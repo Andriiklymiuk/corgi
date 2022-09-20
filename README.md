@@ -257,13 +257,6 @@ Pros of using go
 
 **In short**: install go and you are good to go
 
-## TODO
-- add tests
-- add sonar integration
-- drop in to terminal addition of files/services/db dumps
-- `corgi init` with `corgi_services` folder cleanup
-
-
 Credits:
 
 - <a href="https://www.freepik.com/free-vector/cute-corgi-dog-astronaut-floating-space-cartoon-vector-icon-illustration-animal-science-icon-concept-isolated-premium-vector-flat-cartoon-style_22271104.htm#query=corgi%20icon&position=7&from_view=keyword">Corgi image by catalyststuff</a> on Freepik
