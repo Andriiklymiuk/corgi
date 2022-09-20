@@ -13,3 +13,13 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+*/**/dump.sql
+.DS_STORE
+
+
+dist/
+.env
+# Added by corgi cli
+corgi_services/db_services
+corgi-compose.yml
