@@ -1,0 +1,6 @@
+services:
+  corgi:
+    databaseName: corgi-database
+    user: corgi
+    password: corgiSecurePassword
+    port: 5555
