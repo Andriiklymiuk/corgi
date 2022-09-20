@@ -46,7 +46,6 @@ func run(cmd *cobra.Command, args []string) {
 		return
 	}
 	fmt.Println(corgi)
-	fmt.Println("test sonar code analyzes")
 }
 
 func init() {
