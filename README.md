@@ -43,7 +43,7 @@ brew install corgi
 corgi -h
 ```
 
-It will install it globally (it can be outdated, because the building runs in separate repo)
+It will install it globally.
 
 With it you can run `corgi` in any folder on your local.
 
