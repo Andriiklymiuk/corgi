@@ -197,10 +197,6 @@ It can be done so, because cli is dependent upon on `docker-compose.yml` and MAK
 
 
 ## FAQ
-- psql: FATAL:  database "corgi" does not exist
-
-Because database dumps (copies) still need to have `corgi` db, you need to connect manually to db and create empty database with name `corgi` in there 
-
 - -bash: ./pre-commit: /bin/bash: bad interpreter: Operation not permitted
 
 For this you need to go to .githooks folder and run 
