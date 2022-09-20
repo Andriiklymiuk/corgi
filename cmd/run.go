@@ -3,8 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"andriiklymiuk/corgi/utils"
+
+	"github.com/spf13/cobra"
 )
 
 type DatabaseService struct {
@@ -45,6 +46,7 @@ func run(cmd *cobra.Command, args []string) {
 		return
 	}
 	fmt.Println(corgi)
+	fmt.Println("test sonar code analyzes")
 }
 
 func init() {
