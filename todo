@@ -1,5 +1,5 @@
 ## TODO
-- add running scripts from beforeStart and start section s of corgi-compose
+
 - run services from corgi compose concurrently
 - get env variables from depending services and db_services
 - add tests
