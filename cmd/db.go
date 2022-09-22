@@ -5,9 +5,10 @@ import (
 	"log"
 	"time"
 
+	"andriiklymiuk/corgi/utils"
+
 	"github.com/briandowns/spinner"
 	"github.com/spf13/cobra"
-	"andriiklymiuk/corgi/utils"
 )
 
 // dbCmd represents the db command
