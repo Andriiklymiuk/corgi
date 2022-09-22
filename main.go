@@ -6,9 +6,10 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/manifoldco/promptui"
 	"andriiklymiuk/corgi/cmd"
 	"andriiklymiuk/corgi/utils"
+
+	"github.com/manifoldco/promptui"
 )
 
 func main() {
@@ -42,14 +43,11 @@ func main() {
 }
 
 func showFinalMessage() {
-	randomQuote := utils.GetRandomQuote("technology")
-	fmt.Printf(`
-Glad for using me ✨ See you next time 🚀 🐶
-
-%s
-
-					`,
-		randomQuote,
+	fmt.Println(
+		"\n✨ Glad for using me ✨ See you next time 🚀 🐶\n",
+		string("\033[36m"),
+		utils.GetRandomQuote("famous-quotes"),
+		string("\033[0m"),
 	)
 }
 
@@ -93,7 +91,7 @@ func welcomeBanner() {
 `
 	fmt.Println(string("\033[33m"), art, string("\033[0m"))
 	fmt.Println(`🐶 WOOF CORGI 🐶 says:`)
-	fmt.Println(utils.GetRandomQuote("famous-quotes"))
+	fmt.Println(string("\033[36m"), utils.GetRandomQuote("famous-quotes"), string("\033[0m"))
 	fmt.Println()
 }
 
