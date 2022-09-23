@@ -36,5 +36,5 @@ brews:
   description: "Command line interface for database configurations and other useful things, written in Go"
   tap:
     owner: Andriiklymiuk
-    name: tools
+    name: homebrew-tools
 
