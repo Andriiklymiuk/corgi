@@ -73,7 +73,7 @@ Use the arrow keys to navigate: ↓ ↑ → ←
 
 If you want to do seeding to do database seeding (population with data), you need to:
 
-0. [Create database dump](./resources/readme/database_dump.md), name it `dump.sql` and place it in targeted service, e.g. place it in `corgi_services/db_services/backoffice` folder
+0. [Create database dump](./database_dump.md), name it `dump.sql` and place it in targeted service, e.g. place it in `corgi_services/db_services/backoffice` folder
 1. Run `corgi db` from root folder
 2. Choose service
 3. Choose seed. It will populate db.
