@@ -1,5 +1,5 @@
 ## What is my purpose?
-As we expand out services and go towards microservices architecture, we need to somehow test many databases, that are started and run locally.
+As we expand services and go towards microservices architecture, we need to somehow test many databases, that are started and run locally.
 
 Creation, seeding, recreation of database is pretty cumbersome task, which this cli wants to improve.
 
