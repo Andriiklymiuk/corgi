@@ -35,7 +35,7 @@
 ## Quick install with [Homebrew](https://brew.sh) without repo cloning 
 
 ```bash
-brew tap andriiklymiuk/tools https://github.com/andriiklymiuk/tools
+brew tap andriiklymiuk/homebrew-tools
 
 brew install corgi
 
