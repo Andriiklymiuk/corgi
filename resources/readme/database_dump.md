@@ -1,6 +1,6 @@
 # Create Dump
 
-**👋  How we can create a dump of the database? Let's go guy and follow the guide!**
+**👋  How we can create a dump of the database? Let's go guys and follow the guide!**
 
 ## Some requirements before starting:
 
