@@ -80,4 +80,4 @@ If you want to do seeding to do database seeding (population with data), you nee
 
 **Important**: seeding is best to do on newly created db.
 
-[Main docs](../../Readme.md)
+[Main docs](../../README.md)

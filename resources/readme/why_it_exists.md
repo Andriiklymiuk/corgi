@@ -21,4 +21,4 @@ Pros of using go
 
 **In short**: install go and you are good to go
 
-[Main docs](../../Readme.md)
+[Main docs](../../README.md)

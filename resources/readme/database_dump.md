@@ -32,4 +32,4 @@ In `queries` section  ✅   everything, except `Load via partition root`
 Thanks to Nicolas for provided info
 nicolas.zamarreno@skeepers.io
 
-[Main docs](../../Readme.md)
+[Main docs](../../README.md)
