@@ -19,7 +19,7 @@ The goal is to create smth flexible and robust.
 WOOF 🐶
 	`,
 	Example: "./corgi db",
-	Version: "1.0.3",
+	Version: "1.0.4",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
