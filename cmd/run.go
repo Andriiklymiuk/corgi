@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"andriiklymiuk/corgi/utils"
 
@@ -52,6 +53,8 @@ func init() {
 	)
 }
 
+var servicesWaitGroup sync.WaitGroup
+
 func runRun(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices("corgi-compose.yml")
 	if err != nil {
@@ -60,12 +63,14 @@ func runRun(cmd *cobra.Command, args []string) {
 	}
 
 	for _, service := range corgi.Services {
-		// think about making it as goroutine
-		runService(service, cmd)
+		servicesWaitGroup.Add(1)
+		go runService(service, cmd)
 	}
+	servicesWaitGroup.Wait()
 }
 
 func runService(service utils.Service, cobraCmd *cobra.Command) {
+	defer servicesWaitGroup.Done()
 	fmt.Println(string("\n\033[34m"), "🐶 RUNNING SERVICE", service.ServiceName, string("\033[0m"))
 	omitBeforeStart, err := cobraCmd.Flags().GetBool("omitBeforeStart")
 	if err != nil {
@@ -88,18 +93,22 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 	}
 	if service.Start != nil {
 		fmt.Println("\nStart commands:")
+		var startServiceWaitGroup sync.WaitGroup
 		for _, startCmd := range service.Start {
-			// think about making it as goroutine
-			err := runServiceCmd(startCmd, service.Path)
-			if err != nil {
-				fmt.Println(
-					string("\033[31m"),
-					"aborting all other start commands for ", service, ", because of ", err,
-					string("\033[0m"),
-				)
-				break
-			}
+			servicesWaitGroup.Add(1)
+			go func(startCmd string) {
+				err := runServiceCmd(startCmd, service.Path)
+				if err != nil {
+					fmt.Println(
+						string("\033[31m"),
+						"aborting all other start commands for ", service, ", because of ", err,
+						string("\033[0m"),
+					)
+					return
+				}
+			}(startCmd)
 		}
+		startServiceWaitGroup.Wait()
 	}
 }
 
