@@ -39,4 +39,4 @@ It should fix commit pre hook
 
 </br>
 
-[Main docs](../../Readme.md)
+[Main docs](../../README.md)
