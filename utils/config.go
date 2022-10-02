@@ -19,13 +19,15 @@ type DatabaseService struct {
 }
 
 type Service struct {
-	ServiceName   string
-	Path          string              `yaml:"path"`
-	DockerEnabled bool                `yaml:"docker_enabled"`
-	Environment   []map[string]string `yaml:"environment"`
-	BeforeStart   []string            `yaml:"beforeStart"`
-	Start         []string            `yaml:"start"`
-	AfterStart    []string            `yaml:"afterStart"`
+	ServiceName       string
+	Path              string   `yaml:"path"`
+	DockerEnabled     bool     `yaml:"docker_enabled"`
+	Environment       []string `yaml:"environment"`
+	DependsOnServices []string `yaml:"depends_on_services"`
+	DependsOnDb       []string `yaml:"depends_on_db"`
+	BeforeStart       []string `yaml:"beforeStart"`
+	Start             []string `yaml:"start"`
+	AfterStart        []string `yaml:"afterStart"`
 }
 
 type CorgiCompose struct {
@@ -74,12 +76,14 @@ func GetCorgiServices(pathToCorgiComposeFile string) (*CorgiCompose, error) {
 		var services []Service
 		for indexName, service := range servicesData["services"] {
 			services = append(services, Service{
-				ServiceName:   indexName,
-				Path:          service.Path,
-				DockerEnabled: service.DockerEnabled,
-				Environment:   service.Environment,
-				BeforeStart:   service.BeforeStart,
-				Start:         service.Start,
+				ServiceName:       indexName,
+				Path:              service.Path,
+				DockerEnabled:     service.DockerEnabled,
+				DependsOnServices: service.DependsOnServices,
+				DependsOnDb:       service.DependsOnDb,
+				Environment:       service.Environment,
+				BeforeStart:       service.BeforeStart,
+				Start:             service.Start,
 			})
 		}
 		corgi.Services = services
