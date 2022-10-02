@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -38,6 +39,8 @@ func runRun(cmd *cobra.Command, args []string) {
 		fmt.Println(err)
 		return
 	}
+
+	generateEnvForServices(corgi)
 
 	for _, service := range corgi.Services {
 		servicesWaitGroup.Add(1)
@@ -100,4 +103,140 @@ func runServiceCmd(serviceCommand string, path string) error {
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
+}
+
+// Adds env variables to each service, including dependent db_services and services
+func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
+	for _, service := range corgiCompose.Services {
+
+		envForService := strings.Join(service.Environment[:], "\n")
+
+		// add url for dependent service
+		if service.DependsOnServices != nil {
+			for _, dependingService := range service.DependsOnServices {
+				for _, s := range corgiCompose.Services {
+					if s.ServiceName == dependingService {
+						if s.Port != 0 {
+							envForService = fmt.Sprintf(
+								"%s\n%s=http://localhost:%s",
+								envForService,
+								strings.ToUpper(s.ServiceName)+"_URL",
+								fmt.Sprint(s.Port),
+							)
+							continue
+						}
+						for _, envLine := range s.Environment {
+							if strings.Split(envLine, "=")[0] == "PORT" {
+								envForService = fmt.Sprintf(
+									"%s\n%s=http://localhost:%s",
+									envForService,
+									strings.ToUpper(s.ServiceName)+"_URL",
+									strings.Split(envLine, "=")[1],
+								)
+								continue
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if service.DependsOnDb != nil {
+			for _, dependingDb := range service.DependsOnDb {
+				for _, db := range corgiCompose.DatabaseServices {
+					if db.ServiceName == dependingDb {
+						var serviceNameInEnv string
+
+						// add name of db, if there are more than 2 dependent service
+						if len(service.DependsOnDb) > 1 {
+							serviceNameInEnv = strings.ToUpper(db.ServiceName) + "_"
+						}
+						envForService = fmt.Sprintf(
+							"%s%s%s%s%s%s",
+							envForService,
+							fmt.Sprintf("\n\nDB_%sHOST=http://localhost", serviceNameInEnv),
+							fmt.Sprintf("\nDB_%sUSER=%s", serviceNameInEnv, db.User),
+							fmt.Sprintf("\nDB_%sNAME=%s", serviceNameInEnv, db.DatabaseName),
+							fmt.Sprintf("\nDB_%sPORT=%d", serviceNameInEnv, db.Port),
+							fmt.Sprintf("\nDB_%sPASSWORD=%s", serviceNameInEnv, db.Password),
+						)
+					}
+				}
+			}
+		}
+
+		var pathToEnvFile string
+		if len(service.Path) <= 1 {
+			pathToEnvFile = ".env"
+		} else {
+			if service.Path[len(service.Path)-1:] != "/" {
+				pathToEnvFile = service.Path + "/.env"
+			} else {
+				pathToEnvFile = service.Path + ".env"
+			}
+		}
+
+		corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
+		var corgiEnvPosition []int
+		envFileContent := getFileContent(pathToEnvFile)
+
+		for index, line := range envFileContent {
+			if line == corgiGeneratedMessage {
+				corgiEnvPosition = append(corgiEnvPosition, index)
+			}
+		}
+
+		if len(corgiEnvPosition) == 2 {
+			envFileContent = removeIndexesFromSlice(
+				envFileContent,
+				corgiEnvPosition[0],
+				corgiEnvPosition[1],
+			)
+		}
+
+		envFileContentString := strings.Join(envFileContent, "\n")
+
+		if len(envForService) != 0 {
+			envForService := fmt.Sprintf(
+				"\n%s\n%s\n%s\n",
+				corgiGeneratedMessage,
+				envForService,
+				corgiGeneratedMessage,
+			)
+			envFileContentString = envFileContentString + envForService
+		}
+
+		f, err := os.OpenFile(pathToEnvFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		defer f.Close()
+		if _, err = f.WriteString(envFileContentString); err != nil {
+			fmt.Println(err)
+			continue
+		}
+	}
+}
+
+func getFileContent(fileName string) []string {
+	f, err := os.Open(fileName)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	result := []string{}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		result = append(result, line)
+	}
+	return result
+}
+
+func removeIndexesFromSlice(s []string, from int, to int) []string {
+	return append(s[:from], s[to+1:]...)
 }
