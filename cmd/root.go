@@ -41,6 +41,12 @@ func Execute() string {
 func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	rootCmd.PersistentFlags().BoolP("genDoc", "", false, "Generate cobra docs")
+	rootCmd.PersistentFlags().BoolP(
+		"silent",
+		"",
+		false,
+		"Hide all welcome messages",
+	)
 }
 
 func generateCobraDocs(cmd *cobra.Command) {
