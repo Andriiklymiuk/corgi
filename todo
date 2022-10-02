@@ -1,9 +1,7 @@
 ## TODO
 
-- run services from corgi compose concurrently
-- get env variables from depending services and db_services
+- add --seed option to run automatic seed commands
 - add tests
-- add --notPolite to remove quotes, images, etc in console logs
 - add option to run service in docker and remove it on command close
 - add option to cleanup env variables after each run
 - create services on each cmd run
