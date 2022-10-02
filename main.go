@@ -14,7 +14,7 @@ import (
 
 func main() {
 	ClearTerminal()
-	welcomeBanner()
+	showWelcomeMessage()
 	var runCli func()
 	runCli = func() {
 		cmdExecuted := cmd.Execute()
@@ -43,11 +43,11 @@ func main() {
 }
 
 func showFinalMessage() {
+	if !canShowWelcomeMessages() {
+		return
+	}
 	fmt.Println(
-		"\n✨ Glad for using me ✨ See you next time 🚀 🐶\n",
-		string("\033[36m"),
-		utils.GetRandomQuote("famous-quotes"),
-		string("\033[0m"),
+		"\n✨ Glad for using me ✨ See you next time 🚀 🐶",
 	)
 }
 
@@ -65,7 +65,14 @@ func canRunCliAgain(cmdExecuted string) bool {
 	return true
 }
 
-func welcomeBanner() {
+func canShowWelcomeMessages() bool {
+	return os.Args[len(os.Args)-1] != "--silent"
+}
+
+func showWelcomeMessage() {
+	if !canShowWelcomeMessages() {
+		return
+	}
 	art := `                             
                 @@                                
               ******@                             
