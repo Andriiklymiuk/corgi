@@ -23,6 +23,7 @@ type Service struct {
 	Path              string   `yaml:"path"`
 	DockerEnabled     bool     `yaml:"docker_enabled"`
 	Environment       []string `yaml:"environment"`
+	Port              int      `yaml:"port"`
 	DependsOnServices []string `yaml:"depends_on_services"`
 	DependsOnDb       []string `yaml:"depends_on_db"`
 	BeforeStart       []string `yaml:"beforeStart"`
@@ -82,6 +83,7 @@ func GetCorgiServices(pathToCorgiComposeFile string) (*CorgiCompose, error) {
 				DependsOnServices: service.DependsOnServices,
 				DependsOnDb:       service.DependsOnDb,
 				Environment:       service.Environment,
+				Port:              service.Port,
 				BeforeStart:       service.BeforeStart,
 				Start:             service.Start,
 			})
