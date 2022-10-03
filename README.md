@@ -72,12 +72,21 @@ db_services:
 
 services:
   corgiServer:
+    environment:
+      - PORT=8965
+    depends_on_db:
+      - corgi
     beforeStart:
       - install your dependencies or do other stuff
       - that needs to be run before start cmd
     start:
       - start corgiServer
   corgiApp:
+    environment:
+      - SOME_ENV=corgi_is_best
+      - SOME_ENV2=corgi_is_best_indeed
+    depends_on_services:
+      - corgiServer
     beforeStart:
       - install your dependencies or do other stuff
       - that needs to be run before start cmd
