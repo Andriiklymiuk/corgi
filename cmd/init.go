@@ -6,17 +6,18 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/spf13/cobra"
 	"andriiklymiuk/corgi/utils"
+
+	"github.com/spf13/cobra"
 )
 
-var createCmd = &cobra.Command{
+var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Create db service",
 	Long: `
 This is used to create db service from template.	
 	`,
-	Run: runCreate,
+	Run: runInit,
 }
 
 type FilenameForService struct {
@@ -24,7 +25,7 @@ type FilenameForService struct {
 	Template string
 }
 
-func runCreate(cmd *cobra.Command, args []string) {
+func runInit(cmd *cobra.Command, args []string) {
 	filesToIgnore := []string{
 		"# Added by corgi cli",
 		utils.RootDbServicesFolder,
@@ -39,10 +40,10 @@ func runCreate(cmd *cobra.Command, args []string) {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
 	}
 
-	createDatabaseServices(services.DatabaseServices)
+	CreateDatabaseServices(services.DatabaseServices)
 }
 
-func createDatabaseServices(databaseServices []utils.DatabaseService) {
+func CreateDatabaseServices(databaseServices []utils.DatabaseService) {
 	if len(databaseServices) == 0 {
 		fmt.Println(`
 No services info provided.
@@ -183,5 +184,5 @@ help:
 `
 
 func init() {
-	rootCmd.AddCommand(createCmd)
+	rootCmd.AddCommand(initCmd)
 }
