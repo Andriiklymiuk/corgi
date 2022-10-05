@@ -79,7 +79,12 @@ func runRun(cmd *cobra.Command, args []string) {
 			}
 			fmt.Println(string("\n\033[34m"), "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, string("\033[0m"))
 			GetDump(dbService)
-			SeedDb(dbService.ServiceName)
+			err = SeedDb(dbService.ServiceName)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			fmt.Println(string("\n\033[34m"), "🎉 ", dbService.ServiceName, " IS SEEDED", string("\033[0m"))
 		}
 	}
 

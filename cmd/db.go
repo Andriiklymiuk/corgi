@@ -125,7 +125,10 @@ func showMakeCommands(
 		fmt.Println("Container id: ", containerId)
 
 	case "seed":
-		SeedDb(targetService)
+		err = SeedDb(targetService)
+		if err != nil {
+			fmt.Println(err)
+		}
 	case "getDump":
 		GetDump(serviceConfig)
 	default:
@@ -136,7 +139,7 @@ func showMakeCommands(
 	}
 }
 
-func SeedDb(targetService string) {
+func SeedDb(targetService string) error {
 	serviceIsRunning, err := utils.GetStatusOfService(targetService)
 	if err != nil {
 		fmt.Printf("Getting target service info failed: %s\n", err)
@@ -147,15 +150,13 @@ func SeedDb(targetService string) {
 	)
 
 	if err != nil {
-		fmt.Printf("Couldn't check for db dump file, error %s\n", err)
-		return
+		return fmt.Errorf("error in checking dump file: %s", err)
 	}
 	if !dumpFileExists {
-		fmt.Printf(
-			"Db dump file doesn't exist in %s. Please add one its directory\n",
+		return fmt.Errorf(
+			"db dump file doesn't exist in %s. Please add one its directory",
 			targetService,
 		)
-		return
 	}
 	if !serviceIsRunning {
 		_, err := utils.ExecuteMakeCommand(targetService, "up")
@@ -167,8 +168,7 @@ func SeedDb(targetService string) {
 
 	containerId, err := utils.GetContainerId(targetService)
 	if err != nil {
-		log.Println(err)
-		return
+		return err
 	}
 
 	s := spinner.New(spinner.CharSets[70], 100*time.Millisecond)
@@ -183,10 +183,10 @@ func SeedDb(targetService string) {
 
 	s.Stop()
 	if err != nil {
-		fmt.Println("Make command failed", err)
-		return
+		return fmt.Errorf("make command failed: %s", err)
 	}
 	fmt.Println(string(output))
+	return nil
 }
 
 func GetDump(serviceConfig utils.DatabaseService) {
