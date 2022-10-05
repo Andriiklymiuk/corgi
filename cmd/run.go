@@ -67,13 +67,31 @@ func runRun(cmd *cobra.Command, args []string) {
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 
+	runDatabaseServices(cmd, corgi.DatabaseServices)
+
+	generateEnvForServices(corgi)
+
+	for _, service := range corgi.Services {
+		servicesWaitGroup.Add(1)
+		go runService(service, cmd)
+	}
+	servicesWaitGroup.Wait()
+}
+
+func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
 	isSeed, err := cmd.Flags().GetBool("seed")
 	if err != nil {
 		return
 	}
 
+	err = utils.DockerInit()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	if isSeed {
-		for _, dbService := range corgi.DatabaseServices {
+		for _, dbService := range databaseServices {
 			if (dbService.SeedFromDb == utils.SeedDbSource{}) {
 				continue
 			}
@@ -89,14 +107,6 @@ func runRun(cmd *cobra.Command, args []string) {
 	}
 
 	utils.ExecuteForEachService("up")
-
-	generateEnvForServices(corgi)
-
-	for _, service := range corgi.Services {
-		servicesWaitGroup.Add(1)
-		go runService(service, cmd)
-	}
-	servicesWaitGroup.Wait()
 }
 
 func runService(service utils.Service, cobraCmd *cobra.Command) {
