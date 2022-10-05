@@ -105,6 +105,25 @@ func ExecuteMakeCommand(targetService string, makeCommand ...string) ([]byte, er
 	return output, nil
 }
 
+func ExecuteCommandRun(targetService string, command ...string) error {
+	path, err := getPathToService(targetService)
+	if err != nil {
+		return fmt.Errorf("path to target service is not found: %s", err)
+	}
+
+	cmd := exec.Command(command[0], command[1:]...)
+	cmd.Dir = path
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf(`output error: %s, in path %s with command make %s
+		`, err, path, command)
+	}
+
+	return nil
+}
+
 func CheckDockerStatus() error {
 	cmd := exec.Command("docker", "ps", "-q")
 	output, err := cmd.CombinedOutput()
