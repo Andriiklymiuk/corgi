@@ -29,6 +29,18 @@ func init() {
 		false,
 		"Omits all before start commands from corgi-compose config",
 	)
+	runCmd.PersistentFlags().BoolP(
+		"seed",
+		"s",
+		false,
+		"Seed all db_services that have seedSource or have dump.sql in their folder",
+	)
+	runCmd.PersistentFlags().BoolP(
+		"fromScratch",
+		"",
+		false,
+		"Clean corgi_services folder before running",
+	)
 }
 
 var servicesWaitGroup sync.WaitGroup
