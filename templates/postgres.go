@@ -26,10 +26,10 @@ id:
 	docker ps -aqf "name=postgres-{{.ServiceName}}" | awk '{print $1}'
 seed:
 	cat dump.sql | docker exec -i $(c)  psql -U {{.User}} -d {{.DatabaseName}}
-getDump:
+{{if .SeedFromDb.Host}}getDump:
 	PGPASSWORD=$(p) pg_dump --host {{.SeedFromDb.Host}} --port {{.SeedFromDb.Port}} --username {{.SeedFromDb.User}} -d {{.SeedFromDb.DatabaseName}} --blobs --no-owner --no-privileges --no-unlogged-table-data --format plain --verbose --file "dump.sql"
-help:
+{{end}}help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id seed getDump help
+.PHONY: up down stop id seed {{if .SeedFromDb.Host}}getDump{{end}}help
 `
