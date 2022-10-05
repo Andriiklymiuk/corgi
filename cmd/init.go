@@ -39,6 +39,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	services, err := utils.GetCorgiServices("corgi-compose.yml")
 	if err != nil {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
+		return
 	}
 
 	CreateDatabaseServices(services.DatabaseServices)
