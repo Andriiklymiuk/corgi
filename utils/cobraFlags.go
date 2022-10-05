@@ -17,7 +17,10 @@ func CheckForFlagAndExecuteMake(cmd *cobra.Command, flag string, cmdName string)
 	if !isFlagPresent {
 		return
 	}
+	ExecuteForEachService(cmdName)
+}
 
+func ExecuteForEachService(cmdName string) {
 	files, err := GetFoldersListInDirectory()
 	if err != nil {
 		return
