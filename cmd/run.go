@@ -79,6 +79,9 @@ func runRun(cmd *cobra.Command, args []string) {
 }
 
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
+	if len(databaseServices) == 0 {
+		return
+	}
 	isSeed, err := cmd.Flags().GetBool("seed")
 	if err != nil {
 		return
