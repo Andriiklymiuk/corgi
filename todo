@@ -1,7 +1,7 @@
 ## TODO
 
-- add --seed option to run automatic seed commands
+- add examples
+- add git clone on corgi init
 - add tests
 - add option to run service in docker and remove it on command close
-- add option to cleanup env variables after each run
 - create services on each cmd run
