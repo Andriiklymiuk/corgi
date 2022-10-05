@@ -45,6 +45,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	CreateDatabaseServices(services.DatabaseServices)
 }
 
+// Generate database files for each database service
 func CreateDatabaseServices(databaseServices []utils.DatabaseService) {
 	if len(databaseServices) == 0 {
 		fmt.Println(`
