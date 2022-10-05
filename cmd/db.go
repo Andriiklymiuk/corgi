@@ -129,9 +129,9 @@ func showMakeCommands(
 		fmt.Println("Container id: ", containerId)
 
 	case "seed":
-		seedDb(targetService)
+		SeedDb(targetService)
 	case "getDump":
-		getDump(targetService, serviceConfig)
+		GetDump(serviceConfig)
 	default:
 		_, err := utils.ExecuteMakeCommand(targetService, makeCommand)
 		if err != nil {
@@ -140,7 +140,7 @@ func showMakeCommands(
 	}
 }
 
-func seedDb(targetService string) {
+func SeedDb(targetService string) {
 	serviceIsRunning, err := utils.GetStatusOfService(targetService)
 	if err != nil {
 		fmt.Printf("Getting target service info failed: %s\n", err)
@@ -193,9 +193,9 @@ func seedDb(targetService string) {
 	fmt.Println(string(output))
 }
 
-func getDump(targetService string, serviceConfig utils.DatabaseService) {
+func GetDump(serviceConfig utils.DatabaseService) {
 	err := utils.ExecuteCommandRun(
-		targetService,
+		serviceConfig.ServiceName,
 		"make",
 		"getDump",
 		fmt.Sprintf("p=%s", serviceConfig.SeedFromDb.Password),
