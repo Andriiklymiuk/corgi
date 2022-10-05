@@ -12,9 +12,18 @@ var RootDbServicesFolder = "corgi_services/db_services"
 
 type DatabaseService struct {
 	ServiceName  string
+	User         string       `yaml:"user"`
+	Password     string       `yaml:"password"`
+	DatabaseName string       `yaml:"databaseName"`
+	Port         int          `yaml:"port"`
+	SeedFromDb   SeedDbSource `yaml:"seedFromDb"`
+}
+
+type SeedDbSource struct {
+	Host         string `yaml:"host"`
+	DatabaseName string `yaml:"databaseName"`
 	User         string `yaml:"user"`
 	Password     string `yaml:"password"`
-	DatabaseName string `yaml:"databaseName"`
 	Port         int    `yaml:"port"`
 }
 
@@ -61,6 +70,7 @@ func GetCorgiServices(pathToCorgiComposeFile string) (*CorgiCompose, error) {
 				User:         service.User,
 				Password:     service.Password,
 				Port:         service.Port,
+				SeedFromDb:   service.SeedFromDb,
 			})
 		}
 		corgi.DatabaseServices = dbServices
@@ -92,4 +102,13 @@ func GetCorgiServices(pathToCorgiComposeFile string) (*CorgiCompose, error) {
 	}
 
 	return &corgi, nil
+}
+
+func GetDbServiceByName(databaseServiceName string, databaseServices []DatabaseService) (DatabaseService, error) {
+	for _, db := range databaseServices {
+		if db.ServiceName == databaseServiceName {
+			return db, nil
+		}
+	}
+	return DatabaseService{}, fmt.Errorf("db_service %s is not found", databaseServiceName)
 }

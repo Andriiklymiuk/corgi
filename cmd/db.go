@@ -33,8 +33,13 @@ func init() {
 }
 
 func runDb(cobra *cobra.Command, args []string) {
+	corgi, err := utils.GetCorgiServices("corgi-compose.yml")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	err := utils.DockerInit()
+	err = utils.DockerInit()
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -70,14 +75,26 @@ func runDb(cobra *cobra.Command, args []string) {
 		fmt.Printf("%s isn't running 🔴\n", targetService)
 	}
 
+	serviceConfig, err := utils.GetDbServiceByName(targetService, corgi.DatabaseServices)
+	if err != nil {
+		log.Println("Getting target service config failed", err)
+		return
+	}
+
 	showMakeCommands(
 		cobra,
 		args,
 		targetService,
+		serviceConfig,
 	)
 }
 
-func showMakeCommands(cobra *cobra.Command, args []string, targetService string) {
+func showMakeCommands(
+	cobra *cobra.Command,
+	args []string,
+	targetService string,
+	serviceConfig utils.DatabaseService,
+) {
 
 	makeFileCommandsList, err := utils.GetMakefileCommandsInDirectory(targetService)
 	if err != nil {
@@ -113,6 +130,8 @@ func showMakeCommands(cobra *cobra.Command, args []string, targetService string)
 
 	case "seed":
 		seedDb(targetService)
+	case "getDump":
+		getDump(targetService, serviceConfig)
 	default:
 		_, err := utils.ExecuteMakeCommand(targetService, makeCommand)
 		if err != nil {
@@ -172,4 +191,19 @@ func seedDb(targetService string) {
 		return
 	}
 	fmt.Println(string(output))
+}
+
+func getDump(targetService string, serviceConfig utils.DatabaseService) {
+	err := utils.ExecuteCommandRun(
+		targetService,
+		"make",
+		"getDump",
+		fmt.Sprintf("p=%s", serviceConfig.SeedFromDb.Password),
+	)
+	if err != nil {
+		fmt.Println("Make command failed", err)
+		return
+	}
+
+	fmt.Printf("✅ Successfully added database dump to %s\n", serviceConfig.ServiceName)
 }
