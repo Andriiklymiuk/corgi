@@ -45,12 +45,8 @@ func runDb(cobra *cobra.Command, args []string) {
 		return
 	}
 
-	utils.CheckForFlagAndExecute(cobra, "stopAll", func(f string) string {
-		return fmt.Sprintf("docker stop %s", fmt.Sprintf("postgres-%s", f))
-	})
-	utils.CheckForFlagAndExecute(cobra, "removeAll", func(f string) string {
-		return fmt.Sprintf("docker rm %s", fmt.Sprintf("postgres-%s", f))
-	})
+	utils.CheckForFlagAndExecuteMake(cobra, "stopAll", "stop")
+	utils.CheckForFlagAndExecuteMake(cobra, "removeAll", "remove")
 	utils.CheckForFlagAndExecuteMake(cobra, "downAll", "down")
 	utils.CheckForFlagAndExecuteMake(cobra, "upAll", "up")
 
