@@ -28,8 +28,10 @@ seed:
 	cat dump.sql | docker exec -i $(c)  psql -U {{.User}} -d {{.DatabaseName}}
 {{if .SeedFromDb.Host}}getDump:
 	PGPASSWORD=$(p) pg_dump --host {{.SeedFromDb.Host}} --port {{.SeedFromDb.Port}} --username {{.SeedFromDb.User}} -d {{.SeedFromDb.DatabaseName}} --blobs --no-owner --no-privileges --no-unlogged-table-data --format plain --verbose --file "dump.sql"
-{{end}}help:
+{{end}}remove:
+	docker rm postgres-{{.ServiceName}}
+help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id seed {{if .SeedFromDb.Host}}getDump{{end}}help
+.PHONY: up down stop id seed {{if .SeedFromDb.Host}}getDump{{end}}remove help
 `
