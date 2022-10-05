@@ -1,5 +1,6 @@
 ## TODO
 
+- add graceful shutdown (databases down on close)
 - add examples
 - add git clone on corgi init
 - add tests
