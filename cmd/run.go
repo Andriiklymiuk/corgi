@@ -52,6 +52,39 @@ func runRun(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	isFromScratch, err := cmd.Flags().GetBool("fromScratch")
+	if err != nil {
+		return
+	}
+	if isFromScratch {
+		err = os.RemoveAll("./corgi_services/")
+		if err != nil {
+			fmt.Println("couldn't delete corgi_services folder: ", err)
+			return
+		}
+		fmt.Println("🗑️ Cleaned up corgi_services")
+	}
+
+	CreateDatabaseServices(corgi.DatabaseServices)
+
+	isSeed, err := cmd.Flags().GetBool("seed")
+	if err != nil {
+		return
+	}
+
+	if isSeed {
+		for _, dbService := range corgi.DatabaseServices {
+			if (dbService.SeedFromDb == utils.SeedDbSource{}) {
+				continue
+			}
+			fmt.Println(string("\n\033[34m"), "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, string("\033[0m"))
+			GetDump(dbService)
+			SeedDb(dbService.ServiceName)
+		}
+	}
+
+	utils.ExecuteForEachService("up")
+
 	generateEnvForServices(corgi)
 
 	for _, service := range corgi.Services {
