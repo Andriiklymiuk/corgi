@@ -33,5 +33,5 @@ seed:
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id seed {{if .SeedFromDb.Host}}getDump{{end}}remove help
+.PHONY: up down stop id seed {{if .SeedFromDb.Host}}getDump {{end}}remove help
 `
