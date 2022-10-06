@@ -133,7 +133,7 @@ These files are created, so that you can run db_services manually, if you want.
 - Runs scripts in ```beforeStart``` of service
 - Runs scripts in ```start``` of service **concurrently** (in parallel)
 8. If you run ```Ctrl-C``` in terminal, it will:
-- close all start scripts
+- terminate all services and their scripts
 - stop all databases
 - runs all ```afterStart``` commands
 
