@@ -148,7 +148,7 @@ These files are created, so that you can run db_services manually, if you want.
 
 ## Without cli
 
-The beauty of this cli is that it is versatile and can be run without even opening cli, if it broke or smth has happened to it.
+The beauty of this cli is that it is versatile and can be run without even opening cli, if it is broke or smth has happened to it.
 All database services are in `corgi_services/db_services` folder, so you can go to interested service folder and just run `make up` to start the database.
 
 It can be done so, because cli is dependent upon on `docker-compose.yml` and MAKEFILE for each service, and it can be run independently.
