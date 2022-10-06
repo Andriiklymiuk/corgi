@@ -97,6 +97,7 @@ func GetCorgiServices(pathToCorgiComposeFile string) (*CorgiCompose, error) {
 				Environment:       service.Environment,
 				Port:              service.Port,
 				BeforeStart:       service.BeforeStart,
+				AfterStart:        service.AfterStart,
 				Start:             service.Start,
 			})
 		}
