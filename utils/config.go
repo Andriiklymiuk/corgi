@@ -30,6 +30,7 @@ type SeedDbSource struct {
 type Service struct {
 	ServiceName       string
 	Path              string   `yaml:"path"`
+	CloneFrom         string   `yaml:"cloneFrom"`
 	DockerEnabled     bool     `yaml:"docker_enabled"`
 	Environment       []string `yaml:"environment"`
 	Port              int      `yaml:"port"`
@@ -89,6 +90,7 @@ func GetCorgiServices(pathToCorgiComposeFile string) (*CorgiCompose, error) {
 			services = append(services, Service{
 				ServiceName:       indexName,
 				Path:              service.Path,
+				CloneFrom:         service.CloneFrom,
 				DockerEnabled:     service.DockerEnabled,
 				DependsOnServices: service.DependsOnServices,
 				DependsOnDb:       service.DependsOnDb,
