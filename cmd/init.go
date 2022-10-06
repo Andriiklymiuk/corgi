@@ -56,8 +56,8 @@ type FilenameForService struct {
 func CreateDatabaseServices(databaseServices []utils.DatabaseService) {
 	if len(databaseServices) == 0 {
 		fmt.Println(`
-No services info provided.
-Please provide them in corgi-compose.yml file`)
+No services info provided -> no db_services created.
+Provide them in corgi-compose.yml file`)
 		return
 	}
 
