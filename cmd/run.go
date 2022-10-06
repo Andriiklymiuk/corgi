@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 
 	"andriiklymiuk/corgi/utils"
 
@@ -43,14 +45,22 @@ func init() {
 	)
 }
 
-var servicesWaitGroup sync.WaitGroup
-
 func runRun(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices("corgi-compose.yml")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
+	closeSignal := make(chan os.Signal, 1)
+	signal.Notify(closeSignal, syscall.SIGINT, syscall.SIGTERM)
+	runCmdDone := make(chan bool, 1)
+
+	go func() {
+		<-closeSignal
+		cleanup(corgi)
+		runCmdDone <- true
+	}()
 
 	isFromScratch, err := cmd.Flags().GetBool("fromScratch")
 	if err != nil {
@@ -75,10 +85,17 @@ func runRun(cmd *cobra.Command, args []string) {
 	generateEnvForServices(corgi)
 
 	for _, service := range corgi.Services {
-		servicesWaitGroup.Add(1)
 		go runService(service, cmd)
 	}
-	servicesWaitGroup.Wait()
+
+	<-runCmdDone
+}
+
+func cleanup(corgi *utils.CorgiCompose) {
+	if len(corgi.DatabaseServices) != 0 {
+		utils.ExecuteForEachService("stop")
+	}
+	fmt.Println("\n👋 Exiting cli")
 }
 
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
@@ -116,7 +133,6 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 }
 
 func runService(service utils.Service, cobraCmd *cobra.Command) {
-	defer servicesWaitGroup.Done()
 	fmt.Println(string("\n\033[34m"), "🐶 RUNNING SERVICE", service.ServiceName, string("\033[0m"))
 	omitBeforeStart, err := cobraCmd.Flags().GetBool("omitBeforeStart")
 	if err != nil {
