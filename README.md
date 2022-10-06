@@ -64,6 +64,12 @@ db_services:
     user: corgi
     password: corgiSecurePassword
     port: 5432
+    seedFromDb:
+      host: db_host_for_seed_seed_db
+      databaseName: db_name_for_seed_db
+      user: db_user_for_seed_db
+      password: db_password_for_seed_db
+      port: db_port_for_seed_db
   corgiTest:
     databaseName: corgi-database-test
     user: corgi
@@ -82,6 +88,8 @@ services:
     start:
       - start corgiServer
   corgiApp:
+    cloneFrom: url_to_use_in_git_clone_if_path_doesn't_exist
+    path: /path/for/service
     environment:
       - SOME_ENV=corgi_is_best
       - SOME_ENV2=corgi_is_best_indeed
@@ -92,6 +100,8 @@ services:
       - that needs to be run before start cmd
     start:
       - start corgiApp
+    afterStart:
+      - do some cleanup staff on service close
 ```
 Then run, which will create db_services.
 ```bash 
