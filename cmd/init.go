@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"text/template"
 
@@ -42,6 +44,8 @@ func runInit(cmd *cobra.Command, args []string) {
 	}
 
 	CreateDatabaseServices(services.DatabaseServices)
+	CreateServicesFolders(services.Services)
+}
 
 type FilenameForService struct {
 	Name     string
@@ -82,6 +86,44 @@ Please provide them in corgi-compose.yml file`)
 		}
 		fmt.Print(string("\033[32m"), "✅ ", string("\033[0m"))
 		fmt.Printf("Db service %s was successfully created\n", service.ServiceName)
+	}
+}
+
+func CreateServicesFolders(services []utils.Service) {
+	for _, service := range services {
+		if service.Path != "" {
+			_, err := os.Stat(service.Path)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					if service.CloneFrom == "" {
+						fmt.Printf(
+							"No directory %s, please provide cloneFrom url or create service in the path",
+							service.CloneFrom,
+						)
+						continue
+					}
+					pathSlice := strings.Split(service.Path, "/")
+					pathWithoutLastFolder := strings.Join(pathSlice[:len(pathSlice)-1], "/")
+					err := os.MkdirAll(pathWithoutLastFolder, os.ModePerm)
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+
+					cmd := exec.Command("git", "clone", service.CloneFrom)
+					cmd.Dir = pathWithoutLastFolder
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					err = cmd.Run()
+					if err != nil {
+						fmt.Printf(`output error: %s, in path %s with git clone %s
+					`, err, pathWithoutLastFolder, service.CloneFrom)
+					}
+					continue
+				}
+				fmt.Println(err)
+			}
+		}
 	}
 }
 
