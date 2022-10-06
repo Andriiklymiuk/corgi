@@ -73,16 +73,23 @@ Use the arrow keys to navigate: ↓ ↑ → ←
 
 If you want to do seeding manually to do database seeding (population with data), you can do it:
 
-- Automatically (**recommended**)
+- ### Automatically (**recommended**)
 
-Add seedSource in ```corgi-compose.yml``` and the run
+Add seedSource in ```corgi-compose.yml``` and then run
 
 ```bash 
 corgi run --seed
 ```
 It will create dump of data and then seed it to your database.
 
-- Manually
+- ### Manually
+
+If you provided seedSource in ```corgi-compose.yml```, than you can do:
+
+1. ```corgi db```-> choose service -> Choose **dump**
+2. ```corgi db```-> choose service -> Choose **seed**
+
+If no seedSource provided:
 
 0. [Create database dump](./database_dump.md), name it `dump.sql` and place it in targeted service, e.g. place it in `corgi_services/db_services/backoffice` folder
 1. Run `corgi db` from root folder
