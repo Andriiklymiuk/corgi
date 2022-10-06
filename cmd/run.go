@@ -141,8 +141,9 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 		fmt.Println("\nStart commands:")
 		var startServiceWaitGroup sync.WaitGroup
 		for _, startCmd := range service.Start {
-			servicesWaitGroup.Add(1)
+			startServiceWaitGroup.Add(1)
 			go func(startCmd string) {
+				defer startServiceWaitGroup.Done()
 				err := runServiceCmd(startCmd, service.Path)
 				if err != nil {
 					fmt.Println(
