@@ -57,6 +57,9 @@ func runRun(cmd *cobra.Command, args []string) {
 		return
 	}
 	if isFromScratch {
+		if len(corgi.DatabaseServices) != 0 {
+			utils.ExecuteForEachService("remove")
+		}
 		err = os.RemoveAll("./corgi_services/")
 		if err != nil {
 			fmt.Println("couldn't delete corgi_services folder: ", err)
