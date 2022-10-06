@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 
 	"andriiklymiuk/corgi/utils"
@@ -95,6 +94,22 @@ func cleanup(corgi *utils.CorgiCompose) {
 	if len(corgi.DatabaseServices) != 0 {
 		utils.ExecuteForEachService("stop")
 	}
+	for _, service := range corgi.Services {
+		if service.AfterStart != nil {
+			fmt.Println("\nAfter start commands:")
+			for _, afterStartCmd := range service.AfterStart {
+				err := runServiceCmd(afterStartCmd, service.Path)
+				if err != nil {
+					fmt.Println(
+						string("\033[31m"),
+						"aborting all other afterStart commands for ", service, ", because of ", err,
+						string("\033[0m"),
+					)
+					break
+				}
+			}
+		}
+	}
 	fmt.Println("\n👋 Exiting cli")
 }
 
@@ -149,17 +164,14 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 					"aborting all other beforeStart commands for ", service, ", because of ", err,
 					string("\033[0m"),
 				)
-				break
+				return
 			}
 		}
 	}
 	if service.Start != nil {
 		fmt.Println("\nStart commands:")
-		var startServiceWaitGroup sync.WaitGroup
 		for _, startCmd := range service.Start {
-			startServiceWaitGroup.Add(1)
 			go func(startCmd string) {
-				defer startServiceWaitGroup.Done()
 				err := runServiceCmd(startCmd, service.Path)
 				if err != nil {
 					fmt.Println(
@@ -171,7 +183,6 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 				}
 			}(startCmd)
 		}
-		startServiceWaitGroup.Wait()
 	}
 }
 
