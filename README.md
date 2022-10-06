@@ -53,6 +53,10 @@ With it you can run `corgi` in any folder on your local.
 If you want to run db_services or your services require docker, then you need
 - [Docker](https://www.docker.com)
 
+If you want to use auto seeding feature for postgres databases, you need to install
+- [psql](https://formulae.brew.sh/formula/libpq) 
+
+
 ## Services creation
 
 You need to create corgi-compose.yml file in root of your target repo to create services and db services.
