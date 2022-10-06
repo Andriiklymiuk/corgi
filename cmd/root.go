@@ -18,7 +18,11 @@ The goal is to create smth flexible and robust.
 
 WOOF 🐶
 	`,
-	Example: "./corgi db",
+	Example: `
+corgi init
+
+corgi run
+`,
 	Version: "1.0.5",
 }
 
