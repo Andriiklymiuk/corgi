@@ -21,9 +21,8 @@ This is used to create db service from template.
 	Run: runInit,
 }
 
-type FilenameForService struct {
-	Name     string
-	Template string
+func init() {
+	rootCmd.AddCommand(initCmd)
 }
 
 func runInit(cmd *cobra.Command, args []string) {
@@ -43,6 +42,10 @@ func runInit(cmd *cobra.Command, args []string) {
 	}
 
 	CreateDatabaseServices(services.DatabaseServices)
+
+type FilenameForService struct {
+	Name     string
+	Template string
 }
 
 // Generate database files for each database service
@@ -50,7 +53,7 @@ func CreateDatabaseServices(databaseServices []utils.DatabaseService) {
 	if len(databaseServices) == 0 {
 		fmt.Println(`
 No services info provided.
-Please provided them in corgi-compose.yml file`)
+Please provide them in corgi-compose.yml file`)
 		return
 	}
 
@@ -61,7 +64,7 @@ Please provided them in corgi-compose.yml file`)
 
 	for _, service := range databaseServices {
 		for _, file := range filesToCreate {
-			err := createFileFromTemplate(
+			err := createDbFileFromTemplate(
 				service,
 				file.Name,
 				file.Template,
@@ -113,7 +116,7 @@ func addFileToGitignore(fileToIgnore string) error {
 	return nil
 }
 
-func createFileFromTemplate(
+func createDbFileFromTemplate(
 	dbService utils.DatabaseService,
 	fileName string,
 	fileTemplate string,
@@ -152,8 +155,4 @@ func createFileFromTemplate(
 		)
 	}
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(initCmd)
 }
