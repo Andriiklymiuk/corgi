@@ -8,4 +8,5 @@
 - add medium explanations post
 
 - add tests
-- add option to run service in docker and remove it on command close
+- add docker/minikube support for service/db_service runs
+- add mysql and other databases support
