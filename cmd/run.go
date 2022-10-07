@@ -259,16 +259,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 			}
 		}
 
-		var pathToEnvFile string
-		if len(service.Path) <= 1 {
-			pathToEnvFile = ".env"
-		} else {
-			if service.Path[len(service.Path)-1:] != "/" {
-				pathToEnvFile = service.Path + "/.env"
-			} else {
-				pathToEnvFile = service.Path + ".env"
-			}
-		}
+		pathToEnvFile := getPathToEnv(service)
 
 		corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 		var corgiEnvPosition []int
@@ -313,6 +304,30 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 			fmt.Println(err)
 			continue
 		}
+	}
+}
+
+func getPathToEnv(service utils.Service) string {
+	if len(service.Path) <= 1 {
+		return ".env"
+	}
+	envName := ".env"
+	if service.EnvPath != "" {
+		if strings.Contains(service.EnvPath, "/") &&
+			service.EnvPath[:1] == "." {
+			envName = service.EnvPath[1:]
+		} else {
+			envName = service.EnvPath
+		}
+	}
+
+	if len(service.Path) <= 1 {
+		return envName
+	}
+	if service.Path[len(service.Path)-1:] != "/" {
+		return service.Path + "/" + envName
+	} else {
+		return service.Path + envName
 	}
 }
 
