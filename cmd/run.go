@@ -299,7 +299,9 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 			)
 			envFileContentString = envFileContentString + envForService
 		}
-
+		if envFileContentString == "" {
+			continue
+		}
 		f, err := os.OpenFile(pathToEnvFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 		if err != nil {
 			fmt.Println(err)
