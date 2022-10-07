@@ -99,7 +99,8 @@ services:
       - SOME_ENV=corgi_is_best
       - SOME_ENV2=corgi_is_best_indeed
     depends_on_services:
-      - corgiServer
+      - name: corgiServer
+        envAlias: BEST_CORGI_SERVER_URL
     beforeStart:
       - install your dependencies or do other stuff
       - that needs to be run before start cmd

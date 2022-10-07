@@ -27,19 +27,24 @@ type SeedDbSource struct {
 	Port         int    `yaml:"port"`
 }
 
+type DependsOnService struct {
+	Name     string `yaml:"name"`
+	EnvAlias string `yaml:"envAlias"`
+}
+
 type Service struct {
 	ServiceName       string
-	Path              string   `yaml:"path"`
-	CloneFrom         string   `yaml:"cloneFrom"`
-	DockerEnabled     bool     `yaml:"docker_enabled"`
-	Environment       []string `yaml:"environment"`
-	EnvPath           string   `yaml:"envPath"`
-	Port              int      `yaml:"port"`
-	DependsOnServices []string `yaml:"depends_on_services"`
-	DependsOnDb       []string `yaml:"depends_on_db"`
-	BeforeStart       []string `yaml:"beforeStart"`
-	Start             []string `yaml:"start"`
-	AfterStart        []string `yaml:"afterStart"`
+	Path              string             `yaml:"path"`
+	CloneFrom         string             `yaml:"cloneFrom"`
+	DockerEnabled     bool               `yaml:"docker_enabled"`
+	Environment       []string           `yaml:"environment"`
+	EnvPath           string             `yaml:"envPath"`
+	Port              int                `yaml:"port"`
+	DependsOnServices []DependsOnService `yaml:"depends_on_services"`
+	DependsOnDb       []string           `yaml:"depends_on_db"`
+	BeforeStart       []string           `yaml:"beforeStart"`
+	Start             []string           `yaml:"start"`
+	AfterStart        []string           `yaml:"afterStart"`
 }
 
 type CorgiCompose struct {
