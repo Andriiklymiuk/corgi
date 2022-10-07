@@ -310,6 +310,12 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 func getPathToEnv(service utils.Service) string {
 	envName := ".env"
 	if service.EnvPath != "" {
+		service.EnvPath = strings.Replace(
+			service.EnvPath,
+			service.Path,
+			"",
+			-1,
+		)
 		if strings.Contains(service.EnvPath, "/") {
 			if service.EnvPath[:1] == "." {
 				service.EnvPath = service.EnvPath[1:]
