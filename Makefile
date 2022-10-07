@@ -4,7 +4,7 @@ fixHooks:
 # run it in public repo and add before GITHUB_TOKEN
 release:
 	goreleaser --rm-dist
-getLatestTag:
+tag:
 	git describe --tags --abbrev=0
 
-.PHONY: fixHooks release getLatestTag
+.PHONY: fixHooks release tag
