@@ -46,7 +46,7 @@ func init() {
 }
 
 func runRun(cmd *cobra.Command, args []string) {
-	corgi, err := utils.GetCorgiServices("corgi-compose.yml")
+	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Println(err)
 		return

@@ -36,8 +36,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	for _, fileToIgnore := range filesToIgnore {
 		addFileToGitignore(fileToIgnore)
 	}
-
-	services, err := utils.GetCorgiServices("corgi-compose.yml")
+	services, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
 		return

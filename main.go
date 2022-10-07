@@ -55,14 +55,15 @@ func canRunCliAgain(cmdExecuted string) bool {
 	if cmdExecuted == "corgi" {
 		return false
 	}
-	lastWordInCmd := os.Args[len(os.Args)-1]
-	if lastWordInCmd == "init" || lastWordInCmd == "run" {
-		return false
+
+	for _, arg := range os.Args {
+		if arg == "init" ||
+			arg == "run" ||
+			arg == "filename" {
+			return false
+		}
 	}
-	if lastWordInCmd[0:1] == "-" {
-		return false
-	}
-	return true
+	return os.Args[len(os.Args)-1][0:1] == "-"
 }
 
 func canShowWelcomeMessages() bool {

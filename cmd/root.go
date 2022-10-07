@@ -51,6 +51,12 @@ func init() {
 		false,
 		"Hide all welcome messages",
 	)
+	rootCmd.PersistentFlags().StringP(
+		"filename",
+		"f",
+		"",
+		"Custom filepath for for corgi-compose",
+	)
 }
 
 func generateCobraDocs(cmd *cobra.Command) {
