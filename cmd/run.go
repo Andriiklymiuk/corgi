@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -209,12 +210,18 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 		if service.DependsOnServices != nil {
 			for _, dependingService := range service.DependsOnServices {
 				for _, s := range corgiCompose.Services {
-					if s.ServiceName == dependingService {
+					if s.ServiceName == dependingService.Name {
+						var envNameToUse string
+						if dependingService.EnvAlias != "" {
+							envNameToUse = dependingService.EnvAlias
+						} else {
+							envNameToUse = splitStringForEnv(s.ServiceName) + "_URL"
+						}
 						if s.Port != 0 {
 							envForService = fmt.Sprintf(
 								"%s\n%s=http://localhost:%s",
 								envForService,
-								strings.ToUpper(s.ServiceName)+"_URL",
+								envNameToUse,
 								fmt.Sprint(s.Port),
 							)
 							continue
@@ -224,7 +231,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 								envForService = fmt.Sprintf(
 									"%s\n%s=http://localhost:%s",
 									envForService,
-									strings.ToUpper(s.ServiceName)+"_URL",
+									envNameToUse,
 									strings.Split(envLine, "=")[1],
 								)
 								continue
@@ -243,7 +250,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 
 						// add name of db, if there are more than 2 dependent service
 						if len(service.DependsOnDb) > 1 {
-							serviceNameInEnv = strings.ToUpper(db.ServiceName) + "_"
+							serviceNameInEnv = splitStringForEnv(db.ServiceName) + "_"
 						}
 						envForService = fmt.Sprintf(
 							"%s%s%s%s%s%s",
@@ -305,6 +312,33 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 			continue
 		}
 	}
+}
+
+func splitStringForEnv(s string) string {
+	if strings.Contains(s, "/") {
+		return strings.ToUpper(
+			strings.Join(strings.Split(s, "/"), "_"),
+		)
+	}
+	if strings.Contains(s, "-") {
+		fmt.Println("here", s)
+		return strings.ToUpper(
+			strings.Join(strings.Split(s, "-"), "_"),
+		)
+	}
+	re := regexp.MustCompile(`[^A-Z][^A-Z]*`)
+	stringSlice := re.FindAllString(s, -1)
+
+	for i := range stringSlice {
+		if i == 0 {
+			continue
+		}
+		characterIndex := strings.Index(s, stringSlice[i])
+		stringSlice[i] = string(s[characterIndex-1]) + stringSlice[i]
+	}
+	return strings.ToUpper(
+		strings.Join(stringSlice, "_"),
+	)
 }
 
 func getPathToEnv(service utils.Service) string {
