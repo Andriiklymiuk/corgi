@@ -120,35 +120,7 @@ Or, if you want to just run services and already created db_services:
 ***Tip***: there can be as many services as you wish. 
 But create it with different ports to be able to run in all at the same time, if you want.
 
-## What happens on run
-
-I will explain based on [corgi-compose.yml example](#corgi-composeyml-example).
-
-If you run ```corgi run``` it will:
-
-1. Create folder with db helpers files in in ```corgi_services/db_services``` folder. 
-These files are created, so that you can run db_services manually, if you want.
-2. If there are any db_services, than it will auto launch docker (if not launched)
-3. If there is --seed flag added, it will get db dump from ```seedFromDb``` database and populate database
-4. Start databases in docker (docker up)
-5. Check ```depends_on_db``` part in each service and it will add env variables (DB_HOST, DB_USER,DB_NAME,DB_PORT,DB_PASSWORD) for db in the .env file in service path 
-6. Check ```depends_on_service``` part in each service and it will add env variables for service (server/app, etc) in the .env file in service path in the form of ```http://localhost:POST_IN_DEPENDENT_SERVICE``` (in corgiApp it will add ```http://localhost:8965```)
-7. Runs each service **concurrently** (in parallel)
-- Runs scripts in ```beforeStart``` of service
-- Runs scripts in ```start``` of service **concurrently** (in parallel)
-8. If you run ```Ctrl-C``` in terminal, it will:
-- terminate all services and their scripts
-- stop all databases
-- runs all ```afterStart``` commands
-
-## What happens on init
-
-I will explain based on [corgi-compose.yml example](#corgi-composeyml-example).
-
-1. It adds corgi compose files to gitignore
-2. Creates folder with db helpers files in in ```corgi_services/db_services``` folder. 
-These files are created, so that you can run db_services manually, if you want.
-3. If the path provided doesn't exist and cloneFrom is provided, than it will run git clone with provided url. So, for example, you provide path to service: `./myWoofServices/corgiserver`, than it will run git clone in `./myWoofServices/` folder. **Bare in mind**, that git clone should create `corgiserver` folder to correctly work.
+You can read of what exactly happens on [run](./resources/readme/why_it_exists.md#what-happens-on-run) or on [init](./resources/readme/why_it_exists.md#what-happens-on-run) to better understand corgi logic.
 
 ## Without cli
 
