@@ -67,7 +67,10 @@ func canRunCliAgain(cmdExecuted string) bool {
 
 func canShowWelcomeMessages() bool {
 	for _, arg := range os.Args {
-		if arg == "--silent" || arg == "-h" || arg == "--help" {
+		if arg == "--genDoc" ||
+			arg == "--silent" ||
+			arg == "-h" ||
+			arg == "--help" {
 			return false
 		}
 	}
