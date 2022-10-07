@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
@@ -53,7 +54,15 @@ type CorgiCompose struct {
 }
 
 // Get corgi-compose info from path to corgi-compose.yml file
-func GetCorgiServices(pathToCorgiComposeFile string) (*CorgiCompose, error) {
+func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
+	filenameFlag, err := cobra.Root().Flags().GetString("filename")
+	if err != nil {
+		return nil, err
+	}
+	pathToCorgiComposeFile := "corgi-compose.yml"
+	if filenameFlag != "" {
+		pathToCorgiComposeFile = filenameFlag
+	}
 	file, err := os.ReadFile(pathToCorgiComposeFile)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't read %s", pathToCorgiComposeFile)

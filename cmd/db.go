@@ -33,7 +33,7 @@ func init() {
 }
 
 func runDb(cobra *cobra.Command, args []string) {
-	corgi, err := utils.GetCorgiServices("corgi-compose.yml")
+	corgi, err := utils.GetCorgiServices(cobra)
 	if err != nil {
 		fmt.Println(err)
 		return
