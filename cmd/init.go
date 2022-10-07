@@ -31,7 +31,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	filesToIgnore := []string{
 		"# Added by corgi cli",
 		utils.RootDbServicesFolder,
-		"corgi-compose.yml",
+		"corgi-compose*.yml",
 	}
 	for _, fileToIgnore := range filesToIgnore {
 		addFileToGitignore(fileToIgnore)

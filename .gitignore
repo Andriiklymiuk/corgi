@@ -22,4 +22,4 @@ dist/
 .env
 # Added by corgi cli
 corgi_services/db_services
-corgi-compose.yml
+corgi-compose*.yml
