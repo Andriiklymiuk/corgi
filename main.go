@@ -69,6 +69,8 @@ func canShowWelcomeMessages() bool {
 	for _, arg := range os.Args {
 		if arg == "--genDoc" ||
 			arg == "--silent" ||
+			arg == "--version" ||
+			arg == "-v" ||
 			arg == "-h" ||
 			arg == "--help" {
 			return false
