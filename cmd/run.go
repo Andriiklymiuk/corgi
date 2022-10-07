@@ -308,17 +308,17 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 }
 
 func getPathToEnv(service utils.Service) string {
-	if len(service.Path) <= 1 {
-		return ".env"
-	}
 	envName := ".env"
 	if service.EnvPath != "" {
-		if strings.Contains(service.EnvPath, "/") &&
-			service.EnvPath[:1] == "." {
-			envName = service.EnvPath[1:]
-		} else {
-			envName = service.EnvPath
+		if strings.Contains(service.EnvPath, "/") {
+			if service.EnvPath[:1] == "." {
+				service.EnvPath = service.EnvPath[1:]
+			}
+			if service.EnvPath[:1] == "/" {
+				service.EnvPath = service.EnvPath[1:]
+			}
 		}
+		envName = service.EnvPath
 	}
 
 	if len(service.Path) <= 1 {
