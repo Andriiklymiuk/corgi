@@ -42,6 +42,8 @@ func runInit(cmd *cobra.Command, args []string) {
 	for _, fileToIgnore := range filesToIgnore {
 		addFileToGitignore(fileToIgnore)
 	}
+	CreateCorgiComposeExampleFile(cmd)
+	
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
@@ -51,7 +53,6 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 	CloneServices(corgi.Services)
-	CreateCorgiComposeExampleFile(cmd)
 }
 
 type FilenameForService struct {
