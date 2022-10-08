@@ -15,7 +15,8 @@ corgi init [flags]
 ### Options
 
 ```
-  -h, --help   help for init
+      --example   Create corgi-compose.simple-example.yml file
+  -h, --help      help for init
 ```
 
 ### Options inherited from parent commands

@@ -25,6 +25,12 @@ This is used to create db service from template.
 
 func init() {
 	rootCmd.AddCommand(initCmd)
+	initCmd.PersistentFlags().BoolP(
+		"example",
+		"",
+		false,
+		"Create corgi-compose.simple-example.yml file",
+	)
 }
 
 func runInit(cmd *cobra.Command, args []string) {
@@ -45,6 +51,7 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 	CloneServices(corgi.Services)
+	CreateCorgiComposeExampleFile(cmd)
 }
 
 type FilenameForService struct {
@@ -200,4 +207,44 @@ func createDbFileFromTemplate(
 		)
 	}
 	return nil
+}
+
+func CreateCorgiComposeExampleFile(cmd *cobra.Command) {
+	shouldCreateExample, err := cmd.Flags().GetBool("example")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if !shouldCreateExample {
+		return
+	}
+
+	f, err := os.Create(templates.CorgiComposeSimpleExampleFilename)
+
+	if err != nil {
+		fmt.Printf(
+			"error of creating %s, error: %s",
+			templates.CorgiComposeSimpleExampleFilename,
+			err,
+		)
+	}
+
+	defer f.Close()
+
+	tmp :=
+		template.
+			Must(template.New("simple").
+				Parse(templates.CorgiComposeSimpleExample),
+			)
+
+	err = tmp.Execute(f, nil)
+
+	if err != nil {
+		fmt.Printf(
+			"error of creating template %s, error: %s",
+			templates.CorgiComposeSimpleExampleFilename,
+			err,
+		)
+	}
 }
