@@ -37,12 +37,6 @@ func init() {
 		false,
 		"Seed all db_services that have seedSource or have dump.sql in their folder",
 	)
-	runCmd.PersistentFlags().BoolP(
-		"fromScratch",
-		"",
-		false,
-		"Clean corgi_services folder before running",
-	)
 }
 
 func runRun(cmd *cobra.Command, args []string) {
@@ -62,21 +56,7 @@ func runRun(cmd *cobra.Command, args []string) {
 		runCmdDone <- true
 	}()
 
-	isFromScratch, err := cmd.Flags().GetBool("fromScratch")
-	if err != nil {
-		return
-	}
-	if isFromScratch {
-		if len(corgi.DatabaseServices) != 0 {
-			utils.ExecuteForEachService("remove")
-		}
-		err = os.RemoveAll("./corgi_services/")
-		if err != nil {
-			fmt.Println("couldn't delete corgi_services folder: ", err)
-			return
-		}
-		fmt.Println("🗑️ Cleaned up corgi_services")
-	}
+	utils.CleanCorgiServicesFolder(cmd, *corgi)
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 

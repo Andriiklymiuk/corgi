@@ -57,6 +57,12 @@ func init() {
 		"",
 		"Custom filepath for for corgi-compose",
 	)
+	rootCmd.PersistentFlags().BoolP(
+		"fromScratch",
+		"",
+		false,
+		"Clean corgi_services folder before running",
+	)
 }
 
 func generateCobraDocs(cmd *cobra.Command) {
