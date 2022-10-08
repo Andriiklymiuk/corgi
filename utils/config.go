@@ -135,6 +135,7 @@ func GetDbServiceByName(databaseServiceName string, databaseServices []DatabaseS
 func CleanCorgiServicesFolder(cmd *cobra.Command, corgi CorgiCompose) {
 	isFromScratch, err := cmd.Root().Flags().GetBool("fromScratch")
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 	if !isFromScratch {
