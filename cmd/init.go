@@ -36,14 +36,15 @@ func runInit(cmd *cobra.Command, args []string) {
 	for _, fileToIgnore := range filesToIgnore {
 		addFileToGitignore(fileToIgnore)
 	}
-	services, err := utils.GetCorgiServices(cmd)
+	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
 		return
 	}
+	utils.CleanCorgiServicesFolder(cmd, *corgi)
 
-	CreateDatabaseServices(services.DatabaseServices)
-	CreateServicesFolders(services.Services)
+	CreateDatabaseServices(corgi.DatabaseServices)
+	CloneServices(corgi.Services)
 }
 
 type FilenameForService struct {
@@ -88,39 +89,42 @@ Provide them in corgi-compose.yml file`)
 	}
 }
 
-func CreateServicesFolders(services []utils.Service) {
+func CloneServices(services []utils.Service) {
 	for _, service := range services {
-		if service.Path != "" {
-			_, err := os.Stat(service.Path)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					if service.CloneFrom == "" {
-						fmt.Printf(
-							"No directory %s, please provide cloneFrom url or create service in the path",
-							service.CloneFrom,
-						)
-						continue
-					}
-					pathSlice := strings.Split(service.Path, "/")
-					pathWithoutLastFolder := strings.Join(pathSlice[:len(pathSlice)-1], "/")
-					err := os.MkdirAll(pathWithoutLastFolder, os.ModePerm)
-					if err != nil {
-						fmt.Println(err)
-						continue
-					}
+		if service.Path == "" {
+			fmt.Println("No service path provided, using current directory as root for", service.ServiceName)
+			continue
+		}
 
-					cmd := exec.Command("git", "clone", service.CloneFrom)
-					cmd.Dir = pathWithoutLastFolder
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					err = cmd.Run()
-					if err != nil {
-						fmt.Printf(`output error: %s, in path %s with git clone %s
-					`, err, pathWithoutLastFolder, service.CloneFrom)
-					}
-					continue
-				}
+		_, err := os.Stat(service.Path)
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
 				fmt.Println(err)
+				continue
+			}
+			if service.CloneFrom == "" {
+				fmt.Printf(
+					"No directory %s, please provide cloneFrom url or create service in the path",
+					service.CloneFrom,
+				)
+				continue
+			}
+			pathSlice := strings.Split(service.Path, "/")
+			pathWithoutLastFolder := strings.Join(pathSlice[:len(pathSlice)-1], "/")
+			err := os.MkdirAll(pathWithoutLastFolder, os.ModePerm)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			cmd := exec.Command("git", "clone", service.CloneFrom)
+			cmd.Dir = pathWithoutLastFolder
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			if err != nil {
+				fmt.Printf(`output error: %s, in path %s with git clone %s
+					`, err, pathWithoutLastFolder, service.CloneFrom)
 			}
 		}
 	}
