@@ -92,7 +92,7 @@ Provide them in corgi-compose.yml file`)
 func CloneServices(services []utils.Service) {
 	for _, service := range services {
 		if service.Path == "" {
-			fmt.Println("No service path provided, using current directory as root for", service.ServiceName)
+			fmt.Println("\nNo path for", service.ServiceName, ". Using current directory")
 			continue
 		}
 
