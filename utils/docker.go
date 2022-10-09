@@ -12,7 +12,7 @@ import (
 	"github.com/briandowns/spinner"
 )
 
-func getPathToService(targetService string) (string, error) {
+func GetPathToDbService(targetService string) (string, error) {
 	currentWorkingDirectory, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("cannot get path to service %s", err)
@@ -64,7 +64,7 @@ func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 		return nil, fmt.Errorf("no makefile found in %s", targetService)
 	}
 
-	path, err := getPathToService(targetService)
+	path, err := GetPathToDbService(targetService)
 	if err != nil {
 		return nil, fmt.Errorf("path to target service is not found: %s", err)
 	}
@@ -86,7 +86,7 @@ func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 }
 
 func ExecuteMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {
-	path, err := getPathToService(targetService)
+	path, err := GetPathToDbService(targetService)
 	if err != nil {
 		return nil, fmt.Errorf("path to target service is not found: %s", err)
 	}
@@ -106,7 +106,7 @@ func ExecuteMakeCommand(targetService string, makeCommand ...string) ([]byte, er
 }
 
 func ExecuteCommandRun(targetService string, command ...string) error {
-	path, err := getPathToService(targetService)
+	path, err := GetPathToDbService(targetService)
 	if err != nil {
 		return fmt.Errorf("path to target service is not found: %s", err)
 	}
@@ -146,7 +146,7 @@ func CheckDockerStatus() error {
 }
 
 func ExecuteSeedMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {
-	path, err := getPathToService(targetService)
+	path, err := GetPathToDbService(targetService)
 	if err != nil {
 		return nil, fmt.Errorf("path to target service is not found: %s", err)
 	}

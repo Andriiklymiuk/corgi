@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -140,15 +141,10 @@ func showMakeCommands(
 }
 
 func SeedDb(targetService string) error {
-	serviceIsRunning, err := utils.GetStatusOfService(targetService)
-	if err != nil {
-		fmt.Printf("Getting target service info failed: %s\n", err)
-	}
 	dumpFileExists, err := utils.CheckIfFileExistsInDirectory(
 		fmt.Sprintf("./%s/%s", utils.RootDbServicesFolder, targetService),
 		"dump.sql",
 	)
-
 	if err != nil {
 		return fmt.Errorf("error in checking dump file: %s", err)
 	}
@@ -157,6 +153,10 @@ func SeedDb(targetService string) error {
 			"db dump file doesn't exist in %s. Please add one its directory",
 			targetService,
 		)
+	}
+	serviceIsRunning, err := utils.GetStatusOfService(targetService)
+	if err != nil {
+		fmt.Printf("Getting target service info failed: %s\n", err)
 	}
 	if !serviceIsRunning {
 		_, err := utils.ExecuteMakeCommand(targetService, "up")
@@ -202,4 +202,40 @@ func GetDump(serviceConfig utils.DatabaseService) {
 	}
 
 	fmt.Printf("✅ Successfully added database dump to %s\n", serviceConfig.ServiceName)
+}
+
+func DumpAndSeedDb(dbService utils.DatabaseService) error {
+	if dbService.SeedFromFilePath != "" {
+		src := dbService.SeedFromFilePath
+		path, err := utils.GetPathToDbService(dbService.ServiceName)
+		if err != nil {
+			return fmt.Errorf("path to target service is not found: %s", err)
+		}
+		dest := path + "/dump.sql"
+
+		bytesRead, err := os.ReadFile(src)
+
+		if err != nil {
+			return err
+		}
+
+		err = os.WriteFile(dest, bytesRead, 0644)
+
+		if err != nil {
+			return err
+		}
+		fmt.Println(string("\n\033[34m"), "⛅ DATABASE DUMP COPIED for", dbService.ServiceName, string("\033[0m"))
+	}
+
+	if (dbService.SeedFromDb != utils.SeedDbSource{} && dbService.SeedFromFilePath == "") {
+		fmt.Println(string("\n\033[34m"), "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, string("\033[0m"))
+		GetDump(dbService)
+	}
+
+	err := SeedDb(dbService.ServiceName)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string("\n\033[34m"), "🎉 ", dbService.ServiceName, " IS SEEDED", string("\033[0m"))
+	return nil
 }
