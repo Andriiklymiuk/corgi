@@ -69,7 +69,8 @@ db_services:
     user: corgi
     password: corgiSecurePassword
     port: 5432
-    seedFromFilePath: path/to/dump.sql to use, it will precede before seedFromDb
+    seedFromFilePath: path/to/dump.sql to use, it will precede before seedFromDb. 
+    #Add seedFromFilePath or seedFromDb, only one will work
     seedFromDb:
       host: db_host_for_seed_seed_db
       databaseName: db_name_for_seed_db
