@@ -12,12 +12,13 @@ var DbServicesInConfig = "db_services"
 var RootDbServicesFolder = "corgi_services/db_services"
 
 type DatabaseService struct {
-	ServiceName  string
-	User         string       `yaml:"user"`
-	Password     string       `yaml:"password"`
-	DatabaseName string       `yaml:"databaseName"`
-	Port         int          `yaml:"port"`
-	SeedFromDb   SeedDbSource `yaml:"seedFromDb"`
+	ServiceName      string
+	User             string       `yaml:"user"`
+	Password         string       `yaml:"password"`
+	DatabaseName     string       `yaml:"databaseName"`
+	Port             int          `yaml:"port"`
+	SeedFromDb       SeedDbSource `yaml:"seedFromDb"`
+	SeedFromFilePath string       `yaml:"seedFromFilePath"`
 }
 
 type SeedDbSource struct {
@@ -81,12 +82,13 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		var dbServices []DatabaseService
 		for indexName, service := range dbServicesData[DbServicesInConfig] {
 			dbServices = append(dbServices, DatabaseService{
-				ServiceName:  indexName,
-				DatabaseName: service.DatabaseName,
-				User:         service.User,
-				Password:     service.Password,
-				Port:         service.Port,
-				SeedFromDb:   service.SeedFromDb,
+				ServiceName:      indexName,
+				DatabaseName:     service.DatabaseName,
+				User:             service.User,
+				Password:         service.Password,
+				Port:             service.Port,
+				SeedFromDb:       service.SeedFromDb,
+				SeedFromFilePath: service.SeedFromFilePath,
 			})
 		}
 		corgi.DatabaseServices = dbServices

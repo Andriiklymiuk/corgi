@@ -111,17 +111,10 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 
 	if isSeed {
 		for _, dbService := range databaseServices {
-			if (dbService.SeedFromDb == utils.SeedDbSource{}) {
-				continue
-			}
-			fmt.Println(string("\n\033[34m"), "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, string("\033[0m"))
-			GetDump(dbService)
-			err = SeedDb(dbService.ServiceName)
+			err := DumpAndSeedDb(dbService)
 			if err != nil {
-				fmt.Println(err)
-				continue
+				fmt.Println("Error dumping and seeding file", err)
 			}
-			fmt.Println(string("\n\033[34m"), "🎉 ", dbService.ServiceName, " IS SEEDED", string("\033[0m"))
 		}
 	}
 
