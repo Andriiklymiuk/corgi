@@ -62,8 +62,11 @@ func canRunCliAgain(cmdExecuted string) bool {
 			arg == "filename" {
 			return false
 		}
+		if arg[0:1] == "-" && arg != "-f" {
+			return false
+		}
 	}
-	return os.Args[len(os.Args)-1][0:1] != "-"
+	return true
 }
 
 func canShowWelcomeMessages() bool {
