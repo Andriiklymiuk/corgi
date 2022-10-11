@@ -176,8 +176,15 @@ func runServiceCmd(serviceCommand string, path string) error {
 // Adds env variables to each service, including dependent db_services and services
 func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 	for _, service := range corgiCompose.Services {
+		var envForService string
 
-		envForService := strings.Join(service.Environment[:], "\n")
+		if service.CopyEnvFromFilePath != "" {
+			envForService = strings.Join(
+				getFileContent(service.CopyEnvFromFilePath),
+				"\n",
+			) + "\n"
+		}
+		envForService = envForService + strings.Join(service.Environment[:], "\n")
 
 		// add url for dependent service
 		if service.DependsOnServices != nil {

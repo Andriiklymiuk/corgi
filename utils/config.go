@@ -35,18 +35,19 @@ type DependsOnService struct {
 }
 
 type Service struct {
-	ServiceName       string
-	Path              string             `yaml:"path"`
-	CloneFrom         string             `yaml:"cloneFrom"`
-	DockerEnabled     bool               `yaml:"docker_enabled"`
-	Environment       []string           `yaml:"environment"`
-	EnvPath           string             `yaml:"envPath"`
-	Port              int                `yaml:"port"`
-	DependsOnServices []DependsOnService `yaml:"depends_on_services"`
-	DependsOnDb       []string           `yaml:"depends_on_db"`
-	BeforeStart       []string           `yaml:"beforeStart"`
-	Start             []string           `yaml:"start"`
-	AfterStart        []string           `yaml:"afterStart"`
+	ServiceName         string
+	Path                string             `yaml:"path"`
+	CloneFrom           string             `yaml:"cloneFrom"`
+	DockerEnabled       bool               `yaml:"docker_enabled"`
+	Environment         []string           `yaml:"environment"`
+	EnvPath             string             `yaml:"envPath"`
+	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath"`
+	Port                int                `yaml:"port"`
+	DependsOnServices   []DependsOnService `yaml:"depends_on_services"`
+	DependsOnDb         []string           `yaml:"depends_on_db"`
+	BeforeStart         []string           `yaml:"beforeStart"`
+	Start               []string           `yaml:"start"`
+	AfterStart          []string           `yaml:"afterStart"`
 }
 
 type CorgiCompose struct {
@@ -105,18 +106,19 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		var services []Service
 		for indexName, service := range servicesData["services"] {
 			services = append(services, Service{
-				ServiceName:       indexName,
-				Path:              service.Path,
-				CloneFrom:         service.CloneFrom,
-				DockerEnabled:     service.DockerEnabled,
-				DependsOnServices: service.DependsOnServices,
-				DependsOnDb:       service.DependsOnDb,
-				Environment:       service.Environment,
-				EnvPath:           service.EnvPath,
-				Port:              service.Port,
-				BeforeStart:       service.BeforeStart,
-				AfterStart:        service.AfterStart,
-				Start:             service.Start,
+				ServiceName:         indexName,
+				Path:                service.Path,
+				CloneFrom:           service.CloneFrom,
+				DockerEnabled:       service.DockerEnabled,
+				DependsOnServices:   service.DependsOnServices,
+				DependsOnDb:         service.DependsOnDb,
+				Environment:         service.Environment,
+				EnvPath:             service.EnvPath,
+				CopyEnvFromFilePath: service.CopyEnvFromFilePath,
+				Port:                service.Port,
+				BeforeStart:         service.BeforeStart,
+				AfterStart:          service.AfterStart,
+				Start:               service.Start,
 			})
 		}
 		corgi.Services = services
