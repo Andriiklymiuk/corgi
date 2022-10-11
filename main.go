@@ -63,7 +63,7 @@ func canRunCliAgain(cmdExecuted string) bool {
 			return false
 		}
 	}
-	return os.Args[len(os.Args)-1][0:1] == "-"
+	return os.Args[len(os.Args)-1][0:1] != "-"
 }
 
 func canShowWelcomeMessages() bool {
