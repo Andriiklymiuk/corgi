@@ -228,7 +228,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 						envForService = fmt.Sprintf(
 							"%s%s%s%s%s%s",
 							envForService,
-							fmt.Sprintf("\n\nDB_%sHOST=http://localhost", serviceNameInEnv),
+							fmt.Sprintf("\n\nDB_%sHOST=localhost", serviceNameInEnv),
 							fmt.Sprintf("\nDB_%sUSER=%s", serviceNameInEnv, db.User),
 							fmt.Sprintf("\nDB_%sNAME=%s", serviceNameInEnv, db.DatabaseName),
 							fmt.Sprintf("\nDB_%sPORT=%d", serviceNameInEnv, db.Port),
