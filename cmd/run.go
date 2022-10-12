@@ -246,6 +246,14 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 			}
 		}
 
+		if service.Port != 0 {
+			envForService = fmt.Sprintf(
+				"%s%s",
+				envForService,
+				fmt.Sprintf("\nPORT=%d", service.Port),
+			)
+		}
+
 		pathToEnvFile := getPathToEnv(service)
 
 		corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
