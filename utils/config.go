@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -65,6 +66,10 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	if filenameFlag != "" {
 		pathToCorgiComposeFile = filenameFlag
 	}
+	describeFlag, err := cobra.Root().Flags().GetBool("describe")
+	if err != nil {
+		return nil, err
+	}
 	file, err := os.ReadFile(pathToCorgiComposeFile)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't read %s", pathToCorgiComposeFile)
@@ -82,7 +87,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	} else {
 		var dbServices []DatabaseService
 		for indexName, service := range dbServicesData[DbServicesInConfig] {
-			dbServices = append(dbServices, DatabaseService{
+			dbToAdd := DatabaseService{
 				ServiceName:      indexName,
 				DatabaseName:     service.DatabaseName,
 				User:             service.User,
@@ -90,7 +95,12 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				Port:             service.Port,
 				SeedFromDb:       service.SeedFromDb,
 				SeedFromFilePath: service.SeedFromFilePath,
-			})
+			}
+			dbServices = append(dbServices, dbToAdd)
+
+			if describeFlag {
+				describeServiceInfo(dbToAdd)
+			}
 		}
 		corgi.DatabaseServices = dbServices
 	}
@@ -105,7 +115,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	} else {
 		var services []Service
 		for indexName, service := range servicesData["services"] {
-			services = append(services, Service{
+			serviceToAdd := Service{
 				ServiceName:         indexName,
 				Path:                service.Path,
 				CloneFrom:           service.CloneFrom,
@@ -119,7 +129,12 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				BeforeStart:         service.BeforeStart,
 				AfterStart:          service.AfterStart,
 				Start:               service.Start,
-			})
+			}
+			services = append(services, serviceToAdd)
+
+			if describeFlag {
+				describeServiceInfo(serviceToAdd)
+			}
 		}
 		corgi.Services = services
 	}
@@ -154,4 +169,13 @@ func CleanCorgiServicesFolder(cmd *cobra.Command, corgi CorgiCompose) {
 		return
 	}
 	fmt.Println("🗑️ Cleaned up corgi_services")
+}
+
+func describeServiceInfo(service any) {
+	data, err := json.MarshalIndent(service, "", "\t")
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println(string(data))
+	}
 }
