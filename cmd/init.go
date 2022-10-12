@@ -38,12 +38,13 @@ func runInit(cmd *cobra.Command, args []string) {
 		"# Added by corgi cli",
 		utils.RootDbServicesFolder,
 		"corgi-compose*.yml",
+		".env*",
 	}
 	for _, fileToIgnore := range filesToIgnore {
 		addFileToGitignore(fileToIgnore)
 	}
 	CreateCorgiComposeExampleFile(cmd)
-	
+
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
