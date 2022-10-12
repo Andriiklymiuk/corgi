@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 )
@@ -60,4 +61,21 @@ func CheckIfFileExistsInDirectory(pathToDirectory string, fileName string) (bool
 		}
 	}
 	return makeFileExists, nil
+}
+
+func GetFileContent(fileName string) []string {
+	f, err := os.Open(fileName)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	result := []string{}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		result = append(result, line)
+	}
+	return result
 }

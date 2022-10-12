@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -180,7 +179,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 
 		if service.CopyEnvFromFilePath != "" {
 			envForService = strings.Join(
-				getFileContent(service.CopyEnvFromFilePath),
+				utils.GetFileContent(service.CopyEnvFromFilePath),
 				"\n",
 			) + "\n"
 		}
@@ -258,7 +257,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 
 		corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 		var corgiEnvPosition []int
-		envFileContent := getFileContent(pathToEnvFile)
+		envFileContent := utils.GetFileContent(pathToEnvFile)
 
 		for index, line := range envFileContent {
 			if line == corgiGeneratedMessage {
@@ -357,23 +356,6 @@ func getPathToEnv(service utils.Service) string {
 	} else {
 		return service.Path + envName
 	}
-}
-
-func getFileContent(fileName string) []string {
-	f, err := os.Open(fileName)
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	result := []string{}
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		result = append(result, line)
-	}
-	return result
 }
 
 func removeIndexesFromSlice(s []string, from int, to int) []string {
