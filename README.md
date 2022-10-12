@@ -85,6 +85,7 @@ db_services:
 
 services:
   corgiServer:
+    # copyEnvFromFilePath: path_to_copy_env_from
     environment:
       - PORT=8965
     depends_on_db:
