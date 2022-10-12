@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -13,13 +15,14 @@ var DbServicesInConfig = "db_services"
 var RootDbServicesFolder = "corgi_services/db_services"
 
 type DatabaseService struct {
-	ServiceName      string
-	User             string       `yaml:"user"`
-	Password         string       `yaml:"password"`
-	DatabaseName     string       `yaml:"databaseName"`
-	Port             int          `yaml:"port"`
-	SeedFromDb       SeedDbSource `yaml:"seedFromDb"`
-	SeedFromFilePath string       `yaml:"seedFromFilePath"`
+	ServiceName       string
+	User              string       `yaml:"user"`
+	Password          string       `yaml:"password"`
+	DatabaseName      string       `yaml:"databaseName"`
+	Port              int          `yaml:"port"`
+	SeedFromDbEnvPath string       `yaml:"seedFromDbEnvPath"`
+	SeedFromDb        SeedDbSource `yaml:"seedFromDb"`
+	SeedFromFilePath  string       `yaml:"seedFromFilePath"`
 }
 
 type SeedDbSource struct {
@@ -87,13 +90,22 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	} else {
 		var dbServices []DatabaseService
 		for indexName, service := range dbServicesData[DbServicesInConfig] {
+			var seedFromDb SeedDbSource
+			if service.SeedFromDbEnvPath != "" {
+				seedFromDb = getDbSourceFromPath(service.SeedFromDbEnvPath)
+			}
+
+			if (seedFromDb == SeedDbSource{}) {
+				seedFromDb = service.SeedFromDb
+			}
+
 			dbToAdd := DatabaseService{
 				ServiceName:      indexName,
 				DatabaseName:     service.DatabaseName,
 				User:             service.User,
 				Password:         service.Password,
 				Port:             service.Port,
-				SeedFromDb:       service.SeedFromDb,
+				SeedFromDb:       seedFromDb,
 				SeedFromFilePath: service.SeedFromFilePath,
 			}
 			dbServices = append(dbServices, dbToAdd)
@@ -169,6 +181,31 @@ func CleanCorgiServicesFolder(cmd *cobra.Command, corgi CorgiCompose) {
 		return
 	}
 	fmt.Println("🗑️ Cleaned up corgi_services")
+}
+
+func getDbSourceFromPath(path string) SeedDbSource {
+	var seedFromDb SeedDbSource
+	for _, envLine := range GetFileContent(path) {
+		envLineValues := strings.Split(envLine, "=")
+		switch strings.ToUpper(envLineValues[0]) {
+		case "DB_HOST":
+			seedFromDb.Host = envLineValues[1]
+		case "DB_NAME":
+			seedFromDb.DatabaseName = envLineValues[1]
+		case "DB_PASSWORD":
+			seedFromDb.Password = envLineValues[1]
+		case "DB_USER":
+			seedFromDb.User = envLineValues[1]
+		case "DB_PORT":
+			intVar, err := strconv.Atoi(envLineValues[1])
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			seedFromDb.Port = intVar
+		}
+	}
+	return seedFromDb
 }
 
 func describeServiceInfo(service any) {
