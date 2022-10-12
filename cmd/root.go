@@ -63,6 +63,12 @@ func init() {
 		false,
 		"Clean corgi_services folder before running",
 	)
+	rootCmd.PersistentFlags().BoolP(
+		"describe",
+		"",
+		false,
+		"Describe contents of corgi-compose file",
+	)
 }
 
 func generateCobraDocs(cmd *cobra.Command) {
