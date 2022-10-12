@@ -82,6 +82,15 @@ corgi run --seed
 ```
 It will create dump of data and then seed it to your database.
 
+**Tip** You can add in ```seedFromDbEnvPath``` the path to env config with db in the form of:
+``` 
+DB_HOST=host_of_db_from_which_to_get_dump
+DB_NAME=name_of_db_from_which_to_get_dump
+DB_USER=user_of_db_from_which_to_get_dump
+DB_PASSWORD=password_of_db_from_which_to_get_dump
+DB_PORT=port_of_db_from_which_to_get_dump
+```
+
 - ### Manually
 
 If you provided seedSource in ```corgi-compose.yml```, than you can do:
