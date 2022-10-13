@@ -15,9 +15,15 @@ import (
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Cleans all services",
-	Long: `It cleans all db, corgi_services folder, cloned repos, etc.
+	Long: `Cleans all db, corgi_services folder, cloned repos, etc.
 Useful to clean start corgi as new.
 Similar to --fromScratch flag used in other commands, but this is more generic.
+
+Requires items flag.
+`,
+	Example: `
+corgi clean -i db,corgi_services,services
+corgi clean -i db
 `,
 	Run: runClean,
 }
