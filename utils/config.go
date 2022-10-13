@@ -36,6 +36,7 @@ type SeedDbSource struct {
 type DependsOnService struct {
 	Name     string `yaml:"name"`
 	EnvAlias string `yaml:"envAlias"`
+	Suffix   string `yaml:"suffix"`
 }
 
 type Service struct {
