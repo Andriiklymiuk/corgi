@@ -59,6 +59,7 @@ func canRunCliAgain(cmdExecuted string) bool {
 	for _, arg := range os.Args {
 		if arg == "init" ||
 			arg == "run" ||
+			arg == "clean" ||
 			arg == "filename" {
 			return false
 		}
