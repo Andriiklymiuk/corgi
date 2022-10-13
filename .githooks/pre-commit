@@ -11,6 +11,6 @@ if [[ $STAGED_GO_FILES == "" ]]; then
 else
     go build
     git add corgi
-    ./corgi --genDoc
+    ./corgi --doc
     git add resources/readme
 fi

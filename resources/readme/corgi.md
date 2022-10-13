@@ -25,9 +25,9 @@ corgi run
 
 ```
       --describe          Describe contents of corgi-compose file
+      --doc               Generate cobra docs
   -f, --filename string   Custom filepath for for corgi-compose
       --fromScratch       Clean corgi_services folder before running
-      --genDoc            Generate cobra docs
   -h, --help              help for corgi
       --silent            Hide all welcome messages
   -t, --toggle            Help message for toggle

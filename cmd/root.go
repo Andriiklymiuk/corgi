@@ -44,7 +44,7 @@ func Execute() string {
 
 func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	rootCmd.PersistentFlags().BoolP("genDoc", "", false, "Generate cobra docs")
+	rootCmd.PersistentFlags().BoolP("doc", "", false, "Generate cobra docs")
 	rootCmd.PersistentFlags().BoolP(
 		"silent",
 		"",
@@ -72,9 +72,9 @@ func init() {
 }
 
 func generateCobraDocs(cmd *cobra.Command) {
-	shouldGenerateCobraDocs, err := cmd.Flags().GetBool("genDoc")
+	shouldGenerateCobraDocs, err := cmd.Flags().GetBool("doc")
 	if err != nil {
-		fmt.Println("Couldn't read flag genDoc: ", err)
+		fmt.Println("Couldn't read flag:", err)
 	}
 
 	if !shouldGenerateCobraDocs {
