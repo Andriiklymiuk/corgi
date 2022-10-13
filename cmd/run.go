@@ -55,7 +55,7 @@ func runRun(cmd *cobra.Command, args []string) {
 		runCmdDone <- true
 	}()
 
-	utils.CleanCorgiServicesFolder(cmd, *corgi)
+	utils.CleanFromScratch(cmd, *corgi)
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 

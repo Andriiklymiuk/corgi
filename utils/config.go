@@ -163,7 +163,7 @@ func GetDbServiceByName(databaseServiceName string, databaseServices []DatabaseS
 	return DatabaseService{}, fmt.Errorf("db_service %s is not found", databaseServiceName)
 }
 
-func CleanCorgiServicesFolder(cmd *cobra.Command, corgi CorgiCompose) {
+func CleanFromScratch(cmd *cobra.Command, corgi CorgiCompose) {
 	isFromScratch, err := cmd.Root().Flags().GetBool("fromScratch")
 	if err != nil {
 		fmt.Println(err)
@@ -175,7 +175,11 @@ func CleanCorgiServicesFolder(cmd *cobra.Command, corgi CorgiCompose) {
 	if len(corgi.DatabaseServices) != 0 {
 		ExecuteForEachService("remove")
 	}
-	err = os.RemoveAll("./corgi_services/")
+	CleanCorgiServicesFolder()
+}
+
+func CleanCorgiServicesFolder() {
+	err := os.RemoveAll("./corgi_services/")
 	if err != nil {
 		fmt.Println("couldn't delete corgi_services folder: ", err)
 		return

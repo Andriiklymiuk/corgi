@@ -50,7 +50,7 @@ func runInit(cmd *cobra.Command, args []string) {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
 		return
 	}
-	utils.CleanCorgiServicesFolder(cmd, *corgi)
+	utils.CleanFromScratch(cmd, *corgi)
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 	CloneServices(corgi.Services)
