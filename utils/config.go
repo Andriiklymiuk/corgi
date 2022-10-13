@@ -43,7 +43,6 @@ type Service struct {
 	ServiceName         string
 	Path                string             `yaml:"path"`
 	CloneFrom           string             `yaml:"cloneFrom"`
-	DockerEnabled       bool               `yaml:"docker_enabled"`
 	Environment         []string           `yaml:"environment"`
 	EnvPath             string             `yaml:"envPath"`
 	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath"`
