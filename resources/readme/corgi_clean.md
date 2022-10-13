@@ -19,6 +19,7 @@ corgi clean [flags]
 
 ```
 
+corgi clean -i all
 corgi clean -i db,corgi_services,services
 corgi clean -i db
 
@@ -33,6 +34,8 @@ corgi clean -i db
                         db - down all databases, that were added to corgi_services folder.
                         corgi_services - clean corgi_services folder.
                         services - delete all services folders (useful, when you want to clean cloned repos folders)
+                        
+                        all - equal to writing db,corgi_services,services in items
                         		
 ```
 
