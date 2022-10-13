@@ -198,20 +198,22 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 						}
 						if s.Port != 0 {
 							envForService = fmt.Sprintf(
-								"%s\n%s=http://localhost:%s",
+								"%s\n%s=http://localhost:%s%s",
 								envForService,
 								envNameToUse,
 								fmt.Sprint(s.Port),
+								dependingService.Suffix,
 							)
 							continue
 						}
 						for _, envLine := range s.Environment {
 							if strings.Split(envLine, "=")[0] == "PORT" {
 								envForService = fmt.Sprintf(
-									"%s\n%s=http://localhost:%s",
+									"%s\n%s=http://localhost:%s%s",
 									envForService,
 									envNameToUse,
 									strings.Split(envLine, "=")[1],
+									dependingService.Suffix,
 								)
 								continue
 							}
