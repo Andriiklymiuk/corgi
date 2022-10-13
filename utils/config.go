@@ -131,7 +131,6 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				ServiceName:         indexName,
 				Path:                service.Path,
 				CloneFrom:           service.CloneFrom,
-				DockerEnabled:       service.DockerEnabled,
 				DependsOnServices:   service.DependsOnServices,
 				DependsOnDb:         service.DependsOnDb,
 				Environment:         service.Environment,
