@@ -82,7 +82,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 				if err != nil {
 					fmt.Println(
 						string("\033[31m"),
-						"aborting all other afterStart commands for ", service, ", because of ", err,
+						"aborting all other afterStart commands for ", service.ServiceName, ", because of ", err,
 						string("\033[0m"),
 					)
 					break
@@ -134,7 +134,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 			if err != nil {
 				fmt.Println(
 					string("\033[31m"),
-					"aborting all other beforeStart commands for ", service, ", because of ", err,
+					"aborting all other beforeStart commands for ", service.ServiceName, ", because of ", err,
 					string("\033[0m"),
 				)
 				return
@@ -149,7 +149,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 				if err != nil {
 					fmt.Println(
 						string("\033[31m"),
-						"aborting all other start commands for ", service, ", because of ", err,
+						"aborting ", service.ServiceName, "cmd ", startCmd, ", because of ", err,
 						string("\033[0m"),
 					)
 					return
