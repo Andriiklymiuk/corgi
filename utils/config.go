@@ -13,6 +13,8 @@ import (
 
 var DbServicesInConfig = "db_services"
 var RootDbServicesFolder = "corgi_services/db_services"
+var ServicesItemsFromFlag []string
+var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
 	ServiceName       string
@@ -85,11 +87,14 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	if err != nil {
 		return nil, fmt.Errorf("couldn't unmarshal dbServicesData %s", pathToCorgiComposeFile)
 	}
-	if len(dbServicesData[DbServicesInConfig]) == 0 {
+	if len(dbServicesData[DbServicesInConfig]) == 0 || !servicesCanBeAdded(DbServicesItemsFromFlag) {
 		fmt.Println("no db_services provided")
 	} else {
 		var dbServices []DatabaseService
 		for indexName, service := range dbServicesData[DbServicesInConfig] {
+			if !isServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
+				continue
+			}
 			var seedFromDb SeedDbSource
 			if service.SeedFromDbEnvPath != "" {
 				seedFromDb = getDbSourceFromPath(service.SeedFromDbEnvPath)
@@ -122,11 +127,14 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	if err != nil {
 		return nil, fmt.Errorf("couldn't unmarshal servicesData %s", pathToCorgiComposeFile)
 	}
-	if len(servicesData["services"]) == 0 {
+	if len(servicesData["services"]) == 0 || !servicesCanBeAdded(ServicesItemsFromFlag) {
 		fmt.Println("no services provided")
 	} else {
 		var services []Service
 		for indexName, service := range servicesData["services"] {
+			if !isServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
+				continue
+			}
 			serviceToAdd := Service{
 				ServiceName:         indexName,
 				Path:                service.Path,
@@ -218,4 +226,26 @@ func describeServiceInfo(service any) {
 	} else {
 		fmt.Println(string(data))
 	}
+}
+
+func servicesCanBeAdded(services []string) bool {
+	for _, service := range services {
+		if service == "none" {
+			return false
+		}
+	}
+	return true
+}
+
+func isServiceIncludedInFlag(services []string, serviceName string) bool {
+	if len(services) == 0 {
+		return true
+	}
+	var isIncluded bool
+	for _, service := range services {
+		if service == serviceName {
+			isIncluded = true
+		}
+	}
+	return isIncluded
 }
