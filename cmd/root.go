@@ -76,10 +76,11 @@ func init() {
 		"services",
 		"",
 		[]string{},
-		`Slice of services to start.
+		`Slice of services to choose from.
 
-If you provide at least 1 services here, than corgi will run only this service, while ignoring all others.
+If you provide at least 1 services here, than corgi will choose only this service, while ignoring all others.
 none - will ignore all services run.
+(--services app,server)
 
 By default all services are included and run.
 		`,
@@ -89,10 +90,11 @@ By default all services are included and run.
 		"dbServices",
 		"",
 		[]string{},
-		`Slice of db_services to start.
+		`Slice of db_services to choose from.
 
-If you provide at least 1 db_service here, than corgi will run only this db, while ignoring all others.
+If you provide at least 1 db_service here, than corgi will choose only this db_service, while ignoring all others.
 none - will ignore all db_services run.
+(--dbServices db,db1,db2)
 
 By default all db_services are included and run.
 		`,
