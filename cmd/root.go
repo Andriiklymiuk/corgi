@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils"
 	"fmt"
 	"os"
 
@@ -68,6 +69,33 @@ func init() {
 		"",
 		false,
 		"Describe contents of corgi-compose file",
+	)
+
+	rootCmd.PersistentFlags().StringSliceVarP(
+		&utils.ServicesItemsFromFlag,
+		"services",
+		"",
+		[]string{},
+		`Slice of services to start.
+
+If you provide at least 1 services here, than corgi will run only this service, while ignoring all others.
+none - will ignore all services run.
+
+By default all services are included and run.
+		`,
+	)
+	rootCmd.PersistentFlags().StringSliceVarP(
+		&utils.DbServicesItemsFromFlag,
+		"dbServices",
+		"",
+		[]string{},
+		`Slice of db_services to start.
+
+If you provide at least 1 db_service here, than corgi will run only this db, while ignoring all others.
+none - will ignore all db_services run.
+
+By default all db_services are included and run.
+		`,
 	)
 }
 
