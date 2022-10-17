@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var omitItems []string
+
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:   "run",
@@ -25,16 +27,23 @@ var runCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.PersistentFlags().BoolP(
-		"omitBeforeStart",
-		"",
-		false,
-		"Omits all before start commands from corgi-compose config",
-	)
-	runCmd.PersistentFlags().BoolP(
 		"seed",
 		"s",
 		false,
 		"Seed all db_services that have seedSource or have dump.sql in their folder",
+	)
+	runCmd.PersistentFlags().StringSliceVarP(
+		&omitItems,
+		"omit",
+		"",
+		[]string{},
+		`Slice of parts of service to omit.
+
+beforeStart - beforeStart in services is omitted.
+afterStart - afterStart in services is omitted.
+
+By default nothing is omitted
+		`,
 	)
 }
 
@@ -75,7 +84,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 		utils.ExecuteForEachService("stop")
 	}
 	for _, service := range corgi.Services {
-		if service.AfterStart != nil {
+		if service.AfterStart != nil && !omitServiceCmd("afterStart") {
 			fmt.Println("\nAfter start commands:")
 			for _, afterStartCmd := range service.AfterStart {
 				err := runServiceCmd(afterStartCmd, service.Path)
@@ -122,12 +131,8 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 
 func runService(service utils.Service, cobraCmd *cobra.Command) {
 	fmt.Println(string("\n\033[34m"), "🐶 RUNNING SERVICE", service.ServiceName, string("\033[0m"))
-	omitBeforeStart, err := cobraCmd.Flags().GetBool("omitBeforeStart")
-	if err != nil {
-		return
-	}
 
-	if service.BeforeStart != nil && !omitBeforeStart {
+	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
 		fmt.Println("\nBefore start commands:")
 		for _, beforeStartCmd := range service.BeforeStart {
 			err := runServiceCmd(beforeStartCmd, service.Path)
@@ -362,4 +367,13 @@ func getPathToEnv(service utils.Service) string {
 
 func removeIndexesFromSlice(s []string, from int, to int) []string {
 	return append(s[:from], s[to+1:]...)
+}
+
+func omitServiceCmd(cmdName string) bool {
+	for _, s := range omitItems {
+		if cmdName == s {
+			return true
+		}
+	}
+	return false
 }
