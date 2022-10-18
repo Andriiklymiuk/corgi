@@ -45,6 +45,36 @@ afterStart - afterStart in services is omitted.
 By default nothing is omitted
 		`,
 	)
+
+	runCmd.PersistentFlags().StringSliceVarP(
+		&utils.ServicesItemsFromFlag,
+		"services",
+		"",
+		[]string{},
+		`Slice of services to choose from.
+
+If you provide at least 1 services here, than corgi will choose only this service, while ignoring all others.
+none - will ignore all services run.
+(--services app,server)
+
+By default all services are included and run.
+		`,
+	)
+
+	runCmd.PersistentFlags().StringSliceVarP(
+		&utils.DbServicesItemsFromFlag,
+		"dbServices",
+		"",
+		[]string{},
+		`Slice of db_services to choose from.
+
+If you provide at least 1 db_service here, than corgi will choose only this db_service, while ignoring all others.
+none - will ignore all db_services run.
+(--dbServices db,db1,db2)
+
+By default all db_services are included and run.
+		`,
+	)
 }
 
 func runRun(cmd *cobra.Command, args []string) {
