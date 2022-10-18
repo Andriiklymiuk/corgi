@@ -25,19 +25,18 @@ corgi run
 
 ```
       --describe          Describe contents of corgi-compose file
-      --doc               Generate cobra docs
   -f, --filename string   Custom filepath for for corgi-compose
       --fromScratch       Clean corgi_services folder before running
   -h, --help              help for corgi
       --silent            Hide all welcome messages
   -t, --toggle            Help message for toggle
-  -v, --version           version for corgi
 ```
 
 ### SEE ALSO
 
 * [corgi clean](corgi_clean.md)	 - Cleans all services
 * [corgi db](corgi_db.md)	 - Database action helpers
+* [corgi docs](corgi_docs.md)	 - Do stuff with docs
 * [corgi init](corgi_init.md)	 - Create db service
 * [corgi run](corgi_run.md)	 - Run all databases and services
 
