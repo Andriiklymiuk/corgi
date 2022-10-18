@@ -63,7 +63,7 @@ func canRunCliAgain(cmdExecuted string) bool {
 		if arg == "init" ||
 			arg == "run" ||
 			arg == "clean" ||
-			arg == "doc" ||
+			arg == "docs" ||
 			arg == "filename" {
 			return false
 		}
@@ -76,7 +76,7 @@ func canRunCliAgain(cmdExecuted string) bool {
 
 func canShowWelcomeMessages() bool {
 	for _, arg := range os.Args {
-		if arg == "doc" ||
+		if arg == "docs" ||
 			arg == "--silent" ||
 			arg == "--version" ||
 			arg == "-v" ||
