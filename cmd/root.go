@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/cobra/doc"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -33,8 +31,6 @@ func Execute() string {
 
 	err := rootCmd.Execute()
 
-	generateCobraDocs(rootCmd)
-
 	if err != nil {
 		os.Exit(1)
 	}
@@ -44,7 +40,6 @@ func Execute() string {
 
 func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	rootCmd.PersistentFlags().BoolP("doc", "", false, "Generate cobra docs")
 	rootCmd.PersistentFlags().BoolP(
 		"silent",
 		"",
@@ -69,23 +64,4 @@ func init() {
 		false,
 		"Describe contents of corgi-compose file",
 	)
-}
-
-func generateCobraDocs(cmd *cobra.Command) {
-	shouldGenerateCobraDocs, err := cmd.Flags().GetBool("doc")
-	if err != nil {
-		fmt.Println("Couldn't read flag:", err)
-	}
-
-	if !shouldGenerateCobraDocs {
-		return
-	}
-	err = doc.GenMarkdownTree(cmd, "./resources/readme")
-	if err != nil {
-		fmt.Println("Cobra docs are not regenerated: ", err)
-	} else {
-		fmt.Println("Cobra docs are generated, exiting ..")
-	}
-	os.Exit(1)
-
 }

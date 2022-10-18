@@ -1,28 +1,20 @@
-## corgi db
+## corgi docs
 
-Database action helpers
+Do stuff with docs
 
 ### Synopsis
 
-
-This is database generator helper, that is accessible from cli.
-You can do db commands with the help of Makefile directly in the folder of
-each service, but this is much easier to do it here.
-
-	
+Helper set of commands to make your life easier with docs and corgi 
 
 ```
-corgi db [flags]
+corgi docs [flags]
 ```
 
 ### Options
 
 ```
-  -d, --downAll     Down all services, stop and remove all
-  -h, --help        help for db
-  -r, --removeAll   Remove all services
-  -s, --stopAll     Stop all services
-  -u, --upAll       Up all services, start all
+  -g, --generate   Generate cobra docs. Useful for development only, because it updates corgi docs.
+  -h, --help       help for docs
 ```
 
 ### Options inherited from parent commands

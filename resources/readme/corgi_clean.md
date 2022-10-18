@@ -43,7 +43,6 @@ corgi clean -i db
 
 ```
       --describe          Describe contents of corgi-compose file
-      --doc               Generate cobra docs
   -f, --filename string   Custom filepath for for corgi-compose
       --fromScratch       Clean corgi_services folder before running
       --silent            Hide all welcome messages
