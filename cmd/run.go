@@ -160,6 +160,10 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 }
 
 func runService(service utils.Service, cobraCmd *cobra.Command) {
+	if service.ManualRun && !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
+		fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
+		return
+	}
 	fmt.Println(string("\n\033[34m"), "🐶 RUNNING SERVICE", service.ServiceName, string("\033[0m"))
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {

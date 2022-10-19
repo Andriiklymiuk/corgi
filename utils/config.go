@@ -44,6 +44,7 @@ type DependsOnService struct {
 type Service struct {
 	ServiceName         string
 	Path                string             `yaml:"path"`
+	ManualRun           bool               `yaml:"manualRun"`
 	CloneFrom           string             `yaml:"cloneFrom"`
 	Environment         []string           `yaml:"environment"`
 	EnvPath             string             `yaml:"envPath"`
@@ -92,7 +93,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	} else {
 		var dbServices []DatabaseService
 		for indexName, service := range dbServicesData[DbServicesInConfig] {
-			if !isServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
+			if !IsServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
 				continue
 			}
 			var seedFromDb SeedDbSource
@@ -132,12 +133,13 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	} else {
 		var services []Service
 		for indexName, service := range servicesData["services"] {
-			if !isServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
+			if !IsServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
 				continue
 			}
 			serviceToAdd := Service{
 				ServiceName:         indexName,
 				Path:                service.Path,
+				ManualRun:           service.ManualRun,
 				CloneFrom:           service.CloneFrom,
 				DependsOnServices:   service.DependsOnServices,
 				DependsOnDb:         service.DependsOnDb,
@@ -237,7 +239,7 @@ func servicesCanBeAdded(services []string) bool {
 	return true
 }
 
-func isServiceIncludedInFlag(services []string, serviceName string) bool {
+func IsServiceIncludedInFlag(services []string, serviceName string) bool {
 	if len(services) == 0 {
 		return true
 	}
