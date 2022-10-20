@@ -75,6 +75,12 @@ none - will ignore all db_services run.
 By default all db_services are included and run.
 		`,
 	)
+	runCmd.PersistentFlags().BoolP(
+		"pull",
+		"",
+		false,
+		"Git pull services repo changes",
+	)
 }
 
 func runRun(cmd *cobra.Command, args []string) {
@@ -163,6 +169,16 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 	if service.ManualRun && !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
 		fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
 		return
+	}
+	isPull, err := cobraCmd.Flags().GetBool("pull")
+	if err != nil {
+		return
+	}
+	if isPull {
+		err = runServiceCmd("git pull", service.Path)
+		if err != nil {
+			fmt.Println("pull failed for", service.ServiceName, "error:", err)
+		}
 	}
 	fmt.Println(string("\n\033[34m"), "🐶 RUNNING SERVICE", service.ServiceName, string("\033[0m"))
 
