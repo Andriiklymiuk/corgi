@@ -61,7 +61,7 @@ If you want to use auto seeding feature for postgres databases, you need to inst
 
 You need to create corgi-compose.yml file in root of your target repo to create services and db services.
 
-Examples of are in [examples folder](./examples/).
+Examples of corgi-compose.yml files are in [examples folder](./examples/). You can also check what should be in corgi-compose.yml by running ```corgi docs```. It will print out all possible items in corgi .yml file.
 
 Then run, which will create db_services.
 ```bash 
