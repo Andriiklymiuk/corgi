@@ -281,21 +281,27 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 		if service.DependsOnDb != nil {
 			for _, dependingDb := range service.DependsOnDb {
 				for _, db := range corgiCompose.DatabaseServices {
-					if db.ServiceName == dependingDb {
+					if db.ServiceName == dependingDb.Name {
 						var serviceNameInEnv string
 
-						// add name of db, if there are more than 2 dependent service
 						if len(service.DependsOnDb) > 1 {
 							serviceNameInEnv = splitStringForEnv(db.ServiceName) + "_"
+						}
+						if dependingDb.EnvAlias != "" {
+							if dependingDb.EnvAlias == "none" {
+								serviceNameInEnv = ""
+							} else {
+								serviceNameInEnv = dependingDb.EnvAlias + "_"
+							}
 						}
 						envForService = fmt.Sprintf(
 							"%s%s%s%s%s%s",
 							envForService,
-							fmt.Sprintf("\n\nDB_%sHOST=localhost", serviceNameInEnv),
-							fmt.Sprintf("\nDB_%sUSER=%s", serviceNameInEnv, db.User),
-							fmt.Sprintf("\nDB_%sNAME=%s", serviceNameInEnv, db.DatabaseName),
-							fmt.Sprintf("\nDB_%sPORT=%d", serviceNameInEnv, db.Port),
-							fmt.Sprintf("\nDB_%sPASSWORD=%s", serviceNameInEnv, db.Password),
+							fmt.Sprintf("\n\n%sDB_HOST=localhost", serviceNameInEnv),
+							fmt.Sprintf("\n%sDB_USER=%s", serviceNameInEnv, db.User),
+							fmt.Sprintf("\n%sDB_NAME=%s", serviceNameInEnv, db.DatabaseName),
+							fmt.Sprintf("\n%sDB_PORT=%d", serviceNameInEnv, db.Port),
+							fmt.Sprintf("\n%sDB_PASSWORD=%s", serviceNameInEnv, db.Password),
 						)
 					}
 				}

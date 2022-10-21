@@ -41,6 +41,11 @@ type DependsOnService struct {
 	Suffix   string `yaml:"suffix"`
 }
 
+type DependsOnDb struct {
+	Name     string `yaml:"name"`
+	EnvAlias string `yaml:"envAlias"`
+}
+
 type Service struct {
 	ServiceName         string
 	Path                string             `yaml:"path"`
@@ -51,7 +56,7 @@ type Service struct {
 	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath"`
 	Port                int                `yaml:"port"`
 	DependsOnServices   []DependsOnService `yaml:"depends_on_services"`
-	DependsOnDb         []string           `yaml:"depends_on_db"`
+	DependsOnDb         []DependsOnDb      `yaml:"depends_on_db"`
 	BeforeStart         []string           `yaml:"beforeStart"`
 	Start               []string           `yaml:"start"`
 	AfterStart          []string           `yaml:"afterStart"`
