@@ -93,7 +93,7 @@ Provide them in corgi-compose.yml file`)
 				break
 			}
 		}
-		fmt.Print(string("\033[32m"), "✅ ", string("\033[0m"))
+		fmt.Print(utils.GreenColor, "✅ ", utils.WhiteColor)
 		fmt.Printf("Db service %s was successfully created\n", service.ServiceName)
 	}
 }

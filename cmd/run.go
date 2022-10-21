@@ -126,9 +126,9 @@ func cleanup(corgi *utils.CorgiCompose) {
 				err := runServiceCmd(afterStartCmd, service.Path)
 				if err != nil {
 					fmt.Println(
-						string("\033[31m"),
+						utils.RedColor,
 						"aborting all other afterStart commands for ", service.ServiceName, ", because of ", err,
-						string("\033[0m"),
+						utils.WhiteColor,
 					)
 					break
 				}
@@ -180,7 +180,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 			fmt.Println("pull failed for", service.ServiceName, "error:", err)
 		}
 	}
-	fmt.Println(string("\n\033[34m"), "🐶 RUNNING SERVICE", service.ServiceName, string("\033[0m"))
+	fmt.Println(utils.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, utils.WhiteColor)
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
 		fmt.Println("\nBefore start commands:")
@@ -188,9 +188,9 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 			err := runServiceCmd(beforeStartCmd, service.Path)
 			if err != nil {
 				fmt.Println(
-					string("\033[31m"),
+					utils.RedColor,
 					"aborting all other beforeStart commands for ", service.ServiceName, ", because of ", err,
-					string("\033[0m"),
+					utils.WhiteColor,
 				)
 				return
 			}
@@ -203,9 +203,9 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 				err := runServiceCmd(startCmd, service.Path)
 				if err != nil {
 					fmt.Println(
-						string("\033[31m"),
+						utils.RedColor,
 						"aborting ", service.ServiceName, "cmd ", startCmd, ", because of ", err,
-						string("\033[0m"),
+						utils.WhiteColor,
 					)
 					return
 				}
@@ -215,7 +215,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 }
 
 func runServiceCmd(serviceCommand string, path string) error {
-	fmt.Println("\n🚀 🤖 Executing command: ", string("\033[32m"), serviceCommand, string("\033[0m"))
+	fmt.Println("\n🚀 🤖 Executing command: ", utils.GreenColor, serviceCommand, utils.WhiteColor)
 
 	commandSlice := strings.Fields(serviceCommand)
 	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
