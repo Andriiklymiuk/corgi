@@ -60,60 +60,9 @@ If you want to use auto seeding feature for postgres databases, you need to inst
 ## Services creation
 
 You need to create corgi-compose.yml file in root of your target repo to create services and db services.
-It should be created in the following way:
-### corgi-compose.yml example
-```yml
-db_services:
-  corgi:
-    databaseName: corgi-database
-    user: corgi
-    password: corgiSecurePassword
-    port: 5432
-    #Use seedFromFilePath or seedFromDb/seedFromDbEnvPath, only one will work
-    seedFromFilePath: path/to/dump.sql to use, it will precede before seedFromDb.
-    # can be empty, use either seedFromDbEnvPath or seedFromDb 
-    seedFromDbEnvPath: path/to/db/info/.env
-    seedFromDb:
-      host: db_host_for_seed_seed_db
-      databaseName: db_name_for_seed_db
-      user: db_user_for_seed_db
-      password: db_password_for_seed_db
-      port: db_port_for_seed_db
-  corgiTest:
-    databaseName: corgi-database-test
-    user: corgi
-    password: corgiSecurePasswordTest
-    port: 5433
 
-services:
-  corgiServer:
-    # copyEnvFromFilePath: path_to_copy_env_from
-    environment:
-      - PORT=8965
-    depends_on_db:
-      - name: corgi
-    beforeStart:
-      - install your dependencies or do other stuff
-      - that needs to be run before start cmd
-    start:
-      - start corgiServer
-  corgiApp:
-    cloneFrom: url_to_use_in_git_clone_if_path_doesn't_exist
-    path: /path/for/service
-    environment:
-      - SOME_ENV=corgi_is_best
-      - SOME_ENV2=corgi_is_best_indeed
-    depends_on_services:
-      - name: corgiServer
-        envAlias: BEST_CORGI_SERVER_URL
-    beforeStart:
-      - install your dependencies or do other stuff
-      - that needs to be run before start cmd
-    start:
-      - start corgiApp
-    afterStart:
-      - do some cleanup staff on service close
-```
+Examples of are in [examples folder](./examples/).
+
 Then run, which will create db_services.
 ```bash 
   corgi init

@@ -3,7 +3,11 @@ db_services:
     databaseName: corgi-database
     user: corgi
     password: corgiSecurePassword
-    port: 5432
+    port: 5434
+    #Use seedFromFilePath or seedFromDb/seedFromDbEnvPath, only one will work
+    seedFromFilePath: path/to/dump.sql to use, it will precede before seedFromDb.
+    # can be empty, use either seedFromDbEnvPath or seedFromDb 
+    seedFromDbEnvPath: path/to/db/info/.env
     seedFromDb:
       host: db_host_for_seed_seed_db
       databaseName: db_name_for_seed_db
@@ -14,10 +18,11 @@ db_services:
     databaseName: corgi-database-test
     user: corgi
     password: corgiSecurePasswordTest
-    port: 5433
+    port: 5435
 
 services:
   corgiServer:
+    # copyEnvFromFilePath: path_to_copy_env_from
     environment:
       - PORT=8965
     depends_on_db:
@@ -35,7 +40,7 @@ services:
       - SOME_ENV2=corgi_is_best_indeed
     depends_on_services:
       - name: corgiServer
-        envAlias: CORGI_SERVER_URL
+        envAlias: BEST_CORGI_SERVER_URL
     beforeStart:
       - install your dependencies or do other stuff
       - that needs to be run before start cmd
