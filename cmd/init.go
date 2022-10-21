@@ -10,6 +10,7 @@ import (
 
 	"andriiklymiuk/corgi/templates"
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/art"
 
 	"github.com/spf13/cobra"
 )
@@ -93,7 +94,7 @@ Provide them in corgi-compose.yml file`)
 				break
 			}
 		}
-		fmt.Print(utils.GreenColor, "✅ ", utils.WhiteColor)
+		fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
 		fmt.Printf("Db service %s was successfully created\n", service.ServiceName)
 	}
 }
