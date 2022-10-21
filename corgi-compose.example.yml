@@ -21,7 +21,7 @@ services:
     environment:
       - PORT=8965
     depends_on_db:
-      - corgi
+      - name: corgi
     beforeStart:
       - install your dependencies or do other stuff
       - that needs to be run before start cmd
