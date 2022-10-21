@@ -50,7 +50,7 @@ func showFinalMessage() {
 		"\n✨ Glad for using me ✨ See you next time 🚀 🐶",
 		string("\n\n\033[36m"),
 		utils.GetRandomQuote("famous-quotes"),
-		string("\033[0m"),
+		utils.WhiteColor,
 	)
 }
 
@@ -115,9 +115,9 @@ func showWelcomeMessage() {
              &&     ,      @      &    
                                                            
 `
-	fmt.Println(string("\033[33m"), art, string("\033[0m"))
+	fmt.Println(utils.YellowColor, art, utils.WhiteColor)
 	fmt.Println(`🐶 WOOF CORGI 🐶 says:`)
-	fmt.Println(string("\033[36m"), utils.GetRandomQuote("famous-quotes"), string("\033[0m"))
+	fmt.Println(utils.CyanColor, utils.GetRandomQuote("famous-quotes"), utils.WhiteColor)
 	fmt.Println()
 }
 

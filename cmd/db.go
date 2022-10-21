@@ -224,11 +224,11 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(string("\n\033[34m"), "⛅ DATABASE DUMP COPIED for", dbService.ServiceName, string("\033[0m"))
+		fmt.Println(utils.BlueColor, "⛅ DATABASE DUMP COPIED for", dbService.ServiceName, utils.WhiteColor)
 	}
 
 	if (dbService.SeedFromDb != utils.SeedFromDb{} && dbService.SeedFromFilePath == "") {
-		fmt.Println(string("\n\033[34m"), "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, string("\033[0m"))
+		fmt.Println(utils.BlueColor, "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, utils.WhiteColor)
 		GetDump(dbService)
 	}
 
@@ -236,6 +236,6 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(string("\n\033[34m"), "🎉 ", dbService.ServiceName, " IS SEEDED", string("\033[0m"))
+	fmt.Println(utils.BlueColor, "🎉 ", dbService.ServiceName, " IS SEEDED", utils.WhiteColor)
 	return nil
 }
