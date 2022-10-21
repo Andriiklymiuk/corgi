@@ -18,16 +18,16 @@ var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
 	ServiceName       string
-	User              string       `yaml:"user"`
-	Password          string       `yaml:"password"`
-	DatabaseName      string       `yaml:"databaseName"`
-	Port              int          `yaml:"port"`
-	SeedFromDbEnvPath string       `yaml:"seedFromDbEnvPath"`
-	SeedFromDb        SeedDbSource `yaml:"seedFromDb"`
-	SeedFromFilePath  string       `yaml:"seedFromFilePath"`
+	User              string     `yaml:"user"`
+	Password          string     `yaml:"password"`
+	DatabaseName      string     `yaml:"databaseName"`
+	Port              int        `yaml:"port"`
+	SeedFromDbEnvPath string     `yaml:"seedFromDbEnvPath"`
+	SeedFromDb        SeedFromDb `yaml:"seedFromDb"`
+	SeedFromFilePath  string     `yaml:"seedFromFilePath"`
 }
 
-type SeedDbSource struct {
+type SeedFromDb struct {
 	Host         string `yaml:"host"`
 	DatabaseName string `yaml:"databaseName"`
 	User         string `yaml:"user"`
@@ -101,12 +101,12 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			if !IsServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
 				continue
 			}
-			var seedFromDb SeedDbSource
+			var seedFromDb SeedFromDb
 			if service.SeedFromDbEnvPath != "" {
 				seedFromDb = getDbSourceFromPath(service.SeedFromDbEnvPath)
 			}
 
-			if (seedFromDb == SeedDbSource{}) {
+			if (seedFromDb == SeedFromDb{}) {
 				seedFromDb = service.SeedFromDb
 			}
 
@@ -201,8 +201,8 @@ func CleanCorgiServicesFolder() {
 	fmt.Println("🗑️ Cleaned up corgi_services")
 }
 
-func getDbSourceFromPath(path string) SeedDbSource {
-	var seedFromDb SeedDbSource
+func getDbSourceFromPath(path string) SeedFromDb {
+	var seedFromDb SeedFromDb
 	for _, envLine := range GetFileContent(path) {
 		envLineValues := strings.Split(envLine, "=")
 		switch strings.ToUpper(envLineValues[0]) {

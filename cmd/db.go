@@ -227,7 +227,7 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 		fmt.Println(string("\n\033[34m"), "⛅ DATABASE DUMP COPIED for", dbService.ServiceName, string("\033[0m"))
 	}
 
-	if (dbService.SeedFromDb != utils.SeedDbSource{} && dbService.SeedFromFilePath == "") {
+	if (dbService.SeedFromDb != utils.SeedFromDb{} && dbService.SeedFromFilePath == "") {
 		fmt.Println(string("\n\033[34m"), "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, string("\033[0m"))
 		GetDump(dbService)
 	}
