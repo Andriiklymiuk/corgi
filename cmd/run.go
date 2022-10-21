@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/art"
 
 	"github.com/spf13/cobra"
 )
@@ -126,9 +127,9 @@ func cleanup(corgi *utils.CorgiCompose) {
 				err := runServiceCmd(afterStartCmd, service.Path)
 				if err != nil {
 					fmt.Println(
-						utils.RedColor,
+						art.RedColor,
 						"aborting all other afterStart commands for ", service.ServiceName, ", because of ", err,
-						utils.WhiteColor,
+						art.WhiteColor,
 					)
 					break
 				}
@@ -180,7 +181,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 			fmt.Println("pull failed for", service.ServiceName, "error:", err)
 		}
 	}
-	fmt.Println(utils.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, utils.WhiteColor)
+	fmt.Println(art.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, art.WhiteColor)
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
 		fmt.Println("\nBefore start commands:")
@@ -188,9 +189,9 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 			err := runServiceCmd(beforeStartCmd, service.Path)
 			if err != nil {
 				fmt.Println(
-					utils.RedColor,
+					art.RedColor,
 					"aborting all other beforeStart commands for ", service.ServiceName, ", because of ", err,
-					utils.WhiteColor,
+					art.WhiteColor,
 				)
 				return
 			}
@@ -203,9 +204,9 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 				err := runServiceCmd(startCmd, service.Path)
 				if err != nil {
 					fmt.Println(
-						utils.RedColor,
+						art.RedColor,
 						"aborting ", service.ServiceName, "cmd ", startCmd, ", because of ", err,
-						utils.WhiteColor,
+						art.WhiteColor,
 					)
 					return
 				}
@@ -215,7 +216,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 }
 
 func runServiceCmd(serviceCommand string, path string) error {
-	fmt.Println("\n🚀 🤖 Executing command: ", utils.GreenColor, serviceCommand, utils.WhiteColor)
+	fmt.Println("\n🚀 🤖 Executing command: ", art.GreenColor, serviceCommand, art.WhiteColor)
 
 	commandSlice := strings.Fields(serviceCommand)
 	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)

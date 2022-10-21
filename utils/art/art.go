@@ -1,4 +1,4 @@
-package utils
+package art
 
 var WhiteColor = string("\033[0m")
 var RedColor = string("\033[31m")

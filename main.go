@@ -8,6 +8,7 @@ import (
 
 	"andriiklymiuk/corgi/cmd"
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/art"
 
 	"github.com/manifoldco/promptui"
 )
@@ -50,7 +51,7 @@ func showFinalMessage() {
 		"\n✨ Glad for using me ✨ See you next time 🚀 🐶",
 		string("\n\n\033[36m"),
 		utils.GetRandomQuote("famous-quotes"),
-		utils.WhiteColor,
+		art.WhiteColor,
 	)
 }
 
@@ -92,7 +93,7 @@ func showWelcomeMessage() {
 	if !canShowWelcomeMessages() {
 		return
 	}
-	art := `                             
+	artImage := `                             
                 @@                                
               ******@                             
              @*******@                            
@@ -115,9 +116,9 @@ func showWelcomeMessage() {
              &&     ,      @      &    
                                                            
 `
-	fmt.Println(utils.YellowColor, art, utils.WhiteColor)
+	fmt.Println(art.YellowColor, artImage, art.WhiteColor)
 	fmt.Println(`🐶 WOOF CORGI 🐶 says:`)
-	fmt.Println(utils.CyanColor, utils.GetRandomQuote("famous-quotes"), utils.WhiteColor)
+	fmt.Println(art.CyanColor, utils.GetRandomQuote("famous-quotes"), art.WhiteColor)
 	fmt.Println()
 }
 

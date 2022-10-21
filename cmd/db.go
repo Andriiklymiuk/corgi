@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/art"
 
 	"github.com/briandowns/spinner"
 	"github.com/spf13/cobra"
@@ -224,11 +225,11 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(utils.BlueColor, "⛅ DATABASE DUMP COPIED for", dbService.ServiceName, utils.WhiteColor)
+		fmt.Println(art.BlueColor, "⛅ DATABASE DUMP COPIED for", dbService.ServiceName, art.WhiteColor)
 	}
 
 	if (dbService.SeedFromDb != utils.SeedFromDb{} && dbService.SeedFromFilePath == "") {
-		fmt.Println(utils.BlueColor, "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, utils.WhiteColor)
+		fmt.Println(art.BlueColor, "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, art.WhiteColor)
 		GetDump(dbService)
 	}
 
@@ -236,6 +237,6 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(utils.BlueColor, "🎉 ", dbService.ServiceName, " IS SEEDED", utils.WhiteColor)
+	fmt.Println(art.BlueColor, "🎉 ", dbService.ServiceName, " IS SEEDED", art.WhiteColor)
 	return nil
 }
