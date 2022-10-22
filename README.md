@@ -61,7 +61,7 @@ With it you can run `corgi` in any folder on your local.
 
 You need to create corgi-compose.yml file in root of your target repo to create services and db services.
 
-Examples of corgi-compose.yml files are in [examples folder](./examples/) and . You can also check what should be in corgi-compose.yml by running ```corgi docs```. It will print out all possible items in corgi .yml file or you can go to [corgi compose items doc](./resources/readme/corgi_compose_items.md).
+Examples of corgi-compose.yml files are in [examples folder](./examples/). You can also check what should be in corgi-compose.yml by running ```corgi docs```. It will print out all possible items in corgi .yml file or you can go to [corgi compose items doc](./resources/readme/corgi_compose_items.md).
 
 Then run, which will create db_services.
 ```bash 
