@@ -52,11 +52,9 @@ With it you can run `corgi` in any folder on your local.
 </br>
 
 ## Prerequisites
-If you want to run db_services or your services require docker, then you need
-- [Docker](https://www.docker.com)
+- [Docker](https://www.docker.com) - for running databases
 
-If you want to use auto seeding feature for postgres databases, you need to install
-- [psql](https://formulae.brew.sh/formula/libpq) 
+- [psql](https://formulae.brew.sh/formula/libpq) in order to use auto seeding
 
 
 ## Services creation
