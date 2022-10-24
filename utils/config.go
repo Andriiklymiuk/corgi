@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -269,18 +270,18 @@ func IsServiceIncludedInFlag(services []string, serviceName string) bool {
 
 func getCorgiConfigFromAlert() (string, error) {
 	var files []string
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(".", func(path string, directory fs.DirEntry, err error) error {
 		if err != nil {
 			fmt.Println(err)
 			return nil
 		}
-		if info.IsDir() {
+		if directory.IsDir() {
 			return nil
 		}
 		if filepath.Ext(path) != ".yml" && filepath.Ext(path) != ".yaml" {
 			return nil
 		}
-		if !strings.Contains(info.Name(), "corgi") {
+		if !strings.Contains(directory.Name(), "corgi") {
 			return nil
 		}
 
