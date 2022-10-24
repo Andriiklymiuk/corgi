@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -73,10 +74,19 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	if err != nil {
 		return nil, err
 	}
-	pathToCorgiComposeFile := "corgi-compose.yml"
+	var pathToCorgiComposeFile string
 	if filenameFlag != "" {
 		pathToCorgiComposeFile = filenameFlag
 	}
+	if pathToCorgiComposeFile == "" {
+		chosenCorgiPath, err := getCorgiConfigFromAlert()
+		if err != nil || chosenCorgiPath == "" {
+			pathToCorgiComposeFile = "corgi-compose.yml"
+		} else {
+			pathToCorgiComposeFile = chosenCorgiPath
+		}
+	}
+
 	describeFlag, err := cobra.Root().Flags().GetBool("describe")
 	if err != nil {
 		return nil, err
@@ -255,4 +265,44 @@ func IsServiceIncludedInFlag(services []string, serviceName string) bool {
 		}
 	}
 	return isIncluded
+}
+
+func getCorgiConfigFromAlert() (string, error) {
+	var files []string
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".yml" && filepath.Ext(path) != ".yaml" {
+			return nil
+		}
+		if !strings.Contains(info.Name(), "corgi") {
+			return nil
+		}
+
+		files = append(files, path)
+
+		return nil
+	})
+
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+
+	file, err := PickItemFromListPrompt(
+		"Select corgi config file to use",
+		files,
+		"none",
+	)
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+
+	return file, nil
 }
