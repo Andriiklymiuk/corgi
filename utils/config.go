@@ -80,12 +80,11 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		pathToCorgiComposeFile = filenameFlag
 	}
 	if pathToCorgiComposeFile == "" {
-		chosenCorgiPath, err := getCorgiConfigFromAlert()
-		if err != nil || chosenCorgiPath == "" {
-			pathToCorgiComposeFile = "corgi-compose.yml"
-		} else {
-			pathToCorgiComposeFile = chosenCorgiPath
+		chosenPathToCorgiCompose, err := getCorgiConfigFilePath()
+		if err != nil {
+			return nil, err
 		}
+		pathToCorgiComposeFile = chosenPathToCorgiCompose
 	}
 
 	describeFlag, err := cobra.Root().Flags().GetBool("describe")
@@ -266,6 +265,29 @@ func IsServiceIncludedInFlag(services []string, serviceName string) bool {
 		}
 	}
 	return isIncluded
+}
+
+func getCorgiConfigFilePath() (string, error) {
+	defaultCorgiConfigName := "corgi-compose.yml"
+	corgiComposeExists, err := CheckIfFileExistsInDirectory(
+		".",
+		defaultCorgiConfigName,
+	)
+	if err != nil {
+		return "", err
+	}
+	if corgiComposeExists {
+		return defaultCorgiConfigName, nil
+	}
+
+	chosenCorgiPath, err := getCorgiConfigFromAlert()
+	if err != nil {
+		return "", err
+	}
+	if err != nil || chosenCorgiPath == "" {
+		return "", err
+	}
+	return chosenCorgiPath, nil
 }
 
 func getCorgiConfigFromAlert() (string, error) {
