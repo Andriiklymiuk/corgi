@@ -4,7 +4,7 @@ var DockerComposePostgres = `version: "3.8"
 
 services:
   postgres:
-    image: postgres:11.5-alpine
+    image: postgres:15.0-alpine
     container_name: postgres-{{.ServiceName}}
     logging:
       driver: none
