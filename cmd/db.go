@@ -41,6 +41,8 @@ func runDb(cobra *cobra.Command, args []string) {
 		return
 	}
 
+	CreateDatabaseServices(corgi.DatabaseServices)
+
 	err = utils.DockerInit()
 	if err != nil {
 		fmt.Println(err)
