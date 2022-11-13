@@ -51,6 +51,7 @@ type DependsOnDb struct {
 type Service struct {
 	ServiceName         string
 	Path                string             `yaml:"path"`
+	IgnoreEnv           bool               `yaml:"ignore_env"`
 	ManualRun           bool               `yaml:"manualRun"`
 	CloneFrom           string             `yaml:"cloneFrom"`
 	Environment         []string           `yaml:"environment"`
@@ -154,6 +155,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			serviceToAdd := Service{
 				ServiceName:         indexName,
 				Path:                service.Path,
+				IgnoreEnv:           service.IgnoreEnv,
 				ManualRun:           service.ManualRun,
 				CloneFrom:           service.CloneFrom,
 				DependsOnServices:   service.DependsOnServices,
