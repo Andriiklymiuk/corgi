@@ -239,7 +239,12 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 				"\n",
 			) + "\n"
 		}
-		envForService = envForService + strings.Join(service.Environment[:], "\n")
+		if len(service.Environment[:]) > 0 {
+			envForService =
+				envForService +
+					strings.Join(service.Environment[:], "\n") +
+					"\n"
+		}
 
 		// add url for dependent service
 		if service.DependsOnServices != nil {
@@ -254,7 +259,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 						}
 						if s.Port != 0 {
 							envForService = fmt.Sprintf(
-								"%s\n%s=http://localhost:%s%s",
+								"%s%s=http://localhost:%s%s\n",
 								envForService,
 								envNameToUse,
 								fmt.Sprint(s.Port),
@@ -265,7 +270,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 						for _, envLine := range s.Environment {
 							if strings.Split(envLine, "=")[0] == "PORT" {
 								envForService = fmt.Sprintf(
-									"%s\n%s=http://localhost:%s%s",
+									"%s%s=http://localhost:%s%s\n",
 									envForService,
 									envNameToUse,
 									strings.Split(envLine, "=")[1],
@@ -298,11 +303,11 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 						envForService = fmt.Sprintf(
 							"%s%s%s%s%s%s",
 							envForService,
-							fmt.Sprintf("\n\n%sDB_HOST=localhost", serviceNameInEnv),
+							fmt.Sprintf("\n%sDB_HOST=localhost", serviceNameInEnv),
 							fmt.Sprintf("\n%sDB_USER=%s", serviceNameInEnv, db.User),
 							fmt.Sprintf("\n%sDB_NAME=%s", serviceNameInEnv, db.DatabaseName),
 							fmt.Sprintf("\n%sDB_PORT=%d", serviceNameInEnv, db.Port),
-							fmt.Sprintf("\n%sDB_PASSWORD=%s", serviceNameInEnv, db.Password),
+							fmt.Sprintf("\n%sDB_PASSWORD=%s\n", serviceNameInEnv, db.Password),
 						)
 					}
 				}
