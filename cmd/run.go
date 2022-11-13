@@ -231,6 +231,17 @@ func runServiceCmd(serviceCommand string, path string) error {
 // Adds env variables to each service, including dependent db_services and services
 func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 	for _, service := range corgiCompose.Services {
+
+		if service.IgnoreEnv {
+			fmt.Println(
+				art.RedColor,
+				"Ignoring env file for",
+				service.ServiceName,
+				art.WhiteColor,
+			)
+			continue
+		}
+
 		var envForService string
 
 		if service.CopyEnvFromFilePath != "" {
