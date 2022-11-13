@@ -18,9 +18,9 @@ func main() {
 	showWelcomeMessage()
 	var runCli func()
 	runCli = func() {
-		cmdExecuted := cmd.Execute()
+		cmd.Execute()
 
-		canRunCli := canRunCliAgain(cmdExecuted)
+		canRunCli := canRunCliAgain()
 		if !canRunCli {
 			showFinalMessage()
 			return
@@ -55,24 +55,20 @@ func showFinalMessage() {
 	)
 }
 
-func canRunCliAgain(cmdExecuted string) bool {
-	if cmdExecuted == "corgi" {
-		return false
-	}
-
+func canRunCliAgain() bool {
+	var hasDbCmd bool
 	for _, arg := range os.Args {
-		if arg == "init" ||
-			arg == "run" ||
-			arg == "clean" ||
-			arg == "docs" ||
-			arg == "filename" {
+		if arg == "-f" || arg == "--filename" {
+			continue
+		}
+		if arg[0:1] == "-" {
 			return false
 		}
-		if arg[0:1] == "-" && arg != "-f" {
-			return false
+		if arg == "db" {
+			hasDbCmd = true
 		}
 	}
-	return true
+	return hasDbCmd
 }
 
 func canShowWelcomeMessages() bool {
