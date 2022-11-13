@@ -21,7 +21,7 @@ corgi init
 
 corgi run
 `,
-	Version: "1.1.35",
+	Version: "1.1.36",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
