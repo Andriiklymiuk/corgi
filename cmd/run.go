@@ -167,9 +167,15 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 }
 
 func runService(service utils.Service, cobraCmd *cobra.Command) {
-	if service.ManualRun && !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
-		fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
-		return
+	if service.ManualRun {
+		if len(utils.ServicesItemsFromFlag) == 0 {
+			fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
+			return
+		}
+		if !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
+			fmt.Println(service.ServiceName, "is not run, because it should be added manually")
+			return
+		}
 	}
 	isPull, err := cobraCmd.Flags().GetBool("pull")
 	if err != nil {
