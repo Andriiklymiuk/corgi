@@ -256,12 +256,6 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 				"\n",
 			) + "\n"
 		}
-		if len(service.Environment[:]) > 0 {
-			envForService =
-				envForService +
-					strings.Join(service.Environment[:], "\n") +
-					"\n"
-		}
 
 		// add url for dependent service
 		if service.DependsOnServices != nil {
@@ -329,6 +323,13 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 					}
 				}
 			}
+		}
+
+		if len(service.Environment[:]) > 0 {
+			envForService =
+				envForService +
+					strings.Join(service.Environment[:], "\n") +
+					"\n"
 		}
 
 		if service.Port != 0 {
