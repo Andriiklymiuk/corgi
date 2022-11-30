@@ -217,24 +217,11 @@ func GetServiceInfo(targetService string) (string, error) {
 
 	var service []string
 	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "POSTGRES") {
-			serviceInfo := strings.Replace(strings.TrimSpace(scanner.Text()), "POSTGRES_", "", 1)
-			v := strings.Split(serviceInfo, "=")
-			l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
-
-			service = append(service, l)
-		}
-
-		if strings.Contains(scanner.Text(), "5432") {
-			serviceInfo := strings.ReplaceAll(strings.TrimSpace(scanner.Text()), `"`, "")
-			v := strings.Split(serviceInfo, ":")
-
-			service = append(service, "PORT "+strings.Split(v[0], " ")[1])
-		}
+		service = getDbInfoFromString(scanner.Text(), service)
 	}
 
 	if len(service) == 0 {
-		return "", fmt.Errorf("haven't found postgres service info")
+		return "", fmt.Errorf("haven't found db_service info ")
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -251,6 +238,36 @@ Connection info to %s:
 	)
 
 	return result, nil
+}
+
+func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
+	// postgres
+	if strings.Contains(text, "POSTGRES") {
+		serviceInfo := strings.Replace(strings.TrimSpace(text), "POSTGRES_", "", 1)
+		v := strings.Split(serviceInfo, "=")
+		l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
+		return append(dbInfoStringsArray, l)
+	}
+	if strings.Contains(text, "5432") {
+		serviceInfo := strings.ReplaceAll(strings.TrimSpace(text), `"`, "")
+		v := strings.Split(serviceInfo, ":")
+		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
+	}
+
+	// rabbitmq
+	if strings.Contains(text, "RABBITMQ") {
+		serviceInfo := strings.Replace(strings.TrimSpace(text), "RABBITMQ_DEFAULT_", "", 1)
+		v := strings.Split(serviceInfo, "=")
+		l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
+		return append(dbInfoStringsArray, l)
+	}
+	if strings.Contains(text, "5672") {
+		serviceInfo := strings.ReplaceAll(strings.TrimSpace(text), `"`, "")
+		v := strings.Split(serviceInfo, ":")
+		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
+	}
+
+	return dbInfoStringsArray
 }
 
 func GetStatusOfService(targetService string) (bool, error) {

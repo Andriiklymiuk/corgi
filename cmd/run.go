@@ -311,15 +311,22 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 								serviceNameInEnv = dependingDb.EnvAlias + "_"
 							}
 						}
-						envForService = fmt.Sprintf(
-							"%s%s%s%s%s%s",
-							envForService,
-							fmt.Sprintf("\n%sDB_HOST=localhost", serviceNameInEnv),
-							fmt.Sprintf("\n%sDB_USER=%s", serviceNameInEnv, db.User),
-							fmt.Sprintf("\n%sDB_NAME=%s", serviceNameInEnv, db.DatabaseName),
-							fmt.Sprintf("\n%sDB_PORT=%d", serviceNameInEnv, db.Port),
-							fmt.Sprintf("\n%sDB_PASSWORD=%s\n", serviceNameInEnv, db.Password),
-						)
+						if db.Driver == "rabbitmq" {
+							serviceNameInEnv = serviceNameInEnv + "RABBITMQ_"
+						}
+						host := fmt.Sprintf("\n%sDB_HOST=%s", serviceNameInEnv, db.Host)
+						user := fmt.Sprintf("\n%sDB_USER=%s", serviceNameInEnv, db.User)
+						name := fmt.Sprintf("\n%sDB_NAME=%s", serviceNameInEnv, db.DatabaseName)
+						port := fmt.Sprintf("\n%sDB_PORT=%d", serviceNameInEnv, db.Port)
+						password := fmt.Sprintf("\n%sDB_PASSWORD=%s\n", serviceNameInEnv, db.Password)
+						switch db.Driver {
+						case "rabbitmq":
+							envForService = fmt.Sprintf(
+								"%s%s%s%s%s", envForService, host, user, port, password)
+						default:
+							envForService = fmt.Sprintf(
+								"%s%s%s%s%s%s", envForService, host, user, name, port, password)
+						}
 					}
 				}
 			}
@@ -327,7 +334,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 
 		if len(service.Environment[:]) > 0 {
 			envForService =
-				envForService +
+				envForService + "\n" +
 					strings.Join(service.Environment[:], "\n") +
 					"\n"
 		}
