@@ -20,6 +20,7 @@ var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
 	ServiceName       string
+	Driver            string     `yaml:"driver"`
 	User              string     `yaml:"user"`
 	Password          string     `yaml:"password"`
 	DatabaseName      string     `yaml:"databaseName"`
@@ -121,8 +122,16 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				seedFromDb = service.SeedFromDb
 			}
 
+			var driver string
+			if service.Driver == "" {
+				driver = "postgres"
+			} else {
+				driver = service.Driver
+			}
+
 			dbToAdd := DatabaseService{
 				ServiceName:      indexName,
+				Driver:           driver,
 				DatabaseName:     service.DatabaseName,
 				User:             service.User,
 				Password:         service.Password,

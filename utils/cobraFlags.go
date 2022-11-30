@@ -31,7 +31,7 @@ func ExecuteForEachService(cmdName string) {
 			fmt.Printf("Failed to %s service %s, error: %s", cmdName, file, err)
 			return
 		}
-		fmt.Printf("postgres-%s is %s\n", file, cmdName)
+		fmt.Printf("%s is %s\n", file, cmdName)
 	}
 }
 
@@ -57,7 +57,7 @@ func CheckForFlagAndExecute(cmd *cobra.Command, flag string, executeFunc func(st
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			fmt.Printf("%s for postgres-%s is successful\n", flag, file)
+			fmt.Printf("%s for %s is successful\n", flag, file)
 		}
 	}
 }

@@ -71,12 +71,8 @@ Provide them in corgi-compose.yml file`)
 		return
 	}
 
-	filesToCreate := []FilenameForService{
-		{"docker-compose.yml", templates.DockerComposePostgres},
-		{"Makefile", templates.MakefilePostgres},
-	}
-
 	for _, service := range databaseServices {
+		filesToCreate := getFilesToCreate(service.Driver)
 		for _, file := range filesToCreate {
 			err := createDbFileFromTemplate(
 				service,
@@ -96,6 +92,21 @@ Provide them in corgi-compose.yml file`)
 		}
 		fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
 		fmt.Printf("Db service %s was successfully created\n", service.ServiceName)
+	}
+}
+
+func getFilesToCreate(driver string) []FilenameForService {
+	switch driver {
+	case "rabbitmq":
+		return []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeRabbitMQ},
+			{"Makefile", templates.MakefileRabbitMQ},
+		}
+	default:
+		return []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposePostgres},
+			{"Makefile", templates.MakefilePostgres},
+		}
 	}
 }
 
