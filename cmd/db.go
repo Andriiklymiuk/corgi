@@ -67,7 +67,7 @@ func runDb(cobra *cobra.Command, args []string) {
 	fmt.Print(serviceInfo)
 	serviceIsRunning, err := utils.GetStatusOfService(targetService)
 	if err != nil {
-		fmt.Printf("Getting target service info failed: %s\n", err)
+		fmt.Printf("Getting target service status failed: %s\n", err)
 	}
 	if serviceIsRunning {
 		fmt.Printf("%s is running 🟢\n", targetService)
