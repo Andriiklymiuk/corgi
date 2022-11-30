@@ -16,7 +16,7 @@ These files are created, so that you can run db_services manually, if you want.
 2. If there are any db_services, than it will auto launch docker (if not launched)
 3. If there is --seed flag added, it will get db dump from ```seedFromFilePath``` file dump or from ```seedFromDb``` or database and populate database
 4. Start databases in docker (docker up)
-5. Check ```depends_on_db``` part in each service and it will add env variables (DB_HOST, DB_USER,DB_NAME,DB_PORT,DB_PASSWORD) for db in the .env file in service path 
+5. Check ```depends_on_db``` part in each service and it will add env variables (DB_HOST, DB_USER, DB_NAME, DB_PORT ,DB_PASSWORD) for db in the .env file in service path 
 6. Check ```depends_on_service``` part in each service and it will add env variables for service (server/app, etc) in the .env file in service path in the form of ```http://localhost:POST_IN_DEPENDENT_SERVICE``` (in corgiApp it will add ```http://localhost:8965```)
 7. Runs each service **concurrently** (in parallel)
 - Runs scripts in ```beforeStart``` of service
