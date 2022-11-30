@@ -52,6 +52,12 @@ var serviceItems = []CorgiComposeItems{
 		description: "Path to .env file in target repo. By default .env file is used",
 	},
 	{
+		item:        "ignoreEnv",
+		example:     "false",
+		itemType:    "boolean",
+		description: "Should service ignore env and don't change env file or not. By default is false (env is not ignored)",
+	},
+	{
 		item:        "path",
 		example:     "./path/to/target/repo",
 		itemType:    "string",
