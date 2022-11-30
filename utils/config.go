@@ -21,6 +21,7 @@ var DbServicesItemsFromFlag []string
 type DatabaseService struct {
 	ServiceName       string
 	Driver            string     `yaml:"driver"`
+	Host              string     `yaml:"host"`
 	User              string     `yaml:"user"`
 	Password          string     `yaml:"password"`
 	DatabaseName      string     `yaml:"databaseName"`
@@ -129,9 +130,17 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				driver = service.Driver
 			}
 
+			var host string
+			if service.Host == "" {
+				host = "localhost"
+			} else {
+				host = service.Host
+			}
+
 			dbToAdd := DatabaseService{
 				ServiceName:      indexName,
 				Driver:           driver,
+				Host:             host,
 				DatabaseName:     service.DatabaseName,
 				User:             service.User,
 				Password:         service.Password,
