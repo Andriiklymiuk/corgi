@@ -115,6 +115,18 @@ var serviceItems = []CorgiComposeItems{
 
 var dbServiceItems = []CorgiComposeItems{
 	{
+		item:        "driver",
+		example:     "postgres",
+		itemType:    "string",
+		description: "This is database driver for this service.\n\t\t\tBy default postgres is used.",
+	},
+	{
+		item:        "host",
+		example:     "localhost",
+		itemType:    "string",
+		description: "This is database host for this service, that will be used in `DB_HOST.\n\t\t\tBy default localhost is used",
+	},
+	{
 		item:        "databaseName",
 		example:     "corgi-database",
 		itemType:    "string",
