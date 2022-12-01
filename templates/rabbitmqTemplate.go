@@ -4,7 +4,7 @@ var DockerComposeRabbitMQ = `version: "3.8"
 
 services:
   rabbitmq3:
-    image: rabbitmq:3-alpine
+    image: rabbitmq:3-management
     container_name: rabbitmq-{{.ServiceName}}
     environment:
       - RABBITMQ_DEFAULT_USER={{.User}}
@@ -13,6 +13,7 @@ services:
       - /var/lib/rabbitmq
     ports:
       - "{{.Port}}:5672"
+      - "15672:15672"
 `
 
 var MakefileRabbitMQ = `up:
