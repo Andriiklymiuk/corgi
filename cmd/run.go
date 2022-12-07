@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"regexp"
 	"strings"
@@ -124,7 +123,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 		if service.AfterStart != nil && !omitServiceCmd("afterStart") {
 			fmt.Println("\nAfter start commands:")
 			for _, afterStartCmd := range service.AfterStart {
-				err := runServiceCmd(afterStartCmd, service.Path)
+				err := utils.RunCmdInPath(afterStartCmd, service.Path)
 				if err != nil {
 					fmt.Println(
 						art.RedColor,
@@ -177,7 +176,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 		return
 	}
 	if isPull {
-		err = runServiceCmd("git pull", service.Path)
+		err = utils.RunCmdInPath("git pull", service.Path)
 		if err != nil {
 			fmt.Println("pull failed for", service.ServiceName, "error:", err)
 		}
@@ -187,7 +186,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
 		fmt.Println("\nBefore start commands:")
 		for _, beforeStartCmd := range service.BeforeStart {
-			err := runServiceCmd(beforeStartCmd, service.Path)
+			err := utils.RunCmdInPath(beforeStartCmd, service.Path)
 			if err != nil {
 				fmt.Println(
 					art.RedColor,
@@ -202,7 +201,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 		fmt.Println("\nStart commands:")
 		for _, startCmd := range service.Start {
 			go func(startCmd string) {
-				err := runServiceCmd(startCmd, service.Path)
+				err := utils.RunCmdInPath(startCmd, service.Path)
 				if err != nil {
 					fmt.Println(
 						art.RedColor,
@@ -214,19 +213,6 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 			}(startCmd)
 		}
 	}
-}
-
-func runServiceCmd(serviceCommand string, path string) error {
-	fmt.Println("\n🚀 🤖 Executing command: ", art.GreenColor, serviceCommand, art.WhiteColor)
-
-	commandSlice := strings.Fields(serviceCommand)
-	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
-
-	cmd.Dir = path
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
 }
 
 // Adds env variables to each service, including dependent db_services and services
