@@ -1,20 +1,15 @@
-## corgi docs
+## corgi pull
 
-Do stuff with docs
-
-### Synopsis
-
-Helper set of commands to make your life easier with docs and corgi 
+Runs git pull for each service folder
 
 ```
-corgi docs [flags]
+corgi pull [flags]
 ```
 
 ### Options
 
 ```
-  -g, --generate   Generate cobra docs. Useful for development only, because it updates corgi docs.
-  -h, --help       help for docs
+  -h, --help   help for pull
 ```
 
 ### Options inherited from parent commands
