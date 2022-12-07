@@ -9,7 +9,7 @@ import (
 )
 
 func RunServiceCmd(serviceName string, serviceCommand string, path string) error {
-	executingMessage := fmt.Sprintf("\n🚀 🤖 Executing command for service %s: ", serviceName)
+	executingMessage := fmt.Sprintf("\n🚀 🤖 Executing command for %s: ", serviceName)
 	fmt.Println(executingMessage, art.GreenColor, serviceCommand, art.WhiteColor)
 
 	commandSlice := strings.Fields(serviceCommand)
