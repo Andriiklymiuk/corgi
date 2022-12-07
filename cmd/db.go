@@ -28,10 +28,11 @@ each service, but this is much easier to do it here.
 
 func init() {
 	rootCmd.AddCommand(dbCmd)
-	dbCmd.PersistentFlags().BoolP("stopAll", "s", false, "Stop all services")
-	dbCmd.PersistentFlags().BoolP("removeAll", "r", false, "Remove all services")
-	dbCmd.PersistentFlags().BoolP("upAll", "u", false, "Up all services, start all")
-	dbCmd.PersistentFlags().BoolP("downAll", "d", false, "Down all services, stop and remove all")
+	dbCmd.PersistentFlags().BoolP("stopAll", "s", false, "Stop all database services")
+	dbCmd.PersistentFlags().BoolP("removeAll", "r", false, "Remove all database services")
+	dbCmd.PersistentFlags().BoolP("upAll", "u", false, "Up all database services, start all")
+	dbCmd.PersistentFlags().BoolP("downAll", "d", false, "Down all database services, stop and remove all")
+	dbCmd.PersistentFlags().BoolP("seedAll", "", false, "Seed all database services")
 }
 
 func runDb(cobra *cobra.Command, args []string) {
@@ -53,6 +54,7 @@ func runDb(cobra *cobra.Command, args []string) {
 	utils.CheckForFlagAndExecuteMake(cobra, "removeAll", "remove")
 	utils.CheckForFlagAndExecuteMake(cobra, "downAll", "down")
 	utils.CheckForFlagAndExecuteMake(cobra, "upAll", "up")
+	checkForSeedAllFlag(cobra, corgi.DatabaseServices)
 
 	targetService, err := utils.GetTargetService()
 	if err != nil {
@@ -241,4 +243,25 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 	}
 	fmt.Println(art.BlueColor, "🎉 ", dbService.ServiceName, " IS SEEDED", art.WhiteColor)
 	return nil
+}
+
+func checkForSeedAllFlag(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
+	shouldSeedAllDatabases, err := cmd.Flags().GetBool("seedAll")
+	if err != nil {
+		return
+	}
+
+	if !shouldSeedAllDatabases {
+		return
+	}
+	SeedAllDatabases(databaseServices)
+}
+
+func SeedAllDatabases(databaseServices []utils.DatabaseService) {
+	for _, dbService := range databaseServices {
+		err := DumpAndSeedDb(dbService)
+		if err != nil {
+			fmt.Println("Error dumping and seeding file", err)
+		}
+	}
 }
