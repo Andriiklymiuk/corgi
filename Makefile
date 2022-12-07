@@ -7,4 +7,7 @@ release:
 tag:
 	git describe --tags --abbrev=0
 
-.PHONY: fixHooks release tag
+generateDocs:
+	go run . docs -g
+
+.PHONY: fixHooks release tag generateDocs
