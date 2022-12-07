@@ -2,8 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"os/exec"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -32,32 +30,5 @@ func ExecuteForEachService(cmdName string) {
 			return
 		}
 		fmt.Printf("%s is %s\n", file, cmdName)
-	}
-}
-
-func CheckForFlagAndExecute(cmd *cobra.Command, flag string, executeFunc func(string) string) {
-	shouldStopAllServices, err := cmd.Flags().GetBool(flag)
-	if err != nil {
-		return
-	}
-
-	if !shouldStopAllServices {
-		return
-	}
-
-	files, err := GetFoldersListInDirectory()
-	if err != nil {
-		return
-	}
-
-	for _, file := range files {
-		commandSlice := strings.Fields(executeFunc(file))
-		cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
-		_, err := cmd.CombinedOutput()
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Printf("%s for %s is successful\n", flag, file)
-		}
 	}
 }
