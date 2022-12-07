@@ -35,15 +35,6 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command, args []string) {
-	filesToIgnore := []string{
-		"# Added by corgi cli",
-		utils.RootDbServicesFolder,
-		"corgi-compose*.yml",
-		".env*",
-	}
-	for _, fileToIgnore := range filesToIgnore {
-		addFileToGitignore(fileToIgnore)
-	}
 	CreateCorgiComposeExampleFile(cmd)
 
 	corgi, err := utils.GetCorgiServices(cmd)
@@ -55,6 +46,18 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 	CloneServices(corgi.Services)
+
+	filesToIgnore := []string{
+		"# Added by corgi cli",
+		utils.RootDbServicesFolder,
+		"corgi-compose*.yml",
+		".env*",
+	}
+	filesToIgnore = getGitignoreServicePath(corgi.Services, filesToIgnore)
+
+	for _, fileToIgnore := range filesToIgnore {
+		addFileToGitignore(fileToIgnore)
+	}
 }
 
 type FilenameForService struct {
@@ -180,6 +183,30 @@ func addFileToGitignore(fileToIgnore string) error {
 		defer f.Close()
 	}
 	return nil
+}
+
+func getGitignoreServicePath(services []utils.Service, filesToIgnore []string) []string {
+	for _, service := range services {
+		if service.CloneFrom == "" {
+			continue
+		}
+		if service.Path == "" {
+			continue
+		}
+		if strings.Contains(service.Path, "../") {
+			continue
+		}
+		gitignorePath := strings.ReplaceAll(
+			service.Path,
+			"./",
+			"",
+		)
+		if len(strings.Split(gitignorePath, "/")) > 1 {
+			continue
+		}
+		filesToIgnore = append(filesToIgnore, gitignorePath)
+	}
+	return filesToIgnore
 }
 
 func createDbFileFromTemplate(
