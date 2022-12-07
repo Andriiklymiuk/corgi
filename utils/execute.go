@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-func RunCmdInPath(serviceCommand string, path string) error {
-	fmt.Println("\n🚀 🤖 Executing command: ", art.GreenColor, serviceCommand, art.WhiteColor)
+func RunServiceCmd(serviceName string, serviceCommand string, path string) error {
+	executingMessage := fmt.Sprintf("\n🚀 🤖 Executing command for service %s: ", serviceName)
+	fmt.Println(executingMessage, art.GreenColor, serviceCommand, art.WhiteColor)
 
 	commandSlice := strings.Fields(serviceCommand)
 	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
