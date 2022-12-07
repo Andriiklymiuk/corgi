@@ -47,12 +47,7 @@ func showFinalMessage() {
 	if !canShowWelcomeMessages() {
 		return
 	}
-	fmt.Println(
-		"\n✨ Glad for using me ✨ See you next time 🚀 🐶",
-		string("\n\n\033[36m"),
-		utils.GetRandomQuote("famous-quotes"),
-		art.WhiteColor,
-	)
+	utils.PrintBye()
 }
 
 func canRunCliAgain() bool {
