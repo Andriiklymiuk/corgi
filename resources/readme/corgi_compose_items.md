@@ -9,6 +9,7 @@ Corgi compose `service` can contain the following items (properties):
 | Item        | Example           | itemType  |  Description
 | ------------| :-------------    | -         | --
 | cloneFrom             | `git@github.com:Andriiklymiuk/corgi.git` | `string` | Git url to target repo. By default nothing is cloned.
+| branch                | `some/feature/branch` | `string` | Branch to use for git checkout. By default default branch for repo is used.
 | environment           | - YOUR_ENV=dev<br>- YOUR__ANTOHER_ENV=abcdef  | `[]string` | List of environment variables to copy and put into your env file.<br>By default no environments are added.
 | envPath               | ./path/to/.env | `string` | Path to .env file in target repo. By default .env file is used
 | ignoreEnv             | false | `string` | Should service ignore env and don't change env file or not. By default is false (env is not ignored)
