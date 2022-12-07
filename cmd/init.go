@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"text/template"
 
@@ -141,14 +140,37 @@ func CloneServices(services []utils.Service) {
 				continue
 			}
 
-			cmd := exec.Command("git", "clone", service.CloneFrom)
-			cmd.Dir = pathWithoutLastFolder
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err = cmd.Run()
+			err = utils.RunServiceCmd(
+				service.ServiceName,
+				fmt.Sprintf("git clone %s", service.CloneFrom),
+				pathWithoutLastFolder,
+			)
 			if err != nil {
 				fmt.Printf(`output error: %s, in path %s with git clone %s
 					`, err, pathWithoutLastFolder, service.CloneFrom)
+				continue
+			}
+			if service.Branch != "" {
+				err = utils.RunServiceCmd(
+					service.ServiceName,
+					fmt.Sprintf("git checkout %s", service.Branch),
+					service.Path,
+				)
+				if err != nil {
+					fmt.Printf(`output error: %s, in path %s with git checkout %s
+					`, err, service.Path, service.Branch)
+					continue
+				}
+				err = utils.RunServiceCmd(
+					service.ServiceName,
+					"git pull",
+					service.Path,
+				)
+				if err != nil {
+					fmt.Printf(`output error: %s, in path %s with git pull %s
+					`, err, service.Path, service.Branch)
+					continue
+				}
 			}
 		}
 	}

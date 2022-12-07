@@ -40,6 +40,12 @@ var serviceItems = []CorgiComposeItems{
 		description: "Git url to target repo. By default nothing is cloned.",
 	},
 	{
+		item:        "branch",
+		example:     "some/feature/branch",
+		itemType:    "string",
+		description: "Branch to use for git checkout. By default default branch for repo is used.",
+	},
+	{
 		item:        "environment",
 		example:     "- YOUR_ENV=dev\n\t- YOUR__ANTOHER_ENV=abcdef",
 		itemType:    "[]string",

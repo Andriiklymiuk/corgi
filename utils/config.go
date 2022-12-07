@@ -56,6 +56,7 @@ type Service struct {
 	IgnoreEnv           bool               `yaml:"ignore_env"`
 	ManualRun           bool               `yaml:"manualRun"`
 	CloneFrom           string             `yaml:"cloneFrom"`
+	Branch              string             `yaml:"branch"`
 	Environment         []string           `yaml:"environment"`
 	EnvPath             string             `yaml:"envPath"`
 	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath"`
@@ -176,6 +177,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				IgnoreEnv:           service.IgnoreEnv,
 				ManualRun:           service.ManualRun,
 				CloneFrom:           service.CloneFrom,
+				Branch:              service.Branch,
 				DependsOnServices:   service.DependsOnServices,
 				DependsOnDb:         service.DependsOnDb,
 				Environment:         service.Environment,
