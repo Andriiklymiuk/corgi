@@ -123,7 +123,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 		if service.AfterStart != nil && !omitServiceCmd("afterStart") {
 			fmt.Println("\nAfter start commands:")
 			for _, afterStartCmd := range service.AfterStart {
-				err := utils.RunCmdInPath(afterStartCmd, service.Path)
+				err := utils.RunServiceCmd(service.ServiceName, afterStartCmd, service.Path)
 				if err != nil {
 					fmt.Println(
 						art.RedColor,
@@ -176,7 +176,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 		return
 	}
 	if isPull {
-		err = utils.RunCmdInPath("git pull", service.Path)
+		err = utils.RunServiceCmd(service.ServiceName, "git pull", service.Path)
 		if err != nil {
 			fmt.Println("pull failed for", service.ServiceName, "error:", err)
 		}
@@ -186,7 +186,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
 		fmt.Println("\nBefore start commands:")
 		for _, beforeStartCmd := range service.BeforeStart {
-			err := utils.RunCmdInPath(beforeStartCmd, service.Path)
+			err := utils.RunServiceCmd(service.ServiceName, beforeStartCmd, service.Path)
 			if err != nil {
 				fmt.Println(
 					art.RedColor,
@@ -201,7 +201,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command) {
 		fmt.Println("\nStart commands:")
 		for _, startCmd := range service.Start {
 			go func(startCmd string) {
-				err := utils.RunCmdInPath(startCmd, service.Path)
+				err := utils.RunServiceCmd(service.ServiceName, startCmd, service.Path)
 				if err != nil {
 					fmt.Println(
 						art.RedColor,

@@ -25,7 +25,7 @@ func runPull(cmd *cobra.Command, _ []string) {
 		return
 	}
 	for _, service := range corgi.Services {
-		err = utils.RunCmdInPath("git pull", service.Path)
+		err = utils.RunServiceCmd(service.ServiceName, "git pull", service.Path)
 		if err != nil {
 			fmt.Println("pull failed for", service.ServiceName, "error:", err)
 		}
