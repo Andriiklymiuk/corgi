@@ -155,12 +155,7 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 	}
 
 	if isSeed {
-		for _, dbService := range databaseServices {
-			err := DumpAndSeedDb(dbService)
-			if err != nil {
-				fmt.Println("Error dumping and seeding file", err)
-			}
-		}
+		SeedAllDatabases((databaseServices))
 	}
 
 	utils.ExecuteForEachService("up")
