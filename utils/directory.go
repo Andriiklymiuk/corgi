@@ -20,7 +20,8 @@ func GetTargetService() (string, error) {
 
 	if err != nil {
 		if err.Error() == backString {
-			os.Exit(1)
+			PrintBye()
+			os.Exit(0)
 			return "", fmt.Errorf(backString)
 		}
 

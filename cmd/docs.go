@@ -205,6 +205,6 @@ func generateCobraDocs(cmd *cobra.Command) {
 	} else {
 		fmt.Println("Cobra docs are generated, exiting ..")
 	}
-	os.Exit(1)
+	os.Exit(0)
 
 }
