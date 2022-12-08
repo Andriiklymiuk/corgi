@@ -176,8 +176,37 @@ var dbServiceItems = []CorgiComposeItems{
 	},
 }
 
+var requiredItems = []CorgiComposeItems{
+	{
+		item:        "why",
+		example:     "- pass butter\n\t- help with service X",
+		itemType:    "[]string",
+		description: "The reasons to use/install this required command.",
+	},
+	{
+		item:        "install",
+		example:     "- install cmd 1\n\t- install cmd 2",
+		itemType:    "\t[]string",
+		description: "Installation steps to run, if cmd not found.",
+	},
+	{
+		item:        "optional",
+		example:     "true",
+		itemType:    "\tboolean",
+		description: "Show or not the prompt, before this cmd installation.\n\t\t\t\tBy default false.",
+	},
+	{
+		item:        "checkCmd",
+		example:     "this_command -v",
+		itemType:    "\tstring",
+		description: "Command to run to check, if it is installed.\n\t\t\t\tBy default cmd name is used.",
+	},
+}
+
 func runDocs(cmd *cobra.Command, args []string) {
 	generateCobraDocs(cmd)
+
+	fmt.Println("Corgi compose can have different items (properties). These are what they can be")
 
 	writer := tabwriter.NewWriter(os.Stdout, 0, 8, 1, '\t', tabwriter.AlignRight)
 	fmt.Fprintln(writer, "item\texample\titemType\tdescription")
@@ -193,7 +222,16 @@ func runDocs(cmd *cobra.Command, args []string) {
 		s := fmt.Sprintf("%s\t%s\t%s\t%s", item.item, item.example, item.itemType, item.description)
 		fmt.Fprintln(writer, s)
 	}
+	fmt.Fprintln(writer, "\t\t\t")
+	fmt.Fprintln(writer, "\t\t\t")
+	fmt.Fprintln(writer, "required items:\t\t\t")
+	for _, item := range requiredItems {
+		s := fmt.Sprintf("%s\t%s\t%s\t%s", item.item, item.example, item.itemType, item.description)
+		fmt.Fprintln(writer, s)
+	}
 	writer.Flush()
+
+	fmt.Println("You can see examples here:", "https://github.com/Andriiklymiuk/corgi/tree/main/examples")
 }
 
 func generateCobraDocs(cmd *cobra.Command) {
@@ -212,5 +250,4 @@ func generateCobraDocs(cmd *cobra.Command) {
 		fmt.Println("Cobra docs are generated, exiting ..")
 	}
 	os.Exit(0)
-
 }

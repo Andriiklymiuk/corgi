@@ -14,6 +14,8 @@ import (
 )
 
 var DbServicesInConfig = "db_services"
+var ServicesInConfig = "services"
+var RequiredInConfig = "required"
 var RootDbServicesFolder = "corgi_services/db_services"
 var ServicesItemsFromFlag []string
 var DbServicesItemsFromFlag []string
@@ -68,9 +70,18 @@ type Service struct {
 	AfterStart          []string           `yaml:"afterStart"`
 }
 
+type Required struct {
+	Name     string
+	Why      []string `yaml:"why"`
+	Install  []string `yaml:"install"`
+	Optional bool     `yaml:"optional"`
+	CheckCmd string   `yaml:"checkCmd"`
+}
+
 type CorgiCompose struct {
 	DatabaseServices []DatabaseService
 	Services         []Service
+	Required         []Required
 }
 
 // Get corgi-compose info from path to corgi-compose.yml file
@@ -163,11 +174,11 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	if err != nil {
 		return nil, fmt.Errorf("couldn't unmarshal servicesData %s", pathToCorgiComposeFile)
 	}
-	if len(servicesData["services"]) == 0 || !servicesCanBeAdded(ServicesItemsFromFlag) {
+	if len(servicesData[ServicesInConfig]) == 0 || !servicesCanBeAdded(ServicesItemsFromFlag) {
 		fmt.Println("no services provided")
 	} else {
 		var services []Service
-		for indexName, service := range servicesData["services"] {
+		for indexName, service := range servicesData[ServicesInConfig] {
 			if !IsServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
 				continue
 			}
@@ -195,6 +206,32 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			}
 		}
 		corgi.Services = services
+	}
+
+	requiredData := make(map[string]map[string]Required)
+	err = yaml.Unmarshal(file, &requiredData)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't unmarshal required %s", pathToCorgiComposeFile)
+	}
+	if len(requiredData[RequiredInConfig]) == 0 {
+		fmt.Println("no required instructions provided in file.\nIt is useful to provide required to showcase what is used and how to install it")
+	} else {
+		var requiredInstructions []Required
+		for indexName, required := range requiredData[RequiredInConfig] {
+			requiredToAdd := Required{
+				Name:     indexName,
+				Why:      required.Why,
+				Install:  required.Install,
+				Optional: required.Optional,
+				CheckCmd: required.CheckCmd,
+			}
+			requiredInstructions = append(requiredInstructions, requiredToAdd)
+
+			if describeFlag {
+				describeServiceInfo(requiredToAdd)
+			}
+		}
+		corgi.Required = requiredInstructions
 	}
 
 	return &corgi, nil

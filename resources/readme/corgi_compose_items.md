@@ -40,4 +40,14 @@ Corgi compose `db_service` can contain the following items (properties):
 | seedFromDbEnvPath     | ./path/to/db/info/.env | `string` | Path to .env file with db credentials for db, from which data is seeded.<br>Use either seedFromFilePath or seedFromDb/seedFromDbEnvPath
 | seedFromDb            | - host: seed_db_host<br>- databaseName: seed_db_name<br>- user: seed_db_user<br>- password: seed_db_password<br>- port: seed_db_port | `SeedFromDb` | Db credentials to seed from.<br>Use either seedFromFilePath or seedFromDb/seedFromDbEnvPath
 
+Also, you can add required items in required part.
+Corgi compose `required` can contain the following items (properties):
+
+| Item        | Example           | itemType  |  Description
+| ------------| :-------------    | -         | --
+| why                   | - pass butter<br>- help with service X | `[]string` | The reasons to use/install this required command.
+| install               | - install cmd 1<br>- install cmd 2 | `[]string` | Installation steps to run, if cmd not found.
+| optional              | true | `boolean` | Show or not the prompt, before this cmd installation.<br>By default false.
+| checkCmd              | this_command -v | `string` | Command to run to check, if it is installed.<br>By default cmd name is used.
+
 [Main docs](../../README.md)
