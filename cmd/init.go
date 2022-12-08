@@ -45,6 +45,7 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 	CloneServices(corgi.Services)
+	RunRequired(corgi.Required)
 
 	filesToIgnore := []string{
 		"# Added by corgi cli",
