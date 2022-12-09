@@ -59,7 +59,7 @@ func RunRequired(required []utils.Required) {
 		return
 	}
 
-	fmt.Println("🎉 All required statements were found successfully")
+	fmt.Println("🎉 All required software was found successfully")
 }
 
 func processRequired(required utils.Required) bool {
