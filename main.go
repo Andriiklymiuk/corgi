@@ -121,6 +121,11 @@ func runClearCmd(name string, arg ...string) {
 }
 
 func ClearTerminal() {
+	for _, arg := range os.Args {
+		if arg == "--silent" {
+			return
+		}
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		runClearCmd("tput", "reset")
