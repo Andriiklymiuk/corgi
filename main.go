@@ -47,7 +47,7 @@ func showFinalMessage() {
 	if !canShowWelcomeMessages() {
 		return
 	}
-	utils.PrintBye()
+	utils.PrintFinalMessage()
 }
 
 func canRunCliAgain() bool {
