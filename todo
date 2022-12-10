@@ -6,7 +6,6 @@
   2 db 2 servers 1 app/website
   1 service with clone from remote
 - add medium explanations post
-- add corgi doc --explain service,dbService - for showing available corgi-compose.yml properties in console, tabulized
 
 - add tests
 - add docker/minikube support for service/db_service runs
