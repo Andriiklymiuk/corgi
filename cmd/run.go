@@ -6,7 +6,9 @@ import (
 	"os/signal"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
@@ -92,12 +94,12 @@ func runRun(cmd *cobra.Command, args []string) {
 
 	closeSignal := make(chan os.Signal, 1)
 	signal.Notify(closeSignal, syscall.SIGINT, syscall.SIGTERM)
-	runCmdDone := make(chan bool, 1)
 
 	go func() {
 		<-closeSignal
 		cleanup(corgi)
-		runCmdDone <- true
+		utils.PrintFinalMessage()
+		os.Exit(0)
 	}()
 
 	utils.CleanFromScratch(cmd, *corgi)
@@ -108,11 +110,22 @@ func runRun(cmd *cobra.Command, args []string) {
 
 	generateEnvForServices(corgi)
 
+	var serviceWaitGroup sync.WaitGroup
+	serviceWaitGroup.Add(len(corgi.Services))
+	var startCmdPresent bool
 	for _, service := range corgi.Services {
-		go runService(service, cmd)
+		go runService(service, cmd, &serviceWaitGroup)
+		if len(service.Start) != 0 {
+			startCmdPresent = true
+		}
 	}
 
-	<-runCmdDone
+	for startCmdPresent {
+		time.Sleep(60 * time.Second)
+		fmt.Println("😉 corgi is still running")
+	}
+	fmt.Println("no Start cmd to run")
+	serviceWaitGroup.Wait()
 }
 
 func cleanup(corgi *utils.CorgiCompose) {
@@ -160,7 +173,8 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 	utils.ExecuteForEachService("up")
 }
 
-func runService(service utils.Service, cobraCmd *cobra.Command) {
+func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup *sync.WaitGroup) {
+	defer serviceWaitGroup.Done()
 	if service.ManualRun {
 		if len(utils.ServicesItemsFromFlag) == 0 {
 			fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
