@@ -16,6 +16,11 @@
   [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
 </div>
 
+Send someone your project yml file, init and run it in minutes.
+
+No more long meetings, explanations of how to run new project with multiple microservices and configs. Just send corgi-compose.yml file to your team and corgi will do the rest.
+
+Auto git cloning, db seeding, concurrent running and much more.
 
 ## Inside:
 - [Quick install with homebrew](#quick-install-with-homebrewhttpsbrewsh-without-repo-cloning)
@@ -54,20 +59,26 @@ With it you can run `corgi` in any folder on your local.
 ## Prerequisites
 - [Docker](https://www.docker.com) - for running databases
 
-- [psql](https://formulae.brew.sh/formula/libpq) in order to use auto seeding
+- [psql](https://formulae.brew.sh/formula/libpq) - to use auto seeding for postgresql databases
 
 
 ## Services creation
 
-You need to create corgi-compose.yml file in root of your target repo to create services and db services.
+Corgi has several concepts to understand:
+
+- db_services - databases configs to use when doing creation/seeding/etc
+- services - project folders to use for corgi. Can be server, app, anything you can imaging
+- required - programs needed for running your project successfully (node,yarn,go,whatever you want)
+
+These items are added to corgi-compose.yml file to create services, db services and check for required software.
 
 Examples of corgi-compose.yml files are in [examples folder](./examples/). You can also check what should be in corgi-compose.yml by running ```corgi docs```. It will print out all possible items in corgi .yml file or you can go to [corgi compose items doc](./resources/readme/corgi_compose_items.md).
 
-Then run, which will create db_services.
+After creating corgi-compose.yml file, you can run to create db folders, clone git repos, etc.
 ```bash 
   corgi init
 ```
-Or, if you want to just run services and already created db_services:
+If you want to just run services and already created db_services:
 ```bash 
   corgi run
 ```
@@ -77,12 +88,6 @@ But create it with different ports to be able to run in all at the same time, if
 
 You can read of what exactly happens on [run](./resources/readme/why_it_exists.md#what-happens-on-run) or on [init](./resources/readme/why_it_exists.md#what-happens-on-run) to better understand corgi logic.
 
-## Without cli
-
-The beauty of this cli is that it is versatile and can be run without even opening cli, if it is broke or smth has happened to it.
-All database services are in `corgi_services/db_services` folder, so you can go to interested service folder and just run `make up` to start the database.
-
-It can be done so, because cli is dependent upon on `docker-compose.yml` and MAKEFILE for each service, and it can be run independently.
 
 </br>
 
