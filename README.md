@@ -66,9 +66,9 @@ With it you can run `corgi` in any folder on your local.
 
 Corgi has several concepts to understand:
 
-- db_services - databases configs to use when doing creation/seeding/etc
-- services - project folders to use for corgi. Can be server, app, anything you can imaging
-- required - programs needed for running your project successfully (node,yarn,go,whatever you want)
+- db_services - database configs to use when doing creation/seeding/etc
+- services - project folders to use for corgi. Can be server, app, anything you can imagine
+- required - programs needed for running your project successfully (node,yarn,go,whatever you want). They are checked on init
 
 These items are added to corgi-compose.yml file to create services, db services and check for required software.
 
