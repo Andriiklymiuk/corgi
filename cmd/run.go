@@ -355,7 +355,7 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 		}
 
 		if len(corgiEnvPosition) == 2 {
-			envFileContent = removeIndexesFromSlice(
+			envFileContent = removeFromToIndexes(
 				envFileContent,
 				corgiEnvPosition[0],
 				corgiEnvPosition[1],
@@ -447,7 +447,7 @@ func getPathToEnv(service utils.Service) string {
 	}
 }
 
-func removeIndexesFromSlice(s []string, from int, to int) []string {
+func removeFromToIndexes(s []string, from int, to int) []string {
 	return append(s[:from], s[to+1:]...)
 }
 
