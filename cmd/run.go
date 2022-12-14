@@ -121,7 +121,7 @@ func runRun(cmd *cobra.Command, args []string) {
 	}
 
 	for startCmdPresent {
-		time.Sleep(60 * time.Second)
+		time.Sleep(5 * 60 * time.Second)
 		fmt.Println("😉 corgi is still running")
 	}
 	fmt.Println("no Start cmd to run")
