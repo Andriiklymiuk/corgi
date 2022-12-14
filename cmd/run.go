@@ -231,6 +231,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 
 // Adds env variables to each service, including dependent db_services and services
 func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
+	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 	for _, service := range corgiCompose.Services {
 
 		if service.IgnoreEnv {
@@ -246,8 +247,16 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 		var envForService string
 
 		if service.CopyEnvFromFilePath != "" {
+			envFileContent := utils.GetFileContent(service.CopyEnvFromFilePath)
+			var envFileNormalizedContent []string
+			for _, content := range envFileContent {
+				if content != corgiGeneratedMessage {
+					envFileNormalizedContent = append(envFileNormalizedContent, content)
+				}
+			}
+
 			envForService = strings.Join(
-				utils.GetFileContent(service.CopyEnvFromFilePath),
+				envFileNormalizedContent,
 				"\n",
 			) + "\n"
 		}
@@ -344,7 +353,6 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 
 		pathToEnvFile := getPathToEnv(service)
 
-		corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 		var corgiEnvPosition []int
 		envFileContent := utils.GetFileContent(pathToEnvFile)
 
