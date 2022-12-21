@@ -122,43 +122,43 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		fmt.Println("no db_services provided")
 	} else {
 		var dbServices []DatabaseService
-		for indexName, service := range dbServicesData[DbServicesInConfig] {
+		for indexName, db := range dbServicesData[DbServicesInConfig] {
 			if !IsServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
 				continue
 			}
 			var seedFromDb SeedFromDb
-			if service.SeedFromDbEnvPath != "" {
-				seedFromDb = getDbSourceFromPath(service.SeedFromDbEnvPath)
+			if db.SeedFromDbEnvPath != "" {
+				seedFromDb = getDbSourceFromPath(db.SeedFromDbEnvPath)
 			}
 
 			if (seedFromDb == SeedFromDb{}) {
-				seedFromDb = service.SeedFromDb
+				seedFromDb = db.SeedFromDb
 			}
 
 			var driver string
-			if service.Driver == "" {
+			if db.Driver == "" {
 				driver = "postgres"
 			} else {
-				driver = service.Driver
+				driver = db.Driver
 			}
 
 			var host string
-			if service.Host == "" {
+			if db.Host == "" {
 				host = "localhost"
 			} else {
-				host = service.Host
+				host = db.Host
 			}
 
 			dbToAdd := DatabaseService{
 				ServiceName:      indexName,
 				Driver:           driver,
 				Host:             host,
-				DatabaseName:     service.DatabaseName,
-				User:             service.User,
-				Password:         service.Password,
-				Port:             service.Port,
+				DatabaseName:     db.DatabaseName,
+				User:             db.User,
+				Password:         db.Password,
+				Port:             db.Port,
 				SeedFromDb:       seedFromDb,
-				SeedFromFilePath: service.SeedFromFilePath,
+				SeedFromFilePath: db.SeedFromFilePath,
 			}
 			dbServices = append(dbServices, dbToAdd)
 
