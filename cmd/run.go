@@ -333,7 +333,8 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 								"%s%s%s%s%s", envForService, host, user, port, password)
 						case "sqs":
 							envForService = fmt.Sprintf(
-								"%s%s%s%s",
+								"%s%s%s%s%s",
+								envForService,
 								fmt.Sprintf("\nREGION=%s", templates.SqsRegion),
 								fmt.Sprintf("\n%sQUEUE_URL=%s",
 									serviceNameInEnv,
