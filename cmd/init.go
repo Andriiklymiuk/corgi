@@ -230,10 +230,12 @@ func createDbFileFromTemplate(
 	fileName string,
 	fileTemplate string,
 ) error {
+	fileName, pathToFileName := getPathToFileName(fileName)
 	path := fmt.Sprintf(
-		"%s/%s",
+		"%s/%s/%s",
 		utils.RootDbServicesFolder,
 		dbService.ServiceName,
+		pathToFileName,
 	)
 
 	err := os.MkdirAll(path, os.ModePerm)
@@ -264,4 +266,13 @@ func createDbFileFromTemplate(
 		)
 	}
 	return nil
+}
+
+func getPathToFileName(file string) (string, string) {
+	pathSlice := strings.Split(file, "/")
+	if len(pathSlice) > 1 {
+		fileName := pathSlice[len(pathSlice)-1]
+		return fileName, strings.Join(pathSlice[:len(pathSlice)-1], "/") + "/"
+	}
+	return file, ""
 }
