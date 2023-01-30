@@ -69,6 +69,7 @@ Provide them in corgi-compose.yml file`)
 
 	for _, service := range databaseServices {
 		filesToCreate := getFilesToCreate(service.Driver)
+		var errDuringFileCreation bool
 		for _, file := range filesToCreate {
 			err := createDbFileFromTemplate(
 				service,
@@ -77,8 +78,9 @@ Provide them in corgi-compose.yml file`)
 			)
 
 			if err != nil {
+				errDuringFileCreation = true
 				fmt.Printf(
-					"error creating %s for service %s, error: %s",
+					"error creating %s for service %s, error: %s\n",
 					file.Name,
 					service.ServiceName,
 					err,
@@ -86,8 +88,13 @@ Provide them in corgi-compose.yml file`)
 				break
 			}
 		}
-		fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
-		fmt.Printf("Db service %s was successfully created\n", service.ServiceName)
+		if errDuringFileCreation {
+			fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
+			fmt.Printf("Db service %s had error during creation\n", service.ServiceName)
+		} else {
+			fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
+			fmt.Printf("Db service %s was successfully created\n", service.ServiceName)
+		}
 	}
 }
 
