@@ -105,6 +105,12 @@ func getFilesToCreate(driver string) []FilenameForService {
 			{"docker-compose.yml", templates.DockerComposeRabbitMQ},
 			{"Makefile", templates.MakefileRabbitMQ},
 		}
+	case "sqs":
+		return []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeSqs},
+			{"Makefile", templates.MakefileSqs},
+			{"bootstrap/bootstrap.sh", templates.BootstrapSqs},
+		}
 	default:
 		return []FilenameForService{
 			{"docker-compose.yml", templates.DockerComposePostgres},
