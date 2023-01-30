@@ -18,7 +18,7 @@ services:
 `
 
 var MakefileSqs = `up:
-	docker compose up -d
+	chmod +x bootstrap/bootstrap.sh && docker compose up -d
 down:
 	docker compose down    
 stop:
