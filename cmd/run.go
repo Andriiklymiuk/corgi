@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"andriiklymiuk/corgi/templates"
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 
@@ -318,6 +319,9 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 						if db.Driver == "rabbitmq" {
 							serviceNameInEnv = serviceNameInEnv + "RABBITMQ_"
 						}
+						if db.Driver == "sqs" {
+							serviceNameInEnv = serviceNameInEnv + "AWS_SQS_"
+						}
 						host := fmt.Sprintf("\n%sDB_HOST=%s", serviceNameInEnv, db.Host)
 						user := fmt.Sprintf("\n%sDB_USER=%s", serviceNameInEnv, db.User)
 						name := fmt.Sprintf("\n%sDB_NAME=%s", serviceNameInEnv, db.DatabaseName)
@@ -327,6 +331,21 @@ func generateEnvForServices(corgiCompose *utils.CorgiCompose) {
 						case "rabbitmq":
 							envForService = fmt.Sprintf(
 								"%s%s%s%s%s", envForService, host, user, port, password)
+						case "sqs":
+							envForService = fmt.Sprintf(
+								"%s%s%s%s",
+								fmt.Sprintf("\nREGION=%s", templates.SqsRegion),
+								fmt.Sprintf("\n%sQUEUE_URL=%s",
+									serviceNameInEnv,
+									fmt.Sprintf(
+										"http://localhost:%d/000000000000/%s",
+										db.Port,
+										db.DatabaseName,
+									),
+								),
+								"\nAWS_ACCESS_KEY_ID=test",
+								"\nAWS_SECRET_ACCESS_KEY=test",
+							)
 						default:
 							envForService = fmt.Sprintf(
 								"%s%s%s%s%s%s", envForService, host, user, name, port, password)
