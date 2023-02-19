@@ -170,7 +170,7 @@ func CloneServices(services []utils.Service) {
 				}
 				err = utils.RunServiceCmd(
 					service.ServiceName,
-					"git pull",
+					"corgi pull --silent",
 					service.Path,
 				)
 				if err != nil {
@@ -178,6 +178,24 @@ func CloneServices(services []utils.Service) {
 					`, err, service.Path, service.Branch)
 					continue
 				}
+			}
+		}
+		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
+			service.Path,
+			"corgi-compose.yml",
+		)
+		if err != nil {
+			fmt.Println(err)
+		}
+		if corgiComposeExists {
+			err = utils.RunServiceCmd(
+				service.ServiceName,
+				"corgi init --silent",
+				service.Path,
+			)
+			if err != nil {
+				fmt.Printf(`output error: %s, in path %s with corgi init --silent %s
+					`, err, service.Path, service.Branch)
 			}
 		}
 	}
