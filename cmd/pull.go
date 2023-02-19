@@ -24,8 +24,31 @@ func runPull(cmd *cobra.Command, _ []string) {
 		fmt.Println(err)
 		return
 	}
+	err = utils.RunCombinedCmd("git pull", ".")
+	if err != nil {
+		fmt.Println(err)
+	}
 	for _, service := range corgi.Services {
-		err = utils.RunServiceCmd(service.ServiceName, "git pull", service.Path)
+		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
+			service.Path,
+			"corgi-compose.yml",
+		)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		var pullCmdToExecute string
+		if corgiComposeExists {
+			pullCmdToExecute = "corgi pull --silent"
+		} else {
+			pullCmdToExecute = "git pull"
+		}
+
+		err = utils.RunServiceCmd(
+			service.ServiceName,
+			pullCmdToExecute,
+			service.Path,
+		)
 		if err != nil {
 			fmt.Println("pull failed for", service.ServiceName, "error:", err)
 		}

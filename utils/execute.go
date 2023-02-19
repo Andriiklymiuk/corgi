@@ -21,3 +21,12 @@ func RunServiceCmd(serviceName string, serviceCommand string, path string) error
 
 	return cmd.Run()
 }
+
+func RunCombinedCmd(command string, path string) error {
+	fmt.Println("🚀 🤖 Executing command: ", art.GreenColor, command, art.WhiteColor)
+
+	commandSlice := strings.Fields(command)
+	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
+	_, err := cmd.CombinedOutput()
+	return err
+}
