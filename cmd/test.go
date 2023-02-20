@@ -18,6 +18,8 @@ var testCmd = &cobra.Command{
 	Run:   runTest,
 }
 
+var EnvItemsFromFlag []string
+
 func init() {
 	rootCmd.AddCommand(testCmd)
 
@@ -35,6 +37,20 @@ none - will ignore all services run test.
 By default all services are included and test are run on them.
 		`,
 	)
+
+	testCmd.PersistentFlags().StringSliceVarP(
+		&EnvItemsFromFlag,
+		"env",
+		"",
+		[]string{},
+		`Slice of test names to choose from.
+
+If you provide at least 1 env here, than corgi will choose only to run these test names, while ignoring all others.
+(--env local,dev,prod)
+
+By default all tests are included to run.
+		`,
+	)
 }
 
 func runTest(cmd *cobra.Command, _ []string) {
@@ -46,6 +62,9 @@ func runTest(cmd *cobra.Command, _ []string) {
 	for _, service := range corgi.Services {
 		fmt.Println(art.BlueColor, "🐶 TESTING SERVICE", service.ServiceName, art.WhiteColor)
 		for _, testServiceCmd := range service.Test {
+			if !utils.IsServiceIncludedInFlag(EnvItemsFromFlag, testServiceCmd.Name) {
+				continue
+			}
 			testService(testServiceCmd, service.Path)
 		}
 	}
