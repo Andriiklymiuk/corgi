@@ -214,7 +214,9 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		return nil, fmt.Errorf("couldn't unmarshal required %s", pathToCorgiComposeFile)
 	}
 	if len(requiredData[RequiredInConfig]) == 0 {
-		fmt.Println("no required instructions provided in file.\nIt is useful to provide required to showcase what is used and how to install it")
+		fmt.Println("no required instructions provided in file.")
+		fmt.Println("Tip: It is useful to provide required to showcase what is used and how to install it")
+		fmt.Println()
 	} else {
 		var requiredInstructions []Required
 		for indexName, required := range requiredData[RequiredInConfig] {
