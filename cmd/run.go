@@ -82,7 +82,7 @@ By default all db_services are included and run.
 		"pull",
 		"",
 		false,
-		"Git pull services repo changes",
+		"Pull services repo changes",
 	)
 }
 
@@ -191,9 +191,9 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		return
 	}
 	if isPull {
-		err = utils.RunServiceCmd(service.ServiceName, "git pull", service.Path)
+		err = utils.RunServiceCmd(service.ServiceName, "corgi pull --silent", service.Path)
 		if err != nil {
-			fmt.Println("pull failed for", service.ServiceName, "error:", err)
+			fmt.Println("corgi pull failed for", service.ServiceName, "error:", err)
 		}
 	}
 	fmt.Println(art.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, art.WhiteColor)
