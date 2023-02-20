@@ -62,6 +62,12 @@ func runTest(cmd *cobra.Command, _ []string) {
 	for _, service := range corgi.Services {
 		fmt.Println(art.BlueColor, "🐶 TESTING SERVICE", service.ServiceName, art.WhiteColor)
 		for _, testServiceCmd := range service.Test {
+			if testServiceCmd.ManualRun {
+				if len(EnvItemsFromFlag) == 0 {
+					fmt.Println(testServiceCmd.Name, "is not run, because it should be run manually (manualRun)")
+					continue
+				}
+			}
 			if !utils.IsServiceIncludedInFlag(EnvItemsFromFlag, testServiceCmd.Name) {
 				continue
 			}
