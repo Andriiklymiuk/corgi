@@ -53,8 +53,9 @@ type DependsOnDb struct {
 }
 
 type TestService struct {
-	Name    string   `yaml:"name"`
-	Command []string `yaml:"command"`
+	Name      string   `yaml:"name"`
+	ManualRun bool     `yaml:"manualRun"`
+	Command   []string `yaml:"command"`
 }
 
 type Service struct {
