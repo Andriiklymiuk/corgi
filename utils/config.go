@@ -52,6 +52,11 @@ type DependsOnDb struct {
 	EnvAlias string `yaml:"envAlias"`
 }
 
+type TestService struct {
+	Name    string   `yaml:"name"`
+	Command []string `yaml:"command"`
+}
+
 type Service struct {
 	ServiceName         string
 	Path                string             `yaml:"path"`
@@ -68,6 +73,7 @@ type Service struct {
 	BeforeStart         []string           `yaml:"beforeStart"`
 	Start               []string           `yaml:"start"`
 	AfterStart          []string           `yaml:"afterStart"`
+	Test                []TestService      `yaml:"test"`
 }
 
 type Required struct {
@@ -198,6 +204,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				BeforeStart:         service.BeforeStart,
 				AfterStart:          service.AfterStart,
 				Start:               service.Start,
+				Test:                service.Test,
 			}
 			services = append(services, serviceToAdd)
 
