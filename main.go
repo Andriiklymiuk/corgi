@@ -110,7 +110,7 @@ func showWelcomeMessage() {
 `
 	fmt.Println(art.YellowColor, artImage, art.WhiteColor)
 	fmt.Println(`🐶 WOOF CORGI 🐶 says:`)
-	fmt.Println(art.CyanColor, utils.GetRandomQuote("famous-quotes"), art.WhiteColor)
+	fmt.Println(art.CyanColor, utils.GetRandomQuote(), art.WhiteColor)
 	fmt.Println()
 }
 
