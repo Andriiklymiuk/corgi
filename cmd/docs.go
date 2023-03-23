@@ -47,7 +47,7 @@ var serviceItems = []CorgiComposeItems{
 	},
 	{
 		item:        "environment",
-		example:     "- YOUR_ENV=dev\n\t- YOUR__ANTOHER_ENV=abcdef",
+		example:     "- YOUR_ENV=dev\n\t- YOUR__ANOTHER_ENV=abcdef",
 		itemType:    "[]string",
 		description: "List of environment variables to copy and put into your env file.\n\t\t\tBy default no environments are added.",
 	},
@@ -203,7 +203,7 @@ var requiredItems = []CorgiComposeItems{
 	},
 }
 
-func runDocs(cmd *cobra.Command, args []string) {
+func runDocs(cmd *cobra.Command, _ []string) {
 	generateCobraDocs(cmd)
 
 	fmt.Println("Corgi compose can have different items (properties). These are what they can be")

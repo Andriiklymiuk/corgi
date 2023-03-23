@@ -10,7 +10,7 @@ type Quote struct {
 	Author  string `json:"author"`
 }
 
-func GetRandomQuote(tag string) string {
+func GetRandomQuote() string {
 
 	quotes := []string{
 		"Technology is anything that wasn’t around when you were born. - Alan Kay",

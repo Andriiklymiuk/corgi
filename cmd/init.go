@@ -27,7 +27,7 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 }
 
-func runInit(cmd *cobra.Command, args []string) {
+func runInit(cmd *cobra.Command, _ []string) {
 
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {

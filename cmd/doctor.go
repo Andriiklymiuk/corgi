@@ -25,7 +25,7 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 }
 
-func runDoctor(cmd *cobra.Command, args []string) {
+func runDoctor(cmd *cobra.Command, _ []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Printf("couldn't get services config, error: %s\n", err)

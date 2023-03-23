@@ -31,7 +31,7 @@ corgi clean -i db
 
 var cleanItems []string
 
-func runClean(cobra *cobra.Command, args []string) {
+func runClean(cobra *cobra.Command, _ []string) {
 	for _, itemToDelete := range cleanItems {
 		switch itemToDelete {
 		case "all":
