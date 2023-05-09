@@ -3,7 +3,7 @@ package templates
 var DockerComposePostgres = `version: "3.9"
 
 services:
-  postgres:
+  postgres-{{.ServiceName}}:
     image: postgres:15.0-alpine
     container_name: postgres-{{.ServiceName}}
     logging:
@@ -14,6 +14,12 @@ services:
       - POSTGRES_DB={{.DatabaseName}}
     ports:
       - "{{.Port}}:5432"
+    networks:
+      - corgi-network
+
+networks:
+  corgi-network:
+    driver: bridge
 `
 
 var MakefilePostgres = `up:

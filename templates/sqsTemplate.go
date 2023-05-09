@@ -5,7 +5,7 @@ var SqsRegion = "eu-central-1"
 var DockerComposeSqs = `version: "3.9"
       
 services:
-  localstack:
+  sqs-{{.ServiceName}}:
     image: localstack/localstack:latest
     container_name: sqs-{{.ServiceName}}
     hostname: sqs
@@ -15,6 +15,12 @@ services:
       - '{{.Port}}:4566'
     volumes:
       - ./bootstrap:/etc/localstack/init/ready.d/
+    networks:
+      - corgi-network
+
+networks:
+  corgi-network:
+    driver: bridge
 `
 
 var MakefileSqs = `up:
