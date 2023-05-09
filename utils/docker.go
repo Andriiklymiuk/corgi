@@ -324,3 +324,18 @@ func DockerInit() error {
 	}
 	return nil
 }
+
+func GetLocalMachineIpAddress() (string, error) {
+	cmd := `ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | 
+	grep -Eo '([0-9]*\.){3}[0-9]*' | 
+	grep -v '127.0.0.1' | 
+	head -n1`
+
+	out, err := exec.Command("sh", "-c", cmd).Output()
+	if err != nil {
+		fmt.Println("Error on getting local machine ip address:", err)
+		return "", err
+	}
+
+	return strings.TrimSpace(string(out)), nil
+}
