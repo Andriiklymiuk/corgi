@@ -3,7 +3,7 @@ package templates
 var DockerComposeRabbitMQ = `version: "3.9"
 
 services:
-  rabbitmq3:
+  rabbitmq-{{.ServiceName}}:
     image: rabbitmq:3-management
     container_name: rabbitmq-{{.ServiceName}}
     environment:
@@ -14,6 +14,12 @@ services:
     ports:
       - "{{.Port}}:5672"
       - "15672:15672"
+    networks:
+      - corgi-network:
+
+networks:
+  corgi-network:
+    driver: bridge
 `
 
 var MakefileRabbitMQ = `up:
