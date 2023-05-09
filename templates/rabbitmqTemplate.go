@@ -1,6 +1,6 @@
 package templates
 
-var DockerComposeRabbitMQ = `version: "3.8"
+var DockerComposeRabbitMQ = `version: "3.9"
 
 services:
   rabbitmq3:

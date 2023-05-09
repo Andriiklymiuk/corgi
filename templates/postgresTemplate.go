@@ -1,6 +1,6 @@
 package templates
 
-var DockerComposePostgres = `version: "3.8"
+var DockerComposePostgres = `version: "3.9"
 
 services:
   postgres:
