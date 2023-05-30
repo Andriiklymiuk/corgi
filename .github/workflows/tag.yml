@@ -1,0 +1,39 @@
+name: Create Tag
+
+on:
+  push:
+    branches:
+      - "*"
+
+jobs:
+  create-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Run make getActionVersion
+        run: make getActionVersion
+
+      - name: Extract APP_VERSION and Create Tag
+        run: |
+          TAG="v${VERSION}"
+
+          echo "VERSION: ${VERSION}"
+          echo "TAG: $TAG"
+
+          # Check if the tag exists
+          EXISTS=$(curl -s https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/$TAG)
+
+          if [ "$EXISTS" == "null" ]
+          then
+            echo "Tag does not exist, creating new tag"
+            git tag $TAG
+            git push origin $TAG
+          else
+            echo "Tag already exists"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}

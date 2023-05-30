@@ -10,4 +10,16 @@ tag:
 generateDocs:
 	go run . docs -g
 
-.PHONY: fixHooks release tag generateDocs
+VERSION := $(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}')
+
+getVersion:
+	echo $(VERSION)
+
+getActionVersion:
+	if [ -n "${GITHUB_ENV}" ]; then \
+		echo "VERSION=$(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}')" >> "${GITHUB_ENV}"; \
+	else \
+		echo "GITHUB_ENV not set"; \
+	fi
+
+.PHONY: fixHooks release tag generateDocs getVersion getActionVersion
