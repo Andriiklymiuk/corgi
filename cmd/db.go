@@ -196,6 +196,7 @@ func SeedDb(targetService string) error {
 	return nil
 }
 
+// Get dump either from seedDb or from self, if isSelf true, that dump is from current db
 func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
 	var password string
 
@@ -244,7 +245,7 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 
 	if (dbService.SeedFromDb != utils.SeedFromDb{} && dbService.SeedFromFilePath == "") {
 		fmt.Println(art.BlueColor, "⛅ GETTING DATABASE DUMP for", dbService.ServiceName, art.WhiteColor)
-		GetDump(dbService)
+		GetDump(dbService, false)
 	}
 
 	err := SeedDb(dbService.ServiceName)
