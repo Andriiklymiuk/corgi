@@ -33,16 +33,16 @@ jobs:
             echo "Tag does not exist, creating new tag"
             git tag $TAG
             git push origin $TAG
-            echo "::set-output name=tag_exists::false"
+            echo "TAG_EXISTS=false" >> $GITHUB_ENV
           else
             echo "Tag already exists"
-            echo "::set-output name=tag_exists::true"
+            echo "TAG_EXISTS=true" >> $GITHUB_ENV
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
       - name: Trigger Release workflow
-        if: steps.create-tag.outputs.tag_exists == 'false'
+        if: env.TAG_EXISTS == 'false'
         run: |
           curl \
             -X POST \
