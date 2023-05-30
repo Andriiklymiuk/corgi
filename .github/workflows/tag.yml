@@ -18,6 +18,7 @@ jobs:
         run: make getActionVersion
 
       - name: Extract APP_VERSION and Create Tag
+        id: create-tag
         run: |
           TAG="v${VERSION}"
 
@@ -25,17 +26,27 @@ jobs:
           echo "TAG: $TAG"
 
           # Check if the tag exists
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/$TAG)
+          EXISTS=$(curl -s https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/$TAG)
 
-          if [ "$HTTP_STATUS" -ne 200 ]
+          if [ "$EXISTS" == "null" ]
           then
             echo "Tag does not exist, creating new tag"
-            git config --global user.email "action@github.com"
-            git config --global user.name "GitHub Action"
             git tag $TAG
             git push origin $TAG
+            echo "::set-output name=tag_exists::false"
           else
             echo "Tag already exists"
+            echo "::set-output name=tag_exists::true"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+      - name: Trigger Release workflow
+        if: steps.create-tag.outputs.tag_exists == 'false'
+        run: |
+          curl \
+            -X POST \
+            -H "Authorization: token ${{ secrets.GH_PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/release.yml/dispatches \
+            -d '{"ref":"refs/tags/'"$TAG"'"}'
