@@ -1,10 +1,9 @@
-name: goreleaser
+name: Create release
 
 on:
   push:
-    tags:
-      - "*"
-  workflow_dispatch:
+    branches:
+      - "main"
 
 jobs:
   goreleaser:
@@ -14,11 +13,43 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.19
+          go-version: 1.20.3
+
+      - name: Get version and add it to GITHUB_ENV
+        run: make getActionVersion
+
+      - name: Extract APP_VERSION and Create Tag
+        id: create-tag
+        run: |
+          TAG="v${VERSION}"
+
+          echo "VERSION: ${VERSION}"
+          echo "TAG: $TAG"
+
+          # Check if the tag exists
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/$TAG)
+
+          if [ "$HTTP_STATUS" -ne 200 ]
+          then
+            echo "Tag does not exist, creating new tag"
+            git config --global user.email "action@github.com"
+            git config --global user.name "GitHub Action"
+            git tag $TAG
+            git push origin $TAG
+            echo "TAG_EXISTS=false" >> $GITHUB_ENV
+          else
+            echo "Tag already exists"
+            echo "TAG_EXISTS=true" >> $GITHUB_ENV
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
       - name: Run GoReleaser
+        if: env.TAG_EXISTS == 'false'
         uses: goreleaser/goreleaser-action@v3
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
