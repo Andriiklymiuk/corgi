@@ -136,7 +136,9 @@ func showMakeCommands(
 			fmt.Println(err)
 		}
 	case "getDump":
-		GetDump(serviceConfig)
+		GetDump(serviceConfig, false)
+	case "getSelfDump":
+		GetDump(serviceConfig, true)
 	default:
 		_, err := utils.ExecuteMakeCommand(targetService, makeCommand)
 		if err != nil {
@@ -194,12 +196,20 @@ func SeedDb(targetService string) error {
 	return nil
 }
 
-func GetDump(serviceConfig utils.DatabaseService) {
+func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
+	var password string
+
+	if isSelf {
+		password = serviceConfig.Password
+	} else {
+		password = serviceConfig.SeedFromDb.Password
+	}
+
 	err := utils.ExecuteCommandRun(
 		serviceConfig.ServiceName,
 		"make",
 		"getDump",
-		fmt.Sprintf("p=%s", serviceConfig.SeedFromDb.Password),
+		fmt.Sprintf("p=%s", password),
 	)
 	if err != nil {
 		fmt.Println("Make command failed", err)
