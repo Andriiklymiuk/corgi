@@ -6,6 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var APP_VERSION = "1.1.61"
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "corgi",
@@ -21,7 +23,7 @@ corgi init
 
 corgi run
 `,
-	Version: "1.1.61",
+	Version: APP_VERSION,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
