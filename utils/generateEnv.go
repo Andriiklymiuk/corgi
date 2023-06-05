@@ -117,8 +117,9 @@ func generateEnvForDbDependentService(service Service, dependingDb DependsOnDb, 
 	case "rabbitmq":
 		envForService = fmt.Sprintf("%s%s%s%s%s", envForService, host, user, port, password)
 	case "sqs":
-		envForService = fmt.Sprintf("%s%s%s%s%s", envForService,
+		envForService = fmt.Sprintf("%s%s%s%s%s%s", envForService,
 			fmt.Sprintf("\nREGION=%s", templates.SqsRegion),
+			fmt.Sprintf("\nAWS_REGION=%s", templates.SqsRegion),
 			fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://localhost:%d/000000000000/%s", db.Port, db.DatabaseName)),
 			"\nAWS_ACCESS_KEY_ID=test",
 			"\nAWS_SECRET_ACCESS_KEY=test",
