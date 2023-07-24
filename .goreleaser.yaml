@@ -11,30 +11,21 @@ builds:
       - linux
       - windows
       - darwin
-archives:
-  - replacements:
-      darwin: Darwin
-      linux: Linux
-      windows: Windows
-      386: i386
-      amd64: x86_64
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
 changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
+      - "^docs:"
+      - "^test:"
 # .goreleaser.yaml
 brews:
-- 
-  name: corgi
-  homepage: https://github.com/Andriiklymiuk/corgi
-  description: "Command line interface for database configurations and other useful things, written in Go"
-  tap:
-    owner: Andriiklymiuk
-    name: homebrew-tools
-
+  - name: corgi
+    homepage: https://github.com/Andriiklymiuk/corgi
+    description: "Command line interface for database configurations and other useful things, written in Go"
+    repository:
+      owner: Andriiklymiuk
+      name: homebrew-tools
