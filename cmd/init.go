@@ -7,7 +7,6 @@ import (
 	"strings"
 	"text/template"
 
-	"andriiklymiuk/corgi/templates"
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 
@@ -54,11 +53,6 @@ func runInit(cmd *cobra.Command, _ []string) {
 	}
 }
 
-type FilenameForService struct {
-	Name     string
-	Template string
-}
-
 // Generate database files for each database service
 func CreateDatabaseServices(databaseServices []utils.DatabaseService) {
 	if len(databaseServices) == 0 {
@@ -99,25 +93,13 @@ Provide them in corgi-compose.yml file`)
 	}
 }
 
-func getFilesToCreate(driver string) []FilenameForService {
-	switch driver {
-	case "rabbitmq":
-		return []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeRabbitMQ},
-			{"Makefile", templates.MakefileRabbitMQ},
-		}
-	case "sqs":
-		return []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeSqs},
-			{"Makefile", templates.MakefileSqs},
-			{"bootstrap/bootstrap.sh", templates.BootstrapSqs},
-		}
-	default:
-		return []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposePostgres},
-			{"Makefile", templates.MakefilePostgres},
-		}
+func getFilesToCreate(driver string) []utils.FilenameForService {
+	driverConfig, ok := utils.DriverConfigs[driver]
+	if !ok {
+		driverConfig = utils.DriverConfigs["default"]
 	}
+
+	return driverConfig.FilesToCreate
 }
 
 func CloneServices(services []utils.Service) {

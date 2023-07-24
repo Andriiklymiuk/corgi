@@ -30,7 +30,7 @@ Corgi compose `db_service` can contain the following items (properties):
 
 | Item        | Example           | itemType  |  Description
 | ------------| :-------------    | -         | --
-| driver                | postgres | `string` | This is database driver for this service. By default postgres is used.
+| driver                | postgres | `string` | This is database driver for this service. By default postgres is used. For now postgres, rabbitmq, sqs and redis supported
 | host                  | localhost | `string` | This is database host for this service, that will be used in `DB_HOST`. By default localhost is used
 | databaseName          | corgi-database | `string` | This is database name for this service, that will be used in `DB_NAME`
 | user                  | corgi | `string` | This is database user for this service, that will be used in `DB_USER`

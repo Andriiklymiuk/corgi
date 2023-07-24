@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"andriiklymiuk/corgi/templates"
 	"andriiklymiuk/corgi/utils/art"
 	"fmt"
 	"os"
@@ -88,7 +87,6 @@ func handleDependsOnDb(service Service, corgiCompose CorgiCompose) string {
 }
 
 func generateEnvForDbDependentService(service Service, dependingDb DependsOnDb, db DatabaseService) string {
-	var envForService string
 	var serviceNameInEnv string
 
 	if len(service.DependsOnDb) > 1 {
@@ -101,32 +99,14 @@ func generateEnvForDbDependentService(service Service, dependingDb DependsOnDb, 
 			serviceNameInEnv = dependingDb.EnvAlias + "_"
 		}
 	}
-	if db.Driver == "rabbitmq" {
-		serviceNameInEnv = serviceNameInEnv + "RABBITMQ_"
-	}
-	if db.Driver == "sqs" {
-		serviceNameInEnv = serviceNameInEnv + "AWS_SQS_"
-	}
-	host := fmt.Sprintf("\n%sDB_HOST=%s", serviceNameInEnv, db.Host)
-	user := fmt.Sprintf("\n%sDB_USER=%s", serviceNameInEnv, db.User)
-	name := fmt.Sprintf("\n%sDB_NAME=%s", serviceNameInEnv, db.DatabaseName)
-	port := fmt.Sprintf("\n%sDB_PORT=%d", serviceNameInEnv, db.Port)
-	password := fmt.Sprintf("\n%sDB_PASSWORD=%s\n", serviceNameInEnv, db.Password)
 
-	switch db.Driver {
-	case "rabbitmq":
-		envForService = fmt.Sprintf("%s%s%s%s%s", envForService, host, user, port, password)
-	case "sqs":
-		envForService = fmt.Sprintf("%s%s%s%s%s%s", envForService,
-			fmt.Sprintf("\nREGION=%s", templates.SqsRegion),
-			fmt.Sprintf("\nAWS_REGION=%s", templates.SqsRegion),
-			fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://localhost:%d/000000000000/%s", db.Port, db.DatabaseName)),
-			"\nAWS_ACCESS_KEY_ID=test",
-			"\nAWS_SECRET_ACCESS_KEY=test",
-		)
-	default:
-		envForService = fmt.Sprintf("%s%s%s%s%s%s", envForService, host, user, name, port, password)
+	driverConfig, ok := DriverConfigs[db.Driver]
+	if !ok {
+		driverConfig = DriverConfigs["default"]
 	}
+
+	serviceNameInEnv += driverConfig.Prefix
+	envForService := driverConfig.EnvGenerator(serviceNameInEnv, db)
 
 	return envForService
 }
