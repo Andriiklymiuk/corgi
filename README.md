@@ -22,6 +22,11 @@ No more long meetings, explanations of how to run new project with multiple micr
 
 Auto git cloning, db seeding, concurrent running and much more.
 
+## VSCODE users
+
+You can install [corgi extension](https://marketplace.visualstudio.com/items?itemName=corgi.corgi) to get syntax highlights and much more
+
+
 ## Inside:
 - [Quick install with homebrew](#quick-install-with-homebrewhttpsbrewsh-without-repo-cloning)
 - [Prerequisites](#prerequisites)
