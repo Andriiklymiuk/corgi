@@ -27,7 +27,7 @@ func main() {
 		}
 
 		prompt := promptui.Prompt{
-			Label:     "Do you want to continue using Corgi?",
+			Label:     "Do you want to continue using Corgi",
 			IsConfirm: true,
 		}
 
@@ -51,7 +51,7 @@ func showFinalMessage() {
 }
 
 func canRunCliAgain() bool {
-	var hasDbCmd bool
+	var canRun bool
 	for _, arg := range os.Args {
 		if arg == "-f" || arg == "--filename" {
 			continue
@@ -60,10 +60,13 @@ func canRunCliAgain() bool {
 			return false
 		}
 		if arg == "db" {
-			hasDbCmd = true
+			canRun = true
+		}
+		if arg == "create" {
+			canRun = true
 		}
 	}
-	return hasDbCmd
+	return canRun
 }
 
 func canShowWelcomeMessages() bool {

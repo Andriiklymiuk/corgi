@@ -6,10 +6,34 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
-func PickItemFromListPrompt(label string, items []string, backString string) (string, error) {
+type PickPromptOptionSetter func(*PickPromptOptions)
+
+type PickPromptOptions struct {
+	backStringAtTheEnd bool
+}
+
+func WithBackStringAtTheEnd() PickPromptOptionSetter {
+	return func(opts *PickPromptOptions) {
+		opts.backStringAtTheEnd = true
+	}
+}
+
+func PickItemFromListPrompt(label string, items []string, backString string, setters ...PickPromptOptionSetter) (string, error) {
+	opts := &PickPromptOptions{}
+	for _, setter := range setters {
+		setter(opts)
+	}
+
+	// Add backString based on the options
+	if opts.backStringAtTheEnd {
+		items = append(items, backString)
+	} else {
+		items = append([]string{backString}, items...)
+	}
+
 	prompt := promptui.Select{
 		Label: label,
-		Items: append([]string{backString}, items...),
+		Items: items,
 		Size:  8,
 	}
 
