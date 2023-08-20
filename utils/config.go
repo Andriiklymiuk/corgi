@@ -21,7 +21,7 @@ var ServicesItemsFromFlag []string
 var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
-	ServiceName       string
+	ServiceName       string     `yaml:"service_name,omitempty"`
 	Driver            string     `yaml:"driver"`
 	Host              string     `yaml:"host"`
 	User              string     `yaml:"user"`
@@ -59,7 +59,7 @@ type TestService struct {
 }
 
 type Service struct {
-	ServiceName         string
+	ServiceName         string             `yaml:"service_name,omitempty"`
 	Path                string             `yaml:"path"`
 	IgnoreEnv           bool               `yaml:"ignore_env"`
 	ManualRun           bool               `yaml:"manualRun"`
@@ -78,7 +78,7 @@ type Service struct {
 }
 
 type Required struct {
-	Name     string
+	Name     string   `yaml:"name,omitempty"`
 	Why      []string `yaml:"why"`
 	Install  []string `yaml:"install"`
 	Optional bool     `yaml:"optional"`
