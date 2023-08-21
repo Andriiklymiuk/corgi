@@ -31,7 +31,7 @@ func runPull(cmd *cobra.Command, _ []string) {
 	for _, service := range corgi.Services {
 		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
 			service.Path,
-			"corgi-compose.yml",
+			utils.CorgiComposeDefaultName,
 		)
 		if err != nil {
 			fmt.Println(err)
