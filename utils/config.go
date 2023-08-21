@@ -29,8 +29,8 @@ type DatabaseService struct {
 	DatabaseName      string     `yaml:"databaseName,omitempty"`
 	Port              int        `yaml:"port,omitempty"`
 	SeedFromDbEnvPath string     `yaml:"seedFromDbEnvPath,omitempty"`
-	SeedFromDb        SeedFromDb `yaml:"seedFromDb,omitempty"`
 	SeedFromFilePath  string     `yaml:"seedFromFilePath,omitempty"`
+	SeedFromDb        SeedFromDb `yaml:"seedFromDb,omitempty"`
 }
 
 type SeedFromDb struct {
