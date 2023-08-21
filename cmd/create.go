@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"bufio"
 	"fmt"
 	"os"
 	"reflect"
@@ -111,9 +112,45 @@ func askAndSetFields(item interface{}) {
 			continue
 		}
 		prompt := formatPrompt(yamlTag, field.Name)
+		optionsTag := field.Tag.Get("options")
+		if optionsTag != "" {
+			options := strings.Split(optionsTag, ",")
+			selectPrompt := promptui.Select{
+				Label: prompt,
+				Items: options,
+			}
+			_, selected, err := selectPrompt.Run()
+			if err != nil {
+				fmt.Printf("Prompt failed %v\n", err)
+				return
+			}
 
+			if selected == "❌skip" {
+				v.Field(i).SetString("")
+			} else {
+				v.Field(i).SetString(selected)
+			}
+			continue
+		}
+		// Check if the field is a struct
 		if field.Type.Kind() == reflect.Struct {
-			askAndSetFields(v.Field(i).Addr().Interface())
+			// Ask user if they want to populate this struct
+			prompt := promptui.Prompt{
+				Label:     fmt.Sprintf("Do you want to populate %s?", field.Name),
+				IsConfirm: true,
+			}
+
+			_, err := prompt.Run()
+			if err != nil { // If user says no or there's an error, skip this struct
+				continue
+			}
+
+			structField := v.Field(i)
+			// Initialize the struct if it's a zero value
+			if structField.IsZero() {
+				structField.Set(reflect.New(field.Type).Elem())
+			}
+			askAndSetFields(structField.Addr().Interface())
 		} else if field.Type.Kind() == reflect.Slice {
 			sliceType := field.Type.Elem()
 			if sliceType.Kind() == reflect.String {
@@ -130,7 +167,8 @@ func askAndSetFields(item interface{}) {
 				v.Field(i).Set(reflect.ValueOf(sliceValues))
 			}
 		} else {
-			setUserInputToField(v.Field(i), prompt)
+			prompt := formatPrompt(yamlTag, field.Name)
+			setUserInputToField(v.Field(i), prompt, field.Name == "ServiceName" || field.Name == "Name")
 		}
 	}
 }
@@ -143,10 +181,23 @@ func formatPrompt(yamlTag, fieldName string) string {
 	return fmt.Sprintf("Enter %s:", strings.ToLower(fieldName))
 }
 
-func setUserInputToField(field reflect.Value, prompt string) {
+func setUserInputToField(field reflect.Value, prompt string, removeSpaces bool) {
+	reader := bufio.NewReader(os.Stdin)
+
 	fmt.Println(prompt)
-	var input string
-	fmt.Scanln(&input)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Printf("Failed to read input: %v\n", err)
+		return
+	}
+
+	// Trim the newline and any surrounding whitespace
+	input = strings.TrimSpace(input)
+
+	if removeSpaces {
+		input = strings.ReplaceAll(input, " ", "")
+	}
+
 	switch field.Kind() {
 	case reflect.String:
 		field.SetString(input)

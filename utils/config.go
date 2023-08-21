@@ -22,67 +22,67 @@ var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
 	ServiceName       string     `yaml:"service_name,omitempty"`
-	Driver            string     `yaml:"driver"`
-	Host              string     `yaml:"host"`
-	User              string     `yaml:"user"`
-	Password          string     `yaml:"password"`
-	DatabaseName      string     `yaml:"databaseName"`
-	Port              int        `yaml:"port"`
-	SeedFromDbEnvPath string     `yaml:"seedFromDbEnvPath"`
-	SeedFromDb        SeedFromDb `yaml:"seedFromDb"`
-	SeedFromFilePath  string     `yaml:"seedFromFilePath"`
+	Driver            string     `yaml:"driver,omitempty" options:"postgres,redis,rabbitmq,sqs,❌skip"`
+	Host              string     `yaml:"host,omitempty"`
+	User              string     `yaml:"user,omitempty"`
+	Password          string     `yaml:"password,omitempty"`
+	DatabaseName      string     `yaml:"databaseName,omitempty"`
+	Port              int        `yaml:"port,omitempty"`
+	SeedFromDbEnvPath string     `yaml:"seedFromDbEnvPath,omitempty"`
+	SeedFromDb        SeedFromDb `yaml:"seedFromDb,omitempty"`
+	SeedFromFilePath  string     `yaml:"seedFromFilePath,omitempty"`
 }
 
 type SeedFromDb struct {
-	Host         string `yaml:"host"`
-	DatabaseName string `yaml:"databaseName"`
-	User         string `yaml:"user"`
-	Password     string `yaml:"password"`
-	Port         int    `yaml:"port"`
+	Host         string `yaml:"host,omitempty"`
+	DatabaseName string `yaml:"databaseName,omitempty"`
+	User         string `yaml:"user,omitempty"`
+	Password     string `yaml:"password,omitempty"`
+	Port         int    `yaml:"port,omitempty"`
 }
 
 type DependsOnService struct {
-	Name     string `yaml:"name"`
-	EnvAlias string `yaml:"envAlias"`
-	Suffix   string `yaml:"suffix"`
+	Name     string `yaml:"name,omitempty"`
+	EnvAlias string `yaml:"envAlias,omitempty"`
+	Suffix   string `yaml:"suffix,omitempty"`
 }
 
 type DependsOnDb struct {
-	Name     string `yaml:"name"`
-	EnvAlias string `yaml:"envAlias"`
+	Name     string `yaml:"name,omitempty"`
+	EnvAlias string `yaml:"envAlias,omitempty"`
 }
 
 type TestService struct {
-	Name      string   `yaml:"name"`
-	ManualRun bool     `yaml:"manualRun"`
-	Command   []string `yaml:"command"`
+	Name      string   `yaml:"name,omitempty"`
+	ManualRun bool     `yaml:"manualRun,omitempty"`
+	Command   []string `yaml:"command,omitempty"`
 }
 
 type Service struct {
 	ServiceName         string             `yaml:"service_name,omitempty"`
-	Path                string             `yaml:"path"`
-	IgnoreEnv           bool               `yaml:"ignore_env"`
-	ManualRun           bool               `yaml:"manualRun"`
-	CloneFrom           string             `yaml:"cloneFrom"`
-	Branch              string             `yaml:"branch"`
-	Environment         []string           `yaml:"environment"`
-	EnvPath             string             `yaml:"envPath"`
-	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath"`
-	Port                int                `yaml:"port"`
-	DependsOnServices   []DependsOnService `yaml:"depends_on_services"`
-	DependsOnDb         []DependsOnDb      `yaml:"depends_on_db"`
-	BeforeStart         []string           `yaml:"beforeStart"`
-	Start               []string           `yaml:"start"`
-	AfterStart          []string           `yaml:"afterStart"`
-	Test                []TestService      `yaml:"test"`
+	Path                string             `yaml:"path,omitempty"`
+	IgnoreEnv           bool               `yaml:"ignore_env,omitempty"`
+	ManualRun           bool               `yaml:"manualRun,omitempty"`
+	CloneFrom           string             `yaml:"cloneFrom,omitempty"`
+	Branch              string             `yaml:"branch,omitempty"`
+	Environment         []string           `yaml:"environment,omitempty"`
+	EnvPath             string             `yaml:"envPath,omitempty"`
+	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath,omitempty"`
+	Port                int                `yaml:"port,omitempty"`
+	DependsOnServices   []DependsOnService `yaml:"depends_on_services,omitempty"`
+	DependsOnDb         []DependsOnDb      `yaml:"depends_on_db,omitempty"`
+	BeforeStart         []string           `yaml:"beforeStart,omitempty"`
+	Start               []string           `yaml:"start,omitempty"`
+	AfterStart          []string           `yaml:"afterStart,omitempty"`
+	Test                []TestService      `yaml:"test,omitempty"`
 }
 
 type Required struct {
 	Name     string   `yaml:"name,omitempty"`
-	Why      []string `yaml:"why"`
-	Install  []string `yaml:"install"`
-	Optional bool     `yaml:"optional"`
-	CheckCmd string   `yaml:"checkCmd"`
+	Why      []string `yaml:"why,omitempty"`
+	Install  []string `yaml:"install,omitempty"`
+	Optional bool     `yaml:"optional,omitempty"`
+	CheckCmd string   `yaml:"checkCmd,omitempty"`
 }
 
 type CorgiCompose struct {
