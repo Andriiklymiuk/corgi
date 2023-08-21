@@ -181,30 +181,38 @@ func formatPrompt(yamlTag, fieldName string) string {
 	return fmt.Sprintf("Enter %s:", strings.ToLower(fieldName))
 }
 
-func setUserInputToField(field reflect.Value, prompt string, removeSpaces bool) {
+func setUserInputToField(field reflect.Value, prompt string, isRequired bool) {
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Println(prompt)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Printf("Failed to read input: %v\n", err)
-		return
-	}
-
-	// Trim the newline and any surrounding whitespace
-	input = strings.TrimSpace(input)
-
-	if removeSpaces {
-		input = strings.ReplaceAll(input, " ", "")
-	}
-
-	switch field.Kind() {
-	case reflect.String:
-		field.SetString(input)
-	case reflect.Int:
-		if value, err := strconv.Atoi(input); err == nil {
-			field.SetInt(int64(value))
+	for {
+		fmt.Println(prompt)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("Failed to read input: %v\n", err)
+			return
 		}
+
+		input = strings.TrimSpace(input)
+
+		if isRequired && input == "" {
+			fmt.Println("This field cannot be empty. Please provide a valid input.")
+			continue
+		}
+
+		if !isRequired {
+			input = strings.ReplaceAll(input, " ", "")
+		}
+
+		switch field.Kind() {
+		case reflect.String:
+			field.SetString(input)
+		case reflect.Int:
+			if value, err := strconv.Atoi(input); err == nil {
+				field.SetInt(int64(value))
+			}
+		}
+
+		break
 	}
 }
 
