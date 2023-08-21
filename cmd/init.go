@@ -43,7 +43,6 @@ func runInit(cmd *cobra.Command, _ []string) {
 		"# Added by corgi cli",
 		utils.RootDbServicesFolder,
 		"corgi_services/*",
-		"corgi-compose*.yml",
 		".env*",
 	}
 	filesToIgnore = getGitignoreServicePath(corgi.Services, filesToIgnore)
