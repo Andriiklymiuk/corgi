@@ -95,7 +95,7 @@ func runCreate(cmd *cobra.Command, _ []string) {
 	if filenameFlag != "" {
 		filename = filenameFlag
 	} else {
-		filename = "corgi-compose.yml"
+		filename = utils.CorgiComposeDefaultName
 	}
 	saveToFile(filename)
 

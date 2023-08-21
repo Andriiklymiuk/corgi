@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var CorgiComposeDefaultName = "corgi-compose.yml"
 var DbServicesInConfig = "db_services"
 var ServicesInConfig = "services"
 var RequiredInConfig = "required"
@@ -337,7 +338,7 @@ func IsServiceIncludedInFlag(services []string, serviceName string) bool {
 }
 
 func getCorgiConfigFilePath() (string, error) {
-	defaultCorgiConfigName := "corgi-compose.yml"
+	defaultCorgiConfigName := CorgiComposeDefaultName
 	corgiComposeExists, err := CheckIfFileExistsInDirectory(
 		".",
 		defaultCorgiConfigName,

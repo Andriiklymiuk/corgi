@@ -164,7 +164,7 @@ func CloneServices(services []utils.Service) {
 		}
 		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
 			service.Path,
-			"corgi-compose.yml",
+			utils.CorgiComposeDefaultName,
 		)
 		if err != nil {
 			fmt.Println(err)
