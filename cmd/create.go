@@ -39,7 +39,7 @@ func runCreate(cmd *cobra.Command, _ []string) {
 				service.ServiceName = ""
 				dbServiceMap[name] = &service
 			}
-			configMap["db_services"] = dbServiceMap
+			configMap[utils.DbServicesInConfig] = dbServiceMap
 		}
 		if corgi.Services != nil {
 			serviceMap := make(map[string]*utils.Service)
@@ -48,7 +48,7 @@ func runCreate(cmd *cobra.Command, _ []string) {
 				service.ServiceName = ""
 				serviceMap[name] = &service
 			}
-			configMap["services"] = serviceMap
+			configMap[utils.ServicesInConfig] = serviceMap
 		}
 		if corgi.Required != nil {
 			requiredMap := make(map[string]*utils.Required)
@@ -57,7 +57,7 @@ func runCreate(cmd *cobra.Command, _ []string) {
 				req.Name = ""
 				requiredMap[name] = &req
 			}
-			configMap["required"] = requiredMap
+			configMap[utils.RequiredInConfig] = requiredMap
 		}
 	}
 
@@ -70,11 +70,11 @@ func runCreate(cmd *cobra.Command, _ []string) {
 
 	switch choice {
 	case "DatabaseService":
-		handleServiceCreation("db_services", &utils.DatabaseService{}, "ServiceName")
+		handleServiceCreation(utils.DbServicesInConfig, &utils.DatabaseService{}, "ServiceName")
 	case "Service":
-		handleServiceCreation("services", &utils.Service{}, "ServiceName")
+		handleServiceCreation(utils.ServicesInConfig, &utils.Service{}, "ServiceName")
 	case "Required":
-		handleServiceCreation("required", &utils.Required{}, "Name")
+		handleServiceCreation(utils.RequiredInConfig, &utils.Required{}, "Name")
 	}
 	prompt := promptui.Prompt{
 		Label:     "Do you want to save changes",
@@ -216,25 +216,25 @@ func handleServiceCreation(serviceType string, serviceInstance interface{}, fiel
 
 	if _, exists := configMap[serviceType]; !exists {
 		switch serviceType {
-		case "db_services":
+		case utils.DbServicesInConfig:
 			configMap[serviceType] = make(map[string]*utils.DatabaseService)
-		case "services":
+		case utils.ServicesInConfig:
 			configMap[serviceType] = make(map[string]*utils.Service)
-		case "required":
+		case utils.RequiredInConfig:
 			configMap[serviceType] = make(map[string]*utils.Required)
 		}
 	}
 
 	switch serviceType {
-	case "db_services":
+	case utils.DbServicesInConfig:
 		servicesMap := configMap[serviceType].(map[string]*utils.DatabaseService)
 		servicesMap[nameVal] = serviceInstance.(*utils.DatabaseService)
 
-	case "services":
+	case utils.ServicesInConfig:
 		servicesMap := configMap[serviceType].(map[string]*utils.Service)
 		servicesMap[nameVal] = serviceInstance.(*utils.Service)
 
-	case "required":
+	case utils.RequiredInConfig:
 		servicesMap := configMap[serviceType].(map[string]*utils.Required)
 		servicesMap[nameVal] = serviceInstance.(*utils.Required)
 	}
