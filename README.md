@@ -45,9 +45,7 @@ You can install [corgi extension](https://marketplace.visualstudio.com/items?ite
 ## Quick install with [Homebrew](https://brew.sh)
 
 ```bash
-brew tap andriiklymiuk/homebrew-tools
-
-brew install corgi
+brew install andriiklymiuk/homebrew-tools/corgi
 
 # ask for help to check if it works
 corgi -h
