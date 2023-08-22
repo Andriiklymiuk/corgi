@@ -4,11 +4,24 @@ var DockerComposeRedis = `version: "3.9"
       
 services:
   redis-{{.ServiceName}}:
-    build: .
+    image: redis/redis-stack:latest
     restart: always
     ports:
       - '{{.Port}}:6379'
     container_name: redis-{{.ServiceName}}
+    volumes:
+      - ./data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+      - ./users.acl:/etc/redis/users.acl
+    command:
+      [
+        'redis-server',
+        '/usr/local/etc/redis/redis.conf',
+        '--loadmodule',
+        '/opt/redis-stack/lib/rejson.so',
+        '--loadmodule',
+        '/opt/redis-stack/lib/redisearch.so',
+      ]
     networks:
       - corgi-network
 
@@ -17,14 +30,8 @@ networks:
     driver: bridge
 `
 
-var DockerfileRedis = `FROM redis:latest
-COPY redis.conf /usr/local/etc/redis/redis.conf
-COPY users.acl /etc/redis/users.acl
-CMD [ "redis-server", "/usr/local/etc/redis/redis.conf" ]
-`
-
 var MakefileRedis = `up:
-	docker compose up -d --build
+	docker compose up -d
 down:
 	docker compose down    
 stop:
@@ -38,8 +45,7 @@ help:
 
 .PHONY: up down stop id remove help
 `
-var RedisConfiguration = `requirepass {{.Password}}
-aclfile /etc/redis/users.acl
-`
+var RedisConfiguration = `aclfile /etc/redis/users.acl`
 
-var RedisAccessControlList = `user {{.User}} on +@all +@pubsub ~* &* >{{.Password}}`
+var RedisAccessControlList = `user default off -@all
+user {{.User}} on +@all +@pubsub ~* &* >{{.Password}}`
