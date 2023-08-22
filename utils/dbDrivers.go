@@ -40,7 +40,7 @@ var DriverConfigs = map[string]DriverConfig{
 			return fmt.Sprintf("%s%s%s%s%s%s", host,
 				fmt.Sprintf("\nREGION=%s", templates.SqsRegion),
 				fmt.Sprintf("\nAWS_REGION=%s", templates.SqsRegion),
-				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://localhost:%d/000000000000/%s", db.Port, db.DatabaseName)),
+				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://%s:%d/000000000000/%s", db.Host, db.Port, db.DatabaseName)),
 				"\nAWS_ACCESS_KEY_ID=test",
 				"\nAWS_SECRET_ACCESS_KEY=test",
 			)
