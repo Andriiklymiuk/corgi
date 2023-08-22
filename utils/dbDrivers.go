@@ -57,17 +57,18 @@ var DriverConfigs = map[string]DriverConfig{
 			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
 			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
 			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf("\n%sHOST=%s\n", serviceNameInEnv, db.Host)
 
-			return fmt.Sprintf("%s%s%s%s", user,
+			return fmt.Sprintf("%s%s%s%s%s", user,
 				port,
 				password,
-				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("redis://localhost:%d", db.Port)),
+				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("redis://%s:%d", "localhost", db.Port)),
+				host,
 			)
 		},
 		FilesToCreate: []FilenameForService{
 			{"docker-compose.yml", templates.DockerComposeRedis},
 			{"Makefile", templates.MakefileRedis},
-			{"Dockerfile", templates.DockerfileRedis},
 			{"redis.conf", templates.RedisConfiguration},
 			{"users.acl", templates.RedisAccessControlList},
 		},
