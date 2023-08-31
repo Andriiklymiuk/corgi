@@ -15,7 +15,7 @@ services:
       - "{{.Port}}:5672"
       - "15672:15672"
     networks:
-      - corgi-network:
+      - corgi-network
 
 networks:
   corgi-network:
