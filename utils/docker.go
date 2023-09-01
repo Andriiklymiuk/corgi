@@ -267,6 +267,19 @@ func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
 		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
 	}
 
+	// mongodb
+	if strings.Contains(text, "MONGO") {
+		serviceInfo := strings.Replace(strings.TrimSpace(text), "MONGO_INITDB_", "", 1)
+		v := strings.Split(serviceInfo, "=")
+		l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
+		return append(dbInfoStringsArray, l)
+	}
+	if strings.Contains(text, "27017") {
+		serviceInfo := strings.ReplaceAll(strings.TrimSpace(text), `"`, "")
+		v := strings.Split(serviceInfo, ":")
+		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
+	}
+
 	return dbInfoStringsArray
 }
 
