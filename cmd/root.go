@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var APP_VERSION = "1.1.76"
+var APP_VERSION = "1.1.77"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -66,4 +66,5 @@ func init() {
 		false,
 		"Describe contents of corgi-compose file",
 	)
+	rootCmd.SetVersionTemplate("corgi version {{.Version}}\nChangelog: https://github.com/Andriiklymiuk/corgi/releases/tag/v{{.Version}}\n")
 }
