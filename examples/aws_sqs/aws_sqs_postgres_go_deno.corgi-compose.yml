@@ -1,0 +1,50 @@
+db_services:
+  postgres-db-for-go-example:
+    driver: postgres
+    databaseName: best_name_for_database
+    user: woof
+    password: woof_database_password
+    port: 5234
+  aws-sqs-queue-for-go:
+    driver: sqs
+    databaseName: sqs_queue_name
+    port: 4599
+
+services:
+  go_aws_sqs_listener:
+    cloneFrom: https://github.com/Andriiklymiuk/go_aws_sqs_listener.git
+    path: ./go_aws_sqs_listener
+    depends_on_db:
+      - name: postgres-db-for-go-example
+        envAlias: none
+      - name: aws-sqs-queue-for-go
+        envAlias: none
+    port: 7092
+    start:
+      - go run .
+  deno_aws_sqs_emitter:
+    cloneFrom: https://github.com/Andriiklymiuk/deno_aws_sqs_emitter.git
+    path: ./deno_aws_sqs_emitter
+    depends_on_db:
+      - name: aws-sqs-queue-for-go
+        envAlias: none
+    port: 7098
+    start:
+      - deno run --allow-net --allow-read --allow-env server.ts
+
+required:
+  go:
+    why:
+      - To launch locally service manually
+      - You need to install it yourself brew install go
+    checkCmd: go version
+  deno:
+    why:
+      - Needed to launch deno_aws_sqs_emitter
+      - You need to install it yourself from https://deno.land/manual/getting_started/installation
+    checkCmd: deno --version
+  docker:
+    why:
+      - To launch databases
+      - You need to install it yourself from https://docs.docker.com/desktop/install/mac-install/
+    checkCmd: docker -v
