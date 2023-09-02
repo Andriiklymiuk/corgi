@@ -90,6 +90,10 @@ func runRun(cmd *cobra.Command, _ []string) {
 		return
 	}
 
+	if CheckClonedReposExistence(corgi.Services) {
+		CloneServices(corgi.Services)
+	}
+
 	closeSignal := make(chan os.Signal, 1)
 	signal.Notify(closeSignal, syscall.SIGINT, syscall.SIGTERM)
 

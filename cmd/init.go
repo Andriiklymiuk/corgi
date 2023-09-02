@@ -101,6 +101,25 @@ func getFilesToCreate(driver string) []utils.FilenameForService {
 	return driverConfig.FilesToCreate
 }
 
+func CheckClonedReposExistence(services []utils.Service) bool {
+	var someRepoShouldBeCloned bool
+	for _, service := range services {
+		if service.CloneFrom == "" {
+			continue
+		}
+		if service.Path == "" || service.Path == "." {
+			continue
+		}
+		_, err := os.Stat(service.Path)
+		if err != nil {
+			fmt.Printf("Path %s does not exist for service %s. It should be cloned.\n", service.Path, service.ServiceName)
+			someRepoShouldBeCloned = true
+			break
+		}
+	}
+	return someRepoShouldBeCloned
+}
+
 func CloneServices(services []utils.Service) {
 	for _, service := range services {
 		if service.Path == "" {
