@@ -5,7 +5,6 @@ var DockerComposeRedis = `version: "3.9"
 services:
   redis-{{.ServiceName}}:
     image: redis/redis-stack:latest
-    restart: always
     ports:
       - '{{.Port}}:6379'
     container_name: redis-{{.ServiceName}}
