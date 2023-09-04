@@ -21,7 +21,7 @@ corgi run --seed
 You can also do it from corgi vscode extension.
 1. Choose `run from workspace root` -> Initialize repos
 2. Choose `Databases` -> seed all db
-3, Corgi run
+3. Corgi run
 
 
 This will startup ios app and go server.
