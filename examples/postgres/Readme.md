@@ -6,7 +6,9 @@ This example contains:
 
 ## How to start it?
 
-1. Download postgres-seeded-go-reactnative.corgi-compose.yml and users_dump.sql.
+1. Download:
+- postgres-seeded-go-reactnative.corgi-compose.yml
+- users_dump.sql.
 
 2. Run
 ```bash
