@@ -9,17 +9,45 @@ import (
 )
 
 func RunServiceCmd(serviceName string, serviceCommand string, path string) error {
-	executingMessage := fmt.Sprintf("\n🚀 🤖 Executing command for %s: ", serviceName)
-	fmt.Println(executingMessage, art.GreenColor, serviceCommand, art.WhiteColor)
+	lines := strings.Split(serviceCommand, "\n")
+	var accumulatedCommand string
 
-	commandSlice := strings.Fields(serviceCommand)
-	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
 
-	cmd.Dir = path
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+		// If the line ends with a backslash, remove it and append the line to the next
+		if strings.HasSuffix(line, "\\") {
+			accumulatedCommand += strings.TrimSuffix(line, "\\") + " "
+			continue
+		}
 
-	return cmd.Run()
+		// Execute the accumulated command if any, otherwise execute the line itself
+		finalCommand := line
+		if accumulatedCommand != "" {
+			finalCommand = accumulatedCommand + line
+			accumulatedCommand = ""
+		}
+		executingMessage := fmt.Sprintf("\n🚀 🤖 Executing command for %s: ", serviceName)
+		fmt.Println(executingMessage, art.GreenColor, finalCommand, art.WhiteColor)
+
+		commandSlice := strings.Fields(finalCommand)
+		if len(commandSlice) == 0 {
+			continue
+		}
+		cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
+
+		cmd.Dir = path
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func RunCombinedCmd(command string, path string) error {
