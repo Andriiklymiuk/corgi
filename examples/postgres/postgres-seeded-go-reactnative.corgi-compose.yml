@@ -15,6 +15,7 @@ services:
       - name: go_server_user_data
     beforeStart:
       - yarn install
+      - npx pod-install
     start:
       - yarn start
       - yarn ios
