@@ -199,17 +199,20 @@ func SeedDb(targetService string) error {
 // Get dump either from seedDb or from self, if isSelf true, that dump is from current db
 func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
 	var password string
+	var cmdName string
 
 	if isSelf {
 		password = serviceConfig.Password
+		cmdName = "getSelfDump"
 	} else {
 		password = serviceConfig.SeedFromDb.Password
+		cmdName = "getDump"
 	}
 
 	err := utils.ExecuteCommandRun(
 		serviceConfig.ServiceName,
 		"make",
-		"getDump",
+		cmdName,
 		fmt.Sprintf("p=%s", password),
 	)
 	if err != nil {
