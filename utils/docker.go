@@ -280,6 +280,19 @@ func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
 		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
 	}
 
+	// mysql
+	if strings.Contains(text, "MYSQL") {
+		serviceInfo := strings.Replace(strings.TrimSpace(text), "MYSQL_", "", 1)
+		v := strings.Split(serviceInfo, "=")
+		l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
+		return append(dbInfoStringsArray, l)
+	}
+	if strings.Contains(text, "3306") {
+		serviceInfo := strings.ReplaceAll(strings.TrimSpace(text), `"`, "")
+		v := strings.Split(serviceInfo, ":")
+		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
+	}
+
 	return dbInfoStringsArray
 }
 

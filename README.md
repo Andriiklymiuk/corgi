@@ -22,6 +22,10 @@ No more long meetings, explanations of how to run new project with multiple micr
 
 Auto git cloning, db seeding, concurrent running and much more.
 
+While in services you can create whatever you want, but in db services **for now it supports**: postgres, mongodb, mysql, rabbitmq, sqs and redis. 
+
+***Planning to add***: Kafka, dynamodb (probably), scylladb and surrealdb.
+
 ## VSCODE users
 
 You can install [corgi extension](https://marketplace.visualstudio.com/items?itemName=corgi.corgi) to get syntax highlights and much more
