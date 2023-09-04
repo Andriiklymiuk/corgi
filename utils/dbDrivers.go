@@ -89,6 +89,22 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileMongodb},
 		},
 	},
+	"mysql": {
+		Prefix: "MYSQL_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+
+			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeMySQL},
+			{"Makefile", templates.MakefileMySQL},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
