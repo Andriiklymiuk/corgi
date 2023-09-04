@@ -22,9 +22,9 @@ No more long meetings, explanations of how to run new project with multiple micr
 
 Auto git cloning, db seeding, concurrent running and much more.
 
-While in services you can create whatever you want, but in db services **for now it supports**: postgres, mongodb, mysql, rabbitmq, sqs and redis. 
+While in services you can create whatever you want, but in db services **for now it supports**: postgres, mongodb, mysql, rabbitmq, sqs and redis. DynamoDb and mysql has experimental support.
 
-***Planning to add***: Kafka, dynamodb (probably), scylladb and surrealdb.
+***Planning to add***: Kafka, scylladb and surrealdb.
 
 ## VSCODE users
 

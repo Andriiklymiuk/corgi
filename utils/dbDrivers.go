@@ -105,6 +105,27 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileMySQL},
 		},
 	},
+	"dynamodb": {
+		Prefix: "DYNAMODB_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+
+			return fmt.Sprintf("%s%s%s%s%s",
+				host,
+				port,
+				name,
+				fmt.Sprintf("\nREGION=%s", templates.DynamoDBRegion),
+				fmt.Sprintf("\nAWS_REGION=%s", templates.DynamoDBRegion),
+			)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeDynamoDB},
+			{"Makefile", templates.MakefileDynamoDB},
+			{"bootstrap/bootstrap.sh", templates.BootstrapDynamoDB},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
