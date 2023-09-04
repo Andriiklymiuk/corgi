@@ -10,5 +10,8 @@
     "coveredGutterStyle": "blockgreen",
     "uncoveredGutterStyle": "blockred"
   },
-  "go.coverOnSingleTest": true
+  "go.coverOnSingleTest": true,
+  "[markdown]": {
+    "editor.formatOnSave": false,
+  }
 }
