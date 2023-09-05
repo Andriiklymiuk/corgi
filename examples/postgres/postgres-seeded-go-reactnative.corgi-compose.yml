@@ -28,7 +28,7 @@ services:
     depends_on_db:
       - name: postgres_with_data_for_go_reactnative
         envAlias: none
-    beforeStart:
+    start:
       - go run .
 
 required:
