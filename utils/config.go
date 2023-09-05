@@ -190,6 +190,18 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			if !IsServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
 				continue
 			}
+			if service.Path == "" && service.CloneFrom != "" {
+				if strings.HasSuffix(service.CloneFrom, ".git") {
+					splitURL := strings.Split(service.CloneFrom, "/")
+					repoName := strings.TrimSuffix(splitURL[len(splitURL)-1], ".git")
+					service.Path = "./" + repoName
+				}
+			}
+
+			if !strings.HasPrefix(service.Path, "./") && service.Path != "" {
+				service.Path = "./" + service.Path
+			}
+
 			serviceToAdd := Service{
 				ServiceName:         indexName,
 				Path:                service.Path,
