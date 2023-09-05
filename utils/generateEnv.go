@@ -111,10 +111,26 @@ func generateEnvForDbDependentService(service Service, dependingDb DependsOnDb, 
 	return envForService
 }
 
+func EnsurePathExists(dirName string) error {
+	_, err := os.Stat(dirName)
+	if err == nil {
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+	return os.MkdirAll(dirName, 0755)
+}
+
 // Adds env variables to each service, including dependent db_services and services
 func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 	for _, service := range corgiCompose.Services {
+		err := EnsurePathExists(service.Path)
+		if err != nil {
+			fmt.Println("Error ensuring directory:", err)
+			return
+		}
 
 		if service.IgnoreEnv {
 			fmt.Println(
