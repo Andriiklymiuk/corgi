@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkcorgi_docs=self.webpackChunkcorgi_docs||[]).push([[2805],{1795:s=>{s.exports=JSON.parse('{"label":"docusaurus","permalink":"/corgi/blog/tags/docusaurus","allTagsPath":"/corgi/blog/tags","count":4}')}}]);
