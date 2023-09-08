@@ -27,6 +27,24 @@ func init() {
 
 var configMap = map[string]interface{}{}
 
+// Deep copy DbService
+func copyDatabaseService(service *utils.DatabaseService) *utils.DatabaseService {
+	newService := *service // This performs a shallow copy
+	return &newService
+}
+
+// Deep copy Service
+func copyService(service *utils.Service) *utils.Service {
+	newService := *service
+	return &newService
+}
+
+// Deep copy Required
+func copyRequired(req *utils.Required) *utils.Required {
+	newReq := *req
+	return &newReq
+}
+
 func runCreate(cmd *cobra.Command, _ []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
@@ -34,10 +52,11 @@ func runCreate(cmd *cobra.Command, _ []string) {
 	} else {
 		if corgi.DatabaseServices != nil {
 			dbServiceMap := make(map[string]*utils.DatabaseService)
-			for _, service := range corgi.DatabaseServices {
-				name := service.ServiceName
-				service.ServiceName = ""
-				dbServiceMap[name] = &service
+			for _, dvService := range corgi.DatabaseServices {
+				name := dvService.ServiceName
+				newDbService := copyDatabaseService(&dvService)
+				newDbService.ServiceName = ""
+				dbServiceMap[name] = newDbService
 			}
 			configMap[utils.DbServicesInConfig] = dbServiceMap
 		}
@@ -45,8 +64,9 @@ func runCreate(cmd *cobra.Command, _ []string) {
 			serviceMap := make(map[string]*utils.Service)
 			for _, service := range corgi.Services {
 				name := service.ServiceName
-				service.ServiceName = ""
-				serviceMap[name] = &service
+				newService := copyService(&service)
+				newService.ServiceName = ""
+				serviceMap[name] = newService
 			}
 			configMap[utils.ServicesInConfig] = serviceMap
 		}
@@ -54,8 +74,9 @@ func runCreate(cmd *cobra.Command, _ []string) {
 			requiredMap := make(map[string]*utils.Required)
 			for _, req := range corgi.Required {
 				name := req.Name
-				req.Name = ""
-				requiredMap[name] = &req
+				newReq := copyRequired(&req)
+				newReq.Name = ""
+				requiredMap[name] = newReq
 			}
 			configMap[utils.RequiredInConfig] = requiredMap
 		}
@@ -257,10 +278,74 @@ func saveToFile(filename string) {
 	defer file.Close()
 
 	encoder := yaml.NewEncoder(file)
-	err = encoder.Encode(configMap)
-	if err != nil {
-		fmt.Printf("Error encoding YAML: %v\n", err)
-	} else {
-		fmt.Printf("%s has been saved successfully!\n", filename)
+	encoder.SetIndent(2)
+	if dbServiceMap, exists := configMap[utils.DbServicesInConfig]; exists {
+		err = encoder.Encode(map[string]interface{}{utils.DbServicesInConfig: dbServiceMap})
+		if err != nil {
+			fmt.Printf("Error encoding services section: %v\n", err)
+		}
 	}
+
+	if serviceMap, exists := configMap[utils.ServicesInConfig]; exists {
+		err = encoder.Encode(map[string]interface{}{utils.ServicesInConfig: serviceMap})
+		if err != nil {
+			fmt.Printf("Error encoding dbServices section: %v\n", err)
+		}
+	}
+
+	if requiredMap, exists := configMap[utils.RequiredInConfig]; exists {
+		err = encoder.Encode(map[string]interface{}{utils.RequiredInConfig: requiredMap})
+		if err != nil {
+			fmt.Printf("Error encoding required section: %v\n", err)
+		}
+	}
+
+	if err := removeSeparators(filename); err != nil {
+		fmt.Printf("Error removing separators: %v\n", err)
+		return
+	}
+
+	fmt.Printf("%s has been saved successfully!\n", filename)
+}
+
+func removeSeparators(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	var lines []string
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "---" {
+			lines = append(lines, line)
+		} else {
+			lines = append(lines, "")
+		}
+	}
+
+	if scanner.Err() != nil {
+		return scanner.Err()
+	}
+
+	// Now write the lines back to the file
+	file, err = os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	for _, line := range lines {
+		_, err := writer.WriteString(line + "\n")
+		if err != nil {
+			return err
+		}
+	}
+	writer.Flush()
+
+	return nil
 }
