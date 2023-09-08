@@ -158,15 +158,16 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			}
 
 			dbToAdd := DatabaseService{
-				ServiceName:      indexName,
-				Driver:           driver,
-				Host:             host,
-				DatabaseName:     db.DatabaseName,
-				User:             db.User,
-				Password:         db.Password,
-				Port:             db.Port,
-				SeedFromDb:       seedFromDb,
-				SeedFromFilePath: db.SeedFromFilePath,
+				ServiceName:       indexName,
+				Driver:            driver,
+				Host:              host,
+				DatabaseName:      db.DatabaseName,
+				User:              db.User,
+				Password:          db.Password,
+				Port:              db.Port,
+				SeedFromDb:        seedFromDb,
+				SeedFromDbEnvPath: db.SeedFromDbEnvPath,
+				SeedFromFilePath:  db.SeedFromFilePath,
 			}
 			dbServices = append(dbServices, dbToAdd)
 
