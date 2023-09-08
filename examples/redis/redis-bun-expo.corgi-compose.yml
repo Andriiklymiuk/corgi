@@ -1,0 +1,54 @@
+db_services:
+  redis-for-bun:
+    driver: redis
+    host: localhost
+    user: best_user_for_this_serivce
+    password: most_secure_password_ever
+    port: 2911
+
+services:
+  expo_redis_listener:
+    cloneFrom: https://github.com/Andriiklymiuk/expo_redis_listener.git
+    depends_on_services:
+      - name: bun_redis_server
+        envAlias: EXPO_PUBLIC_API_URL
+    beforeStart:
+      - yarn install
+    start:
+      - yarn ios
+    afterStart:
+      - yarn ios:simulator:close
+  bun_redis_server:
+    cloneFrom: https://github.com/Andriiklymiuk/bun_redis_server.git
+    port: 1022
+    depends_on_db:
+      - name: redis-for-bun
+    beforeStart:
+      - bun install
+    start:
+      - bun start
+
+required:
+  yarn:
+    why:
+      - To build and launch some of the repos locally with yarn
+    install:
+      - brew install yarn
+    checkCmd: yarn -v
+  bun:
+    why:
+      - To launch products service locally
+    install:
+      - curl -fsSL https://bun.sh/install | bash
+    checkCmd: bun -v
+  docker:
+    why:
+      - To launch database services
+      - You need to install it yourself from https://docs.docker.com/desktop/install/mac-install/
+    checkCmd: docker -v
+  jq:
+    why:
+      - To format server output in nice format
+    install:
+      - brew install jq
+    checkCmd: jq --version
