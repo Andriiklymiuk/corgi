@@ -32,17 +32,27 @@ networks:
 var MakefileRedis = `up:
 	docker compose up -d
 down:
-	docker compose down    
+	docker compose down
 stop:
 	docker stop redis-{{.ServiceName}}
 id:
 	docker ps -aqf "name=redis-{{.ServiceName}}" | awk '{print $1}'
+seed:
+  @echo "Copying dump.rdb into local Docker container..."
+  docker cp ./dump.rdb redis-{{.ServiceName}}:/data/
+  @echo "Restarting Redis service in Docker container..."
+  docker restart redis-{{.ServiceName}}
+getDump:
+  @echo "Creating Redis dump..."
+  docker exec redis-{{.ServiceName}} redis-cli SAVE
+  @echo "Copying dump.rdb to current directory..."
+  docker cp redis-{{.ServiceName}}:/data/dump.rdb ./dump.rdb
 remove:
 	docker rm redis-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove help
+.PHONY: up down stop id remove getDump seed help
 `
 var RedisConfiguration = `aclfile /etc/redis/users.acl`
 
