@@ -23,11 +23,11 @@ No more long meetings, explanations of how to run new project with multiple micr
 Auto git cloning, db seeding, concurrent running and much more.
 
 While in services you can create whatever you want, but in db services **for now it supports**: 
-- postgres
-- mongodb
-- rabbitmq
-- sqs
-- redis
+- [postgres](https://github.com/Andriiklymiuk/corgi_examples/tree/main/postgres)
+- [mongodb](https://github.com/Andriiklymiuk/corgi_examples/blob/main/mongodb/mongodb-go.corgi-compose.yml)
+- [rabbitmq](https://github.com/Andriiklymiuk/corgi_examples/blob/main/rabbitmq/rabbitmq-go-nestjs.corgi-compose.yml)
+- [aws sqs](https://github.com/Andriiklymiuk/corgi_examples/blob/main/aws_sqs/aws_sqs_postgres_go_deno.corgi-compose.yml)
+- [redis](https://github.com/Andriiklymiuk/corgi_examples/blob/main/redis/redis-bun-expo.corgi-compose.yml)
 - mysql (experimental)
 - dynamoDb (experimental)
 
