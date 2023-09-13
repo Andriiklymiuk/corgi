@@ -18,11 +18,9 @@ The goal is to create smth flexible and robust.
 
 WOOF 🐶
 	`,
-	Example: `
-corgi init
+	Example: `corgi init
 
-corgi run
-`,
+corgi run`,
 	Version: APP_VERSION,
 }
 
