@@ -21,11 +21,9 @@ Similar to --fromScratch flag used in other commands, but this is more generic.
 
 Requires items flag.
 `,
-	Example: `
-corgi clean -i all
+	Example: `corgi clean -i all
 corgi clean -i db,corgi_services,services
-corgi clean -i db
-`,
+corgi clean -i db`,
 	Run: runClean,
 }
 
