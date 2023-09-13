@@ -6,6 +6,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -238,12 +240,31 @@ func generateCobraDocs(cmd *cobra.Command) {
 	shouldGenerateCobraDocs, err := cmd.Flags().GetBool("generate")
 	if err != nil {
 		fmt.Println("Couldn't read flag:", err)
+		return
 	}
 
 	if !shouldGenerateCobraDocs {
 		return
 	}
-	err = doc.GenMarkdownTree(cmd.Root(), "./resources/readme")
+
+	linkHandler := func(name string) string {
+		return strings.ReplaceAll(name, ".md", "")
+	}
+
+	filePrepender := func(filename string) string {
+		base := filepath.Base(filename)
+		name := strings.TrimSuffix(base, filepath.Ext(base))
+		title := strings.ReplaceAll(name, "_", " ")
+
+		return "# " + title + "\n\n"
+	}
+
+	err = doc.GenMarkdownTreeCustom(
+		cmd.Root(),
+		"./resources/readme/commands",
+		filePrepender,
+		linkHandler,
+	)
 	if err != nil {
 		fmt.Println("Cobra docs are not regenerated: ", err)
 	} else {
