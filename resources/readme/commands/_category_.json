@@ -1,0 +1,8 @@
+{
+  "label": "Commands",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Some commonly used corgi commands, that you can try"
+  }
+}
