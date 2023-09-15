@@ -135,6 +135,12 @@ var dbServiceItems = []CorgiComposeItems{
 		description: "This is database host for this service, that will be used in `DB_HOST.\n\t\t\tBy default localhost is used",
 	},
 	{
+		item:        "version",
+		example:     "1.0.1",
+		itemType:    "string",
+		description: "This is database version for this service, that will be used in to setup database.\n\t\t\tBy default latest version is used",
+	},
+	{
 		item:        "databaseName",
 		example:     "corgi-database",
 		itemType:    "string",

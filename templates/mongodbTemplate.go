@@ -4,7 +4,7 @@ var DockerComposeMongodb = `version: "3.9"
 
 services:
   mongo-{{.ServiceName}}:
-    image: mongo:latest
+    image: mongo:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: mongo-{{.ServiceName}}
     logging:
       driver: none

@@ -6,7 +6,7 @@ var DockerComposeSqs = `version: "3.9"
       
 services:
   sqs-{{.ServiceName}}:
-    image: localstack/localstack:latest
+    image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: sqs-{{.ServiceName}}
     hostname: sqs
     environment:

@@ -4,7 +4,7 @@ var DockerComposeRabbitMQ = `version: "3.9"
 
 services:
   rabbitmq-{{.ServiceName}}:
-    image: rabbitmq:3-management
+    image: rabbitmq:{{if .Version}}{{.Version}}-{{end}}management
     container_name: rabbitmq-{{.ServiceName}}
     environment:
       - RABBITMQ_DEFAULT_USER={{.User}}
