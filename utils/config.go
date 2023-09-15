@@ -24,6 +24,7 @@ var DbServicesItemsFromFlag []string
 type DatabaseService struct {
 	ServiceName       string     `yaml:"service_name,omitempty"`
 	Driver            string     `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,redis,rabbitmq,sqs,dynamodb,❌skip"`
+	Version           string     `yaml:"version,omitempty"`
 	Host              string     `yaml:"host,omitempty"`
 	User              string     `yaml:"user,omitempty"`
 	Password          string     `yaml:"password,omitempty"`
@@ -160,6 +161,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			dbToAdd := DatabaseService{
 				ServiceName:       indexName,
 				Driver:            driver,
+				Version:           db.Version,
 				Host:              host,
 				DatabaseName:      db.DatabaseName,
 				User:              db.User,

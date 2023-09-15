@@ -6,7 +6,7 @@ var DockerComposeDynamoDB = `version: "3.9"
 
 services:
   dynamodb-{{.ServiceName}}:
-    image: localstack/localstack:latest
+    image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: dynamodb-{{.ServiceName}}
     environment:
       - SERVICES=dynamodb

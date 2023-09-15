@@ -4,7 +4,7 @@ var DockerComposeMySQL = `version: "3.9"
 
 services:
   mysql-{{.ServiceName}}:
-    image: mysql:8.1.0
+    image: mysql:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: mysql-{{.ServiceName}}
     logging:
       driver: none
