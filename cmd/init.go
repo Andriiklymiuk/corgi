@@ -150,7 +150,7 @@ func CloneServices(services []utils.Service) {
 
 			err = utils.RunServiceCmd(
 				service.ServiceName,
-				fmt.Sprintf("git clone %s", service.CloneFrom),
+				fmt.Sprintf("git clone %s %s", service.CloneFrom, service.Path),
 				pathWithoutLastFolder,
 			)
 			if err != nil {
