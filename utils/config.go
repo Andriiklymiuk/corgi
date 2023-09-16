@@ -205,6 +205,10 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				service.Path = "./" + service.Path
 			}
 
+			if service.Path == "." {
+				service.Path = ""
+			}
+
 			serviceToAdd := Service{
 				ServiceName:         indexName,
 				Path:                service.Path,
