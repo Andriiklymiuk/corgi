@@ -23,8 +23,7 @@ var forkCmd = &cobra.Command{
 
 corgi fork
 
-corgi fork --all --private --useSameRepoName --gitProvider github
-	`,
+corgi fork --all --private --useSameRepoName --gitProvider github`,
 	Run:     runFork,
 	PreRunE: preRunE,
 }
