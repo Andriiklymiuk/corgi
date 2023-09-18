@@ -21,9 +21,9 @@ var forkCmd = &cobra.Command{
 	Long:  `This is command, that helps to bootstrap new projects using currently cloned/created repos and pushing them to newly created ones.`,
 	Example: `corgi fork --all
 
-	corgi fork
+corgi fork
 
-	corgi fork --all --private --useSameRepoName --gitProvider github
+corgi fork --all --private --useSameRepoName --gitProvider github
 	`,
 	Run:     runFork,
 	PreRunE: preRunE,
