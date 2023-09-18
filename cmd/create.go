@@ -25,8 +25,6 @@ func init() {
 	rootCmd.AddCommand(createCmd)
 }
 
-var configMap = map[string]interface{}{}
-
 // Deep copy DbService
 func copyDatabaseService(service *utils.DatabaseService) *utils.DatabaseService {
 	newService := *service // This performs a shallow copy
@@ -45,41 +43,51 @@ func copyRequired(req *utils.Required) *utils.Required {
 	return &newReq
 }
 
+func GetCorgiServicesMap(corgi *utils.CorgiCompose) map[string]interface{} {
+	var corgiServicesMap = map[string]interface{}{}
+	if corgi.DatabaseServices != nil {
+		dbServiceMap := make(map[string]*utils.DatabaseService)
+		for _, dvService := range corgi.DatabaseServices {
+			name := dvService.ServiceName
+			newDbService := copyDatabaseService(&dvService)
+			newDbService.ServiceName = ""
+			dbServiceMap[name] = newDbService
+		}
+		corgiServicesMap[utils.DbServicesInConfig] = dbServiceMap
+	}
+	if corgi.Services != nil {
+		serviceMap := make(map[string]*utils.Service)
+		for _, service := range corgi.Services {
+			name := service.ServiceName
+			newService := copyService(&service)
+			newService.ServiceName = ""
+			serviceMap[name] = newService
+		}
+		corgiServicesMap[utils.ServicesInConfig] = serviceMap
+	}
+	if corgi.Required != nil {
+		requiredMap := make(map[string]*utils.Required)
+		for _, req := range corgi.Required {
+			name := req.Name
+			newReq := copyRequired(&req)
+			newReq.Name = ""
+			requiredMap[name] = newReq
+		}
+		corgiServicesMap[utils.RequiredInConfig] = requiredMap
+	}
+
+	return corgiServicesMap
+}
+
 func runCreate(cmd *cobra.Command, _ []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
+	var corgiMap map[string]interface{}
+
 	if err != nil {
 		fmt.Println("Error loading existing configurations:", err)
+		corgiMap = map[string]interface{}{}
 	} else {
-		if corgi.DatabaseServices != nil {
-			dbServiceMap := make(map[string]*utils.DatabaseService)
-			for _, dvService := range corgi.DatabaseServices {
-				name := dvService.ServiceName
-				newDbService := copyDatabaseService(&dvService)
-				newDbService.ServiceName = ""
-				dbServiceMap[name] = newDbService
-			}
-			configMap[utils.DbServicesInConfig] = dbServiceMap
-		}
-		if corgi.Services != nil {
-			serviceMap := make(map[string]*utils.Service)
-			for _, service := range corgi.Services {
-				name := service.ServiceName
-				newService := copyService(&service)
-				newService.ServiceName = ""
-				serviceMap[name] = newService
-			}
-			configMap[utils.ServicesInConfig] = serviceMap
-		}
-		if corgi.Required != nil {
-			requiredMap := make(map[string]*utils.Required)
-			for _, req := range corgi.Required {
-				name := req.Name
-				newReq := copyRequired(&req)
-				newReq.Name = ""
-				requiredMap[name] = newReq
-			}
-			configMap[utils.RequiredInConfig] = requiredMap
-		}
+		corgiMap = GetCorgiServicesMap(corgi)
 	}
 
 	choices := []string{"DatabaseService", "Service", "Required"}
@@ -91,11 +99,26 @@ func runCreate(cmd *cobra.Command, _ []string) {
 
 	switch choice {
 	case "DatabaseService":
-		handleServiceCreation(utils.DbServicesInConfig, &utils.DatabaseService{}, "ServiceName")
+		handleServiceCreation(
+			corgiMap,
+			utils.DbServicesInConfig,
+			&utils.DatabaseService{},
+			"ServiceName",
+		)
 	case "Service":
-		handleServiceCreation(utils.ServicesInConfig, &utils.Service{}, "ServiceName")
+		handleServiceCreation(
+			corgiMap,
+			utils.ServicesInConfig,
+			&utils.Service{},
+			"ServiceName",
+		)
 	case "Required":
-		handleServiceCreation(utils.RequiredInConfig, &utils.Required{}, "Name")
+		handleServiceCreation(
+			corgiMap,
+			utils.RequiredInConfig,
+			&utils.Required{},
+			"Name",
+		)
 	}
 	prompt := promptui.Prompt{
 		Label:     "Do you want to save changes",
@@ -107,19 +130,7 @@ func runCreate(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	filenameFlag, err := cmd.Root().Flags().GetString("filename")
-	if err != nil {
-		fmt.Print(err.Error())
-	}
-
-	var filename string
-	if filenameFlag != "" {
-		filename = filenameFlag
-	} else {
-		filename = utils.CorgiComposeDefaultName
-	}
-	saveToFile(filename)
-
+	UpdateCorgiComposeFileWithMap(corgiMap)
 }
 
 func askAndSetFields(item interface{}) {
@@ -237,39 +248,46 @@ func setUserInputToField(field reflect.Value, prompt string, isRequired bool) {
 	}
 }
 
-func handleServiceCreation(serviceType string, serviceInstance interface{}, fieldName string) {
+func handleServiceCreation(corgiMap map[string]interface{}, serviceType string, serviceInstance interface{}, fieldName string) {
 	askAndSetFields(serviceInstance)
 
 	nameVal := reflect.ValueOf(serviceInstance).Elem().FieldByName(fieldName).String()
 	reflect.ValueOf(serviceInstance).Elem().FieldByName(fieldName).SetString("")
 
-	if _, exists := configMap[serviceType]; !exists {
+	if _, exists := corgiMap[serviceType]; !exists {
 		switch serviceType {
 		case utils.DbServicesInConfig:
-			configMap[serviceType] = make(map[string]*utils.DatabaseService)
+			corgiMap[serviceType] = make(map[string]*utils.DatabaseService)
 		case utils.ServicesInConfig:
-			configMap[serviceType] = make(map[string]*utils.Service)
+			corgiMap[serviceType] = make(map[string]*utils.Service)
 		case utils.RequiredInConfig:
-			configMap[serviceType] = make(map[string]*utils.Required)
+			corgiMap[serviceType] = make(map[string]*utils.Required)
 		}
 	}
 
 	switch serviceType {
 	case utils.DbServicesInConfig:
-		servicesMap := configMap[serviceType].(map[string]*utils.DatabaseService)
+		servicesMap := corgiMap[serviceType].(map[string]*utils.DatabaseService)
 		servicesMap[nameVal] = serviceInstance.(*utils.DatabaseService)
 
 	case utils.ServicesInConfig:
-		servicesMap := configMap[serviceType].(map[string]*utils.Service)
+		servicesMap := corgiMap[serviceType].(map[string]*utils.Service)
 		servicesMap[nameVal] = serviceInstance.(*utils.Service)
 
 	case utils.RequiredInConfig:
-		servicesMap := configMap[serviceType].(map[string]*utils.Required)
+		servicesMap := corgiMap[serviceType].(map[string]*utils.Required)
 		servicesMap[nameVal] = serviceInstance.(*utils.Required)
 	}
 }
 
-func saveToFile(filename string) {
+func UpdateCorgiComposeFileWithMap(corgiMap map[string]interface{}) {
+	var filename string
+	if utils.CorgiComposePath != "" {
+		filename = utils.CorgiComposePath
+	} else {
+		filename = utils.CorgiComposeDefaultName
+	}
+
 	file, err := os.Create(filename)
 	if err != nil {
 		fmt.Printf("Error creating file: %v\n", err)
@@ -279,21 +297,21 @@ func saveToFile(filename string) {
 
 	encoder := yaml.NewEncoder(file)
 	encoder.SetIndent(2)
-	if dbServiceMap, exists := configMap[utils.DbServicesInConfig]; exists {
+	if dbServiceMap, exists := corgiMap[utils.DbServicesInConfig]; exists {
 		err = encoder.Encode(map[string]interface{}{utils.DbServicesInConfig: dbServiceMap})
 		if err != nil {
 			fmt.Printf("Error encoding services section: %v\n", err)
 		}
 	}
 
-	if serviceMap, exists := configMap[utils.ServicesInConfig]; exists {
+	if serviceMap, exists := corgiMap[utils.ServicesInConfig]; exists {
 		err = encoder.Encode(map[string]interface{}{utils.ServicesInConfig: serviceMap})
 		if err != nil {
 			fmt.Printf("Error encoding dbServices section: %v\n", err)
 		}
 	}
 
-	if requiredMap, exists := configMap[utils.RequiredInConfig]; exists {
+	if requiredMap, exists := corgiMap[utils.RequiredInConfig]; exists {
 		err = encoder.Encode(map[string]interface{}{utils.RequiredInConfig: requiredMap})
 		if err != nil {
 			fmt.Printf("Error encoding required section: %v\n", err)
