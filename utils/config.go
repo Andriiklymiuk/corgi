@@ -93,6 +93,8 @@ type CorgiCompose struct {
 	Required         []Required
 }
 
+var CorgiComposePath string
+
 // Get corgi-compose info from path to corgi-compose.yml file
 func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	filenameFlag, err := cobra.Root().Flags().GetString("filename")
@@ -110,6 +112,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		}
 		pathToCorgiComposeFile = chosenPathToCorgiCompose
 	}
+	CorgiComposePath = pathToCorgiComposeFile
 
 	describeFlag, err := cobra.Root().Flags().GetBool("describe")
 	if err != nil {
