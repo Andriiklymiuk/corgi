@@ -118,7 +118,16 @@ func checkRequiredIsFound(required utils.Required) (bool, string) {
 		cmdToRunForCheck = required.Name
 	}
 
-	commandSlice := strings.Fields(cmdToRunForCheck)
+	err := CheckCommandExists(cmdToRunForCheck)
+	if err != nil {
+		return false, fmt.Sprintf("\n❌ %s is not found: %s\n", required.Name, err.Error())
+	}
+
+	return true, fmt.Sprintf("\n✅ %s is found\n", required.Name)
+}
+
+func CheckCommandExists(command string) error {
+	commandSlice := strings.Fields(command)
 	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
 
 	stdout, err := cmd.StdoutPipe()
@@ -141,7 +150,7 @@ func checkRequiredIsFound(required utils.Required) (bool, string) {
 		message := scannerError.Text()
 		fmt.Println(message)
 		if strings.Contains(message, "command not found") {
-			return false, fmt.Sprintf("\n❌ %s is not found: %s\n", required.Name, message)
+			return fmt.Errorf(message)
 		}
 	}
 
@@ -151,16 +160,16 @@ func checkRequiredIsFound(required utils.Required) (bool, string) {
 		message := scanner.Text()
 		fmt.Println(message)
 		if strings.Contains(message, "command not found") {
-			return false, fmt.Sprintf("\n❌ %s is not found: %s\n", required.Name, message)
+			return fmt.Errorf(message)
 		}
 	}
 
 	err = cmd.Wait()
 	if err != nil {
 		if strings.Contains(err.Error(), "not started") {
-			return false, fmt.Sprintf("\n❌ %s is not found: %s\n", required.Name, err)
+			return err
 		}
 	}
 
-	return true, fmt.Sprintf("\n✅ %s is found\n", required.Name)
+	return nil
 }
