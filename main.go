@@ -51,7 +51,7 @@ func showFinalMessage() {
 }
 
 func canRunCliAgain() bool {
-	var canRun bool
+	commandsToRunAgain := []string{"db", "create", "fork"}
 	for _, arg := range os.Args {
 		if arg == "-f" || arg == "--filename" {
 			continue
@@ -59,14 +59,13 @@ func canRunCliAgain() bool {
 		if arg[0:1] == "-" {
 			return false
 		}
-		if arg == "db" {
-			canRun = true
-		}
-		if arg == "create" {
-			canRun = true
+		for _, validCommand := range commandsToRunAgain {
+			if arg == validCommand {
+				return true
+			}
 		}
 	}
-	return canRun
+	return false
 }
 
 func canShowWelcomeMessages() bool {
