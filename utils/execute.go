@@ -9,6 +9,7 @@ import (
 )
 
 func RunServiceCmd(serviceName string, serviceCommand string, path string) error {
+	fmt.Println(serviceCommand)
 	lines := strings.Split(serviceCommand, "\n")
 	var accumulatedCommand string
 
@@ -37,6 +38,7 @@ func RunServiceCmd(serviceName string, serviceCommand string, path string) error
 		if len(commandSlice) == 0 {
 			continue
 		}
+
 		cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
 
 		cmd.Dir = path
@@ -44,7 +46,28 @@ func RunServiceCmd(serviceName string, serviceCommand string, path string) error
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			return err
+			// Check the error directly
+			if strings.Contains(err.Error(), "executable file not found") {
+				// Attempt to install missing command
+				missingCommand := commandSlice[0]
+				if cmdInfo, ok := CommandInstructions[missingCommand]; ok {
+					fmt.Printf("\n❗%s is missing. Attempting to install it using: %s\n", missingCommand, cmdInfo.Install)
+					installCmd := exec.Command("/bin/bash", "-c", cmdInfo.Install)
+					installCmd.Dir = path
+					installCmd.Stdout = os.Stdout
+					installCmd.Stderr = os.Stderr
+					if err := installCmd.Run(); err != nil {
+						return fmt.Errorf("failed to install %s: %v", missingCommand, err)
+					}
+					// Rerun the original command
+					fmt.Printf("\n🔄 Retrying the command: %s\n", finalCommand)
+					return RunServiceCmd(serviceName, finalCommand, path)
+				} else {
+					return fmt.Errorf("unknown command %s, no install instructions found", missingCommand)
+				}
+			} else {
+				return err
+			}
 		}
 	}
 	return nil
