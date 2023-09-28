@@ -30,6 +30,7 @@ While in services you can create whatever you want, but in db services **for now
 - [redis](https://github.com/Andriiklymiuk/corgi_examples/blob/main/redis/redis-bun-expo.corgi-compose.yml)
 - mysql (experimental)
 - dynamoDb (experimental)
+- kafka (experimental)
 
 ***Planning to add***: Kafka, scylladb and surrealdb.
 
