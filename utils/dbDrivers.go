@@ -143,6 +143,23 @@ var DriverConfigs = map[string]DriverConfig{
 			{"bootstrap/bootstrap.sh", templates.BootstrapKafka},
 		},
 	},
+	"mssql": {
+		Prefix: "MSSQL_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+
+			return fmt.Sprintf("%s%s%s%s%s", host, user, port, name, password)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeMSSQL},
+			{"Makefile", templates.MakefileMSSQL},
+			{"bootstrap/bootstrap.sh", templates.BootstrapMSSQL},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
