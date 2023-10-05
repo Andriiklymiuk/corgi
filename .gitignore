@@ -15,6 +15,7 @@
 # vendor/
 
 */**/dump.sql
+dump.bak
 .DS_STORE
 
 

@@ -16,10 +16,9 @@ services:
       - "{{.Port}}:1433"
     networks:
       - corgi-network
-    privileged: true
     volumes:
       - mssql-data:/var/opt/mssql
-      - ./bootstrap:/etc/mssql-init
+      - ./bootstrap:/var/opt/mssql-tools/startup
       - .:/var/opt/mssql/backup
     cap_add:
       - SYS_PTRACE
@@ -41,9 +40,9 @@ stop:
 id:
 	docker ps -aqf "name=mssql-{{.ServiceName}}" | awk '{print $1}'
 seed:
-	cat dump.bak | docker exec -i $$(docker ps -aqf "name=mssql-{{.ServiceName}}") /opt/mssql-tools/bin/sqlcmd -U {{.User}} -P {{.Password}} -Q "RESTORE DATABASE {{.DatabaseName}} FROM DISK = '/var/opt/mssql/backup/{{.DatabaseName}}.bak'"
+	cat dump.bak | docker exec -i $$(docker ps -aqf "name=mssql-{{.ServiceName}}") /opt/mssql-tools/bin/sqlcmd -U {{.User}} -P {{.Password}} -Q "RESTORE DATABASE [{{.DatabaseName}}] FROM DISK = '/var/opt/mssql/backup/dump.bak'"
 getSelfDump:
-	docker exec -i $$(docker ps -aqf "name=mssql-{{.ServiceName}}") /opt/mssql-tools/bin/sqlcmd -U {{.User}} -P {{.Password}} -Q "BACKUP DATABASE {{.DatabaseName}} TO DISK = '/var/opt/mssql/backup/{{.DatabaseName}}.bak'"
+	docker exec -i $$(docker ps -aqf "name=mssql-{{.ServiceName}}") /opt/mssql-tools/bin/sqlcmd -U {{.User}} -P {{.Password}} -Q "BACKUP DATABASE [{{.DatabaseName}}] TO DISK = '/var/opt/mssql/backup/dump.bak'"
 remove:
 	docker rm mssql-{{.ServiceName}}
 help:
@@ -57,7 +56,7 @@ var BootstrapMSSQL = `#!/bin/bash
 set -euo pipefail
 
 echo "waiting for mssql to be ready"
-for i in {1..30}; do
+for i in {1..90}; do
   if /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "{{.Password}}" -Q "SELECT 1" > /dev/null 2>&1; then
     echo "mssql is ready"
     break

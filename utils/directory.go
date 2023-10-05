@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func GetTargetService() (string, error) {
@@ -62,6 +63,19 @@ func CheckIfFileExistsInDirectory(pathToDirectory string, fileName string) (bool
 		}
 	}
 	return makeFileExists, nil
+}
+
+func CheckIfFilesExistsInDirectory(pathToDirectory string, fileToCheck string) (bool, error) {
+	matches, err := filepath.Glob(
+		filepath.Join(
+			pathToDirectory,
+			fileToCheck,
+		),
+	)
+	if err != nil {
+		return false, err
+	}
+	return len(matches) > 0, nil
 }
 
 func GetFileContent(fileName string) []string {

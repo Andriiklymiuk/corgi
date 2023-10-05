@@ -148,9 +148,9 @@ func showMakeCommands(
 }
 
 func SeedDb(targetService string) error {
-	dumpFileExists, err := utils.CheckIfFileExistsInDirectory(
+	dumpFileExists, err := utils.CheckIfFilesExistsInDirectory(
 		fmt.Sprintf("./%s/%s", utils.RootDbServicesFolder, targetService),
-		"dump.sql",
+		"dump.*",
 	)
 	if err != nil {
 		return fmt.Errorf("error in checking dump file: %s", err)
@@ -230,7 +230,18 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 		if err != nil {
 			return fmt.Errorf("path to target service is not found: %s", err)
 		}
-		dest := path + "/dump.sql"
+		var dumpFileName string
+
+		switch dbService.Driver {
+		case "mssql":
+			dumpFileName = "dump.sql"
+		case "postgres":
+			dumpFileName = "dump.sql"
+		default:
+			dumpFileName = "dump.sql"
+		}
+
+		dest := path + "/" + dumpFileName
 
 		bytesRead, err := os.ReadFile(src)
 

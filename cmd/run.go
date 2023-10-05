@@ -30,7 +30,7 @@ func init() {
 		"seed",
 		"s",
 		false,
-		"Seed all db_services that have seedSource or have dump.sql in their folder",
+		"Seed all db_services that have seedSource or have dump.sql / dump.bak or other dump file in their folder",
 	)
 	runCmd.PersistentFlags().StringSliceVarP(
 		&omitItems,
