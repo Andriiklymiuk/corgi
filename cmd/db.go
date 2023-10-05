@@ -240,8 +240,6 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 		default:
 			dumpFileName = "dump.sql"
 		}
-		fmt.Println("dbService.Driver", dbService.Driver)
-		fmt.Println("dumpFileName", dumpFileName)
 
 		dest := path + "/" + dumpFileName
 
