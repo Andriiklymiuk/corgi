@@ -234,12 +234,14 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 
 		switch dbService.Driver {
 		case "mssql":
-			dumpFileName = "dump.sql"
+			dumpFileName = "dump.bak"
 		case "postgres":
 			dumpFileName = "dump.sql"
 		default:
 			dumpFileName = "dump.sql"
 		}
+		fmt.Println("dbService.Driver", dbService.Driver)
+		fmt.Println("dumpFileName", dumpFileName)
 
 		dest := path + "/" + dumpFileName
 
