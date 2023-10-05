@@ -31,6 +31,7 @@ While in services you can create whatever you want, but in db services **for now
 - mysql (experimental)
 - dynamodb (experimental)
 - kafka (experimental)
+- mssql (experimental)
 
 ***Planning to add***: Kafka, scylladb and surrealdb.
 
