@@ -11,7 +11,6 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "{{.Password}}"
       MSSQL_PID: "Express"
-      MSSQL_USER: "{{.User}}"
     ports:
       - "{{.Port}}:1433"
     networks:
@@ -32,7 +31,7 @@ volumes:
 `
 
 var MakefileMSSQL = `up:
-	chmod +x bootstrap/bootstrap.sh && docker compose up -d
+	chmod +x bootstrap/bootstrap.sh && docker-compose up -d && docker exec mssql-{{.ServiceName}} /var/opt/mssql-tools/startup/bootstrap.sh
 down:
 	docker-compose down    
 stop:
@@ -40,7 +39,7 @@ stop:
 id:
 	docker ps -aqf "name=mssql-{{.ServiceName}}" | awk '{print $1}'
 seed:
-	cat dump.bak | docker exec -i $$(docker ps -aqf "name=mssql-{{.ServiceName}}") /opt/mssql-tools/bin/sqlcmd -U {{.User}} -P {{.Password}} -Q "RESTORE DATABASE [{{.DatabaseName}}] FROM DISK = '/var/opt/mssql/backup/dump.bak'"
+	cat dump.bak | docker exec -i $$(docker ps -aqf "name=mssql-{{.ServiceName}}") /opt/mssql-tools/bin/sqlcmd -U {{.User}} -P {{.Password}} -Q "RESTORE DATABASE [{{.DatabaseName}}] FROM DISK = '/var/opt/mssql/backup/dump.bak' WITH REPLACE"
 getSelfDump:
 	docker exec -i $$(docker ps -aqf "name=mssql-{{.ServiceName}}") /opt/mssql-tools/bin/sqlcmd -U {{.User}} -P {{.Password}} -Q "BACKUP DATABASE [{{.DatabaseName}}] TO DISK = '/var/opt/mssql/backup/dump.bak'"
 remove:
@@ -74,6 +73,12 @@ echo "==================="
 # Creating the user.
 /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "{{.Password}}" -Q "CREATE LOGIN {{.User}} WITH PASSWORD = '{{.Password}}'; USE [{{.DatabaseName}}]; CREATE USER {{.User}} FOR LOGIN {{.User}}"
 
-# Granting permissions to the user for the specific database (for example, db_owner rights).
+# Add user sysadmin permissions
+/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "{{.Password}}" -Q "ALTER SERVER ROLE sysadmin ADD MEMBER {{.User}}"
+
+# Add user to dbcreator server role (not needed, because of sysadmin, but i will leave it here just in case)
+/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "{{.Password}}" -Q "ALTER SERVER ROLE dbcreator ADD MEMBER {{.User}}"
+
+# Granting permissions to the user for the specific database (not needed, because of sysadmin, but i will leave it here just in case)
 /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "{{.Password}}" -Q "USE [{{.DatabaseName}}]; EXEC sp_addrolemember 'db_owner', '{{.User}}'"
 `
