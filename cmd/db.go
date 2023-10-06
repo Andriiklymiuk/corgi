@@ -237,6 +237,8 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 			dumpFileName = "dump.bak"
 		case "postgres":
 			dumpFileName = "dump.sql"
+		case "cassandra":
+			dumpFileName = "dump.cql"
 		default:
 			dumpFileName = "dump.sql"
 		}
