@@ -4,7 +4,7 @@ var DockerComposeKafka = `version: "3.9"
 
 services:
   zookeeper-{{.ServiceName}}:
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: zookeeper-{{.ServiceName}}
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -13,7 +13,7 @@ services:
       - kafka-network
 
   kafka-{{.ServiceName}}:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: kafka-{{.ServiceName}}
     depends_on:
       - zookeeper-{{.ServiceName}}
