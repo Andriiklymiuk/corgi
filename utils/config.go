@@ -23,7 +23,7 @@ var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
 	ServiceName       string     `yaml:"service_name,omitempty"`
-	Driver            string     `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,redis,rabbitmq,sqs,dynamodb,kafka,mssql❌skip"`
+	Driver            string     `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,redis,rabbitmq,sqs,dynamodb,kafka,mssql,cassandra,cockroach❌skip"`
 	Version           string     `yaml:"version,omitempty"`
 	Host              string     `yaml:"host,omitempty"`
 	User              string     `yaml:"user,omitempty"`

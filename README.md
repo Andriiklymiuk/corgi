@@ -32,8 +32,10 @@ While in services you can create whatever you want, but in db services **for now
 - dynamodb (experimental)
 - kafka (experimental)
 - mssql (experimental)
+- cassandra db (experimental)
+- cockroach db (experimental)
 
-***Planning to add***: Kafka, scylladb and surrealdb.
+***Planning to add***: scylladb and surrealdb.
 
 ## Documentation
 
