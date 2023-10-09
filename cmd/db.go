@@ -140,7 +140,7 @@ func showMakeCommands(
 	case "getSelfDump":
 		GetDump(serviceConfig, true)
 	default:
-		_, err := utils.ExecuteMakeCommand(targetService, makeCommand)
+		_, err := utils.ExecuteMakeRealtimeCommand(targetService, makeCommand)
 		if err != nil {
 			fmt.Println("Make command failed", err)
 		}
