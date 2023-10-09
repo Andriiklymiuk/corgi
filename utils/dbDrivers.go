@@ -3,6 +3,7 @@ package utils
 import (
 	"andriiklymiuk/corgi/templates"
 	"fmt"
+	"strings"
 )
 
 type FilenameForService struct {
@@ -191,6 +192,32 @@ var DriverConfigs = map[string]DriverConfig{
 			{"docker-compose.yml", templates.DockerComposeCockroach},
 			{"Makefile", templates.MakefileCockroach},
 			{"bootstrap/bootstrap.sh", templates.BootstrapCockroach},
+		},
+	},
+	"clickhouse": {
+		Prefix: "CLICKHOUSE_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+
+			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+		},
+		FilesToCreate: []FilenameForService{
+			{
+				"docker-compose.yml",
+				strings.Replace(templates.DockerComposeClickHouse, "@@", "`", -1),
+			},
+			{
+				"Makefile",
+				strings.Replace(templates.MakefileClickHouse, "@@", "`", -1),
+			},
+			{
+				"bootstrap/bootstrap.sh",
+				strings.Replace(templates.BootstrapClickHouse, "@@", "`", -1),
+			},
 		},
 	},
 	"default": {
