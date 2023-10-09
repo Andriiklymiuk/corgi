@@ -9,7 +9,7 @@ services:
     logging:
       driver: none
     environment:
-      - MYSQL_ROOT_PASSWORD={{.RootPassword}}
+      - MYSQL_ROOT_PASSWORD={{.Password}}
       - MYSQL_DATABASE={{.DatabaseName}}
       - MYSQL_USER={{.User}}
       - MYSQL_PASSWORD={{.Password}}
