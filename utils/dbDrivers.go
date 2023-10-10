@@ -65,7 +65,7 @@ var DriverConfigs = map[string]DriverConfig{
 			return fmt.Sprintf("%s%s%s%s%s", user,
 				port,
 				password,
-				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("redis://%s:%d", "localhost", db.Port)),
+				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("redis://%s:%d", db.Host, db.Port)),
 				host,
 			)
 		},
@@ -74,6 +74,29 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileRedis},
 			{"redis.conf", templates.RedisConfiguration},
 			{"users.acl", templates.RedisAccessControlList},
+		},
+	},
+	"keydb": {
+		Prefix: "KEYDB_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf("\n%sHOST=%s\n", serviceNameInEnv, db.Host)
+
+			return fmt.Sprintf("%s%s%s%s%s",
+				user,
+				port,
+				password,
+				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("keydb://%s:%d", db.Host, db.Port)),
+				host,
+			)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeKeyDB},
+			{"Makefile", templates.MakefileKeyDB},
+			{"keydb.conf", templates.KeyDBConfiguration},
+			{"users.acl", templates.KeyDBAccessControlList},
 		},
 	},
 	"mongodb": {
