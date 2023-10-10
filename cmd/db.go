@@ -140,7 +140,7 @@ func showMakeCommands(
 	case "getSelfDump":
 		GetDump(serviceConfig, true)
 	default:
-		_, err := utils.ExecuteMakeRealtimeCommand(targetService, makeCommand)
+		err := utils.ExecuteCommandRun(targetService, "make", makeCommand)
 		if err != nil {
 			fmt.Println("Make command failed", err)
 		}
@@ -166,7 +166,7 @@ func SeedDb(targetService string) error {
 		fmt.Printf("Getting target service info failed: %s\n", err)
 	}
 	if !serviceIsRunning {
-		_, err := utils.ExecuteMakeCommand(targetService, "up")
+		err := utils.ExecuteCommandRun(targetService, "make", "up")
 		if err != nil {
 			fmt.Println("Make command failed", err)
 		}

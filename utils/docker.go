@@ -85,25 +85,6 @@ func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 	return outputSlice[1:], nil
 }
 
-func ExecuteMakeRealtimeCommand(targetService string, makeCommand ...string) ([]byte, error) {
-	path, err := GetPathToDbService(targetService)
-	if err != nil {
-		return nil, fmt.Errorf("path to target service is not found: %s", err)
-	}
-
-	cmd := exec.Command("make", makeCommand...)
-	cmd.Dir = path
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err = cmd.Run()
-	if err != nil {
-		return nil, fmt.Errorf("error: %s in path %s, with command make %s", err, path, makeCommand)
-	}
-
-	return nil, nil
-}
-
 func ExecuteMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {
 	path, err := GetPathToDbService(targetService)
 	if err != nil {

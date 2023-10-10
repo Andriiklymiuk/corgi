@@ -24,7 +24,7 @@ func ExecuteForEachService(cmdName string) {
 		return
 	}
 	for _, file := range files {
-		_, err := ExecuteMakeCommand(file, cmdName)
+		err := ExecuteCommandRun(file, "make", cmdName)
 		if err != nil {
 			fmt.Printf("Failed to %s service %s, error: %s", cmdName, file, err)
 			return
