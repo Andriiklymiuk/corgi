@@ -62,7 +62,8 @@ var DriverConfigs = map[string]DriverConfig{
 			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
 			host := fmt.Sprintf("\n%sHOST=%s\n", serviceNameInEnv, db.Host)
 
-			return fmt.Sprintf("%s%s%s%s%s", user,
+			return fmt.Sprintf("%s%s%s%s%s",
+				user,
 				port,
 				password,
 				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("redis://%s:%d", db.Host, db.Port)),
