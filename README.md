@@ -37,6 +37,7 @@ While in services you can create whatever you want, but in db services **for now
 - cockroach
 - clickhouse
 - scylla
+- keydb
 
 
 ***Planning to add***: scylladb and surrealdb.
