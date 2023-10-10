@@ -2,7 +2,9 @@ package utils
 
 import (
 	"andriiklymiuk/corgi/utils/art"
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -80,4 +82,157 @@ func RunCombinedCmd(command string, path string) error {
 	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
 	_, err := cmd.CombinedOutput()
 	return err
+}
+
+func GetPathToDbService(targetService string) (string, error) {
+	currentWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("cannot get path to service %s", err)
+	}
+
+	path := fmt.Sprintf(
+		"%s/%s/%s",
+		currentWorkingDirectory,
+		RootDbServicesFolder,
+		targetService,
+	)
+	return path, nil
+}
+
+func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
+	makeFileExists, err := CheckIfFileExistsInDirectory(
+		fmt.Sprintf("./%s/%s", RootDbServicesFolder, targetService),
+		"Makefile",
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to check if Makefile exists in %s, error: %s",
+			targetService,
+			err,
+		)
+	}
+
+	if !makeFileExists {
+		return nil, fmt.Errorf("no makefile found in %s", targetService)
+	}
+
+	path, err := GetPathToDbService(targetService)
+	if err != nil {
+		return nil, fmt.Errorf("path to target service is not found: %s", err)
+	}
+
+	cmd := exec.Command("make", "help")
+	cmd.Dir = path
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("output error: %s in path %s", err, path)
+	}
+
+	outputSlice := strings.Split(
+		strings.TrimSpace(string(output)),
+		"\n",
+	)
+
+	return outputSlice[1:], nil
+}
+
+func ExecuteMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {
+	path, err := GetPathToDbService(targetService)
+	if err != nil {
+		return nil, fmt.Errorf("path to target service is not found: %s", err)
+	}
+
+	cmd := exec.Command("make", makeCommand...)
+	cmd.Dir = path
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf(`%s
+		output error: %s in path %s, with command make %s
+		`, output, err, path, makeCommand)
+	}
+
+	fmt.Print(string(output))
+
+	return output, nil
+}
+
+func ExecuteCommandRun(targetService string, command ...string) error {
+	path, err := GetPathToDbService(targetService)
+	if err != nil {
+		return fmt.Errorf("path to target service is not found: %s", err)
+	}
+
+	cmd := exec.Command(command[0], command[1:]...)
+	cmd.Dir = path
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf(`output error: %s, in path %s with command make %s
+		`, err, path, command)
+	}
+
+	return nil
+}
+
+func ExecuteSeedMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {
+	path, err := GetPathToDbService(targetService)
+	if err != nil {
+		return nil, fmt.Errorf("path to target service is not found: %s", err)
+	}
+
+	cmd := exec.Command("make", makeCommand...)
+	cmd.Dir = path
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		return nil, err
+	}
+
+	scannerError := bufio.NewScanner(io.MultiReader(stderr))
+	scannerError.Split(bufio.ScanLines)
+
+	var errorsList []string
+	for scannerError.Scan() {
+		errorsList = append(errorsList, scannerError.Text())
+	}
+
+	if len(errorsList) != 0 {
+		errorString := strings.Join(errorsList, "\n")
+		if len(errorsList) >= 10 {
+			return nil, fmt.Errorf(errorString)
+		} else {
+			fmt.Println(errorString)
+		}
+	}
+
+	scanner := bufio.NewScanner(io.MultiReader(stdout))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		m := scanner.Text()
+		fmt.Println(m)
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	output := []byte(
+		fmt.Sprintf("Successful make command of %s",
+			strings.Join(makeCommand, " ")),
+	)
+
+	return output, nil
 }

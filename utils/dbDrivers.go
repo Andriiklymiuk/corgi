@@ -2,7 +2,9 @@ package utils
 
 import (
 	"andriiklymiuk/corgi/templates"
+	"bufio"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -252,4 +254,94 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefilePostgres},
 		},
 	},
+}
+
+func GetServiceInfo(targetService string) (string, error) {
+	f, err := os.Open(fmt.Sprintf("%s/%s/docker-compose.yml", RootDbServicesFolder, targetService))
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+
+	var service []string
+	for scanner.Scan() {
+		service = getDbInfoFromString(scanner.Text(), service)
+	}
+
+	if len(service) == 0 {
+		return "", fmt.Errorf("haven't found db_service info ")
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	result := fmt.Sprintf(`
+Connection info to %s:
+%s
+
+`,
+		targetService,
+		strings.Join(service, "\n"),
+	)
+
+	return result, nil
+}
+
+func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
+	// postgres
+	if strings.Contains(text, "POSTGRES") {
+		serviceInfo := strings.Replace(strings.TrimSpace(text), "POSTGRES_", "", 1)
+		v := strings.Split(serviceInfo, "=")
+		l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
+		return append(dbInfoStringsArray, l)
+	}
+	if strings.Contains(text, "5432") {
+		serviceInfo := strings.ReplaceAll(strings.TrimSpace(text), `"`, "")
+		v := strings.Split(serviceInfo, ":")
+		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
+	}
+
+	// rabbitmq
+	if strings.Contains(text, "RABBITMQ") {
+		serviceInfo := strings.Replace(strings.TrimSpace(text), "RABBITMQ_DEFAULT_", "", 1)
+		v := strings.Split(serviceInfo, "=")
+		l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
+		return append(dbInfoStringsArray, l)
+	}
+	if strings.Contains(text, "5672") {
+		serviceInfo := strings.ReplaceAll(strings.TrimSpace(text), `"`, "")
+		v := strings.Split(serviceInfo, ":")
+		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
+	}
+
+	// mongodb
+	if strings.Contains(text, "MONGO") {
+		serviceInfo := strings.Replace(strings.TrimSpace(text), "MONGO_INITDB_", "", 1)
+		v := strings.Split(serviceInfo, "=")
+		l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
+		return append(dbInfoStringsArray, l)
+	}
+	if strings.Contains(text, "27017") {
+		serviceInfo := strings.ReplaceAll(strings.TrimSpace(text), `"`, "")
+		v := strings.Split(serviceInfo, ":")
+		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
+	}
+
+	// mysql
+	if strings.Contains(text, "MYSQL") {
+		serviceInfo := strings.Replace(strings.TrimSpace(text), "MYSQL_", "", 1)
+		v := strings.Split(serviceInfo, "=")
+		l := strings.Split(v[0], " ")[1] + " " + v[len(v)-1]
+		return append(dbInfoStringsArray, l)
+	}
+	if strings.Contains(text, "3306") {
+		serviceInfo := strings.ReplaceAll(strings.TrimSpace(text), `"`, "")
+		v := strings.Split(serviceInfo, ":")
+		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
+	}
+
+	return dbInfoStringsArray
 }
