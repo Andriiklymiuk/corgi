@@ -60,11 +60,11 @@ echo "Configuring CockroachDB"
 echo "==========================="
 
 # Creating the specified database.
-/cockroach/cockroach sql --insecure -e "CREATE DATABASE IF NOT EXISTS {{.DatabaseName}}"
+/cockroach/cockroach sql --insecure -e 'CREATE DATABASE IF NOT EXISTS "{{.DatabaseName}}"'
 
 # Creating the user.
-/cockroach/cockroach sql --insecure -e "CREATE USER IF NOT EXISTS {{.User}} WITH PASSWORD '{{.Password}}'"
+/cockroach/cockroach sql --insecure -e 'CREATE USER IF NOT EXISTS {{.User}}'
 
 # Granting permissions to the user for the specific database.
-/cockroach/cockroach sql --insecure -e "GRANT ALL ON DATABASE {{.DatabaseName}} TO {{.User}}"
+/cockroach/cockroach sql --insecure -e 'GRANT ALL ON DATABASE "{{.DatabaseName}}" TO {{.User}}'
 `
