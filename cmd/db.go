@@ -241,6 +241,8 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 			dumpFileName = "dump.cql"
 		case "redis", "keydb":
 			dumpFileName = "dump.rdb"
+		case "surrealdb":
+			dumpFileName = "dump.surql"
 		default:
 			dumpFileName = "dump.sql"
 		}
