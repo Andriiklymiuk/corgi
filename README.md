@@ -41,9 +41,6 @@ While in services you can create whatever you want, but in db services **for now
 - influxdb
 - surrealdb
 
-
-***Planning to add***: scylladb and surrealdb.
-
 ## Documentation
 
 You can check documentation on https://andriiklymiuk.github.io/corgi/
