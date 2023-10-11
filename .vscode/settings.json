@@ -4,7 +4,8 @@
     "keydb",
     "mssql",
     "Prepender",
-    "rabbitmq"
+    "rabbitmq",
+    "surrealdb"
   ],
   "go.coverOnSave": true,
   "go.coverageDecorator": {
