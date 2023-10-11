@@ -38,6 +38,8 @@ While in services you can create whatever you want, but in db services **for now
 - clickhouse
 - scylla
 - keydb
+- influxdb
+- surrealdb
 
 
 ***Planning to add***: scylladb and surrealdb.
