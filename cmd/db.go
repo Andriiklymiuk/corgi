@@ -230,22 +230,7 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 		if err != nil {
 			return fmt.Errorf("path to target service is not found: %s", err)
 		}
-		var dumpFileName string
-
-		switch dbService.Driver {
-		case "mssql":
-			dumpFileName = "dump.bak"
-		case "postgres":
-			dumpFileName = "dump.sql"
-		case "cassandra", "scylla":
-			dumpFileName = "dump.cql"
-		case "redis", "keydb":
-			dumpFileName = "dump.rdb"
-		case "surrealdb":
-			dumpFileName = "dump.surql"
-		default:
-			dumpFileName = "dump.sql"
-		}
+		dumpFileName := utils.GetDumpFilename(dbService.Driver)
 
 		dest := path + "/" + dumpFileName
 

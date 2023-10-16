@@ -418,3 +418,20 @@ func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
 
 	return dbInfoStringsArray
 }
+
+func GetDumpFilename(driver string) string {
+	switch driver {
+	case "mssql":
+		return "dump.bak"
+	case "postgres":
+		return "dump.sql"
+	case "cassandra", "scylla":
+		return "dump.cql"
+	case "redis", "keydb":
+		return "dump.rdb"
+	case "surrealdb":
+		return "dump.surql"
+	default:
+		return "dump.sql"
+	}
+}
