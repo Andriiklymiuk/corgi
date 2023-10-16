@@ -27,8 +27,9 @@ var DriverConfigs = map[string]DriverConfig{
 			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
 			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
 			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%s", db.Host, "15672"))
 
-			return fmt.Sprintf("%s%s%s%s", host, user, port, password)
+			return fmt.Sprintf("%s%s%s%s%s", host, user, port, password, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
 			{"docker-compose.yml", templates.DockerComposeRabbitMQ},
