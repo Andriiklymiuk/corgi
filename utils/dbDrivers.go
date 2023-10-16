@@ -311,6 +311,24 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileInfluxDB},
 		},
 	},
+	"neo4j": {
+		Prefix: "NEO4J_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+
+			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%s", db.Host, "7474"))
+
+			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, dashboardUrl)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeNeo4j},
+			{"Makefile", templates.MakefileNeo4j},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
@@ -431,6 +449,8 @@ func GetDumpFilename(driver string) string {
 		return "dump.rdb"
 	case "surrealdb":
 		return "dump.surql"
+	case "neo4j":
+		return "dump.cypher"
 	default:
 		return "dump.sql"
 	}
