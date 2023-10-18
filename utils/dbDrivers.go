@@ -315,9 +315,12 @@ var DriverConfigs = map[string]DriverConfig{
 	"neo4j": {
 		Prefix: "NEO4J_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			// add this fix, when neo4j community edition supports multiple databases
+			// validDatabaseName := strings.ReplaceAll(db.DatabaseName, "-", "_")
+
 			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
 			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, "neo4j")
 			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
 			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
 
@@ -328,13 +331,14 @@ var DriverConfigs = map[string]DriverConfig{
 		FilesToCreate: []FilenameForService{
 			{"docker-compose.yml", templates.DockerComposeNeo4j},
 			{"Makefile", templates.MakefileNeo4j},
+			{"bootstrap/bootstrap.sh", templates.BootstrapNeo4j},
 		},
 	},
 	"arangodb": {
 		Prefix: "ARANGO_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, "root")
 			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
 			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
 			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
