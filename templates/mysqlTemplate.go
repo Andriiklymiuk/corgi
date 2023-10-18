@@ -6,8 +6,6 @@ services:
   mysql-{{.ServiceName}}:
     image: mysql:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: mysql-{{.ServiceName}}
-    logging:
-      driver: none
     environment:
       - MYSQL_ROOT_PASSWORD={{.Password}}
       - MYSQL_DATABASE={{.DatabaseName}}
