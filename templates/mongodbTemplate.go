@@ -6,8 +6,6 @@ services:
   mongo-{{.ServiceName}}:
     image: mongo:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: mongo-{{.ServiceName}}
-    logging:
-      driver: none
     environment:
       - MONGO_INITDB_ROOT_USERNAME={{.User}}
       - MONGO_INITDB_ROOT_PASSWORD={{.Password}}

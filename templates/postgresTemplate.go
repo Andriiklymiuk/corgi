@@ -6,8 +6,6 @@ services:
   postgres-{{.ServiceName}}:
     image: postgres:{{if .Version}}{{.Version}}-{{end}}alpine
     container_name: postgres-{{.ServiceName}}
-    logging:
-      driver: none
     environment:
       - POSTGRES_USER={{.User}}
       - POSTGRES_PASSWORD={{.Password}}
