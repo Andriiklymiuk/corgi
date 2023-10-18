@@ -29,9 +29,9 @@ stop:
 id:
 	docker ps -aqf "name=arangodb-{{.ServiceName}}" | awk '{print $1}'
 getSelfDump:
-	# TODO
+	# TODO, you can use arangosh for it
 seed:
-	# TODO
+	# TODO, you can use arangosh for it
 remove:
 	docker rm arangodb-{{.ServiceName}}
 help:
@@ -42,18 +42,11 @@ help:
 
 // TODO: fix not connecting error
 // bootstrap/bootstrap.sh
-var BootstrapArangodb = `#!/bin/bash
+var BootstrapArangodb = `#!/bin/sh
+
+sleep 10
 
 set -euo pipefail
-
-echo "Waiting for ArangoDB to be ready"
-for i in {1..180}; do
-  if arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} > /dev/null; then
-    break
-  fi
-  echo "waiting for ArangoDB..."
-  sleep 1
-done
 
 echo "Configuring ArangoDB"
 echo "==================="
@@ -79,17 +72,33 @@ retry_command() {
 }
 
 # Test connection to ArangoDB using arangosh with a retry mechanism.
-retry_command 5 arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} --javascript.execute-string 'print("Testing connection...");'
+retry_command 5 arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} --javascript.execute-string 'print("Arangodb_connected");'
 
-# Create the specified database using arangosh with a retry mechanism.
-echo "Creating database {{.DatabaseName}}"
-retry_command 5 arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} --javascript.execute-string 'db._createDatabase("{{.DatabaseName}}");'
+# Check if the specified database already exists using arangosh.
+if ! arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} --javascript.execute-string 'if (!db._databases().includes("{{.DatabaseName}}")) { print("not exists"); } else { print("exists"); }' | grep "not exists" > /dev/null; then
+    echo "Database {{.DatabaseName}} already exists. Skipping creation."
+else
+    # Create the specified database using arangosh with a retry mechanism.
+    echo "Creating database {{.DatabaseName}}"
+    retry_command 5 arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} --javascript.execute-string 'db._createDatabase("{{.DatabaseName}}");'
+fi
 
-# Create the specified user using arangosh with a retry mechanism.
-echo "Creating user {{.User}}"
-retry_command 5 arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} --javascript.execute-string 'require("@arangodb/users").save("{{.User}}", "{{.Password}}");'
+# Check if the specified user already exists using arangosh.
+echo 'const users = require("@arangodb/users"); if (!users.exists("{{.User}}")) { print("not exists"); } else { print("exists"); }' > /tmp/arangosh_check_user_script.js
+if ! arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} --javascript.execute /tmp/arangosh_check_user_script.js | grep "not exists" > /dev/null; then
+    echo "User {{.User}} already exists. Skipping creation."
+else
+    # Create the specified user using arangosh with a retry mechanism.
+    echo "Creating user {{.User}}"
+    echo "const users = require('@arangodb/users'); users.save('{{.User}}','{{.Password}}');" > /tmp/arangosh_script.js
+    retry_command 5 arangosh --server.endpoint http://localhost:8529 --server.username root --server.password "{{.Password}}" --javascript.execute /tmp/arangosh_script.js
+    rm /tmp/arangosh_script.js
+fi
+rm /tmp/arangosh_check_user_script.js
 
 # Grant the specified user access to the specified database using arangosh with a retry mechanism.
 echo "Granting user {{.User}} access to database {{.DatabaseName}}"
-retry_command 5 arangosh --server.endpoint http://localhost:8529 --server.username root --server.password {{.Password}} --javascript.execute-string 'require("@arangodb/users").grantDatabase("{{.User}}", "{{.DatabaseName}}", "rw");'
+echo 'require("@arangodb/users").grantDatabase("{{.User}}", "{{.DatabaseName}}", "rw");' > /tmp/arangosh_grant_script.js
+retry_command 5 arangosh --server.endpoint http://localhost:8529 --server.username root --server.password "{{.Password}}" --javascript.execute /tmp/arangosh_grant_script.js
+rm /tmp/arangosh_grant_script.js
 `
