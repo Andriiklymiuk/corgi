@@ -26,7 +26,7 @@ networks:
 var MakefileSurrealDB = `up:
 	docker compose up -d
 down:
-	docker compose down --volumes    
+	docker compose down --volumes
 stop:
 	docker stop surrealdb-{{.ServiceName}}
 id:

@@ -27,7 +27,7 @@ networks:
 var MakefileNeo4j = `up:
 	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec neo4j-{{.ServiceName}} /docker-entrypoint-initdb.d/bootstrap.sh
 down:
-	docker compose down --volumes    
+	docker compose down --volumes
 stop:
 	docker stop neo4j-{{.ServiceName}}
 id:

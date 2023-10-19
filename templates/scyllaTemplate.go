@@ -22,7 +22,7 @@ networks:
 var MakefileScylla = `up:
 	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec scylla-{{.ServiceName}} /etc/scylla-init/bootstrap.sh
 down:
-	docker compose down --volumes    
+	docker compose down --volumes
 stop:
 	docker stop scylla-{{.ServiceName}}
 id:

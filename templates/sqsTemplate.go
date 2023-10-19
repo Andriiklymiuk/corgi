@@ -26,7 +26,7 @@ networks:
 var MakefileSqs = `up:
 	chmod +x bootstrap/bootstrap.sh && docker compose up -d
 down:
-	docker compose down --volumes    
+	docker compose down --volumes
 stop:
 	docker stop sqs-{{.ServiceName}}
 id:
