@@ -22,9 +22,9 @@ networks:
 `
 
 var MakefileMySQL = `up:
-	docker-compose up -d
+	docker compose up -d
 down:
-	docker-compose down
+	docker compose down --volumes
 stop:
 	docker stop mysql-{{.ServiceName}}
 id:
@@ -36,7 +36,7 @@ seed:
 {{end}}getSelfDump:
 	mysqldump --host={{.Host}} --port={{.Port}} --user={{.User}} --password=$(p) {{.DatabaseName}} > dump.sql
 remove:
-	docker rm mysql-{{.ServiceName}}
+	docker rm --volumes mysql-{{.ServiceName}}
 logs:
 	docker logs mysql-{{.ServiceName}}
 help:

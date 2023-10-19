@@ -32,14 +32,14 @@ networks:
 var MakefileInfluxDB = `up:
 	docker compose up -d
 down:
-	docker compose down
+	docker compose down --volumes
 	docker volume rm {{.ServiceName}}_influxdb-data
 stop:
 	docker stop influxdb-{{.ServiceName}}
 id:
 	docker ps -aqf "name=influxdb-{{.ServiceName}}" | awk '{print $1}'
 remove:
-	docker rm influxdb-{{.ServiceName}}
+	docker rm --volumes influxdb-{{.ServiceName}}
 logs:
 	docker logs influxdb-{{.ServiceName}}
 help:

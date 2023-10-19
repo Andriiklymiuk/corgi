@@ -22,9 +22,9 @@ networks:
 `
 
 var MakefileMariaDB = `up:
-	docker-compose up -d
+	docker compose up -d
 down:
-	docker-compose down
+	docker compose down --volumes
 stop:
 	docker stop mariadb-{{.ServiceName}}
 id:
@@ -36,7 +36,7 @@ seed:
 {{end}}getSelfDump:
 	mysqldump --host={{.Host}} --port={{.Port}} --user={{.User}} --password=$(p) {{.DatabaseName}} > dump.sql
 remove:
-	docker rm mariadb-{{.ServiceName}}
+	docker rm --volumes mariadb-{{.ServiceName}}
 logs:
 	docker logs mariadb-{{.ServiceName}}
 help:

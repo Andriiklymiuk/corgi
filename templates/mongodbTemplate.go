@@ -23,7 +23,7 @@ networks:
 var MakefileMongodb = `up:
 	docker compose up -d
 down:
-	docker compose down    
+	docker compose down --volumes    
 stop:
 	docker stop mongo-{{.ServiceName}}
 id:
@@ -35,7 +35,7 @@ seed:
 {{end}}getSelfDump:
 	mongodump --host {{.Host}} --port {{.Port}} --username {{.User}} --password=$(p) --db {{.DatabaseName}} --out "dump-folder"
 remove:
-	docker rm mongo-{{.ServiceName}}
+	docker rm --volumes mongo-{{.ServiceName}}
 logs:
 	docker logs mongo-{{.ServiceName}}
 help:

@@ -25,7 +25,7 @@ networks:
 var MakefileCassandra = `up:
 	docker compose up -d
 down:
-	docker compose down
+	docker compose down --volumes
 stop:
 	docker stop cassandra-{{.ServiceName}}
 id:
@@ -39,7 +39,7 @@ getSelfDump:
 	    echo "COPY {{.DatabaseName}}.$$table TO STDOUT;" | docker exec -i $(id) cqlsh -u {{.User}} -p {{.Password}} >> dump.cql; \
 	done
 remove:
-	docker rm cassandra-{{.ServiceName}}
+	docker rm --volumes cassandra-{{.ServiceName}}
 logs:
 	docker logs cassandra-{{.ServiceName}}
 help:

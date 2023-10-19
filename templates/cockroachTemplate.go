@@ -21,9 +21,9 @@ networks:
 `
 
 var MakefileCockroach = `up:
-	chmod +x bootstrap/bootstrap.sh && docker-compose up -d && docker exec cockroach-{{.ServiceName}} /var/opt/cockroach/startup/bootstrap.sh
+	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec cockroach-{{.ServiceName}} /var/opt/cockroach/startup/bootstrap.sh
 down:
-	docker compose down
+	docker compose down --volumes
 stop:
 	docker stop cockroach-{{.ServiceName}}
 id:
@@ -35,7 +35,7 @@ seed:
 {{end}}getSelfDump:
 	cockroach dump {{.DatabaseName}} --insecure --host={{.Host}} --port={{.Port}} -u {{.User}} > dump.sql
 remove:
-	docker rm cockroach-{{.ServiceName}}
+	docker rm --volumes cockroach-{{.ServiceName}}
 logs:
 	docker logs cockroach-{{.ServiceName}}
 help:

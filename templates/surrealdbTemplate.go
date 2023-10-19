@@ -24,15 +24,15 @@ networks:
 `
 
 var MakefileSurrealDB = `up:
-	docker-compose up -d
+	docker compose up -d
 down:
-	docker compose down    
+	docker compose down --volumes    
 stop:
 	docker stop surrealdb-{{.ServiceName}}
 id:
 	docker ps -aqf "name=surrealdb-{{.ServiceName}}" | awk '{print $1}'
 remove:
-	docker rm surrealdb-{{.ServiceName}}
+	docker rm --volumes surrealdb-{{.ServiceName}}
 logs:
 	docker logs surrealdb-{{.ServiceName}}
 help:

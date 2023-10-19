@@ -23,7 +23,7 @@ networks:
 var MakefilePostgres = `up:
 	docker compose up -d
 down:
-	docker compose down    
+	docker compose down --volumes    
 stop:
 	docker stop postgres-{{.ServiceName}}
 id:
@@ -35,7 +35,7 @@ seed:
 {{end}}getSelfDump:
 	PGPASSWORD=$(p) pg_dump --host {{.Host}} --port {{.Port}} --username {{.User}} -d {{.DatabaseName}} --blobs --no-owner --no-privileges --no-unlogged-table-data --format plain --verbose --file "dump.sql"
 remove:
-	docker rm postgres-{{.ServiceName}}
+	docker rm --volumes postgres-{{.ServiceName}}
 logs:
 	docker logs postgres-{{.ServiceName}}
 help:

@@ -20,9 +20,9 @@ networks:
 `
 
 var MakefileScylla = `up:
-	chmod +x bootstrap/bootstrap.sh && docker-compose up -d && docker exec scylla-{{.ServiceName}} /etc/scylla-init/bootstrap.sh
+	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec scylla-{{.ServiceName}} /etc/scylla-init/bootstrap.sh
 down:
-	docker-compose down    
+	docker compose down --volumes    
 stop:
 	docker stop scylla-{{.ServiceName}}
 id:
@@ -36,7 +36,7 @@ getSelfDump:
 	    echo "COPY {{.DatabaseName}}.$$table TO STDOUT;" | docker exec -i $(id) cqlsh -u {{.User}} -p {{.Password}} >> dump.cql; \
 	done
 remove:
-	docker rm scylla-{{.ServiceName}}
+	docker rm --volumes scylla-{{.ServiceName}}
 logs:
 	docker logs scylla-{{.ServiceName}}
 help:

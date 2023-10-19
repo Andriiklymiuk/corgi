@@ -26,13 +26,13 @@ networks:
 var MakefileSqs = `up:
 	chmod +x bootstrap/bootstrap.sh && docker compose up -d
 down:
-	docker compose down    
+	docker compose down --volumes    
 stop:
 	docker stop sqs-{{.ServiceName}}
 id:
 	docker ps -aqf "name=sqs-{{.ServiceName}}" | awk '{print $1}'
 remove:
-	docker rm sqs-{{.ServiceName}}
+	docker rm --volumes sqs-{{.ServiceName}}
 logs:
 	docker logs sqs-{{.ServiceName}}
 help:
