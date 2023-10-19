@@ -36,8 +36,10 @@ seed:
 	mongodump --host {{.Host}} --port {{.Port}} --username {{.User}} --password=$(p) --db {{.DatabaseName}} --out "dump-folder"
 remove:
 	docker rm mongo-{{.ServiceName}}
+logs:
+	docker logs mongo-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id seed {{if .SeedFromDb.Host}}getDump {{end}}getSelfDump remove help
+.PHONY: up down stop id seed {{if .SeedFromDb.Host}}getDump {{end}}getSelfDump remove logs help
 `

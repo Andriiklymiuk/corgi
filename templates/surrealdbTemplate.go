@@ -33,8 +33,10 @@ id:
 	docker ps -aqf "name=surrealdb-{{.ServiceName}}" | awk '{print $1}'
 remove:
 	docker rm surrealdb-{{.ServiceName}}
+logs:
+	docker logs surrealdb-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove help
+.PHONY: up down stop id remove logs help
 `

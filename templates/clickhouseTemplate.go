@@ -29,7 +29,8 @@ volumes:
 var MakefileClickHouse = `up:
 	chmod +x bootstrap/bootstrap.sh && docker-compose up -d
 down:
-	docker-compose down    
+	docker-compose down
+	docker volume rm {{.ServiceName}}_clickhouse-data
 stop:
 	docker stop clickhouse-{{.ServiceName}}
 id:
@@ -55,10 +56,12 @@ getSelfDump:
 		done;
 remove:
 	docker rm clickhouse-{{.ServiceName}}
+logs:
+	docker logs clickhouse-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id seed getSelfDump remove help
+.PHONY: up down stop id seed getSelfDump remove logs help
 `
 
 var BootstrapClickHouse = `#!/bin/bash

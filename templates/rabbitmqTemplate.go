@@ -32,8 +32,10 @@ id:
 	docker ps -aqf "name=rabbitmq-{{.ServiceName}}" | awk '{print $1}'
 remove:
 	docker rm rabbitmq-{{.ServiceName}}
+logs:
+	docker logs rabbitmq-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove help
+.PHONY: up down stop id remove logs help
 `

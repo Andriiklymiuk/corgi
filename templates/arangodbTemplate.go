@@ -34,10 +34,12 @@ seed:
 	# TODO, you can use arangosh for it
 remove:
 	docker rm arangodb-{{.ServiceName}}
+logs:
+	docker logs arangodb-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id seed getSelfDump remove help
+.PHONY: up down stop id seed getSelfDump remove logs help
 `
 
 // TODO: fix not connecting error

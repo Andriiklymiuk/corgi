@@ -45,10 +45,12 @@ getDump:
 	docker cp keydb-{{.ServiceName}}:/data/dump.rdb ./dump.rdb
 remove:
 	docker rm keydb-{{.ServiceName}}
+logs:
+	docker logs keydb-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove getDump seed help
+.PHONY: up down stop id remove getDump seed logs help
 `
 
 var KeyDBConfiguration = `aclfile /etc/keydb/users.acl`

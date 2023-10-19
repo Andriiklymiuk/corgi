@@ -33,10 +33,12 @@ id:
 	docker ps -aqf "name=sqs-{{.ServiceName}}" | awk '{print $1}'
 remove:
 	docker rm sqs-{{.ServiceName}}
+logs:
+	docker logs sqs-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove help
+.PHONY: up down stop id remove logs help
 `
 
 var BootstrapSqs = `#!/usr/bin/env bash

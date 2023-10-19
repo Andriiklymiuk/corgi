@@ -32,10 +32,12 @@ id:
 	docker ps -aqf "name=dynamodb-{{.ServiceName}}" | awk '{print $1}'
 remove:
 	docker rm dynamodb-{{.ServiceName}}
+logs:
+	docker logs dynamodb-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove help
+.PHONY: up down stop id remove logs help
 `
 
 var BootstrapDynamoDB = `#!/usr/bin/env bash
