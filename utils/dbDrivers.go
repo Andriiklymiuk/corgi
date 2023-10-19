@@ -179,7 +179,9 @@ var DriverConfigs = map[string]DriverConfig{
 			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
 			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, port, name, password)
+			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%s", db.Host, "9000"))
+
+			return fmt.Sprintf("%s%s%s%s%s%s", host, user, port, name, password, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
 			{"docker-compose.yml", templates.DockerComposeKafka},
