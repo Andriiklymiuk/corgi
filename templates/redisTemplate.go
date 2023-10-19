@@ -38,15 +38,15 @@ stop:
 id:
 	docker ps -aqf "name=redis-{{.ServiceName}}" | awk '{print $1}'
 seed:
-  @echo "Copying dump.rdb into local Docker container..."
-  docker cp ./dump.rdb redis-{{.ServiceName}}:/data/
-  @echo "Restarting Redis service in Docker container..."
-  docker restart redis-{{.ServiceName}}
+	@echo "Copying dump.rdb into local Docker container..."
+	docker cp ./dump.rdb redis-{{.ServiceName}}:/data/
+	@echo "Restarting Redis service in Docker container..."
+	docker restart redis-{{.ServiceName}}
 getDump:
-  @echo "Creating Redis dump..."
-  docker exec redis-{{.ServiceName}} redis-cli SAVE
-  @echo "Copying dump.rdb to current directory..."
-  docker cp redis-{{.ServiceName}}:/data/dump.rdb ./dump.rdb
+	@echo "Creating Redis dump..."
+	docker exec redis-{{.ServiceName}} redis-cli SAVE
+	@echo "Copying dump.rdb to current directory..."
+	docker cp redis-{{.ServiceName}}:/data/dump.rdb ./dump.rdb
 remove:
 	docker rm --volumes redis-{{.ServiceName}}
 logs:
