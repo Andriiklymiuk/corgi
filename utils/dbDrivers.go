@@ -200,6 +200,7 @@ var DriverConfigs = map[string]DriverConfig{
 
 			return fmt.Sprintf("%s%s%s%s%s", host, user, port, name, password)
 		},
+		// TODO: mention somewhere, that if password is less than 8 characters, it will not create mssql db
 		FilesToCreate: []FilenameForService{
 			{"docker-compose.yml", templates.DockerComposeMSSQL},
 			{"Makefile", templates.MakefileMSSQL},
