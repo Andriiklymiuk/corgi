@@ -42,10 +42,9 @@ networks:
 `
 
 var MakefileElasticsearch = `up:
-	chmod +x bootstrap/bootstrap.sh && docker-compose up -d && docker exec elasticsearch-{{.ServiceName}} /usr/local/bootstrap/bootstrap.sh
+	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec elasticsearch-{{.ServiceName}} /usr/local/bootstrap/bootstrap.sh
 down:
-	docker-compose down
-	docker volume rm {{.ServiceName}}_esdata
+	docker compose down --volumes
 stop:
 	docker stop elasticsearch-{{.ServiceName}}
 	docker stop kibana-{{.ServiceName}}
@@ -55,8 +54,8 @@ logs:
 	docker logs elasticsearch-{{.ServiceName}}
 	docker logs kibana-{{.ServiceName}}
 remove:
-	docker rm elasticsearch-{{.ServiceName}}
-	docker rm kibana-{{.ServiceName}}
+	docker rm --volumes elasticsearch-{{.ServiceName}}
+	docker rm --volumes kibana-{{.ServiceName}}
 	docker volume rm {{.ServiceName}}_esdata
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort

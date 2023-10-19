@@ -25,9 +25,9 @@ networks:
 `
 
 var MakefileNeo4j = `up:
-	chmod +x bootstrap/bootstrap.sh && docker-compose up -d && docker exec neo4j-{{.ServiceName}} /docker-entrypoint-initdb.d/bootstrap.sh
+	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec neo4j-{{.ServiceName}} /docker-entrypoint-initdb.d/bootstrap.sh
 down:
-	docker compose down    
+	docker compose down --volumes    
 stop:
 	docker stop neo4j-{{.ServiceName}}
 id:
@@ -37,7 +37,7 @@ seed:
 getSelfDump:
 	docker exec neo4j-{{.ServiceName}} bin/cypher-shell -u {{.User}} -p {{.Password}} --database={{.DatabaseName}} "CALL apoc.export.cypher.all('stdout:', {format: 'cypher-shell', separateFiles: false, cypherFormat: 'create'});" > dump.cypher
 remove:
-	docker rm neo4j-{{.ServiceName}}
+	docker rm --volumes neo4j-{{.ServiceName}}
 logs:
 	docker logs neo4j-{{.ServiceName}}
 help:

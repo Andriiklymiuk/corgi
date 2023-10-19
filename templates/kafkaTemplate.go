@@ -42,15 +42,15 @@ networks:
 `
 
 var MakefileKafka = `up:
-	chmod +x bootstrap/bootstrap.sh && docker-compose up -d && sleep 10 && docker exec -it kafka-{{.ServiceName}} /etc/kafka-init/bootstrap.sh
+	chmod +x bootstrap/bootstrap.sh && docker compose up -d && sleep 10 && docker exec -it kafka-{{.ServiceName}} /etc/kafka-init/bootstrap.sh
 down:
-	docker-compose down    
+	docker compose down --volumes    
 stop:
 	docker stop kafka-{{.ServiceName}} zookeeper-{{.ServiceName}}
 logs:
 	docker logs kafka-{{.ServiceName}}
 remove:
-	docker rm kafka-{{.ServiceName}} zookeeper-{{.ServiceName}}
+	docker rm --volumes kafka-{{.ServiceName}} zookeeper-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 

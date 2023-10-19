@@ -28,7 +28,7 @@ networks:
 var MakefileKeyDB = `up:
 	docker compose up -d
 down:
-	docker compose down
+	docker compose down --volumes
 stop:
 	docker stop keydb-{{.ServiceName}}
 id:
@@ -44,7 +44,7 @@ getDump:
 	echo "Copying dump.rdb to current directory..."
 	docker cp keydb-{{.ServiceName}}:/data/dump.rdb ./dump.rdb
 remove:
-	docker rm keydb-{{.ServiceName}}
+	docker rm --volumes keydb-{{.ServiceName}}
 logs:
 	docker logs keydb-{{.ServiceName}}
 help:

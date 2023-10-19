@@ -32,7 +32,7 @@ networks:
 var MakefileRedis = `up:
 	docker compose up -d
 down:
-	docker compose down
+	docker compose down --volumes
 stop:
 	docker stop redis-{{.ServiceName}}
 id:
@@ -48,7 +48,7 @@ getDump:
   @echo "Copying dump.rdb to current directory..."
   docker cp redis-{{.ServiceName}}:/data/dump.rdb ./dump.rdb
 remove:
-	docker rm redis-{{.ServiceName}}
+	docker rm --volumes redis-{{.ServiceName}}
 logs:
 	docker logs redis-{{.ServiceName}}
 help:

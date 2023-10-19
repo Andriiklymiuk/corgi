@@ -21,9 +21,9 @@ networks:
 `
 
 var MakefileArangoDB = `up:
-	chmod +x bootstrap/bootstrap.sh && docker-compose up -d && docker exec arangodb-{{.ServiceName}} /opt/bootstrap.sh
+	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec arangodb-{{.ServiceName}} /opt/bootstrap.sh
 down:
-	docker compose down    
+	docker compose down --volumes    
 stop:
 	docker stop arangodb-{{.ServiceName}}
 id:
@@ -33,7 +33,7 @@ getSelfDump:
 seed:
 	# TODO, you can use arangosh for it
 remove:
-	docker rm arangodb-{{.ServiceName}}
+	docker rm --volumes arangodb-{{.ServiceName}}
 logs:
 	docker logs arangodb-{{.ServiceName}}
 help:

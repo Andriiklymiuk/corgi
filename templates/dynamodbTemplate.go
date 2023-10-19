@@ -25,13 +25,13 @@ networks:
 var MakefileDynamoDB = `up:
 	chmod +x bootstrap/bootstrap.sh && docker compose up -d
 down:
-	docker compose down    
+	docker compose down --volumes    
 stop:
 	docker stop dynamodb-{{.ServiceName}}
 id:
 	docker ps -aqf "name=dynamodb-{{.ServiceName}}" | awk '{print $1}'
 remove:
-	docker rm dynamodb-{{.ServiceName}}
+	docker rm --volumes dynamodb-{{.ServiceName}}
 logs:
 	docker logs dynamodb-{{.ServiceName}}
 help:

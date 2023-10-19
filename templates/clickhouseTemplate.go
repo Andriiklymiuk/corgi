@@ -27,10 +27,9 @@ volumes:
 `
 
 var MakefileClickHouse = `up:
-	chmod +x bootstrap/bootstrap.sh && docker-compose up -d
+	chmod +x bootstrap/bootstrap.sh && docker compose up -d
 down:
-	docker-compose down
-	docker volume rm {{.ServiceName}}_clickhouse-data
+	docker compose down --volumes
 stop:
 	docker stop clickhouse-{{.ServiceName}}
 id:
@@ -55,7 +54,7 @@ getSelfDump:
 		echo "\n" >> dump.sql; \
 		done;
 remove:
-	docker rm clickhouse-{{.ServiceName}}
+	docker rm --volumes clickhouse-{{.ServiceName}}
 logs:
 	docker logs clickhouse-{{.ServiceName}}
 help:

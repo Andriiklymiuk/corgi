@@ -25,13 +25,13 @@ networks:
 var MakefileRabbitMQ = `up:
 	docker compose up -d
 down:
-	docker compose down    
+	docker compose down --volumes    
 stop:
 	docker stop rabbitmq-{{.ServiceName}}
 id:
 	docker ps -aqf "name=rabbitmq-{{.ServiceName}}" | awk '{print $1}'
 remove:
-	docker rm rabbitmq-{{.ServiceName}}
+	docker rm --volumes rabbitmq-{{.ServiceName}}
 logs:
 	docker logs rabbitmq-{{.ServiceName}}
 help:
