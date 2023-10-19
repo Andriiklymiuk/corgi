@@ -34,6 +34,7 @@ var MakefileMSSQL = `up:
 	chmod +x bootstrap/bootstrap.sh && docker-compose up -d && docker exec mssql-{{.ServiceName}} /var/opt/mssql-tools/startup/bootstrap.sh
 down:
 	docker-compose down    
+	docker volume rm {{.ServiceName}}_mssql-data
 stop:
 	docker stop mssql-{{.ServiceName}}
 id:
@@ -44,10 +45,12 @@ getSelfDump:
 	docker exec -i $$(docker ps -aqf "name=mssql-{{.ServiceName}}") /opt/mssql-tools/bin/sqlcmd -U {{.User}} -P {{.Password}} -Q "BACKUP DATABASE [{{.DatabaseName}}] TO DISK = '/var/opt/mssql/backup/dump.bak'"
 remove:
 	docker rm mssql-{{.ServiceName}}
+logs:
+	docker logs mssql-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id seed getSelfDump remove help
+.PHONY: up down stop id seed getSelfDump remove logs help
 `
 
 var BootstrapMSSQL = `#!/bin/bash

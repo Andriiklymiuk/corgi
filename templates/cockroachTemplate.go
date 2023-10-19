@@ -36,10 +36,12 @@ seed:
 	cockroach dump {{.DatabaseName}} --insecure --host={{.Host}} --port={{.Port}} -u {{.User}} > dump.sql
 remove:
 	docker rm cockroach-{{.ServiceName}}
+logs:
+	docker logs cockroach-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove getDump seed help
+.PHONY: up down stop id remove getDump seed logs help
 `
 
 var BootstrapCockroach = `#!/bin/bash

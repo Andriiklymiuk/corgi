@@ -40,8 +40,10 @@ getSelfDump:
 	done
 remove:
 	docker rm cassandra-{{.ServiceName}}
+logs:
+	docker logs cassandra-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove getSelfDump seed help
+.PHONY: up down stop id remove getSelfDump seed logs help
 `

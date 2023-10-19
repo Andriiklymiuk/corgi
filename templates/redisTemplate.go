@@ -49,10 +49,12 @@ getDump:
   docker cp redis-{{.ServiceName}}:/data/dump.rdb ./dump.rdb
 remove:
 	docker rm redis-{{.ServiceName}}
+logs:
+	docker logs redis-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove getDump seed help
+.PHONY: up down stop id remove getDump seed logs help
 `
 var RedisConfiguration = `aclfile /etc/redis/users.acl`
 

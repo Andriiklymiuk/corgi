@@ -38,10 +38,12 @@ getSelfDump:
 	docker exec neo4j-{{.ServiceName}} bin/cypher-shell -u {{.User}} -p {{.Password}} --database={{.DatabaseName}} "CALL apoc.export.cypher.all('stdout:', {format: 'cypher-shell', separateFiles: false, cypherFormat: 'create'});" > dump.cypher
 remove:
 	docker rm neo4j-{{.ServiceName}}
+logs:
+	docker logs neo4j-{{.ServiceName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id seed getSelfDump remove help
+.PHONY: up down stop id seed getSelfDump remove logs help
 `
 
 var BootstrapNeo4j = `#!/bin/bash
