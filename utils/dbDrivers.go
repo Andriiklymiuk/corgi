@@ -353,6 +353,25 @@ var DriverConfigs = map[string]DriverConfig{
 			{"bootstrap/bootstrap.sh", templates.BootstrapArangodb},
 		},
 	},
+	"elasticsearch": {
+		Prefix: "ELASTIC_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+
+			kibanaDashboardUrl := fmt.Sprintf("\n%sKIBANA_DASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:5601", db.Host))
+
+			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, kibanaDashboardUrl)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeElasticsearch},
+			{"Makefile", templates.MakefileElasticsearch},
+			{"bootstrap/bootstrap.sh", templates.BootstrapElasticsearch},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
