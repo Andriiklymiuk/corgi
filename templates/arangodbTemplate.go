@@ -23,7 +23,7 @@ networks:
 var MakefileArangoDB = `up:
 	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec arangodb-{{.ServiceName}} /opt/bootstrap.sh
 down:
-	docker compose down --volumes    
+	docker compose down --volumes
 stop:
 	docker stop arangodb-{{.ServiceName}}
 id:

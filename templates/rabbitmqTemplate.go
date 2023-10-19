@@ -25,7 +25,7 @@ networks:
 var MakefileRabbitMQ = `up:
 	docker compose up -d
 down:
-	docker compose down --volumes    
+	docker compose down --volumes
 stop:
 	docker stop rabbitmq-{{.ServiceName}}
 id:

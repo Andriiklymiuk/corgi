@@ -23,7 +23,7 @@ networks:
 var MakefilePostgres = `up:
 	docker compose up -d
 down:
-	docker compose down --volumes    
+	docker compose down --volumes
 stop:
 	docker stop postgres-{{.ServiceName}}
 id:

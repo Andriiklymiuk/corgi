@@ -33,7 +33,6 @@ var MakefileInfluxDB = `up:
 	docker compose up -d
 down:
 	docker compose down --volumes
-	docker volume rm {{.ServiceName}}_influxdb-data
 stop:
 	docker stop influxdb-{{.ServiceName}}
 id:

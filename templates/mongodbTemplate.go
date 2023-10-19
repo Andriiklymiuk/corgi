@@ -23,7 +23,7 @@ networks:
 var MakefileMongodb = `up:
 	docker compose up -d
 down:
-	docker compose down --volumes    
+	docker compose down --volumes
 stop:
 	docker stop mongo-{{.ServiceName}}
 id:

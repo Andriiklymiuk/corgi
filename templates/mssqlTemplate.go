@@ -33,8 +33,7 @@ volumes:
 var MakefileMSSQL = `up:
 	chmod +x bootstrap/bootstrap.sh && docker compose up -d && docker exec mssql-{{.ServiceName}} /var/opt/mssql-tools/startup/bootstrap.sh
 down:
-	docker compose down --volumes    
-	docker volume rm {{.ServiceName}}_mssql-data
+	docker compose down --volumes
 stop:
 	docker stop mssql-{{.ServiceName}}
 id:
