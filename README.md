@@ -43,6 +43,7 @@ While in services you can create whatever you want, but in db services **for now
 - neo4j
 - arangodb
 - elasticsearch
+- timescaledb
 
 ## Documentation
 
