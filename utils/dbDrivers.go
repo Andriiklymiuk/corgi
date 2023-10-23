@@ -391,6 +391,25 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileTimescale},
 		},
 	},
+	"couchdb": {
+		Prefix: "COUCHDB_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+
+			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d/_utils", db.Host, db.Port))
+
+			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, dashboardUrl)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeCouchDB},
+			{"Makefile", templates.MakefileCouchDB},
+			{"bootstrap/bootstrap.sh", templates.BootstrapCouchDB},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
@@ -513,6 +532,8 @@ func GetDumpFilename(driver string) string {
 		return "dump.surql"
 	case "neo4j":
 		return "dump.cypher"
+	case "couchdb":
+		return "dump.json"
 	default:
 		return "dump.sql"
 	}
