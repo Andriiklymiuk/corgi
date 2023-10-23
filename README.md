@@ -46,6 +46,21 @@ While in services you can create whatever you want, but in db services **for now
 - timescaledb
 - couchdb
 
+Upcoming TODO:
+- druid
+https://druid.apache.org
+- Dgraph
+- Meilisearch
+- Faunadb
+- Doltdb
+- Yugabytedb
+- Foundationdb
+- Tidb 
+- Edgedb 
+- Memgraph
+- Mindsdb
+- typedb
+
 ## Documentation
 
 You can check documentation on https://andriiklymiuk.github.io/corgi/
