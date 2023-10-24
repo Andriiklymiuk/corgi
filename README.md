@@ -46,9 +46,9 @@ While in services you can create whatever you want, but in db services **for now
 - timescaledb
 - couchdb
 - dgraph
+- meilisearch
 
 Upcoming TODO:
-- Meilisearch
 - Faunadb
 - Doltdb
 - Yugabytedb
