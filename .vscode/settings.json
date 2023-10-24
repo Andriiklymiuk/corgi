@@ -4,6 +4,7 @@
     "arangodb",
     "clickhouse",
     "dgraph",
+    "faunadb",
     "getmeili",
     "keydb",
     "MEILI",
