@@ -3,6 +3,7 @@
     "Arango",
     "arangodb",
     "clickhouse",
+    "dgraph",
     "keydb",
     "mssql",
     "Prepender",
