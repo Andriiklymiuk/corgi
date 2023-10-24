@@ -447,6 +447,21 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileMeiliSearch},
 		},
 	},
+	"faunadb": {
+		Prefix: "FAUNADB_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			// secret is default password in faunadb
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, "secret")
+
+			return fmt.Sprintf("%s%s%s", host, port, password)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeFauna},
+			{"Makefile", templates.MakefileFauna},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
