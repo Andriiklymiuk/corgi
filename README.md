@@ -48,9 +48,6 @@ While in services you can create whatever you want, but in db services **for now
 - dgraph
 
 Upcoming TODO:
-- druid
-https://druid.apache.org
-- Dgraph
 - Meilisearch
 - Faunadb
 - Doltdb
