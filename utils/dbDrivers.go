@@ -337,6 +337,25 @@ var DriverConfigs = map[string]DriverConfig{
 			{"bootstrap/bootstrap.sh", templates.BootstrapNeo4j},
 		},
 	},
+	"dgraph": {
+		Prefix: "DGRAPH_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, "0")
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			// no user and password is added, because acl is only available in enterprise version
+
+			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%s", db.Host, "8000"))
+			dbUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d", db.Host, db.Port))
+
+			return fmt.Sprintf("%s%s%s%s%s", host, name, port, dashboardUrl, dbUrl)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeDgraph},
+			{"Makefile", templates.MakefileDgraph},
+		},
+	},
+
 	"arangodb": {
 		Prefix: "ARANGO_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
