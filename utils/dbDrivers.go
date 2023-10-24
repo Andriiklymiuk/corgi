@@ -355,7 +355,6 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileDgraph},
 		},
 	},
-
 	"arangodb": {
 		Prefix: "ARANGO_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
@@ -427,6 +426,25 @@ var DriverConfigs = map[string]DriverConfig{
 			{"docker-compose.yml", templates.DockerComposeCouchDB},
 			{"Makefile", templates.MakefileCouchDB},
 			{"bootstrap/bootstrap.sh", templates.BootstrapCouchDB},
+		},
+	},
+	"meilisearch": {
+		Prefix: "MEILISEARCH_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			// it doesn't use traditional usernames, so only host, port, name (for MeiliSearch itself), and the master key (acting like a password) are provided.
+
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, "meilisearch")
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			masterKey := fmt.Sprintf("\n%sMASTER_KEY=%s\n", serviceNameInEnv, db.Password)
+
+			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d", db.Host, db.Port))
+
+			return fmt.Sprintf("%s%s%s%s%s", host, name, port, masterKey, dashboardUrl)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeMeiliSearch},
+			{"Makefile", templates.MakefileMeiliSearch},
 		},
 	},
 	"default": {
