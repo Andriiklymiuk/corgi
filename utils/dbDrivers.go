@@ -462,6 +462,27 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileFauna},
 		},
 	},
+	"yugabytedb": {
+		Prefix: "YUGABYTEDB_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+
+			// use yugabyte as default one for use and password. TODO: change it to the provided one
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			password := fmt.Sprintf("\n%sPASSWORD=%s", serviceNameInEnv, db.Password)
+
+			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d", db.Host, 15433))
+
+			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, dashboardUrl)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeYugabytedb},
+			{"Makefile", templates.MakefileYugabytedb},
+		},
+	},
+
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {

@@ -13,7 +13,9 @@
     "Prepender",
     "rabbitmq",
     "surrealdb",
-    "timescaledb"
+    "timescaledb",
+    "yugabyte",
+    "yugabytedb"
   ],
   "go.coverOnSave": true,
   "go.coverageDecorator": {

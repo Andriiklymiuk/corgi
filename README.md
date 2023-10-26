@@ -48,9 +48,9 @@ While in services you can create whatever you want, but in db services **for now
 - dgraph
 - meilisearch
 - faunadb
+- yugabytedb
 
 Upcoming TODO:
-- Yugabytedb
 - Foundationdb
 - Tidb 
 - Edgedb 
