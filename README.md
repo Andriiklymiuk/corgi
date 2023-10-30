@@ -51,8 +51,6 @@ While in services you can create whatever you want, but in db services **for now
 - yugabytedb
 
 Upcoming TODO:
-- Foundationdb
-- Tidb 
 - Edgedb 
 - Memgraph
 - Mindsdb
