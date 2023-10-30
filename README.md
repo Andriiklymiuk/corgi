@@ -50,11 +50,6 @@ While in services you can create whatever you want, but in db services **for now
 - faunadb
 - yugabytedb
 
-Upcoming TODO:
-- Edgedb 
-- Memgraph
-- Mindsdb
-- typedb
 
 ## Documentation
 
