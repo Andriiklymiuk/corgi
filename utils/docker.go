@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
+	"github.com/manifoldco/promptui"
 )
 
 func GetContainerId(targetService string) (string, error) {
@@ -77,6 +78,32 @@ func StartDocker() error {
 	_, err := cmd.CombinedOutput()
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func OrbctlInit() error {
+	err := CheckCommandExists("orbctl version")
+	if err != nil {
+		prompt := promptui.Prompt{
+			Label:     "Orbctl is not found, do you want to install it?",
+			IsConfirm: true,
+		}
+
+		_, err := prompt.Run()
+		if err != nil {
+			return fmt.Errorf("orbctl is not installed, because of user's choice")
+		}
+
+		err = RunServiceCmd("orbctl", "brew install orbstack", "")
+		if err != nil {
+			return fmt.Errorf("error happened during installation %s", err)
+		}
+
+		err = CheckCommandExists("orbctl version")
+		if err != nil {
+			return fmt.Errorf("orbctl is not installed still")
+		}
 	}
 	return nil
 }
