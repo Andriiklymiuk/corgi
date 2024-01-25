@@ -3,10 +3,7 @@ package cmd
 import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
-	"bufio"
 	"fmt"
-	"io"
-	"os/exec"
 	"strings"
 
 	"github.com/manifoldco/promptui"
@@ -118,58 +115,10 @@ func checkRequiredIsFound(required utils.Required) (bool, string) {
 		cmdToRunForCheck = required.Name
 	}
 
-	err := CheckCommandExists(cmdToRunForCheck)
+	err := utils.CheckCommandExists(cmdToRunForCheck)
 	if err != nil {
 		return false, fmt.Sprintf("\n❌ %s is not found: %s\n", required.Name, err.Error())
 	}
 
 	return true, fmt.Sprintf("\n✅ %s is found\n", required.Name)
-}
-
-func CheckCommandExists(command string) error {
-	commandSlice := strings.Fields(command)
-	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		fmt.Println(err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	err = cmd.Start()
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	scannerError := bufio.NewScanner(io.MultiReader(stderr))
-	scannerError.Split(bufio.ScanLines)
-	for scannerError.Scan() {
-		message := scannerError.Text()
-		fmt.Println(message)
-		if strings.Contains(message, "command not found") {
-			return fmt.Errorf(message)
-		}
-	}
-
-	scanner := bufio.NewScanner(io.MultiReader(stdout))
-	scanner.Split(bufio.ScanLines)
-	for scanner.Scan() {
-		message := scanner.Text()
-		fmt.Println(message)
-		if strings.Contains(message, "command not found") {
-			return fmt.Errorf(message)
-		}
-	}
-
-	err = cmd.Wait()
-	if err != nil {
-		if strings.Contains(err.Error(), "not started") {
-			return err
-		}
-	}
-
-	return nil
 }
