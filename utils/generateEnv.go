@@ -161,10 +161,14 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 		}
 
 		if service.Port != 0 {
+			portAlias := "PORT"
+			if service.PortAlias != "" {
+				portAlias = service.PortAlias
+			}
 			envForService = fmt.Sprintf(
 				"%s%s",
 				envForService,
-				fmt.Sprintf("\nPORT=%d", service.Port),
+				fmt.Sprintf("\n%s=%d", portAlias, service.Port),
 			)
 		}
 

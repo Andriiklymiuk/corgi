@@ -71,6 +71,7 @@ type Service struct {
 	EnvPath             string             `yaml:"envPath,omitempty"`
 	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath,omitempty"`
 	Port                int                `yaml:"port,omitempty"`
+	PortAlias           string             `yaml:"portAlias,omitempty"`
 	DependsOnServices   []DependsOnService `yaml:"depends_on_services,omitempty"`
 	DependsOnDb         []DependsOnDb      `yaml:"depends_on_db,omitempty"`
 	BeforeStart         []string           `yaml:"beforeStart,omitempty"`
@@ -225,6 +226,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				EnvPath:             service.EnvPath,
 				CopyEnvFromFilePath: service.CopyEnvFromFilePath,
 				Port:                service.Port,
+				PortAlias:           service.PortAlias,
 				BeforeStart:         service.BeforeStart,
 				AfterStart:          service.AfterStart,
 				Start:               service.Start,
