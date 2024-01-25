@@ -236,3 +236,51 @@ func ExecuteSeedMakeCommand(targetService string, makeCommand ...string) ([]byte
 
 	return output, nil
 }
+
+func CheckCommandExists(command string) error {
+	commandSlice := strings.Fields(command)
+	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		fmt.Println(err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	scannerError := bufio.NewScanner(io.MultiReader(stderr))
+	scannerError.Split(bufio.ScanLines)
+	for scannerError.Scan() {
+		message := scannerError.Text()
+		fmt.Println(message)
+		if strings.Contains(message, "command not found") {
+			return fmt.Errorf(message)
+		}
+	}
+
+	scanner := bufio.NewScanner(io.MultiReader(stdout))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		message := scanner.Text()
+		fmt.Println(message)
+		if strings.Contains(message, "command not found") {
+			return fmt.Errorf(message)
+		}
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		if strings.Contains(err.Error(), "not started") {
+			return err
+		}
+	}
+
+	return nil
+}
