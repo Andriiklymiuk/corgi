@@ -85,7 +85,7 @@ var serviceItems = []CorgiComposeItems{
 	},
 	{
 		item:        "portAlias",
-		example:     "SERVICE_PORT",
+		example:     "PORT",
 		itemType:    "string",
 		description: "Service port env name alias, that will be added to .env file. By default PORT is used, e.g. PORT=5432",
 	},
