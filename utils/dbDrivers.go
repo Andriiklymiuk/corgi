@@ -78,6 +78,27 @@ var DriverConfigs = map[string]DriverConfig{
 			{"users.acl", templates.RedisAccessControlList},
 		},
 	},
+	"redis-server": {
+		Prefix: "REDIS_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			token := fmt.Sprintf("\n%sTOKEN=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf("\n%sHOST=%s\n", serviceNameInEnv, db.Host)
+
+			return fmt.Sprintf("%s%s%s%s%s",
+				port,
+				password,
+				token,
+				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("redis://%s:%d", db.Host, db.Port)),
+				host,
+			)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeRedisServer},
+			{"Makefile", templates.MakefileRedisServer},
+		},
+	},
 	"keydb": {
 		Prefix: "KEYDB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
@@ -599,7 +620,7 @@ func GetDumpFilename(driver string) string {
 		return "dump.sql"
 	case "cassandra", "scylla":
 		return "dump.cql"
-	case "redis", "keydb":
+	case "redis", "redis-server", "keydb":
 		return "dump.rdb"
 	case "surrealdb":
 		return "dump.surql"
