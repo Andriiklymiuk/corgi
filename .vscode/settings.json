@@ -12,6 +12,7 @@
     "mssql",
     "Prepender",
     "rabbitmq",
+    "requirepass",
     "surrealdb",
     "timescaledb",
     "yugabyte",

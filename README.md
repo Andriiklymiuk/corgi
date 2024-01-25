@@ -28,6 +28,7 @@ While in services you can create whatever you want, but in db services **for now
 - [rabbitmq](https://github.com/Andriiklymiuk/corgi_examples/blob/main/rabbitmq/rabbitmq-go-nestjs.corgi-compose.yml)
 - [aws sqs](https://github.com/Andriiklymiuk/corgi_examples/blob/main/aws_sqs/aws_sqs_postgres_go_deno.corgi-compose.yml)
 - [redis](https://github.com/Andriiklymiuk/corgi_examples/blob/main/redis/redis-bun-expo.corgi-compose.yml)
+- redis-server
 - mysql
 - mariadb
 - dynamodb
