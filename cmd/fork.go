@@ -292,7 +292,7 @@ func changeRepoOrigin(path string, serviceName string, newRepoOrigin string) err
 }
 
 func createRepoInProvider(providerCliName string, providerInstallLink string, repoName string, private bool) (string, error) {
-	err := CheckCommandExists(fmt.Sprintf("%s version", providerCliName))
+	err := utils.CheckCommandExists(fmt.Sprintf("%s version", providerCliName))
 	if err != nil {
 		return "", fmt.Errorf(
 			"you need to install %s cli and authenticate into it to create repo fork.\nCheck %s",
