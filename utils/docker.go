@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
-	"github.com/manifoldco/promptui"
+	"github.com/spf13/cobra"
 )
 
 func GetContainerId(targetService string) (string, error) {
@@ -82,33 +82,77 @@ func StartDocker() error {
 	return nil
 }
 
-func OrbctlInit() error {
+func StartOrbctl() error {
 	err := CheckCommandExists("orbctl version")
+
 	if err != nil {
-		prompt := promptui.Prompt{
-			Label:     "Orbctl is not found, do you want to install it?",
-			IsConfirm: true,
-		}
+		return fmt.Errorf("orbctl is not installed")
+	}
 
-		_, err := prompt.Run()
-		if err != nil {
-			return fmt.Errorf("orbctl is not installed, because of user's choice")
-		}
-
-		err = RunServiceCmd("orbctl", "brew install orbstack", "")
-		if err != nil {
-			return fmt.Errorf("error happened during installation %s", err)
-		}
-
-		err = CheckCommandExists("orbctl version")
-		if err != nil {
-			return fmt.Errorf("orbctl is not installed still")
-		}
+	err = RunServiceCmd("orbctl", "orbctl start", "")
+	if err != nil {
+		return fmt.Errorf("orbctl run failed: %s", err)
 	}
 	return nil
 }
 
-func DockerInit() error {
+func StartColima() error {
+	err := CheckCommandExists("colima version")
+
+	if err != nil {
+		return fmt.Errorf("colima is not installed")
+	}
+
+	err = RunServiceCmd("colima", "colima start", "")
+	if err != nil {
+		return fmt.Errorf("colima run failed: %s", err)
+	}
+	return nil
+}
+
+type DockerContextConfig struct {
+	Name  string
+	Start func() error
+}
+
+var DockerContextConfigs = map[string]DockerContextConfig{
+	"orbctl": {
+		Name: "orbctl",
+		Start: func() error {
+			return StartOrbctl()
+		},
+	},
+	"colima": {
+		Name: "colima",
+		Start: func() error {
+			return StartColima()
+		},
+	},
+	"default": {
+		Name: "default",
+		Start: func() error {
+			return StartDocker()
+		},
+	},
+	"docker-linux": {
+		Name: "docker-linux",
+		Start: func() error {
+			return StartDocker()
+		},
+	},
+}
+
+func isDockerContextValid(dockerContext string) bool {
+	validDockerContexts := []string{"default", "orbctl", "colima", "docker-linux"}
+	for _, validValue := range validDockerContexts {
+		if dockerContext == validValue {
+			return true
+		}
+	}
+	return false
+}
+
+func DockerInit(cobra *cobra.Command) error {
 	err := CheckDockerStatus()
 	if err != nil {
 		if err.Error() != "docker not opened" {
@@ -116,7 +160,23 @@ func DockerInit() error {
 		}
 
 		if err.Error() == "docker not opened" {
-			err := StartDocker()
+			dockerContext, err := cobra.Root().Flags().GetString("dockerContext")
+			if err != nil {
+				fmt.Println("error on getting dockerContext flag", err)
+				return err
+			}
+			isDockerContextValid := isDockerContextValid(dockerContext)
+
+			if isDockerContextValid && dockerContext != "default" && dockerContext != "docker-linux" {
+				err = DockerContextConfigs[dockerContext].Start()
+				if err == nil {
+					fmt.Printf("%s run successfully\n", dockerContext)
+					return nil
+				}
+				fmt.Printf("couldn't open %s, error: %s", dockerContext, err)
+			}
+
+			err = StartDocker()
 			if err != nil {
 				return fmt.Errorf("couldn't open docker, error: %s", err)
 			}
@@ -129,6 +189,7 @@ func DockerInit() error {
 			return nil
 		}
 	}
+	fmt.Println("docker is already running")
 	return nil
 }
 

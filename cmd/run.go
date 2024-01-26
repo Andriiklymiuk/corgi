@@ -162,7 +162,7 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 		return
 	}
 
-	err = utils.DockerInit()
+	err = utils.DockerInit(cmd)
 	if err != nil {
 		fmt.Println(err)
 		return
