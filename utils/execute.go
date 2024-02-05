@@ -41,7 +41,7 @@ func RunServiceCmd(serviceName string, serviceCommand string, path string) error
 			continue
 		}
 
-		cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
+		cmd := exec.Command("/bin/sh", "-c", finalCommand)
 
 		cmd.Dir = path
 		cmd.Stdout = os.Stdout
