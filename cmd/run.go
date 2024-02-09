@@ -112,6 +112,14 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	utils.GenerateEnvForServices(corgi)
 
+	utils.RunServiceCommands(
+		utils.BeforeStartInConfig,
+		"corgi beforeStart",
+		corgi.BeforeStart,
+		"",
+		false,
+	)
+
 	var serviceWaitGroup sync.WaitGroup
 	serviceWaitGroup.Add(len(corgi.Services))
 	var startCmdPresent bool
@@ -134,22 +142,28 @@ func cleanup(corgi *utils.CorgiCompose) {
 	if len(corgi.DatabaseServices) != 0 {
 		utils.ExecuteForEachService("stop")
 	}
+
 	for _, service := range corgi.Services {
 		if service.AfterStart != nil && !omitServiceCmd("afterStart") {
 			fmt.Println("\nAfter start commands:")
-			for _, afterStartCmd := range service.AfterStart {
-				err := utils.RunServiceCmd(service.ServiceName, afterStartCmd, service.Path)
-				if err != nil {
-					fmt.Println(
-						art.RedColor,
-						"aborting all other afterStart commands for ", service.ServiceName, ", because of ", err,
-						art.WhiteColor,
-					)
-					break
-				}
-			}
+			utils.RunServiceCommands(
+				"afterStart",
+				service.ServiceName,
+				service.AfterStart,
+				service.Path,
+				false,
+			)
 		}
 	}
+
+	utils.RunServiceCommands(
+		utils.AfterStartInConfig,
+		"corgi afterStart",
+		corgi.AfterStart,
+		"",
+		false,
+	)
+
 	fmt.Println("\n👋 Exiting cli")
 }
 
@@ -201,33 +215,23 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
 		fmt.Println("\nBefore start commands:")
-		for _, beforeStartCmd := range service.BeforeStart {
-			err := utils.RunServiceCmd(service.ServiceName, beforeStartCmd, service.Path)
-			if err != nil {
-				fmt.Println(
-					art.RedColor,
-					"aborting all other beforeStart commands for ", service.ServiceName, ", because of ", err,
-					art.WhiteColor,
-				)
-				return
-			}
-		}
+		utils.RunServiceCommands(
+			"beforeStart",
+			service.ServiceName,
+			service.BeforeStart,
+			service.Path,
+			false,
+		)
 	}
 	if service.Start != nil {
 		fmt.Println("\nStart commands:")
-		for _, startCmd := range service.Start {
-			go func(startCmd string) {
-				err := utils.RunServiceCmd(service.ServiceName, startCmd, service.Path)
-				if err != nil {
-					fmt.Println(
-						art.RedColor,
-						"aborting ", service.ServiceName, "cmd ", startCmd, ", because of ", err,
-						art.WhiteColor,
-					)
-					return
-				}
-			}(startCmd)
-		}
+		utils.RunServiceCommands(
+			"start",
+			service.ServiceName,
+			service.Start,
+			service.Path,
+			true,
+		)
 	}
 }
 
