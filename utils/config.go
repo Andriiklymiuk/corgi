@@ -17,6 +17,11 @@ var CorgiComposeDefaultName = "corgi-compose.yml"
 var DbServicesInConfig = "db_services"
 var ServicesInConfig = "services"
 var RequiredInConfig = "required"
+var InitInConfig = "init"
+var StartInConfig = "start"
+var BeforeStartInConfig = "beforeStart"
+var AfterStartInConfig = "afterStart"
+
 var RootDbServicesFolder = "corgi_services/db_services"
 var ServicesItemsFromFlag []string
 var DbServicesItemsFromFlag []string
@@ -92,6 +97,22 @@ type CorgiCompose struct {
 	DatabaseServices []DatabaseService
 	Services         []Service
 	Required         []Required
+	// cannot combine from one commands struct, so have to repeated
+	Init        []string `yaml:"init,omitempty"`
+	BeforeStart []string `yaml:"beforeStart,omitempty"`
+	Start       []string `yaml:"start,omitempty"`
+	AfterStart  []string `yaml:"afterStart,omitempty"`
+}
+
+type CorgiComposeYaml struct {
+	DatabaseServices map[string]DatabaseService `yaml:"db_services"`
+	Services         map[string]Service         `yaml:"services"`
+	Required         map[string]Required        `yaml:"required"`
+	// cannot combine from one commands struct, so have to repeated
+	Init        []string `yaml:"init,omitempty"`
+	BeforeStart []string `yaml:"beforeStart,omitempty"`
+	Start       []string `yaml:"start,omitempty"`
+	AfterStart  []string `yaml:"afterStart,omitempty"`
 }
 
 var CorgiComposePath string
@@ -126,16 +147,24 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 
 	var corgi CorgiCompose
 
-	dbServicesData := make(map[string]map[string]DatabaseService)
-	err = yaml.Unmarshal(file, &dbServicesData)
+	var corgiYaml CorgiComposeYaml
+	err = yaml.Unmarshal(file, &corgiYaml)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't unmarshal dbServicesData %s", pathToCorgiComposeFile)
+		return nil, fmt.Errorf("couldn't unmarshal file %s: %v", pathToCorgiComposeFile, err)
 	}
-	if len(dbServicesData[DbServicesInConfig]) == 0 || !servicesCanBeAdded(DbServicesItemsFromFlag) {
+
+	corgi.Init = corgiYaml.Init
+	corgi.BeforeStart = corgiYaml.BeforeStart
+	corgi.Start = corgiYaml.Start
+	corgi.AfterStart = corgiYaml.AfterStart
+
+	dbServicesData := corgiYaml.DatabaseServices
+
+	if len(dbServicesData) == 0 || !servicesCanBeAdded(DbServicesItemsFromFlag) {
 		fmt.Println("no db_services provided")
 	} else {
 		var dbServices []DatabaseService
-		for indexName, db := range dbServicesData[DbServicesInConfig] {
+		for indexName, db := range dbServicesData {
 			if !IsServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
 				continue
 			}
@@ -184,16 +213,12 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		corgi.DatabaseServices = dbServices
 	}
 
-	servicesData := make(map[string]map[string]Service)
-	err = yaml.Unmarshal(file, &servicesData)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't unmarshal servicesData %s", pathToCorgiComposeFile)
-	}
-	if len(servicesData[ServicesInConfig]) == 0 || !servicesCanBeAdded(ServicesItemsFromFlag) {
+	servicesData := corgiYaml.Services
+	if len(servicesData) == 0 || !servicesCanBeAdded(ServicesItemsFromFlag) {
 		fmt.Println("no services provided")
 	} else {
 		var services []Service
-		for indexName, service := range servicesData[ServicesInConfig] {
+		for indexName, service := range servicesData {
 			if !IsServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
 				continue
 			}
@@ -241,18 +266,14 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		corgi.Services = services
 	}
 
-	requiredData := make(map[string]map[string]Required)
-	err = yaml.Unmarshal(file, &requiredData)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't unmarshal required %s", pathToCorgiComposeFile)
-	}
-	if len(requiredData[RequiredInConfig]) == 0 {
+	requiredData := corgiYaml.Required
+	if len(requiredData) == 0 {
 		fmt.Println("no required instructions provided in file.")
 		fmt.Println("Tip: It is useful to provide required to showcase what is used and how to install it")
 		fmt.Println()
 	} else {
 		var requiredInstructions []Required
-		for indexName, required := range requiredData[RequiredInConfig] {
+		for indexName, required := range requiredData {
 			requiredToAdd := Required{
 				Name:     indexName,
 				Why:      required.Why,

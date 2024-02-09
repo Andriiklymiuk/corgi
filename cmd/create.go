@@ -43,6 +43,13 @@ func copyRequired(req *utils.Required) *utils.Required {
 	return &newReq
 }
 
+func lowercaseFirstLetter(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	return string(s[0]+'a'-'A') + s[1:]
+}
+
 func GetCorgiServicesMap(corgi *utils.CorgiCompose) map[string]interface{} {
 	var corgiServicesMap = map[string]interface{}{}
 	if corgi.DatabaseServices != nil {
@@ -76,6 +83,19 @@ func GetCorgiServicesMap(corgi *utils.CorgiCompose) map[string]interface{} {
 		corgiServicesMap[utils.RequiredInConfig] = requiredMap
 	}
 
+	if corgi.Init != nil {
+		corgiServicesMap[utils.InitInConfig] = corgi.Init
+	}
+	if corgi.Start != nil {
+		corgiServicesMap[utils.StartInConfig] = corgi.Start
+	}
+	if corgi.BeforeStart != nil {
+		corgiServicesMap[utils.BeforeStartInConfig] = corgi.BeforeStart
+	}
+	if corgi.AfterStart != nil {
+		corgiServicesMap[utils.AfterStartInConfig] = corgi.AfterStart
+	}
+
 	return corgiServicesMap
 }
 
@@ -90,7 +110,15 @@ func runCreate(cmd *cobra.Command, _ []string) {
 		corgiMap = GetCorgiServicesMap(corgi)
 	}
 
-	choices := []string{"DatabaseService", "Service", "Required"}
+	choices := []string{
+		"DatabaseService",
+		"Service",
+		"Required",
+		"Init",
+		"BeforeStart",
+		"Start",
+		"AfterStart",
+	}
 	choice, err := utils.PickItemFromListPrompt("What do you want to create?", choices, "❌ Exit", utils.WithBackStringAtTheEnd())
 	if err != nil {
 		fmt.Println(err)
@@ -118,6 +146,16 @@ func runCreate(cmd *cobra.Command, _ []string) {
 			utils.RequiredInConfig,
 			&utils.Required{},
 			"Name",
+		)
+
+	case
+		"Init",
+		"BeforeStart",
+		"Start",
+		"AfterStart":
+		handleCommandCreation(
+			corgiMap,
+			lowercaseFirstLetter(choice),
 		)
 	}
 	prompt := promptui.Prompt{
@@ -186,17 +224,17 @@ func askAndSetFields(item interface{}) {
 		} else if field.Type.Kind() == reflect.Slice {
 			sliceType := field.Type.Elem()
 			if sliceType.Kind() == reflect.String {
-				sliceValues := make([]string, 0)
 				fmt.Println(prompt + " (press ENTER after each item; press ENTER with no input when done)")
-				for {
-					var input string
-					fmt.Scanln(&input)
-					if input == "" {
+				scanner := bufio.NewScanner(os.Stdin)
+				var commands []string
+				for scanner.Scan() {
+					command := scanner.Text()
+					if command == "" {
 						break
 					}
-					sliceValues = append(sliceValues, input)
+					commands = append(commands, command)
 				}
-				v.Field(i).Set(reflect.ValueOf(sliceValues))
+				v.Field(i).Set(reflect.ValueOf(commands))
 			}
 		} else {
 			prompt := formatPrompt(yamlTag, field.Name)
@@ -248,6 +286,30 @@ func setUserInputToField(field reflect.Value, prompt string, isRequired bool) {
 	}
 }
 
+func handleCommandCreation(corgiMap map[string]interface{}, section string) {
+	fmt.Printf("Enter commands for %s section (empty input to finish):\n", section)
+
+	var commands []string
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for scanner.Scan() {
+		command := scanner.Text()
+		if command == "" {
+			break
+		}
+		commands = append(commands, command)
+	}
+
+	existingCommands, exists := corgiMap[section].([]string)
+	if exists {
+		commands = append(existingCommands, commands...)
+	}
+
+	corgiMap[section] = commands
+
+	fmt.Printf("Commands for %s section have been saved successfully!\n", section)
+}
+
 func handleServiceCreation(corgiMap map[string]interface{}, serviceType string, serviceInstance interface{}, fieldName string) {
 	askAndSetFields(serviceInstance)
 
@@ -297,10 +359,30 @@ func UpdateCorgiComposeFileWithMap(corgiMap map[string]interface{}) {
 
 	encoder := yaml.NewEncoder(file)
 	encoder.SetIndent(2)
+
 	if dbServiceMap, exists := corgiMap[utils.DbServicesInConfig]; exists {
 		err = encoder.Encode(map[string]interface{}{utils.DbServicesInConfig: dbServiceMap})
 		if err != nil {
 			fmt.Printf("Error encoding services section: %v\n", err)
+		}
+	}
+
+	for _, sectionKey := range []string{
+		utils.InitInConfig,
+		utils.StartInConfig,
+		utils.BeforeStartInConfig,
+		utils.AfterStartInConfig,
+	} {
+		if section, exists := corgiMap[sectionKey]; exists {
+			if sectionArr, ok := section.([]string); ok {
+				if len(sectionArr) == 0 {
+					continue
+				}
+			}
+			err := encoder.Encode(map[string]interface{}{sectionKey: section})
+			if err != nil {
+				fmt.Printf("Error encoding %s section: %v\n", sectionKey, err)
+			}
 		}
 	}
 

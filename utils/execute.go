@@ -75,6 +75,50 @@ func RunServiceCmd(serviceName string, serviceCommand string, path string) error
 	return nil
 }
 
+func RunServiceCommands(
+	commandsName string,
+	serviceName string,
+	commands []string,
+	path string,
+	isParallel bool,
+) {
+	if isParallel {
+		for _, command := range commands {
+			go func(command string) {
+				err := RunServiceCmd(
+					serviceName,
+					command,
+					path,
+				)
+				if err != nil {
+					fmt.Println(
+						art.RedColor,
+						fmt.Sprintf("aborting %s command `%s` for %s, because of %s", commandsName, command, serviceName, err),
+						art.WhiteColor,
+					)
+					return
+				}
+			}(command)
+		}
+	} else {
+		for _, command := range commands {
+			err := RunServiceCmd(
+				serviceName,
+				command,
+				path,
+			)
+			if err != nil {
+				fmt.Println(
+					art.RedColor,
+					fmt.Sprintf("aborting %s command `%s` for %s, because of %s", commandsName, command, serviceName, err),
+					art.WhiteColor,
+				)
+				return
+			}
+		}
+	}
+}
+
 func RunCombinedCmd(command string, path string) error {
 	fmt.Println("🚀 🤖 Executing command: ", art.GreenColor, command, art.WhiteColor)
 
