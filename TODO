@@ -1,10 +1,11 @@
 - add init, beforeStart, start, afterStart commands
+- create env file if not exists, if it is added from copyEnvFromFilePath
+- add environmentAliases, so that you can override env values, for example
+  if service requires AMPQ_PORT and i will add to this service enc REDIS_PORT, so in environmentAliases i can write
+  - AMPQ_PORT=${REDIS_PORT}
+  if i need WEBHOOK_URL and it uses ws://${API_URL}, than i will be able to write in environmentAliases
+  - WEBHOOK_URL=ws://${API_URL}
 - in required checkCmd && || don't work, use same approach to start commands
-- add environmentAliases, so that you can override env values, for example 
-    if service requires AMPQ_PORT and i will add to this service enc REDIS_PORT, so in environmentAliases i can write
-          - AMPQ_PORT=${REDIS_PORT}
-    if i need WEBHOOK_URL and it uses ws://${API_URL}, than i will be able to write in environmentAliases
-          - WEBHOOK_URL=ws://${API_URL}
 - copy dump from seedFromFile (don't remember its name), if corgi db seed is used
 - if there is a path and no cloneFrom, so open this service path and not create new folder of name service
 - probably in make seed command don't pass id if docker service and just get it in line itself (check mysql)
