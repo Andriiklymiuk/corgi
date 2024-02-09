@@ -69,7 +69,11 @@ func CreateMissingEnvFiles(services []utils.Service) {
 			if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 
 				if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
-					fmt.Printf("Failed to create directory for env file %s, error: %s\n", service.CopyEnvFromFilePath, err)
+					fmt.Printf(
+						"Failed to create directory for env file %s, error: %s\n",
+						service.CopyEnvFromFilePath,
+						err,
+					)
 					continue
 				}
 			}
@@ -269,7 +273,10 @@ func addFileToGitignore(fileToIgnore string) error {
 	return nil
 }
 
-func getGitignoreServicePath(services []utils.Service, filesToIgnore []string) []string {
+func getGitignoreServicePath(
+	services []utils.Service,
+	filesToIgnore []string,
+) []string {
 	for _, service := range services {
 		if service.CloneFrom == "" {
 			continue
