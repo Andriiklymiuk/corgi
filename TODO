@@ -1,5 +1,3 @@
-- add init, beforeStart, start, afterStart commands
-- create env file if not exists, if it is added from copyEnvFromFilePath
 - add environmentAliases, so that you can override env values, for example
   if service requires AMPQ_PORT and i will add to this service enc REDIS_PORT, so in environmentAliases i can write
   - AMPQ_PORT=${REDIS_PORT}
