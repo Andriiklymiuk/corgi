@@ -24,34 +24,45 @@ var runCmd = &cobra.Command{
 	Run:   runRun,
 }
 
+// startCmd represents the run command
+// duplicated, because it is always forgotten what to use
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Run all databases and services. this is alias for run",
+	Long:  `This command helps to run all services and their dependent services.`,
+	Run:   runRun,
+}
+
 func init() {
 	rootCmd.AddCommand(runCmd)
-	runCmd.PersistentFlags().BoolP(
-		"seed",
-		"s",
-		false,
-		"Seed all db_services that have seedSource or have dump.sql / dump.bak or other dump file in their folder",
-	)
-	runCmd.PersistentFlags().StringSliceVarP(
-		&omitItems,
-		"omit",
-		"",
-		[]string{},
-		`Slice of parts of service to omit.
+	rootCmd.AddCommand(startCmd)
+	for _, cmd := range []*cobra.Command{runCmd, startCmd} {
+		cmd.PersistentFlags().BoolP(
+			"seed",
+			"s",
+			false,
+			"Seed all db_services that have seedSource or have dump.sql / dump.bak or other dump file in their folder",
+		)
+		cmd.PersistentFlags().StringSliceVarP(
+			&omitItems,
+			"omit",
+			"",
+			[]string{},
+			`Slice of parts of service to omit.
 
 beforeStart - beforeStart in services is omitted.
 afterStart - afterStart in services is omitted.
 
 By default nothing is omitted
 		`,
-	)
+		)
 
-	runCmd.PersistentFlags().StringSliceVarP(
-		&utils.ServicesItemsFromFlag,
-		"services",
-		"",
-		[]string{},
-		`Slice of services to choose from.
+		cmd.PersistentFlags().StringSliceVarP(
+			&utils.ServicesItemsFromFlag,
+			"services",
+			"",
+			[]string{},
+			`Slice of services to choose from.
 
 If you provide at least 1 services here, than corgi will choose only this service, while ignoring all others.
 none - will ignore all services run.
@@ -59,14 +70,14 @@ none - will ignore all services run.
 
 By default all services are included and run.
 		`,
-	)
+		)
 
-	runCmd.PersistentFlags().StringSliceVarP(
-		&utils.DbServicesItemsFromFlag,
-		"dbServices",
-		"",
-		[]string{},
-		`Slice of db_services to choose from.
+		cmd.PersistentFlags().StringSliceVarP(
+			&utils.DbServicesItemsFromFlag,
+			"dbServices",
+			"",
+			[]string{},
+			`Slice of db_services to choose from.
 
 If you provide at least 1 db_service here, than corgi will choose only this db_service, while ignoring all others.
 none - will ignore all db_services run.
@@ -74,13 +85,14 @@ none - will ignore all db_services run.
 
 By default all db_services are included and run.
 		`,
-	)
-	runCmd.PersistentFlags().BoolP(
-		"pull",
-		"",
-		false,
-		"Pull services repo changes",
-	)
+		)
+		cmd.PersistentFlags().BoolP(
+			"pull",
+			"",
+			false,
+			"Pull services repo changes",
+		)
+	}
 }
 
 func runRun(cmd *cobra.Command, _ []string) {
