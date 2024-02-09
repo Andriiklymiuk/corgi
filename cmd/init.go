@@ -188,7 +188,7 @@ func CloneServices(services []utils.Service) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		if corgiComposeExists {
+		if corgiComposeExists && service.CloneFrom != "" {
 			err = utils.RunServiceCmd(
 				service.ServiceName,
 				"corgi init --silent",
