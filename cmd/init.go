@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -35,6 +36,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 	}
 	utils.CleanFromScratch(cmd, *corgi)
 
+	CreateMissingEnvFiles(corgi.Services)
 	CreateDatabaseServices(corgi.DatabaseServices)
 	CloneServices(corgi.Services)
 	RunRequired(corgi.Required)
@@ -57,6 +59,32 @@ func runInit(cmd *cobra.Command, _ []string) {
 
 	for _, fileToIgnore := range filesToIgnore {
 		addFileToGitignore(fileToIgnore)
+	}
+}
+
+func CreateMissingEnvFiles(services []utils.Service) {
+	for _, service := range services {
+		if service.CopyEnvFromFilePath != "" {
+			dirPath := filepath.Dir(service.CopyEnvFromFilePath)
+			if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+
+				if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
+					fmt.Printf("Failed to create directory for env file %s, error: %s\n", service.CopyEnvFromFilePath, err)
+					continue
+				}
+			}
+
+			_, err := os.Stat(service.CopyEnvFromFilePath)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					f, err := os.Create(service.CopyEnvFromFilePath)
+					if err != nil {
+						fmt.Println(err)
+					}
+					defer f.Close()
+				}
+			}
+		}
 	}
 }
 
