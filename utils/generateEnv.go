@@ -153,13 +153,6 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 
 		envForService += handleDependsOnDb(service, *corgiCompose)
 
-		if len(service.Environment[:]) > 0 {
-			envForService =
-				envForService + "\n" +
-					strings.Join(service.Environment[:], "\n") +
-					"\n"
-		}
-
 		if service.Port != 0 {
 			portAlias := "PORT"
 			if service.PortAlias != "" {
@@ -170,6 +163,21 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 				envForService,
 				fmt.Sprintf("\n%s=%d", portAlias, service.Port),
 			)
+		}
+
+		if len(service.Environment) > 0 {
+			// Parse existing environment variables from envForService into a map for easy lookup.
+			existingEnvVars := parseEnvVarsIntoMap(envForService)
+
+			var updatedEnvironment []string
+			for _, envLine := range service.Environment {
+				// Process each environment variable line for potential substitutions.
+				updatedEnvLine := substituteEnvVarReferences(envLine, existingEnvVars)
+				updatedEnvironment = append(updatedEnvironment, updatedEnvLine)
+			}
+
+			// Join the updated environment strings and add them to envForService.
+			envForService += "\n" + strings.Join(updatedEnvironment, "\n") + "\n"
 		}
 
 		pathToEnvFile := getPathToEnv(service)
@@ -217,6 +225,36 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 			continue
 		}
 	}
+}
+
+func parseEnvVarsIntoMap(envForService string) map[string]string {
+	envMap := make(map[string]string)
+	lines := strings.Split(envForService, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "=") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				key := parts[0]
+				value := parts[1]
+				envMap[key] = value
+			}
+		}
+	}
+	return envMap
+}
+
+// substituteEnvVarReferences processes an environment variable line for variable references and substitutes them.
+func substituteEnvVarReferences(envLine string, envMap map[string]string) string {
+	re := regexp.MustCompile(`\$\{([^}]+)\}`)
+	return re.ReplaceAllStringFunc(envLine, func(match string) string {
+		// Extract the variable name from the match.
+		varName := match[2 : len(match)-1] // Remove ${ and }
+		if value, exists := envMap[varName]; exists {
+			return value
+		}
+		// If there's no match, return the original placeholder.
+		return match
+	})
 }
 
 func splitStringForEnv(s string) string {
