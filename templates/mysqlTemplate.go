@@ -30,7 +30,7 @@ stop:
 id:
 	docker ps -aqf "name=mysql-{{.ServiceName}}" | awk '{print $1}'
 seed:
-	cat dump.sql | docker exec -i $(shell docker ps -aqf "name=mysql-{{.ServiceName}}") mysql -u{{.User}} -p{{.Password}} {{.DatabaseName}}
+	cat dump.sql | docker exec -i $(shell docker ps -aqf "name=mysql-{{.ServiceName}}") mysql -uroot -p{{.Password}} {{.DatabaseName}}
 {{if .SeedFromDb.Host}}getDump:
 	mysqldump --host={{.SeedFromDb.Host}} --port={{.SeedFromDb.Port}} --user={{.SeedFromDb.User}} --password=$(p) {{.SeedFromDb.DatabaseName}} > dump.sql
 {{end}}getSelfDump:
