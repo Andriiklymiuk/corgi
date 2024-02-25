@@ -39,7 +39,6 @@ func Execute() string {
 }
 
 func init() {
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	rootCmd.PersistentFlags().BoolP(
 		"silent",
 		"",
@@ -70,6 +69,12 @@ func init() {
 		"",
 		"default",
 		"Specify docker context to use, can be default,orbctl,colima",
+	)
+	rootCmd.PersistentFlags().StringP(
+		"fromTemplate",
+		"t",
+		"",
+		"Create corgi service from template url",
 	)
 	rootCmd.SetVersionTemplate("corgi version {{.Version}}\nChangelog: https://github.com/Andriiklymiuk/corgi/releases/tag/v{{.Version}}\n")
 }
