@@ -1,15 +1,15 @@
-# corgi run
+# corgi start
 
-## corgi run
+## corgi start
 
-Run all databases and services
+Run all databases and services. this is alias for run
 
 ### Synopsis
 
 This command helps to run all services and their dependent services.
 
 ```
-corgi run [flags]
+corgi start [flags]
 ```
 
 ### Options
@@ -23,7 +23,7 @@ corgi run [flags]
                              
                              By default all db_services are included and run.
                              		
-  -h, --help                 help for run
+  -h, --help                 help for start
       --omit strings         Slice of parts of service to omit.
                              
                              beforeStart - beforeStart in services is omitted.
