@@ -119,20 +119,9 @@ var CorgiComposePath string
 
 // Get corgi-compose info from path to corgi-compose.yml file
 func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
-	filenameFlag, err := cobra.Root().Flags().GetString("filename")
+	pathToCorgiComposeFile, err := determineCorgiComposePath(cobra)
 	if err != nil {
 		return nil, err
-	}
-	var pathToCorgiComposeFile string
-	if filenameFlag != "" {
-		pathToCorgiComposeFile = filenameFlag
-	}
-	if pathToCorgiComposeFile == "" {
-		chosenPathToCorgiCompose, err := getCorgiConfigFilePath()
-		if err != nil {
-			return nil, err
-		}
-		pathToCorgiComposeFile = chosenPathToCorgiCompose
 	}
 	CorgiComposePath = pathToCorgiComposeFile
 
@@ -443,4 +432,33 @@ func getCorgiConfigFromAlert() (string, error) {
 	}
 
 	return file, nil
+}
+
+func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {
+	filenameFlag, err := cobraCmd.Root().Flags().GetString("filename")
+	if err != nil {
+		return "", err
+	}
+	fromTemplateFlag, err := cobraCmd.Root().Flags().GetString("fromTemplate")
+	if err != nil {
+		return "", err
+	}
+
+	if fromTemplateFlag != "" {
+		downloadedFile, err := DownloadFileFromURL(fromTemplateFlag, filenameFlag)
+		if err != nil {
+			return "", fmt.Errorf("error downloading template: %v", err)
+		}
+		return downloadedFile, nil
+	}
+
+	if filenameFlag != "" {
+		return filenameFlag, nil
+	}
+	chosenPathToCorgiCompose, err := getCorgiConfigFilePath()
+	if err != nil {
+		return "", err
+	}
+	return chosenPathToCorgiCompose, nil
+
 }
