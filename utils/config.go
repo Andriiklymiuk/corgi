@@ -50,14 +50,16 @@ type SeedFromDb struct {
 }
 
 type DependsOnService struct {
-	Name     string `yaml:"name,omitempty"`
-	EnvAlias string `yaml:"envAlias,omitempty"`
-	Suffix   string `yaml:"suffix,omitempty"`
+	Name        string `yaml:"name,omitempty"`
+	EnvAlias    string `yaml:"envAlias,omitempty"`
+	Suffix      string `yaml:"suffix,omitempty"`
+	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
 }
 
 type DependsOnDb struct {
-	Name     string `yaml:"name,omitempty"`
-	EnvAlias string `yaml:"envAlias,omitempty"`
+	Name        string `yaml:"name,omitempty"`
+	EnvAlias    string `yaml:"envAlias,omitempty"`
+	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
 }
 
 type TestService struct {

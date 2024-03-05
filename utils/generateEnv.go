@@ -47,6 +47,10 @@ func handleDependentServices(service Service, corgiCompose CorgiCompose) string 
 			continue
 		}
 
+		if s.ManualRun && !dependingService.ForceUseEnv {
+			continue
+		}
+
 		var envNameToUse string
 		if dependingService.EnvAlias != "" {
 			envNameToUse = dependingService.EnvAlias
@@ -77,6 +81,10 @@ func handleDependsOnDb(service Service, corgiCompose CorgiCompose) string {
 		for _, dependingDb := range service.DependsOnDb {
 			for _, db := range corgiCompose.DatabaseServices {
 				if db.ServiceName == dependingDb.Name {
+					if db.ManualRun && !dependingDb.ForceUseEnv {
+						continue
+					}
+
 					envForService += generateEnvForDbDependentService(service, dependingDb, db)
 				}
 			}
