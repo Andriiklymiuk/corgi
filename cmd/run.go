@@ -180,9 +180,19 @@ func cleanup(corgi *utils.CorgiCompose) {
 }
 
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
-	if len(databaseServices) == 0 {
+	isThereDatabaseToRun := false
+	for _, dbService := range databaseServices {
+		if !dbService.ManualRun {
+			isThereDatabaseToRun = true
+			break
+		}
+	}
+
+	if !isThereDatabaseToRun || len(databaseServices) == 0 {
+		fmt.Println("No database service to run")
 		return
 	}
+
 	isSeed, err := cmd.Flags().GetBool("seed")
 	if err != nil {
 		return
@@ -198,7 +208,24 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 		SeedAllDatabases((databaseServices))
 	}
 
-	utils.ExecuteForEachService("up")
+	for _, dbService := range databaseServices {
+		if dbService.ManualRun {
+			continue
+		}
+
+		serviceIsRunning, err := utils.GetStatusOfService(dbService.ServiceName)
+		if err != nil {
+			fmt.Printf("Getting target service info failed: %s\n", err)
+		}
+		if !serviceIsRunning {
+			fmt.Println(art.BlueColor, "\n🤖 Starting database", dbService.ServiceName, art.WhiteColor)
+			err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up")
+			if err != nil {
+				fmt.Println("Starting service failed", err)
+			}
+			time.Sleep(time.Second * 3)
+		}
+	}
 }
 
 func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup *sync.WaitGroup) {

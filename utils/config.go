@@ -35,6 +35,7 @@ type DatabaseService struct {
 	Password          string     `yaml:"password,omitempty"`
 	DatabaseName      string     `yaml:"databaseName,omitempty"`
 	Port              int        `yaml:"port,omitempty"`
+	ManualRun         bool       `yaml:"manualRun,omitempty"`
 	SeedFromDbEnvPath string     `yaml:"seedFromDbEnvPath,omitempty"`
 	SeedFromFilePath  string     `yaml:"seedFromFilePath,omitempty"`
 	SeedFromDb        SeedFromDb `yaml:"seedFromDb,omitempty"`
@@ -189,6 +190,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				User:              db.User,
 				Password:          db.Password,
 				Port:              db.Port,
+				ManualRun:         db.ManualRun,
 				SeedFromDb:        seedFromDb,
 				SeedFromDbEnvPath: db.SeedFromDbEnvPath,
 				SeedFromFilePath:  db.SeedFromFilePath,
