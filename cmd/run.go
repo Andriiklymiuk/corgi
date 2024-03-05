@@ -144,6 +144,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	for startCmdPresent {
 		time.Sleep(5 * 60 * time.Second)
+		// TODO: probably need to remove this, if the service consumes input from terminal
 		fmt.Println("😉 corgi is still running")
 	}
 	fmt.Println("No service or start command to run")
