@@ -146,7 +146,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 		time.Sleep(5 * 60 * time.Second)
 		fmt.Println("😉 corgi is still running")
 	}
-	fmt.Println("no Start cmd to run")
+	fmt.Println("No service or start command to run")
 	serviceWaitGroup.Wait()
 }
 
