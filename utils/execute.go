@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"syscall"
 )
@@ -84,6 +85,19 @@ func RunServiceCmd(
 	return nil
 }
 
+func sendInterrupt() {
+	if runtime.GOOS == "windows" {
+		fmt.Println("Windows does not support syscall.Kill in the same way as Unix.")
+		// Implement an alternative mechanism for Windows or skip the operation
+	} else {
+		// Use syscall.Kill on Unix-based systems
+		err := syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+		if err != nil {
+			fmt.Printf("Error sending SIGINT: %v\n", err)
+		}
+	}
+}
+
 func RunServiceCommands(
 	commandsName string,
 	serviceName string,
@@ -111,7 +125,7 @@ func RunServiceCommands(
 				}
 				if interactive {
 					// maybe there is other way to stop the process, but it will do for now
-					syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+					sendInterrupt()
 				}
 			}(command)
 		}
