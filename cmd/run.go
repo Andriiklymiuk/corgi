@@ -130,6 +130,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 		corgi.BeforeStart,
 		"",
 		false,
+		false,
 	)
 
 	var serviceWaitGroup sync.WaitGroup
@@ -144,7 +145,6 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	for startCmdPresent {
 		time.Sleep(5 * 60 * time.Second)
-		// TODO: probably need to remove this, if the service consumes input from terminal
 		fmt.Println("😉 corgi is still running")
 	}
 	fmt.Println("No service or start command to run")
@@ -165,6 +165,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 				service.AfterStart,
 				service.Path,
 				false,
+				false,
 			)
 		}
 	}
@@ -174,6 +175,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 		"corgi afterStart",
 		corgi.AfterStart,
 		"",
+		false,
 		false,
 	)
 
@@ -246,7 +248,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		return
 	}
 	if isPull {
-		err = utils.RunServiceCmd(service.ServiceName, "corgi pull --silent", service.Path)
+		err = utils.RunServiceCmd(service.ServiceName, "corgi pull --silent", service.Path, false)
 		if err != nil {
 			fmt.Println("corgi pull failed for", service.ServiceName, "error:", err)
 		}
@@ -261,6 +263,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			service.BeforeStart,
 			service.Path,
 			false,
+			false,
 		)
 	}
 	if service.Start != nil {
@@ -271,6 +274,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			service.Start,
 			service.Path,
 			true,
+			service.InteractiveInput,
 		)
 	}
 }

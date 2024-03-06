@@ -47,6 +47,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 		corgi.Init,
 		"",
 		false,
+		false,
 	)
 
 	filesToIgnore := []string{
@@ -192,6 +193,7 @@ func CloneServices(services []utils.Service) {
 				service.ServiceName,
 				fmt.Sprintf("git clone %s %s", service.CloneFrom, service.Path),
 				pathWithoutLastFolder,
+				false,
 			)
 			if err != nil {
 				fmt.Printf(`output error: %s, in path %s with git clone %s
@@ -203,6 +205,7 @@ func CloneServices(services []utils.Service) {
 					service.ServiceName,
 					fmt.Sprintf("git checkout %s", service.Branch),
 					service.Path,
+					false,
 				)
 				if err != nil {
 					fmt.Printf(`output error: %s, in path %s with git checkout %s
@@ -213,6 +216,7 @@ func CloneServices(services []utils.Service) {
 					service.ServiceName,
 					"corgi pull --silent",
 					service.Path,
+					false,
 				)
 				if err != nil {
 					fmt.Printf(`output error: %s, in path %s with git pull %s
@@ -233,6 +237,7 @@ func CloneServices(services []utils.Service) {
 				service.ServiceName,
 				"corgi init --silent",
 				service.Path,
+				false,
 			)
 			if err != nil {
 				fmt.Printf(`output error: %s, in path %s with corgi init --silent %s

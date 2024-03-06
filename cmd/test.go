@@ -79,7 +79,7 @@ func runTest(cmd *cobra.Command, _ []string) {
 func testService(test utils.TestService, path string) {
 	fmt.Println(art.BlueColor, "\n🤖 Executing commands for test", test.Name, art.WhiteColor)
 	for _, testCommand := range test.Command {
-		err := utils.RunServiceCmd(test.Name, testCommand, path)
+		err := utils.RunServiceCmd(test.Name, testCommand, path, false)
 		if err != nil {
 			fmt.Println(
 				art.RedColor,

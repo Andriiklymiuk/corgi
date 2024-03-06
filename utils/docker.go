@@ -89,7 +89,7 @@ func StartOrbctl() error {
 		return fmt.Errorf("orbctl is not installed")
 	}
 
-	err = RunServiceCmd("orbctl", "orbctl start", "")
+	err = RunServiceCmd("orbctl", "orbctl start", "", false)
 	if err != nil {
 		return fmt.Errorf("orbctl run failed: %s", err)
 	}
@@ -103,7 +103,7 @@ func StartColima() error {
 		return fmt.Errorf("colima is not installed")
 	}
 
-	err = RunServiceCmd("colima", "colima start", "")
+	err = RunServiceCmd("colima", "colima start", "", false)
 	if err != nil {
 		return fmt.Errorf("colima run failed: %s", err)
 	}

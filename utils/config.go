@@ -86,6 +86,7 @@ type Service struct {
 	Start               []string           `yaml:"start,omitempty"`
 	AfterStart          []string           `yaml:"afterStart,omitempty"`
 	Test                []TestService      `yaml:"test,omitempty"`
+	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
 }
 
 type Required struct {
@@ -249,6 +250,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				AfterStart:          service.AfterStart,
 				Start:               service.Start,
 				Test:                service.Test,
+				InteractiveInput:    service.InteractiveInput,
 			}
 			services = append(services, serviceToAdd)
 

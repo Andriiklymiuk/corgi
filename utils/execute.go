@@ -8,9 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 )
 
-func RunServiceCmd(serviceName string, serviceCommand string, path string) error {
+func RunServiceCmd(
+	serviceName string,
+	serviceCommand string,
+	path string,
+	interactive bool,
+) error {
 	fmt.Println(serviceCommand)
 	lines := strings.Split(serviceCommand, "\n")
 	var accumulatedCommand string
@@ -46,6 +52,9 @@ func RunServiceCmd(serviceName string, serviceCommand string, path string) error
 		cmd.Dir = path
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		if interactive {
+			cmd.Stdin = os.Stdin
+		}
 
 		if err := cmd.Run(); err != nil {
 			// Check the error directly
@@ -63,7 +72,7 @@ func RunServiceCmd(serviceName string, serviceCommand string, path string) error
 					}
 					// Rerun the original command
 					fmt.Printf("\n🔄 Retrying the command: %s\n", finalCommand)
-					return RunServiceCmd(serviceName, finalCommand, path)
+					return RunServiceCmd(serviceName, finalCommand, path, false)
 				} else {
 					return fmt.Errorf("unknown command %s, no install instructions found", missingCommand)
 				}
@@ -81,6 +90,7 @@ func RunServiceCommands(
 	commands []string,
 	path string,
 	isParallel bool,
+	interactive bool,
 ) {
 	if isParallel {
 		for _, command := range commands {
@@ -89,6 +99,7 @@ func RunServiceCommands(
 					serviceName,
 					command,
 					path,
+					interactive,
 				)
 				if err != nil {
 					fmt.Println(
@@ -98,6 +109,10 @@ func RunServiceCommands(
 					)
 					return
 				}
+				if interactive {
+					// maybe there is other way to stop the process, but it will do for now
+					syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+				}
 			}(command)
 		}
 	} else {
@@ -106,6 +121,7 @@ func RunServiceCommands(
 				serviceName,
 				command,
 				path,
+				interactive,
 			)
 			if err != nil {
 				fmt.Println(
