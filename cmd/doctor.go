@@ -88,7 +88,7 @@ func processRequired(required utils.Required) bool {
 	}
 
 	for _, installStep := range required.Install {
-		err := utils.RunServiceCmd(required.Name, installStep, "")
+		err := utils.RunServiceCmd(required.Name, installStep, "", false)
 		if err != nil {
 			fmt.Println("error happened during installation", err)
 			break
