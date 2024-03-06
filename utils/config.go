@@ -389,9 +389,6 @@ func getCorgiConfigFilePath() (string, error) {
 	}
 
 	chosenCorgiPath, err := getCorgiConfigFromAlert()
-	if err != nil {
-		return "", err
-	}
 	if err != nil || chosenCorgiPath == "" {
 		return "", err
 	}
