@@ -62,6 +62,7 @@ func handleDependentServices(service Service, corgiCompose CorgiCompose) string 
 			envForService = createEnvString(envForService, envNameToUse, "localhost", fmt.Sprint(s.Port), dependingService.Suffix)
 			continue
 		}
+		// TODO: use export environment too, if present
 
 		for _, envLine := range s.Environment {
 			if strings.Split(envLine, "=")[0] == "PORT" {
