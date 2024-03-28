@@ -173,6 +173,8 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			}
 
 			if (seedFromDb == SeedFromDb{}) {
+				seedFromDb = db.SeedFromDb
+			} else {
 				if db.SeedFromDb.Host != "" {
 					seedFromDb.Host = db.SeedFromDb.Host
 				}
