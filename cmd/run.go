@@ -118,12 +118,6 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	utils.CleanFromScratch(cmd, *corgi)
 
-	CreateDatabaseServices(corgi.DatabaseServices)
-
-	runDatabaseServices(cmd, corgi.DatabaseServices)
-
-	utils.GenerateEnvForServices(corgi)
-
 	utils.RunServiceCommands(
 		utils.BeforeStartInConfig,
 		"corgi beforeStart",
@@ -132,6 +126,12 @@ func runRun(cmd *cobra.Command, _ []string) {
 		false,
 		false,
 	)
+
+	CreateDatabaseServices(corgi.DatabaseServices)
+
+	runDatabaseServices(cmd, corgi.DatabaseServices)
+
+	utils.GenerateEnvForServices(corgi)
 
 	var serviceWaitGroup sync.WaitGroup
 	serviceWaitGroup.Add(len(corgi.Services))
