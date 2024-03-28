@@ -106,6 +106,8 @@ type CorgiCompose struct {
 	BeforeStart []string `yaml:"beforeStart,omitempty"`
 	Start       []string `yaml:"start,omitempty"`
 	AfterStart  []string `yaml:"afterStart,omitempty"`
+
+	// TODO: DockerRequired bool     `yaml:"dockerRequired,omitempty"`
 }
 
 type CorgiComposeYaml struct {
