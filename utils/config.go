@@ -102,7 +102,7 @@ type CorgiCompose struct {
 	DatabaseServices []DatabaseService
 	Services         []Service
 	Required         []Required
-	// cannot combine from one commands struct, so have to repeated
+	// cannot combine from one common struct (yaml serialization), so have to repeat
 	Init        []string `yaml:"init,omitempty"`
 	BeforeStart []string `yaml:"beforeStart,omitempty"`
 	Start       []string `yaml:"start,omitempty"`
@@ -115,11 +115,13 @@ type CorgiComposeYaml struct {
 	DatabaseServices map[string]DatabaseService `yaml:"db_services"`
 	Services         map[string]Service         `yaml:"services"`
 	Required         map[string]Required        `yaml:"required"`
-	// cannot combine from one commands struct, so have to repeated
+	// cannot combine from one common struct (yaml serialization), so have to repeat
 	Init        []string `yaml:"init,omitempty"`
 	BeforeStart []string `yaml:"beforeStart,omitempty"`
 	Start       []string `yaml:"start,omitempty"`
 	AfterStart  []string `yaml:"afterStart,omitempty"`
+
+	UseDocker bool `yaml:"useDocker,omitempty"`
 }
 
 var CorgiComposePath string
@@ -153,6 +155,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	corgi.BeforeStart = corgiYaml.BeforeStart
 	corgi.Start = corgiYaml.Start
 	corgi.AfterStart = corgiYaml.AfterStart
+	corgi.UseDocker = corgiYaml.UseDocker
 
 	dbServicesData := corgiYaml.DatabaseServices
 
