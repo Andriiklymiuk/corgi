@@ -118,6 +118,13 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	utils.CleanFromScratch(cmd, *corgi)
 
+	if corgi.UseDocker {
+		err = utils.DockerInit(cmd)
+		if err != nil {
+			fmt.Println("Docker init failed", err)
+		}
+	}
+
 	utils.RunServiceCommands(
 		utils.BeforeStartInConfig,
 		"corgi beforeStart",
