@@ -167,7 +167,21 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			}
 
 			if (seedFromDb == SeedFromDb{}) {
-				seedFromDb = db.SeedFromDb
+				if db.SeedFromDb.Host != "" {
+					seedFromDb.Host = db.SeedFromDb.Host
+				}
+				if db.SeedFromDb.DatabaseName != "" {
+					seedFromDb.DatabaseName = db.SeedFromDb.DatabaseName
+				}
+				if db.SeedFromDb.User != "" {
+					seedFromDb.User = db.SeedFromDb.User
+				}
+				if db.SeedFromDb.Password != "" {
+					seedFromDb.Password = db.SeedFromDb.Password
+				}
+				if db.SeedFromDb.Port != 0 {
+					seedFromDb.Port = db.SeedFromDb.Port
+				}
 			}
 
 			var driver string
