@@ -96,6 +96,10 @@ func GetCorgiServicesMap(corgi *utils.CorgiCompose) map[string]interface{} {
 		corgiServicesMap[utils.AfterStartInConfig] = corgi.AfterStart
 	}
 
+	if corgi.UseDocker {
+		corgiServicesMap[utils.UseDockerInConfig] = corgi.UseDocker
+	}
+
 	return corgiServicesMap
 }
 
@@ -372,6 +376,7 @@ func UpdateCorgiComposeFileWithMap(corgiMap map[string]interface{}) {
 		utils.StartInConfig,
 		utils.BeforeStartInConfig,
 		utils.AfterStartInConfig,
+		utils.UseDockerInConfig,
 	} {
 		if section, exists := corgiMap[sectionKey]; exists {
 			if sectionArr, ok := section.([]string); ok {

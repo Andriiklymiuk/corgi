@@ -21,6 +21,7 @@ var InitInConfig = "init"
 var StartInConfig = "start"
 var BeforeStartInConfig = "beforeStart"
 var AfterStartInConfig = "afterStart"
+var UseDockerInConfig = "useDocker"
 
 var RootDbServicesFolder = "corgi_services/db_services"
 var ServicesItemsFromFlag []string
@@ -107,7 +108,7 @@ type CorgiCompose struct {
 	Start       []string `yaml:"start,omitempty"`
 	AfterStart  []string `yaml:"afterStart,omitempty"`
 
-	// TODO: DockerRequired bool     `yaml:"dockerRequired,omitempty"`
+	UseDocker bool `yaml:"useDocker,omitempty"`
 }
 
 type CorgiComposeYaml struct {
