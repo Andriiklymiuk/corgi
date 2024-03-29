@@ -22,6 +22,7 @@ var StartInConfig = "start"
 var BeforeStartInConfig = "beforeStart"
 var AfterStartInConfig = "afterStart"
 var UseDockerInConfig = "useDocker"
+var UseAwsVpnInConfig = "useAwsVpn"
 
 var RootDbServicesFolder = "corgi_services/db_services"
 var ServicesItemsFromFlag []string
@@ -109,6 +110,7 @@ type CorgiCompose struct {
 	AfterStart  []string `yaml:"afterStart,omitempty"`
 
 	UseDocker bool `yaml:"useDocker,omitempty"`
+	UseAwsVpn bool `yaml:"useAwsVpn,omitempty"`
 }
 
 type CorgiComposeYaml struct {
@@ -122,6 +124,7 @@ type CorgiComposeYaml struct {
 	AfterStart  []string `yaml:"afterStart,omitempty"`
 
 	UseDocker bool `yaml:"useDocker,omitempty"`
+	UseAwsVpn bool `yaml:"useAwsVpn,omitempty"`
 }
 
 var CorgiComposePath string
@@ -156,6 +159,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	corgi.Start = corgiYaml.Start
 	corgi.AfterStart = corgiYaml.AfterStart
 	corgi.UseDocker = corgiYaml.UseDocker
+	corgi.UseAwsVpn = corgiYaml.UseAwsVpn
 
 	dbServicesData := corgiYaml.DatabaseServices
 

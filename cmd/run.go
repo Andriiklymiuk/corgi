@@ -118,6 +118,13 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	utils.CleanFromScratch(cmd, *corgi)
 
+	if corgi.UseAwsVpn {
+		err = utils.AwsVpnInit()
+		if err != nil {
+			fmt.Println("AWS VPN init failed", err)
+		}
+	}
+
 	if corgi.UseDocker {
 		err = utils.DockerInit(cmd)
 		if err != nil {
