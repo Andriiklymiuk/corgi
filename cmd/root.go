@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var APP_VERSION = "1.3.3"
+var APP_VERSION = "1.3.4"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -75,6 +75,12 @@ func init() {
 		"t",
 		"",
 		"Create corgi service from template url",
+	)
+	rootCmd.PersistentFlags().BoolP(
+		"runOnce",
+		"",
+		false,
+		"Run corgi once and exit",
 	)
 	rootCmd.SetVersionTemplate("corgi version {{.Version}}\nChangelog: https://github.com/Andriiklymiuk/corgi/releases/tag/v{{.Version}}\n")
 }
