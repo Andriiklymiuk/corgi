@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -16,6 +17,15 @@ func CheckForFlagAndExecuteMake(cmd *cobra.Command, flag string, cmdName string)
 		return
 	}
 	ExecuteForEachService(cmdName)
+
+	isRunOnce, err := cmd.Root().Flags().GetBool("runOnce")
+	if err != nil {
+		return
+	}
+	if isRunOnce {
+		PrintFinalMessage()
+		os.Exit(0)
+	}
 }
 
 func ExecuteForEachService(cmdName string) {
