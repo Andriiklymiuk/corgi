@@ -49,9 +49,10 @@ While in services you can create whatever you want, but in db services **for now
 - dgraph
 - meilisearch
 - faunadb
-- yugabytedb
-- skytable
-- dragonfly
+- yugabytedb, [docs](https://www.yugabyte.com)
+- skytable, [docs](https://skytable.io)
+- dragonfly, [docs](https://www.dragonflydb.io)
+- redict, [docs](https://redict.io)
 
 
 ## Documentation
