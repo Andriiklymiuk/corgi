@@ -50,6 +50,7 @@ While in services you can create whatever you want, but in db services **for now
 - meilisearch
 - faunadb
 - yugabytedb
+- skytable
 
 
 ## Documentation

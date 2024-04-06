@@ -503,7 +503,19 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileYugabytedb},
 		},
 	},
-
+	"skytable": {
+		Prefix: "SKYTABLE_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			// now docker generates password in logs, so we don't need to provide it
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			return fmt.Sprintf("%s%s", host, port)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeSkytable},
+			{"Makefile", templates.MakefileSkytable},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
