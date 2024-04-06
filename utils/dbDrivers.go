@@ -516,6 +516,18 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileSkytable},
 		},
 	},
+	"dragonfly": {
+		Prefix: "DRAGONFLY_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			return fmt.Sprintf("%s%s", host, port)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeDragonfly},
+			{"Makefile", templates.MakefileDragonfly},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
