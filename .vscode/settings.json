@@ -19,6 +19,7 @@
     "skytable",
     "surrealdb",
     "timescaledb",
+    "valkey",
     "yugabyte",
     "yugabytedb"
   ],

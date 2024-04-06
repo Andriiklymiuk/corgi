@@ -53,6 +53,7 @@ While in services you can create whatever you want, but in db services **for now
 - [skytable](https://skytable.io)
 - [dragonfly](https://www.dragonflydb.io)
 - [redict](https://redict.io)
+- [valkey](https://github.com/valkey-io/valkey)
 
 
 ## Documentation
