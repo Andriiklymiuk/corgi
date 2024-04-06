@@ -10,16 +10,42 @@ import (
 	"strings"
 )
 
-func DownloadFileFromURL(url string, fileName string) (string, error) {
+func DownloadFileFromURL(
+	url string,
+	fileName string,
+	privateToken string,
+) (string, error) {
 	// Convert the URL to a raw content URL if it's a GitHub or GitLab URL
 	rawURL := convertToRawURL(url)
 
-	// Get the file from the URL
-	resp, err := http.Get(rawURL)
+	req, err := http.NewRequest("GET", rawURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	if privateToken != "" {
+		if strings.Contains(rawURL, "github.com") || strings.Contains(rawURL, "githubusercontent.com") {
+			req.Header.Add("Authorization", "token "+privateToken)
+		} else if strings.Contains(rawURL, "gitlab.com") {
+			// For GitLab, use the PRIVATE-TOKEN header, but for gitlab repos with SSO it won't work properly
+			req.Header.Add("PRIVATE-TOKEN", privateToken)
+		}
+	}
+	fmt.Println("Downloading file from", rawURL)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to download file: %v", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf(
+			"failed to download file, server returned status code %d",
+			resp.StatusCode,
+		)
+	}
 
 	// Extract the filename from the URL
 	if fileName == "" {

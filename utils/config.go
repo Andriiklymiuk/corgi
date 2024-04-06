@@ -474,7 +474,12 @@ func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {
 	}
 
 	if fromTemplateFlag != "" {
-		downloadedFile, err := DownloadFileFromURL(fromTemplateFlag, filenameFlag)
+		privateTokenFlag, err := cobraCmd.Root().Flags().GetString("privateToken")
+		if err != nil {
+			return "", err
+		}
+
+		downloadedFile, err := DownloadFileFromURL(fromTemplateFlag, filenameFlag, privateTokenFlag)
 		if err != nil {
 			return "", fmt.Errorf("error downloading template: %v", err)
 		}
