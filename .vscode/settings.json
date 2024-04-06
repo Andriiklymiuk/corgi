@@ -14,6 +14,7 @@
     "orbstack",
     "Prepender",
     "rabbitmq",
+    "redict",
     "requirepass",
     "skytable",
     "surrealdb",

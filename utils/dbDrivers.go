@@ -528,6 +528,18 @@ var DriverConfigs = map[string]DriverConfig{
 			{"Makefile", templates.MakefileDragonfly},
 		},
 	},
+	"redict": {
+		Prefix: "REDICT_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			return fmt.Sprintf("%s%s", host, port)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeRedict},
+			{"Makefile", templates.MakefileRedict},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
