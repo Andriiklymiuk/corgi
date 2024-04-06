@@ -170,7 +170,7 @@ func SeedDb(targetService string) error {
 		if err != nil {
 			fmt.Println("Make command failed", err)
 		}
-		time.Sleep(time.Second * 7)
+		time.Sleep(time.Second * 12)
 	}
 
 	containerId, err := utils.GetContainerId(targetService)
