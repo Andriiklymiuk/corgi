@@ -24,6 +24,8 @@
     "yugabytedb"
   ],
   "go.coverOnSave": true,
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
   "go.coverageDecorator": {
     "type": "gutter",
     "coveredHighlightColor": "rgba(64,128,128,0.5)",
