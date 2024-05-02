@@ -21,6 +21,7 @@ var initCmd = &cobra.Command{
 This is used to create db service from template.	
 	`,
 	Run: runInit,
+	Aliases: []string{"initialize", "clone"},
 }
 
 func init() {

@@ -16,6 +16,7 @@ var doctorCmd = &cobra.Command{
 	Short: "Check required properties in corgi-compose",
 	Long:  `Checks what is required for corgi-compose and installs, if not found.`,
 	Run:   runDoctor,
+	Aliases: []string{"check"},
 }
 
 func init() {

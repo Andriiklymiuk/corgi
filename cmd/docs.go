@@ -20,6 +20,7 @@ var docsCmd = &cobra.Command{
 	Short: "Do stuff with docs",
 	Long:  `Helper set of commands to make your life easier with docs and corgi `,
 	Run:   runDocs,
+	Aliases: []string{"doc"},
 }
 
 func init() {

@@ -25,6 +25,7 @@ Requires items flag.
 corgi clean -i db,corgi_services,services
 corgi clean -i db`,
 	Run: runClean,
+	Aliases: []string{"clear"},
 }
 
 var cleanItems []string
