@@ -22,15 +22,7 @@ var runCmd = &cobra.Command{
 	Short: "Run all databases and services",
 	Long:  `This command helps to run all services and their dependent services.`,
 	Run:   runRun,
-}
-
-// startCmd represents the run command
-// duplicated, because it is always forgotten what to use
-var startCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Run all databases and services. this is alias for run",
-	Long:  `This command helps to run all services and their dependent services.`,
-	Run:   runRun,
+	Aliases: []string{"start"},
 }
 
 func init() {

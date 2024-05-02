@@ -24,6 +24,7 @@ each service, but this is much easier to do it here.
 
 	`,
 	Run: runDb,
+	Aliases: []string{"database"},
 }
 
 func init() {
