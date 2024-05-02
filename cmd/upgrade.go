@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,13 +13,30 @@ import (
 )
 
 var upgradeCmd = &cobra.Command{
-	Use:   "upgrade",
-	Short: "Upgrade corgi to the latest version",
-	Long:  `Use this command to upgrade corgi to the latest version available in Homebrew.`,
-	Run:   upgradeRun,
+	Use:     "upgrade",
+	Short:   "Upgrade corgi to the latest version",
+	Long:    `Use this command to upgrade corgi to the latest version available in Homebrew.`,
+	Aliases: []string{"update"},
+	Run:     upgradeRun,
 }
 
 func upgradeRun(cmd *cobra.Command, args []string) {
+	currentVersion := APP_VERSION
+	latestVersion, err := getLatestGitHubTag()
+	if err != nil {
+		fmt.Println("Failed to fetch the latest version from GitHub:", err)
+		return
+	}
+	latestVersion = strings.TrimPrefix(latestVersion, "v")
+
+	if currentVersion == latestVersion {
+		fmt.Println("You are already using the latest version of corgi.")
+		return
+	}
+
+	fmt.Println("Current version:", currentVersion)
+	fmt.Println("Latest version available:", latestVersion)
+
 	brewPath, err := getHomebrewBinPath()
 	if err != nil {
 		fmt.Println("Error determining Homebrew binary path:", err)
@@ -65,4 +84,29 @@ func getHomebrewBinPath() (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%s/bin", strings.TrimSpace(string(output))), nil
+}
+
+func getLatestGitHubTag() (string, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/Andriiklymiuk/corgi/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("User-Agent", "request")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", err
+	}
+
+	return data.TagName, nil
 }
