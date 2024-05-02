@@ -1,23 +1,21 @@
-# corgi init
+# corgi upgrade
 
-## corgi init
+## corgi upgrade
 
-Create db service
+Upgrade corgi to the latest version
 
 ### Synopsis
 
-
-This is used to create db service from template.	
-	
+Use this command to upgrade corgi to the latest version available in Homebrew.
 
 ```
-corgi init [flags]
+corgi upgrade [flags]
 ```
 
 ### Options
 
 ```
-  -h, --help   help for init
+  -h, --help   help for upgrade
 ```
 
 ### Options inherited from parent commands
