@@ -30,7 +30,7 @@ func upgradeRun(cmd *cobra.Command, args []string) {
 	latestVersion = strings.TrimPrefix(latestVersion, "v")
 
 	if currentVersion == latestVersion {
-		fmt.Println("You are already using the latest version of corgi.")
+		fmt.Printf("You are already using the latest version of corgi (%s).\n", currentVersion)
 		return
 	}
 
