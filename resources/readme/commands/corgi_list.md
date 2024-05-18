@@ -1,31 +1,22 @@
-# corgi db
+# corgi list
 
-## corgi db
+## corgi list
 
-Database action helpers
+List all executed corgi-compose paths
 
 ### Synopsis
 
-
-This is database generator helper, that is accessible from cli.
-You can do db commands with the help of Makefile directly in the folder of
-each service, but this is much easier to do it here.
-
-	
+This command lists all the paths to corgi-compose files that have been executed.
 
 ```
-corgi db [flags]
+corgi list [flags]
 ```
 
 ### Options
 
 ```
-  -d, --downAll     Down all database services, stop and remove all
-  -h, --help        help for db
-  -r, --removeAll   Remove all database services
-      --seedAll     Seed all database services
-  -s, --stopAll     Stop all database services
-  -u, --upAll       Up all database services, start all
+      --cleanList   Clear all the listed paths
+  -h, --help        help for list
 ```
 
 ### Options inherited from parent commands

@@ -16,16 +16,16 @@ import (
 
 // docsCmd represents the docs command
 var docsCmd = &cobra.Command{
-	Use:   "docs",
-	Short: "Do stuff with docs",
-	Long:  `Helper set of commands to make your life easier with docs and corgi `,
-	Run:   runDocs,
+	Use:     "docs",
+	Short:   "Do stuff with docs",
+	Long:    `Helper set of commands to make your life easier with docs and corgi `,
+	Run:     runDocs,
 	Aliases: []string{"doc"},
 }
 
 func init() {
 	rootCmd.AddCommand(docsCmd)
-	docsCmd.PersistentFlags().BoolP("generate", "g", false, "Generate cobra docs. Useful for development only, because it updates corgi docs.")
+	docsCmd.PersistentFlags().BoolP("generate", "", false, "Generate cobra docs. Useful for development only, because it updates corgi docs.")
 }
 
 type CorgiComposeItems struct {
