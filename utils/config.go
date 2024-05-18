@@ -137,6 +137,10 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	}
 	CorgiComposePath = pathToCorgiComposeFile
 
+	if err := SaveExecPath(pathToCorgiComposeFile); err != nil {
+		return nil, fmt.Errorf("failed to save corgi-compose file path: %v", err)
+	}
+
 	describeFlag, err := cobra.Root().Flags().GetBool("describe")
 	if err != nil {
 		return nil, err
@@ -464,6 +468,21 @@ func getCorgiConfigFromAlert() (string, error) {
 }
 
 func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {
+	globalFlag, err := cobraCmd.Flags().GetBool("global")
+	if err != nil {
+		return "", fmt.Errorf("error checking global flag: %v", err)
+	}
+
+	if globalFlag {
+		globalPath, err := selectGlobalExecPath()
+		if err != nil {
+			fmt.Println("No global corgi path selected.", err)
+		} else if globalPath == "" {
+			fmt.Println("No global corgi path selected.")
+		} else {
+			return globalPath, nil
+		}
+	}
 	filenameFlag, err := cobraCmd.Root().Flags().GetString("filename")
 	if err != nil {
 		return "", err
@@ -495,4 +514,25 @@ func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {
 	}
 	return chosenPathToCorgiCompose, nil
 
+}
+
+func selectGlobalExecPath() (string, error) {
+	paths, err := ListExecPaths()
+	if err != nil {
+		return "", fmt.Errorf("error retrieving executed paths: %v", err)
+	}
+	if len(paths) == 0 {
+		return "", fmt.Errorf("no global corgi paths found")
+	}
+
+	selectedPath, err := PickItemFromListPrompt(
+		"Select a path from global corgi paths",
+		paths,
+		"none",
+	)
+	if err != nil {
+		return "", fmt.Errorf("error selecting path: %v", err)
+	}
+
+	return selectedPath, nil
 }

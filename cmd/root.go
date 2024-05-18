@@ -88,5 +88,11 @@ func init() {
 		false,
 		"Run corgi once and exit",
 	)
+	rootCmd.PersistentFlags().BoolP(
+		"global",
+		"g",
+		false,
+		"Use global path to one of the services",
+	)
 	rootCmd.SetVersionTemplate("corgi version {{.Version}}\nChangelog: https://github.com/Andriiklymiuk/corgi/releases/tag/v{{.Version}}\n")
 }
