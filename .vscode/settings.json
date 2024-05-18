@@ -36,5 +36,8 @@
   "go.coverOnSingleTest": true,
   "[markdown]": {
     "editor.formatOnSave": false
+  },
+  "[go]": {
+    "editor.formatOnSaveMode": "file"
   }
 }
