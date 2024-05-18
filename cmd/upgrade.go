@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -37,7 +38,7 @@ func upgradeRun(cmd *cobra.Command, args []string) {
 	fmt.Println("Current version:", currentVersion)
 	fmt.Println("Latest version available:", latestVersion)
 
-	brewPath, err := getHomebrewBinPath()
+	brewPath, err := utils.GetHomebrewBinPath()
 	if err != nil {
 		fmt.Println("Error determining Homebrew binary path:", err)
 		return
@@ -77,14 +78,6 @@ func upgradeCorgi() error {
 	return cmd.Run()
 }
 
-func getHomebrewBinPath() (string, error) {
-	cmd := exec.Command("brew", "--prefix")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s/bin", strings.TrimSpace(string(output))), nil
-}
 
 func getLatestGitHubTag() (string, error) {
 	client := &http.Client{}
