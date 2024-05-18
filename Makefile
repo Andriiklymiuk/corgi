@@ -8,7 +8,7 @@ tag:
 	git describe --tags --abbrev=0
 
 generateDocs:
-	go run . docs -g
+	go run . docs --generate
 
 VERSION := $(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}')
 
