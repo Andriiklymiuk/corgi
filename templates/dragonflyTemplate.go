@@ -5,6 +5,7 @@ var DockerComposeDragonfly = `version: "3.8"
 services:
   dragonfly-{{.ServiceName}}:
     image: 'docker.dragonflydb.io/dragonflydb/dragonfly:{{if .Version}}{{.Version}}{{else}}latest{{end}}'
+    container_name: dragonfly-{{.ServiceName}}
     ulimits:
       memlock: -1
     ports:
