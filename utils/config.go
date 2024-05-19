@@ -179,7 +179,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		corgi.Description,
 		pathToCorgiComposeFile,
 	); err != nil {
-		return nil, fmt.Errorf("failed to save corgi-compose file path: %v", err)
+		fmt.Println("failed to save corgi-compose file path: ", err)
 	}
 
 	if len(dbServicesData) == 0 || !servicesCanBeAdded(DbServicesItemsFromFlag) {
