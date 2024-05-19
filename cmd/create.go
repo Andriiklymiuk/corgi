@@ -15,10 +15,10 @@ import (
 )
 
 var createCmd = &cobra.Command{
-	Use:   "create",
-	Short: "A command to create configurations for corgi",
-	Long:  `A command to interactively prompt the user to create configurations for corgi and save to corgi-compose.yml.`,
-	Run:   runCreate,
+	Use:     "create",
+	Short:   "A command to create configurations for corgi",
+	Long:    `A command to interactively prompt the user to create configurations for corgi and save to corgi-compose.yml.`,
+	Run:     runCreate,
 	Aliases: []string{"add"},
 }
 
