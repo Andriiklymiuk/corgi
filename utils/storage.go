@@ -14,7 +14,13 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const dbFile = "corgi_paths.db"
+const dbFile = "corgi_projects.db"
+
+type CorgiExecPath struct {
+	Name        string
+	Description string
+	Path        string
+}
 
 var DB *sql.DB
 
@@ -80,10 +86,12 @@ func InitDB() error {
 	}
 
 	createTableQuery := `
-	CREATE TABLE IF NOT EXISTS executed_paths (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		path TEXT NOT NULL UNIQUE
-	);`
+    CREATE TABLE IF NOT EXISTS executed_paths (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        description TEXT,
+        path TEXT NOT NULL UNIQUE
+    );`
 	if _, err = DB.Exec(createTableQuery); err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
@@ -91,7 +99,7 @@ func InitDB() error {
 	return nil
 }
 
-func SaveExecPath(path string) error {
+func SaveExecPath(name, description, path string) error {
 	InitDBWrapper()
 	if err := GetDBInitError(); err != nil {
 		return fmt.Errorf("database initialization failed: %w", err)
@@ -102,33 +110,38 @@ func SaveExecPath(path string) error {
 		return fmt.Errorf("failed to convert path to absolute: %w", err)
 	}
 
-	insertQuery := `INSERT OR IGNORE INTO executed_paths (path) VALUES (?);`
-	_, err = DB.Exec(insertQuery, absPath)
-	return err
+	insertQuery := `INSERT INTO executed_paths (name, description, path) VALUES (?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET
+                    name = excluded.name, description = excluded.description;`
+	_, err = DB.Exec(insertQuery, name, description, absPath)
+	if err != nil {
+		return fmt.Errorf("failed to save or update executed path: %w", err)
+	}
+	return nil
 }
 
-func ListExecPaths() ([]string, error) {
+func ListExecPaths() ([]CorgiExecPath, error) {
 	InitDBWrapper()
 	if err := GetDBInitError(); err != nil {
 		return nil, fmt.Errorf("database initialization failed: %w", err)
 	}
 
-	selectQuery := `SELECT path FROM executed_paths;`
+	selectQuery := `SELECT name, description, path FROM executed_paths;`
 	rows, err := DB.Query(selectQuery)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var paths []string
+	var execPaths []CorgiExecPath
 	for rows.Next() {
-		var path string
-		if err := rows.Scan(&path); err != nil {
+		var corgiExecPath CorgiExecPath
+		if err := rows.Scan(&corgiExecPath.Name, &corgiExecPath.Description, &corgiExecPath.Path); err != nil {
 			return nil, err
 		}
-		paths = append(paths, path)
+		execPaths = append(execPaths, corgiExecPath)
 	}
-	return paths, nil
+	return execPaths, nil
 }
 
 func GetHomebrewBinPath() (string, error) {
