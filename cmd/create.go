@@ -104,6 +104,12 @@ func GetCorgiServicesMap(corgi *utils.CorgiCompose) map[string]interface{} {
 	if corgi.UseAwsVpn {
 		corgiServicesMap[utils.UseAwsVpnInConfig] = corgi.UseAwsVpn
 	}
+	if corgi.Name != "" {
+		corgiServicesMap[utils.NameInConfig] = corgi.Name
+	}
+	if corgi.Description != "" {
+		corgiServicesMap[utils.DescriptionInConfig] = corgi.Description
+	}
 
 	return corgiServicesMap
 }
@@ -383,6 +389,8 @@ func UpdateCorgiComposeFileWithMap(corgiMap map[string]interface{}) {
 		utils.AfterStartInConfig,
 		utils.UseDockerInConfig,
 		utils.UseAwsVpnInConfig,
+		utils.NameInConfig,
+		utils.DescriptionInConfig,
 	} {
 		if section, exists := corgiMap[sectionKey]; exists {
 			if sectionArr, ok := section.([]string); ok {
