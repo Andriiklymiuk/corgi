@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/art"
 	"fmt"
 	"time"
 
@@ -51,7 +52,19 @@ func listRun(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Println("Globally executed corgi paths:")
-	for _, path := range paths {
-		fmt.Println(path)
+	for _, ep := range paths {
+		if ep.Name != "" || ep.Description != "" {
+			if ep.Name != "" {
+				var name = art.BlueColor + ep.Name + art.WhiteColor
+				fmt.Printf("Name: %s\n", name)
+			}
+			fmt.Printf("Path: %s\n", ep.Path)
+			if ep.Description != "" {
+				fmt.Printf("Description: %s\n", ep.Description)
+			}
+		} else {
+			fmt.Println(ep.Path)
+		}
+		fmt.Println()
 	}
 }

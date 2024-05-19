@@ -145,10 +145,6 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	}
 	CorgiComposePath = pathToCorgiComposeFile
 
-	if err := SaveExecPath(pathToCorgiComposeFile); err != nil {
-		return nil, fmt.Errorf("failed to save corgi-compose file path: %v", err)
-	}
-
 	describeFlag, err := cobra.Root().Flags().GetBool("describe")
 	if err != nil {
 		return nil, err
@@ -177,6 +173,14 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	corgi.Description = corgiYaml.Description
 
 	dbServicesData := corgiYaml.DatabaseServices
+
+	if err := SaveExecPath(
+		corgi.Name,
+		corgi.Description,
+		pathToCorgiComposeFile,
+	); err != nil {
+		return nil, fmt.Errorf("failed to save corgi-compose file path: %v", err)
+	}
 
 	if len(dbServicesData) == 0 || !servicesCanBeAdded(DbServicesItemsFromFlag) {
 		fmt.Println("no db_services provided")
@@ -528,22 +532,43 @@ func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {
 }
 
 func selectGlobalExecPath() (string, error) {
-	paths, err := ListExecPaths()
+	executionPaths, err := ListExecPaths()
 	if err != nil {
 		return "", fmt.Errorf("error retrieving executed paths: %v", err)
 	}
-	if len(paths) == 0 {
+	if len(executionPaths) == 0 {
 		return "", fmt.Errorf("no global corgi paths found")
 	}
 
-	selectedPath, err := PickItemFromListPrompt(
+	displayPaths := make([]string, len(executionPaths))
+	for i, executionPath := range executionPaths {
+		displayString := ""
+		if executionPath.Name != "" {
+			displayString = fmt.Sprintf("%s, ", executionPath.Name)
+		}
+		displayString += executionPath.Path
+		displayPaths[i] = displayString
+	}
+
+	selectedDisplay, err := PickItemFromListPrompt(
 		"Select a path from global corgi paths",
-		paths,
+		displayPaths,
 		"none",
 	)
 	if err != nil {
 		return "", fmt.Errorf("error selecting path: %v", err)
 	}
+	fmt.Printf("Selected path: %s\n", selectedDisplay)
 
-	return selectedPath, nil
+	for _, executionPath := range executionPaths {
+		formattedDisplay := executionPath.Path
+		if executionPath.Name != "" {
+			formattedDisplay = fmt.Sprintf("%s, %s", executionPath.Name, executionPath.Path)
+		}
+		if selectedDisplay == formattedDisplay {
+			return executionPath.Path, nil
+		}
+	}
+
+	return "", fmt.Errorf("selected path not found in the list")
 }
