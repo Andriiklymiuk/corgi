@@ -5,6 +5,7 @@ var DockerComposeRedict = `version: "3.9"
 services:
   redict-{{.ServiceName}}:
     image: registry.redict.io/redict:{{if .Version}}{{.Version}}{{else}}latest{{end}}
+    container_name: redict-{{.ServiceName}}
     ports:
       - "{{.Port}}:6380"
     volumes:

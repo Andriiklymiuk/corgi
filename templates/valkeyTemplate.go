@@ -6,6 +6,7 @@ var DockerComposeValkey = `version: "3.8"
 services:
   valkey-{{.ServiceName}}:
     image: valkey/valkey:{{if .Version}}{{.Version}}{{else}}unstable{{end}}
+    container_name: valkey-{{.ServiceName}}
     ports:
       - "{{.Port}}:8080"
     environment:
