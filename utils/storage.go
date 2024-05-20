@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"database/sql"
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -10,33 +10,18 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
-const dbFile = "corgi_projects.db"
+const storageFileName = "corgi_exec_paths.txt"
+
+var storageInitOnce sync.Once
+var storageInitError error
+var storageFilePath string
 
 type CorgiExecPath struct {
 	Name        string
 	Description string
 	Path        string
-}
-
-var DB *sql.DB
-
-var DbInitOnce sync.Once
-var DbInitErr error
-
-// InitDBWrapper calls InitDB and stores the result, to be called via sync.Once
-func InitDBWrapper() {
-	DbInitOnce.Do(func() {
-		DbInitErr = InitDB()
-	})
-}
-
-// GetDBInitError provides access to the initialization error after InitDBWrapper has been called
-func GetDBInitError() error {
-	return DbInitErr
 }
 
 func ensureDBPathExists(path string) error {
@@ -69,79 +54,101 @@ func getDataPath() (string, error) {
 	}
 }
 
-func InitDB() error {
-	dataPath, err := getDataPath()
+func initializeStorage() error {
+	var err error
+	storageFilePath, err = getDataPath()
 	if err != nil {
-		return fmt.Errorf("data path error: %w", err)
+		return err
+	}
+	storageFilePath = filepath.Join(storageFilePath, storageFileName)
+
+	if err := ensureDBPathExists(storageFilePath); err != nil {
+		return err
 	}
 
-	dbPath := filepath.Join(dataPath, dbFile)
-	if err := ensureDBPathExists(dbPath); err != nil {
-		return fmt.Errorf("failed to ensure database directory exists: %w", err)
-	}
-
-	DB, err = sql.Open("sqlite3", dbPath)
+	file, err := os.OpenFile(storageFilePath, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
+		return fmt.Errorf("failed to open or create storage file: %w", err)
 	}
-
-	createTableQuery := `
-    CREATE TABLE IF NOT EXISTS executed_paths (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        description TEXT,
-        path TEXT NOT NULL UNIQUE
-    );`
-	if _, err = DB.Exec(createTableQuery); err != nil {
-		return fmt.Errorf("failed to create table: %w", err)
-	}
+	file.Close()
 
 	return nil
 }
 
 func SaveExecPath(name, description, path string) error {
-	InitDBWrapper()
-	if err := GetDBInitError(); err != nil {
-		return fmt.Errorf("database initialization failed: %w", err)
-	}
-
-	absPath, err := filepath.Abs(path)
+	absolutePath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("failed to convert path to absolute: %w", err)
 	}
 
-	insertQuery := `INSERT INTO executed_paths (name, description, path) VALUES (?, ?, ?)
-                    ON CONFLICT(path) DO UPDATE SET
-                    name = excluded.name, description = excluded.description;`
-	_, err = DB.Exec(insertQuery, name, description, absPath)
-	if err != nil {
-		return fmt.Errorf("failed to save or update executed path: %w", err)
+	storageInitOnce.Do(func() {
+		storageInitError = initializeStorage()
+	})
+	if storageInitError != nil {
+		return storageInitError
 	}
-	return nil
+
+	execPaths, err := ListExecPaths()
+	if err != nil {
+		return err
+	}
+
+	updated := false
+	for i, ep := range execPaths {
+		if ep.Path == absolutePath {
+			execPaths[i] = CorgiExecPath{Name: name, Description: description, Path: absolutePath}
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		execPaths = append(execPaths, CorgiExecPath{Name: name, Description: description, Path: absolutePath})
+	}
+
+	return writeExecPaths(execPaths)
+}
+
+func writeExecPaths(execPaths []CorgiExecPath) error {
+	file, err := os.Create(storageFilePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	for _, ep := range execPaths {
+		line := fmt.Sprintf("%s, %s, %s\n", ep.Name, ep.Description, ep.Path)
+		if _, err := writer.WriteString(line); err != nil {
+			return err
+		}
+	}
+	return writer.Flush()
 }
 
 func ListExecPaths() ([]CorgiExecPath, error) {
-	InitDBWrapper()
-	if err := GetDBInitError(); err != nil {
-		return nil, fmt.Errorf("database initialization failed: %w", err)
+	if err := initializeStorage(); err != nil {
+		return nil, err
 	}
-
-	selectQuery := `SELECT name, description, path FROM executed_paths;`
-	rows, err := DB.Query(selectQuery)
+	file, err := os.Open(storageFilePath)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer file.Close()
 
 	var execPaths []CorgiExecPath
-	for rows.Next() {
-		var corgiExecPath CorgiExecPath
-		if err := rows.Scan(&corgiExecPath.Name, &corgiExecPath.Description, &corgiExecPath.Path); err != nil {
-			return nil, err
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		parts := strings.Split(scanner.Text(), ",")
+		if len(parts) < 3 {
+			continue
 		}
-		execPaths = append(execPaths, corgiExecPath)
+		execPaths = append(execPaths, CorgiExecPath{
+			Name:        strings.TrimSpace(parts[0]),
+			Description: strings.TrimSpace(parts[1]),
+			Path:        strings.TrimSpace(parts[2]),
+		})
 	}
-	return execPaths, nil
+	return execPaths, scanner.Err()
 }
 
 func GetHomebrewBinPath() (string, error) {
@@ -154,15 +161,8 @@ func GetHomebrewBinPath() (string, error) {
 }
 
 func ClearExecPaths() error {
-	InitDBWrapper()
-	if err := GetDBInitError(); err != nil {
-		return fmt.Errorf("database initialization failed: %w", err)
+	if err := initializeStorage(); err != nil {
+		return err
 	}
-
-	deleteQuery := `DELETE FROM executed_paths;`
-	if _, err := DB.Exec(deleteQuery); err != nil {
-		return fmt.Errorf("failed to clear executed paths: %w", err)
-	}
-
-	return nil
+	return os.Truncate(storageFilePath, 0)
 }
