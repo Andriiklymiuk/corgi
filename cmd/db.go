@@ -23,7 +23,7 @@ You can do db commands with the help of Makefile directly in the folder of
 each service, but this is much easier to do it here.
 
 	`,
-	Run: runDb,
+	Run:     runDb,
 	Aliases: []string{"database"},
 }
 
