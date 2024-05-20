@@ -34,7 +34,11 @@ func GetTargetService() (string, error) {
 
 func GetFoldersListInDirectory() ([]string, error) {
 	filesInDirectory, err := os.ReadDir(
-		fmt.Sprintf("./%s/", RootDbServicesFolder),
+		fmt.Sprintf(
+			"%s/%s/",
+			CorgiComposePathDir,
+			RootDbServicesFolder,
+		),
 	)
 	if err != nil {
 		return nil, err

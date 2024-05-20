@@ -91,6 +91,8 @@ type Service struct {
 	AfterStart          []string           `yaml:"afterStart,omitempty"`
 	Test                []TestService      `yaml:"test,omitempty"`
 	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
+
+	AbsolutePath string
 }
 
 type Required struct {
@@ -136,6 +138,7 @@ type CorgiComposeYaml struct {
 }
 
 var CorgiComposePath string
+var CorgiComposePathDir string
 
 // Get corgi-compose info from path to corgi-compose.yml file
 func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
@@ -143,7 +146,15 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	pathToCorgiComposeFile, err = filepath.Abs(pathToCorgiComposeFile)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't get absolute path for %s: %v", pathToCorgiComposeFile, err)
+	}
+
+	fmt.Println("Using corgi-compose file: ", pathToCorgiComposeFile)
 	CorgiComposePath = pathToCorgiComposeFile
+	CorgiComposePathDir = filepath.Dir(pathToCorgiComposeFile)
 
 	describeFlag, err := cobra.Root().Flags().GetBool("describe")
 	if err != nil {
@@ -276,10 +287,17 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			if service.Path == "." {
 				service.Path = ""
 			}
+			var absolutePath string
+			if strings.HasPrefix(service.Path, "./") {
+				absolutePath = strings.Replace(service.Path, "./", CorgiComposePathDir+"/", 1)
+			} else {
+				absolutePath = CorgiComposePathDir + "/" + service.Path
+			}
 
 			serviceToAdd := Service{
 				ServiceName:         indexName,
 				Path:                service.Path,
+				AbsolutePath:        absolutePath,
 				IgnoreEnv:           service.IgnoreEnv,
 				ManualRun:           service.ManualRun,
 				CloneFrom:           service.CloneFrom,

@@ -135,7 +135,7 @@ func EnsurePathExists(dirName string) error {
 func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 	for _, service := range corgiCompose.Services {
-		err := EnsurePathExists(service.Path)
+		err := EnsurePathExists(service.AbsolutePath)
 		if err != nil {
 			fmt.Println("Error ensuring directory:", err)
 			return
@@ -154,7 +154,15 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 		var envForService string
 
 		if service.CopyEnvFromFilePath != "" {
-			envForService = getEnvFromFile(service.CopyEnvFromFilePath, corgiGeneratedMessage)
+			copyEnvFromFileAbsolutePath := fmt.Sprintf(
+				"%s/%s",
+				CorgiComposePathDir,
+				service.CopyEnvFromFilePath,
+			)
+			envForService = getEnvFromFile(
+				copyEnvFromFileAbsolutePath,
+				corgiGeneratedMessage,
+			)
 		}
 
 		// add url for dependent service
@@ -297,7 +305,7 @@ func getPathToEnv(service Service) string {
 	if service.EnvPath != "" {
 		service.EnvPath = strings.Replace(
 			service.EnvPath,
-			service.Path,
+			service.AbsolutePath,
 			"",
 			-1,
 		)
@@ -312,13 +320,13 @@ func getPathToEnv(service Service) string {
 		envName = service.EnvPath
 	}
 
-	if len(service.Path) <= 1 {
+	if len(service.AbsolutePath) <= 1 {
 		return envName
 	}
-	if service.Path[len(service.Path)-1:] != "/" {
-		return service.Path + "/" + envName
+	if service.AbsolutePath[len(service.AbsolutePath)-1:] != "/" {
+		return service.AbsolutePath + "/" + envName
 	} else {
-		return service.Path + envName
+		return service.AbsolutePath + envName
 	}
 }
 

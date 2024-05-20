@@ -24,7 +24,7 @@ Requires items flag.
 	Example: `corgi clean -i all
 corgi clean -i db,corgi_services,services
 corgi clean -i db`,
-	Run: runClean,
+	Run:     runClean,
 	Aliases: []string{"clear"},
 }
 
@@ -59,9 +59,9 @@ func cleanServices(cobra *cobra.Command) {
 			return
 		}
 
-		err := os.RemoveAll(service.Path)
+		err := os.RemoveAll(service.AbsolutePath)
 		if err != nil {
-			fmt.Printf("couldn't delete %s folder: %s", service.Path, err)
+			fmt.Printf("couldn't delete %s folder: %s", service.AbsolutePath, err)
 			return
 		}
 		fmt.Printf("🗑️ cleaned up %s folder", service.Path)

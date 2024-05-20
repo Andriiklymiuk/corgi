@@ -571,7 +571,14 @@ var DriverConfigs = map[string]DriverConfig{
 }
 
 func GetServiceInfo(targetService string) (string, error) {
-	f, err := os.Open(fmt.Sprintf("%s/%s/docker-compose.yml", RootDbServicesFolder, targetService))
+	f, err := os.Open(
+		fmt.Sprintf(
+			"%s/%s/%s/docker-compose.yml",
+			CorgiComposePathDir,
+			RootDbServicesFolder,
+			targetService,
+		),
+	)
 	if err != nil {
 		return "", err
 	}

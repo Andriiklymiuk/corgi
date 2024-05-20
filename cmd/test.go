@@ -71,7 +71,7 @@ func runTest(cmd *cobra.Command, _ []string) {
 			if !utils.IsServiceIncludedInFlag(EnvItemsFromFlag, testServiceCmd.Name) {
 				continue
 			}
-			testService(testServiceCmd, service.Path)
+			testService(testServiceCmd, service.AbsolutePath)
 		}
 	}
 }

@@ -29,7 +29,6 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command, _ []string) {
-
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
@@ -67,23 +66,30 @@ func runInit(cmd *cobra.Command, _ []string) {
 func CreateMissingEnvFiles(services []utils.Service) {
 	for _, service := range services {
 		if service.CopyEnvFromFilePath != "" {
-			dirPath := filepath.Dir(service.CopyEnvFromFilePath)
+			copyEnvFromFileAbsolutePath := fmt.Sprintf(
+				"%s/%s",
+				utils.CorgiComposePathDir,
+				service.CopyEnvFromFilePath,
+			)
+			dirPath := filepath.Dir(
+				copyEnvFromFileAbsolutePath,
+			)
 			if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 
 				if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
 					fmt.Printf(
 						"Failed to create directory for env file %s, error: %s\n",
-						service.CopyEnvFromFilePath,
+						copyEnvFromFileAbsolutePath,
 						err,
 					)
 					continue
 				}
 			}
 
-			_, err := os.Stat(service.CopyEnvFromFilePath)
+			_, err := os.Stat(copyEnvFromFileAbsolutePath)
 			if err != nil {
 				if errors.Is(err, os.ErrNotExist) {
-					f, err := os.Create(service.CopyEnvFromFilePath)
+					f, err := os.Create(copyEnvFromFileAbsolutePath)
 					if err != nil {
 						fmt.Println(err)
 					}
@@ -152,9 +158,11 @@ func CheckClonedReposExistence(services []utils.Service) bool {
 		if service.Path == "" || service.Path == "." {
 			continue
 		}
-		_, err := os.Stat(service.Path)
+		_, err := os.Stat(
+			service.AbsolutePath,
+		)
 		if err != nil {
-			fmt.Printf("Path %s does not exist for service %s. It should be cloned.\n", service.Path, service.ServiceName)
+			fmt.Printf("Path %s does not exist for service %s. It should be cloned.\n", service.AbsolutePath, service.ServiceName)
 			someRepoShouldBeCloned = true
 			break
 		}
@@ -169,7 +177,7 @@ func CloneServices(services []utils.Service) {
 			continue
 		}
 
-		_, err := os.Stat(service.Path)
+		_, err := os.Stat(service.AbsolutePath)
 		if err != nil {
 			if !errors.Is(err, os.ErrNotExist) {
 				fmt.Println(err)
@@ -182,7 +190,7 @@ func CloneServices(services []utils.Service) {
 				)
 				continue
 			}
-			pathSlice := strings.Split(service.Path, "/")
+			pathSlice := strings.Split(service.AbsolutePath, "/")
 			pathWithoutLastFolder := strings.Join(pathSlice[:len(pathSlice)-1], "/")
 			err := os.MkdirAll(pathWithoutLastFolder, os.ModePerm)
 			if err != nil {
@@ -192,42 +200,61 @@ func CloneServices(services []utils.Service) {
 
 			err = utils.RunServiceCmd(
 				service.ServiceName,
-				fmt.Sprintf("git clone %s %s", service.CloneFrom, service.Path),
+				fmt.Sprintf(
+					"git clone %s %s",
+					service.CloneFrom,
+					service.AbsolutePath,
+				),
 				pathWithoutLastFolder,
 				false,
 			)
 			if err != nil {
-				fmt.Printf(`output error: %s, in path %s with git clone %s
-					`, err, pathWithoutLastFolder, service.CloneFrom)
+				if strings.Contains(err.Error(), "exit status 128") {
+					fmt.Printf(
+						"Repo %s already exists in %s, skipping clone",
+						service.CloneFrom,
+						service.AbsolutePath,
+					)
+					continue
+				}
+				fmt.Printf(
+					`output error: %s, in path %s with git clone %s`,
+					err,
+					pathWithoutLastFolder,
+					service.CloneFrom,
+				)
 				continue
 			}
 			if service.Branch != "" {
 				err = utils.RunServiceCmd(
 					service.ServiceName,
-					fmt.Sprintf("git checkout %s", service.Branch),
-					service.Path,
+					fmt.Sprintf(
+						"git checkout %s",
+						service.Branch,
+					),
+					service.AbsolutePath,
 					false,
 				)
 				if err != nil {
 					fmt.Printf(`output error: %s, in path %s with git checkout %s
-					`, err, service.Path, service.Branch)
+					`, err, service.AbsolutePath, service.Branch)
 					continue
 				}
 				err = utils.RunServiceCmd(
 					service.ServiceName,
 					"corgi pull --silent",
-					service.Path,
+					service.AbsolutePath,
 					false,
 				)
 				if err != nil {
 					fmt.Printf(`output error: %s, in path %s with git pull %s
-					`, err, service.Path, service.Branch)
+					`, err, service.AbsolutePath, service.Branch)
 					continue
 				}
 			}
 		}
 		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
-			service.Path,
+			service.AbsolutePath,
 			utils.CorgiComposeDefaultName,
 		)
 		if err != nil {
@@ -237,20 +264,21 @@ func CloneServices(services []utils.Service) {
 			err = utils.RunServiceCmd(
 				service.ServiceName,
 				"corgi init --silent",
-				service.Path,
+				service.AbsolutePath,
 				false,
 			)
 			if err != nil {
 				fmt.Printf(`output error: %s, in path %s with corgi init --silent %s
-					`, err, service.Path, service.Branch)
+					`, err, service.AbsolutePath, service.Branch)
 			}
 		}
 	}
 }
 
 func addFileToGitignore(fileToIgnore string) error {
+	gitignorePath := fmt.Sprintf("%s/%s", utils.CorgiComposePathDir, ".gitignore")
 	f, err := os.OpenFile(
-		".gitignore",
+		gitignorePath,
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
 		0644,
 	)
@@ -259,7 +287,9 @@ func addFileToGitignore(fileToIgnore string) error {
 	}
 	defer f.Close()
 
-	content, err := os.ReadFile(".gitignore")
+	content, err := os.ReadFile(
+		gitignorePath,
+	)
 	if err != nil {
 		return fmt.Errorf("couldn't read .gitignore file, error: %s", err)
 	}
@@ -313,7 +343,8 @@ func createDbFileFromTemplate(
 ) error {
 	fileName, pathToFileName := getPathToFileName(fileName)
 	path := fmt.Sprintf(
-		"%s/%s/%s",
+		"%s/%s/%s/%s",
+		utils.CorgiComposePathDir,
 		utils.RootDbServicesFolder,
 		dbService.ServiceName,
 		pathToFileName,
