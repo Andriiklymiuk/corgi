@@ -144,14 +144,9 @@ func RunCombinedCmd(command string, path string) error {
 }
 
 func GetPathToDbService(targetService string) (string, error) {
-	currentWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("cannot get path to service %s", err)
-	}
-
 	path := fmt.Sprintf(
 		"%s/%s/%s",
-		currentWorkingDirectory,
+		CorgiComposePathDir,
 		RootDbServicesFolder,
 		targetService,
 	)
@@ -160,7 +155,12 @@ func GetPathToDbService(targetService string) (string, error) {
 
 func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 	makeFileExists, err := CheckIfFileExistsInDirectory(
-		fmt.Sprintf("./%s/%s", RootDbServicesFolder, targetService),
+		fmt.Sprintf(
+			"%s/%s/%s",
+			CorgiComposePathDir,
+			RootDbServicesFolder,
+			targetService,
+		),
 		"Makefile",
 	)
 	if err != nil {

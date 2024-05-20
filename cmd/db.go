@@ -150,7 +150,11 @@ func showMakeCommands(
 
 func SeedDb(targetService string) error {
 	dumpFileExists, err := utils.CheckIfFilesExistsInDirectory(
-		fmt.Sprintf("./%s/%s", utils.RootDbServicesFolder, targetService),
+		fmt.Sprintf("%s/%s/%s",
+			utils.CorgiComposePathDir,
+			utils.RootDbServicesFolder,
+			targetService,
+		),
 		"dump.*",
 	)
 	if err != nil {

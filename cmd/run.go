@@ -166,7 +166,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 				"afterStart",
 				service.ServiceName,
 				service.AfterStart,
-				service.Path,
+				service.AbsolutePath,
 				false,
 				false,
 			)
@@ -251,7 +251,12 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		return
 	}
 	if isPull {
-		err = utils.RunServiceCmd(service.ServiceName, "corgi pull --silent", service.Path, false)
+		err = utils.RunServiceCmd(
+			service.ServiceName,
+			"corgi pull --silent",
+			service.AbsolutePath,
+			false,
+		)
 		if err != nil {
 			fmt.Println("corgi pull failed for", service.ServiceName, "error:", err)
 		}
@@ -264,7 +269,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			"beforeStart",
 			service.ServiceName,
 			service.BeforeStart,
-			service.Path,
+			service.AbsolutePath,
 			false,
 			false,
 		)
@@ -275,7 +280,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			"start",
 			service.ServiceName,
 			service.Start,
-			service.Path,
+			service.AbsolutePath,
 			true,
 			service.InteractiveInput,
 		)

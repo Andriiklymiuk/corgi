@@ -209,7 +209,7 @@ func CreateForksForServices(
 			continue
 		}
 
-		err = changeRepoOrigin(service.Path, service.ServiceName, repoToCloneTo)
+		err = changeRepoOrigin(service.AbsolutePath, service.ServiceName, repoToCloneTo)
 		if err != nil {
 			return err
 		}
