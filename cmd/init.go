@@ -20,7 +20,7 @@ var initCmd = &cobra.Command{
 	Long: `
 This is used to create db service from template.	
 	`,
-	Run: runInit,
+	Run:     runInit,
 	Aliases: []string{"initialize", "clone"},
 }
 
