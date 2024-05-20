@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"andriiklymiuk/corgi/utils/art"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -562,7 +563,7 @@ func selectGlobalExecPath() (string, error) {
 	for i, executionPath := range executionPaths {
 		displayString := ""
 		if executionPath.Name != "" {
-			displayString = fmt.Sprintf("%s, ", executionPath.Name)
+			displayString = fmt.Sprintf("%s%s%s, ", art.BlueColor, executionPath.Name, art.WhiteColor)
 		}
 		displayString += executionPath.Path
 		displayPaths[i] = displayString
@@ -581,7 +582,7 @@ func selectGlobalExecPath() (string, error) {
 	for _, executionPath := range executionPaths {
 		formattedDisplay := executionPath.Path
 		if executionPath.Name != "" {
-			formattedDisplay = fmt.Sprintf("%s, %s", executionPath.Name, executionPath.Path)
+			formattedDisplay = fmt.Sprintf("%s%s%s, %s", art.BlueColor, executionPath.Name, art.WhiteColor, executionPath.Path)
 		}
 		if selectedDisplay == formattedDisplay {
 			return executionPath.Path, nil
