@@ -78,6 +78,11 @@ It will install it globally.
 
 With it you can run `corgi` in any folder on your local.
 
+Try it with expo + hono server example
+```bash
+corgi run -t https://github.com/Andriiklymiuk/corgi_examples/blob/main/honoExpoTodo/hono-bun-expo.corgi-compose.yml
+```
+
 
 
 Credits:
