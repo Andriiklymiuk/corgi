@@ -12,7 +12,10 @@ import (
 	"sync"
 )
 
-const storageFileName = "corgi_exec_paths.txt"
+const (
+	storageFileName = "corgi_exec_paths.txt"
+	fieldSeparator  = "|"
+)
 
 var storageInitOnce sync.Once
 var storageInitError error
@@ -117,7 +120,14 @@ func writeExecPaths(execPaths []CorgiExecPath) error {
 
 	writer := bufio.NewWriter(file)
 	for _, ep := range execPaths {
-		line := fmt.Sprintf("%s, %s, %s\n", ep.Name, ep.Description, ep.Path)
+		line := fmt.Sprintf(
+			"%s%s%s%s%s\n",
+			ep.Name,
+			fieldSeparator,
+			ep.Description,
+			fieldSeparator,
+			ep.Path,
+		)
 		if _, err := writer.WriteString(line); err != nil {
 			return err
 		}
@@ -138,7 +148,7 @@ func ListExecPaths() ([]CorgiExecPath, error) {
 	var execPaths []CorgiExecPath
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		parts := strings.Split(scanner.Text(), ",")
+		parts := strings.Split(scanner.Text(), fieldSeparator)
 		if len(parts) < 3 {
 			continue
 		}
