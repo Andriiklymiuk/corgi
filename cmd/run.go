@@ -22,7 +22,7 @@ var runCmd = &cobra.Command{
 	Short:   "Run all databases and services",
 	Long:    `This command helps to run all services and their dependent services.`,
 	Run:     runRun,
-	Aliases: []string{"start"},
+	Aliases: []string{"start", "r"},
 }
 
 func init() {
