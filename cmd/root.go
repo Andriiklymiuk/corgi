@@ -77,6 +77,18 @@ func init() {
 		"Create corgi service from template url",
 	)
 	rootCmd.PersistentFlags().StringP(
+		"fromTemplateName",
+		"n",
+		"",
+		"Create corgi service from template name and url",
+	)
+	rootCmd.PersistentFlags().BoolP(
+		"exampleList",
+		"l",
+		false,
+		"Create corgi service from template name and url",
+	)
+	rootCmd.PersistentFlags().StringP(
 		"privateToken",
 		"",
 		"",

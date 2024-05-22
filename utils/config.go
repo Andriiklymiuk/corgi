@@ -537,6 +537,39 @@ func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {
 		return downloadedFile, nil
 	}
 
+	templateNameFlag, err := cobraCmd.Root().Flags().GetString("fromTemplateName")
+	if err != nil {
+		return "", err
+	}
+	if templateNameFlag != "" {
+		return DownloadExample(
+			cobraCmd,
+			templateNameFlag,
+			filenameFlag,
+		)
+	}
+	showExampleList, err := cobraCmd.Root().Flags().GetBool("exampleList")
+	if err != nil {
+		return "", err
+	}
+
+	if showExampleList {
+		selectedPath, err := PickItemFromListPrompt(
+			"Select corgi template to use",
+			ExtractExamplePaths(ExampleProjects),
+			"none",
+		)
+
+		if err != nil {
+			return "", fmt.Errorf("error selecting path: %v", err)
+		}
+		return DownloadExample(
+			cobraCmd,
+			selectedPath,
+			filenameFlag,
+		)
+	}
+
 	if filenameFlag != "" {
 		return filenameFlag, nil
 	}
