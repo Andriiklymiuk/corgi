@@ -509,10 +509,8 @@ func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {
 
 	if globalFlag {
 		globalPath, err := selectGlobalExecPath()
-		if err != nil {
-			fmt.Println("No global corgi path selected.", err)
-		} else if globalPath == "" {
-			fmt.Println("No global corgi path selected.")
+		if err != nil || globalPath == "" {
+			return "", fmt.Errorf("no global corgi path selected")
 		} else {
 			return globalPath, nil
 		}
