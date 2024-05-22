@@ -86,7 +86,7 @@ func init() {
 		"exampleList",
 		"l",
 		false,
-		"Create corgi service from template name and url",
+		"List examples to choose from. Click on any example to download it",
 	)
 	rootCmd.PersistentFlags().StringP(
 		"privateToken",
