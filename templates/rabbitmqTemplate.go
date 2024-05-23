@@ -13,7 +13,7 @@ services:
       - /var/lib/rabbitmq
     ports:
       - "{{.Port}}:5672"
-      - "15672:15672"
+      - "{{if .Port2}}{{.Port2}}{{else}}15672{{end}}:15672"
     networks:
       - corgi-network
 
