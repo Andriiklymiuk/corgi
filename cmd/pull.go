@@ -31,6 +31,10 @@ func runPull(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		fmt.Println(err)
 	}
+	isRunOnce, err := cmd.Root().Flags().GetBool("runOnce")
+	if err != nil {
+		return
+	}
 	for _, service := range corgi.Services {
 		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
 			service.AbsolutePath,
@@ -41,8 +45,8 @@ func runPull(cmd *cobra.Command, _ []string) {
 		}
 
 		var pullCmdToExecute string
-		if corgiComposeExists {
-			pullCmdToExecute = "corgi pull --silent"
+		if corgiComposeExists && !isRunOnce {
+			pullCmdToExecute = "corgi pull --silent --runOnce"
 		} else {
 			pullCmdToExecute = "git pull"
 		}
