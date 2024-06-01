@@ -220,13 +220,16 @@ func CreateForksForServices(
 	return nil
 }
 
-func runCommand(outBuffer *bytes.Buffer, command string, args ...string) error {
+func runCommandToOutput(outBuffer *bytes.Buffer, path string, command string, args ...string) error {
 	cmd := exec.Command(command, args...)
 	if outBuffer != nil {
 		cmd.Stdout = outBuffer
 	}
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
+	if path != "" {
+		cmd.Dir = path
+	}
 	err := cmd.Run()
 	if err != nil {
 		// Handle specific error cases here.
@@ -308,7 +311,7 @@ func createRepoInProvider(providerCliName string, providerInstallLink string, re
 	if private {
 		privacyFlag = "--private"
 	}
-	err = runCommand(&out, providerCliName, "repo", "create", repoName, privacyFlag)
+	err = runCommandToOutput(&out, "", providerCliName, "repo", "create", repoName, privacyFlag)
 	if err != nil {
 		return "", fmt.Errorf("failed to create repo: %s", err)
 	}
@@ -319,4 +322,50 @@ func createRepoInProvider(providerCliName string, providerInstallLink string, re
 	fmt.Println("Extracted repo URL:", newRepoUrl)
 
 	return newRepoUrl, nil
+}
+func CheckoutToPrimaryBranch(
+	name string,
+	path string,
+	targetBranch string,
+	usePrimaryBranch bool,
+) error {
+	var out bytes.Buffer
+	var err error
+
+	if usePrimaryBranch {
+		err = runCommandToOutput(&out, path, "git", "remote", "show", "origin")
+		if err != nil {
+			fmt.Printf("[%s] Error fetching remote details: %s\n", name, err)
+			return err
+		}
+		targetBranch = strings.TrimSpace(strings.Split(strings.TrimSpace(strings.Split(out.String(), "HEAD branch:")[1]), "\n")[0])
+	}
+
+	var currentOut bytes.Buffer
+	err = runCommandToOutput(&currentOut, path, "git", "branch", "--show-current")
+	if err != nil {
+		fmt.Printf("[%s] Error determining current branch: %s\n", name, err)
+		return err
+	}
+	currentBranch := strings.TrimSpace(currentOut.String())
+
+	if currentBranch == targetBranch {
+		fmt.Printf("[%s] You are already on the target branch: %s\n", name, targetBranch)
+		return nil
+	}
+
+	err = runCommandToOutput(nil, path, "git", "checkout", targetBranch)
+	if err != nil {
+		fmt.Printf("[%s] Error checking out the target branch: %s\n", name, err)
+		return err
+	}
+
+	err = runCommandToOutput(nil, path, "git", "pull", "origin", targetBranch)
+	if err != nil {
+		fmt.Printf("[%s] Error pulling the latest changes: %s\n", name, err)
+		return err
+	}
+
+	fmt.Printf("[%s] Successfully checked out and updated the target branch: %s\n", name, targetBranch)
+	return nil
 }
