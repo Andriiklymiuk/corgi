@@ -158,6 +158,9 @@ func CheckClonedReposExistence(services []utils.Service) bool {
 		if service.Path == "" || service.Path == "." {
 			continue
 		}
+		if service.Branch != "" {
+			someRepoShouldBeCloned = true
+		}
 		_, err := os.Stat(
 			service.AbsolutePath,
 		)
@@ -250,6 +253,21 @@ func CloneServices(services []utils.Service) {
 					fmt.Printf(`output error: %s, in path %s with git pull %s
 					`, err, service.AbsolutePath, service.Branch)
 					continue
+				}
+			}
+		} else {
+			if service.CloneFrom == "" {
+				continue
+			}
+			if service.Branch != "" {
+				err := CheckoutToPrimaryBranch(
+					service.ServiceName,
+					service.AbsolutePath,
+					service.Branch,
+					false,
+				)
+				if err != nil {
+					fmt.Println(err)
 				}
 			}
 		}
