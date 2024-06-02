@@ -8,7 +8,40 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
+
+var (
+	ProcessHandles []*os.Process
+	pidMutex       sync.Mutex
+)
+
+func addProcess(proc *os.Process) {
+	pidMutex.Lock()
+	ProcessHandles = append(ProcessHandles, proc)
+	pidMutex.Unlock()
+}
+
+func removeProcess(proc *os.Process) {
+	pidMutex.Lock()
+	for i, storedProc := range ProcessHandles {
+		if storedProc.Pid == proc.Pid {
+			ProcessHandles = append(ProcessHandles[:i], ProcessHandles[i+1:]...)
+			break
+		}
+	}
+	pidMutex.Unlock()
+}
+
+func KillAllStoredProcesses() {
+	pidMutex.Lock()
+	defer pidMutex.Unlock()
+	for _, proc := range ProcessHandles {
+		KillProcessGroup(proc.Pid)
+		proc.Release()
+	}
+	ProcessHandles = []*os.Process{}
+}
 
 func RunServiceCmd(
 	serviceName string,
@@ -54,8 +87,15 @@ func RunServiceCmd(
 		if interactive {
 			cmd.Stdin = os.Stdin
 		}
+		SetProcessGroup(cmd)
+		if err := cmd.Start(); err != nil {
+			return err
+		}
 
-		if err := cmd.Run(); err != nil {
+		addProcess(cmd.Process)
+
+		if err := cmd.Wait(); err != nil {
+			removeProcess(cmd.Process)
 			// Check the error directly
 			if strings.Contains(err.Error(), "executable file not found") {
 				// Attempt to install missing command
