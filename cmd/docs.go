@@ -79,6 +79,12 @@ var serviceItems = []CorgiComposeItems{
 		description: "The path to the .env, which content will be copied to service repo .env file",
 	},
 	{
+		item:        "localhostNameInEnv",
+		example:     "localhost",
+		itemType:    "string",
+		description: "Localhost name to use in .env file, by default localhost is used.",
+	},
+	{
 		item:        "port",
 		example:     "5432",
 		itemType:    "number",

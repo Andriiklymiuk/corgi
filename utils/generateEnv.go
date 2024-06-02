@@ -227,6 +227,15 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 			)
 			envFileContentString = envFileContentString + envForService
 		}
+
+		if service.LocalhostNameInEnv != "" {
+			envFileContentString = strings.ReplaceAll(
+				envFileContentString,
+				"localhost",
+				service.LocalhostNameInEnv,
+			)
+		}
+
 		if envFileContentString == "" {
 			continue
 		}
