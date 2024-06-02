@@ -349,7 +349,6 @@ func watchCorgiCompose(
 					return
 				}
 				if event.Op&fsnotify.Write == fsnotify.Write {
-					fmt.Println("Detected change in", event.Name)
 					oldCorgi := utils.CorgiComposeFileContent
 					corgi, err := utils.GetCorgiServices(cmd)
 					if err != nil {
@@ -359,6 +358,7 @@ func watchCorgiCompose(
 					if utils.CompareCorgiFiles(corgi, oldCorgi) {
 						continue
 					}
+					fmt.Println("Detected corgi compose change in", event.Name)
 					watcher.Remove(utils.CorgiComposePath)
 					utils.SendRestart()
 				}

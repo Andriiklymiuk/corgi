@@ -157,7 +157,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		return nil, fmt.Errorf("couldn't get absolute path for %s: %v", pathToCorgiComposeFile, err)
 	}
 
-	fmt.Println("Using corgi-compose file: ", pathToCorgiComposeFile)
+	fmt.Println("Using corgi-compose file:", pathToCorgiComposeFile)
 	CorgiComposePath = pathToCorgiComposeFile
 	CorgiComposePathDir = filepath.Dir(pathToCorgiComposeFile)
 
