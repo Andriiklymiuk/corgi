@@ -141,6 +141,7 @@ type CorgiComposeYaml struct {
 
 var CorgiComposePath string
 var CorgiComposePathDir string
+var CorgiComposeFileContent *CorgiCompose
 
 // Get corgi-compose info from path to corgi-compose.yml file
 func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
@@ -351,6 +352,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		corgi.Required = requiredInstructions
 	}
 
+	CorgiComposeFileContent = &corgi
 	return &corgi, nil
 }
 
