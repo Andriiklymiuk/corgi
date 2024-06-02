@@ -110,7 +110,7 @@ func RunServiceCommands(
 				}
 				if interactive {
 					// maybe there is other way to stop the process, but it will do for now
-					sendInterrupt()
+					SendInterrupt()
 				}
 			}(command)
 		}
