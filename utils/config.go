@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -625,4 +626,45 @@ func selectGlobalExecPath() (string, error) {
 	}
 
 	return "", fmt.Errorf("selected path not found in the list")
+}
+
+func toMap(slice interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	val := reflect.ValueOf(slice)
+	for i := 0; i < val.Len(); i++ {
+		item := val.Index(i).Interface()
+		key := reflect.ValueOf(item).FieldByName("ServiceName").String()
+		result[key] = item
+	}
+	return result
+}
+
+func CompareCorgiFiles(c1, c2 *CorgiCompose) bool {
+	if c1.Name != c2.Name ||
+		c1.Description != c2.Description ||
+		c1.UseDocker != c2.UseDocker ||
+		c1.UseAwsVpn != c2.UseAwsVpn {
+		return false
+	}
+
+	if !reflect.DeepEqual(toMap(c1.Services), toMap(c2.Services)) {
+		return false
+	}
+
+	if !reflect.DeepEqual(toMap(c1.DatabaseServices), toMap(c2.DatabaseServices)) {
+		return false
+	}
+
+	if !reflect.DeepEqual(c1.Required, c2.Required) {
+		return false
+	}
+
+	if !reflect.DeepEqual(c1.Init, c2.Init) ||
+		!reflect.DeepEqual(c1.BeforeStart, c2.BeforeStart) ||
+		!reflect.DeepEqual(c1.Start, c2.Start) ||
+		!reflect.DeepEqual(c1.AfterStart, c2.AfterStart) {
+		return false
+	}
+
+	return true
 }
