@@ -11,6 +11,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )
 
@@ -102,14 +103,41 @@ func runRun(cmd *cobra.Command, _ []string) {
 	}
 
 	closeSignal := make(chan os.Signal, 1)
-	signal.Notify(closeSignal, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(closeSignal, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	go func() {
-		<-closeSignal
-		cleanup(corgi)
-		utils.PrintFinalMessage()
-		os.Exit(0)
-	}()
+	go func(cmd *cobra.Command) {
+		for {
+			s := <-closeSignal
+			switch s {
+			case syscall.SIGHUP:
+				fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
+
+				utils.KillAllStoredProcesses()
+				cmd.Run(cmd, nil)
+			default:
+				fmt.Println("👋 Exiting corgi", s)
+				cleanup(corgi)
+				utils.KillAllStoredProcesses()
+				utils.PrintFinalMessage()
+				os.Exit(0)
+			}
+		}
+	}(cmd)
+
+	isWatch, err := cmd.Flags().GetBool("watch")
+	if err != nil {
+		return
+	}
+
+	if isWatch {
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			fmt.Println("Error initializing watcher:", err)
+			return
+		}
+		defer watcher.Close()
+		watchCorgiCompose(watcher, cmd)
+	}
 
 	utils.CleanFromScratch(cmd, *corgi)
 
@@ -300,4 +328,46 @@ func omitServiceCmd(cmdName string) bool {
 		}
 	}
 	return false
+}
+
+func watchCorgiCompose(
+	watcher *fsnotify.Watcher,
+	cmd *cobra.Command,
+) {
+	fmt.Println("👀 Watching for changes in corgi-compose file")
+	err := watcher.Add(utils.CorgiComposePath)
+	if err != nil {
+		fmt.Println("Error adding CorgiCompose to watcher:", err)
+		return
+	}
+
+	go func() {
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					fmt.Println("Detected change in", event.Name)
+					oldCorgi := utils.CorgiComposeFileContent
+					corgi, err := utils.GetCorgiServices(cmd)
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+					if utils.CompareCorgiFiles(corgi, oldCorgi) {
+						continue
+					}
+					watcher.Remove(utils.CorgiComposePath)
+					utils.SendRestart()
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				fmt.Println("Watcher error:", err)
+			}
+		}
+	}()
 }
