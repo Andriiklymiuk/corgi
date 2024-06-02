@@ -82,6 +82,12 @@ By default all db_services are included and run.
 		false,
 		"Pull services repo changes",
 	)
+	runCmd.PersistentFlags().BoolP(
+		"watch",
+		"w",
+		false,
+		"Watch for changes in corgi-compose file",
+	)
 }
 
 func runRun(cmd *cobra.Command, _ []string) {
