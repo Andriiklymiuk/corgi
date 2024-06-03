@@ -173,6 +173,7 @@ func SeedDb(targetService string) error {
 			targetService,
 		)
 	}
+	// TODO: use utils.IsServiceRunning instead of this
 	serviceIsRunning, err := utils.GetStatusOfService(targetService)
 	if err != nil {
 		fmt.Printf("Getting target service info failed: %s\n", err)
