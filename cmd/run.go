@@ -233,19 +233,10 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 		return
 	}
 
-	isSeed, err := cmd.Flags().GetBool("seed")
-	if err != nil {
-		return
-	}
-
-	err = utils.DockerInit(cmd)
+	err := utils.DockerInit(cmd)
 	if err != nil {
 		fmt.Println(err)
 		return
-	}
-
-	if isSeed {
-		SeedAllDatabases((databaseServices))
 	}
 
 	for _, dbService := range databaseServices {
@@ -269,6 +260,15 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 			time.Sleep(time.Second * 3)
 		}
 	}
+
+	isSeed, err := cmd.Flags().GetBool("seed")
+	if err != nil {
+		return
+	}
+	if isSeed {
+		SeedAllDatabases((databaseServices))
+	}
+
 }
 
 func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup *sync.WaitGroup) {
