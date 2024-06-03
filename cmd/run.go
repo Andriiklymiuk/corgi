@@ -253,7 +253,10 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 			continue
 		}
 
-		serviceIsRunning, err := utils.GetStatusOfService(dbService.ServiceName)
+		serviceIsRunning, err := utils.IsServiceRunning(
+			dbService.Driver,
+			dbService.ServiceName,
+		)
 		if err != nil {
 			fmt.Printf("Getting target service info failed: %s\n", err)
 		}

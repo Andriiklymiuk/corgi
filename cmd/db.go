@@ -68,7 +68,20 @@ func runDb(cobra *cobra.Command, args []string) {
 		fmt.Printf("Getting target service info failed: %s", err)
 	}
 	fmt.Print(serviceInfo)
-	serviceIsRunning, err := utils.GetStatusOfService(targetService)
+
+	serviceConfig, err := utils.GetDbServiceByName(
+		targetService,
+		corgi.DatabaseServices,
+	)
+	if err != nil {
+		log.Println("Getting target service config failed", err)
+		return
+	}
+
+	serviceIsRunning, err := utils.IsServiceRunning(
+		serviceConfig.Driver,
+		serviceConfig.ServiceName,
+	)
 	if err != nil {
 		fmt.Printf("Getting target service status failed: %s\n", err)
 	}
@@ -76,12 +89,6 @@ func runDb(cobra *cobra.Command, args []string) {
 		fmt.Printf("%s is running 🟢\n", targetService)
 	} else {
 		fmt.Printf("%s isn't running 🔴\n", targetService)
-	}
-
-	serviceConfig, err := utils.GetDbServiceByName(targetService, corgi.DatabaseServices)
-	if err != nil {
-		log.Println("Getting target service config failed", err)
-		return
 	}
 
 	showMakeCommands(

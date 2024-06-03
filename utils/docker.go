@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -49,6 +50,42 @@ func CheckDockerStatus() error {
 		return fmt.Errorf(errorString)
 	}
 	return nil
+}
+
+func IsServiceRunning(driver, targetService string) (bool, error) {
+	cmd := exec.Command(
+		"docker",
+		"ps",
+		"--all",
+		"--filter",
+		fmt.Sprintf("name=%s-%s", driver, targetService),
+		"--format",
+		"{{.Names}}\t{{.Status}}",
+	)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return false, fmt.Errorf("error executing docker ps: %v", err)
+	}
+
+	lines := strings.Split(out.String(), "\n")
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) > 1 {
+			fmt.Printf("parts: %s\n", parts)
+			containerName := parts[0]
+			containerStatus := parts[1]
+
+			if strings.Contains(containerName, fmt.Sprintf("%s-%s", driver, targetService)) &&
+				strings.HasPrefix(containerStatus, "Up") &&
+				parts[len(parts)-1] != "(Paused)" {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 func GetStatusOfService(targetService string) (bool, error) {
