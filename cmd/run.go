@@ -84,8 +84,8 @@ By default all db_services are included and run.
 		"Pull services repo changes",
 	)
 	runCmd.PersistentFlags().BoolP(
-		"watch",
-		"w",
+		"no-watch",
+		"",
 		false,
 		"Watch for changes in corgi-compose file",
 	)
@@ -124,12 +124,12 @@ func runRun(cmd *cobra.Command, _ []string) {
 		}
 	}(cmd)
 
-	isWatch, err := cmd.Flags().GetBool("watch")
+	isNoWatch, err := cmd.Flags().GetBool("no-watch")
 	if err != nil {
 		return
 	}
 
-	if isWatch {
+	if !isNoWatch {
 		watcher, err := fsnotify.NewWatcher()
 		if err != nil {
 			fmt.Println("Error initializing watcher:", err)
