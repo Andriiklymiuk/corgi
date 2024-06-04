@@ -87,7 +87,7 @@ By default all db_services are included and run.
 		"no-watch",
 		"",
 		false,
-		"Watch for changes in corgi-compose file",
+		"Dusable watch for changes in corgi-compose file",
 	)
 }
 
