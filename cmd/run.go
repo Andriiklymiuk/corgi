@@ -116,7 +116,12 @@ func runRun(cmd *cobra.Command, _ []string) {
 				cmd.Run(cmd, nil)
 			default:
 				fmt.Println("👋 Exiting corgi", s)
-				cleanup(corgi)
+				corgiLatestVersion, err := utils.GetCorgiServices(cmd)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+				cleanup(corgiLatestVersion)
 				utils.KillAllStoredProcesses()
 				utils.PrintFinalMessage()
 				os.Exit(0)
