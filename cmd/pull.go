@@ -55,7 +55,7 @@ func runPull(cmd *cobra.Command, _ []string) {
 			service.ServiceName,
 			pullCmdToExecute,
 			service.AbsolutePath,
-			false,
+			true,
 		)
 		if err != nil {
 			fmt.Println("pull failed for", service.ServiceName, "error:", err)

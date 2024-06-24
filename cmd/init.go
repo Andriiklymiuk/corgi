@@ -209,7 +209,7 @@ func CloneServices(services []utils.Service) {
 					service.AbsolutePath,
 				),
 				pathWithoutLastFolder,
-				false,
+				true,
 			)
 			if err != nil {
 				if strings.Contains(err.Error(), "exit status 128") {
@@ -236,7 +236,7 @@ func CloneServices(services []utils.Service) {
 						service.Branch,
 					),
 					service.AbsolutePath,
-					false,
+					true,
 				)
 				if err != nil {
 					fmt.Printf(`output error: %s, in path %s with git checkout %s
@@ -247,7 +247,7 @@ func CloneServices(services []utils.Service) {
 					service.ServiceName,
 					"corgi pull --silent",
 					service.AbsolutePath,
-					false,
+					true,
 				)
 				if err != nil {
 					fmt.Printf(`output error: %s, in path %s with git pull %s
@@ -283,7 +283,7 @@ func CloneServices(services []utils.Service) {
 				service.ServiceName,
 				"corgi init --silent",
 				service.AbsolutePath,
-				false,
+				true,
 			)
 			if err != nil {
 				fmt.Printf(`output error: %s, in path %s with corgi init --silent %s

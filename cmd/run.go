@@ -297,7 +297,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			service.ServiceName,
 			"corgi pull --silent",
 			service.AbsolutePath,
-			false,
+			true,
 		)
 		if err != nil {
 			fmt.Println("corgi pull failed for", service.ServiceName, "error:", err)
