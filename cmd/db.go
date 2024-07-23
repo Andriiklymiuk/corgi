@@ -226,7 +226,7 @@ func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
 		serviceConfig.ServiceName,
 		"make",
 		cmdName,
-		fmt.Sprintf("p=%s", password),
+		fmt.Sprintf("p='%s'", password),
 	)
 	if err != nil {
 		fmt.Println("Make command failed", err)
