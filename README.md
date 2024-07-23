@@ -23,13 +23,13 @@ No more long meetings, explanations of how to run new project with multiple micr
 Auto git cloning, db seeding, concurrent running and much more.
 
 While in services you can create whatever you want, but in db services **for now it supports**: 
-- postgres, [example](https://github.com/Andriiklymiuk/corgi_examples/tree/main/postgres)
-- mongodb, [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/mongodb/mongodb-go.corgi-compose.yml)
-- rabbitmq, [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/rabbitmq/rabbitmq-go-nestjs.corgi-compose.yml)
-- aws sqs, [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/aws_sqs/aws_sqs_postgres_go_deno.corgi-compose.yml)
-- redis, [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/redis/redis-bun-expo.corgi-compose.yml)
-- redis-server
-- mysql
+- [postgres](https://www.postgresql.org), [example](https://github.com/Andriiklymiuk/corgi_examples/tree/main/postgres)
+- [mongodb](https://www.mongodb.com), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/mongodb/mongodb-go.corgi-compose.yml)
+- [rabbitmq](https://www.rabbitmq.com), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/rabbitmq/rabbitmq-go-nestjs.corgi-compose.yml)
+- [aws sqs](https://docs.localstack.cloud/user-guide/aws/sqs/), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/aws_sqs/aws_sqs_postgres_go_deno.corgi-compose.yml)
+- [redis](https://redis.io), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/redis/redis-bun-expo.corgi-compose.yml)
+- [redis-server](https://redis.io)
+- [mysql](https://www.mysql.com)
 - [mariadb](https://mariadb.org)
 - [dynamodb](https://aws.amazon.com/dynamodb/)
 - [kafka](https://kafka.apache.org)
@@ -54,7 +54,7 @@ While in services you can create whatever you want, but in db services **for now
 - [dragonfly](https://www.dragonflydb.io)
 - [redict](https://redict.io)
 - [valkey](https://github.com/valkey-io/valkey)
-
+- [s3](https://docs.localstack.cloud/user-guide/aws/s3/)
 
 ## Documentation
 
