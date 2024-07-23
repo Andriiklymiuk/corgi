@@ -55,6 +55,26 @@ var DriverConfigs = map[string]DriverConfig{
 			{"bootstrap/bootstrap.sh", templates.BootstrapSqs},
 		},
 	},
+	"s3": {
+		Prefix: "AWS_S3_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			return fmt.Sprintf("%s%s%s%s%s%s",
+				host,
+				port,
+				fmt.Sprintf("\nREGION=%s", templates.S3Region),
+				fmt.Sprintf("\nAWS_REGION=%s", templates.S3Region),
+				"\nAWS_ACCESS_KEY_ID=test",
+				"\nAWS_SECRET_ACCESS_KEY=test",
+			)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeS3},
+			{"Makefile", templates.MakefileS3},
+			{"bootstrap/bootstrap.sh", templates.BootstrapS3},
+		},
+	},
 	"redis": {
 		Prefix: "REDIS_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
