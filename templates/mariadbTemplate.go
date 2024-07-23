@@ -32,7 +32,7 @@ id:
 seed:
 	cat dump.sql | docker exec -i $(c) mysql -u{{.User}} -p{{.Password}} {{.DatabaseName}}
 {{if .SeedFromDb.Host}}getDump:
-	mysqldump --host={{.SeedFromDb.Host}} --port={{.SeedFromDb.Port}} --user={{.SeedFromDb.User}} --password='$${p}' {{.SeedFromDb.DatabaseName}} > dump.sql
+	mysqldump --host={{.SeedFromDb.Host}} --port={{.SeedFromDb.Port}} --user={{.SeedFromDb.User}} --password=$(p) {{.SeedFromDb.DatabaseName}} > dump.sql
 {{end}}getSelfDump:
 	mysqldump --host={{.Host}} --port={{.Port}} --user={{.User}} --password=$(p) {{.DatabaseName}} > dump.sql
 remove:

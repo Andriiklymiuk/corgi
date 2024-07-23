@@ -30,12 +30,11 @@ stop:
 id:
 	docker ps -aqf "name=mysql-{{.ServiceName}}" | awk '{print $1}'
 seed:
-	cat dump.sql | docker exec -i $$(shell docker ps -aqf "name=mysql-{{.ServiceName}}") mysql -uroot -p'{{.Password}}' {{.DatabaseName}}
+	cat dump.sql | docker exec -i $(shell docker ps -aqf "name=mysql-{{.ServiceName}}") mysql -uroot -p{{.Password}} {{.DatabaseName}}
 {{if .SeedFromDb.Host}}getDump:
-	@if [ -z "$${p}" ]; then echo "Error: Password not provided. Use 'make getDump p=your_password'"; exit 1; fi
-	mysqldump --host={{.SeedFromDb.Host}} --port={{.SeedFromDb.Port}} --user={{.SeedFromDb.User}} --password='$${p}' {{.SeedFromDb.DatabaseName}} > dump.sql
+	mysqldump --host={{.SeedFromDb.Host}} --port={{.SeedFromDb.Port}} --user={{.SeedFromDb.User}} --password='$(p)' {{.SeedFromDb.DatabaseName}} > dump.sql
 {{end}}getSelfDump:
-	mysqldump --host={{.Host}} --port={{.Port}} --user={{.User}} --password='$${p}' {{.DatabaseName}} > dump.sql
+	mysqldump --host={{.Host}} --port={{.Port}} --user={{.User}} --password=$(p) {{.DatabaseName}} > dump.sql
 remove:
 	docker rm --volumes mysql-{{.ServiceName}}
 logs:
