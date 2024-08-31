@@ -16,7 +16,7 @@ var scriptCmd = &cobra.Command{
 	Use:     "script",
 	Short:   "Runs script on each service, if it specified",
 	Run:     runScript,
-	Aliases: []string{"asdf", "scripts", "commands"},
+	Aliases: []string{"asdf", "asd", "scripts", "commands"},
 }
 
 var ScriptNamesFromFlag []string
@@ -88,7 +88,6 @@ func runScript(cmd *cobra.Command, _ []string) {
 				utils.GenerateEnvForService(
 					corgi,
 					service,
-					"# 🐶 Generate env file for script",
 					scriptServiceCmd.CopyEnvFromFilePath,
 				)
 			}
@@ -99,7 +98,6 @@ func runScript(cmd *cobra.Command, _ []string) {
 		utils.GenerateEnvForService(
 			corgi,
 			service,
-			"# 🐶 Generate env file for script",
 			"",
 		)
 	}
