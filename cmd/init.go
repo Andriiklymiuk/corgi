@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -65,38 +64,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 
 func CreateMissingEnvFiles(services []utils.Service) {
 	for _, service := range services {
-		if service.CopyEnvFromFilePath != "" {
-			copyEnvFromFileAbsolutePath := fmt.Sprintf(
-				"%s/%s",
-				utils.CorgiComposePathDir,
-				service.CopyEnvFromFilePath,
-			)
-			dirPath := filepath.Dir(
-				copyEnvFromFileAbsolutePath,
-			)
-			if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-
-				if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
-					fmt.Printf(
-						"Failed to create directory for env file %s, error: %s\n",
-						copyEnvFromFileAbsolutePath,
-						err,
-					)
-					continue
-				}
-			}
-
-			_, err := os.Stat(copyEnvFromFileAbsolutePath)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					f, err := os.Create(copyEnvFromFileAbsolutePath)
-					if err != nil {
-						fmt.Println(err)
-					}
-					defer f.Close()
-				}
-			}
-		}
+		utils.CreateFileForPath(service.CopyEnvFromFilePath)
 	}
 }
 
