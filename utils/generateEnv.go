@@ -139,7 +139,6 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 		GenerateEnvForService(
 			corgiCompose,
 			service,
-			"# 🐶 Auto generated vars by corgi",
 			"",
 		)
 	}
@@ -148,9 +147,9 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 func GenerateEnvForService(
 	corgiCompose *CorgiCompose,
 	service Service,
-	corgiGeneratedMessage string,
 	copyEnvFilePath string,
 ) error {
+	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 	err := EnsurePathExists(service.AbsolutePath)
 	if err != nil {
 		fmt.Println("Error ensuring directory:", err)
