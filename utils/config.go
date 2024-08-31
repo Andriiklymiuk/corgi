@@ -69,10 +69,11 @@ type DependsOnDb struct {
 	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
 }
 
-type TestService struct {
-	Name      string   `yaml:"name,omitempty"`
-	ManualRun bool     `yaml:"manualRun,omitempty"`
-	Command   []string `yaml:"command,omitempty"`
+type Script struct {
+	Name                string   `yaml:"name,omitempty"`
+	ManualRun           bool     `yaml:"manualRun,omitempty"`
+	Commands            []string `yaml:"commands,omitempty"`
+	CopyEnvFromFilePath string   `yaml:"copyEnvFromFilePath,omitempty"`
 }
 
 type Service struct {
@@ -93,7 +94,7 @@ type Service struct {
 	BeforeStart         []string           `yaml:"beforeStart,omitempty"`
 	Start               []string           `yaml:"start,omitempty"`
 	AfterStart          []string           `yaml:"afterStart,omitempty"`
-	Test                []TestService      `yaml:"test,omitempty"`
+	Scripts             []Script           `yaml:"scripts,omitempty"`
 	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
 
 	AbsolutePath string
@@ -319,7 +320,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				BeforeStart:         service.BeforeStart,
 				AfterStart:          service.AfterStart,
 				Start:               service.Start,
-				Test:                service.Test,
+				Scripts:             service.Scripts,
 				InteractiveInput:    service.InteractiveInput,
 			}
 			services = append(services, serviceToAdd)

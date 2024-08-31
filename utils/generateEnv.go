@@ -2,8 +2,10 @@ package utils
 
 import (
 	"andriiklymiuk/corgi/utils/art"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -133,124 +135,144 @@ func EnsurePathExists(dirName string) error {
 
 // Adds env variables to each service, including dependent db_services and services
 func GenerateEnvForServices(corgiCompose *CorgiCompose) {
-	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 	for _, service := range corgiCompose.Services {
-		err := EnsurePathExists(service.AbsolutePath)
-		if err != nil {
-			fmt.Println("Error ensuring directory:", err)
-			return
+		GenerateEnvForService(
+			corgiCompose,
+			service,
+			"# 🐶 Auto generated vars by corgi",
+			"",
+		)
+	}
+}
+
+func GenerateEnvForService(
+	corgiCompose *CorgiCompose,
+	service Service,
+	corgiGeneratedMessage string,
+	copyEnvFilePath string,
+) error {
+	err := EnsurePathExists(service.AbsolutePath)
+	if err != nil {
+		fmt.Println("Error ensuring directory:", err)
+		return err
+	}
+
+	if service.IgnoreEnv {
+		fmt.Println(
+			art.RedColor,
+			"Ignoring env file for",
+			service.ServiceName,
+			art.WhiteColor,
+		)
+		return nil
+	}
+
+	var envForService string
+	var pathToCopyEnvFileFrom string
+	if copyEnvFilePath != "" {
+		pathToCopyEnvFileFrom = copyEnvFilePath
+	} else {
+		pathToCopyEnvFileFrom = service.CopyEnvFromFilePath
+	}
+
+	if pathToCopyEnvFileFrom != "" {
+		copyEnvFromFileAbsolutePath := fmt.Sprintf(
+			"%s/%s",
+			CorgiComposePathDir,
+			pathToCopyEnvFileFrom,
+		)
+		envForService = getEnvFromFile(
+			copyEnvFromFileAbsolutePath,
+			corgiGeneratedMessage,
+		)
+	}
+
+	// add url for dependent service
+	envForService += handleDependentServices(service, *corgiCompose)
+
+	envForService += handleDependsOnDb(service, *corgiCompose)
+
+	if service.Port != 0 {
+		portAlias := "PORT"
+		if service.PortAlias != "" {
+			portAlias = service.PortAlias
+		}
+		envForService = fmt.Sprintf(
+			"%s%s",
+			envForService,
+			fmt.Sprintf("\n%s=%d", portAlias, service.Port),
+		)
+	}
+
+	if len(service.Environment) > 0 {
+		// Parse existing environment variables from envForService into a map for easy lookup.
+		existingEnvVars := parseEnvVarsIntoMap(envForService)
+
+		var updatedEnvironment []string
+		for _, envLine := range service.Environment {
+			// Process each environment variable line for potential substitutions.
+			updatedEnvLine := substituteEnvVarReferences(envLine, existingEnvVars)
+			updatedEnvironment = append(updatedEnvironment, updatedEnvLine)
 		}
 
-		if service.IgnoreEnv {
-			fmt.Println(
-				art.RedColor,
-				"Ignoring env file for",
-				service.ServiceName,
-				art.WhiteColor,
-			)
-			continue
-		}
+		// Join the updated environment strings and add them to envForService.
+		envForService += "\n" + strings.Join(updatedEnvironment, "\n") + "\n"
+	}
 
-		var envForService string
+	pathToEnvFile := getPathToEnv(service)
 
-		if service.CopyEnvFromFilePath != "" {
-			copyEnvFromFileAbsolutePath := fmt.Sprintf(
-				"%s/%s",
-				CorgiComposePathDir,
-				service.CopyEnvFromFilePath,
-			)
-			envForService = getEnvFromFile(
-				copyEnvFromFileAbsolutePath,
-				corgiGeneratedMessage,
-			)
-		}
+	var corgiEnvPosition []int
+	envFileContent := GetFileContent(pathToEnvFile)
 
-		// add url for dependent service
-		envForService += handleDependentServices(service, *corgiCompose)
-
-		envForService += handleDependsOnDb(service, *corgiCompose)
-
-		if service.Port != 0 {
-			portAlias := "PORT"
-			if service.PortAlias != "" {
-				portAlias = service.PortAlias
-			}
-			envForService = fmt.Sprintf(
-				"%s%s",
-				envForService,
-				fmt.Sprintf("\n%s=%d", portAlias, service.Port),
-			)
-		}
-
-		if len(service.Environment) > 0 {
-			// Parse existing environment variables from envForService into a map for easy lookup.
-			existingEnvVars := parseEnvVarsIntoMap(envForService)
-
-			var updatedEnvironment []string
-			for _, envLine := range service.Environment {
-				// Process each environment variable line for potential substitutions.
-				updatedEnvLine := substituteEnvVarReferences(envLine, existingEnvVars)
-				updatedEnvironment = append(updatedEnvironment, updatedEnvLine)
-			}
-
-			// Join the updated environment strings and add them to envForService.
-			envForService += "\n" + strings.Join(updatedEnvironment, "\n") + "\n"
-		}
-
-		pathToEnvFile := getPathToEnv(service)
-
-		var corgiEnvPosition []int
-		envFileContent := GetFileContent(pathToEnvFile)
-
-		for index, line := range envFileContent {
-			if line == corgiGeneratedMessage {
-				corgiEnvPosition = append(corgiEnvPosition, index)
-			}
-		}
-
-		if len(corgiEnvPosition) == 2 {
-			envFileContent = removeFromToIndexes(
-				envFileContent,
-				corgiEnvPosition[0],
-				corgiEnvPosition[1],
-			)
-		}
-
-		envFileContentString := strings.Join(envFileContent, "\n")
-
-		if len(envForService) != 0 {
-			envForService := fmt.Sprintf(
-				"\n%s\n%s\n%s\n",
-				corgiGeneratedMessage,
-				envForService,
-				corgiGeneratedMessage,
-			)
-			envFileContentString = envFileContentString + envForService
-		}
-
-		if service.LocalhostNameInEnv != "" {
-			envFileContentString = strings.ReplaceAll(
-				envFileContentString,
-				"localhost",
-				service.LocalhostNameInEnv,
-			)
-		}
-
-		if envFileContentString == "" {
-			continue
-		}
-		f, err := os.OpenFile(pathToEnvFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		defer f.Close()
-		if _, err = f.WriteString(envFileContentString); err != nil {
-			fmt.Println(err)
-			continue
+	for index, line := range envFileContent {
+		if line == corgiGeneratedMessage {
+			corgiEnvPosition = append(corgiEnvPosition, index)
 		}
 	}
+
+	if len(corgiEnvPosition) == 2 {
+		envFileContent = removeFromToIndexes(
+			envFileContent,
+			corgiEnvPosition[0],
+			corgiEnvPosition[1],
+		)
+	}
+
+	envFileContentString := strings.Join(envFileContent, "\n")
+
+	if len(envForService) != 0 {
+		envForService := fmt.Sprintf(
+			"\n%s\n%s\n%s\n",
+			corgiGeneratedMessage,
+			envForService,
+			corgiGeneratedMessage,
+		)
+		envFileContentString = envFileContentString + envForService
+	}
+
+	if service.LocalhostNameInEnv != "" {
+		envFileContentString = strings.ReplaceAll(
+			envFileContentString,
+			"localhost",
+			service.LocalhostNameInEnv,
+		)
+	}
+
+	if envFileContentString == "" {
+		return nil
+	}
+	f, err := os.OpenFile(pathToEnvFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	defer f.Close()
+	if _, err = f.WriteString(envFileContentString); err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
 }
 
 func parseEnvVarsIntoMap(envForService string) map[string]string {
@@ -341,4 +363,40 @@ func getPathToEnv(service Service) string {
 
 func removeFromToIndexes(s []string, from int, to int) []string {
 	return append(s[:from], s[to+1:]...)
+}
+
+func CreateFileForPath(path string) {
+	if path == "" {
+		return
+	}
+	copyEnvFromFileAbsolutePath := fmt.Sprintf(
+		"%s/%s",
+		CorgiComposePathDir,
+		path,
+	)
+	dirPath := filepath.Dir(
+		copyEnvFromFileAbsolutePath,
+	)
+	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+
+		if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
+			fmt.Printf(
+				"Failed to create directory for env file %s, error: %s\n",
+				copyEnvFromFileAbsolutePath,
+				err,
+			)
+			return
+		}
+	}
+
+	_, err := os.Stat(copyEnvFromFileAbsolutePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			f, err := os.Create(copyEnvFromFileAbsolutePath)
+			if err != nil {
+				fmt.Println(err)
+			}
+			defer f.Close()
+		}
+	}
 }

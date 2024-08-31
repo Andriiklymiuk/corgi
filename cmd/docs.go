@@ -132,6 +132,12 @@ var serviceItems = []CorgiComposeItems{
 		itemType:    "[]string",
 		description: "List of commands to run consequently, when the cli is exited.",
 	},
+	{
+		item:        "scripts",
+		example:     "- name: script_name\n\t\t- commands: \n\t\t\t- command 1\n\t\t\t- command 2\n\t\t- manualRun: true/false\n\t\t- copyEnvFromFilePath: ./path/to/.env",
+		itemType:    "[]Script",
+		description: "List of scripts to run for the service.",
+	},
 }
 
 var dbServiceItems = []CorgiComposeItems{

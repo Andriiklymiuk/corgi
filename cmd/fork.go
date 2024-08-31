@@ -18,7 +18,7 @@ import (
 var forkCmd = &cobra.Command{
 	Use:   "fork",
 	Short: "Fork an existing service repositories to new repos.",
-	Long:  `This is command, that helps to bootstrap new projects using currently cloned/created repos and pushing them to newly created ones.`,
+	Long:  `This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.`,
 	Example: `corgi fork --all
 
 corgi fork

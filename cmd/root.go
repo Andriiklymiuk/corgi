@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var APP_VERSION = "1.6.11"
+var APP_VERSION = "1.7.0"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -78,7 +78,7 @@ func init() {
 	)
 	rootCmd.PersistentFlags().StringP(
 		"fromTemplateName",
-		"n",
+		"",
 		"",
 		"Create corgi service from template name and url",
 	)
