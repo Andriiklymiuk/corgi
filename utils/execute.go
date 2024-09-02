@@ -80,43 +80,61 @@ func RunServiceCmd(
 		}
 
 		cmd := exec.Command("/bin/sh", "-c", finalCommand)
-
 		cmd.Dir = path
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+
 		if interactive {
 			cmd.Stdin = os.Stdin
-		}
-		SetProcessGroup(cmd)
-		if err := cmd.Start(); err != nil {
-			return err
-		}
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
 
-		addProcess(cmd.Process)
+			done := make(chan error, 1)
 
-		if err := cmd.Wait(); err != nil {
-			removeProcess(cmd.Process)
-			// Check the error directly
-			if strings.Contains(err.Error(), "executable file not found") {
-				// Attempt to install missing command
-				missingCommand := commandSlice[0]
-				if cmdInfo, ok := CommandInstructions[missingCommand]; ok {
-					fmt.Printf("\n❗%s is missing. Attempting to install it using: %s\n", missingCommand, cmdInfo.Install)
-					installCmd := exec.Command("/bin/bash", "-c", cmdInfo.Install)
-					installCmd.Dir = path
-					installCmd.Stdout = os.Stdout
-					installCmd.Stderr = os.Stderr
-					if err := installCmd.Run(); err != nil {
-						return fmt.Errorf("failed to install %s: %v", missingCommand, err)
-					}
-					// Rerun the original command
-					fmt.Printf("\n🔄 Retrying the command: %s\n", finalCommand)
-					return RunServiceCmd(serviceName, finalCommand, path, false)
-				} else {
-					return fmt.Errorf("unknown command %s, no install instructions found", missingCommand)
-				}
-			} else {
+			err := cmd.Start()
+			if err != nil {
 				return err
+			}
+
+			go func() {
+				done <- cmd.Wait()
+			}()
+
+			if err := <-done; err != nil {
+				return err
+			}
+		} else {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			SetProcessGroup(cmd)
+			if err := cmd.Start(); err != nil {
+				return err
+			}
+
+			addProcess(cmd.Process)
+
+			if err := cmd.Wait(); err != nil {
+				removeProcess(cmd.Process)
+				// Check the error directly
+				if strings.Contains(err.Error(), "executable file not found") {
+					// Attempt to install missing command
+					missingCommand := commandSlice[0]
+					if cmdInfo, ok := CommandInstructions[missingCommand]; ok {
+						fmt.Printf("\n❗%s is missing. Attempting to install it using: %s\n", missingCommand, cmdInfo.Install)
+						installCmd := exec.Command("/bin/bash", "-c", cmdInfo.Install)
+						installCmd.Dir = path
+						installCmd.Stdout = os.Stdout
+						installCmd.Stderr = os.Stderr
+						if err := installCmd.Run(); err != nil {
+							return fmt.Errorf("failed to install %s: %v", missingCommand, err)
+						}
+						// Rerun the original command
+						fmt.Printf("\n🔄 Retrying the command: %s\n", finalCommand)
+						return RunServiceCmd(serviceName, finalCommand, path, interactive)
+					} else {
+						return fmt.Errorf("unknown command %s, no install instructions found", missingCommand)
+					}
+				} else {
+					return err
+				}
 			}
 		}
 	}
