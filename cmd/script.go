@@ -109,7 +109,12 @@ func runScript(cmd *cobra.Command, _ []string) {
 func runServiceScript(script utils.Script, path string) {
 	fmt.Println(art.BlueColor, "\n🤖 Executing commands for script", script.Name, art.WhiteColor)
 	for _, scriptCommand := range script.Commands {
-		err := utils.RunServiceCmd(script.Name, scriptCommand, path, false)
+		err := utils.RunServiceCmd(
+			script.Name,
+			scriptCommand,
+			path,
+			true,
+		)
 		if err != nil {
 			fmt.Println(
 				art.RedColor,
