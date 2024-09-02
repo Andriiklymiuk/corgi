@@ -140,6 +140,7 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) {
 			corgiCompose,
 			service,
 			"",
+			false,
 		)
 	}
 }
@@ -148,6 +149,7 @@ func GenerateEnvForService(
 	corgiCompose *CorgiCompose,
 	service Service,
 	copyEnvFilePath string,
+	ignoreDependentServicesEnvs bool,
 ) error {
 	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
 	err := EnsurePathExists(service.AbsolutePath)
@@ -186,21 +188,23 @@ func GenerateEnvForService(
 		)
 	}
 
-	// add url for dependent service
-	envForService += handleDependentServices(service, *corgiCompose)
+	if !ignoreDependentServicesEnvs {
+		// add url for dependent service
+		envForService += handleDependentServices(service, *corgiCompose)
 
-	envForService += handleDependsOnDb(service, *corgiCompose)
+		envForService += handleDependsOnDb(service, *corgiCompose)
 
-	if service.Port != 0 {
-		portAlias := "PORT"
-		if service.PortAlias != "" {
-			portAlias = service.PortAlias
+		if service.Port != 0 {
+			portAlias := "PORT"
+			if service.PortAlias != "" {
+				portAlias = service.PortAlias
+			}
+			envForService = fmt.Sprintf(
+				"%s%s",
+				envForService,
+				fmt.Sprintf("\n%s=%d", portAlias, service.Port),
+			)
 		}
-		envForService = fmt.Sprintf(
-			"%s%s",
-			envForService,
-			fmt.Sprintf("\n%s=%d", portAlias, service.Port),
-		)
 	}
 
 	if len(service.Environment) > 0 {

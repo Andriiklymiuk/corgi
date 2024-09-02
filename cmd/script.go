@@ -20,6 +20,7 @@ var scriptCmd = &cobra.Command{
 }
 
 var ScriptNamesFromFlag []string
+var IgnoreDependentServices bool
 
 func init() {
 	rootCmd.AddCommand(scriptCmd)
@@ -51,6 +52,14 @@ If you provide at least 1 name here, than corgi will choose only to run these sc
 
 By default all scripts are included to run.
 		`,
+	)
+
+	scriptCmd.PersistentFlags().BoolVarP(
+		&IgnoreDependentServices,
+		"ignore-dependent-services",
+		"",
+		true,
+		"Ignore dependent services for scripts, while copying env from other services.",
 	)
 }
 
@@ -89,6 +98,7 @@ func runScript(cmd *cobra.Command, _ []string) {
 					corgi,
 					service,
 					scriptServiceCmd.CopyEnvFromFilePath,
+					IgnoreDependentServices,
 				)
 			}
 			runServiceScript(scriptServiceCmd, service.AbsolutePath)
@@ -99,6 +109,7 @@ func runScript(cmd *cobra.Command, _ []string) {
 			corgi,
 			service,
 			"",
+			false,
 		)
 	}
 	if !isAnyScriptsFound {
