@@ -205,21 +205,21 @@ func GenerateEnvForService(
 				fmt.Sprintf("\n%s=%d", portAlias, service.Port),
 			)
 		}
-	}
 
-	if len(service.Environment) > 0 {
-		// Parse existing environment variables from envForService into a map for easy lookup.
-		existingEnvVars := parseEnvVarsIntoMap(envForService)
+		if len(service.Environment) > 0 {
+			// Parse existing environment variables from envForService into a map for easy lookup.
+			existingEnvVars := parseEnvVarsIntoMap(envForService)
 
-		var updatedEnvironment []string
-		for _, envLine := range service.Environment {
-			// Process each environment variable line for potential substitutions.
-			updatedEnvLine := substituteEnvVarReferences(envLine, existingEnvVars)
-			updatedEnvironment = append(updatedEnvironment, updatedEnvLine)
+			var updatedEnvironment []string
+			for _, envLine := range service.Environment {
+				// Process each environment variable line for potential substitutions.
+				updatedEnvLine := substituteEnvVarReferences(envLine, existingEnvVars)
+				updatedEnvironment = append(updatedEnvironment, updatedEnvLine)
+			}
+
+			// Join the updated environment strings and add them to envForService.
+			envForService += "\n" + strings.Join(updatedEnvironment, "\n") + "\n"
 		}
-
-		// Join the updated environment strings and add them to envForService.
-		envForService += "\n" + strings.Join(updatedEnvironment, "\n") + "\n"
 	}
 
 	pathToEnvFile := getPathToEnv(service)
