@@ -221,7 +221,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 		false,
 	)
 
-	fmt.Println("\n👋 Exiting cli")
+	fmt.Println("\n👋 Exiting corgi")
 }
 
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {

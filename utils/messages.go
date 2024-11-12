@@ -7,7 +7,7 @@ import (
 
 func PrintFinalMessage() {
 	fmt.Println(
-		"\n✨ Glad for using me ✨ See you next time 🚀 🐶",
+		"\n✨ Thanks for using me ✨ See you next time 🚀 🐶",
 		string("\n\n\033[36m"),
 		GetRandomQuote(),
 		art.WhiteColor,
