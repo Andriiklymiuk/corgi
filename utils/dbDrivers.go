@@ -102,15 +102,28 @@ var DriverConfigs = map[string]DriverConfig{
 		Prefix: "REDIS_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
-			token := fmt.Sprintf("\n%sTOKEN=%s\n", serviceNameInEnv, db.Password)
+			var password, token string
+			if db.Password != "" {
+				password = fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+				token = fmt.Sprintf("\n%sTOKEN=%s\n", serviceNameInEnv, db.Password)
+			}
+
+			var url string
+			if db.Password != "" {
+				url = fmt.Sprintf("\n%sURL=%s", serviceNameInEnv,
+					fmt.Sprintf("redis://:%s@%s:%d", db.Password, db.Host, db.Port))
+			} else {
+				url = fmt.Sprintf("\n%sURL=%s", serviceNameInEnv,
+					fmt.Sprintf("redis://%s:%d", db.Host, db.Port))
+			}
+
 			host := fmt.Sprintf("\n%sHOST=%s\n", serviceNameInEnv, db.Host)
 
 			return fmt.Sprintf("%s%s%s%s%s",
 				port,
 				password,
 				token,
-				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("redis://%s:%d", db.Host, db.Port)),
+				url,
 				host,
 			)
 		},
