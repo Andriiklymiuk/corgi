@@ -6,7 +6,7 @@ services:
   redis-server-{{.ServiceName}}:
     image: redis:{{if .Version}}{{.Version}}-{{end}}alpine
     container_name: redis-server-{{.ServiceName}}
-    command: redis-server --requirepass {{.Password}}
+    command: redis-server {{if .Password}}--requirepass {{.Password}}{{end}}
     ports:
       - "{{.Port}}:6379"
     networks:
