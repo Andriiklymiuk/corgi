@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkcorgi_docs=self.webpackChunkcorgi_docs||[]).push([[4738],{4026:o=>{o.exports=JSON.parse('{"permalink":"/corgi/blog/tags/hola","page":1,"postsPerPage":10,"totalPages":1,"totalCount":1,"blogDescription":"Blog","blogTitle":"Blog"}')}}]);
