@@ -62,7 +62,7 @@ You can check documentation on https://andriiklymiuk.github.io/corgi/
 
 ## VSCODE users
 
-You can install [corgi extension](https://marketplace.visualstudio.com/items?itemName=andriiklymiuk.corgi-checker) to get syntax highlights and much more
+You can install [corgi extension](https://marketplace.visualstudio.com/items?itemName=corgi.corgi) to get syntax highlights and much more
 
 
 ## Quick install with [Homebrew](https://brew.sh)
