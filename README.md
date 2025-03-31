@@ -60,6 +60,8 @@ While in services you can create whatever you want, but in db services **for now
 
 You can check documentation on https://andriiklymiuk.github.io/corgi/
 
+And here is small 2 min video showcase https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY
+
 ## VSCODE users
 
 You can install [corgi extension](https://marketplace.visualstudio.com/items?itemName=corgi.corgi) to get syntax highlights and much more
