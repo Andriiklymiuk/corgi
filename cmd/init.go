@@ -51,7 +51,6 @@ func runInit(cmd *cobra.Command, _ []string) {
 
 	filesToIgnore := []string{
 		"# Added by corgi cli",
-		utils.RootDbServicesFolder,
 		"corgi_services/*",
 		".env*",
 	}
