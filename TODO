@@ -1,6 +1,1 @@
-- in required checkCmd && || don't work, use same approach to start commands
-- copy dump from seedFromFile (don't remember its name), if corgi db seed is used
-- if there is a path and no cloneFrom, so open this service path and not create new folder of name service
-- probably in make seed command don't pass id if docker service and just get it in line itself (check mysql)
-- add support for docker runner
 - change properties db_services, depends_on_services and depends_on_db_services to databases, dependsOnDatabases abd dependsOnServices. don't forget to release it in v2 with stating brraking changes and change all the exampls in repos and in vscode and in corgi example
