@@ -80,10 +80,12 @@ Provide them in corgi-compose.yml file`)
 		filesToCreate := getFilesToCreate(service.Driver)
 		var errDuringFileCreation bool
 		for _, file := range filesToCreate {
-			err := createDbFileFromTemplate(
+			err := createFileFromTemplate(
 				service,
 				file.Name,
 				file.Template,
+				service.ServiceName,
+				utils.RootDbServicesFolder,
 			)
 
 			if err != nil {
@@ -321,44 +323,55 @@ func getGitignoreServicePath(
 	return filesToIgnore
 }
 
-func createDbFileFromTemplate(
-	dbService utils.DatabaseService,
+func createFileFromTemplate(
+	service interface{},
 	fileName string,
 	fileTemplate string,
+	serviceName string,
+	serviceFolder string,
 ) error {
 	fileName, pathToFileName := getPathToFileName(fileName)
 	path := fmt.Sprintf(
 		"%s/%s/%s/%s",
 		utils.CorgiComposePathDir,
-		utils.RootDbServicesFolder,
-		dbService.ServiceName,
+		serviceFolder,
+		serviceName,
 		pathToFileName,
 	)
 
 	err := os.MkdirAll(path, os.ModePerm)
-
 	if err != nil {
 		return fmt.Errorf("error of creating %s, error: %s", path, err)
 	}
 
-	dockerComposeFile := fmt.Sprintf("%s/%s", path, fileName)
-
-	f, err := os.Create(dockerComposeFile)
-
+	filePath := fmt.Sprintf("%s/%s", path, fileName)
+	f, err := os.Create(filePath)
 	if err != nil {
-		return fmt.Errorf("error of creating %s, error: %s", dockerComposeFile, err)
+		return fmt.Errorf("error of creating %s, error: %s", filePath, err)
 	}
-
 	defer f.Close()
 
+	if sv, ok := service.(utils.Service); ok && fileName == "docker-compose.yml" {
+		exposedPort, err := utils.GetExposedPortFromDockerfile(sv)
+		if err != nil {
+			fmt.Printf("Warning: %v\n", err)
+			fmt.Println("To fix this, add an EXPOSE directive to your Dockerfile, e.g., EXPOSE 3020")
+		} else {
+			fileTemplate = strings.Replace(
+				fileTemplate,
+				"${DOCKERFILE_PORT}",
+				exposedPort,
+				-1,
+			)
+		}
+	}
+
 	tmp := template.Must(template.New("simple").Parse(fileTemplate))
-
-	err = tmp.Execute(f, dbService)
-
+	err = tmp.Execute(f, service)
 	if err != nil {
 		return fmt.Errorf(
 			"error of creating template %s, error: %s",
-			dockerComposeFile,
+			filePath,
 			err,
 		)
 	}
