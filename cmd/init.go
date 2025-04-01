@@ -37,6 +37,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 
 	CreateMissingEnvFiles(corgi.Services)
 	CreateDatabaseServices(corgi.DatabaseServices)
+	CreateServices(corgi.Services)
 	CloneServices(corgi.Services)
 	RunRequired(corgi.Required)
 
@@ -109,10 +110,143 @@ Provide them in corgi-compose.yml file`)
 	}
 }
 
+func CreateServices(services []utils.Service) {
+	if len(services) == 0 {
+		return
+	}
+
+	for _, service := range services {
+		if service.Runner.Name == "" {
+			continue
+		}
+		if service.Runner.Name != "docker" {
+			continue
+		}
+		if service.Port == 0 {
+			fmt.Printf(
+				"Service %s does not have port specified, skipping docker runner creation\n",
+				service.ServiceName,
+			)
+			continue
+		}
+		dockerfileExists, err := utils.CheckIfFileExistsInDirectory(
+			service.AbsolutePath,
+			"Dockerfile",
+		)
+		if err != nil {
+			fmt.Println(err)
+		}
+		if !dockerfileExists {
+			fmt.Printf(
+				"Service %s does not have Dockerfile in path %s\n",
+				service.ServiceName,
+				service.AbsolutePath,
+			)
+			continue
+		}
+
+		err = copyEnvFileWithSubstitutions(service)
+		if err != nil {
+			fmt.Printf(
+				"Error copying .env file for service %s: %s\n",
+				service.ServiceName,
+				err,
+			)
+		} else {
+			fmt.Printf(
+				"Successfully copied .env file for service %s with substitutions\n",
+				service.ServiceName,
+			)
+		}
+
+		filesToCreate := getServiceFilesToCreate(service.Runner.Name)
+
+		var errDuringFileCreation bool
+		for _, file := range filesToCreate {
+			err := createFileFromTemplate(
+				service,
+				file.Name,
+				file.Template,
+				service.ServiceName,
+				utils.RootServicesFolder,
+			)
+
+			if err != nil {
+				errDuringFileCreation = true
+				fmt.Printf(
+					"error creating %s for service %s, error: %s\n",
+					file.Name,
+					service.ServiceName,
+					err,
+				)
+				break
+			}
+		}
+		if errDuringFileCreation {
+			fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
+			fmt.Printf("Service %s had error during creation\n", service.ServiceName)
+		} else {
+			fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
+			fmt.Printf("Service %s was successfully created\n", service.ServiceName)
+		}
+	}
+}
+
+func copyEnvFileWithSubstitutions(service utils.Service) error {
+	sourceEnvPath := fmt.Sprintf("%s/.env", service.AbsolutePath)
+
+	_, err := os.Stat(sourceEnvPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf(".env file does not exist at %s", sourceEnvPath)
+		}
+		return fmt.Errorf("error checking .env file at %s: %w", sourceEnvPath, err)
+	}
+
+	content, err := os.ReadFile(sourceEnvPath)
+	if err != nil {
+		return fmt.Errorf("error reading .env file at %s: %w", sourceEnvPath, err)
+	}
+
+	modifiedContent := strings.ReplaceAll(string(content), "localhost", "host.docker.internal")
+	modifiedContent = strings.ReplaceAll(modifiedContent, "127.0.0.1", "host.docker.internal")
+
+	destPath := fmt.Sprintf("%s/%s/%s/.env",
+		utils.CorgiComposePathDir,
+		utils.RootServicesFolder,
+		service.ServiceName)
+
+	destDir := fmt.Sprintf("%s/%s/%s",
+		utils.CorgiComposePathDir,
+		utils.RootServicesFolder,
+		service.ServiceName)
+
+	err = os.MkdirAll(destDir, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("error creating directory %s: %w", destDir, err)
+	}
+
+	err = os.WriteFile(destPath, []byte(modifiedContent), 0644)
+	if err != nil {
+		return fmt.Errorf("error writing modified .env file for docker to %s: %w", destPath, err)
+	}
+
+	return nil
+}
+
 func getFilesToCreate(driver string) []utils.FilenameForService {
 	driverConfig, ok := utils.DriverConfigs[driver]
 	if !ok {
 		driverConfig = utils.DriverConfigs["default"]
+	}
+
+	return driverConfig.FilesToCreate
+}
+
+func getServiceFilesToCreate(driver string) []utils.FilenameForService {
+	driverConfig, ok := utils.ServiceConfigs[driver]
+	if !ok {
+		return nil
 	}
 
 	return driverConfig.FilesToCreate
