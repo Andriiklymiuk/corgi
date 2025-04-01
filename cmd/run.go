@@ -175,6 +175,8 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	utils.GenerateEnvForServices(corgi)
 
+	CreateServices(corgi.Services)
+
 	var serviceWaitGroup sync.WaitGroup
 	serviceWaitGroup.Add(len(corgi.Services))
 	var startCmdPresent bool
@@ -316,6 +318,17 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			false,
 		)
 	}
+
+	if service.Runner.Name == "docker" {
+		go func() {
+			fmt.Println(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
+			err = utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up")
+			if err != nil {
+				fmt.Println("Starting service failed", err)
+			}
+		}()
+	}
+
 	if service.Start != nil {
 		fmt.Println("\nStart commands:")
 		utils.RunServiceCommands(

@@ -211,6 +211,16 @@ func GetPathToDbService(targetService string) (string, error) {
 	return path, nil
 }
 
+func GetPathToService(targetService string) (string, error) {
+	path := fmt.Sprintf(
+		"%s/%s/%s",
+		CorgiComposePathDir,
+		RootServicesFolder,
+		targetService,
+	)
+	return path, nil
+}
+
 func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 	makeFileExists, err := CheckIfFileExistsInDirectory(
 		fmt.Sprintf(
@@ -276,6 +286,25 @@ func ExecuteMakeCommand(targetService string, makeCommand ...string) ([]byte, er
 
 func ExecuteCommandRun(targetService string, command ...string) error {
 	path, err := GetPathToDbService(targetService)
+	if err != nil {
+		return fmt.Errorf("path to target service is not found: %s", err)
+	}
+
+	cmd := exec.Command(command[0], command[1:]...)
+	cmd.Dir = path
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf(`output error: %s, in path %s with command make %s
+		`, err, path, command)
+	}
+
+	return nil
+}
+
+func ExecuteServiceCommandRun(targetService string, command ...string) error {
+	path, err := GetPathToService(targetService)
 	if err != nil {
 		return fmt.Errorf("path to target service is not found: %s", err)
 	}
