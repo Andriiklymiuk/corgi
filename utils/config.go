@@ -29,6 +29,7 @@ var NameInConfig = "name"
 var DescriptionInConfig = "description"
 
 var RootDbServicesFolder = "corgi_services/db_services"
+var RootServicesFolder = "corgi_services/services"
 var ServicesItemsFromFlag []string
 var DbServicesItemsFromFlag []string
 
@@ -76,6 +77,10 @@ type Script struct {
 	CopyEnvFromFilePath string   `yaml:"copyEnvFromFilePath,omitempty"`
 }
 
+type Runner struct {
+	Name string `yaml:"name,omitempty" options:"docker,"`
+}
+
 type Service struct {
 	ServiceName         string             `yaml:"service_name,omitempty"`
 	Path                string             `yaml:"path,omitempty"`
@@ -96,6 +101,8 @@ type Service struct {
 	AfterStart          []string           `yaml:"afterStart,omitempty"`
 	Scripts             []Script           `yaml:"scripts,omitempty"`
 	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
+
+	Runner Runner `yaml:"runner,omitempty"`
 
 	AbsolutePath string
 }
@@ -279,6 +286,18 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 			if !IsServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
 				continue
 			}
+			if service.Runner.Name == "docker" && service.Port == 0 {
+				exposedPort, err := GetExposedPortFromDockerfile(service)
+				if err != nil {
+					fmt.Println("couldn't get exposed port from Dockerfile: ", err)
+				}
+				if exposedPort != "" {
+					service.Port, err = strconv.Atoi(exposedPort)
+					if err != nil {
+						fmt.Println("error converting exposed port to integer:", err)
+					}
+				}
+			}
 			if service.Path == "" && service.CloneFrom != "" {
 				if strings.HasSuffix(service.CloneFrom, ".git") {
 					splitURL := strings.Split(service.CloneFrom, "/")
@@ -322,6 +341,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				Start:               service.Start,
 				Scripts:             service.Scripts,
 				InteractiveInput:    service.InteractiveInput,
+				Runner:              service.Runner,
 			}
 			services = append(services, serviceToAdd)
 
