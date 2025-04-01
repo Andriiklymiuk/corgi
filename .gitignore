@@ -20,7 +20,10 @@ dump.bak
 
 
 dist/
+.npmrc
 .env
+Dockerfile
+corgi
 
 # Added by corgi cli
 corgi_services/db_services
