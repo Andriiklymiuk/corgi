@@ -52,13 +52,13 @@ func CheckDockerStatus() error {
 	return nil
 }
 
-func IsServiceRunning(driver, targetService string) (bool, error) {
+func IsServiceRunning(containerName string) (bool, error) {
 	cmd := exec.Command(
 		"docker",
 		"ps",
 		"--all",
 		"--filter",
-		fmt.Sprintf("name=%s-%s", driver, targetService),
+		fmt.Sprintf("name=%s", containerName),
 		"--format",
 		"{{.Names}}\t{{.Status}}",
 	)
@@ -77,7 +77,7 @@ func IsServiceRunning(driver, targetService string) (bool, error) {
 			containerName := parts[0]
 			containerStatus := parts[1]
 
-			if strings.Contains(containerName, fmt.Sprintf("%s-%s", driver, targetService)) &&
+			if strings.Contains(containerName, containerName) &&
 				strings.HasPrefix(containerStatus, "Up") &&
 				parts[len(parts)-1] != "(Paused)" {
 				return true, nil
