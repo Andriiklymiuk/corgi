@@ -153,10 +153,16 @@ func runRun(cmd *cobra.Command, _ []string) {
 		}
 	}
 
-	if corgi.UseDocker {
-		err = utils.DockerInit(cmd)
-		if err != nil {
-			fmt.Println("Docker init failed", err)
+	if corgi.UseDocker || func() bool {
+		for _, s := range corgi.Services {
+			if s.Runner.Name == "docker" {
+				return true
+			}
+		}
+		return false
+	}() {
+		if err := utils.DockerInit(cmd); err != nil {
+			fmt.Println("Docker init failed:", err)
 		}
 	}
 
