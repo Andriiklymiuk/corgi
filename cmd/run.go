@@ -328,7 +328,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		)
 	}
 
-	if service.Runner.Name == "docker" {
+	if service.Runner.Name == "docker" && service.Port != 0 {
 		go func() {
 			fmt.Println(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
 			err = utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up")
