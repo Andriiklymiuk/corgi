@@ -329,25 +329,24 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 	}
 
 	if service.Runner.Name == "docker" && service.Port != 0 {
-		go func() {
-			fmt.Println(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
-			err = utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up")
-			if err != nil {
-				fmt.Println("Starting service failed", err)
-			}
-		}()
-	}
+		fmt.Println(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
+		err = utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up")
+		if err != nil {
+			fmt.Println("Starting service failed", err)
+		}
+	} else {
 
-	if service.Start != nil {
-		fmt.Println("\nStart commands:")
-		utils.RunServiceCommands(
-			"start",
-			service.ServiceName,
-			service.Start,
-			service.AbsolutePath,
-			true,
-			service.InteractiveInput,
-		)
+		if service.Start != nil {
+			fmt.Println("\nStart commands:")
+			utils.RunServiceCommands(
+				"start",
+				service.ServiceName,
+				service.Start,
+				service.AbsolutePath,
+				true,
+				service.InteractiveInput,
+			)
+		}
 	}
 }
 
