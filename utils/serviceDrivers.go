@@ -31,6 +31,12 @@ var ServiceConfigs = map[string]ServiceConfig{
 }
 
 func GetExposedPortFromDockerfile(service Service) (string, error) {
+	if service.Port != 0 {
+		// If the port is already specified in the service struct, return it directly
+		// This is because the port is already specified in the service struct
+		// and we don't need to check the Dockerfile for it
+		return fmt.Sprintf("%d", service.Port), nil
+	}
 	dockerfileExists, err := CheckIfFileExistsInDirectory(
 		service.AbsolutePath,
 		"Dockerfile",
