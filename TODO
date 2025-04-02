@@ -1,5 +1,5 @@
 Bugs:
 - on corgi compose hot reload, if i change runner back to start, than runner doesn't get stopped and both are running
-
+- top register case service name stops docker runner from starting
 Features:
 - change properties db_services, depends_on_services and depends_on_db_services to databases, dependsOnDatabases abd dependsOnServices. don't forget to release it in v2 with stating brraking changes and change all the exampls in repos and in vscode and in corgi example
