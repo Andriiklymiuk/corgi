@@ -193,14 +193,15 @@ func CreateServices(services []utils.Service) {
 }
 
 func copyEnvFileWithSubstitutions(service utils.Service) error {
-	sourceEnvPath := fmt.Sprintf("%s/.env", service.AbsolutePath)
+	envPath := utils.GetPathToEnv(service)
+	sourceEnvPath := fmt.Sprintf("%s/%s", service.AbsolutePath, envPath)
 
 	_, err := os.Stat(sourceEnvPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf(".env file does not exist at %s", sourceEnvPath)
+			return fmt.Errorf("%s file does not exist at %s", envPath, sourceEnvPath)
 		}
-		return fmt.Errorf("error checking .env file at %s: %w", sourceEnvPath, err)
+		return fmt.Errorf("error checking %s file at %s: %w", envPath, sourceEnvPath, err)
 	}
 
 	content, err := os.ReadFile(sourceEnvPath)

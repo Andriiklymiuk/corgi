@@ -222,7 +222,7 @@ func GenerateEnvForService(
 		}
 	}
 
-	pathToEnvFile := getPathToEnv(service)
+	pathToEnvFile := GetPathToEnv(service)
 
 	var corgiEnvPosition []int
 	envFileContent := GetFileContent(pathToEnvFile)
@@ -334,7 +334,7 @@ func splitStringForEnv(s string) string {
 	)
 }
 
-func getPathToEnv(service Service) string {
+func GetPathToEnv(service Service) string {
 	envName := ".env"
 	if service.EnvPath != "" {
 		service.EnvPath = strings.Replace(
