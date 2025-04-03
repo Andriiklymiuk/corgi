@@ -2,7 +2,7 @@ package templates
 
 var DockerComposePostgis = `services:
   postgis-{{.ServiceName}}:
-    image: postgis/postgis:{{if .Version}}{{.Version}}-{{end}}alpine
+    image: postgis/postgis:{{if .Version}}{{.Version}}-{{else}}17-3.5-{{end}}alpine
     container_name: postgis-{{.ServiceName}}
     environment:
       - POSTGRES_USER={{.User}}
