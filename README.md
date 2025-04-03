@@ -54,7 +54,7 @@ While in services you can create whatever you want, but in db services **for now
 - [dragonfly](https://www.dragonflydb.io)
 - [redict](https://redict.io)
 - [valkey](https://github.com/valkey-io/valkey)
-- [s3](https://docs.localstack.cloud/user-guide/aws/s3/) - in development
+- [postgis](https://postgis.net)
 
 ## Documentation
 
