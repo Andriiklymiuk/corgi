@@ -173,17 +173,19 @@ func RunServiceCommands(
 			}(command)
 		}
 	} else {
-		for _, command := range commands {
+		if len(commands) > 0 {
+			combinedCommand := strings.Join(commands, " && ")
+
 			err := RunServiceCmd(
 				serviceName,
-				command,
+				combinedCommand,
 				path,
 				interactive,
 			)
 			if err != nil {
 				fmt.Println(
 					art.RedColor,
-					fmt.Sprintf("aborting %s command `%s` for %s, because of %s", commandsName, command, serviceName, err),
+					fmt.Sprintf("aborting %s commands for %s, because of %s", commandsName, serviceName, err),
 					art.WhiteColor,
 				)
 				return
