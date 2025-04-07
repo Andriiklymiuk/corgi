@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var APP_VERSION = "1.8.5"
+var APP_VERSION = "1.8.6"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -96,7 +96,7 @@ func init() {
 	)
 	rootCmd.PersistentFlags().BoolP(
 		"runOnce",
-		"",
+		"o",
 		false,
 		"Run corgi once and exit",
 	)
