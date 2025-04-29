@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeCockroach = `version: "3.9"
-
-services:
+var DockerComposeCockroach = `services:
   cockroach-{{.ServiceName}}:
     image: cockroachdb/cockroach:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     command: start-single-node --insecure

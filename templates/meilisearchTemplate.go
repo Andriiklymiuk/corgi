@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeMeiliSearch = `version: "3.9"
-
-services:
+var DockerComposeMeiliSearch = `services:
   meilisearch-{{.ServiceName}}:
     image: getmeili/meilisearch:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: meilisearch-{{.ServiceName}}

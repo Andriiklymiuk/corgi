@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeClickHouse = `version: "3.9"
-
-services:
+var DockerComposeClickHouse = `services:
   clickhouse-{{.ServiceName}}:
     image: clickhouse/clickhouse-server:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: clickhouse-{{.ServiceName}}

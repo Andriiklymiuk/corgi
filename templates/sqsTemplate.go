@@ -2,9 +2,7 @@ package templates
 
 var SqsRegion = "eu-central-1"
 
-var DockerComposeSqs = `version: "3.9"
-      
-services:
+var DockerComposeSqs = `services:
   sqs-{{.ServiceName}}:
     image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: sqs-{{.ServiceName}}

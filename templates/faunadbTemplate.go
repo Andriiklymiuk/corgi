@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeFauna = `version: "3.9"
-
-services:
+var DockerComposeFauna = `services:
   faunadb-{{.ServiceName}}:
     image: fauna/faunadb:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: faunadb-{{.ServiceName}}

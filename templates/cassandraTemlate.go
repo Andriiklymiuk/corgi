@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeCassandra = `version: "3.9"
-
-services:
+var DockerComposeCassandra = `services:
   cassandra-{{.ServiceName}}:
     image: cassandra:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: cassandra-{{.ServiceName}}

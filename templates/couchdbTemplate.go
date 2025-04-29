@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeCouchDB = `version: "3.9"
-
-services:
+var DockerComposeCouchDB = `services:
   couchdb-{{.ServiceName}}:
     image: couchdb:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: couchdb-{{.ServiceName}}

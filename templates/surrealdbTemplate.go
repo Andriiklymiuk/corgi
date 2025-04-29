@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeSurrealDB = `version: "3.9"
-
-services:
+var DockerComposeSurrealDB = `services:
   surrealdb-{{.ServiceName}}:
     image: surrealdb/surrealdb:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: surrealdb-{{.ServiceName}}

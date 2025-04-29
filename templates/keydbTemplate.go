@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeKeyDB = `version: "3.9"
-      
-services:
+var DockerComposeKeyDB = `services:
   keydb-{{.ServiceName}}:
     image: eqalpha/keydb:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     ports:

@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeDgraph = `version: "3.9"
-
-services:
+var DockerComposeDgraph = `services:
   dgraph-zero-{{.ServiceName}}:
     image: dgraph/dgraph:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: zero-{{.ServiceName}}

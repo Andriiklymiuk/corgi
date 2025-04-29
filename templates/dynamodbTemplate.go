@@ -2,9 +2,7 @@ package templates
 
 var DynamoDBRegion = "eu-central-1"
 
-var DockerComposeDynamoDB = `version: "3.9"
-
-services:
+var DockerComposeDynamoDB = `services:
   dynamodb-{{.ServiceName}}:
     image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: dynamodb-{{.ServiceName}}

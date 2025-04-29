@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeElasticsearch = `version: "3.9"
-
-services:
+var DockerComposeElasticsearch = `services:
   elasticsearch-{{.ServiceName}}:
     image: docker.elastic.co/elasticsearch/elasticsearch:{{if .Version}}{{.Version}}{{else}}8.10.2{{end}}
     container_name: elasticsearch-{{.ServiceName}}

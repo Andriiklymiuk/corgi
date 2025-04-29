@@ -2,8 +2,7 @@ package templates
 
 var S3Region = "eu-central-1"
 
-var DockerComposeS3 = `version: "3.9"
-services:
+var DockerComposeS3 = `services:
   s3-{{.ServiceName}}:
     image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: s3-{{.ServiceName}}

@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeInfluxDB = `version: "3.9"
-
-services:
+var DockerComposeInfluxDB = `services:
   influxdb-{{.ServiceName}}:
     image: influxdb:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: influxdb-{{.ServiceName}}

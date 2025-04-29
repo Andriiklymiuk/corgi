@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeTimescale = `version: "3.9"
-
-services:
+var DockerComposeTimescale = `services:
   timescaledb-{{.ServiceName}}:
     image: timescale/timescaledb:{{if .Version}}{{.Version}}{{else}}latest-pg14{{end}}
     container_name: timescaledb-{{.ServiceName}}

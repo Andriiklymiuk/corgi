@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeMySQL = `version: "3.9"
-
-services:
+var DockerComposeMySQL = `services:
   mysql-{{.ServiceName}}:
     image: mysql:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: mysql-{{.ServiceName}}
