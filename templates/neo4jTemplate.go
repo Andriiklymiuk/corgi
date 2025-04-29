@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeNeo4j = `version: "3.9"
-
-services:
+var DockerComposeNeo4j = `services:
   neo4j-{{.ServiceName}}:
     image: neo4j:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: neo4j-{{.ServiceName}}

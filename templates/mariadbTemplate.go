@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeMariaDB = `version: "3.9"
-
-services:
+var DockerComposeMariaDB = `services:
   mariadb-{{.ServiceName}}:
     image: mariadb:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: mariadb-{{.ServiceName}}

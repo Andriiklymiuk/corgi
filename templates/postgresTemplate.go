@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposePostgres = `version: "3.9"
-
-services:
+var DockerComposePostgres = `services:
   postgres-{{.ServiceName}}:
     image: postgres:{{if .Version}}{{.Version}}-{{end}}alpine
     container_name: postgres-{{.ServiceName}}

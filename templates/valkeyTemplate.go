@@ -1,9 +1,7 @@
 package templates
 
 // TODO: change to latest version from unstable, when it is available
-var DockerComposeValkey = `version: "3.8"
-
-services:
+var DockerComposeValkey = `services:
   valkey-{{.ServiceName}}:
     image: valkey/valkey:{{if .Version}}{{.Version}}{{else}}unstable{{end}}
     container_name: valkey-{{.ServiceName}}

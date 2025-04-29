@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeMSSQL = `version: "3.9"
-
-services:
+var DockerComposeMSSQL = `services:
   mssql-{{.ServiceName}}:
     image: mcr.microsoft.com/mssql/server:{{if .Version}}{{.Version}}{{else}}2022{{end}}-latest
     container_name: mssql-{{.ServiceName}}

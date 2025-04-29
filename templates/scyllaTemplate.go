@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeScylla = `version: "3.9"
-
-services:
+var DockerComposeScylla = `services:
   scylla-{{.ServiceName}}:
     image: scylladb/scylla:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: scylla-{{.ServiceName}}

@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeRedis = `version: "3.9"
-      
-services:
+var DockerComposeRedis = `services:
   redis-{{.ServiceName}}:
     image: redis/redis-stack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     ports:

@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeDragonfly = `version: "3.8"
-
-services:
+var DockerComposeDragonfly = `services:
   dragonfly-{{.ServiceName}}:
     image: 'docker.dragonflydb.io/dragonflydb/dragonfly:{{if .Version}}{{.Version}}{{else}}latest{{end}}'
     container_name: dragonfly-{{.ServiceName}}

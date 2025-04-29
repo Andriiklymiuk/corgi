@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeYugabytedb = `version: "3.9"
-
-services:
+var DockerComposeYugabytedb = `services:
   yugabyte-{{.ServiceName}}:
     image: yugabytedb/yugabyte:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: yugabytedb-{{.ServiceName}}

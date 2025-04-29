@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeArangoDB = `version: "3.9"
-
-services:
+var DockerComposeArangoDB = `services:
   arangodb-{{.ServiceName}}:
     image: arangodb:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: arangodb-{{.ServiceName}}

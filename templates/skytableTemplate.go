@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeSkytable = `version: "3.9"
-      
-services:
+var DockerComposeSkytable = `services:
   skytable-{{.ServiceName}}:
     image: skytable/skytable:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     ports:

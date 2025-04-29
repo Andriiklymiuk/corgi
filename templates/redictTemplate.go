@@ -1,8 +1,6 @@
 package templates
 
-var DockerComposeRedict = `version: "3.9"
-
-services:
+var DockerComposeRedict = `services:
   redict-{{.ServiceName}}:
     image: registry.redict.io/redict:{{if .Version}}{{.Version}}{{else}}latest{{end}}
     container_name: redict-{{.ServiceName}}
