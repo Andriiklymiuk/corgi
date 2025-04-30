@@ -47,7 +47,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 		corgi.Init,
 		"",
 		false,
-		false,
+		true,
 	)
 
 	filesToIgnore := []string{
