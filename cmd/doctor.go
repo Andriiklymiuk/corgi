@@ -12,10 +12,10 @@ import (
 
 // doctorCmd represents the doctor command
 var doctorCmd = &cobra.Command{
-	Use:   "doctor",
-	Short: "Check required properties in corgi-compose",
-	Long:  `Checks what is required for corgi-compose and installs, if not found.`,
-	Run:   runDoctor,
+	Use:     "doctor",
+	Short:   "Check required properties in corgi-compose",
+	Long:    `Checks what is required for corgi-compose and installs, if not found.`,
+	Run:     runDoctor,
 	Aliases: []string{"check"},
 }
 
@@ -89,7 +89,7 @@ func processRequired(required utils.Required) bool {
 	}
 
 	for _, installStep := range required.Install {
-		err := utils.RunServiceCmd(required.Name, installStep, "", false)
+		err := utils.RunServiceCmd(required.Name, installStep, "", true)
 		if err != nil {
 			fmt.Println("error happened during installation", err)
 			break

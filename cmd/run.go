@@ -172,7 +172,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 		corgi.BeforeStart,
 		"",
 		false,
-		false,
+		true,
 	)
 
 	CreateDatabaseServices(corgi.DatabaseServices)
