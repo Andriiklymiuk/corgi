@@ -201,6 +201,12 @@ var dbServiceItems = []CorgiComposeItems{
 		itemType:    "\tSeedFromDb",
 		description: "Db credentials to seed from.\n\t\t\t\tUse either seedFromFilePath or seedFromDb/seedFromDbEnvPath",
 	},
+	{
+		item:        "additional",
+		example:     "definitionPath: ./rabbitmq_definition.json",
+		itemType:    "AdditionalDatabaseConfig",
+		description: "Additional configuration for specific database types.\n\t\t\tFor RabbitMQ: definitionPath - path to JSON file with RabbitMQ definitions (queues, exchanges, bindings, etc.)",
+	},
 }
 
 var requiredItems = []CorgiComposeItems{
