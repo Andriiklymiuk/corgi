@@ -6,9 +6,11 @@ var DockerComposeRabbitMQ = `services:
     container_name: rabbitmq-{{.ServiceName}}
     environment:
       - RABBITMQ_DEFAULT_USER={{.User}}
-      - RABBITMQ_DEFAULT_PASS={{.Password}}
+      - RABBITMQ_DEFAULT_PASS={{.Password}}{{if and .Additional .Additional.DefinitionPath}}
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_management load_definitions "/etc/rabbitmq/definitions.json"{{end}}
     volumes:
-      - /var/lib/rabbitmq
+      - /var/lib/rabbitmq{{if and .Additional .Additional.DefinitionPath}}
+      - {{.Additional.DefinitionPath}}:/etc/rabbitmq/definitions.json{{end}}
     ports:
       - "{{.Port}}:5672"
       - "{{if .Port2}}{{.Port2}}{{else}}15672{{end}}:15672"
