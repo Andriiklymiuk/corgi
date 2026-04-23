@@ -225,6 +225,12 @@ var dbServiceItems = []CorgiComposeItems{
 		itemType:    "[]string",
 		description: "localstack driver only. S3 buckets auto-created by the LocalStack bootstrap.\n\t\t\tAlso emitted as env: AWS_S3_<UPPER_NAME>_BUCKET=<bucket-name>",
 	},
+	{
+		item:        "healthCheck",
+		example:     "/health",
+		itemType:    "string",
+		description: "Optional HTTP path used by `corgi status`.\n\t\t\tIf set, status probes GET http://localhost:<port><healthCheck> and accepts any non-5xx response as healthy.\n\t\t\tIf unset, status falls back to a raw TCP connect on the port.\n\t\t\tThe localstack driver defaults to /_localstack/health if not overridden.",
+	},
 }
 
 var requiredItems = []CorgiComposeItems{

@@ -4,6 +4,8 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 
 	"github.com/manifoldco/promptui"
@@ -12,9 +14,18 @@ import (
 
 // doctorCmd represents the doctor command
 var doctorCmd = &cobra.Command{
-	Use:     "doctor",
-	Short:   "Check required properties in corgi-compose",
-	Long:    `Checks what is required for corgi-compose and installs, if not found.`,
+	Use:   "doctor",
+	Short: "Preflight checks: required tools, Docker, port availability",
+	Long: `Preflight checks for running this corgi-compose.
+
+Verifies in order:
+  1. Every tool declared in the 'required:' block is installed (offers install
+     if present and interactive).
+  2. Docker daemon is reachable (skipped if no db_services are declared).
+  3. Every port used by db_services and services is free. Ports already in use
+     are reported with the owning process (COMMAND, pid).
+
+Exit code is non-zero if anything fails so CI / scripts can consume it.`,
 	Run:     runDoctor,
 	Aliases: []string{"check"},
 }
@@ -27,37 +38,115 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Printf("couldn't get services config, error: %s\n", err)
+		os.Exit(1)
+	}
+
+	requiredOK := RunRequired(corgi.Required)
+	dockerOK := runDockerCheck(corgi)
+	portsOK := runPortChecks(corgi)
+
+	fmt.Println()
+	if requiredOK && dockerOK && portsOK {
+		fmt.Println(art.GreenColor, "🎉 Doctor: all checks passed", art.WhiteColor)
 		return
 	}
 
-	RunRequired(corgi.Required)
-
+	fmt.Println(art.RedColor, "❌ Doctor: one or more checks failed", art.WhiteColor)
+	os.Exit(1)
 }
 
-func RunRequired(required []utils.Required) {
+// RunRequired is kept for backwards compatibility with cmd/init.go.
+// It returns whether all required tools were found.
+func RunRequired(required []utils.Required) bool {
 	if len(required) == 0 {
-		fmt.Println("No required is added in corgi-compose")
-		return
+		return true
 	}
-	var notFoundRequiredItems []string
-
-	for _, required := range required {
-		isFound := processRequired(required)
-		if !isFound {
-			notFoundRequiredItems = append(notFoundRequiredItems, required.Name)
+	var notFound []string
+	for _, r := range required {
+		if !processRequired(r) {
+			notFound = append(notFound, r.Name)
 		}
 	}
-	if len(notFoundRequiredItems) != 0 {
-		fmt.Println(
-			"💬 Some required commands were not found:",
-			art.RedColor,
-			strings.Join(notFoundRequiredItems, ", "),
-			art.WhiteColor,
-		)
-		return
+	if len(notFound) == 0 {
+		return true
 	}
+	fmt.Println(
+		"💬 Missing required tools:",
+		art.RedColor,
+		strings.Join(notFound, ", "),
+		art.WhiteColor,
+	)
+	return false
+}
 
-	fmt.Println("🎉 All required software was found successfully")
+func runDockerCheck(corgi *utils.CorgiCompose) bool {
+	if len(corgi.DatabaseServices) == 0 {
+		return true
+	}
+	fmt.Println()
+	if utils.IsDockerRunning() {
+		fmt.Println("✅", art.GreenColor, "Docker daemon is running", art.WhiteColor)
+		return true
+	}
+	fmt.Println("❌", art.RedColor,
+		"Docker daemon is not reachable — start Docker Desktop / colima / dockerd",
+		art.WhiteColor)
+	return false
+}
+
+// portOwnerInfo names what a port is declared for, in the running compose.
+type portOwnerInfo struct {
+	Port int
+	Desc string // e.g. "db_services.api-db (postgres)" or "services.api"
+}
+
+func collectDeclaredPorts(corgi *utils.CorgiCompose) []portOwnerInfo {
+	var ports []portOwnerInfo
+	for _, db := range corgi.DatabaseServices {
+		if db.Port == 0 {
+			continue
+		}
+		ports = append(ports, portOwnerInfo{
+			Port: db.Port,
+			Desc: fmt.Sprintf("db_services.%s (%s)", db.ServiceName, db.Driver),
+		})
+	}
+	for _, svc := range corgi.Services {
+		if svc.Port == 0 || svc.ManualRun {
+			continue
+		}
+		ports = append(ports, portOwnerInfo{
+			Port: svc.Port,
+			Desc: fmt.Sprintf("services.%s", svc.ServiceName),
+		})
+	}
+	sort.SliceStable(ports, func(i, j int) bool { return ports[i].Port < ports[j].Port })
+	return ports
+}
+
+func runPortChecks(corgi *utils.CorgiCompose) bool {
+	ports := collectDeclaredPorts(corgi)
+	if len(ports) == 0 {
+		return true
+	}
+	fmt.Println()
+	fmt.Println("🔌 Port availability:")
+	allFree := true
+	for _, p := range ports {
+		if utils.IsPortListening(p.Port) {
+			owner := utils.PortOwner(p.Port)
+			if owner == "" {
+				owner = "(unknown — lsof unavailable)"
+			}
+			fmt.Printf("  %s ❌ %d busy — needed for %s — held by: %s%s\n",
+				art.RedColor, p.Port, p.Desc, owner, art.WhiteColor)
+			allFree = false
+		} else {
+			fmt.Printf("  %s ✅ %d free — for %s%s\n",
+				art.GreenColor, p.Port, p.Desc, art.WhiteColor)
+		}
+	}
+	return allFree
 }
 
 func processRequired(required utils.Required) bool {
@@ -106,7 +195,6 @@ func processRequired(required utils.Required) bool {
 }
 
 func checkRequiredIsFound(required utils.Required) (bool, string) {
-
 	fmt.Println("\n🤖 Required:", art.GreenColor, required.Name, art.WhiteColor)
 
 	var cmdToRunForCheck string

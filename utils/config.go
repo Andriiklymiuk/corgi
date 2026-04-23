@@ -52,6 +52,10 @@ type DatabaseService struct {
 	Services []string `yaml:"services,omitempty"` // e.g. [sqs, s3]
 	Queues   []string `yaml:"queues,omitempty"`   // SQS queues to auto-create
 	Buckets  []string `yaml:"buckets,omitempty"`  // S3 buckets to auto-create
+	// Optional HTTP path for `corgi status`. If set, status check does GET
+	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
+	// If unset, status falls back to a TCP connect on the port.
+	HealthCheck string `yaml:"healthCheck,omitempty"`
 }
 
 type SeedFromDb struct {
@@ -112,6 +116,11 @@ type Service struct {
 	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
 
 	Runner Runner `yaml:"runner,omitempty"`
+
+	// Optional HTTP path for `corgi status`. If set, status check does GET
+	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
+	// If unset, status falls back to a TCP connect on the port.
+	HealthCheck string `yaml:"healthCheck,omitempty"`
 
 	AbsolutePath string
 }
@@ -282,6 +291,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				Services:          db.Services,
 				Queues:            db.Queues,
 				Buckets:           db.Buckets,
+				HealthCheck:       db.HealthCheck,
 			}
 			dbServices = append(dbServices, dbToAdd)
 
@@ -357,6 +367,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				Scripts:             service.Scripts,
 				InteractiveInput:    service.InteractiveInput,
 				Runner:              service.Runner,
+				HealthCheck:         service.HealthCheck,
 			}
 			services = append(services, serviceToAdd)
 

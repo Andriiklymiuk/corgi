@@ -1,22 +1,33 @@
-# corgi docs
+# corgi status
 
-## corgi docs
+## corgi status
 
-Do stuff with docs
+Healthcheck every declared service and db_service
 
 ### Synopsis
 
-Helper set of commands to make your life easier with docs and corgi 
+Verifies every db_service and (non-manualRun) service declared in
+corgi-compose.yml is reachable on its port.
+
+For each db_service:
+  - TCP connect on localhost:<port>. If 'healthCheck' is set, or the driver is
+    'localstack', corgi additionally does an HTTP GET and accepts any non-5xx
+    response as healthy.
+
+For each service:
+  - TCP connect on localhost:<port>. If 'healthCheck' is set, corgi does
+    GET http://localhost:<port><healthCheck> and accepts any non-5xx response.
+
+Exit code is non-zero if anything's down so CI / scripts can consume it.
 
 ```
-corgi docs [flags]
+corgi status [flags]
 ```
 
 ### Options
 
 ```
-      --generate   Generate cobra docs. Useful for development only, because it updates corgi docs.
-  -h, --help       help for docs
+  -h, --help   help for status
 ```
 
 ### Options inherited from parent commands
