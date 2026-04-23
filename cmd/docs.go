@@ -138,6 +138,12 @@ var serviceItems = []CorgiComposeItems{
 		itemType:    "[]Script",
 		description: "List of scripts to run for the service.",
 	},
+	{
+		item:        "healthCheck",
+		example:     "/health",
+		itemType:    "string",
+		description: "Optional HTTP path used by `corgi status`.\n\t\t\tIf set, status probes GET http://localhost:<port><healthCheck> and accepts any non-5xx response as healthy.\n\t\t\tIf unset, status falls back to a raw TCP connect on the port.",
+	},
 }
 
 var dbServiceItems = []CorgiComposeItems{
