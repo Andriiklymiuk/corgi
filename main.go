@@ -72,6 +72,10 @@ func canShowWelcomeMessages() bool {
 	for _, arg := range os.Args {
 		if arg == "docs" ||
 			arg == "doctor" ||
+			arg == "check" ||
+			arg == "status" ||
+			arg == "health" ||
+			arg == "healthcheck" ||
 			arg == "--silent" ||
 			arg == "--version" ||
 			arg == "-v" ||
@@ -125,7 +129,17 @@ func runClearCmd(name string, arg ...string) {
 
 func ClearTerminal() {
 	for _, arg := range os.Args {
-		if arg == "--silent" {
+		if arg == "--silent" ||
+			arg == "doctor" ||
+			arg == "check" ||
+			arg == "status" ||
+			arg == "health" ||
+			arg == "healthcheck" ||
+			arg == "docs" ||
+			arg == "--version" ||
+			arg == "-v" ||
+			arg == "-h" ||
+			arg == "--help" {
 			return
 		}
 	}
