@@ -55,6 +55,8 @@ While in services you can create whatever you want, but in db services **for now
 - [redict](https://redict.io)
 - [valkey](https://github.com/valkey-io/valkey)
 - [postgis](https://postgis.net)
+- [pgvector](https://github.com/pgvector/pgvector) — postgres + `pgvector` extension. Uses prefix `DB_`, same as plain `postgres`
+- [localstack](https://docs.localstack.cloud/) — single container for multiple AWS services (sqs, s3, …), with `queues` / `buckets` auto-created from config
 
 ## Documentation
 

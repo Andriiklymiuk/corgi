@@ -207,6 +207,24 @@ var dbServiceItems = []CorgiComposeItems{
 		itemType:    "AdditionalDatabaseConfig",
 		description: "Additional configuration for specific database types.\n\t\t\tFor RabbitMQ: definitionPath - path to JSON file with RabbitMQ definitions (queues, exchanges, bindings, etc.)",
 	},
+	{
+		item:        "services",
+		example:     "[sqs, s3]",
+		itemType:    "[]string",
+		description: "localstack driver only. AWS services to enable inside the single LocalStack container.\n\t\t\tDefault when omitted: [sqs, s3]",
+	},
+	{
+		item:        "queues",
+		example:     "[api-queue, ela-queue]",
+		itemType:    "[]string",
+		description: "localstack driver only. SQS queues auto-created by the LocalStack bootstrap.\n\t\t\tAlso emitted as env: AWS_SQS_<UPPER_NAME>=<queue-name> and AWS_SQS_<UPPER_NAME>_URL=<full-url>",
+	},
+	{
+		item:        "buckets",
+		example:     "[ela-documents]",
+		itemType:    "[]string",
+		description: "localstack driver only. S3 buckets auto-created by the LocalStack bootstrap.\n\t\t\tAlso emitted as env: AWS_S3_<UPPER_NAME>_BUCKET=<bucket-name>",
+	},
 }
 
 var requiredItems = []CorgiComposeItems{
