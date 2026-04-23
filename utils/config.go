@@ -35,7 +35,7 @@ var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
 	ServiceName       string                   `yaml:"service_name,omitempty"`
-	Driver            string                   `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,mariadb,redis,redis-server,rabbitmq,sqs,s3,dynamodb,kafka,mssql,cassandra,cockroach,clickhouse,scylla,keydb,surrealdb,neo4j,dgraph,arangodb,elasticsearch,timescaledb,couchdb,meilisearch,faunadb,yugabytedb,skytable,dragonfly,redict,valkey,postgis❌skip"`
+	Driver            string                   `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,mariadb,redis,redis-server,rabbitmq,sqs,s3,dynamodb,kafka,mssql,cassandra,cockroach,clickhouse,scylla,keydb,surrealdb,neo4j,dgraph,arangodb,elasticsearch,timescaledb,couchdb,meilisearch,faunadb,yugabytedb,skytable,dragonfly,redict,valkey,postgis,pgvector,localstack❌skip"`
 	Version           string                   `yaml:"version,omitempty"`
 	Host              string                   `yaml:"host,omitempty"`
 	User              string                   `yaml:"user,omitempty"`
@@ -48,6 +48,10 @@ type DatabaseService struct {
 	SeedFromFilePath  string                   `yaml:"seedFromFilePath,omitempty"`
 	SeedFromDb        SeedFromDb               `yaml:"seedFromDb,omitempty"`
 	Additional        AdditionalDatabaseConfig `yaml:"additional,omitempty"`
+	// localstack driver:
+	Services []string `yaml:"services,omitempty"` // e.g. [sqs, s3]
+	Queues   []string `yaml:"queues,omitempty"`   // SQS queues to auto-create
+	Buckets  []string `yaml:"buckets,omitempty"`  // S3 buckets to auto-create
 }
 
 type SeedFromDb struct {
@@ -275,6 +279,9 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				SeedFromDbEnvPath: db.SeedFromDbEnvPath,
 				SeedFromFilePath:  db.SeedFromFilePath,
 				Additional:        additional,
+				Services:          db.Services,
+				Queues:            db.Queues,
+				Buckets:           db.Buckets,
 			}
 			dbServices = append(dbServices, dbToAdd)
 

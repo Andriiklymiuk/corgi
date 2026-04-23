@@ -41,9 +41,11 @@ var DriverConfigs = map[string]DriverConfig{
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
 
-			return fmt.Sprintf("%s%s%s%s%s%s", host,
+			return fmt.Sprintf("%s%s%s%s%s%s%s%s", host,
 				fmt.Sprintf("\nREGION=%s", templates.SqsRegion),
 				fmt.Sprintf("\nAWS_REGION=%s", templates.SqsRegion),
+				fmt.Sprintf("\n%sENDPOINT=http://%s:%d/000000000000/", serviceNameInEnv, db.Host, db.Port),
+				fmt.Sprintf("\n%sQUEUE_NAME=%s", serviceNameInEnv, db.DatabaseName),
 				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://%s:%d/000000000000/%s", db.Host, db.Port, db.DatabaseName)),
 				"\nAWS_ACCESS_KEY_ID=test",
 				"\nAWS_SECRET_ACCESS_KEY=test",
@@ -60,11 +62,13 @@ var DriverConfigs = map[string]DriverConfig{
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
 			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			return fmt.Sprintf("%s%s%s%s%s%s",
+			return fmt.Sprintf("%s%s%s%s%s%s%s%s",
 				host,
 				port,
 				fmt.Sprintf("\nREGION=%s", templates.S3Region),
 				fmt.Sprintf("\nAWS_REGION=%s", templates.S3Region),
+				fmt.Sprintf("\n%sENDPOINT_URL=http://%s:%d", serviceNameInEnv, db.Host, db.Port),
+				fmt.Sprintf("\n%sBUCKET=%s", serviceNameInEnv, db.DatabaseName),
 				"\nAWS_ACCESS_KEY_ID=test",
 				"\nAWS_SECRET_ACCESS_KEY=test",
 			)
@@ -599,6 +603,62 @@ var DriverConfigs = map[string]DriverConfig{
 		FilesToCreate: []FilenameForService{
 			{"docker-compose.yml", templates.DockerComposePostgis},
 			{"Makefile", templates.MakefilePostgis},
+		},
+	},
+	"pgvector": {
+		Prefix: "DB_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+
+			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposePgvector},
+			{"Makefile", templates.MakefilePgvector},
+		},
+	},
+	"localstack": {
+		// Unified LocalStack driver: one container, multiple AWS services,
+		// multiple queues and buckets. Emits generic AWS_* env + per-queue/per-bucket env.
+		Prefix: "AWS_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			var out strings.Builder
+
+			fmt.Fprintf(&out, "\n%sHOST=%s", serviceNameInEnv, db.Host)
+			fmt.Fprintf(&out, "\n%sPORT=%d", serviceNameInEnv, db.Port)
+			fmt.Fprintf(&out, "\n%sENDPOINT_URL=http://%s:%d", serviceNameInEnv, db.Host, db.Port)
+			fmt.Fprintf(&out, "\n%sSQS_ENDPOINT=http://%s:%d/000000000000/", serviceNameInEnv, db.Host, db.Port)
+			fmt.Fprintf(&out, "\n%sS3_ENDPOINT_URL=http://%s:%d", serviceNameInEnv, db.Host, db.Port)
+			fmt.Fprintf(&out, "\n%sREGION=%s", serviceNameInEnv, templates.LocalstackRegion)
+			fmt.Fprintf(&out, "\n%sACCESS_KEY_ID=test", serviceNameInEnv)
+			fmt.Fprintf(&out, "\n%sSECRET_ACCESS_KEY=test", serviceNameInEnv)
+
+			// Per-queue: AWS_SQS_<NAME>=queue-name  AND  AWS_SQS_<NAME>_URL=full-url
+			// Matches humbrela convention (AWS_SQS_API_QUEUE, AWS_SQS_ELA_QUEUE, etc.).
+			for _, q := range db.Queues {
+				envKey := strings.ToUpper(strings.ReplaceAll(q, "-", "_"))
+				fmt.Fprintf(&out, "\n%sSQS_%s=%s", serviceNameInEnv, envKey, q)
+				fmt.Fprintf(&out, "\n%sSQS_%s_URL=http://%s:%d/000000000000/%s",
+					serviceNameInEnv, envKey, db.Host, db.Port, q)
+			}
+
+			// Per-bucket: AWS_S3_<NAME>_BUCKET=bucket-name
+			for _, b := range db.Buckets {
+				envKey := strings.ToUpper(strings.ReplaceAll(b, "-", "_"))
+				fmt.Fprintf(&out, "\n%sS3_%s_BUCKET=%s", serviceNameInEnv, envKey, b)
+			}
+
+			out.WriteString("\n")
+			return out.String()
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeLocalstack},
+			{"Makefile", templates.MakefileLocalstack},
+			{"bootstrap/bootstrap.sh", templates.BootstrapLocalstack},
 		},
 	},
 	"default": {
