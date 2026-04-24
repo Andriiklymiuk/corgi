@@ -1,0 +1,14 @@
+{
+  "name": "corgi",
+  "owner": {
+    "name": "Andrii Klymiuk",
+    "url": "https://github.com/Andriiklymiuk"
+  },
+  "plugins": [
+    {
+      "name": "corgi",
+      "source": "./plugins/corgi",
+      "description": "AI skill for authoring corgi-compose.yml, running and debugging corgi projects"
+    }
+  ]
+}
