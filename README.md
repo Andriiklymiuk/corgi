@@ -73,6 +73,17 @@ And here is small 2 min video showcase https://youtu.be/rlMCjs4EoFs?si=o3SQaymM5
 
 You can install [corgi extension](https://marketplace.visualstudio.com/items?itemName=corgi.corgi) to get syntax highlights and much more
 
+## Claude Code users
+
+This repo ships a [Claude Code](https://claude.com/claude-code) plugin so an AI agent can author your `corgi-compose.yml`, run corgi, and debug failures accurately.
+
+```
+/plugin marketplace add Andriiklymiuk/corgi
+/plugin install corgi@corgi
+```
+
+Then in any project that has a `corgi-compose.yml`, Claude will recognize it and use `corgi run` / `corgi doctor` / `corgi status` instead of inventing its own commands. A `/corgi-new` slash command scaffolds a fresh `corgi-compose.yml` from a short conversation.
+
 
 ## Quick install with [Homebrew](https://brew.sh)
 
