@@ -14,7 +14,6 @@ import (
 )
 
 func main() {
-	ClearTerminal()
 	showWelcomeMessage()
 	var runCli func()
 	runCli = func() {
