@@ -85,18 +85,46 @@ This repo ships a [Claude Code](https://claude.com/claude-code) plugin so an AI 
 Then in any project that has a `corgi-compose.yml`, Claude will recognize it and use `corgi run` / `corgi doctor` / `corgi status` instead of inventing its own commands. A `/corgi-new` slash command scaffolds a fresh `corgi-compose.yml` from a short conversation.
 
 
-## Quick install with [Homebrew](https://brew.sh)
+## Install
+
+After install, `corgi` is available globally — run it from any folder.
+
+### macOS / Linux — [Homebrew](https://brew.sh)
 
 ```bash
 brew install andriiklymiuk/homebrew-tools/corgi
+```
 
-# ask for help to check if it works
+### macOS / Linux — install script
+
+No Homebrew? One-liner that picks the right OS/arch binary from GitHub releases:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh
+```
+
+Installs to `/usr/local/bin` if writable, otherwise `~/.local/bin` (auto-added to PATH for zsh/bash/fish).
+
+Useful overrides:
+- `CORGI_VERSION=1.10.0` — pin a version
+- `CORGI_INSTALL_DIR=$HOME/bin` — force a directory
+- `CORGI_NO_MODIFY_PATH=1` — don't touch shell rc files
+
+### Windows — PowerShell
+
+```powershell
+irm https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.ps1 | iex
+```
+
+Installs to `%LOCALAPPDATA%\corgi\bin` and adds it to your user PATH.
+
+### Verify
+
+```bash
 corgi -h
 ```
 
-It will install it globally.
-
-With it you can run `corgi` in any folder on your local.
+`corgi update` (alias `corgi upgrade`) detects how you installed and uses the matching method to upgrade.
 
 Try it with expo + hono server example
 ```bash
