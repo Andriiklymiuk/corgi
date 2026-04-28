@@ -1,0 +1,1 @@
+"use strict";(globalThis.webpackChunkcorgi_docs=globalThis.webpackChunkcorgi_docs||[]).push([[1903],{1912(o){o.exports=JSON.parse('{"blogBasePath":"/corgi/blog","blogTitle":"Blog","authorsListPath":"/corgi/blog/authors"}')}}]);
