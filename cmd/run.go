@@ -179,7 +179,10 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	runDatabaseServices(cmd, corgi.DatabaseServices)
 
-	utils.GenerateEnvForServices(corgi)
+	if err := utils.GenerateEnvForServices(corgi); err != nil {
+		fmt.Println(art.RedColor, "aborting corgi run:", err, art.WhiteColor)
+		os.Exit(1)
+	}
 
 	CreateServices(corgi.Services)
 
