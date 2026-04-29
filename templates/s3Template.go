@@ -4,7 +4,7 @@ var S3Region = "eu-central-1"
 
 var DockerComposeS3 = `services:
   s3-{{.ServiceName}}:
-    image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
+    image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}3.8{{end}}
     container_name: s3-{{.ServiceName}}
     hostname: s3
     environment:
