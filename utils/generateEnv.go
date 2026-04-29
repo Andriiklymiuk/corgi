@@ -302,18 +302,53 @@ func substituteCrossServiceRefs(
 }
 
 // Adds env variables to each service, including dependent db_services and services.
-// Services are processed in dependency order so that ${producer.VAR} references
-// can be resolved against the producer's exports.
+//
+// Resolution is two-phase so that bidirectional ${producer.VAR} references
+// (codependencies) work as long as the actual VAR values don't form a true
+// cycle:
+//
+//  1. Try topo-sort. If it succeeds, process services in dependency order —
+//     each service's exports are fully resolved before any consumer runs.
+//     This is the fast path and matches pre-1.12 behavior.
+//
+//  2. If topo-sort detects a cycle (both sides reference each other's
+//     exports), fall back to fixed-point resolution: build each service's
+//     exports from its local env without cross-ref substitution, then
+//     iteratively expand ${producer.VAR} within the exports map until
+//     stable. Finally, write each service's env file using the resolved
+//     map. A genuine VAR-level cycle (e.g. A.X="${B.Y}" and B.Y="${A.X}")
+//     remains unresolvable and surfaces as an error naming the stuck vars.
 func GenerateEnvForServices(corgiCompose *CorgiCompose) error {
 	ordered, err := topoSortServices(corgiCompose.Services)
-	if err != nil {
-		fmt.Println(art.RedColor, "service env generation:", err, art.WhiteColor)
-		return err
+	if err == nil {
+		currentExportsMap = ExportsMap{}
+		defer func() { currentExportsMap = nil }()
+
+		for _, service := range ordered {
+			if err := GenerateEnvForService(
+				corgiCompose,
+				service,
+				"",
+				false,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	currentExportsMap = ExportsMap{}
+
+	// Fallback: fixed-point resolution for codependencies.
+	resolved, fpErr := resolveExportsFixedPoint(corgiCompose)
+	if fpErr != nil {
+		// Both topo and fixed-point failed — true cycle. Surface the
+		// fixed-point error since it names the actual stuck variables.
+		fmt.Println(art.RedColor, "service env generation:", fpErr, art.WhiteColor)
+		return fpErr
+	}
+	currentExportsMap = resolved
 	defer func() { currentExportsMap = nil }()
 
-	for _, service := range ordered {
+	for _, service := range corgiCompose.Services {
 		if err := GenerateEnvForService(
 			corgiCompose,
 			service,
@@ -324,6 +359,133 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) error {
 		}
 	}
 	return nil
+}
+
+// resolveExportsFixedPoint is the codependency fallback. It builds each
+// service's exports from its local env (no cross-ref substitution), then
+// iteratively expands ${producer.VAR} within the exports map until either
+// stable or all references are resolved. Returns an error naming any
+// vars whose values still contain unresolved cross-refs after the
+// iteration limit (true VAR-level cycle).
+func resolveExportsFixedPoint(c *CorgiCompose) (ExportsMap, error) {
+	out := ExportsMap{}
+	for _, s := range c.Services {
+		if len(s.Exports) == 0 {
+			continue
+		}
+		// Local env: copy-from-file + dependent service URLs + db emissions
+		// + port + own environment block with only ${OWN_VAR} substituted.
+		// Cross-service refs (${other.X}) are left as literal placeholders.
+		localEnv := buildLocalEnv(s, *c)
+		envMap := parseEnvVarsIntoMap(localEnv)
+
+		exports := map[string]string{}
+		for _, entry := range s.Exports {
+			if idx := strings.Index(entry, "="); idx >= 0 {
+				name := strings.TrimSpace(entry[:idx])
+				rawVal := entry[idx+1:]
+				exports[name] = substituteEnvVarReferences(rawVal, envMap)
+				continue
+			}
+			name := strings.TrimSpace(entry)
+			if val, ok := envMap[name]; ok {
+				exports[name] = val
+			}
+			// else: bare export of nonexistent var — silently dropped to
+			// match resolveExports() leniency in the fallback path.
+		}
+		out[s.ServiceName] = exports
+	}
+
+	// Build per-service consumer view for substituteCrossServiceRefs to
+	// validate that ${producer.VAR} producer is in depends_on_services.
+	consumers := map[string]Service{}
+	for _, s := range c.Services {
+		consumers[s.ServiceName] = s
+	}
+
+	maxIter := 0
+	for _, vars := range out {
+		maxIter += len(vars)
+	}
+	maxIter = maxIter*2 + 1
+
+	for iter := 0; iter < maxIter; iter++ {
+		changed := false
+		for serviceName, vars := range out {
+			consumer := consumers[serviceName]
+			for varName, val := range vars {
+				if !crossServiceRefRe.MatchString(val) {
+					continue
+				}
+				newVal, subErr := substituteCrossServiceRefs(val, consumer, out)
+				if subErr != nil {
+					// Could be a transitive self-ref induced by cycle
+					// (e.g. value rewritten to ${self.X}). Don't abort —
+					// let the iteration converge and the post-loop
+					// stuck-check report it as a cycle.
+					continue
+				}
+				if newVal != val {
+					vars[varName] = newVal
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+
+	var stuck []string
+	for serviceName, vars := range out {
+		for varName, val := range vars {
+			if crossServiceRefRe.MatchString(val) {
+				stuck = append(stuck, fmt.Sprintf("%s.%s=%q", serviceName, varName, val))
+			}
+		}
+	}
+	if len(stuck) > 0 {
+		return nil, fmt.Errorf(
+			"cycle in cross-service exports — could not resolve: %s",
+			strings.Join(stuck, ", "),
+		)
+	}
+	return out, nil
+}
+
+// buildLocalEnv replicates the env-construction phase of GenerateEnvForService
+// without writing a file or substituting cross-service refs. Used by the
+// codependency fallback to compute each service's exports independently of
+// resolution order.
+func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
+	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
+
+	var envForService string
+	if service.CopyEnvFromFilePath != "" {
+		path := fmt.Sprintf("%s/%s", CorgiComposePathDir, service.CopyEnvFromFilePath)
+		envForService = getEnvFromFile(path, corgiGeneratedMessage)
+	}
+	envForService += handleDependentServices(service, corgiCompose)
+	envForService += handleDependsOnDb(service, corgiCompose)
+	if service.Port != 0 {
+		portAlias := "PORT"
+		if service.PortAlias != "" {
+			portAlias = service.PortAlias
+		}
+		envForService += fmt.Sprintf("\n%s=%d", portAlias, service.Port)
+	}
+	if len(service.Environment) > 0 {
+		existing := parseEnvVarsIntoMap(envForService)
+		var lines []string
+		for _, line := range service.Environment {
+			// Only own ${VAR} substitution; leave ${producer.VAR} literal
+			// for the fixed-point resolver to handle.
+			lines = append(lines, substituteEnvVarReferences(line, existing))
+		}
+		envForService += "\n" + strings.Join(lines, "\n") + "\n"
+	}
+	return envForService
 }
 
 func GenerateEnvForService(
@@ -409,14 +571,18 @@ func GenerateEnvForService(
 	}
 
 	// Resolve this service's exports so later services can reference them.
+	// In the codependency fallback path, currentExportsMap is pre-populated
+	// by resolveExportsFixedPoint; don't clobber the resolved values.
 	if currentExportsMap != nil && len(service.Exports) > 0 {
-		producerEnv := parseEnvVarsIntoMap(envForService)
-		resolved, err := resolveExports(service, producerEnv)
-		if err != nil {
-			fmt.Println(art.RedColor, "exports for", service.ServiceName, ":", err, art.WhiteColor)
-			return err
+		if _, already := currentExportsMap[service.ServiceName]; !already {
+			producerEnv := parseEnvVarsIntoMap(envForService)
+			resolved, err := resolveExports(service, producerEnv)
+			if err != nil {
+				fmt.Println(art.RedColor, "exports for", service.ServiceName, ":", err, art.WhiteColor)
+				return err
+			}
+			currentExportsMap[service.ServiceName] = resolved
 		}
-		currentExportsMap[service.ServiceName] = resolved
 	}
 
 	pathToEnvFile := GetPathToEnv(service)

@@ -103,6 +103,93 @@ func TestTopoSortServices_SelfDep(t *testing.T) {
 	}
 }
 
+func TestResolveExportsFixedPoint_BidirectionalLiterals(t *testing.T) {
+	// Real codependency that topo-sort can't order: both services have
+	// hard ${other.VAR} refs but the export VALUES themselves are static
+	// literals so resolution converges in one fixed-point pass.
+	c := &CorgiCompose{
+		Services: []Service{
+			{
+				ServiceName:       "a",
+				DependsOnServices: []DependsOnService{{Name: "b"}},
+				Environment:       []string{"FROM_B=${b.B_VAL}", "A_VAL=hello-from-a"},
+				Exports:           []string{"A_VAL"},
+			},
+			{
+				ServiceName:       "b",
+				DependsOnServices: []DependsOnService{{Name: "a"}},
+				Environment:       []string{"FROM_A=${a.A_VAL}", "B_VAL=hello-from-b"},
+				Exports:           []string{"B_VAL"},
+			},
+		},
+	}
+	resolved, err := resolveExportsFixedPoint(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved["a"]["A_VAL"] != "hello-from-a" {
+		t.Fatalf("a.A_VAL = %q", resolved["a"]["A_VAL"])
+	}
+	if resolved["b"]["B_VAL"] != "hello-from-b" {
+		t.Fatalf("b.B_VAL = %q", resolved["b"]["B_VAL"])
+	}
+}
+
+func TestResolveExportsFixedPoint_TransitiveResolution(t *testing.T) {
+	// A exports a literal that references B's export. B's export references
+	// A's literal-only export (not the ${b.X} one). Fixed-point should
+	// resolve in a couple of iterations.
+	c := &CorgiCompose{
+		Services: []Service{
+			{
+				ServiceName:       "a",
+				DependsOnServices: []DependsOnService{{Name: "b"}},
+				Exports:           []string{"COMBINED=${b.B_HOST}:7000", "A_TAG=tag-a"},
+			},
+			{
+				ServiceName:       "b",
+				DependsOnServices: []DependsOnService{{Name: "a"}},
+				Exports:           []string{"B_HOST=localhost", "ECHO_A=${a.A_TAG}"},
+			},
+		},
+	}
+	resolved, err := resolveExportsFixedPoint(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved["a"]["COMBINED"] != "localhost:7000" {
+		t.Fatalf("a.COMBINED = %q", resolved["a"]["COMBINED"])
+	}
+	if resolved["b"]["ECHO_A"] != "tag-a" {
+		t.Fatalf("b.ECHO_A = %q", resolved["b"]["ECHO_A"])
+	}
+}
+
+func TestResolveExportsFixedPoint_TrueVarLevelCycle(t *testing.T) {
+	// A.X = ${b.Y}, B.Y = ${a.X}. Genuine cycle — fixed-point cannot resolve.
+	c := &CorgiCompose{
+		Services: []Service{
+			{
+				ServiceName:       "a",
+				DependsOnServices: []DependsOnService{{Name: "b"}},
+				Exports:           []string{"X=${b.Y}"},
+			},
+			{
+				ServiceName:       "b",
+				DependsOnServices: []DependsOnService{{Name: "a"}},
+				Exports:           []string{"Y=${a.X}"},
+			},
+		},
+	}
+	_, err := resolveExportsFixedPoint(c)
+	if err == nil {
+		t.Fatal("expected error: var-level cycle should be unresolvable")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("expected cycle message, got %v", err)
+	}
+}
+
 func TestTopoSortServices_MixedHardSoft(t *testing.T) {
 	// api consumes notif's TOKEN (hard); notif aliases api's URL (soft).
 	// Order must be notif → api. No cycle.
