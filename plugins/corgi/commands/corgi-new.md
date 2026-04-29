@@ -23,6 +23,7 @@ Ask one question at a time. Skip anything obvious from Step 1. Likely questions:
 - **Any AWS services needed locally?** (If yes → use `driver: localstack` with `queues:` / `buckets:`.)
 - **Which services need to wait on which dbs?** (Becomes `depends_on_db:` with `envAlias`.)
 - **Any cross-service calls?** (Becomes `depends_on_services:`.)
+- **Any shared secrets or vars one service must publish to another?** (Becomes `exports:` on producer, `${producer.VAR}` reference inside consumer's `environment:`.)
 - **Are services in this repo, or should corgi clone them?** (Sets `path:` vs `cloneFrom:`.)
 
 Don't ask about flags the user would never think about (e.g. `manualRun`, `runner.name`) — set sane defaults and note them inline.

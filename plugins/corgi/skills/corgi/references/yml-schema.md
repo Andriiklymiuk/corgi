@@ -80,6 +80,10 @@ depends_on_services:
     suffix:         string        # Appended to URL (e.g. /api/v1)
     forceUseEnv:    bool
 
+exports:                 [string]   # Whitelist of vars exported to dependents.
+                                    #   "NAME"           re-export own env var (must exist)
+                                    #   "NAME=value"     inline literal (${OWN_VAR} expanded)
+
 runner:
   name: string                    # "docker" or custom
 
@@ -144,3 +148,41 @@ For each `depends_on_services`:
 - Emits `<envAlias>=http://<localhostNameInEnv>:<port><suffix>`.
 
 `useDocker: true` rewrites `localhost` → `host.docker.internal` in generated `.env` values so containers can reach host ports.
+
+## Exporting and referencing service env vars
+
+A service can declare a whitelist of env vars it exports to dependents:
+
+```yaml
+services:
+  notifier:
+    port: 7000
+    copyEnvFromFilePath: .env-notifier   # contains NOTIFICATION_API_TOKEN=xxx
+    environment:
+      - URL=http://localhost:${PORT}
+    exports:
+      - NOTIFICATION_API_TOKEN              # re-export own env var
+      - URL                                 # re-export own env var
+      - HEALTH=http://localhost:${PORT}/healthz   # inline literal
+```
+
+Dependents reference these via `${producer.VAR}` inside their own `environment`:
+
+```yaml
+services:
+  app:
+    depends_on_services:
+      - name: notifier
+    environment:
+      - NOTIFICATION_API_TOKEN=${notifier.NOTIFICATION_API_TOKEN}   # shared secret
+      - NOTIFIER_URL=${notifier.URL}                                # rename
+      - NOTIFIER_PING=${notifier.HEALTH}/extra                      # compose
+```
+
+Rules:
+- Producer must be listed in consumer's `depends_on_services` to be referenced.
+- Only names in `exports` are visible — typos and unexported names error at env generation.
+- Cycles in `depends_on_services` graph error.
+- Service name in `${producer.VAR}` must match the raw yaml key exactly (case-sensitive, no `-`/`/` normalization, unlike legacy `<NAME>_URL`).
+- `exports` entries that reference a missing own-env var error at env generation.
+- `manualRun` producers still produce exports (values are static); URL-based exports may point at nothing live.

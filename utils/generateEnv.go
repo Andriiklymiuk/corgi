@@ -133,9 +133,157 @@ func EnsurePathExists(dirName string) error {
 	return os.MkdirAll(dirName, 0755)
 }
 
-// Adds env variables to each service, including dependent db_services and services
+// ExportsMap holds resolved exports per service: serviceName -> varName -> value.
+type ExportsMap map[string]map[string]string
+
+var currentExportsMap ExportsMap
+
+var crossServiceRefRe = regexp.MustCompile(`\$\{([A-Za-z0-9_\-/]+)\.([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// topoSortServices returns services in dependency order (deps first). Errors on cycles.
+func topoSortServices(services []Service) ([]Service, error) {
+	indeg := map[string]int{}
+	graph := map[string][]string{}
+	byName := map[string]Service{}
+
+	for _, s := range services {
+		byName[s.ServiceName] = s
+		if _, ok := indeg[s.ServiceName]; !ok {
+			indeg[s.ServiceName] = 0
+		}
+	}
+	for _, s := range services {
+		seen := map[string]bool{}
+		for _, d := range s.DependsOnServices {
+			if _, ok := byName[d.Name]; !ok {
+				continue
+			}
+			if seen[d.Name] {
+				continue
+			}
+			seen[d.Name] = true
+			graph[d.Name] = append(graph[d.Name], s.ServiceName)
+			indeg[s.ServiceName]++
+		}
+	}
+
+	var queue []string
+	for _, s := range services {
+		if indeg[s.ServiceName] == 0 {
+			queue = append(queue, s.ServiceName)
+		}
+	}
+
+	var ordered []Service
+	for len(queue) > 0 {
+		n := queue[0]
+		queue = queue[1:]
+		ordered = append(ordered, byName[n])
+		for _, m := range graph[n] {
+			indeg[m]--
+			if indeg[m] == 0 {
+				queue = append(queue, m)
+			}
+		}
+	}
+	if len(ordered) != len(services) {
+		return nil, fmt.Errorf("cycle detected in depends_on_services graph")
+	}
+	return ordered, nil
+}
+
+// resolveExports computes the exports map for a producer service from its
+// resolved env. Entries with `=` are inline literals (with ${OWN_VAR} expansion);
+// entries without `=` are re-exports of an existing env var.
+func resolveExports(service Service, producerEnv map[string]string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, entry := range service.Exports {
+		if idx := strings.Index(entry, "="); idx >= 0 {
+			name := strings.TrimSpace(entry[:idx])
+			rawVal := entry[idx+1:]
+			out[name] = substituteEnvVarReferences(rawVal, producerEnv)
+			continue
+		}
+		name := strings.TrimSpace(entry)
+		val, ok := producerEnv[name]
+		if !ok {
+			return nil, fmt.Errorf(
+				"service %q exports %q but it is not present in the service's resolved env",
+				service.ServiceName, name,
+			)
+		}
+		out[name] = val
+	}
+	return out, nil
+}
+
+// substituteCrossServiceRefs expands ${producer.VAR} references against the
+// cross-service exports map. Validates that the producer is listed in the
+// consumer's depends_on_services and that VAR is exported.
+func substituteCrossServiceRefs(
+	envLine string,
+	consumer Service,
+	exports ExportsMap,
+) (string, error) {
+	if exports == nil {
+		return envLine, nil
+	}
+	allowed := map[string]bool{}
+	for _, d := range consumer.DependsOnServices {
+		allowed[d.Name] = true
+	}
+
+	var firstErr error
+	out := crossServiceRefRe.ReplaceAllStringFunc(envLine, func(match string) string {
+		m := crossServiceRefRe.FindStringSubmatch(match)
+		producer, varName := m[1], m[2]
+		if !allowed[producer] {
+			if firstErr == nil {
+				firstErr = fmt.Errorf(
+					"service %q references ${%s.%s} but %q is not in depends_on_services",
+					consumer.ServiceName, producer, varName, producer,
+				)
+			}
+			return match
+		}
+		producerExports, ok := exports[producer]
+		if !ok {
+			if firstErr == nil {
+				firstErr = fmt.Errorf(
+					"service %q references ${%s.%s} but %q has no exports",
+					consumer.ServiceName, producer, varName, producer,
+				)
+			}
+			return match
+		}
+		val, ok := producerExports[varName]
+		if !ok {
+			if firstErr == nil {
+				firstErr = fmt.Errorf(
+					"service %q references ${%s.%s} but %q is not exported by %q",
+					consumer.ServiceName, producer, varName, varName, producer,
+				)
+			}
+			return match
+		}
+		return val
+	})
+	return out, firstErr
+}
+
+// Adds env variables to each service, including dependent db_services and services.
+// Services are processed in dependency order so that ${producer.VAR} references
+// can be resolved against the producer's exports.
 func GenerateEnvForServices(corgiCompose *CorgiCompose) {
-	for _, service := range corgiCompose.Services {
+	ordered, err := topoSortServices(corgiCompose.Services)
+	if err != nil {
+		fmt.Println(art.RedColor, "service env generation:", err, art.WhiteColor)
+		return
+	}
+	currentExportsMap = ExportsMap{}
+	defer func() { currentExportsMap = nil }()
+
+	for _, service := range ordered {
 		GenerateEnvForService(
 			corgiCompose,
 			service,
@@ -212,14 +360,30 @@ func GenerateEnvForService(
 
 			var updatedEnvironment []string
 			for _, envLine := range service.Environment {
-				// Process each environment variable line for potential substitutions.
-				updatedEnvLine := substituteEnvVarReferences(envLine, existingEnvVars)
+				// First expand cross-service ${producer.VAR} references, then own ${VAR}.
+				crossExpanded, err := substituteCrossServiceRefs(envLine, service, currentExportsMap)
+				if err != nil {
+					fmt.Println(art.RedColor, "env generation for", service.ServiceName, ":", err, art.WhiteColor)
+					return err
+				}
+				updatedEnvLine := substituteEnvVarReferences(crossExpanded, existingEnvVars)
 				updatedEnvironment = append(updatedEnvironment, updatedEnvLine)
 			}
 
 			// Join the updated environment strings and add them to envForService.
 			envForService += "\n" + strings.Join(updatedEnvironment, "\n") + "\n"
 		}
+	}
+
+	// Resolve this service's exports so later services can reference them.
+	if currentExportsMap != nil && len(service.Exports) > 0 {
+		producerEnv := parseEnvVarsIntoMap(envForService)
+		resolved, err := resolveExports(service, producerEnv)
+		if err != nil {
+			fmt.Println(art.RedColor, "exports for", service.ServiceName, ":", err, art.WhiteColor)
+			return err
+		}
+		currentExportsMap[service.ServiceName] = resolved
 	}
 
 	pathToEnvFile := GetPathToEnv(service)
