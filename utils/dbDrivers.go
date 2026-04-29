@@ -652,6 +652,32 @@ var DriverConfigs = map[string]DriverConfig{
 				fmt.Fprintf(&out, "\n%sS3_%s_BUCKET=%s", serviceNameInEnv, envKey, b)
 			}
 
+			// Per-topic: AWS_SNS_<NAME>=topic-name  AND  AWS_SNS_<NAME>_ARN=full-arn
+			for _, t := range db.Topics {
+				envKey := strings.ToUpper(strings.ReplaceAll(t, "-", "_"))
+				fmt.Fprintf(&out, "\n%sSNS_%s=%s", serviceNameInEnv, envKey, t)
+				fmt.Fprintf(&out, "\n%sSNS_%s_ARN=arn:aws:sns:%s:000000000000:%s",
+					serviceNameInEnv, envKey, templates.LocalstackRegion, t)
+			}
+
+			// Per-secret: AWS_SECRET_<NAME>=secret-name (path keys flattened)
+			for _, s := range db.Secrets {
+				envKey := awsEnvKey(s.Name)
+				fmt.Fprintf(&out, "\n%sSECRET_%s=%s", serviceNameInEnv, envKey, s.Name)
+			}
+
+			// Per-parameter: AWS_SSM_<NAME>=parameter-name
+			for _, p := range db.Parameters {
+				envKey := awsEnvKey(p.Name)
+				fmt.Fprintf(&out, "\n%sSSM_%s=%s", serviceNameInEnv, envKey, p.Name)
+			}
+
+			// Per-stream: AWS_KINESIS_<NAME>=stream-name
+			for _, st := range db.Streams {
+				envKey := strings.ToUpper(strings.ReplaceAll(st, "-", "_"))
+				fmt.Fprintf(&out, "\n%sKINESIS_%s=%s", serviceNameInEnv, envKey, st)
+			}
+
 			out.WriteString("\n")
 			return out.String()
 		},

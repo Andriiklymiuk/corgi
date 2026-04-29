@@ -4,7 +4,7 @@ var DynamoDBRegion = "eu-central-1"
 
 var DockerComposeDynamoDB = `services:
   dynamodb-{{.ServiceName}}:
-    image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
+    image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}3.8{{end}}
     container_name: dynamodb-{{.ServiceName}}
     environment:
       - SERVICES=dynamodb

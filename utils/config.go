@@ -49,13 +49,34 @@ type DatabaseService struct {
 	SeedFromDb        SeedFromDb               `yaml:"seedFromDb,omitempty"`
 	Additional        AdditionalDatabaseConfig `yaml:"additional,omitempty"`
 	// localstack driver:
-	Services []string `yaml:"services,omitempty"` // e.g. [sqs, s3]
-	Queues   []string `yaml:"queues,omitempty"`   // SQS queues to auto-create
-	Buckets  []string `yaml:"buckets,omitempty"`  // S3 buckets to auto-create
+	Services      []string          `yaml:"services,omitempty"`      // e.g. [sqs, s3, sns, secretsmanager, ssm, kinesis]
+	Queues        []string          `yaml:"queues,omitempty"`        // SQS queues to auto-create
+	Buckets       []string          `yaml:"buckets,omitempty"`       // S3 buckets to auto-create
+	Topics        []string          `yaml:"topics,omitempty"`        // SNS topics to auto-create
+	Subscriptions []SnsSubscription `yaml:"subscriptions,omitempty"` // SNS topic -> SQS queue wiring
+	Secrets       []AwsSecret       `yaml:"secrets,omitempty"`       // Secrets Manager entries
+	Parameters    []SsmParameter    `yaml:"parameters,omitempty"`    // SSM Parameter Store entries
+	Streams       []string          `yaml:"streams,omitempty"`       // Kinesis streams (1 shard each)
 	// Optional HTTP path for `corgi status`. If set, status check does GET
 	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
 	// If unset, status falls back to a TCP connect on the port.
 	HealthCheck string `yaml:"healthCheck,omitempty"`
+}
+
+type SnsSubscription struct {
+	Topic string `yaml:"topic,omitempty"`
+	Queue string `yaml:"queue,omitempty"`
+}
+
+type AwsSecret struct {
+	Name  string `yaml:"name,omitempty"`
+	Value string `yaml:"value,omitempty"`
+}
+
+type SsmParameter struct {
+	Name  string `yaml:"name,omitempty"`
+	Value string `yaml:"value,omitempty"`
+	Type  string `yaml:"type,omitempty"` // String | StringList | SecureString
 }
 
 type SeedFromDb struct {
@@ -274,6 +295,14 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 
 			additional, finalUser, finalPassword := ProcessAdditionalDatabaseConfig(db, indexName)
 
+			services := db.Services
+			if driver == "localstack" {
+				services = autoInjectLocalstackServices(services, db)
+				if err := validateLocalstackConfig(indexName, db); err != nil {
+					return nil, err
+				}
+			}
+
 			dbToAdd := DatabaseService{
 				ServiceName:       indexName,
 				Driver:            driver,
@@ -289,9 +318,14 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				SeedFromDbEnvPath: db.SeedFromDbEnvPath,
 				SeedFromFilePath:  db.SeedFromFilePath,
 				Additional:        additional,
-				Services:          db.Services,
+				Services:          services,
 				Queues:            db.Queues,
 				Buckets:           db.Buckets,
+				Topics:            db.Topics,
+				Subscriptions:     db.Subscriptions,
+				Secrets:           db.Secrets,
+				Parameters:        db.Parameters,
+				Streams:           db.Streams,
 				HealthCheck:       db.HealthCheck,
 			}
 			dbServices = append(dbServices, dbToAdd)

@@ -4,7 +4,7 @@ var SqsRegion = "eu-central-1"
 
 var DockerComposeSqs = `services:
   sqs-{{.ServiceName}}:
-    image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}latest{{end}}
+    image: localstack/localstack:{{if .Version}}{{.Version}}{{else}}3.8{{end}}
     container_name: sqs-{{.ServiceName}}
     hostname: sqs
     environment:
