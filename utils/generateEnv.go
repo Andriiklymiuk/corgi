@@ -140,7 +140,16 @@ var currentExportsMap ExportsMap
 
 var crossServiceRefRe = regexp.MustCompile(`\$\{([A-Za-z0-9_\-/]+)\.([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-// topoSortServices returns services in dependency order (deps first). Errors on cycles.
+// topoSortServices returns services in dependency order (deps first).
+//
+// Only "hard" edges add ordering: a hard edge is created when consumer's
+// environment block contains ${producer.VAR}. depends_on_services entries
+// that are alias-only (e.g. envAlias: BASE_URL) are "soft" — their emitted
+// value is a static localhost:port and needs no ordering. Self-deps are
+// always ignored.
+//
+// Cycles only matter when both sides reference each other's exports. If a
+// cycle is detected, the error names the services involved.
 func topoSortServices(services []Service) ([]Service, error) {
 	indeg := map[string]int{}
 	graph := map[string][]string{}
@@ -153,8 +162,20 @@ func topoSortServices(services []Service) ([]Service, error) {
 		}
 	}
 	for _, s := range services {
+		producers := map[string]bool{}
+		for _, env := range s.Environment {
+			for _, m := range crossServiceRefRe.FindAllStringSubmatch(env, -1) {
+				producers[m[1]] = true
+			}
+		}
 		seen := map[string]bool{}
 		for _, d := range s.DependsOnServices {
+			if d.Name == s.ServiceName {
+				continue
+			}
+			if !producers[d.Name] {
+				continue
+			}
 			if _, ok := byName[d.Name]; !ok {
 				continue
 			}
@@ -187,7 +208,16 @@ func topoSortServices(services []Service) ([]Service, error) {
 		}
 	}
 	if len(ordered) != len(services) {
-		return nil, fmt.Errorf("cycle detected in depends_on_services graph")
+		var stuck []string
+		for _, s := range services {
+			if indeg[s.ServiceName] > 0 {
+				stuck = append(stuck, s.ServiceName)
+			}
+		}
+		return nil, fmt.Errorf(
+			"cycle detected in cross-service ${producer.VAR} references involving: %s",
+			strings.Join(stuck, ", "),
+		)
 	}
 	return ordered, nil
 }
@@ -274,23 +304,26 @@ func substituteCrossServiceRefs(
 // Adds env variables to each service, including dependent db_services and services.
 // Services are processed in dependency order so that ${producer.VAR} references
 // can be resolved against the producer's exports.
-func GenerateEnvForServices(corgiCompose *CorgiCompose) {
+func GenerateEnvForServices(corgiCompose *CorgiCompose) error {
 	ordered, err := topoSortServices(corgiCompose.Services)
 	if err != nil {
 		fmt.Println(art.RedColor, "service env generation:", err, art.WhiteColor)
-		return
+		return err
 	}
 	currentExportsMap = ExportsMap{}
 	defer func() { currentExportsMap = nil }()
 
 	for _, service := range ordered {
-		GenerateEnvForService(
+		if err := GenerateEnvForService(
 			corgiCompose,
 			service,
 			"",
 			false,
-		)
+		); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func GenerateEnvForService(

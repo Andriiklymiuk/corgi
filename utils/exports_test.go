@@ -20,8 +20,13 @@ func TestTopoSortServices_NoDeps(t *testing.T) {
 }
 
 func TestTopoSortServices_LinearDep(t *testing.T) {
+	// Only cross-service ${producer.VAR} refs add ordering edges.
 	services := []Service{
-		{ServiceName: "consumer", DependsOnServices: []DependsOnService{{Name: "producer"}}},
+		{
+			ServiceName:       "consumer",
+			DependsOnServices: []DependsOnService{{Name: "producer"}},
+			Environment:       []string{"X=${producer.TOKEN}"},
+		},
 		{ServiceName: "producer"},
 	}
 	ordered, err := topoSortServices(services)
@@ -34,9 +39,18 @@ func TestTopoSortServices_LinearDep(t *testing.T) {
 }
 
 func TestTopoSortServices_Cycle(t *testing.T) {
+	// Real cycle: both sides reference each other's exports.
 	services := []Service{
-		{ServiceName: "a", DependsOnServices: []DependsOnService{{Name: "b"}}},
-		{ServiceName: "b", DependsOnServices: []DependsOnService{{Name: "a"}}},
+		{
+			ServiceName:       "a",
+			DependsOnServices: []DependsOnService{{Name: "b"}},
+			Environment:       []string{"X=${b.TOKEN}"},
+		},
+		{
+			ServiceName:       "b",
+			DependsOnServices: []DependsOnService{{Name: "a"}},
+			Environment:       []string{"Y=${a.TOKEN}"},
+		},
 	}
 	_, err := topoSortServices(services)
 	if err == nil {
@@ -44,6 +58,71 @@ func TestTopoSortServices_Cycle(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cycle") {
 		t.Fatalf("expected cycle message, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "a") || !strings.Contains(err.Error(), "b") {
+		t.Fatalf("expected cycle error to name services a and b, got %v", err)
+	}
+}
+
+func TestTopoSortServices_SoftCodependency(t *testing.T) {
+	// Two services depend on each other via envAlias only — no cross-ref.
+	// Should NOT cycle: emitted values are static localhost:port.
+	services := []Service{
+		{
+			ServiceName:       "api",
+			DependsOnServices: []DependsOnService{{Name: "notif", EnvAlias: "NOTIF_URL"}},
+		},
+		{
+			ServiceName:       "notif",
+			DependsOnServices: []DependsOnService{{Name: "api", EnvAlias: "API_URL"}},
+		},
+	}
+	ordered, err := topoSortServices(services)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ordered) != 2 {
+		t.Fatalf("expected 2 services, got %d", len(ordered))
+	}
+}
+
+func TestTopoSortServices_SelfDep(t *testing.T) {
+	// Service listing itself as dep (for own BASE_URL alias) must not cycle.
+	services := []Service{
+		{
+			ServiceName:       "a",
+			DependsOnServices: []DependsOnService{{Name: "a", EnvAlias: "BASE_URL"}},
+		},
+	}
+	ordered, err := topoSortServices(services)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ordered) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(ordered))
+	}
+}
+
+func TestTopoSortServices_MixedHardSoft(t *testing.T) {
+	// api consumes notif's TOKEN (hard); notif aliases api's URL (soft).
+	// Order must be notif → api. No cycle.
+	services := []Service{
+		{
+			ServiceName:       "api",
+			DependsOnServices: []DependsOnService{{Name: "notif"}},
+			Environment:       []string{"TOKEN=${notif.TOKEN}"},
+		},
+		{
+			ServiceName:       "notif",
+			DependsOnServices: []DependsOnService{{Name: "api", EnvAlias: "API_URL"}},
+		},
+	}
+	ordered, err := topoSortServices(services)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ordered[0].ServiceName != "notif" || ordered[1].ServiceName != "api" {
+		t.Fatalf("expected [notif, api], got [%s, %s]", ordered[0].ServiceName, ordered[1].ServiceName)
 	}
 }
 
