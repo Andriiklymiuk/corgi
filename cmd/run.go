@@ -219,6 +219,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 				service.AbsolutePath,
 				false,
 				false,
+				service.EnvPath,
 			)
 		}
 	}
@@ -328,6 +329,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			service.AbsolutePath,
 			false,
 			false,
+			service.EnvPath,
 		)
 	}
 
@@ -348,6 +350,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 				service.AbsolutePath,
 				true,
 				service.InteractiveInput,
+				service.EnvPath,
 			)
 		}
 	}
