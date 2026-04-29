@@ -30,12 +30,16 @@ For each service:
   - TCP connect on localhost:<port>. If 'healthCheck' is set, corgi does
     GET http://localhost:<port><healthCheck> and accepts any non-5xx response.
 
-Exit code is non-zero if anything's down so CI / scripts can consume it.`,
+Exit code is non-zero if anything's down so CI / scripts can consume it.
+
+Add --watch (or -w) to repoll continuously; --interval controls the cadence.`,
 	Run:     runStatus,
 	Aliases: []string{"health", "healthcheck"},
 }
 
 func init() {
+	statusCmd.Flags().BoolP("watch", "w", false, "Repoll continuously; press Ctrl+C to stop")
+	statusCmd.Flags().DurationP("interval", "i", 2*time.Second, "Delay between watch polls")
 	rootCmd.AddCommand(statusCmd)
 }
 
@@ -62,7 +66,26 @@ func runStatus(cmd *cobra.Command, _ []string) {
 	// Sort by port for predictable output.
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Port < rows[j].Port })
 
-	up, down := 0, 0
+	watch, _ := cmd.Flags().GetBool("watch")
+	interval, _ := cmd.Flags().GetDuration("interval")
+
+	if watch {
+		runStatusWatch(rows, interval)
+		return
+	}
+
+	up, down := printStatusOnce(rows)
+	if down == 0 {
+		fmt.Printf("%s🎉 %d/%d healthy%s\n", art.GreenColor, up, up+down, art.WhiteColor)
+		return
+	}
+	fmt.Printf("%s%d down, %d up%s — check `corgi run` logs for the failing services.\n",
+		art.RedColor, down, up, art.WhiteColor)
+	os.Exit(1)
+}
+
+// printStatusOnce renders the full table once. Returns counts.
+func printStatusOnce(rows []statusRow) (up, down int) {
 	fmt.Println("🩺 corgi status")
 	for _, r := range rows {
 		ok, detail := probe(r)
@@ -74,15 +97,48 @@ func runStatus(cmd *cobra.Command, _ []string) {
 			down++
 		}
 	}
-
 	fmt.Println()
-	if down == 0 {
-		fmt.Printf("%s🎉 %d/%d healthy%s\n", art.GreenColor, up, up+down, art.WhiteColor)
-		return
+	return up, down
+}
+
+// runStatusWatch prints the initial table, then polls quietly and only
+// emits a line when a service's health transitions (up→down or down→up).
+// Mimics `kubectl get -w` — quiet while stable, alerts on change. Ctrl+C
+// to stop. Reactive, not periodic-spam.
+func runStatusWatch(rows []statusRow, interval time.Duration) {
+	if interval <= 0 {
+		interval = 2 * time.Second
 	}
-	fmt.Printf("%s%d down, %d up%s — check `corgi run` logs for the failing services.\n",
-		art.RedColor, down, up, art.WhiteColor)
-	os.Exit(1)
+
+	state := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		ok, _ := probe(r)
+		state[r.Label] = ok
+	}
+	up, down := printStatusOnce(rows)
+	fmt.Printf("%s👀 watching %d targets every %s — Ctrl+C to stop (%d up, %d down)%s\n",
+		art.CyanColor, len(rows), interval, up, down, art.WhiteColor)
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		for _, r := range rows {
+			ok, detail := probe(r)
+			prev := state[r.Label]
+			if ok == prev {
+				continue
+			}
+			state[r.Label] = ok
+			ts := time.Now().Format("15:04:05")
+			if ok {
+				fmt.Printf("  %s[%s] ✅ %-40s came up — %s%s\n",
+					art.GreenColor, ts, r.Label, detail, art.WhiteColor)
+			} else {
+				fmt.Printf("  %s[%s] ❌ %-40s went down — %s%s\n",
+					art.RedColor, ts, r.Label, detail, art.WhiteColor)
+			}
+		}
+	}
 }
 
 // collectStatusRows turns the parsed compose into a flat list of things to probe.
