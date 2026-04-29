@@ -12,23 +12,38 @@ import (
 	"sync"
 )
 
-// withEnvSource prepends `set -a; . ./.env; set +a; ` to a command when
-// the service has a .env file in its working directory. Lets a start command
-// like `npx vite --port $PORT` see PORT and other corgi-emitted vars without
-// each service having to write its own `source .env` boilerplate.
+// withEnvSource prepends a POSIX `set -a; . <envFile>; set +a; ` prefix to a
+// command when an env file exists for the service. Lets a start command like
+// `npx vite --port $PORT` see PORT and other corgi-emitted vars without each
+// service writing its own `source .env` boilerplate.
 //
-// Sourcing is POSIX (`.`), so works under /bin/sh. If .env doesn't exist or
-// path is empty (corgi's own internal commands like `orbctl start`), returns
-// the command untouched.
-func withEnvSource(command, path string) string {
-	if path == "" {
+// envFile is the absolute path to the file. Empty / missing → command
+// returned untouched. Sourcing uses POSIX `.` so works under /bin/sh.
+func withEnvSource(command, envFile string) string {
+	if envFile == "" {
 		return command
 	}
-	envFile := filepath.Join(path, ".env")
 	if _, err := os.Stat(envFile); err != nil {
 		return command
 	}
-	return "set -a; . ./.env; set +a; " + command
+	return fmt.Sprintf("set -a; . %q; set +a; %s", envFile, command)
+}
+
+// resolveEnvFile picks the env file to source: if envFileOverride is supplied
+// (matches Service.EnvPath, e.g. `.env.local`), use it relative to path;
+// otherwise fall back to `<path>/.env`. Empty path disables sourcing.
+func resolveEnvFile(path string, envFileOverride []string) string {
+	if path == "" {
+		return ""
+	}
+	if len(envFileOverride) > 0 && envFileOverride[0] != "" {
+		override := envFileOverride[0]
+		if filepath.IsAbs(override) {
+			return override
+		}
+		return filepath.Join(path, override)
+	}
+	return filepath.Join(path, ".env")
 }
 
 var (
@@ -63,12 +78,19 @@ func KillAllStoredProcesses() {
 	ProcessHandles = []*os.Process{}
 }
 
+// RunServiceCmd executes a single shell command for a service.
+//
+// Optional envFile (variadic for backwards compatibility): filename or
+// absolute path of the env file to source before the command. When omitted
+// or empty, defaults to `<path>/.env` if present.
 func RunServiceCmd(
 	serviceName string,
 	serviceCommand string,
 	path string,
 	interactive bool,
+	envFile ...string,
 ) error {
+	resolvedEnvFile := resolveEnvFile(path, envFile)
 	fmt.Println(serviceCommand)
 	lines := strings.Split(serviceCommand, "\n")
 	var accumulatedCommand string
@@ -99,7 +121,7 @@ func RunServiceCmd(
 			continue
 		}
 
-		shellCommand := withEnvSource(finalCommand, path)
+		shellCommand := withEnvSource(finalCommand, resolvedEnvFile)
 		cmd := exec.Command("/bin/sh", "-c", shellCommand)
 		cmd.Dir = path
 
@@ -149,7 +171,7 @@ func RunServiceCmd(
 						}
 						// Rerun the original command
 						fmt.Printf("\n🔄 Retrying the command: %s\n", finalCommand)
-						return RunServiceCmd(serviceName, finalCommand, path, interactive)
+						return RunServiceCmd(serviceName, finalCommand, path, interactive, envFile...)
 					} else {
 						return fmt.Errorf("unknown command %s, no install instructions found", missingCommand)
 					}
@@ -162,6 +184,9 @@ func RunServiceCmd(
 	return nil
 }
 
+// RunServiceCommands runs a list of commands for a service.
+//
+// Optional envFile (variadic): see RunServiceCmd. Forwarded unchanged.
 func RunServiceCommands(
 	commandsName string,
 	serviceName string,
@@ -169,6 +194,7 @@ func RunServiceCommands(
 	path string,
 	isParallel bool,
 	interactive bool,
+	envFile ...string,
 ) {
 	if isParallel {
 		for _, command := range commands {
@@ -178,6 +204,7 @@ func RunServiceCommands(
 					command,
 					path,
 					interactive,
+					envFile...,
 				)
 				if err != nil {
 					fmt.Println(
@@ -202,6 +229,7 @@ func RunServiceCommands(
 				combinedCommand,
 				path,
 				interactive,
+				envFile...,
 			)
 			if err != nil {
 				fmt.Println(
