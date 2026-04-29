@@ -7,9 +7,29 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 )
+
+// withEnvSource prepends `set -a; . ./.env; set +a; ` to a command when
+// the service has a .env file in its working directory. Lets a start command
+// like `npx vite --port $PORT` see PORT and other corgi-emitted vars without
+// each service having to write its own `source .env` boilerplate.
+//
+// Sourcing is POSIX (`.`), so works under /bin/sh. If .env doesn't exist or
+// path is empty (corgi's own internal commands like `orbctl start`), returns
+// the command untouched.
+func withEnvSource(command, path string) string {
+	if path == "" {
+		return command
+	}
+	envFile := filepath.Join(path, ".env")
+	if _, err := os.Stat(envFile); err != nil {
+		return command
+	}
+	return "set -a; . ./.env; set +a; " + command
+}
 
 var (
 	ProcessHandles []*os.Process
@@ -79,7 +99,8 @@ func RunServiceCmd(
 			continue
 		}
 
-		cmd := exec.Command("/bin/sh", "-c", finalCommand)
+		shellCommand := withEnvSource(finalCommand, path)
+		cmd := exec.Command("/bin/sh", "-c", shellCommand)
 		cmd.Dir = path
 
 		if interactive {
