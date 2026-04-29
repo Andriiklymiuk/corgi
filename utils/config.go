@@ -109,6 +109,7 @@ type Service struct {
 	PortAlias           string             `yaml:"portAlias,omitempty"`
 	DependsOnServices   []DependsOnService `yaml:"depends_on_services,omitempty"`
 	DependsOnDb         []DependsOnDb      `yaml:"depends_on_db,omitempty"`
+	Exports             []string           `yaml:"exports,omitempty"`
 	BeforeStart         []string           `yaml:"beforeStart,omitempty"`
 	Start               []string           `yaml:"start,omitempty"`
 	AfterStart          []string           `yaml:"afterStart,omitempty"`
@@ -355,6 +356,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				Branch:              service.Branch,
 				DependsOnServices:   service.DependsOnServices,
 				DependsOnDb:         service.DependsOnDb,
+				Exports:             service.Exports,
 				Environment:         service.Environment,
 				EnvPath:             service.EnvPath,
 				CopyEnvFromFilePath: service.CopyEnvFromFilePath,

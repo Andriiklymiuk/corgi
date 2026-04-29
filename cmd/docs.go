@@ -115,6 +115,12 @@ var serviceItems = []CorgiComposeItems{
 		description: "Adds service credentials to .env.\n\t\t\tsuffix is added at the end of added value\n\t\t\tNAME_TO_USE_IN_ENV=localhost:port/special/suffix will be added to .env\n\t\t\tIf you add just name, than it is SERVICE_NAME=localhost:port_in_env",
 	},
 	{
+		item:        "exports",
+		example:     "- VAR_NAME\n\t- ANOTHER=http://localhost:${PORT}/x",
+		itemType:    "[]string",
+		description: "Whitelist of env vars exported to dependents.\n\t\t\tEntries without `=` re-export from the service's own resolved env (must exist).\n\t\t\tEntries with `=` are inline literals (support ${OWN_VAR} expansion).\n\t\t\tDependents reference via ${producer.VAR_NAME} inside their `environment` block.\n\t\t\tProducer must be listed in consumer's depends_on_services.",
+	},
+	{
 		item:        "beforeStart",
 		example:     "- install dependencies\n\t- do some builds",
 		itemType:    "\t[]string",
