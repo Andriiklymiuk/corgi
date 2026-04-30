@@ -35,7 +35,7 @@ var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
 	ServiceName       string                   `yaml:"service_name,omitempty"`
-	Driver            string                   `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,mariadb,redis,redis-server,rabbitmq,sqs,s3,dynamodb,kafka,mssql,cassandra,cockroach,clickhouse,scylla,keydb,surrealdb,neo4j,dgraph,arangodb,elasticsearch,timescaledb,couchdb,meilisearch,faunadb,yugabytedb,skytable,dragonfly,redict,valkey,postgis,pgvector,localstack❌skip"`
+	Driver            string                   `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,mariadb,redis,redis-server,rabbitmq,sqs,s3,dynamodb,kafka,mssql,cassandra,cockroach,clickhouse,scylla,keydb,surrealdb,neo4j,dgraph,arangodb,elasticsearch,timescaledb,couchdb,meilisearch,faunadb,yugabytedb,skytable,dragonfly,redict,valkey,postgis,pgvector,localstack,supabase❌skip"`
 	Version           string                   `yaml:"version,omitempty"`
 	Host              string                   `yaml:"host,omitempty"`
 	User              string                   `yaml:"user,omitempty"`
@@ -57,6 +57,9 @@ type DatabaseService struct {
 	Secrets       []AwsSecret       `yaml:"secrets,omitempty"`       // Secrets Manager entries
 	Parameters    []SsmParameter    `yaml:"parameters,omitempty"`    // SSM Parameter Store entries
 	Streams       []string          `yaml:"streams,omitempty"`       // Kinesis streams (1 shard each)
+	// supabase driver:
+	JWTSecret string             `yaml:"jwtSecret,omitempty"` // Override stock JWT secret. If set, driver re-signs ANON_KEY / SERVICE_ROLE_KEY with this secret to match what `supabase status` will report.
+	AuthUsers []SupabaseAuthUser `yaml:"authUsers,omitempty"` // Auth users to seed via supabase admin API on `up`.
 	// Optional HTTP path for `corgi status`. If set, status check does GET
 	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
 	// If unset, status falls back to a TCP connect on the port.
@@ -71,6 +74,30 @@ type SnsSubscription struct {
 type AwsSecret struct {
 	Name  string `yaml:"name,omitempty"`
 	Value string `yaml:"value,omitempty"`
+}
+
+// SupabaseAuthUser is one entry in db_services.<name>.authUsers for the
+// supabase driver. `metadata` is a yaml map serialized to JSON for
+// user_metadata. Nil omits user_metadata.
+type SupabaseAuthUser struct {
+	Email    string                 `yaml:"email,omitempty"`
+	Password string                 `yaml:"password,omitempty"`
+	Metadata map[string]interface{} `yaml:"metadata,omitempty"`
+}
+
+// MetadataJSON serializes Metadata to a compact JSON object string for the
+// admin API. Returns "{}" if Metadata is nil. Errors marshaling are
+// extremely unlikely (yaml decoder produces JSON-friendly types) but on
+// failure we fall back to "{}" to keep the bootstrap script idempotent.
+func (u SupabaseAuthUser) MetadataJSON() string {
+	if u.Metadata == nil {
+		return "{}"
+	}
+	b, err := json.Marshal(u.Metadata)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 type SsmParameter struct {
@@ -136,6 +163,12 @@ type Service struct {
 	AfterStart          []string           `yaml:"afterStart,omitempty"`
 	Scripts             []Script           `yaml:"scripts,omitempty"`
 	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
+	// AutoSourceEnv toggles the `set -a; . <envFile>; set +a` prefix corgi
+	// adds to start/beforeStart/afterStart commands. nil/true = on (default),
+	// false = off. Off avoids exporting every var to subprocesses (e.g. when
+	// a beforeStart `npm install` would otherwise leak secrets to postinstall
+	// scripts).
+	AutoSourceEnv *bool `yaml:"autoSourceEnv,omitempty"`
 
 	Runner Runner `yaml:"runner,omitempty"`
 
@@ -326,6 +359,8 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				Secrets:           db.Secrets,
 				Parameters:        db.Parameters,
 				Streams:           db.Streams,
+				JWTSecret:         db.JWTSecret,
+				AuthUsers:         db.AuthUsers,
 				HealthCheck:       db.HealthCheck,
 			}
 			dbServices = append(dbServices, dbToAdd)
@@ -402,6 +437,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				Start:               service.Start,
 				Scripts:             service.Scripts,
 				InteractiveInput:    service.InteractiveInput,
+				AutoSourceEnv:       service.AutoSourceEnv,
 				Runner:              service.Runner,
 				HealthCheck:         service.HealthCheck,
 			}

@@ -29,19 +29,24 @@ func withEnvSource(command, envFile string) string {
 	return fmt.Sprintf("set -a; . %q; set +a; %s", envFile, command)
 }
 
-// resolveEnvFile picks the env file to source: if envFileOverride is supplied
-// (matches Service.EnvPath, e.g. `.env.local`), use it relative to path;
-// otherwise fall back to `<path>/.env`. Empty path disables sourcing.
+// SkipAutoSourceEnv disables auto-sourcing for a single command.
+const SkipAutoSourceEnv = "<<corgi:no-env-source>>"
+
 func resolveEnvFile(path string, envFileOverride []string) string {
 	if path == "" {
 		return ""
 	}
-	if len(envFileOverride) > 0 && envFileOverride[0] != "" {
+	if len(envFileOverride) > 0 {
 		override := envFileOverride[0]
-		if filepath.IsAbs(override) {
-			return override
+		if override == SkipAutoSourceEnv {
+			return ""
 		}
-		return filepath.Join(path, override)
+		if override != "" {
+			if filepath.IsAbs(override) {
+				return override
+			}
+			return filepath.Join(path, override)
+		}
 	}
 	return filepath.Join(path, ".env")
 }

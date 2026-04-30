@@ -219,7 +219,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 				service.AbsolutePath,
 				false,
 				false,
-				service.EnvPath,
+				getServiceEnv(service),
 			)
 		}
 	}
@@ -329,7 +329,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			service.AbsolutePath,
 			false,
 			false,
-			service.EnvPath,
+			getServiceEnv(service),
 		)
 	}
 
@@ -350,10 +350,17 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 				service.AbsolutePath,
 				true,
 				service.InteractiveInput,
-				service.EnvPath,
+				getServiceEnv(service),
 			)
 		}
 	}
+}
+
+func getServiceEnv(service utils.Service) string {
+	if service.AutoSourceEnv != nil && !*service.AutoSourceEnv {
+		return utils.SkipAutoSourceEnv
+	}
+	return service.EnvPath
 }
 
 func omitServiceCmd(cmdName string) bool {

@@ -27,7 +27,7 @@ Verifies in order:
 
 Exit code is non-zero if anything fails so CI / scripts can consume it.`,
 	Run:     runDoctor,
-	Aliases: []string{"check"},
+	Aliases: []string{"check", "preflight"},
 }
 
 func init() {
