@@ -45,6 +45,7 @@ Set the driver with `driver: <name>`. Corgi generates a `docker-compose.yml` and
 | `dynamodb` | 8000 | `DYNAMODB_` | `amazon/dynamodb-local:latest` | Standalone local emulator |
 | `localstack` | 4566 | `AWS_` | `localstack/localstack:latest` | Unified AWS emulator — see below |
 | `supabase` | 54321 | `SUPABASE_` | wraps `supabase` CLI | Local auth + storage. Reads ports from `supabase/config.toml`. Seeds `buckets:` + `authUsers:` on `up`. See below + [docs/drivers/supabase.md](../../../../docs/drivers/supabase.md) |
+| `image` | (you set) | `<SERVICE>_` | (you set via `image:`) | Generic stateless docker-image driver. For services that ship as a public image with no DB/state (gotenberg, mailhog, jaeger). See below |
 
 ## localstack special keys
 
@@ -98,6 +99,38 @@ required:
 ```
 
 Full docs: [docs/drivers/supabase.md](../../../../docs/drivers/supabase.md)
+
+## image driver (generic stateless docker image)
+
+Use for services that ship as a public docker image with no DB / persistent state. Sits inside `db_services:` because corgi treats it as infra (declared, lifecycle-managed, env-emitting), not a code repo.
+
+```yaml
+db_services:
+  gotenberg:
+    driver: image
+    image: gotenberg/gotenberg:8
+    port: 3100              # host bind
+    containerPort: 3000     # container's internal port (default = port)
+    healthCheck: /health
+```
+
+Emits (default prefix = uppercased service name):
+```
+GOTENBERG_URL=http://localhost:3100
+GOTENBERG_HOST=localhost
+GOTENBERG_PORT=3100
+```
+
+Override prefix via `envAlias:` on the consumer side:
+```yaml
+services:
+  api:
+    depends_on_db:
+      - name: gotenberg
+        envAlias: PDF_SERVICE   # → PDF_SERVICE_URL=http://localhost:3100
+```
+
+`up`/`down`/`stop`/`logs`/`id` follow the standard Makefile shape (same as postgres/etc).
 
 ## Picking the right driver
 

@@ -35,7 +35,7 @@ var DbServicesItemsFromFlag []string
 
 type DatabaseService struct {
 	ServiceName       string                   `yaml:"service_name,omitempty"`
-	Driver            string                   `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,mariadb,redis,redis-server,rabbitmq,sqs,s3,dynamodb,kafka,mssql,cassandra,cockroach,clickhouse,scylla,keydb,surrealdb,neo4j,dgraph,arangodb,elasticsearch,timescaledb,couchdb,meilisearch,faunadb,yugabytedb,skytable,dragonfly,redict,valkey,postgis,pgvector,localstack,supabase❌skip"`
+	Driver            string                   `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,mariadb,redis,redis-server,rabbitmq,sqs,s3,dynamodb,kafka,mssql,cassandra,cockroach,clickhouse,scylla,keydb,surrealdb,neo4j,dgraph,arangodb,elasticsearch,timescaledb,couchdb,meilisearch,faunadb,yugabytedb,skytable,dragonfly,redict,valkey,postgis,pgvector,localstack,supabase,image❌skip"`
 	Version           string                   `yaml:"version,omitempty"`
 	Host              string                   `yaml:"host,omitempty"`
 	User              string                   `yaml:"user,omitempty"`
@@ -61,6 +61,9 @@ type DatabaseService struct {
 	JWTSecret      string             `yaml:"jwtSecret,omitempty"`      // Override stock JWT secret. If set, driver re-signs ANON_KEY / SERVICE_ROLE_KEY with this secret to match what `supabase status` will report.
 	AuthUsers      []SupabaseAuthUser `yaml:"authUsers,omitempty"`      // Auth users to seed via supabase admin API on `up`.
 	ConfigTomlPath string             `yaml:"configTomlPath,omitempty"` // Optional path (relative to corgi-compose.yml) to a config.toml that corgi copies to <projectRoot>/supabase/config.toml on each `corgi init`. If unset, supabase init runs at first `corgi up` if no config.toml exists yet.
+	// image driver:
+	Image         string `yaml:"image,omitempty"`         // image driver only. Docker image reference (e.g. "gotenberg/gotenberg:8").
+	ContainerPort int    `yaml:"containerPort,omitempty"` // image driver only. Container's internal port. Defaults to `port:` if unset. Used in docker-compose `<port>:<containerPort>` mapping.
 	// Optional HTTP path for `corgi status`. If set, status check does GET
 	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
 	// If unset, status falls back to a TCP connect on the port.

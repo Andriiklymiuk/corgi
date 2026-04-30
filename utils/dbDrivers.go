@@ -751,6 +751,38 @@ var DriverConfigs = map[string]DriverConfig{
 			{"bootstrap/bootstrap.sh", templates.BootstrapSupabase},
 		},
 	},
+	"image": {
+		// Stateless docker-image driver. Use for services shipped as a public
+		// image with no DB / persistent state (gotenberg, mailhog, jaeger,
+		// redis-commander, etc.). Default env emission: <PREFIX>URL/HOST/PORT.
+		// PREFIX is empty by default; consumers usually set `envAlias:` on
+		// their depends_on_db entry. When no alias is set + no driver prefix,
+		// emit uses the uppercased ServiceName as fallback prefix so vars
+		// don't collide.
+		Prefix: "",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			prefix := serviceNameInEnv
+			if prefix == "" {
+				prefix = strings.ToUpper(strings.ReplaceAll(db.ServiceName, "-", "_")) + "_"
+			}
+			host := db.Host
+			if host == "" {
+				host = "localhost"
+			}
+			var out strings.Builder
+			if db.Port != 0 {
+				fmt.Fprintf(&out, "\n%sURL=http://%s:%d", prefix, host, db.Port)
+				fmt.Fprintf(&out, "\n%sHOST=%s", prefix, host)
+				fmt.Fprintf(&out, "\n%sPORT=%d", prefix, db.Port)
+			}
+			out.WriteString("\n")
+			return out.String()
+		},
+		FilesToCreate: []FilenameForService{
+			{"docker-compose.yml", templates.DockerComposeImage},
+			{"Makefile", templates.MakefileImage},
+		},
+	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
