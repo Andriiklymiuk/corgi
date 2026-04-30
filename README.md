@@ -6,14 +6,15 @@
   [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=bugs)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
   [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
 
-  [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-  [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
 
-  [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-  [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-  [![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
 
-  [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+
 </div>
 
 Send someone your project yml file, init and run it in minutes.
@@ -22,7 +23,8 @@ No more long meetings, explanations of how to run new project with multiple micr
 
 Auto git cloning, db seeding, concurrent running and much more.
 
-While in services you can create whatever you want, but in db services **for now it supports**: 
+While in services you can create whatever you want, but in db services **for now it supports**:
+
 - [postgres](https://www.postgresql.org), [example](https://github.com/Andriiklymiuk/corgi_examples/tree/main/postgres)
 - [mongodb](https://www.mongodb.com), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/mongodb/mongodb-go.corgi-compose.yml)
 - [rabbitmq](https://www.rabbitmq.com), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/rabbitmq/rabbitmq-go-nestjs.corgi-compose.yml)
@@ -65,6 +67,22 @@ While in services you can create whatever you want, but in db services **for now
 - `corgi doctor` (aliases: `check`, `preflight`) — before `corgi run`: verifies every tool in `required:`, Docker is up, and every port in `db_services.*.port` / `services.*.port` is free (lists the offending process if not)
 - `corgi status` (aliases: `health`, `healthcheck`) — after `corgi run`: TCP-probes every declared port. If a service sets `healthCheck: /some/path`, corgi does an HTTP probe and accepts any non-5xx response as healthy. The `localstack` driver defaults to `GET /_localstack/health`.
 
+## Tunneling
+
+`corgi tunnel` opens public HTTPS tunnels to declared services. Useful for webhook testing (DocuSeal, Stripe, etc.) without ngrok-style signup.
+
+```bash
+corgi tunnel                       # tunnel every services.<name> with port: set
+corgi tunnel api                   # single service
+corgi tunnel api,api-2     # csv
+corgi tunnel --port 3030           # raw port, skips compose lookup
+corgi tunnel --provider ngrok      # default: cloudflared (free, no signup)
+```
+
+Default provider = [Cloudflare Quick Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) via `cloudflared`. Anonymous, free, ephemeral URLs (rotate per restart). For stable URLs, use Cloudflare Named Tunnels (login required) or another provider.
+
+Auth-needing providers (e.g. ngrok) are detected before any subprocess starts — corgi prints the exact login command and exits without partial state.
+
 ## Documentation
 
 You can check documentation on https://andriiklymiuk.github.io/corgi/
@@ -85,7 +103,6 @@ This repo ships a [Claude Code](https://claude.com/claude-code) plugin so an AI 
 ```
 
 Then in any project that has a `corgi-compose.yml`, Claude will recognize it and use `corgi run` / `corgi doctor` / `corgi status` instead of inventing its own commands. A `/corgi-new` slash command scaffolds a fresh `corgi-compose.yml` from a short conversation.
-
 
 ## Install
 
@@ -108,6 +125,7 @@ curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh
 Installs to `/usr/local/bin` if writable, otherwise `~/.local/bin` (auto-added to PATH for zsh/bash/fish).
 
 Useful overrides:
+
 - `CORGI_VERSION=1.10.0` — pin a version
 - `CORGI_INSTALL_DIR=$HOME/bin` — force a directory
 - `CORGI_NO_MODIFY_PATH=1` — don't touch shell rc files
@@ -129,12 +147,13 @@ corgi -h
 `corgi update` (alias `corgi upgrade`) detects how you installed and uses the matching method to upgrade.
 
 Try it with expo + hono server example
+
 ```bash
 corgi run -t https://github.com/Andriiklymiuk/corgi_examples/blob/main/honoExpoTodo/hono-bun-expo.corgi-compose.yml
 ```
 
+## Credits & thanks
 
-
-Credits:
-
+- `corgi tunnel` defaults to [cloudflared](https://github.com/cloudflare/cloudflared) ([Apache 2.0](https://github.com/cloudflare/cloudflared/blob/master/LICENSE)) and its free, no-signup [Quick Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/). Big thanks to Cloudflare for shipping this open and free — makes local webhook testing painless.
+- Optional providers: [ngrok](https://ngrok.com) (closed source, free tier with authtoken) and [localtunnel](https://github.com/localtunnel/localtunnel) ([MIT](https://github.com/localtunnel/localtunnel/blob/master/LICENSE)) — thanks to both projects for the alternatives.
 - <a href="https://www.freepik.com/free-vector/cute-corgi-dog-astronaut-floating-space-cartoon-vector-icon-illustration-animal-science-icon-concept-isolated-premium-vector-flat-cartoon-style_22271104.htm#query=corgi%20icon&position=7&from_view=keyword">Corgi image by catalyststuff</a> on Freepik

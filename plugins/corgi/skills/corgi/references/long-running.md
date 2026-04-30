@@ -1,11 +1,13 @@
 ---
 name: long-running
-description: How to invoke `corgi run` from inside a Claude Code agent loop without hanging the shell. Read before ever running `corgi run` in bash.
+description: How to invoke `corgi run` (and other long-running corgi commands like `corgi tunnel`) from inside a Claude Code agent loop without hanging the shell. Read before ever running them in bash.
 ---
 
-# Running `corgi run` safely from an agent
+# Running long-running corgi commands safely from an agent
 
 `corgi run` blocks indefinitely, streams logs, watches the compose file, and responds to SIGINT/SIGTERM/SIGHUP. There is no `--detach` flag. Running it synchronously in a Bash tool call will make the agent hang until the 10-minute timeout hits.
+
+`corgi tunnel` has the same shape: one tunnel subprocess per service, blocks until Ctrl+C. Same patterns apply — use Pattern A (background) or Pattern B (hand off to user's terminal).
 
 ## The two correct patterns
 

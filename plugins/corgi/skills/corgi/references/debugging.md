@@ -89,6 +89,24 @@ Seeding is only attempted when `--seed` / `-s` is passed to `corgi run`.
 - `seedFromDb` / `seedFromDbEnvPath`: corgi connects to the source DB via the provided creds and dumps it live. If this fails, the source DB is usually unreachable (VPN, firewall) — not a corgi bug.
 - Post-seed the target DB is left populated. Re-running `corgi run -s` will re-seed and typically overwrite.
 
+## `corgi tunnel` failures
+
+### `<provider> not found on PATH. Install: …`
+
+The tunnel binary is missing. Run the install command corgi prints (e.g. `brew install cloudflared`).
+
+### `<provider> authentication required: …`
+
+Provider needs login. corgi prints the exact command to run (e.g. `ngrok config add-authtoken <TOKEN>`). Run it once, then retry `corgi tunnel`. cloudflared (Quick Tunnels mode) and localtunnel never need auth.
+
+### Tunnel comes up but webhook calls fail
+
+- **Cloudflare Quick Tunnel + SSE endpoint** — Quick Tunnels don't support Server-Sent Events. Use ngrok or localtunnel for SSE flows.
+- **5MB POST cap exceeded** — Quick Tunnel limit. Use a Named Tunnel (or ngrok) for larger payloads.
+- **Webhook URL stale after restart** — Quick Tunnel URLs rotate per tunnel restart. Re-paste into the webhook console (DocuSeal/Stripe/etc.) or set up a Named Tunnel.
+
+See `../../../docs/tunnel.md` for full provider matrix + Quick Tunnel limitations.
+
 ## "It was working yesterday" recipes
 
 - `corgi clean -i corgi_services` — regenerates all the docker-compose/Makefile artifacts from templates. Safe, non-destructive to cloned service repos.
