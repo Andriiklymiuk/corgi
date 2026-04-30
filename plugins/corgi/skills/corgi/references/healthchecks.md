@@ -14,6 +14,7 @@ For every `services.<name>` and `db_services.<name>` that declares a `port:`, `c
 1. **No `healthCheck:` key** → TCP connect to `localhost:<port>`. Healthy if the connect succeeds.
 2. **`healthCheck: /some/path`** → HTTP GET `http://localhost:<port><path>`. Healthy on any non-5xx response. 2xx, 3xx, 4xx all pass.
 3. **`driver: localstack` with no override** → HTTP GET `/_localstack/health`. Override by setting `healthCheck:` explicitly.
+4. **`driver: supabase`** → set `healthCheck: /rest/v1/`. Returns 401 (kong rejects unauth requests), corgi accepts non-5xx as healthy. Don't omit it — TCP probe on :54321 races kong startup.
 
 ## Syntax
 
