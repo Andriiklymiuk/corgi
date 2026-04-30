@@ -233,13 +233,13 @@ var dbServiceItems = []CorgiComposeItems{
 	},
 	{
 		item:        "queues",
-		example:     "[api-queue, ela-queue]",
+		example:     "[api-queue, api-2-queue]",
 		itemType:    "[]string",
 		description: "localstack driver only. SQS queues auto-created by the LocalStack bootstrap.\n\t\t\tAlso emitted as env: AWS_SQS_<UPPER_NAME>=<queue-name> and AWS_SQS_<UPPER_NAME>_URL=<full-url>",
 	},
 	{
 		item:        "buckets",
-		example:     "[ela-documents]",
+		example:     "[api-documents]",
 		itemType:    "[]string",
 		description: "localstack: S3 buckets auto-created by the LocalStack bootstrap.\n\t\t\tSupabase: Storage buckets created via Storage API. Emitted env varies per driver (AWS_S3_<NAME>_BUCKET or SUPABASE_BUCKET_<NAME>).",
 	},

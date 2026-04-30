@@ -58,6 +58,11 @@ authUsers:                     # supabase: seed via Admin API on `up`
     password: string
     metadata: object           # yaml map serialized to JSON for user_metadata
 configTomlPath: string         # supabase: optional path (relative to corgi-compose.yml) to a config.toml that corgi copies to <projectRoot>/supabase/config.toml on every init. If unset, supabase init runs at first `up`.
+image: string                  # image: docker image reference (e.g. "gotenberg/gotenberg:8")
+containerPort: int             # image: container's internal port. Defaults to `port:` if unset
+environment: [string]          # image: docker-compose environment list, e.g. ["MEILI_MASTER_KEY=secret"]
+volumes:     [string]          # image: docker-compose volume mounts, e.g. ["./data:/app/data"]
+command:     [string]          # image: override container entrypoint args, e.g. ["--collector.zipkin.host-port=9411"]
 ```
 
 ## `services.<name>`
