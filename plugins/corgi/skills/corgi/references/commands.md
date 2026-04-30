@@ -48,6 +48,20 @@ Exits 0 / 1. No flags.
 
 Post-run probe — synchronous, safe to run. TCP/HTTP probe every declared port. See `healthchecks.md`. Exits 0 / 1. No flags.
 
+### `corgi tunnel [services]`
+
+Open public HTTPS tunnels to declared services. Default provider `cloudflared` (Cloudflare Quick Tunnels — free, no signup). Spawns one subprocess per target, prints URLs as they appear, blocks until Ctrl+C.
+
+Flags:
+- `--provider {cloudflared|ngrok|localtunnel}` — switch provider (default: cloudflared)
+- `--port <int>` — tunnel raw local port (skip compose lookup)
+
+Auth-needing providers (e.g. ngrok) preflight before any tunnel spawns; corgi prints the exact login command and exits without partial state.
+
+When `api` is among the targets, corgi auto-prints the DocuSeal webhook path (`<url>/webhooks/docuseal`) as a hint.
+
+Full docs: [docs/tunnel.md](../../../../docs/tunnel.md).
+
 ### `corgi init` (aliases: `initialize`, `clone`)
 
 One-shot setup: clone repos referenced by `cloneFrom:`, generate `corgi_services/db_services/<name>/docker-compose.yml` + `Makefile` per db, run `required:` installs. Idempotent — safe to re-run.
@@ -127,3 +141,4 @@ Same as `-h` / `--help`. Per-command help available via `corgi <cmd> -h`.
 - User asks **"stop the databases"** → `corgi clean -i db` (non-destructive to volumes in most drivers — verify first if user has irreplaceable data).
 - User wants to **try an example** → `corgi run -l` then `corgi run -t <url>`.
 - User wants to **reset the whole local state** → confirm scope, then `corgi clean -i corgi_services` (safe) or `-i all` (destructive).
+- User asks **"how do I expose <service> publicly for webhooks?"** → `corgi tunnel <service>` (or `corgi tunnel` for all services). Default = Cloudflare Quick Tunnels (no signup). Don't recommend ad-hoc `ngrok http …` — `corgi tunnel --provider ngrok <service>` reuses the same flow + login preflight.

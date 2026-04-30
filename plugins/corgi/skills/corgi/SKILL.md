@@ -19,6 +19,8 @@ Safe synchronous probes:
 
 Both exit 0 on success, 1 on failure. Output is colored text, not JSON.
 
+`corgi tunnel` is also long-running (one tunnel subprocess per service, blocks until Ctrl+C). Background it the same way you background `corgi run`. See `references/long-running.md` if invoking from an agent.
+
 ## Routing: when to read what
 
 | Task | Read |
@@ -28,6 +30,7 @@ Both exit 0 on success, 1 on failure. Output is colored text, not JSON.
 | Adding `healthCheck:` to a service or db | `references/healthchecks.md` |
 | `corgi doctor` or `corgi run` failed | `references/debugging.md` |
 | Explaining / choosing a CLI flag | `references/commands.md` |
+| Setting up webhook tunnels (DocuSeal/Stripe/etc.) | `../../../docs/tunnel.md` (full) or `references/commands.md#corgi-tunnel-services` |
 | Running `corgi run` inside an agent loop | `references/long-running.md` |
 
 Load only what the task needs. Do not read every reference every time.
@@ -46,6 +49,7 @@ Load only what the task needs. Do not read every reference every time.
 corgi run                  # start everything (long-running, background it)
 corgi doctor               # preflight
 corgi status               # health check
+corgi tunnel               # public HTTPS tunnels (long-running) — default cloudflared
 corgi init                 # scaffold db_services/ + cloned repos
 corgi create               # interactive yml editor
 corgi clean -i db          # stop+remove db containers (also: services, corgi_services, all)
