@@ -57,6 +57,7 @@ authUsers:                     # supabase: seed via Admin API on `up`
   - email:    string
     password: string
     metadata: object           # yaml map serialized to JSON for user_metadata
+configTomlPath: string         # supabase: optional path (relative to corgi-compose.yml) to a config.toml that corgi copies to <projectRoot>/supabase/config.toml on every init. If unset, supabase init runs at first `up`.
 ```
 
 ## `services.<name>`

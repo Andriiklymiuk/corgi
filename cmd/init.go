@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -103,11 +104,49 @@ Provide them in corgi-compose.yml file`)
 		if errDuringFileCreation {
 			fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
 			fmt.Printf("Db service %s had error during creation\n", service.ServiceName)
-		} else {
-			fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
-			fmt.Printf("Db service %s was successfully created\n", service.ServiceName)
+			continue
 		}
+
+		if err := applyDriverPostInit(service); err != nil {
+			fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
+			fmt.Printf("Db service %s post-init failed: %s\n", service.ServiceName, err)
+			continue
+		}
+
+		fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
+		fmt.Printf("Db service %s was successfully created\n", service.ServiceName)
 	}
+}
+
+// applyDriverPostInit runs driver-specific steps after the standard
+// FilesToCreate emission. Currently used by the supabase driver to copy a
+// user-provided config.toml (via `configTomlPath:` in corgi-compose.yml) into
+// <projectRoot>/supabase/config.toml. Always overwrites — matches how other
+// corgi-emitted files are re-written on each init.
+func applyDriverPostInit(service utils.DatabaseService) error {
+	if service.Driver != "supabase" || service.ConfigTomlPath == "" {
+		return nil
+	}
+
+	src := service.ConfigTomlPath
+	if !filepath.IsAbs(src) {
+		src = filepath.Join(utils.CorgiComposePathDir, src)
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("read configTomlPath %q: %w", src, err)
+	}
+
+	destDir := filepath.Join(utils.CorgiComposePathDir, "supabase")
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("create %q: %w", destDir, err)
+	}
+	dest := filepath.Join(destDir, "config.toml")
+	if err := os.WriteFile(dest, data, 0644); err != nil {
+		return fmt.Errorf("write %q: %w", dest, err)
+	}
+	fmt.Printf("  copied configTomlPath %s → %s\n", service.ConfigTomlPath, dest)
+	return nil
 }
 
 func CreateServices(services []utils.Service) {

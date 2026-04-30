@@ -89,6 +89,26 @@ Skip for local-only setups — stock secret works.
 
 `corgi status` HTTP probes this path. Use `/rest/v1/` (returns 401, accepted as up).
 
+### `configTomlPath: string`
+
+Optional. Path (relative to corgi-compose.yml; absolute paths also accepted) to a `config.toml` that corgi copies to `<projectRoot>/supabase/config.toml` on every `corgi init`. Useful when:
+
+- You want to check the config into a templates/ dir and treat it as source of truth.
+- Fresh clones should boot with your customizations (custom JWT secret, ports, schemas) without anyone running `supabase init` first.
+
+```yaml
+db_services:
+  supabase:
+    driver: supabase
+    configTomlPath: ./templates/supabase-config.toml
+```
+
+Behavior:
+
+- Always overwrites the destination — matches how other corgi-emitted files (Makefiles, docker-compose.yml) re-emit on each init.
+- If the source file is missing, `corgi init` errors for that service.
+- If unset, first `corgi up` triggers `supabase init` (existing flow).
+
 ## supabase/config.toml location
 
 corgi expects `<corgi-compose dir>/supabase/config.toml` — same convention as supabase CLI. No yaml field to relocate it; supabase CLI itself doesn't support that.
@@ -107,7 +127,7 @@ Next `corgi run` recreates via `supabase init`. Customizations lost (JWT secret,
 
 ### What corgi reads from it
 
-Only the `[api].port`, `[db].port`, `[studio].port`, `[inbucket].port` values — to emit matching `SUPABASE_*` URLs that align with what supabase actually binds to. Everything else (auth, storage, realtime, edge functions, mailer) is supabase CLI's domain.
+The `[api].port`, `[db].port`, `[studio].port`, `[inbucket].port` values — to emit matching `SUPABASE_*` URLs that align with what supabase actually binds to. Everything else (auth, storage, realtime, edge functions, mailer) is supabase CLI's domain. Compose `port:` overrides `[api].port`; the Makefile patches the file before `supabase start` so both stay aligned.
 
 ## Lifecycle
 
@@ -145,7 +165,21 @@ required:
 
 ## Custom port
 
-Don't set `port:` in compose for supabase — driver ignores it. Change `[api].port` in `supabase/config.toml` instead. Driver reads it and emits matching URLs.
+`port:` in compose drives `[api].port`. Two paths:
+
+```yaml
+db_services:
+  supabase:
+    driver: supabase
+    port: 8000
+```
+
+What happens:
+1. corgi env emission reads `[api].port` from `config.toml` but overrides with compose `port:` if set — `SUPABASE_URL=http://...:8000`.
+2. Makefile `up`: after `supabase init` (if it ran), an awk pass patches `[api].port = 8000` in `supabase/config.toml`. `supabase start` then binds to 8000.
+3. Bind port and emitted URL stay aligned even after first init.
+
+Compose `port:` only controls `[api].port`. db/studio/inbucket stay at whatever `config.toml` says (stock 54322/54323/54324). To override those, edit the file directly:
 
 ```toml
 [api]
@@ -157,6 +191,8 @@ port = 8001
 [studio]
 port = 8002
 ```
+
+For full pre-baked control, check the file into a templates dir and use `configTomlPath:`.
 
 ## Two-database setup
 

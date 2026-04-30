@@ -96,7 +96,9 @@ const (
 
 // MakefileSupabase wraps the supabase CLI. Runs from project root so
 // supabase/config.toml is found in its conventional location.
-var MakefileSupabase = `ROOT := $(shell git rev-parse --show-toplevel 2>/dev/null || cd ../../.. && pwd)
+// DESIRED_API_PORT is templated from yaml port:; "0" means unset (don't patch).
+var MakefileSupabase = `ROOT := $(shell git rev-parse --show-toplevel 2>/dev/null || (cd ../../.. && pwd))
+DESIRED_API_PORT := {{.Port}}
 
 up:
 	@command -v supabase >/dev/null 2>&1 || { \
@@ -117,6 +119,19 @@ up:
 		echo "→ supabase/config.toml missing — running 'supabase init'..."; \
 		supabase init; \
 	}
+	@if [ "$(DESIRED_API_PORT)" != "0" ] && [ -n "$(DESIRED_API_PORT)" ]; then \
+		cd "$(ROOT)" && awk -v p="$(DESIRED_API_PORT)" ' \
+			/^\[/{ section=$$0 } \
+			section=="[api]" && /^port[[:space:]]*=/{ \
+				if ($$0 != "port = " p) { \
+					print "port = " p; changed=1; next \
+				} \
+			} \
+			{ print } \
+			END{ if (changed) print "→ patched [api].port=" p " in supabase/config.toml" > "/dev/stderr" } \
+		' supabase/config.toml > supabase/config.toml.corgi-tmp && \
+			mv supabase/config.toml.corgi-tmp supabase/config.toml; \
+	fi
 	@cd "$(ROOT)" && if supabase status >/dev/null 2>&1; then \
 		echo "✓ supabase already running"; \
 	else \
@@ -155,7 +170,7 @@ set -euo pipefail
 
 # corgi-managed wrapper for the supabase CLI runs from the project root
 # (where supabase/config.toml lives). Re-derive that here.
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || cd ../../.. && pwd)"
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd ../../.. && pwd))"
 cd "$ROOT"
 
 if ! command -v supabase >/dev/null 2>&1; then
