@@ -48,7 +48,9 @@ Load only what the task needs. Do not read every reference every time.
 ```
 corgi run                  # start everything (long-running, background it)
 corgi doctor               # preflight
-corgi status               # health check
+corgi status               # health check (one-shot)
+corgi status --ready       # block until all healthy / timeout (CI-friendly)
+corgi status --watch       # live monitor, transitions only
 corgi tunnel               # public HTTPS tunnels (long-running) — default cloudflared
 corgi init                 # scaffold db_services/ + cloned repos
 corgi create               # interactive yml editor

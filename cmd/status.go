@@ -3,9 +3,11 @@ package cmd
 import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -32,7 +34,13 @@ For each service:
 
 Exit code is non-zero if anything's down so CI / scripts can consume it.
 
-Add --watch (or -w) to repoll continuously; --interval controls the cadence.`,
+Modes:
+  -w, --watch         Repoll continuously, alert on transitions only (kubectl-style).
+  -r, --ready         Block until every target is up. Exit 0 when all healthy,
+                      exit 1 on --timeout (default 5m). Alias: --until-healthy.
+      --service csv   Narrow probes to listed services.
+      --json          Machine-readable. One-shot: array. Watch/ready: NDJSON per transition.
+  -q, --quiet         Suppress per-line output; rely on exit code only.`,
 	Run:     runStatus,
 	Aliases: []string{"health", "healthcheck"},
 }
@@ -40,6 +48,12 @@ Add --watch (or -w) to repoll continuously; --interval controls the cadence.`,
 func init() {
 	statusCmd.Flags().BoolP("watch", "w", false, "Repoll continuously; press Ctrl+C to stop")
 	statusCmd.Flags().DurationP("interval", "i", 2*time.Second, "Delay between watch polls")
+	statusCmd.Flags().BoolP("ready", "r", false, "Exit 0 once every probed target is up; exit 1 on --timeout (alias: --until-healthy)")
+	statusCmd.Flags().Bool("until-healthy", false, "Same as --ready")
+	statusCmd.Flags().Duration("timeout", 5*time.Minute, "Max wait for --until-healthy")
+	statusCmd.Flags().StringSlice("service", nil, "Limit checks to listed services (csv); applies to both services + db_services")
+	statusCmd.Flags().Bool("json", false, "Emit machine-readable JSON. One-shot: array. Watch: NDJSON one-per-transition.")
+	statusCmd.Flags().BoolP("quiet", "q", false, "Suppress per-line output; rely on exit code only")
 	rootCmd.AddCommand(statusCmd)
 }
 
@@ -63,49 +77,147 @@ func runStatus(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	// Sort by port for predictable output.
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Port < rows[j].Port })
+
+	serviceFilter, _ := cmd.Flags().GetStringSlice("service")
+	if len(serviceFilter) > 0 {
+		rows = filterRows(rows, serviceFilter)
+		if len(rows) == 0 {
+			fmt.Printf("No matching services for filter %v.\n", serviceFilter)
+			os.Exit(1)
+		}
+	}
 
 	watch, _ := cmd.Flags().GetBool("watch")
 	interval, _ := cmd.Flags().GetDuration("interval")
+	untilHealthy, _ := cmd.Flags().GetBool("until-healthy")
+	if ready, _ := cmd.Flags().GetBool("ready"); ready {
+		untilHealthy = true
+	}
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	quiet, _ := cmd.Flags().GetBool("quiet")
 
+	if untilHealthy {
+		runStatusUntilHealthy(rows, interval, timeout, jsonOut, quiet)
+		return
+	}
 	if watch {
-		runStatusWatch(rows, interval)
+		runStatusWatch(rows, interval, jsonOut, quiet)
 		return
 	}
 
-	up, down := printStatusOnce(rows)
-	if down == 0 {
-		fmt.Printf("%s🎉 %d/%d healthy%s\n", art.GreenColor, up, up+down, art.WhiteColor)
+	up, down := probeAll(rows)
+	if jsonOut {
+		emitJSON(up, down)
+		if anyDown(up, down) {
+			os.Exit(1)
+		}
 		return
 	}
-	fmt.Printf("%s%d down, %d up%s — check `corgi run` logs for the failing services.\n",
-		art.RedColor, down, up, art.WhiteColor)
+	if !quiet {
+		renderProbeResults(up, down)
+	}
+	if anyDown(up, down) == false {
+		if !quiet {
+			fmt.Printf("%s🎉 %d/%d healthy%s\n", art.GreenColor, len(up), len(up)+len(down), art.WhiteColor)
+		}
+		return
+	}
+	if !quiet {
+		fmt.Printf("%s%d down, %d up%s — check `corgi run` logs for the failing services.\n",
+			art.RedColor, len(down), len(up), art.WhiteColor)
+	}
 	os.Exit(1)
 }
 
-// printStatusOnce renders the full table once. Returns counts.
-func printStatusOnce(rows []statusRow) (up, down int) {
-	fmt.Println("🩺 corgi status")
+type probeResult struct {
+	Row     statusRow
+	Healthy bool
+	Detail  string
+}
+
+func probeAll(rows []statusRow) (up, down []probeResult) {
 	for _, r := range rows {
 		ok, detail := probe(r)
+		pr := probeResult{Row: r, Healthy: ok, Detail: detail}
 		if ok {
-			fmt.Printf("  %s ✅ %-40s %s%s\n", art.GreenColor, r.Label, detail, art.WhiteColor)
-			up++
+			up = append(up, pr)
 		} else {
-			fmt.Printf("  %s ❌ %-40s %s%s\n", art.RedColor, r.Label, detail, art.WhiteColor)
-			down++
+			down = append(down, pr)
+		}
+	}
+	return
+}
+
+func anyDown(up, down []probeResult) bool { return len(down) > 0 }
+
+func renderProbeResults(up, down []probeResult) {
+	fmt.Println("🩺 corgi status")
+	all := append(append([]probeResult{}, up...), down...)
+	sort.SliceStable(all, func(i, j int) bool { return all[i].Row.Port < all[j].Row.Port })
+	for _, pr := range all {
+		if pr.Healthy {
+			fmt.Printf("  %s ✅ %-40s %s%s\n", art.GreenColor, pr.Row.Label, pr.Detail, art.WhiteColor)
+		} else {
+			fmt.Printf("  %s ❌ %-40s %s%s\n", art.RedColor, pr.Row.Label, pr.Detail, art.WhiteColor)
 		}
 	}
 	fmt.Println()
-	return up, down
 }
 
-// runStatusWatch prints the initial table, then polls quietly and only
-// emits a line when a service's health transitions (up→down or down→up).
-// Mimics `kubectl get -w` — quiet while stable, alerts on change. Ctrl+C
-// to stop. Reactive, not periodic-spam.
-func runStatusWatch(rows []statusRow, interval time.Duration) {
+func emitJSON(up, down []probeResult) {
+	type entry struct {
+		Label   string `json:"label"`
+		Port    int    `json:"port"`
+		Kind    string `json:"kind"`
+		URL     string `json:"url,omitempty"`
+		Healthy bool   `json:"healthy"`
+		Detail  string `json:"detail"`
+	}
+	var out []entry
+	for _, pr := range up {
+		out = append(out, entry{pr.Row.Label, pr.Row.Port, pr.Row.Kind, pr.Row.URL, true, pr.Detail})
+	}
+	for _, pr := range down {
+		out = append(out, entry{pr.Row.Label, pr.Row.Port, pr.Row.Kind, pr.Row.URL, false, pr.Detail})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	b, _ := json.MarshalIndent(out, "", "  ")
+	fmt.Println(string(b))
+}
+
+func filterRows(rows []statusRow, names []string) []statusRow {
+	want := map[string]bool{}
+	for _, n := range names {
+		for _, p := range strings.Split(n, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				want[p] = true
+			}
+		}
+	}
+	var out []statusRow
+	for _, r := range rows {
+		// Label is "services.<name>" or "db_services.<name> (<driver>)".
+		// Match the bare service name.
+		bare := r.Label
+		if i := strings.IndexByte(bare, '.'); i >= 0 {
+			bare = bare[i+1:]
+		}
+		if i := strings.IndexByte(bare, ' '); i >= 0 {
+			bare = bare[:i]
+		}
+		if want[bare] {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// runStatusWatch reactive: print initial state, then alert on transitions.
+// Quiet by default while stable. Ctrl+C exits.
+func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet bool) {
 	if interval <= 0 {
 		interval = 2 * time.Second
 	}
@@ -115,9 +227,15 @@ func runStatusWatch(rows []statusRow, interval time.Duration) {
 		ok, _ := probe(r)
 		state[r.Label] = ok
 	}
-	up, down := printStatusOnce(rows)
-	fmt.Printf("%s👀 watching %d targets every %s — Ctrl+C to stop (%d up, %d down)%s\n",
-		art.CyanColor, len(rows), interval, up, down, art.WhiteColor)
+
+	up, down := probeAll(rows)
+	if jsonOut {
+		emitJSON(up, down)
+	} else if !quiet {
+		renderProbeResults(up, down)
+		fmt.Printf("%s👀 watching %d targets every %s — Ctrl+C to stop (%d up, %d down)%s\n",
+			art.CyanColor, len(rows), interval, len(up), len(down), art.WhiteColor)
+	}
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -129,15 +247,103 @@ func runStatusWatch(rows []statusRow, interval time.Duration) {
 				continue
 			}
 			state[r.Label] = ok
-			ts := time.Now().Format("15:04:05")
-			if ok {
-				fmt.Printf("  %s[%s] ✅ %-40s came up — %s%s\n",
-					art.GreenColor, ts, r.Label, detail, art.WhiteColor)
-			} else {
-				fmt.Printf("  %s[%s] ❌ %-40s went down — %s%s\n",
-					art.RedColor, ts, r.Label, detail, art.WhiteColor)
+			emitTransition(r, ok, detail, jsonOut, quiet)
+		}
+	}
+}
+
+// runStatusUntilHealthy polls until all rows up (exit 0) or timeout (exit 1).
+func runStatusUntilHealthy(rows []statusRow, interval, timeout time.Duration, jsonOut, quiet bool) {
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+
+	deadline := time.Now().Add(timeout)
+	state := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		state[r.Label] = false // unknown → assume down to surface initial transitions
+	}
+
+	if !jsonOut && !quiet {
+		fmt.Printf("%s⏳ waiting up to %s for %d targets to become healthy...%s\n",
+			art.CyanColor, timeout, len(rows), art.WhiteColor)
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	check := func() (allUp bool) {
+		allUp = true
+		for _, r := range rows {
+			ok, detail := probe(r)
+			prev := state[r.Label]
+			state[r.Label] = ok
+			if ok != prev {
+				emitTransition(r, ok, detail, jsonOut, quiet)
+			}
+			if !ok {
+				allUp = false
 			}
 		}
+		return
+	}
+
+	if check() {
+		finalize(rows, jsonOut, quiet, true)
+		return
+	}
+	for range ticker.C {
+		if check() {
+			finalize(rows, jsonOut, quiet, true)
+			return
+		}
+		if time.Now().After(deadline) {
+			finalize(rows, jsonOut, quiet, false)
+			os.Exit(1)
+		}
+	}
+}
+
+func emitTransition(r statusRow, ok bool, detail string, jsonOut, quiet bool) {
+	if jsonOut {
+		type ev struct {
+			Time    string `json:"time"`
+			Label   string `json:"label"`
+			Port    int    `json:"port"`
+			Healthy bool   `json:"healthy"`
+			Detail  string `json:"detail"`
+		}
+		b, _ := json.Marshal(ev{time.Now().Format(time.RFC3339), r.Label, r.Port, ok, detail})
+		fmt.Println(string(b))
+		return
+	}
+	if quiet {
+		return
+	}
+	ts := time.Now().Format("15:04:05")
+	if ok {
+		fmt.Printf("  %s[%s] ✅ %-40s came up — %s%s\n", art.GreenColor, ts, r.Label, detail, art.WhiteColor)
+	} else {
+		fmt.Printf("  %s[%s] ❌ %-40s went down — %s%s\n", art.RedColor, ts, r.Label, detail, art.WhiteColor)
+	}
+}
+
+func finalize(rows []statusRow, jsonOut, quiet, healthy bool) {
+	up, down := probeAll(rows)
+	if jsonOut {
+		emitJSON(up, down)
+		return
+	}
+	if quiet {
+		return
+	}
+	if healthy {
+		fmt.Printf("%s🎉 all %d targets healthy%s\n", art.GreenColor, len(rows), art.WhiteColor)
+	} else {
+		fmt.Printf("%s⌛ timeout — %d up, %d down%s\n", art.RedColor, len(up), len(down), art.WhiteColor)
+		renderProbeResults(up, down)
 	}
 }
 
