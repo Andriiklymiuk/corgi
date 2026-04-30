@@ -36,7 +36,15 @@ db_services:
 - `corgi status` exits **0** if every probed target is healthy.
 - Exits **1** if any single target fails — a worker with port 3001 down will fail the whole command even if everything else is fine.
 
-Output is colored text to stdout (no stderr, no JSON):
+## Watch + ready modes
+
+- `corgi status -w` (alias `--watch`) loops, prints transitions only (kubectl-style). Tunable via `-i, --interval` (default 2s). Ctrl+C exits.
+- `corgi status -r` (aliases `--ready`, `--until-healthy`) loops until every target is up — exits 0 when all green, exits 1 on `--timeout` (default 5m). CI-friendly block-until-ready gate.
+- `--service api,broker-portal` narrows the probed set. Use with `--ready` when iterating on one service.
+- `--json` switches output: one-shot JSON array; watch/ready emit NDJSON one-per-transition.
+- `-q, --quiet` suppresses output; rely on exit code only.
+
+Output is colored text to stdout (no stderr, no JSON unless `--json`):
 
 ```
 🩺 corgi status

@@ -46,7 +46,22 @@ Exits 0 / 1. No flags.
 
 ### `corgi status` (aliases: `health`, `healthcheck`)
 
-Post-run probe — synchronous, safe to run. TCP/HTTP probe every declared port. See `healthchecks.md`. Exits 0 / 1. No flags.
+Post-run probe — synchronous, safe to run. TCP/HTTP probe every declared port. See `healthchecks.md`. Exits 0 / 1.
+
+Flags:
+- `-w, --watch` — re-probe continuously, alerts on transitions only (kubectl-style). Ctrl+C stops.
+- `-i, --interval <dur>` — watch cadence (default `2s`).
+- `-r, --ready` (alias `--until-healthy`) — exit 0 when every probed target is up; exit 1 on `--timeout`.
+- `--timeout <dur>` — bound the wait for `--ready` (default `5m`).
+- `--service <csv>` — narrow probes to listed services (matches both `services.<name>` and `db_services.<name>`).
+- `--json` — machine output. One-shot: JSON array. Watch: NDJSON one-per-transition.
+- `-q, --quiet` — suppress per-line output; rely on exit code only.
+
+Common patterns:
+- CI gate: `corgi status --ready --timeout 3m` blocks until stack ready, fails build on timeout.
+- Single-service wait: `corgi status --ready --service api`.
+- Live monitor: `corgi status --watch`.
+- Pipeline: `corgi status --json | jq '.[] | select(.healthy==false)'`.
 
 ### `corgi tunnel [services]`
 
