@@ -62,8 +62,11 @@ type DatabaseService struct {
 	AuthUsers      []SupabaseAuthUser `yaml:"authUsers,omitempty"`      // Auth users to seed via supabase admin API on `up`.
 	ConfigTomlPath string             `yaml:"configTomlPath,omitempty"` // Optional path (relative to corgi-compose.yml) to a config.toml that corgi copies to <projectRoot>/supabase/config.toml on each `corgi init`. If unset, supabase init runs at first `corgi up` if no config.toml exists yet.
 	// image driver:
-	Image         string `yaml:"image,omitempty"`         // image driver only. Docker image reference (e.g. "gotenberg/gotenberg:8").
-	ContainerPort int    `yaml:"containerPort,omitempty"` // image driver only. Container's internal port. Defaults to `port:` if unset. Used in docker-compose `<port>:<containerPort>` mapping.
+	Image         string   `yaml:"image,omitempty"`         // image driver only. Docker image reference (e.g. "gotenberg/gotenberg:8").
+	ContainerPort int      `yaml:"containerPort,omitempty"` // image driver only. Container's internal port. Defaults to `port:` if unset. Used in docker-compose `<port>:<containerPort>` mapping.
+	Environment   []string `yaml:"environment,omitempty"`   // image driver only. Docker-compose environment entries (e.g. ["MEILI_MASTER_KEY=secret"]).
+	Volumes       []string `yaml:"volumes,omitempty"`       // image driver only. Docker-compose volume mappings (e.g. ["./data:/app/data"]).
+	Command       []string `yaml:"command,omitempty"`       // image driver only. Override container entrypoint args (e.g. ["--collector.zipkin.host-port=9411"]).
 	// Optional HTTP path for `corgi status`. If set, status check does GET
 	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
 	// If unset, status falls back to a TCP connect on the port.

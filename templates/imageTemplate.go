@@ -1,9 +1,12 @@
 package templates
 
-// DockerComposeImage renders a generic docker-compose for stateless services
-// shipped as a public image (gotenberg, mailhog, jaeger, etc.). The container
-// listens on `ContainerPort` (defaults to `Port` if unset) and is exposed on
-// the host's `Port`. Optional environment entries pass through verbatim.
+// DockerComposeImage renders a generic docker-compose for stateless (or
+// stateful) services shipped as a public image (gotenberg, mailhog, jaeger,
+// meilisearch, etc.). Supported optional fields:
+//   - port + containerPort: host:container port mapping
+//   - environment: docker-compose environment list ([KEY=VALUE])
+//   - volumes: docker-compose volume mounts (["./data:/app/data"])
+//   - command: override container entrypoint args (["--flag", "value"])
 var DockerComposeImage = `services:
   image-{{.ServiceName}}:
     image: {{.Image}}
@@ -11,6 +14,21 @@ var DockerComposeImage = `services:
 {{- if .Port }}
     ports:
       - "{{.Port}}:{{if .ContainerPort}}{{.ContainerPort}}{{else}}{{.Port}}{{end}}"
+{{- end }}
+{{- if .Environment }}
+    environment:
+{{- range .Environment }}
+      - {{ . }}
+{{- end }}
+{{- end }}
+{{- if .Volumes }}
+    volumes:
+{{- range .Volumes }}
+      - {{ . }}
+{{- end }}
+{{- end }}
+{{- if .Command }}
+    command: [{{ range $i, $arg := .Command }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}]
 {{- end }}
     restart: unless-stopped
     networks:

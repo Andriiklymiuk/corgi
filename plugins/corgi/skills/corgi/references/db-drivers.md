@@ -100,9 +100,9 @@ required:
 
 Full docs: [docs/drivers/supabase.md](../../../../docs/drivers/supabase.md)
 
-## image driver (generic stateless docker image)
+## image driver (generic docker image)
 
-Use for services that ship as a public docker image with no DB / persistent state. Sits inside `db_services:` because corgi treats it as infra (declared, lifecycle-managed, env-emitting), not a code repo.
+Use for services that ship as a public docker image. Sits inside `db_services:` because corgi treats it as infra (declared, lifecycle-managed, env-emitting), not a code repo.
 
 ```yaml
 db_services:
@@ -128,6 +128,46 @@ services:
     depends_on_db:
       - name: gotenberg
         envAlias: PDF_SERVICE   # → PDF_SERVICE_URL=http://localhost:3100
+```
+
+### Optional fields
+
+`environment:` — passed verbatim to docker-compose `environment:` list.
+
+```yaml
+db_services:
+  meilisearch:
+    driver: image
+    image: getmeili/meilisearch:v1.10
+    port: 7700
+    environment:
+      - MEILI_MASTER_KEY=local-master-key
+      - MEILI_NO_ANALYTICS=true
+```
+
+`volumes:` — passed verbatim to docker-compose `volumes:` list. Required for stateful images that need persistence across restarts.
+
+```yaml
+db_services:
+  meilisearch:
+    driver: image
+    image: getmeili/meilisearch:v1.10
+    port: 7700
+    volumes:
+      - ./meili_data:/meili_data
+```
+
+`command:` — override container entrypoint args. Passed as docker-compose `command:` array.
+
+```yaml
+db_services:
+  jaeger:
+    driver: image
+    image: jaegertracing/all-in-one:1.55
+    port: 16686
+    command:
+      - --collector.zipkin.host-port=9411
+      - --memory.max-traces=10000
 ```
 
 `up`/`down`/`stop`/`logs`/`id` follow the standard Makefile shape (same as postgres/etc).
