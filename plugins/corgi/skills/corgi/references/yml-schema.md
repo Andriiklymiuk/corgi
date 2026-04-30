@@ -65,6 +65,20 @@ volumes:     [string]          # image: docker-compose volume mounts, e.g. ["./d
 command:     [string]          # image: override container entrypoint args, e.g. ["--collector.zipkin.host-port=9411"]
 ```
 
+### Optional: `services.<name>.tunnel`
+
+```yaml
+services:
+  api:
+    port: 3030
+    tunnel:
+      provider: cloudflared       # cloudflared (default) | ngrok
+      hostname: ${API_TUNNEL_HOST} # public URL (required when block present)
+      name: ${USER}-api-dev       # cloudflared only: pre-created tunnel name
+```
+
+`${VAR}` resolves from shell env first, then `env/source/<service>.env`. Missing vars = strict error at `corgi tunnel`. CLI `corgi tunnel --provider X` overrides compose `provider`. localtunnel can't host arbitrary domains — Quick mode only.
+
 ## `services.<name>`
 
 ```yaml

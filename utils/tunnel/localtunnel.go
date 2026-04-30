@@ -23,5 +23,12 @@ func (Localtunnel) InstallHint() string { return "npm install -g localtunnel" }
 
 func (Localtunnel) AcceptsStdin() bool { return false }
 
-// PreflightAuth — localtunnel needs no auth ever. Anonymous + free.
 func (Localtunnel) PreflightAuth() error { return nil }
+
+func (Localtunnel) CmdNamed(port int, cfg NamedConfig) ([]string, error) {
+	return nil, fmt.Errorf("localtunnel doesn't support custom hostnames; remove `tunnel.hostname` or switch provider to cloudflared/ngrok")
+}
+
+func (Localtunnel) PreflightNamedAuth(cfg NamedConfig) error {
+	return fmt.Errorf("localtunnel doesn't support named/stable URLs; switch provider to cloudflared or ngrok")
+}

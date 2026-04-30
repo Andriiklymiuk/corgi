@@ -20,10 +20,21 @@ type Event struct {
 }
 
 // Run spawns the provider's tunnel CLI for one (service, port) target and
-// streams Events on `events`. Cancel `ctx` to terminate the subprocess.
-// Run returns when the subprocess exits.
-func Run(ctx context.Context, provider Provider, service string, port int, events chan<- Event) {
-	argv := provider.Cmd(port)
+// streams Events on `events`. If named is non-nil, runs in named mode with
+// the configured hostname (URL emitted immediately). Cancel `ctx` to
+// terminate the subprocess. Run returns when the subprocess exits.
+func Run(ctx context.Context, provider Provider, service string, port int, named *NamedConfig, events chan<- Event) {
+	var argv []string
+	if named != nil {
+		var err error
+		argv, err = provider.CmdNamed(port, *named)
+		if err != nil {
+			events <- Event{Service: service, Port: port, Err: err, Done: true}
+			return
+		}
+	} else {
+		argv = provider.Cmd(port)
+	}
 	if len(argv) == 0 {
 		events <- Event{Service: service, Port: port, Err: fmt.Errorf("provider %s returned empty command", provider.Name()), Done: true}
 		return
@@ -36,6 +47,10 @@ func Run(ctx context.Context, provider Provider, service string, port int, event
 			Done:    true,
 		}
 		return
+	}
+
+	if named != nil {
+		events <- Event{Service: service, Port: port, URL: "https://" + named.Hostname}
 	}
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
