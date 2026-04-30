@@ -57,10 +57,11 @@ While in services you can create whatever you want, but in db services **for now
 - [postgis](https://postgis.net)
 - [pgvector](https://github.com/pgvector/pgvector) — postgres + `pgvector` extension. Uses prefix `DB_`, same as plain `postgres`
 - [localstack](https://docs.localstack.cloud/) — single container for multiple AWS services (sqs, s3, …), with `queues` / `buckets` auto-created from config
+- [supabase](https://supabase.com/docs/guides/local-development) — wraps `supabase init`/`start`. Emits `SUPABASE_*` + S3 vars, ports from `supabase/config.toml`. Seeds `buckets:` and `authUsers:` on `up`; `jwtSecret:` re-signs keys.
 
 ## Preflight & healthcheck
 
-- `corgi doctor` (alias: `check`) — before `corgi run`: verifies every tool in `required:`, Docker is up, and every port in `db_services.*.port` / `services.*.port` is free (lists the offending process if not)
+- `corgi doctor` (aliases: `check`, `preflight`) — before `corgi run`: verifies every tool in `required:`, Docker is up, and every port in `db_services.*.port` / `services.*.port` is free (lists the offending process if not)
 - `corgi status` (aliases: `health`, `healthcheck`) — after `corgi run`: TCP-probes every declared port. If a service sets `healthCheck: /some/path`, corgi does an HTTP probe and accepts any non-5xx response as healthy. The `localstack` driver defaults to `GET /_localstack/health`.
 
 ## Documentation

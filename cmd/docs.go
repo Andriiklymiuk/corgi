@@ -67,6 +67,12 @@ var serviceItems = []CorgiComposeItems{
 		description: "Should service ignore env and don't change env file or not. By default is false (env is not ignored)",
 	},
 	{
+		item:        "autoSourceEnv",
+		example:     "false",
+		itemType:    "boolean",
+		description: "Toggles the automatic `set -a; . <envFile>; set +a` prefix corgi adds before start/beforeStart/afterStart commands. Default is on. Set to false to skip sourcing (e.g. to avoid leaking secrets to npm postinstall scripts).",
+	},
+	{
 		item:        "path",
 		example:     "./path/to/target/repo",
 		itemType:    "string",
@@ -235,7 +241,19 @@ var dbServiceItems = []CorgiComposeItems{
 		item:        "buckets",
 		example:     "[ela-documents]",
 		itemType:    "[]string",
-		description: "localstack driver only. S3 buckets auto-created by the LocalStack bootstrap.\n\t\t\tAlso emitted as env: AWS_S3_<UPPER_NAME>_BUCKET=<bucket-name>",
+		description: "localstack: S3 buckets auto-created by the LocalStack bootstrap.\n\t\t\tSupabase: Storage buckets created via Storage API. Emitted env varies per driver (AWS_S3_<NAME>_BUCKET or SUPABASE_BUCKET_<NAME>).",
+	},
+	{
+		item:        "jwtSecret",
+		example:     "my-custom-32-byte-secret-here-xxx",
+		itemType:    "string",
+		description: "supabase driver only. Override the stock JWT secret. Must mirror auth.jwt_secret in supabase/config.toml. Driver re-signs ANON_KEY / SERVICE_ROLE_KEY with this so emitted env matches what `supabase status` reports.",
+	},
+	{
+		item:        "authUsers",
+		example:     "- email: admin@example.com\n\t\t\t  password: password123\n\t\t\t  metadata:\n\t\t\t    type: broker",
+		itemType:    "[]SupabaseAuthUser",
+		description: "supabase driver only. Auth users seeded via the supabase admin API on `up`. Idempotent. metadata is a map serialized to JSON for user_metadata.",
 	},
 	{
 		item:        "healthCheck",

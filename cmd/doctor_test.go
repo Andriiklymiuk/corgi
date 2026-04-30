@@ -12,7 +12,7 @@ func TestCollectDeclaredPorts_IncludesDbAndServicesSorted(t *testing.T) {
 			{ServiceName: "shared-aws", Driver: "localstack", Port: 4566},
 		},
 		Services: []utils.Service{
-			{ServiceName: "broker", Port: 3010},
+			{ServiceName: "api-secondary", Port: 3010},
 			{ServiceName: "api", Port: 3030},
 		},
 	}

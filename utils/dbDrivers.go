@@ -638,7 +638,6 @@ var DriverConfigs = map[string]DriverConfig{
 			fmt.Fprintf(&out, "\n%sSECRET_ACCESS_KEY=test", serviceNameInEnv)
 
 			// Per-queue: AWS_SQS_<NAME>=queue-name  AND  AWS_SQS_<NAME>_URL=full-url
-			// Matches humbrela convention (AWS_SQS_API_QUEUE, AWS_SQS_ELA_QUEUE, etc.).
 			for _, q := range db.Queues {
 				envKey := strings.ToUpper(strings.ReplaceAll(q, "-", "_"))
 				fmt.Fprintf(&out, "\n%sSQS_%s=%s", serviceNameInEnv, envKey, q)
@@ -685,6 +684,67 @@ var DriverConfigs = map[string]DriverConfig{
 			{"docker-compose.yml", templates.DockerComposeLocalstack},
 			{"Makefile", templates.MakefileLocalstack},
 			{"bootstrap/bootstrap.sh", templates.BootstrapLocalstack},
+		},
+	},
+	"supabase": {
+		// Wraps the supabase CLI rather than running its containers directly —
+		// the CLI manages its own multi-container stack (postgres, gotrue,
+		// postgrest, kong, studio, storage-api, etc.). corgi only emits env
+		// vars and triggers `supabase start/stop` from the project root.
+		//
+		// Defaults below match `supabase status -o env` output for a project
+		// initialized with the stock JWT secret. Customizing the secret in
+		// supabase/config.toml will diverge ANON_KEY / SERVICE_ROLE_KEY /
+		// JWT_SECRET — handle via overrides in v2.
+		Prefix: "SUPABASE_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			var out strings.Builder
+
+			host := db.Host
+			if host == "" {
+				host = "localhost"
+			}
+
+			// Source of truth = supabase/config.toml. The yaml `port:` field
+			// is intentionally ignored — supabase CLI binds to whatever
+			// config.toml says, and corgi must emit matching values.
+			ports := templates.ReadSupabasePorts(CorgiComposePathDir)
+
+			jwtSecret := db.JWTSecret
+			if jwtSecret == "" {
+				jwtSecret = templates.SupabaseJWTSecret
+			}
+			anonKey := templates.SignSupabaseJWT(jwtSecret, "anon")
+			serviceRoleKey := templates.SignSupabaseJWT(jwtSecret, "service_role")
+
+			fmt.Fprintf(&out, "\n%sURL=http://%s:%d", serviceNameInEnv, host, ports.API)
+			fmt.Fprintf(&out, "\n%sANON_KEY=%s", serviceNameInEnv, anonKey)
+			fmt.Fprintf(&out, "\n%sSERVICE_ROLE_KEY=%s", serviceNameInEnv, serviceRoleKey)
+			fmt.Fprintf(&out, "\n%sJWT_SECRET=%s", serviceNameInEnv, jwtSecret)
+			fmt.Fprintf(&out, "\n%sDB_URL=postgresql://postgres:postgres@%s:%d/postgres", serviceNameInEnv, host, ports.DB)
+			fmt.Fprintf(&out, "\n%sDB_HOST=%s", serviceNameInEnv, host)
+			fmt.Fprintf(&out, "\n%sDB_PORT=%d", serviceNameInEnv, ports.DB)
+			fmt.Fprintf(&out, "\n%sSTUDIO_URL=http://%s:%d", serviceNameInEnv, host, ports.Studio)
+			fmt.Fprintf(&out, "\n%sINBUCKET_URL=http://%s:%d", serviceNameInEnv, host, ports.Inbucket)
+			fmt.Fprintf(&out, "\n%sSTORAGE_S3_URL=http://%s:%d/storage/v1/s3", serviceNameInEnv, host, ports.API)
+			fmt.Fprintf(&out, "\n%sS3_PROTOCOL_ACCESS_KEY_ID=%s", serviceNameInEnv, templates.SupabaseS3AccessKeyID)
+			fmt.Fprintf(&out, "\n%sS3_PROTOCOL_ACCESS_KEY_SECRET=%s", serviceNameInEnv, templates.SupabaseS3AccessKey)
+			fmt.Fprintf(&out, "\n%sS3_PROTOCOL_REGION=%s", serviceNameInEnv, templates.SupabaseS3Region)
+
+			// Per-bucket: SUPABASE_BUCKET_<NAME>=<bucket-name>. Buckets are
+			// auto-created by supabase via [storage.buckets.<name>] entries
+			// in supabase/config.toml; corgi just emits the name for consumers.
+			for _, b := range db.Buckets {
+				envKey := strings.ToUpper(strings.ReplaceAll(b, "-", "_"))
+				fmt.Fprintf(&out, "\n%sBUCKET_%s=%s", serviceNameInEnv, envKey, b)
+			}
+
+			out.WriteString("\n")
+			return out.String()
+		},
+		FilesToCreate: []FilenameForService{
+			{"Makefile", templates.MakefileSupabase},
+			{"bootstrap/bootstrap.sh", templates.BootstrapSupabase},
 		},
 	},
 	"default": {

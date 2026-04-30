@@ -75,6 +75,13 @@ func TestResolveEnvFile_EmptyOverrideUsesDefault(t *testing.T) {
 	}
 }
 
+func TestResolveEnvFile_OffSentinelDisables(t *testing.T) {
+	got := resolveEnvFile("/services/api", []string{SkipAutoSourceEnv})
+	if got != "" {
+		t.Fatalf("expected empty when SkipAutoSourceEnv sentinel passed, got %q", got)
+	}
+}
+
 func TestResolveEnvFile_NoPathDisables(t *testing.T) {
 	if got := resolveEnvFile("", nil); got != "" {
 		t.Fatalf("expected empty, got %q", got)
