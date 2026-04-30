@@ -44,6 +44,7 @@ Set the driver with `driver: <name>`. Corgi generates a `docker-compose.yml` and
 | `skytable` | 2003 | `SKYTABLE_` | `skytable/skytable:latest` | |
 | `dynamodb` | 8000 | `DYNAMODB_` | `amazon/dynamodb-local:latest` | Standalone local emulator |
 | `localstack` | 4566 | `AWS_` | `localstack/localstack:latest` | Unified AWS emulator — see below |
+| `supabase` | 54321 | `SUPABASE_` | wraps `supabase` CLI | Local auth + storage. Reads ports from `supabase/config.toml`. Seeds `buckets:` + `authUsers:` on `up`. See below + [docs/drivers/supabase.md](../../../../docs/drivers/supabase.md) |
 
 ## localstack special keys
 
@@ -62,10 +63,46 @@ db_services:
 
 `corgi status` uses `/_localstack/health` by default for the localstack driver — you don't need to set `healthCheck` unless overriding.
 
+## supabase special keys
+
+Wraps supabase CLI — corgi runs `supabase init`/`start`/`stop`. Auto-creates Storage buckets via Storage API and auth users via Admin API on `up`. Idempotent.
+
+```yaml
+db_services:
+  supabase:
+    driver: supabase
+    healthCheck: /rest/v1/
+    buckets: [user-uploads, public-assets]
+    authUsers:
+      - email: admin@example.com
+        password: password123
+        metadata:
+          role: admin
+    # jwtSecret: my-32-char-secret  # only if you customized auth.jwt_secret in config.toml
+```
+
+Don't set `port:` for supabase — driver reads `[api].port` from `supabase/config.toml`. To change ports, edit that file. corgi auto-runs `supabase init` if `config.toml` missing.
+
+Emitted env (with `envAlias: none`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_DB_URL`, `SUPABASE_DB_HOST`, `SUPABASE_DB_PORT`, `SUPABASE_STUDIO_URL`, `SUPABASE_INBUCKET_URL`, `SUPABASE_STORAGE_S3_URL`, `SUPABASE_S3_PROTOCOL_*`, `SUPABASE_BUCKET_<UPPER_NAME>`.
+
+For frontend frameworks use `envAlias: VITE` (→ `VITE_SUPABASE_*`) or `envAlias: EXPO_PUBLIC` (→ `EXPO_PUBLIC_SUPABASE_*`).
+
+Requires supabase CLI on PATH. Add to `required:` block:
+```yaml
+required:
+  supabase:
+    why: [Local auth + storage stack]
+    checkCmd: supabase --version
+    install: [brew install supabase/tap/supabase]
+```
+
+Full docs: [docs/drivers/supabase.md](../../../../docs/drivers/supabase.md)
+
 ## Picking the right driver
 
 - User says **"Redis"** generically → `redis` unless they need a specific fork. `keydb`/`dragonfly`/`valkey` are drop-in replacements with the `REDIS` wire protocol but different env prefixes, so don't change the driver on a running project without updating env usage.
 - User says **"AWS SQS" or "AWS S3"** → prefer `localstack` with `queues:` / `buckets:` over the legacy standalone `sqs`/`s3` drivers.
+- User says **"Supabase"**, **"local auth"**, **"GoTrue"**, or **"local Storage"** → `supabase`. Don't try to recreate auth/storage manually with separate containers.
 - User wants **"vector search on Postgres"** → `pgvector` (not `postgres` + manual extension install).
 - User wants **"time-series on Postgres"** → `timescaledb`.
 - User wants **"Postgres with geo"** → `postgis`.
@@ -78,5 +115,6 @@ db_services:
 - 9042: `cassandra`, `scylla`.
 - 8000: `surrealdb` and `dynamodb` both default here — change one if using both.
 - 4566: `localstack`, `sqs`, `s3` all share this; only one at a time.
+- 54321..54324: `supabase` driver claims api/db/studio/inbucket here. Override via `[api].port`/`[db].port`/etc. in `supabase/config.toml`, NOT compose `port:` field.
 
 If two drivers need the same port, change `port:` on one of them. Corgi will substitute it into the generated compose file and env vars.

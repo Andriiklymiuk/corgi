@@ -35,7 +35,7 @@ Notable flags:
 - `--pull` — `git pull` in service dirs before starting
 - `--no-watch` — disable auto-reload on compose file change
 
-### `corgi doctor` (alias: `check`)
+### `corgi doctor` (aliases: `check`, `preflight`)
 
 Preflight — synchronous, safe to run. Checks:
 - Every tool in `required:` is installed (runs its `checkCmd`).

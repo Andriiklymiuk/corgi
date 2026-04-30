@@ -251,7 +251,7 @@ var dbServiceItems = []CorgiComposeItems{
 	},
 	{
 		item:        "authUsers",
-		example:     "- email: admin@example.com\n\t\t\t  password: password123\n\t\t\t  metadata:\n\t\t\t    type: broker",
+		example:     "- email: admin@example.com\n\t\t\t  password: password123\n\t\t\t  metadata:\n\t\t\t    type: admin",
 		itemType:    "[]SupabaseAuthUser",
 		description: "supabase driver only. Auth users seeded via the supabase admin API on `up`. Idempotent. metadata is a map serialized to JSON for user_metadata.",
 	},

@@ -72,6 +72,15 @@ The `healthCheck:` path is wrong. 404 is treated as unhealthy in corgi. Either d
 
 Localstack boots its individual AWS services asynchronously. Wait ~5-10s and re-probe. If still down, run `docker logs` on the localstack container.
 
+### supabase ❌ or hangs on `up`
+
+- **First run takes minutes** — supabase pulls 10+ container images. Watch terminal for `[+] Pulling N/M`. Don't kill it.
+- **`InvalidRequestException`** from `supabase status -o env` — cli too old. `brew upgrade supabase`.
+- **Port 54321/54322/etc. taken** — old supabase project still running. `supabase stop --no-backup` from any project dir kills it globally.
+- **Auth users not seeded** — bootstrap.sh logs `auth users:` timing. Missing? `SERVICE_ROLE_KEY` empty in `supabase status`. Try `supabase status` standalone to confirm stack is healthy.
+- **Bucket creation 409** — already exists, idempotent skip. Not an error.
+- **Custom JWT secret in config.toml but not in compose** → corgi-emitted ANON/SERVICE_ROLE keys won't match. Mirror the secret as `jwtSecret:` in compose.
+
 ## Seed failures
 
 Seeding is only attempted when `--seed` / `-s` is passed to `corgi run`.

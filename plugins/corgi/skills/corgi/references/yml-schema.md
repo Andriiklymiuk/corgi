@@ -49,7 +49,14 @@ additional:
   definitionPath: string       # rabbitmq: path to JSON definitions file
 services: [string]             # localstack: AWS services (default: [sqs, s3])
 queues:   [string]             # localstack: auto-create SQS queues; emits AWS_SQS_<UPPER>
-buckets:  [string]             # localstack: auto-create S3 buckets; emits AWS_S3_<UPPER>_BUCKET
+buckets:  [string]             # localstack/supabase: auto-create buckets
+                               #   localstack → AWS_S3_<UPPER>_BUCKET
+                               #   supabase   → SUPABASE_BUCKET_<UPPER> (via Storage API)
+jwtSecret: string              # supabase: override stock JWT secret; driver re-signs ANON/SERVICE_ROLE keys
+authUsers:                     # supabase: seed via Admin API on `up`
+  - email:    string
+    password: string
+    metadata: object           # yaml map serialized to JSON for user_metadata
 ```
 
 ## `services.<name>`
@@ -65,7 +72,8 @@ ignore_env:              bool     # Skip .env generation
 envPath:                 string   # Where .env lives inside the repo (default: .env)
 copyEnvFromFilePath:     string   # Template .env to copy in
 localhostNameInEnv:      string   # Default: localhost; becomes host.docker.internal under Docker
-environment:             [string] # Extra env vars (KEY=value)
+environment:             [string] # Extra env vars (KEY=value). Supports ${OWN_VAR} (own env) and ${producer.VAR} (cross-service exports)
+autoSourceEnv:           bool     # Default true. False = corgi skips auto-`set -a; . .env; set +a` prefix on commands (avoids leaking secrets to subprocesses)
 healthCheck:             string   # HTTP path for `corgi status`
 interactiveInput:        bool     # Keep stdin open for start commands
 

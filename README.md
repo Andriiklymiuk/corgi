@@ -56,8 +56,8 @@ While in services you can create whatever you want, but in db services **for now
 - [valkey](https://github.com/valkey-io/valkey)
 - [postgis](https://postgis.net)
 - [pgvector](https://github.com/pgvector/pgvector) — postgres + `pgvector` extension. Uses prefix `DB_`, same as plain `postgres`
-- [localstack](https://docs.localstack.cloud/) — single container for multiple AWS services (sqs, s3, …), with `queues` / `buckets` auto-created from config
-- [supabase](https://supabase.com/docs/guides/local-development) — wraps `supabase init`/`start`. Emits `SUPABASE_*` + S3 vars, ports from `supabase/config.toml`. Seeds `buckets:` and `authUsers:` on `up`; `jwtSecret:` re-signs keys.
+- [localstack](https://docs.localstack.cloud/) — single container for multiple AWS services (sqs, s3, sns, secretsmanager, ssm, kinesis), with `queues` / `buckets` / `topics` / `secrets` auto-created from config. Full docs: [docs/drivers/localstack.md](docs/drivers/localstack.md)
+- [supabase](https://supabase.com/docs/guides/local-development) — wraps `supabase init`/`start`. Emits `SUPABASE_*` + S3 vars, ports from `supabase/config.toml`. Seeds `buckets:` and `authUsers:` on `up`; `jwtSecret:` re-signs keys. Full docs: [docs/drivers/supabase.md](docs/drivers/supabase.md)
 
 ## Preflight & healthcheck
 
