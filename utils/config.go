@@ -58,8 +58,9 @@ type DatabaseService struct {
 	Parameters    []SsmParameter    `yaml:"parameters,omitempty"`    // SSM Parameter Store entries
 	Streams       []string          `yaml:"streams,omitempty"`       // Kinesis streams (1 shard each)
 	// supabase driver:
-	JWTSecret string             `yaml:"jwtSecret,omitempty"` // Override stock JWT secret. If set, driver re-signs ANON_KEY / SERVICE_ROLE_KEY with this secret to match what `supabase status` will report.
-	AuthUsers []SupabaseAuthUser `yaml:"authUsers,omitempty"` // Auth users to seed via supabase admin API on `up`.
+	JWTSecret      string             `yaml:"jwtSecret,omitempty"`      // Override stock JWT secret. If set, driver re-signs ANON_KEY / SERVICE_ROLE_KEY with this secret to match what `supabase status` will report.
+	AuthUsers      []SupabaseAuthUser `yaml:"authUsers,omitempty"`      // Auth users to seed via supabase admin API on `up`.
+	ConfigTomlPath string             `yaml:"configTomlPath,omitempty"` // Optional path (relative to corgi-compose.yml) to a config.toml that corgi copies to <projectRoot>/supabase/config.toml on each `corgi init`. If unset, supabase init runs at first `corgi up` if no config.toml exists yet.
 	// Optional HTTP path for `corgi status`. If set, status check does GET
 	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
 	// If unset, status falls back to a TCP connect on the port.

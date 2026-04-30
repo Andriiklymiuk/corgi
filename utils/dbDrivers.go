@@ -705,10 +705,14 @@ var DriverConfigs = map[string]DriverConfig{
 				host = "localhost"
 			}
 
-			// Source of truth = supabase/config.toml. The yaml `port:` field
-			// is intentionally ignored — supabase CLI binds to whatever
-			// config.toml says, and corgi must emit matching values.
+			// Default source of truth = supabase/config.toml. If yaml `port:`
+			// is set, it overrides [api].port — the Makefile patches
+			// config.toml to match before `supabase start`, so emitted URLs
+			// and the actual bind port stay consistent.
 			ports := templates.ReadSupabasePorts(CorgiComposePathDir)
+			if db.Port != 0 {
+				ports.API = db.Port
+			}
 
 			jwtSecret := db.JWTSecret
 			if jwtSecret == "" {
