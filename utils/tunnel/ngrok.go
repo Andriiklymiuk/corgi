@@ -27,9 +27,6 @@ func (Ngrok) InstallHint() string { return "brew install ngrok/ngrok/ngrok" }
 
 func (Ngrok) AcceptsStdin() bool { return false }
 
-// PreflightAuth invokes `ngrok config check` which exits 0 only when an
-// authtoken is configured (free tier requires one). On failure, return a
-// pasted-ready login command pointing at the dashboard token page.
 func (Ngrok) PreflightAuth() error {
 	cmd := exec.Command("ngrok", "config", "check")
 	if err := cmd.Run(); err != nil {
@@ -42,5 +39,23 @@ then run:
 
 (Free tier is fine. No paid plan needed for local webhook testing.)`)
 	}
+	return nil
+}
+
+func (Ngrok) CmdNamed(port int, cfg NamedConfig) ([]string, error) {
+	return []string{
+		"ngrok", "http",
+		"--log=stdout",
+		"--domain=" + cfg.Hostname,
+		fmt.Sprintf("%d", port),
+	}, nil
+}
+
+func (Ngrok) PreflightNamedAuth(cfg NamedConfig) error {
+	if err := (Ngrok{}).PreflightAuth(); err != nil {
+		return err
+	}
+	// Domain claim verification needs ngrok API; defer to runtime.
+	// If hostname unclaimed, ngrok prints a clear error in stdout.
 	return nil
 }

@@ -179,12 +179,29 @@ type Service struct {
 
 	Runner Runner `yaml:"runner,omitempty"`
 
+	// Tunnel declares an optional public HTTPS tunnel managed by `corgi
+	// tunnel`. When set + hostname resolves non-empty, corgi runs the
+	// provider in named/static mode (stable URL across restarts).
+	// Otherwise (block missing or hostname empty) corgi falls back to the
+	// provider's default behavior (cloudflared Quick Tunnels, etc.).
+	Tunnel *TunnelConfig `yaml:"tunnel,omitempty"`
+
 	// Optional HTTP path for `corgi status`. If set, status check does GET
 	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
 	// If unset, status falls back to a TCP connect on the port.
 	HealthCheck string `yaml:"healthCheck,omitempty"`
 
 	AbsolutePath string
+}
+
+// TunnelConfig describes a stable public HTTPS tunnel for one service.
+// Hostname / Name support `${VAR}` substitution from shell env first, then
+// from the service's env file (copyEnvFromFilePath). Missing required vars
+// produce a strict error at `corgi tunnel` time — no silent fallback.
+type TunnelConfig struct {
+	Provider string `yaml:"provider,omitempty"` // cloudflared (default) | ngrok. localtunnel rejected (Quick mode only).
+	Hostname string `yaml:"hostname,omitempty"` // public URL (e.g. api-andrii.dev.example.com). Required when block present.
+	Name     string `yaml:"name,omitempty"`     // cloudflared tunnel name (must exist via `cloudflared tunnel create`). Ignored for ngrok.
 }
 
 type Required struct {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -51,10 +52,14 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 	}
 
 	type target struct {
-		service string
-		port    int
+		service        string
+		port           int
+		providerOvr    tunnel.Provider // per-target override (compose `tunnel.provider`); nil = use --provider flag
+		named          *tunnel.NamedConfig
 	}
 	var targets []target
+
+	flagProvider, flagSet := provider, cmd.Flags().Changed("provider")
 
 	if tunnelPort != 0 {
 		targets = append(targets, target{service: fmt.Sprintf("port-%d", tunnelPort), port: tunnelPort})
@@ -87,10 +92,20 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 					continue
 				}
 			} else if s.ManualRun {
-				// In --all mode, skip manualRun services. Explicit name selects them.
 				continue
 			}
-			targets = append(targets, target{service: s.ServiceName, port: s.Port})
+
+			t := target{service: s.ServiceName, port: s.Port}
+			if s.Tunnel != nil {
+				named, perTargetProvider, err := resolveTunnel(s, flagProvider, flagSet)
+				if err != nil {
+					fmt.Printf("✗ %s: %s\n", s.ServiceName, err)
+					os.Exit(1)
+				}
+				t.named = named
+				t.providerOvr = perTargetProvider
+			}
+			targets = append(targets, t)
 		}
 
 		if requested != nil {
@@ -111,14 +126,34 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	if err := provider.PreflightAuth(); err != nil {
-		fmt.Printf("✗ %s authentication required:\n\n%s\n", provider.Name(), err)
-		os.Exit(1)
+	for _, t := range targets {
+		p := t.providerOvr
+		if p == nil {
+			p = provider
+		}
+		var err error
+		if t.named != nil {
+			err = p.PreflightNamedAuth(*t.named)
+		} else {
+			err = p.PreflightAuth()
+		}
+		if err != nil {
+			fmt.Printf("✗ %s (%s):\n\n%s\n", t.service, p.Name(), err)
+			os.Exit(1)
+		}
 	}
 
-	fmt.Printf("🌐 Tunnels (%s) — Ctrl+C to stop\n\n", provider.Name())
+	fmt.Printf("🌐 Tunnels (default %s) — Ctrl+C to stop\n\n", provider.Name())
 	for _, t := range targets {
-		fmt.Printf("  %-30s :%-5d → starting...\n", t.service, t.port)
+		mode := "quick"
+		p := provider
+		if t.providerOvr != nil {
+			p = t.providerOvr
+		}
+		if t.named != nil {
+			mode = "named " + t.named.Hostname
+		}
+		fmt.Printf("  %-30s :%-5d  %s/%s → starting...\n", t.service, t.port, p.Name(), mode)
 	}
 	fmt.Println()
 
@@ -137,10 +172,14 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 	var wg sync.WaitGroup
 	for _, t := range targets {
 		wg.Add(1)
-		go func(svc string, port int) {
+		go func(t target) {
 			defer wg.Done()
-			tunnel.Run(ctx, provider, svc, port, events)
-		}(t.service, t.port)
+			p := t.providerOvr
+			if p == nil {
+				p = provider
+			}
+			tunnel.Run(ctx, p, t.service, t.port, t.named, events)
+		}(t)
 	}
 	go func() {
 		wg.Wait()
@@ -167,6 +206,52 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 			// quiet exit
 		}
 	}
+}
+
+// resolveTunnel produces (NamedConfig, providerOverride) for a service that
+// has `tunnel:` set. Substitutes ${VAR} from shell env first, then from the
+// service's env file. CLI --provider flag wins over compose `tunnel.provider`.
+// Strict on missing env vars + unsupported providers.
+func resolveTunnel(s utils.Service, flagProvider tunnel.Provider, flagSet bool) (*tunnel.NamedConfig, tunnel.Provider, error) {
+	cfg := s.Tunnel
+	fileEnv, err := tunnel.LoadEnvFile(envFilePath(s))
+	if err != nil {
+		return nil, nil, fmt.Errorf("read env file: %w", err)
+	}
+
+	var missing []string
+	hostname := tunnel.Substitute(cfg.Hostname, fileEnv, &missing)
+	name := tunnel.Substitute(cfg.Name, fileEnv, &missing)
+
+	if hostname == "" || strings.Contains(hostname, "${") || strings.Contains(hostname, "$") && len(missing) > 0 {
+		return nil, nil, tunnel.MissingError("tunnel.hostname", missing)
+	}
+
+	providerName := cfg.Provider
+	if providerName == "" {
+		providerName = "cloudflared"
+	}
+	if flagSet {
+		return &tunnel.NamedConfig{Hostname: hostname, Name: name}, flagProvider, nil
+	}
+	p, ok := tunnel.Providers[providerName]
+	if !ok {
+		return nil, nil, fmt.Errorf("unknown tunnel.provider %q (compose). Valid: %s", providerName, strings.Join(tunnel.Names(), ", "))
+	}
+	return &tunnel.NamedConfig{Hostname: hostname, Name: name}, p, nil
+}
+
+// envFilePath returns the path to the service's source env file (the file
+// corgi copies into the service's runtime via copyEnvFromFilePath).
+// Returns "" if the service has no copyEnvFromFilePath configured.
+func envFilePath(s utils.Service) string {
+	if s.CopyEnvFromFilePath == "" {
+		return ""
+	}
+	if filepath.IsAbs(s.CopyEnvFromFilePath) {
+		return s.CopyEnvFromFilePath
+	}
+	return filepath.Join(utils.CorgiComposePathDir, s.CopyEnvFromFilePath)
 }
 
 func init() {

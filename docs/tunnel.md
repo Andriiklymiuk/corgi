@@ -58,12 +58,55 @@ then run:
 
 corgi exits without partial state, you run the printed command, then retry.
 
-## Stable URLs
+## Stable URLs (named mode)
 
-Quick Tunnels rotate. For URLs that survive restarts:
+Add a `tunnel:` block to a service in `corgi-compose.yml`:
 
-- **Cloudflare Named Tunnels** — `cloudflared tunnel login` once, then `cloudflared tunnel create`. Stable subdomain on a domain you control. Free up to high traffic. Not yet wrapped in `corgi tunnel` (use the CLI directly).
-- **ngrok paid tier** — reserved domains. Paid feature.
+```yaml
+services:
+  api:
+    port: 3030
+    tunnel:
+      provider: cloudflared       # cloudflared (default) | ngrok
+      hostname: ${API_TUNNEL_HOST} # required, supports ${VAR}
+      name: ${USER}-api-dev       # cloudflared only
+```
+
+`${VAR}` resolves from shell env first, then the service's env file (`env/source/<svc>.env`). Missing vars produce a strict error — no silent fallback to Quick mode.
+
+CLI override: `corgi tunnel api --provider ngrok` swaps the provider while keeping the same hostname.
+
+### cloudflared one-time setup (per dev)
+
+Free for Cloudflare Zero Trust orgs ≤50 users. Requires a domain in Cloudflare DNS.
+
+```bash
+cloudflared tunnel login                                      # browser OAuth
+cloudflared tunnel create andrii-api                          # creates tunnel + creds
+cloudflared tunnel route dns andrii-api api-andrii.dev.example.com
+echo 'export API_TUNNEL_HOST=api-andrii.dev.example.com' >> ~/.zshrc
+```
+
+`corgi tunnel api` now hits `https://api-andrii.dev.example.com` every time. corgi preflight checks `~/.cloudflared/cert.pem` + `cloudflared tunnel list` for the named tunnel and aborts with the exact missing command if either fails.
+
+### ngrok one-time setup (per dev)
+
+Free static domain — one per ngrok account, on `*.ngrok-free.app`. No DNS work.
+
+```bash
+# 1. Sign up at ngrok.com (free)
+# 2. Dashboard → Domains → Claim free static domain → e.g. my-api-andrii.ngrok-free.app
+ngrok config add-authtoken <YOUR_TOKEN>
+echo 'export API_TUNNEL_HOST=my-api-andrii.ngrok-free.app' >> ~/.zshrc
+```
+
+Compose with `provider: ngrok`:
+```yaml
+tunnel:
+  provider: ngrok
+  hostname: ${API_TUNNEL_HOST}
+  # name: not used for ngrok
+```
 
 ## Limitations of Cloudflare Quick Tunnels
 
