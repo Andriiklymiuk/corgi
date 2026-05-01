@@ -143,7 +143,20 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	fmt.Printf("🌐 Tunnels (default %s) — Ctrl+C to stop\n\n", provider.Name())
+	providersInUse := map[string]bool{}
+	for _, t := range targets {
+		p := provider
+		if t.providerOvr != nil {
+			p = t.providerOvr
+		}
+		providersInUse[p.Name()] = true
+	}
+	providerList := make([]string, 0, len(providersInUse))
+	for n := range providersInUse {
+		providerList = append(providerList, n)
+	}
+	sort.Strings(providerList)
+	fmt.Printf("🌐 Tunnels (%s) — Ctrl+C to stop\n\n", strings.Join(providerList, ", "))
 	for _, t := range targets {
 		mode := "quick"
 		p := provider
@@ -197,9 +210,6 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 			if urls[ev.Service] == "" {
 				urls[ev.Service] = ev.URL
 				fmt.Printf("  ✓ %-28s :%-5d → %s\n", ev.Service, ev.Port, ev.URL)
-				if ev.Service == "api" {
-					fmt.Printf("    DocuSeal webhook: %s/webhooks/docuseal\n", ev.URL)
-				}
 			}
 			mu.Unlock()
 		case ev.Done:
