@@ -463,6 +463,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				InteractiveInput:    service.InteractiveInput,
 				AutoSourceEnv:       service.AutoSourceEnv,
 				Runner:              service.Runner,
+				Tunnel:              service.Tunnel,
 				HealthCheck:         service.HealthCheck,
 			}
 			services = append(services, serviceToAdd)
