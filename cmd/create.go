@@ -236,9 +236,40 @@ func askAndSetFields(item interface{}) {
 				structField.Set(reflect.New(field.Type).Elem())
 			}
 			askAndSetFields(structField.Addr().Interface())
+		} else if field.Type.Kind() == reflect.Ptr {
+			// *struct (e.g. *TunnelConfig) or *primitive (e.g. *bool AutoSourceEnv).
+			// Ask whether to populate, then allocate + recurse / set primitive.
+			confirm := promptui.Prompt{
+				Label:     fmt.Sprintf("Do you want to populate %s?", field.Name),
+				IsConfirm: true,
+			}
+			if _, err := confirm.Run(); err != nil {
+				continue
+			}
+			elemType := field.Type.Elem()
+			ptr := reflect.New(elemType)
+			switch elemType.Kind() {
+			case reflect.Struct:
+				askAndSetFields(ptr.Interface())
+			case reflect.Bool:
+				yn := promptui.Prompt{
+					Label:     fmt.Sprintf("Set %s to true?", field.Name),
+					IsConfirm: true,
+				}
+				_, err := yn.Run()
+				ptr.Elem().SetBool(err == nil)
+			case reflect.String:
+				setUserInputToField(ptr.Elem(), prompt, false)
+			case reflect.Int:
+				setUserInputToField(ptr.Elem(), prompt, false)
+			default:
+				continue
+			}
+			v.Field(i).Set(ptr)
 		} else if field.Type.Kind() == reflect.Slice {
 			sliceType := field.Type.Elem()
-			if sliceType.Kind() == reflect.String {
+			switch sliceType.Kind() {
+			case reflect.String:
 				fmt.Println(prompt + " (press ENTER after each item; press ENTER with no input when done)")
 				scanner := bufio.NewScanner(os.Stdin)
 				var commands []string
@@ -250,6 +281,60 @@ func askAndSetFields(item interface{}) {
 					commands = append(commands, command)
 				}
 				v.Field(i).Set(reflect.ValueOf(commands))
+			case reflect.Struct:
+				// Loop: ask "add another?" until no. Each iteration recurses on a fresh element.
+				slice := reflect.MakeSlice(field.Type, 0, 0)
+				for {
+					more := promptui.Prompt{
+						Label:     fmt.Sprintf("Add an entry to %s?", field.Name),
+						IsConfirm: true,
+					}
+					if _, err := more.Run(); err != nil {
+						break
+					}
+					elem := reflect.New(sliceType)
+					askAndSetFields(elem.Interface())
+					slice = reflect.Append(slice, elem.Elem())
+				}
+				if slice.Len() > 0 {
+					v.Field(i).Set(slice)
+				}
+			default:
+				// []map / []slice / etc — too freeform for CLI prompts. Skip with hint.
+				fmt.Printf("(skipping %s — edit corgi-compose.yml directly for this field)\n", field.Name)
+			}
+		} else if field.Type.Kind() == reflect.Map {
+			// map[string]string and map[string]interface{}. Loop key=value pairs.
+			fmt.Println(prompt + " (enter as key=value, ENTER on empty line to finish)")
+			scanner := bufio.NewScanner(os.Stdin)
+			out := reflect.MakeMap(field.Type)
+			valueKind := field.Type.Elem().Kind()
+			for scanner.Scan() {
+				line := strings.TrimSpace(scanner.Text())
+				if line == "" {
+					break
+				}
+				eq := strings.IndexByte(line, '=')
+				if eq <= 0 {
+					fmt.Println("  expected key=value, skipping line")
+					continue
+				}
+				k := reflect.ValueOf(strings.TrimSpace(line[:eq]))
+				rawVal := strings.TrimSpace(line[eq+1:])
+				var val reflect.Value
+				switch valueKind {
+				case reflect.String:
+					val = reflect.ValueOf(rawVal)
+				case reflect.Interface:
+					val = reflect.ValueOf(rawVal) // store as string; user can refine in yaml
+				default:
+					fmt.Printf("  unsupported map value kind %s, skipping\n", valueKind)
+					continue
+				}
+				out.SetMapIndex(k, val)
+			}
+			if out.Len() > 0 {
+				v.Field(i).Set(out)
 			}
 		} else {
 			prompt := formatPrompt(yamlTag, field.Name)

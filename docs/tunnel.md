@@ -35,8 +35,8 @@ Default provider is `cloudflared` (Cloudflare Quick Tunnels — free, no signup)
 | Provider | Auth required | URLs | Install |
 |----------|---------------|------|---------|
 | `cloudflared` (default) | None for Quick Tunnels | `*.trycloudflare.com`, rotate per restart | `brew install cloudflared` |
-| `ngrok` | Yes — free authtoken | `*.ngrok-free.app` etc., rotate per restart | `brew install ngrok` |
-| `localtunnel` | None | `*.loca.lt`, rotate per restart | `npm install -g localtunnel` |
+| `ngrok` | Yes — free authtoken | Free static `*.ngrok-free.dev` (one per account) or random per restart | `brew install ngrok` |
+| `localtunnel` | None | `*.localtunnel.me`, random per restart, or requested label via `--subdomain` (best-effort) | `npm install -g localtunnel` or `brew install localtunnel` |
 
 Auth-needing providers are detected before any tunnel spawns:
 
@@ -69,7 +69,13 @@ services:
       name: ${USER}-api-dev       # cloudflared only
 ```
 
-`${VAR}` resolves from shell env first, then the service's env file (`env/source/<svc>.env`). Missing vars produce a strict error — no silent fallback to Quick mode.
+`${VAR}` resolves in priority order:
+
+1. Shell env (highest)
+2. The service's runtime `.env` at `<service-dir>/.env` (where devs edit and `corgi run` reads from)
+3. The source env file declared by `copyEnvFromFilePath` (e.g. `env/source/<svc>.env`)
+
+Missing vars produce a strict error — no silent fallback to Quick mode.
 
 CLI override: `corgi tunnel api --provider ngrok` swaps the provider while keeping the same hostname.
 
@@ -79,12 +85,12 @@ Free for Cloudflare Zero Trust orgs ≤50 users. Requires a domain in Cloudflare
 
 ```bash
 cloudflared tunnel login                                      # browser OAuth
-cloudflared tunnel create andrii-api                          # creates tunnel + creds
-cloudflared tunnel route dns andrii-api api-andrii.dev.example.com
-echo 'export API_TUNNEL_HOST=api-andrii.dev.example.com' >> ~/.zshrc
+cloudflared tunnel create my-api                          # creates tunnel + creds
+cloudflared tunnel route dns my-api api.dev.example.com
+echo 'export API_TUNNEL_HOST=api.dev.example.com' >> ~/.zshrc
 ```
 
-`corgi tunnel api` now hits `https://api-andrii.dev.example.com` every time. corgi preflight checks `~/.cloudflared/cert.pem` + `cloudflared tunnel list` for the named tunnel and aborts with the exact missing command if either fails.
+`corgi tunnel api` now hits `https://api.dev.example.com` every time. corgi preflight checks `~/.cloudflared/cert.pem` + `cloudflared tunnel list` for the named tunnel and aborts with the exact missing command if either fails.
 
 ### ngrok one-time setup (per dev)
 
@@ -92,9 +98,9 @@ Free static domain — one per ngrok account, on `*.ngrok-free.app`. No DNS work
 
 ```bash
 # 1. Sign up at ngrok.com (free)
-# 2. Dashboard → Domains → Claim free static domain → e.g. my-api-andrii.ngrok-free.app
+# 2. Dashboard → Domains → Claim free static domain → e.g. my-api.ngrok-free.dev
 ngrok config add-authtoken <YOUR_TOKEN>
-echo 'export API_TUNNEL_HOST=my-api-andrii.ngrok-free.app' >> ~/.zshrc
+echo 'export API_TUNNEL_HOST=my-api.ngrok-free.dev' >> ~/.zshrc
 ```
 
 Compose with `provider: ngrok`:
@@ -104,6 +110,18 @@ tunnel:
   hostname: ${API_TUNNEL_HOST}
   # name: not used for ngrok
 ```
+
+### localtunnel named subdomain (no signup)
+
+Free, no auth, no DNS. Server picks a random subdomain by default; pass a label and the server tries to give it to you (falls back to random if taken).
+
+```yaml
+tunnel:
+  provider: localtunnel
+  hostname: my-api        # bare label only, no .localtunnel.me suffix
+```
+
+Then `corgi tunnel api` runs `lt --port 3030 --subdomain my-api`. URL printed reflects what the server actually granted — could be `https://my-api.localtunnel.me` or a random fallback. Best-effort by design.
 
 ## Limitations of Cloudflare Quick Tunnels
 

@@ -199,7 +199,7 @@ type Service struct {
 // from the service's env file (copyEnvFromFilePath). Missing required vars
 // produce a strict error at `corgi tunnel` time — no silent fallback.
 type TunnelConfig struct {
-	Provider string `yaml:"provider,omitempty"` // cloudflared (default) | ngrok. localtunnel rejected (Quick mode only).
+	Provider string `yaml:"provider,omitempty"` // cloudflared (default) | ngrok | localtunnel.
 	Hostname string `yaml:"hostname,omitempty"` // public URL (e.g. api-andrii.dev.example.com). Required when block present.
 	Name     string `yaml:"name,omitempty"`     // cloudflared tunnel name (must exist via `cloudflared tunnel create`). Ignored for ngrok.
 }
@@ -385,6 +385,12 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 				Streams:           db.Streams,
 				JWTSecret:         db.JWTSecret,
 				AuthUsers:         db.AuthUsers,
+				ConfigTomlPath:    db.ConfigTomlPath,
+				Image:             db.Image,
+				ContainerPort:     db.ContainerPort,
+				Environment:       db.Environment,
+				Volumes:           db.Volumes,
+				Command:           db.Command,
 				HealthCheck:       db.HealthCheck,
 			}
 			dbServices = append(dbServices, dbToAdd)

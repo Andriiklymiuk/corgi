@@ -68,8 +68,10 @@ Common patterns:
 Open public HTTPS tunnels to declared services. Default provider `cloudflared` (Cloudflare Quick Tunnels — free, no signup). Spawns one subprocess per target, prints URLs as they appear, blocks until Ctrl+C.
 
 Flags:
-- `--provider {cloudflared|ngrok|localtunnel}` — switch provider (default: cloudflared)
+- `--provider {cloudflared|ngrok|localtunnel}` — switch provider (default: cloudflared). CLI flag overrides compose `tunnel.provider`.
 - `--port <int>` — tunnel raw local port (skip compose lookup)
+
+Compose `services.<name>.tunnel:` block enables named/static mode (stable URL across restarts). Hostname `${VAR}` substitution reads (in order): shell env → `<service-dir>/.env` (runtime) → `env/source/<svc>.env` (source). Missing vars = strict error.
 
 Auth-needing providers (e.g. ngrok) preflight before any tunnel spawns; corgi prints the exact login command and exits without partial state.
 
@@ -82,6 +84,8 @@ One-shot setup: clone repos referenced by `cloneFrom:`, generate `corgi_services
 ### `corgi create` (aliases: `add`, `new`)
 
 Interactive CLI editor for adding a `db_services`, `services`, or `required` entry to the current compose file. Uses an interactive prompt — don't invoke from an agent unless you can feed stdin.
+
+Reflection-driven prompts cover: scalars (string/int), `[]string` lists, nested structs, `*struct` (e.g. `tunnel:`), `*bool` (e.g. `autoSourceEnv`), `[]struct` (e.g. `depends_on_services`, `authUsers`, `subscriptions`), and `map[string]…` (key=value lines). Heterogeneous slices (`[]map`, `[]slice`) are skipped with a hint to edit yaml directly.
 
 ### `corgi db` (alias: `database`)
 

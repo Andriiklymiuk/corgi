@@ -89,6 +89,16 @@ By default all db_services are included and run.
 		false,
 		"Dusable watch for changes in corgi-compose file",
 	)
+	runCmd.PersistentFlags().Bool(
+		"tunnel",
+		false,
+		`Open public HTTPS tunnels alongside the stack for every service that
+declares a tunnel: block in corgi-compose.yml. Services whose tunnel
+hostname env vars (e.g. ${API_TUNNEL_HOST}) are unset are skipped with
+a warning — corgi run keeps going. Equivalent to running corgi tunnel
+in a second terminal, but bundled into one process. Auth still
+required per provider (e.g. ngrok config add-authtoken).`,
+	)
 }
 
 func runRun(cmd *cobra.Command, _ []string) {
@@ -116,6 +126,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 				cmd.Run(cmd, nil)
 			default:
 				fmt.Println("👋 Exiting corgi", s)
+				stopRunTunnels()
 				corgiLatestVersion, err := utils.GetCorgiServices(cmd)
 				if err != nil {
 					fmt.Println(err)
@@ -194,6 +205,10 @@ func runRun(cmd *cobra.Command, _ []string) {
 		if len(service.Start) != 0 {
 			startCmdPresent = true
 		}
+	}
+
+	if tunnelFlag, _ := cmd.Flags().GetBool("tunnel"); tunnelFlag {
+		startTunnelsForRun(corgi.Services)
 	}
 
 	for startCmdPresent {

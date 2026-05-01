@@ -105,6 +105,14 @@ Provider needs login. corgi prints the exact command to run (e.g. `ngrok config 
 - **5MB POST cap exceeded** — Quick Tunnel limit. Use a Named Tunnel (or ngrok) for larger payloads.
 - **Webhook URL stale after restart** — Quick Tunnel URLs rotate per tunnel restart. Re-paste into the webhook console (Stripe/GitHub/e-sign/etc.) or set up a Named Tunnel.
 
+### Compose `tunnel:` block silently ignored (Quick mode runs instead of named)
+
+If `corgi tunnel <svc>` falls back to Quick mode despite a `tunnel:` block being declared:
+
+- Confirm binary version supports the field — `corgi --version` and check the changelog for tunnel support. Older builds parse but drop the `tunnel:` block during runtime Service struct construction.
+- Confirm the env var resolves. Hostname `${VAR}` is read from shell env → `<service-dir>/.env` → `env/source/<svc>.env`. If unset everywhere, expect a strict error (`env vars not set for tunnel.hostname: …`), not a silent Quick fallback.
+- If error path missing too, suspect stale binary: rebuild from source and re-test before debugging further.
+
 See `../../../docs/tunnel.md` for full provider matrix + Quick Tunnel limitations.
 
 ## "It was working yesterday" recipes
