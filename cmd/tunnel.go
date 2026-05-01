@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/tunnel"
@@ -218,11 +219,9 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 	}
 }
 
-// resolveTunnel produces (NamedConfig, providerOverride) for a service that
-// has `tunnel:` set. Substitutes ${VAR} from shell env first, then from the
-// service's runtime .env (<service>/.env), then from the source env file
-// declared by copyEnvFromFilePath. CLI --provider flag wins over compose
-// `tunnel.provider`. Strict on missing env vars + unsupported providers.
+// Resolves a service's tunnel: block into (NamedConfig, provider).
+// Substitutes ${VAR} from shell, runtime .env, then source env (in order).
+// CLI --provider beats compose. Errors on missing vars or unknown provider.
 func resolveTunnel(s utils.Service, flagProvider tunnel.Provider, flagSet bool) (*tunnel.NamedConfig, tunnel.Provider, error) {
 	cfg := s.Tunnel
 
@@ -261,15 +260,9 @@ func resolveTunnel(s utils.Service, flagProvider tunnel.Provider, flagSet bool) 
 	return &tunnel.NamedConfig{Hostname: hostname, Name: name}, p, nil
 }
 
-// envFilePaths returns env files to consult for ${VAR} substitution, in
-// priority order (first match wins):
-//  1. The service's runtime .env at <AbsolutePath>/.env — the live file devs
-//     edit and where corgi run injects values. Reading this matches what
-//     `corgi run` actually loads.
-//  2. The source env file declared by copyEnvFromFilePath (e.g.
-//     env/source/api.env) — fallback for pre-clone or pre-run usage.
-//
-// Returns nil for services with neither configured.
+// Env files to check for ${VAR}, first match wins:
+//  1. <service>/.env — live file devs edit, what corgi run reads.
+//  2. copyEnvFromFilePath source — fallback before clone/run.
 func envFilePaths(s utils.Service) []string {
 	var paths []string
 	if s.AbsolutePath != "" {
@@ -283,6 +276,104 @@ func envFilePaths(s utils.Service) []string {
 		}
 	}
 	return paths
+}
+
+// Cancel fn for tunnels spawned by `corgi run --tunnel`. run.go's signal
+// handler calls it before os.Exit so the subprocesses die first.
+var runTunnelsCancel context.CancelFunc
+
+// Spawns one tunnel per service with a resolvable `tunnel:` block,
+// alongside `corgi run`. Skips (with a warning) when env vars are missing
+// or auth isn't set up — keeps the rest of the stack running.
+func startTunnelsForRun(services []utils.Service) {
+	type runTarget struct {
+		service  string
+		port     int
+		provider tunnel.Provider
+		named    *tunnel.NamedConfig
+	}
+	var targets []runTarget
+
+	for _, s := range services {
+		if s.Tunnel == nil || s.Port == 0 || s.ManualRun {
+			continue
+		}
+		named, p, err := resolveTunnel(s, nil, false)
+		if err != nil {
+			fmt.Printf("🌐 ⚠ skipping tunnel for %s: %s\n", s.ServiceName, err)
+			continue
+		}
+		if err := p.PreflightNamedAuth(*named); err != nil {
+			fmt.Printf("🌐 ⚠ skipping tunnel for %s (%s):\n    %s\n", s.ServiceName, p.Name(), firstLine(err.Error()))
+			continue
+		}
+		targets = append(targets, runTarget{
+			service:  s.ServiceName,
+			port:     s.Port,
+			provider: p,
+			named:    named,
+		})
+	}
+
+	if len(targets) == 0 {
+		fmt.Println("🌐 no tunnels to start (no resolvable tunnel: blocks)")
+		return
+	}
+
+	fmt.Printf("🌐 opening %d tunnel(s) alongside services — Ctrl+C to stop everything\n", len(targets))
+	for _, t := range targets {
+		fmt.Printf("  %-30s :%-5d  %s/named %s\n", t.service, t.port, t.provider.Name(), t.named.Hostname)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runTunnelsCancel = cancel
+
+	events := make(chan tunnel.Event, 32)
+	var wg sync.WaitGroup
+	for _, t := range targets {
+		wg.Add(1)
+		go func(t runTarget) {
+			defer wg.Done()
+			tunnel.Run(ctx, t.provider, t.service, t.port, t.named, events)
+		}(t)
+	}
+	go func() {
+		wg.Wait()
+		close(events)
+	}()
+	go func() {
+		urls := map[string]string{}
+		for ev := range events {
+			switch {
+			case ev.Err != nil:
+				fmt.Printf("  🌐 ✗ %-28s :%-5d → %s\n", ev.Service, ev.Port, ev.Err)
+			case ev.URL != "" && urls[ev.Service] == "":
+				urls[ev.Service] = ev.URL
+				fmt.Printf("  🌐 ✓ %-28s :%-5d → %s\n", ev.Service, ev.Port, ev.URL)
+			}
+		}
+	}()
+}
+
+// Called from run.go on SIGINT, before os.Exit. Cancels the tunnel ctx
+// so exec.CommandContext sends SIGKILL, then sleeps briefly so the kill
+// syscalls land before the parent exits.
+func stopRunTunnels() {
+	if runTunnelsCancel == nil {
+		return
+	}
+	fmt.Println("🌐 closing tunnels...")
+	runTunnelsCancel()
+	time.Sleep(300 * time.Millisecond)
+}
+
+func firstLine(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			return s[:i]
+		}
+	}
+	return s
 }
 
 func init() {

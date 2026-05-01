@@ -77,7 +77,7 @@ services:
       name: ${USER}-api-dev       # cloudflared only: pre-created tunnel name
 ```
 
-`${VAR}` resolves from shell env first, then `env/source/<service>.env`. Missing vars = strict error at `corgi tunnel`. CLI `corgi tunnel --provider X` overrides compose `provider`. localtunnel can't host arbitrary domains — Quick mode only.
+`${VAR}` resolves in order: shell env → `<service-dir>/.env` (runtime, dev-edited, same file `corgi run` loads) → `env/source/<service>.env` (source, declared by `copyEnvFromFilePath`). Missing vars = strict error at `corgi tunnel`. CLI `corgi tunnel --provider X` overrides compose `provider`. localtunnel `hostname:` accepts a bare subdomain label (no dots) — passed to `lt --subdomain`; server grant is best-effort.
 
 ## `services.<name>`
 
