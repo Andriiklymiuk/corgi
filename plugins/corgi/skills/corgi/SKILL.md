@@ -30,7 +30,7 @@ Both exit 0 on success, 1 on failure. Output is colored text, not JSON.
 | Adding `healthCheck:` to a service or db | `references/healthchecks.md` |
 | `corgi doctor` or `corgi run` failed | `references/debugging.md` |
 | Explaining / choosing a CLI flag | `references/commands.md` |
-| Setting up webhook tunnels (DocuSeal/Stripe/etc.) | `../../../docs/tunnel.md` (full) or `references/commands.md#corgi-tunnel-services` |
+| Setting up webhook tunnels (Stripe/GitHub/e-sign/etc.) | `../../../docs/tunnel.md` (full) or `references/commands.md#corgi-tunnel-services` |
 | Running `corgi run` inside an agent loop | `references/long-running.md` |
 
 Load only what the task needs. Do not read every reference every time.

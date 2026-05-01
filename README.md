@@ -69,7 +69,7 @@ While in services you can create whatever you want, but in db services **for now
 
 ## Tunneling
 
-`corgi tunnel` opens public HTTPS tunnels to declared services. Useful for webhook testing (DocuSeal, Stripe, etc.) without ngrok-style signup.
+`corgi tunnel` opens public HTTPS tunnels to declared services. Useful for webhook testing (Stripe, GitHub apps, e-sign providers, etc.) without ngrok-style signup.
 
 ```bash
 corgi tunnel                       # tunnel every services.<name> with port: set

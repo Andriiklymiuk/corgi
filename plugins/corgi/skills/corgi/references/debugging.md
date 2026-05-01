@@ -103,7 +103,7 @@ Provider needs login. corgi prints the exact command to run (e.g. `ngrok config 
 
 - **Cloudflare Quick Tunnel + SSE endpoint** — Quick Tunnels don't support Server-Sent Events. Use ngrok or localtunnel for SSE flows.
 - **5MB POST cap exceeded** — Quick Tunnel limit. Use a Named Tunnel (or ngrok) for larger payloads.
-- **Webhook URL stale after restart** — Quick Tunnel URLs rotate per tunnel restart. Re-paste into the webhook console (DocuSeal/Stripe/etc.) or set up a Named Tunnel.
+- **Webhook URL stale after restart** — Quick Tunnel URLs rotate per tunnel restart. Re-paste into the webhook console (Stripe/GitHub/e-sign/etc.) or set up a Named Tunnel.
 
 See `../../../docs/tunnel.md` for full provider matrix + Quick Tunnel limitations.
 

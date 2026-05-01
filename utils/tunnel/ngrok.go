@@ -23,7 +23,7 @@ var ngrokURLRe = regexp.MustCompile(`https://[a-z0-9-]+\.ngrok[a-z0-9.-]*`)
 
 func (Ngrok) ExtractURL(line string) string { return ngrokURLRe.FindString(line) }
 
-func (Ngrok) InstallHint() string { return "brew install ngrok/ngrok/ngrok" }
+func (Ngrok) InstallHint() string { return "brew install ngrok" }
 
 func (Ngrok) AcceptsStdin() bool { return false }
 

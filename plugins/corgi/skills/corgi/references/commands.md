@@ -73,8 +73,6 @@ Flags:
 
 Auth-needing providers (e.g. ngrok) preflight before any tunnel spawns; corgi prints the exact login command and exits without partial state.
 
-When `api` is among the targets, corgi auto-prints the DocuSeal webhook path (`<url>/webhooks/docuseal`) as a hint.
-
 Full docs: [docs/tunnel.md](../../../../docs/tunnel.md).
 
 ### `corgi init` (aliases: `initialize`, `clone`)

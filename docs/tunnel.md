@@ -2,7 +2,7 @@
 
 Opens public HTTPS tunnels to declared services. One subprocess per target, URLs printed as they come up. Ctrl+C closes all.
 
-Common use case: testing webhook integrations (DocuSeal, Stripe, GitHub apps) against your local stack without configuring DNS / VPN.
+Common use case: testing webhook integrations (Stripe, GitHub apps, e-sign providers) against your local stack without configuring DNS / VPN.
 
 ## Usage
 
@@ -26,19 +26,16 @@ Default provider is `cloudflared` (Cloudflare Quick Tunnels — free, no signup)
   admin                          :3002  → starting...
 
   ✓ api                          :3030  → https://kind-zebra-42.trycloudflare.com
-    DocuSeal webhook: https://kind-zebra-42.trycloudflare.com/webhooks/docuseal
   ✓ web                          :3010  → https://small-fox-99.trycloudflare.com
   ✓ admin                        :3002  → https://big-owl-7.trycloudflare.com
 ```
-
-When `api` is among the targets, corgi auto-prints the DocuSeal webhook path as a hint.
 
 ## Providers
 
 | Provider | Auth required | URLs | Install |
 |----------|---------------|------|---------|
 | `cloudflared` (default) | None for Quick Tunnels | `*.trycloudflare.com`, rotate per restart | `brew install cloudflared` |
-| `ngrok` | Yes — free authtoken | `*.ngrok-free.app` etc., rotate per restart | `brew install ngrok/ngrok/ngrok` |
+| `ngrok` | Yes — free authtoken | `*.ngrok-free.app` etc., rotate per restart | `brew install ngrok` |
 | `localtunnel` | None | `*.loca.lt`, rotate per restart | `npm install -g localtunnel` |
 
 Auth-needing providers are detected before any tunnel spawns:
@@ -118,7 +115,7 @@ Worth knowing before relying on them for anything but ephemeral testing:
 - **No IPv6 origin.**
 - **Subject to anti-abuse limits.** Don't run sustained load through Quick Tunnels — use a Named Tunnel.
 
-DocuSeal webhooks are small POSTs, so Quick Tunnels handle them comfortably.
+Small webhook POSTs (most provider integrations) fit Quick Tunnels comfortably. Sustained traffic / large payloads / SSE need a Named Tunnel or another provider.
 
 Reference: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/#limitations
 
