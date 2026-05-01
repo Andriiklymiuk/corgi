@@ -220,13 +220,23 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 
 // resolveTunnel produces (NamedConfig, providerOverride) for a service that
 // has `tunnel:` set. Substitutes ${VAR} from shell env first, then from the
-// service's env file. CLI --provider flag wins over compose `tunnel.provider`.
-// Strict on missing env vars + unsupported providers.
+// service's runtime .env (<service>/.env), then from the source env file
+// declared by copyEnvFromFilePath. CLI --provider flag wins over compose
+// `tunnel.provider`. Strict on missing env vars + unsupported providers.
 func resolveTunnel(s utils.Service, flagProvider tunnel.Provider, flagSet bool) (*tunnel.NamedConfig, tunnel.Provider, error) {
 	cfg := s.Tunnel
-	fileEnv, err := tunnel.LoadEnvFile(envFilePath(s))
-	if err != nil {
-		return nil, nil, fmt.Errorf("read env file: %w", err)
+
+	fileEnv := map[string]string{}
+	for _, path := range envFilePaths(s) {
+		envMap, err := tunnel.LoadEnvFile(path)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read env file %s: %w", path, err)
+		}
+		for k, v := range envMap {
+			if _, exists := fileEnv[k]; !exists {
+				fileEnv[k] = v
+			}
+		}
 	}
 
 	var missing []string
@@ -251,17 +261,28 @@ func resolveTunnel(s utils.Service, flagProvider tunnel.Provider, flagSet bool) 
 	return &tunnel.NamedConfig{Hostname: hostname, Name: name}, p, nil
 }
 
-// envFilePath returns the path to the service's source env file (the file
-// corgi copies into the service's runtime via copyEnvFromFilePath).
-// Returns "" if the service has no copyEnvFromFilePath configured.
-func envFilePath(s utils.Service) string {
-	if s.CopyEnvFromFilePath == "" {
-		return ""
+// envFilePaths returns env files to consult for ${VAR} substitution, in
+// priority order (first match wins):
+//  1. The service's runtime .env at <AbsolutePath>/.env — the live file devs
+//     edit and where corgi run injects values. Reading this matches what
+//     `corgi run` actually loads.
+//  2. The source env file declared by copyEnvFromFilePath (e.g.
+//     env/source/api.env) — fallback for pre-clone or pre-run usage.
+//
+// Returns nil for services with neither configured.
+func envFilePaths(s utils.Service) []string {
+	var paths []string
+	if s.AbsolutePath != "" {
+		paths = append(paths, filepath.Join(s.AbsolutePath, ".env"))
 	}
-	if filepath.IsAbs(s.CopyEnvFromFilePath) {
-		return s.CopyEnvFromFilePath
+	if s.CopyEnvFromFilePath != "" {
+		if filepath.IsAbs(s.CopyEnvFromFilePath) {
+			paths = append(paths, s.CopyEnvFromFilePath)
+		} else {
+			paths = append(paths, filepath.Join(utils.CorgiComposePathDir, s.CopyEnvFromFilePath))
+		}
 	}
-	return filepath.Join(utils.CorgiComposePathDir, s.CopyEnvFromFilePath)
+	return paths
 }
 
 func init() {
