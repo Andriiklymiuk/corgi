@@ -121,7 +121,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 			switch s {
 			case syscall.SIGHUP:
 				fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
-
+				stopRunTunnels()
 				utils.KillAllStoredProcesses()
 				cmd.Run(cmd, nil)
 			default:
