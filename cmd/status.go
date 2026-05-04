@@ -243,17 +243,14 @@ func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet boo
 		return
 	}
 
-	prevLines := strings.Count(frame, "\n")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
 		results = probeAllParallel(rows)
 		var buf strings.Builder
-		fmt.Fprintf(&buf, "\033[%dA\033[J", prevLines)
-		next := buildWatchFrame(rows, results, interval, time.Now())
-		buf.WriteString(next)
+		buf.WriteString("\033[2J\033[H")
+		buf.WriteString(buildWatchFrame(rows, results, interval, time.Now()))
 		fmt.Print(buf.String())
-		prevLines = strings.Count(next, "\n")
 	}
 }
 
