@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -43,7 +44,13 @@ func CheckDockerStatus() error {
 		if strings.Contains(errorString, "executable file not found") {
 			return fmt.Errorf("docker not installed")
 		}
-		if strings.Contains(errorString, "Is the docker daemon running") {
+		if strings.Contains(errorString, "Is the docker daemon running") ||
+			strings.Contains(errorString, "Cannot connect to the Docker daemon") ||
+			strings.Contains(errorString, "failed to connect to the docker API") ||
+			strings.Contains(errorString, "if the daemon is running") ||
+			strings.Contains(errorString, "docker daemon socket") ||
+			strings.Contains(errorString, "connect: no such file or directory") ||
+			strings.Contains(errorString, "connect: connection refused") {
 			return fmt.Errorf("docker not opened")
 		}
 
@@ -111,12 +118,37 @@ func GetStatusOfService(targetService string) (bool, error) {
 }
 
 func StartDocker() error {
-	cmd := exec.Command("open", "/Applications/Docker.app")
-	_, err := cmd.CombinedOutput()
-	if err != nil {
-		return err
+	switch runtime.GOOS {
+	case "darwin":
+		cmd := exec.Command("open", "/Applications/Docker.app")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("open Docker.app failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return nil
+	case "linux":
+		if out, err := exec.Command("systemctl", "start", "docker").CombinedOutput(); err == nil {
+			return nil
+		} else if strings.Contains(string(out), "Interactive authentication required") ||
+			strings.Contains(string(out), "Failed to") {
+			if out2, err2 := exec.Command("sudo", "-n", "systemctl", "start", "docker").CombinedOutput(); err2 == nil {
+				return nil
+			} else {
+				_ = out2
+			}
+		}
+		if err := exec.Command("systemctl", "--user", "start", "docker").Run(); err == nil {
+			return nil
+		}
+		return fmt.Errorf("could not start docker daemon on linux. Start manually: `sudo systemctl start docker` (rootful) or `systemctl --user start docker` (rootless)")
+	case "windows":
+		cmd := exec.Command("cmd", "/C", "start", "", "Docker Desktop.exe")
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("could not start Docker Desktop on windows: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported OS for auto-starting docker: %s", runtime.GOOS)
 	}
-	return nil
 }
 
 func StartOrbctl() error {
@@ -220,7 +252,16 @@ func DockerInit(cobra *cobra.Command) error {
 			s := spinner.New(spinner.CharSets[39], 100*time.Millisecond)
 			s.Suffix = " doing woof magic to start docker"
 			s.Start()
-			for CheckDockerStatus() != nil {
+			deadline := time.Now().Add(60 * time.Second)
+			for {
+				if CheckDockerStatus() == nil {
+					break
+				}
+				if time.Now().After(deadline) {
+					s.Stop()
+					return fmt.Errorf("docker daemon did not become reachable within 60s — start it manually and retry")
+				}
+				time.Sleep(500 * time.Millisecond)
 			}
 			s.Stop()
 			return nil
