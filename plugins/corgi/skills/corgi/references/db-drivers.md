@@ -73,6 +73,10 @@ db_services:
   supabase:
     driver: supabase
     healthCheck: /rest/v1/
+    port: 54321              # api (kong gateway). Patches [api].port.
+    dbPort: 54322            # optional. Patches [db].port.
+    studioPort: 54323        # optional. Patches [studio].port.
+    inbucketPort: 54324      # optional. Patches [inbucket].port.
     buckets: [user-uploads, public-assets]
     authUsers:
       - email: admin@example.com
@@ -80,10 +84,14 @@ db_services:
         metadata:
           role: admin
     # jwtSecret: my-32-char-secret  # only if you customized auth.jwt_secret in config.toml
-    # configTomlPath: ./templates/supabase-config.toml  # optional: copy this file → <projectRoot>/supabase/config.toml on every init
+    # configTomlPath: ./config/supabase.config.toml  # source of truth — copied to corgi_services/db_services/<svc>/supabase/config.toml on every init
 ```
 
-If `port:` is set, it overrides `[api].port` — the driver patches `supabase/config.toml` (after `supabase init`, before `supabase start`) so the emitted `SUPABASE_URL` and the actual bind port stay consistent. db/studio/inbucket ports keep whatever `config.toml` says (default 54322/54323/54324). For full control over all ports, edit `config.toml` directly or supply one via `configTomlPath:` (path relative to corgi-compose.yml; copied on every `corgi init`, always overwriting).
+Compose ports always win: the Makefile awk-patches `[api/db/studio/inbucket].port` in config.toml before `supabase start`, so emitted env URLs and bind ports stay aligned. Unset yaml ports keep whatever `config.toml` says (stock defaults 54321/54322/54323/54324).
+
+`configTomlPath` controls where the canonical config.toml lives:
+- **set** → corgi copies the file to `corgi_services/db_services/<svc>/supabase/config.toml` and runs the CLI from that dir. Edit the source file (e.g. `config/supabase.config.toml`) only — destination is regenerated each init.
+- **unset** → legacy behavior. `supabase init` writes `<projectRoot>/supabase/config.toml` on first run. Dev edits live there directly.
 
 Emitted env (with `envAlias: none`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_DB_URL`, `SUPABASE_DB_HOST`, `SUPABASE_DB_PORT`, `SUPABASE_STUDIO_URL`, `SUPABASE_INBUCKET_URL`, `SUPABASE_STORAGE_S3_URL`, `SUPABASE_S3_PROTOCOL_*`, `SUPABASE_BUCKET_<UPPER_NAME>`.
 
@@ -189,6 +197,6 @@ db_services:
 - 9042: `cassandra`, `scylla`.
 - 8000: `surrealdb` and `dynamodb` both default here — change one if using both.
 - 4566: `localstack`, `sqs`, `s3` all share this; only one at a time.
-- 54321..54324: `supabase` driver claims api/db/studio/inbucket here. Override [api].port via compose `port:` (driver patches config.toml + reads compose port for env emission). For db/studio/inbucket, edit `[db]/[studio]/[inbucket].port` in `supabase/config.toml`.
+- 54321..54324: `supabase` driver claims api/db/studio/inbucket here. Override via compose `port:` (api), `dbPort:`, `studioPort:`, `inbucketPort:` — driver patches config.toml + emits matching env URLs.
 
 If two drivers need the same port, change `port:` on one of them. Corgi will substitute it into the generated compose file and env vars.

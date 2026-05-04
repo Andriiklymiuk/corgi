@@ -57,7 +57,10 @@ authUsers:                     # supabase: seed via Admin API on `up`
   - email:    string
     password: string
     metadata: object           # yaml map serialized to JSON for user_metadata
-configTomlPath: string         # supabase: optional path (relative to corgi-compose.yml) to a config.toml that corgi copies to <projectRoot>/supabase/config.toml on every init. If unset, supabase init runs at first `up`.
+configTomlPath: string         # supabase: optional path to a config.toml. When set, corgi copies it to corgi_services/db_services/<svc>/supabase/config.toml on every init and runs the supabase CLI from there. When unset, falls back to <projectRoot>/supabase/config.toml created by `supabase init` on first run.
+dbPort: int                    # supabase: override [db].port in config.toml (default 54322). Patched on every up.
+studioPort: int                # supabase: override [studio].port in config.toml (default 54323). Patched on every up.
+inbucketPort: int              # supabase: override [inbucket].port in config.toml (default 54324). Patched on every up.
 image: string                  # image: docker image reference (e.g. "gotenberg/gotenberg:8")
 containerPort: int             # image: container's internal port. Defaults to `port:` if unset
 environment: [string]          # image: docker-compose environment list, e.g. ["MEILI_MASTER_KEY=secret"]

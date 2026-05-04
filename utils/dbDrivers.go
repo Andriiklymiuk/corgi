@@ -705,13 +705,24 @@ var DriverConfigs = map[string]DriverConfig{
 				host = "localhost"
 			}
 
-			// Default source of truth = supabase/config.toml. If yaml `port:`
-			// is set, it overrides [api].port — the Makefile patches
-			// config.toml to match before `supabase start`, so emitted URLs
-			// and the actual bind port stay consistent.
-			ports := templates.ReadSupabasePorts(CorgiComposePathDir)
+			// Read ports from config.toml, then let yaml override per section.
+			// Path depends on configTomlPath: corgi-managed dir if set, root if not.
+			tomlSource := CorgiComposePathDir
+			if db.ConfigTomlPath != "" {
+				tomlSource = CorgiComposePathDir + "/" + RootDbServicesFolder + "/" + db.ServiceName + "/supabase/config.toml"
+			}
+			ports := templates.ReadSupabasePorts(tomlSource)
 			if db.Port != 0 {
 				ports.API = db.Port
+			}
+			if db.DbPort != 0 {
+				ports.DB = db.DbPort
+			}
+			if db.StudioPort != 0 {
+				ports.Studio = db.StudioPort
+			}
+			if db.InbucketPort != 0 {
+				ports.Inbucket = db.InbucketPort
 			}
 
 			jwtSecret := db.JWTSecret

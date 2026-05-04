@@ -118,11 +118,9 @@ Provide them in corgi-compose.yml file`)
 	}
 }
 
-// applyDriverPostInit runs driver-specific steps after the standard
-// FilesToCreate emission. Currently used by the supabase driver to copy a
-// user-provided config.toml (via `configTomlPath:` in corgi-compose.yml) into
-// <projectRoot>/supabase/config.toml. Always overwrites — matches how other
-// corgi-emitted files are re-written on each init.
+// Copies the user's configTomlPath into the corgi-managed supabase service
+// dir on every init. No-op when configTomlPath isn't set (legacy mode keeps
+// supabase/config.toml at project root, created by `supabase init`).
 func applyDriverPostInit(service utils.DatabaseService) error {
 	if service.Driver != "supabase" || service.ConfigTomlPath == "" {
 		return nil
@@ -137,7 +135,12 @@ func applyDriverPostInit(service utils.DatabaseService) error {
 		return fmt.Errorf("read configTomlPath %q: %w", src, err)
 	}
 
-	destDir := filepath.Join(utils.CorgiComposePathDir, "supabase")
+	destDir := filepath.Join(
+		utils.CorgiComposePathDir,
+		utils.RootDbServicesFolder,
+		service.ServiceName,
+		"supabase",
+	)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("create %q: %w", destDir, err)
 	}

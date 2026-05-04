@@ -256,6 +256,30 @@ var dbServiceItems = []CorgiComposeItems{
 		description: "supabase driver only. Auth users seeded via the supabase admin API on `up`. Idempotent. metadata is a map serialized to JSON for user_metadata.",
 	},
 	{
+		item:        "configTomlPath",
+		example:     "./config/supabase.config.toml",
+		itemType:    "string",
+		description: "supabase driver only. Path (relative to corgi-compose.yml) to the canonical config.toml. When set, corgi copies it to corgi_services/db_services/<svc>/supabase/config.toml on every init and runs the supabase CLI from there. When unset, falls back to <projectRoot>/supabase/config.toml created by `supabase init`.",
+	},
+	{
+		item:        "dbPort",
+		example:     "54322",
+		itemType:    "int",
+		description: "supabase driver only. Override [db].port in config.toml. Patched on every up so bind port and emitted SUPABASE_DB_PORT stay aligned. Default 54322.",
+	},
+	{
+		item:        "studioPort",
+		example:     "54323",
+		itemType:    "int",
+		description: "supabase driver only. Override [studio].port. Patched on every up. Default 54323.",
+	},
+	{
+		item:        "inbucketPort",
+		example:     "54324",
+		itemType:    "int",
+		description: "supabase driver only. Override [inbucket].port (local email capture). Patched on every up. Default 54324.",
+	},
+	{
 		item:        "healthCheck",
 		example:     "/health",
 		itemType:    "string",
