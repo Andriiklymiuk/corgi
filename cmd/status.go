@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -234,21 +236,35 @@ func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet boo
 		return
 	}
 
-	results := probeAllParallel(rows)
-	frame := buildWatchFrame(rows, results, interval, time.Now())
-	fmt.Print(frame)
-
 	if !isStdoutTTY() {
+		results := probeAllParallel(rows)
+		frame := buildWatchFrame(rows, results, interval, time.Now())
+		fmt.Print(frame)
 		runWatchAppend(rows, results, interval, false, false)
 		return
 	}
+
+	fmt.Print("\033[?1049h\033[H")
+	restore := func() { fmt.Print("\033[?1049l") }
+	defer restore()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		restore()
+		os.Exit(0)
+	}()
+
+	results := probeAllParallel(rows)
+	fmt.Print(buildWatchFrame(rows, results, interval, time.Now()))
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
 		results = probeAllParallel(rows)
 		var buf strings.Builder
-		buf.WriteString("\033[2J\033[H")
+		buf.WriteString("\033[H\033[J")
 		buf.WriteString(buildWatchFrame(rows, results, interval, time.Now()))
 		fmt.Print(buf.String())
 	}
