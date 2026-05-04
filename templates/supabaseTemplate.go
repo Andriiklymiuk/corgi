@@ -22,16 +22,19 @@ type SupabasePorts struct {
 	Inbucket int // [inbucket].port
 }
 
-// ReadSupabasePorts parses supabase/config.toml relative to projectRoot.
-// Pass the corgi project root (CorgiComposePathDir) so it works regardless
-// of the user's cwd or `corgi run -f /other/path/...`. Empty projectRoot
-// falls back to cwd. Missing or unparseable sections fall back to the
-// supabase CLI defaults so consumers always get a sensible URL.
-func ReadSupabasePorts(projectRoot string) SupabasePorts {
+// Parses a supabase config.toml. Arg can be either a direct .toml path or
+// a project root (resolves to <root>/supabase/config.toml). Empty falls back
+// to cwd. Missing sections use supabase CLI defaults.
+func ReadSupabasePorts(pathOrRoot string) SupabasePorts {
 	defaults := SupabasePorts{API: 54321, DB: 54322, Studio: 54323, Inbucket: 54324}
-	tomlPath := "supabase/config.toml"
-	if projectRoot != "" {
-		tomlPath = projectRoot + "/supabase/config.toml"
+	var tomlPath string
+	switch {
+	case strings.HasSuffix(pathOrRoot, ".toml"):
+		tomlPath = pathOrRoot
+	case pathOrRoot == "":
+		tomlPath = "supabase/config.toml"
+	default:
+		tomlPath = pathOrRoot + "/supabase/config.toml"
 	}
 	data, err := os.ReadFile(tomlPath)
 	if err != nil {
@@ -94,11 +97,37 @@ const (
 	SupabaseS3Region      = "local"
 )
 
-// MakefileSupabase wraps the supabase CLI. Runs from project root so
-// supabase/config.toml is found in its conventional location.
-// DESIRED_API_PORT is templated from yaml port:; "0" means unset (don't patch).
-var MakefileSupabase = `ROOT := $(shell git rev-parse --show-toplevel 2>/dev/null || (cd ../../.. && pwd))
+// Wraps the supabase CLI. WORKDIR is the service folder when configTomlPath
+// is set (corgi owns config.toml), or project root otherwise (legacy).
+// DESIRED_*_PORT come from yaml port:/dbPort:/studioPort:/inbucketPort:;
+// "0" = noop. Patches happen before `supabase start` so bind ports match
+// the env corgi emits.
+var MakefileSupabase = `{{if .ConfigTomlPath -}}
+WORKDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+{{- else -}}
+WORKDIR := $(shell git rev-parse --show-toplevel 2>/dev/null || (cd ../../.. && pwd))
+{{- end}}
 DESIRED_API_PORT := {{.Port}}
+DESIRED_DB_PORT := {{.DbPort}}
+DESIRED_STUDIO_PORT := {{.StudioPort}}
+DESIRED_INBUCKET_PORT := {{.InbucketPort}}
+
+# In-place patch [<section>].port in config.toml. Args: section, desired port.
+define _patch_supabase_port
+	@if [ "$(2)" != "0" ] && [ -n "$(2)" ]; then \
+		cd "$(WORKDIR)" && awk -v sec="$(1)" -v p="$(2)" ' \
+			/^\[/{ section=$$0 } \
+			section=="["sec"]" && /^port[[:space:]]*=/{ \
+				if ($$0 != "port = " p) { \
+					print "port = " p; changed=1; next \
+				} \
+			} \
+			{ print } \
+			END{ if (changed) print "→ patched ["sec"].port=" p " in supabase/config.toml" > "/dev/stderr" } \
+		' supabase/config.toml > supabase/config.toml.corgi-tmp && \
+			mv supabase/config.toml.corgi-tmp supabase/config.toml; \
+	fi
+endef
 
 up:
 	@command -v supabase >/dev/null 2>&1 || { \
@@ -115,24 +144,15 @@ up:
 			exit 1; \
 		fi; \
 	}
-	@cd "$(ROOT)" && [ -f supabase/config.toml ] || { \
+	@cd "$(WORKDIR)" && [ -f supabase/config.toml ] || { \
 		echo "→ supabase/config.toml missing — running 'supabase init'..."; \
 		supabase init; \
 	}
-	@if [ "$(DESIRED_API_PORT)" != "0" ] && [ -n "$(DESIRED_API_PORT)" ]; then \
-		cd "$(ROOT)" && awk -v p="$(DESIRED_API_PORT)" ' \
-			/^\[/{ section=$$0 } \
-			section=="[api]" && /^port[[:space:]]*=/{ \
-				if ($$0 != "port = " p) { \
-					print "port = " p; changed=1; next \
-				} \
-			} \
-			{ print } \
-			END{ if (changed) print "→ patched [api].port=" p " in supabase/config.toml" > "/dev/stderr" } \
-		' supabase/config.toml > supabase/config.toml.corgi-tmp && \
-			mv supabase/config.toml.corgi-tmp supabase/config.toml; \
-	fi
-	@cd "$(ROOT)" && if supabase status >/dev/null 2>&1; then \
+	$(call _patch_supabase_port,api,$(DESIRED_API_PORT))
+	$(call _patch_supabase_port,db,$(DESIRED_DB_PORT))
+	$(call _patch_supabase_port,studio,$(DESIRED_STUDIO_PORT))
+	$(call _patch_supabase_port,inbucket,$(DESIRED_INBUCKET_PORT))
+	@cd "$(WORKDIR)" && if supabase status >/dev/null 2>&1; then \
 		echo "✓ supabase already running"; \
 	else \
 		echo "→ starting supabase (first run pulls images; can take several minutes)..."; \
@@ -141,18 +161,18 @@ up:
 	@bash bootstrap/bootstrap.sh
 
 down:
-	@cd "$(ROOT)" && supabase stop --no-backup 2>/dev/null || true
+	@cd "$(WORKDIR)" && supabase stop --no-backup 2>/dev/null || true
 
 stop: down
 
 logs:
-	@cd "$(ROOT)" && supabase status
+	@cd "$(WORKDIR)" && supabase status
 
 id:
 	@docker ps --filter "name=supabase_" --format '{{"{{.ID}}"}}' | head -1
 
 remove:
-	@cd "$(ROOT)" && supabase stop --no-backup 2>/dev/null || true
+	@cd "$(WORKDIR)" && supabase stop --no-backup 2>/dev/null || true
 
 bootstrap:
 	@bash bootstrap/bootstrap.sh
@@ -168,10 +188,15 @@ help:
 var BootstrapSupabase = `#!/usr/bin/env bash
 set -euo pipefail
 
-# corgi-managed wrapper for the supabase CLI runs from the project root
-# (where supabase/config.toml lives). Re-derive that here.
+# WORKDIR matches Makefile's: service folder when configTomlPath is set,
+# project root otherwise.
+{{if .ConfigTomlPath -}}
+WORKDIR="$(cd "$(dirname "$0")/.." && pwd)"
+{{- else -}}
+WORKDIR="$(git rev-parse --show-toplevel 2>/dev/null || (cd ../../.. && pwd))"
+{{- end}}
+cd "$WORKDIR"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd ../../.. && pwd))"
-cd "$ROOT"
 
 if ! command -v supabase >/dev/null 2>&1; then
     echo "supabase CLI not found — skipping bootstrap"

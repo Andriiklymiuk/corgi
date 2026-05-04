@@ -91,27 +91,42 @@ Skip for local-only setups — stock secret works.
 
 ### `configTomlPath: string`
 
-Optional. Path (relative to corgi-compose.yml; absolute paths also accepted) to a `config.toml` that corgi copies to `<projectRoot>/supabase/config.toml` on every `corgi init`. Useful when:
-
-- You want to check the config into a templates/ dir and treat it as source of truth.
-- Fresh clones should boot with your customizations (custom JWT secret, ports, schemas) without anyone running `supabase init` first.
+Path to a `config.toml` (relative to corgi-compose.yml; absolute also accepted) that corgi copies into the supabase service folder on every `corgi init`. Treat the source file as your single source of truth — git-track it, edit it, share across the team.
 
 ```yaml
 db_services:
-  supabase:
+  my-supabase:
     driver: supabase
-    configTomlPath: ./templates/supabase-config.toml
+    configTomlPath: ./config/supabase.config.toml
 ```
 
-Behavior:
+What changes when set vs unset:
 
-- Always overwrites the destination — matches how other corgi-emitted files (Makefiles, docker-compose.yml) re-emit on each init.
-- If the source file is missing, `corgi init` errors for that service.
-- If unset, first `corgi up` triggers `supabase init` (existing flow).
+| | Unset (legacy) | Set (recommended) |
+|---|---|---|
+| Generated config.toml lives at | `<projectRoot>/supabase/config.toml` | `corgi_services/db_services/<svc>/supabase/config.toml` |
+| Where supabase CLI runs from | project root | the corgi-managed service dir |
+| `supabase init` on first run | yes (creates root supabase/) | no (corgi writes the file directly) |
+
+Always overwrites the destination on each `corgi init`. If the source is missing, init errors. Once you set this, edit the source file only — anything in the destination gets clobbered next init.
+
+### `dbPort` / `studioPort` / `inbucketPort: int`
+
+Override `[db].port` / `[studio].port` / `[inbucket].port` in config.toml. Same patch flow as `port:` (= `[api].port`): Makefile awk-patches the file before `supabase start`, so bind ports + emitted URLs stay aligned. Defaults from supabase CLI: 54322 / 54323 / 54324.
+
+```yaml
+db_services:
+  my-supabase:
+    driver: supabase
+    port: 54321         # api (kong gateway)
+    dbPort: 54322
+    studioPort: 54323
+    inbucketPort: 54324
+```
 
 ## supabase/config.toml location
 
-corgi expects `<corgi-compose dir>/supabase/config.toml` — same convention as supabase CLI. No yaml field to relocate it; supabase CLI itself doesn't support that.
+Convention follows supabase CLI: `<cwd>/supabase/config.toml`. corgi runs the CLI from either project root (configTomlPath unset) or the service folder under `corgi_services/db_services/<svc>/` (configTomlPath set). The CLI auto-discovers from cwd in both modes.
 
 ### Missing file
 

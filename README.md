@@ -59,7 +59,7 @@ While in services you can create whatever you want, but in db services **for now
 - [postgis](https://postgis.net)
 - [pgvector](https://github.com/pgvector/pgvector) — postgres + `pgvector` extension. Uses prefix `DB_`, same as plain `postgres`
 - [localstack](https://docs.localstack.cloud/) — single container for multiple AWS services (sqs, s3, sns, secretsmanager, ssm, kinesis), with `queues` / `buckets` / `topics` / `secrets` auto-created from config. Full docs: [docs/drivers/localstack.md](docs/drivers/localstack.md)
-- [supabase](https://supabase.com/docs/guides/local-development) — wraps `supabase init`/`start`. Emits `SUPABASE_*` + S3 vars, ports from `supabase/config.toml`. Seeds `buckets:` and `authUsers:` on `up`; `jwtSecret:` re-signs keys. Full docs: [docs/drivers/supabase.md](docs/drivers/supabase.md)
+- [supabase](https://supabase.com/docs/guides/local-development) — wraps `supabase init`/`start`. Emits `SUPABASE_*` + S3 vars, ports from config.toml. Seeds `buckets:` and `authUsers:` on `up`; `jwtSecret:` re-signs keys; `configTomlPath:` makes corgi own config.toml under `corgi_services/`; `port:`/`dbPort:`/`studioPort:`/`inbucketPort:` patch the matching `[section].port`. Full docs: [docs/drivers/supabase.md](docs/drivers/supabase.md)
 - `image` — generic docker-image driver for any public image (gotenberg, mailhog, jaeger, meilisearch, …). Set `image:` + `port:` + optional `containerPort:`/`environment:`/`volumes:`/`command:`. Full docs: [docs/drivers/image.md](docs/drivers/image.md)
 
 ## Preflight & healthcheck
