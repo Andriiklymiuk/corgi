@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -35,7 +36,9 @@ For each service:
 Exit code is non-zero if anything's down so CI / scripts can consume it.
 
 Modes:
-  -w, --watch         Repoll continuously, alert on transitions only (kubectl-style).
+  -w, --watch         Repoll continuously and redraw the table in place
+                      (live timestamp + counts). Falls back to append-only
+                      transition lines for piped stdout, --json, or --quiet.
   -r, --ready         Block until every target is up. Exit 0 when all healthy,
                       exit 1 on --timeout (default 5m). Alias: --until-healthy.
       --service csv   Narrow probes to listed services.
@@ -58,10 +61,10 @@ func init() {
 }
 
 type statusRow struct {
-	Label string // e.g. "db_services.api-db (postgres)"
+	Label string
 	Port  int
-	Kind  string // "tcp" or "http"
-	URL   string // for http kind
+	Kind  string
+	URL   string
 }
 
 func runStatus(cmd *cobra.Command, _ []string) {
@@ -199,8 +202,6 @@ func filterRows(rows []statusRow, names []string) []statusRow {
 	}
 	var out []statusRow
 	for _, r := range rows {
-		// Label is "services.<name>" or "db_services.<name> (<driver>)".
-		// Match the bare service name.
 		bare := r.Label
 		if i := strings.IndexByte(bare, '.'); i >= 0 {
 			bare = bare[i+1:]
@@ -215,44 +216,133 @@ func filterRows(rows []statusRow, names []string) []statusRow {
 	return out
 }
 
-// runStatusWatch reactive: print initial state, then alert on transitions.
-// Quiet by default while stable. Ctrl+C exits.
 func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet bool) {
 	if interval <= 0 {
 		interval = 2 * time.Second
 	}
 
-	state := make(map[string]bool, len(rows))
-	for _, r := range rows {
-		ok, _ := probe(r)
-		state[r.Label] = ok
-	}
-
-	up, down := probeAll(rows)
 	if jsonOut {
+		results := probeAllParallel(rows)
+		up, down := splitResults(rows, results)
 		emitJSON(up, down)
-	} else if !quiet {
-		renderProbeResults(up, down)
-		fmt.Printf("%s👀 watching %d targets every %s — Ctrl+C to stop (%d up, %d down)%s\n",
-			art.CyanColor, len(rows), interval, len(up), len(down), art.WhiteColor)
+		runWatchAppend(rows, results, interval, true, false)
+		return
 	}
 
+	if quiet {
+		runWatchAppend(rows, nil, interval, false, true)
+		return
+	}
+
+	results := probeAllParallel(rows)
+	frame := buildWatchFrame(rows, results, interval, time.Now())
+	fmt.Print(frame)
+
+	if !isStdoutTTY() {
+		runWatchAppend(rows, results, interval, false, false)
+		return
+	}
+
+	prevLines := strings.Count(frame, "\n")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
+		results = probeAllParallel(rows)
+		var buf strings.Builder
+		fmt.Fprintf(&buf, "\033[%dA\033[J", prevLines)
+		next := buildWatchFrame(rows, results, interval, time.Now())
+		buf.WriteString(next)
+		fmt.Print(buf.String())
+		prevLines = strings.Count(next, "\n")
+	}
+}
+
+func runWatchAppend(rows []statusRow, seed map[string]probeResult, interval time.Duration, jsonOut, quiet bool) {
+	state := make(map[string]bool, len(rows))
+	if seed != nil {
 		for _, r := range rows {
-			ok, detail := probe(r)
-			prev := state[r.Label]
-			if ok == prev {
+			state[r.Label] = seed[r.Label].Healthy
+		}
+	} else {
+		for _, r := range rows {
+			ok, _ := probe(r)
+			state[r.Label] = ok
+		}
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		results := probeAllParallel(rows)
+		for _, r := range rows {
+			pr := results[r.Label]
+			if state[r.Label] == pr.Healthy {
 				continue
 			}
-			state[r.Label] = ok
-			emitTransition(r, ok, detail, jsonOut, quiet)
+			state[r.Label] = pr.Healthy
+			emitTransition(r, pr.Healthy, pr.Detail, jsonOut, quiet)
 		}
 	}
 }
 
-// runStatusUntilHealthy polls until all rows up (exit 0) or timeout (exit 1).
+func probeAllParallel(rows []statusRow) map[string]probeResult {
+	out := make(map[string]probeResult, len(rows))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, r := range rows {
+		wg.Add(1)
+		go func(row statusRow) {
+			defer wg.Done()
+			ok, detail := probe(row)
+			pr := probeResult{Row: row, Healthy: ok, Detail: detail}
+			mu.Lock()
+			out[row.Label] = pr
+			mu.Unlock()
+		}(r)
+	}
+	wg.Wait()
+	return out
+}
+
+func splitResults(rows []statusRow, results map[string]probeResult) (up, down []probeResult) {
+	for _, r := range rows {
+		pr := results[r.Label]
+		if pr.Healthy {
+			up = append(up, pr)
+		} else {
+			down = append(down, pr)
+		}
+	}
+	return
+}
+
+// rows must be pre-sorted by port — runStatus does it once before the loop.
+func buildWatchFrame(rows []statusRow, results map[string]probeResult, interval time.Duration, now time.Time) string {
+	var buf strings.Builder
+	buf.WriteString("🩺 corgi status\n")
+	upCount := 0
+	for _, r := range rows {
+		pr := results[r.Label]
+		if pr.Healthy {
+			upCount++
+			fmt.Fprintf(&buf, "  %s ✅ %-40s %s%s\n", art.GreenColor, r.Label, pr.Detail, art.WhiteColor)
+		} else {
+			fmt.Fprintf(&buf, "  %s ❌ %-40s %s%s\n", art.RedColor, r.Label, pr.Detail, art.WhiteColor)
+		}
+	}
+	down := len(rows) - upCount
+	fmt.Fprintf(&buf, "\n%s👀 watching %d targets every %s — last update %s (%d up, %d down) — Ctrl+C to stop%s\n",
+		art.CyanColor, len(rows), interval, now.Format("15:04:05"), upCount, down, art.WhiteColor)
+	return buf.String()
+}
+
+func isStdoutTTY() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
 func runStatusUntilHealthy(rows []statusRow, interval, timeout time.Duration, jsonOut, quiet bool) {
 	if interval <= 0 {
 		interval = 2 * time.Second
@@ -347,7 +437,6 @@ func finalize(rows []statusRow, jsonOut, quiet, healthy bool) {
 	}
 }
 
-// collectStatusRows turns the parsed compose into a flat list of things to probe.
 func collectStatusRows(corgi *utils.CorgiCompose) []statusRow {
 	var rows []statusRow
 
@@ -392,14 +481,14 @@ func collectStatusRows(corgi *utils.CorgiCompose) []statusRow {
 
 func probe(r statusRow) (bool, string) {
 	if r.Kind == "http" {
-		ok, code := utils.IsHTTPHealthy(r.URL, 5*time.Second)
+		ok, code, reason := utils.IsHTTPHealthy(r.URL, 5*time.Second)
 		if ok {
 			return true, fmt.Sprintf("%s [HTTP %d]", r.URL, code)
 		}
-		if code == 0 {
-			return false, fmt.Sprintf("%s (no response)", r.URL)
+		if code != 0 {
+			return false, fmt.Sprintf("%s [HTTP %d]", r.URL, code)
 		}
-		return false, fmt.Sprintf("%s [HTTP %d]", r.URL, code)
+		return false, fmt.Sprintf("%s (%s)", r.URL, reason)
 	}
 
 	if utils.IsPortListening(r.Port) {
