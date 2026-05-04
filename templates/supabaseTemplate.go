@@ -203,6 +203,15 @@ if ! command -v supabase >/dev/null 2>&1; then
     exit 0
 fi
 
+# jq is optional. New users still get created without it; only the
+# password / user_metadata reconcile pass on existing users is skipped.
+HAVE_JQ=0
+if command -v jq >/dev/null 2>&1; then
+    HAVE_JQ=1
+else
+    echo "⚠ jq not found — auth user reconcile will be skipped (install: brew install jq)"
+fi
+
 # Pull live keys from supabase. Handles custom JWT secrets transparently.
 eval "$(supabase status -o env 2>/dev/null)" || {
     echo "⚠ supabase status failed — bootstrap skipped"
@@ -247,8 +256,12 @@ curl -sS -o /dev/null -X POST "$API_URL/storage/v1/bucket" \
 echo "  buckets: $(($(date +%s) - BUCKETS_TS))s"
 
 USERS_TS=$(date +%s)
+# Reconcile loop: POST creates new users (422 swallowed if already there);
+# follow-up PUT keeps password + user_metadata in sync with corgi-compose.yml
+# on every re-run. PUT path is gated on $HAVE_JQ from the prerequisite check
+# above — without jq, new users still get created but edits don't propagate.
 {{range .AuthUsers}}
-echo "  create auth user: {{.Email}}"
+echo "  upsert auth user: {{.Email}}"
 metadata='{{.MetadataJSON}}'
 curl -sS -o /dev/null -X POST "$API_URL/auth/v1/admin/users" \
     -H "apikey: $SERVICE_ROLE_KEY" \
@@ -256,6 +269,23 @@ curl -sS -o /dev/null -X POST "$API_URL/auth/v1/admin/users" \
     -H "Content-Type: application/json" \
     -d "$(printf '{"email":"%s","password":"%s","email_confirm":true,"user_metadata":%s}' \
             "{{.Email}}" "{{.Password}}" "$metadata")" || true
+
+if [ "$HAVE_JQ" = "1" ]; then
+    # gotrue admin API has no server-side email filter, so list (cap at 1000 —
+    # plenty for local dev seeds) and pick the matching id client-side.
+    user_id=$(curl -sS "$API_URL/auth/v1/admin/users?per_page=1000" \
+        -H "apikey: $SERVICE_ROLE_KEY" \
+        -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+        | jq -r --arg e "{{.Email}}" '.users[]? | select(.email == $e) | .id' | head -1)
+    if [ -n "$user_id" ]; then
+        curl -sS -o /dev/null -X PUT "$API_URL/auth/v1/admin/users/$user_id" \
+            -H "apikey: $SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(printf '{"password":"%s","user_metadata":%s}' \
+                    "{{.Password}}" "$metadata")" || true
+    fi
+fi
 {{end}}
 echo "  auth users: $(($(date +%s) - USERS_TS))s"
 
