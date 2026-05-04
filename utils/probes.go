@@ -1,11 +1,14 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -55,14 +58,27 @@ func PortOwner(port int) string {
 
 // IsHTTPHealthy returns true if a GET on the URL returns any non-5xx
 // response within the timeout. Any transport error or 5xx counts as unhealthy.
-func IsHTTPHealthy(url string, timeout time.Duration) (bool, int) {
+// reason is "" on HTTP response (regardless of code); on transport error it is
+// one of "timeout", "connection refused", "no response".
+func IsHTTPHealthy(rawURL string, timeout time.Duration) (healthy bool, code int, reason string) {
 	client := &http.Client{Timeout: timeout}
-	resp, err := client.Get(url)
+	resp, err := client.Get(rawURL)
 	if err != nil {
-		return false, 0
+		return false, 0, classifyHTTPErr(err)
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode < 500, resp.StatusCode
+	return resp.StatusCode < 500, resp.StatusCode, ""
+}
+
+func classifyHTTPErr(err error) string {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Timeout() {
+		return "timeout"
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return "connection refused"
+	}
+	return "no response"
 }
 
 // IsDockerRunning returns true if the docker daemon responds to `docker info`.
