@@ -38,64 +38,64 @@ func findServiceByName(services []Service, serviceName string) *Service {
 }
 
 func handleDependentServices(service Service, corgiCompose CorgiCompose) string {
-	envForService := ""
-
 	if service.DependsOnServices == nil {
+		return ""
+	}
+	envForService := ""
+	for _, dep := range service.DependsOnServices {
+		envForService = appendDependentServiceEnv(envForService, dep, corgiCompose)
+	}
+	return envForService
+}
+
+func appendDependentServiceEnv(envForService string, dep DependsOnService, corgiCompose CorgiCompose) string {
+	s := findServiceByName(corgiCompose.Services, dep.Name)
+	if s == nil {
+		return envForService
+	}
+	if s.ManualRun && !dep.ForceUseEnv {
 		return envForService
 	}
 
-	for _, dependingService := range service.DependsOnServices {
-		s := findServiceByName(corgiCompose.Services, dependingService.Name)
-
-		if s == nil {
-			continue
-		}
-
-		if s.ManualRun && !dependingService.ForceUseEnv {
-			continue
-		}
-
-		var envNameToUse string
-		if dependingService.EnvAlias != "" {
-			envNameToUse = dependingService.EnvAlias
-		} else {
-			envNameToUse = splitStringForEnv(s.ServiceName) + "_URL"
-		}
-
-		if s.Port != 0 {
-			envForService = createEnvString(envForService, envNameToUse, "localhost", fmt.Sprint(s.Port), dependingService.Suffix)
-			continue
-		}
-
-		for _, envLine := range s.Environment {
-			if strings.Split(envLine, "=")[0] == "PORT" {
-				envForService = createEnvString(envForService, envNameToUse, "localhost", strings.Split(envLine, "=")[1], dependingService.Suffix)
-				continue
-			}
-		}
+	envNameToUse := dep.EnvAlias
+	if envNameToUse == "" {
+		envNameToUse = splitStringForEnv(s.ServiceName) + "_URL"
 	}
 
+	if s.Port != 0 {
+		return createEnvString(envForService, envNameToUse, "localhost", fmt.Sprint(s.Port), dep.Suffix)
+	}
+	for _, envLine := range s.Environment {
+		parts := strings.SplitN(envLine, "=", 2)
+		if len(parts) == 2 && parts[0] == "PORT" {
+			envForService = createEnvString(envForService, envNameToUse, "localhost", parts[1], dep.Suffix)
+		}
+	}
 	return envForService
 }
 
 func handleDependsOnDb(service Service, corgiCompose CorgiCompose) string {
+	if service.DependsOnDb == nil {
+		return ""
+	}
 	var envForService string
+	for _, dep := range service.DependsOnDb {
+		db := findDbByName(corgiCompose.DatabaseServices, dep.Name)
+		if db == nil || (db.ManualRun && !dep.ForceUseEnv) {
+			continue
+		}
+		envForService += generateEnvForDbDependentService(service, dep, *db)
+	}
+	return envForService
+}
 
-	if service.DependsOnDb != nil {
-		for _, dependingDb := range service.DependsOnDb {
-			for _, db := range corgiCompose.DatabaseServices {
-				if db.ServiceName == dependingDb.Name {
-					if db.ManualRun && !dependingDb.ForceUseEnv {
-						continue
-					}
-
-					envForService += generateEnvForDbDependentService(service, dependingDb, db)
-				}
-			}
+func findDbByName(dbs []DatabaseService, name string) *DatabaseService {
+	for i := range dbs {
+		if dbs[i].ServiceName == name {
+			return &dbs[i]
 		}
 	}
-
-	return envForService
+	return nil
 }
 
 func generateEnvForDbDependentService(service Service, dependingDb DependsOnDb, db DatabaseService) string {

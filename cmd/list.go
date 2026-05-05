@@ -53,18 +53,21 @@ func listRun(cmd *cobra.Command, args []string) {
 
 	fmt.Println("Globally executed corgi paths:")
 	for _, ep := range paths {
-		if ep.Name != "" || ep.Description != "" {
-			if ep.Name != "" {
-				var name = art.BlueColor + ep.Name + art.WhiteColor
-				fmt.Printf("Name: %s\n", name)
-			}
-			fmt.Printf("Path: %s\n", ep.Path)
-			if ep.Description != "" {
-				fmt.Printf("Description: %s\n", ep.Description)
-			}
-		} else {
-			fmt.Println(ep.Path)
-		}
+		printExecPath(ep)
 		fmt.Println()
+	}
+}
+
+func printExecPath(ep utils.CorgiExecPath) {
+	if ep.Name == "" && ep.Description == "" {
+		fmt.Println(ep.Path)
+		return
+	}
+	if ep.Name != "" {
+		fmt.Printf("Name: %s%s%s\n", art.BlueColor, ep.Name, art.WhiteColor)
+	}
+	fmt.Printf("Path: %s\n", ep.Path)
+	if ep.Description != "" {
+		fmt.Printf("Description: %s\n", ep.Description)
 	}
 }

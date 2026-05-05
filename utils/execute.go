@@ -12,7 +12,10 @@ import (
 	"sync"
 )
 
-const servicePathFmt = "%s/%s/%s"
+const (
+	servicePathFmt        = "%s/%s/%s"
+	errPathToServiceNotFound = "path to target service is not found: %s"
+)
 
 // withEnvSource prepends a POSIX `set -a; . <envFile>; set +a; ` prefix to a
 // command when an env file exists for the service. Lets a start command like
@@ -303,7 +306,7 @@ func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 
 	path, err := GetPathToDbService(targetService)
 	if err != nil {
-		return nil, fmt.Errorf("path to target service is not found: %s", err)
+		return nil, fmt.Errorf(errPathToServiceNotFound, err)
 	}
 
 	cmd := exec.Command("make", "help")
@@ -325,7 +328,7 @@ func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 func ExecuteMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {
 	path, err := GetPathToDbService(targetService)
 	if err != nil {
-		return nil, fmt.Errorf("path to target service is not found: %s", err)
+		return nil, fmt.Errorf(errPathToServiceNotFound, err)
 	}
 
 	cmd := exec.Command("make", makeCommand...)
@@ -345,7 +348,7 @@ func ExecuteMakeCommand(targetService string, makeCommand ...string) ([]byte, er
 func ExecuteCommandRun(targetService string, command ...string) error {
 	path, err := GetPathToDbService(targetService)
 	if err != nil {
-		return fmt.Errorf("path to target service is not found: %s", err)
+		return fmt.Errorf(errPathToServiceNotFound, err)
 	}
 
 	cmd := exec.Command(command[0], command[1:]...)
@@ -364,7 +367,7 @@ func ExecuteCommandRun(targetService string, command ...string) error {
 func ExecuteServiceCommandRun(targetService string, command ...string) error {
 	path, err := GetPathToService(targetService)
 	if err != nil {
-		return fmt.Errorf("path to target service is not found: %s", err)
+		return fmt.Errorf(errPathToServiceNotFound, err)
 	}
 
 	cmd := exec.Command(command[0], command[1:]...)
@@ -383,7 +386,7 @@ func ExecuteServiceCommandRun(targetService string, command ...string) error {
 func ExecuteSeedMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {
 	path, err := GetPathToDbService(targetService)
 	if err != nil {
-		return nil, fmt.Errorf("path to target service is not found: %s", err)
+		return nil, fmt.Errorf(errPathToServiceNotFound, err)
 	}
 
 	cmd := exec.Command("make", makeCommand...)

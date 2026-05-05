@@ -14,6 +14,11 @@ import (
 	"github.com/spf13/cobra/doc"
 )
 
+const (
+	docsRowFmt    = "%s\t%s\t%s\t%s"
+	docsBlankRow  = "\t\t\t"
+)
+
 // docsCmd represents the docs command
 var docsCmd = &cobra.Command{
 	Use:     "docs",
@@ -323,21 +328,21 @@ func runDocs(cmd *cobra.Command, _ []string) {
 	fmt.Fprintln(writer, "item\texample\titemType\tdescription")
 	fmt.Fprintln(writer, "service items:\t\t\t")
 	for _, item := range serviceItems {
-		s := fmt.Sprintf("%s\t%s\t%s\t%s", item.item, item.example, item.itemType, item.description)
+		s := fmt.Sprintf(docsRowFmt, item.item, item.example, item.itemType, item.description)
 		fmt.Fprintln(writer, s)
 	}
-	fmt.Fprintln(writer, "\t\t\t")
-	fmt.Fprintln(writer, "\t\t\t")
+	fmt.Fprintln(writer, docsBlankRow)
+	fmt.Fprintln(writer, docsBlankRow)
 	fmt.Fprintln(writer, "db_service items:\t\t\t")
 	for _, item := range dbServiceItems {
-		s := fmt.Sprintf("%s\t%s\t%s\t%s", item.item, item.example, item.itemType, item.description)
+		s := fmt.Sprintf(docsRowFmt, item.item, item.example, item.itemType, item.description)
 		fmt.Fprintln(writer, s)
 	}
-	fmt.Fprintln(writer, "\t\t\t")
-	fmt.Fprintln(writer, "\t\t\t")
+	fmt.Fprintln(writer, docsBlankRow)
+	fmt.Fprintln(writer, docsBlankRow)
 	fmt.Fprintln(writer, "required items:\t\t\t")
 	for _, item := range requiredItems {
-		s := fmt.Sprintf("%s\t%s\t%s\t%s", item.item, item.example, item.itemType, item.description)
+		s := fmt.Sprintf(docsRowFmt, item.item, item.example, item.itemType, item.description)
 		fmt.Fprintln(writer, s)
 	}
 	writer.Flush()
