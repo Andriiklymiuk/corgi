@@ -145,48 +145,19 @@ scoop bucket add corgi https://github.com/Andriiklymiuk/scoop-bucket
 scoop install corgi
 ```
 
-### Universal binary installers (no per-tool registry)
-
-These read corgi's GitHub releases directly — no extra config:
+### [mise](https://mise.jdx.dev) (tool/version manager)
 
 ```bash
-# mise (formerly rtx) — modern tool/version manager
 mise use -g github:Andriiklymiuk/corgi
-
-# ubi — single-shot universal installer
-ubi --project Andriiklymiuk/corgi
-
-# eget — same idea
-eget Andriiklymiuk/corgi
 ```
 
-### [aqua](https://aquaproj.github.io/) — declarative version manager
-
-```yaml
-# aqua.yaml
-registries:
-  - type: standard
-    ref: v4.x.x
-packages:
-  - name: Andriiklymiuk/corgi@v1.16.2
-```
-
-```bash
-aqua i
-```
+Reads corgi's GitHub releases directly — no registry config needed.
 
 ### [pkgx](https://pkgx.sh)
 
 ```bash
 pkgx corgi run        # one-off, no install
 pkgx install corgi    # to PATH
-```
-
-### [Nix](https://nixos.org) flake
-
-```bash
-nix run github:Andriiklymiuk/corgi -- run        # one-off
-nix profile install github:Andriiklymiuk/corgi   # persistent
 ```
 
 ### Verify
