@@ -146,6 +146,49 @@ corgi -h
 
 `corgi update` (alias `corgi upgrade`) detects how you installed and uses the matching method to upgrade.
 
+### Shell tab-completion
+
+Brew installs `_corgi` (zsh), `corgi.bash`, `corgi.fish` automatically. After that:
+
+- `corgi run --services <TAB>` → service names from `corgi-compose.yml`
+- `corgi run --dbServices <TAB>` → db_services
+- `corgi script -n <TAB>` → script names per service (filters by `--services` if set)
+- `corgi tunnel <TAB>` → tunnelable services
+- `corgi clean -i <TAB>`, `--provider`, `--omit`, `--dockerContext`, `--fromTemplateName` — also wired
+
+**zsh users — if `<TAB>` shows files instead of names**, your shell isn't loading brew's site-functions dir. One-time fix in `~/.zshrc` (works for every brew CLI, not just corgi):
+
+```sh
+# macOS Apple Silicon
+FPATH="/opt/homebrew/share/zsh/site-functions:$FPATH"
+# macOS Intel
+FPATH="/usr/local/share/zsh/site-functions:$FPATH"
+# Linux (linuxbrew)
+FPATH="/home/linuxbrew/.linuxbrew/share/zsh/site-functions:$FPATH"
+
+autoload -Uz compinit && compinit
+```
+
+Add it BEFORE any existing `compinit` call. Then `rm -f ~/.zcompdump* && exec zsh`.
+
+Why: brew drops completions in `<brew-prefix>/share/zsh/site-functions/`, but plain zsh doesn't include that path in `$fpath` by default — so the file is installed but never loaded. Same gap affects `gh`, `kubectl`, `helm`, etc.
+
+**Linux native package managers** (apt/dnf/pacman) — corgi isn't packaged there yet. Use the install script (`curl ... install.sh | sh`), then generate the completion script manually:
+
+```sh
+# zsh
+mkdir -p ~/.zsh/completions
+corgi completion zsh > ~/.zsh/completions/_corgi
+# add once to ~/.zshrc:
+fpath=(~/.zsh/completions $fpath); autoload -Uz compinit && compinit
+
+# bash (needs bash-completion package)
+corgi completion bash | sudo tee /etc/bash_completion.d/corgi >/dev/null
+
+# fish
+corgi completion fish > ~/.config/fish/completions/corgi.fish
+```
+
 Try it with expo + hono server example
 
 ```bash
