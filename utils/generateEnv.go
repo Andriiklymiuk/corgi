@@ -195,13 +195,26 @@ func topoSortServices(services []Service) ([]Service, error) {
 		addServiceEdges(s, byName, graph, indeg)
 	}
 
+	queue := initialZeroInDegree(services, indeg)
+	ordered := drainTopoQueue(queue, byName, graph, indeg)
+
+	if len(ordered) != len(services) {
+		return nil, cycleError(services, indeg)
+	}
+	return ordered, nil
+}
+
+func initialZeroInDegree(services []Service, indeg map[string]int) []string {
 	var queue []string
 	for _, s := range services {
 		if indeg[s.ServiceName] == 0 {
 			queue = append(queue, s.ServiceName)
 		}
 	}
+	return queue
+}
 
+func drainTopoQueue(queue []string, byName map[string]Service, graph map[string][]string, indeg map[string]int) []Service {
 	var ordered []Service
 	for len(queue) > 0 {
 		n := queue[0]
@@ -214,19 +227,20 @@ func topoSortServices(services []Service) ([]Service, error) {
 			}
 		}
 	}
-	if len(ordered) != len(services) {
-		var stuck []string
-		for _, s := range services {
-			if indeg[s.ServiceName] > 0 {
-				stuck = append(stuck, s.ServiceName)
-			}
+	return ordered
+}
+
+func cycleError(services []Service, indeg map[string]int) error {
+	var stuck []string
+	for _, s := range services {
+		if indeg[s.ServiceName] > 0 {
+			stuck = append(stuck, s.ServiceName)
 		}
-		return nil, fmt.Errorf(
-			"cycle detected in cross-service ${producer.VAR} references involving: %s",
-			strings.Join(stuck, ", "),
-		)
 	}
-	return ordered, nil
+	return fmt.Errorf(
+		"cycle detected in cross-service ${producer.VAR} references involving: %s",
+		strings.Join(stuck, ", "),
+	)
 }
 
 // resolveExports computes the exports map for a producer service from its
@@ -396,27 +410,38 @@ func buildServiceExports(s Service, envMap map[string]string) map[string]string 
 
 func iterateExportsFixedPoint(out ExportsMap, consumers map[string]Service, maxIter int) {
 	for iter := 0; iter < maxIter; iter++ {
-		changed := false
-		for serviceName, vars := range out {
-			consumer := consumers[serviceName]
-			for varName, val := range vars {
-				if !crossServiceRefRe.MatchString(val) {
-					continue
-				}
-				newVal, subErr := substituteCrossServiceRefs(val, consumer, out)
-				if subErr != nil {
-					continue
-				}
-				if newVal != val {
-					vars[varName] = newVal
-					changed = true
-				}
-			}
-		}
-		if !changed {
+		if !applyOnePass(out, consumers) {
 			return
 		}
 	}
+}
+
+func applyOnePass(out ExportsMap, consumers map[string]Service) bool {
+	changed := false
+	for serviceName, vars := range out {
+		if substituteServiceVars(vars, consumers[serviceName], out) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func substituteServiceVars(vars map[string]string, consumer Service, out ExportsMap) bool {
+	changed := false
+	for varName, val := range vars {
+		if !crossServiceRefRe.MatchString(val) {
+			continue
+		}
+		newVal, subErr := substituteCrossServiceRefs(val, consumer, out)
+		if subErr != nil {
+			continue
+		}
+		if newVal != val {
+			vars[varName] = newVal
+			changed = true
+		}
+	}
+	return changed
 }
 
 func findStuckExports(out ExportsMap) []string {

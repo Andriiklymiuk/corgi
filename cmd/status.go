@@ -385,10 +385,7 @@ func runStatusUntilHealthy(rows []statusRow, interval, timeout time.Duration, js
 	}
 
 	deadline := time.Now().Add(timeout)
-	state := make(map[string]bool, len(rows))
-	for _, r := range rows {
-		state[r.Label] = false // unknown → assume down to surface initial transitions
-	}
+	state := initStateMap(rows)
 
 	if !jsonOut && !quiet {
 		fmt.Printf("%s⏳ waiting up to %s for %d targets to become healthy...%s\n",
@@ -397,21 +394,7 @@ func runStatusUntilHealthy(rows []statusRow, interval, timeout time.Duration, js
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	check := func() (allUp bool) {
-		allUp = true
-		for _, r := range rows {
-			ok, detail := probe(r)
-			prev := state[r.Label]
-			state[r.Label] = ok
-			if ok != prev {
-				emitTransition(r, ok, detail, jsonOut, quiet)
-			}
-			if !ok {
-				allUp = false
-			}
-		}
-		return
-	}
+	check := func() bool { return checkAllHealthy(rows, state, jsonOut, quiet) }
 
 	if check() {
 		finalize(rows, jsonOut, quiet, true)
@@ -427,6 +410,30 @@ func runStatusUntilHealthy(rows []statusRow, interval, timeout time.Duration, js
 			os.Exit(1)
 		}
 	}
+}
+
+func initStateMap(rows []statusRow) map[string]bool {
+	state := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		state[r.Label] = false
+	}
+	return state
+}
+
+func checkAllHealthy(rows []statusRow, state map[string]bool, jsonOut, quiet bool) bool {
+	allUp := true
+	for _, r := range rows {
+		ok, detail := probe(r)
+		prev := state[r.Label]
+		state[r.Label] = ok
+		if ok != prev {
+			emitTransition(r, ok, detail, jsonOut, quiet)
+		}
+		if !ok {
+			allUp = false
+		}
+	}
+	return allUp
 }
 
 func emitTransition(r statusRow, ok bool, detail string, jsonOut, quiet bool) {
