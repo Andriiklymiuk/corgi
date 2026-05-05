@@ -54,6 +54,9 @@ coverage-html: test
 coverage-by-pkg: test
 	go tool cover -func=coverage.out | grep -v _test.go | awk '{pkg=$$1; sub(/\/[^\/]+$$/, "", pkg); cov[pkg]+=$$3+0; n[pkg]++} END {for (p in cov) printf "%s\t%.1f%%\n", p, cov[p]/n[p]}' | sort -k2 -n
 
+test\:cov:
+	go test ./... -timeout 30s -coverprofile=/tmp/coverage.out -covermode=atomic 2>&1 | tail -10 && go tool cover -func=/tmp/coverage.out | tail -1
+
 .PHONY: \
 fixHooks \
 release \
@@ -67,4 +70,5 @@ incrementVersionMajor \
 test \
 coverage \
 coverage-html \
-coverage-by-pkg
+coverage-by-pkg \
+test\:cov
