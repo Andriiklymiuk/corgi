@@ -94,9 +94,7 @@ func KillAllStoredProcesses() {
 // absolute path of the env file to source before the command. When omitted
 // or empty, defaults to `<path>/.env` if present.
 func RunServiceCmd(
-	serviceName string,
-	serviceCommand string,
-	path string,
+	serviceName, serviceCommand, path string,
 	interactive bool,
 	envFile ...string,
 ) error {
@@ -110,88 +108,85 @@ func RunServiceCmd(
 		if line == "" {
 			continue
 		}
-
-		// If the line ends with a backslash, remove it and append the line to the next
 		if strings.HasSuffix(line, "\\") {
 			accumulatedCommand += strings.TrimSuffix(line, "\\") + " "
 			continue
 		}
-
-		// Execute the accumulated command if any, otherwise execute the line itself
 		finalCommand := line
 		if accumulatedCommand != "" {
 			finalCommand = accumulatedCommand + line
 			accumulatedCommand = ""
 		}
-		executingMessage := fmt.Sprintf("\n🚀 🤖 Executing command for %s: ", serviceName)
-		fmt.Println(executingMessage, art.GreenColor, finalCommand, art.WhiteColor)
-
-		commandSlice := strings.Fields(finalCommand)
-		if len(commandSlice) == 0 {
-			continue
-		}
-
-		shellCommand := withEnvSource(finalCommand, resolvedEnvFile)
-		cmd := exec.Command("/bin/sh", "-c", shellCommand)
-		cmd.Dir = path
-
-		if interactive {
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-
-			done := make(chan error, 1)
-
-			err := cmd.Start()
-			if err != nil {
-				return err
-			}
-
-			go func() {
-				done <- cmd.Wait()
-			}()
-
-			if err := <-done; err != nil {
-				return err
-			}
-		} else {
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			SetProcessGroup(cmd)
-			if err := cmd.Start(); err != nil {
-				return err
-			}
-
-			addProcess(cmd.Process)
-
-			if err := cmd.Wait(); err != nil {
-				removeProcess(cmd.Process)
-				// Check the error directly
-				if strings.Contains(err.Error(), "executable file not found") {
-					// Attempt to install missing command
-					missingCommand := commandSlice[0]
-					if cmdInfo, ok := CommandInstructions[missingCommand]; ok {
-						fmt.Printf("\n❗%s is missing. Attempting to install it using: %s\n", missingCommand, cmdInfo.Install)
-						installCmd := exec.Command("/bin/bash", "-c", cmdInfo.Install)
-						installCmd.Dir = path
-						installCmd.Stdout = os.Stdout
-						installCmd.Stderr = os.Stderr
-						if err := installCmd.Run(); err != nil {
-							return fmt.Errorf("failed to install %s: %v", missingCommand, err)
-						}
-						// Rerun the original command
-						fmt.Printf("\n🔄 Retrying the command: %s\n", finalCommand)
-						return RunServiceCmd(serviceName, finalCommand, path, interactive, envFile...)
-					} else {
-						return fmt.Errorf("unknown command %s, no install instructions found", missingCommand)
-					}
-				} else {
-					return err
-				}
-			}
+		if err := executeShellLine(serviceName, finalCommand, path, interactive, resolvedEnvFile, envFile); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func executeShellLine(serviceName, finalCommand, path string, interactive bool, resolvedEnvFile string, envFile []string) error {
+	fmt.Printf("\n🚀 🤖 Executing command for %s:  %s%s%s\n", serviceName, art.GreenColor, finalCommand, art.WhiteColor)
+	commandSlice := strings.Fields(finalCommand)
+	if len(commandSlice) == 0 {
+		return nil
+	}
+	shellCommand := withEnvSource(finalCommand, resolvedEnvFile)
+	cmd := exec.Command("/bin/sh", "-c", shellCommand)
+	cmd.Dir = path
+
+	if interactive {
+		return runInteractive(cmd)
+	}
+	return runManaged(cmd, commandSlice, serviceName, finalCommand, path, envFile)
+}
+
+func runInteractive(cmd *exec.Cmd) error {
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	done := make(chan error, 1)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { done <- cmd.Wait() }()
+	return <-done
+}
+
+func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand, path string, envFile []string) error {
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	SetProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	addProcess(cmd.Process)
+	if err := cmd.Wait(); err != nil {
+		removeProcess(cmd.Process)
+		return handleCommandFailure(err, commandSlice, serviceName, finalCommand, path, envFile)
+	}
+	return nil
+}
+
+func handleCommandFailure(err error, commandSlice []string, serviceName, finalCommand, path string, envFile []string) error {
+	if !strings.Contains(err.Error(), "executable file not found") {
+		return err
+	}
+	missingCommand := commandSlice[0]
+	cmdInfo, ok := CommandInstructions[missingCommand]
+	if !ok {
+		return fmt.Errorf("unknown command %s, no install instructions found", missingCommand)
+	}
+	fmt.Printf("\n❗%s is missing. Attempting to install it using: %s\n", missingCommand, cmdInfo.Install)
+	installCmd := exec.Command("/bin/bash", "-c", cmdInfo.Install)
+	installCmd.Dir = path
+	installCmd.Stdout = os.Stdout
+	installCmd.Stderr = os.Stderr
+	if err := installCmd.Run(); err != nil {
+		return fmt.Errorf("failed to install %s: %v", missingCommand, err)
+	}
+	fmt.Printf("\n🔄 Retrying the command: %s\n", finalCommand)
+	return RunServiceCmd(serviceName, finalCommand, path, false, envFile...)
 }
 
 // RunServiceCommands runs a list of commands for a service.

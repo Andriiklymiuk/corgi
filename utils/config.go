@@ -255,264 +255,305 @@ var CorgiComposeFileContent *CorgiCompose
 
 // Get corgi-compose info from path to corgi-compose.yml file
 func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
-	pathToCorgiComposeFile, err := determineCorgiComposePath(cobra)
+	pathToCorgiComposeFile, corgiYaml, err := loadCorgiComposeFile(cobra)
 	if err != nil {
 		return nil, err
 	}
 
+	describeFlag, err := cobra.Root().Flags().GetBool("describe")
+	if err != nil {
+		return nil, err
+	}
+
+	corgi := buildBaseCorgi(corgiYaml)
+
+	if err := SaveExecPath(corgi.Name, corgi.Description, pathToCorgiComposeFile); err != nil {
+		fmt.Println("failed to save corgi-compose file path: ", err)
+	}
+
+	dbServices, err := parseDatabaseServices(corgiYaml.DatabaseServices, describeFlag)
+	if err != nil {
+		return nil, err
+	}
+	corgi.DatabaseServices = dbServices
+
+	corgi.Services = parseServices(corgiYaml.Services, describeFlag)
+	corgi.Required = parseRequired(corgiYaml.Required, describeFlag)
+
+	CorgiComposeFileContent = &corgi
+	return &corgi, nil
+}
+
+func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error) {
+	pathToCorgiComposeFile, err := determineCorgiComposePath(cobra)
+	if err != nil {
+		return "", CorgiComposeYaml{}, err
+	}
+
 	pathToCorgiComposeFile, err = filepath.Abs(pathToCorgiComposeFile)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't get absolute path for %s: %v", pathToCorgiComposeFile, err)
+		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't get absolute path for %s: %v", pathToCorgiComposeFile, err)
 	}
 
 	fmt.Println("Using corgi-compose file:", pathToCorgiComposeFile)
 	CorgiComposePath = pathToCorgiComposeFile
 	CorgiComposePathDir = filepath.Dir(pathToCorgiComposeFile)
 
-	describeFlag, err := cobra.Root().Flags().GetBool("describe")
-	if err != nil {
-		return nil, err
-	}
 	file, err := os.ReadFile(pathToCorgiComposeFile)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't read %s", pathToCorgiComposeFile)
+		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read %s", pathToCorgiComposeFile)
 	}
-
-	var corgi CorgiCompose
 
 	var corgiYaml CorgiComposeYaml
-	err = yaml.Unmarshal(file, &corgiYaml)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't unmarshal file %s: %v", pathToCorgiComposeFile, err)
+	if err := yaml.Unmarshal(file, &corgiYaml); err != nil {
+		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't unmarshal file %s: %v", pathToCorgiComposeFile, err)
 	}
+	return pathToCorgiComposeFile, corgiYaml, nil
+}
 
-	corgi.Init = corgiYaml.Init
-	corgi.BeforeStart = corgiYaml.BeforeStart
-	corgi.Start = corgiYaml.Start
-	corgi.AfterStart = corgiYaml.AfterStart
-	corgi.UseDocker = corgiYaml.UseDocker
-	corgi.UseAwsVpn = corgiYaml.UseAwsVpn
-
-	corgi.Name = corgiYaml.Name
-	corgi.Description = corgiYaml.Description
-
-	dbServicesData := corgiYaml.DatabaseServices
-
-	if err := SaveExecPath(
-		corgi.Name,
-		corgi.Description,
-		pathToCorgiComposeFile,
-	); err != nil {
-		fmt.Println("failed to save corgi-compose file path: ", err)
+func buildBaseCorgi(y CorgiComposeYaml) CorgiCompose {
+	return CorgiCompose{
+		Init:        y.Init,
+		BeforeStart: y.BeforeStart,
+		Start:       y.Start,
+		AfterStart:  y.AfterStart,
+		UseDocker:   y.UseDocker,
+		UseAwsVpn:   y.UseAwsVpn,
+		Name:        y.Name,
+		Description: y.Description,
 	}
+}
 
+func parseDatabaseServices(dbServicesData map[string]DatabaseService, describeFlag bool) ([]DatabaseService, error) {
 	if len(dbServicesData) == 0 || !servicesCanBeAdded(DbServicesItemsFromFlag) {
 		fmt.Println("no db_services provided")
-	} else {
-		var dbServices []DatabaseService
-		for indexName, db := range dbServicesData {
-			if !IsServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
-				continue
-			}
-			var seedFromDb SeedFromDb
-			if db.SeedFromDbEnvPath != "" {
-				seedFromDb = getDbSourceFromPath(db.SeedFromDbEnvPath)
-			}
-
-			if (seedFromDb == SeedFromDb{}) {
-				seedFromDb = db.SeedFromDb
-			} else {
-				if db.SeedFromDb.Host != "" {
-					seedFromDb.Host = db.SeedFromDb.Host
-				}
-				if db.SeedFromDb.DatabaseName != "" {
-					seedFromDb.DatabaseName = db.SeedFromDb.DatabaseName
-				}
-				if db.SeedFromDb.User != "" {
-					seedFromDb.User = db.SeedFromDb.User
-				}
-				if db.SeedFromDb.Password != "" {
-					seedFromDb.Password = db.SeedFromDb.Password
-				}
-				if db.SeedFromDb.Port != 0 {
-					seedFromDb.Port = db.SeedFromDb.Port
-				}
-			}
-
-			var driver string
-			if db.Driver == "" {
-				driver = "postgres"
-			} else {
-				driver = db.Driver
-			}
-
-			var host string
-			if db.Host == "" {
-				host = "localhost"
-			} else {
-				host = db.Host
-			}
-
-			additional, finalUser, finalPassword := ProcessAdditionalDatabaseConfig(db, indexName)
-
-			services := db.Services
-			if driver == "localstack" {
-				services = autoInjectLocalstackServices(services, db)
-				if err := validateLocalstackConfig(indexName, db); err != nil {
-					return nil, err
-				}
-			}
-
-			dbToAdd := DatabaseService{
-				ServiceName:       indexName,
-				Driver:            driver,
-				Version:           db.Version,
-				Host:              host,
-				DatabaseName:      db.DatabaseName,
-				User:              finalUser,
-				Password:          finalPassword,
-				Port:              db.Port,
-				Port2:             db.Port2,
-				ManualRun:         db.ManualRun,
-				SeedFromDb:        seedFromDb,
-				SeedFromDbEnvPath: db.SeedFromDbEnvPath,
-				SeedFromFilePath:  db.SeedFromFilePath,
-				Additional:        additional,
-				Services:          services,
-				Queues:            db.Queues,
-				Buckets:           db.Buckets,
-				Topics:            db.Topics,
-				Subscriptions:     db.Subscriptions,
-				Secrets:           db.Secrets,
-				Parameters:        db.Parameters,
-				Streams:           db.Streams,
-				JWTSecret:         db.JWTSecret,
-				AuthUsers:         db.AuthUsers,
-				ConfigTomlPath:    db.ConfigTomlPath,
-				StudioPort:        db.StudioPort,
-				InbucketPort:      db.InbucketPort,
-				DbPort:            db.DbPort,
-				Image:             db.Image,
-				ContainerPort:     db.ContainerPort,
-				Environment:       db.Environment,
-				Volumes:           db.Volumes,
-				Command:           db.Command,
-				HealthCheck:       db.HealthCheck,
-			}
-			dbServices = append(dbServices, dbToAdd)
-
-			if describeFlag {
-				describeServiceInfo(dbToAdd)
-			}
+		return nil, nil
+	}
+	var dbServices []DatabaseService
+	for indexName, db := range dbServicesData {
+		if !IsServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
+			continue
 		}
-		corgi.DatabaseServices = dbServices
+		dbToAdd, err := buildDatabaseService(indexName, db)
+		if err != nil {
+			return nil, err
+		}
+		dbServices = append(dbServices, dbToAdd)
+		if describeFlag {
+			describeServiceInfo(dbToAdd)
+		}
+	}
+	return dbServices, nil
+}
+
+func buildDatabaseService(indexName string, db DatabaseService) (DatabaseService, error) {
+	seedFromDb := mergeSeedFromDb(db)
+	driver := db.Driver
+	if driver == "" {
+		driver = "postgres"
+	}
+	host := db.Host
+	if host == "" {
+		host = "localhost"
 	}
 
-	servicesData := corgiYaml.Services
+	additional, finalUser, finalPassword := ProcessAdditionalDatabaseConfig(db, indexName)
+
+	services := db.Services
+	if driver == "localstack" {
+		services = autoInjectLocalstackServices(services, db)
+		if err := validateLocalstackConfig(indexName, db); err != nil {
+			return DatabaseService{}, err
+		}
+	}
+
+	return DatabaseService{
+		ServiceName:       indexName,
+		Driver:            driver,
+		Version:           db.Version,
+		Host:              host,
+		DatabaseName:      db.DatabaseName,
+		User:              finalUser,
+		Password:          finalPassword,
+		Port:              db.Port,
+		Port2:             db.Port2,
+		ManualRun:         db.ManualRun,
+		SeedFromDb:        seedFromDb,
+		SeedFromDbEnvPath: db.SeedFromDbEnvPath,
+		SeedFromFilePath:  db.SeedFromFilePath,
+		Additional:        additional,
+		Services:          services,
+		Queues:            db.Queues,
+		Buckets:           db.Buckets,
+		Topics:            db.Topics,
+		Subscriptions:     db.Subscriptions,
+		Secrets:           db.Secrets,
+		Parameters:        db.Parameters,
+		Streams:           db.Streams,
+		JWTSecret:         db.JWTSecret,
+		AuthUsers:         db.AuthUsers,
+		ConfigTomlPath:    db.ConfigTomlPath,
+		StudioPort:        db.StudioPort,
+		InbucketPort:      db.InbucketPort,
+		DbPort:            db.DbPort,
+		Image:             db.Image,
+		ContainerPort:     db.ContainerPort,
+		Environment:       db.Environment,
+		Volumes:           db.Volumes,
+		Command:           db.Command,
+		HealthCheck:       db.HealthCheck,
+	}, nil
+}
+
+func mergeSeedFromDb(db DatabaseService) SeedFromDb {
+	var seedFromDb SeedFromDb
+	if db.SeedFromDbEnvPath != "" {
+		seedFromDb = getDbSourceFromPath(db.SeedFromDbEnvPath)
+	}
+	if (seedFromDb == SeedFromDb{}) {
+		return db.SeedFromDb
+	}
+	if db.SeedFromDb.Host != "" {
+		seedFromDb.Host = db.SeedFromDb.Host
+	}
+	if db.SeedFromDb.DatabaseName != "" {
+		seedFromDb.DatabaseName = db.SeedFromDb.DatabaseName
+	}
+	if db.SeedFromDb.User != "" {
+		seedFromDb.User = db.SeedFromDb.User
+	}
+	if db.SeedFromDb.Password != "" {
+		seedFromDb.Password = db.SeedFromDb.Password
+	}
+	if db.SeedFromDb.Port != 0 {
+		seedFromDb.Port = db.SeedFromDb.Port
+	}
+	return seedFromDb
+}
+
+func parseServices(servicesData map[string]Service, describeFlag bool) []Service {
 	if len(servicesData) == 0 || !servicesCanBeAdded(ServicesItemsFromFlag) {
 		fmt.Println("no services provided")
-	} else {
-		var services []Service
-		for indexName, service := range servicesData {
-			if !IsServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
-				continue
-			}
-			if service.Runner.Name == "docker" && service.Port == 0 {
-				exposedPort, err := GetExposedPortFromDockerfile(service)
-				if err != nil {
-					fmt.Println("couldn't get exposed port from Dockerfile: ", err)
-				}
-				if exposedPort != "" {
-					service.Port, err = strconv.Atoi(exposedPort)
-					if err != nil {
-						fmt.Println("error converting exposed port to integer:", err)
-					}
-				}
-			}
-			if service.Path == "" && service.CloneFrom != "" {
-				if strings.HasSuffix(service.CloneFrom, ".git") {
-					splitURL := strings.Split(service.CloneFrom, "/")
-					repoName := strings.TrimSuffix(splitURL[len(splitURL)-1], ".git")
-					service.Path = "./" + repoName
-				}
-			}
-
-			if !strings.HasPrefix(service.Path, "./") && service.Path != "" {
-				service.Path = "./" + service.Path
-			}
-
-			if service.Path == "." {
-				service.Path = ""
-			}
-			var absolutePath string
-			if strings.HasPrefix(service.Path, "./") {
-				absolutePath = strings.Replace(service.Path, "./", CorgiComposePathDir+"/", 1)
-			} else {
-				absolutePath = CorgiComposePathDir + "/" + service.Path
-			}
-
-			serviceToAdd := Service{
-				ServiceName:         indexName,
-				Path:                service.Path,
-				AbsolutePath:        absolutePath,
-				IgnoreEnv:           service.IgnoreEnv,
-				ManualRun:           service.ManualRun,
-				CloneFrom:           service.CloneFrom,
-				Branch:              service.Branch,
-				DependsOnServices:   service.DependsOnServices,
-				DependsOnDb:         service.DependsOnDb,
-				Exports:             service.Exports,
-				Environment:         service.Environment,
-				EnvPath:             service.EnvPath,
-				CopyEnvFromFilePath: service.CopyEnvFromFilePath,
-				LocalhostNameInEnv:  service.LocalhostNameInEnv,
-				Port:                service.Port,
-				PortAlias:           service.PortAlias,
-				BeforeStart:         service.BeforeStart,
-				AfterStart:          service.AfterStart,
-				Start:               service.Start,
-				Scripts:             service.Scripts,
-				InteractiveInput:    service.InteractiveInput,
-				AutoSourceEnv:       service.AutoSourceEnv,
-				Runner:              service.Runner,
-				Tunnel:              service.Tunnel,
-				HealthCheck:         service.HealthCheck,
-			}
-			services = append(services, serviceToAdd)
-
-			if describeFlag {
-				describeServiceInfo(serviceToAdd)
-			}
-		}
-		corgi.Services = services
+		return nil
 	}
+	var services []Service
+	for indexName, service := range servicesData {
+		if !IsServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
+			continue
+		}
+		serviceToAdd := buildService(indexName, service)
+		services = append(services, serviceToAdd)
+		if describeFlag {
+			describeServiceInfo(serviceToAdd)
+		}
+	}
+	return services
+}
 
-	requiredData := corgiYaml.Required
+func buildService(indexName string, service Service) Service {
+	resolveDockerExposedPort(&service)
+	resolveServicePathFromCloneFrom(&service)
+	normalizeServicePath(&service)
+	absolutePath := computeAbsolutePath(service.Path)
+
+	return Service{
+		ServiceName:         indexName,
+		Path:                service.Path,
+		AbsolutePath:        absolutePath,
+		IgnoreEnv:           service.IgnoreEnv,
+		ManualRun:           service.ManualRun,
+		CloneFrom:           service.CloneFrom,
+		Branch:              service.Branch,
+		DependsOnServices:   service.DependsOnServices,
+		DependsOnDb:         service.DependsOnDb,
+		Exports:             service.Exports,
+		Environment:         service.Environment,
+		EnvPath:             service.EnvPath,
+		CopyEnvFromFilePath: service.CopyEnvFromFilePath,
+		LocalhostNameInEnv:  service.LocalhostNameInEnv,
+		Port:                service.Port,
+		PortAlias:           service.PortAlias,
+		BeforeStart:         service.BeforeStart,
+		AfterStart:          service.AfterStart,
+		Start:               service.Start,
+		Scripts:             service.Scripts,
+		InteractiveInput:    service.InteractiveInput,
+		AutoSourceEnv:       service.AutoSourceEnv,
+		Runner:              service.Runner,
+		Tunnel:              service.Tunnel,
+		HealthCheck:         service.HealthCheck,
+	}
+}
+
+func resolveDockerExposedPort(service *Service) {
+	if service.Runner.Name != "docker" || service.Port != 0 {
+		return
+	}
+	exposedPort, err := GetExposedPortFromDockerfile(*service)
+	if err != nil {
+		fmt.Println("couldn't get exposed port from Dockerfile: ", err)
+	}
+	if exposedPort == "" {
+		return
+	}
+	port, err := strconv.Atoi(exposedPort)
+	if err != nil {
+		fmt.Println("error converting exposed port to integer:", err)
+		return
+	}
+	service.Port = port
+}
+
+func resolveServicePathFromCloneFrom(service *Service) {
+	if service.Path != "" || service.CloneFrom == "" {
+		return
+	}
+	if !strings.HasSuffix(service.CloneFrom, ".git") {
+		return
+	}
+	splitURL := strings.Split(service.CloneFrom, "/")
+	repoName := strings.TrimSuffix(splitURL[len(splitURL)-1], ".git")
+	service.Path = "./" + repoName
+}
+
+func normalizeServicePath(service *Service) {
+	if !strings.HasPrefix(service.Path, "./") && service.Path != "" {
+		service.Path = "./" + service.Path
+	}
+	if service.Path == "." {
+		service.Path = ""
+	}
+}
+
+func computeAbsolutePath(path string) string {
+	if strings.HasPrefix(path, "./") {
+		return strings.Replace(path, "./", CorgiComposePathDir+"/", 1)
+	}
+	return CorgiComposePathDir + "/" + path
+}
+
+func parseRequired(requiredData map[string]Required, describeFlag bool) []Required {
 	if len(requiredData) == 0 {
 		fmt.Println("no required instructions provided in file.")
 		fmt.Println("Tip: It is useful to provide required to showcase what is used and how to install it")
 		fmt.Println()
-	} else {
-		var requiredInstructions []Required
-		for indexName, required := range requiredData {
-			requiredToAdd := Required{
-				Name:     indexName,
-				Why:      required.Why,
-				Install:  required.Install,
-				Optional: required.Optional,
-				CheckCmd: required.CheckCmd,
-			}
-			requiredInstructions = append(requiredInstructions, requiredToAdd)
-
-			if describeFlag {
-				describeServiceInfo(requiredToAdd)
-			}
-		}
-		corgi.Required = requiredInstructions
+		return nil
 	}
-
-	CorgiComposeFileContent = &corgi
-	return &corgi, nil
+	var requiredInstructions []Required
+	for indexName, required := range requiredData {
+		requiredToAdd := Required{
+			Name:     indexName,
+			Why:      required.Why,
+			Install:  required.Install,
+			Optional: required.Optional,
+			CheckCmd: required.CheckCmd,
+		}
+		requiredInstructions = append(requiredInstructions, requiredToAdd)
+		if describeFlag {
+			describeServiceInfo(requiredToAdd)
+		}
+	}
+	return requiredInstructions
 }
 
 func GetDbServiceByName(databaseServiceName string, databaseServices []DatabaseService) (DatabaseService, error) {
@@ -669,79 +710,77 @@ func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error checking global flag: %v", err)
 	}
-
 	if globalFlag {
-		globalPath, err := selectGlobalExecPath()
-		if err != nil || globalPath == "" {
-			return "", fmt.Errorf("no global corgi path selected")
-		} else {
-			return globalPath, nil
-		}
+		return resolveGlobalPath()
 	}
+
 	filenameFlag, err := cobraCmd.Root().Flags().GetString("filename")
 	if err != nil {
 		return "", err
 	}
-	fromTemplateFlag, err := cobraCmd.Root().Flags().GetString("fromTemplate")
-	if err != nil {
-		return "", err
+
+	if path, handled, err := resolveTemplatePath(cobraCmd, filenameFlag); handled {
+		return path, err
 	}
 
+	if filenameFlag != "" {
+		return filenameFlag, nil
+	}
+	return getCorgiConfigFilePath()
+}
+
+func resolveGlobalPath() (string, error) {
+	globalPath, err := selectGlobalExecPath()
+	if err != nil || globalPath == "" {
+		return "", fmt.Errorf("no global corgi path selected")
+	}
+	return globalPath, nil
+}
+
+func resolveTemplatePath(cobraCmd *cobra.Command, filenameFlag string) (string, bool, error) {
+	fromTemplateFlag, err := cobraCmd.Root().Flags().GetString("fromTemplate")
+	if err != nil {
+		return "", true, err
+	}
 	if fromTemplateFlag != "" {
 		privateTokenFlag, err := cobraCmd.Root().Flags().GetString("privateToken")
 		if err != nil {
-			return "", err
+			return "", true, err
 		}
-
-		downloadedFile, err := DownloadFileFromURL(fromTemplateFlag, filenameFlag, privateTokenFlag)
+		downloaded, err := DownloadFileFromURL(fromTemplateFlag, filenameFlag, privateTokenFlag)
 		if err != nil {
-			return "", fmt.Errorf("error downloading template: %v", err)
+			return "", true, fmt.Errorf("error downloading template: %v", err)
 		}
-		return downloadedFile, nil
+		return downloaded, true, nil
 	}
 
 	templateNameFlag, err := cobraCmd.Root().Flags().GetString("fromTemplateName")
 	if err != nil {
-		return "", err
+		return "", true, err
 	}
 	if templateNameFlag != "" {
-		return DownloadExample(
-			cobraCmd,
-			templateNameFlag,
-			filenameFlag,
-		)
-	}
-	showExampleList, err := cobraCmd.Root().Flags().GetBool("exampleList")
-	if err != nil {
-		return "", err
+		path, err := DownloadExample(cobraCmd, templateNameFlag, filenameFlag)
+		return path, true, err
 	}
 
+	showExampleList, err := cobraCmd.Root().Flags().GetBool("exampleList")
+	if err != nil {
+		return "", true, err
+	}
 	if showExampleList {
 		selectedPath, err := PickItemFromListPrompt(
 			"Select corgi template to use",
 			ExtractExamplePaths(ExampleProjects),
 			"none",
 		)
-
 		if err != nil {
-			return "", fmt.Errorf("error selecting path: %v", err)
+			return "", true, fmt.Errorf("error selecting path: %v", err)
 		}
-		return DownloadExample(
-			cobraCmd,
-			selectedPath,
-			filenameFlag,
-		)
+		path, err := DownloadExample(cobraCmd, selectedPath, filenameFlag)
+		return path, true, err
 	}
 
-	if filenameFlag != "" {
-		return filenameFlag, nil
-	}
-	chosenPathToCorgiCompose, err := getCorgiConfigFilePath()
-	if err != nil {
-		return "", err
-	}
-	return chosenPathToCorgiCompose, nil
-
+	return "", false, nil
 }
 
 func selectGlobalExecPath() (string, error) {

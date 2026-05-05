@@ -228,52 +228,57 @@ func isDockerContextValid(dockerContext string) bool {
 
 func DockerInit(cobra *cobra.Command) error {
 	err := CheckDockerStatus()
+	if err == nil {
+		fmt.Println("docker is already running")
+		return nil
+	}
+	if err.Error() != errDockerNotOpened {
+		return err
+	}
+
+	dockerContext, err := cobra.Root().Flags().GetString("dockerContext")
 	if err != nil {
-		if err.Error() != errDockerNotOpened {
-			return err
-		}
+		fmt.Println("error on getting dockerContext flag", err)
+		return err
+	}
 
-		if err.Error() == errDockerNotOpened {
-			dockerContext, err := cobra.Root().Flags().GetString("dockerContext")
-			if err != nil {
-				fmt.Println("error on getting dockerContext flag", err)
-				return err
-			}
-			isDockerContextValid := isDockerContextValid(dockerContext)
+	if tryDockerContextStart(dockerContext) {
+		return nil
+	}
+	return startDockerAndWait()
+}
 
-			if isDockerContextValid && dockerContext != "default" && dockerContext != dockerLinuxCtx {
-				err = DockerContextConfigs[dockerContext].Start()
-				if err == nil {
-					fmt.Printf("%s run successfully\n", dockerContext)
-					return nil
-				}
-				fmt.Printf("couldn't open %s, error: %s", dockerContext, err)
-			}
+func tryDockerContextStart(dockerContext string) bool {
+	if !isDockerContextValid(dockerContext) || dockerContext == "default" || dockerContext == dockerLinuxCtx {
+		return false
+	}
+	err := DockerContextConfigs[dockerContext].Start()
+	if err == nil {
+		fmt.Printf("%s run successfully\n", dockerContext)
+		return true
+	}
+	fmt.Printf("couldn't open %s, error: %s", dockerContext, err)
+	return false
+}
 
-			err = StartDocker()
-			if err != nil {
-				return fmt.Errorf("couldn't open docker, error: %s", err)
-			}
-			s := spinner.New(spinner.CharSets[39], 100*time.Millisecond)
-			s.Suffix = " doing woof magic to start docker"
-			s.Start()
-			deadline := time.Now().Add(60 * time.Second)
-			for {
-				if CheckDockerStatus() == nil {
-					break
-				}
-				if time.Now().After(deadline) {
-					s.Stop()
-					return fmt.Errorf("docker daemon did not become reachable within 60s — start it manually and retry")
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-			s.Stop()
+func startDockerAndWait() error {
+	if err := StartDocker(); err != nil {
+		return fmt.Errorf("couldn't open docker, error: %s", err)
+	}
+	s := spinner.New(spinner.CharSets[39], 100*time.Millisecond)
+	s.Suffix = " doing woof magic to start docker"
+	s.Start()
+	defer s.Stop()
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if CheckDockerStatus() == nil {
 			return nil
 		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("docker daemon did not become reachable within 60s — start it manually and retry")
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
-	fmt.Println("docker is already running")
-	return nil
 }
 
 func GetLocalMachineIpAddress() (string, error) {
