@@ -63,6 +63,36 @@ By default all scripts are included to run.
 	)
 }
 
+func shouldRunScript(s utils.Script) bool {
+	if s.ManualRun && len(ScriptNamesFromFlag) == 0 {
+		fmt.Println(s.Name, "is not run, because it should be run manually (manualRun)")
+		return false
+	}
+	return utils.IsServiceIncludedInFlag(ScriptNamesFromFlag, s.Name)
+}
+
+func runScriptsForService(corgi *utils.CorgiCompose, service utils.Service) {
+	utils.CreateFileForPath(service.CopyEnvFromFilePath)
+	fmt.Println(art.BlueColor, "🐶 SCRIPT FOR", service.ServiceName, art.WhiteColor)
+	for _, scriptServiceCmd := range service.Scripts {
+		if !shouldRunScript(scriptServiceCmd) {
+			continue
+		}
+		if scriptServiceCmd.CopyEnvFromFilePath != "" {
+			utils.GenerateEnvForService(
+				corgi,
+				service,
+				scriptServiceCmd.CopyEnvFromFilePath,
+				IgnoreDependentServices,
+			)
+		}
+		runServiceScript(scriptServiceCmd, service.AbsolutePath)
+	}
+
+	// return to previous state of .env file
+	utils.GenerateEnvForService(corgi, service, "", false)
+}
+
 func runScript(cmd *cobra.Command, _ []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
@@ -75,42 +105,12 @@ func runScript(cmd *cobra.Command, _ []string) {
 	}
 
 	var isAnyScriptsFound bool
-
 	for _, service := range corgi.Services {
 		if service.Scripts == nil {
 			continue
 		}
-		utils.CreateFileForPath(service.CopyEnvFromFilePath)
-		fmt.Println(art.BlueColor, "🐶 SCRIPT FOR", service.ServiceName, art.WhiteColor)
 		isAnyScriptsFound = true
-		for _, scriptServiceCmd := range service.Scripts {
-			if scriptServiceCmd.ManualRun {
-				if len(ScriptNamesFromFlag) == 0 {
-					fmt.Println(scriptServiceCmd.Name, "is not run, because it should be run manually (manualRun)")
-					continue
-				}
-			}
-			if !utils.IsServiceIncludedInFlag(ScriptNamesFromFlag, scriptServiceCmd.Name) {
-				continue
-			}
-			if scriptServiceCmd.CopyEnvFromFilePath != "" {
-				utils.GenerateEnvForService(
-					corgi,
-					service,
-					scriptServiceCmd.CopyEnvFromFilePath,
-					IgnoreDependentServices,
-				)
-			}
-			runServiceScript(scriptServiceCmd, service.AbsolutePath)
-		}
-
-		// return to previous state of .env file
-		utils.GenerateEnvForService(
-			corgi,
-			service,
-			"",
-			false,
-		)
+		runScriptsForService(corgi, service)
 	}
 	if !isAnyScriptsFound {
 		fmt.Println(art.RedColor, "No scripts found", art.WhiteColor)

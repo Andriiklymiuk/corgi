@@ -57,17 +57,8 @@ func autoInjectLocalstackServices(services []string, db DatabaseService) []strin
 	return services
 }
 
-func validateLocalstackConfig(name string, db DatabaseService) error {
-	topics := map[string]bool{}
-	for _, t := range db.Topics {
-		topics[t] = true
-	}
-	queues := map[string]bool{}
-	for _, q := range db.Queues {
-		queues[q] = true
-	}
-
-	for i, sub := range db.Subscriptions {
+func validateSubscriptions(name string, subs []SnsSubscription, topics, queues map[string]bool) error {
+	for i, sub := range subs {
 		if sub.Topic == "" || sub.Queue == "" {
 			return fmt.Errorf(
 				"db_services.%s.subscriptions[%d]: topic and queue are required",
@@ -87,14 +78,11 @@ func validateLocalstackConfig(name string, db DatabaseService) error {
 			)
 		}
 	}
+	return nil
+}
 
-	for i, s := range db.Secrets {
-		if s.Name == "" {
-			return fmt.Errorf("db_services.%s.secrets[%d]: name required", name, i)
-		}
-	}
-
-	for i, p := range db.Parameters {
+func validateLocalstackParameters(name string, params []SsmParameter) error {
+	for i, p := range params {
 		if p.Name == "" {
 			return fmt.Errorf("db_services.%s.parameters[%d]: name required", name, i)
 		}
@@ -107,6 +95,28 @@ func validateLocalstackConfig(name string, db DatabaseService) error {
 			)
 		}
 	}
-
 	return nil
+}
+
+func validateLocalstackConfig(name string, db DatabaseService) error {
+	topics := map[string]bool{}
+	for _, t := range db.Topics {
+		topics[t] = true
+	}
+	queues := map[string]bool{}
+	for _, q := range db.Queues {
+		queues[q] = true
+	}
+
+	if err := validateSubscriptions(name, db.Subscriptions, topics, queues); err != nil {
+		return err
+	}
+
+	for i, s := range db.Secrets {
+		if s.Name == "" {
+			return fmt.Errorf("db_services.%s.secrets[%d]: name required", name, i)
+		}
+	}
+
+	return validateLocalstackParameters(name, db.Parameters)
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const corgiGeneratedMessage = "# 🐶 Auto generated vars by corgi"
+
 func getEnvFromFile(filePath, corgiGeneratedMessage string) string {
 	envFileContent := GetFileContent(filePath)
 	var envFileNormalizedContent []string
@@ -150,6 +152,35 @@ var crossServiceRefRe = regexp.MustCompile(`\$\{([A-Za-z0-9_\-/]+)\.([A-Za-z_][A
 //
 // Cycles only matter when both sides reference each other's exports. If a
 // cycle is detected, the error names the services involved.
+func collectProducers(s Service) map[string]bool {
+	producers := map[string]bool{}
+	for _, env := range s.Environment {
+		for _, m := range crossServiceRefRe.FindAllStringSubmatch(env, -1) {
+			producers[m[1]] = true
+		}
+	}
+	return producers
+}
+
+func addServiceEdges(s Service, byName map[string]Service, graph map[string][]string, indeg map[string]int) {
+	producers := collectProducers(s)
+	seen := map[string]bool{}
+	for _, d := range s.DependsOnServices {
+		if d.Name == s.ServiceName || !producers[d.Name] {
+			continue
+		}
+		if _, ok := byName[d.Name]; !ok {
+			continue
+		}
+		if seen[d.Name] {
+			continue
+		}
+		seen[d.Name] = true
+		graph[d.Name] = append(graph[d.Name], s.ServiceName)
+		indeg[s.ServiceName]++
+	}
+}
+
 func topoSortServices(services []Service) ([]Service, error) {
 	indeg := map[string]int{}
 	graph := map[string][]string{}
@@ -162,30 +193,7 @@ func topoSortServices(services []Service) ([]Service, error) {
 		}
 	}
 	for _, s := range services {
-		producers := map[string]bool{}
-		for _, env := range s.Environment {
-			for _, m := range crossServiceRefRe.FindAllStringSubmatch(env, -1) {
-				producers[m[1]] = true
-			}
-		}
-		seen := map[string]bool{}
-		for _, d := range s.DependsOnServices {
-			if d.Name == s.ServiceName {
-				continue
-			}
-			if !producers[d.Name] {
-				continue
-			}
-			if _, ok := byName[d.Name]; !ok {
-				continue
-			}
-			if seen[d.Name] {
-				continue
-			}
-			seen[d.Name] = true
-			graph[d.Name] = append(graph[d.Name], s.ServiceName)
-			indeg[s.ServiceName]++
-		}
+		addServiceEdges(s, byName, graph, indeg)
 	}
 
 	var queue []string
@@ -250,6 +258,35 @@ func resolveExports(service Service, producerEnv map[string]string) (map[string]
 // substituteCrossServiceRefs expands ${producer.VAR} references against the
 // cross-service exports map. Validates that the producer is listed in the
 // consumer's depends_on_services and that VAR is exported.
+func resolveCrossServiceRef(
+	consumer Service,
+	allowed map[string]bool,
+	exports ExportsMap,
+	producer, varName, match string,
+) (string, error) {
+	if !allowed[producer] {
+		return match, fmt.Errorf(
+			"service %q references ${%s.%s} but %q is not in depends_on_services",
+			consumer.ServiceName, producer, varName, producer,
+		)
+	}
+	producerExports, ok := exports[producer]
+	if !ok {
+		return match, fmt.Errorf(
+			"service %q references ${%s.%s} but %q has no exports",
+			consumer.ServiceName, producer, varName, producer,
+		)
+	}
+	val, ok := producerExports[varName]
+	if !ok {
+		return match, fmt.Errorf(
+			"service %q references ${%s.%s} but %q is not exported by %q",
+			consumer.ServiceName, producer, varName, varName, producer,
+		)
+	}
+	return val, nil
+}
+
 func substituteCrossServiceRefs(
 	envLine string,
 	consumer Service,
@@ -266,35 +303,9 @@ func substituteCrossServiceRefs(
 	var firstErr error
 	out := crossServiceRefRe.ReplaceAllStringFunc(envLine, func(match string) string {
 		m := crossServiceRefRe.FindStringSubmatch(match)
-		producer, varName := m[1], m[2]
-		if !allowed[producer] {
-			if firstErr == nil {
-				firstErr = fmt.Errorf(
-					"service %q references ${%s.%s} but %q is not in depends_on_services",
-					consumer.ServiceName, producer, varName, producer,
-				)
-			}
-			return match
-		}
-		producerExports, ok := exports[producer]
-		if !ok {
-			if firstErr == nil {
-				firstErr = fmt.Errorf(
-					"service %q references ${%s.%s} but %q has no exports",
-					consumer.ServiceName, producer, varName, producer,
-				)
-			}
-			return match
-		}
-		val, ok := producerExports[varName]
-		if !ok {
-			if firstErr == nil {
-				firstErr = fmt.Errorf(
-					"service %q references ${%s.%s} but %q is not exported by %q",
-					consumer.ServiceName, producer, varName, varName, producer,
-				)
-			}
-			return match
+		val, err := resolveCrossServiceRef(consumer, allowed, exports, m[1], m[2], match)
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
 		return val
 	})
@@ -367,38 +378,71 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) error {
 // stable or all references are resolved. Returns an error naming any
 // vars whose values still contain unresolved cross-refs after the
 // iteration limit (true VAR-level cycle).
+func buildServiceExports(s Service, envMap map[string]string) map[string]string {
+	exports := map[string]string{}
+	for _, entry := range s.Exports {
+		if idx := strings.Index(entry, "="); idx >= 0 {
+			name := strings.TrimSpace(entry[:idx])
+			rawVal := entry[idx+1:]
+			exports[name] = substituteEnvVarReferences(rawVal, envMap)
+			continue
+		}
+		name := strings.TrimSpace(entry)
+		if val, ok := envMap[name]; ok {
+			exports[name] = val
+		}
+	}
+	return exports
+}
+
+func iterateExportsFixedPoint(out ExportsMap, consumers map[string]Service, maxIter int) {
+	for iter := 0; iter < maxIter; iter++ {
+		changed := false
+		for serviceName, vars := range out {
+			consumer := consumers[serviceName]
+			for varName, val := range vars {
+				if !crossServiceRefRe.MatchString(val) {
+					continue
+				}
+				newVal, subErr := substituteCrossServiceRefs(val, consumer, out)
+				if subErr != nil {
+					continue
+				}
+				if newVal != val {
+					vars[varName] = newVal
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			return
+		}
+	}
+}
+
+func findStuckExports(out ExportsMap) []string {
+	var stuck []string
+	for serviceName, vars := range out {
+		for varName, val := range vars {
+			if crossServiceRefRe.MatchString(val) {
+				stuck = append(stuck, fmt.Sprintf("%s.%s=%q", serviceName, varName, val))
+			}
+		}
+	}
+	return stuck
+}
+
 func resolveExportsFixedPoint(c *CorgiCompose) (ExportsMap, error) {
 	out := ExportsMap{}
 	for _, s := range c.Services {
 		if len(s.Exports) == 0 {
 			continue
 		}
-		// Local env: copy-from-file + dependent service URLs + db emissions
-		// + port + own environment block with only ${OWN_VAR} substituted.
-		// Cross-service refs (${other.X}) are left as literal placeholders.
 		localEnv := buildLocalEnv(s, *c)
 		envMap := parseEnvVarsIntoMap(localEnv)
-
-		exports := map[string]string{}
-		for _, entry := range s.Exports {
-			if idx := strings.Index(entry, "="); idx >= 0 {
-				name := strings.TrimSpace(entry[:idx])
-				rawVal := entry[idx+1:]
-				exports[name] = substituteEnvVarReferences(rawVal, envMap)
-				continue
-			}
-			name := strings.TrimSpace(entry)
-			if val, ok := envMap[name]; ok {
-				exports[name] = val
-			}
-			// else: bare export of nonexistent var — silently dropped to
-			// match resolveExports() leniency in the fallback path.
-		}
-		out[s.ServiceName] = exports
+		out[s.ServiceName] = buildServiceExports(s, envMap)
 	}
 
-	// Build per-service consumer view for substituteCrossServiceRefs to
-	// validate that ${producer.VAR} producer is in depends_on_services.
 	consumers := map[string]Service{}
 	for _, s := range c.Services {
 		consumers[s.ServiceName] = s
@@ -410,42 +454,9 @@ func resolveExportsFixedPoint(c *CorgiCompose) (ExportsMap, error) {
 	}
 	maxIter = maxIter*2 + 1
 
-	for iter := 0; iter < maxIter; iter++ {
-		changed := false
-		for serviceName, vars := range out {
-			consumer := consumers[serviceName]
-			for varName, val := range vars {
-				if !crossServiceRefRe.MatchString(val) {
-					continue
-				}
-				newVal, subErr := substituteCrossServiceRefs(val, consumer, out)
-				if subErr != nil {
-					// Could be a transitive self-ref induced by cycle
-					// (e.g. value rewritten to ${self.X}). Don't abort —
-					// let the iteration converge and the post-loop
-					// stuck-check report it as a cycle.
-					continue
-				}
-				if newVal != val {
-					vars[varName] = newVal
-					changed = true
-				}
-			}
-		}
-		if !changed {
-			break
-		}
-	}
+	iterateExportsFixedPoint(out, consumers, maxIter)
 
-	var stuck []string
-	for serviceName, vars := range out {
-		for varName, val := range vars {
-			if crossServiceRefRe.MatchString(val) {
-				stuck = append(stuck, fmt.Sprintf("%s.%s=%q", serviceName, varName, val))
-			}
-		}
-	}
-	if len(stuck) > 0 {
+	if stuck := findStuckExports(out); len(stuck) > 0 {
 		return nil, fmt.Errorf(
 			"cycle in cross-service exports — could not resolve: %s",
 			strings.Join(stuck, ", "),
@@ -459,8 +470,6 @@ func resolveExportsFixedPoint(c *CorgiCompose) (ExportsMap, error) {
 // codependency fallback to compute each service's exports independently of
 // resolution order.
 func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
-	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
-
 	var envForService string
 	if service.CopyEnvFromFilePath != "" {
 		path := fmt.Sprintf("%s/%s", CorgiComposePathDir, service.CopyEnvFromFilePath)
@@ -488,143 +497,103 @@ func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 	return envForService
 }
 
-func GenerateEnvForService(
-	corgiCompose *CorgiCompose,
-	service Service,
-	copyEnvFilePath string,
-	ignoreDependentServicesEnvs bool,
-) error {
-	corgiGeneratedMessage := "# 🐶 Auto generated vars by corgi"
-	err := EnsurePathExists(service.AbsolutePath)
-	if err != nil {
-		fmt.Println("Error ensuring directory:", err)
-		return err
+func resolveCopyEnvPath(service Service, copyEnvFilePath string) string {
+	if copyEnvFilePath != "" {
+		return copyEnvFilePath
+	}
+	return service.CopyEnvFromFilePath
+}
+
+func appendEnvironmentLines(envForService string, service Service) (string, error) {
+	if len(service.Environment) == 0 {
+		return envForService, nil
+	}
+	existingEnvVars := parseEnvVarsIntoMap(envForService)
+	var updatedEnvironment []string
+	for _, envLine := range service.Environment {
+		crossExpanded, err := substituteCrossServiceRefs(envLine, service, currentExportsMap)
+		if err != nil {
+			fmt.Println(art.RedColor, "env generation for", service.ServiceName, ":", err, art.WhiteColor)
+			return "", err
+		}
+		updatedEnvLine := substituteEnvVarReferences(crossExpanded, existingEnvVars)
+		updatedEnvironment = append(updatedEnvironment, updatedEnvLine)
+	}
+	return envForService + "\n" + strings.Join(updatedEnvironment, "\n") + "\n", nil
+}
+
+func buildServiceEnvBody(service Service, corgiCompose *CorgiCompose, copyEnvFilePath string, ignoreDependentServicesEnvs bool) (string, error) {
+	var envForService string
+	pathToCopyEnvFileFrom := resolveCopyEnvPath(service, copyEnvFilePath)
+	if pathToCopyEnvFileFrom != "" {
+		copyEnvFromFileAbsolutePath := fmt.Sprintf("%s/%s", CorgiComposePathDir, pathToCopyEnvFileFrom)
+		envForService = getEnvFromFile(copyEnvFromFileAbsolutePath, corgiGeneratedMessage)
 	}
 
-	if service.IgnoreEnv {
-		fmt.Println(
-			art.RedColor,
-			"Ignoring env file for",
-			service.ServiceName,
-			art.WhiteColor,
-		)
+	if ignoreDependentServicesEnvs {
+		return envForService, nil
+	}
+
+	envForService += handleDependentServices(service, *corgiCompose)
+	envForService += handleDependsOnDb(service, *corgiCompose)
+
+	if service.Port != 0 {
+		portAlias := "PORT"
+		if service.PortAlias != "" {
+			portAlias = service.PortAlias
+		}
+		envForService += fmt.Sprintf("\n%s=%d", portAlias, service.Port)
+	}
+
+	return appendEnvironmentLines(envForService, service)
+}
+
+func recordExportsForService(service Service, envForService string) error {
+	if currentExportsMap == nil || len(service.Exports) == 0 {
 		return nil
 	}
-
-	var envForService string
-	var pathToCopyEnvFileFrom string
-	if copyEnvFilePath != "" {
-		pathToCopyEnvFileFrom = copyEnvFilePath
-	} else {
-		pathToCopyEnvFileFrom = service.CopyEnvFromFilePath
+	if _, already := currentExportsMap[service.ServiceName]; already {
+		return nil
 	}
-
-	if pathToCopyEnvFileFrom != "" {
-		copyEnvFromFileAbsolutePath := fmt.Sprintf(
-			"%s/%s",
-			CorgiComposePathDir,
-			pathToCopyEnvFileFrom,
-		)
-		envForService = getEnvFromFile(
-			copyEnvFromFileAbsolutePath,
-			corgiGeneratedMessage,
-		)
+	producerEnv := parseEnvVarsIntoMap(envForService)
+	resolved, err := resolveExports(service, producerEnv)
+	if err != nil {
+		fmt.Println(art.RedColor, "exports for", service.ServiceName, ":", err, art.WhiteColor)
+		return err
 	}
+	currentExportsMap[service.ServiceName] = resolved
+	return nil
+}
 
-	if !ignoreDependentServicesEnvs {
-		// add url for dependent service
-		envForService += handleDependentServices(service, *corgiCompose)
-
-		envForService += handleDependsOnDb(service, *corgiCompose)
-
-		if service.Port != 0 {
-			portAlias := "PORT"
-			if service.PortAlias != "" {
-				portAlias = service.PortAlias
-			}
-			envForService = fmt.Sprintf(
-				"%s%s",
-				envForService,
-				fmt.Sprintf("\n%s=%d", portAlias, service.Port),
-			)
-		}
-
-		if len(service.Environment) > 0 {
-			// Parse existing environment variables from envForService into a map for easy lookup.
-			existingEnvVars := parseEnvVarsIntoMap(envForService)
-
-			var updatedEnvironment []string
-			for _, envLine := range service.Environment {
-				// First expand cross-service ${producer.VAR} references, then own ${VAR}.
-				crossExpanded, err := substituteCrossServiceRefs(envLine, service, currentExportsMap)
-				if err != nil {
-					fmt.Println(art.RedColor, "env generation for", service.ServiceName, ":", err, art.WhiteColor)
-					return err
-				}
-				updatedEnvLine := substituteEnvVarReferences(crossExpanded, existingEnvVars)
-				updatedEnvironment = append(updatedEnvironment, updatedEnvLine)
-			}
-
-			// Join the updated environment strings and add them to envForService.
-			envForService += "\n" + strings.Join(updatedEnvironment, "\n") + "\n"
-		}
-	}
-
-	// Resolve this service's exports so later services can reference them.
-	// In the codependency fallback path, currentExportsMap is pre-populated
-	// by resolveExportsFixedPoint; don't clobber the resolved values.
-	if currentExportsMap != nil && len(service.Exports) > 0 {
-		if _, already := currentExportsMap[service.ServiceName]; !already {
-			producerEnv := parseEnvVarsIntoMap(envForService)
-			resolved, err := resolveExports(service, producerEnv)
-			if err != nil {
-				fmt.Println(art.RedColor, "exports for", service.ServiceName, ":", err, art.WhiteColor)
-				return err
-			}
-			currentExportsMap[service.ServiceName] = resolved
-		}
-	}
-
-	pathToEnvFile := GetPathToEnv(service)
-
-	var corgiEnvPosition []int
+func renderEnvFileContent(pathToEnvFile string, envForService string, service Service) string {
 	envFileContent := GetFileContent(pathToEnvFile)
-
+	var corgiEnvPosition []int
 	for index, line := range envFileContent {
 		if line == corgiGeneratedMessage {
 			corgiEnvPosition = append(corgiEnvPosition, index)
 		}
 	}
-
 	if len(corgiEnvPosition) == 2 {
-		envFileContent = removeFromToIndexes(
-			envFileContent,
-			corgiEnvPosition[0],
-			corgiEnvPosition[1],
-		)
+		envFileContent = removeFromToIndexes(envFileContent, corgiEnvPosition[0], corgiEnvPosition[1])
 	}
 
 	envFileContentString := strings.Join(envFileContent, "\n")
-
 	if len(envForService) != 0 {
-		envForService := fmt.Sprintf(
+		envFileContentString += fmt.Sprintf(
 			"\n%s\n%s\n%s\n",
 			corgiGeneratedMessage,
 			envForService,
 			corgiGeneratedMessage,
 		)
-		envFileContentString = envFileContentString + envForService
 	}
-
 	if service.LocalhostNameInEnv != "" {
-		envFileContentString = strings.ReplaceAll(
-			envFileContentString,
-			"localhost",
-			service.LocalhostNameInEnv,
-		)
+		envFileContentString = strings.ReplaceAll(envFileContentString, "localhost", service.LocalhostNameInEnv)
 	}
+	return envFileContentString
+}
 
-	if envFileContentString == "" {
+func writeEnvFile(pathToEnvFile, content string) error {
+	if content == "" {
 		return nil
 	}
 	f, err := os.OpenFile(pathToEnvFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
@@ -632,13 +601,42 @@ func GenerateEnvForService(
 		fmt.Println(err)
 		return err
 	}
-
 	defer f.Close()
-	if _, err = f.WriteString(envFileContentString); err != nil {
+	if _, err := f.WriteString(content); err != nil {
 		fmt.Println(err)
 		return err
 	}
 	return nil
+}
+
+func GenerateEnvForService(
+	corgiCompose *CorgiCompose,
+	service Service,
+	copyEnvFilePath string,
+	ignoreDependentServicesEnvs bool,
+) error {
+	if err := EnsurePathExists(service.AbsolutePath); err != nil {
+		fmt.Println("Error ensuring directory:", err)
+		return err
+	}
+
+	if service.IgnoreEnv {
+		fmt.Println(art.RedColor, "Ignoring env file for", service.ServiceName, art.WhiteColor)
+		return nil
+	}
+
+	envForService, err := buildServiceEnvBody(service, corgiCompose, copyEnvFilePath, ignoreDependentServicesEnvs)
+	if err != nil {
+		return err
+	}
+
+	if err := recordExportsForService(service, envForService); err != nil {
+		return err
+	}
+
+	pathToEnvFile := GetPathToEnv(service)
+	envFileContentString := renderEnvFileContent(pathToEnvFile, envForService, service)
+	return writeEnvFile(pathToEnvFile, envFileContentString)
 }
 
 func parseEnvVarsIntoMap(envForService string) map[string]string {

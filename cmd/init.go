@@ -152,85 +152,80 @@ func applyDriverPostInit(service utils.DatabaseService) error {
 	return nil
 }
 
-func CreateServices(services []utils.Service) {
-	if len(services) == 0 {
-		return
+func shouldCreateService(service utils.Service) bool {
+	if service.Runner.Name == "" || service.Runner.Name != "docker" {
+		return false
 	}
-
-	for _, service := range services {
-		if service.Runner.Name == "" {
-			continue
-		}
-		if service.Runner.Name != "docker" {
-			continue
-		}
-		if service.Port == 0 {
-			fmt.Printf(
-				"Service %s does not have port specified, skipping docker runner creation\n",
-				service.ServiceName,
-			)
-			continue
-		}
-		dockerfileExists, err := utils.CheckIfFileExistsInDirectory(
+	if service.Port == 0 {
+		fmt.Printf(
+			"Service %s does not have port specified, skipping docker runner creation\n",
+			service.ServiceName,
+		)
+		return false
+	}
+	dockerfileExists, err := utils.CheckIfFileExistsInDirectory(
+		service.AbsolutePath,
+		"Dockerfile",
+	)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if !dockerfileExists {
+		fmt.Printf(
+			"Service %s does not have Dockerfile in path %s\n",
+			service.ServiceName,
 			service.AbsolutePath,
-			"Dockerfile",
+		)
+		return false
+	}
+	return true
+}
+
+func writeServiceFiles(service utils.Service) bool {
+	for _, file := range getServiceFilesToCreate(service.Runner.Name) {
+		err := createFileFromTemplate(
+			service,
+			file.Name,
+			file.Template,
+			service.ServiceName,
+			utils.RootServicesFolder,
 		)
 		if err != nil {
-			fmt.Println(err)
-		}
-		if !dockerfileExists {
 			fmt.Printf(
-				"Service %s does not have Dockerfile in path %s\n",
-				service.ServiceName,
-				service.AbsolutePath,
-			)
-			continue
-		}
-
-		err = copyEnvFileWithSubstitutions(service)
-		if err != nil {
-			fmt.Printf(
-				"Error copying .env file for service %s: %s\n",
+				"error creating %s for service %s, error: %s\n",
+				file.Name,
 				service.ServiceName,
 				err,
 			)
-		} else {
-			fmt.Printf(
-				"Successfully copied .env file for service %s with substitutions\n",
-				service.ServiceName,
-			)
+			return false
 		}
+	}
+	return true
+}
 
-		filesToCreate := getServiceFilesToCreate(service.Runner.Name)
+func createSingleService(service utils.Service) {
+	if !shouldCreateService(service) {
+		return
+	}
 
-		var errDuringFileCreation bool
-		for _, file := range filesToCreate {
-			err := createFileFromTemplate(
-				service,
-				file.Name,
-				file.Template,
-				service.ServiceName,
-				utils.RootServicesFolder,
-			)
+	if err := copyEnvFileWithSubstitutions(service); err != nil {
+		fmt.Printf("Error copying .env file for service %s: %s\n", service.ServiceName, err)
+	} else {
+		fmt.Printf("Successfully copied .env file for service %s with substitutions\n", service.ServiceName)
+	}
 
-			if err != nil {
-				errDuringFileCreation = true
-				fmt.Printf(
-					"error creating %s for service %s, error: %s\n",
-					file.Name,
-					service.ServiceName,
-					err,
-				)
-				break
-			}
-		}
-		if errDuringFileCreation {
-			fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
-			fmt.Printf("Service %s had error during creation\n", service.ServiceName)
-		} else {
-			fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
-			fmt.Printf("Service %s was successfully created\n", service.ServiceName)
-		}
+	if writeServiceFiles(service) {
+		fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
+		fmt.Printf("Service %s was successfully created\n", service.ServiceName)
+	} else {
+		fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
+		fmt.Printf("Service %s had error during creation\n", service.ServiceName)
+	}
+}
+
+func CreateServices(services []utils.Service) {
+	for _, service := range services {
+		createSingleService(service)
 	}
 }
 

@@ -69,7 +69,29 @@ type statusRow struct {
 	URL   string
 }
 
-func runStatus(cmd *cobra.Command, _ []string) {
+type statusFlags struct {
+	watch        bool
+	interval     time.Duration
+	untilHealthy bool
+	timeout      time.Duration
+	jsonOut      bool
+	quiet        bool
+}
+
+func readStatusFlags(cmd *cobra.Command) statusFlags {
+	watch, _ := cmd.Flags().GetBool("watch")
+	interval, _ := cmd.Flags().GetDuration("interval")
+	untilHealthy, _ := cmd.Flags().GetBool("until-healthy")
+	if ready, _ := cmd.Flags().GetBool("ready"); ready {
+		untilHealthy = true
+	}
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	quiet, _ := cmd.Flags().GetBool("quiet")
+	return statusFlags{watch, interval, untilHealthy, timeout, jsonOut, quiet}
+}
+
+func resolveStatusRows(cmd *cobra.Command) []statusRow {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Printf("couldn't get services config: %s\n", err)
@@ -79,7 +101,7 @@ func runStatus(cmd *cobra.Command, _ []string) {
 	rows := collectStatusRows(corgi)
 	if len(rows) == 0 {
 		fmt.Println("No services with ports declared in corgi-compose.yml — nothing to check.")
-		return
+		return nil
 	}
 
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Port < rows[j].Port })
@@ -92,48 +114,49 @@ func runStatus(cmd *cobra.Command, _ []string) {
 			os.Exit(1)
 		}
 	}
+	return rows
+}
 
-	watch, _ := cmd.Flags().GetBool("watch")
-	interval, _ := cmd.Flags().GetDuration("interval")
-	untilHealthy, _ := cmd.Flags().GetBool("until-healthy")
-	if ready, _ := cmd.Flags().GetBool("ready"); ready {
-		untilHealthy = true
-	}
-	timeout, _ := cmd.Flags().GetDuration("timeout")
-	jsonOut, _ := cmd.Flags().GetBool("json")
-	quiet, _ := cmd.Flags().GetBool("quiet")
-
-	if untilHealthy {
-		runStatusUntilHealthy(rows, interval, timeout, jsonOut, quiet)
-		return
-	}
-	if watch {
-		runStatusWatch(rows, interval, jsonOut, quiet)
-		return
-	}
-
+func runStatusOnce(rows []statusRow, f statusFlags) {
 	up, down := probeAll(rows)
-	if jsonOut {
+	if f.jsonOut {
 		emitJSON(up, down)
 		if anyDown(up, down) {
 			os.Exit(1)
 		}
 		return
 	}
-	if !quiet {
+	if !f.quiet {
 		renderProbeResults(up, down)
 	}
-	if anyDown(up, down) == false {
-		if !quiet {
+	if !anyDown(up, down) {
+		if !f.quiet {
 			fmt.Printf("%s🎉 %d/%d healthy%s\n", art.GreenColor, len(up), len(up)+len(down), art.WhiteColor)
 		}
 		return
 	}
-	if !quiet {
+	if !f.quiet {
 		fmt.Printf("%s%d down, %d up%s — check `corgi run` logs for the failing services.\n",
 			art.RedColor, len(down), len(up), art.WhiteColor)
 	}
 	os.Exit(1)
+}
+
+func runStatus(cmd *cobra.Command, _ []string) {
+	rows := resolveStatusRows(cmd)
+	if rows == nil {
+		return
+	}
+
+	f := readStatusFlags(cmd)
+	switch {
+	case f.untilHealthy:
+		runStatusUntilHealthy(rows, f.interval, f.timeout, f.jsonOut, f.quiet)
+	case f.watch:
+		runStatusWatch(rows, f.interval, f.jsonOut, f.quiet)
+	default:
+		runStatusOnce(rows, f)
+	}
 }
 
 type probeResult struct {
@@ -218,32 +241,7 @@ func filterRows(rows []statusRow, names []string) []statusRow {
 	return out
 }
 
-func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet bool) {
-	if interval <= 0 {
-		interval = 2 * time.Second
-	}
-
-	if jsonOut {
-		results := probeAllParallel(rows)
-		up, down := splitResults(rows, results)
-		emitJSON(up, down)
-		runWatchAppend(rows, results, interval, true, false)
-		return
-	}
-
-	if quiet {
-		runWatchAppend(rows, nil, interval, false, true)
-		return
-	}
-
-	if !isStdoutTTY() {
-		results := probeAllParallel(rows)
-		frame := buildWatchFrame(rows, results, interval, time.Now())
-		fmt.Print(frame)
-		runWatchAppend(rows, results, interval, false, false)
-		return
-	}
-
+func runStatusWatchTTY(rows []statusRow, interval time.Duration) {
 	fmt.Print("\033[?1049h\033[H")
 	restore := func() { fmt.Print("\033[?1049l") }
 	defer restore()
@@ -267,6 +265,28 @@ func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet boo
 		buf.WriteString("\033[H\033[J")
 		buf.WriteString(buildWatchFrame(rows, results, interval, time.Now()))
 		fmt.Print(buf.String())
+	}
+}
+
+func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet bool) {
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+
+	switch {
+	case jsonOut:
+		results := probeAllParallel(rows)
+		up, down := splitResults(rows, results)
+		emitJSON(up, down)
+		runWatchAppend(rows, results, interval, true, false)
+	case quiet:
+		runWatchAppend(rows, nil, interval, false, true)
+	case !isStdoutTTY():
+		results := probeAllParallel(rows)
+		fmt.Print(buildWatchFrame(rows, results, interval, time.Now()))
+		runWatchAppend(rows, results, interval, false, false)
+	default:
+		runStatusWatchTTY(rows, interval)
 	}
 }
 
