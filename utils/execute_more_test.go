@@ -140,6 +140,105 @@ func TestGetPathToDbService(t *testing.T) {
 	}
 }
 
+func TestGetMakefileCommandsInDirectoryNoMakefile(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "x")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := GetMakefileCommandsInDirectory("x")
+	if err == nil || !strings.Contains(err.Error(), "no makefile") {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestGetMakefileCommandsInDirectoryDirMissing(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = "/nonexistent/zzz"
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	_, err := GetMakefileCommandsInDirectory("x")
+	if err == nil {
+		t.Error("expected err")
+	}
+}
+
+func TestExecuteCommandRunMissing(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "x")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ExecuteCommandRun("x", "command-not-exists-zzz"); err == nil {
+		t.Error("expected err")
+	}
+}
+
+func TestExecuteServiceCommandRunMissing(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootServicesFolder, "x")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ExecuteServiceCommandRun("x", "command-not-exists-zzz"); err == nil {
+		t.Error("expected err")
+	}
+}
+
+func TestExecuteCommandRunEcho(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "x")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ExecuteCommandRun("x", "echo", "hi"); err != nil {
+		t.Errorf("err: %v", err)
+	}
+}
+
+func TestExecuteMakeCommandFails(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "x")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := ExecuteMakeCommand("x", "noTarget")
+	if err == nil {
+		t.Error("expected err")
+	}
+}
+
+func TestCheckCommandExistsTrueCommand(t *testing.T) {
+	if err := CheckCommandExists("true"); err != nil {
+		t.Errorf("err: %v", err)
+	}
+}
+
+func TestCheckCommandExistsMissingCommand(t *testing.T) {
+	err := CheckCommandExists("totally-nonexistent-command-zzz")
+	_ = err
+}
+
 func TestGetPathToService(t *testing.T) {
 	prev := CorgiComposePathDir
 	CorgiComposePathDir = "/proj"

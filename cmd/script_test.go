@@ -39,3 +39,16 @@ func TestShouldRunScriptManualButForcedByFlag(t *testing.T) {
 		t.Error("want true (flag forces inclusion)")
 	}
 }
+
+func TestRunServiceScriptEmpty(t *testing.T) {
+	runServiceScript(utils.Script{Name: "x", Commands: nil}, "")
+}
+
+func TestRunServiceScriptEcho(t *testing.T) {
+	runServiceScript(utils.Script{Name: "x", Commands: []string{"echo hi"}}, "")
+}
+
+func TestRunScriptsForServiceNoScripts(t *testing.T) {
+	corgi := &utils.CorgiCompose{}
+	runScriptsForService(corgi, utils.Service{ServiceName: "x"})
+}
