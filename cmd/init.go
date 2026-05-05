@@ -316,121 +316,109 @@ func CheckClonedReposExistence(services []utils.Service) bool {
 
 func CloneServices(services []utils.Service) {
 	for _, service := range services {
-		if service.Path == "" {
-			fmt.Println("\nNo path for", service.ServiceName, ". Using current directory")
-			continue
-		}
+		cloneOneService(service)
+	}
+}
 
-		_, err := os.Stat(service.AbsolutePath)
-		if err != nil {
-			if !errors.Is(err, os.ErrNotExist) {
-				fmt.Println(err)
-				continue
-			}
-			if service.CloneFrom == "" {
-				fmt.Printf(
-					"No directory %s, please provide cloneFrom url or create service in the path",
-					service.CloneFrom,
-				)
-				continue
-			}
-			pathSlice := strings.Split(service.AbsolutePath, "/")
-			pathWithoutLastFolder := strings.Join(pathSlice[:len(pathSlice)-1], "/")
-			err := os.MkdirAll(pathWithoutLastFolder, os.ModePerm)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
+func cloneOneService(service utils.Service) {
+	if service.Path == "" {
+		fmt.Println("\nNo path for", service.ServiceName, ". Using current directory")
+		return
+	}
 
-			err = utils.RunServiceCmd(
-				service.ServiceName,
-				fmt.Sprintf(
-					"git clone %s %s",
-					service.CloneFrom,
-					service.AbsolutePath,
-				),
-				pathWithoutLastFolder,
-				true,
-			)
-			if err != nil {
-				if strings.Contains(err.Error(), "exit status 128") {
-					fmt.Printf(
-						"Repo %s already exists in %s, skipping clone",
-						service.CloneFrom,
-						service.AbsolutePath,
-					)
-					continue
-				}
-				fmt.Printf(
-					`output error: %s, in path %s with git clone %s`,
-					err,
-					pathWithoutLastFolder,
-					service.CloneFrom,
-				)
-				continue
-			}
-			if service.Branch != "" {
-				err = utils.RunServiceCmd(
-					service.ServiceName,
-					fmt.Sprintf(
-						"git checkout %s",
-						service.Branch,
-					),
-					service.AbsolutePath,
-					true,
-				)
-				if err != nil {
-					fmt.Printf(`output error: %s, in path %s with git checkout %s
-					`, err, service.AbsolutePath, service.Branch)
-					continue
-				}
-				err = utils.RunServiceCmd(
-					service.ServiceName,
-					"corgi pull --silent",
-					service.AbsolutePath,
-					true,
-				)
-				if err != nil {
-					fmt.Printf(`output error: %s, in path %s with git pull %s
-					`, err, service.AbsolutePath, service.Branch)
-					continue
-				}
-			}
-		} else {
-			if service.CloneFrom == "" {
-				continue
-			}
-			if service.Branch != "" {
-				err := CheckoutToPrimaryBranch(
-					service.ServiceName,
-					service.AbsolutePath,
-					service.Branch,
-					false,
-				)
-				if err != nil {
-					fmt.Println(err)
-				}
-			}
+	_, statErr := os.Stat(service.AbsolutePath)
+	switch {
+	case statErr == nil:
+		handleExistingServiceDir(service)
+	case errors.Is(statErr, os.ErrNotExist):
+		if !cloneMissingServiceDir(service) {
+			return
 		}
-		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
-			service.AbsolutePath,
-			utils.CorgiComposeDefaultName,
+	default:
+		fmt.Println(statErr)
+		return
+	}
+
+	maybeRunNestedCorgiInit(service)
+}
+
+func cloneMissingServiceDir(service utils.Service) bool {
+	if service.CloneFrom == "" {
+		fmt.Printf(
+			"No directory %s, please provide cloneFrom url or create service in the path",
+			service.CloneFrom,
 		)
-		if err != nil {
-			fmt.Println(err)
-		}
-		if corgiComposeExists && service.CloneFrom != "" {
-			err = utils.RunServiceCmd(
-				service.ServiceName,
-				"corgi init --silent",
-				service.AbsolutePath,
-				true,
-			)
-			if err != nil {
-				fmt.Printf(`output error: %s, in path %s with corgi init --silent %s
-					`, err, service.AbsolutePath, service.Branch)
-			}
-		}
+		return false
+	}
+	pathSlice := strings.Split(service.AbsolutePath, "/")
+	pathWithoutLastFolder := strings.Join(pathSlice[:len(pathSlice)-1], "/")
+	if err := os.MkdirAll(pathWithoutLastFolder, os.ModePerm); err != nil {
+		fmt.Println(err)
+		return false
+	}
+	if !runGitClone(service, pathWithoutLastFolder) {
+		return false
+	}
+	if service.Branch != "" {
+		runBranchCheckout(service)
+	}
+	return true
+}
+
+func runGitClone(service utils.Service, pathWithoutLastFolder string) bool {
+	err := utils.RunServiceCmd(
+		service.ServiceName,
+		fmt.Sprintf("git clone %s %s", service.CloneFrom, service.AbsolutePath),
+		pathWithoutLastFolder,
+		true,
+	)
+	if err == nil {
+		return true
+	}
+	if strings.Contains(err.Error(), "exit status 128") {
+		fmt.Printf("Repo %s already exists in %s, skipping clone", service.CloneFrom, service.AbsolutePath)
+		return false
+	}
+	fmt.Printf("output error: %s, in path %s with git clone %s", err, pathWithoutLastFolder, service.CloneFrom)
+	return false
+}
+
+func runBranchCheckout(service utils.Service) {
+	err := utils.RunServiceCmd(
+		service.ServiceName,
+		fmt.Sprintf("git checkout %s", service.Branch),
+		service.AbsolutePath,
+		true,
+	)
+	if err != nil {
+		fmt.Printf("output error: %s, in path %s with git checkout %s\n", err, service.AbsolutePath, service.Branch)
+		return
+	}
+	err = utils.RunServiceCmd(service.ServiceName, "corgi pull --silent", service.AbsolutePath, true)
+	if err != nil {
+		fmt.Printf("output error: %s, in path %s with git pull %s\n", err, service.AbsolutePath, service.Branch)
+	}
+}
+
+func handleExistingServiceDir(service utils.Service) {
+	if service.CloneFrom == "" || service.Branch == "" {
+		return
+	}
+	if err := CheckoutToPrimaryBranch(service.ServiceName, service.AbsolutePath, service.Branch, false); err != nil {
+		fmt.Println(err)
+	}
+}
+
+func maybeRunNestedCorgiInit(service utils.Service) {
+	corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(service.AbsolutePath, utils.CorgiComposeDefaultName)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if !corgiComposeExists || service.CloneFrom == "" {
+		return
+	}
+	if err := utils.RunServiceCmd(service.ServiceName, "corgi init --silent", service.AbsolutePath, true); err != nil {
+		fmt.Printf("output error: %s, in path %s with corgi init --silent %s\n", err, service.AbsolutePath, service.Branch)
 	}
 }
 

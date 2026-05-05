@@ -81,43 +81,58 @@ func buildTargetsFromCompose(cmd *cobra.Command, args []string, flagProvider tun
 
 	requested := parseRequestedServices(args)
 	var targets []tunnelTarget
-
 	for _, s := range corgi.Services {
-		if s.Port == 0 {
-			continue
+		t, skip, err := buildTunnelTargetForService(s, requested, flagProvider, flagSet)
+		if err != nil {
+			return nil, err
 		}
-		if requested != nil {
-			if !requested[s.ServiceName] {
-				continue
-			}
-		} else if s.ManualRun {
+		if skip {
 			continue
-		}
-
-		t := tunnelTarget{service: s.ServiceName, port: s.Port}
-		if s.Tunnel != nil {
-			named, perTargetProvider, err := resolveTunnel(s, flagProvider, flagSet)
-			if err != nil {
-				return nil, fmt.Errorf("✗ %s: %w", s.ServiceName, err)
-			}
-			t.named = named
-			t.providerOvr = perTargetProvider
 		}
 		targets = append(targets, t)
 	}
 
+	warnUnknownRequested(requested, targets)
+	return targets, nil
+}
+
+func buildTunnelTargetForService(s utils.Service, requested map[string]bool, flagProvider tunnel.Provider, flagSet bool) (tunnelTarget, bool, error) {
+	if s.Port == 0 {
+		return tunnelTarget{}, true, nil
+	}
 	if requested != nil {
-		seen := map[string]bool{}
-		for _, t := range targets {
-			seen[t.service] = true
+		if !requested[s.ServiceName] {
+			return tunnelTarget{}, true, nil
 		}
-		for name := range requested {
-			if !seen[name] {
-				fmt.Printf("⚠ unknown service %q (no compose entry or no port: set)\n", name)
-			}
+	} else if s.ManualRun {
+		return tunnelTarget{}, true, nil
+	}
+
+	t := tunnelTarget{service: s.ServiceName, port: s.Port}
+	if s.Tunnel != nil {
+		named, perTargetProvider, err := resolveTunnel(s, flagProvider, flagSet)
+		if err != nil {
+			return tunnelTarget{}, false, fmt.Errorf("✗ %s: %w", s.ServiceName, err)
+		}
+		t.named = named
+		t.providerOvr = perTargetProvider
+	}
+	return t, false, nil
+}
+
+func warnUnknownRequested(requested map[string]bool, targets []tunnelTarget) {
+	if requested == nil {
+		return
+	}
+	seen := map[string]bool{}
+	for _, t := range targets {
+		seen[t.service] = true
+	}
+	for name := range requested {
+		if !seen[name] {
+			fmt.Printf("⚠ unknown service %q (no compose entry or no port: set)\n", name)
 		}
 	}
-	return targets, nil
 }
 
 func preflightTargets(targets []tunnelTarget, provider tunnel.Provider) error {

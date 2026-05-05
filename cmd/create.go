@@ -216,150 +216,172 @@ func askAndSetFields(item interface{}) {
 		if yamlTag == "-" {
 			continue
 		}
-		prompt := formatPrompt(yamlTag, field.Name)
-		optionsTag := field.Tag.Get("options")
-		if optionsTag != "" {
-			options := strings.Split(optionsTag, ",")
-			selectPrompt := promptui.Select{
-				Label: prompt,
-				Items: options,
-			}
-			_, selected, err := selectPrompt.Run()
-			if err != nil {
-				fmt.Printf("Prompt failed %v\n", err)
-				return
-			}
+		if !askField(v, i, field, yamlTag) {
+			return
+		}
+	}
+}
 
-			if selected == "❌skip" {
-				v.Field(i).SetString("")
-			} else {
-				v.Field(i).SetString(selected)
-			}
+func askField(v reflect.Value, i int, field reflect.StructField, yamlTag string) bool {
+	prompt := formatPrompt(yamlTag, field.Name)
+	if optionsTag := field.Tag.Get("options"); optionsTag != "" {
+		return promptOptions(v.Field(i), prompt, optionsTag)
+	}
+	switch field.Type.Kind() {
+	case reflect.Struct:
+		promptStructField(v.Field(i), field)
+	case reflect.Ptr:
+		promptPtrField(v.Field(i), field, prompt)
+	case reflect.Slice:
+		promptSliceField(v.Field(i), field, prompt)
+	case reflect.Map:
+		promptMapField(v.Field(i), field, prompt)
+	default:
+		setUserInputToField(v.Field(i), prompt, field.Name == "ServiceName" || field.Name == "Name")
+	}
+	return true
+}
+
+func promptOptions(field reflect.Value, prompt, optionsTag string) bool {
+	options := strings.Split(optionsTag, ",")
+	selectPrompt := promptui.Select{Label: prompt, Items: options}
+	_, selected, err := selectPrompt.Run()
+	if err != nil {
+		fmt.Printf("Prompt failed %v\n", err)
+		return false
+	}
+	if selected == "❌skip" {
+		field.SetString("")
+	} else {
+		field.SetString(selected)
+	}
+	return true
+}
+
+func confirmPopulate(name string) bool {
+	prompt := promptui.Prompt{
+		Label:     fmt.Sprintf("Do you want to populate %s?", name),
+		IsConfirm: true,
+	}
+	_, err := prompt.Run()
+	return err == nil
+}
+
+func promptStructField(structField reflect.Value, field reflect.StructField) {
+	if !confirmPopulate(field.Name) {
+		return
+	}
+	if structField.IsZero() {
+		structField.Set(reflect.New(field.Type).Elem())
+	}
+	askAndSetFields(structField.Addr().Interface())
+}
+
+func promptPtrField(target reflect.Value, field reflect.StructField, prompt string) {
+	if !confirmPopulate(field.Name) {
+		return
+	}
+	elemType := field.Type.Elem()
+	ptr := reflect.New(elemType)
+	switch elemType.Kind() {
+	case reflect.Struct:
+		askAndSetFields(ptr.Interface())
+	case reflect.Bool:
+		yn := promptui.Prompt{
+			Label:     fmt.Sprintf("Set %s to true?", field.Name),
+			IsConfirm: true,
+		}
+		_, err := yn.Run()
+		ptr.Elem().SetBool(err == nil)
+	case reflect.String, reflect.Int:
+		setUserInputToField(ptr.Elem(), prompt, false)
+	default:
+		return
+	}
+	target.Set(ptr)
+}
+
+func promptSliceField(target reflect.Value, field reflect.StructField, prompt string) {
+	sliceType := field.Type.Elem()
+	switch sliceType.Kind() {
+	case reflect.String:
+		target.Set(reflect.ValueOf(readStringSlice(prompt)))
+	case reflect.Struct:
+		slice := readStructSlice(field.Type, sliceType, field.Name)
+		if slice.Len() > 0 {
+			target.Set(slice)
+		}
+	default:
+		fmt.Printf("(skipping %s — edit corgi-compose.yml directly for this field)\n", field.Name)
+	}
+}
+
+func readStringSlice(prompt string) []string {
+	fmt.Println(prompt + " (press ENTER after each item; press ENTER with no input when done)")
+	scanner := bufio.NewScanner(os.Stdin)
+	var commands []string
+	for scanner.Scan() {
+		command := scanner.Text()
+		if command == "" {
+			break
+		}
+		commands = append(commands, command)
+	}
+	return commands
+}
+
+func readStructSlice(fieldType, sliceType reflect.Type, fieldName string) reflect.Value {
+	slice := reflect.MakeSlice(fieldType, 0, 0)
+	for {
+		more := promptui.Prompt{
+			Label:     fmt.Sprintf("Add an entry to %s?", fieldName),
+			IsConfirm: true,
+		}
+		if _, err := more.Run(); err != nil {
+			break
+		}
+		elem := reflect.New(sliceType)
+		askAndSetFields(elem.Interface())
+		slice = reflect.Append(slice, elem.Elem())
+	}
+	return slice
+}
+
+func promptMapField(target reflect.Value, field reflect.StructField, prompt string) {
+	fmt.Println(prompt + " (enter as key=value, ENTER on empty line to finish)")
+	scanner := bufio.NewScanner(os.Stdin)
+	out := reflect.MakeMap(field.Type)
+	valueKind := field.Type.Elem().Kind()
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			break
+		}
+		k, val, ok := parseMapEntry(line, valueKind)
+		if !ok {
 			continue
 		}
-		// Check if the field is a struct
-		if field.Type.Kind() == reflect.Struct {
-			// Ask user if they want to populate this struct
-			prompt := promptui.Prompt{
-				Label:     fmt.Sprintf("Do you want to populate %s?", field.Name),
-				IsConfirm: true,
-			}
+		out.SetMapIndex(k, val)
+	}
+	if out.Len() > 0 {
+		target.Set(out)
+	}
+}
 
-			_, err := prompt.Run()
-			if err != nil { // If user says no or there's an error, skip this struct
-				continue
-			}
-
-			structField := v.Field(i)
-			// Initialize the struct if it's a zero value
-			if structField.IsZero() {
-				structField.Set(reflect.New(field.Type).Elem())
-			}
-			askAndSetFields(structField.Addr().Interface())
-		} else if field.Type.Kind() == reflect.Ptr {
-			// *struct (e.g. *TunnelConfig) or *primitive (e.g. *bool AutoSourceEnv).
-			// Ask whether to populate, then allocate + recurse / set primitive.
-			confirm := promptui.Prompt{
-				Label:     fmt.Sprintf("Do you want to populate %s?", field.Name),
-				IsConfirm: true,
-			}
-			if _, err := confirm.Run(); err != nil {
-				continue
-			}
-			elemType := field.Type.Elem()
-			ptr := reflect.New(elemType)
-			switch elemType.Kind() {
-			case reflect.Struct:
-				askAndSetFields(ptr.Interface())
-			case reflect.Bool:
-				yn := promptui.Prompt{
-					Label:     fmt.Sprintf("Set %s to true?", field.Name),
-					IsConfirm: true,
-				}
-				_, err := yn.Run()
-				ptr.Elem().SetBool(err == nil)
-			case reflect.String:
-				setUserInputToField(ptr.Elem(), prompt, false)
-			case reflect.Int:
-				setUserInputToField(ptr.Elem(), prompt, false)
-			default:
-				continue
-			}
-			v.Field(i).Set(ptr)
-		} else if field.Type.Kind() == reflect.Slice {
-			sliceType := field.Type.Elem()
-			switch sliceType.Kind() {
-			case reflect.String:
-				fmt.Println(prompt + " (press ENTER after each item; press ENTER with no input when done)")
-				scanner := bufio.NewScanner(os.Stdin)
-				var commands []string
-				for scanner.Scan() {
-					command := scanner.Text()
-					if command == "" {
-						break
-					}
-					commands = append(commands, command)
-				}
-				v.Field(i).Set(reflect.ValueOf(commands))
-			case reflect.Struct:
-				// Loop: ask "add another?" until no. Each iteration recurses on a fresh element.
-				slice := reflect.MakeSlice(field.Type, 0, 0)
-				for {
-					more := promptui.Prompt{
-						Label:     fmt.Sprintf("Add an entry to %s?", field.Name),
-						IsConfirm: true,
-					}
-					if _, err := more.Run(); err != nil {
-						break
-					}
-					elem := reflect.New(sliceType)
-					askAndSetFields(elem.Interface())
-					slice = reflect.Append(slice, elem.Elem())
-				}
-				if slice.Len() > 0 {
-					v.Field(i).Set(slice)
-				}
-			default:
-				// []map / []slice / etc — too freeform for CLI prompts. Skip with hint.
-				fmt.Printf("(skipping %s — edit corgi-compose.yml directly for this field)\n", field.Name)
-			}
-		} else if field.Type.Kind() == reflect.Map {
-			// map[string]string and map[string]interface{}. Loop key=value pairs.
-			fmt.Println(prompt + " (enter as key=value, ENTER on empty line to finish)")
-			scanner := bufio.NewScanner(os.Stdin)
-			out := reflect.MakeMap(field.Type)
-			valueKind := field.Type.Elem().Kind()
-			for scanner.Scan() {
-				line := strings.TrimSpace(scanner.Text())
-				if line == "" {
-					break
-				}
-				eq := strings.IndexByte(line, '=')
-				if eq <= 0 {
-					fmt.Println("  expected key=value, skipping line")
-					continue
-				}
-				k := reflect.ValueOf(strings.TrimSpace(line[:eq]))
-				rawVal := strings.TrimSpace(line[eq+1:])
-				var val reflect.Value
-				switch valueKind {
-				case reflect.String:
-					val = reflect.ValueOf(rawVal)
-				case reflect.Interface:
-					val = reflect.ValueOf(rawVal) // store as string; user can refine in yaml
-				default:
-					fmt.Printf("  unsupported map value kind %s, skipping\n", valueKind)
-					continue
-				}
-				out.SetMapIndex(k, val)
-			}
-			if out.Len() > 0 {
-				v.Field(i).Set(out)
-			}
-		} else {
-			prompt := formatPrompt(yamlTag, field.Name)
-			setUserInputToField(v.Field(i), prompt, field.Name == "ServiceName" || field.Name == "Name")
-		}
+func parseMapEntry(line string, valueKind reflect.Kind) (reflect.Value, reflect.Value, bool) {
+	eq := strings.IndexByte(line, '=')
+	if eq <= 0 {
+		fmt.Println("  expected key=value, skipping line")
+		return reflect.Value{}, reflect.Value{}, false
+	}
+	k := reflect.ValueOf(strings.TrimSpace(line[:eq]))
+	rawVal := strings.TrimSpace(line[eq+1:])
+	switch valueKind {
+	case reflect.String, reflect.Interface:
+		return k, reflect.ValueOf(rawVal), true
+	default:
+		fmt.Printf("  unsupported map value kind %s, skipping\n", valueKind)
+		return reflect.Value{}, reflect.Value{}, false
 	}
 }
 
@@ -480,14 +502,31 @@ func UpdateCorgiComposeFileWithMap(corgiMap map[string]interface{}) {
 	encoder := yaml.NewEncoder(file)
 	encoder.SetIndent(2)
 
-	if dbServiceMap, exists := corgiMap[utils.DbServicesInConfig]; exists {
-		err = encoder.Encode(map[string]interface{}{utils.DbServicesInConfig: dbServiceMap})
-		if err != nil {
-			fmt.Printf("Error encoding services section: %v\n", err)
-		}
+	encodeSection(encoder, corgiMap, utils.DbServicesInConfig, "services")
+	encodeScalarSections(encoder, corgiMap)
+	encodeSection(encoder, corgiMap, utils.ServicesInConfig, "dbServices")
+	encodeSection(encoder, corgiMap, utils.RequiredInConfig, "required")
+
+	if err := removeSeparators(filename); err != nil {
+		fmt.Printf("Error removing separators: %v\n", err)
+		return
 	}
 
-	for _, sectionKey := range []string{
+	fmt.Printf("%s has been saved successfully!\n", filename)
+}
+
+func encodeSection(encoder *yaml.Encoder, corgiMap map[string]interface{}, key, label string) {
+	section, exists := corgiMap[key]
+	if !exists {
+		return
+	}
+	if err := encoder.Encode(map[string]interface{}{key: section}); err != nil {
+		fmt.Printf("Error encoding %s section: %v\n", label, err)
+	}
+}
+
+func encodeScalarSections(encoder *yaml.Encoder, corgiMap map[string]interface{}) {
+	scalarKeys := []string{
 		utils.InitInConfig,
 		utils.StartInConfig,
 		utils.BeforeStartInConfig,
@@ -496,40 +535,19 @@ func UpdateCorgiComposeFileWithMap(corgiMap map[string]interface{}) {
 		utils.UseAwsVpnInConfig,
 		utils.NameInConfig,
 		utils.DescriptionInConfig,
-	} {
-		if section, exists := corgiMap[sectionKey]; exists {
-			if sectionArr, ok := section.([]string); ok {
-				if len(sectionArr) == 0 {
-					continue
-				}
-			}
-			err := encoder.Encode(map[string]interface{}{sectionKey: section})
-			if err != nil {
-				fmt.Printf("Error encoding %s section: %v\n", sectionKey, err)
-			}
+	}
+	for _, sectionKey := range scalarKeys {
+		section, exists := corgiMap[sectionKey]
+		if !exists {
+			continue
+		}
+		if sectionArr, ok := section.([]string); ok && len(sectionArr) == 0 {
+			continue
+		}
+		if err := encoder.Encode(map[string]interface{}{sectionKey: section}); err != nil {
+			fmt.Printf("Error encoding %s section: %v\n", sectionKey, err)
 		}
 	}
-
-	if serviceMap, exists := corgiMap[utils.ServicesInConfig]; exists {
-		err = encoder.Encode(map[string]interface{}{utils.ServicesInConfig: serviceMap})
-		if err != nil {
-			fmt.Printf("Error encoding dbServices section: %v\n", err)
-		}
-	}
-
-	if requiredMap, exists := corgiMap[utils.RequiredInConfig]; exists {
-		err = encoder.Encode(map[string]interface{}{utils.RequiredInConfig: requiredMap})
-		if err != nil {
-			fmt.Printf("Error encoding required section: %v\n", err)
-		}
-	}
-
-	if err := removeSeparators(filename); err != nil {
-		fmt.Printf("Error removing separators: %v\n", err)
-		return
-	}
-
-	fmt.Printf("%s has been saved successfully!\n", filename)
 }
 
 func removeSeparators(filename string) error {

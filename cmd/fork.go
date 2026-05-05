@@ -97,127 +97,148 @@ func runFork(cmd *cobra.Command, args []string) {
 	UpdateCorgiComposeFileWithMap(corgiMap)
 }
 
+type forkFlags struct {
+	all             bool
+	private         bool
+	useSameRepoName bool
+	gitProvider     string
+}
+
+func readForkFlags(cmd *cobra.Command) (forkFlags, error) {
+	var f forkFlags
+	var err error
+	if f.all, err = cmd.Flags().GetBool("all"); err != nil {
+		return f, err
+	}
+	if f.private, err = cmd.Flags().GetBool("private"); err != nil {
+		return f, err
+	}
+	if f.useSameRepoName, err = cmd.Flags().GetBool("useSameRepoName"); err != nil {
+		return f, err
+	}
+	f.gitProvider, err = cmd.Flags().GetString("gitProvider")
+	return f, err
+}
+
 func CreateForksForServices(
 	cmd *cobra.Command,
 	services []utils.Service,
 	chosenService string,
 	corgiMap map[string]interface{},
 ) error {
-	shouldForkAllServices, err := cmd.Flags().GetBool("all")
-	if err != nil {
-		return err
-	}
-	shouldNewReposBePrivate, err := cmd.Flags().GetBool("private")
-	if err != nil {
-		return err
-	}
-	useSameRepoName, err := cmd.Flags().GetBool("useSameRepoName")
-	if err != nil {
-		return err
-	}
-	newGitProvider, err := cmd.Flags().GetString("gitProvider")
+	flags, err := readForkFlags(cmd)
 	if err != nil {
 		return err
 	}
 	for _, service := range services {
-		if !shouldForkAllServices && service.ServiceName != chosenService {
+		if !flags.all && service.ServiceName != chosenService {
 			continue
 		}
-
-		fmt.Println(art.BlueColor, fmt.Sprintf("Changing git repo origin for service %s", service.ServiceName), art.WhiteColor)
-
-		if !shouldForkAllServices {
-			prompt := promptui.Prompt{
-				Label:     fmt.Sprintf("Do you want to create new git repo for %s", service.ServiceName),
-				IsConfirm: true,
-			}
-
-			_, err = prompt.Run()
-			if err != nil {
-				continue
-			}
-		}
-
-		var repoToCloneTo string
-		var isNewRepoPrivate bool
-		var repoName string
-
-		if err == nil {
-			if !shouldNewReposBePrivate {
-				privatePrompt := promptui.Prompt{
-					Label:     "Do you want this repo to be private",
-					IsConfirm: true,
-				}
-				_, err = privatePrompt.Run()
-				isNewRepoPrivate = (err == nil)
-			} else {
-				isNewRepoPrivate = shouldNewReposBePrivate
-			}
-
-			if useSameRepoName {
-				repoName = service.ServiceName
-			} else {
-				namePrompt := promptui.Prompt{
-					Label:   "Enter the name for this repo",
-					Default: service.ServiceName,
-				}
-				repoName, err = namePrompt.Run()
-				if err != nil {
-					return err
-				}
-			}
-
-			if newGitProvider == "" {
-				options := []string{"github", "gitlab"}
-				newGitProvider, err = utils.PickItemFromListPrompt("Where do you want to store the repo?", options, "🚫 abort")
-				if err != nil {
-					return err
-				}
-			}
-			// ok, user wants to create new git repo
-			switch newGitProvider {
-			case "github":
-				repoToCloneTo, err = createRepoInProvider("gh", "https://cli.github.com", repoName, isNewRepoPrivate)
-				if err != nil {
-					return err
-				}
-			case "gitlab":
-				repoToCloneTo, err = createRepoInProvider("glab", "https://gitlab.com/gitlab-org/cli#installation", repoName, isNewRepoPrivate)
-				if err != nil {
-					return err
-				}
-			}
-		} else {
-			prompt := promptui.Prompt{
-				Label: "Provide your own repo link (needs to be empty repo)",
-				Validate: func(input string) error {
-					if strings.HasSuffix(input, ".git") {
-						return nil
-					}
-					return errors.New("the repo link must end with .git")
-				},
-			}
-			repoToCloneTo, err = prompt.Run()
-			if err != nil {
-				return err
-			}
-		}
-
-		fmt.Println(repoToCloneTo)
-		if repoToCloneTo == "" {
-			fmt.Println("Aborting, repo is empty")
-			continue
-		}
-
-		err = changeRepoOrigin(service.AbsolutePath, service.ServiceName, repoToCloneTo)
-		if err != nil {
+		if err := forkOneService(service, flags, corgiMap); err != nil {
 			return err
 		}
-
-		servicesMap := corgiMap[utils.ServicesInConfig].(map[string]*utils.Service)
-		servicesMap[service.ServiceName].CloneFrom = repoToCloneTo
 	}
 	return nil
+}
+
+func forkOneService(service utils.Service, flags forkFlags, corgiMap map[string]interface{}) error {
+	fmt.Println(art.BlueColor, fmt.Sprintf("Changing git repo origin for service %s", service.ServiceName), art.WhiteColor)
+
+	confirmedNew := flags.all
+	if !flags.all {
+		prompt := promptui.Prompt{
+			Label:     fmt.Sprintf("Do you want to create new git repo for %s", service.ServiceName),
+			IsConfirm: true,
+		}
+		_, perr := prompt.Run()
+		if perr != nil {
+			return nil
+		}
+		confirmedNew = true
+	}
+
+	repoToCloneTo, err := chooseForkTarget(service, flags, confirmedNew)
+	if err != nil {
+		return err
+	}
+	fmt.Println(repoToCloneTo)
+	if repoToCloneTo == "" {
+		fmt.Println("Aborting, repo is empty")
+		return nil
+	}
+	if err := changeRepoOrigin(service.AbsolutePath, service.ServiceName, repoToCloneTo); err != nil {
+		return err
+	}
+	servicesMap := corgiMap[utils.ServicesInConfig].(map[string]*utils.Service)
+	servicesMap[service.ServiceName].CloneFrom = repoToCloneTo
+	return nil
+}
+
+func chooseForkTarget(service utils.Service, flags forkFlags, confirmedNew bool) (string, error) {
+	if !confirmedNew {
+		return promptManualRepoLink()
+	}
+	isPrivate := determinePrivacy(flags.private)
+	repoName, err := determineRepoName(service.ServiceName, flags.useSameRepoName)
+	if err != nil {
+		return "", err
+	}
+	provider, err := determineProvider(flags.gitProvider)
+	if err != nil {
+		return "", err
+	}
+	return createRepoForProvider(provider, repoName, isPrivate)
+}
+
+func determinePrivacy(forcePrivate bool) bool {
+	if forcePrivate {
+		return true
+	}
+	privatePrompt := promptui.Prompt{
+		Label:     "Do you want this repo to be private",
+		IsConfirm: true,
+	}
+	_, err := privatePrompt.Run()
+	return err == nil
+}
+
+func determineRepoName(serviceName string, useSame bool) (string, error) {
+	if useSame {
+		return serviceName, nil
+	}
+	namePrompt := promptui.Prompt{Label: "Enter the name for this repo", Default: serviceName}
+	return namePrompt.Run()
+}
+
+func determineProvider(provider string) (string, error) {
+	if provider != "" {
+		return provider, nil
+	}
+	options := []string{"github", "gitlab"}
+	return utils.PickItemFromListPrompt("Where do you want to store the repo?", options, "🚫 abort")
+}
+
+func createRepoForProvider(provider, repoName string, isPrivate bool) (string, error) {
+	switch provider {
+	case "github":
+		return createRepoInProvider("gh", "https://cli.github.com", repoName, isPrivate)
+	case "gitlab":
+		return createRepoInProvider("glab", "https://gitlab.com/gitlab-org/cli#installation", repoName, isPrivate)
+	}
+	return "", nil
+}
+
+func promptManualRepoLink() (string, error) {
+	prompt := promptui.Prompt{
+		Label: "Provide your own repo link (needs to be empty repo)",
+		Validate: func(input string) error {
+			if strings.HasSuffix(input, ".git") {
+				return nil
+			}
+			return errors.New("the repo link must end with .git")
+		},
+	}
+	return prompt.Run()
 }
 
 func runCommandToOutput(outBuffer *bytes.Buffer, path string, command string, args ...string) error {
