@@ -520,3 +520,21 @@ func TestRunWatchAppendNilSeed(t *testing.T) {
 	case <-done:
 	}
 }
+
+func TestRunWatchAppendJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	seed := probeAllParallel(rows)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runWatchAppend(rows, seed, 50*time.Millisecond, true, false)
+	}()
+	select {
+	case <-time.After(200 * time.Millisecond):
+	case <-done:
+	}
+}
