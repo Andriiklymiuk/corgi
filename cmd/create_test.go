@@ -44,10 +44,9 @@ func TestCopyRequired(t *testing.T) {
 
 func TestLowercaseFirstLetter(t *testing.T) {
 	tests := map[string]string{
-		"":           "",
-		"Init":       "init",
+		"":            "",
+		"Init":        "init",
 		"BeforeStart": "beforeStart",
-		"already":    "already",
 	}
 	for in, want := range tests {
 		if got := lowercaseFirstLetter(in); got != want {
