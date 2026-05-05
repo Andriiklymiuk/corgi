@@ -373,7 +373,6 @@ func TestRemoveProcessNotPresent(t *testing.T) {
 	proc := cmd.Process
 	cmd.Wait()
 
-	// Remove something that was never added — should not panic
 	removeProcess(proc)
 	if len(ProcessHandles) != 0 {
 		t.Fatalf("expected 0, got %d", len(ProcessHandles))
@@ -404,7 +403,6 @@ func TestExecuteSeedMakeCommandPathNotFound(t *testing.T) {
 	prev := CorgiComposePathDir
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
-	// Service doesn't exist → GetPathToDbService errors → ExecuteSeedMakeCommand returns error
 	_, err := ExecuteSeedMakeCommand("nonexistent_service", "seed")
 	if err == nil {
 		t.Error("expected error for nonexistent service")
@@ -420,7 +418,6 @@ func TestRunInteractiveSimple(t *testing.T) {
 }
 
 func TestHandleCommandFailureUnknownCmd(t *testing.T) {
-	// Command not in CommandInstructions → returns error with "no install instructions"
 	err := handleCommandFailure(
 		fmt.Errorf("executable file not found in $PATH"),
 		[]string{"totally-unknown-xyz-cmd"},
@@ -432,7 +429,6 @@ func TestHandleCommandFailureUnknownCmd(t *testing.T) {
 }
 
 func TestHandleCommandFailureNonMissing(t *testing.T) {
-	// Error doesn't contain "executable file not found" → propagated as-is
 	original := fmt.Errorf("some other error")
 	err := handleCommandFailure(original, []string{"make"}, "svc", "make", "/tmp", nil)
 	if err != original {
@@ -451,7 +447,6 @@ func TestKillAllStoredProcessesWithEntries(t *testing.T) {
 	}
 	addProcess(cmd.Process)
 	cmd.Wait()
-	// Process already exited; KillAllStoredProcesses should not panic
 	KillAllStoredProcesses()
 }
 
