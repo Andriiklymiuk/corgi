@@ -43,95 +43,86 @@ corgi tunnel --provider ngrok api`,
 	Run: runTunnelCmd,
 }
 
-func runTunnelCmd(cmd *cobra.Command, args []string) {
-	provider, ok := tunnel.Providers[tunnelProvider]
-	if !ok {
-		names := tunnel.Names()
-		sort.Strings(names)
-		fmt.Printf("Unknown provider %q. Available: %s\n", tunnelProvider, strings.Join(names, ", "))
-		os.Exit(1)
+type tunnelTarget struct {
+	service     string
+	port        int
+	providerOvr tunnel.Provider // per-target override (compose `tunnel.provider`); nil = use --provider flag
+	named       *tunnel.NamedConfig
+}
+
+func (t tunnelTarget) effectiveProvider(fallback tunnel.Provider) tunnel.Provider {
+	if t.providerOvr != nil {
+		return t.providerOvr
+	}
+	return fallback
+}
+
+func parseRequestedServices(args []string) map[string]bool {
+	if len(args) == 0 {
+		return nil
+	}
+	requested := map[string]bool{}
+	for _, a := range args {
+		for _, name := range strings.Split(a, ",") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				requested[name] = true
+			}
+		}
+	}
+	return requested
+}
+
+func buildTargetsFromCompose(cmd *cobra.Command, args []string, flagProvider tunnel.Provider, flagSet bool) ([]tunnelTarget, error) {
+	corgi, err := utils.GetCorgiServices(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't load corgi-compose.yml: %w", err)
 	}
 
-	type target struct {
-		service        string
-		port           int
-		providerOvr    tunnel.Provider // per-target override (compose `tunnel.provider`); nil = use --provider flag
-		named          *tunnel.NamedConfig
-	}
-	var targets []target
+	requested := parseRequestedServices(args)
+	var targets []tunnelTarget
 
-	flagProvider, flagSet := provider, cmd.Flags().Changed("provider")
-
-	if tunnelPort != 0 {
-		targets = append(targets, target{service: fmt.Sprintf("port-%d", tunnelPort), port: tunnelPort})
-	} else {
-		corgi, err := utils.GetCorgiServices(cmd)
-		if err != nil {
-			fmt.Printf("couldn't load corgi-compose.yml: %s\n", err)
-			os.Exit(1)
+	for _, s := range corgi.Services {
+		if s.Port == 0 {
+			continue
 		}
-
-		var requested map[string]bool
-		if len(args) > 0 {
-			requested = map[string]bool{}
-			for _, a := range args {
-				for _, name := range strings.Split(a, ",") {
-					name = strings.TrimSpace(name)
-					if name != "" {
-						requested[name] = true
-					}
-				}
-			}
-		}
-
-		for _, s := range corgi.Services {
-			if s.Port == 0 {
-				continue
-			}
-			if requested != nil {
-				if !requested[s.ServiceName] {
-					continue
-				}
-			} else if s.ManualRun {
-				continue
-			}
-
-			t := target{service: s.ServiceName, port: s.Port}
-			if s.Tunnel != nil {
-				named, perTargetProvider, err := resolveTunnel(s, flagProvider, flagSet)
-				if err != nil {
-					fmt.Printf("✗ %s: %s\n", s.ServiceName, err)
-					os.Exit(1)
-				}
-				t.named = named
-				t.providerOvr = perTargetProvider
-			}
-			targets = append(targets, t)
-		}
-
 		if requested != nil {
-			seen := map[string]bool{}
-			for _, t := range targets {
-				seen[t.service] = true
+			if !requested[s.ServiceName] {
+				continue
 			}
-			for name := range requested {
-				if !seen[name] {
-					fmt.Printf("⚠ unknown service %q (no compose entry or no port: set)\n", name)
-				}
+		} else if s.ManualRun {
+			continue
+		}
+
+		t := tunnelTarget{service: s.ServiceName, port: s.Port}
+		if s.Tunnel != nil {
+			named, perTargetProvider, err := resolveTunnel(s, flagProvider, flagSet)
+			if err != nil {
+				return nil, fmt.Errorf("✗ %s: %w", s.ServiceName, err)
+			}
+			t.named = named
+			t.providerOvr = perTargetProvider
+		}
+		targets = append(targets, t)
+	}
+
+	if requested != nil {
+		seen := map[string]bool{}
+		for _, t := range targets {
+			seen[t.service] = true
+		}
+		for name := range requested {
+			if !seen[name] {
+				fmt.Printf("⚠ unknown service %q (no compose entry or no port: set)\n", name)
 			}
 		}
 	}
+	return targets, nil
+}
 
-	if len(targets) == 0 {
-		fmt.Println("No services with port: matched. Nothing to tunnel.")
-		os.Exit(1)
-	}
-
+func preflightTargets(targets []tunnelTarget, provider tunnel.Provider) error {
 	for _, t := range targets {
-		p := t.providerOvr
-		if p == nil {
-			p = provider
-		}
+		p := t.effectiveProvider(provider)
 		var err error
 		if t.named != nil {
 			err = p.PreflightNamedAuth(*t.named)
@@ -139,18 +130,16 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 			err = p.PreflightAuth()
 		}
 		if err != nil {
-			fmt.Printf("✗ %s (%s):\n\n%s\n", t.service, p.Name(), err)
-			os.Exit(1)
+			return fmt.Errorf("✗ %s (%s):\n\n%w", t.service, p.Name(), err)
 		}
 	}
+	return nil
+}
 
+func printTunnelSummary(targets []tunnelTarget, provider tunnel.Provider) {
 	providersInUse := map[string]bool{}
 	for _, t := range targets {
-		p := provider
-		if t.providerOvr != nil {
-			p = t.providerOvr
-		}
-		providersInUse[p.Name()] = true
+		providersInUse[t.effectiveProvider(provider).Name()] = true
 	}
 	providerList := make([]string, 0, len(providersInUse))
 	for n := range providersInUse {
@@ -160,17 +149,15 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 	fmt.Printf("🌐 Tunnels (%s) — Ctrl+C to stop\n\n", strings.Join(providerList, ", "))
 	for _, t := range targets {
 		mode := "quick"
-		p := provider
-		if t.providerOvr != nil {
-			p = t.providerOvr
-		}
 		if t.named != nil {
 			mode = "named " + t.named.Hostname
 		}
-		fmt.Printf("  %-30s :%-5d  %s/%s → starting...\n", t.service, t.port, p.Name(), mode)
+		fmt.Printf("  %-30s :%-5d  %s/%s → starting...\n", t.service, t.port, t.effectiveProvider(provider).Name(), mode)
 	}
 	fmt.Println()
+}
 
+func runTunnelTargets(targets []tunnelTarget, provider tunnel.Provider) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -186,13 +173,9 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 	var wg sync.WaitGroup
 	for _, t := range targets {
 		wg.Add(1)
-		go func(t target) {
+		go func(t tunnelTarget) {
 			defer wg.Done()
-			p := t.providerOvr
-			if p == nil {
-				p = provider
-			}
-			tunnel.Run(ctx, p, t.service, t.port, t.named, events)
+			tunnel.Run(ctx, t.effectiveProvider(provider), t.service, t.port, t.named, events)
 		}(t)
 	}
 	go func() {
@@ -217,6 +200,43 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 			// quiet exit
 		}
 	}
+}
+
+func runTunnelCmd(cmd *cobra.Command, args []string) {
+	provider, ok := tunnel.Providers[tunnelProvider]
+	if !ok {
+		names := tunnel.Names()
+		sort.Strings(names)
+		fmt.Printf("Unknown provider %q. Available: %s\n", tunnelProvider, strings.Join(names, ", "))
+		os.Exit(1)
+	}
+
+	flagProvider, flagSet := provider, cmd.Flags().Changed("provider")
+
+	var targets []tunnelTarget
+	if tunnelPort != 0 {
+		targets = []tunnelTarget{{service: fmt.Sprintf("port-%d", tunnelPort), port: tunnelPort}}
+	} else {
+		built, err := buildTargetsFromCompose(cmd, args, flagProvider, flagSet)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		targets = built
+	}
+
+	if len(targets) == 0 {
+		fmt.Println("No services with port: matched. Nothing to tunnel.")
+		os.Exit(1)
+	}
+
+	if err := preflightTargets(targets, provider); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	printTunnelSummary(targets, provider)
+	runTunnelTargets(targets, provider)
 }
 
 // Resolves a service's tunnel: block into (NamedConfig, provider).
@@ -285,15 +305,15 @@ var runTunnelsCancel context.CancelFunc
 // Spawns one tunnel per service with a resolvable `tunnel:` block,
 // alongside `corgi run`. Skips (with a warning) when env vars are missing
 // or auth isn't set up — keeps the rest of the stack running.
-func startTunnelsForRun(services []utils.Service) {
-	type runTarget struct {
-		service  string
-		port     int
-		provider tunnel.Provider
-		named    *tunnel.NamedConfig
-	}
-	var targets []runTarget
+type runTarget struct {
+	service  string
+	port     int
+	provider tunnel.Provider
+	named    *tunnel.NamedConfig
+}
 
+func collectRunTargets(services []utils.Service) []runTarget {
+	var targets []runTarget
 	for _, s := range services {
 		if s.Tunnel == nil || s.Port == 0 || s.ManualRun {
 			continue
@@ -314,7 +334,11 @@ func startTunnelsForRun(services []utils.Service) {
 			named:    named,
 		})
 	}
+	return targets
+}
 
+func startTunnelsForRun(services []utils.Service) {
+	targets := collectRunTargets(services)
 	if len(targets) == 0 {
 		fmt.Println("🌐 no tunnels to start (no resolvable tunnel: blocks)")
 		return

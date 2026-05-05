@@ -149,24 +149,41 @@ func completeDbServices(cmd *cobra.Command, _ []string, toComplete string) ([]st
 	return withCsvPrefix(prefix, names)
 }
 
-func completeScriptNames(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	c := loadComposeForCompletion(cmd)
-	if c == nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	// If user already passed --services, narrow script list to those services.
-	// Empty / unset --services = show every script across the whole compose.
-	servicesFilter, _ := cmd.Flags().GetStringSlice("services")
+func parseServicesFilter(raw []string) map[string]struct{} {
 	wanted := map[string]struct{}{}
-	for _, raw := range servicesFilter {
-		for _, name := range strings.Split(raw, ",") {
+	for _, entry := range raw {
+		for _, name := range strings.Split(entry, ",") {
 			name = strings.TrimSpace(name)
 			if name != "" && name != "none" {
 				wanted[name] = struct{}{}
 			}
 		}
 	}
+	return wanted
+}
+
+func collectScriptName(sc utils.Script, already, seen map[string]struct{}) (string, bool) {
+	if sc.Name == "" {
+		return "", false
+	}
+	if _, dup := already[sc.Name]; dup {
+		return "", false
+	}
+	if _, ok := seen[sc.Name]; ok {
+		return "", false
+	}
+	seen[sc.Name] = struct{}{}
+	return sc.Name, true
+}
+
+func completeScriptNames(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	c := loadComposeForCompletion(cmd)
+	if c == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	servicesFilter, _ := cmd.Flags().GetStringSlice("services")
+	wanted := parseServicesFilter(servicesFilter)
 
 	prefix, _, already := splitCsv(toComplete)
 	seen := map[string]struct{}{}
@@ -178,17 +195,9 @@ func completeScriptNames(cmd *cobra.Command, _ []string, toComplete string) ([]s
 			}
 		}
 		for _, sc := range svc.Scripts {
-			if sc.Name == "" {
-				continue
+			if name, ok := collectScriptName(sc, already, seen); ok {
+				names = append(names, name)
 			}
-			if _, dup := already[sc.Name]; dup {
-				continue
-			}
-			if _, ok := seen[sc.Name]; ok {
-				continue
-			}
-			seen[sc.Name] = struct{}{}
-			names = append(names, sc.Name)
 		}
 	}
 	sort.Strings(names)
