@@ -198,58 +198,50 @@ func RunServiceCmd(
 //
 // Optional envFile (variadic): see RunServiceCmd. Forwarded unchanged.
 func RunServiceCommands(
-	commandsName string,
-	serviceName string,
+	commandsName, serviceName string,
 	commands []string,
 	path string,
-	isParallel bool,
-	interactive bool,
+	isParallel, interactive bool,
 	envFile ...string,
 ) {
 	if isParallel {
-		for _, command := range commands {
-			go func(command string) {
-				err := RunServiceCmd(
-					serviceName,
-					command,
-					path,
-					interactive,
-					envFile...,
-				)
-				if err != nil {
-					fmt.Println(
-						art.RedColor,
-						fmt.Sprintf("aborting %s command `%s` for %s, because of %s", commandsName, command, serviceName, err),
-						art.WhiteColor,
-					)
-					return
-				}
-				if interactive {
-					// maybe there is other way to stop the process, but it will do for now
-					SendInterrupt()
-				}
-			}(command)
-		}
-	} else {
-		if len(commands) > 0 {
-			combinedCommand := strings.Join(commands, " && ")
+		runCommandsParallel(commandsName, serviceName, commands, path, interactive, envFile)
+		return
+	}
+	runCommandsSequential(commandsName, serviceName, commands, path, interactive, envFile)
+}
 
-			err := RunServiceCmd(
-				serviceName,
-				combinedCommand,
-				path,
-				interactive,
-				envFile...,
-			)
+func runCommandsParallel(commandsName, serviceName string, commands []string, path string, interactive bool, envFile []string) {
+	for _, command := range commands {
+		go func(command string) {
+			err := RunServiceCmd(serviceName, command, path, interactive, envFile...)
 			if err != nil {
 				fmt.Println(
 					art.RedColor,
-					fmt.Sprintf("aborting %s commands for %s, because of %s", commandsName, serviceName, err),
+					fmt.Sprintf("aborting %s command `%s` for %s, because of %s", commandsName, command, serviceName, err),
 					art.WhiteColor,
 				)
 				return
 			}
-		}
+			if interactive {
+				SendInterrupt()
+			}
+		}(command)
+	}
+}
+
+func runCommandsSequential(commandsName, serviceName string, commands []string, path string, interactive bool, envFile []string) {
+	if len(commands) == 0 {
+		return
+	}
+	combinedCommand := strings.Join(commands, " && ")
+	err := RunServiceCmd(serviceName, combinedCommand, path, interactive, envFile...)
+	if err != nil {
+		fmt.Println(
+			art.RedColor,
+			fmt.Sprintf("aborting %s commands for %s, because of %s", commandsName, serviceName, err),
+			art.WhiteColor,
+		)
 	}
 }
 

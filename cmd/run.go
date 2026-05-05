@@ -273,48 +273,18 @@ func cleanup(corgi *utils.CorgiCompose) {
 }
 
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
-	isThereDatabaseToRun := false
-	for _, dbService := range databaseServices {
-		if !dbService.ManualRun {
-			isThereDatabaseToRun = true
-			break
-		}
-	}
-
-	if !isThereDatabaseToRun || len(databaseServices) == 0 {
+	if !hasDatabaseToRun(databaseServices) {
 		fmt.Println("No database service to run")
 		return
 	}
 
-	err := utils.DockerInit(cmd)
-	if err != nil {
+	if err := utils.DockerInit(cmd); err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	for _, dbService := range databaseServices {
-		if dbService.ManualRun {
-			continue
-		}
-
-		serviceIsRunning, err := utils.IsServiceRunning(
-			fmt.Sprintf(
-				"%s-%s",
-				dbService.Driver,
-				dbService.ServiceName,
-			),
-		)
-		if err != nil {
-			fmt.Printf("Getting target service info failed: %s\n", err)
-		}
-		if !serviceIsRunning {
-			fmt.Println(art.BlueColor, "\n🤖 Starting database", dbService.ServiceName, art.WhiteColor)
-			err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up")
-			if err != nil {
-				fmt.Println("Starting service failed", err)
-			}
-			time.Sleep(time.Second * 3)
-		}
+		startDatabaseIfNeeded(dbService)
 	}
 
 	isSeed, err := cmd.Flags().GetBool("seed")
@@ -322,9 +292,39 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 		return
 	}
 	if isSeed {
-		SeedAllDatabases((databaseServices))
+		SeedAllDatabases(databaseServices)
 	}
+}
 
+func hasDatabaseToRun(databaseServices []utils.DatabaseService) bool {
+	if len(databaseServices) == 0 {
+		return false
+	}
+	for _, dbService := range databaseServices {
+		if !dbService.ManualRun {
+			return true
+		}
+	}
+	return false
+}
+
+func startDatabaseIfNeeded(dbService utils.DatabaseService) {
+	if dbService.ManualRun {
+		return
+	}
+	containerName := fmt.Sprintf("%s-%s", dbService.Driver, dbService.ServiceName)
+	serviceIsRunning, err := utils.IsServiceRunning(containerName)
+	if err != nil {
+		fmt.Printf("Getting target service info failed: %s\n", err)
+	}
+	if serviceIsRunning {
+		return
+	}
+	fmt.Println(art.BlueColor, "\n🤖 Starting database", dbService.ServiceName, art.WhiteColor)
+	if err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up"); err != nil {
+		fmt.Println("Starting service failed", err)
+	}
+	time.Sleep(time.Second * 3)
 }
 
 func shouldSkipManualRun(service utils.Service) bool {
