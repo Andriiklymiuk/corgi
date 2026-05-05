@@ -3,6 +3,7 @@ package cmd
 import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/tunnel"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -265,4 +266,33 @@ func TestCollectRunTargetsSkipsMissingTunnel(t *testing.T) {
 	if len(targets) != 0 {
 		t.Errorf("expected 0, got %d", len(targets))
 	}
+}
+
+func TestStopRunTunnelsWithCancel(t *testing.T) {
+	_, cancel := context.WithCancel(context.Background())
+	runTunnelsCancel = cancel
+	t.Cleanup(func() { runTunnelsCancel = nil })
+	stopRunTunnels()
+}
+
+func TestStopRunTunnelsNil(t *testing.T) {
+	prev := runTunnelsCancel
+	runTunnelsCancel = nil
+	t.Cleanup(func() { runTunnelsCancel = prev })
+	stopRunTunnels()
+}
+
+func TestFirstLine(t *testing.T) {
+	if got := firstLine("hello\nworld"); got != "hello" {
+		t.Errorf("got %q", got)
+	}
+	if got := firstLine("no newline"); got != "no newline" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestStartTunnelsForRunNoTargets(t *testing.T) {
+	startTunnelsForRun([]utils.Service{
+		{ServiceName: "api", Port: 0, Tunnel: nil},
+	})
 }

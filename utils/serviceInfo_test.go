@@ -124,3 +124,34 @@ services:
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestGetServiceInfoMySQL(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "mysql")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	body := `version: "3"
+services:
+  mysql-db:
+    environment:
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=pass
+      - MYSQL_DATABASE=mydb
+    ports:
+      - "3306:3306"
+`
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetServiceInfo("mysql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "Connection info to mysql") {
+		t.Errorf("got %q", got)
+	}
+}
