@@ -64,3 +64,63 @@ services:
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestGetServiceInfoRabbitMQ(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "mq")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	body := `version: "3"
+services:
+  rabbitmq-mq:
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    ports:
+      - "5672:5672"
+`
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetServiceInfo("mq")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "Connection info to mq") {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestGetServiceInfoMongo(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "mongo")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	body := `version: "3"
+services:
+  mongo-db:
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=pass
+    ports:
+      - "27017:27017"
+`
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetServiceInfo("mongo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "Connection info to mongo") {
+		t.Errorf("got %q", got)
+	}
+}
