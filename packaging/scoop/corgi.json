@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
+  "version": "1.16.2",
+  "description": "Send someone your project yml file, init and run it in minutes — multi-service / db / tunnel orchestrator",
+  "homepage": "https://github.com/Andriiklymiuk/corgi",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/Andriiklymiuk/corgi/releases/download/v1.16.2/corgi_1.16.2_windows_amd64.tar.gz",
+      "hash": "c1b613511579137da10ee55d2f5184796dc19a119d6224d87f2641297c3f22b2"
+    },
+    "arm64": {
+      "url": "https://github.com/Andriiklymiuk/corgi/releases/download/v1.16.2/corgi_1.16.2_windows_arm64.tar.gz",
+      "hash": "609ebd00b5b0d20839ffa69c28b9243f2dee3db93be1256947476eabd25116ba"
+    },
+    "32bit": {
+      "url": "https://github.com/Andriiklymiuk/corgi/releases/download/v1.16.2/corgi_1.16.2_windows_386.tar.gz",
+      "hash": "5e126f59c91d720edd22b39194fb867ca6890e35b3bcfd945f18774aa3389bba"
+    }
+  },
+  "bin": "corgi.exe",
+  "checkver": {
+    "github": "https://github.com/Andriiklymiuk/corgi"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/Andriiklymiuk/corgi/releases/download/v$version/corgi_$version_windows_amd64.tar.gz"
+      },
+      "arm64": {
+        "url": "https://github.com/Andriiklymiuk/corgi/releases/download/v$version/corgi_$version_windows_arm64.tar.gz"
+      },
+      "32bit": {
+        "url": "https://github.com/Andriiklymiuk/corgi/releases/download/v$version/corgi_$version_windows_386.tar.gz"
+      }
+    },
+    "hash": {
+      "url": "https://github.com/Andriiklymiuk/corgi/releases/download/v$version/checksums.txt"
+    }
+  }
+}

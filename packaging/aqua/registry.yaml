@@ -1,0 +1,26 @@
+# Staged for submission to https://github.com/aquaproj/aqua-registry
+# Target path in registry repo: pkgs/Andriiklymiuk/corgi/registry.yaml
+#
+# Generation shortcut (run inside aqua-registry repo):
+#   aqua gr Andriiklymiuk/corgi
+#
+# After merge, users add to aqua.yaml:
+#   - name: Andriiklymiuk/corgi@v1.16.2
+
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/registry.json
+packages:
+  - type: github_release
+    repo_owner: Andriiklymiuk
+    repo_name: corgi
+    description: Send someone your project yml file, init and run it in minutes — multi-service / db / tunnel orchestrator
+    asset: corgi_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz
+    files:
+      - name: corgi
+    supported_envs:
+      - darwin
+      - linux
+      - windows
+    checksum:
+      type: github_release
+      asset: checksums.txt
+      algorithm: sha256
