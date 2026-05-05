@@ -69,3 +69,39 @@ func TestPortOwnerNoListener(t *testing.T) {
 	_ = got
 }
 
+func TestCheckDockerStatusRunsCmd(t *testing.T) {
+	err := CheckDockerStatus()
+	_ = err
+}
+
+func TestIsServiceRunningFalseForFakeContainer(t *testing.T) {
+	running, err := IsServiceRunning("corgi-test-fake-container-xyz")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if running {
+		t.Error("expected not running")
+	}
+}
+
+func TestGetStatusOfServiceFakeContainer(t *testing.T) {
+	running, err := GetStatusOfService("corgi-test-fake-container-xyz")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if running {
+		t.Error("expected not running")
+	}
+}
+
+func TestGetLocalMachineIpAddress(t *testing.T) {
+	ip, _ := GetLocalMachineIpAddress()
+	_ = ip
+}
+
+func TestGetContainerIdNoMakefile(t *testing.T) {
+	_, err := GetContainerId("corgi-nonexistent-svc-xyz")
+	if err == nil {
+		t.Error("expected error for nonexistent service")
+	}
+}
