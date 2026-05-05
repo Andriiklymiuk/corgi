@@ -101,102 +101,66 @@ required per provider (e.g. ngrok config add-authtoken).`,
 	)
 }
 
-func runRun(cmd *cobra.Command, _ []string) {
-	corgi, err := utils.GetCorgiServices(cmd)
+func handleRunSignal(cmd *cobra.Command, s os.Signal) {
+	if s == syscall.SIGHUP {
+		fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
+		stopRunTunnels()
+		utils.KillAllStoredProcesses()
+		cmd.Run(cmd, nil)
+		return
+	}
+	fmt.Println("👋 Exiting corgi", s)
+	stopRunTunnels()
+	corgiLatestVersion, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	cleanup(corgiLatestVersion)
+	utils.KillAllStoredProcesses()
+	utils.PrintFinalMessage()
+	os.Exit(0)
+}
 
-	if CheckClonedReposExistence(corgi.Services) {
-		CloneServices(corgi.Services)
-	}
-
+func installSignalHandler(cmd *cobra.Command) {
 	closeSignal := make(chan os.Signal, 1)
 	signal.Notify(closeSignal, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-
-	go func(cmd *cobra.Command) {
-		for {
-			s := <-closeSignal
-			switch s {
-			case syscall.SIGHUP:
-				fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
-				stopRunTunnels()
-				utils.KillAllStoredProcesses()
-				cmd.Run(cmd, nil)
-			default:
-				fmt.Println("👋 Exiting corgi", s)
-				stopRunTunnels()
-				corgiLatestVersion, err := utils.GetCorgiServices(cmd)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-				cleanup(corgiLatestVersion)
-				utils.KillAllStoredProcesses()
-				utils.PrintFinalMessage()
-				os.Exit(0)
-			}
+	go func() {
+		for s := range closeSignal {
+			handleRunSignal(cmd, s)
 		}
-	}(cmd)
+	}()
+}
 
+func setupComposeWatcher(cmd *cobra.Command) (*fsnotify.Watcher, error) {
 	isNoWatch, err := cmd.Flags().GetBool("no-watch")
 	if err != nil {
-		return
+		return nil, err
 	}
-
-	if !isNoWatch {
-		watcher, err := fsnotify.NewWatcher()
-		if err != nil {
-			fmt.Println("Error initializing watcher:", err)
-			return
-		}
-		defer watcher.Close()
-		watchCorgiCompose(watcher, cmd)
+	if isNoWatch {
+		return nil, nil
 	}
-
-	utils.CleanFromScratch(cmd, *corgi)
-
-	if corgi.UseAwsVpn {
-		err = utils.AwsVpnInit()
-		if err != nil {
-			fmt.Println("AWS VPN init failed", err)
-		}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("error initializing watcher: %w", err)
 	}
+	watchCorgiCompose(watcher, cmd)
+	return watcher, nil
+}
 
-	if corgi.UseDocker || func() bool {
-		for _, s := range corgi.Services {
-			if s.Runner.Name == "docker" {
-				return true
-			}
-		}
-		return false
-	}() {
-		if err := utils.DockerInit(cmd); err != nil {
-			fmt.Println("Docker init failed:", err)
+func usesDocker(corgi *utils.CorgiCompose) bool {
+	if corgi.UseDocker {
+		return true
+	}
+	for _, s := range corgi.Services {
+		if s.Runner.Name == "docker" {
+			return true
 		}
 	}
+	return false
+}
 
-	utils.RunServiceCommands(
-		utils.BeforeStartInConfig,
-		"corgi beforeStart",
-		corgi.BeforeStart,
-		"",
-		false,
-		true,
-	)
-
-	CreateDatabaseServices(corgi.DatabaseServices)
-
-	runDatabaseServices(cmd, corgi.DatabaseServices)
-
-	if err := utils.GenerateEnvForServices(corgi); err != nil {
-		fmt.Println(art.RedColor, "aborting corgi run:", err, art.WhiteColor)
-		os.Exit(1)
-	}
-
-	CreateServices(corgi.Services)
-
+func startAllServices(corgi *utils.CorgiCompose, cmd *cobra.Command) {
 	var serviceWaitGroup sync.WaitGroup
 	serviceWaitGroup.Add(len(corgi.Services))
 	var startCmdPresent bool
@@ -217,6 +181,63 @@ func runRun(cmd *cobra.Command, _ []string) {
 	}
 	fmt.Println("No service or start command to run")
 	serviceWaitGroup.Wait()
+}
+
+func runRun(cmd *cobra.Command, _ []string) {
+	corgi, err := utils.GetCorgiServices(cmd)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if CheckClonedReposExistence(corgi.Services) {
+		CloneServices(corgi.Services)
+	}
+
+	installSignalHandler(cmd)
+
+	watcher, err := setupComposeWatcher(cmd)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if watcher != nil {
+		defer watcher.Close()
+	}
+
+	utils.CleanFromScratch(cmd, *corgi)
+
+	if corgi.UseAwsVpn {
+		if err := utils.AwsVpnInit(); err != nil {
+			fmt.Println("AWS VPN init failed", err)
+		}
+	}
+
+	if usesDocker(corgi) {
+		if err := utils.DockerInit(cmd); err != nil {
+			fmt.Println("Docker init failed:", err)
+		}
+	}
+
+	utils.RunServiceCommands(
+		utils.BeforeStartInConfig,
+		"corgi beforeStart",
+		corgi.BeforeStart,
+		"",
+		false,
+		true,
+	)
+
+	CreateDatabaseServices(corgi.DatabaseServices)
+	runDatabaseServices(cmd, corgi.DatabaseServices)
+
+	if err := utils.GenerateEnvForServices(corgi); err != nil {
+		fmt.Println(art.RedColor, "aborting corgi run:", err, art.WhiteColor)
+		os.Exit(1)
+	}
+
+	CreateServices(corgi.Services)
+	startAllServices(corgi, cmd)
 }
 
 func cleanup(corgi *utils.CorgiCompose) {
@@ -306,33 +327,66 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 
 }
 
-func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup *sync.WaitGroup) {
-	defer serviceWaitGroup.Done()
-	if service.ManualRun {
-		if len(utils.ServicesItemsFromFlag) == 0 {
-			fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
-			return
-		}
-		if !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
-			fmt.Println(service.ServiceName, "is not run, because it should be added manually")
-			return
-		}
+func shouldSkipManualRun(service utils.Service) bool {
+	if !service.ManualRun {
+		return false
 	}
+	if len(utils.ServicesItemsFromFlag) == 0 {
+		fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
+		return true
+	}
+	if !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
+		fmt.Println(service.ServiceName, "is not run, because it should be added manually")
+		return true
+	}
+	return false
+}
+
+func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 	isPull, err := cobraCmd.Flags().GetBool("pull")
-	if err != nil {
+	if err != nil || !isPull {
 		return
 	}
-	if isPull {
-		err = utils.RunServiceCmd(
+	if err := utils.RunServiceCmd(
+		service.ServiceName,
+		"corgi pull --silent",
+		service.AbsolutePath,
+		true,
+	); err != nil {
+		fmt.Println("corgi pull failed for", service.ServiceName, "error:", err)
+	}
+}
+
+func startServiceProcess(service utils.Service) {
+	if service.Runner.Name == "docker" && service.Port != 0 {
+		fmt.Println(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
+		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up"); err != nil {
+			fmt.Println("Starting service failed", err)
+		}
+		return
+	}
+	if service.Start != nil {
+		fmt.Println("\nStart commands:")
+		utils.RunServiceCommands(
+			"start",
 			service.ServiceName,
-			"corgi pull --silent",
+			service.Start,
 			service.AbsolutePath,
 			true,
+			service.InteractiveInput,
+			getServiceEnv(service),
 		)
-		if err != nil {
-			fmt.Println("corgi pull failed for", service.ServiceName, "error:", err)
-		}
 	}
+}
+
+func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup *sync.WaitGroup) {
+	defer serviceWaitGroup.Done()
+	if shouldSkipManualRun(service) {
+		return
+	}
+
+	runServicePullIfRequested(cobraCmd, service)
+
 	fmt.Println(art.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, art.WhiteColor)
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
@@ -348,27 +402,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		)
 	}
 
-	if service.Runner.Name == "docker" && service.Port != 0 {
-		fmt.Println(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
-		err = utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up")
-		if err != nil {
-			fmt.Println("Starting service failed", err)
-		}
-	} else {
-
-		if service.Start != nil {
-			fmt.Println("\nStart commands:")
-			utils.RunServiceCommands(
-				"start",
-				service.ServiceName,
-				service.Start,
-				service.AbsolutePath,
-				true,
-				service.InteractiveInput,
-				getServiceEnv(service),
-			)
-		}
-	}
+	startServiceProcess(service)
 }
 
 func getServiceEnv(service utils.Service) string {
@@ -387,13 +421,25 @@ func omitServiceCmd(cmdName string) bool {
 	return false
 }
 
-func watchCorgiCompose(
-	watcher *fsnotify.Watcher,
-	cmd *cobra.Command,
-) {
-	fmt.Println("👀 Watching for changes in corgi-compose file")
-	err := watcher.Add(utils.CorgiComposePath)
+func handleComposeWriteEvent(watcher *fsnotify.Watcher, cmd *cobra.Command, eventName string) bool {
+	oldCorgi := utils.CorgiComposeFileContent
+	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
+		fmt.Println(err)
+		return true // stop watching on read error
+	}
+	if utils.CompareCorgiFiles(corgi, oldCorgi) {
+		return false
+	}
+	fmt.Println("Detected corgi compose change in", eventName)
+	watcher.Remove(utils.CorgiComposePath)
+	utils.SendRestart()
+	return false
+}
+
+func watchCorgiCompose(watcher *fsnotify.Watcher, cmd *cobra.Command) {
+	fmt.Println("👀 Watching for changes in corgi-compose file")
+	if err := watcher.Add(utils.CorgiComposePath); err != nil {
 		fmt.Println("Error adding CorgiCompose to watcher:", err)
 		return
 	}
@@ -405,19 +451,11 @@ func watchCorgiCompose(
 				if !ok {
 					return
 				}
-				if event.Op&fsnotify.Write == fsnotify.Write {
-					oldCorgi := utils.CorgiComposeFileContent
-					corgi, err := utils.GetCorgiServices(cmd)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					if utils.CompareCorgiFiles(corgi, oldCorgi) {
-						continue
-					}
-					fmt.Println("Detected corgi compose change in", event.Name)
-					watcher.Remove(utils.CorgiComposePath)
-					utils.SendRestart()
+				if event.Op&fsnotify.Write != fsnotify.Write {
+					continue
+				}
+				if handleComposeWriteEvent(watcher, cmd, event.Name) {
+					return
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
