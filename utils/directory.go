@@ -55,7 +55,7 @@ func GetFoldersListInDirectory() ([]string, error) {
 	return files, nil
 }
 
-func CheckIfFileExistsInDirectory(pathToDirectory string, fileName string) (bool, error) {
+func CheckIfFileExistsInDirectory(pathToDirectory, fileName string) (bool, error) {
 	filesInDirectory, err := os.ReadDir(pathToDirectory)
 	if err != nil {
 		return false, err
@@ -69,7 +69,7 @@ func CheckIfFileExistsInDirectory(pathToDirectory string, fileName string) (bool
 	return makeFileExists, nil
 }
 
-func CheckIfFilesExistsInDirectory(pathToDirectory string, fileToCheck string) (bool, error) {
+func CheckIfFilesExistsInDirectory(pathToDirectory, fileToCheck string) (bool, error) {
 	matches, err := filepath.Glob(
 		filepath.Join(
 			pathToDirectory,

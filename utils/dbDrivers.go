@@ -11,6 +11,25 @@ import (
 const (
 	regionEnvFmt    = "\nREGION=%s"
 	awsRegionEnvFmt = "\nAWS_REGION=%s"
+
+	envHost         = "\n%sHOST=%s"
+	envHostNL       = "\n%sHOST=%s\n"
+	envUser         = "\n%sUSER=%s"
+	envName         = "\n%sNAME=%s"
+	envPort         = "\n%sPORT=%d"
+	envPassword     = "\n%sPASSWORD=%s\n"
+	envURL          = "\n%sURL=%s"
+	envDashboardURL = "\n%sDASHBOARD_URL=%s\n"
+
+	urlHostPort    = "http://%s:%s"
+	urlHostPortInt = "http://%s:%d"
+
+	concat5 = "%s%s%s%s%s"
+	concat6 = "%s%s%s%s%s%s"
+
+	fileDockerCompose = "docker-compose.yml"
+	fileBootstrap     = "bootstrap/bootstrap.sh"
+	fileMakefile      = "Makefile"
 )
 
 type FilenameForService struct {
@@ -28,23 +47,23 @@ var DriverConfigs = map[string]DriverConfig{
 	"rabbitmq": {
 		Prefix: "RABBITMQ_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
-			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%s", db.Host, "15672"))
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "15672"))
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, port, password, dashboardUrl)
+			return fmt.Sprintf(concat5, host, user, port, password, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeRabbitMQ},
-			{"Makefile", templates.MakefileRabbitMQ},
+			{fileDockerCompose, templates.DockerComposeRabbitMQ},
+			{fileMakefile, templates.MakefileRabbitMQ},
 		},
 	},
 	"sqs": {
 		Prefix: "AWS_SQS_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
 
 			return fmt.Sprintf("%s%s%s%s%s%s%s%s", host,
 				fmt.Sprintf(regionEnvFmt, templates.SqsRegion),
@@ -57,16 +76,16 @@ var DriverConfigs = map[string]DriverConfig{
 			)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeSqs},
-			{"Makefile", templates.MakefileSqs},
-			{"bootstrap/bootstrap.sh", templates.BootstrapSqs},
+			{fileDockerCompose, templates.DockerComposeSqs},
+			{fileMakefile, templates.MakefileSqs},
+			{fileBootstrap, templates.BootstrapSqs},
 		},
 	},
 	"s3": {
 		Prefix: "AWS_S3_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			return fmt.Sprintf("%s%s%s%s%s%s%s%s",
 				host,
 				port,
@@ -79,30 +98,30 @@ var DriverConfigs = map[string]DriverConfig{
 			)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeS3},
-			{"Makefile", templates.MakefileS3},
-			{"bootstrap/bootstrap.sh", templates.BootstrapS3},
+			{fileDockerCompose, templates.DockerComposeS3},
+			{fileMakefile, templates.MakefileS3},
+			{fileBootstrap, templates.BootstrapS3},
 		},
 	},
 	"redis": {
 		Prefix: "REDIS_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
-			host := fmt.Sprintf("\n%sHOST=%s\n", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHostNL, serviceNameInEnv, db.Host)
 
-			return fmt.Sprintf("%s%s%s%s%s",
+			return fmt.Sprintf(concat5,
 				user,
 				port,
 				password,
-				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("redis://%s:%d", db.Host, db.Port)),
+				fmt.Sprintf(envURL, serviceNameInEnv, fmt.Sprintf("redis://%s:%d", db.Host, db.Port)),
 				host,
 			)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeRedis},
-			{"Makefile", templates.MakefileRedis},
+			{fileDockerCompose, templates.DockerComposeRedis},
+			{fileMakefile, templates.MakefileRedis},
 			{"redis.conf", templates.RedisConfiguration},
 			{"users.acl", templates.RedisAccessControlList},
 		},
@@ -110,25 +129,25 @@ var DriverConfigs = map[string]DriverConfig{
 	"redis-server": {
 		Prefix: "REDIS_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			var password, token string
 			if db.Password != "" {
-				password = fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+				password = fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 				token = fmt.Sprintf("\n%sTOKEN=%s\n", serviceNameInEnv, db.Password)
 			}
 
 			var url string
 			if db.Password != "" {
-				url = fmt.Sprintf("\n%sURL=%s", serviceNameInEnv,
+				url = fmt.Sprintf(envURL, serviceNameInEnv,
 					fmt.Sprintf("redis://:%s@%s:%d", db.Password, db.Host, db.Port))
 			} else {
-				url = fmt.Sprintf("\n%sURL=%s", serviceNameInEnv,
+				url = fmt.Sprintf(envURL, serviceNameInEnv,
 					fmt.Sprintf("redis://%s:%d", db.Host, db.Port))
 			}
 
-			host := fmt.Sprintf("\n%sHOST=%s\n", serviceNameInEnv, db.Host)
+			host := fmt.Sprintf(envHostNL, serviceNameInEnv, db.Host)
 
-			return fmt.Sprintf("%s%s%s%s%s",
+			return fmt.Sprintf(concat5,
 				port,
 				password,
 				token,
@@ -137,29 +156,29 @@ var DriverConfigs = map[string]DriverConfig{
 			)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeRedisServer},
-			{"Makefile", templates.MakefileRedisServer},
+			{fileDockerCompose, templates.DockerComposeRedisServer},
+			{fileMakefile, templates.MakefileRedisServer},
 		},
 	},
 	"keydb": {
 		Prefix: "KEYDB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
-			host := fmt.Sprintf("\n%sHOST=%s\n", serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHostNL, serviceNameInEnv, db.Host)
 
-			return fmt.Sprintf("%s%s%s%s%s",
+			return fmt.Sprintf(concat5,
 				user,
 				port,
 				password,
-				fmt.Sprintf("\n%sURL=%s", serviceNameInEnv, fmt.Sprintf("keydb://%s:%d", db.Host, db.Port)),
+				fmt.Sprintf(envURL, serviceNameInEnv, fmt.Sprintf("keydb://%s:%d", db.Host, db.Port)),
 				host,
 			)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeKeyDB},
-			{"Makefile", templates.MakefileKeyDB},
+			{fileDockerCompose, templates.DockerComposeKeyDB},
+			{fileMakefile, templates.MakefileKeyDB},
 			{"keydb.conf", templates.KeyDBConfiguration},
 			{"users.acl", templates.KeyDBAccessControlList},
 		},
@@ -167,59 +186,59 @@ var DriverConfigs = map[string]DriverConfig{
 	"mongodb": {
 		Prefix: "MONGO_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeMongodb},
-			{"Makefile", templates.MakefileMongodb},
+			{fileDockerCompose, templates.DockerComposeMongodb},
+			{fileMakefile, templates.MakefileMongodb},
 		},
 	},
 	"mysql": {
 		Prefix: "MYSQL_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeMySQL},
-			{"Makefile", templates.MakefileMySQL},
+			{fileDockerCompose, templates.DockerComposeMySQL},
+			{fileMakefile, templates.MakefileMySQL},
 		},
 	},
 	"mariadb": {
 		Prefix: "MARIADB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeMariaDB},
-			{"Makefile", templates.MakefileMariaDB},
+			{fileDockerCompose, templates.DockerComposeMariaDB},
+			{fileMakefile, templates.MakefileMariaDB},
 		},
 	},
 	"dynamodb": {
 		Prefix: "DYNAMODB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
 
-			return fmt.Sprintf("%s%s%s%s%s",
+			return fmt.Sprintf(concat5,
 				host,
 				port,
 				name,
@@ -228,108 +247,107 @@ var DriverConfigs = map[string]DriverConfig{
 			)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeDynamoDB},
-			{"Makefile", templates.MakefileDynamoDB},
-			{"bootstrap/bootstrap.sh", templates.BootstrapDynamoDB},
+			{fileDockerCompose, templates.DockerComposeDynamoDB},
+			{fileMakefile, templates.MakefileDynamoDB},
+			{fileBootstrap, templates.BootstrapDynamoDB},
 		},
 	},
 	"kafka": {
 		Prefix: "KAFKA_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%s", db.Host, "9000"))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "9000"))
 
-			return fmt.Sprintf("%s%s%s%s%s%s", host, user, port, name, password, dashboardUrl)
+			return fmt.Sprintf(concat6, host, user, port, name, password, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeKafka},
-			{"Makefile", templates.MakefileKafka},
-			{"bootstrap/bootstrap.sh", templates.BootstrapKafka},
+			{fileDockerCompose, templates.DockerComposeKafka},
+			{fileMakefile, templates.MakefileKafka},
+			{fileBootstrap, templates.BootstrapKafka},
 		},
 	},
 	"mssql": {
 		Prefix: "MSSQL_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, port, name, password)
+			return fmt.Sprintf(concat5, host, user, port, name, password)
 		},
-		// TODO: mention somewhere, that if password is less than 8 characters, it will not create mssql db
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeMSSQL},
-			{"Makefile", templates.MakefileMSSQL},
-			{"bootstrap/bootstrap.sh", templates.BootstrapMSSQL},
+			{fileDockerCompose, templates.DockerComposeMSSQL},
+			{fileMakefile, templates.MakefileMSSQL},
+			{fileBootstrap, templates.BootstrapMSSQL},
 		},
 	},
 	"cassandra": {
 		Prefix: "CASSANDRA_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeCassandra},
-			{"Makefile", templates.MakefileCassandra},
+			{fileDockerCompose, templates.DockerComposeCassandra},
+			{fileMakefile, templates.MakefileCassandra},
 		},
 	},
 	"scylla": {
 		Prefix: "SCYLLA_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeScylla},
-			{"Makefile", templates.MakefileScylla},
-			{"bootstrap/bootstrap.sh", templates.BootstrapScylla},
+			{fileDockerCompose, templates.DockerComposeScylla},
+			{fileMakefile, templates.MakefileScylla},
+			{fileBootstrap, templates.BootstrapScylla},
 		},
 	},
 	"cockroach": {
 		Prefix: "COCKROACH_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeCockroach},
-			{"Makefile", templates.MakefileCockroach},
-			{"bootstrap/bootstrap.sh", templates.BootstrapCockroach},
+			{fileDockerCompose, templates.DockerComposeCockroach},
+			{fileMakefile, templates.MakefileCockroach},
+			{fileBootstrap, templates.BootstrapCockroach},
 		},
 	},
 	"clickhouse": {
 		Prefix: "CLICKHOUSE_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
 			{
@@ -349,33 +367,33 @@ var DriverConfigs = map[string]DriverConfig{
 	"surrealdb": {
 		Prefix: "SURREALDB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeSurrealDB},
-			{"Makefile", templates.MakefileSurrealDB},
+			{fileDockerCompose, templates.DockerComposeSurrealDB},
+			{fileMakefile, templates.MakefileSurrealDB},
 		},
 	},
 	"influxdb": {
 		Prefix: "INFLUXDB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeInfluxDB},
-			{"Makefile", templates.MakefileInfluxDB},
+			{fileDockerCompose, templates.DockerComposeInfluxDB},
+			{fileMakefile, templates.MakefileInfluxDB},
 		},
 	},
 	"neo4j": {
@@ -384,111 +402,111 @@ var DriverConfigs = map[string]DriverConfig{
 			// add this fix, when neo4j community edition supports multiple databases
 			// validDatabaseName := strings.ReplaceAll(db.DatabaseName, "-", "_")
 
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, "neo4j")
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, "neo4j")
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%s", db.Host, "7474"))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "7474"))
 
-			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, dashboardUrl)
+			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeNeo4j},
-			{"Makefile", templates.MakefileNeo4j},
-			{"bootstrap/bootstrap.sh", templates.BootstrapNeo4j},
+			{fileDockerCompose, templates.DockerComposeNeo4j},
+			{fileMakefile, templates.MakefileNeo4j},
+			{fileBootstrap, templates.BootstrapNeo4j},
 		},
 	},
 	"dgraph": {
 		Prefix: "DGRAPH_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, "0")
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			name := fmt.Sprintf(envName, serviceNameInEnv, "0")
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			// no user and password is added, because acl is only available in enterprise version
 
-			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%s", db.Host, "8000"))
-			dbUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d", db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "8000"))
+			dbUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, db.Port))
 
-			return fmt.Sprintf("%s%s%s%s%s", host, name, port, dashboardUrl, dbUrl)
+			return fmt.Sprintf(concat5, host, name, port, dashboardUrl, dbUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeDgraph},
-			{"Makefile", templates.MakefileDgraph},
+			{fileDockerCompose, templates.DockerComposeDgraph},
+			{fileMakefile, templates.MakefileDgraph},
 		},
 	},
 	"arangodb": {
 		Prefix: "ARANGO_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, "root")
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, "root")
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d", db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, db.Port))
 
-			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, dashboardUrl)
+			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeArangoDB},
-			{"Makefile", templates.MakefileArangoDB},
-			{"bootstrap/bootstrap.sh", templates.BootstrapArangodb},
+			{fileDockerCompose, templates.DockerComposeArangoDB},
+			{fileMakefile, templates.MakefileArangoDB},
+			{fileBootstrap, templates.BootstrapArangodb},
 		},
 	},
 	"elasticsearch": {
 		Prefix: "ELASTIC_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
 			kibanaDashboardUrl := fmt.Sprintf("\n%sKIBANA_DASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:5601", db.Host))
 
-			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, kibanaDashboardUrl)
+			return fmt.Sprintf(concat6, host, user, name, port, password, kibanaDashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeElasticsearch},
-			{"Makefile", templates.MakefileElasticsearch},
-			{"bootstrap/bootstrap.sh", templates.BootstrapElasticsearch},
+			{fileDockerCompose, templates.DockerComposeElasticsearch},
+			{fileMakefile, templates.MakefileElasticsearch},
+			{fileBootstrap, templates.BootstrapElasticsearch},
 		},
 	},
 	"timescaledb": {
 		Prefix: "TIMESCALE_DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeTimescale},
-			{"Makefile", templates.MakefileTimescale},
+			{fileDockerCompose, templates.DockerComposeTimescale},
+			{fileMakefile, templates.MakefileTimescale},
 		},
 	},
 	"couchdb": {
 		Prefix: "COUCHDB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d/_utils", db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf("http://%s:%d/_utils", db.Host, db.Port))
 
-			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, dashboardUrl)
+			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeCouchDB},
-			{"Makefile", templates.MakefileCouchDB},
-			{"bootstrap/bootstrap.sh", templates.BootstrapCouchDB},
+			{fileDockerCompose, templates.DockerComposeCouchDB},
+			{fileMakefile, templates.MakefileCouchDB},
+			{fileBootstrap, templates.BootstrapCouchDB},
 		},
 	},
 	"meilisearch": {
@@ -496,134 +514,133 @@ var DriverConfigs = map[string]DriverConfig{
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			// it doesn't use traditional usernames, so only host, port, name (for MeiliSearch itself), and the master key (acting like a password) are provided.
 
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, "meilisearch")
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			name := fmt.Sprintf(envName, serviceNameInEnv, "meilisearch")
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			masterKey := fmt.Sprintf("\n%sMASTER_KEY=%s\n", serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d", db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, db.Port))
 
-			return fmt.Sprintf("%s%s%s%s%s", host, name, port, masterKey, dashboardUrl)
+			return fmt.Sprintf(concat5, host, name, port, masterKey, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeMeiliSearch},
-			{"Makefile", templates.MakefileMeiliSearch},
+			{fileDockerCompose, templates.DockerComposeMeiliSearch},
+			{fileMakefile, templates.MakefileMeiliSearch},
 		},
 	},
 	"faunadb": {
 		Prefix: "FAUNADB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			// secret is default password in faunadb
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, "secret")
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, "secret")
 
 			return fmt.Sprintf("%s%s%s", host, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeFauna},
-			{"Makefile", templates.MakefileFauna},
+			{fileDockerCompose, templates.DockerComposeFauna},
+			{fileMakefile, templates.MakefileFauna},
 		},
 	},
 	"yugabytedb": {
 		Prefix: "YUGABYTEDB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 
-			// use yugabyte as default one for use and password. TODO: change it to the provided one
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
 			password := fmt.Sprintf("\n%sPASSWORD=%s", serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf("\n%sDASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:%d", db.Host, 15433))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, 15433))
 
-			return fmt.Sprintf("%s%s%s%s%s%s", host, user, name, port, password, dashboardUrl)
+			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeYugabytedb},
-			{"Makefile", templates.MakefileYugabytedb},
+			{fileDockerCompose, templates.DockerComposeYugabytedb},
+			{fileMakefile, templates.MakefileYugabytedb},
 		},
 	},
 	"skytable": {
 		Prefix: "SKYTABLE_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			// now docker generates password in logs, so we don't need to provide it
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			return fmt.Sprintf("%s%s", host, port)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeSkytable},
-			{"Makefile", templates.MakefileSkytable},
+			{fileDockerCompose, templates.DockerComposeSkytable},
+			{fileMakefile, templates.MakefileSkytable},
 		},
 	},
 	"dragonfly": {
 		Prefix: "DRAGONFLY_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			return fmt.Sprintf("%s%s", host, port)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeDragonfly},
-			{"Makefile", templates.MakefileDragonfly},
+			{fileDockerCompose, templates.DockerComposeDragonfly},
+			{fileMakefile, templates.MakefileDragonfly},
 		},
 	},
 	"redict": {
 		Prefix: "REDICT_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			return fmt.Sprintf("%s%s", host, port)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeRedict},
-			{"Makefile", templates.MakefileRedict},
+			{fileDockerCompose, templates.DockerComposeRedict},
+			{fileMakefile, templates.MakefileRedict},
 		},
 	},
 	"valkey": {
 		Prefix: "VALKEY_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			return fmt.Sprintf("%s%s", host, port)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeValkey},
-			{"Makefile", templates.MakefileValkey},
+			{fileDockerCompose, templates.DockerComposeValkey},
+			{fileMakefile, templates.MakefileValkey},
 		},
 	},
 	"postgis": {
 		Prefix: "POSTGIS_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposePostgis},
-			{"Makefile", templates.MakefilePostgis},
+			{fileDockerCompose, templates.DockerComposePostgis},
+			{fileMakefile, templates.MakefilePostgis},
 		},
 	},
 	"pgvector": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposePgvector},
-			{"Makefile", templates.MakefilePgvector},
+			{fileDockerCompose, templates.DockerComposePgvector},
+			{fileMakefile, templates.MakefilePgvector},
 		},
 	},
 	"localstack": {
@@ -633,8 +650,8 @@ var DriverConfigs = map[string]DriverConfig{
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			var out strings.Builder
 
-			fmt.Fprintf(&out, "\n%sHOST=%s", serviceNameInEnv, db.Host)
-			fmt.Fprintf(&out, "\n%sPORT=%d", serviceNameInEnv, db.Port)
+			fmt.Fprintf(&out, envHost, serviceNameInEnv, db.Host)
+			fmt.Fprintf(&out, envPort, serviceNameInEnv, db.Port)
 			fmt.Fprintf(&out, "\n%sENDPOINT_URL=http://%s:%d", serviceNameInEnv, db.Host, db.Port)
 			fmt.Fprintf(&out, "\n%sSQS_ENDPOINT=http://%s:%d/000000000000/", serviceNameInEnv, db.Host, db.Port)
 			fmt.Fprintf(&out, "\n%sS3_ENDPOINT_URL=http://%s:%d", serviceNameInEnv, db.Host, db.Port)
@@ -686,9 +703,9 @@ var DriverConfigs = map[string]DriverConfig{
 			return out.String()
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeLocalstack},
-			{"Makefile", templates.MakefileLocalstack},
-			{"bootstrap/bootstrap.sh", templates.BootstrapLocalstack},
+			{fileDockerCompose, templates.DockerComposeLocalstack},
+			{fileMakefile, templates.MakefileLocalstack},
+			{fileBootstrap, templates.BootstrapLocalstack},
 		},
 	},
 	"supabase": {
@@ -763,8 +780,8 @@ var DriverConfigs = map[string]DriverConfig{
 			return out.String()
 		},
 		FilesToCreate: []FilenameForService{
-			{"Makefile", templates.MakefileSupabase},
-			{"bootstrap/bootstrap.sh", templates.BootstrapSupabase},
+			{fileMakefile, templates.MakefileSupabase},
+			{fileBootstrap, templates.BootstrapSupabase},
 		},
 	},
 	"image": {
@@ -788,31 +805,31 @@ var DriverConfigs = map[string]DriverConfig{
 			var out strings.Builder
 			if db.Port != 0 {
 				fmt.Fprintf(&out, "\n%sURL=http://%s:%d", prefix, host, db.Port)
-				fmt.Fprintf(&out, "\n%sHOST=%s", prefix, host)
-				fmt.Fprintf(&out, "\n%sPORT=%d", prefix, db.Port)
+				fmt.Fprintf(&out, envHost, prefix, host)
+				fmt.Fprintf(&out, envPort, prefix, db.Port)
 			}
 			out.WriteString("\n")
 			return out.String()
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeImage},
-			{"Makefile", templates.MakefileImage},
+			{fileDockerCompose, templates.DockerComposeImage},
+			{fileMakefile, templates.MakefileImage},
 		},
 	},
 	"default": {
 		Prefix: "DB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
-			user := fmt.Sprintf("\n%sUSER=%s", serviceNameInEnv, db.User)
-			name := fmt.Sprintf("\n%sNAME=%s", serviceNameInEnv, db.DatabaseName)
-			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, db.Port)
-			password := fmt.Sprintf("\n%sPASSWORD=%s\n", serviceNameInEnv, db.Password)
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
+			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			return fmt.Sprintf("%s%s%s%s%s", host, user, name, port, password)
+			return fmt.Sprintf(concat5, host, user, name, port, password)
 		},
 		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposePostgres},
-			{"Makefile", templates.MakefilePostgres},
+			{fileDockerCompose, templates.DockerComposePostgres},
+			{fileMakefile, templates.MakefilePostgres},
 		},
 	},
 }

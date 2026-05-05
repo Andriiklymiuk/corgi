@@ -11,9 +11,7 @@ import (
 )
 
 func DownloadFileFromURL(
-	url string,
-	fileName string,
-	privateToken string,
+	url, fileName, privateToken string,
 ) (string, error) {
 	// Convert the URL to a raw content URL if it's a GitHub or GitLab URL
 	rawURL := convertToRawURL(url)

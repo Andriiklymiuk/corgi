@@ -254,7 +254,7 @@ func getListOfServicesWithClonedFrom(services []utils.Service) []string {
 	return servicesList
 }
 
-func changeRepoOrigin(path string, serviceName string, newRepoOrigin string) error {
+func changeRepoOrigin(path, serviceName, newRepoOrigin string) error {
 	// Remove the existing 'origin' if it exists
 	err := utils.RunServiceCmd(
 		serviceName,

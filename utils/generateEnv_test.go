@@ -93,7 +93,7 @@ func TestFindServiceByName(t *testing.T) {
 	if got := findServiceByName(services, "b"); got == nil || got.ServiceName != "b" {
 		t.Errorf("got %+v", got)
 	}
-	if got := findServiceByName(services, "missing"); got != nil {
+	if findServiceByName(services, "missing") != nil {
 		t.Errorf("expected nil")
 	}
 }
