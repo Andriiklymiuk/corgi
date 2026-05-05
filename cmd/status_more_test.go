@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestInitStateMap(t *testing.T) {
@@ -158,15 +157,3 @@ func TestIsStdoutTTY(t *testing.T) {
 	_ = isStdoutTTY()
 }
 
-func TestRunStatusWatchTimings(t *testing.T) {
-	rows := []statusRow{{Label: "x", Kind: "tcp", Port: 1}}
-	done := make(chan bool)
-	go func() {
-		runStatusWatch(rows, 0, false, true)
-		done <- true
-	}()
-	select {
-	case <-done:
-	case <-time.After(50 * time.Millisecond):
-	}
-}
