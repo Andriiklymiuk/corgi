@@ -5,7 +5,8 @@
       "Bash(awk '-F[\\\\t :]+' '$NF==\"0.0%\" {print $1}')",
       "WebFetch(domain:sonarcloud.io)",
       "Bash(curl -s \"https://sonarcloud.io/api/issues/search?componentKeys=Andriiklymiuk_corgi&statuses=OPEN,CONFIRMED&ps=100&resolved=false\")",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(make test\\\\:cov)"
     ]
   }
 }
