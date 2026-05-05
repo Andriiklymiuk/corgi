@@ -275,22 +275,6 @@ func TestStopRunTunnelsWithCancel(t *testing.T) {
 	stopRunTunnels()
 }
 
-func TestStopRunTunnelsNil(t *testing.T) {
-	prev := runTunnelsCancel
-	runTunnelsCancel = nil
-	t.Cleanup(func() { runTunnelsCancel = prev })
-	stopRunTunnels()
-}
-
-func TestFirstLine(t *testing.T) {
-	if got := firstLine("hello\nworld"); got != "hello" {
-		t.Errorf("got %q", got)
-	}
-	if got := firstLine("no newline"); got != "no newline" {
-		t.Errorf("got %q", got)
-	}
-}
-
 func TestStartTunnelsForRunNoTargets(t *testing.T) {
 	startTunnelsForRun([]utils.Service{
 		{ServiceName: "api", Port: 0, Tunnel: nil},

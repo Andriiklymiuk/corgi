@@ -371,3 +371,38 @@ func TestWatchCorgiComposeNoWatch(t *testing.T) {
 		t.Error("expected nil watcher when no-watch=true")
 	}
 }
+
+func TestHandleComposeWriteEventReadError(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	_, c := newTestComposeCommand()
+	got := handleComposeWriteEvent(nil, c, "corgi-compose.yml")
+	if !got {
+		t.Error("expected true (stop watching) when file missing")
+	}
+}
+
+func TestHandleComposeWriteEventNoChange(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	if err := os.WriteFile(yml, []byte("name: same\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestComposeCommand()
+	corgi, err := utils.GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	utils.CorgiComposeFileContent = corgi
+
+	got := handleComposeWriteEvent(nil, c, "corgi-compose.yml")
+	if got {
+		t.Error("expected false when content unchanged")
+	}
+}
