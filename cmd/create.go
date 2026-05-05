@@ -52,58 +52,12 @@ func lowercaseFirstLetter(s string) string {
 }
 
 func GetCorgiServicesMap(corgi *utils.CorgiCompose) map[string]interface{} {
-	var corgiServicesMap = map[string]interface{}{}
-	if corgi.DatabaseServices != nil {
-		dbServiceMap := make(map[string]*utils.DatabaseService)
-		for _, dvService := range corgi.DatabaseServices {
-			name := dvService.ServiceName
-			newDbService := copyDatabaseService(&dvService)
-			newDbService.ServiceName = ""
-			dbServiceMap[name] = newDbService
-		}
-		corgiServicesMap[utils.DbServicesInConfig] = dbServiceMap
-	}
-	if corgi.Services != nil {
-		serviceMap := make(map[string]*utils.Service)
-		for _, service := range corgi.Services {
-			name := service.ServiceName
-			newService := copyService(&service)
-			newService.ServiceName = ""
-			serviceMap[name] = newService
-		}
-		corgiServicesMap[utils.ServicesInConfig] = serviceMap
-	}
-	if corgi.Required != nil {
-		requiredMap := make(map[string]*utils.Required)
-		for _, req := range corgi.Required {
-			name := req.Name
-			newReq := copyRequired(&req)
-			newReq.Name = ""
-			requiredMap[name] = newReq
-		}
-		corgiServicesMap[utils.RequiredInConfig] = requiredMap
-	}
-
-	if corgi.Init != nil {
-		corgiServicesMap[utils.InitInConfig] = corgi.Init
-	}
-	if corgi.Start != nil {
-		corgiServicesMap[utils.StartInConfig] = corgi.Start
-	}
-	if corgi.BeforeStart != nil {
-		corgiServicesMap[utils.BeforeStartInConfig] = corgi.BeforeStart
-	}
-	if corgi.AfterStart != nil {
-		corgiServicesMap[utils.AfterStartInConfig] = corgi.AfterStart
-	}
-
-	if corgi.UseDocker {
-		corgiServicesMap[utils.UseDockerInConfig] = corgi.UseDocker
-	}
-
-	if corgi.UseAwsVpn {
-		corgiServicesMap[utils.UseAwsVpnInConfig] = corgi.UseAwsVpn
-	}
+	corgiServicesMap := map[string]interface{}{}
+	addDbServicesToMap(corgi, corgiServicesMap)
+	addServicesToMap(corgi, corgiServicesMap)
+	addRequiredToMap(corgi, corgiServicesMap)
+	addLifecycleToMap(corgi, corgiServicesMap)
+	addFlagsToMap(corgi, corgiServicesMap)
 	if corgi.Name != "" {
 		corgiServicesMap[utils.NameInConfig] = corgi.Name
 	}
@@ -112,6 +66,72 @@ func GetCorgiServicesMap(corgi *utils.CorgiCompose) map[string]interface{} {
 	}
 
 	return corgiServicesMap
+}
+
+func addDbServicesToMap(corgi *utils.CorgiCompose, m map[string]interface{}) {
+	if corgi.DatabaseServices == nil {
+		return
+	}
+	dbServiceMap := make(map[string]*utils.DatabaseService)
+	for _, dvService := range corgi.DatabaseServices {
+		name := dvService.ServiceName
+		newDbService := copyDatabaseService(&dvService)
+		newDbService.ServiceName = ""
+		dbServiceMap[name] = newDbService
+	}
+	m[utils.DbServicesInConfig] = dbServiceMap
+}
+
+func addServicesToMap(corgi *utils.CorgiCompose, m map[string]interface{}) {
+	if corgi.Services == nil {
+		return
+	}
+	serviceMap := make(map[string]*utils.Service)
+	for _, service := range corgi.Services {
+		name := service.ServiceName
+		newService := copyService(&service)
+		newService.ServiceName = ""
+		serviceMap[name] = newService
+	}
+	m[utils.ServicesInConfig] = serviceMap
+}
+
+func addRequiredToMap(corgi *utils.CorgiCompose, m map[string]interface{}) {
+	if corgi.Required == nil {
+		return
+	}
+	requiredMap := make(map[string]*utils.Required)
+	for _, req := range corgi.Required {
+		name := req.Name
+		newReq := copyRequired(&req)
+		newReq.Name = ""
+		requiredMap[name] = newReq
+	}
+	m[utils.RequiredInConfig] = requiredMap
+}
+
+func addLifecycleToMap(corgi *utils.CorgiCompose, m map[string]interface{}) {
+	if corgi.Init != nil {
+		m[utils.InitInConfig] = corgi.Init
+	}
+	if corgi.Start != nil {
+		m[utils.StartInConfig] = corgi.Start
+	}
+	if corgi.BeforeStart != nil {
+		m[utils.BeforeStartInConfig] = corgi.BeforeStart
+	}
+	if corgi.AfterStart != nil {
+		m[utils.AfterStartInConfig] = corgi.AfterStart
+	}
+}
+
+func addFlagsToMap(corgi *utils.CorgiCompose, m map[string]interface{}) {
+	if corgi.UseDocker {
+		m[utils.UseDockerInConfig] = corgi.UseDocker
+	}
+	if corgi.UseAwsVpn {
+		m[utils.UseAwsVpnInConfig] = corgi.UseAwsVpn
+	}
 }
 
 func runCreate(cmd *cobra.Command, _ []string) {

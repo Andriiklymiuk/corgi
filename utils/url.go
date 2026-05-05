@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const githubHost = "github.com"
+
 func DownloadFileFromURL(
 	url, fileName, privateToken string,
 ) (string, error) {
@@ -22,7 +24,7 @@ func DownloadFileFromURL(
 	}
 
 	if privateToken != "" {
-		if strings.Contains(rawURL, "github.com") || strings.Contains(rawURL, "githubusercontent.com") {
+		if strings.Contains(rawURL, githubHost) || strings.Contains(rawURL, "githubusercontent.com") {
 			req.Header.Add("Authorization", "token "+privateToken)
 		} else if strings.Contains(rawURL, "gitlab.com") {
 			// For GitLab, use the PRIVATE-TOKEN header, but for gitlab repos with SSO it won't work properly
@@ -74,8 +76,8 @@ func convertToRawURL(url string) string {
 	rawURL := url
 
 	// For GitHub URLs
-	if strings.Contains(url, "github.com") {
-		rawURL = strings.Replace(rawURL, "github.com", "raw.githubusercontent.com", 1)
+	if strings.Contains(url, githubHost) {
+		rawURL = strings.Replace(rawURL, githubHost, "raw.githubusercontent.com", 1)
 		rawURL = strings.Replace(rawURL, "/blob/", "/", 1)
 	}
 

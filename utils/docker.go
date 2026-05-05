@@ -12,6 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	errDockerNotOpened = "docker not opened"
+	dockerLinuxCtx     = "docker-linux"
+)
+
 func GetContainerId(targetService string) (string, error) {
 	output, err := ExecuteMakeCommand(targetService, "id")
 	if err != nil {
@@ -51,7 +56,7 @@ func CheckDockerStatus() error {
 			strings.Contains(errorString, "docker daemon socket") ||
 			strings.Contains(errorString, "connect: no such file or directory") ||
 			strings.Contains(errorString, "connect: connection refused") {
-			return fmt.Errorf("docker not opened")
+			return fmt.Errorf("%s", errDockerNotOpened)
 		}
 
 		return fmt.Errorf("%s", errorString)
@@ -203,8 +208,8 @@ var DockerContextConfigs = map[string]DockerContextConfig{
 			return StartDocker()
 		},
 	},
-	"docker-linux": {
-		Name: "docker-linux",
+	dockerLinuxCtx: {
+		Name: dockerLinuxCtx,
 		Start: func() error {
 			return StartDocker()
 		},
@@ -212,7 +217,7 @@ var DockerContextConfigs = map[string]DockerContextConfig{
 }
 
 func isDockerContextValid(dockerContext string) bool {
-	validDockerContexts := []string{"default", "orbctl", "colima", "docker-linux"}
+	validDockerContexts := []string{"default", "orbctl", "colima", dockerLinuxCtx}
 	for _, validValue := range validDockerContexts {
 		if dockerContext == validValue {
 			return true
@@ -224,11 +229,11 @@ func isDockerContextValid(dockerContext string) bool {
 func DockerInit(cobra *cobra.Command) error {
 	err := CheckDockerStatus()
 	if err != nil {
-		if err.Error() != "docker not opened" {
+		if err.Error() != errDockerNotOpened {
 			return err
 		}
 
-		if err.Error() == "docker not opened" {
+		if err.Error() == errDockerNotOpened {
 			dockerContext, err := cobra.Root().Flags().GetString("dockerContext")
 			if err != nil {
 				fmt.Println("error on getting dockerContext flag", err)
@@ -236,7 +241,7 @@ func DockerInit(cobra *cobra.Command) error {
 			}
 			isDockerContextValid := isDockerContextValid(dockerContext)
 
-			if isDockerContextValid && dockerContext != "default" && dockerContext != "docker-linux" {
+			if isDockerContextValid && dockerContext != "default" && dockerContext != dockerLinuxCtx {
 				err = DockerContextConfigs[dockerContext].Start()
 				if err == nil {
 					fmt.Printf("%s run successfully\n", dockerContext)

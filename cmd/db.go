@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const errMakeCommandFailed = "Make command failed"
+
 // dbCmd represents the db command
 var dbCmd = &cobra.Command{
 	Use:   "db",
@@ -153,7 +155,7 @@ func showMakeCommands(
 	default:
 		err := utils.ExecuteCommandRun(targetService, "make", makeCommand)
 		if err != nil {
-			fmt.Println("Make command failed", err)
+			fmt.Println(errMakeCommandFailed, err)
 		}
 	}
 }
@@ -183,7 +185,7 @@ func SeedDb(targetService string) error {
 	if !serviceIsRunning {
 		err := utils.ExecuteCommandRun(targetService, "make", "up")
 		if err != nil {
-			fmt.Println("Make command failed", err)
+			fmt.Println(errMakeCommandFailed, err)
 		}
 		time.Sleep(time.Second * 15)
 	}
@@ -231,7 +233,7 @@ func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
 		fmt.Sprintf("p='%s'", password),
 	)
 	if err != nil {
-		fmt.Println("Make command failed", err)
+		fmt.Println(errMakeCommandFailed, err)
 		return
 	}
 
