@@ -27,9 +27,9 @@ stop:
 id:
 	docker ps -aqf "name=arangodb-{{.ServiceName}}" | awk '{print $1}'
 getSelfDump:
-	# TODO, you can use arangosh for it
+	# use arangosh
 seed:
-	# TODO, you can use arangosh for it
+	# use arangosh
 remove:
 	docker rm --volumes arangodb-{{.ServiceName}}
 logs:
@@ -40,7 +40,6 @@ help:
 .PHONY: up down stop id seed getSelfDump remove logs help
 `
 
-// TODO: fix not connecting error
 // bootstrap/bootstrap.sh
 var BootstrapArangodb = `#!/bin/sh
 

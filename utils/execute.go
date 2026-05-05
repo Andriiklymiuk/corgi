@@ -250,7 +250,7 @@ func RunServiceCommands(
 	}
 }
 
-func RunCombinedCmd(command string, path string) error {
+func RunCombinedCmd(command, path string) error {
 	fmt.Println("🚀 🤖 Executing command: ", art.GreenColor, command, art.WhiteColor)
 
 	commandSlice := strings.Fields(command)
