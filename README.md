@@ -153,7 +153,7 @@ mise use -g github:Andriiklymiuk/corgi
 
 Reads corgi's GitHub releases directly — no registry config needed.
 
-### [pkgx](https://pkgx.sh)
+### [pkgx](https://pkgx.sh) - in progress, waiting for https://github.com/pkgxdev/pantry/pull/12834
 
 ```bash
 pkgx corgi run        # one-off, no install
