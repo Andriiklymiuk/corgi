@@ -35,7 +35,8 @@ changelog:
 brews:
   - name: corgi
     homepage: https://github.com/Andriiklymiuk/corgi
-    description: "Command line interface for database configurations and other useful things, written in Go"
+    description: "Command line interface for database configurations and other
+      useful things, written in Go"
     repository:
       owner: Andriiklymiuk
       name: homebrew-tools
