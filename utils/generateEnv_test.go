@@ -637,3 +637,57 @@ func TestCreateFileForPath(t *testing.T) {
 func TestCreateFileForPathEmpty(t *testing.T) {
 	CreateFileForPath("")
 }
+
+func TestFindDbByNameFound(t *testing.T) {
+	dbs := []DatabaseService{{ServiceName: "pg"}, {ServiceName: "redis"}}
+	got := findDbByName(dbs, "redis")
+	if got == nil || got.ServiceName != "redis" {
+		t.Errorf("expected redis, got %v", got)
+	}
+}
+
+func TestFindDbByNameMissing(t *testing.T) {
+	dbs := []DatabaseService{{ServiceName: "pg"}}
+	got := findDbByName(dbs, "mysql")
+	if got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func TestGenerateEnvForServiceWithDependsOnDb(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	corgi := &CorgiCompose{
+		DatabaseServices: []DatabaseService{
+			{ServiceName: "pg", Driver: "postgres", Host: "localhost", Port: 5432, User: "u", Password: "p", DatabaseName: "d"},
+		},
+	}
+	svc := Service{
+		ServiceName:  "api",
+		AbsolutePath: dir,
+		DependsOnDb:  []DependsOnDb{{Name: "pg"}},
+	}
+	if err := GenerateEnvForService(corgi, svc, "", false); err != nil {
+		t.Errorf("unexpected err: %v", err)
+	}
+}
+
+func TestGenerateEnvForServiceWithExports(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	svc := Service{
+		ServiceName:  "api",
+		AbsolutePath: dir,
+		Port:         3000,
+		Exports:      []string{"API_URL=http://localhost:3000"},
+	}
+	if err := GenerateEnvForService(&CorgiCompose{}, svc, "", false); err != nil {
+		t.Errorf("unexpected err: %v", err)
+	}
+}
