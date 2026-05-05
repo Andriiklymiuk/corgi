@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -397,4 +398,59 @@ func TestGetMakefileCommandsInDirectoryWithMakefile(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	_ = cmds
+}
+
+func TestExecuteSeedMakeCommandPathNotFound(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+	// Service doesn't exist → GetPathToDbService errors → ExecuteSeedMakeCommand returns error
+	_, err := ExecuteSeedMakeCommand("nonexistent_service", "seed")
+	if err == nil {
+		t.Error("expected error for nonexistent service")
+	}
+}
+
+func TestRunInteractiveSimple(t *testing.T) {
+	cmd := exec.Command("true")
+	err := runInteractive(cmd)
+	if err != nil {
+		t.Errorf("runInteractive(true) unexpected err: %v", err)
+	}
+}
+
+func TestHandleCommandFailureUnknownCmd(t *testing.T) {
+	// Command not in CommandInstructions → returns error with "no install instructions"
+	err := handleCommandFailure(
+		fmt.Errorf("executable file not found in $PATH"),
+		[]string{"totally-unknown-xyz-cmd"},
+		"svc", "totally-unknown-xyz-cmd", "/tmp", nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "no install instructions") {
+		t.Errorf("unexpected err: %v", err)
+	}
+}
+
+func TestHandleCommandFailureNonMissing(t *testing.T) {
+	// Error doesn't contain "executable file not found" → propagated as-is
+	original := fmt.Errorf("some other error")
+	err := handleCommandFailure(original, []string{"make"}, "svc", "make", "/tmp", nil)
+	if err != original {
+		t.Errorf("expected original error back, got %v", err)
+	}
+}
+
+func TestKillAllStoredProcessesWithEntries(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	cmd := exec.Command("true")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	addProcess(cmd.Process)
+	cmd.Wait()
+	// Process already exited; KillAllStoredProcesses should not panic
+	KillAllStoredProcesses()
 }

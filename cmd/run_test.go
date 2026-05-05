@@ -320,3 +320,54 @@ func TestSetupComposeWatcherNoWatchFalse(t *testing.T) {
 	}
 	w.Close()
 }
+
+func TestStartServiceProcessDockerPort(t *testing.T) {
+	// docker runner with port — tries ExecuteServiceCommandRun("make up") which will fail gracefully
+	startServiceProcess(utils.Service{
+		ServiceName: "svc",
+		Runner:      utils.Runner{Name: "docker"},
+		Port:        8080,
+	})
+}
+
+func TestStartServiceProcessStartCmds(t *testing.T) {
+	dir := t.TempDir()
+	startServiceProcess(utils.Service{
+		ServiceName:  "svc",
+		Start:        []string{"echo hi"},
+		AbsolutePath: dir,
+	})
+}
+
+func TestRunDatabaseServicesWithNonManual(t *testing.T) {
+	// hasDatabaseToRun=true, DockerInit will fail (no docker) → returns early
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("seed", false, "")
+	runDatabaseServices(cmd, []utils.DatabaseService{
+		{ServiceName: "pg", Driver: "postgres", Port: 5432, ManualRun: false},
+	})
+}
+
+func TestStartDatabaseIfNeededNotRunning(t *testing.T) {
+	// ManualRun=false, but IsServiceRunning will fail (no docker) → prints error, continues
+	startDatabaseIfNeeded(utils.DatabaseService{
+		ServiceName: "pg",
+		Driver:      "postgres",
+		ManualRun:   false,
+	})
+}
+
+func TestWatchCorgiComposeNoWatch(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("no-watch", true, "")
+	cmd.Flags().Set("no-watch", "true")
+	// setupComposeWatcher returns nil when no-watch=true
+	w, err := setupComposeWatcher(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w != nil {
+		w.Close()
+		t.Error("expected nil watcher when no-watch=true")
+	}
+}

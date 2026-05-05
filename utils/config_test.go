@@ -544,3 +544,112 @@ func TestGetCorgiConfigFilePathExists(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestGetCorgiServicesWithDbService(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := `name: testapp
+db_services:
+  mydb:
+    driver: postgres
+    host: localhost
+    user: root
+    password: secret
+    databaseName: mydb
+    port: 5432
+services:
+  api:
+    port: 3000
+    cloneFrom: ""
+    path: ""
+`
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	c := newCobraWithRootFlags()
+	c.Flags().Bool("global", false, "")
+	corgi, err := GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(corgi.DatabaseServices) != 1 {
+		t.Errorf("expected 1 db service, got %d", len(corgi.DatabaseServices))
+	}
+	if len(corgi.Services) != 1 {
+		t.Errorf("expected 1 service, got %d", len(corgi.Services))
+	}
+}
+
+func TestDetermineCorgiComposePathWithFilenameFlag(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "custom.yml")
+	if err := os.WriteFile(yml, []byte("name: custom\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	c := newCobraWithRootFlags()
+	c.Flags().Bool("global", false, "")
+	c.Flags().Set("filename", "custom.yml")
+	path, err := determineCorgiComposePath(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "custom.yml" {
+		t.Errorf("expected custom.yml, got %q", path)
+	}
+}
+
+func TestParseDatabaseServicesWithRabbitMQ(t *testing.T) {
+	dbMap := map[string]DatabaseService{
+		"mq": {
+			Driver:       "rabbitmq",
+			Port:         5672,
+			User:         "guest",
+			Password:     "guest",
+			DatabaseName: "vhost",
+		},
+	}
+	prev := DbServicesItemsFromFlag
+	DbServicesItemsFromFlag = nil
+	t.Cleanup(func() { DbServicesItemsFromFlag = prev })
+	services, err := parseDatabaseServices(dbMap, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(services))
+	}
+	if services[0].Driver != "rabbitmq" {
+		t.Errorf("expected rabbitmq driver, got %s", services[0].Driver)
+	}
+}
+
+func TestCleanCorgiServicesFolderWithData(t *testing.T) {
+	prev, _ := os.Getwd()
+	dir := t.TempDir()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(prev) })
+
+	if err := os.MkdirAll(filepath.Join(dir, "corgi_services", "db_services", "pg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	CleanCorgiServicesFolder()
+	if _, err := os.Stat(filepath.Join(dir, "corgi_services")); !os.IsNotExist(err) {
+		t.Error("expected corgi_services to be removed")
+	}
+}
+
+func TestMetadataJSONValid(t *testing.T) {
+	u := SupabaseAuthUser{Email: "test@example.com"}
+	j := u.MetadataJSON()
+	if j == "" {
+		t.Error("expected non-empty JSON")
+	}
+}

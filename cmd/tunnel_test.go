@@ -3,6 +3,7 @@ package cmd
 import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/tunnel"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -198,5 +199,70 @@ func TestBuildTargetsFromComposeError(t *testing.T) {
 	_, err := buildTargetsFromCompose(c, nil, tunnel.Cloudflared{}, false)
 	if err == nil {
 		t.Error("expected err")
+	}
+}
+
+func newTestTunnelCommand() (*cobra.Command, *cobra.Command) {
+	root := &cobra.Command{Use: "corgi"}
+	c := &cobra.Command{Use: "tunnel"}
+	root.AddCommand(c)
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		root.Flags().String(f, "", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		root.Flags().Bool(f, false, "")
+	}
+	c.Flags().Bool("global", false, "")
+	return root, c
+}
+
+func TestBuildTargetsFromComposeSuccess(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := "name: test\nservices:\n  api:\n    port: 3000\n"
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestTunnelCommand()
+	targets, err := buildTargetsFromCompose(c, nil, tunnel.Cloudflared{}, false)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(targets) != 1 {
+		t.Errorf("expected 1 target, got %d", len(targets))
+	}
+}
+
+func TestBuildTargetsFromComposeNoServices(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	if err := os.WriteFile(yml, []byte("name: test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestTunnelCommand()
+	targets, err := buildTargetsFromCompose(c, nil, tunnel.Cloudflared{}, false)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(targets) != 0 {
+		t.Errorf("expected 0 targets, got %d", len(targets))
+	}
+}
+
+func TestCollectRunTargetsSkipsMissingTunnel(t *testing.T) {
+	// service has no tunnel block → collectRunTargets skips it
+	targets := collectRunTargets([]utils.Service{
+		{ServiceName: "api", Port: 3000, Tunnel: nil},
+	})
+	if len(targets) != 0 {
+		t.Errorf("expected 0, got %d", len(targets))
 	}
 }

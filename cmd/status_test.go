@@ -5,9 +5,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 func TestCollectStatusRows_SkipsZeroPortAndManualRun(t *testing.T) {
@@ -319,4 +323,114 @@ func TestSplitResultsEmpty(t *testing.T) {
 	if up != nil || down != nil {
 		t.Errorf("expected nil, got up=%v down=%v", up, down)
 	}
+}
+
+func newTestStatusCommand() (*cobra.Command, *cobra.Command) {
+	root := &cobra.Command{Use: "corgi"}
+	c := &cobra.Command{Use: "status"}
+	root.AddCommand(c)
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		root.Flags().String(f, "", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		root.Flags().Bool(f, false, "")
+	}
+	c.Flags().Bool("global", false, "")
+	c.Flags().StringSlice("service", nil, "")
+	return root, c
+}
+
+func TestResolveStatusRowsNoPortServices(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := "name: test\nservices:\n  nosvc:\n    port: 0\n"
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestStatusCommand()
+	rows := resolveStatusRows(c)
+	if rows != nil {
+		t.Errorf("expected nil rows for no-port services, got %v", rows)
+	}
+}
+
+func TestResolveStatusRowsWithPort(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := "name: test\nservices:\n  api:\n    port: 3000\n"
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestStatusCommand()
+	rows := resolveStatusRows(c)
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d: %v", len(rows), rows)
+	}
+	if rows[0].Label != "services.api" {
+		t.Errorf("unexpected label: %s", rows[0].Label)
+	}
+}
+
+func TestResolveStatusRowsWithFilter(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := "name: test\nservices:\n  api:\n    port: 3000\n  worker:\n    port: 3001\n"
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestStatusCommand()
+	c.Flags().Set("service", "api")
+	rows := resolveStatusRows(c)
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row after filter, got %d", len(rows))
+	}
+}
+
+func TestRunStatusUntilHealthyAllUp(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "svc", Kind: "http", URL: srv.URL, Port: 1}}
+	// Should return immediately when all healthy on first check
+	runStatusUntilHealthy(rows, 50*time.Millisecond, 5*time.Second, false, true)
+}
+
+func TestRunStatusUntilHealthyAllUpJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "svc", Kind: "http", URL: srv.URL, Port: 1}}
+	runStatusUntilHealthy(rows, 50*time.Millisecond, 5*time.Second, true, false)
+}
+
+func TestFinalizeHealthyQuiet(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	finalize(rows, false, true, true)
+}
+
+func TestFinalizeHealthyVerbose(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	finalize(rows, false, false, true)
 }
