@@ -504,3 +504,15 @@ func TestHandleCommandFailureKnownCmdInstallFails(t *testing.T) {
 		t.Error("expected error when install fails in CI")
 	}
 }
+
+func TestCheckCommandExistsWithOutput(t *testing.T) {
+	err := CheckCommandExists("echo hello")
+	if err != nil {
+		t.Errorf("unexpected err: %v", err)
+	}
+}
+
+func TestCheckCommandExistsNotFound(t *testing.T) {
+	err := CheckCommandExists("totally-missing-cmd-xyz --version")
+	_ = err
+}

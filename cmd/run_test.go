@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )
 
@@ -423,4 +424,37 @@ func TestRunServicePullIfRequestedPullTrue(t *testing.T) {
 		t.Fatal(err)
 	}
 	runServicePullIfRequested(c, utils.Service{ServiceName: "svc", AbsolutePath: t.TempDir()})
+}
+
+func TestHandleComposeWriteEventContentChanged(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	if err := os.WriteFile(yml, []byte("name: v1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestComposeCommand()
+	corgi, err := utils.GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	utils.CorgiComposeFileContent = corgi
+
+	if err := os.WriteFile(yml, []byte("name: v2\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	got := handleComposeWriteEvent(w, c, yml)
+	if got {
+		t.Error("expected false when content changed (not a read error)")
+	}
 }
