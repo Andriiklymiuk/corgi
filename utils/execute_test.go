@@ -454,3 +454,47 @@ func TestKillAllStoredProcessesWithEntries(t *testing.T) {
 	// Process already exited; KillAllStoredProcesses should not panic
 	KillAllStoredProcesses()
 }
+
+func TestExecuteMakeCommandSuccess(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "svc")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("echo:\n\t@echo hello\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ExecuteMakeCommand("svc", "echo")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(string(out), "hello") {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestExecuteSeedMakeCommandSuccess(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "svc")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("seed:\n\t@echo seeded\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ExecuteSeedMakeCommand("svc", "seed")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	_ = out
+}
+
+func TestRunCommandsParallelNoOp(t *testing.T) {
+	runCommandsParallel("test", "svc", []string{"echo hi"}, t.TempDir(), false, nil)
+}
