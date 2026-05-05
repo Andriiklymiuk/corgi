@@ -2,6 +2,7 @@ package utils
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,7 +91,6 @@ func TestResolveEnvFile_NoPathDisables(t *testing.T) {
 		t.Fatalf("expected empty when path empty, got %q", got)
 	}
 }
-
 
 func TestWithEnvSourceEmptyEnvFile(t *testing.T) {
 	if got := withEnvSource("echo hi", ""); got != "echo hi" {
@@ -335,4 +335,66 @@ func TestGetPathToService(t *testing.T) {
 	if !strings.Contains(got, "api") {
 		t.Errorf("got %q", got)
 	}
+}
+
+func TestRemoveProcess(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	// Use a real process so we get a valid *os.Process
+	cmd := exec.Command("true")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	proc := cmd.Process
+	cmd.Wait()
+
+	addProcess(proc)
+	if len(ProcessHandles) != 1 {
+		t.Fatalf("expected 1 handle, got %d", len(ProcessHandles))
+	}
+	removeProcess(proc)
+	if len(ProcessHandles) != 0 {
+		t.Fatalf("expected 0 handles after remove, got %d", len(ProcessHandles))
+	}
+}
+
+func TestRemoveProcessNotPresent(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	cmd := exec.Command("true")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	proc := cmd.Process
+	cmd.Wait()
+
+	// Remove something that was never added — should not panic
+	removeProcess(proc)
+	if len(ProcessHandles) != 0 {
+		t.Fatalf("expected 0, got %d", len(ProcessHandles))
+	}
+}
+
+func TestGetMakefileCommandsInDirectoryWithMakefile(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "svc")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	makefile := "help:\n\t@echo stop\nstop:\n\t@echo noop\n"
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(makefile), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmds, err := GetMakefileCommandsInDirectory("svc")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	_ = cmds
 }

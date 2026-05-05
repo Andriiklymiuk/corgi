@@ -233,3 +233,90 @@ func TestHandleComposeWriteEventErrorReadingNew(t *testing.T) {
 		t.Errorf("expected true on error")
 	}
 }
+
+func TestCleanupWithAfterStart(t *testing.T) {
+	dir := t.TempDir()
+	cleanup(&utils.CorgiCompose{
+		Services: []utils.Service{
+			{ServiceName: "x", AfterStart: []string{"echo after"}, AbsolutePath: dir},
+		},
+	})
+}
+
+func TestCleanupWithGlobalAfterStart(t *testing.T) {
+	cleanup(&utils.CorgiCompose{
+		AfterStart: []string{"echo global-after"},
+	})
+}
+
+func TestRunServiceWithStartCommands(t *testing.T) {
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = nil })
+	utils.ServicesItemsFromFlag = nil
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("pull", false, "")
+	dir := t.TempDir()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	runService(utils.Service{
+		ServiceName:  "x",
+		Start:        []string{"echo hi"},
+		AbsolutePath: dir,
+	}, cmd, &wg)
+	wg.Wait()
+}
+
+func TestRunServiceWithBeforeStart(t *testing.T) {
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = nil })
+	utils.ServicesItemsFromFlag = nil
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("pull", false, "")
+	dir := t.TempDir()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	runService(utils.Service{
+		ServiceName:  "x",
+		BeforeStart:  []string{"echo before"},
+		AbsolutePath: dir,
+	}, cmd, &wg)
+	wg.Wait()
+}
+
+func TestHandleComposeWriteEventSameContent(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	if err := os.WriteFile(yml, []byte("name: same\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestComposeCommand()
+	corgi, err := utils.GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	utils.CorgiComposeFileContent = corgi
+
+	got := handleComposeWriteEvent(nil, c, "corgi-compose.yml")
+	if got {
+		t.Error("expected false when content is same")
+	}
+}
+
+func TestSetupComposeWatcherNoWatchFalse(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("no-watch", false, "")
+	w, err := setupComposeWatcher(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w == nil {
+		t.Error("expected watcher when no-watch=false")
+	}
+	w.Close()
+}

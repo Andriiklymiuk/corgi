@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCollectStatusRows_SkipsZeroPortAndManualRun(t *testing.T) {
@@ -113,7 +114,6 @@ func TestCollectStatusRows_OtherDriversStayTCP(t *testing.T) {
 		}
 	}
 }
-
 
 func TestInitStateMap(t *testing.T) {
 	rows := []statusRow{{Label: "a"}, {Label: "b"}}
@@ -264,3 +264,59 @@ func TestIsStdoutTTY(t *testing.T) {
 	_ = isStdoutTTY()
 }
 
+func TestRunStatusOnceQuietAllUp(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	runStatusOnce(rows, statusFlags{quiet: true})
+}
+
+func TestRunStatusOnceJSONAllUp(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	runStatusOnce(rows, statusFlags{jsonOut: true})
+}
+
+func TestRunStatusOnceDefaultAllUp(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	runStatusOnce(rows, statusFlags{})
+}
+
+func TestFilterRowsMatchesPrefix(t *testing.T) {
+	rows := []statusRow{
+		{Label: "db_services.postgres (postgres)"},
+		{Label: "services.api"},
+		{Label: "services.worker"},
+	}
+	got := filterRows(rows, []string{"postgres", "worker"})
+	if len(got) != 2 {
+		t.Errorf("expected 2, got %d: %+v", len(got), got)
+	}
+}
+
+func TestBuildWatchFrameOutput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
+	defer srv.Close()
+	rows := []statusRow{{Label: "svc", Kind: "http", URL: srv.URL, Port: 1}}
+	results := probeAllParallel(rows)
+	out := buildWatchFrame(rows, results, 2000000000, time.Now())
+	if !strings.Contains(out, "svc") {
+		t.Errorf("frame missing svc: %q", out)
+	}
+}
+
+func TestSplitResultsEmpty(t *testing.T) {
+	up, down := splitResults(nil, nil)
+	if up != nil || down != nil {
+		t.Errorf("expected nil, got up=%v down=%v", up, down)
+	}
+}

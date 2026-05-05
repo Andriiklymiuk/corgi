@@ -488,3 +488,59 @@ func TestCleanCorgiServicesFolderMissing(t *testing.T) {
 	// Should not panic when folder doesn't exist
 	CleanCorgiServicesFolder()
 }
+
+func TestCleanFromScratchEnabled(t *testing.T) {
+	c := newCobraWithRootFlags()
+	if err := c.Flags().Set("fromScratch", "true"); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, _ := os.Getwd()
+	dir := t.TempDir()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	// No DatabaseServices → just calls CleanCorgiServicesFolder (os.RemoveAll on tmp)
+	CleanFromScratch(c, CorgiCompose{})
+}
+
+func TestCleanFromScratchEnabledWithDbs(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	c := newCobraWithRootFlags()
+	if err := c.Flags().Set("fromScratch", "true"); err != nil {
+		t.Fatal(err)
+	}
+	dbDir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "mydb")
+	os.MkdirAll(dbDir, 0755)
+	os.WriteFile(filepath.Join(dbDir, "Makefile"), []byte("remove:\n\t@echo noop\n"), 0644)
+
+	cwd, _ := os.Getwd()
+	dir := t.TempDir()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	CleanFromScratch(c, CorgiCompose{
+		DatabaseServices: []DatabaseService{{ServiceName: "mydb"}},
+	})
+}
+
+func TestGetCorgiConfigFilePathExists(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, CorgiComposeDefaultName), []byte("name: t\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	got, err := getCorgiConfigFilePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != CorgiComposeDefaultName {
+		t.Errorf("got %q", got)
+	}
+}
