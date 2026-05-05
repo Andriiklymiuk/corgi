@@ -54,7 +54,7 @@ func CheckDockerStatus() error {
 			return fmt.Errorf("docker not opened")
 		}
 
-		return fmt.Errorf(errorString)
+		return fmt.Errorf("%s", errorString)
 	}
 	return nil
 }
@@ -104,7 +104,7 @@ func GetStatusOfService(targetService string) (bool, error) {
 		output error: %s 
 		`, output, err)
 
-		return false, fmt.Errorf(errorString)
+		return false, fmt.Errorf("%s", errorString)
 	}
 	v := strings.Split(string(output), "\n")
 

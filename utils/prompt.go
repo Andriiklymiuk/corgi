@@ -44,7 +44,7 @@ func PickItemFromListPrompt(label string, items []string, backString string, set
 	}
 
 	if result == backString {
-		return "", fmt.Errorf(backString)
+		return "", fmt.Errorf("%s", backString)
 	}
 
 	return result, nil

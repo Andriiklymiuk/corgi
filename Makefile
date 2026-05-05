@@ -42,6 +42,18 @@ incrementVersionMajor:
 	$(eval VERSION := $(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}'))
 
 
+test:
+	go test ./... -race -coverprofile=coverage.out -covermode=atomic -timeout 5m
+
+coverage: test
+	go tool cover -func=coverage.out | tail -1
+
+coverage-html: test
+	go tool cover -html=coverage.out
+
+coverage-by-pkg: test
+	go tool cover -func=coverage.out | grep -v _test.go | awk '{pkg=$$1; sub(/\/[^\/]+$$/, "", pkg); cov[pkg]+=$$3+0; n[pkg]++} END {for (p in cov) printf "%s\t%.1f%%\n", p, cov[p]/n[p]}' | sort -k2 -n
+
 .PHONY: \
 fixHooks \
 release \
@@ -51,4 +63,8 @@ getVersion \
 getActionVersion \
 incrementVersionPatch \
 incrementVersionMinor \
-incrementVersionMajor
+incrementVersionMajor \
+test \
+coverage \
+coverage-html \
+coverage-by-pkg
