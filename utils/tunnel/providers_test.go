@@ -148,3 +148,39 @@ func TestLocaltunnel(t *testing.T) {
 		}
 	})
 }
+
+func TestCloudflaredPreflightNamedAuthNoCert(t *testing.T) {
+	err := Cloudflared{}.PreflightNamedAuth(NamedConfig{Hostname: "my.tunnel.example.com"})
+	if err == nil {
+		t.Error("expected error when cert.pem missing")
+	}
+}
+
+func TestNgrokInstallHint(t *testing.T) {
+	hint := Ngrok{}.InstallHint()
+	if hint == "" {
+		t.Error("InstallHint should not be empty")
+	}
+}
+
+func TestNgrokPreflightAuthNoConfig(t *testing.T) {
+	err := Ngrok{}.PreflightAuth()
+	if err == nil {
+		t.Log("ngrok is installed (unexpected in CI) or PreflightAuth returned nil")
+	}
+}
+
+func TestNgrokPreflightNamedAuth(t *testing.T) {
+	// Should return error when ngrok config not present
+	err := Ngrok{}.PreflightNamedAuth(NamedConfig{Hostname: "x.ngrok.app"})
+	if err == nil {
+		t.Log("ngrok available and configured (unexpected)")
+	}
+}
+
+func TestLocaltunnelInstallHint(t *testing.T) {
+	hint := Localtunnel{}.InstallHint()
+	if hint == "" {
+		t.Error("InstallHint should not be empty")
+	}
+}
