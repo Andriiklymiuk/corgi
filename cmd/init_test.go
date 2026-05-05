@@ -399,8 +399,6 @@ func TestCopyEnvFileWithSubstitutionsEnvPath(t *testing.T) {
 	utils.CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-	// With AbsolutePath=".", GetPathToEnv returns ".env" (len(".")<=1).
-	// copyEnvFileWithSubstitutions then forms "." + "/" + ".env" = "./.env" ✓
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_HOST=localhost\nADDR=127.0.0.1\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -435,7 +433,6 @@ func TestCreateSingleServiceDockerSuccess(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine\nEXPOSE 8080\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	// No .env file → copyEnvFileWithSubstitutions will print error but not fail createSingleService
 	createSingleService(utils.Service{
 		ServiceName:  "svc",
 		Runner:       utils.Runner{Name: "docker"},
@@ -446,7 +443,6 @@ func TestCreateSingleServiceDockerSuccess(t *testing.T) {
 
 func TestCloneMissingServiceDirWithCloneFrom(t *testing.T) {
 	dir := t.TempDir()
-	// cloneFrom is set but git clone will fail (not a real repo) → returns false
 	got := cloneMissingServiceDir(utils.Service{
 		ServiceName:  "x",
 		CloneFrom:    "https://invalid.example.invalid/repo.git",
@@ -459,7 +455,6 @@ func TestCloneMissingServiceDirWithCloneFrom(t *testing.T) {
 
 func TestCloneOneServiceExistingDir(t *testing.T) {
 	dir := t.TempDir()
-	// Dir exists, no CloneFrom → handleExistingServiceDir called (no-op)
 	cloneOneService(utils.Service{
 		ServiceName:  "x",
 		Path:         dir,
@@ -480,7 +475,6 @@ func TestCreateDatabaseServicesMultiple(t *testing.T) {
 
 func TestRunBranchCheckoutSuccess(t *testing.T) {
 	dir := t.TempDir()
-	// git -C <dir> checkout -- will fail (not a git repo) without panic
 	runBranchCheckout(utils.Service{
 		ServiceName:  "x",
 		AbsolutePath: dir,

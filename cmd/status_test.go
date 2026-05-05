@@ -404,7 +404,6 @@ func TestRunStatusUntilHealthyAllUp(t *testing.T) {
 	}))
 	defer srv.Close()
 	rows := []statusRow{{Label: "svc", Kind: "http", URL: srv.URL, Port: 1}}
-	// Should return immediately when all healthy on first check
 	runStatusUntilHealthy(rows, 50*time.Millisecond, 5*time.Second, false, true)
 }
 
