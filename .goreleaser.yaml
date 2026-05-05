@@ -2,8 +2,15 @@
 # Make sure to check the documentation at https://goreleaser.com
 before:
   hooks:
-    # You may remove this if you don't use go modules.
     - go mod tidy
+    # Generate shell completions for bundling into release archive + brew.
+    # Built once via `go run .` so we don't depend on the release binary's
+    # platform. Banner is suppressed because main.canShowWelcomeMessages
+    # excludes the `completion` subcommand.
+    - mkdir -p completions
+    - sh -c "go run . completion bash > completions/corgi.bash"
+    - sh -c "go run . completion zsh  > completions/corgi.zsh"
+    - sh -c "go run . completion fish > completions/corgi.fish"
 builds:
   - env:
       - CGO_ENABLED=0
@@ -11,6 +18,9 @@ builds:
       - linux
       - windows
       - darwin
+archives:
+  - files:
+      - completions/*
 checksum:
   name_template: "checksums.txt"
 snapshot:
@@ -29,3 +39,20 @@ brews:
     repository:
       owner: Andriiklymiuk
       name: homebrew-tools
+    # Install shell completions alongside the binary so `brew install corgi`
+    # gives users tab-completion out of the box (zsh users may need
+    # `compinit` once; brew bash users need bash-completion@2 installed).
+    extra_install: |
+      bash_completion.install "completions/corgi.bash" => "corgi"
+      zsh_completion.install  "completions/corgi.zsh"  => "_corgi"
+      fish_completion.install "completions/corgi.fish"
+    caveats: |
+      Shell tab-completion installed for bash, zsh, fish.
+        corgi run --services <TAB>      # services from corgi-compose.yml
+        corgi run --dbServices <TAB>    # db_services
+        corgi script -n <TAB>           # script names per service
+        corgi tunnel <TAB>              # tunnel-able services
+      zsh users may need to run `compinit` once or open a new shell.
+
+      What's new in this release:
+        https://github.com/Andriiklymiuk/corgi/releases/tag/v#{version}
