@@ -280,3 +280,81 @@ func TestStartTunnelsForRunNoTargets(t *testing.T) {
 		{ServiceName: "api", Port: 0, Tunnel: nil},
 	})
 }
+
+func TestBuildTunnelTargetForServiceManualRunWithRequested(t *testing.T) {
+	requested := map[string]bool{"api": true}
+	_, skip, err := buildTunnelTargetForService(
+		utils.Service{ServiceName: "api", Port: 3000, ManualRun: true},
+		requested, nil, false,
+	)
+	if err != nil || skip {
+		t.Errorf("skip=%v err=%v", skip, err)
+	}
+}
+
+func TestBuildTunnelTargetForServiceWithTunnelBlock(t *testing.T) {
+	_, _, err := buildTunnelTargetForService(
+		utils.Service{
+			ServiceName: "api",
+			Port:        3000,
+			Tunnel:      &utils.TunnelConfig{Hostname: "api.example.com", Provider: "cloudflared"},
+		},
+		nil, nil, false,
+	)
+	_ = err
+}
+
+func TestResolveTunnelKnownProvider(t *testing.T) {
+	named, p, err := resolveTunnel(utils.Service{
+		ServiceName: "api",
+		Port:        3000,
+		Tunnel:      &utils.TunnelConfig{Hostname: "api.example.com", Provider: "cloudflared"},
+	}, nil, false)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if named.Hostname != "api.example.com" {
+		t.Errorf("hostname = %q", named.Hostname)
+	}
+	_ = p
+}
+
+func TestResolveTunnelFlagSet(t *testing.T) {
+	p := tunnel.Cloudflared{}
+	named, got, err := resolveTunnel(utils.Service{
+		ServiceName: "api",
+		Port:        3000,
+		Tunnel:      &utils.TunnelConfig{Hostname: "api.example.com"},
+	}, p, true)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if named.Hostname != "api.example.com" {
+		t.Errorf("hostname = %q", named.Hostname)
+	}
+	_ = got
+}
+
+func TestResolveTunnelEmptyHostname(t *testing.T) {
+	_, _, err := resolveTunnel(utils.Service{
+		ServiceName: "api",
+		Port:        3000,
+		Tunnel:      &utils.TunnelConfig{Hostname: ""},
+	}, nil, false)
+	if err == nil {
+		t.Error("expected error for empty hostname")
+	}
+}
+
+func TestCollectRunTargetsWithTunnelError(t *testing.T) {
+	targets := collectRunTargets([]utils.Service{
+		{
+			ServiceName: "api",
+			Port:        3000,
+			Tunnel:      &utils.TunnelConfig{Hostname: ""},
+		},
+	})
+	if len(targets) != 0 {
+		t.Errorf("expected 0 targets, got %d", len(targets))
+	}
+}
