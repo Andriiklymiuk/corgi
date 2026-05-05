@@ -18,7 +18,8 @@ warn() { printf '%s\n' "$*" >&2; }
 err()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 require_cmd() {
-    command -v "$1" >/dev/null 2>&1 || err "missing required command: $1"
+    cmd="$1"
+    command -v "$cmd" >/dev/null 2>&1 || err "missing required command: $cmd"
 }
 
 require_cmd uname

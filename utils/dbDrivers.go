@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+const (
+	regionEnvFmt    = "\nREGION=%s"
+	awsRegionEnvFmt = "\nAWS_REGION=%s"
+)
+
 type FilenameForService struct {
 	Name     string
 	Template string
@@ -42,8 +47,8 @@ var DriverConfigs = map[string]DriverConfig{
 			host := fmt.Sprintf("\n%sHOST=%s", serviceNameInEnv, db.Host)
 
 			return fmt.Sprintf("%s%s%s%s%s%s%s%s", host,
-				fmt.Sprintf("\nREGION=%s", templates.SqsRegion),
-				fmt.Sprintf("\nAWS_REGION=%s", templates.SqsRegion),
+				fmt.Sprintf(regionEnvFmt, templates.SqsRegion),
+				fmt.Sprintf(awsRegionEnvFmt, templates.SqsRegion),
 				fmt.Sprintf("\n%sENDPOINT=http://%s:%d/000000000000/", serviceNameInEnv, db.Host, db.Port),
 				fmt.Sprintf("\n%sQUEUE_NAME=%s", serviceNameInEnv, db.DatabaseName),
 				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://%s:%d/000000000000/%s", db.Host, db.Port, db.DatabaseName)),
@@ -65,8 +70,8 @@ var DriverConfigs = map[string]DriverConfig{
 			return fmt.Sprintf("%s%s%s%s%s%s%s%s",
 				host,
 				port,
-				fmt.Sprintf("\nREGION=%s", templates.S3Region),
-				fmt.Sprintf("\nAWS_REGION=%s", templates.S3Region),
+				fmt.Sprintf(regionEnvFmt, templates.S3Region),
+				fmt.Sprintf(awsRegionEnvFmt, templates.S3Region),
 				fmt.Sprintf("\n%sENDPOINT_URL=http://%s:%d", serviceNameInEnv, db.Host, db.Port),
 				fmt.Sprintf("\n%sBUCKET=%s", serviceNameInEnv, db.DatabaseName),
 				"\nAWS_ACCESS_KEY_ID=test",
@@ -218,8 +223,8 @@ var DriverConfigs = map[string]DriverConfig{
 				host,
 				port,
 				name,
-				fmt.Sprintf("\nREGION=%s", templates.DynamoDBRegion),
-				fmt.Sprintf("\nAWS_REGION=%s", templates.DynamoDBRegion),
+				fmt.Sprintf(regionEnvFmt, templates.DynamoDBRegion),
+				fmt.Sprintf(awsRegionEnvFmt, templates.DynamoDBRegion),
 			)
 		},
 		FilesToCreate: []FilenameForService{
