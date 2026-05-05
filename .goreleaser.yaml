@@ -47,12 +47,20 @@ brews:
       zsh_completion.install  "completions/corgi.zsh"  => "_corgi"
       fish_completion.install "completions/corgi.fish"
     caveats: |
-      Shell tab-completion installed for bash, zsh, fish.
+      Shell tab-completion installed for bash, zsh, fish:
         corgi run --services <TAB>      # services from corgi-compose.yml
         corgi run --dbServices <TAB>    # db_services
         corgi script -n <TAB>           # script names per service
-        corgi tunnel <TAB>              # tunnel-able services
-      zsh users may need to run `compinit` once or open a new shell.
+        corgi tunnel <TAB>              # tunnelable services
 
-      What's new in this release:
+      zsh users — if `<TAB>` shows files instead of names, your shell
+      isn't loading brew's site-functions. Add this to ~/.zshrc BEFORE
+      `compinit` (one-time, fixes all brew-installed completions):
+
+        FPATH="#{HOMEBREW_PREFIX}/share/zsh/site-functions:$FPATH"
+        autoload -Uz compinit && compinit
+
+      Then: `rm -f ~/.zcompdump* && exec zsh`
+
+      What's new:
         https://github.com/Andriiklymiuk/corgi/releases/tag/v#{version}
