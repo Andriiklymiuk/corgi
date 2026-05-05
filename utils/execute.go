@@ -12,6 +12,8 @@ import (
 	"sync"
 )
 
+const servicePathFmt = "%s/%s/%s"
+
 // withEnvSource prepends a POSIX `set -a; . <envFile>; set +a; ` prefix to a
 // command when an env file exists for the service. Lets a start command like
 // `npx vite --port $PORT` see PORT and other corgi-emitted vars without each
@@ -259,7 +261,7 @@ func RunCombinedCmd(command string, path string) error {
 
 func GetPathToDbService(targetService string) (string, error) {
 	path := fmt.Sprintf(
-		"%s/%s/%s",
+		servicePathFmt,
 		CorgiComposePathDir,
 		RootDbServicesFolder,
 		targetService,
@@ -269,7 +271,7 @@ func GetPathToDbService(targetService string) (string, error) {
 
 func GetPathToService(targetService string) (string, error) {
 	path := fmt.Sprintf(
-		"%s/%s/%s",
+		servicePathFmt,
 		CorgiComposePathDir,
 		RootServicesFolder,
 		targetService,
@@ -280,7 +282,7 @@ func GetPathToService(targetService string) (string, error) {
 func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 	makeFileExists, err := CheckIfFileExistsInDirectory(
 		fmt.Sprintf(
-			"%s/%s/%s",
+			servicePathFmt,
 			CorgiComposePathDir,
 			RootDbServicesFolder,
 			targetService,

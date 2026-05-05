@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(go tool *)"
+      "Bash(go tool *)",
+      "Bash(awk '-F[\\\\t :]+' '$NF==\"0.0%\" {print $1}')",
+      "WebFetch(domain:sonarcloud.io)"
     ]
   }
 }
