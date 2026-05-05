@@ -413,7 +413,7 @@ func ExecuteSeedMakeCommand(targetService string, makeCommand ...string) ([]byte
 	if len(errorsList) != 0 {
 		errorString := strings.Join(errorsList, "\n")
 		if len(errorsList) >= 10 {
-			return nil, fmt.Errorf(errorString)
+			return nil, fmt.Errorf("%s", errorString)
 		} else {
 			fmt.Println(errorString)
 		}
@@ -463,7 +463,7 @@ func CheckCommandExists(command string) error {
 		message := scannerError.Text()
 		fmt.Println(message)
 		if strings.Contains(message, "command not found") {
-			return fmt.Errorf(message)
+			return fmt.Errorf("%s", message)
 		}
 	}
 
@@ -473,7 +473,7 @@ func CheckCommandExists(command string) error {
 		message := scanner.Text()
 		fmt.Println(message)
 		if strings.Contains(message, "command not found") {
-			return fmt.Errorf(message)
+			return fmt.Errorf("%s", message)
 		}
 	}
 

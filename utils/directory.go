@@ -23,7 +23,7 @@ func GetTargetService() (string, error) {
 		if err.Error() == backString {
 			PrintFinalMessage()
 			os.Exit(0)
-			return "", fmt.Errorf(backString)
+			return "", fmt.Errorf("%s", backString)
 		}
 
 		return "", fmt.Errorf("failed to choose %s", err)
