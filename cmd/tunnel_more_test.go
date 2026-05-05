@@ -5,6 +5,8 @@ import (
 	"andriiklymiuk/corgi/utils/tunnel"
 	"path/filepath"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestFirstLine(t *testing.T) {
@@ -160,4 +162,41 @@ func TestCollectRunTargetsSkipsNoTunnel(t *testing.T) {
 func TestStopRunTunnelsNil(t *testing.T) {
 	runTunnelsCancel = nil
 	stopRunTunnels()
+}
+
+func TestPreflightTargetsEmpty(t *testing.T) {
+	if err := preflightTargets(nil, tunnel.Cloudflared{}); err != nil {
+		t.Errorf("err: %v", err)
+	}
+}
+
+func TestPreflightTargetsBasic(t *testing.T) {
+	targets := []tunnelTarget{
+		{service: "x", port: 3000},
+	}
+	err := preflightTargets(targets, tunnel.Cloudflared{})
+	_ = err
+}
+
+func TestPrintTunnelSummary(t *testing.T) {
+	targets := []tunnelTarget{
+		{service: "x", port: 3000},
+		{service: "y", port: 4000, named: &tunnel.NamedConfig{Hostname: "y.example.com"}},
+	}
+	printTunnelSummary(targets, tunnel.Cloudflared{})
+}
+
+func TestBuildTargetsFromComposeError(t *testing.T) {
+	c := &cobra.Command{}
+	c.Flags().Bool("global", false, "")
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		c.Flags().String(f, "/nonexistent/zzz.yml", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		c.Flags().Bool(f, false, "")
+	}
+	_, err := buildTargetsFromCompose(c, nil, tunnel.Cloudflared{}, false)
+	if err == nil {
+		t.Error("expected err")
+	}
 }

@@ -137,3 +137,15 @@ func TestCreateRepoForProviderUnknown(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestCheckoutToPrimaryBranchInvalidPath(t *testing.T) {
+	err := CheckoutToPrimaryBranch("svc", "/no/such/path/zzz", "main", false)
+	if err == nil {
+		t.Error("expected err")
+	}
+}
+
+func TestCreateRepoInProviderMissingCli(t *testing.T) {
+	_, err := createRepoInProvider("gh-totally-nonexistent-zzz", "https://x", "name", false)
+	_ = err
+}

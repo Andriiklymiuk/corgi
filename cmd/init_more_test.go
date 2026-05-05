@@ -94,3 +94,19 @@ func TestCreateServicesIterates(t *testing.T) {
 		{ServiceName: "x", Runner: utils.Runner{Name: ""}},
 	})
 }
+
+func TestRunBranchCheckoutPathMissing(t *testing.T) {
+	runBranchCheckout(utils.Service{
+		ServiceName:  "x",
+		AbsolutePath: "/nonexistent/zzz",
+		Branch:       "main",
+	})
+}
+
+func TestHandleExistingServiceDirNoCloneFrom(t *testing.T) {
+	handleExistingServiceDir(utils.Service{ServiceName: "x"})
+}
+
+func TestHandleExistingServiceDirNoBranch(t *testing.T) {
+	handleExistingServiceDir(utils.Service{ServiceName: "x", CloneFrom: "g"})
+}
