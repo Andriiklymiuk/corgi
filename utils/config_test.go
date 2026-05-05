@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestServicesCanBeAdded(t *testing.T) {
@@ -329,4 +331,160 @@ func TestResolveDockerExposedPortFromDockerfile(t *testing.T) {
 	if s.Port != 9000 {
 		t.Errorf("got %d", s.Port)
 	}
+}
+
+func newCobraWithRootFlags() *cobra.Command {
+	c := &cobra.Command{}
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		c.Flags().String(f, "", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		c.Flags().Bool(f, false, "")
+	}
+	return c
+}
+
+func TestResolveTemplatePathNoFlags(t *testing.T) {
+	c := newCobraWithRootFlags()
+	got, handled, err := resolveTemplatePath(c, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if handled {
+		t.Errorf("expected not handled, got %v", got)
+	}
+}
+
+func TestResolveTemplatePathMissingFlag(t *testing.T) {
+	c := &cobra.Command{}
+	_, handled, err := resolveTemplatePath(c, "")
+	if !handled || err == nil {
+		t.Errorf("expected handled+err: handled=%v err=%v", handled, err)
+	}
+}
+
+func TestDescribeServiceInfo(t *testing.T) {
+	describeServiceInfo(map[string]int{"a": 1})
+}
+
+func TestCleanFromScratchDisabled(t *testing.T) {
+	c := newCobraWithRootFlags()
+	c.Flags().Set("fromScratch", "false")
+	CleanFromScratch(c, CorgiCompose{})
+}
+
+func TestCleanFromScratchMissingFlag(t *testing.T) {
+	CleanFromScratch(&cobra.Command{}, CorgiCompose{})
+}
+
+func TestResolveGlobalPathEmpty(t *testing.T) {
+	prev := storageFilePath
+	storageFilePath = "/no/such/zzz.txt"
+	t.Cleanup(func() { storageFilePath = prev })
+	_, err := resolveGlobalPath()
+	if err == nil {
+		t.Error("expected err")
+	}
+}
+
+func TestToMapDatabaseServices(t *testing.T) {
+	slice := []DatabaseService{
+		{ServiceName: "db1", Driver: "postgres"},
+		{ServiceName: "db2", Driver: "mysql"},
+	}
+	m := toMap(slice)
+	if len(m) != 2 {
+		t.Fatalf("want 2, got %d", len(m))
+	}
+	if _, ok := m["db1"]; !ok {
+		t.Error("missing db1")
+	}
+	if _, ok := m["db2"]; !ok {
+		t.Error("missing db2")
+	}
+}
+
+func TestCompareCorgiFilesDifferentName(t *testing.T) {
+	c1 := &CorgiCompose{Name: "a"}
+	c2 := &CorgiCompose{Name: "b"}
+	if CompareCorgiFiles(c1, c2) {
+		t.Error("different names should not be equal")
+	}
+}
+
+func TestCompareCorgiFilesDifferentServices(t *testing.T) {
+	c1 := &CorgiCompose{Services: []Service{{ServiceName: "a"}}}
+	c2 := &CorgiCompose{Services: []Service{{ServiceName: "b"}}}
+	if CompareCorgiFiles(c1, c2) {
+		t.Error("different services should not be equal")
+	}
+}
+
+func TestCompareCorgiFilesDifferentInit(t *testing.T) {
+	c1 := &CorgiCompose{Init: []string{"make setup"}}
+	c2 := &CorgiCompose{Init: []string{"make other"}}
+	if CompareCorgiFiles(c1, c2) {
+		t.Error("different init should not be equal")
+	}
+}
+
+func TestNormalizeServicePathAddsPrefix(t *testing.T) {
+	s := &Service{Path: "myapp"}
+	normalizeServicePath(s)
+	if s.Path != "./myapp" {
+		t.Errorf("got %q", s.Path)
+	}
+}
+
+func TestNormalizeServicePathDotPrefixed(t *testing.T) {
+	s := &Service{Path: "."}
+	normalizeServicePath(s)
+	if s.Path != "./." {
+		t.Errorf("got %q", s.Path)
+	}
+}
+
+func TestNormalizeServicePathAlreadyPrefixed(t *testing.T) {
+	s := &Service{Path: "./svc"}
+	normalizeServicePath(s)
+	if s.Path != "./svc" {
+		t.Errorf("got %q", s.Path)
+	}
+}
+
+func TestNormalizeServicePathEmpty(t *testing.T) {
+	s := &Service{Path: ""}
+	normalizeServicePath(s)
+	if s.Path != "" {
+		t.Errorf("got %q", s.Path)
+	}
+}
+
+func TestResolveServicePathFromCloneFrom(t *testing.T) {
+	s := &Service{CloneFrom: "https://github.com/user/myrepo.git"}
+	resolveServicePathFromCloneFrom(s)
+	if s.Path != "./myrepo" {
+		t.Errorf("got %q", s.Path)
+	}
+}
+
+func TestResolveServicePathFromCloneFromNotGit(t *testing.T) {
+	s := &Service{CloneFrom: "https://github.com/user/myrepo"}
+	resolveServicePathFromCloneFrom(s)
+	if s.Path != "" {
+		t.Errorf("expected empty, got %q", s.Path)
+	}
+}
+
+func TestResolveServicePathFromCloneFromPathAlreadySet(t *testing.T) {
+	s := &Service{Path: "./existing", CloneFrom: "https://github.com/user/repo.git"}
+	resolveServicePathFromCloneFrom(s)
+	if s.Path != "./existing" {
+		t.Errorf("path should not change, got %q", s.Path)
+	}
+}
+
+func TestCleanCorgiServicesFolderMissing(t *testing.T) {
+	// Should not panic when folder doesn't exist
+	CleanCorgiServicesFolder()
 }
