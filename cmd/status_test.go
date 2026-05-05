@@ -469,3 +469,54 @@ func TestRunWatchAppendWithSeed(t *testing.T) {
 	case <-done:
 	}
 }
+
+func TestRunStatusWatchQuiet(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runStatusWatch(rows, 50*time.Millisecond, false, true)
+	}()
+	select {
+	case <-time.After(200 * time.Millisecond):
+	case <-done:
+	}
+}
+
+func TestRunStatusWatchNonTTYNonJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runStatusWatch(rows, 50*time.Millisecond, false, false)
+	}()
+	select {
+	case <-time.After(200 * time.Millisecond):
+	case <-done:
+	}
+}
+
+func TestRunWatchAppendNilSeed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runWatchAppend(rows, nil, 50*time.Millisecond, false, true)
+	}()
+	select {
+	case <-time.After(200 * time.Millisecond):
+	case <-done:
+	}
+}

@@ -493,3 +493,14 @@ func TestExecuteSeedMakeCommandSuccess(t *testing.T) {
 func TestRunCommandsParallelNoOp(t *testing.T) {
 	runCommandsParallel("test", "svc", []string{"echo hi"}, t.TempDir(), false, nil)
 }
+
+func TestHandleCommandFailureKnownCmdInstallFails(t *testing.T) {
+	err := handleCommandFailure(
+		fmt.Errorf("executable file not found in $PATH"),
+		[]string{"yarn"},
+		"svc", "yarn install", t.TempDir(), nil,
+	)
+	if err == nil {
+		t.Error("expected error when install fails in CI")
+	}
+}
