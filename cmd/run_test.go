@@ -406,3 +406,21 @@ func TestHandleComposeWriteEventNoChange(t *testing.T) {
 		t.Error("expected false when content unchanged")
 	}
 }
+
+func TestHandleExistingServiceDirWithCloneAndBranch(t *testing.T) {
+	handleExistingServiceDir(utils.Service{
+		ServiceName:  "x",
+		CloneFrom:    "https://invalid.example.invalid/repo.git",
+		Branch:       "main",
+		AbsolutePath: t.TempDir(),
+	})
+}
+
+func TestRunServicePullIfRequestedPullTrue(t *testing.T) {
+	c := &cobra.Command{}
+	c.Flags().Bool("pull", true, "")
+	if err := c.Flags().Set("pull", "true"); err != nil {
+		t.Fatal(err)
+	}
+	runServicePullIfRequested(c, utils.Service{ServiceName: "svc", AbsolutePath: t.TempDir()})
+}
