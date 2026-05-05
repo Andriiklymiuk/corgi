@@ -75,6 +75,9 @@ func canShowWelcomeMessages() bool {
 			arg == "status" ||
 			arg == "health" ||
 			arg == "healthcheck" ||
+			arg == "completion" ||
+			arg == "__complete" ||
+			arg == "__completeNoDesc" ||
 			arg == "--silent" ||
 			arg == "--version" ||
 			arg == "-v" ||
@@ -135,6 +138,9 @@ func ClearTerminal() {
 			arg == "health" ||
 			arg == "healthcheck" ||
 			arg == "docs" ||
+			arg == "completion" ||
+			arg == "__complete" ||
+			arg == "__completeNoDesc" ||
 			arg == "--version" ||
 			arg == "-v" ||
 			arg == "-h" ||

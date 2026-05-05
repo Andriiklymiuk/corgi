@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var APP_VERSION = "1.15.20"
+var APP_VERSION = "1.16.0"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -27,7 +27,13 @@ corgi run`,
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() string {
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	// Cobra's `completion` subcommand emits shell scripts (bash|zsh|fish|powershell)
+	// that wire up tab completion via corgi's hidden `__complete` entry. Hide
+	// it from the top-level help listing to keep the cmd surface focused —
+	// still callable as `corgi completion <shell>`.
+	rootCmd.CompletionOptions.HiddenDefaultCmd = true
+
+	registerCompletions()
 
 	err := rootCmd.Execute()
 
