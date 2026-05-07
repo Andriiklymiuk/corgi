@@ -653,3 +653,146 @@ func TestMetadataJSONValid(t *testing.T) {
 		t.Error("expected non-empty JSON")
 	}
 }
+
+func TestParseDatabaseServicesNoneFlag(t *testing.T) {
+	prev := DbServicesItemsFromFlag
+	DbServicesItemsFromFlag = []string{"none"}
+	t.Cleanup(func() { DbServicesItemsFromFlag = prev })
+	got, err := parseDatabaseServices(map[string]DatabaseService{"x": {Driver: "postgres"}}, false)
+	if err != nil || got != nil {
+		t.Errorf("expected nil/nil, got %v, %v", got, err)
+	}
+}
+
+func TestParseServicesNoneFlag(t *testing.T) {
+	prev := ServicesItemsFromFlag
+	ServicesItemsFromFlag = []string{"none"}
+	t.Cleanup(func() { ServicesItemsFromFlag = prev })
+	if got := parseServices(map[string]Service{"x": {}}, false); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func TestParseDatabaseServicesFiltersByFlag(t *testing.T) {
+	prev := DbServicesItemsFromFlag
+	DbServicesItemsFromFlag = []string{"keep"}
+	t.Cleanup(func() { DbServicesItemsFromFlag = prev })
+	got, err := parseDatabaseServices(map[string]DatabaseService{
+		"keep": {Driver: "postgres"},
+		"skip": {Driver: "mysql"},
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ServiceName != "keep" {
+		t.Errorf("expected only keep, got %+v", got)
+	}
+}
+
+func TestParseDatabaseServicesDescribe(t *testing.T) {
+	prev := DbServicesItemsFromFlag
+	DbServicesItemsFromFlag = nil
+	t.Cleanup(func() { DbServicesItemsFromFlag = prev })
+	got, err := parseDatabaseServices(map[string]DatabaseService{"x": {Driver: "postgres"}}, true)
+	if err != nil || len(got) != 1 {
+		t.Errorf("got %v %v", got, err)
+	}
+}
+
+func TestParseServicesDescribe(t *testing.T) {
+	prev := ServicesItemsFromFlag
+	ServicesItemsFromFlag = nil
+	t.Cleanup(func() { ServicesItemsFromFlag = prev })
+	got := parseServices(map[string]Service{"x": {Port: 1234}}, true)
+	if len(got) != 1 {
+		t.Errorf("got %d", len(got))
+	}
+}
+
+func TestMergeSeedFromDbAllOverrides(t *testing.T) {
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+	if err := os.WriteFile(envFile, []byte("DB_HOST=h\nDB_NAME=n\nDB_USER=u\nDB_PASSWORD=p\nDB_PORT=10\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := mergeSeedFromDb(DatabaseService{
+		SeedFromDbEnvPath: envFile,
+		SeedFromDb: SeedFromDb{
+			Host:         "OV_H",
+			DatabaseName: "OV_N",
+			User:         "OV_U",
+			Password:     "OV_P",
+			Port:         99,
+		},
+	})
+	if got.Host != "OV_H" || got.DatabaseName != "OV_N" || got.User != "OV_U" || got.Password != "OV_P" || got.Port != 99 {
+		t.Errorf("overrides not applied: %+v", got)
+	}
+}
+
+func TestBuildDatabaseServiceLocalstackInjects(t *testing.T) {
+	got, err := buildDatabaseService("ls", DatabaseService{
+		Driver:   "localstack",
+		Services: []string{"s3", "sqs"},
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if got.Driver != "localstack" {
+		t.Errorf("got driver %q", got.Driver)
+	}
+}
+
+func TestResolveTemplatePathFromTemplateName(t *testing.T) {
+	c := newCobraWithRootFlags()
+	c.Flags().Set("fromTemplateName", "nonexistent-example-name")
+	_, handled, _ := resolveTemplatePath(c, "")
+	if !handled {
+		t.Error("expected handled=true when fromTemplateName set")
+	}
+}
+
+func TestResolveTemplatePathExampleList(t *testing.T) {
+	c := newCobraWithRootFlags()
+	c.Flags().Set("exampleList", "true")
+	_, handled, _ := resolveTemplatePath(c, "")
+	if !handled {
+		t.Error("expected handled=true when exampleList set")
+	}
+}
+
+func TestResolveTemplatePathFromTemplateBadURL(t *testing.T) {
+	c := newCobraWithRootFlags()
+	c.Flags().Set("fromTemplate", "://broken")
+	_, handled, err := resolveTemplatePath(c, "")
+	if !handled || err == nil {
+		t.Errorf("expected handled+err, got handled=%v err=%v", handled, err)
+	}
+}
+
+func TestSelectGlobalExecPathEmpty(t *testing.T) {
+	prev := storageFilePath
+	storageFilePath = "/no/such/zzz.txt"
+	t.Cleanup(func() { storageFilePath = prev })
+	_, err := selectGlobalExecPath()
+	if err == nil {
+		t.Error("expected err")
+	}
+}
+
+func TestDescribeServiceInfoUnsupported(t *testing.T) {
+	describeServiceInfo(make(chan int))
+}
+
+func TestDetermineCorgiComposePathGlobalNoData(t *testing.T) {
+	prev := storageFilePath
+	storageFilePath = "/no/such/zzz.txt"
+	t.Cleanup(func() { storageFilePath = prev })
+	c := newCobraWithRootFlags()
+	c.Flags().Bool("global", true, "")
+	_, err := determineCorgiComposePath(c)
+	if err == nil {
+		t.Error("expected err for no global path")
+	}
+}
+

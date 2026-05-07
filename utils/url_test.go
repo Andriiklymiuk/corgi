@@ -112,4 +112,54 @@ func TestDownloadFileFromURL(t *testing.T) {
 			t.Errorf("derived path = %q, want auto.bin", path)
 		}
 	})
+
+	t.Run("github private token sets Authorization header", func(t *testing.T) {
+		var gotAuth string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("Authorization")
+			_, _ = w.Write([]byte("ok"))
+		}))
+		defer srv.Close()
+		token := "ghp_abc"
+		_, err := DownloadFileFromURL(srv.URL+"/githubusercontent.com/x.txt", "tok-gh.txt", token)
+		if err != nil {
+			t.Fatalf("download err: %v", err)
+		}
+		if gotAuth != "token "+token {
+			t.Errorf("Authorization header = %q, want %q", gotAuth, "token "+token)
+		}
+	})
+
+	t.Run("gitlab private token sets PRIVATE-TOKEN header", func(t *testing.T) {
+		var gotAuth string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("PRIVATE-TOKEN")
+			_, _ = w.Write([]byte("ok"))
+		}))
+		defer srv.Close()
+		token := "glpat_xyz"
+		_, err := DownloadFileFromURL(srv.URL+"/gitlab.com/x.txt", "tok-gl.txt", token)
+		if err != nil {
+			t.Fatalf("download err: %v", err)
+		}
+		if gotAuth != token {
+			t.Errorf("PRIVATE-TOKEN = %q, want %q", gotAuth, token)
+		}
+	})
+
+	t.Run("bad URL scheme returns request error", func(t *testing.T) {
+		_, err := DownloadFileFromURL("://invalid", "x.txt", "")
+		if err == nil {
+			t.Error("expected error for bad URL")
+		}
+	})
+
+	t.Run("network failure returns error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		srv.Close()
+		_, err := DownloadFileFromURL(srv.URL+"/x.txt", "x.txt", "")
+		if err == nil {
+			t.Error("expected error from closed server")
+		}
+	})
 }

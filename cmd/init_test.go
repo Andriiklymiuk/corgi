@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestGetPathToFileName(t *testing.T) {
@@ -480,4 +482,123 @@ func TestRunBranchCheckoutSuccess(t *testing.T) {
 		AbsolutePath: dir,
 		Branch:       "main",
 	})
+}
+
+func TestApplyDriverPostInitSupabaseRelativePath(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	relName := "config.toml"
+	src := filepath.Join(utils.CorgiComposePathDir, relName)
+	if err := os.WriteFile(src, []byte("body=1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := applyDriverPostInit(utils.DatabaseService{
+		Driver:         "supabase",
+		ServiceName:    "supa",
+		ConfigTomlPath: relName,
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	dest := filepath.Join(utils.CorgiComposePathDir, utils.RootDbServicesFolder, "supa", "supabase", "config.toml")
+	if _, err := os.Stat(dest); err != nil {
+		t.Errorf("dest missing: %v", err)
+	}
+}
+
+func TestMaybeRunNestedCorgiInitWithCompose(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, utils.CorgiComposeDefaultName), []byte("name: nested\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	maybeRunNestedCorgiInit(utils.Service{
+		ServiceName:  "x",
+		AbsolutePath: dir,
+		CloneFrom:    "https://invalid.example.invalid/x.git",
+	})
+}
+
+func TestMaybeRunNestedCorgiInitNoCloneFrom(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, utils.CorgiComposeDefaultName), []byte("name: x\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	maybeRunNestedCorgiInit(utils.Service{
+		ServiceName:  "x",
+		AbsolutePath: dir,
+		CloneFrom:    "",
+	})
+}
+
+func TestAddFileToGitignoreMissingDir(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = "/no/such/path/xyz"
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+	err := addFileToGitignore("foo")
+	if err == nil {
+		t.Error("expected err opening .gitignore in missing dir")
+	}
+}
+
+func TestCreateFileFromTemplateBadPath(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = "/dev/null/nope"
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	err := createFileFromTemplate(
+		utils.DatabaseService{ServiceName: "x"},
+		"out.txt",
+		"hi",
+		"x",
+		"corgi_services/db_services",
+	)
+	if err == nil {
+		t.Error("expected err for unwritable path")
+	}
+}
+
+func TestCreateFileFromTemplateBadTemplate(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	defer func() { _ = recover() }()
+	err := createFileFromTemplate(
+		utils.DatabaseService{ServiceName: "x"},
+		"out.txt",
+		"{{.MissingMethod}}",
+		"x",
+		"corgi_services/db_services",
+	)
+	_ = err
+}
+
+func TestRunGitCloneInvalidURL(t *testing.T) {
+	dir := t.TempDir()
+	if runGitClone(utils.Service{
+		ServiceName:  "x",
+		CloneFrom:    "https://invalid.example.invalid/x.git",
+		AbsolutePath: filepath.Join(dir, "x"),
+	}, dir) {
+		t.Error("expected false")
+	}
+}
+
+func TestRunInitNoComposeFile(t *testing.T) {
+	cwd, _ := os.Getwd()
+	dir := t.TempDir()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	c := &cobra.Command{}
+	c.Flags().Bool("global", false, "")
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		c.Flags().String(f, "/no/such/file/zzz.yml", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		c.Flags().Bool(f, false, "")
+	}
+	runInit(c, nil)
 }
