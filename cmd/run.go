@@ -122,14 +122,24 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 	os.Exit(0)
 }
 
-func installSignalHandler(cmd *cobra.Command) {
+func installSignalHandler(cmd *cobra.Command) func() {
 	closeSignal := make(chan os.Signal, 1)
 	signal.Notify(closeSignal, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		for s := range closeSignal {
 			handleRunSignal(cmd, s)
 		}
 	}()
+	var stopOnce sync.Once
+	return func() {
+		stopOnce.Do(func() {
+			signal.Stop(closeSignal)
+			close(closeSignal)
+			<-done
+		})
+	}
 }
 
 func setupComposeWatcher(cmd *cobra.Command) (*fsnotify.Watcher, error) {
@@ -194,7 +204,8 @@ func runRun(cmd *cobra.Command, _ []string) {
 		CloneServices(corgi.Services)
 	}
 
-	installSignalHandler(cmd)
+	stopSignalHandler := installSignalHandler(cmd)
+	defer stopSignalHandler()
 
 	watcher, err := setupComposeWatcher(cmd)
 	if err != nil {

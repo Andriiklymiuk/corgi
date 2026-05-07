@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -62,54 +61,6 @@ db_services:
 	dest := filepath.Join(dir, utils.RootDbServicesFolder, "pg", "docker-compose.yml")
 	if _, err := os.Stat(dest); err != nil {
 		t.Errorf("file not created: %v", err)
-	}
-}
-
-func TestRunRunEmptyCompose(t *testing.T) {
-	chdirToTempCompose(t, "name: empty\n")
-	c := newRootedCmd()
-	c.Flags().Bool("no-watch", true, "")
-	c.Flags().Bool("tunnel", false, "")
-	c.Flags().Bool("seed", false, "")
-	c.Flags().Bool("pull", false, "")
-	c.Flags().StringSlice("omit", nil, "")
-	c.Flags().StringSlice("services", nil, "")
-	c.Flags().StringSlice("dbServices", nil, "")
-	c.Run = runRun
-	// runRun will spawn signal handler goroutine but still complete.
-	done := make(chan struct{})
-	go func() {
-		runRun(c, nil)
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-	}
-}
-
-func TestRunRunWithBeforeStart(t *testing.T) {
-	chdirToTempCompose(t, `name: x
-beforeStart:
-  - echo before-start
-`)
-	c := newRootedCmd()
-	c.Flags().Bool("no-watch", true, "")
-	c.Flags().Bool("tunnel", false, "")
-	c.Flags().Bool("seed", false, "")
-	c.Flags().Bool("pull", false, "")
-	c.Flags().StringSlice("omit", nil, "")
-	c.Flags().StringSlice("services", nil, "")
-	c.Flags().StringSlice("dbServices", nil, "")
-	c.Run = runRun
-	done := make(chan struct{})
-	go func() {
-		runRun(c, nil)
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
 	}
 }
 

@@ -120,6 +120,19 @@ func TestStartAllServicesNoStartCmd(t *testing.T) {
 	startAllServices(corgi, cmd)
 }
 
+func TestInstallSignalHandlerStopIsIdempotent(t *testing.T) {
+	stop := installSignalHandler(&cobra.Command{})
+	stop()
+	stop()
+}
+
+func TestInstallSignalHandlerNoLeak(t *testing.T) {
+	for i := 0; i < 5; i++ {
+		stop := installSignalHandler(&cobra.Command{})
+		stop()
+	}
+}
+
 func TestRunServiceSkipsManual(t *testing.T) {
 	t.Cleanup(func() { utils.ServicesItemsFromFlag = nil })
 	utils.ServicesItemsFromFlag = nil
