@@ -31,6 +31,7 @@ Both exit 0 on success, 1 on failure. Output is colored text, not JSON.
 | `corgi doctor` or `corgi run` failed | `references/debugging.md` |
 | Explaining / choosing a CLI flag | `references/commands.md` |
 | Setting up webhook tunnels (Stripe/GitHub/e-sign/etc.) | `../../../docs/tunnel.md` (full) or `references/commands.md#corgi-tunnel-services` |
+| Producing a service map / relation diagram for the project | run `/corgi-describe` (see `references/describe-output.md`) |
 | Running `corgi run` inside an agent loop | `references/long-running.md` |
 
 Load only what the task needs. Do not read every reference every time.
@@ -38,6 +39,8 @@ Load only what the task needs. Do not read every reference every time.
 ## Common workflows
 
 **Fresh project from scratch:** use the `/corgi-new` slash command, or: write `corgi-compose.yml` → `corgi doctor` → start `corgi run` in background → `corgi status`.
+
+**Document an existing project:** `/corgi-describe` parses `corgi-compose.yml` and writes a detailed Markdown doc (services, dbs, env wiring, tunnels, scripts) plus a Mermaid relationship diagram to `docs/corgi-services.md`. Read-only — does not touch services. Built-in `corgi --describe` only prints per-service JSON during parse (and does **not** short-circuit — the underlying command, e.g. `run`, still executes); the slash command is the richer, side-effect-free alternative.
 
 **Existing repo with `corgi-compose.yml`:** this file is the single source of truth for how services start. Do not invent `npm run dev`, `docker compose up`, or per-service shell commands — use `corgi run`. Look at `db_services:` to know what databases exist and at `services:` to know what service repos are expected.
 
@@ -57,6 +60,7 @@ corgi create               # interactive yml editor
 corgi clean -i db          # stop+remove db containers (also: services, corgi_services, all)
 corgi pull                 # git pull in every service dir
 corgi version              # show installed version
+corgi --describe           # built-in: per-service JSON during parse; does NOT short-circuit. Use /corgi-describe for a rendered doc + Mermaid diagram
 ```
 
 Full surface in `references/commands.md`.
