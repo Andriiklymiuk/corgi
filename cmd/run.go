@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -101,6 +102,12 @@ required per provider (e.g. ngrok config add-authtoken).`,
 	)
 }
 
+// exitInProgress guards the terminal-exit path. CompareAndSwap-then-reset on
+// error preserves the old "retry on next signal if cleanup setup failed"
+// behavior, while still preventing the irreversible Kill+cleanup+Exit
+// sequence from running twice concurrently.
+var exitInProgress atomic.Bool
+
 func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 	if s == syscall.SIGHUP {
 		fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
@@ -109,15 +116,22 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 		cmd.Run(cmd, nil)
 		return
 	}
+	if !exitInProgress.CompareAndSwap(false, true) {
+		return
+	}
 	fmt.Println("👋 Exiting corgi", s)
 	stopRunTunnels()
 	corgiLatestVersion, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Println(err)
+		exitInProgress.Store(false)
 		return
 	}
-	cleanup(corgiLatestVersion)
+	// Kill long-running start commands first so afterStart cleanup runs on
+	// a clean process table — prevents the kill-all sweep from racing
+	// with mid-flight afterStart commands.
 	utils.KillAllStoredProcesses()
+	cleanup(corgiLatestVersion)
 	utils.PrintFinalMessage()
 	os.Exit(0)
 }
@@ -259,25 +273,22 @@ func cleanup(corgi *utils.CorgiCompose) {
 	for _, service := range corgi.Services {
 		if service.AfterStart != nil && !omitServiceCmd("afterStart") {
 			fmt.Println("\nAfter start commands:")
-			utils.RunServiceCommands(
+			utils.RunCleanupCommands(
 				"afterStart",
 				service.ServiceName,
 				service.AfterStart,
 				service.AbsolutePath,
-				false,
-				false,
 				getServiceEnv(service),
 			)
 		}
 	}
 
-	utils.RunServiceCommands(
+	utils.RunCleanupCommands(
 		utils.AfterStartInConfig,
 		"corgi afterStart",
 		corgi.AfterStart,
 		"",
-		false,
-		false,
+		"",
 	)
 
 	fmt.Println("\n👋 Exiting corgi")
