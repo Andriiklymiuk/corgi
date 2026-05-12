@@ -102,10 +102,8 @@ required per provider (e.g. ngrok config add-authtoken).`,
 	)
 }
 
-// exitInProgress guards the terminal-exit path. CompareAndSwap-then-reset on
-// error preserves the old "retry on next signal if cleanup setup failed"
-// behavior, while still preventing the irreversible Kill+cleanup+Exit
-// sequence from running twice concurrently.
+// exitInProgress guards the terminal-exit path. Reset on cleanup-setup
+// error so the next signal can retry.
 var exitInProgress atomic.Bool
 
 func handleRunSignal(cmd *cobra.Command, s os.Signal) {
@@ -113,12 +111,14 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 		fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
 		stopRunTunnels()
 		utils.KillAllStoredProcesses()
+		utils.ResetShutdown()
 		cmd.Run(cmd, nil)
 		return
 	}
 	if !exitInProgress.CompareAndSwap(false, true) {
 		return
 	}
+	utils.RequestShutdown()
 	fmt.Println("👋 Exiting corgi", s)
 	stopRunTunnels()
 	corgiLatestVersion, err := utils.GetCorgiServices(cmd)
@@ -127,9 +127,8 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 		exitInProgress.Store(false)
 		return
 	}
-	// Kill long-running start commands first so afterStart cleanup runs on
-	// a clean process table — prevents the kill-all sweep from racing
-	// with mid-flight afterStart commands.
+	// Kill start commands first so afterStart runs on a clean process
+	// table — avoids races with mid-flight cleanup.
 	utils.KillAllStoredProcesses()
 	cleanup(corgiLatestVersion)
 	utils.PrintFinalMessage()
@@ -262,6 +261,11 @@ func runRun(cmd *cobra.Command, _ []string) {
 	}
 
 	CreateServices(corgi.Services)
+	// Bail if shutdown fired mid-init: spawning start cmds now would
+	// orphan them past KillAllStoredProcesses.
+	if utils.ShutdownRequested() {
+		return
+	}
 	startAllServices(corgi, cmd)
 }
 
@@ -403,6 +407,9 @@ func startServiceProcess(service utils.Service) {
 
 func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup *sync.WaitGroup) {
 	defer serviceWaitGroup.Done()
+	if utils.ShutdownRequested() {
+		return
+	}
 	if shouldSkipManualRun(service) {
 		return
 	}
@@ -424,6 +431,9 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		)
 	}
 
+	if utils.ShutdownRequested() {
+		return
+	}
 	startServiceProcess(service)
 }
 

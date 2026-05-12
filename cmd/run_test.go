@@ -305,6 +305,33 @@ func TestCleanupAfterStartTimeoutDoesNotBlock(t *testing.T) {
 	}
 }
 
+func TestRunService_BailsOnShutdownBeforeSpawning(t *testing.T) {
+	utils.ResetShutdownForTests()
+	t.Cleanup(utils.ResetShutdownForTests)
+	utils.RequestShutdown()
+
+	prev := utils.ProcessHandles
+	utils.ProcessHandles = nil
+	t.Cleanup(func() { utils.ProcessHandles = prev })
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("pull", false, "")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	runService(utils.Service{
+		ServiceName:  "x",
+		BeforeStart:  []string{"touch should-not-run"},
+		Start:        []string{"sleep 30"},
+		AbsolutePath: t.TempDir(),
+	}, cmd, &wg)
+	wg.Wait()
+
+	if len(utils.ProcessHandles) != 0 {
+		t.Errorf("runService must not spawn processes after shutdown, got %d handles", len(utils.ProcessHandles))
+	}
+}
+
 func TestExitInProgressBlocksReentry(t *testing.T) {
 	t.Cleanup(func() { exitInProgress.Store(false) })
 
@@ -420,7 +447,13 @@ func TestStartServiceProcessStartCmds(t *testing.T) {
 }
 
 func TestRunDatabaseServicesWithNonManual(t *testing.T) {
-	// hasDatabaseToRun=true, DockerInit will fail (no docker) → returns early
+	// hasDatabaseToRun=true, DockerInit must NOT launch Docker.app in the
+	// test environment — pre-set shutdown so startDockerAndWait bails
+	// before invoking StartDocker.
+	utils.ResetShutdownForTests()
+	t.Cleanup(utils.ResetShutdownForTests)
+	utils.RequestShutdown()
+
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("seed", false, "")
 	runDatabaseServices(cmd, []utils.DatabaseService{

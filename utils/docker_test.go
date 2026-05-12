@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestIsDockerContextValid(t *testing.T) {
@@ -103,5 +105,36 @@ func TestGetContainerIdNoMakefile(t *testing.T) {
 	_, err := GetContainerId("corgi-nonexistent-svc-xyz")
 	if err == nil {
 		t.Error("expected error for nonexistent service")
+	}
+}
+
+func TestStartDockerAndWait_BailsBeforeLaunchingDockerApp(t *testing.T) {
+	// If docker is already running, the function would return nil before
+	// hitting StartDocker — that path doesn't prove anything about the
+	// shutdown short-circuit, so skip.
+	if CheckDockerStatus() == nil {
+		t.Skip("docker already running")
+	}
+	ResetShutdownForTests()
+	t.Cleanup(ResetShutdownForTests)
+
+	// Pre-signal shutdown. startDockerAndWait must return BEFORE invoking
+	// StartDocker (which would `open /Applications/Docker.app` on macOS).
+	RequestShutdown()
+
+	start := time.Now()
+	err := startDockerAndWait()
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected abort error, got nil")
+	}
+	if !strings.Contains(err.Error(), "aborted by shutdown signal") {
+		t.Errorf("expected abort-by-shutdown error, got: %v", err)
+	}
+	// Must return effectively instantly — never touch StartDocker or the
+	// 60s poll deadline.
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("did not short-circuit promptly: %s — may have launched Docker", elapsed)
 	}
 }

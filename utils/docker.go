@@ -262,6 +262,9 @@ func tryDockerContextStart(dockerContext string) bool {
 }
 
 func startDockerAndWait() error {
+	if ShutdownRequested() {
+		return fmt.Errorf("docker startup aborted by shutdown signal")
+	}
 	if err := StartDocker(); err != nil {
 		return fmt.Errorf("couldn't open docker, error: %s", err)
 	}
@@ -271,13 +274,18 @@ func startDockerAndWait() error {
 	defer s.Stop()
 	deadline := time.Now().Add(60 * time.Second)
 	for {
+		if ShutdownRequested() {
+			return fmt.Errorf("docker startup aborted by shutdown signal")
+		}
 		if CheckDockerStatus() == nil {
 			return nil
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("docker daemon did not become reachable within 60s — start it manually and retry")
 		}
-		time.Sleep(500 * time.Millisecond)
+		if InterruptibleSleep(500 * time.Millisecond) {
+			return fmt.Errorf("docker startup aborted by shutdown signal")
+		}
 	}
 }
 

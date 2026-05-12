@@ -14,13 +14,12 @@ import (
 	"time"
 )
 
-// AfterStartTimeout bounds each cleanup command (per YAML entry). Hung
-// afterStart must not block corgi shutdown forever. Exposed as a var so
-// tests can shorten it.
+// AfterStartTimeout bounds each cleanup command. Hung afterStart must
+// not block corgi shutdown.
 var AfterStartTimeout = 60 * time.Second
 
 const (
-	servicePathFmt        = "%s/%s/%s"
+	servicePathFmt           = "%s/%s/%s"
 	errPathToServiceNotFound = "path to target service is not found: %s"
 )
 
@@ -232,11 +231,9 @@ func runCommandsParallel(commandsName, serviceName string, commands []string, pa
 	}
 }
 
-// RunCleanupCommands runs cleanup commands (e.g. afterStart) sequentially
-// with a hard per-command timeout. Cleanup commands are NOT tracked in
-// ProcessHandles, so they survive any concurrent KillAllStoredProcesses
-// sweep. Each command runs in its own process group so the timeout can
-// SIGKILL the whole tree on deadline.
+// RunCleanupCommands runs cleanup commands sequentially with a per-cmd
+// timeout. Not tracked in ProcessHandles — must survive concurrent
+// KillAllStoredProcesses sweeps. Own pgroup so timeout can kill children.
 func RunCleanupCommands(
 	commandsName, serviceName string,
 	commands []string,
