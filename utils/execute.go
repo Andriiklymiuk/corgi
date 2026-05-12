@@ -3,6 +3,7 @@ package utils
 import (
 	"andriiklymiuk/corgi/utils/art"
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
+
+// AfterStartTimeout bounds each cleanup command (per YAML entry). Hung
+// afterStart must not block corgi shutdown forever. Exposed as a var so
+// tests can shorten it.
+var AfterStartTimeout = 60 * time.Second
 
 const (
 	servicePathFmt        = "%s/%s/%s"
@@ -223,6 +230,59 @@ func runCommandsParallel(commandsName, serviceName string, commands []string, pa
 			}
 		}(command)
 	}
+}
+
+// RunCleanupCommands runs cleanup commands (e.g. afterStart) sequentially
+// with a hard per-command timeout. Cleanup commands are NOT tracked in
+// ProcessHandles, so they survive any concurrent KillAllStoredProcesses
+// sweep. Each command runs in its own process group so the timeout can
+// SIGKILL the whole tree on deadline.
+func RunCleanupCommands(
+	commandsName, serviceName string,
+	commands []string,
+	path string,
+	envFile string,
+) {
+	if len(commands) == 0 {
+		return
+	}
+	resolvedEnvFile := resolveEnvFile(path, []string{envFile})
+	for _, command := range commands {
+		if err := runCleanupCommand(commandsName, serviceName, command, path, resolvedEnvFile); err != nil {
+			fmt.Println(
+				art.RedColor,
+				fmt.Sprintf("aborting %s commands for %s, because of %s", commandsName, serviceName, err),
+				art.WhiteColor,
+			)
+			return
+		}
+	}
+}
+
+func runCleanupCommand(commandsName, serviceName, command, path, resolvedEnvFile string) error {
+	fmt.Printf("\n🚀 🤖 Executing %s for %s:  %s%s%s\n", commandsName, serviceName, art.GreenColor, command, art.WhiteColor)
+	shellCommand := withEnvSource(command, resolvedEnvFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), AfterStartTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", shellCommand)
+	cmd.Dir = path
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	SetProcessGroup(cmd)
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return KillProcessGroup(cmd.Process.Pid)
+	}
+
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return fmt.Errorf("timeout after %s", AfterStartTimeout)
+	}
+	return err
 }
 
 func runCommandsSequential(commandsName, serviceName string, commands []string, path string, interactive bool, envFile []string) {

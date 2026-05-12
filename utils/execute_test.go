@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWithEnvSource_WhenFileExists(t *testing.T) {
@@ -515,4 +516,134 @@ func TestCheckCommandExistsWithOutput(t *testing.T) {
 func TestCheckCommandExistsNotFound(t *testing.T) {
 	err := CheckCommandExists("totally-missing-cmd-xyz --version")
 	_ = err
+}
+
+func TestRunCleanupCommandsEmpty(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	RunCleanupCommands("afterStart", "svc", nil, t.TempDir(), "")
+	RunCleanupCommands("afterStart", "svc", []string{}, t.TempDir(), "")
+
+	if len(ProcessHandles) != 0 {
+		t.Errorf("ProcessHandles must stay empty, got %d", len(ProcessHandles))
+	}
+}
+
+func TestRunCleanupCommandsSuccess(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "ran")
+	RunCleanupCommands("afterStart", "svc", []string{
+		fmt.Sprintf("touch %s", marker),
+	}, dir, "")
+
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("marker not created: %v", err)
+	}
+	if len(ProcessHandles) != 0 {
+		t.Errorf("cleanup commands must not be tracked, got %d handles", len(ProcessHandles))
+	}
+}
+
+func TestRunCleanupCommandsTimeoutKills(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	prevTimeout := AfterStartTimeout
+	AfterStartTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { AfterStartTimeout = prevTimeout })
+
+	start := time.Now()
+	RunCleanupCommands("afterStart", "svc", []string{"sleep 30"}, t.TempDir(), "")
+	elapsed := time.Since(start)
+
+	if elapsed > 5*time.Second {
+		t.Fatalf("cleanup did not honor timeout, took %s", elapsed)
+	}
+	if len(ProcessHandles) != 0 {
+		t.Errorf("ProcessHandles must stay empty, got %d", len(ProcessHandles))
+	}
+}
+
+func TestRunCleanupCommandsStopsOnFailure(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "should-not-exist")
+	RunCleanupCommands("afterStart", "svc", []string{
+		"false",
+		fmt.Sprintf("touch %s", marker),
+	}, dir, "")
+
+	if _, err := os.Stat(marker); err == nil {
+		t.Errorf("second command must not run after first fails")
+	}
+}
+
+func TestRunCleanupCommandsSurvivesKillAll(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	// Add a tracked dummy so KillAllStoredProcesses has something to kill.
+	dummy := exec.Command("sleep", "30")
+	SetProcessGroup(dummy)
+	if err := dummy.Start(); err != nil {
+		t.Fatal(err)
+	}
+	addProcess(dummy.Process)
+	// Reap the SIGKILL'd dummy to avoid leaking a zombie into the test
+	// runner. Wait returns an exit error after SIGKILL — ignore it.
+	t.Cleanup(func() { _ = dummy.Wait() })
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "ran")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		RunCleanupCommands("afterStart", "svc", []string{
+			fmt.Sprintf("sleep 0.3 && touch %s", marker),
+		}, dir, "")
+	}()
+
+	// Kill tracked procs while cleanup runs — cleanup must not be affected.
+	time.Sleep(50 * time.Millisecond)
+	KillAllStoredProcesses()
+
+	<-done
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("cleanup was killed by KillAllStoredProcesses: %v", err)
+	}
+}
+
+func TestRunCleanupCommandsSourcesEnv(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("CLEANUP_VAR=present\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(dir, "out")
+	RunCleanupCommands("afterStart", "svc", []string{
+		fmt.Sprintf("echo $CLEANUP_VAR > %s", marker),
+	}, dir, "")
+
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(got)) != "present" {
+		t.Errorf("env not sourced, got %q", got)
+	}
 }

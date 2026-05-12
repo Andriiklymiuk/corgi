@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
@@ -261,6 +262,71 @@ func TestCleanupWithGlobalAfterStart(t *testing.T) {
 	cleanup(&utils.CorgiCompose{
 		AfterStart: []string{"echo global-after"},
 	})
+}
+
+func TestCleanupAfterStartActuallyRuns(t *testing.T) {
+	prev := utils.ProcessHandles
+	utils.ProcessHandles = nil
+	t.Cleanup(func() { utils.ProcessHandles = prev })
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "ran")
+	cleanup(&utils.CorgiCompose{
+		Services: []utils.Service{
+			{ServiceName: "x", AfterStart: []string{"touch " + marker}, AbsolutePath: dir},
+		},
+	})
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("afterStart did not run: %v", err)
+	}
+	if len(utils.ProcessHandles) != 0 {
+		t.Errorf("afterStart must not be tracked, got %d handles", len(utils.ProcessHandles))
+	}
+}
+
+func TestCleanupAfterStartTimeoutDoesNotBlock(t *testing.T) {
+	prev := utils.ProcessHandles
+	utils.ProcessHandles = nil
+	t.Cleanup(func() { utils.ProcessHandles = prev })
+
+	prevTimeout := utils.AfterStartTimeout
+	utils.AfterStartTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { utils.AfterStartTimeout = prevTimeout })
+
+	start := time.Now()
+	cleanup(&utils.CorgiCompose{
+		Services: []utils.Service{
+			{ServiceName: "x", AfterStart: []string{"sleep 30"}, AbsolutePath: t.TempDir()},
+		},
+	})
+	elapsed := time.Since(start)
+	if elapsed > 5*time.Second {
+		t.Fatalf("cleanup blocked past timeout, took %s", elapsed)
+	}
+}
+
+func TestExitInProgressBlocksReentry(t *testing.T) {
+	t.Cleanup(func() { exitInProgress.Store(false) })
+
+	exitInProgress.Store(false)
+	if !exitInProgress.CompareAndSwap(false, true) {
+		t.Fatal("first CAS should claim the flag")
+	}
+	if exitInProgress.CompareAndSwap(false, true) {
+		t.Fatal("second CAS must not succeed while exit in progress")
+	}
+}
+
+func TestExitInProgressResetsForRetry(t *testing.T) {
+	t.Cleanup(func() { exitInProgress.Store(false) })
+
+	exitInProgress.Store(false)
+	exitInProgress.CompareAndSwap(false, true)
+	// Simulate cleanup-setup error path resetting the flag.
+	exitInProgress.Store(false)
+	if !exitInProgress.CompareAndSwap(false, true) {
+		t.Fatal("after reset, next signal must be able to claim the flag")
+	}
 }
 
 func TestRunServiceWithStartCommands(t *testing.T) {
