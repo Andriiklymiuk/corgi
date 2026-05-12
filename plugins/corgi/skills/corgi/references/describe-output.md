@@ -1,187 +1,126 @@
 ---
 name: describe-output
-description: Output template for /corgi-describe — Markdown structure plus Mermaid diagram conventions. Read when producing or reviewing a corgi-services.md doc.
+description: Output template for /corgi-describe — compact Markdown structure plus Mermaid diagram conventions. Read when producing or reviewing a corgi-services.md doc.
 ---
 
 # `/corgi-describe` output format
 
-The slash command `/corgi-describe` writes a single Markdown file (default: `docs/corgi-services.md`). This reference defines its structure so the output stays consistent across projects and re-runs.
+The slash command `/corgi-describe` writes a single Markdown file (default: `docs/corgi-services.md`). Goal: **compact**. Reader scans once, sees relationships, drills only into services they care about. Skip every empty/default field. Don't restate the schema — describe **this** project.
+
+## Compactness rules (enforced)
+
+1. **Skip empty.** No `_not set_`, no `none`, no placeholders. Field missing → omit line.
+2. **No metadata table** unless `useDocker` or `useAwsVpn` is explicitly set. One-line description at top is enough.
+3. **No per-DB subsection** unless DB has `additional.*`, `seed*`, `version`, or `healthCheck`. Plain DBs collapse into one shared table.
+4. **No per-service subsection wrappers** — use `### svc-name` then compact bullets/tables directly. No `#### Lifecycle commands` / `#### DB dependencies` / `#### Service dependencies` / `#### Exports` headers. Use bold inline labels (`**Deps:**`, `**Env:**`, `**Lifecycle:**`).
+5. **Combine db+svc deps** into one "Deps" table per service.
+6. **README → 1–3 lines max:** tagline + sonar key (linked) + repo URL if present. Never dump the badge list. Never dump useful-links section. If only badges exist, emit sonar line only.
+7. **Drop "Inbound env references" / "Consumed by"** — diagram already shows reverse direction.
+8. **Skip "Lifecycle hooks (project-level)"** entirely if all commands are pure `echo` (debug noise). Same for per-service lifecycle: skip echo-only blocks. Keep if any real command.
+9. **Skip "Environment" prose section** — env vars belong in the deps table or are visible in `environment:`. Only list env entries that reference `${producer.VAR}` (export consumers), since those drive the dotted graph edges.
+10. **Cycles & warnings** section appears only when non-empty.
 
 ## File skeleton
 
 (Outer fence uses four backticks so inner triple-backtick fences nest cleanly.)
 
 ````markdown
-# <project name> — service map
+# <name>
 
-> <description>
+> <description, one line — omit blockquote if no description>
 
-| Key | Value |
-|---|---|
-| name | <name> |
-| useDocker | <true/false> |
-| useAwsVpn | <true/false> |
-| Source | `corgi-compose.yml` |
-| Generated | <ISO date, optional> |
+| Tool | checkCmd | Optional |
+|---|---|---|
+| docker | `docker --version` | no |
 
-## Relationships
+(Required tools table only when `required:` is non-empty. Drop "Why" column unless any tool has `why:` set.)
 
 ```mermaid
 graph LR
   …  (see "Diagram conventions" below)
 ```
 
-## Required tools
-
-| Tool | Why | checkCmd | Optional |
-|---|---|---|---|
-| docker | container runtime for dbs | `docker --version` | no |
-
 ## Databases
 
-### `<db-name>` — <driver>
+| name | driver | host:port | db / user |
+|---|---|---|---|
+| `app-db` | postgres | `localhost:5432` | `app` / `app` |
+| `cache` | redis | `localhost:6379` | — |
 
-- **Host:port** `localhost:5432`  (+ `:port2` if set)
-- **Credentials** `user=<user>` / `password=***`
-- **Database** `<databaseName>`
-- **Version** `<version|latest>`
-- **Healthcheck** `<healthCheck path or — >`
-- **Seed** `<seedFromFilePath | seedFromDbEnvPath | inline seedFromDb | none>`
-- **Additional** — only when present:
-  - `queues: [...]`  → `AWS_SQS_<UPPER>`
-  - `buckets: [...]` → `AWS_S3_<UPPER>_BUCKET` or `SUPABASE_BUCKET_<UPPER>`
-  - `services: [...]`, `jwtSecret`, `authUsers`, `image`, `environment`, `volumes`, `command`, …
+(Single table. Password always `***` — omit column unless mixed. Add `:port2` to host:port if set.)
 
-(Repeat per db_service.)
+### `<db-name>` — extras
+
+Only emit subsection per DB if it has `version`, `healthCheck`, seed source, or `additional.*`. Include only the non-empty fields:
+
+- **Version** `<version>`
+- **Healthcheck** `<healthCheck>`
+- **Seed** `<seedFromFilePath | seedFromDbEnvPath | inline seedFromDb>`
+- **Additional** `queues: [...]`, `buckets: [...]`, `services: [...]`, `jwtSecret`, `authUsers`, `image`, `environment`, `volumes`, `command`, …
 
 ## Services
 
-### `<svc-name>`
+### `<svc-name>` `:<port>`
 
-- **Source** `path: ./svc` *(or `cloneFrom: <url>` on branch `<branch>` → resolved dir `corgi_services/services/<name>/`)*
-- **Port** `3000` (envAlias `PORT`)
-- **Healthcheck** `http://localhost:3000/health` *(omit if no `healthCheck:`)*
-- **Flags** — only when set away from defaults:
-  - `manualRun: true`
-  - `ignore_env: true`
-  - `autoSourceEnv: false`
-  - `interactiveInput: true`
-  - `runner.name: docker`
+- **Source** `path: ./svc` *(or `cloneFrom: <url>@<branch>` → `corgi_services/services/<name>/`)*
+- **Healthcheck** `http://localhost:<port><healthCheck>` *(only if `healthCheck:` set)*
+- **README** > <tagline ≤ 200 chars>. [Sonar: org_repo](https://sonarcloud.io/project/overview?id=org_repo). [Repo](https://github.com/org/repo).
+- **Flags** `manualRun`, `ignore_env`, `autoSourceEnv:false`, `runner:docker` *(only those actually set)*
+- **Tunnel** `cloudflared` → `${HOST}` as `${USER}-api-dev` *(only if `tunnel:` set)*
+- **Scripts** `seed-users`, `migrate` *(comma list, only if any)*
 
-**From README** *(omit entire block if no README found or scrape empty)*
+**Deps**
 
-> <tagline — first non-heading paragraph, one sentence ≤ 200 chars>
+| target | kind | envAlias | resolved |
+|---|---|---|---|
+| `app-db` | db | `DB_` | postgres → `DB_HOST`/`DB_PORT`/… |
+| `notifier` | svc | `NOTIFIER_URL` | `http://localhost:7000/api/v1` |
 
-- **Badges**
-  - [![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=org_repo&metric=alert_status)](https://sonarcloud.io/project/overview?id=org_repo)
-  - [![CI](https://github.com/org/repo/actions/workflows/ci.yml/badge.svg)](https://github.com/org/repo/actions/workflows/ci.yml)
-  - [![codecov](https://codecov.io/gh/org/repo/branch/main/graph/badge.svg)](https://codecov.io/gh/org/repo)
+(Single table. `kind` is `db` or `svc`. For db rows, `envAlias` column shows the generated prefix; for svc rows, the service envAlias; `resolved` shows the URL hint or env prefix. Suffix appears inline in resolved URL. Drop the table entirely if no deps.)
 
-- **Useful links** *(from `## Links` / `## Resources` / `## Documentation` sections)*
-  - [Architecture overview](https://example.com/docs/arch)
-  - [Runbook](https://example.com/runbook)
+**Exports** `NOTIFICATION_API_TOKEN`, `URL=http://localhost:7000`, `HEALTH=…` *(comma list, only if non-empty)*
 
-- **Repo** `https://github.com/org/repo`
-- **Docs** `https://example.com/docs`
-- **SonarCloud** `org_repo` — https://sonarcloud.io/project/overview?id=org_repo
-
-(Truncate to 10 badges + 10 links; append `(+N more in README)` when truncated. Render `readme: not found` and skip the block entirely if the working-copy dir or README is missing.)
+**Cross-service env refs** `${notifier.URL}`, `${notifier.TOKEN}` *(only if any — these drive the dotted edges)*
 
 **Lifecycle**
 
 ```sh
 # beforeStart
 <cmds>
-```
-
-```sh
 # start
 <cmds>
-```
-
-```sh
 # afterStart
 <cmds>
 ```
 
-(Omit any block that is empty.)
-
-**Database dependencies**
-
-| db | envAlias | env-var prefix |
-|---|---|---|
-| `app-db` | `""` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` |
-| `cache` | `CACHE_` | `CACHE_REDIS_HOST`, `CACHE_REDIS_PORT`, … |
-
-Use the driver-specific prefix when `envAlias: ""` for non-postgres drivers (`REDIS_`, `MONGO_`, `RABBITMQ_`, …). See `db-drivers.md`.
-
-**Service dependencies**
-
-| target | envAlias | suffix | resolved URL |
-|---|---|---|---|
-| `notifier` | `NOTIFIER_URL` | `/api/v1` | `http://localhost:7000/api/v1` |
-
-URL host is `localhostNameInEnv` (default `localhost`; `host.docker.internal` when `useDocker: true`).
-
-**Exports**
-
-- `NOTIFICATION_API_TOKEN` — re-export from own env
-- `URL` — re-export from own env (expanded `${PORT}` → `7000`)
-- `HEALTH=http://localhost:7000/healthz` — inline literal
-
-**Consumed by**
-
-- `app` references `${notifier.URL}`, `${notifier.NOTIFICATION_API_TOKEN}`
-
-**Tunnel** *(only if present)*
-
-- provider: `cloudflared`
-- hostname: `${API_TUNNEL_HOST}`  (resolves at `corgi tunnel` time)
-- name: `${USER}-api-dev`
-
-**Scripts** *(only if present)*
-
-- `seed-users` — `corgi script -n seed-users`
+(Single fenced block. Omit any block label whose section is empty or echo-only. Omit the whole block if all three are empty/echo.)
 
 (Repeat per service.)
 
-## Lifecycle hooks
+## Lifecycle hooks (project)
 
-```sh
-# init
-<cmds>
-```
-
-```sh
-# beforeStart
-<cmds>
-```
-
-```sh
-# afterStart
-<cmds>
-```
+Same single-block format as per-service. Omit section entirely if all three are empty or echo-only.
 
 ## Cycles & warnings
 
-- `<service-a>` ↔ `<service-b>` cycle in `depends_on_services` (corgi will error at runtime).
+- `<service-a>` ↔ `<service-b>` cycle in `depends_on_services`.
 - `<service-x>` references `${producer.VAR}` but `producer` not in its `depends_on_services`.
 - `<service-y>` references `${producer.VAR}` where `VAR` is not in producer's `exports`.
 - `<service-z>` has neither `path:` nor `cloneFrom:`.
 
-(Section says "None." when clean.)
+(Omit section entirely when clean — no "None." line.)
 ````
 
 ## Diagram conventions (Mermaid)
 
-Always `graph LR`. Sanitize node IDs: replace any character outside `[A-Za-z0-9_]` with `_` (e.g. yaml key `test_redis-db` → node id `db_test_redis_db`). Always keep the **display label** (inside the brackets) as the original yaml key so the reader sees real names. Use these exact node shapes so multiple diagrams render consistently:
+Always `graph LR`. Sanitize node IDs: replace any character outside `[A-Za-z0-9_]` with `_` (yaml key `test_redis-db` → node id `db_test_redis_db`). Display label inside brackets keeps the original yaml key. Node shapes:
 
-| Element | Syntax | Visual |
-|---|---|---|
-| Service | `svc_<name>(["<name><br/>:<port>"])` | stadium |
-| Database | `db_<name>[("<name><br/>(<driver>):<port>")]` | cylinder |
-| Required tool | `tool_<name>{{<name>}}` | hexagon |
-| Tunnel | `tun_<svc>(((🌐 <hostname>)))` | circle |
+| Element | Syntax |
+|---|---|
+| Service | `svc_<name>(["<name><br/>:<port>"])` |
+| Database | `db_<name>[("<name><br/>(<driver>):<port>")]` |
+| Required tool | `tool_<name>{{<name>}}` |
+| Tunnel | `tun_<svc>(((🌐 <hostname>)))` |
 
 Edges:
 
@@ -189,30 +128,28 @@ Edges:
 |---|---|---|
 | Service → DB | `svc_api -->|DB_| db_app_db` | label = `envAlias` or driver prefix when blank |
 | Service → Service | `svc_app -->|NOTIFIER_URL| svc_notifier` | label = `envAlias`; append `(suffix)` if set |
-| Producer → Consumer (exports) | `svc_notifier -.->|TOKEN, URL| svc_app` | dotted, label lists exported vars consumer actually references |
-| Tunnel → Service | `tun_api --> svc_api` | wraps the public hostname |
+| Producer → Consumer (exports) | `svc_notifier -.->|TOKEN, URL| svc_app` | dotted, vars consumer references |
+| Tunnel → Service | `tun_api --> svc_api` | |
 
-Subgraphs (group by role, not by tier):
+Subgraphs only when each group has ≥ 2 nodes — for a single service or single db, skip the subgraph wrapper (saves 2 lines).
 
 ```
 subgraph services["Services"]
   svc_…
 end
-
 subgraph databases["Databases"]
   db_…
 end
-
 subgraph required["Required tools"]
   tool_…
 end
 ```
 
-Tool nodes have no edges — they apply to the whole project, not individual services.
+Tool nodes have no edges.
 
 ### Worked example
 
-Given this compose:
+Given:
 
 ```yaml
 name: shop
@@ -241,7 +178,14 @@ required:
     checkCmd: docker --version
 ```
 
-Diagram:
+Output (compact form):
+
+````markdown
+# shop
+
+| Tool | checkCmd | Optional |
+|---|---|---|
+| docker | `docker --version` | no |
 
 ```mermaid
 graph LR
@@ -249,25 +193,42 @@ graph LR
     svc_web(["web<br/>:3000"])
     svc_notifier(["notifier<br/>:7000"])
   end
-  subgraph databases["Databases"]
-    db_app_db[("app-db<br/>(postgres):5432")]
-  end
-  subgraph required["Required tools"]
-    tool_docker{{docker}}
-  end
+  db_app_db[("app-db<br/>(postgres):5432")]
+  tool_docker{{docker}}
   svc_web -->|DB_| db_app_db
   svc_web -->|NOTIFIER_URL| svc_notifier
   svc_notifier -.->|NOTIFICATION_API_TOKEN| svc_web
 ```
 
-Note `app-db` (yaml key) → `db_app_db` (sanitized id) but the display label keeps the hyphen.
+## Databases
+
+| name | driver | host:port | db / user |
+|---|---|---|---|
+| `app-db` | postgres | `localhost:5432` | — |
+
+## Services
+
+### `web` `:3000`
+
+**Deps**
+
+| target | kind | envAlias | resolved |
+|---|---|---|---|
+| `app-db` | db | `DB_` | postgres → `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` |
+| `notifier` | svc | `NOTIFIER_URL` | `http://localhost:7000` |
+
+**Cross-service env refs** `${notifier.NOTIFICATION_API_TOKEN}`
+
+### `notifier` `:7000`
+
+**Exports** `NOTIFICATION_API_TOKEN`, `URL`
+````
 
 ## Style rules
 
-- Tables over paragraphs.
-- Omit a section when its source field is empty rather than printing "none" — except **Cycles & warnings**, which always exists and reads "None." when clean.
-- Never include real secrets; render passwords as `***`.
-- Never run commands as part of describing — this is parsing only.
-- Re-runs overwrite the same file. Tell the user when overwriting.
-- README scrape is best-effort. Never fail the whole command on a malformed README — drop that service's **From README** block and continue.
-- Badges and links keep their original URLs verbatim. Never rewrite to a tracker / proxy. Never embed raw `<img>`/`<iframe>`; convert to Markdown links.
+- Tables > lists > paragraphs.
+- Omit empty. No "none", no `_not set_`, no `—` placeholder rows for missing fields.
+- Passwords → `***`. Never real secrets.
+- Re-runs overwrite. Tell user.
+- README scrape best-effort: tagline + sonar + repo link only. Never full badge dump. Drop block if scrape empty.
+- Badges/links keep original URLs. Never rewrite to tracker/proxy. No raw HTML beyond `<br/>` in Mermaid.
