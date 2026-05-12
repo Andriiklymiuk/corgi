@@ -41,6 +41,36 @@ incrementVersionMajor:
 	sed -i "" "s/\(APP_VERSION = \"\)$(MAJOR).[0-9]*.[0-9]*\"/\1$(NEW_MAJOR).0.0\"/" cmd/root.go
 	$(eval VERSION := $(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}'))
 
+PLUGIN_FILE := plugins/corgi/.claude-plugin/plugin.json
+PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | awk -F '"' '{print $$4}')
+
+getPluginVersion:
+	echo $(PLUGIN_VERSION)
+
+incrementPluginVersionPatch:
+	$(eval MAJOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 1))
+	$(eval MINOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 2))
+	$(eval PATCH=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 3))
+	$(eval NEW_PATCH=$(shell echo $$(($(PATCH) + 1))))
+	sed -i "" "s/\"version\": \"$(MAJOR).$(MINOR).$(PATCH)\"/\"version\": \"$(MAJOR).$(MINOR).$(NEW_PATCH)\"/" $(PLUGIN_FILE)
+	$(eval PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | awk -F '"' '{print $$4}'))
+
+incrementPluginVersionMinor:
+	$(eval MAJOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 1))
+	$(eval MINOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 2))
+	$(eval PATCH=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 3))
+	$(eval NEW_MINOR=$(shell echo $$(($(MINOR) + 1))))
+	sed -i "" "s/\"version\": \"$(MAJOR).$(MINOR).$(PATCH)\"/\"version\": \"$(MAJOR).$(NEW_MINOR).0\"/" $(PLUGIN_FILE)
+	$(eval PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | awk -F '"' '{print $$4}'))
+
+incrementPluginVersionMajor:
+	$(eval MAJOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 1))
+	$(eval MINOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 2))
+	$(eval PATCH=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 3))
+	$(eval NEW_MAJOR=$(shell echo $$(($(MAJOR) + 1))))
+	sed -i "" "s/\"version\": \"$(MAJOR).$(MINOR).$(PATCH)\"/\"version\": \"$(NEW_MAJOR).0.0\"/" $(PLUGIN_FILE)
+	$(eval PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | awk -F '"' '{print $$4}'))
+
 
 test:
 	go test ./... -race -coverprofile=coverage.out -covermode=atomic -timeout 5m
@@ -67,6 +97,10 @@ getActionVersion \
 incrementVersionPatch \
 incrementVersionMinor \
 incrementVersionMajor \
+getPluginVersion \
+incrementPluginVersionPatch \
+incrementPluginVersionMinor \
+incrementPluginVersionMajor \
 test \
 coverage \
 coverage-html \
