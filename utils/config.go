@@ -33,6 +33,13 @@ var RootServicesFolder = "corgi_services/services"
 var ServicesItemsFromFlag []string
 var DbServicesItemsFromFlag []string
 
+// SkippedServices / SkippedDbServices record entries declared in
+// corgi-compose.yml but excluded by --services / --dbServices filters.
+// Env generation uses these to silently drop ${producer.VAR} lines whose
+// producer was intentionally not started, instead of erroring out.
+var SkippedServices = map[string]bool{}
+var SkippedDbServices = map[string]bool{}
+
 type DatabaseService struct {
 	ServiceName       string                   `yaml:"service_name,omitempty"`
 	Driver            string                   `yaml:"driver,omitempty" options:"postgres,mongodb,mysql,mariadb,redis,redis-server,rabbitmq,sqs,s3,dynamodb,kafka,mssql,cassandra,cockroach,clickhouse,scylla,keydb,surrealdb,neo4j,dgraph,arangodb,elasticsearch,timescaledb,couchdb,meilisearch,faunadb,yugabytedb,skytable,dragonfly,redict,valkey,postgis,pgvector,localstack,supabase,image❌skip"`
@@ -325,13 +332,18 @@ func buildBaseCorgi(y CorgiComposeYaml) CorgiCompose {
 }
 
 func parseDatabaseServices(dbServicesData map[string]DatabaseService, describeFlag bool) ([]DatabaseService, error) {
+	SkippedDbServices = map[string]bool{}
 	if len(dbServicesData) == 0 || !servicesCanBeAdded(DbServicesItemsFromFlag) {
+		for indexName := range dbServicesData {
+			SkippedDbServices[indexName] = true
+		}
 		fmt.Println("no db_services provided")
 		return nil, nil
 	}
 	var dbServices []DatabaseService
 	for indexName, db := range dbServicesData {
 		if !IsServiceIncludedInFlag(DbServicesItemsFromFlag, indexName) {
+			SkippedDbServices[indexName] = true
 			continue
 		}
 		dbToAdd, err := buildDatabaseService(indexName, db)
@@ -432,13 +444,18 @@ func mergeSeedFromDb(db DatabaseService) SeedFromDb {
 }
 
 func parseServices(servicesData map[string]Service, describeFlag bool) []Service {
+	SkippedServices = map[string]bool{}
 	if len(servicesData) == 0 || !servicesCanBeAdded(ServicesItemsFromFlag) {
+		for indexName := range servicesData {
+			SkippedServices[indexName] = true
+		}
 		fmt.Println("no services provided")
 		return nil
 	}
 	var services []Service
 	for indexName, service := range servicesData {
 		if !IsServiceIncludedInFlag(ServicesItemsFromFlag, indexName) {
+			SkippedServices[indexName] = true
 			continue
 		}
 		serviceToAdd := buildService(indexName, service)
