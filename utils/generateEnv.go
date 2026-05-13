@@ -650,11 +650,13 @@ func renderEnvFileContent(pathToEnvFile string, envForService string, service Se
 			corgiGeneratedMessage,
 		)
 	}
-	// LocalhostNameInEnv wins over --host for this service: it rewrites every
-	// "localhost" in the file (incl. db hosts), while --host only touches
-	// service URLs at generation time.
-	if service.LocalhostNameInEnv != "" {
+	// Rewrite "localhost" in the file. LocalhostNameInEnv wins if set;
+	// otherwise --host catches user-written URLs (e.g. Supabase) too.
+	switch {
+	case service.LocalhostNameInEnv != "":
 		envFileContentString = strings.ReplaceAll(envFileContentString, "localhost", service.LocalhostNameInEnv)
+	case HostOverride != "":
+		envFileContentString = strings.ReplaceAll(envFileContentString, "localhost", HostOverride)
 	}
 	return envFileContentString
 }

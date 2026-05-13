@@ -106,6 +106,34 @@ func TestRenderEnvFileContent_LocalhostNameInEnvWinsOverHostOverride(t *testing.
 	}
 }
 
+func TestRenderEnvFileContent_HostOverrideRewritesUserWrittenLocalhost(t *testing.T) {
+	defer func() { HostOverride = "" }()
+	HostOverride = "10.0.0.5"
+
+	service := Service{ServiceName: "client"}
+	envBody := "EXPO_PUBLIC_SUPABASE_URL=http://localhost:54321\n"
+
+	out := renderEnvFileContent("/nonexistent/path/to/.env", envBody, service)
+
+	if !strings.Contains(out, "EXPO_PUBLIC_SUPABASE_URL=http://10.0.0.5:54321") {
+		t.Fatalf("expected user-written localhost rewritten by HostOverride, got %q", out)
+	}
+}
+
+func TestRenderEnvFileContent_NoHostOverride_LeavesLocalhost(t *testing.T) {
+	defer func() { HostOverride = "" }()
+	HostOverride = ""
+
+	service := Service{ServiceName: "client"}
+	envBody := "EXPO_PUBLIC_SUPABASE_URL=http://localhost:54321\n"
+
+	out := renderEnvFileContent("/nonexistent/path/to/.env", envBody, service)
+
+	if !strings.Contains(out, "http://localhost:54321") {
+		t.Fatalf("expected localhost preserved without override, got %q", out)
+	}
+}
+
 func TestAppendDependentServiceEnv_UsesHostOverride(t *testing.T) {
 	defer func() { HostOverride = "" }()
 	HostOverride = "10.0.0.5"

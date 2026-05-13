@@ -6,18 +6,19 @@ import (
 	"strings"
 )
 
-// HostOverride swaps "localhost" in service URL env vars when set via
-// `corgi run --host`. DBs stay on localhost — they live on the same box.
+// HostOverride is the value of `corgi run --host`. Rewrites "localhost"
+// in generated service URLs, and in the rest of the .env when
+// LocalhostNameInEnv isn't set.
 var HostOverride string
 
-// Interfaces that look like the LAN but aren't reachable from a phone:
-// Docker bridges, macOS VPN tunnels, AirDrop, loopback aliases.
+// Interfaces a phone can't actually reach: Docker bridges, VPN tunnels,
+// AirDrop, loopback.
 var virtualIfacePrefixes = []string{
 	"utun", "bridge", "vmnet", "vmenet", "docker", "veth",
 	"awdl", "llw", "tun", "tap", "anpi", "ap", "lo",
 }
 
-// Seam so tests can inject a fake interface list.
+// Overridable so tests can swap in fake interfaces.
 var getInterfaces = func() []net.Interface {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -30,7 +31,7 @@ func DetectHostIP() (string, error) {
 	return PickHostIPFromInterfaces(getInterfaces())
 }
 
-// Try en0/en1/eth0/wlan0 first, then any non-virtual interface.
+// Prefer the usual Wi-Fi/Ethernet names, then fall back to anything real.
 func PickHostIPFromInterfaces(ifaces []net.Interface) (string, error) {
 	if len(ifaces) == 0 {
 		return "", fmt.Errorf("no network interfaces available")
