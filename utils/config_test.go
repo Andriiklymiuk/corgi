@@ -232,6 +232,79 @@ func TestParseServicesNonePresent(t *testing.T) {
 	}
 }
 
+func TestParseServices_PopulatesSkippedServices(t *testing.T) {
+	prev := ServicesItemsFromFlag
+	ServicesItemsFromFlag = []string{"api"}
+	t.Cleanup(func() {
+		ServicesItemsFromFlag = prev
+		SkippedServices = map[string]bool{}
+	})
+	parseServices(map[string]Service{
+		"api":          {},
+		"broker":       {},
+		"notification": {},
+	}, false)
+	if SkippedServices["api"] {
+		t.Error("api should not be in SkippedServices")
+	}
+	if !SkippedServices["broker"] || !SkippedServices["notification"] {
+		t.Errorf("expected broker+notification skipped, got %+v", SkippedServices)
+	}
+}
+
+func TestParseServices_NoneMarksAllSkipped(t *testing.T) {
+	prev := ServicesItemsFromFlag
+	ServicesItemsFromFlag = []string{"none"}
+	t.Cleanup(func() {
+		ServicesItemsFromFlag = prev
+		SkippedServices = map[string]bool{}
+	})
+	parseServices(map[string]Service{"a": {}, "b": {}}, false)
+	if !SkippedServices["a"] || !SkippedServices["b"] {
+		t.Errorf("expected all skipped, got %+v", SkippedServices)
+	}
+}
+
+func TestParseDatabaseServices_PopulatesSkippedDbServices(t *testing.T) {
+	prev := DbServicesItemsFromFlag
+	DbServicesItemsFromFlag = []string{"main-db"}
+	t.Cleanup(func() {
+		DbServicesItemsFromFlag = prev
+		SkippedDbServices = map[string]bool{}
+	})
+	_, err := parseDatabaseServices(map[string]DatabaseService{
+		"main-db":  {Port: 5432},
+		"cache-db": {Port: 5433},
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if SkippedDbServices["main-db"] {
+		t.Error("main-db should not be skipped")
+	}
+	if !SkippedDbServices["cache-db"] {
+		t.Errorf("expected cache-db skipped, got %+v", SkippedDbServices)
+	}
+}
+
+func TestParseDatabaseServices_NoneMarksAllSkipped(t *testing.T) {
+	prev := DbServicesItemsFromFlag
+	DbServicesItemsFromFlag = []string{"none"}
+	t.Cleanup(func() {
+		DbServicesItemsFromFlag = prev
+		SkippedDbServices = map[string]bool{}
+	})
+	_, err := parseDatabaseServices(map[string]DatabaseService{
+		"a": {}, "b": {},
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !SkippedDbServices["a"] || !SkippedDbServices["b"] {
+		t.Errorf("expected all skipped, got %+v", SkippedDbServices)
+	}
+}
+
 func TestBuildService(t *testing.T) {
 	prev := CorgiComposePathDir
 	CorgiComposePathDir = "/proj"

@@ -12,6 +12,68 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func newRunCmdForTest() *cobra.Command {
+	c := &cobra.Command{Use: "run"}
+	c.Flags().String("host", "", "")
+	return c
+}
+
+func TestResolveHostFlag_Empty(t *testing.T) {
+	defer func() { utils.HostOverride = "init-was-set" }()
+	utils.HostOverride = "init-was-set"
+	c := newRunCmdForTest()
+	if err := resolveHostFlag(c); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if utils.HostOverride != "" {
+		t.Fatalf("expected empty override, got %q", utils.HostOverride)
+	}
+}
+
+func TestResolveHostFlag_ExplicitIP(t *testing.T) {
+	defer func() { utils.HostOverride = "" }()
+	c := newRunCmdForTest()
+	if err := c.Flags().Set("host", "192.168.1.42"); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolveHostFlag(c); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if utils.HostOverride != "192.168.1.42" {
+		t.Fatalf("expected 192.168.1.42, got %q", utils.HostOverride)
+	}
+}
+
+func TestResolveHostFlag_WhitespaceTrimmed(t *testing.T) {
+	defer func() { utils.HostOverride = "" }()
+	c := newRunCmdForTest()
+	if err := c.Flags().Set("host", "   "); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolveHostFlag(c); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if utils.HostOverride != "" {
+		t.Fatalf("expected whitespace to trim to empty, got %q", utils.HostOverride)
+	}
+}
+
+func TestResolveHostFlag_Auto(t *testing.T) {
+	defer func() { utils.HostOverride = "" }()
+	c := newRunCmdForTest()
+	if err := c.Flags().Set("host", "auto"); err != nil {
+		t.Fatal(err)
+	}
+	err := resolveHostFlag(c)
+	if err != nil {
+		// CI without a non-loopback iface — acceptable, skip.
+		t.Skipf("no detectable LAN iface in test env: %v", err)
+	}
+	if utils.HostOverride == "" || utils.HostOverride == "auto" {
+		t.Fatalf("expected detected IP, got %q", utils.HostOverride)
+	}
+}
+
 func TestHasDatabaseToRun(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		if hasDatabaseToRun(nil) {

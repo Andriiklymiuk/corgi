@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -89,6 +90,14 @@ By default all db_services are included and run.
 		"",
 		false,
 		"Dusable watch for changes in corgi-compose file",
+	)
+	runCmd.PersistentFlags().String(
+		"host",
+		"",
+		`IP to use instead of "localhost" in service URL env vars (so a phone
+on the LAN can hit your dev API). Pass an explicit IP or "auto" to
+detect the first non-loopback IPv4. db_services stay on localhost.
+		`,
 	)
 	runCmd.PersistentFlags().Bool(
 		"tunnel",
@@ -206,7 +215,36 @@ func startAllServices(corgi *utils.CorgiCompose, cmd *cobra.Command) {
 	serviceWaitGroup.Wait()
 }
 
+func resolveHostFlag(cmd *cobra.Command) error {
+	raw, err := cmd.Flags().GetString("host")
+	if err != nil {
+		return err
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		utils.HostOverride = ""
+		return nil
+	}
+	if raw == "auto" {
+		ip, err := utils.DetectHostIP()
+		if err != nil {
+			return fmt.Errorf("auto-detect: %w", err)
+		}
+		utils.HostOverride = ip
+		fmt.Println(art.BlueColor, "🌐 --host auto resolved to", ip, art.WhiteColor)
+		return nil
+	}
+	utils.HostOverride = raw
+	fmt.Println(art.BlueColor, "🌐 --host override:", raw, art.WhiteColor)
+	return nil
+}
+
 func runRun(cmd *cobra.Command, _ []string) {
+	if err := resolveHostFlag(cmd); err != nil {
+		fmt.Println(art.RedColor, "host flag:", err, art.WhiteColor)
+		return
+	}
+
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Println(err)
