@@ -336,6 +336,70 @@ func TestSubstituteCrossServiceRefs_ProducerSkipped(t *testing.T) {
 	}
 }
 
+func TestSubstituteServiceVars_StripsSkippedProducerRef(t *testing.T) {
+	defer func() { SkippedServices = map[string]bool{} }()
+	SkippedServices = map[string]bool{"notifier": true}
+
+	exporter := Service{
+		ServiceName:       "exporter",
+		DependsOnServices: []DependsOnService{{Name: "notifier"}},
+		Exports:           []string{"COMBINED"},
+	}
+	out := ExportsMap{
+		"exporter": {"COMBINED": "prefix-${notifier.TOKEN}-suffix"},
+	}
+	consumers := map[string]Service{"exporter": exporter}
+
+	changed := substituteServiceVars(out["exporter"], consumers["exporter"], out)
+	if !changed {
+		t.Fatal("expected substituteServiceVars to report a change")
+	}
+	got := out["exporter"]["COMBINED"]
+	if strings.Contains(got, "notifier.TOKEN") {
+		t.Fatalf("expected skipped ref stripped, got %q", got)
+	}
+	if got != "prefix--suffix" {
+		t.Fatalf("expected 'prefix--suffix', got %q", got)
+	}
+
+	// findStuckExports must not flag this as a cycle.
+	if stuck := findStuckExports(out); len(stuck) > 0 {
+		t.Fatalf("expected no stuck exports, got %v", stuck)
+	}
+}
+
+func TestAppendEnvironmentLines_MixedRefSkipsWholeLine(t *testing.T) {
+	defer func() {
+		SkippedServices = map[string]bool{}
+		currentExportsMap = nil
+	}()
+	SkippedServices = map[string]bool{"notifier": true}
+	currentExportsMap = ExportsMap{
+		"api": {"URL": "http://localhost:3000"},
+	}
+	service := Service{
+		ServiceName: "client",
+		DependsOnServices: []DependsOnService{
+			{Name: "api"},
+			{Name: "notifier"},
+		},
+		Environment: []string{
+			"MIXED=${api.URL}/${notifier.TOKEN}",
+			"GOOD=${api.URL}",
+		},
+	}
+	out, err := appendEnvironmentLines("", service)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(out, "GOOD=http://localhost:3000") {
+		t.Fatalf("expected GOOD line preserved, got %q", out)
+	}
+	if strings.Contains(out, "MIXED=") {
+		t.Fatalf("expected MIXED line dropped, got %q", out)
+	}
+}
+
 func TestAppendEnvironmentLines_SkipsSkippedProducerLine(t *testing.T) {
 	defer func() {
 		SkippedServices = map[string]bool{}

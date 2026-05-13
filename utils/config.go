@@ -33,10 +33,9 @@ var RootServicesFolder = "corgi_services/services"
 var ServicesItemsFromFlag []string
 var DbServicesItemsFromFlag []string
 
-// SkippedServices / SkippedDbServices record entries declared in
-// corgi-compose.yml but excluded by --services / --dbServices filters.
-// Env generation uses these to silently drop ${producer.VAR} lines whose
-// producer was intentionally not started, instead of erroring out.
+// Names declared in corgi-compose.yml but filtered out by --services /
+// --dbServices. Env gen uses these to drop cross-service refs to producers
+// that aren't running, instead of erroring.
 var SkippedServices = map[string]bool{}
 var SkippedDbServices = map[string]bool{}
 

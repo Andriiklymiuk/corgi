@@ -63,12 +63,12 @@ func appendDependentServiceEnv(envForService string, dep DependsOnService, corgi
 	}
 
 	if s.Port != 0 {
-		return createEnvString(envForService, envNameToUse, "localhost", fmt.Sprint(s.Port), dep.Suffix)
+		return createEnvString(envForService, envNameToUse, ServiceHost(), fmt.Sprint(s.Port), dep.Suffix)
 	}
 	for _, envLine := range s.Environment {
 		parts := strings.SplitN(envLine, "=", 2)
 		if len(parts) == 2 && parts[0] == "PORT" {
-			envForService = createEnvString(envForService, envNameToUse, "localhost", parts[1], dep.Suffix)
+			envForService = createEnvString(envForService, envNameToUse, ServiceHost(), parts[1], dep.Suffix)
 		}
 	}
 	return envForService
@@ -139,9 +139,8 @@ type ExportsMap map[string]map[string]string
 
 var currentExportsMap ExportsMap
 
-// producerSkippedError signals that a ${producer.VAR} reference points at a
-// service intentionally excluded by --services / --dbServices. Callers should
-// drop the env line rather than fail. Carries the producer name for logging.
+// Returned when a ${producer.VAR} ref points at a service excluded by
+// --services. Callers drop the env line instead of erroring.
 type producerSkippedError struct {
 	producer string
 	varName  string
@@ -449,6 +448,21 @@ func substituteServiceVars(vars map[string]string, consumer Service, out Exports
 		}
 		newVal, subErr := substituteCrossServiceRefs(val, consumer, out)
 		if subErr != nil {
+			var skipped *producerSkippedError
+			if errors.As(subErr, &skipped) {
+				// Strip skipped refs so findStuckExports doesn't flag a fake cycle.
+				stripped := crossServiceRefRe.ReplaceAllStringFunc(val, func(match string) string {
+					m := crossServiceRefRe.FindStringSubmatch(match)
+					if SkippedServices[m[1]] {
+						return ""
+					}
+					return match
+				})
+				if stripped != val {
+					vars[varName] = stripped
+					changed = true
+				}
+			}
 			continue
 		}
 		if newVal != val {
@@ -556,8 +570,9 @@ func appendEnvironmentLines(envForService string, service Service) (string, erro
 			if errors.As(err, &skipped) {
 				fmt.Println(
 					art.YellowColor,
-					"ℹ️  skipping env line for", service.ServiceName, ":", envLine,
-					"—", skipped.producer, "not in --services run",
+					"ℹ️  dropping env line", envLine, "for", service.ServiceName,
+					"— references ${"+skipped.producer+"."+skipped.varName+"} but",
+					skipped.producer, "is not in --services run",
 					art.WhiteColor,
 				)
 				continue
@@ -635,6 +650,9 @@ func renderEnvFileContent(pathToEnvFile string, envForService string, service Se
 			corgiGeneratedMessage,
 		)
 	}
+	// LocalhostNameInEnv wins over --host for this service: it rewrites every
+	// "localhost" in the file (incl. db hosts), while --host only touches
+	// service URLs at generation time.
 	if service.LocalhostNameInEnv != "" {
 		envFileContentString = strings.ReplaceAll(envFileContentString, "localhost", service.LocalhostNameInEnv)
 	}
