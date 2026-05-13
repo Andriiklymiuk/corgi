@@ -139,6 +139,18 @@ type ExportsMap map[string]map[string]string
 
 var currentExportsMap ExportsMap
 
+// producerSkippedError signals that a ${producer.VAR} reference points at a
+// service intentionally excluded by --services / --dbServices. Callers should
+// drop the env line rather than fail. Carries the producer name for logging.
+type producerSkippedError struct {
+	producer string
+	varName  string
+}
+
+func (e *producerSkippedError) Error() string {
+	return fmt.Sprintf("producer %q is not in --services run; skipping ${%s.%s}", e.producer, e.producer, e.varName)
+}
+
 var crossServiceRefRe = regexp.MustCompile(`\$\{([A-Za-z0-9_\-/]+)\.([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 // topoSortServices returns services in dependency order (deps first).
@@ -282,6 +294,9 @@ func resolveCrossServiceRef(
 			"service %q references ${%s.%s} but %q is not in depends_on_services",
 			consumer.ServiceName, producer, varName, producer,
 		)
+	}
+	if SkippedServices[producer] {
+		return match, &producerSkippedError{producer: producer, varName: varName}
 	}
 	producerExports, ok := exports[producer]
 	if !ok {
@@ -537,6 +552,16 @@ func appendEnvironmentLines(envForService string, service Service) (string, erro
 	for _, envLine := range service.Environment {
 		crossExpanded, err := substituteCrossServiceRefs(envLine, service, currentExportsMap)
 		if err != nil {
+			var skipped *producerSkippedError
+			if errors.As(err, &skipped) {
+				fmt.Println(
+					art.YellowColor,
+					"ℹ️  skipping env line for", service.ServiceName, ":", envLine,
+					"—", skipped.producer, "not in --services run",
+					art.WhiteColor,
+				)
+				continue
+			}
 			fmt.Println(art.RedColor, "env generation for", service.ServiceName, ":", err, art.WhiteColor)
 			return "", err
 		}

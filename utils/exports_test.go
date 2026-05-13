@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -311,6 +312,54 @@ func TestSubstituteCrossServiceRefs_NoExportsMap(t *testing.T) {
 	}
 	if got != "X=${notifier.TOKEN}" {
 		t.Fatalf("expected passthrough, got %q", got)
+	}
+}
+
+func TestSubstituteCrossServiceRefs_ProducerSkipped(t *testing.T) {
+	defer func() { SkippedServices = map[string]bool{} }()
+	SkippedServices = map[string]bool{"notifier": true}
+	consumer := Service{
+		ServiceName:       "app",
+		DependsOnServices: []DependsOnService{{Name: "notifier"}},
+	}
+	exports := ExportsMap{}
+	_, err := substituteCrossServiceRefs("X=${notifier.TOKEN}", consumer, exports)
+	if err == nil {
+		t.Fatal("expected producerSkippedError")
+	}
+	var skipped *producerSkippedError
+	if !errors.As(err, &skipped) {
+		t.Fatalf("expected producerSkippedError, got %T: %v", err, err)
+	}
+	if skipped.producer != "notifier" || skipped.varName != "TOKEN" {
+		t.Fatalf("unexpected fields: %+v", skipped)
+	}
+}
+
+func TestAppendEnvironmentLines_SkipsSkippedProducerLine(t *testing.T) {
+	defer func() {
+		SkippedServices = map[string]bool{}
+		currentExportsMap = nil
+	}()
+	SkippedServices = map[string]bool{"notifier": true}
+	currentExportsMap = ExportsMap{}
+	service := Service{
+		ServiceName:       "app",
+		DependsOnServices: []DependsOnService{{Name: "notifier"}},
+		Environment: []string{
+			"KEEP=ok",
+			"DROP=${notifier.TOKEN}",
+		},
+	}
+	out, err := appendEnvironmentLines("", service)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "KEEP=ok") {
+		t.Fatalf("expected KEEP=ok in output, got %q", out)
+	}
+	if strings.Contains(out, "DROP=") || strings.Contains(out, "notifier.TOKEN") {
+		t.Fatalf("expected DROP line to be omitted, got %q", out)
 	}
 }
 
