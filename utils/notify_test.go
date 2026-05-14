@@ -6,6 +6,14 @@ import (
 	"time"
 )
 
+// TestMain silences real OS notifications for every test in the utils
+// package. Without this, terminal-notifier (on dev machines with brew)
+// pops a toast on every `go test` run.
+func TestMain(m *testing.M) {
+	sendNotificationOverride = func(string, string) {}
+	os.Exit(m.Run())
+}
+
 func TestIsNotificationsEnabled_Default(t *testing.T) {
 	// With no config file (fresh temp HOME), should return false.
 	dir := t.TempDir()

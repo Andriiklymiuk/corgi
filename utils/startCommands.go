@@ -81,6 +81,15 @@ func connectFirstAwsVpnProfile() error {
 	const script = `
 tell application "System Events"
 	tell process "AWS VPN Client"
+		-- dismiss any update / nag dialog that may cover the main window
+		repeat 3 times
+			if (exists window 1) and (exists (first button of window 1 whose name is "Remind Me Later")) then
+				click (first button of window 1 whose name is "Remind Me Later")
+				delay 0.3
+			else
+				exit repeat
+			end if
+		end repeat
 		if not (exists window 1) then return "no-window"
 		if exists (first button of window 1 whose name is "Disconnect") then return "already-connected"
 		if exists (first button of window 1 whose name is "Cancel") then return "connecting-in-progress"
@@ -116,7 +125,9 @@ end tell
 		fmt.Println("🔌 Connecting first AWS VPN profile...")
 		InterruptibleSleep(awsVpnPostConnectWait)
 	case "no-profile":
-		fmt.Println("⚠️  No AWS VPN profile available in client. Add one and re-run.")
+		fmt.Println("⚠️  AWS VPN Client: no Connect button found in main window.")
+		fmt.Println("   Possible causes: profile missing, modal/sheet still open, or window not on front display.")
+		fmt.Println("   Open AWS VPN Client, dismiss any update dialog, then re-run corgi.")
 	case "no-window":
 		fmt.Println("⚠️  AWS VPN Client window not ready. Connect manually.")
 		InterruptibleSleep(awsVpnPostConnectWait)

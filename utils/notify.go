@@ -82,10 +82,31 @@ func NotifyRaw(title, body string) {
 	sendNotification(title, body)
 }
 
+// sendNotificationOverride lets tests swap the real OS dispatcher for a
+// no-op so unit runs don't fire real toasts on the developer's machine.
+var sendNotificationOverride func(title, body string)
+
 func sendNotification(title, body string) {
+	if sendNotificationOverride != nil {
+		sendNotificationOverride(title, body)
+		return
+	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
+		// terminal-notifier (if installed via brew) gives toasts proper
+		// "corgi" branding + survives Focus filters that block Script
+		// Editor by default. Fall back to osascript otherwise.
+		if path, err := exec.LookPath("terminal-notifier"); err == nil {
+			cmd = exec.Command(path,
+				"-title", title,
+				"-message", body,
+				"-group", "com.andriiklymiuk.corgi",
+				"-sender", "com.apple.Terminal",
+			)
+			_ = cmd.Run()
+			return
+		}
 		script := fmt.Sprintf(
 			`display notification %q with title %q`,
 			body, title,

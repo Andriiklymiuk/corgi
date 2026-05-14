@@ -18,7 +18,8 @@ var configCmd = &cobra.Command{
 The preferences live at ~/.corgi/config.yml and persist across projects.
 To toggle notifications: corgi notifications on|off|test.
 To reset everything: delete ~/.corgi/config.yml.`,
-	Run: runConfigShow,
+	Args: cobra.NoArgs,
+	Run:  runConfigShow,
 }
 
 var configPathCmd = &cobra.Command{
