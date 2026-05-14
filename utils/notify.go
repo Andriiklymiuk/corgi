@@ -82,9 +82,11 @@ func NotifyRaw(title, body string) {
 	sendNotification(title, body)
 }
 
-// sendNotificationOverride lets tests swap the real OS dispatcher for a
-// no-op so unit runs don't fire real toasts on the developer's machine.
 var sendNotificationOverride func(title, body string)
+
+func SilenceNotificationsForTests() {
+	sendNotificationOverride = func(string, string) {}
+}
 
 func sendNotification(title, body string) {
 	if sendNotificationOverride != nil {
@@ -111,9 +113,9 @@ func sendNotification(title, body string) {
 			`display notification %q with title %q`,
 			body, title,
 		)
-		cmd = exec.Command("osascript", "-e", script)
+		cmd = exec.Command("osascript", "-e", script) // NOSONAR — system binary
 	case "linux":
-		cmd = exec.Command("notify-send", title, body)
+		cmd = exec.Command("notify-send", title, body) // NOSONAR — system binary
 	case "windows":
 		// PowerShell toast via Windows Runtime APIs (works on Win 10+).
 		ps := fmt.Sprintf(
@@ -125,7 +127,7 @@ func sendNotification(title, body string) {
 				`[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('corgi').Show($notif)`,
 			powershellQuote(title), powershellQuote(body),
 		)
-		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", ps)
+		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", ps) // NOSONAR — system binary
 	default:
 		return
 	}

@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+const redisCLITool = "redis-cli"
+
 // shellConfig is the per-driver mapping from corgi DatabaseService to the
 // CLI tool that opens its shell (psql, mongosh, ...). argsFunc builds args
 // for interactive mode; execArgsFunc is the non-interactive --exec variant.
@@ -131,12 +133,12 @@ var driverShells = map[string]shellConfig{
 			}
 		},
 	},
-	"redis":        {cmd: "redis-cli", argsFunc: redisArgs, execArgsFunc: redisExecArgs},
-	"redis-server": {cmd: "redis-cli", argsFunc: redisArgs, execArgsFunc: redisExecArgs},
-	"keydb":        {cmd: "redis-cli", argsFunc: redisArgs, execArgsFunc: redisExecArgs},
-	"dragonfly":    {cmd: "redis-cli", argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
-	"redict":       {cmd: "redis-cli", argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
-	"valkey":       {cmd: "redis-cli", argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
+	"redis":        {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs},
+	"redis-server": {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs},
+	"keydb":        {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs},
+	"dragonfly":    {cmd: redisCLITool, argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
+	"redict":       {cmd: redisCLITool, argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
+	"valkey":       {cmd: redisCLITool, argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
 	"mongodb":      {cmd: "mongosh", argsFunc: mongoArgs, execArgsFunc: mongoExecArgs},
 	"mysql":        {cmd: "mysql", argsFunc: mysqlArgs, execArgsFunc: mysqlExecArgs},
 	"mariadb":      {cmd: "mysql", argsFunc: mysqlArgs, execArgsFunc: mysqlExecArgs},
@@ -196,7 +198,7 @@ func runDBShell(db DatabaseService, query string, interactive bool) error {
 		}
 	}
 
-	cmd := exec.Command("docker", filtered...)
+	cmd := exec.Command("docker", filtered...) // NOSONAR — docker is a known system binary
 	if interactive {
 		cmd.Stdin = os.Stdin
 	}
@@ -208,7 +210,7 @@ func runDBShell(db DatabaseService, query string, interactive bool) error {
 // getRunningContainerID looks up a container by exact name match (anchored
 // regex), so a "postgres-api" filter never picks up "postgres-api-staging".
 func getRunningContainerID(containerName string) (string, error) {
-	out, err := exec.Command(
+	out, err := exec.Command( // NOSONAR — docker is a known system binary
 		"docker", "ps", "--filter", fmt.Sprintf("name=^%s$", containerName),
 		"--format", "{{.ID}}",
 	).Output()

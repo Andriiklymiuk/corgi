@@ -10,7 +10,7 @@ import (
 // package. Without this, terminal-notifier (on dev machines with brew)
 // pops a toast on every `go test` run.
 func TestMain(m *testing.M) {
-	sendNotificationOverride = func(string, string) {}
+	SilenceNotificationsForTests()
 	os.Exit(m.Run())
 }
 

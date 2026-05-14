@@ -264,17 +264,7 @@ func resolveHostFlag(cmd *cobra.Command) error {
 }
 
 func runRun(cmd *cobra.Command, _ []string) {
-	if ci, _ := cmd.Flags().GetBool("ci"); ci {
-		utils.SetCIMode(true)
-	}
-
-	if notifyEnabled, _ := cmd.Flags().GetBool("notify"); notifyEnabled {
-		utils.SetOnServiceCrash(func(serviceName string) {
-			utils.Notify("corgi 🐶", fmt.Sprintf("Service %q crashed", serviceName))
-		})
-	} else {
-		utils.SetOnServiceCrash(nil)
-	}
+	applyRunFlags(cmd)
 
 	if err := resolveHostFlag(cmd); err != nil {
 		fmt.Println(art.RedColor, "host flag:", err, art.WhiteColor)
@@ -304,27 +294,8 @@ func runRun(cmd *cobra.Command, _ []string) {
 	}
 
 	utils.CleanFromScratch(cmd, *corgi)
-
-	if corgi.UseAwsVpn {
-		if err := utils.AwsVpnInit(); err != nil {
-			fmt.Println("AWS VPN init failed", err)
-		}
-	}
-
-	if usesDocker(corgi) {
-		if err := utils.DockerInit(cmd); err != nil {
-			fmt.Println("Docker init failed:", err)
-		}
-	}
-
-	utils.RunServiceCommands(
-		utils.BeforeStartInConfig,
-		"corgi beforeStart",
-		corgi.BeforeStart,
-		"",
-		false,
-		true,
-	)
+	runPreflight(cmd, corgi)
+	runBeforeStart(corgi)
 
 	CreateDatabaseServices(corgi.DatabaseServices)
 	runDatabaseServices(cmd, corgi.DatabaseServices)
@@ -339,12 +310,47 @@ func runRun(cmd *cobra.Command, _ []string) {
 	}
 
 	CreateServices(corgi.Services)
-	// Bail if shutdown fired mid-init: spawning start cmds now would
-	// orphan them past KillAllStoredProcesses.
 	if utils.ShutdownRequested() {
 		return
 	}
 	startAllServices(corgi, cmd)
+}
+
+func applyRunFlags(cmd *cobra.Command) {
+	if ci, _ := cmd.Flags().GetBool("ci"); ci {
+		utils.SetCIMode(true)
+	}
+	if notifyEnabled, _ := cmd.Flags().GetBool("notify"); notifyEnabled {
+		utils.SetOnServiceCrash(func(serviceName string) {
+			utils.Notify("corgi 🐶", fmt.Sprintf("Service %q crashed", serviceName))
+		})
+	} else {
+		utils.SetOnServiceCrash(nil)
+	}
+}
+
+func runPreflight(cmd *cobra.Command, corgi *utils.CorgiCompose) {
+	if corgi.UseAwsVpn {
+		if err := utils.AwsVpnInit(); err != nil {
+			fmt.Println("AWS VPN init failed", err)
+		}
+	}
+	if usesDocker(corgi) {
+		if err := utils.DockerInit(cmd); err != nil {
+			fmt.Println("Docker init failed:", err)
+		}
+	}
+}
+
+func runBeforeStart(corgi *utils.CorgiCompose) {
+	utils.RunServiceCommands(
+		utils.BeforeStartInConfig,
+		"corgi beforeStart",
+		corgi.BeforeStart,
+		"",
+		false,
+		true,
+	)
 }
 
 func cleanup(corgi *utils.CorgiCompose) {

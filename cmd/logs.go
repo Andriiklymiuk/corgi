@@ -145,8 +145,6 @@ func labelForRun(path string) string {
 	}
 }
 
-// followLog tails the file like `tail -f`. Exits after `--idle` seconds
-// of no new writes (or never, when --idle=0).
 func followLog(path string) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -158,16 +156,12 @@ func followLog(path string) {
 	fmt.Printf("%s📄 %s (Ctrl-C to exit)%s\n\n", art.CyanColor, path, art.WhiteColor)
 
 	reader := bufio.NewReader(f)
-	var idleSince time.Time
 	stripPrefix := looksLikeStampedLog(path)
+	var idleSince time.Time
 	for {
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
-			if stripPrefix && len(line) >= utils.LogTimestampLen {
-				fmt.Print(line[utils.LogTimestampLen:])
-			} else {
-				fmt.Print(line)
-			}
+			printFollowedLine(line, stripPrefix)
 			idleSince = time.Time{}
 		}
 		if err == nil {
@@ -177,16 +171,28 @@ func followLog(path string) {
 			fmt.Printf("read error: %v\n", err)
 			return
 		}
-		if idleSince.IsZero() {
-			idleSince = time.Now()
-		}
-		idleExceeded := logsIdleFlag > 0 && time.Since(idleSince) > logsIdleFlag
-		if !isLogFileActive(path) || idleExceeded {
+		if shouldExitFollow(path, &idleSince) {
 			fmt.Printf("\n%s— end of log —%s\n", art.YellowColor, art.WhiteColor)
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func printFollowedLine(line string, stripPrefix bool) {
+	if stripPrefix && len(line) >= utils.LogTimestampLen {
+		fmt.Print(line[utils.LogTimestampLen:])
+		return
+	}
+	fmt.Print(line)
+}
+
+func shouldExitFollow(path string, idleSince *time.Time) bool {
+	if idleSince.IsZero() {
+		*idleSince = time.Now()
+	}
+	idleExceeded := logsIdleFlag > 0 && time.Since(*idleSince) > logsIdleFlag
+	return !isLogFileActive(path) || idleExceeded
 }
 
 // looksLikeStampedLog returns true when the file's first 25 bytes match
@@ -292,41 +298,56 @@ func followAllLogs(base string) error {
 		return fmt.Errorf("no log directories found under %s/.logs/\nRe-run with: corgi run --logs", base)
 	}
 
-	h := &mergeHeap{}
-	heap.Init(h)
-	for _, svc := range services {
-		runs, err := utils.ListServiceRuns(base, svc)
-		if err != nil || len(runs) == 0 {
-			continue
-		}
-		f, err := os.Open(runs[0])
-		if err != nil {
-			continue
-		}
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 64*1024), 1024*1024)
-		s := &mergeStream{service: svc, scanner: sc, f: f}
-		if s.advance() {
-			heap.Push(h, s)
-		} else {
-			f.Close()
-		}
-	}
-
+	h := buildMergeHeap(base, services)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
 	for h.Len() > 0 {
 		s := heap.Pop(h).(*mergeStream)
-		if s.headTS != "" {
-			fmt.Fprintf(out, "%s %s[%s]%s %s\n", s.headTS, art.CyanColor, s.service, art.WhiteColor, s.headBuf)
-		} else {
-			fmt.Fprintf(out, "%s[%s]%s %s\n", art.CyanColor, s.service, art.WhiteColor, s.headBuf)
-		}
+		writeMergedLine(out, s)
 		if s.advance() {
 			heap.Push(h, s)
 		}
 	}
 	return nil
+}
+
+func buildMergeHeap(base string, services []string) *mergeHeap {
+	h := &mergeHeap{}
+	heap.Init(h)
+	for _, svc := range services {
+		s := openMergeStream(base, svc)
+		if s == nil {
+			continue
+		}
+		if s.advance() {
+			heap.Push(h, s)
+		} else {
+			s.f.Close()
+		}
+	}
+	return h
+}
+
+func openMergeStream(base, svc string) *mergeStream {
+	runs, err := utils.ListServiceRuns(base, svc)
+	if err != nil || len(runs) == 0 {
+		return nil
+	}
+	f, err := os.Open(runs[0])
+	if err != nil {
+		return nil
+	}
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	return &mergeStream{service: svc, scanner: sc, f: f}
+}
+
+func writeMergedLine(out *bufio.Writer, s *mergeStream) {
+	if s.headTS != "" {
+		fmt.Fprintf(out, "%s %s[%s]%s %s\n", s.headTS, art.CyanColor, s.service, art.WhiteColor, s.headBuf)
+		return
+	}
+	fmt.Fprintf(out, "%s[%s]%s %s\n", art.CyanColor, s.service, art.WhiteColor, s.headBuf)
 }
 
 // isLogFileActive returns true when the log file was modified in the last 2s.
