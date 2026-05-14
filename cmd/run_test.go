@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -630,5 +632,42 @@ func TestHandleComposeWriteEventContentChanged(t *testing.T) {
 	got := handleComposeWriteEvent(w, c, yml)
 	if got {
 		t.Error("expected false when content changed (not a read error)")
+	}
+}
+
+func TestSetupLogWriters_RegistersServicesAndDbServices(t *testing.T) {
+	tmp := t.TempDir()
+	prevDir := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = tmp
+	defer func() { utils.CorgiComposePathDir = prevDir }()
+
+	// Reset writer registry.
+	utils.ServiceLogWriters = map[string]io.Writer{}
+
+	corgi := &utils.CorgiCompose{
+		Services: []utils.Service{
+			{ServiceName: "api"},
+			{ServiceName: "web"},
+		},
+		DatabaseServices: []utils.DatabaseService{
+			{ServiceName: "main-db", Driver: "postgres"},
+		},
+	}
+
+	setupLogWriters(corgi)
+
+	for _, name := range []string{"api", "web", "main-db"} {
+		if _, ok := utils.ServiceLogWriters[name]; !ok {
+			t.Errorf("expected log writer registered for %q", name)
+		}
+	}
+
+	// .gitignore should have been created with .logs/ entry.
+	data, err := os.ReadFile(filepath.Join(tmp, "corgi_services", ".gitignore"))
+	if err != nil {
+		t.Fatalf("expected .gitignore, got error: %v", err)
+	}
+	if !strings.Contains(string(data), ".logs/") {
+		t.Errorf(".logs/ entry missing from .gitignore: %s", data)
 	}
 }

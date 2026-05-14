@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -63,9 +64,80 @@ func resolveEnvFile(path string, envFileOverride []string) string {
 }
 
 var (
-	ProcessHandles []*os.Process
-	pidMutex       sync.Mutex
+	ProcessHandles    []*os.Process
+	pidMutex          sync.RWMutex
+	ServiceLogWriters = map[string]io.Writer{}
+	logWritersMu      sync.RWMutex
+	onServiceCrash    atomic.Pointer[func(string)]
 )
+
+// SetOnServiceCrash registers a callback fired when a managed service exits
+// non-zero (and corgi itself is not shutting down). Pass nil to clear.
+func SetOnServiceCrash(fn func(string)) {
+	if fn == nil {
+		onServiceCrash.Store(nil)
+		return
+	}
+	onServiceCrash.Store(&fn)
+}
+
+// SetLogWriter registers a log writer for a service. Any prior writer is
+// closed first so SIGHUP reloads don't leak file descriptors.
+func SetLogWriter(serviceName string, w io.Writer) {
+	logWritersMu.Lock()
+	if prev, ok := ServiceLogWriters[serviceName]; ok {
+		if wc, ok := prev.(io.Closer); ok {
+			wc.Close()
+		}
+	}
+	ServiceLogWriters[serviceName] = w
+	logWritersMu.Unlock()
+}
+
+// markServiceLogStatus tags the service's log writer with its exit status
+// so Close renames the file to .ok or .crashed. No-op when --logs is off.
+func markServiceLogStatus(serviceName string, status LogStatus) {
+	logWritersMu.RLock()
+	w := ServiceLogWriters[serviceName]
+	logWritersMu.RUnlock()
+	if setter, ok := w.(interface{ SetStatus(LogStatus) }); ok {
+		setter.SetStatus(status)
+	}
+}
+
+// markServiceLogStatusIfNotCrashed avoids downgrading a prior Crashed
+// status to OK when later commands in the same start: block succeed.
+func markServiceLogStatusIfNotCrashed(serviceName string, status LogStatus) {
+	logWritersMu.RLock()
+	w := ServiceLogWriters[serviceName]
+	logWritersMu.RUnlock()
+	if reader, ok := w.(interface{ CurrentStatus() LogStatus }); ok {
+		if reader.CurrentStatus() == LogStatusCrashed {
+			return
+		}
+	}
+	if setter, ok := w.(interface{ SetStatus(LogStatus) }); ok {
+		setter.SetStatus(status)
+	}
+}
+
+// CloseAllLogWriters closes every registered io.WriteCloser. Called on exit.
+func CloseAllLogWriters() {
+	logWritersMu.Lock()
+	defer logWritersMu.Unlock()
+	for name, w := range ServiceLogWriters {
+		if wc, ok := w.(io.Closer); ok {
+			wc.Close()
+		}
+		delete(ServiceLogWriters, name)
+	}
+}
+
+func getLogWriter(serviceName string) io.Writer {
+	logWritersMu.RLock()
+	defer logWritersMu.RUnlock()
+	return ServiceLogWriters[serviceName]
+}
 
 func addProcess(proc *os.Process) {
 	pidMutex.Lock()
@@ -160,8 +232,13 @@ func runInteractive(cmd *exec.Cmd) error {
 }
 
 func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand, path string, envFile []string) error {
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if lw := getLogWriter(serviceName); lw != nil {
+		cmd.Stdout = io.MultiWriter(os.Stdout, lw)
+		cmd.Stderr = io.MultiWriter(os.Stderr, lw)
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 	SetProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
@@ -169,8 +246,15 @@ func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand,
 	addProcess(cmd.Process)
 	if err := cmd.Wait(); err != nil {
 		removeProcess(cmd.Process)
+		if !ShutdownRequested() {
+			markServiceLogStatus(serviceName, LogStatusCrashed)
+			if fn := onServiceCrash.Load(); fn != nil {
+				(*fn)(serviceName)
+			}
+		}
 		return handleCommandFailure(err, commandSlice, serviceName, finalCommand, path, envFile)
 	}
+	markServiceLogStatusIfNotCrashed(serviceName, LogStatusOK)
 	return nil
 }
 

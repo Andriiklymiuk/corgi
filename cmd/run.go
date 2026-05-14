@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -109,6 +110,28 @@ a warning — corgi run keeps going. Equivalent to running corgi tunnel
 in a second terminal, but bundled into one process. Auth still
 required per provider (e.g. ngrok config add-authtoken).`,
 	)
+	runCmd.PersistentFlags().Bool(
+		"ci",
+		false,
+		`CI mode: suppress spinners, banners, and color output.
+Plain log lines only. Implies --silent. Auto-enabled when CI=true env is set.
+Pair with --once for CI pipeline use: corgi run --once --ci`,
+	)
+	runCmd.PersistentFlags().Bool(
+		"logs",
+		false,
+		`Persist stdout/stderr of every service and db_service to
+corgi_services/.logs/<name>/<timestamp>.log.
+Keeps the last 10 runs per service; older logs are pruned automatically.
+Read them afterwards with: corgi logs`,
+	)
+	runCmd.PersistentFlags().Bool(
+		"notify",
+		true,
+		`Send a desktop notification when a service crashes unexpectedly.
+Requires notifications to be enabled (answer yes in: corgi doctor).
+Pass --notify=false to disable for a single run.`,
+	)
 }
 
 // exitInProgress guards the terminal-exit path. Reset on cleanup-setup
@@ -120,6 +143,7 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 		fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
 		stopRunTunnels()
 		utils.KillAllStoredProcesses()
+		utils.CloseAllLogWriters()
 		utils.ResetShutdown()
 		cmd.Run(cmd, nil)
 		return
@@ -240,6 +264,18 @@ func resolveHostFlag(cmd *cobra.Command) error {
 }
 
 func runRun(cmd *cobra.Command, _ []string) {
+	if ci, _ := cmd.Flags().GetBool("ci"); ci {
+		utils.SetCIMode(true)
+	}
+
+	if notifyEnabled, _ := cmd.Flags().GetBool("notify"); notifyEnabled {
+		utils.SetOnServiceCrash(func(serviceName string) {
+			utils.Notify("corgi 🐶", fmt.Sprintf("Service %q crashed", serviceName))
+		})
+	} else {
+		utils.SetOnServiceCrash(nil)
+	}
+
 	if err := resolveHostFlag(cmd); err != nil {
 		fmt.Println(art.RedColor, "host flag:", err, art.WhiteColor)
 		return
@@ -298,6 +334,10 @@ func runRun(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
+	if logsEnabled, _ := cmd.Flags().GetBool("logs"); logsEnabled {
+		setupLogWriters(corgi)
+	}
+
 	CreateServices(corgi.Services)
 	// Bail if shutdown fired mid-init: spawning start cmds now would
 	// orphan them past KillAllStoredProcesses.
@@ -334,6 +374,22 @@ func cleanup(corgi *utils.CorgiCompose) {
 	)
 
 	fmt.Println("\n👋 Exiting corgi")
+	utils.CloseAllLogWriters()
+	maybeHintNotifications()
+}
+
+// maybeHintNotifications nudges users to turn on desktop crash alerts.
+// Stays quiet in CI and when notifications are already enabled.
+func maybeHintNotifications() {
+	if utils.CIMode {
+		return
+	}
+	cfg, err := utils.LoadUserConfig()
+	if err != nil || cfg.Notifications {
+		return
+	}
+	fmt.Printf("\n%s💡 Tip: get a desktop alert when a service crashes — run: corgi notifications on%s\n",
+		art.CyanColor, art.WhiteColor)
 }
 
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
@@ -535,4 +591,37 @@ func watchCorgiCompose(watcher *fsnotify.Watcher, cmd *cobra.Command) {
 			}
 		}
 	}()
+}
+
+// setupLogWriters creates per-service log files under corgi_services/.logs/
+// and registers each writer in utils.ServiceLogWriters so that runManaged
+// tees stdout/stderr to the file. Also ensures .gitignore excludes the dir.
+// Closes any previously registered writers first so re-entry on SIGHUP
+// reload does not leak file descriptors.
+func setupLogWriters(corgi *utils.CorgiCompose) {
+	utils.CloseAllLogWriters()
+	base := filepath.Join(utils.CorgiComposePathDir, "corgi_services")
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		fmt.Printf("⚠ logs: could not create %s: %v\n", base, err)
+		return
+	}
+	utils.EnsureLogsGitignore(base)
+
+	registerLog := func(name string) {
+		w, err := utils.OpenLogWriter(base, name)
+		if err != nil {
+			fmt.Printf("⚠ logs: could not open log for %s: %v\n", name, err)
+			return
+		}
+		if w != nil {
+			utils.SetLogWriter(name, w)
+		}
+	}
+
+	for _, svc := range corgi.Services {
+		registerLog(svc.ServiceName)
+	}
+	for _, db := range corgi.DatabaseServices {
+		registerLog(db.ServiceName)
+	}
 }

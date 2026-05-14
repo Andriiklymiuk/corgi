@@ -35,8 +35,14 @@ func listRun(cmd *cobra.Command, args []string) {
 	}
 
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Start()
-	defer s.Stop()
+	if !utils.CIMode {
+		s.Start()
+	}
+	defer func() {
+		if !utils.CIMode {
+			s.Stop()
+		}
+	}()
 
 	paths, err := utils.ListExecPaths()
 	if err != nil {
@@ -44,7 +50,9 @@ func listRun(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	s.Stop()
+	if !utils.CIMode {
+		s.Stop()
+	}
 
 	if len(paths) == 0 {
 		fmt.Println("No executed global corgi paths found.")
