@@ -33,6 +33,10 @@ Both exit 0 on success, 1 on failure. Output is colored text, not JSON.
 | Setting up webhook tunnels (Stripe/GitHub/e-sign/etc.) | `../../../docs/tunnel.md` (full) or `references/commands.md#corgi-tunnel-services` |
 | Producing a service map / relation diagram for the project | run `/corgi-describe` (see `references/describe-output.md`) |
 | Running `corgi run` inside an agent loop | `references/long-running.md` |
+| Persisting / re-reading service logs after a crash | `references/commands.md#corgi-logs` (`corgi run --logs` + `corgi logs`) |
+| Opening a DB shell (psql / redis-cli / mongosh / …) | `references/commands.md#corgi-db-shell-service-name` |
+| Running corgi in CI / disabling spinners and color | `references/commands.md#corgi-run-flags` (`--ci`, auto-detected from `CI` env) |
+| Desktop notifications on service crash | `references/commands.md#corgi-notifications` (`corgi notifications on\|off\|test`) |
 
 Load only what the task needs. Do not read every reference every time.
 
@@ -50,11 +54,22 @@ Load only what the task needs. Do not read every reference every time.
 
 ```
 corgi run                  # start everything (long-running, background it)
-corgi doctor               # preflight
+corgi run --logs           # also persist each service's stdout/stderr to corgi_services/.logs/
+corgi run --ci             # CI-friendly: suppress spinners, banners, colors (auto-on when CI=true)
+corgi logs                 # interactive picker: browse + tail persisted logs (needs prior --logs run)
+corgi logs --service api   # skip service picker, jump to run picker for "api"
+corgi logs --all           # merge newest run of every service into one timestamp-sorted stream
+corgi logs --idle 0        # tail forever (default exits after 30s of dead-air)
+corgi logs --prune         # delete all captured logs
+corgi doctor               # preflight checks (tools, docker, ports)
+corgi config               # show current user settings (~/.corgi/config.yml)
+corgi notifications on|off|test            # toggle/test desktop crash notifications
 corgi status               # health check (one-shot)
 corgi status --ready       # block until all healthy / timeout (CI-friendly)
 corgi status --watch       # live monitor, transitions only
 corgi tunnel               # public HTTPS tunnels (long-running) — default cloudflared
+corgi db shell [name]                       # interactive DB shell inside running container (psql/redis-cli/mongosh/…)
+corgi db shell [name] -e "SELECT 1"         # one-shot query, exit; CI-friendly
 corgi init                 # scaffold db_services/ + cloned repos
 corgi create               # interactive yml editor
 corgi clean -i db          # stop+remove db containers (also: services, corgi_services, all)

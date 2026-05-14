@@ -148,3 +148,4 @@ func TestCheckRequiredIsFoundMissing(t *testing.T) {
 		t.Error("expected not found")
 	}
 }
+

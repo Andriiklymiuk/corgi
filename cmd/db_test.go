@@ -69,3 +69,17 @@ func TestErrMakeCommandFailedConst(t *testing.T) {
 		t.Errorf("got %q", errMakeCommandFailed)
 	}
 }
+
+func TestDbShellCmd_Registered(t *testing.T) {
+	// Verify the shell subcommand is registered under db.
+	found := false
+	for _, sub := range dbCmd.Commands() {
+		if sub.Use == "shell [service-name]" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected `shell` subcommand under `corgi db`")
+	}
+}

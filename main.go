@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+	utils.DetectCIMode()
 	showWelcomeMessage()
 	var runCli func()
 	runCli = func() {
@@ -79,6 +80,7 @@ func canShowWelcomeMessages() bool {
 			arg == "__complete" ||
 			arg == "__completeNoDesc" ||
 			arg == "--silent" ||
+			arg == "--ci" ||
 			arg == "--version" ||
 			arg == "-v" ||
 			arg == "-h" ||
@@ -86,7 +88,7 @@ func canShowWelcomeMessages() bool {
 			return false
 		}
 	}
-	return true
+	return !utils.CIMode
 }
 
 func showWelcomeMessage() {

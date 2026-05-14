@@ -17,9 +17,13 @@ const (
 	fieldSeparator  = "|"
 )
 
-var storageInitOnce sync.Once
-var storageInitError error
-var storageFilePath string
+var (
+	storageInitMu sync.Mutex
+	// storageFilePath doubles as a test seam: when tests set it before any
+	// SaveExecPath/ListExecPaths call, initializeStorage skips the
+	// getDataPath() computation and uses the test-injected path.
+	storageFilePath string
+)
 
 type CorgiExecPath struct {
 	Name        string
@@ -52,18 +56,28 @@ func getDataPath() (string, error) {
 			return "", fmt.Errorf("failed to get user home directory: %w", err)
 		}
 		return filepath.Join(homeDir, ".local", "share", "corgi"), nil
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "corgi"), nil
+		}
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		return filepath.Join(homeDir, ".corgi"), nil
 	default:
 		return "", errors.New("unsupported operating system")
 	}
 }
 
 func initializeStorage() error {
-	var err error
-	storageFilePath, err = getDataPath()
-	if err != nil {
-		return err
+	if storageFilePath == "" {
+		dir, err := getDataPath()
+		if err != nil {
+			return err
+		}
+		storageFilePath = filepath.Join(dir, storageFileName)
 	}
-	storageFilePath = filepath.Join(storageFilePath, storageFileName)
 
 	if err := ensureDBPathExists(storageFilePath); err != nil {
 		return err
@@ -78,17 +92,20 @@ func initializeStorage() error {
 	return nil
 }
 
+func ensureStorageInitialized() error {
+	storageInitMu.Lock()
+	defer storageInitMu.Unlock()
+	return initializeStorage()
+}
+
 func SaveExecPath(name, description, path string) error {
 	absolutePath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("failed to convert path to absolute: %w", err)
 	}
 
-	storageInitOnce.Do(func() {
-		storageInitError = initializeStorage()
-	})
-	if storageInitError != nil {
-		return storageInitError
+	if err := ensureStorageInitialized(); err != nil {
+		return err
 	}
 
 	execPaths, err := ListExecPaths()
@@ -136,7 +153,7 @@ func writeExecPaths(execPaths []CorgiExecPath) error {
 }
 
 func ListExecPaths() ([]CorgiExecPath, error) {
-	if err := initializeStorage(); err != nil {
+	if err := ensureStorageInitialized(); err != nil {
 		return nil, err
 	}
 	file, err := os.Open(storageFilePath)
@@ -171,7 +188,7 @@ func GetHomebrewBinPath() (string, error) {
 }
 
 func ClearExecPaths() error {
-	if err := initializeStorage(); err != nil {
+	if err := ensureStorageInitialized(); err != nil {
 		return err
 	}
 	return os.Truncate(storageFilePath, 0)

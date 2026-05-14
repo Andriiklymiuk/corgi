@@ -36,6 +36,38 @@ func init() {
 	dbCmd.PersistentFlags().BoolP("upAll", "u", false, "Up all database services, start all")
 	dbCmd.PersistentFlags().BoolP("downAll", "d", false, "Down all database services, stop and remove all")
 	dbCmd.PersistentFlags().BoolP("seedAll", "", false, "Seed all database services")
+	dbShellCmd.Flags().StringP("exec", "e", "",
+		"Run a single query/command non-interactively and exit.\n"+
+			"For redis-family drivers the query is split on whitespace, so quoted\n"+
+			"arguments containing spaces (e.g. SET foo \"hello world\") are not\n"+
+			"preserved — wrap them in a script file or use the interactive shell.")
+	dbCmd.AddCommand(dbShellCmd)
+}
+
+// dbShellCmd opens an interactive shell inside the running container for a
+// db_service. Credentials are read from the generated env so the user never
+// has to copy-paste passwords.
+var dbShellCmd = &cobra.Command{
+	Use:   "shell [service-name]",
+	Short: "Open an interactive shell for a db_service",
+	Long: `Open an interactive shell inside the running container for a db_service.
+
+Credentials are sourced from the corgi-compose config so you don't have to
+copy-paste passwords. The shell command is chosen per driver:
+  postgres / postgis / pgvector / timescaledb → psql
+  redis / keydb / dragonfly / redict / valkey  → redis-cli
+  mongodb                                       → mongosh
+  mysql / mariadb                               → mysql
+  mssql                                         → sqlcmd
+  cassandra / scylla                            → cqlsh
+
+The container must already be running (start it with: corgi run).
+
+Examples:
+  corgi db shell                                      # interactive picker
+  corgi db shell postgres                             # open psql for "postgres"
+  corgi db shell postgres -e "SELECT count(*) FROM u" # run one query, exit`,
+	Run: runDbShell,
 }
 
 func runDb(cobra *cobra.Command, args []string) {
@@ -197,7 +229,9 @@ func SeedDb(targetService string) error {
 
 	s := spinner.New(spinner.CharSets[70], 100*time.Millisecond)
 	s.Suffix = fmt.Sprintf(" seeding of database in service %s", targetService)
-	s.Start()
+	if !utils.CIMode {
+		s.Start()
+	}
 
 	output, err := utils.ExecuteSeedMakeCommand(
 		targetService,
@@ -205,7 +239,9 @@ func SeedDb(targetService string) error {
 		fmt.Sprintf("c=%s", containerId),
 	)
 
-	s.Stop()
+	if !utils.CIMode {
+		s.Stop()
+	}
 	if err != nil {
 		return fmt.Errorf("make command failed: %s", err)
 	}
@@ -296,5 +332,59 @@ func SeedAllDatabases(databaseServices []utils.DatabaseService) {
 		if err != nil {
 			fmt.Println("Error dumping and seeding file", err)
 		}
+	}
+}
+
+func runDbShell(cmd *cobra.Command, args []string) {
+	corgi, err := utils.GetCorgiServices(cmd)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if len(corgi.DatabaseServices) == 0 {
+		fmt.Println("No db_services defined in corgi-compose.yml")
+		return
+	}
+
+	var targetName string
+	if len(args) > 0 {
+		targetName = args[0]
+	} else {
+		labels := make([]string, len(corgi.DatabaseServices))
+		labelToName := make(map[string]string, len(corgi.DatabaseServices))
+		for i, db := range corgi.DatabaseServices {
+			label := fmt.Sprintf("%s (%s)", db.ServiceName, db.Driver)
+			labels[i] = label
+			labelToName[label] = db.ServiceName
+		}
+		chosen, err := utils.PickItemFromListPrompt("Select db_service", labels, "⬅️  cancel")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		targetName = labelToName[chosen]
+	}
+
+	dbService, err := utils.GetDbServiceByName(targetName, corgi.DatabaseServices)
+	if err != nil {
+		fmt.Printf("db_service %q not found: %v\n", targetName, err)
+		return
+	}
+
+	query, _ := cmd.Flags().GetString("exec")
+	if query != "" {
+		if err := utils.ExecDBQuery(dbService, query); err != nil {
+			fmt.Printf("%s❌ Query failed: %v%s\n", art.RedColor, err, art.WhiteColor)
+			os.Exit(1)
+		}
+		return
+	}
+
+	fmt.Printf("%s🐚 Opening %s shell for %s...%s\n",
+		art.CyanColor, dbService.Driver, dbService.ServiceName, art.WhiteColor)
+
+	if err := utils.OpenDBShell(dbService); err != nil {
+		fmt.Printf("%s❌ Shell error: %v%s\n", art.RedColor, err, art.WhiteColor)
 	}
 }

@@ -23,7 +23,7 @@ description: All corgi CLI commands and global flags with aliases, key flags, an
 
 ## Commands
 
-### `corgi run` (aliases: `start`, `r`)
+### `corgi run` (aliases: `start`, `r`) {#corgi-run-flags}
 
 Long-running. Starts all db_services + services concurrently, streams logs. **Do not invoke synchronously** — see `long-running.md`.
 
@@ -34,6 +34,11 @@ Notable flags:
 - `--dbServices <list>` — whitelist only these dbs
 - `--pull` — `git pull` in service dirs before starting
 - `--no-watch` — disable auto-reload on compose file change
+- `--host <ip|auto>` — host substituted for `localhost` in service URL env vars (LAN access from phones, etc.). `auto` picks first non-loopback IPv4. db_services stay on localhost.
+- `--tunnel` — open public HTTPS tunnels alongside the stack for every service with a `tunnel:` block. Equivalent to a parallel `corgi tunnel`, bundled into the one process.
+- `--logs` — persist stdout/stderr of every service and db_service to `corgi_services/.logs/<name>/<timestamp>.log`. Capped 50 MB per file, keeps 10 newest runs per service, older pruned automatically. A `.logs/` entry is auto-added to `corgi_services/.gitignore`. Read back with `corgi logs`.
+- `--ci` — CI mode: suppress spinners, banners, color output. Plain log lines only. Auto-enabled when any common CI environment variable is set: `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`, `BUILDKITE`, `JENKINS_URL`, `TEAMCITY_VERSION`, `TRAVIS`, `DRONE`, `BITBUCKET_BUILD_NUMBER`, `CODEBUILD_BUILD_ID`. Pair with `--runOnce` for pipelines.
+- `--notify` (default `true`) — send a desktop notification when a service exits non-zero (and corgi is not shutting down). Requires a one-time opt-in via `corgi doctor`; never fires on Ctrl-C. Duplicate notifications with the same title+body are throttled to one per 30 seconds so a crash-looping service can't spam the desktop. Pass `--notify=false` to silence per-run. macOS uses `osascript`, Linux `notify-send`, Windows PowerShell toast.
 
 ### `corgi doctor` (aliases: `check`, `preflight`)
 
@@ -43,6 +48,32 @@ Preflight — synchronous, safe to run. Checks:
 - Every `port:` in the compose is free; if busy, lists the holding process.
 
 Exits 0 / 1. No flags.
+
+### `corgi config`
+
+Show global user preferences from `~/.corgi/config.yml`.
+
+```
+corgi config       # current settings (notifications, schema version, file path)
+corgi config path  # absolute path to the config file
+```
+
+The file is schema-versioned (`version: 1`). Older unversioned files auto-migrate on load. Reset everything: delete `~/.corgi/config.yml`.
+
+### `corgi notifications` {#corgi-notifications}
+
+Toggle desktop alerts fired when a service crashes during `corgi run`.
+
+```
+corgi notifications        # show current state
+corgi notifications on     # enable
+corgi notifications off    # disable
+corgi notifications test   # fire one test toast (bypasses opt-in)
+```
+
+State is persisted in `~/.corgi/config.yml`. After enabling, `corgi run` will alert via `osascript` (macOS), `notify-send` (Linux), or PowerShell toast (Windows) when any managed service exits non-zero. Duplicate alerts within 30 s are throttled.
+
+The first time `corgi run` exits with notifications still disabled, a one-line hint reminds users this command exists. Hint is silent in CI and silent once notifications are on.
 
 ### `corgi status` (aliases: `health`, `healthcheck`)
 
@@ -97,6 +128,75 @@ Database lifecycle helper. Flags:
 - `--seedAll` — run seed scripts for all dbs
 
 Without flags, opens an interactive menu — avoid from an agent.
+
+#### `corgi db shell [service-name]`
+
+Open an interactive shell inside the running container for a db_service. Credentials sourced from the corgi-compose config — no copy-paste passwords. The container must already be running (start it with `corgi run` or `corgi db --upAll`).
+
+Flags:
+- `-e, --exec <query>` — run a single query non-interactively, print result, exit with the tool's exit code. CI-friendly. Per-driver flag mapping: psql/ysqlsh `-c`, cockroach `-e`, mysql/mariadb `-e`, mssql `-Q`, mongosh `--quiet --eval`, cqlsh `-e`, redis-family appends the tokenized command. Example: `corgi db shell main-db -e "SELECT count(*) FROM users"`.
+
+Driver → shell mapping:
+
+| Drivers | Shell |
+|---|---|
+| `postgres`, `postgis`, `pgvector`, `timescaledb` | `psql` |
+| `cockroachdb` | `cockroach sql --insecure` |
+| `yugabytedb` | `ysqlsh` |
+| `redis`, `redis-server`, `keydb`, `dragonfly`, `redict`, `valkey` | `redis-cli` |
+| `mongodb` | `mongosh` (URI-encoded user/password) |
+| `mysql`, `mariadb` | `mysql` |
+| `mssql` | `sqlcmd` |
+| `cassandra`, `scylla` | `cqlsh` |
+
+Without an argument, opens an interactive picker of all `db_services` (avoid from an agent — needs stdin). With an argument, jumps straight to the named service. Container lookup is anchored exact-match on `<driver>-<serviceName>` so substrings can't pick the wrong container.
+
+Examples:
+```
+corgi db shell              # picker
+corgi db shell main-db      # open psql for db_services.main-db
+```
+
+Errors:
+- `no interactive shell defined for driver "<x>"` — that driver isn't in the map. Connect manually with the generated env in `corgi_services/db_services/<name>/.env`.
+- `container "<x>" is not running` — start it first: `corgi db --upAll` or `corgi run`.
+
+### `corgi logs` (alias: `log`)
+
+Browse and follow per-service logs captured by `corgi run --logs`.
+
+Without flags: two-step interactive picker — choose a service, then a run. The chosen log is streamed to stdout and tails new writes like `tail -f`. Auto-exits after the configured `--idle` window of inactivity (default 30s) or when the producing service stops (mtime-based heuristic). Ctrl-C exits at any time.
+
+Flags:
+- `--service <name>` — skip the service picker, jump straight to the run picker for `<name>`.
+- `--all` — merge the newest run of every logged service into one timestamp-sorted stream. Lines are prefixed `[service]` so origin is clear. Best for crash forensics across services. Reads each file completely; for live multi-service tailing use separate terminals.
+- `--idle <duration>` — exit when the file has been idle this long (default `30s`). Pass `--idle 0` to tail forever. Useful for db_services that idle for long stretches between writes.
+- `--prune` — delete every captured log (`corgi_services/.logs/`).
+
+Run picker labels show outcome at a glance:
+- `2026-05-14T10-32-01.log  ✅ ok` — service exited cleanly
+- `2026-05-14T10-32-01.log  ❌ crashed` — service exited non-zero
+- `2026-05-14T10-32-01.log  ⏳ in-progress` — service still running (or corgi was killed mid-run)
+
+Each line written by a corgi-managed service is prefixed with an RFC3339 UTC timestamp at log time, so log files from different services can be merged and correlated chronologically. `corgi logs` strips the prefix for single-file display.
+
+Layout on disk: `corgi_services/.logs/<service>/<ISO-timestamp>.log`. Filenames sort chronologically. Each file is capped at 50 MB; the 10 newest runs per service are kept. Older files are pruned automatically by `corgi run --logs`.
+
+The `.logs/` directory is auto-added to `corgi_services/.gitignore` on the first `--logs` run, so captures never get committed.
+
+Examples:
+```
+corgi run --logs            # in one terminal — start the stack with capture on
+corgi logs                  # in another terminal — pick a service + run
+corgi logs --service api    # straight to api's runs
+corgi logs --all            # merge newest run of every service, sorted by timestamp
+corgi logs --idle 0         # tail forever (only Ctrl-C exits)
+corgi logs --prune          # wipe all captures
+```
+
+Errors:
+- `no log directories found under …/.logs/` — re-run with `corgi run --logs` first.
+- `no log files found for <service>` — the service is logged but hasn't produced a file yet (very early in boot), or the name doesn't match.
 
 ### `corgi clean` (alias: `clear`)
 
