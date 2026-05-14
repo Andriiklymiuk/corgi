@@ -208,6 +208,7 @@ func TestConnectFirstAwsVpnProfile_DoesNotLeakProfileName(t *testing.T) {
 		`"connecting"`:             true,
 		`"connecting-in-progress"`: true,
 		`"no-profile"`:             true,
+		`"Remind Me Later"`:        true,
 	}
 	for _, token := range extractQuoted(capturedScript) {
 		if !allowedQuoted[token] {
