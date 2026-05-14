@@ -73,10 +73,7 @@ func (lw *logWriter) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	if lw.written >= maxLogFileSize {
-		if !lw.capWarned {
-			lw.capWarned = true
-			_, _ = lw.f.WriteString(nowTimestamp() + " [corgi] log file reached " + fmt.Sprintf("%d", maxLogFileSize) + " bytes, further output dropped\n")
-		}
+		lw.maybeWriteCapWarning()
 		return len(p), nil
 	}
 
@@ -85,42 +82,60 @@ func (lw *logWriter) Write(p []byte) (int, error) {
 	for len(rest) > 0 {
 		nl := bytes.IndexByte(rest, '\n')
 		if nl < 0 {
-			if len(lw.pending) == 0 {
-				lw.pendingTime = time.Now().UTC()
-			}
-			lw.pending = append(lw.pending, rest...)
+			lw.bufferPartialLine(rest)
 			break
 		}
-		line := rest[:nl+1]
+		if err := lw.emitLine(rest[:nl+1]); err != nil {
+			return consumed, err
+		}
 		rest = rest[nl+1:]
-
-		ts := lw.pendingTime
-		if len(lw.pending) == 0 {
-			ts = time.Now().UTC()
-		}
-		stamp := ts.Format(logTimeFormat) + " "
-
-		n, err := lw.f.WriteString(stamp)
-		lw.written += int64(n)
-		if err != nil {
-			return consumed, err
-		}
-		if len(lw.pending) > 0 {
-			n, err = lw.f.Write(normalizeWindowsLineEnding(lw.pending))
-			lw.written += int64(n)
-			lw.pending = lw.pending[:0]
-			lw.pendingTime = time.Time{}
-			if err != nil {
-				return consumed, err
-			}
-		}
-		n, err = lw.f.Write(normalizeWindowsLineEnding(line))
-		lw.written += int64(n)
-		if err != nil {
-			return consumed, err
-		}
 	}
 	return consumed, nil
+}
+
+func (lw *logWriter) maybeWriteCapWarning() {
+	if lw.capWarned {
+		return
+	}
+	lw.capWarned = true
+	_, _ = lw.f.WriteString(nowTimestamp() + " [corgi] log file reached " + fmt.Sprintf("%d", maxLogFileSize) + " bytes, further output dropped\n")
+}
+
+func (lw *logWriter) bufferPartialLine(chunk []byte) {
+	if len(lw.pending) == 0 {
+		lw.pendingTime = time.Now().UTC()
+	}
+	lw.pending = append(lw.pending, chunk...)
+}
+
+func (lw *logWriter) emitLine(line []byte) error {
+	ts := lw.pendingTime
+	if len(lw.pending) == 0 {
+		ts = time.Now().UTC()
+	}
+	if err := lw.writeAndCount(ts.Format(logTimeFormat) + " "); err != nil {
+		return err
+	}
+	if len(lw.pending) > 0 {
+		if err := lw.writeBytesAndCount(normalizeWindowsLineEnding(lw.pending)); err != nil {
+			return err
+		}
+		lw.pending = lw.pending[:0]
+		lw.pendingTime = time.Time{}
+	}
+	return lw.writeBytesAndCount(normalizeWindowsLineEnding(line))
+}
+
+func (lw *logWriter) writeAndCount(s string) error {
+	n, err := lw.f.WriteString(s)
+	lw.written += int64(n)
+	return err
+}
+
+func (lw *logWriter) writeBytesAndCount(b []byte) error {
+	n, err := lw.f.Write(b)
+	lw.written += int64(n)
+	return err
 }
 
 // normalizeWindowsLineEnding turns a trailing Windows newline ("\r\n")

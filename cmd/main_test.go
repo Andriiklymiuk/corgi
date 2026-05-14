@@ -1,16 +1,13 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils"
 	"os"
 	"os/signal"
 	"syscall"
 	"testing"
 )
 
-// TestMain swallows process-wide signals (SIGHUP/SIGINT/SIGTERM) so production
-// code paths that call utils.SendRestart() / SendInterrupt() do not kill the
-// test binary. Without this, handleComposeWriteEvent → SendRestart fires
-// SIGHUP at our own pid and the default Go signal handler exits the process.
 func TestMain(m *testing.M) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
@@ -18,5 +15,6 @@ func TestMain(m *testing.M) {
 		for range sig {
 		}
 	}()
+	utils.SilenceNotificationsForTests()
 	os.Exit(m.Run())
 }
