@@ -628,6 +628,10 @@ func setupLogWriters(corgi *utils.CorgiCompose) {
 		registerLog(svc.ServiceName)
 	}
 	for _, db := range corgi.DatabaseServices {
+		if db.ManualRun {
+			continue
+		}
 		registerLog(db.ServiceName)
+		utils.FollowDatabaseLogs(db.Driver, db.ServiceName)
 	}
 }

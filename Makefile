@@ -22,24 +22,26 @@ getActionVersion:
 		echo "GITHUB_ENV not set"; \
 	fi
 
+# App and plugin share one version. Each app bump rewrites cmd/root.go, then
+# syncPluginVersion copies the new value into plugin.json so they never drift.
 incrementVersionPatch:
 	$(eval PATCH=$(shell echo $(VERSION) | cut -d '.' -f 3))
 	$(eval NEW_PATCH=$(shell echo $$(($(PATCH) + 1))))
 	sed -i "" "s/\(APP_VERSION = \"[0-9]*.[0-9]*.\)$(PATCH)\"/\1$(NEW_PATCH)\"/" cmd/root.go
-	$(eval VERSION := $(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}'))
+	$(MAKE) syncPluginVersion
 
 incrementVersionMinor:
 	$(eval MINOR=$(shell echo $(VERSION) | cut -d '.' -f 2))
 	$(eval PATCH=$(shell echo $(VERSION) | cut -d '.' -f 3))
 	$(eval NEW_MINOR=$(shell echo $$(($(MINOR) + 1))))
 	sed -i "" "s/\(APP_VERSION = \"[0-9]*.\)$(MINOR).$(PATCH)\"/\1$(NEW_MINOR).0\"/" cmd/root.go
-	$(eval VERSION := $(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}'))
+	$(MAKE) syncPluginVersion
 
 incrementVersionMajor:
 	$(eval MAJOR=$(shell echo $(VERSION) | cut -d '.' -f 1))
 	$(eval NEW_MAJOR=$(shell echo $$(($(MAJOR) + 1))))
 	sed -i "" "s/\(APP_VERSION = \"\)$(MAJOR).[0-9]*.[0-9]*\"/\1$(NEW_MAJOR).0.0\"/" cmd/root.go
-	$(eval VERSION := $(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}'))
+	$(MAKE) syncPluginVersion
 
 PLUGIN_FILE := plugins/corgi/.claude-plugin/plugin.json
 PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | awk -F '"' '{print $$4}')
@@ -47,29 +49,11 @@ PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | 
 getPluginVersion:
 	echo $(PLUGIN_VERSION)
 
-incrementPluginVersionPatch:
-	$(eval MAJOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 1))
-	$(eval MINOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 2))
-	$(eval PATCH=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 3))
-	$(eval NEW_PATCH=$(shell echo $$(($(PATCH) + 1))))
-	sed -i "" "s/\"version\": \"$(MAJOR).$(MINOR).$(PATCH)\"/\"version\": \"$(MAJOR).$(MINOR).$(NEW_PATCH)\"/" $(PLUGIN_FILE)
-	$(eval PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | awk -F '"' '{print $$4}'))
-
-incrementPluginVersionMinor:
-	$(eval MAJOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 1))
-	$(eval MINOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 2))
-	$(eval PATCH=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 3))
-	$(eval NEW_MINOR=$(shell echo $$(($(MINOR) + 1))))
-	sed -i "" "s/\"version\": \"$(MAJOR).$(MINOR).$(PATCH)\"/\"version\": \"$(MAJOR).$(NEW_MINOR).0\"/" $(PLUGIN_FILE)
-	$(eval PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | awk -F '"' '{print $$4}'))
-
-incrementPluginVersionMajor:
-	$(eval MAJOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 1))
-	$(eval MINOR=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 2))
-	$(eval PATCH=$(shell echo $(PLUGIN_VERSION) | cut -d '.' -f 3))
-	$(eval NEW_MAJOR=$(shell echo $$(($(MAJOR) + 1))))
-	sed -i "" "s/\"version\": \"$(MAJOR).$(MINOR).$(PATCH)\"/\"version\": \"$(NEW_MAJOR).0.0\"/" $(PLUGIN_FILE)
-	$(eval PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | awk -F '"' '{print $$4}'))
+# Force plugin.json to match the current app VERSION (cmd/root.go). Run by
+# every incrementVersion* target; also runnable standalone to re-align.
+syncPluginVersion:
+	sed -i "" "s/\"version\": \"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\"/\"version\": \"$(VERSION)\"/" $(PLUGIN_FILE)
+	@echo "plugin.json version synced to $(VERSION)"
 
 
 test:
@@ -98,9 +82,7 @@ incrementVersionPatch \
 incrementVersionMinor \
 incrementVersionMajor \
 getPluginVersion \
-incrementPluginVersionPatch \
-incrementPluginVersionMinor \
-incrementPluginVersionMajor \
+syncPluginVersion \
 test \
 coverage \
 coverage-html \
