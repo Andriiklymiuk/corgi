@@ -180,6 +180,8 @@ Run picker labels show outcome at a glance:
 
 Each line written by a corgi-managed service is prefixed with an RFC3339 UTC timestamp at log time, so log files from different services can be merged and correlated chronologically. `corgi logs` strips the prefix for single-file display.
 
+`db_services` are captured differently: their containers run detached, so corgi follows `docker logs -f <driver>-<serviceName>` into the same file. Consequence — the file can include container output from before this `corgi run`, and db runs always show `⏳ in-progress` (the ✅/❌ status suffix tracks service-process exits, not followed containers).
+
 Layout on disk: `corgi_services/.logs/<service>/<ISO-timestamp>.log`. Filenames sort chronologically. Each file is capped at 50 MB; the 10 newest runs per service are kept. Older files are pruned automatically by `corgi run --logs`.
 
 The `.logs/` directory is auto-added to `corgi_services/.gitignore` on the first `--logs` run, so captures never get committed.

@@ -492,6 +492,32 @@ func ExecuteCommandRun(targetService string, command ...string) error {
 	return nil
 }
 
+// FollowDatabaseLogs streams a detached db container's `docker logs -f` into
+// the service's --logs writer. db containers start detached (docker compose
+// up -d), so unlike services nothing flows through runManaged — without this
+// their .log files stay empty. No-op when --logs is off (no registered
+// writer). The follow process is tracked so corgi shutdown stops it.
+func FollowDatabaseLogs(driver, serviceName string) {
+	w := getLogWriter(serviceName)
+	if w == nil {
+		return
+	}
+	containerName := fmt.Sprintf("%s-%s", driver, serviceName)
+	cmd := exec.Command("docker", "logs", "-f", containerName)
+	cmd.Stdout = w
+	cmd.Stderr = w
+	SetProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		fmt.Printf("⚠ logs: cannot follow %s: %v\n", containerName, err)
+		return
+	}
+	addProcess(cmd.Process)
+	go func() {
+		_ = cmd.Wait()
+		removeProcess(cmd.Process)
+	}()
+}
+
 func ExecuteServiceCommandRun(targetService string, command ...string) error {
 	path, err := GetPathToService(targetService)
 	if err != nil {
