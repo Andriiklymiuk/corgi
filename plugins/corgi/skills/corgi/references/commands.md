@@ -39,6 +39,50 @@ Notable flags:
 - `--logs` — persist stdout/stderr of every service and db_service to `corgi_services/.logs/<name>/<timestamp>.log`. Capped 50 MB per file, keeps 10 newest runs per service, older pruned automatically. A `.logs/` entry is auto-added to `corgi_services/.gitignore`. Read back with `corgi logs`.
 - `--ci` — CI mode: suppress spinners, banners, color output. Plain log lines only. Auto-enabled when any common CI environment variable is set: `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`, `BUILDKITE`, `JENKINS_URL`, `TEAMCITY_VERSION`, `TRAVIS`, `DRONE`, `BITBUCKET_BUILD_NUMBER`, `CODEBUILD_BUILD_ID`. Pair with `--runOnce` for pipelines.
 - `--notify` (default `true`) — send a desktop notification when a service exits non-zero (and corgi is not shutting down). Requires a one-time opt-in via `corgi doctor`; never fires on Ctrl-C. Duplicate notifications with the same title+body are throttled to one per 30 seconds so a crash-looping service can't spam the desktop. Pass `--notify=false` to silence per-run. macOS uses `osascript`, Linux `notify-send`, Windows PowerShell toast.
+- `--profile <name>` — run only services/db_services whose `profiles:` list contains `<name>`, plus their transitive `depends_on` closure. No `--profile` runs everything. Unknown profile runs nothing (warns). Composes with `--services`/`--omit`/`--dbServices` as an intersection.
+- `--dry-run` — compute and print the start plan with no side effects (no clone, no `make up`, no spawn, no `.env` writes). Runs validation first. Pair with `--json` for a machine plan: `{valid, order, databases, services, warnings, errors}`. Exit 0 if valid, 1 on validation errors.
+- `--gate-deps` — gate startup on dependency readiness for every `depends_on` edge (default: only edges with `condition: ready|started` are gated; otherwise parallel start).
+- `--ready-timeout <dur>` — max wait for a db/dependency to become ready (default `60s`, non-fatal on timeout).
+
+`depends_on_db`/`depends_on_services` entries take an optional `condition: ready` (wait for readiness probe) or `condition: started` (wait until launched). Empty = no gating unless `--gate-deps`.
+
+### `corgi validate` (alias: `lint`)
+
+Static semantic checks over `corgi-compose.yml` — no containers, clones, or network. Complements `corgi docs --json-schema` (schema = structure, validate = semantics: dangling deps, dependency cycles, unknown driver, port-without-start, port conflicts).
+
+Flags:
+- `--json` — emit `{"ok": bool, "errors": [{code, message, field}], "warnings": [...]}`.
+- `--strict` — treat warnings as failures.
+
+Exit 0 clean / 1 on errors (or warnings under `--strict`) / 2 if the compose file fails to load.
+
+### `corgi exec <service> -- <cmd> [args...]`
+
+Run a one-off command in a service's resolved env + working dir; the child's exit code becomes corgi's. The service's `.env` is sourced the same way `start` commands get it.
+
+Flags:
+- `--json` — emit `{service, exitCode, durationMs}`; child output is routed to stderr so stdout stays pure JSON.
+- `--ensure-deps` — wait for the service's `depends_on_db`/`depends_on_services` to be reachable first.
+- `--ready-timeout <dur>` — cap that wait (default `60s`).
+
+Unknown service exits 2 (`E_SERVICE_NOT_FOUND`); readiness timeout exits 1 (`E_READINESS_TIMEOUT`).
+
+```
+corgi exec api -- npm run migrate
+corgi exec api --ensure-deps -- pytest -q
+```
+
+### `corgi test`
+
+Run each selected service's `test` script (a script named `test` under `services.<name>.scripts`) in that service's env + working dir. Does **not** start anything. Services without a `test` script are skipped, not failed. Multi-command scripts run sequentially, stop on first non-zero exit.
+
+Flags:
+- `--service <name>` — only this service (unknown name exits 2).
+- `--profile <name>` — narrow to a profile first.
+- `--ensure-deps` / `--ready-timeout <dur>` — gate on dependency readiness.
+- `--json` — emit `{"services": [{name, exitCode, durationMs, passed}|{name, skipped:true}], "passed": bool}`.
+
+Exit 0 if all pass (skips don't count) / 1 if any fail / 2 on unknown `--service`.
 
 ### `corgi doctor` (aliases: `check`, `preflight`)
 
