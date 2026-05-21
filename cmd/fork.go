@@ -45,12 +45,28 @@ func preRunE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func validateForkSelection(all bool, service string, available []string, gitProvider string, nonInteractive bool) error {
+	if !nonInteractive {
+		return nil
+	}
+	if !all && service == "" {
+		return fmt.Errorf("non-interactive fork needs --all or --service <name> (available: %s)",
+			strings.Join(available, ", "))
+	}
+	if gitProvider == "" {
+		return fmt.Errorf("non-interactive fork needs --gitProvider github|gitlab")
+	}
+	return nil
+}
+
 func init() {
 	rootCmd.AddCommand(forkCmd)
 	forkCmd.PersistentFlags().BoolP("all", "", false, "Fork all repos")
 	forkCmd.PersistentFlags().BoolP("private", "", false, "Create private repo")
 	forkCmd.PersistentFlags().BoolP("useSameRepoName", "", false, "Use previous repo name for new repo")
 	forkCmd.PersistentFlags().String("gitProvider", "", "Git provider for new repo")
+	forkCmd.PersistentFlags().String("service", "", "Service to fork (skips picker; required in non-interactive mode unless --all)")
+	forkCmd.PersistentFlags().String("newName", "", "Name for the new repo (defaults to the service name)")
 }
 
 func runFork(cmd *cobra.Command, args []string) {
@@ -69,10 +85,24 @@ func runFork(cmd *cobra.Command, args []string) {
 		fmt.Println(art.RedColor, err, art.WhiteColor)
 		return
 	}
-	var chosenService string
+	serviceFlag, _ := cmd.Flags().GetString("service")
+	gitProviderFlag, _ := cmd.Flags().GetString("gitProvider")
+	servicesList := getListOfServicesWithClonedFrom(corgi.Services)
 
-	if !shouldForkAllServices {
-		servicesList := getListOfServicesWithClonedFrom(corgi.Services)
+	if utils.NonInteractive {
+		if err := validateForkSelection(shouldForkAllServices, serviceFlag, servicesList, gitProviderFlag, true); err != nil {
+			if utils.JSONOutput {
+				utils.JSONError("INPUT_REQUIRED", err.Error())
+			} else {
+				fmt.Fprintln(os.Stderr, err)
+			}
+			os.Exit(2)
+		}
+	}
+
+	chosenService := serviceFlag
+
+	if !shouldForkAllServices && chosenService == "" {
 		backString := "🚫 abort"
 		chosenService, err = utils.PickItemFromListPrompt(
 			"Select command",
@@ -102,6 +132,7 @@ type forkFlags struct {
 	private         bool
 	useSameRepoName bool
 	gitProvider     string
+	newName         string
 }
 
 func readForkFlags(cmd *cobra.Command) (forkFlags, error) {
@@ -116,7 +147,10 @@ func readForkFlags(cmd *cobra.Command) (forkFlags, error) {
 	if f.useSameRepoName, err = cmd.Flags().GetBool("useSameRepoName"); err != nil {
 		return f, err
 	}
-	f.gitProvider, err = cmd.Flags().GetString("gitProvider")
+	if f.gitProvider, err = cmd.Flags().GetString("gitProvider"); err != nil {
+		return f, err
+	}
+	f.newName, err = cmd.Flags().GetString("newName")
 	return f, err
 }
 
@@ -144,8 +178,8 @@ func CreateForksForServices(
 func forkOneService(service utils.Service, flags forkFlags, corgiMap map[string]interface{}) error {
 	fmt.Println(art.BlueColor, fmt.Sprintf("Changing git repo origin for service %s", service.ServiceName), art.WhiteColor)
 
-	confirmedNew := flags.all
-	if !flags.all {
+	confirmedNew := flags.all || utils.NonInteractive
+	if !confirmedNew {
 		prompt := promptui.Prompt{
 			Label:     fmt.Sprintf("Do you want to create new git repo for %s", service.ServiceName),
 			IsConfirm: true,
@@ -179,7 +213,7 @@ func chooseForkTarget(service utils.Service, flags forkFlags, confirmedNew bool)
 		return promptManualRepoLink()
 	}
 	isPrivate := determinePrivacy(flags.private)
-	repoName, err := determineRepoName(service.ServiceName, flags.useSameRepoName)
+	repoName, err := determineRepoName(service.ServiceName, flags.newName, flags.useSameRepoName)
 	if err != nil {
 		return "", err
 	}
@@ -194,6 +228,9 @@ func determinePrivacy(forcePrivate bool) bool {
 	if forcePrivate {
 		return true
 	}
+	if utils.NonInteractive {
+		return false
+	}
 	privatePrompt := promptui.Prompt{
 		Label:     "Do you want this repo to be private",
 		IsConfirm: true,
@@ -202,8 +239,11 @@ func determinePrivacy(forcePrivate bool) bool {
 	return err == nil
 }
 
-func determineRepoName(serviceName string, useSame bool) (string, error) {
-	if useSame {
+func determineRepoName(serviceName, newName string, useSame bool) (string, error) {
+	if newName != "" {
+		return newName, nil
+	}
+	if useSame || utils.NonInteractive {
 		return serviceName, nil
 	}
 	namePrompt := promptui.Prompt{Label: "Enter the name for this repo", Default: serviceName}
