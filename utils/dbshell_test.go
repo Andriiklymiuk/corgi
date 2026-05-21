@@ -144,3 +144,49 @@ func TestExecArgs_ScyllaSupportsExec(t *testing.T) {
 		t.Errorf("expected -e <query>, got %v", args)
 	}
 }
+
+func TestArgs_CassandraNoAuth(t *testing.T) {
+	args := cassandraArgs(DatabaseService{})
+	if len(args) != 1 || args[0] != "localhost" {
+		t.Errorf("expected [localhost] without auth, got %v", args)
+	}
+}
+
+func TestArgs_CassandraWithAuth(t *testing.T) {
+	args := cassandraArgs(DatabaseService{User: "cassandra", Password: "pw"})
+	want := []string{"localhost", "-u", "cassandra", "-p", "pw"}
+	if strings.Join(args, " ") != strings.Join(want, " ") {
+		t.Errorf("got %v, want %v", args, want)
+	}
+	exec := cassandraExecArgs(DatabaseService{}, "SELECT now() FROM system.local")
+	if exec[len(exec)-2] != "-e" {
+		t.Errorf("expected trailing -e <query>, got %v", exec)
+	}
+}
+
+func TestArgs_MssqlDefaultsAndExec(t *testing.T) {
+	joined := strings.Join(mssqlArgs(DatabaseService{Password: "secret"}), " ")
+	for _, want := range []string{"-U sa", "-P secret", "-d master"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected %q in %s", want, joined)
+		}
+	}
+	exec := mssqlExecArgs(DatabaseService{Password: "secret"}, "SELECT 1")
+	if exec[len(exec)-2] != "-Q" || exec[len(exec)-1] != "SELECT 1" {
+		t.Errorf("expected trailing -Q SELECT 1, got %v", exec)
+	}
+}
+
+func TestArgs_MongoExecAppendsEval(t *testing.T) {
+	args := mongoExecArgs(DatabaseService{Port: 27017}, "db.users.find()")
+	if args[len(args)-2] != "--eval" || args[len(args)-1] != "db.users.find()" {
+		t.Errorf("expected trailing --eval <query>, got %v", args)
+	}
+}
+
+func TestExecDBQuery_UnknownDriver(t *testing.T) {
+	err := ExecDBQuery(DatabaseService{Driver: "nope", ServiceName: "svc"}, "SELECT 1")
+	if err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("expected error naming driver, got %v", err)
+	}
+}

@@ -92,3 +92,28 @@ func TestDetectModeNonInteractive(t *testing.T) {
 		})
 	}
 }
+
+func TestSetInteractive(t *testing.T) {
+	orig := NonInteractive
+	defer func() { NonInteractive = orig }()
+	NonInteractive = true
+	SetInteractive()
+	if NonInteractive {
+		t.Error("expected NonInteractive=false after SetInteractive")
+	}
+}
+
+func TestDetectMode_NonTTYImpliesNonInteractive(t *testing.T) {
+	origNI, origCI := NonInteractive, CIMode
+	defer func() { NonInteractive, CIMode = origNI, origCI }()
+	for _, k := range append(append([]string{}, ciEnvVars...), agentEnvVars...) {
+		t.Setenv(k, "")
+	}
+	NonInteractive = false
+	CIMode = false
+	DetectMode()
+	// go test runs with piped stdio, so the TTY check must flip NonInteractive on.
+	if !NonInteractive {
+		t.Error("expected NonInteractive=true when stdio is not a TTY")
+	}
+}
