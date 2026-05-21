@@ -32,8 +32,10 @@ stdout is not a single JSON document for the whole run.
 Errors under `--json` have the shape:
 
 ```json
-{"error": {"code": "INPUT_REQUIRED", "message": "..."}}
+{"error": {"code": "E_INTERACTIVE_REQUIRED", "message": "..."}}
 ```
+
+The `code` is a stable string an agent can branch on (see [Error codes](#error-codes)).
 
 ## Lifecycle (detached)
 
@@ -121,6 +123,31 @@ stops one and keeps the rest. It is idempotent (exit 0 when nothing is running).
 | 0 | Success |
 | 1 | Operational failure (a check/command failed) |
 | 2 | Usage / missing required input |
+
+## Error codes
+
+Under `--json`, errors carry a stable `code` string. Branch on the code, not the
+message text (messages may change wording). The catalog:
+
+| Code | Meaning | Typical fix |
+|------|---------|-------------|
+| `E_COMPOSE_NOT_FOUND` | no `corgi-compose.yml` resolved | run from a dir with one, or pass `-f <path>` |
+| `E_COMPOSE_PARSE` | YAML failed to parse | fix syntax; validate with `corgi validate` |
+| `E_INTERACTIVE_REQUIRED` | a prompt was needed but input is unavailable | pass the flag the message names |
+| `E_SERVICE_NOT_FOUND` | named service/db not in compose | check the name against `corgi ps` |
+| `E_MISSING_FIELD` | a required field is absent | supply it (message names the field) |
+| `E_DANGLING_DEP` | `depends_on` references an unknown name | fix the reference |
+| `E_DEPENDENCY_CYCLE` | `depends_on_services` forms a cycle | break the cycle |
+| `E_UNKNOWN_DRIVER` | `db_services.driver` is not a known driver | use a supported driver |
+| `E_MISSING_START` | a service has a `port` but no `start`/`runner` | add a `start` command or `runner: docker` |
+| `E_PORT_CONFLICT` | two services/dbs bind the same host port | give them distinct ports |
+| `E_UNHEALTHY` | a readiness/health probe failed | check the service; inspect `corgi logs` |
+| `E_READINESS_TIMEOUT` | a dependency wasn't ready before the deadline | raise `--ready-timeout`, or fix the dep |
+| `E_DOCKER_DOWN` | the docker daemon is unreachable | start Docker |
+
+Note: the `E_INTERACTIVE_REQUIRED` code was previously emitted as `INPUT_REQUIRED`.
+A few command-specific codes also exist outside this catalog: `ALREADY_RUNNING`
+(second `run --detach`) and `UNSUPPORTED` (`restart --service`).
 
 ## Commands that need a flag (or error in non-interactive mode)
 
