@@ -249,6 +249,10 @@ func processRequired(required utils.Required) bool {
 		return false
 	}
 	if required.Optional {
+		if utils.NonInteractive {
+			fmt.Printf("\n❌ %s is not installed (optional, skipped — no terminal to confirm install)\n", required.Name)
+			return false
+		}
 		prompt := promptui.Prompt{
 			Label:     fmt.Sprintf("Do you want to install %s?", required.Name),
 			IsConfirm: true,

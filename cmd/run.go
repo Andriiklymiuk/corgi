@@ -313,8 +313,12 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		fmt.Println(err)
-		return
+		if utils.JSONOutput {
+			utils.JSONError("config", err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(1)
 	}
 
 	if CheckClonedReposExistence(corgi.Services) {

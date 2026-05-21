@@ -94,13 +94,17 @@ func readStatusFlags(cmd *cobra.Command) statusFlags {
 func resolveStatusRows(cmd *cobra.Command) []statusRow {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		fmt.Printf("couldn't get services config: %s\n", err)
+		if utils.JSONOutput {
+			utils.JSONError("config", err.Error())
+		} else {
+			fmt.Fprintf(os.Stderr, "couldn't get services config: %s\n", err)
+		}
 		os.Exit(1)
 	}
 
 	rows := collectStatusRows(corgi)
 	if len(rows) == 0 {
-		fmt.Println("No services with ports declared in corgi-compose.yml — nothing to check.")
+		utils.Info("No services with ports declared in corgi-compose.yml — nothing to check.")
 		return nil
 	}
 
