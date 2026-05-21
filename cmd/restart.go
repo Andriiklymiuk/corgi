@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"andriiklymiuk/corgi/utils"
 
 	"github.com/spf13/cobra"
@@ -31,6 +34,19 @@ func init() {
 }
 
 func runRestart(cmd *cobra.Command, args []string) {
+	// Per-service restart would overwrite the whole run-state and orphan the
+	// other running services, so it isn't supported yet.
+	if restartService != "" {
+		msg := "restart --service is not supported yet; use: corgi stop --service " +
+			restartService + " && corgi run --detach"
+		if utils.JSONOutput {
+			utils.JSONError("UNSUPPORTED", msg)
+		} else {
+			fmt.Fprintln(os.Stderr, msg)
+		}
+		os.Exit(2)
+	}
+
 	// Scope the teardown to the same service (empty = full stack). Route the
 	// stop summary to stderr so --json stdout carries only the run-state.
 	prevStopService := stopService
@@ -41,14 +57,8 @@ func runRestart(cmd *cobra.Command, args []string) {
 	stopService = prevStopService
 	stopSummaryToStderr = prevToStderr
 
-	// Scope the restart's run the same way, then start detached. runRun does
-	// the full startup (preflight, db start, env gen) before detaching, which
-	// runDetached alone would skip — so reuse runRun rather than runDetached.
-	if restartService != "" {
-		prev := utils.ServicesItemsFromFlag
-		utils.ServicesItemsFromFlag = []string{restartService}
-		defer func() { utils.ServicesItemsFromFlag = prev }()
-	}
+	// runRun does the full startup (preflight, db start, env gen) before
+	// detaching, which runDetached alone would skip — so reuse runRun.
 	cmd.Flags().Set("detach", "true")
 	runRun(cmd, args)
 }

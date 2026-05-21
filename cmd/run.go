@@ -470,16 +470,22 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 	if _, err := os.Stat(statePath); err != nil {
 		return false
 	}
-	if force {
-		// TODO: call full stop once corgi stop lands
-		os.Remove(statePath)
-		return false
-	}
 	prev, err := utils.ReadRunState(statePath)
 	if err != nil {
 		return false
 	}
 	prev = utils.ReconcileRunState(prev, utils.PidAlive, utils.ContainerRunning)
+	if force {
+		// Kill the tracked processes before dropping their state, so a forced
+		// restart doesn't leave the previous run orphaned and untrackable.
+		for _, s := range prev.Services {
+			if s.Status == "running" {
+				_ = stopProcessGroup(s)
+			}
+		}
+		os.Remove(statePath)
+		return false
+	}
 	for _, s := range prev.Services {
 		if s.Status == "running" {
 			msg := "corgi is already running for this project — stop or restart first (use --force to override)"
