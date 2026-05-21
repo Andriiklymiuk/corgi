@@ -178,6 +178,10 @@ Pass --notify=false to disable for a single run.`,
 // error so the next signal can retry.
 var exitInProgress atomic.Bool
 
+// runReloading is true while runRun is re-entered from a SIGHUP reload, so a
+// config-load failure returns gracefully instead of exiting the whole process.
+var runReloading atomic.Bool
+
 func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 	if s == syscall.SIGHUP {
 		fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
@@ -185,7 +189,9 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 		utils.KillAllStoredProcesses()
 		utils.CloseAllLogWriters()
 		utils.ResetShutdown()
+		runReloading.Store(true)
 		cmd.Run(cmd, nil)
+		runReloading.Store(false)
 		return
 	}
 	if !exitInProgress.CompareAndSwap(false, true) {
@@ -317,6 +323,9 @@ func runRun(cmd *cobra.Command, _ []string) {
 			utils.JSONError("config", err.Error())
 		} else {
 			fmt.Fprintln(os.Stderr, err)
+		}
+		if runReloading.Load() {
+			return
 		}
 		os.Exit(1)
 	}
