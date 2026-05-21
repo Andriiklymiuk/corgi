@@ -266,6 +266,49 @@ func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand,
 	return nil
 }
 
+// RunServiceCommandExitCode runs a single command in the service's env and
+// returns the child's exit code, propagating it instead of swallowing it like
+// RunServiceCmd. Sourcing (set -a; . <env>; set +a) and autoSourceEnv handling
+// match the start path exactly via resolveEnvFile + withEnvSource.
+//
+// interactive wires stdin through so REPLs work; otherwise stdin is left nil.
+// stdout/stderr go to the supplied writers (let callers keep --json stdout
+// pure by sending child output to stderr). Returns (exitCode, err): err is
+// non-nil only for spawn failures (command not found, bad cwd), in which case
+// exitCode is -1.
+func RunServiceCommandExitCode(
+	command, path string,
+	interactive bool,
+	stdout, stderr io.Writer,
+	envFile ...string,
+) (int, error) {
+	resolvedEnvFile := resolveEnvFile(path, envFile)
+	shellCommand := withEnvSource(command, resolvedEnvFile)
+	cmd := exec.Command("/bin/sh", "-c", shellCommand)
+	cmd.Dir = path
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if interactive {
+		cmd.Stdin = os.Stdin
+	}
+	SetProcessGroup(cmd)
+
+	if err := cmd.Start(); err != nil {
+		return -1, err
+	}
+	addProcess(cmd.Process)
+	defer removeProcess(cmd.Process)
+
+	err := cmd.Wait()
+	if err == nil {
+		return 0, nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return exitErr.ExitCode(), nil
+	}
+	return -1, err
+}
+
 func StartDetached(serviceName, command, path string, envFile ...string) (*os.Process, error) {
 	resolvedEnvFile := resolveEnvFile(path, envFile)
 	shellCommand := withEnvSource(command, resolvedEnvFile)
