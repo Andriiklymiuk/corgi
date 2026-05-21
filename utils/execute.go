@@ -603,26 +603,24 @@ func CheckCommandExists(command string) error {
 	cmd := exec.Command(commandSlice[0], commandSlice[1:]...)
 
 	stdout, err := cmd.StdoutPipe()
-	if err != nil && !JSONOutput {
-		fmt.Println(err)
+	if err != nil {
+		Info(err)
 	}
 	stderr, err := cmd.StderrPipe()
-	if err != nil && !JSONOutput {
-		fmt.Println(err)
+	if err != nil {
+		Info(err)
 	}
 
 	err = cmd.Start()
-	if err != nil && !JSONOutput {
-		fmt.Println(err)
+	if err != nil {
+		Info(err)
 	}
 
 	scannerError := bufio.NewScanner(io.MultiReader(stderr))
 	scannerError.Split(bufio.ScanLines)
 	for scannerError.Scan() {
 		message := scannerError.Text()
-		if !JSONOutput {
-			fmt.Println(message)
-		}
+		Info(message)
 		if strings.Contains(message, "command not found") {
 			return fmt.Errorf("%s", message)
 		}
@@ -632,9 +630,7 @@ func CheckCommandExists(command string) error {
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		message := scanner.Text()
-		if !JSONOutput {
-			fmt.Println(message)
-		}
+		Info(message)
 		if strings.Contains(message, "command not found") {
 			return fmt.Errorf("%s", message)
 		}
