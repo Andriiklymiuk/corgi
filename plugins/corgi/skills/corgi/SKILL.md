@@ -11,7 +11,7 @@ When this skill activates, you are the expert on corgi. Do not fall back to gene
 
 ## Critical: `corgi run` is long-running
 
-`corgi run` blocks indefinitely, streams logs, and has no `--detach` flag. **Never run it synchronously** — it will hang your shell. See `references/long-running.md` before invoking it.
+`corgi run` blocks indefinitely and streams logs. **Never run it synchronously** — it will hang your shell. For agents, prefer `corgi run --detach` (returns immediately; see the lifecycle line below). See `references/long-running.md` before invoking it foreground.
 
 Safe synchronous probes:
 - `corgi doctor` (alias `check`) — preflight: tools installed, Docker up, ports free
@@ -22,6 +22,8 @@ Both exit 0 on success, 1 on failure. Add global `--json` for machine-readable o
 ### Driving corgi as an agent
 
 Corgi auto-detects non-interactive mode (CI/agent env vars like `CLAUDECODE`, or no TTY) and errors with exit code 2 instead of prompting; `--interactive` forces prompts back. Global `--json` emits pure JSON on stdout (`doctor`, `status`, `list`, `config`, `ps`, `docs --json-schema`; `run --json` prints a startup summary then streams logs to stderr). Exit codes: 0 success, 1 failure, 2 usage/missing input. Full guide + recipes: `../../../docs/agents.md`.
+
+Detached lifecycle (preferred for agents): `corgi run --detach` (starts services that outlive corgi, returns immediately, errors `ALREADY_RUNNING` if already running — use `--force`), then `corgi ps`/`status` for real running/crashed status, `corgi stop [--service x]` to tear down, `corgi restart` for full-stack restart. See the "Lifecycle (detached)" section in `../../../docs/agents.md`.
 
 `corgi tunnel` is also long-running (one tunnel subprocess per service, blocks until Ctrl+C). Background it the same way you background `corgi run`. See `references/long-running.md` if invoking from an agent.
 
