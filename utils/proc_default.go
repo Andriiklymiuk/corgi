@@ -16,3 +16,7 @@ func SetProcessGroup(cmd *exec.Cmd) {
 func KillProcessGroup(pid int) error {
 	return syscall.Kill(-pid, syscall.SIGKILL)
 }
+
+func SignalProcessGroup(pgid int, sig syscall.Signal) error {
+	return syscall.Kill(-pgid, sig)
+}

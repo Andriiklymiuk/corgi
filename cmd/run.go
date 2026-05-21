@@ -598,7 +598,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 		"",
 	)
 
-	fmt.Println("\n👋 Exiting corgi")
+	utils.Info("\n👋 Exiting corgi")
 	utils.CloseAllLogWriters()
 	maybeHintNotifications()
 }
@@ -613,7 +613,7 @@ func maybeHintNotifications() {
 	if err != nil || cfg.Notifications {
 		return
 	}
-	fmt.Printf("\n%s💡 Tip: get a desktop alert when a service crashes — run: corgi notifications on%s\n",
+	utils.Infof("\n%s💡 Tip: get a desktop alert when a service crashes — run: corgi notifications on%s\n",
 		art.CyanColor, art.WhiteColor)
 }
 
