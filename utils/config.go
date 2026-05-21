@@ -274,7 +274,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	corgi := buildBaseCorgi(corgiYaml)
 
 	if err := SaveExecPath(corgi.Name, corgi.Description, pathToCorgiComposeFile); err != nil {
-		fmt.Println("failed to save corgi-compose file path: ", err)
+		Info("failed to save corgi-compose file path: ", err)
 	}
 
 	dbServices, err := parseDatabaseServices(corgiYaml.DatabaseServices, describeFlag)
@@ -301,7 +301,7 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't get absolute path for %s: %v", pathToCorgiComposeFile, err)
 	}
 
-	fmt.Println("Using corgi-compose file:", pathToCorgiComposeFile)
+	Info("Using corgi-compose file:", pathToCorgiComposeFile)
 	CorgiComposePath = pathToCorgiComposeFile
 	CorgiComposePathDir = filepath.Dir(pathToCorgiComposeFile)
 
@@ -336,7 +336,7 @@ func parseDatabaseServices(dbServicesData map[string]DatabaseService, describeFl
 		for indexName := range dbServicesData {
 			SkippedDbServices[indexName] = true
 		}
-		fmt.Println("no db_services provided")
+		Info("no db_services provided")
 		return nil, nil
 	}
 	var dbServices []DatabaseService
@@ -448,7 +448,7 @@ func parseServices(servicesData map[string]Service, describeFlag bool) []Service
 		for indexName := range servicesData {
 			SkippedServices[indexName] = true
 		}
-		fmt.Println("no services provided")
+		Info("no services provided")
 		return nil
 	}
 	var services []Service
@@ -550,9 +550,9 @@ func computeAbsolutePath(path string) string {
 
 func parseRequired(requiredData map[string]Required, describeFlag bool) []Required {
 	if len(requiredData) == 0 {
-		fmt.Println("no required instructions provided in file.")
-		fmt.Println("Tip: It is useful to provide required to showcase what is used and how to install it")
-		fmt.Println()
+		Info("no required instructions provided in file.")
+		Info("Tip: It is useful to provide required to showcase what is used and how to install it")
+		Info()
 		return nil
 	}
 	var requiredInstructions []Required
@@ -633,9 +633,9 @@ func getDbSourceFromPath(path string) SeedFromDb {
 func describeServiceInfo(service any) {
 	data, err := json.MarshalIndent(service, "", "\t")
 	if err != nil {
-		fmt.Println(err)
+		Info(err)
 	} else {
-		fmt.Println(string(data))
+		Info(string(data))
 	}
 }
 
@@ -706,6 +706,10 @@ func getCorgiConfigFromAlert() (string, error) {
 	if err != nil {
 		fmt.Println(err)
 		return "", err
+	}
+
+	if NonInteractive {
+		return "", fmt.Errorf("no corgi-compose.yml found and no terminal to pick one; pass -f <path> or run from a directory containing corgi-compose.yml")
 	}
 
 	file, err := PickItemFromListPrompt(

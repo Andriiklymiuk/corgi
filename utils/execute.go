@@ -203,7 +203,7 @@ func RunServiceCmd(
 }
 
 func executeShellLine(serviceName, finalCommand, path string, interactive bool, resolvedEnvFile string, envFile []string) error {
-	fmt.Printf("\n🚀 🤖 Executing command for %s:  %s%s%s\n", serviceName, art.GreenColor, finalCommand, art.WhiteColor)
+	Infof("\n🚀 🤖 Executing command for %s:  %s%s%s\n", serviceName, art.GreenColor, finalCommand, art.WhiteColor)
 	commandSlice := strings.Fields(finalCommand)
 	if len(commandSlice) == 0 {
 		return nil
@@ -233,10 +233,10 @@ func runInteractive(cmd *exec.Cmd) error {
 
 func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand, path string, envFile []string) error {
 	if lw := getLogWriter(serviceName); lw != nil {
-		cmd.Stdout = io.MultiWriter(os.Stdout, lw)
+		cmd.Stdout = io.MultiWriter(ConsoleOut(), lw)
 		cmd.Stderr = io.MultiWriter(os.Stderr, lw)
 	} else {
-		cmd.Stdout = os.Stdout
+		cmd.Stdout = ConsoleOut()
 		cmd.Stderr = os.Stderr
 	}
 	SetProcessGroup(cmd)
@@ -604,23 +604,23 @@ func CheckCommandExists(command string) error {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		fmt.Println(err)
+		Info(err)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		fmt.Println(err)
+		Info(err)
 	}
 
 	err = cmd.Start()
 	if err != nil {
-		fmt.Println(err)
+		Info(err)
 	}
 
 	scannerError := bufio.NewScanner(io.MultiReader(stderr))
 	scannerError.Split(bufio.ScanLines)
 	for scannerError.Scan() {
 		message := scannerError.Text()
-		fmt.Println(message)
+		Info(message)
 		if strings.Contains(message, "command not found") {
 			return fmt.Errorf("%s", message)
 		}
@@ -630,7 +630,7 @@ func CheckCommandExists(command string) error {
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		message := scanner.Text()
-		fmt.Println(message)
+		Info(message)
 		if strings.Contains(message, "command not found") {
 			return fmt.Errorf("%s", message)
 		}

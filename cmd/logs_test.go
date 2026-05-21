@@ -259,3 +259,19 @@ func TestFollowAllLogs_StreamsAndMerges(t *testing.T) {
 		t.Errorf("line 2 should be latest api: %q", lines[2])
 	}
 }
+
+func TestRequireServiceForLogs(t *testing.T) {
+	err := requireServiceForLogs("", true, []string{"api", "worker"})
+	if err == nil {
+		t.Fatal("expected error when no --service under non-interactive")
+	}
+	if !strings.Contains(err.Error(), "api") || !strings.Contains(err.Error(), "--service") {
+		t.Errorf("error should name --service and list services, got %q", err.Error())
+	}
+	if requireServiceForLogs("api", true, []string{"api"}) != nil {
+		t.Error("explicit service should pass")
+	}
+	if requireServiceForLogs("", false, []string{"api"}) != nil {
+		t.Error("interactive mode should allow empty service")
+	}
+}
