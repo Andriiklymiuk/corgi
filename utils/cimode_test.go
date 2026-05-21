@@ -64,3 +64,31 @@ func clearCIEnv(t *testing.T) {
 		t.Setenv(k, "")
 	}
 }
+
+func TestDetectModeNonInteractive(t *testing.T) {
+	cases := []struct {
+		name   string
+		env    map[string]string
+		wantNI bool
+	}{
+		{"agent env CLAUDECODE", map[string]string{"CLAUDECODE": "1"}, true},
+		{"ci env", map[string]string{"CI": "true"}, true},
+		{"clean env", map[string]string{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, k := range append(append([]string{}, ciEnvVars...), agentEnvVars...) {
+				t.Setenv(k, "")
+			}
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			NonInteractive = false
+			CIMode = false
+			detectFromEnv() // env-only check, TTY-independent
+			if NonInteractive != tc.wantNI {
+				t.Errorf("NonInteractive = %v, want %v", NonInteractive, tc.wantNI)
+			}
+		})
+	}
+}

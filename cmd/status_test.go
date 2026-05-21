@@ -265,7 +265,7 @@ func TestCheckAllHealthyNotAll(t *testing.T) {
 }
 
 func TestIsStdoutTTY(t *testing.T) {
-	_ = isStdoutTTY()
+	_ = utils.IsTTY()
 }
 
 func TestRunStatusOnceQuietAllUp(t *testing.T) {

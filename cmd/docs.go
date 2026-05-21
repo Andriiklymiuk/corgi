@@ -10,6 +10,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"andriiklymiuk/corgi/utils"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 )
@@ -31,6 +33,7 @@ var docsCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(docsCmd)
 	docsCmd.PersistentFlags().BoolP("generate", "", false, "Generate cobra docs. Useful for development only, because it updates corgi docs.")
+	docsCmd.PersistentFlags().BoolP("json-schema", "", false, "Print the JSON Schema (draft-07) for corgi-compose.yml and exit.")
 }
 
 type CorgiComposeItems struct {
@@ -320,6 +323,11 @@ var requiredItems = []CorgiComposeItems{
 }
 
 func runDocs(cmd *cobra.Command, _ []string) {
+	if jsonSchema, err := cmd.Flags().GetBool("json-schema"); err == nil && jsonSchema {
+		fmt.Println(utils.ComposeJSONSchema())
+		return
+	}
+
 	generateCobraDocs(cmd)
 
 	fmt.Println("Corgi compose can have different items (properties). These are what they can be")

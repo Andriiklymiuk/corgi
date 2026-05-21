@@ -9,6 +9,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestValidateForkSelection(t *testing.T) {
+	if validateForkSelection(false, "", []string{"api", "worker"}, "github", true) == nil {
+		t.Error("expected error when neither --all nor --service under non-interactive")
+	}
+	if !strings.Contains(validateForkSelection(false, "", []string{"api"}, "github", true).Error(), "api") {
+		t.Error("error should list available services")
+	}
+	if validateForkSelection(true, "", []string{"api"}, "github", true) != nil {
+		t.Error("--all should pass")
+	}
+	if validateForkSelection(false, "api", []string{"api"}, "github", true) != nil {
+		t.Error("--service should pass")
+	}
+	if validateForkSelection(false, "", []string{"api"}, "github", false) != nil {
+		t.Error("interactive should pass")
+	}
+	err := validateForkSelection(true, "", []string{"api"}, "", true)
+	if err == nil || !strings.Contains(err.Error(), "gitProvider") {
+		t.Errorf("expected gitProvider error under non-interactive, got %v", err)
+	}
+}
+
 func TestPreRunEValidGitProvider(t *testing.T) {
 	c := &cobra.Command{}
 	c.Flags().String("gitProvider", "github", "")
@@ -67,6 +89,7 @@ func TestReadForkFlags(t *testing.T) {
 	c.Flags().Bool("private", true, "")
 	c.Flags().Bool("useSameRepoName", true, "")
 	c.Flags().String("gitProvider", "github", "")
+	c.Flags().String("newName", "", "")
 
 	got, err := readForkFlags(c)
 	if err != nil {
@@ -113,12 +136,19 @@ func TestDetermineProviderExistingValue(t *testing.T) {
 }
 
 func TestDetermineRepoNameUseSame(t *testing.T) {
-	got, err := determineRepoName("api", true)
+	got, err := determineRepoName("api", "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != "api" {
 		t.Errorf("got %q", got)
+	}
+	got, err = determineRepoName("api", "custom", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "custom" {
+		t.Errorf("--newName should win, got %q", got)
 	}
 }
 

@@ -83,3 +83,19 @@ func TestDbShellCmd_Registered(t *testing.T) {
 		t.Error("expected `shell` subcommand under `corgi db`")
 	}
 }
+
+func TestRequireServiceForDBShell(t *testing.T) {
+	err := requireServiceForDBShell("", true, []string{"postgres", "redis"})
+	if err == nil {
+		t.Fatal("expected error when no service under non-interactive")
+	}
+	if !strings.Contains(err.Error(), "postgres") || !strings.Contains(err.Error(), "service") {
+		t.Errorf("error should mention service and list available, got %q", err.Error())
+	}
+	if requireServiceForDBShell("postgres", true, []string{"postgres"}) != nil {
+		t.Error("explicit service should pass")
+	}
+	if requireServiceForDBShell("", false, []string{"postgres"}) != nil {
+		t.Error("interactive mode should allow empty service")
+	}
+}

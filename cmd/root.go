@@ -3,6 +3,8 @@ package cmd
 import (
 	"os"
 
+	"andriiklymiuk/corgi/utils"
+
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +24,18 @@ WOOF 🐶
 
 corgi run`,
 	Version: APP_VERSION,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		applyGlobalFlags(cmd)
+	},
+}
+
+func applyGlobalFlags(cmd *cobra.Command) {
+	if j, _ := cmd.Flags().GetBool("json"); j {
+		utils.JSONOutput = true
+	}
+	if i, _ := cmd.Flags().GetBool("interactive"); i {
+		utils.SetInteractive()
+	}
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -111,6 +125,16 @@ func init() {
 		"g",
 		false,
 		"Use global path to one of the services",
+	)
+	rootCmd.PersistentFlags().Bool(
+		"json",
+		false,
+		"Emit machine-readable JSON output",
+	)
+	rootCmd.PersistentFlags().Bool(
+		"interactive",
+		false,
+		"Force interactive prompts even when no TTY/agent detected",
 	)
 	rootCmd.SetVersionTemplate("corgi version {{.Version}}\nChangelog: https://github.com/Andriiklymiuk/corgi/releases/tag/v{{.Version}}\n")
 }

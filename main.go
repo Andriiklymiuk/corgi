@@ -14,14 +14,14 @@ import (
 )
 
 func main() {
-	utils.DetectCIMode()
+	utils.DetectMode()
 	showWelcomeMessage()
 	var runCli func()
 	runCli = func() {
 		cmd.Execute()
 
 		canRunCli := canRunCliAgain()
-		if !canRunCli {
+		if !canRunCli || !shouldPromptToContinue(utils.NonInteractive) {
 			showFinalMessage()
 			return
 		}
@@ -48,6 +48,10 @@ func showFinalMessage() {
 		return
 	}
 	utils.PrintFinalMessage()
+}
+
+func shouldPromptToContinue(nonInteractive bool) bool {
+	return !nonInteractive
 }
 
 func canRunCliAgain() bool {
@@ -81,6 +85,7 @@ func canShowWelcomeMessages() bool {
 			arg == "__completeNoDesc" ||
 			arg == "--silent" ||
 			arg == "--ci" ||
+			arg == "--json" ||
 			arg == "--version" ||
 			arg == "-v" ||
 			arg == "-h" ||

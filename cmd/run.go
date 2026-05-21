@@ -20,6 +20,46 @@ import (
 
 var omitItems []string
 
+type runSummary struct {
+	Started []runSummaryItem `json:"started"`
+	Failed  []runSummaryItem `json:"failed"`
+}
+
+type runSummaryItem struct {
+	Name  string `json:"name"`
+	Kind  string `json:"kind"` // "service" | "db_service"
+	Port  int    `json:"port,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+// buildRunSummary lists what corgi attempts to launch, applying the same
+// per-item skip rules as the launcher (manualRun db_services and services
+// are excluded; manual services explicitly named in --services are kept).
+func buildRunSummary(corgi *utils.CorgiCompose) runSummary {
+	s := runSummary{Started: []runSummaryItem{}, Failed: []runSummaryItem{}}
+	for _, db := range corgi.DatabaseServices {
+		if db.ManualRun {
+			continue
+		}
+		s.Started = append(s.Started, runSummaryItem{
+			Name: db.ServiceName,
+			Kind: "db_service",
+			Port: db.Port,
+		})
+	}
+	for _, svc := range corgi.Services {
+		if shouldSkipManualRun(svc) {
+			continue
+		}
+		s.Started = append(s.Started, runSummaryItem{
+			Name: svc.ServiceName,
+			Kind: "service",
+			Port: svc.Port,
+		})
+	}
+	return s
+}
+
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:     "run",
@@ -138,6 +178,10 @@ Pass --notify=false to disable for a single run.`,
 // error so the next signal can retry.
 var exitInProgress atomic.Bool
 
+// runReloading is true while runRun is re-entered from a SIGHUP reload, so a
+// config-load failure returns gracefully instead of exiting the whole process.
+var runReloading atomic.Bool
+
 func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 	if s == syscall.SIGHUP {
 		fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
@@ -145,7 +189,9 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 		utils.KillAllStoredProcesses()
 		utils.CloseAllLogWriters()
 		utils.ResetShutdown()
+		runReloading.Store(true)
 		cmd.Run(cmd, nil)
+		runReloading.Store(false)
 		return
 	}
 	if !exitInProgress.CompareAndSwap(false, true) {
@@ -255,11 +301,11 @@ func resolveHostFlag(cmd *cobra.Command) error {
 			return fmt.Errorf("auto-detect: %w", err)
 		}
 		utils.HostOverride = ip
-		fmt.Println(art.BlueColor, "🌐 --host auto resolved to", ip, art.WhiteColor)
+		utils.Info(art.BlueColor, "🌐 --host auto resolved to", ip, art.WhiteColor)
 		return nil
 	}
 	utils.HostOverride = raw
-	fmt.Println(art.BlueColor, "🌐 --host override:", raw, art.WhiteColor)
+	utils.Info(art.BlueColor, "🌐 --host override:", raw, art.WhiteColor)
 	return nil
 }
 
@@ -273,8 +319,15 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		fmt.Println(err)
-		return
+		if utils.JSONOutput {
+			utils.JSONError("config", err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		if runReloading.Load() {
+			return
+		}
+		os.Exit(1)
 	}
 
 	if CheckClonedReposExistence(corgi.Services) {
@@ -312,6 +365,9 @@ func runRun(cmd *cobra.Command, _ []string) {
 	CreateServices(corgi.Services)
 	if utils.ShutdownRequested() {
 		return
+	}
+	if utils.JSONOutput {
+		utils.PrintJSON(buildRunSummary(corgi))
 	}
 	startAllServices(corgi, cmd)
 }
@@ -360,7 +416,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 
 	for _, service := range corgi.Services {
 		if service.AfterStart != nil && !omitServiceCmd("afterStart") {
-			fmt.Println("\nAfter start commands:")
+			utils.Info("\nAfter start commands:")
 			utils.RunCleanupCommands(
 				"afterStart",
 				service.ServiceName,
@@ -400,7 +456,7 @@ func maybeHintNotifications() {
 
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
 	if !hasDatabaseToRun(databaseServices) {
-		fmt.Println("No database service to run")
+		utils.Info("No database service to run")
 		return
 	}
 
@@ -446,7 +502,7 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	if serviceIsRunning {
 		return
 	}
-	fmt.Println(art.BlueColor, "\n🤖 Starting database", dbService.ServiceName, art.WhiteColor)
+	utils.Info(art.BlueColor, "\n🤖 Starting database", dbService.ServiceName, art.WhiteColor)
 	if err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up"); err != nil {
 		fmt.Println("Starting service failed", err)
 	}
@@ -458,11 +514,11 @@ func shouldSkipManualRun(service utils.Service) bool {
 		return false
 	}
 	if len(utils.ServicesItemsFromFlag) == 0 {
-		fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
+		utils.Info(service.ServiceName, "is not run, because it should be run manually (manualRun)")
 		return true
 	}
 	if !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
-		fmt.Println(service.ServiceName, "is not run, because it should be added manually")
+		utils.Info(service.ServiceName, "is not run, because it should be added manually")
 		return true
 	}
 	return false
@@ -485,14 +541,14 @@ func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 
 func startServiceProcess(service utils.Service) {
 	if service.Runner.Name == "docker" && service.Port != 0 {
-		fmt.Println(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
+		utils.Info(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
 		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up"); err != nil {
 			fmt.Println("Starting service failed", err)
 		}
 		return
 	}
 	if service.Start != nil {
-		fmt.Println("\nStart commands:")
+		utils.Info("\nStart commands:")
 		utils.RunServiceCommands(
 			"start",
 			service.ServiceName,
@@ -516,10 +572,10 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 
 	runServicePullIfRequested(cobraCmd, service)
 
-	fmt.Println(art.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, art.WhiteColor)
+	utils.Info(art.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, art.WhiteColor)
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
-		fmt.Println("\nBefore start commands:")
+		utils.Info("\nBefore start commands:")
 		utils.RunServiceCommands(
 			"beforeStart",
 			service.ServiceName,
