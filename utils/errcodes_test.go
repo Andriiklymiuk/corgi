@@ -21,6 +21,7 @@ func TestErrCodeValues(t *testing.T) {
 		"ErrDockerDown":       "E_DOCKER_DOWN",
 		"ErrUsage":            "E_USAGE",
 		"ErrExecFailed":       "E_EXEC_FAILED",
+		"ErrUnknownProfile":   "E_UNKNOWN_PROFILE",
 	}
 
 	got := map[string]string{
@@ -39,6 +40,7 @@ func TestErrCodeValues(t *testing.T) {
 		"ErrDockerDown":       ErrDockerDown,
 		"ErrUsage":            ErrUsage,
 		"ErrExecFailed":       ErrExecFailed,
+		"ErrUnknownProfile":   ErrUnknownProfile,
 	}
 
 	for name, wantVal := range want {
