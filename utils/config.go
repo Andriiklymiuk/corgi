@@ -301,7 +301,11 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't get absolute path for %s: %v", pathToCorgiComposeFile, err)
 	}
 
-	fmt.Println("Using corgi-compose file:", pathToCorgiComposeFile)
+	if JSONOutput {
+		fmt.Fprintln(os.Stderr, "Using corgi-compose file:", pathToCorgiComposeFile)
+	} else {
+		fmt.Println("Using corgi-compose file:", pathToCorgiComposeFile)
+	}
 	CorgiComposePath = pathToCorgiComposeFile
 	CorgiComposePathDir = filepath.Dir(pathToCorgiComposeFile)
 
@@ -336,7 +340,11 @@ func parseDatabaseServices(dbServicesData map[string]DatabaseService, describeFl
 		for indexName := range dbServicesData {
 			SkippedDbServices[indexName] = true
 		}
-		fmt.Println("no db_services provided")
+		if JSONOutput {
+			fmt.Fprintln(os.Stderr, "no db_services provided")
+		} else {
+			fmt.Println("no db_services provided")
+		}
 		return nil, nil
 	}
 	var dbServices []DatabaseService
@@ -550,9 +558,14 @@ func computeAbsolutePath(path string) string {
 
 func parseRequired(requiredData map[string]Required, describeFlag bool) []Required {
 	if len(requiredData) == 0 {
-		fmt.Println("no required instructions provided in file.")
-		fmt.Println("Tip: It is useful to provide required to showcase what is used and how to install it")
-		fmt.Println()
+		if JSONOutput {
+			fmt.Fprintln(os.Stderr, "no required instructions provided in file.")
+			fmt.Fprintln(os.Stderr, "Tip: It is useful to provide required to showcase what is used and how to install it")
+		} else {
+			fmt.Println("no required instructions provided in file.")
+			fmt.Println("Tip: It is useful to provide required to showcase what is used and how to install it")
+			fmt.Println()
+		}
 		return nil
 	}
 	var requiredInstructions []Required

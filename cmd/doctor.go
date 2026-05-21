@@ -34,11 +34,43 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 }
 
+type doctorCheck struct {
+	Name   string `json:"name"`
+	OK     bool   `json:"ok"`
+	Detail string `json:"detail,omitempty"`
+}
+
+type doctorResult struct {
+	OK     bool          `json:"ok"`
+	Checks []doctorCheck `json:"checks"`
+}
+
+func (r *doctorResult) computeOK() {
+	r.OK = true
+	for _, c := range r.Checks {
+		if !c.OK {
+			r.OK = false
+			return
+		}
+	}
+}
+
 func runDoctor(cmd *cobra.Command, _ []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		fmt.Printf("couldn't get services config, error: %s\n", err)
+		if utils.JSONOutput {
+			utils.PrintJSON(doctorResult{OK: false, Checks: []doctorCheck{
+				{Name: "config", OK: false, Detail: err.Error()},
+			}})
+		} else {
+			fmt.Printf("couldn't get services config, error: %s\n", err)
+		}
 		os.Exit(1)
+	}
+
+	if utils.JSONOutput {
+		runDoctorJSON(corgi)
+		return
 	}
 
 	requiredOK := RunRequired(corgi.Required)
@@ -53,6 +85,58 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 
 	fmt.Println(art.RedColor, "❌ Doctor: one or more checks failed", art.WhiteColor)
 	os.Exit(1)
+}
+
+func runDoctorJSON(corgi *utils.CorgiCompose) {
+	var res doctorResult
+
+	for _, r := range corgi.Required {
+		found, _ := checkRequiredIsFoundQuiet(r)
+		c := doctorCheck{Name: "required:" + r.Name, OK: found}
+		if !found {
+			c.Detail = "not found"
+		}
+		res.Checks = append(res.Checks, c)
+	}
+
+	if len(corgi.DatabaseServices) > 0 {
+		dockerOK := utils.IsDockerRunning()
+		c := doctorCheck{Name: "docker", OK: dockerOK}
+		if !dockerOK {
+			c.Detail = "Docker daemon not reachable"
+		}
+		res.Checks = append(res.Checks, c)
+	}
+
+	for _, p := range collectDeclaredPorts(corgi) {
+		busy := utils.IsPortListening(p.Port)
+		c := doctorCheck{Name: fmt.Sprintf("port:%d", p.Port), OK: !busy}
+		if busy {
+			owner := utils.PortOwner(p.Port)
+			if owner == "" {
+				owner = "unknown"
+			}
+			c.Detail = fmt.Sprintf("busy — needed for %s — held by: %s", p.Desc, owner)
+		}
+		res.Checks = append(res.Checks, c)
+	}
+
+	res.computeOK()
+	utils.PrintJSON(res)
+	if !res.OK {
+		os.Exit(1)
+	}
+}
+
+func checkRequiredIsFoundQuiet(required utils.Required) (bool, string) {
+	cmdToRunForCheck := required.Name
+	if required.CheckCmd != "" {
+		cmdToRunForCheck = required.CheckCmd
+	}
+	if err := utils.CheckCommandExists(cmdToRunForCheck); err != nil {
+		return false, err.Error()
+	}
+	return true, ""
 }
 
 // RunRequired is kept for backwards compatibility with cmd/init.go.
