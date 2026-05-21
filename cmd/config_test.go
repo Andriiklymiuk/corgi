@@ -2,12 +2,29 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"bytes"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+func TestConfigJSONShape(t *testing.T) {
+	var buf bytes.Buffer
+	utils.PrintJSONTo(&buf, configView{Version: 1, Notifications: true})
+	var got map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := got["notifications"]; !ok {
+		t.Errorf("notifications field missing: %v", got)
+	}
+	if _, ok := got["version"]; !ok {
+		t.Errorf("version field missing: %v", got)
+	}
+}
 
 func TestRunConfigShow_PrintsPathVersionAndState(t *testing.T) {
 	dir := withTempHome(t)
