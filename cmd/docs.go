@@ -120,13 +120,13 @@ var serviceItems = []CorgiComposeItems{
 		item:        "depends_on_db",
 		example:     "- name: db_name_from_db_services\n\t- envAlias: NAME_BEFORE_DB_IN_ENV",
 		itemType:    "[]DependsOnDb",
-		description: "Adds db credentials (DB_HOST,etc) from db_services will be copied to .env.\n\t\t\tenvAlias adds string before db credentials, like NAME_BEFORE_DB_IN_ENV_DB_HOST",
+		description: "Adds db credentials (DB_HOST,etc) from db_services will be copied to .env.\n\t\t\tenvAlias adds string before db credentials, like NAME_BEFORE_DB_IN_ENV_DB_HOST\n\t\t\toptional condition: ready|started gates startup until the db is ready/started",
 	},
 	{
 		item:        "depends_on_services",
 		example:     "- name: service_name\n\t- envAlias: NAME_TO_USE_IN_ENV\n\t- suffix: /special/suffix",
 		itemType:    "[]DependsOnService",
-		description: "Adds service credentials to .env.\n\t\t\tsuffix is added at the end of added value\n\t\t\tNAME_TO_USE_IN_ENV=localhost:port/special/suffix will be added to .env\n\t\t\tIf you add just name, than it is SERVICE_NAME=localhost:port_in_env",
+		description: "Adds service credentials to .env.\n\t\t\tsuffix is added at the end of added value\n\t\t\tNAME_TO_USE_IN_ENV=localhost:port/special/suffix will be added to .env\n\t\t\tIf you add just name, than it is SERVICE_NAME=localhost:port_in_env\n\t\t\toptional condition: ready|started gates startup until the dependency is ready/started",
 	},
 	{
 		item:        "exports",

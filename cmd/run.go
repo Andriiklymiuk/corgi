@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -220,7 +221,29 @@ removing the stale state file first.`,
 Requires notifications to be enabled (answer yes in: corgi doctor).
 Pass --notify=false to disable for a single run.`,
 	)
+	runCmd.PersistentFlags().Bool(
+		"gate-deps",
+		false,
+		`Gate service startup on dependency readiness for every depends_on edge,
+even ones without an explicit condition:. By default only edges that set
+condition: ready|started are gated; without this flag (and without
+condition:) services start in parallel as before.`,
+	)
+	runCmd.PersistentFlags().Duration(
+		"ready-timeout",
+		60*time.Second,
+		`Max time to wait for a database or dependency service to become ready
+before proceeding anyway (non-fatal). Applies to readiness gating and the
+database readiness probe.`,
+	)
 }
+
+// gateDepsFlag and readyTimeout hold the resolved values of --gate-deps and
+// --ready-timeout for the current run, set by applyRunFlags.
+var (
+	gateDepsFlag bool
+	readyTimeout = 60 * time.Second
+)
 
 // exitInProgress guards the terminal-exit path. Reset on cleanup-setup
 // error so the next signal can retry.
@@ -310,12 +333,39 @@ func usesDocker(corgi *utils.CorgiCompose) bool {
 	return false
 }
 
+// readySignal carries the two startup milestones a dependent may wait on:
+// started (corgi launched the producer) and ready (its readiness probe passed,
+// or timed out — the channel closes either way so dependents never hang). The
+// sync.Once guards make every close idempotent and race-safe, since the
+// producer goroutine, its probe goroutine, and the deferred safety net may all
+// try to close the same channel.
+type readySignal struct {
+	started     chan struct{}
+	ready       chan struct{}
+	startedOnce sync.Once
+	readyOnce   sync.Once
+}
+
+func (s *readySignal) markStarted() { s.startedOnce.Do(func() { close(s.started) }) }
+func (s *readySignal) markReady()   { s.readyOnce.Do(func() { close(s.ready) }) }
+
 func startAllServices(corgi *utils.CorgiCompose, cmd *cobra.Command) {
 	var serviceWaitGroup sync.WaitGroup
 	serviceWaitGroup.Add(len(corgi.Services))
+
+	// Build the registry before launching any goroutine so every dependent can
+	// find its producers' channels regardless of start order.
+	signals := make(map[string]*readySignal, len(corgi.Services))
+	for _, s := range corgi.Services {
+		signals[s.ServiceName] = &readySignal{
+			started: make(chan struct{}),
+			ready:   make(chan struct{}),
+		}
+	}
+
 	var startCmdPresent bool
 	for _, service := range corgi.Services {
-		go runService(service, cmd, &serviceWaitGroup)
+		go runService(service, cmd, &serviceWaitGroup, signals)
 		if len(service.Start) != 0 {
 			startCmdPresent = true
 		}
@@ -533,6 +583,10 @@ func applyRunFlags(cmd *cobra.Command) {
 	if ci, _ := cmd.Flags().GetBool("ci"); ci {
 		utils.SetCIMode(true)
 	}
+	gateDepsFlag, _ = cmd.Flags().GetBool("gate-deps")
+	if d, err := cmd.Flags().GetDuration("ready-timeout"); err == nil && d > 0 {
+		readyTimeout = d
+	}
 	if notifyEnabled, _ := cmd.Flags().GetBool("notify"); notifyEnabled {
 		utils.SetOnServiceCrash(func(serviceName string) {
 			utils.Notify("corgi 🐶", fmt.Sprintf("Service %q crashed", serviceName))
@@ -663,7 +717,14 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	if err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up"); err != nil {
 		fmt.Println("Starting service failed", err)
 	}
-	time.Sleep(time.Second * 3)
+	// Replace the old blind sleep with a bounded readiness probe. Always-on
+	// because it only ever helps; falls back to a short fixed wait when the db
+	// has no known port. Non-fatal on timeout so services still get a chance.
+	ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
+	defer cancel()
+	if err := utils.WaitForDBReady(ctx, dbService); err != nil {
+		utils.Infof("⚠️  %s\n", err)
+	}
 }
 
 func shouldSkipManualRun(service utils.Service) bool {
@@ -718,14 +779,26 @@ func startServiceProcess(service utils.Service) {
 	}
 }
 
-func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup *sync.WaitGroup) {
+func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup *sync.WaitGroup, signals map[string]*readySignal) {
 	defer serviceWaitGroup.Done()
+
+	sig := signals[service.ServiceName]
+	// Close own milestones on any early return so dependents never hang.
+	defer func() {
+		if sig != nil {
+			sig.markStarted()
+			sig.markReady()
+		}
+	}()
+
 	if utils.ShutdownRequested() {
 		return
 	}
 	if shouldSkipManualRun(service) {
 		return
 	}
+
+	waitForServiceDeps(service, signals)
 
 	runServicePullIfRequested(cobraCmd, service)
 
@@ -747,7 +820,85 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 	if utils.ShutdownRequested() {
 		return
 	}
+
+	// Producer side: mark started, then probe readiness in the background since
+	// startServiceProcess blocks on the service's start command.
+	if sig != nil {
+		sig.markStarted()
+		if service.Port == 0 {
+			// Nothing to probe — dependents waiting on `ready` proceed at once.
+			sig.markReady()
+		} else {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
+				defer cancel()
+				_ = utils.WaitForServiceReady(ctx, service) // close even on timeout
+				sig.markReady()
+			}()
+		}
+	}
+
 	startServiceProcess(service)
+}
+
+// waitForServiceDeps blocks until this service's gated dependencies have
+// reached the milestone their condition asks for. An edge is gated when it sets
+// condition: explicitly OR --gate-deps is passed; ungated edges are skipped so
+// default behavior (parallel start, no waiting) is preserved. Waits are bounded
+// by readyTimeout and never deadlock.
+func waitForServiceDeps(service utils.Service, signals map[string]*readySignal) {
+	for _, dep := range service.DependsOnServices {
+		gated := dep.Condition != "" || gateDepsFlag
+		if !gated {
+			continue
+		}
+		producer, ok := signals[dep.Name]
+		if !ok {
+			// Unknown dependency — `corgi validate` already flags these.
+			continue
+		}
+		// condition: started waits only until corgi launched the producer;
+		// "ready" (or empty under --gate-deps) waits for the readiness probe.
+		ch := producer.ready
+		if dep.Condition == "started" {
+			ch = producer.started
+		}
+		select {
+		case <-ch:
+			emitDepReady(service.ServiceName, dep.Name, dep.Condition)
+		case <-time.After(readyTimeout):
+			emitDepTimeout(service.ServiceName, dep.Name)
+		}
+	}
+}
+
+func emitDepReady(service, dep, condition string) {
+	if condition == "" {
+		condition = "ready"
+	}
+	if utils.JSONOutput {
+		utils.PrintJSON(map[string]any{
+			"event":     "dep_ready",
+			"service":   service,
+			"dependsOn": dep,
+			"condition": condition,
+		})
+		return
+	}
+	utils.Infof("⏳ %s dependency %s satisfied (%s)\n", service, dep, condition)
+}
+
+func emitDepTimeout(service, dep string) {
+	if utils.JSONOutput {
+		utils.PrintJSON(map[string]any{
+			"event":     "dep_timeout",
+			"code":      utils.ErrReadinessTimeout,
+			"service":   service,
+			"dependsOn": dep,
+		})
+		return
+	}
+	utils.Infof("⚠️  %s: %s waiting on %s — proceeding anyway\n", utils.ErrReadinessTimeout, service, dep)
 }
 
 func getServiceEnv(service utils.Service) string {

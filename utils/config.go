@@ -165,12 +165,18 @@ type DependsOnService struct {
 	EnvAlias    string `yaml:"envAlias,omitempty"`
 	Suffix      string `yaml:"suffix,omitempty"`
 	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
+	// Condition opts this edge into startup gating: "ready" waits until the
+	// dependency's readiness probe passes, "started" waits only until corgi
+	// launched it. Empty = no gating (unless --gate-deps is passed).
+	Condition string `yaml:"condition,omitempty" json:"condition,omitempty"`
 }
 
 type DependsOnDb struct {
 	Name        string `yaml:"name,omitempty"`
 	EnvAlias    string `yaml:"envAlias,omitempty"`
 	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
+	// Condition opts this edge into startup gating. See DependsOnService.
+	Condition string `yaml:"condition,omitempty" json:"condition,omitempty"`
 }
 
 type Script struct {

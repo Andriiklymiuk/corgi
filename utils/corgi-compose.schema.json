@@ -150,7 +150,8 @@
         "name": { "type": "string", "description": "Name of the service depended on." },
         "envAlias": { "type": "string", "description": "Prefix used for the injected env var." },
         "suffix": { "type": "string", "description": "Suffix appended to the resolved value." },
-        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." }
+        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." },
+        "condition": { "type": "string", "enum": ["ready", "started"], "description": "Gate startup: wait until the dependency is ready (probe passes) or started (launched)." }
       }
     },
     "dependsOnDb": {
@@ -159,7 +160,8 @@
       "properties": {
         "name": { "type": "string", "description": "Name of the db_service depended on." },
         "envAlias": { "type": "string", "description": "Prefix added before injected DB_ credentials." },
-        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." }
+        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." },
+        "condition": { "type": "string", "enum": ["ready", "started"], "description": "Gate startup: wait until the db is ready (probe passes) or started (launched)." }
       }
     },
     "script": {
