@@ -54,6 +54,25 @@ func buildPsRows(corgi *utils.CorgiCompose, probe func(port int) bool) []psRow {
 	return rows
 }
 
+func psRowsFromState(st utils.RunState) []psRow {
+	rows := make([]psRow, 0, len(st.Services)+len(st.DBServices))
+	for _, e := range st.Services {
+		rows = append(rows, psRowFromEntry(e))
+	}
+	for _, e := range st.DBServices {
+		rows = append(rows, psRowFromEntry(e))
+	}
+	return rows
+}
+
+func psRowFromEntry(e utils.RunStateEntry) psRow {
+	row := psRow{Name: e.Name, Kind: e.Kind, Port: e.Port, Status: e.Status}
+	if e.Port != 0 {
+		row.URL = fmt.Sprintf("http://localhost:%d", e.Port)
+	}
+	return row
+}
+
 func makePsRow(name, kind string, port int, probe func(port int) bool) psRow {
 	row := psRow{Name: name, Kind: kind, Port: port, Status: "unknown"}
 	if port == 0 {
@@ -79,7 +98,19 @@ func runPs(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	rows := buildPsRows(corgi, utils.IsPortListening)
+	var rows []psRow
+	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
+	if _, err := os.Stat(statePath); err == nil {
+		st, rerr := utils.ReadRunState(statePath)
+		if rerr == nil {
+			reconciled := utils.ReconcileRunState(st, utils.PidAlive, utils.ContainerRunning)
+			_ = utils.WriteRunState(statePath, reconciled)
+			rows = psRowsFromState(reconciled)
+		}
+	}
+	if rows == nil {
+		rows = buildPsRows(corgi, utils.IsPortListening)
+	}
 
 	if utils.JSONOutput {
 		utils.PrintJSON(rows)
