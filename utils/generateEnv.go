@@ -667,12 +667,12 @@ func writeEnvFile(pathToEnvFile, content string) error {
 	}
 	f, err := os.OpenFile(pathToEnvFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		fmt.Println(err)
+		Info(err)
 		return err
 	}
 	defer f.Close()
 	if _, err := f.WriteString(content); err != nil {
-		fmt.Println(err)
+		Info(err)
 		return err
 	}
 	return nil

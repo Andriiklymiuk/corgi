@@ -72,7 +72,7 @@ func CreateMissingEnvFiles(services []utils.Service) {
 // Generate database files for each database service
 func CreateDatabaseServices(databaseServices []utils.DatabaseService) {
 	if len(databaseServices) == 0 {
-		fmt.Println(`
+		utils.Info(`
 No db_services info provided -> no db_services created.
 Provide them in corgi-compose.yml file`)
 		return

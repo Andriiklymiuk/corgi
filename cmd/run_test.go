@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -669,5 +670,102 @@ func TestSetupLogWriters_RegistersServicesAndDbServices(t *testing.T) {
 	}
 	if !strings.Contains(string(data), ".logs/") {
 		t.Errorf(".logs/ entry missing from .gitignore: %s", data)
+	}
+}
+
+func TestRunSummaryJSONShape(t *testing.T) {
+	s := runSummary{
+		Started: []runSummaryItem{
+			{Name: "api", Kind: "service", Port: 8080},
+			{Name: "pg", Kind: "db_service", Port: 5432},
+		},
+		Failed: []runSummaryItem{
+			{Name: "broken", Kind: "service", Error: "boom"},
+		},
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	started, ok := got["started"].([]any)
+	if !ok || len(started) != 2 {
+		t.Fatalf("started array shape wrong: %v", got["started"])
+	}
+	failed, ok := got["failed"].([]any)
+	if !ok || len(failed) != 1 {
+		t.Fatalf("failed array shape wrong: %v", got["failed"])
+	}
+	first := started[0].(map[string]any)
+	if first["name"] != "api" || first["kind"] != "service" || first["port"].(float64) != 8080 {
+		t.Errorf("item fields wrong: %v", first)
+	}
+	// port omitted when zero; error omitted when empty.
+	if _, has := failed[0].(map[string]any)["port"]; has {
+		t.Errorf("port should be omitted when zero")
+	}
+	if started[0].(map[string]any)["error"] != nil {
+		t.Errorf("error should be omitted when empty")
+	}
+}
+
+func TestBuildRunSummary(t *testing.T) {
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = nil })
+	utils.ServicesItemsFromFlag = nil
+
+	corgi := &utils.CorgiCompose{
+		DatabaseServices: []utils.DatabaseService{
+			{ServiceName: "pg", Driver: "postgres", Port: 5432},
+			{ServiceName: "manual-db", Driver: "postgres", Port: 5433, ManualRun: true},
+		},
+		Services: []utils.Service{
+			{ServiceName: "api", Port: 8080},
+			{ServiceName: "worker"},
+			{ServiceName: "manual-svc", ManualRun: true},
+		},
+	}
+
+	got := buildRunSummary(corgi)
+
+	wantStarted := map[string]int{"pg": 5432, "api": 8080, "worker": 0}
+	if len(got.Started) != len(wantStarted) {
+		t.Fatalf("started count = %d, want %d: %+v", len(got.Started), len(wantStarted), got.Started)
+	}
+	for _, it := range got.Started {
+		port, ok := wantStarted[it.Name]
+		if !ok {
+			t.Errorf("unexpected started item %q", it.Name)
+			continue
+		}
+		if it.Port != port {
+			t.Errorf("%s port = %d, want %d", it.Name, it.Port, port)
+		}
+	}
+	if len(got.Failed) != 0 {
+		t.Errorf("expected no failed entries, got %+v", got.Failed)
+	}
+}
+
+func TestBuildRunSummaryKinds(t *testing.T) {
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = nil })
+	utils.ServicesItemsFromFlag = nil
+
+	corgi := &utils.CorgiCompose{
+		DatabaseServices: []utils.DatabaseService{{ServiceName: "pg", Driver: "postgres"}},
+		Services:         []utils.Service{{ServiceName: "api"}},
+	}
+	got := buildRunSummary(corgi)
+	kinds := map[string]string{}
+	for _, it := range got.Started {
+		kinds[it.Name] = it.Kind
+	}
+	if kinds["pg"] != "db_service" {
+		t.Errorf("pg kind = %q, want db_service", kinds["pg"])
+	}
+	if kinds["api"] != "service" {
+		t.Errorf("api kind = %q, want service", kinds["api"])
 	}
 }
