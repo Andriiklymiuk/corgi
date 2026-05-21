@@ -63,6 +63,17 @@ func runLogs(cmd *cobra.Command, _ []string) {
 
 	serviceName := logsServiceFlag
 	if serviceName == "" {
+		if utils.NonInteractive {
+			available, _ := utils.ListLoggedServices(base)
+			if err := requireServiceForLogs(serviceName, true, available); err != nil {
+				if utils.JSONOutput {
+					utils.JSONError("INPUT_REQUIRED", err.Error())
+				} else {
+					fmt.Fprintln(os.Stderr, err)
+				}
+				os.Exit(2)
+			}
+		}
 		var err error
 		serviceName, err = pickLogService(base)
 		if err != nil {
@@ -95,6 +106,14 @@ func pruneAllLogs(base string) {
 		return
 	}
 	fmt.Println(art.GreenColor, "✅ All log files removed.", art.WhiteColor)
+}
+
+func requireServiceForLogs(service string, nonInteractive bool, available []string) error {
+	if service != "" || !nonInteractive {
+		return nil
+	}
+	return fmt.Errorf("no terminal for the service picker; pass --service <name> (available: %s)",
+		strings.Join(available, ", "))
 }
 
 func pickLogService(base string) (string, error) {
