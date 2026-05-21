@@ -85,7 +85,7 @@ func CheckIfFilesExistsInDirectory(pathToDirectory, fileToCheck string) (bool, e
 func GetFileContent(fileName string) []string {
 	f, err := os.Open(fileName)
 	if err != nil {
-		fmt.Println(err)
+		Info(err)
 	}
 	defer f.Close()
 
