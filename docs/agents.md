@@ -35,6 +35,85 @@ Errors under `--json` have the shape:
 {"error": {"code": "INPUT_REQUIRED", "message": "..."}}
 ```
 
+## Lifecycle (detached)
+
+`corgi run --detach` (`-d`) starts every service as a detached process group that
+survives corgi exiting, persists `corgi_services/.state.json`, and returns
+immediately. It forces logs on. Under `--json` it prints the run-state object:
+
+```json
+{
+  "composePath": "/path/corgi-compose.yml",
+  "startedAt": "2026-05-21T10:59:47Z",
+  "services": [
+    {
+      "name": "api",
+      "kind": "service",
+      "pid": 76960,
+      "pgid": 76960,
+      "command": "sleep 60",
+      "logFile": "/path/corgi_services/.logs/api/2026-05-21T13-59-47.log",
+      "status": "running",
+      "startedAt": "2026-05-21T10:59:47Z",
+      "statusChangedAt": "2026-05-21T10:59:47Z"
+    }
+  ],
+  "dbServices": []
+}
+```
+
+A second `run --detach` while a run-state exists errors (exit 1):
+
+```json
+{"error": {"code": "ALREADY_RUNNING", "message": "corgi is already running for this project — stop or restart first (use --force to override)"}}
+```
+
+`--force` replaces the existing run-state **and kills the previously tracked
+processes first** (no orphans), then starts fresh.
+
+### Status while detached
+
+There is no daemon. With a state file present, `ps`/`status` report **real**
+status (`running`/`crashed`/`stopped`) reconciled live — a dead pid flips to
+`crashed` on the next read. Without a state file they fall back to declared
+topology + a port probe. `statusChangedAt` lives in `.state.json` / the
+`run --detach --json` run-state object, not in the `ps` rows (which carry just
+`name`/`kind`/`port`/`status`/`url`).
+
+```json
+[{"name": "api", "kind": "service", "status": "running"}]
+```
+
+After the pid dies, the very next `corgi --json ps` shows:
+
+```json
+[{"name": "api", "kind": "service", "status": "crashed"}]
+```
+
+### Stop / restart
+
+`corgi stop [--service <name>] [--json]` reads the state, SIGTERMs each process
+group (SIGKILL after a grace period), runs `afterStart` hooks, brings
+`db_service` containers fully down, and removes `.state.json`. `--service x`
+stops one and keeps the rest. It is idempotent (exit 0 when nothing is running).
+
+```json
+{"stopped": ["api"], "failed": []}
+```
+
+`corgi restart [--json]` is a full-stack stop + detached start.
+`restart --service x` is **not** supported yet — it exits 2:
+
+```json
+{"error": {"code": "UNSUPPORTED", "message": "restart --service is not supported yet; use: corgi stop --service api && corgi run --detach"}}
+```
+
+### Caveats
+
+- No daemon: a crashed detached service is detected lazily on the next
+  `ps`/`status`, not via a live notification.
+- Windows: detach and liveness checks are best-effort.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -80,27 +159,31 @@ In an editor, point the YAML language server at it with a top-of-file directive:
 
 ## Safe agent recipe
 
-`corgi run` is long-running and has no detach flag — background it. Probe with
-`status`/`ps`, never by re-running `run`.
+Use `corgi run --detach` — it returns immediately and the services outlive
+corgi. Probe with `status`/`ps`, never by re-running `run` (a second
+`run --detach` errors `ALREADY_RUNNING`). Tear down with `corgi stop`.
 
 ```bash
 # 1. preflight (exit 1 if a port is taken / docker down)
 corgi --json doctor
 
-# 2. launch in the background
-corgi run > /tmp/corgi.run.log 2>&1 &
+# 2. launch detached (writes corgi_services/.state.json, returns immediately)
+corgi --json run --detach
 
 # 3. block until every probed target is up (exit 1 on timeout)
 corgi status --ready --timeout 2m
 
-# 4. inspect declared targets / health as JSON
+# 4. inspect real status as JSON (running/crashed/stopped from state)
 corgi --json status
 corgi --json ps
 
-# 5. read a service's persisted logs (requires `corgi run --logs`)
+# 5. read a service's persisted logs (detach forces logs on)
 corgi logs --service api --idle 0
 
-# 6. tear down
+# 6. stop the stack (SIGTERM each group, removes the state file)
+corgi --json stop
+
+# 7. tear down volumes/containers
 corgi clean -i all
 ```
 
