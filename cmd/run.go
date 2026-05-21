@@ -20,6 +20,46 @@ import (
 
 var omitItems []string
 
+type runSummary struct {
+	Started []runSummaryItem `json:"started"`
+	Failed  []runSummaryItem `json:"failed"`
+}
+
+type runSummaryItem struct {
+	Name  string `json:"name"`
+	Kind  string `json:"kind"` // "service" | "db_service"
+	Port  int    `json:"port,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+// buildRunSummary lists what corgi attempts to launch, applying the same
+// per-item skip rules as the launcher (manualRun db_services and services
+// are excluded; manual services explicitly named in --services are kept).
+func buildRunSummary(corgi *utils.CorgiCompose) runSummary {
+	s := runSummary{Started: []runSummaryItem{}, Failed: []runSummaryItem{}}
+	for _, db := range corgi.DatabaseServices {
+		if db.ManualRun {
+			continue
+		}
+		s.Started = append(s.Started, runSummaryItem{
+			Name: db.ServiceName,
+			Kind: "db_service",
+			Port: db.Port,
+		})
+	}
+	for _, svc := range corgi.Services {
+		if shouldSkipManualRun(svc) {
+			continue
+		}
+		s.Started = append(s.Started, runSummaryItem{
+			Name: svc.ServiceName,
+			Kind: "service",
+			Port: svc.Port,
+		})
+	}
+	return s
+}
+
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:     "run",
@@ -255,11 +295,11 @@ func resolveHostFlag(cmd *cobra.Command) error {
 			return fmt.Errorf("auto-detect: %w", err)
 		}
 		utils.HostOverride = ip
-		fmt.Println(art.BlueColor, "🌐 --host auto resolved to", ip, art.WhiteColor)
+		utils.Info(art.BlueColor, "🌐 --host auto resolved to", ip, art.WhiteColor)
 		return nil
 	}
 	utils.HostOverride = raw
-	fmt.Println(art.BlueColor, "🌐 --host override:", raw, art.WhiteColor)
+	utils.Info(art.BlueColor, "🌐 --host override:", raw, art.WhiteColor)
 	return nil
 }
 
@@ -312,6 +352,9 @@ func runRun(cmd *cobra.Command, _ []string) {
 	CreateServices(corgi.Services)
 	if utils.ShutdownRequested() {
 		return
+	}
+	if utils.JSONOutput {
+		utils.PrintJSON(buildRunSummary(corgi))
 	}
 	startAllServices(corgi, cmd)
 }
@@ -400,7 +443,7 @@ func maybeHintNotifications() {
 
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
 	if !hasDatabaseToRun(databaseServices) {
-		fmt.Println("No database service to run")
+		utils.Info("No database service to run")
 		return
 	}
 
@@ -446,7 +489,7 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	if serviceIsRunning {
 		return
 	}
-	fmt.Println(art.BlueColor, "\n🤖 Starting database", dbService.ServiceName, art.WhiteColor)
+	utils.Info(art.BlueColor, "\n🤖 Starting database", dbService.ServiceName, art.WhiteColor)
 	if err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up"); err != nil {
 		fmt.Println("Starting service failed", err)
 	}
@@ -458,11 +501,11 @@ func shouldSkipManualRun(service utils.Service) bool {
 		return false
 	}
 	if len(utils.ServicesItemsFromFlag) == 0 {
-		fmt.Println(service.ServiceName, "is not run, because it should be run manually (manualRun)")
+		utils.Info(service.ServiceName, "is not run, because it should be run manually (manualRun)")
 		return true
 	}
 	if !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
-		fmt.Println(service.ServiceName, "is not run, because it should be added manually")
+		utils.Info(service.ServiceName, "is not run, because it should be added manually")
 		return true
 	}
 	return false
