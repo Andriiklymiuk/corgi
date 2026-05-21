@@ -13,6 +13,10 @@ import (
 
 var stopService string
 
+// stopSummaryToStderr routes the stop summary to stderr instead of stdout.
+// restart sets this so its --json stdout carries only the final run-state.
+var stopSummaryToStderr bool
+
 type stopFailure struct {
 	Name  string `json:"name"`
 	Error string `json:"error"`
@@ -56,7 +60,11 @@ func stopTargets(st utils.RunState, service string) []utils.RunStateEntry {
 
 func emitStopSummary(s stopSummary) {
 	if utils.JSONOutput {
-		utils.PrintJSON(s)
+		if stopSummaryToStderr {
+			utils.PrintJSONTo(os.Stderr, s)
+		} else {
+			utils.PrintJSON(s)
+		}
 		return
 	}
 	if len(s.Stopped) == 0 && len(s.Failed) == 0 {
