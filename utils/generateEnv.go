@@ -550,6 +550,49 @@ func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 	return envForService
 }
 
+// ComputeEnvKeysForService returns the env var KEYS corgi would generate for the
+// service (from depends_on_services, depends_on_db, port, and environment
+// entries), in generation order with duplicates removed. Pure: no file I/O,
+// no cross-service resolution. It builds the same env body as the writer
+// (buildServiceEnvBody) via the shared handle* helpers, then extracts the keys,
+// so the key set always matches what GenerateEnvForService writes.
+func ComputeEnvKeysForService(svc Service, corgi *CorgiCompose) []string {
+	if corgi == nil || svc.IgnoreEnv {
+		return []string{}
+	}
+
+	var body string
+	body += handleDependentServices(svc, *corgi)
+	body += handleDependsOnDb(svc, *corgi)
+	if svc.Port != 0 {
+		portAlias := "PORT"
+		if svc.PortAlias != "" {
+			portAlias = svc.PortAlias
+		}
+		body += fmt.Sprintf("\n%s=%d", portAlias, svc.Port)
+	}
+	for _, line := range svc.Environment {
+		// Keep the left-of-= verbatim; only the KEY matters here.
+		body += "\n" + line
+	}
+
+	keys := []string{}
+	seen := map[string]bool{}
+	for _, line := range strings.Split(body, "\n") {
+		idx := strings.Index(line, "=")
+		if idx <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 func resolveCopyEnvPath(service Service, copyEnvFilePath string) string {
 	if copyEnvFilePath != "" {
 		return copyEnvFilePath

@@ -229,6 +229,15 @@ even ones without an explicit condition:. By default only edges that set
 condition: ready|started are gated; without this flag (and without
 condition:) services start in parallel as before.`,
 	)
+	runCmd.PersistentFlags().Bool(
+		"dry-run",
+		false,
+		`Compute and print the start plan without any side effects: no make up,
+no git clone, no process spawn, no .env writes. Runs validation first, then
+reports the resolved start order and each service's port, dependencies,
+generated env keys, and whether it would be cloned. Pair with --json for a
+machine-readable plan. Exit 0 if valid, 1 if validation finds errors.`,
+	)
 	runCmd.PersistentFlags().Duration(
 		"ready-timeout",
 		60*time.Second,
@@ -426,6 +435,12 @@ func runRun(cmd *cobra.Command, _ []string) {
 			return
 		}
 		os.Exit(1)
+	}
+
+	// --dry-run branches before any side effect (clone, clean, preflight,
+	// db create, env writes, detach, spawn). Plan only, then exit.
+	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
+		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi)))
 	}
 
 	if CheckClonedReposExistence(corgi.Services) {
