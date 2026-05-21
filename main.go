@@ -21,7 +21,7 @@ func main() {
 		cmd.Execute()
 
 		canRunCli := canRunCliAgain()
-		if !canRunCli {
+		if !canRunCli || !shouldPromptToContinue(utils.NonInteractive) {
 			showFinalMessage()
 			return
 		}
@@ -48,6 +48,10 @@ func showFinalMessage() {
 		return
 	}
 	utils.PrintFinalMessage()
+}
+
+func shouldPromptToContinue(nonInteractive bool) bool {
+	return !nonInteractive
 }
 
 func canRunCliAgain() bool {
