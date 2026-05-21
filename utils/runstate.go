@@ -52,6 +52,44 @@ func WriteRunState(path string, s RunState) error {
 	return os.Rename(tmp, path)
 }
 
+// ReconcileRunState re-checks liveness and flips statuses. pidAlive verifies a
+// service pid still belongs to our process; containerState maps a db container
+// name to "running"/"stopped"/"" (unknown). statusChangedAt updates only on a
+// real status change.
+func ReconcileRunState(
+	s RunState,
+	pidAlive func(pid int, command string) bool,
+	containerState func(name string) string,
+) RunState {
+	now := time.Now().UTC()
+	for i := range s.Services {
+		e := &s.Services[i]
+		newStatus := "running"
+		if !pidAlive(e.PID, e.Command) {
+			newStatus = "crashed"
+		}
+		if newStatus != e.Status {
+			e.Status = newStatus
+			e.StatusChangedAt = now
+		}
+	}
+	for i := range s.DBServices {
+		e := &s.DBServices[i]
+		newStatus := e.Status
+		switch containerState(e.Container) {
+		case "running":
+			newStatus = "running"
+		case "stopped":
+			newStatus = "stopped"
+		}
+		if newStatus != e.Status {
+			e.Status = newStatus
+			e.StatusChangedAt = now
+		}
+	}
+	return s
+}
+
 // ReadRunState reads and parses the state file.
 func ReadRunState(path string) (RunState, error) {
 	var s RunState
