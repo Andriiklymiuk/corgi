@@ -31,3 +31,6 @@ corgi_services/db_services
 corgi-compose*.yml
 .env*
 corgi_services/*
+
+# local planning docs (not tracked)
+docs/plans/
