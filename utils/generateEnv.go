@@ -554,8 +554,10 @@ func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 // service (from depends_on_services, depends_on_db, port, and environment
 // entries), in generation order with duplicates removed. Pure: no file I/O,
 // no cross-service resolution. It builds the same env body as the writer
-// (buildServiceEnvBody) via the shared handle* helpers, then extracts the keys,
-// so the key set always matches what GenerateEnvForService writes.
+// (buildServiceEnvBody) via the shared handle* helpers, then extracts the keys.
+// Keys match GenerateEnvForService for the common case; two writer-only paths
+// are not modeled: keys pulled in via copyEnvFromFilePath (needs file I/O), and
+// environment lines the writer drops when a cross-service producer is skipped.
 func ComputeEnvKeysForService(svc Service, corgi *CorgiCompose) []string {
 	if corgi == nil || svc.IgnoreEnv {
 		return []string{}
