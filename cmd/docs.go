@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	docsRowFmt    = "%s\t%s\t%s\t%s"
-	docsBlankRow  = "\t\t\t"
+	docsRowFmt   = "%s\t%s\t%s\t%s"
+	docsBlankRow = "\t\t\t"
 )
 
 // docsCmd represents the docs command
@@ -164,6 +164,12 @@ var serviceItems = []CorgiComposeItems{
 		itemType:    "string",
 		description: "Optional HTTP path used by `corgi status`.\n\t\t\tIf set, status probes GET http://localhost:<port><healthCheck> and accepts any non-5xx response as healthy.\n\t\t\tIf unset, status falls back to a raw TCP connect on the port.",
 	},
+	{
+		item:        "profiles",
+		example:     "- backend\n\t- full",
+		itemType:    "[]string",
+		description: "Run profiles this service belongs to.\n\t\t\t`corgi run --profile backend` runs only members of that profile plus their depends_on closure.\n\t\t\tA service with no profiles runs only when no --profile is passed (docker-compose behavior).",
+	},
 }
 
 var dbServiceItems = []CorgiComposeItems{
@@ -292,6 +298,12 @@ var dbServiceItems = []CorgiComposeItems{
 		example:     "/health",
 		itemType:    "string",
 		description: "Optional HTTP path used by `corgi status`.\n\t\t\tIf set, status probes GET http://localhost:<port><healthCheck> and accepts any non-5xx response as healthy.\n\t\t\tIf unset, status falls back to a raw TCP connect on the port.\n\t\t\tThe localstack driver defaults to /_localstack/health if not overridden.",
+	},
+	{
+		item:        "profiles",
+		example:     "- backend\n\t- full",
+		itemType:    "[]string",
+		description: "Run profiles this db_service belongs to.\n\t\t\tA db_service with no profiles runs only when no --profile is passed, or when a selected service depends_on_db it.",
 	},
 }
 

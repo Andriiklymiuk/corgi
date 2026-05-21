@@ -16,6 +16,7 @@ const (
 	ErrUnhealthy        = "E_UNHEALTHY"
 	ErrReadinessTimeout = "E_READINESS_TIMEOUT"
 	ErrDockerDown       = "E_DOCKER_DOWN"
-	ErrUsage            = "E_USAGE"       // invalid command usage / args
-	ErrExecFailed       = "E_EXEC_FAILED" // command failed to spawn
+	ErrUsage            = "E_USAGE"           // invalid command usage / args
+	ErrExecFailed       = "E_EXEC_FAILED"     // command failed to spawn
+	ErrUnknownProfile   = "E_UNKNOWN_PROFILE" // --profile matched no services/db_services
 )

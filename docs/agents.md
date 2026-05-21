@@ -146,6 +146,7 @@ message text (messages may change wording). The catalog:
 | `E_DOCKER_DOWN` | the docker daemon is unreachable | start Docker |
 | `E_USAGE` | invalid command usage / arguments | fix the command invocation |
 | `E_EXEC_FAILED` | the command could not be spawned | check the binary exists / path |
+| `E_UNKNOWN_PROFILE` | `run --profile` matched no services/db_services | check the profile name against the compose `profiles:` lists |
 
 Note: the `E_INTERACTIVE_REQUIRED` code was previously emitted as `INPUT_REQUIRED`.
 A few command-specific codes also exist outside this catalog: `ALREADY_RUNNING`

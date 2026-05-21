@@ -80,6 +80,11 @@ type DatabaseService struct {
 	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
 	// If unset, status falls back to a TCP connect on the port.
 	HealthCheck string `yaml:"healthCheck,omitempty"`
+
+	// Profiles names the run profiles this db_service belongs to. With
+	// `corgi run --profile P` only members of P (plus depends_on closure) run.
+	// A db_service with no profiles runs only when no --profile is passed.
+	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 }
 
 // KnownDrivers is the set of valid db_services.driver values, derived from the
@@ -231,6 +236,11 @@ type Service struct {
 	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
 	// If unset, status falls back to a TCP connect on the port.
 	HealthCheck string `yaml:"healthCheck,omitempty"`
+
+	// Profiles names the run profiles this service belongs to. With
+	// `corgi run --profile P` only members of P (plus depends_on closure) run.
+	// A service with no profiles runs only when no --profile is passed.
+	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 
 	AbsolutePath string
 }
@@ -460,6 +470,7 @@ func buildDatabaseService(indexName string, db DatabaseService) (DatabaseService
 		Volumes:           db.Volumes,
 		Command:           db.Command,
 		HealthCheck:       db.HealthCheck,
+		Profiles:          db.Profiles,
 	}, nil
 }
 
@@ -545,6 +556,7 @@ func buildService(indexName string, service Service) Service {
 		Runner:              service.Runner,
 		Tunnel:              service.Tunnel,
 		HealthCheck:         service.HealthCheck,
+		Profiles:            service.Profiles,
 	}
 }
 
