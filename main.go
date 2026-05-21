@@ -85,6 +85,7 @@ func canShowWelcomeMessages() bool {
 			arg == "__completeNoDesc" ||
 			arg == "--silent" ||
 			arg == "--ci" ||
+			arg == "--json" ||
 			arg == "--version" ||
 			arg == "-v" ||
 			arg == "-h" ||
