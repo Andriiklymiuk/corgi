@@ -103,6 +103,66 @@ func TestMCPPlanParity(t *testing.T) {
 	}
 }
 
+// mcpComposeWithProfiles has services tagged with profiles and a db pulled in
+// transitively by the backend service.
+const mcpComposeWithProfiles = `name: mcp-profiles
+db_services:
+  pg:
+    driver: postgres
+    port: 5432
+    user: u
+    password: p
+    databaseName: d
+services:
+  api:
+    port: 3000
+    profiles:
+      - backend
+    start:
+      - go run .
+    depends_on_db:
+      - name: pg
+  web:
+    port: 3001
+    profiles:
+      - frontend
+    start:
+      - npm start
+`
+
+func TestMCPPlanProfileParity(t *testing.T) {
+	chdirToTempCompose(t, mcpComposeWithProfiles)
+
+	const profile = "backend"
+
+	got, err := mcpPlan(planArgs{Profile: profile})
+	if err != nil {
+		t.Fatalf("mcpPlan: %v", err)
+	}
+
+	// Parity: same plan the CLI's `run --profile backend --dry-run` produces,
+	// i.e. computeDryRunPlan over the profile-narrowed compose.
+	corgi, err := loadComposeForMCP("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	filterByProfile(corgi, profile)
+	want := computeDryRunPlan(corgi)
+
+	gotJSON, _ := json.Marshal(got)
+	wantJSON, _ := json.Marshal(want)
+	if !reflect.DeepEqual(gotJSON, wantJSON) {
+		t.Errorf("profile plan mismatch:\n got=%s\nwant=%s", gotJSON, wantJSON)
+	}
+
+	// Sanity: the backend profile must narrow out the frontend-only service.
+	for _, s := range corgi.Services {
+		if s.ServiceName == "web" {
+			t.Errorf("expected web (frontend) to be excluded by backend profile, plan covered %d services", len(corgi.Services))
+		}
+	}
+}
+
 func TestMCPSchemaMatches(t *testing.T) {
 	if mcpSchema() != utils.ComposeJSONSchema() {
 		t.Error("corgi_schema does not return ComposeJSONSchema()")
