@@ -203,7 +203,7 @@ func RunServiceCmd(
 }
 
 func executeShellLine(serviceName, finalCommand, path string, interactive bool, resolvedEnvFile string, envFile []string) error {
-	fmt.Printf("\n🚀 🤖 Executing command for %s:  %s%s%s\n", serviceName, art.GreenColor, finalCommand, art.WhiteColor)
+	Infof("\n🚀 🤖 Executing command for %s:  %s%s%s\n", serviceName, art.GreenColor, finalCommand, art.WhiteColor)
 	commandSlice := strings.Fields(finalCommand)
 	if len(commandSlice) == 0 {
 		return nil
@@ -233,10 +233,10 @@ func runInteractive(cmd *exec.Cmd) error {
 
 func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand, path string, envFile []string) error {
 	if lw := getLogWriter(serviceName); lw != nil {
-		cmd.Stdout = io.MultiWriter(os.Stdout, lw)
+		cmd.Stdout = io.MultiWriter(ConsoleOut(), lw)
 		cmd.Stderr = io.MultiWriter(os.Stderr, lw)
 	} else {
-		cmd.Stdout = os.Stdout
+		cmd.Stdout = ConsoleOut()
 		cmd.Stderr = os.Stderr
 	}
 	SetProcessGroup(cmd)

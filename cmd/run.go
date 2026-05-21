@@ -403,7 +403,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 
 	for _, service := range corgi.Services {
 		if service.AfterStart != nil && !omitServiceCmd("afterStart") {
-			fmt.Println("\nAfter start commands:")
+			utils.Info("\nAfter start commands:")
 			utils.RunCleanupCommands(
 				"afterStart",
 				service.ServiceName,
@@ -528,14 +528,14 @@ func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 
 func startServiceProcess(service utils.Service) {
 	if service.Runner.Name == "docker" && service.Port != 0 {
-		fmt.Println(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
+		utils.Info(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
 		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up"); err != nil {
 			fmt.Println("Starting service failed", err)
 		}
 		return
 	}
 	if service.Start != nil {
-		fmt.Println("\nStart commands:")
+		utils.Info("\nStart commands:")
 		utils.RunServiceCommands(
 			"start",
 			service.ServiceName,
@@ -559,10 +559,10 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 
 	runServicePullIfRequested(cobraCmd, service)
 
-	fmt.Println(art.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, art.WhiteColor)
+	utils.Info(art.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, art.WhiteColor)
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
-		fmt.Println("\nBefore start commands:")
+		utils.Info("\nBefore start commands:")
 		utils.RunServiceCommands(
 			"beforeStart",
 			service.ServiceName,

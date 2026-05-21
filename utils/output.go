@@ -24,3 +24,12 @@ func Info(a ...any) {
 func Infof(format string, a ...any) {
 	fmt.Fprintf(infoWriter(), format, a...)
 }
+
+// ConsoleOut is the stream for streamed/live process output: stderr in JSON
+// mode (so stdout stays the pure JSON payload), stdout otherwise.
+func ConsoleOut() *os.File {
+	if JSONOutput {
+		return os.Stderr
+	}
+	return os.Stdout
+}
