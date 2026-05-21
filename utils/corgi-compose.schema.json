@@ -1,0 +1,244 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Andriiklymiuk/corgi/corgi-compose.schema.json",
+  "title": "corgi-compose.yml",
+  "description": "Schema for corgi-compose.yml, the configuration file for the corgi CLI (databases, services and required tools spun up from one file).",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of this corgi project."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of what this corgi project sets up."
+    },
+    "useDocker": {
+      "type": "boolean",
+      "description": "Run supported pieces via Docker."
+    },
+    "useAwsVpn": {
+      "type": "boolean",
+      "description": "Enable AWS VPN handling."
+    },
+    "init": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Top-level commands run once during corgi init."
+    },
+    "beforeStart": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Top-level commands run consecutively before services start."
+    },
+    "start": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Top-level commands run in parallel on start."
+    },
+    "afterStart": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Top-level commands run consecutively after the CLI exits."
+    },
+    "services": {
+      "type": "object",
+      "description": "Map of service name to its definition.",
+      "additionalProperties": { "$ref": "#/definitions/service" }
+    },
+    "db_services": {
+      "type": "object",
+      "description": "Map of database service name to its definition.",
+      "additionalProperties": { "$ref": "#/definitions/databaseService" }
+    },
+    "required": {
+      "type": "object",
+      "description": "Map of required tool name to its definition.",
+      "additionalProperties": { "$ref": "#/definitions/required" }
+    }
+  },
+  "definitions": {
+    "service": {
+      "type": "object",
+      "description": "A runnable service (local path or cloned repo).",
+      "additionalProperties": true,
+      "properties": {
+        "service_name": { "type": "string", "description": "Override name (normally the map key is used)." },
+        "path": { "type": "string", "description": "Path to the project repo. Defaults to the corgi-compose.yml directory.", "examples": ["./path/to/repo"] },
+        "ignore_env": { "type": "boolean", "description": "If true, corgi does not touch the service's env file." },
+        "manualRun": { "type": "boolean", "description": "If true, only runs when explicitly passed via --services." },
+        "cloneFrom": { "type": "string", "description": "Git URL to clone the service from.", "examples": ["git@github.com:Andriiklymiuk/corgi.git"] },
+        "branch": { "type": "string", "description": "Git branch to check out after cloning." },
+        "environment": { "type": "array", "items": { "type": "string" }, "description": "Env vars copied into the service env file.", "examples": [["YOUR_ENV=dev"]] },
+        "envPath": { "type": "string", "description": "Path to the .env file in the target repo. Defaults to .env." },
+        "copyEnvFromFilePath": { "type": "string", "description": "Path to an .env whose content is copied into the service .env." },
+        "localhostNameInEnv": { "type": "string", "description": "Localhost name used in the env file. Defaults to localhost." },
+        "port": { "type": "integer", "description": "Service port added to the env file.", "examples": [5432] },
+        "portAlias": { "type": "string", "description": "Env var name for the port. Defaults to PORT." },
+        "depends_on_services": { "type": "array", "items": { "$ref": "#/definitions/dependsOnService" }, "description": "Other services this service depends on." },
+        "depends_on_db": { "type": "array", "items": { "$ref": "#/definitions/dependsOnDb" }, "description": "Database services this service depends on." },
+        "exports": { "type": "array", "items": { "type": "string" }, "description": "Whitelist of env vars exported to dependents." },
+        "beforeStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively before start." },
+        "start": { "type": "array", "items": { "type": "string" }, "description": "Commands run in parallel for the service." },
+        "afterStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively when the CLI exits." },
+        "scripts": { "type": "array", "items": { "$ref": "#/definitions/script" }, "description": "Named scripts available for the service." },
+        "interactiveInput": { "type": "boolean", "description": "Allow interactive stdin for this service." },
+        "autoSourceEnv": { "type": "boolean", "description": "Toggle the auto `set -a; . <env>; set +a` prefix. Default on." },
+        "runner": { "$ref": "#/definitions/runner", "description": "Runner config (e.g. docker)." },
+        "tunnel": { "$ref": "#/definitions/tunnel", "description": "Optional public HTTPS tunnel config." },
+        "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset.", "examples": ["/health"] }
+      }
+    },
+    "databaseService": {
+      "type": "object",
+      "description": "A database or backing service (postgres, redis, localstack, supabase, image, ...).",
+      "additionalProperties": true,
+      "properties": {
+        "service_name": { "type": "string", "description": "Override name (normally the map key is used)." },
+        "driver": { "type": "string", "description": "Database/backing-service driver. Defaults to postgres.", "examples": ["postgres", "redis", "localstack", "supabase", "image"] },
+        "version": { "type": "string", "description": "Driver/image version. Defaults to latest." },
+        "host": { "type": "string", "description": "Host used for DB_HOST. Defaults to localhost." },
+        "user": { "type": "string", "description": "User used for DB_USER." },
+        "password": { "type": "string", "description": "Password used for DB_PASSWORD." },
+        "databaseName": { "type": "string", "description": "Database name used for DB_NAME." },
+        "port": { "type": "integer", "description": "Port used for DB_PORT.", "examples": [5432] },
+        "port2": { "type": "integer", "description": "Secondary port for drivers that expose two." },
+        "manualRun": { "type": "boolean", "description": "If true, only runs when explicitly passed via --dbServices." },
+        "seedFromDbEnvPath": { "type": "string", "description": "Path to an .env with source DB credentials to seed from." },
+        "seedFromFilePath": { "type": "string", "description": "Path to a dump.sql file to seed from." },
+        "seedFromDb": { "$ref": "#/definitions/seedFromDb", "description": "Inline source DB credentials to seed from." },
+        "additional": { "$ref": "#/definitions/additionalDatabaseConfig", "description": "Driver-specific extra config." },
+        "services": { "type": "array", "items": { "type": "string" }, "description": "localstack driver: AWS services to enable.", "examples": [["sqs", "s3"]] },
+        "queues": { "type": "array", "items": { "type": "string" }, "description": "localstack driver: SQS queues to auto-create." },
+        "buckets": { "type": "array", "items": { "type": "string" }, "description": "localstack/supabase: buckets to auto-create." },
+        "topics": { "type": "array", "items": { "type": "string" }, "description": "localstack driver: SNS topics to auto-create." },
+        "subscriptions": { "type": "array", "items": { "$ref": "#/definitions/snsSubscription" }, "description": "localstack driver: SNS topic to SQS queue wiring." },
+        "secrets": { "type": "array", "items": { "$ref": "#/definitions/awsSecret" }, "description": "localstack driver: Secrets Manager entries." },
+        "parameters": { "type": "array", "items": { "$ref": "#/definitions/ssmParameter" }, "description": "localstack driver: SSM Parameter Store entries." },
+        "streams": { "type": "array", "items": { "type": "string" }, "description": "localstack driver: Kinesis streams." },
+        "jwtSecret": { "type": "string", "description": "supabase driver: override the stock JWT secret." },
+        "authUsers": { "type": "array", "items": { "$ref": "#/definitions/supabaseAuthUser" }, "description": "supabase driver: auth users to seed on up." },
+        "configTomlPath": { "type": "string", "description": "supabase driver: path to a config.toml copied on each init." },
+        "studioPort": { "type": "integer", "description": "supabase driver: override [studio].port." },
+        "inbucketPort": { "type": "integer", "description": "supabase driver: override [inbucket].port." },
+        "dbPort": { "type": "integer", "description": "supabase driver: override [db].port." },
+        "image": { "type": "string", "description": "image driver: Docker image reference.", "examples": ["gotenberg/gotenberg:8"] },
+        "containerPort": { "type": "integer", "description": "image driver: container internal port. Defaults to port." },
+        "environment": { "type": "array", "items": { "type": "string" }, "description": "image driver: docker-compose environment entries." },
+        "volumes": { "type": "array", "items": { "type": "string" }, "description": "image driver: docker-compose volume mappings." },
+        "command": { "type": "array", "items": { "type": "string" }, "description": "image driver: override container entrypoint args." },
+        "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset.", "examples": ["/health"] }
+      }
+    },
+    "required": {
+      "type": "object",
+      "description": "A required tool that corgi checks for (and can install).",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Override name (normally the map key is used)." },
+        "why": { "type": "array", "items": { "type": "string" }, "description": "Reasons this tool is needed." },
+        "install": { "type": "array", "items": { "type": "string" }, "description": "Install commands run if the tool is missing." },
+        "optional": { "type": "boolean", "description": "If true, prompt before installing. Default false." },
+        "checkCmd": { "type": "string", "description": "Command used to check if the tool is installed. Defaults to the name.", "examples": ["docker -v"] }
+      }
+    },
+    "dependsOnService": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Name of the service depended on." },
+        "envAlias": { "type": "string", "description": "Prefix used for the injected env var." },
+        "suffix": { "type": "string", "description": "Suffix appended to the resolved value." },
+        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." }
+      }
+    },
+    "dependsOnDb": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Name of the db_service depended on." },
+        "envAlias": { "type": "string", "description": "Prefix added before injected DB_ credentials." },
+        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." }
+      }
+    },
+    "script": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Script name." },
+        "manualRun": { "type": "boolean", "description": "If true, the script is only run on demand." },
+        "commands": { "type": "array", "items": { "type": "string" }, "description": "Commands run by the script." },
+        "copyEnvFromFilePath": { "type": "string", "description": "Path to an .env to source for the script." }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Runner name (empty = native, docker = run in Docker).", "examples": ["docker"] }
+      }
+    },
+    "tunnel": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "provider": { "type": "string", "description": "Tunnel provider. Defaults to cloudflared.", "examples": ["cloudflared", "ngrok", "localtunnel"] },
+        "hostname": { "type": "string", "description": "Public URL. Required when the tunnel block is present.", "examples": ["api.dev.example.com"] },
+        "name": { "type": "string", "description": "cloudflared named tunnel (ignored for ngrok)." }
+      }
+    },
+    "seedFromDb": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "host": { "type": "string" },
+        "databaseName": { "type": "string" },
+        "user": { "type": "string" },
+        "password": { "type": "string" },
+        "port": { "type": "integer" }
+      }
+    },
+    "additionalDatabaseConfig": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "definitionPath": { "type": "string", "description": "Path to a driver definition file (e.g. RabbitMQ definitions JSON)." }
+      }
+    },
+    "snsSubscription": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "topic": { "type": "string", "description": "SNS topic name." },
+        "queue": { "type": "string", "description": "SQS queue name subscribed to the topic." }
+      }
+    },
+    "awsSecret": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Secret name." },
+        "value": { "type": "string", "description": "Secret value." }
+      }
+    },
+    "ssmParameter": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Parameter name." },
+        "value": { "type": "string", "description": "Parameter value." },
+        "type": { "type": "string", "description": "Parameter type.", "examples": ["String", "StringList", "SecureString"] }
+      }
+    },
+    "supabaseAuthUser": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "email": { "type": "string", "description": "User email." },
+        "password": { "type": "string", "description": "User password." },
+        "metadata": { "type": "object", "description": "Map serialized to JSON for user_metadata." }
+      }
+    }
+  }
+}

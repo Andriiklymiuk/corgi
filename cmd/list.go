@@ -12,6 +12,20 @@ import (
 
 var cleanList bool
 
+type listEntry struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Path        string `json:"path"`
+}
+
+func toListEntries(paths []utils.CorgiExecPath) []listEntry {
+	entries := make([]listEntry, 0, len(paths))
+	for _, ep := range paths {
+		entries = append(entries, listEntry{Name: ep.Name, Description: ep.Description, Path: ep.Path})
+	}
+	return entries
+}
+
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all executed corgi-compose paths",
@@ -27,35 +41,41 @@ func init() {
 func listRun(cmd *cobra.Command, args []string) {
 	if cleanList {
 		if err := utils.ClearExecPaths(); err != nil {
-			fmt.Printf("Error clearing executed paths: %s\n", err)
+			utils.Infof("Error clearing executed paths: %s\n", err)
 			return
 		}
-		fmt.Println("All executed paths have been cleared.")
+		utils.Info("All executed paths have been cleared.")
 		return
 	}
 
+	useSpinner := !utils.CIMode && !utils.JSONOutput
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	if !utils.CIMode {
+	if useSpinner {
 		s.Start()
 	}
 	defer func() {
-		if !utils.CIMode {
+		if useSpinner {
 			s.Stop()
 		}
 	}()
 
 	paths, err := utils.ListExecPaths()
 	if err != nil {
-		fmt.Printf("Error retrieving executed paths: %s\n", err)
+		utils.Infof("Error retrieving executed paths: %s\n", err)
 		return
 	}
 
-	if !utils.CIMode {
+	if useSpinner {
 		s.Stop()
 	}
 
+	if utils.JSONOutput {
+		utils.PrintJSON(toListEntries(paths))
+		return
+	}
+
 	if len(paths) == 0 {
-		fmt.Println("No executed global corgi paths found.")
+		utils.Info("No executed global corgi paths found.")
 		return
 	}
 
