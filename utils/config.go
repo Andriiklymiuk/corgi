@@ -274,7 +274,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	corgi := buildBaseCorgi(corgiYaml)
 
 	if err := SaveExecPath(corgi.Name, corgi.Description, pathToCorgiComposeFile); err != nil {
-		fmt.Println("failed to save corgi-compose file path: ", err)
+		Info("failed to save corgi-compose file path: ", err)
 	}
 
 	dbServices, err := parseDatabaseServices(corgiYaml.DatabaseServices, describeFlag)
@@ -633,9 +633,9 @@ func getDbSourceFromPath(path string) SeedFromDb {
 func describeServiceInfo(service any) {
 	data, err := json.MarshalIndent(service, "", "\t")
 	if err != nil {
-		fmt.Println(err)
+		Info(err)
 	} else {
-		fmt.Println(string(data))
+		Info(string(data))
 	}
 }
 
