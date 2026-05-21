@@ -5,9 +5,6 @@ import (
 	"strings"
 )
 
-// ContainerRunning probes a container by exact name via docker inspect,
-// returning "running", "stopped", or "" when the state is unknown (no such
-// container, docker unavailable, etc.).
 func ContainerRunning(name string) string {
 	if name == "" {
 		return ""

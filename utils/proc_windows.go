@@ -23,8 +23,6 @@ func KillProcessGroup(pid int) error {
 	return process.Kill()
 }
 
-// SignalProcessGroup is best-effort on Windows: there is no process-group
-// signalling, so it kills the single process regardless of sig.
 func SignalProcessGroup(pgid int, sig syscall.Signal) error {
 	process, err := os.FindProcess(pgid)
 	if err != nil {

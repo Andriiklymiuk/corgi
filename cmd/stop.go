@@ -13,8 +13,6 @@ import (
 
 var stopService string
 
-// stopSummaryToStderr routes the stop summary to stderr instead of stdout.
-// restart sets this so its --json stdout carries only the final run-state.
 var stopSummaryToStderr bool
 
 type stopFailure struct {
@@ -43,8 +41,6 @@ func init() {
 	stopCmd.Flags().StringVar(&stopService, "service", "", "Stop only this service (leave others running)")
 }
 
-// stopTargets returns the service entries to stop: all of them when service is
-// empty, otherwise just the one matching by name (services or db_services).
 func stopTargets(st utils.RunState, service string) []utils.RunStateEntry {
 	all := append(append([]utils.RunStateEntry{}, st.Services...), st.DBServices...)
 	if service == "" {
@@ -145,8 +141,6 @@ func runStop(cmd *cobra.Command, _ []string) {
 	}
 }
 
-// stopProcessGroup SIGTERMs the entry's process group, then SIGKILLs after a
-// short grace if the pid is still alive.
 func stopProcessGroup(e utils.RunStateEntry) error {
 	pgid := e.PGID
 	if pgid == 0 {

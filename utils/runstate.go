@@ -9,14 +9,14 @@ import (
 
 type RunStateEntry struct {
 	Name            string    `json:"name"`
-	Kind            string    `json:"kind"` // "service" | "db_service"
+	Kind            string    `json:"kind"`
 	PID             int       `json:"pid,omitempty"`
 	PGID            int       `json:"pgid,omitempty"`
 	Port            int       `json:"port,omitempty"`
 	Container       string    `json:"container,omitempty"`
 	Command         string    `json:"command,omitempty"`
 	LogFile         string    `json:"logFile,omitempty"`
-	Status          string    `json:"status"` // running | stopped | crashed | unknown
+	Status          string    `json:"status"`
 	StartedAt       time.Time `json:"startedAt,omitempty"`
 	StatusChangedAt time.Time `json:"statusChangedAt,omitempty"`
 	ExitCode        *int      `json:"exitCode,omitempty"`
@@ -30,12 +30,10 @@ type RunState struct {
 	DBServices  []RunStateEntry `json:"dbServices"`
 }
 
-// RunStatePath returns the state-file path for the project rooted at composeDir.
 func RunStatePath(composeDir string) string {
 	return filepath.Join(composeDir, "corgi_services", ".state.json")
 }
 
-// WriteRunState writes s atomically (temp + rename).
 func WriteRunState(path string, s RunState) error {
 	s.UpdatedAt = time.Now().UTC()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -52,10 +50,6 @@ func WriteRunState(path string, s RunState) error {
 	return os.Rename(tmp, path)
 }
 
-// ReconcileRunState re-checks liveness and flips statuses. pidAlive verifies a
-// service pid still belongs to our process; containerState maps a db container
-// name to "running"/"stopped"/"" (unknown). statusChangedAt updates only on a
-// real status change.
 func ReconcileRunState(
 	s RunState,
 	pidAlive func(pid int, command string) bool,
@@ -90,7 +84,6 @@ func ReconcileRunState(
 	return s
 }
 
-// ReadRunState reads and parses the state file.
 func ReadRunState(path string) (RunState, error) {
 	var s RunState
 	data, err := os.ReadFile(path)

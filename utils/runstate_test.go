@@ -39,7 +39,7 @@ func TestReconcileMarksCrashed(t *testing.T) {
 		{Name: "api", Kind: "service", PID: 1, Status: "running"},
 		{Name: "web", Kind: "service", PID: 2, Status: "running"},
 	}}
-	alive := func(pid int, command string) bool { return pid == 1 } // web (pid 2) dead
+	alive := func(pid int, command string) bool { return pid == 1 }
 	container := func(name string) string { return "" }
 	out := ReconcileRunState(s, alive, container)
 	if out.Services[0].Status != "running" {

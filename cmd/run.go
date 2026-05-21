@@ -69,8 +69,6 @@ type detachedProc struct {
 	pgid    int
 }
 
-// buildDetachState turns spawned detached procs and started db_services into a
-// RunState ready to persist. Pure: no I/O, unit-testable.
 func buildDetachState(composePath string, procs []detachedProc, dbs []utils.RunStateEntry) utils.RunState {
 	now := time.Now().UTC()
 	services := make([]utils.RunStateEntry, 0, len(procs))
@@ -386,8 +384,6 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	detach, _ := cmd.Flags().GetBool("detach")
 
-	// A detached run spawns and exits, so it neither watches the compose file
-	// nor handles signals — skip both (the watcher also prints to stdout).
 	if !detach {
 		stopSignalHandler := installSignalHandler(cmd)
 		defer stopSignalHandler()
@@ -433,9 +429,6 @@ func runRun(cmd *cobra.Command, _ []string) {
 	startAllServices(corgi, cmd)
 }
 
-// runDetached spawns each non-skipped service as a detached process group,
-// persists run-state, prints a startup summary, and returns. Reuses the
-// preflight/db/env/beforeStart work already done by runRun.
 func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
 	force, _ := cmd.Flags().GetBool("force")
@@ -463,9 +456,6 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	}
 }
 
-// detachAlreadyRunning returns true (caller should stop) when a live run-state
-// already has a running service and --force was not passed. With --force it
-// removes the stale state file and returns false.
 func detachAlreadyRunning(statePath string, force bool) bool {
 	if _, err := os.Stat(statePath); err != nil {
 		return false
@@ -476,8 +466,6 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 	}
 	prev = utils.ReconcileRunState(prev, utils.PidAlive, utils.ContainerRunning)
 	if force {
-		// Kill the tracked processes before dropping their state, so a forced
-		// restart doesn't leave the previous run orphaned and untrackable.
 		for _, s := range prev.Services {
 			if s.Status == "running" {
 				_ = stopProcessGroup(s)

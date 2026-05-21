@@ -139,8 +139,6 @@ func getLogWriter(serviceName string) io.Writer {
 	return ServiceLogWriters[serviceName]
 }
 
-// LogFilePath returns the on-disk log path for a service when --logs is on,
-// or "" when no writer is registered.
 func LogFilePath(serviceName string) string {
 	w := getLogWriter(serviceName)
 	if p, ok := w.(interface{ Path() string }); ok {
@@ -268,10 +266,6 @@ func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand,
 	return nil
 }
 
-// StartDetached starts a service command in its own process group WITHOUT
-// waiting, so it survives corgi exiting. stdout/stderr go to the service's
-// --logs writer when registered. Returns the started *os.Process. Sibling of
-// runManaged — does not Wait, does not track crashes.
 func StartDetached(serviceName, command, path string, envFile ...string) (*os.Process, error) {
 	resolvedEnvFile := resolveEnvFile(path, envFile)
 	shellCommand := withEnvSource(command, resolvedEnvFile)
