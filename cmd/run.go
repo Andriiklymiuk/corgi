@@ -251,18 +251,23 @@ machine-readable plan. Exit 0 if valid, 1 if validation finds errors.`,
 	)
 	runCmd.PersistentFlags().Duration(
 		"ready-timeout",
-		60*time.Second,
+		defaultReadyTimeout,
 		`Max time to wait for a database or dependency service to become ready
 before proceeding anyway (non-fatal). Applies to readiness gating and the
 database readiness probe.`,
 	)
 }
 
+// defaultReadyTimeout bounds how long corgi waits for a database or dependency
+// service to become reachable before proceeding anyway (non-fatal). Shared by
+// run, exec, test, and the mcp server.
+const defaultReadyTimeout = 15 * time.Second
+
 // gateDepsFlag and readyTimeout hold the resolved values of --gate-deps and
 // --ready-timeout for the current run, set by applyRunFlags.
 var (
 	gateDepsFlag bool
-	readyTimeout = 60 * time.Second
+	readyTimeout = defaultReadyTimeout
 )
 
 // exitInProgress guards the terminal-exit path. Reset on cleanup-setup

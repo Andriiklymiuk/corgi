@@ -233,7 +233,7 @@ Flags:
   stdout/stderr are routed to stderr so stdout stays pure JSON.
 - `--ensure-deps` — wait for the service's `depends_on_db` /
   `depends_on_services` to be reachable first.
-- `--ready-timeout <dur>` — cap that wait (default `60s`).
+- `--ready-timeout <dur>` — cap that wait (default `15s`).
 
 ```bash
 corgi exec api -- npm run migrate
@@ -312,7 +312,7 @@ corgi test --profile backend --json            # test only that profile's servic
 By default (no `condition`, no flag) services start in **parallel** — no
 waiting (unchanged). corgi waits before starting a dependent only when an edge
 sets `condition`, or when `run --gate-deps` is passed (which gates *every*
-edge). `--ready-timeout <dur>` (default `60s`) bounds each wait; a timeout is
+edge). `--ready-timeout <dur>` (default `15s`) bounds each wait; a timeout is
 non-fatal — corgi proceeds anyway and emits `E_READINESS_TIMEOUT`.
 
 ```yaml

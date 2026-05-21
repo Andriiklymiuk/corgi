@@ -37,7 +37,7 @@ func init() {
 	)
 	execCmd.Flags().Duration(
 		"ready-timeout",
-		60*time.Second,
+		defaultReadyTimeout,
 		"Max time to wait for dependencies when --ensure-deps is set.",
 	)
 }
@@ -117,7 +117,7 @@ func runExec(cmd *cobra.Command, args []string) {
 	}
 
 	ensureDeps, _ := cmd.Flags().GetBool("ensure-deps")
-	readyTo := 60 * time.Second
+	readyTo := defaultReadyTimeout
 	if d, err := cmd.Flags().GetDuration("ready-timeout"); err == nil && d > 0 {
 		readyTo = d
 	}

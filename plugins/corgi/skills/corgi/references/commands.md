@@ -42,7 +42,7 @@ Notable flags:
 - `--profile <name>` — run only services/db_services whose `profiles:` list contains `<name>`, plus their transitive `depends_on` closure. No `--profile` runs everything. Unknown profile runs nothing (warns). Composes with `--services`/`--omit`/`--dbServices` as an intersection.
 - `--dry-run` — compute and print the start plan with no side effects (no clone, no `make up`, no spawn, no `.env` writes). Runs validation first. Pair with `--json` for a machine plan: `{valid, order, databases, services, warnings, errors}`. Exit 0 if valid, 1 on validation errors.
 - `--gate-deps` — gate startup on dependency readiness for every `depends_on` edge (default: only edges with `condition: ready|started` are gated; otherwise parallel start).
-- `--ready-timeout <dur>` — max wait for a db/dependency to become ready (default `60s`, non-fatal on timeout).
+- `--ready-timeout <dur>` — max wait for a db/dependency to become ready (default `15s`, non-fatal on timeout).
 
 `depends_on_db`/`depends_on_services` entries take an optional `condition: ready` (wait for readiness probe) or `condition: started` (wait until launched). Empty = no gating unless `--gate-deps`.
 
@@ -63,7 +63,7 @@ Run a one-off command in a service's resolved env + working dir; the child's exi
 Flags:
 - `--json` — emit `{service, exitCode, durationMs}`; child output is routed to stderr so stdout stays pure JSON.
 - `--ensure-deps` — wait for the service's `depends_on_db`/`depends_on_services` to be reachable first.
-- `--ready-timeout <dur>` — cap that wait (default `60s`).
+- `--ready-timeout <dur>` — cap that wait (default `15s`).
 
 Unknown service exits 2 (`E_SERVICE_NOT_FOUND`); readiness timeout exits 1 (`E_READINESS_TIMEOUT`).
 

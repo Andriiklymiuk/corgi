@@ -419,7 +419,7 @@ func mcpExec(args execArgs) (execResult, error) {
 	}
 
 	if args.EnsureDeps {
-		if err := ensureServiceDeps(corgi, *service, 60*time.Second); err != nil {
+		if err := ensureServiceDeps(corgi, *service, defaultReadyTimeout); err != nil {
 			return execResult{}, fmt.Errorf("%s: %v", utils.ErrReadinessTimeout, err)
 		}
 	}

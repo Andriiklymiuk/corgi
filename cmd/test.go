@@ -42,7 +42,7 @@ func init() {
 	)
 	testCmd.Flags().Duration(
 		"ready-timeout",
-		60*time.Second,
+		defaultReadyTimeout,
 		"Max time to wait for dependencies when --ensure-deps is set.",
 	)
 }
@@ -77,7 +77,7 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 	serviceName, _ := cmd.Flags().GetString("service")
 	profile, _ := cmd.Flags().GetString("profile")
 	ensureDeps, _ := cmd.Flags().GetBool("ensure-deps")
-	readyTimeout := 60 * time.Second
+	readyTimeout := defaultReadyTimeout
 	if d, err := cmd.Flags().GetDuration("ready-timeout"); err == nil && d > 0 {
 		readyTimeout = d
 	}
