@@ -60,6 +60,42 @@ func buildRunSummary(corgi *utils.CorgiCompose) runSummary {
 	return s
 }
 
+type detachedProc struct {
+	name    string
+	command string
+	logFile string
+	port    int
+	pid     int
+	pgid    int
+}
+
+// buildDetachState turns spawned detached procs and started db_services into a
+// RunState ready to persist. Pure: no I/O, unit-testable.
+func buildDetachState(composePath string, procs []detachedProc, dbs []utils.RunStateEntry) utils.RunState {
+	now := time.Now().UTC()
+	services := make([]utils.RunStateEntry, 0, len(procs))
+	for _, p := range procs {
+		services = append(services, utils.RunStateEntry{
+			Name:            p.name,
+			Kind:            "service",
+			PID:             p.pid,
+			PGID:            p.pgid,
+			Port:            p.port,
+			Command:         p.command,
+			LogFile:         p.logFile,
+			Status:          "running",
+			StartedAt:       now,
+			StatusChangedAt: now,
+		})
+	}
+	return utils.RunState{
+		ComposePath: composePath,
+		StartedAt:   now,
+		Services:    services,
+		DBServices:  dbs,
+	}
+}
+
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:     "run",
@@ -164,6 +200,20 @@ Pair with --once for CI pipeline use: corgi run --once --ci`,
 corgi_services/.logs/<name>/<timestamp>.log.
 Keeps the last 10 runs per service; older logs are pruned automatically.
 Read them afterwards with: corgi logs`,
+	)
+	runCmd.PersistentFlags().BoolP(
+		"detach",
+		"d",
+		false,
+		`Start every service as a detached process group that survives corgi
+exiting, persist run-state to corgi_services/.state.json, print a JSON
+startup summary, and return immediately (no streaming, no watch).`,
+	)
+	runCmd.PersistentFlags().Bool(
+		"force",
+		false,
+		`With --detach: ignore an existing run-state and start anyway,
+removing the stale state file first.`,
 	)
 	runCmd.PersistentFlags().Bool(
 		"notify",
@@ -358,6 +408,11 @@ func runRun(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
+	if detach, _ := cmd.Flags().GetBool("detach"); detach {
+		runDetached(cmd, corgi)
+		return
+	}
+
 	if logsEnabled, _ := cmd.Flags().GetBool("logs"); logsEnabled {
 		setupLogWriters(corgi)
 	}
@@ -370,6 +425,109 @@ func runRun(cmd *cobra.Command, _ []string) {
 		utils.PrintJSON(buildRunSummary(corgi))
 	}
 	startAllServices(corgi, cmd)
+}
+
+// runDetached spawns each non-skipped service as a detached process group,
+// persists run-state, prints a startup summary, and returns. Reuses the
+// preflight/db/env/beforeStart work already done by runRun.
+func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
+	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
+	force, _ := cmd.Flags().GetBool("force")
+	if blocked := detachAlreadyRunning(statePath, force); blocked {
+		return
+	}
+
+	runBeforeStart(corgi)
+	setupLogWriters(corgi)
+	CreateServices(corgi.Services)
+	if utils.ShutdownRequested() {
+		return
+	}
+
+	procs := spawnDetachedServices(corgi)
+	dbs := detachedDBEntries(corgi)
+	state := buildDetachState(utils.CorgiComposePath, procs, dbs)
+	if err := utils.WriteRunState(statePath, state); err != nil {
+		fmt.Fprintln(os.Stderr, "could not write run-state:", err)
+	}
+
+	if utils.JSONOutput {
+		utils.PrintJSON(state)
+	} else {
+		utils.Infof("🐶 corgi running detached — %d service(s), state: %s\n", len(procs), statePath)
+	}
+}
+
+// detachAlreadyRunning returns true (caller should stop) when a live run-state
+// already has a running service and --force was not passed. With --force it
+// removes the stale state file and returns false.
+func detachAlreadyRunning(statePath string, force bool) bool {
+	if _, err := os.Stat(statePath); err != nil {
+		return false
+	}
+	if force {
+		// TODO: call full stop once corgi stop lands
+		os.Remove(statePath)
+		return false
+	}
+	prev, err := utils.ReadRunState(statePath)
+	if err != nil {
+		return false
+	}
+	prev = utils.ReconcileRunState(prev, utils.PidAlive, utils.ContainerRunning)
+	for _, s := range prev.Services {
+		if s.Status == "running" {
+			msg := "corgi is already running for this project — stop or restart first (use --force to override)"
+			if utils.JSONOutput {
+				utils.JSONError("ALREADY_RUNNING", msg)
+			} else {
+				fmt.Fprintln(os.Stderr, msg)
+			}
+			os.Exit(1)
+		}
+	}
+	return false
+}
+
+func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
+	procs := []detachedProc{}
+	for _, svc := range corgi.Services {
+		if shouldSkipManualRun(svc) || len(svc.Start) == 0 {
+			continue
+		}
+		command := strings.Join(svc.Start, " && ")
+		proc, err := utils.StartDetached(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(svc))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
+			continue
+		}
+		procs = append(procs, detachedProc{
+			name:    svc.ServiceName,
+			command: command,
+			logFile: utils.LogFilePath(svc.ServiceName),
+			port:    svc.Port,
+			pid:     proc.Pid,
+			pgid:    proc.Pid,
+		})
+	}
+	return procs
+}
+
+func detachedDBEntries(corgi *utils.CorgiCompose) []utils.RunStateEntry {
+	dbs := []utils.RunStateEntry{}
+	for _, db := range corgi.DatabaseServices {
+		if db.ManualRun {
+			continue
+		}
+		dbs = append(dbs, utils.RunStateEntry{
+			Name:      db.ServiceName,
+			Kind:      "db_service",
+			Container: fmt.Sprintf("%s-%s", db.Driver, db.ServiceName),
+			Port:      db.Port,
+			Status:    "running",
+		})
+	}
+	return dbs
 }
 
 func applyRunFlags(cmd *cobra.Command) {
