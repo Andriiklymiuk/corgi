@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	utils.DetectCIMode()
+	utils.DetectMode()
 	showWelcomeMessage()
 	var runCli func()
 	runCli = func() {

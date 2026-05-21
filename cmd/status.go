@@ -281,7 +281,7 @@ func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet boo
 		runWatchAppend(rows, results, interval, true, false)
 	case quiet:
 		runWatchAppend(rows, nil, interval, false, true)
-	case !isStdoutTTY():
+	case !utils.IsTTY():
 		results := probeAllParallel(rows)
 		fmt.Print(buildWatchFrame(rows, results, interval, time.Now()))
 		runWatchAppend(rows, results, interval, false, false)
@@ -366,14 +366,6 @@ func buildWatchFrame(rows []statusRow, results map[string]probeResult, interval 
 	fmt.Fprintf(&buf, "\n%s👀 watching %d targets every %s — last update %s (%d up, %d down) — Ctrl+C to stop%s\n",
 		art.CyanColor, len(rows), interval, now.Format("15:04:05"), upCount, down, art.WhiteColor)
 	return buf.String()
-}
-
-func isStdoutTTY() bool {
-	fi, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 func runStatusUntilHealthy(rows []statusRow, interval, timeout time.Duration, jsonOut, quiet bool) {
