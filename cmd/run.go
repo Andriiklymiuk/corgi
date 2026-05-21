@@ -384,16 +384,22 @@ func runRun(cmd *cobra.Command, _ []string) {
 		CloneServices(corgi.Services)
 	}
 
-	stopSignalHandler := installSignalHandler(cmd)
-	defer stopSignalHandler()
+	detach, _ := cmd.Flags().GetBool("detach")
 
-	watcher, err := setupComposeWatcher(cmd)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	if watcher != nil {
-		defer watcher.Close()
+	// A detached run spawns and exits, so it neither watches the compose file
+	// nor handles signals — skip both (the watcher also prints to stdout).
+	if !detach {
+		stopSignalHandler := installSignalHandler(cmd)
+		defer stopSignalHandler()
+
+		watcher, err := setupComposeWatcher(cmd)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if watcher != nil {
+			defer watcher.Close()
+		}
 	}
 
 	utils.CleanFromScratch(cmd, *corgi)
@@ -408,7 +414,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	if detach, _ := cmd.Flags().GetBool("detach"); detach {
+	if detach {
 		runDetached(cmd, corgi)
 		return
 	}
@@ -437,7 +443,6 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		return
 	}
 
-	runBeforeStart(corgi)
 	setupLogWriters(corgi)
 	CreateServices(corgi.Services)
 	if utils.ShutdownRequested() {
