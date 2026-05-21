@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -34,6 +35,15 @@ func init() {
 	rootCmd.AddCommand(mcpCmd)
 }
 
+// mcpHandlerMu serializes all MCP tool/resource work. mcp-go's stdio server
+// runs a worker pool, so handlers can be invoked concurrently; corgi's handlers
+// mutate shared global state (os.Stdout swap in withStdoutToStderr, plus
+// rootCmd flags and utils.CorgiComposePath* in loadComposeCtx) that is not safe
+// to touch from multiple goroutines. Serializing is fine here: corgi mcp is a
+// single-user dev tool and handlers are short. Hold this across the ENTIRE
+// handler body so the stdout swap and compose/flag mutation never overlap.
+var mcpHandlerMu sync.Mutex
+
 func runMCP(_ *cobra.Command, _ []string) {
 	// stdout is the JSON-RPC channel: force non-interactive (no prompts) and
 	// route corgi's own human/JSON logging away from stdout. JSONOutput=true
@@ -45,7 +55,10 @@ func runMCP(_ *cobra.Command, _ []string) {
 	registerMCPTools(s)
 	registerMCPResources(s)
 
-	if err := server.ServeStdio(s); err != nil {
+	// WithWorkerPoolSize(1) is defense-in-depth: it makes the stdio server
+	// process tool calls one-at-a-time. The mcpHandlerMu mutex is the real
+	// guard (it also covers resource handlers, which the pool size doesn't).
+	if err := server.ServeStdio(s, server.WithWorkerPoolSize(1)); err != nil {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		os.Exit(1)
 	}
@@ -320,7 +333,7 @@ type logsResult struct {
 
 func mcpLogs(args logsArgs) (logsResult, error) {
 	if strings.TrimSpace(args.Service) == "" {
-		return logsResult{}, fmt.Errorf("E_USAGE: service is required")
+		return logsResult{}, fmt.Errorf("%s: service is required", utils.ErrUsage)
 	}
 	// Load compose only to resolve CorgiComposePathDir for the log base.
 	if _, err := loadComposeForMCP(args.ComposePath); err != nil {
@@ -333,11 +346,11 @@ func mcpLogs(args logsArgs) (logsResult, error) {
 	base := logsBase()
 	runs, err := utils.ListServiceRuns(base, args.Service)
 	if err != nil || len(runs) == 0 {
-		return logsResult{}, fmt.Errorf("E_SERVICE_NOT_FOUND: no logs found for %q (run with corgi run --logs)", args.Service)
+		return logsResult{}, fmt.Errorf("%s: no logs found for %q (run with corgi run --logs)", utils.ErrServiceNotFound, args.Service)
 	}
 	lines, err := tailLogFile(runs[0], n)
 	if err != nil {
-		return logsResult{}, fmt.Errorf("E_EXEC_FAILED: %v", err)
+		return logsResult{}, fmt.Errorf("%s: %v", utils.ErrExecFailed, err)
 	}
 	return logsResult{Service: args.Service, Lines: lines}, nil
 }
@@ -386,7 +399,7 @@ type execResult struct {
 // channel) and returning the child exit code.
 func mcpExec(args execArgs) (execResult, error) {
 	if strings.TrimSpace(args.Service) == "" || strings.TrimSpace(args.Command) == "" {
-		return execResult{}, fmt.Errorf("E_USAGE: service and command are required")
+		return execResult{}, fmt.Errorf("%s: service and command are required", utils.ErrUsage)
 	}
 	corgi, err := loadComposeForMCP(args.ComposePath)
 	if err != nil {
@@ -401,13 +414,13 @@ func mcpExec(args execArgs) (execResult, error) {
 		}
 	}
 	if service == nil {
-		return execResult{}, fmt.Errorf("E_SERVICE_NOT_FOUND: service %q not found; valid services: %s",
-			args.Service, strings.Join(serviceNames(corgi), ", "))
+		return execResult{}, fmt.Errorf("%s: service %q not found; valid services: %s",
+			utils.ErrServiceNotFound, args.Service, strings.Join(serviceNames(corgi), ", "))
 	}
 
 	if args.EnsureDeps {
 		if err := ensureServiceDeps(corgi, *service, 60*time.Second); err != nil {
-			return execResult{}, fmt.Errorf("E_READINESS_TIMEOUT: %v", err)
+			return execResult{}, fmt.Errorf("%s: %v", utils.ErrReadinessTimeout, err)
 		}
 	}
 
@@ -431,7 +444,7 @@ func mcpExec(args execArgs) (execResult, error) {
 	})
 	durationMs := time.Since(start).Milliseconds()
 	if err2 != nil {
-		return execResult{}, fmt.Errorf("E_EXEC_FAILED: failed to run command for %s: %v", args.Service, err2)
+		return execResult{}, fmt.Errorf("%s: failed to run command for %s: %v", utils.ErrExecFailed, args.Service, err2)
 	}
 	return execResult{ExitCode: code, Output: buf.String(), DurationMs: durationMs}, nil
 }
@@ -559,6 +572,8 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_schema",
 		mcp.WithDescription("Return the JSON Schema (draft-07) for corgi-compose.yml."),
 	), func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		mcpHandlerMu.Lock()
+		defer mcpHandlerMu.Unlock()
 		return mcp.NewToolResultText(mcpSchema()), nil
 	})
 }
@@ -568,13 +583,17 @@ func registerMCPTools(s *server.MCPServer) {
 // carrying the stable code already embedded in the message.
 func jsonHandler(core func(mcp.CallToolRequest) (any, error)) server.ToolHandlerFunc {
 	return func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Serialize the whole handler: the cores below mutate global state
+		// (stdout swap, compose/flag globals) that isn't concurrency-safe.
+		mcpHandlerMu.Lock()
+		defer mcpHandlerMu.Unlock()
 		out, err := core(r)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		b, merrr := json.Marshal(out)
 		if merrr != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("E_EXEC_FAILED: marshal result: %v", merrr)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("%s: marshal result: %v", utils.ErrExecFailed, merrr)), nil
 		}
 		return mcp.NewToolResultText(string(b)), nil
 	}
@@ -588,6 +607,8 @@ func registerMCPResources(s *server.MCPServer) {
 			mcp.WithResourceDescription("JSON Schema (draft-07) for corgi-compose.yml"),
 			mcp.WithMIMEType("application/json")),
 		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			mcpHandlerMu.Lock()
+			defer mcpHandlerMu.Unlock()
 			return []mcp.ResourceContents{mcp.TextResourceContents{
 				URI: "corgi://schema", MIMEType: "application/json", Text: utils.ComposeJSONSchema(),
 			}}, nil
@@ -598,11 +619,16 @@ func registerMCPResources(s *server.MCPServer) {
 			mcp.WithResourceDescription("Resolved/interpolated corgi-compose.yml as JSON"),
 			mcp.WithMIMEType("application/json")),
 		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			mcpHandlerMu.Lock()
+			defer mcpHandlerMu.Unlock()
 			corgi, err := loadComposeForMCP("")
 			if err != nil {
 				return nil, composeLoadError(err)
 			}
-			b, _ := json.MarshalIndent(corgi, "", "  ")
+			b, err := json.MarshalIndent(corgi, "", "  ")
+			if err != nil {
+				return nil, fmt.Errorf("%s: marshal compose: %v", utils.ErrExecFailed, err)
+			}
 			return []mcp.ResourceContents{mcp.TextResourceContents{
 				URI: "corgi://compose", MIMEType: "application/json", Text: string(b),
 			}}, nil
@@ -613,11 +639,16 @@ func registerMCPResources(s *server.MCPServer) {
 			mcp.WithResourceDescription("Live health snapshot of declared services and db_services"),
 			mcp.WithMIMEType("application/json")),
 		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			mcpHandlerMu.Lock()
+			defer mcpHandlerMu.Unlock()
 			out, err := mcpStatus(validateArgs{})
 			if err != nil {
 				return nil, err
 			}
-			b, _ := json.MarshalIndent(out, "", "  ")
+			b, err := json.MarshalIndent(out, "", "  ")
+			if err != nil {
+				return nil, fmt.Errorf("%s: marshal status: %v", utils.ErrExecFailed, err)
+			}
 			return []mcp.ResourceContents{mcp.TextResourceContents{
 				URI: "corgi://status", MIMEType: "application/json", Text: string(b),
 			}}, nil

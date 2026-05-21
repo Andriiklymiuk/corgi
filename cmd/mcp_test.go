@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"os"
 	"reflect"
 	"testing"
 
@@ -137,5 +140,36 @@ func TestMCPExecRequiresArgs(t *testing.T) {
 func TestMCPLogsRequiresService(t *testing.T) {
 	if _, err := mcpLogs(logsArgs{Service: ""}); err == nil {
 		t.Error("expected error for empty service")
+	}
+}
+
+// TestMCPWithStdoutToStderr verifies the stdout swap keeps incidental prints off
+// the real stdout (the JSON-RPC channel) and restores os.Stdout afterward.
+func TestMCPWithStdoutToStderr(t *testing.T) {
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+
+	withStdoutToStderr(func() {
+		fmt.Println("SHOULD_NOT_APPEAR")
+	})
+
+	// (b) os.Stdout must be restored to what it was before the swap.
+	if os.Stdout != w {
+		t.Errorf("os.Stdout not restored: got %v want %v", os.Stdout, w)
+	}
+	os.Stdout = orig
+
+	// (a) nothing should have reached the captured real stdout.
+	w.Close()
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read pipe: %v", err)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected nothing on real stdout during swap, got %q", string(data))
 	}
 }
