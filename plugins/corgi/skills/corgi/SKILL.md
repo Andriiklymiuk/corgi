@@ -17,7 +17,11 @@ Safe synchronous probes:
 - `corgi doctor` (alias `check`) — preflight: tools installed, Docker up, ports free
 - `corgi status` (aliases `health`, `healthcheck`) — post-run: TCP/HTTP probe each port
 
-Both exit 0 on success, 1 on failure. Output is colored text, not JSON.
+Both exit 0 on success, 1 on failure. Add global `--json` for machine-readable output. Driving corgi from an agent: see `../../../docs/agents.md`.
+
+### Driving corgi as an agent
+
+Corgi auto-detects non-interactive mode (CI/agent env vars like `CLAUDECODE`, or no TTY) and errors with exit code 2 instead of prompting; `--interactive` forces prompts back. Global `--json` emits pure JSON on stdout (`doctor`, `status`, `list`, `config`, `ps`, `docs --json-schema`; `run --json` prints a startup summary then streams logs to stderr). Exit codes: 0 success, 1 failure, 2 usage/missing input. Full guide + recipes: `../../../docs/agents.md`.
 
 `corgi tunnel` is also long-running (one tunnel subprocess per service, blocks until Ctrl+C). Background it the same way you background `corgi run`. See `references/long-running.md` if invoking from an agent.
 
@@ -33,6 +37,7 @@ Both exit 0 on success, 1 on failure. Output is colored text, not JSON.
 | Setting up webhook tunnels (Stripe/GitHub/e-sign/etc.) | `../../../docs/tunnel.md` (full) or `references/commands.md#corgi-tunnel-services` |
 | Producing a service map / relation diagram for the project | run `/corgi-describe` (see `references/describe-output.md`) |
 | Running `corgi run` inside an agent loop | `references/long-running.md` |
+| Driving corgi non-interactively (`--json`, exit codes, scaffolding flags) | `../../../docs/agents.md` |
 | Persisting / re-reading service logs after a crash | `references/commands.md#corgi-logs` (`corgi run --logs` + `corgi logs`) |
 | Opening a DB shell (psql / redis-cli / mongosh / …) | `references/commands.md#corgi-db-shell-service-name` |
 | Running corgi in CI / disabling spinners and color | `references/commands.md#corgi-run-flags` (`--ci`, auto-detected from `CI` env) |

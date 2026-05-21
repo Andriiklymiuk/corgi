@@ -22,16 +22,31 @@ To reset everything: delete ~/.corgi/config.yml.`,
 	Run:  runConfigShow,
 }
 
+type configView struct {
+	Version       int    `json:"version"`
+	Notifications bool   `json:"notifications"`
+	Path          string `json:"path"`
+}
+
 var configPathCmd = &cobra.Command{
 	Use:   "path",
 	Short: "Print the absolute path to the user config file",
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir, err := utils.GetUserConfigDir()
 		if err != nil {
-			fmt.Println(err)
+			if utils.JSONOutput {
+				utils.JSONError("config_path", err.Error())
+			} else {
+				fmt.Println(err)
+			}
 			os.Exit(1)
 		}
-		fmt.Println(filepath.Join(dir, "config.yml"))
+		path := filepath.Join(dir, "config.yml")
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]string{"path": path})
+			return
+		}
+		fmt.Println(path)
 	},
 }
 
@@ -43,11 +58,24 @@ func init() {
 func runConfigShow(cmd *cobra.Command, _ []string) {
 	cfg, err := utils.LoadUserConfig()
 	if err != nil {
-		fmt.Printf("%s❌ Failed to read user config: %v%s\n", art.RedColor, err, art.WhiteColor)
+		if utils.JSONOutput {
+			utils.JSONError("config_read", err.Error())
+		} else {
+			fmt.Printf("%s❌ Failed to read user config: %v%s\n", art.RedColor, err, art.WhiteColor)
+		}
 		os.Exit(1)
 	}
 	dir, _ := utils.GetUserConfigDir()
 	path := filepath.Join(dir, "config.yml")
+
+	if utils.JSONOutput {
+		utils.PrintJSON(configView{
+			Version:       cfg.Version,
+			Notifications: cfg.Notifications,
+			Path:          path,
+		})
+		return
+	}
 
 	state := "off"
 	if cfg.Notifications {

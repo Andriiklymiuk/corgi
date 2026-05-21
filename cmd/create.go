@@ -22,8 +22,66 @@ var createCmd = &cobra.Command{
 	Aliases: []string{"add", "new"},
 }
 
+type createFlags struct {
+	kind   string
+	name   string
+	driver string
+	image  string
+	path   string
+	port   int
+}
+
+var createOpts createFlags
+
 func init() {
 	rootCmd.AddCommand(createCmd)
+	createCmd.Flags().StringVar(&createOpts.kind, "kind", "", "Entry kind: db_service|service|required (required in non-interactive mode)")
+	createCmd.Flags().StringVar(&createOpts.name, "name", "", "Entry name (required in non-interactive mode)")
+	createCmd.Flags().StringVar(&createOpts.driver, "driver", "", "db_service driver (e.g. postgres); required for kind=db_service")
+	createCmd.Flags().StringVar(&createOpts.image, "image", "", "db_service docker image (image driver)")
+	createCmd.Flags().StringVar(&createOpts.path, "path", "", "service path")
+	createCmd.Flags().IntVar(&createOpts.port, "port", 0, "port for db_service/service")
+}
+
+func validateCreateFlags(f createFlags, nonInteractive bool) error {
+	if !nonInteractive {
+		return nil
+	}
+	if f.kind == "" || f.name == "" {
+		return fmt.Errorf("non-interactive create needs --kind and --name (kind: db_service|service|required)")
+	}
+	switch f.kind {
+	case "db_service":
+		if f.driver == "" {
+			return fmt.Errorf("non-interactive create of a db_service needs --driver (e.g. --driver postgres)")
+		}
+	case "service", "required":
+	default:
+		return fmt.Errorf("unknown --kind %q (kind: db_service|service|required)", f.kind)
+	}
+	return nil
+}
+
+func createNonInteractive(cmd *cobra.Command, f createFlags) {
+	corgi, err := utils.GetCorgiServices(cmd)
+	corgiMap := map[string]interface{}{}
+	if err == nil {
+		corgiMap = GetCorgiServicesMap(corgi)
+	}
+
+	switch f.kind {
+	case "db_service":
+		svc := &utils.DatabaseService{ServiceName: f.name, Driver: f.driver, Image: f.image, Port: f.port}
+		insertServiceIntoMap(corgiMap, utils.DbServicesInConfig, svc, "ServiceName")
+	case "service":
+		svc := &utils.Service{ServiceName: f.name, Path: f.path, Port: f.port}
+		insertServiceIntoMap(corgiMap, utils.ServicesInConfig, svc, "ServiceName")
+	case "required":
+		req := &utils.Required{Name: f.name}
+		insertServiceIntoMap(corgiMap, utils.RequiredInConfig, req, "Name")
+	}
+
+	UpdateCorgiComposeFileWithMap(corgiMap)
 }
 
 // Deep copy DbService
@@ -135,6 +193,19 @@ func addFlagsToMap(corgi *utils.CorgiCompose, m map[string]interface{}) {
 }
 
 func runCreate(cmd *cobra.Command, _ []string) {
+	if utils.NonInteractive {
+		if err := validateCreateFlags(createOpts, true); err != nil {
+			if utils.JSONOutput {
+				utils.JSONError("INPUT_REQUIRED", err.Error())
+			} else {
+				fmt.Fprintln(os.Stderr, err)
+			}
+			os.Exit(2)
+		}
+		createNonInteractive(cmd, createOpts)
+		return
+	}
+
 	corgi, err := utils.GetCorgiServices(cmd)
 	var corgiMap map[string]interface{}
 
@@ -454,7 +525,10 @@ func handleCommandCreation(corgiMap map[string]interface{}, section string) {
 
 func handleServiceCreation(corgiMap map[string]interface{}, serviceType string, serviceInstance interface{}, fieldName string) {
 	askAndSetFields(serviceInstance)
+	insertServiceIntoMap(corgiMap, serviceType, serviceInstance, fieldName)
+}
 
+func insertServiceIntoMap(corgiMap map[string]interface{}, serviceType string, serviceInstance interface{}, fieldName string) {
 	nameVal := reflect.ValueOf(serviceInstance).Elem().FieldByName(fieldName).String()
 	reflect.ValueOf(serviceInstance).Elem().FieldByName(fieldName).SetString("")
 
