@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"strings"
 	"testing"
 )
 
@@ -159,6 +160,59 @@ func TestDoctorResultComputeOK(t *testing.T) {
 	res2.computeOK()
 	if !res2.OK {
 		t.Error("overall OK must be true when all checks pass")
+	}
+}
+
+func TestCheckRequiredIsFoundQuiet(t *testing.T) {
+	ok, _ := checkRequiredIsFoundQuiet(utils.Required{Name: "echo", CheckCmd: "echo --version"})
+	if !ok {
+		t.Error("expected echo to be found")
+	}
+	ok, detail := checkRequiredIsFoundQuiet(utils.Required{Name: "this-tool-does-not-exist-zzz"})
+	if ok {
+		t.Error("expected missing tool to report not found")
+	}
+	if detail == "" {
+		t.Error("expected a detail message for missing tool")
+	}
+}
+
+func TestProcessRequired_Found(t *testing.T) {
+	if !processRequired(utils.Required{Name: "echo", CheckCmd: "echo --version"}) {
+		t.Error("expected processRequired true for an installed tool")
+	}
+}
+
+func TestProcessRequired_MissingNoInstallSteps(t *testing.T) {
+	// Missing tool with no install steps must fail without prompting.
+	if processRequired(utils.Required{Name: "this-tool-does-not-exist-zzz"}) {
+		t.Error("expected false when tool missing and no install steps")
+	}
+}
+
+func TestProcessRequired_OptionalNonInteractiveSkips(t *testing.T) {
+	orig := utils.NonInteractive
+	defer func() { utils.NonInteractive = orig }()
+	utils.NonInteractive = true
+	// Optional + non-interactive: skipped (no prompt, no install attempt), returns false.
+	got := processRequired(utils.Required{
+		Name:     "this-tool-does-not-exist-zzz",
+		Optional: true,
+		Install:  []string{"echo noop"},
+	})
+	if got {
+		t.Error("expected false for optional missing tool in non-interactive mode")
+	}
+}
+
+func TestRunDoctorJSON_EmptyComposePasses(t *testing.T) {
+	origJSON := utils.JSONOutput
+	defer func() { utils.JSONOutput = origJSON }()
+	utils.JSONOutput = true
+	// No required tools, no db_services, no ports → all checks pass, no os.Exit.
+	out := captureStdout(t, func() { runDoctorJSON(&utils.CorgiCompose{}) })
+	if !strings.Contains(out, `"ok": true`) {
+		t.Errorf("expected ok:true JSON for empty compose, got %q", out)
 	}
 }
 
