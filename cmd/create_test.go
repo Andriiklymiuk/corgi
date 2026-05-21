@@ -480,6 +480,30 @@ func TestUpdateCorgiComposeFileWithMapDefaultName(t *testing.T) {
 	}
 }
 
+func TestValidateCreateFlags(t *testing.T) {
+	if validateCreateFlags(createFlags{}, true) == nil {
+		t.Error("expected error when kind/name missing under non-interactive")
+	}
+	if validateCreateFlags(createFlags{kind: "service", name: "api"}, true) != nil {
+		t.Error("complete service flags should pass")
+	}
+	if validateCreateFlags(createFlags{}, false) != nil {
+		t.Error("interactive mode should not require flags")
+	}
+	if validateCreateFlags(createFlags{kind: "required", name: "node"}, true) != nil {
+		t.Error("complete required flags should pass")
+	}
+	if validateCreateFlags(createFlags{kind: "db_service", name: "db"}, true) == nil {
+		t.Error("db_service without driver should fail")
+	}
+	if validateCreateFlags(createFlags{kind: "db_service", name: "db", driver: "postgres"}, true) != nil {
+		t.Error("db_service with driver should pass")
+	}
+	if validateCreateFlags(createFlags{kind: "bogus", name: "x"}, true) == nil {
+		t.Error("unknown kind should fail")
+	}
+}
+
 func TestHandleServiceCreationDb(t *testing.T) {
 	corgiMap := map[string]interface{}{}
 	svc := &utils.DatabaseService{ServiceName: "newdb"}

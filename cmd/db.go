@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -335,6 +336,14 @@ func SeedAllDatabases(databaseServices []utils.DatabaseService) {
 	}
 }
 
+func requireServiceForDBShell(service string, nonInteractive bool, available []string) error {
+	if service != "" || !nonInteractive {
+		return nil
+	}
+	return fmt.Errorf("no terminal for the db service picker; pass the service name as an argument (available: %s)",
+		strings.Join(available, ", "))
+}
+
 func runDbShell(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
@@ -351,6 +360,20 @@ func runDbShell(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
 		targetName = args[0]
 	} else {
+		if utils.NonInteractive {
+			available := make([]string, len(corgi.DatabaseServices))
+			for i, db := range corgi.DatabaseServices {
+				available[i] = db.ServiceName
+			}
+			if err := requireServiceForDBShell(targetName, true, available); err != nil {
+				if utils.JSONOutput {
+					utils.JSONError("INPUT_REQUIRED", err.Error())
+				} else {
+					fmt.Fprintln(os.Stderr, err)
+				}
+				os.Exit(2)
+			}
+		}
 		labels := make([]string, len(corgi.DatabaseServices))
 		labelToName := make(map[string]string, len(corgi.DatabaseServices))
 		for i, db := range corgi.DatabaseServices {

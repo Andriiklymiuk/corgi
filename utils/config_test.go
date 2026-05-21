@@ -869,3 +869,18 @@ func TestDetermineCorgiComposePathGlobalNoData(t *testing.T) {
 	}
 }
 
+
+func TestGetCorgiConfigFromAlertNonInteractive(t *testing.T) {
+	t.Chdir(t.TempDir()) // empty dir: no corgi-compose.yml present
+	prev := NonInteractive
+	NonInteractive = true
+	defer func() { NonInteractive = prev }()
+
+	path, err := getCorgiConfigFromAlert()
+	if err == nil {
+		t.Fatal("expected error when no compose file and non-interactive, got nil")
+	}
+	if path != "" {
+		t.Errorf("expected empty path, got %q", path)
+	}
+}

@@ -149,3 +149,16 @@ func TestCheckRequiredIsFoundMissing(t *testing.T) {
 	}
 }
 
+func TestDoctorResultComputeOK(t *testing.T) {
+	res := doctorResult{Checks: []doctorCheck{{Name: "docker", OK: true}, {Name: "port:5432", OK: false, Detail: "in use"}}}
+	res.computeOK()
+	if res.OK {
+		t.Error("overall OK must be false when any check fails")
+	}
+	res2 := doctorResult{Checks: []doctorCheck{{Name: "docker", OK: true}}}
+	res2.computeOK()
+	if !res2.OK {
+		t.Error("overall OK must be true when all checks pass")
+	}
+}
+
