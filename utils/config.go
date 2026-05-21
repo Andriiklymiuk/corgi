@@ -708,6 +708,10 @@ func getCorgiConfigFromAlert() (string, error) {
 		return "", err
 	}
 
+	if NonInteractive {
+		return "", fmt.Errorf("no corgi-compose.yml found and no terminal to pick one; pass -f <path> or run from a directory containing corgi-compose.yml")
+	}
+
 	file, err := PickItemFromListPrompt(
 		"Select corgi config file to use",
 		files,
