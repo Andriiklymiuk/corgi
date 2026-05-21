@@ -54,6 +54,39 @@ func TestInterpolateUnsetNoDefaultErrors(t *testing.T) {
 	}
 }
 
+func TestInterpolateTolerantLeavesUnresolved(t *testing.T) {
+	out, unresolved := InterpolateTolerant([]byte("x: ${MISSING}"), lookupFrom(nil))
+	if string(out) != "x: ${MISSING}" {
+		t.Errorf("token should be left untouched: got %q", out)
+	}
+	if len(unresolved) != 1 || unresolved[0] != "MISSING" {
+		t.Errorf("expected MISSING in unresolved, got %#v", unresolved)
+	}
+}
+
+func TestInterpolateTolerantDottedUntouched(t *testing.T) {
+	// Cross-service ${producer.VAR} refs must be left fully untouched and NOT
+	// reported as unresolved — the cross-service resolver owns them.
+	out, unresolved := InterpolateTolerant([]byte("host: ${a.b}"), lookupFrom(nil))
+	if string(out) != "host: ${a.b}" {
+		t.Errorf("dotted form should be untouched: got %q", out)
+	}
+	if len(unresolved) != 0 {
+		t.Errorf("dotted form must not be reported: %#v", unresolved)
+	}
+}
+
+func TestInterpolateTolerantDedupesAndKeepsSetDefaultEscape(t *testing.T) {
+	in := []byte("${MISSING}-${MISSING}-${SET}-${DEF:-d}-$${ESC}")
+	out, unresolved := InterpolateTolerant(in, lookupFrom(map[string]string{"SET": "s"}))
+	if string(out) != "${MISSING}-${MISSING}-s-d-${ESC}" {
+		t.Errorf("got %q", out)
+	}
+	if len(unresolved) != 1 || unresolved[0] != "MISSING" {
+		t.Errorf("expected single deduped MISSING, got %#v", unresolved)
+	}
+}
+
 func TestInterpolateEscape(t *testing.T) {
 	// $${X} -> literal ${X}, no lookup attempted.
 	out, err := Interpolate([]byte("cmd: $${HOME}/bin"), lookupFrom(nil))

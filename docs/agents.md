@@ -197,8 +197,13 @@ paths, image refs, environment entries).
 - `$${LITERAL}` — escapes to the literal `${LITERAL}` (not expanded).
 - Only **braced** forms are expanded. Bare `$VAR` is left untouched (so shell
   snippets in `start` commands are safe).
-- An unset var with **no default** is a hard error (`E_MISSING_FIELD`) naming
-  the var — corgi never silently substitutes empty.
+- An unset var with **no default** is left **unresolved** (the `${VAR}` token
+  stays literal) and corgi prints one warning per name — so tunnel hostnames and
+  cross-service `${producer.VAR}` refs that resolve later still work. Use
+  `${VAR:-default}` for an explicit fallback. corgi never silently substitutes
+  empty.
+- Dotted forms like `${producer.VAR}` are **not** touched by this global pass
+  (only simple `${NAME}` is) — they are resolved later from per-service env.
 
 Values come from the process environment first, then an optional `.env` file
 in the same directory as the compose file (process env wins). The `.env`
@@ -209,7 +214,7 @@ surrounding quotes trimmed.
 db_services:
   pg:
     driver: postgres
-    password: ${DB_PASSWORD}        # required — fails if unset
+    password: ${DB_PASSWORD}        # unset & no default -> left literal + warning
     port: ${PG_PORT:-5432}          # defaults to 5432
 ```
 

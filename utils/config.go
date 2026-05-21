@@ -348,9 +348,13 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 	if err != nil {
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read .env next to %s: %v", pathToCorgiComposeFile, err)
 	}
-	file, err = Interpolate(file, EnvThenDotEnv(dotenv))
-	if err != nil {
-		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't interpolate %s: %v", pathToCorgiComposeFile, err)
+	// Tolerant on purpose: an unset ${VAR} with no default is left untouched
+	// (not a hard error), so tunnel hostnames and cross-service ${producer.VAR}
+	// refs that resolve later from per-service env keep working. We just warn.
+	var unresolved []string
+	file, unresolved = InterpolateTolerant(file, EnvThenDotEnv(dotenv))
+	for _, name := range unresolved {
+		Infof("⚠️  ${%s} is not set; leaving it unresolved (set it in the environment, a sibling .env, or use ${%s:-default})", name, name)
 	}
 
 	var corgiYaml CorgiComposeYaml

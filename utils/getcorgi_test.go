@@ -138,7 +138,10 @@ func TestGetCorgiServicesInterpolatesFromSiblingDotEnv(t *testing.T) {
 	}
 }
 
-func TestGetCorgiServicesFailsOnUnsetVar(t *testing.T) {
+func TestGetCorgiServicesLeavesUnsetVarUnresolved(t *testing.T) {
+	// An unset var with no default must NOT fail the load (non-breaking): the
+	// ${VAR} token is left literal so later tunnel / cross-service resolvers can
+	// still handle it. Only a warning is emitted.
 	dir := t.TempDir()
 	yml := filepath.Join(dir, "corgi-compose.yml")
 	if err := os.WriteFile(yml, []byte("name: ${UNSET_NO_DEFAULT_VAR}\n"), 0644); err != nil {
@@ -149,12 +152,12 @@ func TestGetCorgiServicesFailsOnUnsetVar(t *testing.T) {
 	os.Chdir(dir)
 	t.Cleanup(func() { os.Chdir(cwd) })
 
-	_, err := GetCorgiServices(newCobraFull())
-	if err == nil {
-		t.Fatal("expected interpolation error for unset var")
+	got, err := GetCorgiServices(newCobraFull())
+	if err != nil {
+		t.Fatalf("load should succeed, leaving token unresolved: %v", err)
 	}
-	if !strings.Contains(err.Error(), "UNSET_NO_DEFAULT_VAR") {
-		t.Errorf("error should name var: %v", err)
+	if !strings.Contains(got.Name, "${UNSET_NO_DEFAULT_VAR}") {
+		t.Errorf("token should be left literal, got name %q", got.Name)
 	}
 }
 
