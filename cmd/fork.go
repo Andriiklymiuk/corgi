@@ -78,8 +78,6 @@ func runFork(cmd *cobra.Command, args []string) {
 
 	corgiMap := GetCorgiServicesMap(corgi)
 
-	CloneServices(corgi.Services)
-
 	shouldForkAllServices, err := cmd.Flags().GetBool("all")
 	if err != nil {
 		fmt.Println(art.RedColor, err, art.WhiteColor)
@@ -99,6 +97,8 @@ func runFork(cmd *cobra.Command, args []string) {
 			os.Exit(2)
 		}
 	}
+
+	CloneServices(corgi.Services)
 
 	chosenService := serviceFlag
 
