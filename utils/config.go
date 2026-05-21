@@ -82,6 +82,32 @@ type DatabaseService struct {
 	HealthCheck string `yaml:"healthCheck,omitempty"`
 }
 
+// KnownDrivers is the set of valid db_services.driver values, derived from the
+// `options:` tag on DatabaseService.Driver so the list lives in one place.
+// The tag's trailing "❌skip" sentinel (used by `corgi create` prompts) is
+// stripped, leaving "image" as a real driver.
+var KnownDrivers = knownDriversFromTag()
+
+func knownDriversFromTag() []string {
+	t := reflect.TypeOf(DatabaseService{})
+	f, ok := t.FieldByName("Driver")
+	if !ok {
+		return nil
+	}
+	opts := f.Tag.Get("options")
+	if opts == "" {
+		return nil
+	}
+	var drivers []string
+	for _, d := range strings.Split(opts, ",") {
+		d = strings.TrimSuffix(d, "❌skip")
+		if d != "" {
+			drivers = append(drivers, d)
+		}
+	}
+	return drivers
+}
+
 type SnsSubscription struct {
 	Topic string `yaml:"topic,omitempty"`
 	Queue string `yaml:"queue,omitempty"`
