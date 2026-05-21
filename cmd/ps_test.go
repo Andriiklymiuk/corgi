@@ -40,6 +40,27 @@ func TestPsRowOmitsPortAndURL(t *testing.T) {
 	}
 }
 
+func TestPsRowsFromState(t *testing.T) {
+	st := utils.RunState{Services: []utils.RunStateEntry{
+		{Name: "api", Kind: "service", PID: 1, Port: 8080, Status: "running"},
+	}, DBServices: []utils.RunStateEntry{
+		{Name: "pg", Kind: "db_service", Port: 5432, Status: "stopped"},
+	}}
+	rows := psRowsFromState(st)
+	if len(rows) != 2 {
+		t.Fatalf("want 2 rows, got %d", len(rows))
+	}
+	if rows[0].Name != "api" || rows[0].Status != "running" || rows[0].Port != 8080 {
+		t.Errorf("bad service row: %+v", rows[0])
+	}
+	if rows[0].URL != "http://localhost:8080" {
+		t.Errorf("expected url, got %q", rows[0].URL)
+	}
+	if rows[1].Name != "pg" || rows[1].Status != "stopped" {
+		t.Errorf("bad db row: %+v", rows[1])
+	}
+}
+
 func TestBuildPsRowsStatusFromProbe(t *testing.T) {
 	corgi := &utils.CorgiCompose{
 		DatabaseServices: []utils.DatabaseService{

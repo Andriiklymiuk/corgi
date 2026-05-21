@@ -712,6 +712,27 @@ func TestRunSummaryJSONShape(t *testing.T) {
 	}
 }
 
+func TestBuildDetachState(t *testing.T) {
+	started := []detachedProc{{name: "api", port: 8080, pid: 4321, command: "npm start", logFile: "x.log"}}
+	dbs := []utils.RunStateEntry{{Name: "pg", Kind: "db_service", Container: "postgres-pg", Port: 5432, Status: "running"}}
+	st := buildDetachState("/x/corgi-compose.yml", started, dbs)
+	if len(st.Services) != 1 || st.Services[0].Name != "api" || st.Services[0].PID != 4321 || st.Services[0].Status != "running" {
+		t.Errorf("bad service entry: %+v", st.Services)
+	}
+	if st.Services[0].StartedAt.IsZero() || st.Services[0].StatusChangedAt.IsZero() {
+		t.Error("timestamps should be set")
+	}
+	if st.Services[0].LogFile != "x.log" || st.Services[0].Port != 8080 {
+		t.Errorf("fields not carried: %+v", st.Services[0])
+	}
+	if len(st.DBServices) != 1 || st.DBServices[0].Container != "postgres-pg" {
+		t.Errorf("db entry not carried: %+v", st.DBServices)
+	}
+	if st.ComposePath != "/x/corgi-compose.yml" {
+		t.Errorf("composePath not set: %q", st.ComposePath)
+	}
+}
+
 func TestBuildRunSummary(t *testing.T) {
 	t.Cleanup(func() { utils.ServicesItemsFromFlag = nil })
 	utils.ServicesItemsFromFlag = nil

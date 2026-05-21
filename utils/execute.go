@@ -139,6 +139,14 @@ func getLogWriter(serviceName string) io.Writer {
 	return ServiceLogWriters[serviceName]
 }
 
+func LogFilePath(serviceName string) string {
+	w := getLogWriter(serviceName)
+	if p, ok := w.(interface{ Path() string }); ok {
+		return p.Path()
+	}
+	return ""
+}
+
 func addProcess(proc *os.Process) {
 	pidMutex.Lock()
 	ProcessHandles = append(ProcessHandles, proc)
@@ -256,6 +264,23 @@ func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand,
 	}
 	markServiceLogStatusIfNotCrashed(serviceName, LogStatusOK)
 	return nil
+}
+
+func StartDetached(serviceName, command, path string, envFile ...string) (*os.Process, error) {
+	resolvedEnvFile := resolveEnvFile(path, envFile)
+	shellCommand := withEnvSource(command, resolvedEnvFile)
+	cmd := exec.Command("/bin/sh", "-c", shellCommand)
+	cmd.Dir = path
+	if lw := getLogWriter(serviceName); lw != nil {
+		cmd.Stdout = lw
+		cmd.Stderr = lw
+	}
+	SetProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	addProcess(cmd.Process)
+	return cmd.Process, nil
 }
 
 func handleCommandFailure(err error, commandSlice []string, serviceName, finalCommand, path string, envFile []string) error {
