@@ -204,6 +204,12 @@ paths, image refs, environment entries).
   empty.
 - Dotted forms like `${producer.VAR}` are **not** touched by this global pass
   (only simple `${NAME}` is) — they are resolved later from per-service env.
+- This pass runs everywhere, **including inside `start`/`beforeStart`/`afterStart`
+  and `scripts` command strings**. A braced `${VAR}` / `${VAR:-default}` there is
+  resolved at **load time** (against process env + sibling `.env`), not by the
+  runtime shell. To defer expansion to the runtime shell instead (e.g. a var only
+  defined in the service's own runtime env), escape it as `$${VAR}`, which becomes
+  the literal `${VAR}` for the shell to expand.
 
 Values come from the process environment first, then an optional `.env` file
 in the same directory as the compose file (process env wins). The `.env`

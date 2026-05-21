@@ -354,7 +354,7 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 	var unresolved []string
 	file, unresolved = InterpolateTolerant(file, EnvThenDotEnv(dotenv))
 	for _, name := range unresolved {
-		Infof("⚠️  ${%s} is not set; leaving it unresolved (set it in the environment, a sibling .env, or use ${%s:-default})", name, name)
+		Infof("⚠️  ${%s} is not set; leaving it unresolved (set it in the environment, a sibling .env, or use ${%s:-default})\n", name, name)
 	}
 
 	var corgiYaml CorgiComposeYaml

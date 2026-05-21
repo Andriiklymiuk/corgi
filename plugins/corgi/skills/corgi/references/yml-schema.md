@@ -33,6 +33,10 @@ string field (passwords, ports, paths, image refs, environment entries).
   so tunnel/cross-service refs still resolve later; use `${VAR:-default}` for an
   explicit fallback.
 - Dotted `${producer.VAR}` cross-service refs are left untouched by this pass.
+- Applies inside `start`/`beforeStart`/`afterStart`/`scripts` command strings too:
+  a braced `${VAR}` / `${VAR:-default}` there is resolved at **load time** (process
+  env + sibling `.env`), not by the runtime shell. Escape as `$${VAR}` (→ literal
+  `${VAR}`) to defer expansion to the runtime shell.
 
 Values resolve from the process env first, then a sibling `.env` (same dir as
 the compose file; process env wins). This file-level pass is separate from the

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func lookupFrom(m map[string]string) func(string) (string, bool) {
@@ -84,6 +86,33 @@ func TestInterpolateTolerantDedupesAndKeepsSetDefaultEscape(t *testing.T) {
 	}
 	if len(unresolved) != 1 || unresolved[0] != "MISSING" {
 		t.Errorf("expected single deduped MISSING, got %#v", unresolved)
+	}
+}
+
+func TestInterpolateInsideStartCommand(t *testing.T) {
+	// A braced ${VAR} inside a start command string is resolved at LOAD time
+	// (baked into the parsed Start entry), while $${VAR} is left as the literal
+	// ${VAR} for the runtime shell to expand.
+	in := []byte("start:\n  - echo ${MYVAR}\n  - echo $${MYVAR}\n")
+	out, unresolved := InterpolateTolerant(in, lookupFrom(map[string]string{"MYVAR": "hello"}))
+	if len(unresolved) != 0 {
+		t.Fatalf("expected nothing unresolved, got %#v", unresolved)
+	}
+
+	var parsed struct {
+		Start []string `yaml:"start"`
+	}
+	if err := yaml.Unmarshal(out, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.Start) != 2 {
+		t.Fatalf("expected 2 start entries, got %#v", parsed.Start)
+	}
+	if parsed.Start[0] != "echo hello" {
+		t.Errorf("set var should be baked at load: got %q", parsed.Start[0])
+	}
+	if parsed.Start[1] != "echo ${MYVAR}" {
+		t.Errorf("escaped var should defer to shell: got %q", parsed.Start[1])
 	}
 }
 
