@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -440,15 +441,13 @@ func TestRunStatusWatchJSONSingleIteration(t *testing.T) {
 	}))
 	defer srv.Close()
 	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runStatusWatch(rows, 50*time.Millisecond, false, true)
+		runStatusWatch(ctx, rows, 50*time.Millisecond, false, true)
 	}()
-	select {
-	case <-time.After(200 * time.Millisecond):
-	case <-done:
-	}
+	stopWatch(t, cancel, done)
 }
 
 func TestRunWatchAppendWithSeed(t *testing.T) {
@@ -459,15 +458,13 @@ func TestRunWatchAppendWithSeed(t *testing.T) {
 	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
 	seed := probeAllParallel(rows)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runWatchAppend(rows, seed, 50*time.Millisecond, false, false)
+		runWatchAppend(ctx, rows, seed, 50*time.Millisecond, false, false)
 	}()
-	select {
-	case <-time.After(200 * time.Millisecond):
-	case <-done:
-	}
+	stopWatch(t, cancel, done)
 }
 
 func TestRunStatusWatchQuiet(t *testing.T) {
@@ -476,15 +473,13 @@ func TestRunStatusWatchQuiet(t *testing.T) {
 	}))
 	defer srv.Close()
 	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runStatusWatch(rows, 50*time.Millisecond, false, true)
+		runStatusWatch(ctx, rows, 50*time.Millisecond, false, true)
 	}()
-	select {
-	case <-time.After(200 * time.Millisecond):
-	case <-done:
-	}
+	stopWatch(t, cancel, done)
 }
 
 func TestRunStatusWatchNonTTYNonJSON(t *testing.T) {
@@ -493,15 +488,13 @@ func TestRunStatusWatchNonTTYNonJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runStatusWatch(rows, 50*time.Millisecond, false, false)
+		runStatusWatch(ctx, rows, 50*time.Millisecond, false, false)
 	}()
-	select {
-	case <-time.After(200 * time.Millisecond):
-	case <-done:
-	}
+	stopWatch(t, cancel, done)
 }
 
 func TestRunWatchAppendNilSeed(t *testing.T) {
@@ -510,15 +503,13 @@ func TestRunWatchAppendNilSeed(t *testing.T) {
 	}))
 	defer srv.Close()
 	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runWatchAppend(rows, nil, 50*time.Millisecond, false, true)
+		runWatchAppend(ctx, rows, nil, 50*time.Millisecond, false, true)
 	}()
-	select {
-	case <-time.After(200 * time.Millisecond):
-	case <-done:
-	}
+	stopWatch(t, cancel, done)
 }
 
 func TestRunWatchAppendJSON(t *testing.T) {
@@ -528,13 +519,25 @@ func TestRunWatchAppendJSON(t *testing.T) {
 	defer srv.Close()
 	rows := []statusRow{{Label: "x", Kind: "http", URL: srv.URL, Port: 1}}
 	seed := probeAllParallel(rows)
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runWatchAppend(rows, seed, 50*time.Millisecond, true, false)
+		runWatchAppend(ctx, rows, seed, 50*time.Millisecond, true, false)
 	}()
+	stopWatch(t, cancel, done)
+}
+
+// stopWatch lets a watch loop run briefly, then cancels it and waits for the
+// goroutine to actually exit — so it can't leak and race later tests that
+// mutate shared globals (os.Stdout, utils.JSONOutput) while emitting output.
+func stopWatch(t *testing.T, cancel context.CancelFunc, done <-chan struct{}) {
+	t.Helper()
+	time.Sleep(150 * time.Millisecond)
+	cancel()
 	select {
-	case <-time.After(200 * time.Millisecond):
 	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watch goroutine did not stop after cancel")
 	}
 }
