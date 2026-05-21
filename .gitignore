@@ -34,3 +34,6 @@ corgi_services/*
 
 # local planning docs (not tracked)
 docs/plans/
+
+# local-only vscode extension (not a tracked submodule)
+corgi_vscode_extension/
