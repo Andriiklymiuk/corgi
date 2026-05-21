@@ -144,6 +144,8 @@ message text (messages may change wording). The catalog:
 | `E_UNHEALTHY` | a readiness/health probe failed | check the service; inspect `corgi logs` |
 | `E_READINESS_TIMEOUT` | a dependency wasn't ready before the deadline | raise `--ready-timeout`, or fix the dep |
 | `E_DOCKER_DOWN` | the docker daemon is unreachable | start Docker |
+| `E_USAGE` | invalid command usage / arguments | fix the command invocation |
+| `E_EXEC_FAILED` | the command could not be spawned | check the binary exists / path |
 
 Note: the `E_INTERACTIVE_REQUIRED` code was previously emitted as `INPUT_REQUIRED`.
 A few command-specific codes also exist outside this catalog: `ALREADY_RUNNING`

@@ -19,6 +19,8 @@ func TestErrCodeValues(t *testing.T) {
 		"ErrUnhealthy":        "E_UNHEALTHY",
 		"ErrReadinessTimeout": "E_READINESS_TIMEOUT",
 		"ErrDockerDown":       "E_DOCKER_DOWN",
+		"ErrUsage":            "E_USAGE",
+		"ErrExecFailed":       "E_EXEC_FAILED",
 	}
 
 	got := map[string]string{
@@ -35,6 +37,8 @@ func TestErrCodeValues(t *testing.T) {
 		"ErrUnhealthy":        ErrUnhealthy,
 		"ErrReadinessTimeout": ErrReadinessTimeout,
 		"ErrDockerDown":       ErrDockerDown,
+		"ErrUsage":            ErrUsage,
+		"ErrExecFailed":       ErrExecFailed,
 	}
 
 	for name, wantVal := range want {

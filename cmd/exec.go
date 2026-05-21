@@ -67,7 +67,22 @@ func shellJoin(tokens []string) string {
 }
 
 func runExec(cmd *cobra.Command, args []string) {
-	serviceName, cmdTokens := splitExecArgs(args, cmd.ArgsLenAtDash())
+	dash := cmd.ArgsLenAtDash()
+
+	// Guard against `corgi exec svc extra -- cmd`: everything before `--` must
+	// be a single token (the service name), otherwise we'd silently join the
+	// extra tokens into a bogus service name like "svc extra".
+	if dash > 1 {
+		msg := "too many arguments before --; usage: corgi exec <service> -- <cmd> [args...]"
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrUsage, msg)
+		} else {
+			fmt.Fprintln(os.Stderr, msg)
+		}
+		os.Exit(2)
+	}
+
+	serviceName, cmdTokens := splitExecArgs(args, dash)
 
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
@@ -82,15 +97,19 @@ func runExec(cmd *cobra.Command, args []string) {
 	if serviceName == "" {
 		// No service named: under non-interactive there's nobody to prompt, so
 		// fail with the valid-service list rather than hang.
-		utils.JSONError(utils.ErrServiceNotFound,
-			fmt.Sprintf("no service given; valid services: %s", strings.Join(serviceNames(corgi), ", ")))
+		msg := fmt.Sprintf("no service given; valid services: %s", strings.Join(serviceNames(corgi), ", "))
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrServiceNotFound, msg)
+		} else {
+			fmt.Fprintln(os.Stderr, msg)
+		}
 		os.Exit(2)
 	}
 
 	if len(cmdTokens) == 0 {
 		msg := "no command given; usage: corgi exec <service> -- <cmd> [args...]"
 		if utils.JSONOutput {
-			utils.JSONError("E_USAGE", msg)
+			utils.JSONError(utils.ErrUsage, msg)
 		} else {
 			fmt.Fprintln(os.Stderr, msg)
 		}
@@ -104,12 +123,18 @@ func runExec(cmd *cobra.Command, args []string) {
 	}
 
 	code, err := execService(corgi, serviceName, cmdTokens, ensureDeps, readyTo)
-	if err != nil {
-		// execService only returns an error for resolution/spawn/readiness
-		// failures; it has already emitted the right message/JSON. Exit code
-		// is carried separately.
-		os.Exit(code)
+	if err != nil && code < 0 {
+		// Spawn never produced a child exit code; make sure the failure still
+		// surfaces a message instead of exiting silently.
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrExecFailed, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(1)
 	}
+	// Propagate the child's exit code as corgi's own. Failure cases already
+	// emitted their message/JSON inside execService.
 	os.Exit(code)
 }
 
@@ -143,7 +168,11 @@ func execService(
 	if service == nil {
 		msg := fmt.Sprintf("service %q not found; valid services: %s",
 			serviceName, strings.Join(serviceNames(corgi), ", "))
-		utils.JSONError(utils.ErrServiceNotFound, msg)
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrServiceNotFound, msg)
+		} else {
+			fmt.Fprintln(os.Stderr, msg)
+		}
 		return 2, fmt.Errorf("%s", msg)
 	}
 
@@ -185,7 +214,7 @@ func execService(
 		// Spawn failure (command not found, bad cwd): exit 1.
 		msg := fmt.Sprintf("failed to run command for %s: %v", serviceName, err)
 		if utils.JSONOutput {
-			utils.JSONError("E_EXEC_FAILED", msg)
+			utils.JSONError(utils.ErrExecFailed, msg)
 		} else {
 			fmt.Fprintln(os.Stderr, msg)
 		}

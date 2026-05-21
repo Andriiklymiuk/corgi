@@ -16,4 +16,6 @@ const (
 	ErrUnhealthy        = "E_UNHEALTHY"
 	ErrReadinessTimeout = "E_READINESS_TIMEOUT"
 	ErrDockerDown       = "E_DOCKER_DOWN"
+	ErrUsage            = "E_USAGE"       // invalid command usage / args
+	ErrExecFailed       = "E_EXEC_FAILED" // command failed to spawn
 )
