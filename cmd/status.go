@@ -96,7 +96,7 @@ func resolveStatusRows(cmd *cobra.Command) []statusRow {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		if utils.JSONOutput {
-			utils.JSONError("config", err.Error())
+			utils.JSONError(utils.ErrConfig, err.Error())
 		} else {
 			fmt.Fprintf(os.Stderr, "couldn't get services config: %s\n", err)
 		}

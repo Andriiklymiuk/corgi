@@ -132,6 +132,7 @@ message text (messages may change wording). The catalog:
 | Code | Meaning | Typical fix |
 |------|---------|-------------|
 | `E_COMPOSE_NOT_FOUND` | no `corgi-compose.yml` resolved | run from a dir with one, or pass `-f <path>` |
+| `E_CONFIG` | could not load/resolve the compose file | run from a dir with corgi-compose.yml or pass `-f` |
 | `E_COMPOSE_PARSE` | YAML failed to parse | fix syntax; validate with `corgi validate` |
 | `E_INTERACTIVE_REQUIRED` | a prompt was needed but input is unavailable | pass the flag the message names |
 | `E_SERVICE_NOT_FOUND` | named service/db not in compose | check the name against `corgi ps` |
@@ -149,7 +150,8 @@ message text (messages may change wording). The catalog:
 | `E_UNKNOWN_PROFILE` | `run --profile` matched no services/db_services | check the profile name against the compose `profiles:` lists |
 | `E_INVALID_CONDITION` | invalid depends_on `condition` (use `ready` or `started`) | fix the value |
 
-Note: the `E_INTERACTIVE_REQUIRED` code was previously emitted as `INPUT_REQUIRED`.
+Note: the `E_INTERACTIVE_REQUIRED` code was previously emitted as `INPUT_REQUIRED`,
+and the compose-load error code changed from `config` to `E_CONFIG`.
 A few command-specific codes also exist outside this catalog: `ALREADY_RUNNING`
 (second `run --detach`) and `UNSUPPORTED` (`restart --service`).
 
