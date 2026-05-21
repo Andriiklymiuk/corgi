@@ -157,6 +157,41 @@ func TestValidateCompose(t *testing.T) {
 			wantWarn: map[string]int{WarnNoHealthcheck: 0},
 		},
 		{
+			name: "bogus depends_on condition errors",
+			compose: &CorgiCompose{
+				Services: []Service{
+					{ServiceName: "api", Start: []string{"x"}},
+					{ServiceName: "web", Start: []string{"x"}, DependsOnServices: []DependsOnService{{Name: "api", Condition: "healthy"}}},
+				},
+			},
+			wantErr: map[string]int{ErrInvalidCondition: 1},
+		},
+		{
+			name: "bogus db depends_on condition errors",
+			compose: &CorgiCompose{
+				DatabaseServices: []DatabaseService{{ServiceName: "db", Driver: "postgres"}},
+				Services: []Service{
+					{ServiceName: "api", Start: []string{"x"}, DependsOnDb: []DependsOnDb{{Name: "db", Condition: "bogus"}}},
+				},
+			},
+			wantErr: map[string]int{ErrInvalidCondition: 1},
+		},
+		{
+			name: "valid conditions and empty do not error",
+			compose: &CorgiCompose{
+				DatabaseServices: []DatabaseService{{ServiceName: "db", Driver: "postgres"}},
+				Services: []Service{
+					{ServiceName: "api", Start: []string{"x"}, HealthCheck: "/h"},
+					{ServiceName: "web", Start: []string{"x"}, DependsOnServices: []DependsOnService{
+						{Name: "api", Condition: "ready"},
+						{Name: "api", Condition: "started"},
+						{Name: "api", Condition: ""},
+					}, DependsOnDb: []DependsOnDb{{Name: "db", Condition: "ready"}}},
+				},
+			},
+			wantErr: map[string]int{ErrInvalidCondition: 0},
+		},
+		{
 			name: "cloneFrom without branch warns",
 			compose: &CorgiCompose{
 				Services: []Service{

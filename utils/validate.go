@@ -33,6 +33,7 @@ func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 	errs = append(errs, checkDependencyCycles(c)...)
 	errs = append(errs, checkMissingStart(c)...)
 	errs = append(errs, checkPortConflicts(c)...)
+	errs = append(errs, checkInvalidConditions(c)...)
 
 	warns = append(warns, checkDependedWithoutHealthcheck(c)...)
 	warns = append(warns, checkCloneWithoutBranch(c)...)
@@ -166,6 +167,37 @@ func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
 			Message: fmt.Sprintf("service %q is part of a depends_on_services cycle", n),
 			Field:   fmt.Sprintf("services.%s.depends_on_services", n),
 		})
+	}
+	return out
+}
+
+// checkInvalidConditions flags a depends_on entry whose condition is set to
+// something other than the supported "ready"/"started" values. The run path
+// silently treats unknown values as "ready", so surface them as errors here.
+func checkInvalidConditions(c *CorgiCompose) []ValidationIssue {
+	valid := func(cond string) bool {
+		return cond == "" || cond == "ready" || cond == "started"
+	}
+	var out []ValidationIssue
+	for _, s := range c.Services {
+		for i, dep := range s.DependsOnServices {
+			if !valid(dep.Condition) {
+				out = append(out, ValidationIssue{
+					Code:    ErrInvalidCondition,
+					Message: fmt.Sprintf("service %q has invalid depends_on condition %q (use %q or %q)", s.ServiceName, dep.Condition, "ready", "started"),
+					Field:   fmt.Sprintf("services.%s.depends_on_services[%d].condition", s.ServiceName, i),
+				})
+			}
+		}
+		for i, dep := range s.DependsOnDb {
+			if !valid(dep.Condition) {
+				out = append(out, ValidationIssue{
+					Code:    ErrInvalidCondition,
+					Message: fmt.Sprintf("service %q has invalid depends_on condition %q (use %q or %q)", s.ServiceName, dep.Condition, "ready", "started"),
+					Field:   fmt.Sprintf("services.%s.depends_on_db[%d].condition", s.ServiceName, i),
+				})
+			}
+		}
 	}
 	return out
 }

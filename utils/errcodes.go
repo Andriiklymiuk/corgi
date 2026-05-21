@@ -19,4 +19,5 @@ const (
 	ErrUsage            = "E_USAGE"           // invalid command usage / args
 	ErrExecFailed       = "E_EXEC_FAILED"     // command failed to spawn
 	ErrUnknownProfile   = "E_UNKNOWN_PROFILE" // --profile matched no services/db_services
+	ErrInvalidCondition = "E_INVALID_CONDITION"
 )
