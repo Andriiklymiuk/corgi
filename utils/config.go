@@ -342,6 +342,17 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read %s", pathToCorgiComposeFile)
 	}
 
+	// Expand ${VAR} / ${VAR:-default} in the raw bytes before parsing, against
+	// the process env plus an optional sibling .env (env wins).
+	dotenv, err := LoadDotEnv(filepath.Join(CorgiComposePathDir, ".env"))
+	if err != nil {
+		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read .env next to %s: %v", pathToCorgiComposeFile, err)
+	}
+	file, err = Interpolate(file, EnvThenDotEnv(dotenv))
+	if err != nil {
+		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't interpolate %s: %v", pathToCorgiComposeFile, err)
+	}
+
 	var corgiYaml CorgiComposeYaml
 	if err := yaml.Unmarshal(file, &corgiYaml); err != nil {
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't unmarshal file %s: %v", pathToCorgiComposeFile, err)

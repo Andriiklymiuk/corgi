@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -110,6 +111,50 @@ func TestLoadCorgiComposeFileInvalidYaml(t *testing.T) {
 	_, _, err := loadCorgiComposeFile(c)
 	if err == nil {
 		t.Error("expected unmarshal err")
+	}
+}
+
+func TestGetCorgiServicesInterpolatesFromSiblingDotEnv(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	body := "name: full\ndb_services:\n  pg:\n    driver: postgres\n    password: ${DB_PASSWORD}\n"
+	if err := os.WriteFile(yml, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_PASSWORD=secret\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	got, err := GetCorgiServices(newCobraFull())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.DatabaseServices) != 1 || got.DatabaseServices[0].Password != "secret" {
+		t.Errorf("password not interpolated: %#v", got.DatabaseServices)
+	}
+}
+
+func TestGetCorgiServicesFailsOnUnsetVar(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	if err := os.WriteFile(yml, []byte("name: ${UNSET_NO_DEFAULT_VAR}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, err := GetCorgiServices(newCobraFull())
+	if err == nil {
+		t.Fatal("expected interpolation error for unset var")
+	}
+	if !strings.Contains(err.Error(), "UNSET_NO_DEFAULT_VAR") {
+		t.Errorf("error should name var: %v", err)
 	}
 }
 

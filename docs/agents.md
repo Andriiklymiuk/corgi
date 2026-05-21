@@ -186,6 +186,33 @@ In an editor, point the YAML language server at it with a top-of-file directive:
 # yaml-language-server: $schema=./corgi-compose.schema.json
 ```
 
+## Environment interpolation
+
+`${VAR}` placeholders in `corgi-compose.yml` are expanded in the raw file
+**before** YAML parsing, so they work in any string field (passwords, ports,
+paths, image refs, environment entries).
+
+- `${VAR}` — replaced with the value of `VAR`.
+- `${VAR:-default}` — value of `VAR`, or `default` if `VAR` is unset/empty.
+- `$${LITERAL}` — escapes to the literal `${LITERAL}` (not expanded).
+- Only **braced** forms are expanded. Bare `$VAR` is left untouched (so shell
+  snippets in `start` commands are safe).
+- An unset var with **no default** is a hard error (`E_MISSING_FIELD`) naming
+  the var — corgi never silently substitutes empty.
+
+Values come from the process environment first, then an optional `.env` file
+in the same directory as the compose file (process env wins). The `.env`
+parser is minimal: `KEY=value` lines, `#` comments and blank lines ignored,
+surrounding quotes trimmed.
+
+```yaml
+db_services:
+  pg:
+    driver: postgres
+    password: ${DB_PASSWORD}        # required — fails if unset
+    port: ${PG_PORT:-5432}          # defaults to 5432
+```
+
 ## Safe agent recipe
 
 Use `corgi run --detach` — it returns immediately and the services outlive
