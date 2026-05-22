@@ -360,7 +360,7 @@ paths, image refs, environment entries).
 - Only **braced** forms are expanded. Bare `$VAR` is left untouched (so shell
   snippets in `start` commands are safe).
 - An unset var with **no default** is left **unresolved** (the `${VAR}` token
-  stays literal) and corgi prints one warning per name — so tunnel hostnames and
+  stays literal), silently — so runtime/per-service env, tunnel hostnames, and
   cross-service `${producer.VAR}` refs that resolve later still work. Use
   `${VAR:-default}` for an explicit fallback. corgi never silently substitutes
   empty.
@@ -382,7 +382,7 @@ surrounding quotes trimmed.
 db_services:
   pg:
     driver: postgres
-    password: ${DB_PASSWORD}        # unset & no default -> left literal + warning
+    password: ${DB_PASSWORD}        # unset & no default -> left literal, silently
     port: ${PG_PORT:-5432}          # defaults to 5432
 ```
 
