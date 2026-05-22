@@ -11,17 +11,8 @@ package utils
 // unknown profile (no member matches) yields empty sets, so the caller can warn
 // and start nothing rather than falling through to "select all".
 func SelectByProfile(corgi *CorgiCompose, profile string) (services, dbs map[string]bool) {
-	services = map[string]bool{}
-	dbs = map[string]bool{}
-
 	if profile == "" {
-		for _, s := range corgi.Services {
-			services[s.ServiceName] = true
-		}
-		for _, db := range corgi.DatabaseServices {
-			dbs[db.ServiceName] = true
-		}
-		return services, dbs
+		return selectAll(corgi)
 	}
 
 	svcByName := map[string]Service{}
@@ -29,8 +20,30 @@ func SelectByProfile(corgi *CorgiCompose, profile string) (services, dbs map[str
 		svcByName[s.ServiceName] = s
 	}
 
-	// Seed the BFS with services that declare the profile.
-	var queue []string
+	services, dbs, queue := seedProfileSelection(corgi, profile)
+	walkDepClosure(svcByName, services, dbs, queue)
+	return services, dbs
+}
+
+// selectAll returns every service and db_service (the profile=="" case).
+func selectAll(corgi *CorgiCompose) (services, dbs map[string]bool) {
+	services = map[string]bool{}
+	dbs = map[string]bool{}
+	for _, s := range corgi.Services {
+		services[s.ServiceName] = true
+	}
+	for _, db := range corgi.DatabaseServices {
+		dbs[db.ServiceName] = true
+	}
+	return services, dbs
+}
+
+// seedProfileSelection collects the services and db_services that directly
+// declare the profile, returning the initial selection sets plus the BFS queue
+// of seed services to expand.
+func seedProfileSelection(corgi *CorgiCompose, profile string) (services, dbs map[string]bool, queue []string) {
+	services = map[string]bool{}
+	dbs = map[string]bool{}
 	for _, s := range corgi.Services {
 		if containsString(s.Profiles, profile) {
 			services[s.ServiceName] = true
@@ -43,8 +56,13 @@ func SelectByProfile(corgi *CorgiCompose, profile string) (services, dbs map[str
 			dbs[db.ServiceName] = true
 		}
 	}
+	return services, dbs, queue
+}
 
-	// BFS over service deps. dbs are leaves (no further service deps to walk).
+// walkDepClosure expands the BFS queue over depends_on_services, pulling each
+// service's transitive service and db dependencies into the selection sets.
+// dbs are leaves (no further service deps to walk).
+func walkDepClosure(svcByName map[string]Service, services, dbs map[string]bool, queue []string) {
 	for len(queue) > 0 {
 		name := queue[0]
 		queue = queue[1:]
@@ -64,8 +82,6 @@ func SelectByProfile(corgi *CorgiCompose, profile string) (services, dbs map[str
 			}
 		}
 	}
-
-	return services, dbs
 }
 
 func containsString(list []string, target string) bool {

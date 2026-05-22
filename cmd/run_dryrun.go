@@ -148,6 +148,14 @@ func computeStartOrder(corgi *utils.CorgiCompose) []string {
 		indeg[to]++
 	}
 
+	addDependencyEdges(corgi, addEdge)
+
+	return kahnSort(nodes, indeg, graph)
+}
+
+// addDependencyEdges wires precedence edges from each service's db/service
+// dependencies (the producer) to the service itself (the consumer).
+func addDependencyEdges(corgi *utils.CorgiCompose, addEdge func(from, to string)) {
 	for _, svc := range corgi.Services {
 		to := "svc:" + svc.ServiceName
 		for _, d := range svc.DependsOnDb {
@@ -161,8 +169,6 @@ func computeStartOrder(corgi *utils.CorgiCompose) []string {
 			}
 		}
 	}
-
-	return kahnSort(nodes, indeg, graph)
 }
 
 // kahnSort runs Kahn's algorithm with deterministic tie-breaking (lowest name
@@ -225,6 +231,15 @@ func emitDryRunPlan(plan dryRunPlan) int {
 
 func printDryRunHuman(plan dryRunPlan) {
 	utils.Info(art.BlueColor, "🐶 corgi run --dry-run (no side effects)", art.WhiteColor)
+	printDryRunIssues(plan)
+	printDryRunOrder(plan.Order)
+	printDryRunDatabases(plan.Databases)
+	printDryRunServices(plan.Services)
+}
+
+// printDryRunIssues prints the validation errors (only when invalid) and any
+// warnings.
+func printDryRunIssues(plan dryRunPlan) {
 	if !plan.Valid {
 		utils.Info(art.RedColor, "validation failed:", art.WhiteColor)
 		for _, e := range plan.Errors {
@@ -234,29 +249,37 @@ func printDryRunHuman(plan dryRunPlan) {
 	for _, w := range plan.Warnings {
 		utils.Infof("  ⚠ [%s] %s\n", w.Code, w.Message)
 	}
+}
 
+func printDryRunOrder(order []string) {
 	utils.Info("\nStart order:")
-	for i, id := range plan.Order {
+	for i, id := range order {
 		utils.Infof("  %d. %s\n", i+1, id)
 	}
+}
 
-	if len(plan.Databases) > 0 {
-		utils.Info("\nDatabases:")
-		for _, db := range plan.Databases {
-			utils.Infof("  • %s (driver=%s, port=%d, willStart=%t)\n", db.Name, db.Driver, db.Port, db.WillStart)
-		}
+func printDryRunDatabases(dbs []dryRunDB) {
+	if len(dbs) == 0 {
+		return
 	}
+	utils.Info("\nDatabases:")
+	for _, db := range dbs {
+		utils.Infof("  • %s (driver=%s, port=%d, willStart=%t)\n", db.Name, db.Driver, db.Port, db.WillStart)
+	}
+}
 
-	if len(plan.Services) > 0 {
-		utils.Info("\nServices:")
-		for _, s := range plan.Services {
-			utils.Infof("  • %s (port=%d, willClone=%t)\n", s.Name, s.Port, s.WillClone)
-			if len(s.DependsOn) > 0 {
-				utils.Infof("      depends on: %v\n", s.DependsOn)
-			}
-			if len(s.EnvKeys) > 0 {
-				utils.Infof("      env keys: %v\n", s.EnvKeys)
-			}
+func printDryRunServices(services []dryRunService) {
+	if len(services) == 0 {
+		return
+	}
+	utils.Info("\nServices:")
+	for _, s := range services {
+		utils.Infof("  • %s (port=%d, willClone=%t)\n", s.Name, s.Port, s.WillClone)
+		if len(s.DependsOn) > 0 {
+			utils.Infof("      depends on: %v\n", s.DependsOn)
+		}
+		if len(s.EnvKeys) > 0 {
+			utils.Infof("      env keys: %v\n", s.EnvKeys)
 		}
 	}
 }

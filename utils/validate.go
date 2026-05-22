@@ -103,6 +103,23 @@ func checkDanglingDeps(c *CorgiCompose) []ValidationIssue {
 // cycle in the depends_on_services graph (edges to unknown services are
 // ignored — those surface as dangling deps).
 func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
+	adj := buildServiceDepAdjacency(c)
+	cyclic := findCyclicServices(c, adj)
+
+	var out []ValidationIssue
+	for _, n := range cyclic {
+		out = append(out, ValidationIssue{
+			Code:    ErrDependencyCycle,
+			Message: fmt.Sprintf("service %q is part of a depends_on_services cycle", n),
+			Field:   fmt.Sprintf("services.%s.depends_on_services", n),
+		})
+	}
+	return out
+}
+
+// buildServiceDepAdjacency maps each service to the known services it depends
+// on. Edges to unknown services are dropped (those surface as dangling deps).
+func buildServiceDepAdjacency(c *CorgiCompose) map[string][]string {
 	services, _ := composeNames(c)
 	adj := make(map[string][]string, len(c.Services))
 	for _, s := range c.Services {
@@ -112,7 +129,13 @@ func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
 			}
 		}
 	}
+	return adj
+}
 
+// findCyclicServices returns, sorted, the names of services that participate in
+// a cycle within the dependency adjacency, using an iterative-start DFS over a
+// deterministic order.
+func findCyclicServices(c *CorgiCompose, adj map[string][]string) []string {
 	const (
 		unvisited = 0
 		visiting  = 1
@@ -130,13 +153,7 @@ func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
 			case unvisited:
 				dfs(next, stack)
 			case visiting:
-				// Back edge: everything from `next` to the top of the stack is a cycle.
-				for i := len(stack) - 1; i >= 0; i-- {
-					inCycle[stack[i]] = true
-					if stack[i] == next {
-						break
-					}
-				}
+				markCycleFrom(stack, next, inCycle)
 			}
 		}
 		state[node] = visited
@@ -159,16 +176,18 @@ func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
 		cyclic = append(cyclic, n)
 	}
 	sort.Strings(cyclic)
+	return cyclic
+}
 
-	var out []ValidationIssue
-	for _, n := range cyclic {
-		out = append(out, ValidationIssue{
-			Code:    ErrDependencyCycle,
-			Message: fmt.Sprintf("service %q is part of a depends_on_services cycle", n),
-			Field:   fmt.Sprintf("services.%s.depends_on_services", n),
-		})
+// markCycleFrom flags every node from the top of the DFS stack down to (and
+// including) the back-edge target as being part of a cycle.
+func markCycleFrom(stack []string, target string, inCycle map[string]bool) {
+	for i := len(stack) - 1; i >= 0; i-- {
+		inCycle[stack[i]] = true
+		if stack[i] == target {
+			return
+		}
 	}
-	return out
 }
 
 // checkInvalidConditions flags a depends_on entry whose condition is set to

@@ -35,6 +35,13 @@ func init() {
 	rootCmd.AddCommand(mcpCmd)
 }
 
+// errFmt is the "<code>: <detail>" wrapper used when surfacing an error with a
+// stable code prefix; mimeJSON is the MIME type for the JSON resources/schema.
+const (
+	errFmt   = "%s: %v"
+	mimeJSON = "application/json"
+)
+
 // mcpHandlerMu serializes all MCP tool/resource work. mcp-go's stdio server
 // runs a worker pool, so handlers can be invoked concurrently; corgi's handlers
 // mutate shared global state (os.Stdout swap in withStdoutToStderr, plus
@@ -254,7 +261,7 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 		state = buildDetachState(utils.CorgiComposePath, procs, dbs)
 	})
 	if envErr != nil {
-		return utils.RunState{}, fmt.Errorf("%s: %v", utils.ErrExecFailed, envErr)
+		return utils.RunState{}, fmt.Errorf(errFmt, utils.ErrExecFailed, envErr)
 	}
 	if err := utils.WriteRunState(statePath, state); err != nil {
 		return state, fmt.Errorf("%s: could not write run-state: %v", utils.ErrExecFailed, err)
@@ -350,7 +357,7 @@ func mcpLogs(args logsArgs) (logsResult, error) {
 	}
 	lines, err := tailLogFile(runs[0], n)
 	if err != nil {
-		return logsResult{}, fmt.Errorf("%s: %v", utils.ErrExecFailed, err)
+		return logsResult{}, fmt.Errorf(errFmt, utils.ErrExecFailed, err)
 	}
 	return logsResult{Service: args.Service, Lines: lines}, nil
 }
@@ -420,7 +427,7 @@ func mcpExec(args execArgs) (execResult, error) {
 
 	if args.EnsureDeps {
 		if err := ensureServiceDeps(corgi, *service, defaultReadyTimeout); err != nil {
-			return execResult{}, fmt.Errorf("%s: %v", utils.ErrReadinessTimeout, err)
+			return execResult{}, fmt.Errorf(errFmt, utils.ErrReadinessTimeout, err)
 		}
 	}
 
@@ -473,7 +480,7 @@ func filterByProfile(corgi *utils.CorgiCompose, profile string) {
 
 // composeLoadError prefixes the stable error code so agents can branch on it.
 func composeLoadError(err error) error {
-	return fmt.Errorf("%s: %v", utils.ErrComposeNotFound, err)
+	return fmt.Errorf(errFmt, utils.ErrComposeNotFound, err)
 }
 
 // withStdoutToStderr runs fn with os.Stdout temporarily pointed at os.Stderr.
@@ -605,19 +612,19 @@ func registerMCPResources(s *server.MCPServer) {
 	s.AddResource(
 		mcp.NewResource("corgi://schema", "corgi compose JSON Schema",
 			mcp.WithResourceDescription("JSON Schema (draft-07) for corgi-compose.yml"),
-			mcp.WithMIMEType("application/json")),
+			mcp.WithMIMEType(mimeJSON)),
 		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			mcpHandlerMu.Lock()
 			defer mcpHandlerMu.Unlock()
 			return []mcp.ResourceContents{mcp.TextResourceContents{
-				URI: "corgi://schema", MIMEType: "application/json", Text: utils.ComposeJSONSchema(),
+				URI: "corgi://schema", MIMEType: mimeJSON, Text: utils.ComposeJSONSchema(),
 			}}, nil
 		})
 
 	s.AddResource(
 		mcp.NewResource("corgi://compose", "current corgi compose",
 			mcp.WithResourceDescription("Resolved/interpolated corgi-compose.yml as JSON"),
-			mcp.WithMIMEType("application/json")),
+			mcp.WithMIMEType(mimeJSON)),
 		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			mcpHandlerMu.Lock()
 			defer mcpHandlerMu.Unlock()
@@ -630,14 +637,14 @@ func registerMCPResources(s *server.MCPServer) {
 				return nil, fmt.Errorf("%s: marshal compose: %v", utils.ErrExecFailed, err)
 			}
 			return []mcp.ResourceContents{mcp.TextResourceContents{
-				URI: "corgi://compose", MIMEType: "application/json", Text: string(b),
+				URI: "corgi://compose", MIMEType: mimeJSON, Text: string(b),
 			}}, nil
 		})
 
 	s.AddResource(
 		mcp.NewResource("corgi://status", "live status snapshot",
 			mcp.WithResourceDescription("Live health snapshot of declared services and db_services"),
-			mcp.WithMIMEType("application/json")),
+			mcp.WithMIMEType(mimeJSON)),
 		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			mcpHandlerMu.Lock()
 			defer mcpHandlerMu.Unlock()
@@ -650,7 +657,7 @@ func registerMCPResources(s *server.MCPServer) {
 				return nil, fmt.Errorf("%s: marshal status: %v", utils.ErrExecFailed, err)
 			}
 			return []mcp.ResourceContents{mcp.TextResourceContents{
-				URI: "corgi://status", MIMEType: "application/json", Text: string(b),
+				URI: "corgi://status", MIMEType: mimeJSON, Text: string(b),
 			}}, nil
 		})
 }

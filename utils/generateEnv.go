@@ -12,6 +12,9 @@ import (
 
 const corgiGeneratedMessage = "# 🐶 Auto generated vars by corgi"
 
+// envLineIntFmt formats a newline-prefixed KEY=<int> env line.
+const envLineIntFmt = "\n%s=%d"
+
 func getEnvFromFile(filePath, corgiGeneratedMessage string) string {
 	envFileContent := GetFileContent(filePath)
 	var envFileNormalizedContent []string
@@ -535,7 +538,7 @@ func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 		if service.PortAlias != "" {
 			portAlias = service.PortAlias
 		}
-		envForService += fmt.Sprintf("\n%s=%d", portAlias, service.Port)
+		envForService += fmt.Sprintf(envLineIntFmt, portAlias, service.Port)
 	}
 	if len(service.Environment) > 0 {
 		existing := parseEnvVarsIntoMap(envForService)
@@ -571,7 +574,7 @@ func ComputeEnvKeysForService(svc Service, corgi *CorgiCompose) []string {
 		if svc.PortAlias != "" {
 			portAlias = svc.PortAlias
 		}
-		body += fmt.Sprintf("\n%s=%d", portAlias, svc.Port)
+		body += fmt.Sprintf(envLineIntFmt, portAlias, svc.Port)
 	}
 	for _, line := range svc.Environment {
 		// Keep the left-of-= verbatim; only the KEY matters here.
@@ -651,7 +654,7 @@ func buildServiceEnvBody(service Service, corgiCompose *CorgiCompose, copyEnvFil
 		if service.PortAlias != "" {
 			portAlias = service.PortAlias
 		}
-		envForService += fmt.Sprintf("\n%s=%d", portAlias, service.Port)
+		envForService += fmt.Sprintf(envLineIntFmt, portAlias, service.Port)
 	}
 
 	return appendEnvironmentLines(envForService, service)
