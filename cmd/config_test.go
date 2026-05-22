@@ -61,6 +61,48 @@ func TestRunConfigShow_DefaultsToOff(t *testing.T) {
 	}
 }
 
+func TestRunConfigShow_JSON(t *testing.T) {
+	prev := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = prev })
+
+	dir := withTempHome(t)
+	if err := utils.SaveUserConfig(&utils.UserConfig{Notifications: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() { runConfigShow(&cobra.Command{}, nil) })
+
+	var got configView
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if !got.Notifications {
+		t.Error("notifications should be true")
+	}
+	wantPath := filepath.Join(dir, ".corgi", "config.yml")
+	if got.Path != wantPath {
+		t.Errorf("path got %q want %q", got.Path, wantPath)
+	}
+}
+
+func TestConfigPathSubcommand_JSON(t *testing.T) {
+	prev := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = prev })
+
+	dir := withTempHome(t)
+	out := captureStdout(t, func() { configPathCmd.Run(configPathCmd, nil) })
+
+	var got map[string]string
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	want := filepath.Join(dir, ".corgi", "config.yml")
+	if got["path"] != want {
+		t.Errorf("path got %q want %q", got["path"], want)
+	}
+}
+
 func TestConfigPathSubcommand_PrintsPath(t *testing.T) {
 	dir := withTempHome(t)
 	out := captureStdout(t, func() { configPathCmd.Run(configPathCmd, nil) })

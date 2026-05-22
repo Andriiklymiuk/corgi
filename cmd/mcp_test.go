@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -457,5 +458,40 @@ func TestMCPWithStdoutToStderr(t *testing.T) {
 	}
 	if len(data) != 0 {
 		t.Errorf("expected nothing on real stdout during swap, got %q", string(data))
+	}
+}
+
+// TestLoadComposeCtxResetsFilenameFlag guards the just-fixed leak: a first call
+// with an explicit composePath must not leak that path into a later call with
+// composePath="". cleanup() resets rootCmd's filename persistent flag, so the
+// second load resolves the compose in the current working dir, not the first.
+func TestLoadComposeCtxResetsFilenameFlag(t *testing.T) {
+	// Explicit-path load: a compose file in a dedicated dir.
+	dirA := t.TempDir()
+	pathA := filepath.Join(dirA, "corgi-compose.yml")
+	if err := os.WriteFile(pathA, []byte("name: explicit-a\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := loadComposeForMCP(pathA)
+	if err != nil {
+		t.Fatalf("first load (explicit path): %v", err)
+	}
+	if first.Name != "explicit-a" {
+		t.Fatalf("first load name got %q want explicit-a", first.Name)
+	}
+
+	if got := rootCmd.PersistentFlags().Lookup("filename").Value.String(); got != "" {
+		t.Fatalf("filename flag leaked after explicit-path load: %q", got)
+	}
+
+	// Second load with "" must resolve cwd's compose, not pathA.
+	chdirToTempCompose(t, "name: cwd-b\n")
+	second, err := loadComposeForMCP("")
+	if err != nil {
+		t.Fatalf("second load (cwd): %v", err)
+	}
+	if second.Name != "cwd-b" {
+		t.Fatalf("second load inherited stale filename; got %q want cwd-b", second.Name)
 	}
 }

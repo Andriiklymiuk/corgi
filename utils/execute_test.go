@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -622,6 +623,268 @@ func TestRunCleanupCommandsSurvivesKillAll(t *testing.T) {
 	<-done
 	if _, err := os.Stat(marker); err != nil {
 		t.Fatalf("cleanup was killed by KillAllStoredProcesses: %v", err)
+	}
+}
+
+// fakeLogWriter implements the optional interfaces runManaged/markServiceLogStatus
+// probe (SetStatus/CurrentStatus/Path) without touching the filesystem. Writes
+// can come from a detached child process goroutine, so access is mutex-guarded.
+type fakeLogWriter struct {
+	mu     sync.Mutex
+	buf    strings.Builder
+	status LogStatus
+	path   string
+	closed bool
+}
+
+func (f *fakeLogWriter) Write(p []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.buf.Write(p)
+}
+func (f *fakeLogWriter) written() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.buf.String()
+}
+func (f *fakeLogWriter) SetStatus(s LogStatus)    { f.status = s }
+func (f *fakeLogWriter) CurrentStatus() LogStatus { return f.status }
+func (f *fakeLogWriter) Path() string             { return f.path }
+func (f *fakeLogWriter) Close() error             { f.closed = true; return nil }
+
+func TestSetAndCloseLogWriters(t *testing.T) {
+	t.Cleanup(CloseAllLogWriters)
+	CloseAllLogWriters()
+
+	first := &fakeLogWriter{path: "/tmp/a.log"}
+	SetLogWriter("svc", first)
+	if got := LogFilePath("svc"); got != "/tmp/a.log" {
+		t.Fatalf("LogFilePath got %q", got)
+	}
+
+	// Replacing closes the previous writer (fd-leak guard).
+	second := &fakeLogWriter{path: "/tmp/b.log"}
+	SetLogWriter("svc", second)
+	if !first.closed {
+		t.Error("previous writer should be closed on replace")
+	}
+	if got := LogFilePath("svc"); got != "/tmp/b.log" {
+		t.Fatalf("LogFilePath after replace got %q", got)
+	}
+
+	CloseAllLogWriters()
+	if !second.closed {
+		t.Error("CloseAllLogWriters should close registered writer")
+	}
+	if got := LogFilePath("svc"); got != "" {
+		t.Errorf("expected empty path after CloseAll, got %q", got)
+	}
+}
+
+func TestLogFilePathNoWriter(t *testing.T) {
+	t.Cleanup(CloseAllLogWriters)
+	CloseAllLogWriters()
+	if got := LogFilePath("absent"); got != "" {
+		t.Errorf("expected empty for unregistered service, got %q", got)
+	}
+}
+
+func TestMarkServiceLogStatus(t *testing.T) {
+	t.Cleanup(CloseAllLogWriters)
+	w := &fakeLogWriter{}
+	SetLogWriter("svc", w)
+
+	markServiceLogStatus("svc", LogStatusOK)
+	if w.status != LogStatusOK {
+		t.Fatalf("status got %v", w.status)
+	}
+}
+
+func TestMarkServiceLogStatusIfNotCrashed_DoesNotDowngrade(t *testing.T) {
+	t.Cleanup(CloseAllLogWriters)
+	w := &fakeLogWriter{status: LogStatusCrashed}
+	SetLogWriter("svc", w)
+
+	// A later success must not overwrite an earlier crash.
+	markServiceLogStatusIfNotCrashed("svc", LogStatusOK)
+	if w.status != LogStatusCrashed {
+		t.Fatalf("crashed status was downgraded to %v", w.status)
+	}
+}
+
+func TestMarkServiceLogStatusIfNotCrashed_SetsWhenClean(t *testing.T) {
+	t.Cleanup(CloseAllLogWriters)
+	w := &fakeLogWriter{status: LogStatusUnknown}
+	SetLogWriter("svc", w)
+
+	markServiceLogStatusIfNotCrashed("svc", LogStatusOK)
+	if w.status != LogStatusOK {
+		t.Fatalf("expected OK, got %v", w.status)
+	}
+}
+
+func TestSetOnServiceCrashStoreAndClear(t *testing.T) {
+	t.Cleanup(func() { SetOnServiceCrash(nil) })
+	called := make(chan string, 1)
+	SetOnServiceCrash(func(name string) { called <- name })
+	if fn := onServiceCrash.Load(); fn == nil {
+		t.Fatal("callback not stored")
+	} else {
+		(*fn)("svc")
+	}
+	if got := <-called; got != "svc" {
+		t.Errorf("callback got %q", got)
+	}
+	SetOnServiceCrash(nil)
+	if onServiceCrash.Load() != nil {
+		t.Error("callback not cleared")
+	}
+}
+
+func TestRunServiceCommandExitCode_Zero(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	var out, errBuf strings.Builder
+	code, err := RunServiceCommandExitCode("exit 0", t.TempDir(), false, &out, &errBuf)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code got %d", code)
+	}
+	if len(ProcessHandles) != 0 {
+		t.Errorf("process not deregistered, got %d", len(ProcessHandles))
+	}
+}
+
+func TestRunServiceCommandExitCode_NonZero(t *testing.T) {
+	var out, errBuf strings.Builder
+	code, err := RunServiceCommandExitCode("exit 7", t.TempDir(), false, &out, &errBuf)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if code != 7 {
+		t.Fatalf("exit code got %d want 7", code)
+	}
+}
+
+func TestRunServiceCommandExitCode_CapturesOutput(t *testing.T) {
+	var out, errBuf strings.Builder
+	code, err := RunServiceCommandExitCode("echo hi; echo boom 1>&2", t.TempDir(), false, &out, &errBuf)
+	if err != nil || code != 0 {
+		t.Fatalf("code=%d err=%v", code, err)
+	}
+	if !strings.Contains(out.String(), "hi") {
+		t.Errorf("stdout got %q", out.String())
+	}
+	if !strings.Contains(errBuf.String(), "boom") {
+		t.Errorf("stderr got %q", errBuf.String())
+	}
+}
+
+func TestRunServiceCommandExitCode_SourcesEnv(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("MYVAR=present\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errBuf strings.Builder
+	code, err := RunServiceCommandExitCode("echo $MYVAR", dir, false, &out, &errBuf)
+	if err != nil || code != 0 {
+		t.Fatalf("code=%d err=%v", code, err)
+	}
+	if strings.TrimSpace(out.String()) != "present" {
+		t.Errorf("env not sourced, got %q", out.String())
+	}
+}
+
+func TestStartDetached(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	proc, err := StartDetached("svc", "sleep 0.2", t.TempDir())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if proc == nil {
+		t.Fatal("expected a process handle")
+	}
+	if len(ProcessHandles) == 0 {
+		t.Error("detached process should be tracked")
+	}
+	t.Cleanup(func() {
+		_, _ = proc.Wait()
+		removeProcess(proc)
+	})
+}
+
+func TestStartDetachedWritesToLogWriter(t *testing.T) {
+	t.Cleanup(CloseAllLogWriters)
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	w := &fakeLogWriter{}
+	SetLogWriter("svc", w)
+	proc, err := StartDetached("svc", "echo detached-out", t.TempDir())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	_, _ = proc.Wait()
+	removeProcess(proc)
+	if got := w.written(); !strings.Contains(got, "detached-out") {
+		t.Errorf("detached output not written to log writer, got %q", got)
+	}
+}
+
+func TestStopDockerRunnerServicesNonexistent(t *testing.T) {
+	prevTimeout := AfterStartTimeout
+	AfterStartTimeout = 2 * time.Second
+	t.Cleanup(func() { AfterStartTimeout = prevTimeout })
+
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	// No service dir / no Makefile: make fails but the call must be non-fatal.
+	StopDockerRunnerServices([]string{"absent-svc"})
+}
+
+func TestStopDockerRunnerServicesEmpty(t *testing.T) {
+	StopDockerRunnerServices(nil)
+	StopDockerRunnerServices([]string{})
+}
+
+func TestRunManagedCrashFiresCallback(t *testing.T) {
+	t.Cleanup(CloseAllLogWriters)
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	w := &fakeLogWriter{}
+	SetLogWriter("crashy", w)
+
+	crashed := make(chan string, 1)
+	SetOnServiceCrash(func(name string) { crashed <- name })
+	t.Cleanup(func() { SetOnServiceCrash(nil) })
+
+	// Non-zero exit (not a missing executable) → crash path, callback fires.
+	err := RunServiceCmd("crashy", "exit 3", t.TempDir(), false)
+	if err == nil {
+		t.Fatal("expected error from non-zero exit")
+	}
+	select {
+	case name := <-crashed:
+		if name != "crashy" {
+			t.Errorf("callback got %q", name)
+		}
+	default:
+		t.Fatal("crash callback was not fired")
+	}
+	if w.status != LogStatusCrashed {
+		t.Errorf("log status got %v want Crashed", w.status)
 	}
 }
 
