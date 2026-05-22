@@ -44,6 +44,10 @@ func TestPrintValidateHuman_Branches(t *testing.T) {
 			[]string{"⚠ [W_X] soft", "valid — 1 warning(s)"}},
 		{"strict-warnings", nil, []utils.ValidationIssue{warnItem}, true,
 			[]string{"failing under --strict"}},
+		{"errors-and-warnings", []utils.ValidationIssue{errItem}, []utils.ValidationIssue{warnItem}, false,
+			[]string{"✗ [E_X] broken", "⚠ [W_X] soft", "1 error(s), 1 warning(s)"}},
+		{"error-no-field", []utils.ValidationIssue{{Code: "E_Y", Message: "nofield"}}, nil, false,
+			[]string{"✗ [E_Y] nofield"}},
 	}
 
 	for _, tc := range cases {

@@ -1,6 +1,22 @@
 package cmd
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestRestartUnsupportedMessage(t *testing.T) {
+	msg := restartUnsupportedMessage("api")
+	if !strings.Contains(msg, "not supported yet") {
+		t.Errorf("expected unsupported notice, got %q", msg)
+	}
+	if !strings.Contains(msg, "corgi stop --service api") {
+		t.Errorf("expected stop hint with service name, got %q", msg)
+	}
+	if !strings.Contains(msg, "corgi run --detach") {
+		t.Errorf("expected run --detach hint, got %q", msg)
+	}
+}
 
 func TestRestartCmdRegistered(t *testing.T) {
 	c, _, err := rootCmd.Find([]string{"restart"})
