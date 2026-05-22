@@ -678,9 +678,6 @@ func mcpTest(args testArgs) (testRunResult, error) {
 	if err != nil {
 		return testRunResult{}, composeLoadError(err)
 	}
-	if args.Profile != "" {
-		filterByProfile(corgi, args.Profile)
-	}
 	sel, err := resolveSelection(corgi, args.Service, args.Profile)
 	if err != nil {
 		return testRunResult{}, fmt.Errorf(errFmt, utils.ErrServiceNotFound, err)
