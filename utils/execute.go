@@ -267,15 +267,9 @@ func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand,
 }
 
 // RunServiceCommandExitCode runs a single command in the service's env and
-// returns the child's exit code, propagating it instead of swallowing it like
-// RunServiceCmd. Sourcing (set -a; . <env>; set +a) and autoSourceEnv handling
-// match the start path exactly via resolveEnvFile + withEnvSource.
-//
-// interactive wires stdin through so REPLs work; otherwise stdin is left nil.
-// stdout/stderr go to the supplied writers (let callers keep --json stdout
-// pure by sending child output to stderr). Returns (exitCode, err): err is
-// non-nil only for spawn failures (command not found, bad cwd), in which case
-// exitCode is -1.
+// returns the child's exit code (env sourcing matches the start path).
+// interactive wires stdin through for REPLs. Returns exitCode -1 with a non-nil
+// err only on spawn failure.
 func RunServiceCommandExitCode(
 	command, path string,
 	interactive bool,
@@ -605,10 +599,8 @@ func ExecuteServiceCommandRun(targetService string, command ...string) error {
 	return nil
 }
 
-// StopDockerRunnerServices brings down docker-runner containers (`make down`)
-// for the given service names. Each is bounded and non-fatal: a failing or
-// hung `make down` warns and moves on so shutdown/reload never blocks. Empty
-// input is a no-op.
+// StopDockerRunnerServices brings down docker-runner containers (`make down`).
+// Each call is bounded and non-fatal so shutdown/reload never blocks.
 func StopDockerRunnerServices(serviceNames []string) {
 	for _, name := range serviceNames {
 		path, err := GetPathToService(name)

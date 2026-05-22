@@ -47,8 +47,7 @@ func init() {
 	)
 }
 
-// testResult is one service's outcome. Skipped wins over the run fields:
-// a skipped service has no exit code/duration and never counts as a failure.
+// testResult is one service's outcome. A skipped service never counts as failure.
 type testResult struct {
 	Name       string `json:"name"`
 	ExitCode   int    `json:"exitCode,omitempty"`
@@ -84,7 +83,6 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 
 	sel, err := resolveSelection(corgi, serviceName, profile)
 	if err != nil {
-		// Unknown --service: list valid services and exit 2.
 		if utils.JSONOutput {
 			utils.JSONError(utils.ErrServiceNotFound, err.Error())
 		} else {
@@ -102,8 +100,7 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 }
 
 // resolveSelection narrows corgi.Services by --service / --profile. An unknown
-// --service is an error (exit 2 upstream). An unknown --profile yields an empty
-// selection (warn + run nothing), matching run's behavior.
+// --service errors; an unknown --profile yields an empty selection (warn + run nothing).
 func resolveSelection(corgi *utils.CorgiCompose, serviceName, profile string) (selection, error) {
 	if serviceName != "" {
 		for _, s := range corgi.Services {
@@ -133,8 +130,7 @@ func resolveSelection(corgi *utils.CorgiCompose, serviceName, profile string) (s
 	return selection{services: append([]utils.Service(nil), corgi.Services...)}, nil
 }
 
-// findTestScript returns the service's "test" script commands, or false when it
-// has none (caller skips the service).
+// findTestScript returns the service's "test" script commands, or false when absent.
 func findTestScript(service utils.Service) ([]string, bool) {
 	for _, s := range service.Scripts {
 		if s.Name == "test" {
@@ -145,9 +141,8 @@ func findTestScript(service utils.Service) ([]string, bool) {
 }
 
 // runTests is the testable core: for each selected service, optionally gate on
-// dependency readiness, then run its test script (sequential, stop on first
-// failure). Services without a test script are recorded skipped. Returns the
-// per-service results and whether every run test passed (skips don't count).
+// dependency readiness, then run its test script. Services without one are
+// skipped. Returns the per-service results and whether every run test passed.
 func runTests(corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTimeout time.Duration) (results []testResult, allPassed bool) {
 	results = []testResult{}
 	allPassed = true
@@ -190,8 +185,7 @@ func runTests(corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTi
 }
 
 // runServiceTest runs a service's test commands sequentially in its env,
-// stopping on the first non-zero exit. The captured exit code is that of the
-// failing command (or the last command when all succeed).
+// stopping on the first non-zero exit.
 func runServiceTest(service utils.Service, commands []string, interactive bool, childOut *os.File) testResult {
 	env := getServiceEnv(service)
 	start := time.Now()
@@ -207,7 +201,6 @@ func runServiceTest(service utils.Service, commands []string, interactive bool, 
 			env,
 		)
 		if err != nil {
-			// Spawn failure (command not found, bad cwd): treat as a failed test.
 			return testResult{
 				Name:       service.ServiceName,
 				Passed:     false,
@@ -230,8 +223,7 @@ func runServiceTest(service utils.Service, commands []string, interactive bool, 
 	}
 }
 
-// reportTestResults emits the JSON payload (pure stdout) or the human per-service
-// lines + summary (to stdout in human mode, stderr in JSON mode via utils.Info).
+// reportTestResults emits the JSON payload or the human per-service lines + summary.
 func reportTestResults(results []testResult, allPassed bool) {
 	if utils.JSONOutput {
 		utils.PrintJSON(map[string]any{

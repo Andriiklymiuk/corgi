@@ -30,12 +30,10 @@ var ServiceConfigs = map[string]ServiceConfig{
 	},
 }
 
-// DockerSafeName converts a service name to a form docker compose accepts for
-// project/container names: lowercase, with anything outside [a-z0-9_-] replaced
-// by '-'. Leading separators are trimmed so the name starts with [a-z0-9].
-// docker compose itself lowercases the project name, so without this an
-// uppercase service name (e.g. "MyApi") produces a container_name docker
-// rejects and the runner never starts.
+// DockerSafeName converts a service name to a docker-compose-safe name:
+// lowercased, chars outside [a-z0-9_-] become '-', leading separators trimmed.
+// docker compose lowercases the project name, so without this an uppercase name
+// (e.g. "MyApi") yields a container_name docker rejects.
 func DockerSafeName(name string) string {
 	lower := strings.ToLower(name)
 	var b strings.Builder
@@ -54,15 +52,13 @@ func DockerSafeName(name string) string {
 	return out
 }
 
-// DockerName is the docker-safe service name used in generated docker-compose
-// and Makefile templates. The logical ServiceName is kept everywhere else.
+// DockerName is the docker-safe service name for generated compose/Makefile templates.
 func (s Service) DockerName() string {
 	return DockerSafeName(s.ServiceName)
 }
 
-// DockerRunnerServiceNames returns the names of services managed by the docker
-// runner (started via `make up`). These run as containers, not tracked PIDs, so
-// they must be brought down explicitly on shutdown and on hot reload.
+// DockerRunnerServiceNames returns the names of docker-runner services. They run
+// as containers (not tracked PIDs), so must be brought down explicitly.
 func DockerRunnerServiceNames(services []Service) []string {
 	var names []string
 	for _, s := range services {

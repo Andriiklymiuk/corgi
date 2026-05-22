@@ -34,8 +34,6 @@ Flags:
 }
 
 func init() {
-	// --json comes from the root persistent flag (utils.JSONOutput); only
-	// --strict is local here.
 	validateCmd.Flags().Bool("strict", false, "Treat warnings as failures")
 	rootCmd.AddCommand(validateCmd)
 }

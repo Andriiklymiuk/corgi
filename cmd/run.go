@@ -259,13 +259,11 @@ database readiness probe.`,
 	)
 }
 
-// defaultReadyTimeout bounds how long corgi waits for a database or dependency
-// service to become reachable before proceeding anyway (non-fatal). Shared by
-// run, exec, test, and the mcp server.
+// defaultReadyTimeout bounds the wait for a db/dependency to become reachable
+// before proceeding anyway. Shared by run, exec, test, and the mcp server.
 const defaultReadyTimeout = 15 * time.Second
 
-// gateDepsFlag and readyTimeout hold the resolved values of --gate-deps and
-// --ready-timeout for the current run, set by applyRunFlags.
+// Resolved --gate-deps / --ready-timeout for the current run, set by applyRunFlags.
 var (
 	gateDepsFlag bool
 	readyTimeout = defaultReadyTimeout
@@ -360,12 +358,10 @@ func usesDocker(corgi *utils.CorgiCompose) bool {
 	return false
 }
 
-// readySignal carries the two startup milestones a dependent may wait on:
-// started (corgi launched the producer) and ready (its readiness probe passed,
-// or timed out — the channel closes either way so dependents never hang). The
-// sync.Once guards make every close idempotent and race-safe, since the
-// producer goroutine, its probe goroutine, and the deferred safety net may all
-// try to close the same channel.
+// readySignal carries two startup milestones a dependent may wait on: started
+// (producer launched) and ready (readiness probe passed or timed out — closed
+// either way so dependents never hang). The sync.Once guards make every close
+// idempotent, since multiple goroutines may try to close the same channel.
 type readySignal struct {
 	started     chan struct{}
 	ready       chan struct{}
@@ -455,14 +451,11 @@ func runRun(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	// Profile selection is the single filter point: it narrows corgi.Services /
-	// corgi.DatabaseServices before anything reads them (dry-run, db create, env
-	// gen, start). The existing --services/--omit/--dbServices filters then apply
-	// on this narrowed set (intersection). No --profile = no narrowing.
+	// Single filter point: narrow services/db_services before anything reads them.
+	// The --services/--omit/--dbServices filters then intersect this narrowed set.
 	applyProfileFilter(cmd, corgi)
 
-	// --dry-run branches before any side effect (clone, clean, preflight,
-	// db create, env writes, detach, spawn). Plan only, then exit.
+	// --dry-run branches before any side effect: plan only, then exit.
 	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
 		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi)))
 	}
@@ -618,11 +611,9 @@ func detachedDBEntries(corgi *utils.CorgiCompose) []utils.RunStateEntry {
 	return dbs
 }
 
-// applyProfileFilter narrows corgi.Services / corgi.DatabaseServices to the
-// items selected by --profile (union of the comma-separated profiles, members +
-// transitive depends_on closure). A no-op when --profile is empty. When nothing
-// matches it selects nothing and warns, so `corgi run --profile typo` starts
-// nothing rather than everything.
+// applyProfileFilter narrows services/db_services to those selected by --profile.
+// No-op when empty. When nothing matches it selects nothing and warns, so a typo'd
+// profile starts nothing rather than everything.
 func applyProfileFilter(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	raw, _ := cmd.Flags().GetString("profile")
 	profiles := utils.ParseProfiles(raw)
@@ -632,8 +623,7 @@ func applyProfileFilter(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 
 	services, dbs := utils.SelectByProfiles(corgi, profiles)
 	if len(services) == 0 && len(dbs) == 0 {
-		// Warn (to stderr under --json so stdout stays pure JSON) and select
-		// nothing — don't fall through to "select all".
+		// Select nothing — don't fall through to "select all".
 		utils.Infof("⚠️  [%s] profile %q matches no services or db_services; nothing to run\n", utils.ErrUnknownProfile, raw)
 	}
 
@@ -699,9 +689,8 @@ func runBeforeStart(corgi *utils.CorgiCompose) {
 	)
 }
 
-// stopDockerRunners brings down docker-runner containers from the given compose
-// so a container never outlives its config on shutdown or hot reload. Safe on
-// nil and bounded/non-fatal underneath.
+// stopDockerRunners brings down docker-runner containers so none outlives its
+// config on shutdown or hot reload. Safe on nil.
 func stopDockerRunners(corgi *utils.CorgiCompose) {
 	if corgi == nil {
 		return
@@ -808,9 +797,7 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	if err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up"); err != nil {
 		fmt.Println("Starting service failed", err)
 	}
-	// Replace the old blind sleep with a bounded readiness probe. Always-on
-	// because it only ever helps; falls back to a short fixed wait when the db
-	// has no known port. Non-fatal on timeout so services still get a chance.
+	// Bounded readiness probe (non-fatal on timeout so services still get a chance).
 	ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
 	defer cancel()
 	if err := utils.WaitForDBReady(ctx, dbService); err != nil {
@@ -912,8 +899,8 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		return
 	}
 
-	// Producer side: mark started, then probe readiness in the background since
-	// startServiceProcess blocks on the service's start command.
+	// Mark started, then probe readiness in the background since
+	// startServiceProcess blocks on the start command.
 	if sig != nil {
 		sig.markStarted()
 		if service.Port == 0 {
@@ -932,11 +919,10 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 	startServiceProcess(service)
 }
 
-// waitForServiceDeps blocks until this service's gated dependencies have
-// reached the milestone their condition asks for. An edge is gated when it sets
-// condition: explicitly OR --gate-deps is passed; ungated edges are skipped so
-// default behavior (parallel start, no waiting) is preserved. Waits are bounded
-// by readyTimeout and never deadlock.
+// waitForServiceDeps blocks until this service's gated dependencies reach their
+// condition's milestone. An edge is gated only when it sets condition: or
+// --gate-deps is passed; ungated edges keep the default parallel start. Bounded
+// by readyTimeout.
 func waitForServiceDeps(service utils.Service, signals map[string]*readySignal) {
 	for _, dep := range service.DependsOnServices {
 		gated := dep.Condition != "" || gateDepsFlag

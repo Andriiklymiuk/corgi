@@ -9,7 +9,7 @@ import (
 )
 
 // dryRunPlan is the JSON shape printed by `corgi run --dry-run --json`.
-// Slices are always non-nil so the contract never emits null arrays.
+// Slices stay non-nil so the contract never emits null arrays.
 type dryRunPlan struct {
 	Valid     bool                    `json:"valid"`
 	Order     []string                `json:"order"`
@@ -34,8 +34,8 @@ type dryRunService struct {
 	EnvKeys   []string `json:"envKeys"`
 }
 
-// computeDryRunPlan builds the plan without any side effects. It runs static
-// validation, resolves a topological start order, and reports per-item details.
+// computeDryRunPlan builds the plan without side effects: validate, resolve
+// start order, report per-item details.
 func computeDryRunPlan(corgi *utils.CorgiCompose) dryRunPlan {
 	errs, warns := utils.ValidateCompose(corgi)
 	if errs == nil {
@@ -81,7 +81,7 @@ func computeDryRunPlan(corgi *utils.CorgiCompose) dryRunPlan {
 }
 
 // willClone reports whether corgi would clone this service: cloneFrom is set
-// and the target path does not yet exist on disk. os.Stat is read-only.
+// and the target path does not yet exist.
 func willClone(svc utils.Service) bool {
 	if svc.CloneFrom == "" {
 		return false
@@ -95,8 +95,8 @@ func willClone(svc utils.Service) bool {
 	return true
 }
 
-// serviceDeps returns the node ids this service depends on: db deps as
-// db:<name> and service deps as svc:<name>, sorted for deterministic output.
+// serviceDeps returns the node ids this service depends on (db:<name>,
+// svc:<name>), sorted for deterministic output.
 func serviceDeps(svc utils.Service) []string {
 	deps := []string{}
 	for _, d := range svc.DependsOnDb {
@@ -113,11 +113,9 @@ func serviceDeps(svc utils.Service) []string {
 	return deps
 }
 
-// computeStartOrder topologically sorts the dependency graph. Databases must
-// precede any service depending on them; services follow their
-// depends_on_services. Node ids are db:<name> and svc:<name>. On a cycle
-// (already flagged as E_DEPENDENCY_CYCLE), it emits a best-effort order by
-// appending the remaining nodes deterministically. Ties break by name.
+// computeStartOrder topologically sorts the dependency graph (node ids
+// db:<name>, svc:<name>), tie-breaking by name. On a cycle it falls back to a
+// best-effort order rather than dropping nodes.
 func computeStartOrder(corgi *utils.CorgiCompose) []string {
 	nodes := []string{}
 	indeg := map[string]int{}
@@ -153,8 +151,7 @@ func computeStartOrder(corgi *utils.CorgiCompose) []string {
 	return kahnSort(nodes, indeg, graph)
 }
 
-// addDependencyEdges wires precedence edges from each service's db/service
-// dependencies (the producer) to the service itself (the consumer).
+// addDependencyEdges wires precedence edges from each dependency to its service.
 func addDependencyEdges(corgi *utils.CorgiCompose, addEdge func(from, to string)) {
 	for _, svc := range corgi.Services {
 		to := "svc:" + svc.ServiceName
@@ -171,9 +168,8 @@ func addDependencyEdges(corgi *utils.CorgiCompose, addEdge func(from, to string)
 	}
 }
 
-// kahnSort runs Kahn's algorithm with deterministic tie-breaking (lowest name
-// first). Any nodes left after a cycle are appended in sorted order so the
-// output stays best-effort and stable.
+// kahnSort runs Kahn's algorithm, tie-breaking by name. Nodes left after a
+// cycle are appended in sorted order so the output is never empty.
 func kahnSort(nodes []string, indeg map[string]int, graph map[string][]string) []string {
 	sorted := append([]string{}, nodes...)
 	sort.Strings(sorted)
@@ -237,8 +233,7 @@ func printDryRunHuman(plan dryRunPlan) {
 	printDryRunServices(plan.Services)
 }
 
-// printDryRunIssues prints the validation errors (only when invalid) and any
-// warnings.
+// printDryRunIssues prints validation errors (when invalid) and any warnings.
 func printDryRunIssues(plan dryRunPlan) {
 	if !plan.Valid {
 		utils.Info(art.RedColor, "validation failed:", art.WhiteColor)

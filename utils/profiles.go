@@ -19,15 +19,10 @@ func SelectByProfile(corgi *CorgiCompose, profile string) (services, dbs map[str
 	return SelectByProfiles(corgi, []string{profile})
 }
 
-// SelectByProfiles returns the names of services and db_services to run for the
-// union of the given profiles, including the transitive depends_on closure. An
-// empty/nil slice (or a single "") means select all. Returns sets keyed by name.
-//
-// Selection starts from members whose Profiles intersect the requested set, then
-// walks each selected service's depends_on_services and depends_on_db to pull in
-// the services/dbs they need — even if those have no profiles tag (docker-compose
-// behavior: a frontend profile still brings up the DB it depends on). When no
-// member matches, the sets are empty so the caller can warn and start nothing.
+// SelectByProfiles returns the services and db_services to run for the union of
+// the given profiles, including the transitive depends_on closure (so a profile
+// pulls in dependencies even when they carry no profiles tag, matching
+// docker-compose). Empty/nil (or a single "") means select all.
 func SelectByProfiles(corgi *CorgiCompose, profiles []string) (services, dbs map[string]bool) {
 	if len(profiles) == 0 || (len(profiles) == 1 && profiles[0] == "") {
 		return selectAll(corgi)
@@ -56,9 +51,8 @@ func selectAll(corgi *CorgiCompose) (services, dbs map[string]bool) {
 	return services, dbs
 }
 
-// seedProfileSelection collects the services and db_services that directly
-// declare any of the profiles, returning the initial selection sets plus the
-// BFS queue of seed services to expand.
+// seedProfileSelection collects services and db_services that directly declare
+// any of the profiles, plus the BFS queue of seed services to expand.
 func seedProfileSelection(corgi *CorgiCompose, profiles []string) (services, dbs map[string]bool, queue []string) {
 	services = map[string]bool{}
 	dbs = map[string]bool{}
@@ -79,7 +73,6 @@ func seedProfileSelection(corgi *CorgiCompose, profiles []string) (services, dbs
 
 // walkDepClosure expands the BFS queue over depends_on_services, pulling each
 // service's transitive service and db dependencies into the selection sets.
-// dbs are leaves (no further service deps to walk).
 func walkDepClosure(svcByName map[string]Service, services, dbs map[string]bool, queue []string) {
 	for len(queue) > 0 {
 		name := queue[0]

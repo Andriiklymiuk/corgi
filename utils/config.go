@@ -81,16 +81,12 @@ type DatabaseService struct {
 	// If unset, status falls back to a TCP connect on the port.
 	HealthCheck string `yaml:"healthCheck,omitempty"`
 
-	// Profiles names the run profiles this db_service belongs to. With
-	// `corgi run --profile P` only members of P (plus depends_on closure) run.
-	// A db_service with no profiles runs only when no --profile is passed.
+	// Run profiles this db_service belongs to; empty runs only when no --profile.
 	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 }
 
 // KnownDrivers is the set of valid db_services.driver values, derived from the
-// `options:` tag on DatabaseService.Driver so the list lives in one place.
-// The tag's trailing "❌skip" sentinel (used by `corgi create` prompts) is
-// stripped, leaving "image" as a real driver.
+// Driver field's `options:` tag (its trailing "❌skip" sentinel stripped).
 var KnownDrivers = knownDriversFromTag()
 
 func knownDriversFromTag() []string {
@@ -170,9 +166,8 @@ type DependsOnService struct {
 	EnvAlias    string `yaml:"envAlias,omitempty"`
 	Suffix      string `yaml:"suffix,omitempty"`
 	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
-	// Condition opts this edge into startup gating: "ready" waits until the
-	// dependency's readiness probe passes, "started" waits only until corgi
-	// launched it. Empty = no gating (unless --gate-deps is passed).
+	// Condition gates startup: "ready" waits for the readiness probe, "started"
+	// waits only until corgi launched it. Empty = no gating unless --gate-deps.
 	Condition string `yaml:"condition,omitempty" json:"condition,omitempty"`
 }
 
@@ -237,9 +232,7 @@ type Service struct {
 	// If unset, status falls back to a TCP connect on the port.
 	HealthCheck string `yaml:"healthCheck,omitempty"`
 
-	// Profiles names the run profiles this service belongs to. With
-	// `corgi run --profile P` only members of P (plus depends_on closure) run.
-	// A service with no profiles runs only when no --profile is passed.
+	// Run profiles this service belongs to; empty runs only when no --profile.
 	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 
 	AbsolutePath string
@@ -352,15 +345,14 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read %s", pathToCorgiComposeFile)
 	}
 
-	// Expand ${VAR} / ${VAR:-default} in the raw bytes before parsing, against
-	// the process env plus an optional sibling .env (env wins).
+	// Expand ${VAR} / ${VAR:-default} before parsing, against process env plus an
+	// optional sibling .env (env wins).
 	dotenv, err := LoadDotEnv(filepath.Join(CorgiComposePathDir, ".env"))
 	if err != nil {
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read .env next to %s: %v", pathToCorgiComposeFile, err)
 	}
-	// Tolerant on purpose: an unset ${VAR} with no default is left untouched
-	// (not a hard error), so tunnel hostnames and cross-service ${producer.VAR}
-	// refs that resolve later from per-service env keep working. We just warn.
+	// Tolerant on purpose: leave an unset ${VAR} untouched (just warn) so
+	// cross-service ${producer.VAR} refs that resolve later keep working.
 	var unresolved []string
 	file, unresolved = InterpolateTolerant(file, EnvThenDotEnv(dotenv))
 	for _, name := range unresolved {

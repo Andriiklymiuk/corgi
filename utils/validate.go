@@ -6,9 +6,7 @@ import (
 	"strings"
 )
 
-// Warning codes for static validation. Unlike the E_* error codes in
-// errcodes.go these are non-fatal (advisory) and live here because they are
-// specific to `corgi validate`.
+// Warning codes for static validation (non-fatal, advisory).
 const (
 	WarnNoHealthcheck = "W_NO_HEALTHCHECK"
 	WarnNoBranch      = "W_NO_BRANCH"
@@ -21,8 +19,7 @@ type ValidationIssue struct {
 	Field   string `json:"field,omitempty"`
 }
 
-// ValidateCompose runs static semantic checks over an already-parsed compose.
-// It performs no I/O — the caller is responsible for loading the config.
+// ValidateCompose runs static semantic checks over an already-parsed compose (no I/O).
 func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 	if c == nil {
 		return nil, nil
@@ -41,7 +38,7 @@ func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 	return errs, warns
 }
 
-// known service / db names present in the compose.
+// composeNames returns the known service / db names in the compose.
 func composeNames(c *CorgiCompose) (services, dbs map[string]bool) {
 	services = make(map[string]bool, len(c.Services))
 	dbs = make(map[string]bool, len(c.DatabaseServices))
@@ -132,9 +129,8 @@ func buildServiceDepAdjacency(c *CorgiCompose) map[string][]string {
 	return adj
 }
 
-// findCyclicServices returns, sorted, the names of services that participate in
-// a cycle within the dependency adjacency, using an iterative-start DFS over a
-// deterministic order.
+// findCyclicServices returns the sorted names of services that participate in a
+// cycle within the dependency adjacency.
 func findCyclicServices(c *CorgiCompose, adj map[string][]string) []string {
 	const (
 		unvisited = 0

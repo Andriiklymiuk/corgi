@@ -17,9 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// mcpCmd runs corgi as a long-lived MCP server over stdio. MCP clients
-// (Claude Code, Claude Desktop) spawn `corgi mcp` as a subprocess and talk
-// JSON-RPC over stdin/stdout, so stdout must stay a pure protocol channel.
+// mcpCmd runs corgi as an MCP server over stdio. stdout is the JSON-RPC channel.
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
 	Short: "Run corgi as an MCP server over stdio (for AI agent clients)",
@@ -36,25 +34,19 @@ func init() {
 	rootCmd.AddCommand(mcpCmd)
 }
 
-// errFmt is the "<code>: <detail>" wrapper used when surfacing an error with a
-// stable code prefix; mimeJSON is the MIME type for the JSON resources/schema.
 const (
 	errFmt   = "%s: %v"
 	mimeJSON = "application/json"
 )
 
-// mcpHandlerMu serializes all MCP tool/resource work. mcp-go's stdio server
-// runs a worker pool, so handlers can be invoked concurrently; corgi's handlers
-// mutate shared global state (os.Stdout swap in withStdoutToStderr, plus
-// rootCmd flags and utils.CorgiComposePath* in loadComposeCtx) that is not safe
-// to touch from multiple goroutines. Serializing is fine here: corgi mcp is a
-// single-user dev tool and handlers are short. Hold this across the ENTIRE
+// mcpHandlerMu serializes all MCP tool/resource work. mcp-go can invoke handlers
+// concurrently, but handlers mutate global state (os.Stdout swap, rootCmd flags,
+// utils.CorgiComposePath*) that isn't concurrency-safe. Held across the entire
 // handler body so the stdout swap and compose/flag mutation never overlap.
 var mcpHandlerMu sync.Mutex
 
 func runMCP(cmd *cobra.Command, _ []string) {
-	// No prompts on a server; route corgi's own logging to stderr so stdout
-	// stays the pure JSON-RPC channel (load-bearing for stdio; tidy for HTTP).
+	// Route corgi's own logging to stderr so stdout stays the JSON-RPC channel.
 	utils.NonInteractive = true
 	utils.JSONOutput = true
 
@@ -71,9 +63,7 @@ func runMCP(cmd *cobra.Command, _ []string) {
 }
 
 func serveMCPStdio(s *server.MCPServer) {
-	// WithWorkerPoolSize(1) is defense-in-depth: it makes the stdio server
-	// process tool calls one-at-a-time. The mcpHandlerMu mutex is the real
-	// guard (it also covers resource handlers, which the pool size doesn't).
+	// WithWorkerPoolSize(1) is defense-in-depth; mcpHandlerMu is the real guard.
 	if err := server.ServeStdio(s, server.WithWorkerPoolSize(1)); err != nil {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		os.Exit(1)
@@ -91,31 +81,25 @@ func serveMCPHTTP(s *server.MCPServer, addr string) {
 }
 
 // composeContext bundles a loaded compose with the throwaway cobra command it
-// was loaded through (so callers that need cobra flags — e.g. the run path —
-// can pass it) plus a cleanup to detach the command from rootCmd.
+// was loaded through, plus a cleanup to detach that command from rootCmd.
 type composeContext struct {
 	corgi   *utils.CorgiCompose
 	cmd     *cobra.Command
 	cleanup func()
 }
 
-// loadComposeCtx loads and interpolates the compose the same way commands do,
-// reusing utils.GetCorgiServices. MCP runs outside cobra's flag context, so we
-// attach a throwaway command to rootCmd (inheriting -f/--filename etc.) and set
-// the optional composePath as the filename. Empty path => default resolution
-// from cwd. Caller must defer ctx.cleanup().
+// loadComposeCtx loads the compose via utils.GetCorgiServices. MCP runs outside
+// cobra's flag context, so it attaches a throwaway command to rootCmd. Empty
+// path => default resolution from cwd. Caller must defer ctx.cleanup().
 func loadComposeCtx(composePath string) (composeContext, error) {
-	// GetCorgiServices reads filename/fromTemplate/etc. off cmd.Root().Flags().
-	// Those are rootCmd's persistent flags, which cobra only merges into Flags()
-	// during Execute(). MCP never runs Execute, so merge them explicitly here.
+	// rootCmd's persistent flags are only merged into Flags() during Execute(),
+	// which MCP never runs, so merge them explicitly.
 	rootCmd.Flags().AddFlagSet(rootCmd.PersistentFlags())
 
 	tmp := &cobra.Command{Use: "mcp-load"}
 	rootCmd.AddCommand(tmp)
-	// determineCorgiComposePath reads --global off the command directly (not
-	// Root), so it must be a local flag here.
+	// determineCorgiComposePath reads --global off the command directly, not Root.
 	tmp.Flags().Bool("global", false, "")
-	// runDatabaseServices reads --seed off the command (used by corgi_up).
 	tmp.Flags().Bool("seed", false, "")
 
 	cleanup := func() {
@@ -137,7 +121,7 @@ func loadComposeCtx(composePath string) (composeContext, error) {
 	return composeContext{corgi: corgi, cmd: tmp, cleanup: cleanup}, nil
 }
 
-// loadComposeForMCP is the common case: just the parsed compose.
+// loadComposeForMCP loads just the parsed compose.
 func loadComposeForMCP(composePath string) (*utils.CorgiCompose, error) {
 	ctx, err := loadComposeCtx(composePath)
 	if err != nil {
@@ -234,10 +218,8 @@ type upArgs struct {
 	Seed        bool   `json:"seed"`
 }
 
-// mcpUp always starts DETACHED so the tool returns promptly. It mirrors the
-// foreground run prelude (clone, docker preflight, beforeStart, create+start
-// databases, generate env) and then runDetached's state machine
-// (CreateServices -> spawn -> write .state.json), returning the run-state.
+// mcpUp always starts DETACHED so the tool returns promptly: it mirrors the
+// foreground run prelude, then runDetached's state machine.
 func mcpUp(args upArgs) (utils.RunState, error) {
 	ctx, err := loadComposeCtx(args.ComposePath)
 	if err != nil {
@@ -381,8 +363,7 @@ func mcpLogs(args logsArgs) (logsResult, error) {
 	return logsResult{Service: args.Service, Lines: lines}, nil
 }
 
-// tailLogFile returns the last n lines of a log file, stripping the leading
-// timestamp prefix when present (same convention as `corgi logs`).
+// tailLogFile returns the last n lines of a log file, stripping the timestamp prefix.
 func tailLogFile(path string, n int) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -420,9 +401,8 @@ type execResult struct {
 	DurationMs int64  `json:"durationMs"`
 }
 
-// mcpExec runs a one-off command in a service's resolved env, capturing
-// combined stdout+stderr into a buffer (so nothing leaks to the protocol
-// channel) and returning the child exit code.
+// mcpExec runs a one-off command in a service's resolved env, capturing combined
+// output into a buffer so nothing leaks to the JSON-RPC channel.
 func mcpExec(args execArgs) (execResult, error) {
 	if strings.TrimSpace(args.Service) == "" || strings.TrimSpace(args.Command) == "" {
 		return execResult{}, fmt.Errorf("%s: service and command are required", utils.ErrUsage)
@@ -456,8 +436,6 @@ func mcpExec(args execArgs) (execResult, error) {
 		err2 error
 	)
 	start := time.Now()
-	// Capture combined child output into buf; run with stdout redirected so any
-	// incidental prints from the env/runner setup stay off the JSON-RPC channel.
 	withStdoutToStderr(func() {
 		code, err2 = utils.RunServiceCommandExitCode(
 			args.Command,
@@ -477,9 +455,8 @@ func mcpExec(args execArgs) (execResult, error) {
 
 func mcpSchema() string { return utils.ComposeJSONSchema() }
 
-// filterByProfile narrows corgi to the selection for one or more comma-separated
-// profiles (members + their transitive depends_on closure), mirroring
-// applyProfileFilter without cobra.
+// filterByProfile narrows corgi to the selection for the given comma-separated
+// profiles (members plus their transitive depends_on closure).
 func filterByProfile(corgi *utils.CorgiCompose, profile string) {
 	services, dbs := utils.SelectByProfiles(corgi, utils.ParseProfiles(profile))
 	filteredSvcs := corgi.Services[:0]
@@ -503,10 +480,8 @@ func composeLoadError(err error) error {
 	return fmt.Errorf(errFmt, utils.ErrComposeNotFound, err)
 }
 
-// withStdoutToStderr runs fn with os.Stdout temporarily pointed at os.Stderr.
-// The side-effecting run/stop paths print progress via fmt.Println to stdout;
-// the MCP stdio server captured the real stdout at ServeStdio time, so this
-// keeps that incidental output off the JSON-RPC channel without losing it.
+// withStdoutToStderr runs fn with os.Stdout pointed at os.Stderr, keeping the
+// run/stop paths' progress prints off the JSON-RPC channel.
 func withStdoutToStderr(fn func()) {
 	orig := os.Stdout
 	os.Stdout = os.Stderr
@@ -605,13 +580,10 @@ func registerMCPTools(s *server.MCPServer) {
 	})
 }
 
-// jsonHandler wraps a typed core into an MCP tool handler: it marshals the
-// result to JSON text, and converts a returned error into an MCP tool error
-// carrying the stable code already embedded in the message.
+// jsonHandler wraps a typed core into an MCP tool handler, marshaling the result
+// to JSON text and converting a returned error into an MCP tool error.
 func jsonHandler(core func(mcp.CallToolRequest) (any, error)) server.ToolHandlerFunc {
 	return func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Serialize the whole handler: the cores below mutate global state
-		// (stdout swap, compose/flag globals) that isn't concurrency-safe.
 		mcpHandlerMu.Lock()
 		defer mcpHandlerMu.Unlock()
 		out, err := core(r)
