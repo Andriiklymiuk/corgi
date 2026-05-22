@@ -88,6 +88,16 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 }
 
 func runDoctorJSON(corgi *utils.CorgiCompose) {
+	res := buildDoctorResult(corgi)
+	utils.PrintJSON(res)
+	if !res.OK {
+		os.Exit(1)
+	}
+}
+
+// buildDoctorResult runs the preflight checks (required tools, Docker, ports)
+// and returns the structured result without printing or exiting.
+func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 	var res doctorResult
 
 	for _, r := range corgi.Required {
@@ -122,10 +132,7 @@ func runDoctorJSON(corgi *utils.CorgiCompose) {
 	}
 
 	res.computeOK()
-	utils.PrintJSON(res)
-	if !res.OK {
-		os.Exit(1)
-	}
+	return res
 }
 
 func checkRequiredIsFoundQuiet(required utils.Required) (bool, string) {

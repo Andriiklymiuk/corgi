@@ -190,3 +190,213 @@ func TestExecDBQuery_UnknownDriver(t *testing.T) {
 		t.Fatalf("expected error naming driver, got %v", err)
 	}
 }
+
+// TestDriverArgBuilders_AllDrivers walks every registered driver and asserts
+// the shape of both the interactive and (where supported) --exec arg lists.
+func TestDriverArgBuilders_AllDrivers(t *testing.T) {
+	const q = "SELECT 1"
+	cases := []struct {
+		driver       string
+		db           DatabaseService
+		wantArgs     []string // interactive
+		wantExecTail []string // trailing tokens of execArgs (nil = skip exec check)
+	}{
+		{
+			driver:       "postgres",
+			db:           DatabaseService{User: "u", DatabaseName: "d"},
+			wantArgs:     []string{"-U", "u", "-d", "d"},
+			wantExecTail: []string{"-c", q},
+		},
+		{
+			driver:       "postgres",
+			db:           DatabaseService{},
+			wantArgs:     []string{"-U", "postgres", "-d", "postgres"},
+			wantExecTail: []string{"-c", q},
+		},
+		{
+			driver:       "yugabytedb",
+			db:           DatabaseService{},
+			wantArgs:     []string{"-U", "yugabyte", "-d", "yugabyte"},
+			wantExecTail: []string{"-c", q},
+		},
+		{
+			driver:       "cockroachdb",
+			db:           DatabaseService{},
+			wantArgs:     []string{"sql", "--insecure"},
+			wantExecTail: []string{"--insecure", "-e", q},
+		},
+		{
+			driver:       "redis",
+			db:           DatabaseService{Password: "pw"},
+			wantArgs:     []string{"-a", "pw"},
+			wantExecTail: []string{"-a", "pw", "GET", "k"},
+		},
+		{
+			driver:       "dragonfly",
+			db:           DatabaseService{Password: "ignored"},
+			wantArgs:     nil,
+			wantExecTail: []string{"GET", "k"},
+		},
+		{
+			driver:       "mysql",
+			db:           DatabaseService{User: "u", Password: "pw", DatabaseName: "d"},
+			wantArgs:     []string{"-u", "u", "-ppw", "d"},
+			wantExecTail: []string{"-e", q},
+		},
+		{
+			driver:       "mariadb",
+			db:           DatabaseService{},
+			wantArgs:     []string{"-u", "root"},
+			wantExecTail: []string{"-e", q},
+		},
+		{
+			driver:       "mssql",
+			db:           DatabaseService{User: "sa", Password: "pw", DatabaseName: "m"},
+			wantArgs:     []string{"-U", "sa", "-P", "pw", "-d", "m"},
+			wantExecTail: []string{"-Q", q},
+		},
+		{
+			driver:       "cassandra",
+			db:           DatabaseService{User: "c", Password: "pw"},
+			wantArgs:     []string{"localhost", "-u", "c", "-p", "pw"},
+			wantExecTail: []string{"-e", q},
+		},
+		{
+			driver:       "scylla",
+			db:           DatabaseService{},
+			wantArgs:     []string{"localhost"},
+			wantExecTail: []string{"localhost", "-e", q},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.driver, func(t *testing.T) {
+			cfg, ok := driverShells[tc.driver]
+			if !ok {
+				t.Fatalf("no shell config for %q", tc.driver)
+			}
+			query := q
+			if cfg.cmd == redisCLITool {
+				query = "GET k"
+			}
+			if got := cfg.argsFunc(tc.db); strings.Join(got, " ") != strings.Join(tc.wantArgs, " ") {
+				t.Errorf("argsFunc = %v, want %v", got, tc.wantArgs)
+			}
+			if tc.wantExecTail == nil {
+				return
+			}
+			exec := cfg.execArgsFunc(tc.db, query)
+			tail := exec[len(exec)-len(tc.wantExecTail):]
+			if strings.Join(tail, " ") != strings.Join(tc.wantExecTail, " ") {
+				t.Errorf("execArgs tail = %v, want %v (full %v)", tail, tc.wantExecTail, exec)
+			}
+		})
+	}
+}
+
+func TestMongoArgs_DefaultPortAndUser(t *testing.T) {
+	// Port 0 falls back to 27017; user empty + password set defaults user to "mongo".
+	args := mongoArgs(DatabaseService{Password: "pw", DatabaseName: "app"})
+	uri := args[0]
+	if !strings.Contains(uri, "localhost:27017") {
+		t.Errorf("expected default port 27017 in %s", uri)
+	}
+	if !strings.Contains(uri, "mongo:") {
+		t.Errorf("expected default user 'mongo' in %s", uri)
+	}
+	if !strings.HasSuffix(uri, "/app") {
+		t.Errorf("expected db path /app in %s", uri)
+	}
+}
+
+func TestMongoArgs_CustomPort(t *testing.T) {
+	args := mongoArgs(DatabaseService{Port: 30000})
+	if !strings.Contains(args[0], "localhost:30000") {
+		t.Errorf("expected custom port, got %s", args[0])
+	}
+}
+
+func TestMysqlArgs_NoPasswordNoDb(t *testing.T) {
+	// No password, no db name → only -u <user>.
+	args := mysqlArgs(DatabaseService{User: "admin"})
+	if strings.Join(args, " ") != "-u admin" {
+		t.Errorf("expected [-u admin], got %v", args)
+	}
+}
+
+func TestBuildDockerExecArgs_InteractivePostgres(t *testing.T) {
+	cfg := driverShells["postgres"]
+	got, err := buildDockerExecArgs(cfg, DatabaseService{User: "u", DatabaseName: "d"}, "", "abc123", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"exec", "-it", "abc123", "psql", "-U", "u", "-d", "d"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestBuildDockerExecArgs_NonInteractiveMysql(t *testing.T) {
+	cfg := driverShells["mysql"]
+	got, err := buildDockerExecArgs(cfg, DatabaseService{User: "root", Password: "pw", DatabaseName: "d"}, "SELECT 1", "cid", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"exec", "cid", "mysql", "-u", "root", "-ppw", "d", "-e", "SELECT 1"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestBuildDockerExecArgs_NonInteractiveMongo(t *testing.T) {
+	cfg := driverShells["mongodb"]
+	got, err := buildDockerExecArgs(cfg, DatabaseService{Port: 27017}, "db.x.find()", "cid", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// exec cid mongosh <uri> --quiet --eval db.x.find()
+	if got[0] != "exec" || got[1] != "cid" || got[2] != "mongosh" {
+		t.Errorf("unexpected prefix: %v", got)
+	}
+	if got[len(got)-2] != "--eval" || got[len(got)-1] != "db.x.find()" {
+		t.Errorf("expected trailing --eval query, got %v", got)
+	}
+}
+
+func TestBuildDockerExecArgs_DropsEmptyTokens(t *testing.T) {
+	// redis with no password → argsFunc returns nil, no stray "" left in output.
+	cfg := driverShells["redis"]
+	got, err := buildDockerExecArgs(cfg, DatabaseService{}, "", "cid", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range got {
+		if a == "" {
+			t.Errorf("empty token leaked into args: %v", got)
+		}
+	}
+	want := []string{"exec", "-it", "cid", redisCLITool}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestBuildDockerExecArgs_NoExecSupport(t *testing.T) {
+	// A config without execArgsFunc must error in non-interactive mode.
+	cfg := shellConfig{cmd: "x", argsFunc: func(DatabaseService) []string { return nil }}
+	_, err := buildDockerExecArgs(cfg, DatabaseService{Driver: "x"}, "q", "cid", false)
+	if err == nil || !strings.Contains(err.Error(), "does not support --exec") {
+		t.Fatalf("expected --exec unsupported error, got %v", err)
+	}
+}
+
+func TestExecDBQueryCapture_UnknownDriver(t *testing.T) {
+	// Unknown driver returns a clean error before any docker call, no panic.
+	out, err := ExecDBQueryCapture(DatabaseService{Driver: "nope", ServiceName: "svc"}, "SELECT 1")
+	if err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("expected error naming driver, got %v (out=%q)", err, out)
+	}
+	if out != "" {
+		t.Errorf("expected empty output on driver error, got %q", out)
+	}
+}
