@@ -158,10 +158,11 @@ By default all db_services are included and run.
 	runCmd.PersistentFlags().String(
 		"profile",
 		"",
-		`Run only the named profile: services/db_services whose `+"`profiles:`"+`
-list contains this value, plus the transitive depends_on closure (so a
+		`Run only the named profile(s): services/db_services whose `+"`profiles:`"+`
+list contains a requested value, plus the transitive depends_on closure (so a
 profile still brings up the databases its services need, even if those
-databases have no profiles tag). Items with no profiles run only when no
+databases have no profiles tag). Accepts a comma-separated list for the union,
+e.g. --profile backend,worker. Items with no profiles run only when no
 --profile is passed (docker-compose behavior). An unknown profile starts
 nothing. Composes with --services/--omit/--dbServices as an intersection
 (profile narrows first). By default (no --profile) everything runs.`,
@@ -617,20 +618,22 @@ func detachedDBEntries(corgi *utils.CorgiCompose) []utils.RunStateEntry {
 }
 
 // applyProfileFilter narrows corgi.Services / corgi.DatabaseServices to the
-// items selected by --profile (members + transitive depends_on closure). A
-// no-op when --profile is empty. An unknown profile selects nothing and warns,
-// so `corgi run --profile typo` starts nothing rather than everything.
+// items selected by --profile (union of the comma-separated profiles, members +
+// transitive depends_on closure). A no-op when --profile is empty. When nothing
+// matches it selects nothing and warns, so `corgi run --profile typo` starts
+// nothing rather than everything.
 func applyProfileFilter(cmd *cobra.Command, corgi *utils.CorgiCompose) {
-	profile, _ := cmd.Flags().GetString("profile")
-	if profile == "" {
+	raw, _ := cmd.Flags().GetString("profile")
+	profiles := utils.ParseProfiles(raw)
+	if len(profiles) == 0 {
 		return
 	}
 
-	services, dbs := utils.SelectByProfile(corgi, profile)
+	services, dbs := utils.SelectByProfiles(corgi, profiles)
 	if len(services) == 0 && len(dbs) == 0 {
 		// Warn (to stderr under --json so stdout stays pure JSON) and select
 		// nothing — don't fall through to "select all".
-		utils.Infof("⚠️  [%s] profile %q matches no services or db_services; nothing to run\n", utils.ErrUnknownProfile, profile)
+		utils.Infof("⚠️  [%s] profile %q matches no services or db_services; nothing to run\n", utils.ErrUnknownProfile, raw)
 	}
 
 	filteredSvcs := corgi.Services[:0]

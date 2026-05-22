@@ -1,17 +1,35 @@
 package utils
 
-// SelectByProfile returns the names of services and db_services to run for the
-// given profile, including the transitive depends_on closure. profile=="" means
-// select all. Returns sets (map[string]bool) keyed by service/db name.
-//
-// Selection starts from members whose Profiles contains profile, then walks
-// each selected service's depends_on_services and depends_on_db to pull in the
-// services/dbs they need — even if those have no profiles tag (docker-compose
-// behavior: a frontend profile still brings up the DB it depends on). An
-// unknown profile (no member matches) yields empty sets, so the caller can warn
-// and start nothing rather than falling through to "select all".
+import "strings"
+
+// ParseProfiles splits a comma-separated --profile value into trimmed,
+// non-empty tokens. Returns nil when nothing meaningful is present.
+func ParseProfiles(value string) []string {
+	var out []string
+	for _, p := range strings.Split(value, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// SelectByProfile is the single-profile form of SelectByProfiles.
 func SelectByProfile(corgi *CorgiCompose, profile string) (services, dbs map[string]bool) {
-	if profile == "" {
+	return SelectByProfiles(corgi, []string{profile})
+}
+
+// SelectByProfiles returns the names of services and db_services to run for the
+// union of the given profiles, including the transitive depends_on closure. An
+// empty/nil slice (or a single "") means select all. Returns sets keyed by name.
+//
+// Selection starts from members whose Profiles intersect the requested set, then
+// walks each selected service's depends_on_services and depends_on_db to pull in
+// the services/dbs they need — even if those have no profiles tag (docker-compose
+// behavior: a frontend profile still brings up the DB it depends on). When no
+// member matches, the sets are empty so the caller can warn and start nothing.
+func SelectByProfiles(corgi *CorgiCompose, profiles []string) (services, dbs map[string]bool) {
+	if len(profiles) == 0 || (len(profiles) == 1 && profiles[0] == "") {
 		return selectAll(corgi)
 	}
 
@@ -20,7 +38,7 @@ func SelectByProfile(corgi *CorgiCompose, profile string) (services, dbs map[str
 		svcByName[s.ServiceName] = s
 	}
 
-	services, dbs, queue := seedProfileSelection(corgi, profile)
+	services, dbs, queue := seedProfileSelection(corgi, profiles)
 	walkDepClosure(svcByName, services, dbs, queue)
 	return services, dbs
 }
@@ -39,20 +57,20 @@ func selectAll(corgi *CorgiCompose) (services, dbs map[string]bool) {
 }
 
 // seedProfileSelection collects the services and db_services that directly
-// declare the profile, returning the initial selection sets plus the BFS queue
-// of seed services to expand.
-func seedProfileSelection(corgi *CorgiCompose, profile string) (services, dbs map[string]bool, queue []string) {
+// declare any of the profiles, returning the initial selection sets plus the
+// BFS queue of seed services to expand.
+func seedProfileSelection(corgi *CorgiCompose, profiles []string) (services, dbs map[string]bool, queue []string) {
 	services = map[string]bool{}
 	dbs = map[string]bool{}
 	for _, s := range corgi.Services {
-		if containsString(s.Profiles, profile) {
+		if intersects(s.Profiles, profiles) {
 			services[s.ServiceName] = true
 			queue = append(queue, s.ServiceName)
 		}
 	}
-	// db_services may also declare the profile directly.
+	// db_services may also declare a profile directly.
 	for _, db := range corgi.DatabaseServices {
-		if containsString(db.Profiles, profile) {
+		if intersects(db.Profiles, profiles) {
 			dbs[db.ServiceName] = true
 		}
 	}
@@ -82,6 +100,16 @@ func walkDepClosure(svcByName map[string]Service, services, dbs map[string]bool,
 			}
 		}
 	}
+}
+
+// intersects reports whether any wanted profile is present in have.
+func intersects(have, wanted []string) bool {
+	for _, w := range wanted {
+		if containsString(have, w) {
+			return true
+		}
+	}
+	return false
 }
 
 func containsString(list []string, target string) bool {

@@ -284,9 +284,12 @@ unknown `--service`.
 `corgi run --profile <name>` runs only the services/db_services whose
 `profiles:` list contains `<name>`, **plus their transitive `depends_on`
 closure** (so a profile still brings up the databases its services need, even
-if those databases carry no `profiles:` tag). With no `--profile`, everything
-runs (unchanged docker-compose-style behavior). An unknown profile matches
-nothing and warns (`E_UNKNOWN_PROFILE`) rather than starting everything.
+if those databases carry no `profiles:` tag). `--profile` accepts a
+comma-separated list and runs the **union** of those profiles, e.g.
+`corgi run --profile backend,worker`. With no `--profile`, everything runs
+(unchanged docker-compose-style behavior). If none of the requested profiles
+match anything, corgi warns (`E_UNKNOWN_PROFILE`) and starts nothing rather
+than starting everything; a partially-unknown list just uses the matches.
 
 `profiles:` is a string array on entries under `services` and `db_services`.
 `--profile` composes with `--services` / `--dbServices` / `--omit` as an
@@ -304,8 +307,9 @@ db_services:
 ```
 
 ```bash
-corgi run --profile backend --dry-run --json   # preview just the backend profile
-corgi test --profile backend --json            # test only that profile's services
+corgi run --profile backend --dry-run --json        # preview just the backend profile
+corgi run --profile backend,worker --dry-run --json # union of two profiles
+corgi test --profile backend --json                 # test only that profile's services
 ```
 
 ## Dependency readiness gating

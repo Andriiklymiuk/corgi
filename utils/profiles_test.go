@@ -115,6 +115,72 @@ func TestSelectByProfileUnknownIsEmpty(t *testing.T) {
 	}
 }
 
+func TestParseProfiles(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", nil},
+		{"  ", nil},
+		{"backend", []string{"backend"}},
+		{"backend,worker", []string{"backend", "worker"}},
+		{" backend , worker ", []string{"backend", "worker"}},
+		{"backend,,worker,", []string{"backend", "worker"}},
+	}
+	for _, c := range cases {
+		if got := ParseProfiles(c.in); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("ParseProfiles(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestSelectByProfilesUnion(t *testing.T) {
+	// backend selects api+worker (+db via depends_on_db); frontend selects web
+	// (+db). Union is all three services + db, cache still excluded.
+	corgi := sampleCompose()
+	services, dbs := SelectByProfiles(corgi, []string{"backend", "frontend"})
+
+	wantSvc := []string{"api", "web", "worker"}
+	if got := keys(services); !reflect.DeepEqual(got, wantSvc) {
+		t.Errorf("services = %v, want %v", got, wantSvc)
+	}
+	wantDb := []string{"db"}
+	if got := keys(dbs); !reflect.DeepEqual(got, wantDb) {
+		t.Errorf("dbs = %v, want %v", got, wantDb)
+	}
+}
+
+func TestSelectByProfilesEmptySelectsAll(t *testing.T) {
+	corgi := sampleCompose()
+	services, dbs := SelectByProfiles(corgi, nil)
+	if got := keys(services); !reflect.DeepEqual(got, []string{"api", "web", "worker"}) {
+		t.Errorf("services = %v, want all", got)
+	}
+	if got := keys(dbs); !reflect.DeepEqual(got, []string{"cache", "db"}) {
+		t.Errorf("dbs = %v, want all", got)
+	}
+}
+
+func TestSelectByProfilesUnknownOnlyIsEmpty(t *testing.T) {
+	corgi := sampleCompose()
+	services, dbs := SelectByProfiles(corgi, []string{"nope", "missing"})
+	if len(services) != 0 || len(dbs) != 0 {
+		t.Errorf("unknown-only selected %v / %v, want empty", keys(services), keys(dbs))
+	}
+}
+
+func TestSelectByProfilesMixedKnownUnknown(t *testing.T) {
+	// One known (frontend), one unknown — use the known match, ignore the rest.
+	corgi := sampleCompose()
+	services, dbs := SelectByProfiles(corgi, []string{"frontend", "nope"})
+	if got := keys(services); !reflect.DeepEqual(got, []string{"web"}) {
+		t.Errorf("services = %v, want [web]", got)
+	}
+	if got := keys(dbs); !reflect.DeepEqual(got, []string{"db"}) {
+		t.Errorf("dbs = %v, want [db]", got)
+	}
+}
+
 func TestSelectByProfileDbDeclaredDirectly(t *testing.T) {
 	// A db_service may itself declare a profile and gets selected on its own.
 	corgi := &CorgiCompose{

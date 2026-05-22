@@ -458,10 +458,11 @@ func mcpExec(args execArgs) (execResult, error) {
 
 func mcpSchema() string { return utils.ComposeJSONSchema() }
 
-// filterByProfile narrows corgi to a profile's selection (members + their
-// transitive depends_on closure), mirroring applyProfileFilter without cobra.
+// filterByProfile narrows corgi to the selection for one or more comma-separated
+// profiles (members + their transitive depends_on closure), mirroring
+// applyProfileFilter without cobra.
 func filterByProfile(corgi *utils.CorgiCompose, profile string) {
-	services, dbs := utils.SelectByProfile(corgi, profile)
+	services, dbs := utils.SelectByProfiles(corgi, utils.ParseProfiles(profile))
 	filteredSvcs := corgi.Services[:0]
 	for _, s := range corgi.Services {
 		if services[s.ServiceName] {
@@ -509,7 +510,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_plan",
 		mcp.WithDescription("Compute the dry-run plan: start order, databases, services, validation. No side effects."),
 		composeOpt,
-		mcp.WithString("profile", mcp.Description("Run only this profile's services/db_services")),
+		mcp.WithString("profile", mcp.Description("Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpPlan(planArgs{ComposePath: r.GetString("composePath", ""), Profile: r.GetString("profile", "")})
 	}))
@@ -531,7 +532,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_up",
 		mcp.WithDescription("Start all databases and services DETACHED and return promptly with the run-state."),
 		composeOpt,
-		mcp.WithString("profile", mcp.Description("Run only this profile's services/db_services")),
+		mcp.WithString("profile", mcp.Description("Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)")),
 		mcp.WithBoolean("seed", mcp.Description("Seed db_services that have a dump/seed source")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpUp(upArgs{
