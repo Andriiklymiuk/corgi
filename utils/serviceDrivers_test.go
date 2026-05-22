@@ -107,6 +107,31 @@ func TestServiceDockerName(t *testing.T) {
 	}
 }
 
+func TestDockerRunnerServiceNames(t *testing.T) {
+	services := []Service{
+		{ServiceName: "api", Runner: Runner{Name: "docker"}},
+		{ServiceName: "web"},
+		{ServiceName: "worker", Runner: Runner{Name: "docker"}},
+		{ServiceName: "cli", Runner: Runner{Name: ""}},
+	}
+	got := DockerRunnerServiceNames(services)
+	want := []string{"api", "worker"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got %v want %v", got, want)
+		}
+	}
+}
+
+func TestDockerRunnerServiceNamesNone(t *testing.T) {
+	if got := DockerRunnerServiceNames([]Service{{ServiceName: "web"}}); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
 func TestGetDbInfoFromString(t *testing.T) {
 	t.Run("postgres env extracted", func(t *testing.T) {
 		got := getDbInfoFromString("- POSTGRES_USER=admin", nil)

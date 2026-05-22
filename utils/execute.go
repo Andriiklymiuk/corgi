@@ -605,6 +605,28 @@ func ExecuteServiceCommandRun(targetService string, command ...string) error {
 	return nil
 }
 
+// StopDockerRunnerServices brings down docker-runner containers (`make down`)
+// for the given service names. Each is bounded and non-fatal: a failing or
+// hung `make down` warns and moves on so shutdown/reload never blocks. Empty
+// input is a no-op.
+func StopDockerRunnerServices(serviceNames []string) {
+	for _, name := range serviceNames {
+		path, err := GetPathToService(name)
+		if err != nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), AfterStartTimeout)
+		cmd := exec.CommandContext(ctx, "make", "down")
+		cmd.Dir = path
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Printf("⚠ could not stop docker service %s: %v\n", name, err)
+		}
+		cancel()
+	}
+}
+
 func ExecuteSeedMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {
 	path, err := GetPathToDbService(targetService)
 	if err != nil {

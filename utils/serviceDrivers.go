@@ -60,6 +60,19 @@ func (s Service) DockerName() string {
 	return DockerSafeName(s.ServiceName)
 }
 
+// DockerRunnerServiceNames returns the names of services managed by the docker
+// runner (started via `make up`). These run as containers, not tracked PIDs, so
+// they must be brought down explicitly on shutdown and on hot reload.
+func DockerRunnerServiceNames(services []Service) []string {
+	var names []string
+	for _, s := range services {
+		if s.Runner.Name == "docker" {
+			names = append(names, s.ServiceName)
+		}
+	}
+	return names
+}
+
 func GetExposedPortFromDockerfile(service Service) (string, error) {
 	if service.Port != 0 {
 		// If the port is already specified in the service struct, return it directly

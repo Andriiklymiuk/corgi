@@ -284,6 +284,7 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 		fmt.Println("🔄 Reloading corgi, because of corgi-compose file changes")
 		stopRunTunnels()
 		utils.KillAllStoredProcesses()
+		stopDockerRunners(utils.CorgiComposeFileContent)
 		utils.CloseAllLogWriters()
 		utils.ResetShutdown()
 		runReloading.Store(true)
@@ -698,10 +699,22 @@ func runBeforeStart(corgi *utils.CorgiCompose) {
 	)
 }
 
+// stopDockerRunners brings down docker-runner containers from the given compose
+// so a container never outlives its config on shutdown or hot reload. Safe on
+// nil and bounded/non-fatal underneath.
+func stopDockerRunners(corgi *utils.CorgiCompose) {
+	if corgi == nil {
+		return
+	}
+	utils.StopDockerRunnerServices(utils.DockerRunnerServiceNames(corgi.Services))
+}
+
 func cleanup(corgi *utils.CorgiCompose) {
 	if len(corgi.DatabaseServices) != 0 {
 		utils.ExecuteForEachService("stop")
 	}
+
+	stopDockerRunners(corgi)
 
 	for _, service := range corgi.Services {
 		if service.AfterStart != nil && !omitServiceCmd("afterStart") {

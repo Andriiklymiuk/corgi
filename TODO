@@ -1,3 +1,1 @@
 Bugs:
-- on corgi compose hot reload, if i change runner back to start, than runner doesn't get stopped and both are running
-- top register case service name stops docker runner from starting
