@@ -67,7 +67,7 @@ immediately. It forces logs on. Under `--json` it prints the run-state object:
 A second `run --detach` while a run-state exists errors (exit 1):
 
 ```json
-{"error": {"code": "ALREADY_RUNNING", "message": "corgi is already running for this project — stop or restart first (use --force to override)"}}
+{"error": {"code": "E_ALREADY_RUNNING", "message": "corgi is already running for this project — stop or restart first (use --force to override)"}}
 ```
 
 `--force` replaces the existing run-state **and kills the previously tracked
@@ -107,7 +107,7 @@ stops one and keeps the rest. It is idempotent (exit 0 when nothing is running).
 `restart --service x` is **not** supported yet — it exits 2:
 
 ```json
-{"error": {"code": "UNSUPPORTED", "message": "restart --service is not supported yet; use: corgi stop --service api && corgi run --detach"}}
+{"error": {"code": "E_UNSUPPORTED", "message": "restart --service is not supported yet; use: corgi stop --service api && corgi run --detach"}}
 ```
 
 ### Caveats
@@ -149,11 +149,15 @@ message text (messages may change wording). The catalog:
 | `E_EXEC_FAILED` | the command could not be spawned | check the binary exists / path |
 | `E_UNKNOWN_PROFILE` | `run --profile` matched no services/db_services | check the profile name against the compose `profiles:` lists |
 | `E_INVALID_CONDITION` | invalid depends_on `condition` (use `ready` or `started`) | fix the value |
+| `E_ALREADY_RUNNING` | a detached run is already active | stop/restart first, or `--force` |
+| `E_UNSUPPORTED` | operation not supported yet | use the suggested alternative |
+| `E_CONFIG_PATH` | cannot resolve the user-config dir | check `~/.corgi` perms |
+| `E_CONFIG_READ` | cannot read the user-config file | check `~/.corgi/config.yml` |
 
-Note: the `E_INTERACTIVE_REQUIRED` code was previously emitted as `INPUT_REQUIRED`,
-and the compose-load error code changed from `config` to `E_CONFIG`.
-A few command-specific codes also exist outside this catalog: `ALREADY_RUNNING`
-(second `run --detach`) and `UNSUPPORTED` (`restart --service`).
+Note: a few codes were renamed for consistency — `INPUT_REQUIRED` →
+`E_INTERACTIVE_REQUIRED`, `config` → `E_CONFIG`, `ALREADY_RUNNING` →
+`E_ALREADY_RUNNING`, and `UNSUPPORTED` → `E_UNSUPPORTED`. Every emitted code now
+lives in the catalog above.
 
 ## Commands that need a flag (or error in non-interactive mode)
 
@@ -382,7 +386,7 @@ db_services:
 
 Use `corgi run --detach` — it returns immediately and the services outlive
 corgi. Probe with `status`/`ps`, never by re-running `run` (a second
-`run --detach` errors `ALREADY_RUNNING`). Tear down with `corgi stop`.
+`run --detach` errors `E_ALREADY_RUNNING`). Tear down with `corgi stop`.
 
 ```bash
 # 1. preflight (exit 1 if a port is taken / docker down)

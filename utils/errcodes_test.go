@@ -24,6 +24,10 @@ func TestErrCodeValues(t *testing.T) {
 		"ErrUnknownProfile":   "E_UNKNOWN_PROFILE",
 		"ErrInvalidCondition": "E_INVALID_CONDITION",
 		"ErrConfig":           "E_CONFIG",
+		"ErrAlreadyRunning":   "E_ALREADY_RUNNING",
+		"ErrUnsupported":      "E_UNSUPPORTED",
+		"ErrConfigPath":       "E_CONFIG_PATH",
+		"ErrConfigRead":       "E_CONFIG_READ",
 	}
 
 	got := map[string]string{
@@ -45,6 +49,10 @@ func TestErrCodeValues(t *testing.T) {
 		"ErrUnknownProfile":   ErrUnknownProfile,
 		"ErrInvalidCondition": ErrInvalidCondition,
 		"ErrConfig":           ErrConfig,
+		"ErrAlreadyRunning":   ErrAlreadyRunning,
+		"ErrUnsupported":      ErrUnsupported,
+		"ErrConfigPath":       ErrConfigPath,
+		"ErrConfigRead":       ErrConfigRead,
 	}
 
 	for name, wantVal := range want {

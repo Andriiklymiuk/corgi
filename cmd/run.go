@@ -565,7 +565,7 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 		if s.Status == "running" {
 			msg := "corgi is already running for this project — stop or restart first (use --force to override)"
 			if utils.JSONOutput {
-				utils.JSONError("ALREADY_RUNNING", msg)
+				utils.JSONError(utils.ErrAlreadyRunning, msg)
 			} else {
 				fmt.Fprintln(os.Stderr, msg)
 			}

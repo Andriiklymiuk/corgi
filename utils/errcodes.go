@@ -20,5 +20,9 @@ const (
 	ErrExecFailed       = "E_EXEC_FAILED"     // command failed to spawn
 	ErrUnknownProfile   = "E_UNKNOWN_PROFILE" // --profile matched no services/db_services
 	ErrInvalidCondition = "E_INVALID_CONDITION"
-	ErrConfig           = "E_CONFIG" // could not load/resolve the compose file
+	ErrConfig           = "E_CONFIG"          // could not load/resolve the compose file
+	ErrAlreadyRunning   = "E_ALREADY_RUNNING" // a detached run is already active
+	ErrUnsupported      = "E_UNSUPPORTED"     // operation not supported yet
+	ErrConfigPath       = "E_CONFIG_PATH"     // cannot resolve user-config dir
+	ErrConfigRead       = "E_CONFIG_READ"     // cannot read user-config file
 )
