@@ -232,7 +232,10 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) {
 	}
 
 	events := make(chan tunnel.Event, 32)
-	go tunnel.Run(ctx, provider, "mcp", port, named, events)
+	go func() {
+		tunnel.Run(ctx, provider, "mcp", port, named, events)
+		close(events) // terminate the consumer below when the tunnel exits
+	}()
 	go func() {
 		for ev := range events {
 			switch {
@@ -792,9 +795,9 @@ func jsonHandler(core func(mcp.CallToolRequest) (any, error)) server.ToolHandler
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		b, merrr := json.Marshal(out)
-		if merrr != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("%s: marshal result: %v", utils.ErrExecFailed, merrr)), nil
+		b, err := json.Marshal(out)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("%s: marshal result: %v", utils.ErrExecFailed, err)), nil
 		}
 		return mcp.NewToolResultText(string(b)), nil
 	}
