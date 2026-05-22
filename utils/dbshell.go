@@ -174,6 +174,34 @@ func ExecDBQueryCapture(db DatabaseService, query string) (string, error) {
 	return buf.String(), err
 }
 
+// buildDockerExecArgs assembles the `docker exec ...` argument list for a db
+// service + query. Pure: no docker or container lookup. containerID is the
+// already-resolved target. Empty tokens are dropped so optional flags (e.g.
+// redis with no password) don't leave a stray "".
+func buildDockerExecArgs(cfg shellConfig, db DatabaseService, query, containerID string, interactive bool) ([]string, error) {
+	dockerArgs := []string{"exec"}
+	if interactive {
+		dockerArgs = append(dockerArgs, "-it")
+	}
+	dockerArgs = append(dockerArgs, containerID, cfg.cmd)
+	if interactive {
+		dockerArgs = append(dockerArgs, cfg.argsFunc(db)...)
+	} else {
+		if cfg.execArgsFunc == nil {
+			return nil, fmt.Errorf("driver %q does not support --exec", db.Driver)
+		}
+		dockerArgs = append(dockerArgs, cfg.execArgsFunc(db, query)...)
+	}
+
+	filtered := dockerArgs[:0]
+	for _, a := range dockerArgs {
+		if a != "" {
+			filtered = append(filtered, a)
+		}
+	}
+	return filtered, nil
+}
+
 func runDBShell(db DatabaseService, query string, interactive bool, stdout, stderr io.Writer) error {
 	cfg, ok := driverShells[db.Driver]
 	if !ok {
@@ -188,25 +216,9 @@ func runDBShell(db DatabaseService, query string, interactive bool, stdout, stde
 		return fmt.Errorf("cannot find running container for %s: %w", db.ServiceName, err)
 	}
 
-	dockerArgs := []string{"exec"}
-	if interactive {
-		dockerArgs = append(dockerArgs, "-it")
-	}
-	dockerArgs = append(dockerArgs, containerID, cfg.cmd)
-	if interactive {
-		dockerArgs = append(dockerArgs, cfg.argsFunc(db)...)
-	} else {
-		if cfg.execArgsFunc == nil {
-			return fmt.Errorf("driver %q does not support --exec", db.Driver)
-		}
-		dockerArgs = append(dockerArgs, cfg.execArgsFunc(db, query)...)
-	}
-
-	filtered := dockerArgs[:0]
-	for _, a := range dockerArgs {
-		if a != "" {
-			filtered = append(filtered, a)
-		}
+	filtered, err := buildDockerExecArgs(cfg, db, query, containerID, interactive)
+	if err != nil {
+		return err
 	}
 
 	cmd := exec.Command("docker", filtered...) // NOSONAR — docker is a known system binary

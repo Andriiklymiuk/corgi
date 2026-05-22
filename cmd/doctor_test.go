@@ -205,6 +205,93 @@ func TestProcessRequired_OptionalNonInteractiveSkips(t *testing.T) {
 	}
 }
 
+func TestBuildDoctorResult_RequiredPresent(t *testing.T) {
+	// 'go' is guaranteed present in this test environment.
+	corgi := &utils.CorgiCompose{
+		Required: []utils.Required{{Name: "go", CheckCmd: "go version"}},
+	}
+	res := buildDoctorResult(corgi)
+	if len(res.Checks) != 1 {
+		t.Fatalf("expected 1 check, got %d: %+v", len(res.Checks), res.Checks)
+	}
+	c := res.Checks[0]
+	if c.Name != "required:go" || !c.OK || c.Detail != "" {
+		t.Errorf("expected ok required check, got %+v", c)
+	}
+	if !res.OK {
+		t.Error("overall result must be OK when the only check passes")
+	}
+}
+
+func TestBuildDoctorResult_RequiredMissing(t *testing.T) {
+	corgi := &utils.CorgiCompose{
+		Required: []utils.Required{{Name: "this-tool-does-not-exist-zzz"}},
+	}
+	res := buildDoctorResult(corgi)
+	if len(res.Checks) != 1 {
+		t.Fatalf("expected 1 check, got %+v", res.Checks)
+	}
+	c := res.Checks[0]
+	if c.OK {
+		t.Error("missing tool check must be ok=false")
+	}
+	if c.Detail != "not found" {
+		t.Errorf("expected 'not found' detail, got %q", c.Detail)
+	}
+	if res.OK {
+		t.Error("overall result must be false when a check fails")
+	}
+}
+
+func TestBuildDoctorResult_OKIsAndOfChecks(t *testing.T) {
+	// One present + one missing required → overall false (AND of checks).
+	corgi := &utils.CorgiCompose{
+		Required: []utils.Required{
+			{Name: "go", CheckCmd: "go version"},
+			{Name: "this-tool-does-not-exist-zzz"},
+		},
+	}
+	res := buildDoctorResult(corgi)
+	if len(res.Checks) != 2 {
+		t.Fatalf("expected 2 checks, got %+v", res.Checks)
+	}
+	if !res.Checks[0].OK || res.Checks[1].OK {
+		t.Errorf("expected [ok, not-ok], got %+v", res.Checks)
+	}
+	if res.OK {
+		t.Error("overall must be false when any check fails")
+	}
+}
+
+func TestRunRequired_AllPresent(t *testing.T) {
+	if !RunRequired([]utils.Required{{Name: "go", CheckCmd: "go version"}}) {
+		t.Error("expected true when all required tools present")
+	}
+}
+
+func TestRunRequired_ReportsMissing(t *testing.T) {
+	got := RunRequired([]utils.Required{
+		{Name: "go", CheckCmd: "go version"},
+		{Name: "this-tool-does-not-exist-zzz"},
+	})
+	if got {
+		t.Error("expected false when a required tool is missing")
+	}
+}
+
+func TestProcessRequired_RequiredRunsInstallThenRechecks(t *testing.T) {
+	// Non-optional missing tool: no prompt, runs the (harmless) install step,
+	// re-checks, still absent → false. Exercises the install loop + recheck.
+	got := processRequired(utils.Required{
+		Name:    "this-tool-does-not-exist-zzz",
+		Why:     []string{"to test the install path"},
+		Install: []string{"echo installing"},
+	})
+	if got {
+		t.Error("expected false: tool still missing after install step")
+	}
+}
+
 func TestRunDoctorJSON_EmptyComposePasses(t *testing.T) {
 	origJSON := utils.JSONOutput
 	defer func() { utils.JSONOutput = origJSON }()
