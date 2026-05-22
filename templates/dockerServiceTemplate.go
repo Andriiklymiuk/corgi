@@ -1,8 +1,8 @@
 package templates
 
 var DockerComposeService = `services:
-  {{.ServiceName}}:
-    container_name: {{.ServiceName}}
+  {{.DockerName}}:
+    container_name: {{.DockerName}}
     build:
       context: ../../..
       dockerfile: Dockerfile
@@ -28,15 +28,15 @@ var MakefileService = `up:
 down:
 	docker compose down --volumes
 stop:
-	docker stop {{.ServiceName}}
+	docker stop {{.DockerName}}
 id:
-	docker ps -aqf "name={{.ServiceName}}" | awk '{print $1}'
+	docker ps -aqf "name={{.DockerName}}" | awk '{print $1}'
 remove:
-	docker rm --volumes {{.ServiceName}}
+	docker rm --volumes {{.DockerName}}
 logs:
-	docker logs {{.ServiceName}}
+	docker logs {{.DockerName}}
 build:
-	docker compose build {{.ServiceName}}
+	docker compose build {{.DockerName}}
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 

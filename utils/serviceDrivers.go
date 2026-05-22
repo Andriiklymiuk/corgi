@@ -30,6 +30,36 @@ var ServiceConfigs = map[string]ServiceConfig{
 	},
 }
 
+// DockerSafeName converts a service name to a form docker compose accepts for
+// project/container names: lowercase, with anything outside [a-z0-9_-] replaced
+// by '-'. Leading separators are trimmed so the name starts with [a-z0-9].
+// docker compose itself lowercases the project name, so without this an
+// uppercase service name (e.g. "MyApi") produces a container_name docker
+// rejects and the runner never starts.
+func DockerSafeName(name string) string {
+	lower := strings.ToLower(name)
+	var b strings.Builder
+	for _, r := range lower {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	out := strings.TrimLeft(b.String(), "_-")
+	if out == "" {
+		return "service"
+	}
+	return out
+}
+
+// DockerName is the docker-safe service name used in generated docker-compose
+// and Makefile templates. The logical ServiceName is kept everywhere else.
+func (s Service) DockerName() string {
+	return DockerSafeName(s.ServiceName)
+}
+
 func GetExposedPortFromDockerfile(service Service) (string, error) {
 	if service.Port != 0 {
 		// If the port is already specified in the service struct, return it directly

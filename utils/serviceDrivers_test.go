@@ -78,6 +78,35 @@ func TestGetExposedPortFromDockerfile(t *testing.T) {
 	})
 }
 
+func TestDockerSafeName(t *testing.T) {
+	tests := map[string]string{
+		"MyApi":    "myapi",
+		"Foo_Bar":  "foo_bar",
+		"my-api":   "my-api",
+		"my_api":   "my_api",
+		"My Api":   "my-api",
+		"API.v2":   "api-v2",
+		"_leading": "leading",
+		"-Lead":    "lead",
+		"":         "service",
+		"___":      "service",
+		"valid123": "valid123",
+	}
+	for in, want := range tests {
+		t.Run(in, func(t *testing.T) {
+			if got := DockerSafeName(in); got != want {
+				t.Errorf("DockerSafeName(%q) = %q want %q", in, got, want)
+			}
+		})
+	}
+}
+
+func TestServiceDockerName(t *testing.T) {
+	if got := (Service{ServiceName: "MyApi"}).DockerName(); got != "myapi" {
+		t.Errorf("DockerName() = %q want myapi", got)
+	}
+}
+
 func TestGetDbInfoFromString(t *testing.T) {
 	t.Run("postgres env extracted", func(t *testing.T) {
 		got := getDbInfoFromString("- POSTGRES_USER=admin", nil)
