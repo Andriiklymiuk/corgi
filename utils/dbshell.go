@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -154,16 +156,25 @@ var driverShells = map[string]shellConfig{
 // OpenDBShell drops the user into an interactive psql/mongosh/etc. inside
 // the db_service's running container.
 func OpenDBShell(db DatabaseService) error {
-	return runDBShell(db, "", true)
+	return runDBShell(db, "", true, os.Stdout, os.Stderr)
 }
 
 // ExecDBQuery runs a single query against the db_service's container and
 // writes the tool's output to stdout. Exits with the tool's exit code.
 func ExecDBQuery(db DatabaseService, query string) error {
-	return runDBShell(db, query, false)
+	return runDBShell(db, query, false, os.Stdout, os.Stderr)
 }
 
-func runDBShell(db DatabaseService, query string, interactive bool) error {
+// ExecDBQueryCapture runs a single query non-interactively and returns the
+// tool's combined output instead of streaming it, so callers (e.g. the MCP
+// server) keep stdout clear.
+func ExecDBQueryCapture(db DatabaseService, query string) (string, error) {
+	var buf bytes.Buffer
+	err := runDBShell(db, query, false, &buf, &buf)
+	return buf.String(), err
+}
+
+func runDBShell(db DatabaseService, query string, interactive bool, stdout, stderr io.Writer) error {
 	cfg, ok := driverShells[db.Driver]
 	if !ok {
 		return fmt.Errorf("no interactive shell defined for driver %q\n"+
@@ -202,8 +213,8 @@ func runDBShell(db DatabaseService, query string, interactive bool) error {
 	if interactive {
 		cmd.Stdin = os.Stdin
 	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	return cmd.Run()
 }
 

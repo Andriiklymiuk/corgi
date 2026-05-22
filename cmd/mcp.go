@@ -658,6 +658,97 @@ func mcpExec(args execArgs) (execResult, error) {
 	return execResult{ExitCode: code, Output: buf.String(), DurationMs: durationMs}, nil
 }
 
+type testArgs struct {
+	ComposePath string `json:"composePath"`
+	Service     string `json:"service"`
+	Profile     string `json:"profile"`
+	EnsureDeps  bool   `json:"ensureDeps"`
+}
+
+type testRunResult struct {
+	Services []testResult `json:"services"`
+	Passed   bool         `json:"passed"`
+}
+
+// mcpTest runs each selected service's test script, mirroring `corgi test`.
+// Test scripts execute commands; their child stdout is routed to stderr so the
+// JSON-RPC channel stays clean.
+func mcpTest(args testArgs) (testRunResult, error) {
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return testRunResult{}, composeLoadError(err)
+	}
+	if args.Profile != "" {
+		filterByProfile(corgi, args.Profile)
+	}
+	sel, err := resolveSelection(corgi, args.Service, args.Profile)
+	if err != nil {
+		return testRunResult{}, fmt.Errorf(errFmt, utils.ErrServiceNotFound, err)
+	}
+	var (
+		results []testResult
+		passed  bool
+	)
+	withStdoutToStderr(func() {
+		results, passed = runTests(corgi, sel, args.EnsureDeps, defaultReadyTimeout)
+	})
+	return testRunResult{Services: results, Passed: passed}, nil
+}
+
+func mcpDoctor(args validateArgs) (doctorResult, error) {
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return doctorResult{}, composeLoadError(err)
+	}
+	return buildDoctorResult(corgi), nil
+}
+
+type restartArgs struct {
+	ComposePath string `json:"composePath"`
+	Profile     string `json:"profile"`
+}
+
+// mcpRestart stops the detached stack then starts it again detached, returning
+// the new run-state. Down/up already route their progress prints to stderr.
+func mcpRestart(args restartArgs) (utils.RunState, error) {
+	if _, err := mcpDown(validateArgs{ComposePath: args.ComposePath}); err != nil {
+		return utils.RunState{}, err
+	}
+	return mcpUp(upArgs{ComposePath: args.ComposePath, Profile: args.Profile})
+}
+
+type dbQueryArgs struct {
+	ComposePath string `json:"composePath"`
+	Service     string `json:"service"`
+	Query       string `json:"query"`
+}
+
+type dbQueryResult struct {
+	Service string `json:"service"`
+	Output  string `json:"output"`
+}
+
+// mcpDBQuery runs a single non-interactive query against a db_service container,
+// capturing the tool's output instead of streaming it to stdout.
+func mcpDBQuery(args dbQueryArgs) (dbQueryResult, error) {
+	if strings.TrimSpace(args.Service) == "" || strings.TrimSpace(args.Query) == "" {
+		return dbQueryResult{}, fmt.Errorf("%s: service and query are required", utils.ErrUsage)
+	}
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return dbQueryResult{}, composeLoadError(err)
+	}
+	db, err := utils.GetDbServiceByName(args.Service, corgi.DatabaseServices)
+	if err != nil {
+		return dbQueryResult{}, fmt.Errorf("%s: db_service %q not found: %v", utils.ErrServiceNotFound, args.Service, err)
+	}
+	out, err := utils.ExecDBQueryCapture(db, args.Query)
+	if err != nil {
+		return dbQueryResult{Service: args.Service, Output: out}, fmt.Errorf(errFmt, utils.ErrExecFailed, err)
+	}
+	return dbQueryResult{Service: args.Service, Output: out}, nil
+}
+
 func mcpSchema() string { return utils.ComposeJSONSchema() }
 
 // filterByProfile narrows corgi to the selection for the given comma-separated
@@ -696,8 +787,11 @@ func withStdoutToStderr(fn func()) {
 
 // --- MCP tool registration (thin wrappers over the cores above) ---
 
+const profileDesc = "Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)"
+
 func registerMCPTools(s *server.MCPServer) {
 	composeOpt := mcp.WithString("composePath", mcp.Description("Path to corgi-compose.yml (default: resolve from cwd)"))
+	serviceOpt := mcp.WithString("service", mcp.Required(), mcp.Description("Service name"))
 
 	s.AddTool(mcp.NewTool("corgi_validate",
 		mcp.WithDescription("Statically validate corgi-compose.yml (no side effects). Returns {ok, errors[], warnings[]}."),
@@ -709,7 +803,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_plan",
 		mcp.WithDescription("Compute the dry-run plan: start order, databases, services, validation. No side effects."),
 		composeOpt,
-		mcp.WithString("profile", mcp.Description("Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)")),
+		mcp.WithString("profile", mcp.Description(profileDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpPlan(planArgs{ComposePath: r.GetString("composePath", ""), Profile: r.GetString("profile", "")})
 	}))
@@ -731,7 +825,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_up",
 		mcp.WithDescription("Start all databases and services DETACHED and return promptly with the run-state."),
 		composeOpt,
-		mcp.WithString("profile", mcp.Description("Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)")),
+		mcp.WithString("profile", mcp.Description(profileDesc)),
 		mcp.WithBoolean("seed", mcp.Description("Seed db_services that have a dump/seed source")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpUp(upArgs{
@@ -751,7 +845,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_logs",
 		mcp.WithDescription("Read the last N lines of a service's newest captured log run."),
 		composeOpt,
-		mcp.WithString("service", mcp.Required(), mcp.Description("Service name")),
+		serviceOpt,
 		mcp.WithNumber("lines", mcp.Description("Number of trailing lines (default 200)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpLogs(logsArgs{
@@ -764,7 +858,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_exec",
 		mcp.WithDescription("Run a one-off command in a service's resolved env. Returns {exitCode, output, durationMs}."),
 		composeOpt,
-		mcp.WithString("service", mcp.Required(), mcp.Description("Service name")),
+		serviceOpt,
 		mcp.WithString("command", mcp.Required(), mcp.Description("Command line to run (via /bin/sh -c)")),
 		mcp.WithBoolean("ensureDeps", mcp.Description("Wait for depends_on_db/services to be ready first")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -773,6 +867,52 @@ func registerMCPTools(s *server.MCPServer) {
 			Service:     r.GetString("service", ""),
 			Command:     r.GetString("command", ""),
 			EnsureDeps:  r.GetBool("ensureDeps", false),
+		})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_test",
+		mcp.WithDescription("Run each selected service's `test` script in its resolved env. Returns {services[], passed}. Does not start databases/services."),
+		composeOpt,
+		mcp.WithString("service", mcp.Description("Only test this service")),
+		mcp.WithString("profile", mcp.Description(profileDesc)),
+		mcp.WithBoolean("ensureDeps", mcp.Description("Wait for depends_on_db/services to be ready first")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpTest(testArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Service:     r.GetString("service", ""),
+			Profile:     r.GetString("profile", ""),
+			EnsureDeps:  r.GetBool("ensureDeps", false),
+		})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_doctor",
+		mcp.WithDescription("Preflight checks (required tools, Docker, port availability). Returns {ok, checks[]}. No side effects."),
+		composeOpt,
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpDoctor(validateArgs{ComposePath: r.GetString("composePath", "")})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_restart",
+		mcp.WithDescription("Stop the detached stack then start it again DETACHED. Returns the new run-state."),
+		composeOpt,
+		mcp.WithString("profile", mcp.Description(profileDesc)),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpRestart(restartArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Profile:     r.GetString("profile", ""),
+		})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_db_query",
+		mcp.WithDescription("Run a single non-interactive query against a running db_service container. Returns {service, output}."),
+		composeOpt,
+		serviceOpt,
+		mcp.WithString("query", mcp.Required(), mcp.Description("Query/command to run (e.g. SQL for psql)")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpDBQuery(dbQueryArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Service:     r.GetString("service", ""),
+			Query:       r.GetString("query", ""),
 		})
 	}))
 
@@ -815,6 +955,22 @@ func registerMCPResources(s *server.MCPServer) {
 			defer mcpHandlerMu.Unlock()
 			return []mcp.ResourceContents{mcp.TextResourceContents{
 				URI: "corgi://schema", MIMEType: mimeJSON, Text: utils.ComposeJSONSchema(),
+			}}, nil
+		})
+
+	s.AddResource(
+		mcp.NewResource("corgi://drivers", "supported db drivers",
+			mcp.WithResourceDescription("Supported db_services.driver values"),
+			mcp.WithMIMEType(mimeJSON)),
+		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			mcpHandlerMu.Lock()
+			defer mcpHandlerMu.Unlock()
+			b, err := json.Marshal(utils.KnownDrivers)
+			if err != nil {
+				return nil, fmt.Errorf("%s: marshal drivers: %v", utils.ErrExecFailed, err)
+			}
+			return []mcp.ResourceContents{mcp.TextResourceContents{
+				URI: "corgi://drivers", MIMEType: mimeJSON, Text: string(b),
 			}}, nil
 		})
 

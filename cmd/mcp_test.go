@@ -327,6 +327,108 @@ func TestMCPLogsRequiresService(t *testing.T) {
 	}
 }
 
+const mcpComposeTestPass = `name: mcp-test-pass
+services:
+  api:
+    port: 3000
+    start:
+      - go run .
+    scripts:
+      - name: test
+        commands:
+          - "true"
+`
+
+const mcpComposeTestFail = `name: mcp-test-fail
+services:
+  api:
+    port: 3000
+    start:
+      - go run .
+    scripts:
+      - name: test
+        commands:
+          - "false"
+`
+
+func TestMCPTestPasses(t *testing.T) {
+	chdirToTempCompose(t, mcpComposeTestPass)
+	got, err := mcpTest(testArgs{})
+	if err != nil {
+		t.Fatalf("mcpTest: %v", err)
+	}
+	if !got.Passed {
+		t.Errorf("expected passed=true, got %+v", got)
+	}
+	if len(got.Services) != 1 || !got.Services[0].Passed {
+		t.Errorf("expected one passing service, got %+v", got.Services)
+	}
+}
+
+func TestMCPTestFails(t *testing.T) {
+	chdirToTempCompose(t, mcpComposeTestFail)
+	got, err := mcpTest(testArgs{})
+	if err != nil {
+		t.Fatalf("mcpTest: %v", err)
+	}
+	if got.Passed {
+		t.Errorf("expected passed=false, got %+v", got)
+	}
+}
+
+func TestMCPDoctorShape(t *testing.T) {
+	chdirToTempCompose(t, mcpComposeFixture)
+	got, err := mcpDoctor(validateArgs{})
+	if err != nil {
+		t.Fatalf("mcpDoctor: %v", err)
+	}
+	if got.Checks == nil {
+		t.Error("expected a checks array")
+	}
+	// ok is the AND of every check; just assert it is consistent with the checks.
+	want := true
+	for _, c := range got.Checks {
+		if !c.OK {
+			want = false
+		}
+	}
+	if got.OK != want {
+		t.Errorf("ok=%v inconsistent with checks %+v", got.OK, got.Checks)
+	}
+}
+
+func TestMCPRestartMissingCompose(t *testing.T) {
+	chdirToTempCompose(t, "name: x\n")
+	// Point at a path that does not exist -> composeLoadError.
+	if _, err := mcpRestart(restartArgs{ComposePath: "/no/such/corgi-compose.yml"}); err == nil {
+		t.Error("expected error for missing compose")
+	}
+}
+
+func TestMCPDBQueryRequiresArgs(t *testing.T) {
+	if _, err := mcpDBQuery(dbQueryArgs{Service: "", Query: "SELECT 1"}); err == nil {
+		t.Error("expected error for empty service")
+	}
+	if _, err := mcpDBQuery(dbQueryArgs{Service: "pg", Query: ""}); err == nil {
+		t.Error("expected error for empty query")
+	}
+}
+
+func TestMCPDriversResource(t *testing.T) {
+	if len(utils.KnownDrivers) == 0 {
+		t.Fatal("expected non-empty KnownDrivers")
+	}
+	found := false
+	for _, d := range utils.KnownDrivers {
+		if d == "postgres" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected postgres in KnownDrivers, got %v", utils.KnownDrivers)
+	}
+}
+
 // TestMCPWithStdoutToStderr verifies the stdout swap keeps incidental prints off
 // the real stdout (the JSON-RPC channel) and restores os.Stdout afterward.
 func TestMCPWithStdoutToStderr(t *testing.T) {

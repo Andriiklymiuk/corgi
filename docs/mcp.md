@@ -99,6 +99,10 @@ still bind to `localhost` or front it with an authenticated proxy.
 | `corgi_down` | `{composePath?}` | `{stopped[], failed[]}` | stop machinery (`stopProcessGroup`) |
 | `corgi_logs` | `{service, lines?}` | `{service, lines[]}` | newest captured log run |
 | `corgi_exec` | `{service, command, ensureDeps?}` | `{exitCode, output, durationMs}` | `RunServiceCommandExitCode` (output captured) |
+| `corgi_test` | `{composePath?, service?, profile?, ensureDeps?}` | `{services[], passed}` | `runTests` (does not start db/services) |
+| `corgi_doctor` | `{composePath?}` | `{ok, checks[]}` | `buildDoctorResult` (required tools, Docker, ports) |
+| `corgi_restart` | `{composePath?, profile?}` | run-state — **always detached** | `corgi_down` then `corgi_up` |
+| `corgi_db_query` | `{composePath?, service, query}` | `{service, output}` | `utils.ExecDBQueryCapture` (non-interactive) |
 | `corgi_schema` | `{}` | the JSON Schema (draft-07) as text | `utils.ComposeJSONSchema` |
 
 `corgi_up` is **always detached**: it brings databases up, generates env, then
@@ -110,6 +114,7 @@ spawns each service as a detached process group and writes
 | URI | Content |
 |-----|---------|
 | `corgi://schema` | JSON Schema (draft-07) for `corgi-compose.yml` (static) |
+| `corgi://drivers` | JSON array of supported `db_services.driver` values (`utils.KnownDrivers`) |
 | `corgi://compose` | the resolved/interpolated current compose, marshaled to JSON |
 | `corgi://status` | live status snapshot (re-read on each fetch) |
 
