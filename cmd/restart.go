@@ -30,10 +30,14 @@ func init() {
 	restartCmd.Flags().String("host", "", "IP to use instead of localhost in service URL env vars")
 }
 
+func restartUnsupportedMessage(service string) string {
+	return "restart --service is not supported yet; use: corgi stop --service " +
+		service + " && corgi run --detach"
+}
+
 func runRestart(cmd *cobra.Command, args []string) {
 	if restartService != "" {
-		msg := "restart --service is not supported yet; use: corgi stop --service " +
-			restartService + " && corgi run --detach"
+		msg := restartUnsupportedMessage(restartService)
 		if utils.JSONOutput {
 			utils.JSONError(utils.ErrUnsupported, msg)
 		} else {

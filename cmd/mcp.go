@@ -308,8 +308,10 @@ func loadComposeCtx(composePath string) (composeContext, error) {
 	tmp.Flags().Bool("seed", false, "")
 
 	cleanup := func() {
+		// Reset on rootCmd directly: after RemoveCommand, tmp.Root() is tmp, not
+		// rootCmd, so the stale filename would leak into the next tool call.
+		_ = rootCmd.PersistentFlags().Set("filename", "")
 		rootCmd.RemoveCommand(tmp)
-		_ = tmp.Root().PersistentFlags().Set("filename", "")
 	}
 
 	if composePath != "" {
