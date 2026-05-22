@@ -3,14 +3,25 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/tunnel"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -31,6 +42,12 @@ Register it in .mcp.json (project) or ~/.claude.json:
 
 func init() {
 	mcpCmd.Flags().String("http", "", "Serve MCP over Streamable HTTP at this address (e.g. :8765 or 127.0.0.1:8765) instead of stdio.")
+	mcpCmd.Flags().Bool("tunnel", false, "Open a public tunnel to the --http addr (requires --http).")
+	mcpCmd.Flags().String("tunnel-provider", "cloudflared", "Tunnel provider (cloudflared|ngrok|localtunnel).")
+	mcpCmd.Flags().String("tunnel-hostname", "", "Custom public hostname for the tunnel (${VAR} expanded).")
+	mcpCmd.Flags().String("tunnel-name", "", "cloudflared named-tunnel name.")
+	mcpCmd.Flags().String("token", "", "Bearer token for HTTP auth (auto-generated when --tunnel is set).")
+	mcpCmd.Flags().Bool("insecure", false, "Disable bearer-token auth on the HTTP endpoint.")
 	rootCmd.AddCommand(mcpCmd)
 }
 
@@ -55,11 +72,101 @@ func runMCP(cmd *cobra.Command, _ []string) {
 	registerMCPResources(s)
 
 	httpAddr, _ := cmd.Flags().GetString("http")
+	opts := mcpHTTPOptsFromFlags(cmd)
+	if opts.tunnel && httpAddr == "" {
+		fmt.Fprintln(os.Stderr, "corgi mcp --tunnel requires --http (the local addr to expose).")
+		os.Exit(2)
+	}
 	if httpAddr != "" {
-		serveMCPHTTP(s, httpAddr)
+		serveMCPHTTP(s, httpAddr, resolveMCPToken(opts), opts)
 		return
 	}
 	serveMCPStdio(s)
+}
+
+type mcpHTTPOpts struct {
+	tunnel         bool
+	tunnelProvider string
+	tunnelHostname string
+	tunnelName     string
+	token          string
+	insecure       bool
+}
+
+func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
+	o := mcpHTTPOpts{}
+	o.tunnel, _ = cmd.Flags().GetBool("tunnel")
+	o.tunnelProvider, _ = cmd.Flags().GetString("tunnel-provider")
+	o.tunnelHostname, _ = cmd.Flags().GetString("tunnel-hostname")
+	o.tunnelName, _ = cmd.Flags().GetString("tunnel-name")
+	o.token, _ = cmd.Flags().GetString("token")
+	o.insecure, _ = cmd.Flags().GetBool("insecure")
+	return o
+}
+
+// resolveMCPToken applies the token rules. Plain --http with no --token and no
+// --tunnel stays no-auth (token=="") so existing users are unaffected. A token
+// is auto-generated only for a public tunnel without an explicit one.
+func resolveMCPToken(o mcpHTTPOpts) string {
+	if o.insecure {
+		return ""
+	}
+	token := o.token
+	if token == "" && o.tunnel {
+		token = generateMCPToken()
+	}
+	return token
+}
+
+// generateMCPToken returns a url-safe bearer token prefixed corgi_mcp_.
+func generateMCPToken() string {
+	b := make([]byte, 18)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand failure is fatal: a weak token would defeat the auth.
+		fmt.Fprintln(os.Stderr, "could not generate token:", err)
+		os.Exit(1)
+	}
+	return "corgi_mcp_" + base64.RawURLEncoding.EncodeToString(b)
+}
+
+// bearerAuth wraps next with a constant-time Bearer-token check. token=="" is
+// no-auth and returns next unchanged.
+func bearerAuth(token string, next http.Handler) http.Handler {
+	if token == "" {
+		return next
+	}
+	want := []byte("Bearer " + token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := []byte(r.Header.Get("Authorization"))
+		if subtle.ConstantTimeCompare(got, want) != 1 {
+			w.Header().Set("Content-Type", mimeJSON)
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// buildMCPTunnelConfig selects a provider and builds a NamedConfig from the mcp
+// tunnel flags, expanding ${VAR} in the hostname. A named config is returned
+// only when a hostname (or name) is set; otherwise nil => quick tunnel.
+func buildMCPTunnelConfig(provider, hostname, name string) (tunnel.Provider, *tunnel.NamedConfig, error) {
+	p, ok := tunnel.Providers[provider]
+	if !ok {
+		names := tunnel.Names()
+		sort.Strings(names)
+		return nil, nil, fmt.Errorf("unknown tunnel provider %q. Available: %s", provider, strings.Join(names, ", "))
+	}
+	var missing []string
+	host := tunnel.Substitute(hostname, nil, &missing)
+	if len(missing) > 0 {
+		return nil, nil, tunnel.MissingError("--tunnel-hostname", missing)
+	}
+	if host == "" && name == "" {
+		return p, nil, nil
+	}
+	return p, &tunnel.NamedConfig{Hostname: host, Name: name}, nil
 }
 
 func serveMCPStdio(s *server.MCPServer) {
@@ -70,14 +177,112 @@ func serveMCPStdio(s *server.MCPServer) {
 	}
 }
 
-func serveMCPHTTP(s *server.MCPServer, addr string) {
-	// HTTP exposes corgi control (incl. corgi_up) with no auth in v1.
-	fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
+func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
+	httpSrv := server.NewStreamableHTTPServer(s)
+	// httpSrv.ServeHTTP serves /mcp; mount it on a mux so other paths 404.
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", httpSrv)
+	srv := &http.Server{Addr: addr, Handler: bearerAuth(token, mux)}
+
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
+	} else {
+		fmt.Fprintf(os.Stderr, "corgi mcp bearer token: %s\n", token)
+	}
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
-	if err := server.NewStreamableHTTPServer(s).Start(addr); err != nil {
+	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if opts.tunnel {
+		startMCPTunnel(ctx, addr, token, opts)
+	}
+
+	// Cancel the tunnel ctx on signal so its subprocess dies with the server.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sig)
+	go func() {
+		<-sig
+		cancel()
+		_ = srv.Close()
+	}()
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		os.Exit(1)
 	}
+}
+
+// startMCPTunnel opens one tunnel to addr's local port using the shared
+// tunnel.Run runner, bound to ctx so it dies with the server.
+func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) {
+	provider, named, err := buildMCPTunnelConfig(opts.tunnelProvider, opts.tunnelHostname, opts.tunnelName)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "tunnel:", err)
+		os.Exit(2)
+	}
+	port, err := mcpAddrPort(addr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "tunnel:", err)
+		os.Exit(2)
+	}
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "⚠️⚠️⚠️  --tunnel --insecure exposes corgi control (corgi_up/corgi_exec ⇒ arbitrary command execution) to ANYONE with the URL. Do not use on untrusted networks.")
+	}
+
+	events := make(chan tunnel.Event, 32)
+	go func() {
+		tunnel.Run(ctx, provider, "mcp", port, named, events)
+		close(events) // terminate the consumer below when the tunnel exits
+	}()
+	go func() {
+		for ev := range events {
+			switch {
+			case ev.Err != nil:
+				fmt.Fprintf(os.Stderr, "🌐 ✗ tunnel: %s\n", ev.Err)
+			case ev.URL != "":
+				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
+				printMCPClientConfig(os.Stderr, ev.URL+"/mcp", token)
+			}
+		}
+	}()
+}
+
+// mcpAddrPort extracts the numeric port from a listen addr like ":8765" or
+// "127.0.0.1:8765".
+func mcpAddrPort(addr string) (int, error) {
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, fmt.Errorf("cannot parse port from %q: %w", addr, err)
+	}
+	return strconv.Atoi(portStr)
+}
+
+// localURL renders addr as a dialable host:port, defaulting an empty host to
+// 127.0.0.1 for the printed local URL.
+func localURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return host + ":" + port
+}
+
+// printMCPClientConfig prints a ready-to-paste mcpServers JSON block, including
+// the Authorization header only when a token is set.
+func printMCPClientConfig(w io.Writer, url, token string) {
+	cfg := map[string]any{"mcpServers": map[string]any{"corgi": map[string]any{"url": url}}}
+	if token != "" {
+		cfg["mcpServers"].(map[string]any)["corgi"].(map[string]any)["headers"] = map[string]any{
+			"Authorization": "Bearer " + token,
+		}
+	}
+	b, _ := json.MarshalIndent(cfg, "", "  ")
+	fmt.Fprintln(w, string(b))
 }
 
 // composeContext bundles a loaded compose with the throwaway cobra command it
@@ -453,6 +658,94 @@ func mcpExec(args execArgs) (execResult, error) {
 	return execResult{ExitCode: code, Output: buf.String(), DurationMs: durationMs}, nil
 }
 
+type testArgs struct {
+	ComposePath string `json:"composePath"`
+	Service     string `json:"service"`
+	Profile     string `json:"profile"`
+	EnsureDeps  bool   `json:"ensureDeps"`
+}
+
+type testRunResult struct {
+	Services []testResult `json:"services"`
+	Passed   bool         `json:"passed"`
+}
+
+// mcpTest runs each selected service's test script, mirroring `corgi test`.
+// Test scripts execute commands; their child stdout is routed to stderr so the
+// JSON-RPC channel stays clean.
+func mcpTest(args testArgs) (testRunResult, error) {
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return testRunResult{}, composeLoadError(err)
+	}
+	sel, err := resolveSelection(corgi, args.Service, args.Profile)
+	if err != nil {
+		return testRunResult{}, fmt.Errorf(errFmt, utils.ErrServiceNotFound, err)
+	}
+	var (
+		results []testResult
+		passed  bool
+	)
+	withStdoutToStderr(func() {
+		results, passed = runTests(corgi, sel, args.EnsureDeps, defaultReadyTimeout)
+	})
+	return testRunResult{Services: results, Passed: passed}, nil
+}
+
+func mcpDoctor(args validateArgs) (doctorResult, error) {
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return doctorResult{}, composeLoadError(err)
+	}
+	return buildDoctorResult(corgi), nil
+}
+
+type restartArgs struct {
+	ComposePath string `json:"composePath"`
+	Profile     string `json:"profile"`
+}
+
+// mcpRestart stops the detached stack then starts it again detached, returning
+// the new run-state. Down/up already route their progress prints to stderr.
+func mcpRestart(args restartArgs) (utils.RunState, error) {
+	if _, err := mcpDown(validateArgs{ComposePath: args.ComposePath}); err != nil {
+		return utils.RunState{}, err
+	}
+	return mcpUp(upArgs{ComposePath: args.ComposePath, Profile: args.Profile})
+}
+
+type dbQueryArgs struct {
+	ComposePath string `json:"composePath"`
+	Service     string `json:"service"`
+	Query       string `json:"query"`
+}
+
+type dbQueryResult struct {
+	Service string `json:"service"`
+	Output  string `json:"output"`
+}
+
+// mcpDBQuery runs a single non-interactive query against a db_service container,
+// capturing the tool's output instead of streaming it to stdout.
+func mcpDBQuery(args dbQueryArgs) (dbQueryResult, error) {
+	if strings.TrimSpace(args.Service) == "" || strings.TrimSpace(args.Query) == "" {
+		return dbQueryResult{}, fmt.Errorf("%s: service and query are required", utils.ErrUsage)
+	}
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return dbQueryResult{}, composeLoadError(err)
+	}
+	db, err := utils.GetDbServiceByName(args.Service, corgi.DatabaseServices)
+	if err != nil {
+		return dbQueryResult{}, fmt.Errorf("%s: db_service %q not found: %v", utils.ErrServiceNotFound, args.Service, err)
+	}
+	out, err := utils.ExecDBQueryCapture(db, args.Query)
+	if err != nil {
+		return dbQueryResult{Service: args.Service, Output: out}, fmt.Errorf(errFmt, utils.ErrExecFailed, err)
+	}
+	return dbQueryResult{Service: args.Service, Output: out}, nil
+}
+
 func mcpSchema() string { return utils.ComposeJSONSchema() }
 
 // filterByProfile narrows corgi to the selection for the given comma-separated
@@ -491,8 +784,11 @@ func withStdoutToStderr(fn func()) {
 
 // --- MCP tool registration (thin wrappers over the cores above) ---
 
+const profileDesc = "Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)"
+
 func registerMCPTools(s *server.MCPServer) {
 	composeOpt := mcp.WithString("composePath", mcp.Description("Path to corgi-compose.yml (default: resolve from cwd)"))
+	serviceOpt := mcp.WithString("service", mcp.Required(), mcp.Description("Service name"))
 
 	s.AddTool(mcp.NewTool("corgi_validate",
 		mcp.WithDescription("Statically validate corgi-compose.yml (no side effects). Returns {ok, errors[], warnings[]}."),
@@ -504,7 +800,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_plan",
 		mcp.WithDescription("Compute the dry-run plan: start order, databases, services, validation. No side effects."),
 		composeOpt,
-		mcp.WithString("profile", mcp.Description("Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)")),
+		mcp.WithString("profile", mcp.Description(profileDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpPlan(planArgs{ComposePath: r.GetString("composePath", ""), Profile: r.GetString("profile", "")})
 	}))
@@ -526,7 +822,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_up",
 		mcp.WithDescription("Start all databases and services DETACHED and return promptly with the run-state."),
 		composeOpt,
-		mcp.WithString("profile", mcp.Description("Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)")),
+		mcp.WithString("profile", mcp.Description(profileDesc)),
 		mcp.WithBoolean("seed", mcp.Description("Seed db_services that have a dump/seed source")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpUp(upArgs{
@@ -546,7 +842,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_logs",
 		mcp.WithDescription("Read the last N lines of a service's newest captured log run."),
 		composeOpt,
-		mcp.WithString("service", mcp.Required(), mcp.Description("Service name")),
+		serviceOpt,
 		mcp.WithNumber("lines", mcp.Description("Number of trailing lines (default 200)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpLogs(logsArgs{
@@ -559,7 +855,7 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_exec",
 		mcp.WithDescription("Run a one-off command in a service's resolved env. Returns {exitCode, output, durationMs}."),
 		composeOpt,
-		mcp.WithString("service", mcp.Required(), mcp.Description("Service name")),
+		serviceOpt,
 		mcp.WithString("command", mcp.Required(), mcp.Description("Command line to run (via /bin/sh -c)")),
 		mcp.WithBoolean("ensureDeps", mcp.Description("Wait for depends_on_db/services to be ready first")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -568,6 +864,52 @@ func registerMCPTools(s *server.MCPServer) {
 			Service:     r.GetString("service", ""),
 			Command:     r.GetString("command", ""),
 			EnsureDeps:  r.GetBool("ensureDeps", false),
+		})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_test",
+		mcp.WithDescription("Run each selected service's `test` script in its resolved env. Returns {services[], passed}. Does not start databases/services."),
+		composeOpt,
+		mcp.WithString("service", mcp.Description("Only test this service")),
+		mcp.WithString("profile", mcp.Description(profileDesc)),
+		mcp.WithBoolean("ensureDeps", mcp.Description("Wait for depends_on_db/services to be ready first")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpTest(testArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Service:     r.GetString("service", ""),
+			Profile:     r.GetString("profile", ""),
+			EnsureDeps:  r.GetBool("ensureDeps", false),
+		})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_doctor",
+		mcp.WithDescription("Preflight checks (required tools, Docker, port availability). Returns {ok, checks[]}. No side effects."),
+		composeOpt,
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpDoctor(validateArgs{ComposePath: r.GetString("composePath", "")})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_restart",
+		mcp.WithDescription("Stop the detached stack then start it again DETACHED. Returns the new run-state."),
+		composeOpt,
+		mcp.WithString("profile", mcp.Description(profileDesc)),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpRestart(restartArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Profile:     r.GetString("profile", ""),
+		})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_db_query",
+		mcp.WithDescription("Run a single non-interactive query against a running db_service container. Returns {service, output}."),
+		composeOpt,
+		serviceOpt,
+		mcp.WithString("query", mcp.Required(), mcp.Description("Query/command to run (e.g. SQL for psql)")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpDBQuery(dbQueryArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Service:     r.GetString("service", ""),
+			Query:       r.GetString("query", ""),
 		})
 	}))
 
@@ -590,9 +932,9 @@ func jsonHandler(core func(mcp.CallToolRequest) (any, error)) server.ToolHandler
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		b, merrr := json.Marshal(out)
-		if merrr != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("%s: marshal result: %v", utils.ErrExecFailed, merrr)), nil
+		b, err := json.Marshal(out)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("%s: marshal result: %v", utils.ErrExecFailed, err)), nil
 		}
 		return mcp.NewToolResultText(string(b)), nil
 	}
@@ -610,6 +952,22 @@ func registerMCPResources(s *server.MCPServer) {
 			defer mcpHandlerMu.Unlock()
 			return []mcp.ResourceContents{mcp.TextResourceContents{
 				URI: "corgi://schema", MIMEType: mimeJSON, Text: utils.ComposeJSONSchema(),
+			}}, nil
+		})
+
+	s.AddResource(
+		mcp.NewResource("corgi://drivers", "supported db drivers",
+			mcp.WithResourceDescription("Supported db_services.driver values"),
+			mcp.WithMIMEType(mimeJSON)),
+		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			mcpHandlerMu.Lock()
+			defer mcpHandlerMu.Unlock()
+			b, err := json.Marshal(utils.KnownDrivers)
+			if err != nil {
+				return nil, fmt.Errorf("%s: marshal drivers: %v", utils.ErrExecFailed, err)
+			}
+			return []mcp.ResourceContents{mcp.TextResourceContents{
+				URI: "corgi://drivers", MIMEType: mimeJSON, Text: string(b),
 			}}, nil
 		})
 

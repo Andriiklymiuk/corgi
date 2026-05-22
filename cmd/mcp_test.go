@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"andriiklymiuk/corgi/utils"
@@ -163,6 +166,127 @@ func TestMCPPlanProfileParity(t *testing.T) {
 	}
 }
 
+func TestBearerAuth(t *testing.T) {
+	okHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	cases := []struct {
+		name    string
+		token   string
+		header  string
+		want    int
+		wantNxt bool
+	}{
+		{"valid token", "secret", "Bearer secret", http.StatusOK, true},
+		{"wrong token", "secret", "Bearer nope", http.StatusUnauthorized, false},
+		{"missing header", "secret", "", http.StatusUnauthorized, false},
+		{"no-auth passthrough", "", "", http.StatusOK, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				okHandler.ServeHTTP(w, r)
+			})
+			h := bearerAuth(tc.token, next)
+			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			if tc.header != "" {
+				req.Header.Set("Authorization", tc.header)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != tc.want {
+				t.Errorf("status = %d, want %d", rec.Code, tc.want)
+			}
+			if called != tc.wantNxt {
+				t.Errorf("next called = %v, want %v", called, tc.wantNxt)
+			}
+		})
+	}
+}
+
+func TestGenerateMCPToken(t *testing.T) {
+	a := generateMCPToken()
+	b := generateMCPToken()
+	if a == "" {
+		t.Fatal("token is empty")
+	}
+	if !strings.HasPrefix(a, "corgi_mcp_") {
+		t.Errorf("missing corgi_mcp_ prefix: %q", a)
+	}
+	if a == b {
+		t.Error("two tokens should differ")
+	}
+}
+
+func TestBuildMCPTunnelConfig(t *testing.T) {
+	// Quick tunnel: no hostname/name => nil NamedConfig.
+	_, named, err := buildMCPTunnelConfig("cloudflared", "", "")
+	if err != nil {
+		t.Fatalf("quick: %v", err)
+	}
+	if named != nil {
+		t.Errorf("expected nil named config for quick tunnel, got %+v", named)
+	}
+
+	// Unknown provider errors.
+	if _, _, err := buildMCPTunnelConfig("bogus", "", ""); err == nil {
+		t.Error("expected error for unknown provider")
+	}
+
+	// ${VAR} expansion in hostname.
+	t.Setenv("MCP_TEST_HOST", "mcp.example.com")
+	_, named, err = buildMCPTunnelConfig("cloudflared", "${MCP_TEST_HOST}", "my-mcp")
+	if err != nil {
+		t.Fatalf("named: %v", err)
+	}
+	if named == nil || named.Hostname != "mcp.example.com" || named.Name != "my-mcp" {
+		t.Errorf("expected expanded named config, got %+v", named)
+	}
+
+	// Missing var errors.
+	if _, _, err := buildMCPTunnelConfig("cloudflared", "${MCP_TEST_MISSING}", ""); err == nil {
+		t.Error("expected error for missing env var")
+	}
+}
+
+func TestResolveMCPToken(t *testing.T) {
+	// Plain --http: no token, no tunnel => no-auth (NON-BREAKING).
+	if got := resolveMCPToken(mcpHTTPOpts{}); got != "" {
+		t.Errorf("plain http should stay no-auth, got %q", got)
+	}
+	// Explicit token honored.
+	if got := resolveMCPToken(mcpHTTPOpts{token: "abc"}); got != "abc" {
+		t.Errorf("explicit token = %q, want abc", got)
+	}
+	// Tunnel without token auto-generates.
+	if got := resolveMCPToken(mcpHTTPOpts{tunnel: true}); !strings.HasPrefix(got, "corgi_mcp_") {
+		t.Errorf("tunnel should auto-generate token, got %q", got)
+	}
+	// Insecure disables auth even with tunnel.
+	if got := resolveMCPToken(mcpHTTPOpts{tunnel: true, insecure: true, token: "abc"}); got != "" {
+		t.Errorf("insecure should disable auth, got %q", got)
+	}
+}
+
+func TestMCPAddrPort(t *testing.T) {
+	for _, tc := range []struct {
+		addr string
+		want int
+	}{
+		{":8765", 8765},
+		{"127.0.0.1:8765", 8765},
+	} {
+		got, err := mcpAddrPort(tc.addr)
+		if err != nil || got != tc.want {
+			t.Errorf("mcpAddrPort(%q) = %d, %v; want %d", tc.addr, got, err, tc.want)
+		}
+	}
+}
+
 func TestMCPSchemaMatches(t *testing.T) {
 	if mcpSchema() != utils.ComposeJSONSchema() {
 		t.Error("corgi_schema does not return ComposeJSONSchema()")
@@ -200,6 +324,108 @@ func TestMCPExecRequiresArgs(t *testing.T) {
 func TestMCPLogsRequiresService(t *testing.T) {
 	if _, err := mcpLogs(logsArgs{Service: ""}); err == nil {
 		t.Error("expected error for empty service")
+	}
+}
+
+const mcpComposeTestPass = `name: mcp-test-pass
+services:
+  api:
+    port: 3000
+    start:
+      - go run .
+    scripts:
+      - name: test
+        commands:
+          - "true"
+`
+
+const mcpComposeTestFail = `name: mcp-test-fail
+services:
+  api:
+    port: 3000
+    start:
+      - go run .
+    scripts:
+      - name: test
+        commands:
+          - "false"
+`
+
+func TestMCPTestPasses(t *testing.T) {
+	chdirToTempCompose(t, mcpComposeTestPass)
+	got, err := mcpTest(testArgs{})
+	if err != nil {
+		t.Fatalf("mcpTest: %v", err)
+	}
+	if !got.Passed {
+		t.Errorf("expected passed=true, got %+v", got)
+	}
+	if len(got.Services) != 1 || !got.Services[0].Passed {
+		t.Errorf("expected one passing service, got %+v", got.Services)
+	}
+}
+
+func TestMCPTestFails(t *testing.T) {
+	chdirToTempCompose(t, mcpComposeTestFail)
+	got, err := mcpTest(testArgs{})
+	if err != nil {
+		t.Fatalf("mcpTest: %v", err)
+	}
+	if got.Passed {
+		t.Errorf("expected passed=false, got %+v", got)
+	}
+}
+
+func TestMCPDoctorShape(t *testing.T) {
+	chdirToTempCompose(t, mcpComposeFixture)
+	got, err := mcpDoctor(validateArgs{})
+	if err != nil {
+		t.Fatalf("mcpDoctor: %v", err)
+	}
+	if got.Checks == nil {
+		t.Error("expected a checks array")
+	}
+	// ok is the AND of every check; just assert it is consistent with the checks.
+	want := true
+	for _, c := range got.Checks {
+		if !c.OK {
+			want = false
+		}
+	}
+	if got.OK != want {
+		t.Errorf("ok=%v inconsistent with checks %+v", got.OK, got.Checks)
+	}
+}
+
+func TestMCPRestartMissingCompose(t *testing.T) {
+	chdirToTempCompose(t, "name: x\n")
+	// Point at a path that does not exist -> composeLoadError.
+	if _, err := mcpRestart(restartArgs{ComposePath: "/no/such/corgi-compose.yml"}); err == nil {
+		t.Error("expected error for missing compose")
+	}
+}
+
+func TestMCPDBQueryRequiresArgs(t *testing.T) {
+	if _, err := mcpDBQuery(dbQueryArgs{Service: "", Query: "SELECT 1"}); err == nil {
+		t.Error("expected error for empty service")
+	}
+	if _, err := mcpDBQuery(dbQueryArgs{Service: "pg", Query: ""}); err == nil {
+		t.Error("expected error for empty query")
+	}
+}
+
+func TestMCPDriversResource(t *testing.T) {
+	if len(utils.KnownDrivers) == 0 {
+		t.Fatal("expected non-empty KnownDrivers")
+	}
+	found := false
+	for _, d := range utils.KnownDrivers {
+		if d == "postgres" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected postgres in KnownDrivers, got %v", utils.KnownDrivers)
 	}
 }
 

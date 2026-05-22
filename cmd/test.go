@@ -34,7 +34,7 @@ Examples:
 func init() {
 	rootCmd.AddCommand(testCmd)
 	testCmd.Flags().String("service", "", "Only run the test script for this service.")
-	testCmd.Flags().String("profile", "", "Narrow to services in this profile before selecting test scripts.")
+	testCmd.Flags().String("profile", "", "Narrow to services in this profile (comma-separated for a union) before selecting test scripts.")
 	testCmd.Flags().Bool(
 		"ensure-deps",
 		false,
@@ -113,7 +113,7 @@ func resolveSelection(corgi *utils.CorgiCompose, serviceName, profile string) (s
 	}
 
 	if profile != "" {
-		picked, _ := utils.SelectByProfile(corgi, profile)
+		picked, _ := utils.SelectByProfiles(corgi, utils.ParseProfiles(profile))
 		if len(picked) == 0 {
 			utils.Infof("profile %q matched no services; nothing to test\n", profile)
 			return selection{}, nil
