@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"andriiklymiuk/corgi/utils"
@@ -196,6 +198,74 @@ func TestEmitDryRunPlan_NoSideEffects(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, svc, ".env")); !os.IsNotExist(err) {
 			t.Errorf(".env must not be written for %s in dry-run", svc)
 		}
+	}
+}
+
+func TestEmitDryRunPlan_JSONValid(t *testing.T) {
+	prev := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = prev })
+
+	dir := t.TempDir()
+	plan := computeDryRunPlan(sampleDryRunCompose(dir))
+
+	var code int
+	out := captureStdout(t, func() { code = emitDryRunPlan(plan) })
+	if code != 0 {
+		t.Errorf("valid plan should exit 0, got %d", code)
+	}
+	var got dryRunPlan
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &got); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\noutput: %q", err, out)
+	}
+	if !got.Valid {
+		t.Errorf("expected valid=true in JSON, got %+v", got)
+	}
+}
+
+func TestEmitDryRunPlan_JSONInvalidExit1(t *testing.T) {
+	prev := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = prev })
+
+	c := &utils.CorgiCompose{
+		Services: []utils.Service{
+			{ServiceName: "api", Port: 8080, Start: []string{"echo"},
+				DependsOnServices: []utils.DependsOnService{{Name: "ghost"}}},
+		},
+	}
+	plan := computeDryRunPlan(c)
+
+	var code int
+	out := captureStdout(t, func() { code = emitDryRunPlan(plan) })
+	if code != 1 {
+		t.Errorf("invalid plan should exit 1, got %d", code)
+	}
+	if !strings.Contains(out, "E_") {
+		t.Errorf("expected error code in JSON output, got %q", out)
+	}
+}
+
+func TestEmitDryRunPlan_HumanInvalidExit1(t *testing.T) {
+	prev := utils.JSONOutput
+	utils.JSONOutput = false
+	t.Cleanup(func() { utils.JSONOutput = prev })
+
+	c := &utils.CorgiCompose{
+		Services: []utils.Service{
+			{ServiceName: "api", Port: 8080, Start: []string{"echo"},
+				DependsOnServices: []utils.DependsOnService{{Name: "ghost"}}},
+		},
+	}
+	plan := computeDryRunPlan(c)
+
+	var code int
+	out := captureStdout(t, func() { code = emitDryRunPlan(plan) })
+	if code != 1 {
+		t.Errorf("invalid plan should exit 1, got %d", code)
+	}
+	if !strings.Contains(out, "validation failed") {
+		t.Errorf("expected human validation-failed banner, got %q", out)
 	}
 }
 

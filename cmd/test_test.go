@@ -160,6 +160,63 @@ func TestReportTestResults_JSONShape(t *testing.T) {
 	}
 }
 
+func TestResolveSelection_ProfileMatch(t *testing.T) {
+	corgi := &utils.CorgiCompose{
+		Services: []utils.Service{
+			{ServiceName: "api", AbsolutePath: t.TempDir(), Profiles: []string{"backend"}},
+			{ServiceName: "web", AbsolutePath: t.TempDir(), Profiles: []string{"frontend"}},
+		},
+	}
+	sel, err := resolveSelection(corgi, "", "backend")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sel.services) != 1 || sel.services[0].ServiceName != "api" {
+		t.Errorf("expected only api (backend profile), got %+v", sel.services)
+	}
+}
+
+func TestResolveSelection_ProfileNoMatch(t *testing.T) {
+	corgi := &utils.CorgiCompose{
+		Services: []utils.Service{
+			{ServiceName: "api", AbsolutePath: t.TempDir(), Profiles: []string{"backend"}},
+		},
+	}
+	sel, err := resolveSelection(corgi, "", "ghost-profile")
+	if err != nil {
+		t.Fatalf("unknown profile must not error, got %v", err)
+	}
+	if len(sel.services) != 0 {
+		t.Errorf("unknown profile must select nothing, got %+v", sel.services)
+	}
+}
+
+func TestReportTestResults_HumanSummary(t *testing.T) {
+	prev := utils.JSONOutput
+	utils.JSONOutput = false
+	t.Cleanup(func() { utils.JSONOutput = prev })
+
+	results := []testResult{
+		{Name: "api", Passed: true, ExitCode: 0, DurationMs: 12},
+		{Name: "auth", Passed: false, ExitCode: 3},
+		{Name: "worker", Passed: false, Message: "boom"},
+		{Name: "web", Skipped: true},
+	}
+
+	out := captureStdout(t, func() {
+		reportTestResults(results, false)
+	})
+
+	for _, want := range []string{
+		"✓ api", "✗ auth (exit 3)", "✗ worker: boom", "– web (no test script)",
+		"1 passed, 2 failed, 1 skipped",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected human output to contain %q, got %q", want, out)
+		}
+	}
+}
+
 func TestRunTests_JSONServicesNeverNull(t *testing.T) {
 	prev := utils.JSONOutput
 	utils.JSONOutput = true

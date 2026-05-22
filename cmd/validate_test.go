@@ -22,6 +22,44 @@ func buildReport(c *utils.CorgiCompose, strict bool) (validateReport, bool) {
 	return validateReport{Ok: !failed, Errors: errs, Warnings: warns}, failed
 }
 
+func TestPrintValidateHuman_Branches(t *testing.T) {
+	prev := utils.JSONOutput
+	utils.JSONOutput = false
+	t.Cleanup(func() { utils.JSONOutput = prev })
+
+	errItem := utils.ValidationIssue{Code: "E_X", Message: "broken", Field: "services.api"}
+	warnItem := utils.ValidationIssue{Code: "W_X", Message: "soft", Field: "services.web"}
+
+	cases := []struct {
+		name   string
+		errs   []utils.ValidationIssue
+		warns  []utils.ValidationIssue
+		strict bool
+		want   []string
+	}{
+		{"clean", nil, nil, false, []string{"✓ no errors", "valid — no issues"}},
+		{"errors", []utils.ValidationIssue{errItem}, nil, false,
+			[]string{"✗ [E_X] broken", "(services.api)", "1 error(s), 0 warning(s)"}},
+		{"warnings", nil, []utils.ValidationIssue{warnItem}, false,
+			[]string{"⚠ [W_X] soft", "valid — 1 warning(s)"}},
+		{"strict-warnings", nil, []utils.ValidationIssue{warnItem}, true,
+			[]string{"failing under --strict"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := captureStdout(t, func() {
+				printValidateHuman(tc.errs, tc.warns, tc.strict)
+			})
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("expected %q in output, got %q", want, out)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateReportJSONShape(t *testing.T) {
 	// Compose with a dangling dep and a duplicate port -> two error codes.
 	c := &utils.CorgiCompose{

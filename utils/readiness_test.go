@@ -3,10 +3,60 @@ package utils
 import (
 	"context"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+// httpReadyPort starts an httptest server that serves 200 at the given path and
+// returns its port. The caller closes the server.
+func httpReadyPort(t *testing.T, path string) (*httptest.Server, int) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	srv := httptest.NewServer(mux)
+	u := strings.TrimPrefix(srv.URL, "http://")
+	_, portStr, err := net.SplitHostPort(u)
+	if err != nil {
+		t.Fatalf("split host port: %v", err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("atoi: %v", err)
+	}
+	return srv, port
+}
+
+func TestReadiness_ServiceHTTPHealthCheckReady(t *testing.T) {
+	srv, port := httpReadyPort(t, "/healthz")
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := WaitForServiceReady(ctx, Service{ServiceName: "svc", Port: port, HealthCheck: "/healthz"})
+	if err != nil {
+		t.Fatalf("expected HTTP healthcheck ready, got %v", err)
+	}
+}
+
+func TestReadiness_DBHTTPHealthCheckReady(t *testing.T) {
+	srv, port := httpReadyPort(t, "/ready")
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := WaitForDBReady(ctx, DatabaseService{ServiceName: "db", Port: port, HealthCheck: "/ready"})
+	if err != nil {
+		t.Fatalf("expected HTTP healthcheck ready, got %v", err)
+	}
+}
 
 // listenerPort opens a TCP listener on an ephemeral port and returns it plus
 // the chosen port. The caller closes the listener.
