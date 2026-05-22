@@ -237,7 +237,7 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 
 	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
 	if isAlreadyRunning(statePath) {
-		return utils.RunState{}, fmt.Errorf("ALREADY_RUNNING: corgi is already running for this project — call corgi_down first")
+		return utils.RunState{}, fmt.Errorf(errFmt, utils.ErrAlreadyRunning, "corgi is already running for this project — call corgi_down first")
 	}
 
 	var (
