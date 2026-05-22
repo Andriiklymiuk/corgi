@@ -3,14 +3,25 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/tunnel"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -31,6 +42,12 @@ Register it in .mcp.json (project) or ~/.claude.json:
 
 func init() {
 	mcpCmd.Flags().String("http", "", "Serve MCP over Streamable HTTP at this address (e.g. :8765 or 127.0.0.1:8765) instead of stdio.")
+	mcpCmd.Flags().Bool("tunnel", false, "Open a public tunnel to the --http addr (requires --http).")
+	mcpCmd.Flags().String("tunnel-provider", "cloudflared", "Tunnel provider (cloudflared|ngrok|localtunnel).")
+	mcpCmd.Flags().String("tunnel-hostname", "", "Custom public hostname for the tunnel (${VAR} expanded).")
+	mcpCmd.Flags().String("tunnel-name", "", "cloudflared named-tunnel name.")
+	mcpCmd.Flags().String("token", "", "Bearer token for HTTP auth (auto-generated when --tunnel is set).")
+	mcpCmd.Flags().Bool("insecure", false, "Disable bearer-token auth on the HTTP endpoint.")
 	rootCmd.AddCommand(mcpCmd)
 }
 
@@ -55,11 +72,101 @@ func runMCP(cmd *cobra.Command, _ []string) {
 	registerMCPResources(s)
 
 	httpAddr, _ := cmd.Flags().GetString("http")
+	opts := mcpHTTPOptsFromFlags(cmd)
+	if opts.tunnel && httpAddr == "" {
+		fmt.Fprintln(os.Stderr, "corgi mcp --tunnel requires --http (the local addr to expose).")
+		os.Exit(2)
+	}
 	if httpAddr != "" {
-		serveMCPHTTP(s, httpAddr)
+		serveMCPHTTP(s, httpAddr, resolveMCPToken(opts), opts)
 		return
 	}
 	serveMCPStdio(s)
+}
+
+type mcpHTTPOpts struct {
+	tunnel         bool
+	tunnelProvider string
+	tunnelHostname string
+	tunnelName     string
+	token          string
+	insecure       bool
+}
+
+func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
+	o := mcpHTTPOpts{}
+	o.tunnel, _ = cmd.Flags().GetBool("tunnel")
+	o.tunnelProvider, _ = cmd.Flags().GetString("tunnel-provider")
+	o.tunnelHostname, _ = cmd.Flags().GetString("tunnel-hostname")
+	o.tunnelName, _ = cmd.Flags().GetString("tunnel-name")
+	o.token, _ = cmd.Flags().GetString("token")
+	o.insecure, _ = cmd.Flags().GetBool("insecure")
+	return o
+}
+
+// resolveMCPToken applies the token rules. Plain --http with no --token and no
+// --tunnel stays no-auth (token=="") so existing users are unaffected. A token
+// is auto-generated only for a public tunnel without an explicit one.
+func resolveMCPToken(o mcpHTTPOpts) string {
+	if o.insecure {
+		return ""
+	}
+	token := o.token
+	if token == "" && o.tunnel {
+		token = generateMCPToken()
+	}
+	return token
+}
+
+// generateMCPToken returns a url-safe bearer token prefixed corgi_mcp_.
+func generateMCPToken() string {
+	b := make([]byte, 18)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand failure is fatal: a weak token would defeat the auth.
+		fmt.Fprintln(os.Stderr, "could not generate token:", err)
+		os.Exit(1)
+	}
+	return "corgi_mcp_" + base64.RawURLEncoding.EncodeToString(b)
+}
+
+// bearerAuth wraps next with a constant-time Bearer-token check. token=="" is
+// no-auth and returns next unchanged.
+func bearerAuth(token string, next http.Handler) http.Handler {
+	if token == "" {
+		return next
+	}
+	want := []byte("Bearer " + token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := []byte(r.Header.Get("Authorization"))
+		if subtle.ConstantTimeCompare(got, want) != 1 {
+			w.Header().Set("Content-Type", mimeJSON)
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// buildMCPTunnelConfig selects a provider and builds a NamedConfig from the mcp
+// tunnel flags, expanding ${VAR} in the hostname. A named config is returned
+// only when a hostname (or name) is set; otherwise nil => quick tunnel.
+func buildMCPTunnelConfig(provider, hostname, name string) (tunnel.Provider, *tunnel.NamedConfig, error) {
+	p, ok := tunnel.Providers[provider]
+	if !ok {
+		names := tunnel.Names()
+		sort.Strings(names)
+		return nil, nil, fmt.Errorf("unknown tunnel provider %q. Available: %s", provider, strings.Join(names, ", "))
+	}
+	var missing []string
+	host := tunnel.Substitute(hostname, nil, &missing)
+	if len(missing) > 0 {
+		return nil, nil, tunnel.MissingError("--tunnel-hostname", missing)
+	}
+	if host == "" && name == "" {
+		return p, nil, nil
+	}
+	return p, &tunnel.NamedConfig{Hostname: host, Name: name}, nil
 }
 
 func serveMCPStdio(s *server.MCPServer) {
@@ -70,14 +177,109 @@ func serveMCPStdio(s *server.MCPServer) {
 	}
 }
 
-func serveMCPHTTP(s *server.MCPServer, addr string) {
-	// HTTP exposes corgi control (incl. corgi_up) with no auth in v1.
-	fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
+func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
+	httpSrv := server.NewStreamableHTTPServer(s)
+	// httpSrv.ServeHTTP serves /mcp; mount it on a mux so other paths 404.
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", httpSrv)
+	srv := &http.Server{Addr: addr, Handler: bearerAuth(token, mux)}
+
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
+	} else {
+		fmt.Fprintf(os.Stderr, "corgi mcp bearer token: %s\n", token)
+	}
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
-	if err := server.NewStreamableHTTPServer(s).Start(addr); err != nil {
+	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if opts.tunnel {
+		startMCPTunnel(ctx, addr, token, opts)
+	}
+
+	// Cancel the tunnel ctx on signal so its subprocess dies with the server.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sig)
+	go func() {
+		<-sig
+		cancel()
+		_ = srv.Close()
+	}()
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		os.Exit(1)
 	}
+}
+
+// startMCPTunnel opens one tunnel to addr's local port using the shared
+// tunnel.Run runner, bound to ctx so it dies with the server.
+func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) {
+	provider, named, err := buildMCPTunnelConfig(opts.tunnelProvider, opts.tunnelHostname, opts.tunnelName)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "tunnel:", err)
+		os.Exit(2)
+	}
+	port, err := mcpAddrPort(addr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "tunnel:", err)
+		os.Exit(2)
+	}
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "⚠️⚠️⚠️  --tunnel --insecure exposes corgi control (corgi_up/corgi_exec ⇒ arbitrary command execution) to ANYONE with the URL. Do not use on untrusted networks.")
+	}
+
+	events := make(chan tunnel.Event, 32)
+	go tunnel.Run(ctx, provider, "mcp", port, named, events)
+	go func() {
+		for ev := range events {
+			switch {
+			case ev.Err != nil:
+				fmt.Fprintf(os.Stderr, "🌐 ✗ tunnel: %s\n", ev.Err)
+			case ev.URL != "":
+				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
+				printMCPClientConfig(os.Stderr, ev.URL+"/mcp", token)
+			}
+		}
+	}()
+}
+
+// mcpAddrPort extracts the numeric port from a listen addr like ":8765" or
+// "127.0.0.1:8765".
+func mcpAddrPort(addr string) (int, error) {
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, fmt.Errorf("cannot parse port from %q: %w", addr, err)
+	}
+	return strconv.Atoi(portStr)
+}
+
+// localURL renders addr as a dialable host:port, defaulting an empty host to
+// 127.0.0.1 for the printed local URL.
+func localURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return host + ":" + port
+}
+
+// printMCPClientConfig prints a ready-to-paste mcpServers JSON block, including
+// the Authorization header only when a token is set.
+func printMCPClientConfig(w io.Writer, url, token string) {
+	cfg := map[string]any{"mcpServers": map[string]any{"corgi": map[string]any{"url": url}}}
+	if token != "" {
+		cfg["mcpServers"].(map[string]any)["corgi"].(map[string]any)["headers"] = map[string]any{
+			"Authorization": "Bearer " + token,
+		}
+	}
+	b, _ := json.MarshalIndent(cfg, "", "  ")
+	fmt.Fprintln(w, string(b))
 }
 
 // composeContext bundles a loaded compose with the throwaway cobra command it
