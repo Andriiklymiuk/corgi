@@ -40,6 +40,7 @@ Detached lifecycle (preferred for agents): `corgi run --detach` (starts services
 | Producing a service map / relation diagram for the project | run `/corgi-describe` (see `references/describe-output.md`) |
 | Running `corgi run` inside an agent loop | `references/long-running.md` |
 | Driving corgi non-interactively (`--json`, exit codes, scaffolding flags) | `../../../docs/agents.md` |
+| Driving corgi from an MCP client (Claude Code/Desktop tools) | `../../../docs/mcp.md` |
 | Persisting / re-reading service logs after a crash | `references/commands.md#corgi-logs` (`corgi run --logs` + `corgi logs`) |
 | Opening a DB shell (psql / redis-cli / mongosh / …) | `references/commands.md#corgi-db-shell-service-name` |
 | Running corgi in CI / disabling spinners and color | `references/commands.md#corgi-run-flags` (`--ci`, auto-detected from `CI` env) |

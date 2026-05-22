@@ -90,7 +90,7 @@ func runFork(cmd *cobra.Command, args []string) {
 	if utils.NonInteractive {
 		if err := validateForkSelection(shouldForkAllServices, serviceFlag, servicesList, gitProviderFlag, true); err != nil {
 			if utils.JSONOutput {
-				utils.JSONError("INPUT_REQUIRED", err.Error())
+				utils.JSONError(utils.ErrInteractiveReq, err.Error())
 			} else {
 				fmt.Fprintln(os.Stderr, err)
 			}

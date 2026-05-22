@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -110,6 +111,53 @@ func TestLoadCorgiComposeFileInvalidYaml(t *testing.T) {
 	_, _, err := loadCorgiComposeFile(c)
 	if err == nil {
 		t.Error("expected unmarshal err")
+	}
+}
+
+func TestGetCorgiServicesInterpolatesFromSiblingDotEnv(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	body := "name: full\ndb_services:\n  pg:\n    driver: postgres\n    password: ${DB_PASSWORD}\n"
+	if err := os.WriteFile(yml, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_PASSWORD=secret\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	got, err := GetCorgiServices(newCobraFull())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.DatabaseServices) != 1 || got.DatabaseServices[0].Password != "secret" {
+		t.Errorf("password not interpolated: %#v", got.DatabaseServices)
+	}
+}
+
+func TestGetCorgiServicesLeavesUnsetVarUnresolved(t *testing.T) {
+	// An unset var with no default must NOT fail the load (non-breaking): the
+	// ${VAR} token is left literal so later tunnel / cross-service resolvers can
+	// still handle it. Only a warning is emitted.
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	if err := os.WriteFile(yml, []byte("name: ${UNSET_NO_DEFAULT_VAR}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	got, err := GetCorgiServices(newCobraFull())
+	if err != nil {
+		t.Fatalf("load should succeed, leaving token unresolved: %v", err)
+	}
+	if !strings.Contains(got.Name, "${UNSET_NO_DEFAULT_VAR}") {
+		t.Errorf("token should be left literal, got name %q", got.Name)
 	}
 }
 

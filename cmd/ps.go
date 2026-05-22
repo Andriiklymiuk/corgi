@@ -91,7 +91,7 @@ func runPs(cmd *cobra.Command, _ []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		if utils.JSONOutput {
-			utils.JSONError("config", err.Error())
+			utils.JSONError(utils.ErrConfig, err.Error())
 		} else {
 			utils.Infof("couldn't get services config: %s\n", err)
 		}

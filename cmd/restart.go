@@ -35,7 +35,7 @@ func runRestart(cmd *cobra.Command, args []string) {
 		msg := "restart --service is not supported yet; use: corgi stop --service " +
 			restartService + " && corgi run --detach"
 		if utils.JSONOutput {
-			utils.JSONError("UNSUPPORTED", msg)
+			utils.JSONError(utils.ErrUnsupported, msg)
 		} else {
 			fmt.Fprintln(os.Stderr, msg)
 		}

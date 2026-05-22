@@ -35,7 +35,7 @@ var configPathCmd = &cobra.Command{
 		dir, err := utils.GetUserConfigDir()
 		if err != nil {
 			if utils.JSONOutput {
-				utils.JSONError("config_path", err.Error())
+				utils.JSONError(utils.ErrConfigPath, err.Error())
 			} else {
 				fmt.Println(err)
 			}
@@ -59,7 +59,7 @@ func runConfigShow(cmd *cobra.Command, _ []string) {
 	cfg, err := utils.LoadUserConfig()
 	if err != nil {
 		if utils.JSONOutput {
-			utils.JSONError("config_read", err.Error())
+			utils.JSONError(utils.ErrConfigRead, err.Error())
 		} else {
 			fmt.Printf("%s❌ Failed to read user config: %v%s\n", art.RedColor, err, art.WhiteColor)
 		}

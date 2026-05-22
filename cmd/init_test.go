@@ -370,6 +370,38 @@ func TestWriteServiceFiles(t *testing.T) {
 	}
 }
 
+func TestWriteServiceFilesUppercaseName(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine\nEXPOSE 80\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if !writeServiceFiles(utils.Service{
+		ServiceName:  "MyApi",
+		Runner:       utils.Runner{Name: "docker"},
+		Port:         80,
+		AbsolutePath: dir,
+	}) {
+		t.Fatal("expected true")
+	}
+
+	compose := filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "MyApi", "docker-compose.yml")
+	data, err := os.ReadFile(compose)
+	if err != nil {
+		t.Fatalf("read compose: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "container_name: myapi") {
+		t.Errorf("expected docker-safe container_name, got:\n%s", got)
+	}
+	if strings.Contains(got, "MyApi") {
+		t.Errorf("uppercase name leaked into docker-compose:\n%s", got)
+	}
+}
+
 func TestCloneServicesEmpty(t *testing.T) {
 	CloneServices(nil)
 }

@@ -67,7 +67,7 @@ func runLogs(cmd *cobra.Command, _ []string) {
 			available, _ := utils.ListLoggedServices(base)
 			if err := requireServiceForLogs(serviceName, true, available); err != nil {
 				if utils.JSONOutput {
-					utils.JSONError("INPUT_REQUIRED", err.Error())
+					utils.JSONError(utils.ErrInteractiveReq, err.Error())
 				} else {
 					fmt.Fprintln(os.Stderr, err)
 				}

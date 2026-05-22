@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	docsRowFmt    = "%s\t%s\t%s\t%s"
-	docsBlankRow  = "\t\t\t"
+	docsRowFmt   = "%s\t%s\t%s\t%s"
+	docsBlankRow = "\t\t\t"
 )
 
 // docsCmd represents the docs command
@@ -120,13 +120,13 @@ var serviceItems = []CorgiComposeItems{
 		item:        "depends_on_db",
 		example:     "- name: db_name_from_db_services\n\t- envAlias: NAME_BEFORE_DB_IN_ENV",
 		itemType:    "[]DependsOnDb",
-		description: "Adds db credentials (DB_HOST,etc) from db_services will be copied to .env.\n\t\t\tenvAlias adds string before db credentials, like NAME_BEFORE_DB_IN_ENV_DB_HOST",
+		description: "Adds db credentials (DB_HOST,etc) from db_services will be copied to .env.\n\t\t\tenvAlias adds string before db credentials, like NAME_BEFORE_DB_IN_ENV_DB_HOST\n\t\t\toptional condition: ready|started gates startup until the db is ready/started",
 	},
 	{
 		item:        "depends_on_services",
 		example:     "- name: service_name\n\t- envAlias: NAME_TO_USE_IN_ENV\n\t- suffix: /special/suffix",
 		itemType:    "[]DependsOnService",
-		description: "Adds service credentials to .env.\n\t\t\tsuffix is added at the end of added value\n\t\t\tNAME_TO_USE_IN_ENV=localhost:port/special/suffix will be added to .env\n\t\t\tIf you add just name, than it is SERVICE_NAME=localhost:port_in_env",
+		description: "Adds service credentials to .env.\n\t\t\tsuffix is added at the end of added value\n\t\t\tNAME_TO_USE_IN_ENV=localhost:port/special/suffix will be added to .env\n\t\t\tIf you add just name, than it is SERVICE_NAME=localhost:port_in_env\n\t\t\toptional condition: ready|started gates startup until the dependency is ready/started",
 	},
 	{
 		item:        "exports",
@@ -163,6 +163,12 @@ var serviceItems = []CorgiComposeItems{
 		example:     "/health",
 		itemType:    "string",
 		description: "Optional HTTP path used by `corgi status`.\n\t\t\tIf set, status probes GET http://localhost:<port><healthCheck> and accepts any non-5xx response as healthy.\n\t\t\tIf unset, status falls back to a raw TCP connect on the port.",
+	},
+	{
+		item:        "profiles",
+		example:     "- backend\n\t- full",
+		itemType:    "[]string",
+		description: "Run profiles this service belongs to.\n\t\t\t`corgi run --profile backend` runs only members of that profile plus their depends_on closure.\n\t\t\tA service with no profiles runs only when no --profile is passed (docker-compose behavior).",
 	},
 }
 
@@ -292,6 +298,12 @@ var dbServiceItems = []CorgiComposeItems{
 		example:     "/health",
 		itemType:    "string",
 		description: "Optional HTTP path used by `corgi status`.\n\t\t\tIf set, status probes GET http://localhost:<port><healthCheck> and accepts any non-5xx response as healthy.\n\t\t\tIf unset, status falls back to a raw TCP connect on the port.\n\t\t\tThe localstack driver defaults to /_localstack/health if not overridden.",
+	},
+	{
+		item:        "profiles",
+		example:     "- backend\n\t- full",
+		itemType:    "[]string",
+		description: "Run profiles this db_service belongs to.\n\t\t\tA db_service with no profiles runs only when no --profile is passed, or when a selected service depends_on_db it.",
 	},
 }
 

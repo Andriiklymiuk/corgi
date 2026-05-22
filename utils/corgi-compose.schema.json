@@ -87,7 +87,8 @@
         "autoSourceEnv": { "type": "boolean", "description": "Toggle the auto `set -a; . <env>; set +a` prefix. Default on." },
         "runner": { "$ref": "#/definitions/runner", "description": "Runner config (e.g. docker)." },
         "tunnel": { "$ref": "#/definitions/tunnel", "description": "Optional public HTTPS tunnel config." },
-        "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset.", "examples": ["/health"] }
+        "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset.", "examples": ["/health"] },
+        "profiles": { "type": "array", "items": { "type": "string" }, "description": "Run profiles this service belongs to. `corgi run --profile P` runs only members of P plus their depends_on closure. No profiles = runs only when no --profile is passed.", "examples": [["backend", "full"]] }
       }
     },
     "databaseService": {
@@ -128,7 +129,8 @@
         "environment": { "type": "array", "items": { "type": "string" }, "description": "image driver: docker-compose environment entries." },
         "volumes": { "type": "array", "items": { "type": "string" }, "description": "image driver: docker-compose volume mappings." },
         "command": { "type": "array", "items": { "type": "string" }, "description": "image driver: override container entrypoint args." },
-        "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset.", "examples": ["/health"] }
+        "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset.", "examples": ["/health"] },
+        "profiles": { "type": "array", "items": { "type": "string" }, "description": "Run profiles this db_service belongs to. Runs only when no --profile is passed, or when a selected service depends_on_db it.", "examples": [["backend", "full"]] }
       }
     },
     "required": {
@@ -150,7 +152,8 @@
         "name": { "type": "string", "description": "Name of the service depended on." },
         "envAlias": { "type": "string", "description": "Prefix used for the injected env var." },
         "suffix": { "type": "string", "description": "Suffix appended to the resolved value." },
-        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." }
+        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." },
+        "condition": { "type": "string", "enum": ["ready", "started"], "description": "Gate startup: wait until the dependency is ready (probe passes) or started (launched)." }
       }
     },
     "dependsOnDb": {
@@ -159,7 +162,8 @@
       "properties": {
         "name": { "type": "string", "description": "Name of the db_service depended on." },
         "envAlias": { "type": "string", "description": "Prefix added before injected DB_ credentials." },
-        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." }
+        "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." },
+        "condition": { "type": "string", "enum": ["ready", "started"], "description": "Gate startup: wait until the db is ready (probe passes) or started (launched)." }
       }
     },
     "script": {

@@ -26,7 +26,18 @@ func TestConfigJSONShape(t *testing.T) {
 	}
 }
 
+// withHumanOutput forces the non-JSON output path and restores the global
+// afterward, so these tests stay deterministic even if an earlier test left
+// utils.JSONOutput set (test-isolation, not production behavior).
+func withHumanOutput(t *testing.T) {
+	t.Helper()
+	prev := utils.JSONOutput
+	utils.JSONOutput = false
+	t.Cleanup(func() { utils.JSONOutput = prev })
+}
+
 func TestRunConfigShow_PrintsPathVersionAndState(t *testing.T) {
+	withHumanOutput(t)
 	dir := withTempHome(t)
 	if err := utils.SaveUserConfig(&utils.UserConfig{Notifications: true}); err != nil {
 		t.Fatal(err)
@@ -42,6 +53,7 @@ func TestRunConfigShow_PrintsPathVersionAndState(t *testing.T) {
 }
 
 func TestRunConfigShow_DefaultsToOff(t *testing.T) {
+	withHumanOutput(t)
 	withTempHome(t)
 	out := captureStdout(t, func() { runConfigShow(&cobra.Command{}, nil) })
 	if !strings.Contains(out, "notifications:  off") {

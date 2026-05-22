@@ -367,7 +367,7 @@ func runDbShell(cmd *cobra.Command, args []string) {
 			}
 			if err := requireServiceForDBShell(targetName, true, available); err != nil {
 				if utils.JSONOutput {
-					utils.JSONError("INPUT_REQUIRED", err.Error())
+					utils.JSONError(utils.ErrInteractiveReq, err.Error())
 				} else {
 					fmt.Fprintln(os.Stderr, err)
 				}

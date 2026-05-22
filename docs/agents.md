@@ -32,8 +32,10 @@ stdout is not a single JSON document for the whole run.
 Errors under `--json` have the shape:
 
 ```json
-{"error": {"code": "INPUT_REQUIRED", "message": "..."}}
+{"error": {"code": "E_INTERACTIVE_REQUIRED", "message": "..."}}
 ```
+
+The `code` is a stable string an agent can branch on (see [Error codes](#error-codes)).
 
 ## Lifecycle (detached)
 
@@ -65,7 +67,7 @@ immediately. It forces logs on. Under `--json` it prints the run-state object:
 A second `run --detach` while a run-state exists errors (exit 1):
 
 ```json
-{"error": {"code": "ALREADY_RUNNING", "message": "corgi is already running for this project — stop or restart first (use --force to override)"}}
+{"error": {"code": "E_ALREADY_RUNNING", "message": "corgi is already running for this project — stop or restart first (use --force to override)"}}
 ```
 
 `--force` replaces the existing run-state **and kills the previously tracked
@@ -105,7 +107,7 @@ stops one and keeps the rest. It is idempotent (exit 0 when nothing is running).
 `restart --service x` is **not** supported yet — it exits 2:
 
 ```json
-{"error": {"code": "UNSUPPORTED", "message": "restart --service is not supported yet; use: corgi stop --service api && corgi run --detach"}}
+{"error": {"code": "E_UNSUPPORTED", "message": "restart --service is not supported yet; use: corgi stop --service api && corgi run --detach"}}
 ```
 
 ### Caveats
@@ -121,6 +123,41 @@ stops one and keeps the rest. It is idempotent (exit 0 when nothing is running).
 | 0 | Success |
 | 1 | Operational failure (a check/command failed) |
 | 2 | Usage / missing required input |
+
+## Error codes
+
+Under `--json`, errors carry a stable `code` string. Branch on the code, not the
+message text (messages may change wording). The catalog:
+
+| Code | Meaning | Typical fix |
+|------|---------|-------------|
+| `E_COMPOSE_NOT_FOUND` | no `corgi-compose.yml` resolved | run from a dir with one, or pass `-f <path>` |
+| `E_CONFIG` | could not load/resolve the compose file | run from a dir with corgi-compose.yml or pass `-f` |
+| `E_COMPOSE_PARSE` | YAML failed to parse | fix syntax; validate with `corgi validate` |
+| `E_INTERACTIVE_REQUIRED` | a prompt was needed but input is unavailable | pass the flag the message names |
+| `E_SERVICE_NOT_FOUND` | named service/db not in compose | check the name against `corgi ps` |
+| `E_MISSING_FIELD` | a required field is absent | supply it (message names the field) |
+| `E_DANGLING_DEP` | `depends_on` references an unknown name | fix the reference |
+| `E_DEPENDENCY_CYCLE` | `depends_on_services` forms a cycle | break the cycle |
+| `E_UNKNOWN_DRIVER` | `db_services.driver` is not a known driver | use a supported driver |
+| `E_MISSING_START` | a service has a `port` but no `start`/`runner` | add a `start` command or `runner: docker` |
+| `E_PORT_CONFLICT` | two services/dbs bind the same host port | give them distinct ports |
+| `E_UNHEALTHY` | a readiness/health probe failed | check the service; inspect `corgi logs` |
+| `E_READINESS_TIMEOUT` | a dependency wasn't ready before the deadline | raise `--ready-timeout`, or fix the dep |
+| `E_DOCKER_DOWN` | the docker daemon is unreachable | start Docker |
+| `E_USAGE` | invalid command usage / arguments | fix the command invocation |
+| `E_EXEC_FAILED` | the command could not be spawned | check the binary exists / path |
+| `E_UNKNOWN_PROFILE` | `run --profile` matched no services/db_services | check the profile name against the compose `profiles:` lists |
+| `E_INVALID_CONDITION` | invalid depends_on `condition` (use `ready` or `started`) | fix the value |
+| `E_ALREADY_RUNNING` | a detached run is already active | stop/restart first, or `--force` |
+| `E_UNSUPPORTED` | operation not supported yet | use the suggested alternative |
+| `E_CONFIG_PATH` | cannot resolve the user-config dir | check `~/.corgi` perms |
+| `E_CONFIG_READ` | cannot read the user-config file | check `~/.corgi/config.yml` |
+
+Note: a few codes were renamed for consistency — `INPUT_REQUIRED` →
+`E_INTERACTIVE_REQUIRED`, `config` → `E_CONFIG`, `ALREADY_RUNNING` →
+`E_ALREADY_RUNNING`, and `UNSUPPORTED` → `E_UNSUPPORTED`. Every emitted code now
+lives in the catalog above.
 
 ## Commands that need a flag (or error in non-interactive mode)
 
@@ -143,6 +180,160 @@ corgi fork --all --gitProvider github
 corgi fork --service api --gitProvider github --newName api-fork --private
 ```
 
+## Authoring & inspection
+
+These commands inspect or exercise the compose file without booting the full
+stack. They share the global `--json` contract (pure JSON on stdout, logs to
+stderr) and the [error-code catalog](#error-codes).
+
+### `corgi validate` (alias `lint`)
+
+Static semantic checks over `corgi-compose.yml` — no containers, clones, or
+network. Pairs with `docs --json-schema`: the schema checks *structure*,
+`validate` checks *semantics* (dangling deps, cycles, unknown driver, a port
+without a start command, port conflicts).
+
+Flags:
+
+- `--json` — emit the report object (below).
+- `--strict` — treat warnings as failures.
+
+```json
+{"ok": true, "errors": [], "warnings": [{"code": "...", "message": "...", "field": "..."}]}
+```
+
+Each issue is `{code, message, field}`. Exit 0 when clean, 1 when there are
+errors (or warnings under `--strict`), 2 when the compose file fails to load.
+
+### `corgi run --dry-run`
+
+Compute the start plan with **no side effects** — no clone, no `make up`, no
+process spawn, no `.env` writes. Runs validation first, then reports the
+resolved order and per-item details. Composes with `--profile` /
+`--services` / `--omit` to preview a narrowed run. Exit 0 if valid, 1 if
+validation finds errors.
+
+```json
+{
+  "valid": true,
+  "order": ["db:main", "svc:api"],
+  "databases": [{"name": "main", "driver": "postgres", "port": 5432, "willStart": true}],
+  "services": [
+    {"name": "api", "port": 8080, "willClone": false, "dependsOn": ["db:main"], "envKeys": ["DATABASE_URL"]}
+  ],
+  "warnings": [],
+  "errors": []
+}
+```
+
+`order` ids are `db:<name>` / `svc:<name>`. `errors` is omitted when empty.
+
+### `corgi exec <service> -- <cmd> [args...]`
+
+Run a one-off command in a service's resolved environment and working
+directory (its `.env` is sourced the same way `start` commands get it). The
+child's exit code becomes corgi's exit code.
+
+Flags:
+
+- `--json` — emit `{"service": "...", "exitCode": 0, "durationMs": 12}`; child
+  stdout/stderr are routed to stderr so stdout stays pure JSON.
+- `--ensure-deps` — wait for the service's `depends_on_db` /
+  `depends_on_services` to be reachable first.
+- `--ready-timeout <dur>` — cap that wait (default `15s`).
+
+```bash
+corgi exec api -- npm run migrate
+corgi exec api --ensure-deps -- pytest -q
+```
+
+An unknown service exits 2 with `E_SERVICE_NOT_FOUND`; a readiness timeout
+under `--ensure-deps` exits 1 with `E_READINESS_TIMEOUT`.
+
+### `corgi test`
+
+Run each selected service's `test` script (a script named `test` under
+`services.<name>.scripts`) in that service's env and working dir. It does
+**not** start anything — that's `run`'s job. Services without a `test` script
+are **skipped, not failed**. Multi-command scripts run sequentially and stop on
+the first non-zero exit.
+
+Flags:
+
+- `--service <name>` — only this service (unknown name exits 2).
+- `--profile <name>` — narrow to a profile first (see [Profiles](#profiles)).
+- `--ensure-deps` / `--ready-timeout <dur>` — gate on dependency readiness, as
+  in `exec`.
+- `--json` — emit the results object.
+
+```json
+{
+  "services": [
+    {"name": "api", "exitCode": 0, "durationMs": 1840, "passed": true},
+    {"name": "worker", "skipped": true}
+  ],
+  "passed": true
+}
+```
+
+Exit 0 if every run test passes (skips don't count), 1 if any fail, 2 on an
+unknown `--service`.
+
+## Profiles
+
+`corgi run --profile <name>` runs only the services/db_services whose
+`profiles:` list contains `<name>`, **plus their transitive `depends_on`
+closure** (so a profile still brings up the databases its services need, even
+if those databases carry no `profiles:` tag). `--profile` accepts a
+comma-separated list and runs the **union** of those profiles, e.g.
+`corgi run --profile backend,worker`. With no `--profile`, everything runs
+(unchanged docker-compose-style behavior). If none of the requested profiles
+match anything, corgi warns (`E_UNKNOWN_PROFILE`) and starts nothing rather
+than starting everything; a partially-unknown list just uses the matches.
+
+`profiles:` is a string array on entries under `services` and `db_services`.
+`--profile` composes with `--services` / `--dbServices` / `--omit` as an
+**intersection** (the profile narrows first, then the other filters apply). It
+also works with `--dry-run` to preview a profile's plan.
+
+```yaml
+services:
+  api:
+    profiles: [backend]
+db_services:
+  main:
+    driver: postgres
+    profiles: [backend]
+```
+
+```bash
+corgi run --profile backend --dry-run --json        # preview just the backend profile
+corgi run --profile backend,worker --dry-run --json # union of two profiles
+corgi test --profile backend --json                 # test only that profile's services
+```
+
+## Dependency readiness gating
+
+`depends_on_db` and `depends_on_services` entries accept an optional
+`condition`:
+
+- `condition: ready` — wait until the dependency's readiness probe passes.
+- `condition: started` — wait only until corgi has launched the dependency.
+
+By default (no `condition`, no flag) services start in **parallel** — no
+waiting (unchanged). corgi waits before starting a dependent only when an edge
+sets `condition`, or when `run --gate-deps` is passed (which gates *every*
+edge). `--ready-timeout <dur>` (default `15s`) bounds each wait; a timeout is
+non-fatal — corgi proceeds anyway and emits `E_READINESS_TIMEOUT`.
+
+```yaml
+services:
+  api:
+    depends_on_db:
+      - name: main
+        condition: ready
+```
+
 ## Schema
 
 Get a draft-07 JSON Schema for `corgi-compose.yml`:
@@ -157,11 +348,49 @@ In an editor, point the YAML language server at it with a top-of-file directive:
 # yaml-language-server: $schema=./corgi-compose.schema.json
 ```
 
+## Environment interpolation
+
+`${VAR}` placeholders in `corgi-compose.yml` are expanded in the raw file
+**before** YAML parsing, so they work in any string field (passwords, ports,
+paths, image refs, environment entries).
+
+- `${VAR}` — replaced with the value of `VAR`.
+- `${VAR:-default}` — value of `VAR`, or `default` if `VAR` is unset/empty.
+- `$${LITERAL}` — escapes to the literal `${LITERAL}` (not expanded).
+- Only **braced** forms are expanded. Bare `$VAR` is left untouched (so shell
+  snippets in `start` commands are safe).
+- An unset var with **no default** is left **unresolved** (the `${VAR}` token
+  stays literal) and corgi prints one warning per name — so tunnel hostnames and
+  cross-service `${producer.VAR}` refs that resolve later still work. Use
+  `${VAR:-default}` for an explicit fallback. corgi never silently substitutes
+  empty.
+- Dotted forms like `${producer.VAR}` are **not** touched by this global pass
+  (only simple `${NAME}` is) — they are resolved later from per-service env.
+- This pass runs everywhere, **including inside `start`/`beforeStart`/`afterStart`
+  and `scripts` command strings**. A braced `${VAR}` / `${VAR:-default}` there is
+  resolved at **load time** (against process env + sibling `.env`), not by the
+  runtime shell. To defer expansion to the runtime shell instead (e.g. a var only
+  defined in the service's own runtime env), escape it as `$${VAR}`, which becomes
+  the literal `${VAR}` for the shell to expand.
+
+Values come from the process environment first, then an optional `.env` file
+in the same directory as the compose file (process env wins). The `.env`
+parser is minimal: `KEY=value` lines, `#` comments and blank lines ignored,
+surrounding quotes trimmed.
+
+```yaml
+db_services:
+  pg:
+    driver: postgres
+    password: ${DB_PASSWORD}        # unset & no default -> left literal + warning
+    port: ${PG_PORT:-5432}          # defaults to 5432
+```
+
 ## Safe agent recipe
 
 Use `corgi run --detach` — it returns immediately and the services outlive
 corgi. Probe with `status`/`ps`, never by re-running `run` (a second
-`run --detach` errors `ALREADY_RUNNING`). Tear down with `corgi stop`.
+`run --detach` errors `E_ALREADY_RUNNING`). Tear down with `corgi stop`.
 
 ```bash
 # 1. preflight (exit 1 if a port is taken / docker down)

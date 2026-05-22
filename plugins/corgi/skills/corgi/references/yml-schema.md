@@ -20,6 +20,29 @@ services:     map<name, Service>    # See below
 required:     map<tool, Required>   # See below
 ```
 
+## Global `${VAR}` interpolation
+
+The whole file is interpolated **before** parsing, so `${VAR}` works in any
+string field (passwords, ports, paths, image refs, environment entries).
+
+- `${VAR}` — value of `VAR`.
+- `${VAR:-default}` — value of `VAR`, or `default` when unset/empty.
+- `$${X}` — escapes to the literal `${X}` (not expanded).
+- Braced only — bare `$VAR` is left untouched (safe for shell snippets).
+- Unset with no default → left unresolved (token stays literal) with a warning,
+  so tunnel/cross-service refs still resolve later; use `${VAR:-default}` for an
+  explicit fallback.
+- Dotted `${producer.VAR}` cross-service refs are left untouched by this pass.
+- Applies inside `start`/`beforeStart`/`afterStart`/`scripts` command strings too:
+  a braced `${VAR}` / `${VAR:-default}` there is resolved at **load time** (process
+  env + sibling `.env`), not by the runtime shell. Escape as `$${VAR}` (→ literal
+  `${VAR}`) to defer expansion to the runtime shell.
+
+Values resolve from the process env first, then a sibling `.env` (same dir as
+the compose file; process env wins). This file-level pass is separate from the
+runtime `${producer.VAR}` cross-service refs and the tunnel hostname
+substitution below.
+
 ## `db_services.<name>`
 
 ```yaml

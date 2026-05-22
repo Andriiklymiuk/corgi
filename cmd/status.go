@@ -3,6 +3,7 @@ package cmd
 import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -95,7 +96,7 @@ func resolveStatusRows(cmd *cobra.Command) []statusRow {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		if utils.JSONOutput {
-			utils.JSONError("config", err.Error())
+			utils.JSONError(utils.ErrConfig, err.Error())
 		} else {
 			fmt.Fprintf(os.Stderr, "couldn't get services config: %s\n", err)
 		}
@@ -157,7 +158,11 @@ func runStatus(cmd *cobra.Command, _ []string) {
 	case f.untilHealthy:
 		runStatusUntilHealthy(rows, f.interval, f.timeout, f.jsonOut, f.quiet)
 	case f.watch:
-		runStatusWatch(rows, f.interval, f.jsonOut, f.quiet)
+		// Watch loops until Ctrl+C; cancel on signal so the watch
+		// goroutine exits cleanly instead of being killed mid-write.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		runStatusWatch(ctx, rows, f.interval, f.jsonOut, f.quiet)
 	default:
 		runStatusOnce(rows, f)
 	}
@@ -252,6 +257,7 @@ func runStatusWatchTTY(rows []statusRow, interval time.Duration) {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 	go func() {
 		<-sigCh
 		restore()
@@ -272,7 +278,7 @@ func runStatusWatchTTY(rows []statusRow, interval time.Duration) {
 	}
 }
 
-func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet bool) {
+func runStatusWatch(ctx context.Context, rows []statusRow, interval time.Duration, jsonOut, quiet bool) {
 	if interval <= 0 {
 		interval = 2 * time.Second
 	}
@@ -282,19 +288,19 @@ func runStatusWatch(rows []statusRow, interval time.Duration, jsonOut, quiet boo
 		results := probeAllParallel(rows)
 		up, down := splitResults(rows, results)
 		emitJSON(up, down)
-		runWatchAppend(rows, results, interval, true, false)
+		runWatchAppend(ctx, rows, results, interval, true, false)
 	case quiet:
-		runWatchAppend(rows, nil, interval, false, true)
+		runWatchAppend(ctx, rows, nil, interval, false, true)
 	case !utils.IsTTY():
 		results := probeAllParallel(rows)
 		fmt.Print(buildWatchFrame(rows, results, interval, time.Now()))
-		runWatchAppend(rows, results, interval, false, false)
+		runWatchAppend(ctx, rows, results, interval, false, false)
 	default:
 		runStatusWatchTTY(rows, interval)
 	}
 }
 
-func runWatchAppend(rows []statusRow, seed map[string]probeResult, interval time.Duration, jsonOut, quiet bool) {
+func runWatchAppend(ctx context.Context, rows []statusRow, seed map[string]probeResult, interval time.Duration, jsonOut, quiet bool) {
 	state := make(map[string]bool, len(rows))
 	if seed != nil {
 		for _, r := range rows {
@@ -308,7 +314,12 @@ func runWatchAppend(rows []statusRow, seed map[string]probeResult, interval time
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	for range ticker.C {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 		results := probeAllParallel(rows)
 		for _, r := range rows {
 			pr := results[r.Label]
