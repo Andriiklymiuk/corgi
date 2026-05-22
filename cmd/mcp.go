@@ -32,6 +32,7 @@ Register it in .mcp.json (project) or ~/.claude.json:
 }
 
 func init() {
+	mcpCmd.Flags().String("http", "", "Serve MCP over Streamable HTTP at this address (e.g. :8765 or 127.0.0.1:8765) instead of stdio.")
 	rootCmd.AddCommand(mcpCmd)
 }
 
@@ -51,10 +52,9 @@ const (
 // handler body so the stdout swap and compose/flag mutation never overlap.
 var mcpHandlerMu sync.Mutex
 
-func runMCP(_ *cobra.Command, _ []string) {
-	// stdout is the JSON-RPC channel: force non-interactive (no prompts) and
-	// route corgi's own human/JSON logging away from stdout. JSONOutput=true
-	// makes utils.Info* write to stderr, keeping stdout protocol-pure.
+func runMCP(cmd *cobra.Command, _ []string) {
+	// No prompts on a server; route corgi's own logging to stderr so stdout
+	// stays the pure JSON-RPC channel (load-bearing for stdio; tidy for HTTP).
 	utils.NonInteractive = true
 	utils.JSONOutput = true
 
@@ -62,10 +62,29 @@ func runMCP(_ *cobra.Command, _ []string) {
 	registerMCPTools(s)
 	registerMCPResources(s)
 
+	httpAddr, _ := cmd.Flags().GetString("http")
+	if httpAddr != "" {
+		serveMCPHTTP(s, httpAddr)
+		return
+	}
+	serveMCPStdio(s)
+}
+
+func serveMCPStdio(s *server.MCPServer) {
 	// WithWorkerPoolSize(1) is defense-in-depth: it makes the stdio server
 	// process tool calls one-at-a-time. The mcpHandlerMu mutex is the real
 	// guard (it also covers resource handlers, which the pool size doesn't).
 	if err := server.ServeStdio(s, server.WithWorkerPoolSize(1)); err != nil {
+		fmt.Fprintln(os.Stderr, "mcp server error:", err)
+		os.Exit(1)
+	}
+}
+
+func serveMCPHTTP(s *server.MCPServer, addr string) {
+	// HTTP exposes corgi control (incl. corgi_up) with no auth in v1.
+	fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
+	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
+	if err := server.NewStreamableHTTPServer(s).Start(addr); err != nil {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		os.Exit(1)
 	}

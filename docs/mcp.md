@@ -19,6 +19,29 @@ Register corgi in `.mcp.json` (project-local) or `~/.claude.json` (global):
 The server resolves `corgi-compose.yml` from the working directory the client
 launches it in. Any tool also accepts an explicit `composePath`.
 
+stdio is the default and recommended transport for local use — the client owns
+the process lifecycle and nothing is exposed on the network.
+
+## HTTP transport
+
+Instead of stdio, corgi can serve the same tools/resources over Streamable HTTP:
+
+```
+corgi mcp --http :8765          # or 127.0.0.1:8765
+```
+
+The endpoint is served at `/mcp`. Point an HTTP-capable MCP client at the URL
+rather than a command:
+
+```json
+{ "mcpServers": { "corgi": { "url": "http://localhost:8765/mcp" } } }
+```
+
+**Security:** the HTTP transport has no authentication. It exposes corgi
+control — including `corgi_up`, which starts containers and processes. Bind it
+to `localhost` or put it behind an authenticated reverse proxy. Never expose it
+on a public interface. corgi prints this warning to stderr on startup.
+
 ## Tools
 
 | Tool | Args (JSON) | Returns | Wraps |
