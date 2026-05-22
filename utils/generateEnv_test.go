@@ -646,6 +646,75 @@ func TestFindDbByNameFound(t *testing.T) {
 	}
 }
 
+// writerEnvKeys runs the real env writer for a service to a temp dir and
+// extracts the KEYS inside corgi's generated block. Used to prove
+// ComputeEnvKeysForService matches what GenerateEnvForService actually writes.
+func writerEnvKeys(t *testing.T, c *CorgiCompose, svc Service) []string {
+	t.Helper()
+	if err := GenerateEnvForService(c, svc, "", false); err != nil {
+		t.Fatalf("writer error: %v", err)
+	}
+	body, err := os.ReadFile(GetPathToEnv(svc))
+	if err != nil {
+		t.Fatalf("read .env: %v", err)
+	}
+
+	var keys []string
+	inBlock := false
+	for _, line := range strings.Split(string(body), "\n") {
+		if line == corgiGeneratedMessage {
+			inBlock = !inBlock
+			continue
+		}
+		if !inBlock {
+			continue
+		}
+		idx := strings.Index(line, "=")
+		if idx <= 0 {
+			continue
+		}
+		keys = append(keys, strings.TrimSpace(line[:idx]))
+	}
+	return keys
+}
+
+func TestComputeEnvKeysForServiceParity(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	c := &CorgiCompose{
+		DatabaseServices: []DatabaseService{
+			{ServiceName: "app-db", Driver: "postgres", Host: "localhost", Port: 5432, User: "u", Password: "p", DatabaseName: "app"},
+		},
+		Services: []Service{
+			{ServiceName: "auth", AbsolutePath: filepath.Join(dir, "auth"), Port: 9000},
+			{
+				ServiceName:       "api",
+				AbsolutePath:      filepath.Join(dir, "api"),
+				Port:              8080,
+				DependsOnDb:       []DependsOnDb{{Name: "app-db", EnvAlias: "APP"}},
+				DependsOnServices: []DependsOnService{{Name: "auth", EnvAlias: "AUTH_URL"}},
+				Environment:       []string{"FEATURE_FLAG=on", "LOG_LEVEL=debug"},
+			},
+		},
+	}
+
+	api := c.Services[1]
+	want := writerEnvKeys(t, c, api)
+	got := ComputeEnvKeysForService(api, c)
+
+	// Writer output is a superset only if duplicates appear; both should match
+	// as ordered, de-duplicated key lists.
+	if len(want) == 0 {
+		t.Fatal("expected writer to emit some keys")
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("env key mismatch:\n writer: %v\n compute: %v", want, got)
+	}
+}
+
 func TestFindDbByNameMissing(t *testing.T) {
 	dbs := []DatabaseService{{ServiceName: "pg"}}
 	got := findDbByName(dbs, "mysql")

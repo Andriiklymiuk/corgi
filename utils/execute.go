@@ -266,6 +266,43 @@ func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand,
 	return nil
 }
 
+// RunServiceCommandExitCode runs a single command in the service's env and
+// returns the child's exit code (env sourcing matches the start path).
+// interactive wires stdin through for REPLs. Returns exitCode -1 with a non-nil
+// err only on spawn failure.
+func RunServiceCommandExitCode(
+	command, path string,
+	interactive bool,
+	stdout, stderr io.Writer,
+	envFile ...string,
+) (int, error) {
+	resolvedEnvFile := resolveEnvFile(path, envFile)
+	shellCommand := withEnvSource(command, resolvedEnvFile)
+	cmd := exec.Command("/bin/sh", "-c", shellCommand)
+	cmd.Dir = path
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if interactive {
+		cmd.Stdin = os.Stdin
+	}
+	SetProcessGroup(cmd)
+
+	if err := cmd.Start(); err != nil {
+		return -1, err
+	}
+	addProcess(cmd.Process)
+	defer removeProcess(cmd.Process)
+
+	err := cmd.Wait()
+	if err == nil {
+		return 0, nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return exitErr.ExitCode(), nil
+	}
+	return -1, err
+}
+
 func StartDetached(serviceName, command, path string, envFile ...string) (*os.Process, error) {
 	resolvedEnvFile := resolveEnvFile(path, envFile)
 	shellCommand := withEnvSource(command, resolvedEnvFile)
@@ -560,6 +597,26 @@ func ExecuteServiceCommandRun(targetService string, command ...string) error {
 	}
 
 	return nil
+}
+
+// StopDockerRunnerServices brings down docker-runner containers (`make down`).
+// Each call is bounded and non-fatal so shutdown/reload never blocks.
+func StopDockerRunnerServices(serviceNames []string) {
+	for _, name := range serviceNames {
+		path, err := GetPathToService(name)
+		if err != nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), AfterStartTimeout)
+		cmd := exec.CommandContext(ctx, "make", "down")
+		cmd.Dir = path
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Printf("⚠ could not stop docker service %s: %v\n", name, err)
+		}
+		cancel()
+	}
 }
 
 func ExecuteSeedMakeCommand(targetService string, makeCommand ...string) ([]byte, error) {

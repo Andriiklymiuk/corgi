@@ -12,6 +12,9 @@ import (
 
 const corgiGeneratedMessage = "# 🐶 Auto generated vars by corgi"
 
+// envLineIntFmt formats a newline-prefixed KEY=<int> env line.
+const envLineIntFmt = "\n%s=%d"
+
 func getEnvFromFile(filePath, corgiGeneratedMessage string) string {
 	envFileContent := GetFileContent(filePath)
 	var envFileNormalizedContent []string
@@ -535,7 +538,7 @@ func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 		if service.PortAlias != "" {
 			portAlias = service.PortAlias
 		}
-		envForService += fmt.Sprintf("\n%s=%d", portAlias, service.Port)
+		envForService += fmt.Sprintf(envLineIntFmt, portAlias, service.Port)
 	}
 	if len(service.Environment) > 0 {
 		existing := parseEnvVarsIntoMap(envForService)
@@ -548,6 +551,47 @@ func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 		envForService += "\n" + strings.Join(lines, "\n") + "\n"
 	}
 	return envForService
+}
+
+// ComputeEnvKeysForService returns the env var KEYS corgi would generate for the
+// service, in generation order with duplicates removed. Pure (no file I/O), so
+// it doesn't model two writer-only paths: copyEnvFromFilePath keys and
+// environment lines the writer drops when a cross-service producer is skipped.
+func ComputeEnvKeysForService(svc Service, corgi *CorgiCompose) []string {
+	if corgi == nil || svc.IgnoreEnv {
+		return []string{}
+	}
+
+	var body string
+	body += handleDependentServices(svc, *corgi)
+	body += handleDependsOnDb(svc, *corgi)
+	if svc.Port != 0 {
+		portAlias := "PORT"
+		if svc.PortAlias != "" {
+			portAlias = svc.PortAlias
+		}
+		body += fmt.Sprintf(envLineIntFmt, portAlias, svc.Port)
+	}
+	for _, line := range svc.Environment {
+		// Keep the left-of-= verbatim; only the KEY matters here.
+		body += "\n" + line
+	}
+
+	keys := []string{}
+	seen := map[string]bool{}
+	for _, line := range strings.Split(body, "\n") {
+		idx := strings.Index(line, "=")
+		if idx <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func resolveCopyEnvPath(service Service, copyEnvFilePath string) string {
@@ -606,7 +650,7 @@ func buildServiceEnvBody(service Service, corgiCompose *CorgiCompose, copyEnvFil
 		if service.PortAlias != "" {
 			portAlias = service.PortAlias
 		}
-		envForService += fmt.Sprintf("\n%s=%d", portAlias, service.Port)
+		envForService += fmt.Sprintf(envLineIntFmt, portAlias, service.Port)
 	}
 
 	return appendEnvironmentLines(envForService, service)

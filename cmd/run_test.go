@@ -208,7 +208,7 @@ func TestRunServiceSkipsManual(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	runService(utils.Service{ServiceName: "manual", ManualRun: true}, cmd, &wg)
+	runService(utils.Service{ServiceName: "manual", ManualRun: true}, cmd, &wg, nil)
 	wg.Wait()
 }
 
@@ -389,7 +389,7 @@ func TestRunService_BailsOnShutdownBeforeSpawning(t *testing.T) {
 		BeforeStart:  []string{"touch should-not-run"},
 		Start:        []string{"sleep 30"},
 		AbsolutePath: t.TempDir(),
-	}, cmd, &wg)
+	}, cmd, &wg, nil)
 	wg.Wait()
 
 	if len(utils.ProcessHandles) != 0 {
@@ -435,7 +435,7 @@ func TestRunServiceWithStartCommands(t *testing.T) {
 		ServiceName:  "x",
 		Start:        []string{"echo hi"},
 		AbsolutePath: dir,
-	}, cmd, &wg)
+	}, cmd, &wg, nil)
 	wg.Wait()
 }
 
@@ -453,7 +453,7 @@ func TestRunServiceWithBeforeStart(t *testing.T) {
 		ServiceName:  "x",
 		BeforeStart:  []string{"echo before"},
 		AbsolutePath: dir,
-	}, cmd, &wg)
+	}, cmd, &wg, nil)
 	wg.Wait()
 }
 
