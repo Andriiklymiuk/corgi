@@ -5,6 +5,7 @@ import (
 	"andriiklymiuk/corgi/utils/art"
 	"bufio"
 	"container/heap"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -46,6 +47,32 @@ func init() {
 	logsCmd.Flags().DurationVar(&logsIdleFlag, "idle", 30*time.Second, "Exit after this much dead-air on the file (set 0 to tail forever)")
 }
 
+func logJSONLine(service, ts, level, line string) string {
+	if ts == "" {
+		ts = time.Now().UTC().Format(time.RFC3339)
+	}
+	b, _ := json.Marshal(struct {
+		Service string `json:"service"`
+		TS      string `json:"ts"`
+		Level   string `json:"level"`
+		Line    string `json:"line"`
+	}{service, ts, level, line})
+	return string(b)
+}
+
+// detectLevel is a best-effort log-level guess from a line's content.
+func detectLevel(line string) string {
+	low := strings.ToLower(line)
+	switch {
+	case strings.Contains(low, "error") || strings.Contains(low, "panic") || strings.Contains(low, "fatal"):
+		return "error"
+	case strings.Contains(low, "warn"):
+		return "warn"
+	default:
+		return "info"
+	}
+}
+
 func runLogs(cmd *cobra.Command, _ []string) {
 	base := logsBase()
 
@@ -56,7 +83,7 @@ func runLogs(cmd *cobra.Command, _ []string) {
 
 	if logsAllFlag {
 		if err := followAllLogs(base); err != nil {
-			fmt.Println(err)
+			utils.Info(err)
 		}
 		return
 	}
@@ -77,14 +104,14 @@ func runLogs(cmd *cobra.Command, _ []string) {
 		var err error
 		serviceName, err = pickLogService(base)
 		if err != nil {
-			fmt.Println(err)
+			utils.Info(err)
 			return
 		}
 	}
 
 	runFile, err := pickLogRun(base, serviceName)
 	if err != nil {
-		fmt.Println(err)
+		utils.Info(err)
 		return
 	}
 
@@ -167,40 +194,70 @@ func labelForRun(path string) string {
 func followLog(path string) {
 	f, err := os.Open(path)
 	if err != nil {
-		fmt.Printf("cannot open %s: %v\n", path, err)
+		utils.Infof("cannot open %s: %v\n", path, err)
 		return
 	}
 	defer f.Close()
 
-	fmt.Printf("%s📄 %s (Ctrl-C to exit)%s\n\n", art.CyanColor, path, art.WhiteColor)
+	if !utils.JSONOutput {
+		fmt.Printf("%s📄 %s (Ctrl-C to exit)%s\n\n", art.CyanColor, path, art.WhiteColor)
+	}
+	streamLogLines(f, path)
+}
 
+func streamLogLines(f *os.File, path string) {
+	service := filepath.Base(filepath.Dir(path))
 	reader := bufio.NewReader(f)
 	stripPrefix := looksLikeStampedLog(path)
 	var idleSince time.Time
 	for {
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
-			printFollowedLine(line, stripPrefix)
+			printFollowedLine(service, line, stripPrefix)
 			idleSince = time.Time{}
 		}
 		if err == nil {
 			continue
 		}
-		if err != io.EOF {
-			fmt.Printf("read error: %v\n", err)
-			return
-		}
-		if shouldExitFollow(path, &idleSince) {
-			fmt.Printf("\n%s— end of log —%s\n", art.YellowColor, art.WhiteColor)
+		if followShouldStop(err, path, &idleSince) {
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 }
 
-func printFollowedLine(line string, stripPrefix bool) {
+// followShouldStop reports whether the follow loop should end: a non-EOF read
+// error, or EOF past the idle/inactivity threshold. Prints the matching
+// human notice (suppressed in JSON mode).
+func followShouldStop(err error, path string, idleSince *time.Time) bool {
+	if err != io.EOF {
+		if !utils.JSONOutput {
+			fmt.Printf("read error: %v\n", err)
+		}
+		return true
+	}
+	if shouldExitFollow(path, idleSince) {
+		if !utils.JSONOutput {
+			fmt.Printf("\n%s— end of log —%s\n", art.YellowColor, art.WhiteColor)
+		}
+		return true
+	}
+	return false
+}
+
+func printFollowedLine(service, line string, stripPrefix bool) {
+	ts := ""
+	content := strings.TrimRight(line, "\n")
 	if stripPrefix && len(line) >= utils.LogTimestampLen {
-		fmt.Print(line[utils.LogTimestampLen:])
+		ts = strings.TrimSpace(line[:utils.LogTimestampLen-1])
+		content = strings.TrimRight(line[utils.LogTimestampLen:], "\n")
+	}
+	if utils.JSONOutput {
+		fmt.Println(logJSONLine(service, ts, detectLevel(content), content))
+		return
+	}
+	if ts != "" {
+		fmt.Println(content)
 		return
 	}
 	fmt.Print(line)
@@ -362,6 +419,10 @@ func openMergeStream(base, svc string) *mergeStream {
 }
 
 func writeMergedLine(out *bufio.Writer, s *mergeStream) {
+	if utils.JSONOutput {
+		fmt.Fprintln(out, logJSONLine(s.service, s.headTS, detectLevel(s.headBuf), s.headBuf))
+		return
+	}
 	if s.headTS != "" {
 		fmt.Fprintf(out, "%s %s[%s]%s %s\n", s.headTS, art.CyanColor, s.service, art.WhiteColor, s.headBuf)
 		return

@@ -32,6 +32,141 @@ Exit code is non-zero if anything fails so CI / scripts can consume it.`,
 
 func init() {
 	rootCmd.AddCommand(doctorCmd)
+	doctorCmd.Flags().Bool("fix", false, "Attempt to remediate failed checks")
+	doctorCmd.Flags().Bool("yes", false, "Skip confirmation prompts (required for destructive fixes when non-interactive)")
+}
+
+type fixKind int
+
+const (
+	fixDocker   fixKind = iota // start Docker daemon — safe, auto-OK
+	fixInstall                 // install a missing tool — needs consent
+	fixKillPort                // kill a port hog — destructive
+)
+
+// shouldAutoFix decides whether a remediation may run without a prompt.
+// Docker start is always safe. Installs and kills require either an
+// interactive terminal (to prompt) or an explicit --yes.
+func shouldAutoFix(kind fixKind, nonInteractive, yes bool) bool {
+	if kind == fixDocker {
+		return true
+	}
+	if yes {
+		return true
+	}
+	return !nonInteractive
+}
+
+type fixActions struct {
+	startDocker func() error
+	installTool func(name string) error
+	killPort    func(port int) error
+	confirm     func(prompt string) bool // asked before destructive fixes in interactive mode
+}
+
+type fixSkip struct {
+	Check  string `json:"check"`
+	Reason string `json:"reason"`
+}
+
+type fixOutcome struct {
+	OK      bool      `json:"ok"`
+	Fixed   []string  `json:"fixed"`
+	Skipped []fixSkip `json:"skipped"`
+}
+
+const requiredCheckPrefix = "required:"
+
+func classifyCheck(name string) (fixKind, bool) {
+	switch {
+	case name == "docker":
+		return fixDocker, true
+	case strings.HasPrefix(name, requiredCheckPrefix):
+		return fixInstall, true
+	case strings.HasPrefix(name, "port:"):
+		return fixKillPort, true
+	}
+	return 0, false
+}
+
+func portFromCheckName(name string) int {
+	var p int
+	fmt.Sscanf(name, "port:%d", &p)
+	return p
+}
+
+// applyFix runs the remediation for a kind. Pure dispatch over acts.
+func applyFix(kind fixKind, name string, acts fixActions) error {
+	switch kind {
+	case fixDocker:
+		return acts.startDocker()
+	case fixInstall:
+		return acts.installTool(strings.TrimPrefix(name, requiredCheckPrefix))
+	case fixKillPort:
+		return acts.killPort(portFromCheckName(name))
+	}
+	return nil
+}
+
+// fixOneCheck decides and applies the remediation for a single failed check.
+// Returns fixed=true on success, or a skip reason otherwise. Flat early
+// returns keep cognitive complexity low and make it independently testable.
+func fixOneCheck(c doctorCheck, acts fixActions, nonInteractive, yes bool) (bool, string) {
+	kind, ok := classifyCheck(c.Name)
+	if !ok {
+		return false, "no remediation available"
+	}
+	if !shouldAutoFix(kind, nonInteractive, yes) {
+		return false, "needs --yes (destructive or requires consent)"
+	}
+	// Interactive destructive fixes still ask first, unless --yes.
+	if kind != fixDocker && !yes && !nonInteractive && acts.confirm != nil && !acts.confirm(fmt.Sprintf("Fix %s?", c.Name)) {
+		return false, "declined"
+	}
+	if err := applyFix(kind, c.Name, acts); err != nil {
+		return false, err.Error()
+	}
+	return true, ""
+}
+
+// runFixes walks failed checks and applies the matching remediation, honoring
+// the auto-fix gate. All side effects go through acts so it stays testable.
+func runFixes(res doctorResult, acts fixActions, nonInteractive, yes bool) fixOutcome {
+	out := fixOutcome{OK: true}
+	for _, c := range res.Checks {
+		if c.OK {
+			continue
+		}
+		if fixed, reason := fixOneCheck(c, acts, nonInteractive, yes); fixed {
+			out.Fixed = append(out.Fixed, c.Name)
+		} else {
+			out.Skipped = append(out.Skipped, fixSkip{c.Name, reason})
+			out.OK = false
+		}
+	}
+	return out
+}
+
+// installRequiredByName runs the declared install steps for a required tool.
+func installRequiredByName(corgi *utils.CorgiCompose, name string) error {
+	for _, r := range corgi.Required {
+		if r.Name != name {
+			continue
+		}
+		if len(r.Install) == 0 {
+			return fmt.Errorf("no install steps declared for %s", name)
+		}
+		// In JSON mode run non-interactively so the installer's output is
+		// routed to stderr (via ConsoleOut), keeping stdout pure JSON.
+		interactive := !utils.JSONOutput
+		for _, step := range r.Install {
+			if err := utils.RunServiceCmd(r.Name, step, "", interactive); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("required tool %s not declared", name)
 }
 
 type doctorCheck struct {
@@ -68,6 +203,11 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
+	if fix, _ := cmd.Flags().GetBool("fix"); fix {
+		runDoctorFix(cmd, corgi)
+		return
+	}
+
 	if utils.JSONOutput {
 		runDoctorJSON(corgi)
 		return
@@ -85,6 +225,36 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 
 	fmt.Println(art.RedColor, "❌ Doctor: one or more checks failed", art.WhiteColor)
 	os.Exit(1)
+}
+
+func runDoctorFix(cmd *cobra.Command, corgi *utils.CorgiCompose) {
+	yes, _ := cmd.Flags().GetBool("yes")
+	res := buildDoctorResult(corgi)
+	acts := fixActions{
+		startDocker: utils.StartDockerDaemon,
+		installTool: func(name string) error { return installRequiredByName(corgi, name) },
+		killPort:    utils.KillPortOwner,
+		confirm: func(prompt string) bool {
+			p := promptui.Prompt{Label: prompt, IsConfirm: true}
+			_, err := p.Run()
+			return err == nil
+		},
+	}
+	out := runFixes(res, acts, utils.NonInteractive, yes)
+
+	if utils.JSONOutput {
+		utils.PrintJSON(out)
+	} else {
+		for _, f := range out.Fixed {
+			utils.Infof("✅ fixed: %s\n", f)
+		}
+		for _, s := range out.Skipped {
+			utils.Infof("⏭️  skipped %s: %s\n", s.Check, s.Reason)
+		}
+	}
+	if !out.OK {
+		os.Exit(1)
+	}
 }
 
 func runDoctorJSON(corgi *utils.CorgiCompose) {

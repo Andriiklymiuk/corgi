@@ -347,12 +347,12 @@ func requireServiceForDBShell(service string, nonInteractive bool, available []s
 func runDbShell(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		fmt.Println(err)
+		utils.Info(err)
 		return
 	}
 
 	if len(corgi.DatabaseServices) == 0 {
-		fmt.Println("No db_services defined in corgi-compose.yml")
+		utils.Info("No db_services defined in corgi-compose.yml")
 		return
 	}
 
@@ -391,12 +391,21 @@ func runDbShell(cmd *cobra.Command, args []string) {
 
 	dbService, err := utils.GetDbServiceByName(targetName, corgi.DatabaseServices)
 	if err != nil {
-		fmt.Printf("db_service %q not found: %v\n", targetName, err)
+		utils.Infof("db_service %q not found: %v\n", targetName, err)
 		return
 	}
 
 	query, _ := cmd.Flags().GetString("exec")
 	if query != "" {
+		if utils.JSONOutput {
+			out, qerr := utils.ExecDBQueryCapture(dbService, query)
+			if qerr != nil {
+				utils.JSONError(utils.ErrExecFailed, qerr.Error())
+				os.Exit(1)
+			}
+			utils.PrintJSON(dbQueryResult{Service: dbService.ServiceName, Output: out})
+			return
+		}
 		if err := utils.ExecDBQuery(dbService, query); err != nil {
 			fmt.Printf("%s❌ Query failed: %v%s\n", art.RedColor, err, art.WhiteColor)
 			os.Exit(1)
