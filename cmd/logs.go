@@ -83,7 +83,7 @@ func runLogs(cmd *cobra.Command, _ []string) {
 
 	if logsAllFlag {
 		if err := followAllLogs(base); err != nil {
-			fmt.Println(err)
+			utils.Info(err)
 		}
 		return
 	}
@@ -104,14 +104,14 @@ func runLogs(cmd *cobra.Command, _ []string) {
 		var err error
 		serviceName, err = pickLogService(base)
 		if err != nil {
-			fmt.Println(err)
+			utils.Info(err)
 			return
 		}
 	}
 
 	runFile, err := pickLogRun(base, serviceName)
 	if err != nil {
-		fmt.Println(err)
+		utils.Info(err)
 		return
 	}
 
@@ -194,7 +194,7 @@ func labelForRun(path string) string {
 func followLog(path string) {
 	f, err := os.Open(path)
 	if err != nil {
-		fmt.Printf("cannot open %s: %v\n", path, err)
+		utils.Infof("cannot open %s: %v\n", path, err)
 		return
 	}
 	defer f.Close()

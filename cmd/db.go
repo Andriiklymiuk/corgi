@@ -347,12 +347,12 @@ func requireServiceForDBShell(service string, nonInteractive bool, available []s
 func runDbShell(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		fmt.Println(err)
+		utils.Info(err)
 		return
 	}
 
 	if len(corgi.DatabaseServices) == 0 {
-		fmt.Println("No db_services defined in corgi-compose.yml")
+		utils.Info("No db_services defined in corgi-compose.yml")
 		return
 	}
 
@@ -391,7 +391,7 @@ func runDbShell(cmd *cobra.Command, args []string) {
 
 	dbService, err := utils.GetDbServiceByName(targetName, corgi.DatabaseServices)
 	if err != nil {
-		fmt.Printf("db_service %q not found: %v\n", targetName, err)
+		utils.Infof("db_service %q not found: %v\n", targetName, err)
 		return
 	}
 

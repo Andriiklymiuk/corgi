@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -68,5 +69,31 @@ func TestRunOpen_NonInteractiveSkipsLauncher(t *testing.T) {
 	}
 	if called {
 		t.Fatal("launcher should not be called in NonInteractive mode")
+	}
+}
+
+func TestBrowserCommand(t *testing.T) {
+	name, args := browserCommand("http://localhost:3000")
+	if name == "" || len(args) == 0 {
+		t.Fatalf("browserCommand returned empty: %q %v", name, args)
+	}
+	// last arg should always carry the URL
+	if args[len(args)-1] != "http://localhost:3000" {
+		t.Fatalf("URL not in args: %v", args)
+	}
+}
+
+func TestOpenJSONShapeIsPureJSON(t *testing.T) {
+	targets := []openTarget{{Service: "api", URL: "http://localhost:3000"}}
+	b, err := json.Marshal(map[string]any{"opened": targets})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back map[string][]openTarget
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatalf("open json not parseable: %v", err)
+	}
+	if back["opened"][0].Service != "api" {
+		t.Fatalf("roundtrip mismatch: %+v", back)
 	}
 }

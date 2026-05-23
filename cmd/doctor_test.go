@@ -373,3 +373,70 @@ func TestRunFixes_InteractiveDestructiveAsksConfirm(t *testing.T) {
 		t.Fatalf("expected declined skip, got %+v", out.Skipped)
 	}
 }
+
+func TestClassifyCheck(t *testing.T) {
+	cases := []struct {
+		name     string
+		wantKind fixKind
+		wantOK   bool
+	}{
+		{"docker", fixDocker, true},
+		{"required:bun", fixInstall, true},
+		{"port:3000", fixKillPort, true},
+		{"something-else", 0, false},
+	}
+	for _, c := range cases {
+		k, ok := classifyCheck(c.name)
+		if ok != c.wantOK || (ok && k != c.wantKind) {
+			t.Fatalf("classifyCheck(%q)=%v,%v want %v,%v", c.name, k, ok, c.wantKind, c.wantOK)
+		}
+	}
+}
+
+func TestPortFromCheckName(t *testing.T) {
+	if got := portFromCheckName("port:5432"); got != 5432 {
+		t.Fatalf("portFromCheckName = %d want 5432", got)
+	}
+	if got := portFromCheckName("docker"); got != 0 {
+		t.Fatalf("portFromCheckName(non-port) = %d want 0", got)
+	}
+}
+
+func TestRunFixes_DockerAndInstallSucceed(t *testing.T) {
+	res := doctorResult{Checks: []doctorCheck{
+		{Name: "docker", OK: false},
+		{Name: "required:bun", OK: false},
+		{Name: "noremedy", OK: false},
+	}}
+	acts := fixActions{
+		startDocker: func() error { return nil },
+		installTool: func(string) error { return nil },
+		killPort:    func(int) error { return nil },
+	}
+	// non-interactive + yes so install is allowed
+	out := runFixes(res, acts, true, true)
+	if len(out.Fixed) != 2 {
+		t.Fatalf("expected docker+install fixed, got %+v", out.Fixed)
+	}
+	if out.OK {
+		t.Fatal("expected OK=false due to unremediable check")
+	}
+	if len(out.Skipped) != 1 || out.Skipped[0].Reason != "no remediation available" {
+		t.Fatalf("expected one unremediable skip, got %+v", out.Skipped)
+	}
+}
+
+func TestRunFixes_InstallErrorRecorded(t *testing.T) {
+	res := doctorResult{Checks: []doctorCheck{{Name: "required:bun", OK: false}}}
+	acts := fixActions{installTool: func(string) error { return errInstallTest }}
+	out := runFixes(res, acts, true, true)
+	if out.OK || len(out.Skipped) != 1 || out.Skipped[0].Reason != "boom" {
+		t.Fatalf("expected install error skip, got %+v", out)
+	}
+}
+
+var errInstallTest = errTest("boom")
+
+type errTest string
+
+func (e errTest) Error() string { return string(e) }

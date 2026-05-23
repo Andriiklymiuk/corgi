@@ -148,8 +148,11 @@ func installRequiredByName(corgi *utils.CorgiCompose, name string) error {
 		if len(r.Install) == 0 {
 			return fmt.Errorf("no install steps declared for %s", name)
 		}
+		// In JSON mode run non-interactively so the installer's output is
+		// routed to stderr (via ConsoleOut), keeping stdout pure JSON.
+		interactive := !utils.JSONOutput
 		for _, step := range r.Install {
-			if err := utils.RunServiceCmd(r.Name, step, "", true); err != nil {
+			if err := utils.RunServiceCmd(r.Name, step, "", interactive); err != nil {
 				return err
 			}
 		}

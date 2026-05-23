@@ -585,7 +585,7 @@ func UpdateCorgiComposeFileWithMap(corgiMap map[string]interface{}) {
 
 	file, err := os.Create(filename)
 	if err != nil {
-		fmt.Printf("Error creating file: %v\n", err)
+		utils.Infof("Error creating file: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -599,11 +599,11 @@ func UpdateCorgiComposeFileWithMap(corgiMap map[string]interface{}) {
 	encodeSection(encoder, corgiMap, utils.RequiredInConfig, "required")
 
 	if err := removeSeparators(filename); err != nil {
-		fmt.Printf("Error removing separators: %v\n", err)
+		utils.Infof("Error removing separators: %v\n", err)
 		return
 	}
 
-	fmt.Printf("%s has been saved successfully!\n", filename)
+	utils.Infof("%s has been saved successfully!\n", filename)
 }
 
 func encodeSection(encoder *yaml.Encoder, corgiMap map[string]interface{}, key, label string) {
@@ -612,7 +612,7 @@ func encodeSection(encoder *yaml.Encoder, corgiMap map[string]interface{}, key, 
 		return
 	}
 	if err := encoder.Encode(map[string]interface{}{key: section}); err != nil {
-		fmt.Printf("Error encoding %s section: %v\n", label, err)
+		utils.Infof("Error encoding %s section: %v\n", label, err)
 	}
 }
 
