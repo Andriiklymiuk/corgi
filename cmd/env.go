@@ -29,7 +29,7 @@ and cross-service references), with the source of each variable. Writes nothing.
 func init() {
 	envCmd.Flags().Bool("export", false, "Emit eval-able `export KEY=VALUE` lines (real values)")
 	envCmd.Flags().Bool("json", false, "Emit JSON {service:{KEY:{value,source}}} (real values)")
-	envCmd.Flags().Bool("reveal", false, "Do not mask secret values in the human view")
+	envCmd.Flags().Bool("reveal", false, "Do not mask secret values in the human view (human view only)")
 	rootCmd.AddCommand(envCmd)
 }
 
@@ -91,25 +91,28 @@ func selectEnvServices(corgi *utils.CorgiCompose, args []string, all map[string]
 }
 
 var secretKeyRe = regexp.MustCompile(`(?i)(password|secret|token|api_?key|_pwd|passwd)`)
-var urlCredRe = regexp.MustCompile(`^([a-z][a-z0-9+.-]*://[^:/@\s]+:)([^@/\s]+)(@.*)$`)
+
+// username group allows empty so `scheme://:pass@host` still masks the password.
+var urlCredRe = regexp.MustCompile(`^([a-z][a-z0-9+.-]*://[^:/@\s]*:)([^@/\s]+)(@.*)$`)
 
 // maskStars renders a fixed-width mask that never leaks the secret's length.
 func maskStars(s string) string {
-	if len(s) <= 4 {
+	r := []rune(s)
+	if len(r) <= 4 {
 		return "***"
 	}
-	return s[:2] + "****" + s[len(s)-2:]
+	return string(r[:2]) + "****" + string(r[len(r)-2:])
 }
 
-// maskSecret redacts secret-looking values for the human view. Keys matching
-// secretKeyRe are fully masked; connection-string values have only their
+// maskSecret redacts secret-looking values for the human view. Secret-named
+// keys are fully masked; otherwise connection-string values have only their
 // password segment masked.
 func maskSecret(key, val string) string {
-	if m := urlCredRe.FindStringSubmatch(val); m != nil {
-		return m[1] + "****" + m[3]
-	}
 	if secretKeyRe.MatchString(key) {
 		return maskStars(val)
+	}
+	if m := urlCredRe.FindStringSubmatch(val); m != nil {
+		return m[1] + "****" + m[3]
 	}
 	return val
 }
@@ -123,20 +126,21 @@ func renderPlain(all map[string][]utils.EnvVar, order []string, reveal bool) str
 			b.WriteString("\n")
 		}
 		fmt.Fprintf(&b, "# %s\n", name)
-		// width for alignment
+		// align `# source` against the rendered (possibly masked) KEY=VALUE line
+		lines := make([]string, len(all[name]))
 		w := 0
-		for _, e := range all[name] {
-			if l := len(e.Key) + len(e.Value) + 1; l > w {
-				w = l
-			}
-		}
-		for _, e := range all[name] {
+		for i, e := range all[name] {
 			val := e.Value
 			if !reveal {
 				val = maskSecret(e.Key, e.Value)
 			}
-			line := e.Key + "=" + val
-			fmt.Fprintf(&b, "%-*s  # %s\n", w, line, e.Source)
+			lines[i] = e.Key + "=" + val
+			if l := len(lines[i]); l > w {
+				w = l
+			}
+		}
+		for i, e := range all[name] {
+			fmt.Fprintf(&b, "%-*s  # %s\n", w, lines[i], e.Source)
 		}
 	}
 	return b.String()

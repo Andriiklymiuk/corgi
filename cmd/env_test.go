@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"andriiklymiuk/corgi/utils"
+
+	"github.com/spf13/cobra"
 )
 
 func TestMaskSecret(t *testing.T) {
@@ -21,6 +24,60 @@ func TestMaskSecret(t *testing.T) {
 		if got := maskSecret(c.key, c.val); got != c.want {
 			t.Errorf("maskSecret(%q,%q)=%q want %q", c.key, c.val, got, c.want)
 		}
+	}
+}
+
+// I1: empty-username connection strings must still mask the password.
+func TestMaskSecretEmptyUsernameURL(t *testing.T) {
+	got := maskSecret("REDIS_URL", "redis://:pass@host:6379")
+	if !strings.Contains(got, "****") || strings.Contains(got, "pass") {
+		t.Errorf("password leaked: maskSecret=%q", got)
+	}
+}
+
+// I2: multibyte secret values must not be corrupted into invalid UTF-8.
+func TestMaskSecretMultibyte(t *testing.T) {
+	got := maskSecret("PASSWORD", "héllo")
+	if !utf8.ValidString(got) {
+		t.Errorf("masked value is not valid UTF-8: %q", got)
+	}
+}
+
+// M3: a secret-named key holding a URL must be fully masked, not just its
+// password segment.
+func TestMaskSecretURLKeyTakesPrecedence(t *testing.T) {
+	got := maskSecret("DB_PASSWORD", "postgres://u:p@h")
+	if strings.Contains(got, "postgres://") {
+		t.Errorf("secret-named key not fully masked: %q", got)
+	}
+}
+
+func TestSelectEnvServices(t *testing.T) {
+	all := map[string][]utils.EnvVar{
+		"web": {{Key: "PORT", Value: "80"}},
+		"api": {{Key: "PORT", Value: "81"}},
+	}
+	order, err := selectEnvServices(nil, nil, all)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(order) != 2 || order[0] != "api" || order[1] != "web" {
+		t.Errorf("want sorted [api web], got %v", order)
+	}
+	_, err = selectEnvServices(nil, []string{"nope"}, all)
+	if err == nil || !strings.Contains(err.Error(), utils.ErrServiceNotFound) {
+		t.Errorf("want %s error, got %v", utils.ErrServiceNotFound, err)
+	}
+}
+
+func TestRunEnvMutuallyExclusiveFlags(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("export", true, "")
+	cmd.Flags().Bool("json", true, "")
+	cmd.Flags().Bool("reveal", false, "")
+	err := runEnv(cmd, nil)
+	if err == nil || !strings.Contains(err.Error(), utils.ErrUsage) {
+		t.Errorf("want %s error, got %v", utils.ErrUsage, err)
 	}
 }
 
