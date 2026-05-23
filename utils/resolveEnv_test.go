@@ -114,3 +114,29 @@ func TestResolveAllEnv_AllServices(t *testing.T) {
 		t.Fatal("missing web")
 	}
 }
+
+func TestResolveServiceEnv_ParityWithComputeKeys(t *testing.T) {
+	corgi := &CorgiCompose{
+		DatabaseServices: []DatabaseService{
+			{ServiceName: "pg", Driver: "postgres", Port: 5432, User: "u", Password: "p", DatabaseName: "d"},
+		},
+		Services: []Service{
+			{ServiceName: "api", Port: 8080, PortAlias: "API_PORT",
+				DependsOnDb: []DependsOnDb{{Name: "pg", EnvAlias: "PG"}},
+				Environment: []string{"LOG_LEVEL=debug"}},
+		},
+	}
+	resolved, err := ResolveServiceEnv(corgi.Services[0], corgi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotKeys := map[string]bool{}
+	for _, e := range resolved {
+		gotKeys[e.Key] = true
+	}
+	for _, k := range ComputeEnvKeysForService(corgi.Services[0], corgi) {
+		if !gotKeys[k] {
+			t.Errorf("ComputeEnvKeysForService has %q but resolver does not", k)
+		}
+	}
+}
