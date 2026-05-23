@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"testing"
 
 	"path/filepath"
@@ -109,5 +110,22 @@ func TestResolveRestartTarget(t *testing.T) {
 	}
 	if entry.PID != 42 || svc == nil || svc.ServiceName != "api" {
 		t.Fatalf("happy resolution wrong: entry=%+v svc=%+v", entry, svc)
+	}
+}
+
+func TestEmitRestartError(t *testing.T) {
+	origJSON := utils.JSONOutput
+	t.Cleanup(func() { utils.JSONOutput = origJSON })
+
+	utils.JSONOutput = true
+	out := captureStdout(t, func() { emitRestartError(utils.ErrNotRunning, "boom") })
+	var e struct {
+		Error struct{ Code, Message string } `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(out), &e); err != nil {
+		t.Fatalf("emitRestartError json not pure: %q err=%v", out, err)
+	}
+	if e.Error.Code != utils.ErrNotRunning {
+		t.Fatalf("wrong code: %q", e.Error.Code)
 	}
 }

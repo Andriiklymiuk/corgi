@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -295,3 +297,61 @@ func TestDetectLevel(t *testing.T) {
 		t.Fatal("expected default info level")
 	}
 }
+
+func TestFollowShouldStop(t *testing.T) {
+	// read error (non-EOF) always stops
+	var idle time.Time
+	if !followShouldStop(errLogTest("io fail"), "/nope", &idle) {
+		t.Fatal("non-EOF error should stop")
+	}
+	// EOF on an inactive (old) file stops
+	dir := t.TempDir()
+	p := filepath.Join(dir, "svc", "run.log")
+	os.MkdirAll(filepath.Dir(p), 0755)
+	os.WriteFile(p, []byte("line\n"), 0644)
+	old := time.Now().Add(-1 * time.Hour)
+	os.Chtimes(p, old, old)
+	idle = time.Time{}
+	if !followShouldStop(io.EOF, p, &idle) {
+		t.Fatal("EOF on inactive file should stop")
+	}
+}
+
+func TestStreamLogLines_ReadsToEOF(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "api", "run.log")
+	os.MkdirAll(filepath.Dir(p), 0755)
+	os.WriteFile(p, []byte("hello\nworld\n"), 0644)
+	old := time.Now().Add(-1 * time.Hour)
+	os.Chtimes(p, old, old)
+
+	f, err := os.Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	out := captureStdout(t, func() { streamLogLines(f, p) })
+	if !strings.Contains(out, "hello") || !strings.Contains(out, "world") {
+		t.Fatalf("expected streamed lines, got %q", out)
+	}
+}
+
+func TestPrintFollowedLine_JSON(t *testing.T) {
+	origJSON := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = origJSON })
+	out := captureStdout(t, func() {
+		printFollowedLine("api", "2024-01-01T10:32:01.123Z boom error\n", true)
+	})
+	var rec struct{ Service, TS, Level, Line string }
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &rec); err != nil {
+		t.Fatalf("not JSON: %q err=%v", out, err)
+	}
+	if rec.Service != "api" || rec.Level != "error" {
+		t.Fatalf("bad record: %+v", rec)
+	}
+}
+
+type errLogTest string
+
+func (e errLogTest) Error() string { return string(e) }

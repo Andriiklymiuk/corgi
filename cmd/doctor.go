@@ -75,11 +75,13 @@ type fixOutcome struct {
 	Skipped []fixSkip `json:"skipped"`
 }
 
+const requiredCheckPrefix = "required:"
+
 func classifyCheck(name string) (fixKind, bool) {
 	switch {
 	case name == "docker":
 		return fixDocker, true
-	case strings.HasPrefix(name, "required:"):
+	case strings.HasPrefix(name, requiredCheckPrefix):
 		return fixInstall, true
 	case strings.HasPrefix(name, "port:"):
 		return fixKillPort, true
@@ -93,6 +95,40 @@ func portFromCheckName(name string) int {
 	return p
 }
 
+// applyFix runs the remediation for a kind. Pure dispatch over acts.
+func applyFix(kind fixKind, name string, acts fixActions) error {
+	switch kind {
+	case fixDocker:
+		return acts.startDocker()
+	case fixInstall:
+		return acts.installTool(strings.TrimPrefix(name, requiredCheckPrefix))
+	case fixKillPort:
+		return acts.killPort(portFromCheckName(name))
+	}
+	return nil
+}
+
+// fixOneCheck decides and applies the remediation for a single failed check.
+// Returns fixed=true on success, or a skip reason otherwise. Flat early
+// returns keep cognitive complexity low and make it independently testable.
+func fixOneCheck(c doctorCheck, acts fixActions, nonInteractive, yes bool) (bool, string) {
+	kind, ok := classifyCheck(c.Name)
+	if !ok {
+		return false, "no remediation available"
+	}
+	if !shouldAutoFix(kind, nonInteractive, yes) {
+		return false, "needs --yes (destructive or requires consent)"
+	}
+	// Interactive destructive fixes still ask first, unless --yes.
+	if kind != fixDocker && !yes && !nonInteractive && acts.confirm != nil && !acts.confirm(fmt.Sprintf("Fix %s?", c.Name)) {
+		return false, "declined"
+	}
+	if err := applyFix(kind, c.Name, acts); err != nil {
+		return false, err.Error()
+	}
+	return true, ""
+}
+
 // runFixes walks failed checks and applies the matching remediation, honoring
 // the auto-fix gate. All side effects go through acts so it stays testable.
 func runFixes(res doctorResult, acts fixActions, nonInteractive, yes bool) fixOutcome {
@@ -101,40 +137,12 @@ func runFixes(res doctorResult, acts fixActions, nonInteractive, yes bool) fixOu
 		if c.OK {
 			continue
 		}
-		kind, ok := classifyCheck(c.Name)
-		if !ok {
-			out.Skipped = append(out.Skipped, fixSkip{c.Name, "no remediation available"})
+		if fixed, reason := fixOneCheck(c, acts, nonInteractive, yes); fixed {
+			out.Fixed = append(out.Fixed, c.Name)
+		} else {
+			out.Skipped = append(out.Skipped, fixSkip{c.Name, reason})
 			out.OK = false
-			continue
 		}
-		if !shouldAutoFix(kind, nonInteractive, yes) {
-			out.Skipped = append(out.Skipped, fixSkip{c.Name, "needs --yes (destructive or requires consent)"})
-			out.OK = false
-			continue
-		}
-		// Interactive destructive fixes still ask first, unless --yes.
-		if kind != fixDocker && !yes && !nonInteractive && acts.confirm != nil {
-			if !acts.confirm(fmt.Sprintf("Fix %s?", c.Name)) {
-				out.Skipped = append(out.Skipped, fixSkip{c.Name, "declined"})
-				out.OK = false
-				continue
-			}
-		}
-		var err error
-		switch kind {
-		case fixDocker:
-			err = acts.startDocker()
-		case fixInstall:
-			err = acts.installTool(strings.TrimPrefix(c.Name, "required:"))
-		case fixKillPort:
-			err = acts.killPort(portFromCheckName(c.Name))
-		}
-		if err != nil {
-			out.Skipped = append(out.Skipped, fixSkip{c.Name, err.Error()})
-			out.OK = false
-			continue
-		}
-		out.Fixed = append(out.Fixed, c.Name)
 	}
 	return out
 }

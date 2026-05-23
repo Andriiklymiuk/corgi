@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"andriiklymiuk/corgi/utils"
@@ -157,3 +158,45 @@ func TestRunOpen_LaunchesAndJSON(t *testing.T) {
 		t.Fatalf("unexpected json: %s", out)
 	}
 }
+
+func TestRunOpen_NoPortServices(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	if err := os.WriteFile(yml, []byte("name: t\nservices:\n  worker:\n    start:\n      - echo hi\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	out := captureStdout(t, func() { runOpen(newTestOpenCommand(), nil) })
+	if !strings.Contains(out, "No services with a port") {
+		t.Fatalf("expected no-port message, got %q", out)
+	}
+}
+
+func TestRunOpen_LauncherErrorIsReported(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	if err := os.WriteFile(yml, []byte("name: t\nservices:\n  api:\n    port: 3000\n    start:\n      - echo hi\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	orig := launcher
+	launcher = func(string) error { return errLauncherTest }
+	t.Cleanup(func() { launcher = orig })
+
+	out := captureStdout(t, func() { runOpen(newTestOpenCommand(), nil) })
+	if !strings.Contains(out, "could not open") {
+		t.Fatalf("expected launcher error reported, got %q", out)
+	}
+}
+
+var errLauncherTest = errOpenTest("launch failed")
+
+type errOpenTest string
+
+func (e errOpenTest) Error() string { return string(e) }

@@ -202,7 +202,10 @@ func followLog(path string) {
 	if !utils.JSONOutput {
 		fmt.Printf("%s📄 %s (Ctrl-C to exit)%s\n\n", art.CyanColor, path, art.WhiteColor)
 	}
+	streamLogLines(f, path)
+}
 
+func streamLogLines(f *os.File, path string) {
 	service := filepath.Base(filepath.Dir(path))
 	reader := bufio.NewReader(f)
 	stripPrefix := looksLikeStampedLog(path)
@@ -216,20 +219,30 @@ func followLog(path string) {
 		if err == nil {
 			continue
 		}
-		if err != io.EOF {
-			if !utils.JSONOutput {
-				fmt.Printf("read error: %v\n", err)
-			}
-			return
-		}
-		if shouldExitFollow(path, &idleSince) {
-			if !utils.JSONOutput {
-				fmt.Printf("\n%s— end of log —%s\n", art.YellowColor, art.WhiteColor)
-			}
+		if followShouldStop(err, path, &idleSince) {
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+// followShouldStop reports whether the follow loop should end: a non-EOF read
+// error, or EOF past the idle/inactivity threshold. Prints the matching
+// human notice (suppressed in JSON mode).
+func followShouldStop(err error, path string, idleSince *time.Time) bool {
+	if err != io.EOF {
+		if !utils.JSONOutput {
+			fmt.Printf("read error: %v\n", err)
+		}
+		return true
+	}
+	if shouldExitFollow(path, idleSince) {
+		if !utils.JSONOutput {
+			fmt.Printf("\n%s— end of log —%s\n", art.YellowColor, art.WhiteColor)
+		}
+		return true
+	}
+	return false
 }
 
 func printFollowedLine(service, line string, stripPrefix bool) {
