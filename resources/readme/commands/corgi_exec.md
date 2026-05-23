@@ -1,37 +1,31 @@
-# corgi fork
+# corgi exec
 
-## corgi fork
+## corgi exec
 
-Fork an existing service repositories to new repos.
+Run a one-off command inside a service's resolved environment
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Run a one-off command in a service's working directory with the same env
+corgi uses for that service's start commands (its .env is sourced via the same
+mechanism, honoring autoSourceEnv). stdout/stderr stream through and the child's
+exit code becomes corgi's exit code.
+
+Examples:
+  corgi exec api -- npm run migrate
+  corgi exec api --json -- pytest -q
+  corgi exec api --ensure-deps -- npm run migrate
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi exec <service> -- <cmd> [args...] [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+      --ensure-deps              Wait for the service's depends_on_db and depends_on_services to be ready before running.
+  -h, --help                     help for exec
+      --ready-timeout duration   Max time to wait for dependencies when --ensure-deps is set. (default 15s)
 ```
 
 ### Options inherited from parent commands

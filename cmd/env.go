@@ -1,0 +1,207 @@
+package cmd
+
+import (
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+
+	"andriiklymiuk/corgi/utils"
+
+	"github.com/spf13/cobra"
+)
+
+var envCmd = &cobra.Command{
+	Use:   "env [service...]",
+	Short: "Print services' fully-resolved environment (read-only)",
+	Long: `Resolves and prints each service's environment exactly as corgi would
+generate it (db deps, service deps, ports, literal environment, copied env files,
+and cross-service references), with the source of each variable. Writes nothing.
+
+  corgi env                 # all services, masked, human view
+  corgi env api             # one service
+  eval $(corgi env api --export)
+  corgi env --json`,
+	RunE: runEnv,
+}
+
+func init() {
+	envCmd.Flags().Bool("export", false, "Emit eval-able 'export KEY=VALUE' lines (real values)")
+	envCmd.Flags().Bool("reveal", false, "Do not mask secret values in the human view (human view only)")
+	rootCmd.AddCommand(envCmd)
+}
+
+func runEnv(cmd *cobra.Command, args []string) error {
+	asExport, _ := cmd.Flags().GetBool("export")
+	asJSON := utils.JSONOutput
+	reveal, _ := cmd.Flags().GetBool("reveal")
+	if asExport && asJSON {
+		return fmt.Errorf("%s: choose either --export or --json, not both", utils.ErrUsage)
+	}
+
+	corgi, err := utils.GetCorgiServices(cmd)
+	if err != nil {
+		return fmt.Errorf("%s: %v", utils.ErrComposeNotFound, err)
+	}
+
+	all, err := utils.ResolveAllEnv(corgi)
+	if err != nil {
+		return err
+	}
+
+	order, err := selectEnvServices(args, all)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case asJSON:
+		out, err := renderJSON(all, order)
+		if err != nil {
+			return err
+		}
+		fmt.Println(out)
+	case asExport:
+		fmt.Print(renderExport(all, order))
+	default:
+		utils.Info(renderPlain(all, order, reveal))
+	}
+	return nil
+}
+
+// selectEnvServices returns the requested service order, or all services
+// sorted, validating any explicitly-named services.
+func selectEnvServices(args []string, all map[string][]utils.EnvVar) ([]string, error) {
+	if len(args) == 0 {
+		order := make([]string, 0, len(all))
+		for name := range all {
+			order = append(order, name)
+		}
+		sort.Strings(order)
+		return order, nil
+	}
+	for _, name := range args {
+		if _, ok := all[name]; !ok {
+			return nil, fmt.Errorf("%s: service %q not found", utils.ErrServiceNotFound, name)
+		}
+	}
+	return args, nil
+}
+
+var secretKeyRe = regexp.MustCompile(`(?i)(password|secret|token|api_?key|_pwd|passwd)`)
+
+// urlCredRe matches scheme://user:pass@host (empty user allowed); dsnCredRe
+// matches scheme-less user:pass@host DSNs (e.g. Go's user:pass@tcp(h)/db).
+// Both capture the password as group 2 so only it is masked.
+var urlCredRe = regexp.MustCompile(`^([a-z][a-z0-9+.-]*://[^:/@\s]*:)([^@/\s]+)(@.*)$`)
+var dsnCredRe = regexp.MustCompile(`^([^:/@\s]+:)([^@\s]+)(@\S+)$`)
+
+// maskStars renders a fixed-width mask that never leaks the secret's length.
+func maskStars(s string) string {
+	r := []rune(s)
+	if len(r) <= 4 {
+		return "***"
+	}
+	return string(r[:2]) + "****" + string(r[len(r)-2:])
+}
+
+// maskSecret redacts secret-looking values for the human view. Secret-named
+// keys are fully masked; otherwise connection-string values (URL or DSN form)
+// have only their password segment masked.
+func maskSecret(key, val string) string {
+	if secretKeyRe.MatchString(key) {
+		return maskStars(val)
+	}
+	if m := urlCredRe.FindStringSubmatch(val); m != nil {
+		return m[1] + "****" + m[3]
+	}
+	if m := dsnCredRe.FindStringSubmatch(val); m != nil {
+		return m[1] + "****" + m[3]
+	}
+	return val
+}
+
+// renderPlain returns the human view: KEY=VALUE with an aligned `# source`
+// comment, grouped under `# <service>` headers. Secrets masked unless reveal.
+func renderPlain(all map[string][]utils.EnvVar, order []string, reveal bool) string {
+	var b strings.Builder
+	for i, name := range order {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "# %s\n", name)
+		// align `# source` against the rendered (possibly masked) KEY=VALUE line
+		lines := make([]string, len(all[name]))
+		w := 0
+		for i, e := range all[name] {
+			val := e.Value
+			if !reveal {
+				val = maskSecret(e.Key, e.Value)
+			}
+			lines[i] = e.Key + "=" + val
+			if l := len(lines[i]); l > w {
+				w = l
+			}
+		}
+		for i, e := range all[name] {
+			fmt.Fprintf(&b, "%-*s  # %s\n", w, lines[i], e.Source)
+		}
+	}
+	return b.String()
+}
+
+// shellSingleQuote wraps s in single quotes, escaping embedded quotes so the
+// result is safe for `eval`.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// renderExport emits eval-able `export KEY='VALUE'` lines with real values.
+func renderExport(all map[string][]utils.EnvVar, order []string) string {
+	var b strings.Builder
+	for i, name := range order {
+		if len(order) > 1 {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			fmt.Fprintf(&b, "# --- %s ---\n", name)
+		}
+		for _, e := range all[name] {
+			fmt.Fprintf(&b, "export %s=%s\n", e.Key, shellSingleQuote(e.Value))
+		}
+	}
+	return b.String()
+}
+
+// envEntry is the JSON shape for one resolved variable: name-keyed, value+source.
+type envEntry struct {
+	Value  string `json:"value"`
+	Source string `json:"source"`
+}
+
+// envKeyedMap converts resolver output into {service: {KEY: {value, source}}},
+// the shared JSON contract for `corgi env --json` and the corgi_env MCP tool.
+// utils.EnvVar drops Key from JSON, so callers must build the keyed map here.
+func envKeyedMap(all map[string][]utils.EnvVar, order []string) map[string]map[string]envEntry {
+	doc := map[string]map[string]envEntry{}
+	for _, name := range order {
+		m := map[string]envEntry{}
+		for _, e := range all[name] {
+			m[e.Key] = envEntry{Value: e.Value, Source: e.Source}
+		}
+		doc[name] = m
+	}
+	return doc
+}
+
+// renderJSON emits {service: {KEY: {value, source}}} with REAL values for
+// machine consumption.
+func renderJSON(all map[string][]utils.EnvVar, order []string) (string, error) {
+	doc := envKeyedMap(all, order)
+	b, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}

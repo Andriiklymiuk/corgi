@@ -1,37 +1,32 @@
-# corgi fork
+# corgi mcp
 
-## corgi fork
+## corgi mcp
 
-Fork an existing service repositories to new repos.
+Run corgi as an MCP server over stdio (for AI agent clients)
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Starts a Model Context Protocol server over stdio. AI agent clients spawn
+this as a subprocess and call corgi's commands as structured tools.
+
+Register it in .mcp.json (project) or ~/.claude.json:
+  { "mcpServers": { "corgi": { "command": "corgi", "args": ["mcp"] } } }
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi mcp [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+  -h, --help                     help for mcp
+      --http string              Serve MCP over Streamable HTTP at this address (e.g. :8765 or 127.0.0.1:8765) instead of stdio.
+      --insecure                 Disable bearer-token auth on the HTTP endpoint.
+      --token string             Bearer token for HTTP auth (auto-generated when --tunnel is set).
+      --tunnel                   Open a public tunnel to the --http addr (requires --http).
+      --tunnel-hostname string   Custom public hostname for the tunnel (${VAR} expanded).
+      --tunnel-name string       cloudflared named-tunnel name.
+      --tunnel-provider string   Tunnel provider (cloudflared|ngrok|localtunnel). (default "cloudflared")
 ```
 
 ### Options inherited from parent commands

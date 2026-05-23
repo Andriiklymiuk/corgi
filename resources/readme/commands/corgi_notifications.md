@@ -1,37 +1,29 @@
-# corgi fork
+# corgi notifications
 
-## corgi fork
+## corgi notifications
 
-Fork an existing service repositories to new repos.
+Enable, disable, or test desktop crash notifications
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Toggle desktop notifications fired when a service crashes during corgi run.
+
+Examples:
+  corgi notifications              # show current setting
+  corgi notifications on           # enable
+  corgi notifications off          # disable
+  corgi notifications test         # fire a one-shot test (bypasses opt-in)
+
+State is persisted to ~/.corgi/config.yml.
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi notifications <on|off|test> [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+  -h, --help   help for notifications
 ```
 
 ### Options inherited from parent commands
