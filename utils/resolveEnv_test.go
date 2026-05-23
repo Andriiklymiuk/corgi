@@ -1,6 +1,10 @@
 package utils
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestResolveServiceEnv_DbSource(t *testing.T) {
 	corgi := &CorgiCompose{
@@ -66,4 +70,28 @@ func TestResolveServiceEnv_PortAndLiteral(t *testing.T) {
 	if m["LOG_LEVEL"].Source != "literal" || m["LOG_LEVEL"].Value != "debug" {
 		t.Fatalf("literal entry wrong: %+v", m["LOG_LEVEL"])
 	}
+}
+
+func TestResolveServiceEnv_FileSource(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "seed.env"), []byte("FROM_FILE=yes\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	defer func() { CorgiComposePathDir = old }()
+
+	corgi := &CorgiCompose{
+		Services: []Service{{ServiceName: "api", Port: 3000, CopyEnvFromFilePath: "seed.env"}},
+	}
+	got, err := ResolveServiceEnv(corgi.Services[0], corgi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range got {
+		if e.Key == "FROM_FILE" && e.Source == "file:seed.env" {
+			return
+		}
+	}
+	t.Fatalf("no var attributed to file:seed.env; got %+v", got)
 }

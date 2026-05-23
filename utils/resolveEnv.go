@@ -44,6 +44,13 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	}
 	var entries []EnvVar
 
+	// copied env file (lowest precedence)
+	if svc.CopyEnvFromFilePath != "" {
+		path := fmt.Sprintf("%s/%s", CorgiComposePathDir, svc.CopyEnvFromFilePath)
+		chunk := getEnvFromFile(path, corgiGeneratedMessage)
+		entries = append(entries, parseChunkInOrder(chunk, "file:"+svc.CopyEnvFromFilePath)...)
+	}
+
 	// service dependencies
 	for _, dep := range svc.DependsOnServices {
 		chunk := appendDependentServiceEnv("", dep, *corgi)
