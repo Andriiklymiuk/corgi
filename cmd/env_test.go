@@ -45,3 +45,20 @@ func TestRenderPlain(t *testing.T) {
 		t.Errorf("reveal did not unmask")
 	}
 }
+
+func TestRenderExport(t *testing.T) {
+	all := map[string][]utils.EnvVar{
+		"api": {
+			{Key: "MSG", Value: "it's a test", Source: "literal"},
+			{Key: "API_PORT", Value: "8080", Source: "self:port"},
+		},
+	}
+	out := renderExport(all, []string{"api"})
+	if !strings.Contains(out, `export API_PORT='8080'`) {
+		t.Errorf("missing export line:\n%s", out)
+	}
+	// single-quote escaping: ' -> '\''
+	if !strings.Contains(out, `export MSG='it'\''s a test'`) {
+		t.Errorf("bad shell escaping:\n%s", out)
+	}
+}

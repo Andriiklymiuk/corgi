@@ -59,3 +59,26 @@ func renderPlain(all map[string][]utils.EnvVar, order []string, reveal bool) str
 	}
 	return b.String()
 }
+
+// shellSingleQuote wraps s in single quotes, escaping embedded quotes so the
+// result is safe for `eval`.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// renderExport emits eval-able `export KEY='VALUE'` lines with real values.
+func renderExport(all map[string][]utils.EnvVar, order []string) string {
+	var b strings.Builder
+	for i, name := range order {
+		if len(order) > 1 {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			fmt.Fprintf(&b, "# --- %s ---\n", name)
+		}
+		for _, e := range all[name] {
+			fmt.Fprintf(&b, "export %s=%s\n", e.Key, shellSingleQuote(e.Value))
+		}
+	}
+	return b.String()
+}
