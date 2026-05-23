@@ -3,6 +3,8 @@ package cmd
 import (
 	"testing"
 
+	"path/filepath"
+
 	"andriiklymiuk/corgi/utils"
 )
 
@@ -66,5 +68,46 @@ func TestUpdateServiceEntry(t *testing.T) {
 		if e.Name == "web" && e.PID != 2 {
 			t.Fatalf("web should be untouched: %+v", e)
 		}
+	}
+}
+
+func TestResolveRestartTarget(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, ".state.json")
+	corgi := &utils.CorgiCompose{Services: []utils.Service{
+		{ServiceName: "api", Port: 3000, Start: []string{"echo hi"}},
+	}}
+
+	// 1. no state file -> E_NOT_RUNNING
+	if _, _, _, code, err := resolveRestartTarget(statePath, corgi, "api"); err == nil || code != utils.ErrNotRunning {
+		t.Fatalf("no-state: code=%q err=%v", code, err)
+	}
+
+	// write a run-state with api only
+	st := utils.RunState{Services: []utils.RunStateEntry{
+		{Name: "api", Kind: "service", Status: "running", PID: 42},
+	}}
+	if err := utils.WriteRunState(statePath, st); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. service not in state -> E_NOT_RUNNING
+	if _, _, _, code, err := resolveRestartTarget(statePath, corgi, "web"); err == nil || code != utils.ErrNotRunning {
+		t.Fatalf("not-in-state: code=%q err=%v", code, err)
+	}
+
+	// 3. in state but not in compose -> E_SERVICE_NOT_FOUND
+	emptyCorgi := &utils.CorgiCompose{}
+	if _, _, _, code, err := resolveRestartTarget(statePath, emptyCorgi, "api"); err == nil || code != utils.ErrServiceNotFound {
+		t.Fatalf("not-in-compose: code=%q err=%v", code, err)
+	}
+
+	// 4. happy path -> no error, entry + svc resolved
+	_, entry, svc, code, err := resolveRestartTarget(statePath, corgi, "api")
+	if err != nil || code != "" {
+		t.Fatalf("happy: code=%q err=%v", code, err)
+	}
+	if entry.PID != 42 || svc == nil || svc.ServiceName != "api" {
+		t.Fatalf("happy resolution wrong: entry=%+v svc=%+v", entry, svc)
 	}
 }

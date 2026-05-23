@@ -89,29 +89,40 @@ func emitRestartError(code, msg string) {
 	}
 }
 
+// resolveRestartTarget validates that a single-service restart can proceed:
+// the project has a detached run, the service is in that run-state, and it is
+// declared in the compose. Returns a stable error code with any error so the
+// caller can branch without re-classifying. Side-effect-free beyond reading
+// the run-state file, so it is unit-testable.
+func resolveRestartTarget(statePath string, corgi *utils.CorgiCompose, service string) (utils.RunState, utils.RunStateEntry, *utils.Service, string, error) {
+	st, err := utils.ReadRunState(statePath)
+	if err != nil {
+		return st, utils.RunStateEntry{}, nil, utils.ErrNotRunning, fmt.Errorf("no detached run found for this project")
+	}
+	entry, err := findRestartEntry(st, service)
+	if err != nil {
+		return st, entry, nil, utils.ErrNotRunning, err
+	}
+	svc := findService(corgi, service)
+	if svc == nil {
+		return st, entry, nil, utils.ErrServiceNotFound, fmt.Errorf("service not declared in corgi-compose.yml")
+	}
+	return st, entry, svc, "", nil
+}
+
 // restartSingleService restarts one service of a detached run, leaving the rest
 // untouched. It refuses to start a service that was never in the run-state.
 func restartSingleService(cmd *cobra.Command) {
-	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
-	st, err := utils.ReadRunState(statePath)
-	if err != nil {
-		emitRestartError(utils.ErrNotRunning, "no detached run found for this project")
-		os.Exit(1)
-	}
-	entry, err := findRestartEntry(st, restartService)
-	if err != nil {
-		emitRestartError(utils.ErrNotRunning, err.Error())
-		os.Exit(1)
-	}
-
 	corgi, cerr := utils.GetCorgiServices(cmd)
 	if cerr != nil {
 		emitRestartError(utils.ErrConfig, cerr.Error())
 		os.Exit(1)
 	}
-	svc := findService(corgi, restartService)
-	if svc == nil {
-		emitRestartError(utils.ErrServiceNotFound, "service not declared in corgi-compose.yml")
+
+	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
+	st, entry, svc, code, err := resolveRestartTarget(statePath, corgi, restartService)
+	if err != nil {
+		emitRestartError(code, err.Error())
 		os.Exit(1)
 	}
 
