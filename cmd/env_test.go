@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -60,5 +61,25 @@ func TestRenderExport(t *testing.T) {
 	// single-quote escaping: ' -> '\''
 	if !strings.Contains(out, `export MSG='it'\''s a test'`) {
 		t.Errorf("bad shell escaping:\n%s", out)
+	}
+}
+
+func TestRenderJSON(t *testing.T) {
+	all := map[string][]utils.EnvVar{
+		"api": {{Key: "DB_PASSWORD", Value: "supersecret", Source: "db:pg"}},
+	}
+	out, err := renderJSON(all, []string{"api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed map[string]map[string]struct {
+		Value, Source string
+	}
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("invalid json: %v\n%s", err, out)
+	}
+	e := parsed["api"]["DB_PASSWORD"]
+	if e.Value != "supersecret" || e.Source != "db:pg" {
+		t.Fatalf("json wrong: %+v", e)
 	}
 }

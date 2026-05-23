@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -81,4 +82,26 @@ func renderExport(all map[string][]utils.EnvVar, order []string) string {
 		}
 	}
 	return b.String()
+}
+
+// renderJSON emits {service: {KEY: {value, source}}} with REAL values for
+// machine consumption.
+func renderJSON(all map[string][]utils.EnvVar, order []string) (string, error) {
+	type entry struct {
+		Value  string `json:"value"`
+		Source string `json:"source"`
+	}
+	doc := map[string]map[string]entry{}
+	for _, name := range order {
+		m := map[string]entry{}
+		for _, e := range all[name] {
+			m[e.Key] = entry{Value: e.Value, Source: e.Source}
+		}
+		doc[name] = m
+	}
+	b, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
