@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"regexp"
+	"strings"
+
+	"andriiklymiuk/corgi/utils"
 )
 
 var secretKeyRe = regexp.MustCompile(`(?i)(password|secret|token|api_?key|_pwd|passwd)`)
@@ -26,4 +30,32 @@ func maskSecret(key, val string) string {
 		return maskStars(val)
 	}
 	return val
+}
+
+// renderPlain returns the human view: KEY=VALUE with an aligned `# source`
+// comment, grouped under `# <service>` headers. Secrets masked unless reveal.
+func renderPlain(all map[string][]utils.EnvVar, order []string, reveal bool) string {
+	var b strings.Builder
+	for i, name := range order {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "# %s\n", name)
+		// width for alignment
+		w := 0
+		for _, e := range all[name] {
+			if l := len(e.Key) + len(e.Value) + 1; l > w {
+				w = l
+			}
+		}
+		for _, e := range all[name] {
+			val := e.Value
+			if !reveal {
+				val = maskSecret(e.Key, e.Value)
+			}
+			line := e.Key + "=" + val
+			fmt.Fprintf(&b, "%-*s  # %s\n", w, line, e.Source)
+		}
+	}
+	return b.String()
 }
