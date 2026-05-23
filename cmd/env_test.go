@@ -19,6 +19,9 @@ func TestMaskSecret(t *testing.T) {
 		{"API_TOKEN", "abc", "***"},
 		{"LOG_LEVEL", "debug", "debug"}, // not a secret
 		{"DATABASE_URL", "postgres://u:pw@h:5432/d", "postgres://u:****@h:5432/d"},
+		{"DB_DSN", "user:pw@tcp(h:3306)/db", "user:****@tcp(h:3306)/db"}, // scheme-less DSN
+		{"PORT", "5432", "5432"},                                        // no creds, untouched
+		{"ADDR", "localhost:5432", "localhost:5432"},                    // host:port, no @, untouched
 	}
 	for _, c := range cases {
 		if got := maskSecret(c.key, c.val); got != c.want {
@@ -57,14 +60,14 @@ func TestSelectEnvServices(t *testing.T) {
 		"web": {{Key: "PORT", Value: "80"}},
 		"api": {{Key: "PORT", Value: "81"}},
 	}
-	order, err := selectEnvServices(nil, nil, all)
+	order, err := selectEnvServices(nil, all)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(order) != 2 || order[0] != "api" || order[1] != "web" {
 		t.Errorf("want sorted [api web], got %v", order)
 	}
-	_, err = selectEnvServices(nil, []string{"nope"}, all)
+	_, err = selectEnvServices([]string{"nope"}, all)
 	if err == nil || !strings.Contains(err.Error(), utils.ErrServiceNotFound) {
 		t.Errorf("want %s error, got %v", utils.ErrServiceNotFound, err)
 	}

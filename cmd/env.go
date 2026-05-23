@@ -50,7 +50,7 @@ func runEnv(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	order, err := selectEnvServices(corgi, args, all)
+	order, err := selectEnvServices(args, all)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func runEnv(cmd *cobra.Command, args []string) error {
 
 // selectEnvServices returns the requested service order, or all services
 // sorted, validating any explicitly-named services.
-func selectEnvServices(corgi *utils.CorgiCompose, args []string, all map[string][]utils.EnvVar) ([]string, error) {
+func selectEnvServices(args []string, all map[string][]utils.EnvVar) ([]string, error) {
 	if len(args) == 0 {
 		order := make([]string, 0, len(all))
 		for name := range all {
@@ -91,8 +91,11 @@ func selectEnvServices(corgi *utils.CorgiCompose, args []string, all map[string]
 
 var secretKeyRe = regexp.MustCompile(`(?i)(password|secret|token|api_?key|_pwd|passwd)`)
 
-// username group allows empty so `scheme://:pass@host` still masks the password.
+// urlCredRe matches scheme://user:pass@host (empty user allowed); dsnCredRe
+// matches scheme-less user:pass@host DSNs (e.g. Go's user:pass@tcp(h)/db).
+// Both capture the password as group 2 so only it is masked.
 var urlCredRe = regexp.MustCompile(`^([a-z][a-z0-9+.-]*://[^:/@\s]*:)([^@/\s]+)(@.*)$`)
+var dsnCredRe = regexp.MustCompile(`^([^:/@\s]+:)([^@\s]+)(@\S+)$`)
 
 // maskStars renders a fixed-width mask that never leaks the secret's length.
 func maskStars(s string) string {
@@ -104,13 +107,16 @@ func maskStars(s string) string {
 }
 
 // maskSecret redacts secret-looking values for the human view. Secret-named
-// keys are fully masked; otherwise connection-string values have only their
-// password segment masked.
+// keys are fully masked; otherwise connection-string values (URL or DSN form)
+// have only their password segment masked.
 func maskSecret(key, val string) string {
 	if secretKeyRe.MatchString(key) {
 		return maskStars(val)
 	}
 	if m := urlCredRe.FindStringSubmatch(val); m != nil {
+		return m[1] + "****" + m[3]
+	}
+	if m := dsnCredRe.FindStringSubmatch(val); m != nil {
 		return m[1] + "****" + m[3]
 	}
 	return val
