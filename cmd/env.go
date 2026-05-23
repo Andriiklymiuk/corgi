@@ -27,7 +27,7 @@ and cross-service references), with the source of each variable. Writes nothing.
 }
 
 func init() {
-	envCmd.Flags().Bool("export", false, "Emit eval-able `export KEY=VALUE` lines (real values)")
+	envCmd.Flags().Bool("export", false, "Emit eval-able 'export KEY=VALUE' lines (real values)")
 	envCmd.Flags().Bool("reveal", false, "Do not mask secret values in the human view (human view only)")
 	rootCmd.AddCommand(envCmd)
 }
