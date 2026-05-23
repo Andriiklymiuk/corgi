@@ -94,6 +94,7 @@ still bind to `localhost` or front it with an authenticated proxy.
 | `corgi_validate` | `{composePath?}` | `{ok, errors[], warnings[]}` | `utils.ValidateCompose` |
 | `corgi_plan` | `{composePath?, profile?}` | dry-run plan (`order`, `databases`, `services`, `warnings`) | `computeDryRunPlan` |
 | `corgi_status` | `{composePath?}` | `[{label, port, kind, url, healthy, detail}]` | `collectStatusRows` + `probeAll` |
+| `corgi_env` | `{composePath?}` | `{service: {KEY: {value, source}}}` | `utils.ResolveAllEnv` |
 | `corgi_ps` | `{composePath?}` | `[{name, kind, port, status, url}]` | `buildPsRows` |
 | `corgi_up` | `{composePath?, profile?, seed?}` | run-state (`services[]`, `dbServices[]`) — **always detached** | run prelude + `runDetached` machinery |
 | `corgi_down` | `{composePath?}` | `{stopped[], failed[]}` | stop machinery (`stopProcessGroup`) |

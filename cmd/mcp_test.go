@@ -86,6 +86,28 @@ func TestMCPValidateReportsError(t *testing.T) {
 	}
 }
 
+// TestMCPEnv guards the keyed shape: variable names must survive into JSON
+// (utils.EnvVar drops Key, so a naive marshal would lose them).
+func TestMCPEnv(t *testing.T) {
+	chdirToTempCompose(t, mcpComposeFixture)
+	got, err := mcpEnv(validateArgs{})
+	if err != nil {
+		t.Fatalf("mcpEnv: %v", err)
+	}
+	svc, ok := got["api"]
+	if !ok {
+		t.Fatalf("missing api in env map: %+v", got)
+	}
+	if len(svc) == 0 {
+		t.Fatalf("api has no env entries: %+v", svc)
+	}
+	for k, e := range svc {
+		if k == "" || e.Source == "" {
+			t.Fatalf("bad entry %q=%+v", k, e)
+		}
+	}
+}
+
 func TestMCPPlanParity(t *testing.T) {
 	chdirToTempCompose(t, mcpComposeFixture)
 
