@@ -95,3 +95,22 @@ func TestResolveServiceEnv_FileSource(t *testing.T) {
 	}
 	t.Fatalf("no var attributed to file:seed.env; got %+v", got)
 }
+
+func TestResolveAllEnv_AllServices(t *testing.T) {
+	corgi := &CorgiCompose{
+		Services: []Service{
+			{ServiceName: "api", Port: 8080},
+			{ServiceName: "web", Port: 3000},
+		},
+	}
+	all, err := ResolveAllEnv(corgi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := all["api"]; !ok {
+		t.Fatal("missing api")
+	}
+	if _, ok := all["web"]; !ok {
+		t.Fatal("missing web")
+	}
+}

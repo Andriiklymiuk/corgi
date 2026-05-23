@@ -99,6 +99,34 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	return dedupeLastWins(entries), nil
 }
 
+// ResolveAllEnv resolves every service's env, keyed by service name. It primes
+// the cross-service exports fixed point first so ${producer.VAR} references in
+// any service resolve to real values.
+func ResolveAllEnv(corgi *CorgiCompose) (map[string][]EnvVar, error) {
+	if corgi == nil {
+		return map[string][]EnvVar{}, nil
+	}
+	// resolveExportsFixedPoint only returns the map; it does not assign the
+	// package global that ResolveServiceEnv's literal block reads (unlike the
+	// run path, where GenerateEnvForServices assigns it). Assign it here.
+	resolved, err := resolveExportsFixedPoint(corgi)
+	if err != nil {
+		return nil, err
+	}
+	currentExportsMap = resolved
+	defer func() { currentExportsMap = nil }()
+
+	out := make(map[string][]EnvVar, len(corgi.Services))
+	for _, svc := range corgi.Services {
+		entries, err := ResolveServiceEnv(svc, corgi)
+		if err != nil {
+			return nil, err
+		}
+		out[svc.ServiceName] = entries
+	}
+	return out, nil
+}
+
 // dedupeLastWins keeps the last value/source per key (matching the concat+parse
 // behaviour of the real generator), ordered by each key's final position.
 func dedupeLastWins(in []EnvVar) []EnvVar {
