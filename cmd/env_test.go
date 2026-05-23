@@ -71,9 +71,10 @@ func TestSelectEnvServices(t *testing.T) {
 }
 
 func TestRunEnvMutuallyExclusiveFlags(t *testing.T) {
+	utils.JSONOutput = true
+	defer func() { utils.JSONOutput = false }()
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("export", true, "")
-	cmd.Flags().Bool("json", true, "")
 	cmd.Flags().Bool("reveal", false, "")
 	err := runEnv(cmd, nil)
 	if err == nil || !strings.Contains(err.Error(), utils.ErrUsage) {

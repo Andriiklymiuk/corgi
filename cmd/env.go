@@ -28,14 +28,13 @@ and cross-service references), with the source of each variable. Writes nothing.
 
 func init() {
 	envCmd.Flags().Bool("export", false, "Emit eval-able `export KEY=VALUE` lines (real values)")
-	envCmd.Flags().Bool("json", false, "Emit JSON {service:{KEY:{value,source}}} (real values)")
 	envCmd.Flags().Bool("reveal", false, "Do not mask secret values in the human view (human view only)")
 	rootCmd.AddCommand(envCmd)
 }
 
 func runEnv(cmd *cobra.Command, args []string) error {
 	asExport, _ := cmd.Flags().GetBool("export")
-	asJSON, _ := cmd.Flags().GetBool("json")
+	asJSON := utils.JSONOutput
 	reveal, _ := cmd.Flags().GetBool("reveal")
 	if asExport && asJSON {
 		return fmt.Errorf("%s: choose either --export or --json, not both", utils.ErrUsage)
