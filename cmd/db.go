@@ -397,6 +397,15 @@ func runDbShell(cmd *cobra.Command, args []string) {
 
 	query, _ := cmd.Flags().GetString("exec")
 	if query != "" {
+		if utils.JSONOutput {
+			out, qerr := utils.ExecDBQueryCapture(dbService, query)
+			if qerr != nil {
+				utils.JSONError(utils.ErrExecFailed, qerr.Error())
+				os.Exit(1)
+			}
+			utils.PrintJSON(dbQueryResult{Service: dbService.ServiceName, Output: out})
+			return
+		}
 		if err := utils.ExecDBQuery(dbService, query); err != nil {
 			fmt.Printf("%s❌ Query failed: %v%s\n", art.RedColor, err, art.WhiteColor)
 			os.Exit(1)
