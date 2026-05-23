@@ -2,10 +2,14 @@ package cmd
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"andriiklymiuk/corgi/utils"
+
+	"github.com/spf13/cobra"
 )
 
 func TestOpenTargets_AllWithPorts(t *testing.T) {
@@ -95,5 +99,61 @@ func TestOpenJSONShapeIsPureJSON(t *testing.T) {
 	}
 	if back["opened"][0].Service != "api" {
 		t.Fatalf("roundtrip mismatch: %+v", back)
+	}
+}
+
+func newTestOpenCommand() *cobra.Command {
+	root := &cobra.Command{Use: "corgi"}
+	c := &cobra.Command{Use: "open"}
+	root.AddCommand(c)
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		root.Flags().String(f, "", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		root.Flags().Bool(f, false, "")
+	}
+	c.Flags().Bool("global", false, "")
+	return c
+}
+
+func TestRunOpen_LaunchesAndJSON(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := "name: test\nservices:\n  api:\n    port: 3000\n    start:\n      - echo hi\n"
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	// normal mode: launcher invoked per target
+	var opened []string
+	origLauncher := launcher
+	launcher = func(url string) error { opened = append(opened, url); return nil }
+	t.Cleanup(func() { launcher = origLauncher })
+
+	c := newTestOpenCommand()
+	runOpen(c, nil)
+	if len(opened) != 1 || opened[0] != "http://localhost:3000" {
+		t.Fatalf("expected api launched, got %v", opened)
+	}
+
+	// json mode: pure JSON on stdout, launcher not called
+	opened = nil
+	origJSON := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = origJSON })
+
+	out := captureStdout(t, func() { runOpen(newTestOpenCommand(), nil) })
+	if len(opened) != 0 {
+		t.Fatalf("launcher must not run in --json mode, got %v", opened)
+	}
+	var back map[string][]openTarget
+	if err := json.Unmarshal([]byte(out), &back); err != nil {
+		t.Fatalf("open --json stdout not pure JSON: %q err=%v", out, err)
+	}
+	if back["opened"][0].Service != "api" {
+		t.Fatalf("unexpected json: %s", out)
 	}
 }

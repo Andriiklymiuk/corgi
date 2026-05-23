@@ -2,8 +2,13 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestCollectDeclaredPorts_IncludesDbAndServicesSorted(t *testing.T) {
@@ -440,3 +445,50 @@ var errInstallTest = errTest("boom")
 type errTest string
 
 func (e errTest) Error() string { return string(e) }
+
+func newTestDoctorCommand() *cobra.Command {
+	root := &cobra.Command{Use: "corgi"}
+	c := &cobra.Command{Use: "doctor"}
+	root.AddCommand(c)
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		root.Flags().String(f, "", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		root.Flags().Bool(f, false, "")
+	}
+	c.Flags().Bool("global", false, "")
+	c.Flags().Bool("fix", true, "")
+	c.Flags().Bool("yes", false, "")
+	return c
+}
+
+func TestRunDoctorFix_AllCleanJSON(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	// no required tools, no db_services (so no docker check), a high free port
+	content := "name: test\nservices:\n  api:\n    port: 65510\n    start:\n      - echo hi\n"
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	origJSON := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = origJSON })
+
+	c := newTestDoctorCommand()
+	corgi, err := utils.GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() { runDoctorFix(c, corgi) })
+	var res fixOutcome
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("doctor --fix --json stdout not pure JSON: %q err=%v", out, err)
+	}
+	if !res.OK {
+		t.Fatalf("expected ok=true for clean compose, got %+v", res)
+	}
+}
