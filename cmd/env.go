@@ -168,21 +168,31 @@ func renderExport(all map[string][]utils.EnvVar, order []string) string {
 	return b.String()
 }
 
-// renderJSON emits {service: {KEY: {value, source}}} with REAL values for
-// machine consumption.
-func renderJSON(all map[string][]utils.EnvVar, order []string) (string, error) {
-	type entry struct {
-		Value  string `json:"value"`
-		Source string `json:"source"`
-	}
-	doc := map[string]map[string]entry{}
+// envEntry is the JSON shape for one resolved variable: name-keyed, value+source.
+type envEntry struct {
+	Value  string `json:"value"`
+	Source string `json:"source"`
+}
+
+// envKeyedMap converts resolver output into {service: {KEY: {value, source}}},
+// the shared JSON contract for `corgi env --json` and the corgi_env MCP tool.
+// utils.EnvVar drops Key from JSON, so callers must build the keyed map here.
+func envKeyedMap(all map[string][]utils.EnvVar, order []string) map[string]map[string]envEntry {
+	doc := map[string]map[string]envEntry{}
 	for _, name := range order {
-		m := map[string]entry{}
+		m := map[string]envEntry{}
 		for _, e := range all[name] {
-			m[e.Key] = entry{Value: e.Value, Source: e.Source}
+			m[e.Key] = envEntry{Value: e.Value, Source: e.Source}
 		}
 		doc[name] = m
 	}
+	return doc
+}
+
+// renderJSON emits {service: {KEY: {value, source}}} with REAL values for
+// machine consumption.
+func renderJSON(all map[string][]utils.EnvVar, order []string) (string, error) {
+	doc := envKeyedMap(all, order)
 	b, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return "", err

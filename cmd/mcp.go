@@ -411,6 +411,24 @@ func mcpStatus(args validateArgs) ([]statusEntry, error) {
 	return out, nil
 }
 
+// mcpEnv resolves environment per service into the shared keyed shape.
+func mcpEnv(args validateArgs) (map[string]map[string]envEntry, error) {
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return nil, composeLoadError(err)
+	}
+	all, err := utils.ResolveAllEnv(corgi)
+	if err != nil {
+		return nil, err
+	}
+	order := make([]string, 0, len(all))
+	for name := range all {
+		order = append(order, name)
+	}
+	sort.Strings(order) // deterministic output
+	return envKeyedMap(all, order), nil
+}
+
 func mcpPs(args validateArgs) ([]psRow, error) {
 	corgi, err := loadComposeForMCP(args.ComposePath)
 	if err != nil {
@@ -848,6 +866,13 @@ func registerMCPTools(s *server.MCPServer) {
 		composeOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpStatus(validateArgs{ComposePath: r.GetString("composePath", "")})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_env",
+		mcp.WithDescription("Resolved environment per service with source attribution. Returns {service: {KEY: {value, source}}}. Read-only, real values."),
+		composeOpt,
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpEnv(validateArgs{ComposePath: r.GetString("composePath", "")})
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_ps",
