@@ -23,6 +23,7 @@ const (
 	ErrConfig           = "E_CONFIG"          // could not load/resolve the compose file
 	ErrAlreadyRunning   = "E_ALREADY_RUNNING" // a detached run is already active
 	ErrUnsupported      = "E_UNSUPPORTED"     // operation not supported yet
+	ErrNotRunning       = "E_NOT_RUNNING"     // no matching detached service to act on
 	ErrConfigPath       = "E_CONFIG_PATH"     // cannot resolve user-config dir
 	ErrConfigRead       = "E_CONFIG_READ"     // cannot read user-config file
 )
