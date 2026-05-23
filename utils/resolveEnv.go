@@ -40,6 +40,12 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	}
 	var entries []EnvVar
 
+	// service dependencies
+	for _, dep := range svc.DependsOnServices {
+		chunk := appendDependentServiceEnv("", dep, *corgi)
+		entries = append(entries, parseChunkInOrder(chunk, "service:"+dep.Name)...)
+	}
+
 	// db dependencies
 	for _, dep := range svc.DependsOnDb {
 		db := findDbByName(corgi.DatabaseServices, dep.Name)

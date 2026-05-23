@@ -25,3 +25,22 @@ func TestResolveServiceEnv_DbSource(t *testing.T) {
 		t.Fatalf("no var attributed to db:pg; got %+v", got)
 	}
 }
+
+func TestResolveServiceEnv_ServiceSource(t *testing.T) {
+	corgi := &CorgiCompose{
+		Services: []Service{
+			{ServiceName: "api", Port: 8080},
+			{ServiceName: "web", Port: 3000, DependsOnServices: []DependsOnService{{Name: "api", EnvAlias: "API"}}},
+		},
+	}
+	got, err := ResolveServiceEnv(corgi.Services[1], corgi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range got {
+		if e.Source == "service:api" {
+			return
+		}
+	}
+	t.Fatalf("no var attributed to service:api; got %+v", got)
+}
