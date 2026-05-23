@@ -303,3 +303,73 @@ func TestRunDoctorJSON_EmptyComposePasses(t *testing.T) {
 	}
 }
 
+
+func TestFixDecision(t *testing.T) {
+	cases := []struct {
+		name           string
+		kind           fixKind
+		nonInteractive bool
+		yes            bool
+		want           bool
+	}{
+		{"docker always safe", fixDocker, true, false, true},
+		{"tool needs yes in non-interactive", fixInstall, true, false, false},
+		{"tool with yes", fixInstall, true, true, true},
+		{"kill never auto", fixKillPort, true, false, false},
+		{"kill with yes", fixKillPort, true, true, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := shouldAutoFix(c.kind, c.nonInteractive, c.yes)
+			if got != c.want {
+				t.Fatalf("shouldAutoFix(%v,%v,%v)=%v want %v",
+					c.kind, c.nonInteractive, c.yes, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRunFixes_SkipsDestructiveWhenNonInteractiveNoYes(t *testing.T) {
+	res := doctorResult{Checks: []doctorCheck{
+		{Name: "port:3000", OK: false, Detail: "busy"},
+	}}
+	acts := fixActions{
+		startDocker: func() error { return nil },
+		installTool: func(string) error { return nil },
+		killPort:    func(int) error { t.Fatal("killPort must not be called"); return nil },
+		confirm:     func(string) bool { return true },
+	}
+	out := runFixes(res, acts, true, false)
+	if len(out.Skipped) != 1 || out.Skipped[0].Check != "port:3000" {
+		t.Fatalf("expected port:3000 skipped, got %+v", out.Skipped)
+	}
+	if out.OK {
+		t.Fatal("expected OK=false when a check was skipped")
+	}
+}
+
+func TestRunFixes_KillsWithYes(t *testing.T) {
+	killed := 0
+	res := doctorResult{Checks: []doctorCheck{{Name: "port:3000", OK: false}}}
+	acts := fixActions{killPort: func(int) error { killed++; return nil }}
+	out := runFixes(res, acts, true, true)
+	if killed != 1 || len(out.Fixed) != 1 || !out.OK {
+		t.Fatalf("expected one kill + fixed, got killed=%d out=%+v", killed, out)
+	}
+}
+
+func TestRunFixes_InteractiveDestructiveAsksConfirm(t *testing.T) {
+	asked := false
+	res := doctorResult{Checks: []doctorCheck{{Name: "port:3000", OK: false}}}
+	acts := fixActions{
+		killPort: func(int) error { t.Fatal("must not kill when declined"); return nil },
+		confirm:  func(string) bool { asked = true; return false },
+	}
+	out := runFixes(res, acts, false, false)
+	if !asked {
+		t.Fatal("expected confirm to be asked in interactive destructive fix")
+	}
+	if len(out.Skipped) != 1 || out.Skipped[0].Reason != "declined" {
+		t.Fatalf("expected declined skip, got %+v", out.Skipped)
+	}
+}
