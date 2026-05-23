@@ -19,11 +19,19 @@ Global `--json` makes stdout pure machine-readable JSON; human/log lines go to
 stderr. Commands that emit pure-JSON stdout:
 
 - `status --json` (one-shot: array; `--watch`: NDJSON, one object per transition)
-- `doctor --json`
+- `doctor --json` (also `doctor --fix --json` → `{"ok":bool,"fixed":[...],"skipped":[{"check","reason"}]}`)
 - `list --json`
 - `config --json`, `config path --json`
 - `ps --json`
+- `open --json` → `{"opened":[{"service","url"}]}`
+- `logs --json` → NDJSON, one `{"service","ts","level","line"}` per line (works with `--all` and follow)
+- `db shell <svc> -e "<query>" --json` → `{"service","output"}`
+- `create --kind ... --json` (non-interactive) → `{"created","kind","name","path"}`
+- `restart --service <name> --json` → updated run-state object
 - `docs --json-schema`
+
+Not yet pure-JSON: `fork` and the `db` bulk lifecycle flags (`--upAll` etc.)
+still stream human output; use `corgi_up`/`corgi_down` (MCP) for lifecycle.
 
 `run --json` is best-effort: it prints one JSON startup summary
 (`{"started":[...],"failed":[...]}`) and then streams service logs to stderr —
@@ -104,11 +112,17 @@ stops one and keeps the rest. It is idempotent (exit 0 when nothing is running).
 ```
 
 `corgi restart [--json]` is a full-stack stop + detached start.
-`restart --service x` is **not** supported yet — it exits 2:
+`corgi restart --service x` restarts a **single** detached service, leaving the
+rest running. It only acts on a service already present in the detached
+run-state — restarting one that was never started returns `E_NOT_RUNNING`:
 
 ```json
-{"error": {"code": "E_UNSUPPORTED", "message": "restart --service is not supported yet; use: corgi stop --service api && corgi run --detach"}}
+{"error": {"code": "E_NOT_RUNNING", "message": "service \"web\" is not in the current detached run; start it with corgi run --detach first"}}
 ```
+
+On success `--json` returns the updated run-state object (same shape as
+`corgi run --detach --json`). Single-service restart is detached-only; there is
+no control channel into a live foreground `corgi run`.
 
 ### Caveats
 
@@ -151,6 +165,7 @@ message text (messages may change wording). The catalog:
 | `E_INVALID_CONDITION` | invalid depends_on `condition` (use `ready` or `started`) | fix the value |
 | `E_ALREADY_RUNNING` | a detached run is already active | stop/restart first, or `--force` |
 | `E_UNSUPPORTED` | operation not supported yet | use the suggested alternative |
+| `E_NOT_RUNNING` | no matching detached service to act on | start it with `corgi run --detach` first |
 | `E_CONFIG_PATH` | cannot resolve the user-config dir | check `~/.corgi` perms |
 | `E_CONFIG_READ` | cannot read the user-config file | check `~/.corgi/config.yml` |
 
