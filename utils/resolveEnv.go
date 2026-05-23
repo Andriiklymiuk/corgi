@@ -96,7 +96,23 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 		}
 	}
 
-	return dedupeLastWins(entries), nil
+	resolved := dedupeLastWins(entries)
+
+	// Mirror renderEnvFileContent's final host rewrite (generateEnv.go) so
+	// reported values match the written .env. LocalhostNameInEnv wins if set;
+	// otherwise --host (HostOverride) catches user-written URLs too.
+	switch {
+	case svc.LocalhostNameInEnv != "":
+		for i := range resolved {
+			resolved[i].Value = strings.ReplaceAll(resolved[i].Value, "localhost", svc.LocalhostNameInEnv)
+		}
+	case HostOverride != "":
+		for i := range resolved {
+			resolved[i].Value = strings.ReplaceAll(resolved[i].Value, "localhost", HostOverride)
+		}
+	}
+
+	return resolved, nil
 }
 
 // ResolveAllEnv resolves every service's env, keyed by service name. It primes
