@@ -605,6 +605,7 @@ type execArgs struct {
 type execResult struct {
 	ExitCode   int    `json:"exitCode"`
 	Output     string `json:"output"`
+	Truncated  bool   `json:"truncated,omitempty"`
 	DurationMs int64  `json:"durationMs"`
 }
 
@@ -657,7 +658,8 @@ func mcpExec(args execArgs) (execResult, error) {
 	if err2 != nil {
 		return execResult{}, fmt.Errorf("%s: failed to run command for %s: %v", utils.ErrExecFailed, args.Service, err2)
 	}
-	return execResult{ExitCode: code, Output: buf.String(), DurationMs: durationMs}, nil
+	out, truncated := capMCPOutput(buf.String(), mcpMaxOutputLines, mcpMaxOutputBytes)
+	return execResult{ExitCode: code, Output: out, Truncated: truncated, DurationMs: durationMs}, nil
 }
 
 type testArgs struct {
@@ -723,8 +725,9 @@ type dbQueryArgs struct {
 }
 
 type dbQueryResult struct {
-	Service string `json:"service"`
-	Output  string `json:"output"`
+	Service   string `json:"service"`
+	Output    string `json:"output"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 // mcpDBQuery runs a single non-interactive query against a db_service container,
@@ -742,13 +745,46 @@ func mcpDBQuery(args dbQueryArgs) (dbQueryResult, error) {
 		return dbQueryResult{}, fmt.Errorf("%s: db_service %q not found: %v", utils.ErrServiceNotFound, args.Service, err)
 	}
 	out, err := utils.ExecDBQueryCapture(db, args.Query)
+	capped, truncated := capMCPOutput(out, mcpMaxOutputLines, mcpMaxOutputBytes)
 	if err != nil {
-		return dbQueryResult{Service: args.Service, Output: out}, fmt.Errorf(errFmt, utils.ErrExecFailed, err)
+		return dbQueryResult{Service: args.Service, Output: capped, Truncated: truncated}, fmt.Errorf(errFmt, utils.ErrExecFailed, err)
 	}
-	return dbQueryResult{Service: args.Service, Output: out}, nil
+	return dbQueryResult{Service: args.Service, Output: capped, Truncated: truncated}, nil
 }
 
 func mcpSchema() string { return utils.ComposeJSONSchema() }
+
+// MCP tool output that an agent reads into its context. Verbose build/test
+// output can be tens of KB; capping keeps the head (what ran) and tail (where
+// errors surface) so the agent gets the signal without the whole dump.
+const (
+	mcpMaxOutputLines = 200
+	mcpMaxOutputBytes = 16 * 1024
+)
+
+// capMCPOutput trims s to at most maxLines (head+tail, middle elided) and then
+// to maxBytes (tail-preferring), returning the result and whether it truncated.
+func capMCPOutput(s string, maxLines, maxBytes int) (string, bool) {
+	truncated := false
+	if maxLines > 0 {
+		lines := strings.Split(s, "\n")
+		if len(lines) > maxLines {
+			head := maxLines / 3
+			tail := maxLines - head
+			omitted := len(lines) - head - tail
+			s = strings.Join(lines[:head], "\n") +
+				fmt.Sprintf("\n…[%d lines omitted]…\n", omitted) +
+				strings.Join(lines[len(lines)-tail:], "\n")
+			truncated = true
+		}
+	}
+	if maxBytes > 0 && len(s) > maxBytes {
+		// Keep the tail: errors and exit context land at the end.
+		s = "…[truncated]…\n" + s[len(s)-maxBytes:]
+		truncated = true
+	}
+	return s, truncated
+}
 
 // filterByProfile narrows corgi to the selection for the given comma-separated
 // profiles (members plus their transitive depends_on closure).
@@ -786,10 +822,10 @@ func withStdoutToStderr(fn func()) {
 
 // --- MCP tool registration (thin wrappers over the cores above) ---
 
-const profileDesc = "Run only these profiles' services/db_services (comma-separated for a union, e.g. backend,worker)"
+const profileDesc = "Only these profiles (comma-separated union, e.g. backend,worker)"
 
 func registerMCPTools(s *server.MCPServer) {
-	composeOpt := mcp.WithString("composePath", mcp.Description("Path to corgi-compose.yml (default: resolve from cwd)"))
+	composeOpt := mcp.WithString("composePath", mcp.Description("compose path (default: cwd)"))
 	serviceOpt := mcp.WithString("service", mcp.Required(), mcp.Description("Service name"))
 
 	s.AddTool(mcp.NewTool("corgi_validate",
@@ -855,7 +891,7 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_exec",
-		mcp.WithDescription("Run a one-off command in a service's resolved env. Returns {exitCode, output, durationMs}."),
+		mcp.WithDescription("Run a one-off command in a service's resolved env. Returns {exitCode, output, truncated, durationMs}; large output is capped head+tail."),
 		composeOpt,
 		serviceOpt,
 		mcp.WithString("command", mcp.Required(), mcp.Description("Command line to run (via /bin/sh -c)")),

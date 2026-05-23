@@ -495,3 +495,42 @@ func TestLoadComposeCtxResetsFilenameFlag(t *testing.T) {
 		t.Fatalf("second load inherited stale filename; got %q want cwd-b", second.Name)
 	}
 }
+
+func TestCapMCPOutput(t *testing.T) {
+	// Small output passes through untouched.
+	small := "line1\nline2\nline3"
+	if got, trunc := capMCPOutput(small, 200, 16384); got != small || trunc {
+		t.Fatalf("small output altered: trunc=%v got=%q", trunc, got)
+	}
+
+	// Over the line budget: keep head+tail, drop the middle, flag truncated.
+	var lines []string
+	for i := 0; i < 1000; i++ {
+		lines = append(lines, fmt.Sprintf("L%d", i))
+	}
+	big := strings.Join(lines, "\n")
+	got, trunc := capMCPOutput(big, 200, 1<<20)
+	if !trunc {
+		t.Fatal("expected truncated=true for 1000 lines over 200 budget")
+	}
+	if n := strings.Count(got, "\n") + 1; n > 210 {
+		t.Fatalf("capped output still %d lines, want <=~201", n)
+	}
+	if !strings.Contains(got, "lines omitted") {
+		t.Fatalf("missing omission marker: %q", got)
+	}
+	// Head (what ran) and tail (errors surface last) must survive.
+	if !strings.HasPrefix(got, "L0\n") {
+		t.Fatalf("head lost: %.20q", got)
+	}
+	if !strings.HasSuffix(got, "\nL999") {
+		t.Fatalf("tail lost: ...%q", got[len(got)-20:])
+	}
+
+	// Byte ceiling: one giant line still gets clamped.
+	huge := strings.Repeat("x", 100000)
+	gotB, truncB := capMCPOutput(huge, 200, 16384)
+	if !truncB || len(gotB) > 16384+200 {
+		t.Fatalf("byte cap failed: trunc=%v len=%d", truncB, len(gotB))
+	}
+}
