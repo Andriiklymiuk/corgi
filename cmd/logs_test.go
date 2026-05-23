@@ -146,21 +146,21 @@ func TestLabelForRun(t *testing.T) {
 
 func TestPrintFollowedLine(t *testing.T) {
 	out := captureStdout(t, func() {
-		printFollowedLine("2024-01-01T10:32:01.123Z hello\n", true)
+		printFollowedLine("api", "2024-01-01T10:32:01.123Z hello\n", true)
 	})
 	if !strings.Contains(out, "hello") || strings.Contains(out, "2024") {
 		t.Errorf("expected stripped prefix, got: %q", out)
 	}
 
 	out = captureStdout(t, func() {
-		printFollowedLine("raw line\n", false)
+		printFollowedLine("api", "raw line\n", false)
 	})
 	if !strings.Contains(out, "raw line") {
 		t.Errorf("expected raw line passthrough, got: %q", out)
 	}
 
 	out = captureStdout(t, func() {
-		printFollowedLine("short", true)
+		printFollowedLine("api", "short", true)
 	})
 	if !strings.Contains(out, "short") {
 		t.Errorf("expected short line passthrough when stripPrefix=true, got: %q", out)
@@ -273,5 +273,25 @@ func TestRequireServiceForLogs(t *testing.T) {
 	}
 	if requireServiceForLogs("", false, []string{"api"}) != nil {
 		t.Error("interactive mode should allow empty service")
+	}
+}
+
+func TestLogJSONLine(t *testing.T) {
+	got := logJSONLine("api", "2026-05-23T10:00:00Z", "info", "server up")
+	want := `{"service":"api","ts":"2026-05-23T10:00:00Z","level":"info","line":"server up"}`
+	if got != want {
+		t.Fatalf("logJSONLine = %s want %s", got, want)
+	}
+}
+
+func TestDetectLevel(t *testing.T) {
+	if detectLevel("ERROR boom") != "error" {
+		t.Fatal("expected error level")
+	}
+	if detectLevel("WARN slow") != "warn" {
+		t.Fatal("expected warn level")
+	}
+	if detectLevel("all good") != "info" {
+		t.Fatal("expected default info level")
 	}
 }
