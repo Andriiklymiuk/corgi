@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"encoding/json"
 	"bytes"
 	"os"
 	"path/filepath"
@@ -531,5 +532,14 @@ func TestHandleServiceCreationRequired(t *testing.T) {
 	got := corgiMap[utils.RequiredInConfig].(map[string]*utils.Required)
 	if got["node"] == nil {
 		t.Errorf("got %+v", got)
+	}
+}
+
+func TestCreateResultShape(t *testing.T) {
+	r := createResult{Created: true, Kind: "db_service", Name: "cache", Path: "corgi-compose.yml"}
+	b, _ := json.Marshal(r)
+	want := `{"created":true,"kind":"db_service","name":"cache","path":"corgi-compose.yml"}`
+	if string(b) != want {
+		t.Fatalf("create json = %s want %s", b, want)
 	}
 }

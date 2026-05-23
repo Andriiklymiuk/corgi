@@ -185,7 +185,7 @@ func RunServiceCmd(
 	envFile ...string,
 ) error {
 	resolvedEnvFile := resolveEnvFile(path, envFile)
-	fmt.Println(serviceCommand)
+	Info(serviceCommand)
 	lines := strings.Split(serviceCommand, "\n")
 	var accumulatedCommand string
 

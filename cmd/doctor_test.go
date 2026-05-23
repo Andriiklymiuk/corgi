@@ -2,8 +2,13 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestCollectDeclaredPorts_IncludesDbAndServicesSorted(t *testing.T) {
@@ -303,3 +308,249 @@ func TestRunDoctorJSON_EmptyComposePasses(t *testing.T) {
 	}
 }
 
+
+func TestFixDecision(t *testing.T) {
+	cases := []struct {
+		name           string
+		kind           fixKind
+		nonInteractive bool
+		yes            bool
+		want           bool
+	}{
+		{"docker always safe", fixDocker, true, false, true},
+		{"tool needs yes in non-interactive", fixInstall, true, false, false},
+		{"tool with yes", fixInstall, true, true, true},
+		{"kill never auto", fixKillPort, true, false, false},
+		{"kill with yes", fixKillPort, true, true, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := shouldAutoFix(c.kind, c.nonInteractive, c.yes)
+			if got != c.want {
+				t.Fatalf("shouldAutoFix(%v,%v,%v)=%v want %v",
+					c.kind, c.nonInteractive, c.yes, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRunFixes_SkipsDestructiveWhenNonInteractiveNoYes(t *testing.T) {
+	res := doctorResult{Checks: []doctorCheck{
+		{Name: "port:3000", OK: false, Detail: "busy"},
+	}}
+	acts := fixActions{
+		startDocker: func() error { return nil },
+		installTool: func(string) error { return nil },
+		killPort:    func(int) error { t.Fatal("killPort must not be called"); return nil },
+		confirm:     func(string) bool { return true },
+	}
+	out := runFixes(res, acts, true, false)
+	if len(out.Skipped) != 1 || out.Skipped[0].Check != "port:3000" {
+		t.Fatalf("expected port:3000 skipped, got %+v", out.Skipped)
+	}
+	if out.OK {
+		t.Fatal("expected OK=false when a check was skipped")
+	}
+}
+
+func TestRunFixes_KillsWithYes(t *testing.T) {
+	killed := 0
+	res := doctorResult{Checks: []doctorCheck{{Name: "port:3000", OK: false}}}
+	acts := fixActions{killPort: func(int) error { killed++; return nil }}
+	out := runFixes(res, acts, true, true)
+	if killed != 1 || len(out.Fixed) != 1 || !out.OK {
+		t.Fatalf("expected one kill + fixed, got killed=%d out=%+v", killed, out)
+	}
+}
+
+func TestRunFixes_InteractiveDestructiveAsksConfirm(t *testing.T) {
+	asked := false
+	res := doctorResult{Checks: []doctorCheck{{Name: "port:3000", OK: false}}}
+	acts := fixActions{
+		killPort: func(int) error { t.Fatal("must not kill when declined"); return nil },
+		confirm:  func(string) bool { asked = true; return false },
+	}
+	out := runFixes(res, acts, false, false)
+	if !asked {
+		t.Fatal("expected confirm to be asked in interactive destructive fix")
+	}
+	if len(out.Skipped) != 1 || out.Skipped[0].Reason != "declined" {
+		t.Fatalf("expected declined skip, got %+v", out.Skipped)
+	}
+}
+
+func TestClassifyCheck(t *testing.T) {
+	cases := []struct {
+		name     string
+		wantKind fixKind
+		wantOK   bool
+	}{
+		{"docker", fixDocker, true},
+		{"required:bun", fixInstall, true},
+		{"port:3000", fixKillPort, true},
+		{"something-else", 0, false},
+	}
+	for _, c := range cases {
+		k, ok := classifyCheck(c.name)
+		if ok != c.wantOK || (ok && k != c.wantKind) {
+			t.Fatalf("classifyCheck(%q)=%v,%v want %v,%v", c.name, k, ok, c.wantKind, c.wantOK)
+		}
+	}
+}
+
+func TestPortFromCheckName(t *testing.T) {
+	if got := portFromCheckName("port:5432"); got != 5432 {
+		t.Fatalf("portFromCheckName = %d want 5432", got)
+	}
+	if got := portFromCheckName("docker"); got != 0 {
+		t.Fatalf("portFromCheckName(non-port) = %d want 0", got)
+	}
+}
+
+func TestRunFixes_DockerAndInstallSucceed(t *testing.T) {
+	res := doctorResult{Checks: []doctorCheck{
+		{Name: "docker", OK: false},
+		{Name: "required:bun", OK: false},
+		{Name: "noremedy", OK: false},
+	}}
+	acts := fixActions{
+		startDocker: func() error { return nil },
+		installTool: func(string) error { return nil },
+		killPort:    func(int) error { return nil },
+	}
+	// non-interactive + yes so install is allowed
+	out := runFixes(res, acts, true, true)
+	if len(out.Fixed) != 2 {
+		t.Fatalf("expected docker+install fixed, got %+v", out.Fixed)
+	}
+	if out.OK {
+		t.Fatal("expected OK=false due to unremediable check")
+	}
+	if len(out.Skipped) != 1 || out.Skipped[0].Reason != "no remediation available" {
+		t.Fatalf("expected one unremediable skip, got %+v", out.Skipped)
+	}
+}
+
+func TestRunFixes_InstallErrorRecorded(t *testing.T) {
+	res := doctorResult{Checks: []doctorCheck{{Name: "required:bun", OK: false}}}
+	acts := fixActions{installTool: func(string) error { return errInstallTest }}
+	out := runFixes(res, acts, true, true)
+	if out.OK || len(out.Skipped) != 1 || out.Skipped[0].Reason != "boom" {
+		t.Fatalf("expected install error skip, got %+v", out)
+	}
+}
+
+var errInstallTest = errTest("boom")
+
+type errTest string
+
+func (e errTest) Error() string { return string(e) }
+
+func newTestDoctorCommand() *cobra.Command {
+	root := &cobra.Command{Use: "corgi"}
+	c := &cobra.Command{Use: "doctor"}
+	root.AddCommand(c)
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		root.Flags().String(f, "", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		root.Flags().Bool(f, false, "")
+	}
+	c.Flags().Bool("global", false, "")
+	c.Flags().Bool("fix", true, "")
+	c.Flags().Bool("yes", false, "")
+	return c
+}
+
+func TestRunDoctorFix_AllCleanJSON(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	// no required tools, no db_services (so no docker check), a high free port
+	content := "name: test\nservices:\n  api:\n    port: 65510\n    start:\n      - echo hi\n"
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	origJSON := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = origJSON })
+
+	c := newTestDoctorCommand()
+	corgi, err := utils.GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() { runDoctorFix(c, corgi) })
+	var res fixOutcome
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("doctor --fix --json stdout not pure JSON: %q err=%v", out, err)
+	}
+	if !res.OK {
+		t.Fatalf("expected ok=true for clean compose, got %+v", res)
+	}
+}
+
+func TestFixOneCheck(t *testing.T) {
+	acts := fixActions{
+		startDocker: func() error { return nil },
+		installTool: func(string) error { return nil },
+		killPort:    func(int) error { return nil },
+	}
+	// unremediable
+	if fixed, reason := fixOneCheck(doctorCheck{Name: "weird"}, acts, true, true); fixed || reason != "no remediation available" {
+		t.Fatalf("weird: %v %q", fixed, reason)
+	}
+	// gated (non-interactive, no yes, destructive)
+	if fixed, reason := fixOneCheck(doctorCheck{Name: "port:3000"}, acts, true, false); fixed || reason == "" {
+		t.Fatalf("gated: %v %q", fixed, reason)
+	}
+	// docker auto-fix success
+	if fixed, _ := fixOneCheck(doctorCheck{Name: "docker"}, acts, true, false); !fixed {
+		t.Fatal("docker should auto-fix")
+	}
+	// apply error surfaces
+	bad := fixActions{installTool: func(string) error { return errTest("nope") }}
+	if fixed, reason := fixOneCheck(doctorCheck{Name: "required:bun"}, bad, true, true); fixed || reason != "nope" {
+		t.Fatalf("apply-err: %v %q", fixed, reason)
+	}
+	// declined in interactive
+	declined := fixActions{killPort: func(int) error { return nil }, confirm: func(string) bool { return false }}
+	if fixed, reason := fixOneCheck(doctorCheck{Name: "port:5432"}, declined, false, false); fixed || reason != "declined" {
+		t.Fatalf("declined: %v %q", fixed, reason)
+	}
+}
+
+func TestInstallRequiredByName_Errors(t *testing.T) {
+	corgi := &utils.CorgiCompose{Required: []utils.Required{
+		{Name: "bun"}, // no install steps
+	}}
+	if err := installRequiredByName(corgi, "bun"); err == nil {
+		t.Fatal("expected error for no install steps")
+	}
+	if err := installRequiredByName(corgi, "ghost"); err == nil {
+		t.Fatal("expected error for undeclared tool")
+	}
+}
+
+func TestRunDoctorFix_HumanOutput(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := "name: test\nservices:\n  api:\n    port: 65511\n    start:\n      - echo hi\n"
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	c := newTestDoctorCommand()
+	corgi, err := utils.GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// non-JSON human branch (no fixes needed -> no exit)
+	_ = captureStdout(t, func() { runDoctorFix(c, corgi) })
+}
