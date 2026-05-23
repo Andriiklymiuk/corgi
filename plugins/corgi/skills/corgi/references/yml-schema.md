@@ -29,9 +29,9 @@ string field (passwords, ports, paths, image refs, environment entries).
 - `${VAR:-default}` — value of `VAR`, or `default` when unset/empty.
 - `$${X}` — escapes to the literal `${X}` (not expanded).
 - Braced only — bare `$VAR` is left untouched (safe for shell snippets).
-- Unset with no default → left unresolved (token stays literal) with a warning,
-  so tunnel/cross-service refs still resolve later; use `${VAR:-default}` for an
-  explicit fallback.
+- Unset with no default → left unresolved (token stays literal), silently, so
+  runtime/per-service env, tunnel, and cross-service refs still resolve later;
+  use `${VAR:-default}` for an explicit fallback.
 - Dotted `${producer.VAR}` cross-service refs are left untouched by this pass.
 - Applies inside `start`/`beforeStart`/`afterStart`/`scripts` command strings too:
   a braced `${VAR}` / `${VAR:-default}` there is resolved at **load time** (process
