@@ -1,22 +1,10 @@
 package cmd
 
 import (
-	"strings"
 	"testing"
-)
 
-func TestRestartUnsupportedMessage(t *testing.T) {
-	msg := restartUnsupportedMessage("api")
-	if !strings.Contains(msg, "not supported yet") {
-		t.Errorf("expected unsupported notice, got %q", msg)
-	}
-	if !strings.Contains(msg, "corgi stop --service api") {
-		t.Errorf("expected stop hint with service name, got %q", msg)
-	}
-	if !strings.Contains(msg, "corgi run --detach") {
-		t.Errorf("expected run --detach hint, got %q", msg)
-	}
-}
+	"andriiklymiuk/corgi/utils"
+)
 
 func TestRestartCmdRegistered(t *testing.T) {
 	c, _, err := rootCmd.Find([]string{"restart"})
@@ -36,6 +24,47 @@ func TestRestartCmdHasRunFlags(t *testing.T) {
 	for _, name := range []string{"detach", "force", "host"} {
 		if c.Flags().Lookup(name) == nil {
 			t.Errorf("restart should have --%s flag (runRun reads it)", name)
+		}
+	}
+}
+
+func TestFindRestartEntry_NotStarted(t *testing.T) {
+	st := utils.RunState{Services: []utils.RunStateEntry{
+		{Name: "api", Kind: "service", Status: "running"},
+	}}
+	if _, err := findRestartEntry(st, "web"); err == nil {
+		t.Fatal("expected error for service not in run-state")
+	}
+}
+
+func TestFindRestartEntry_Found(t *testing.T) {
+	st := utils.RunState{Services: []utils.RunStateEntry{
+		{Name: "api", Kind: "service", Status: "running", PID: 123},
+	}}
+	e, err := findRestartEntry(st, "api")
+	if err != nil || e.PID != 123 {
+		t.Fatalf("expected api entry, got %+v err=%v", e, err)
+	}
+}
+
+func TestUpdateServiceEntry(t *testing.T) {
+	st := utils.RunState{Services: []utils.RunStateEntry{
+		{Name: "api", Kind: "service", PID: 1, Status: "crashed"},
+		{Name: "web", Kind: "service", PID: 2, Status: "running"},
+	}}
+	out := updateServiceEntry(st, "api", 99, "npm start", 3000)
+	var got utils.RunStateEntry
+	for _, e := range out.Services {
+		if e.Name == "api" {
+			got = e
+		}
+	}
+	if got.PID != 99 || got.Status != "running" || got.Port != 3000 {
+		t.Fatalf("api not updated: %+v", got)
+	}
+	for _, e := range out.Services {
+		if e.Name == "web" && e.PID != 2 {
+			t.Fatalf("web should be untouched: %+v", e)
 		}
 	}
 }

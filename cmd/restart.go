@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 
@@ -30,20 +32,10 @@ func init() {
 	restartCmd.Flags().String("host", "", "IP to use instead of localhost in service URL env vars")
 }
 
-func restartUnsupportedMessage(service string) string {
-	return "restart --service is not supported yet; use: corgi stop --service " +
-		service + " && corgi run --detach"
-}
-
 func runRestart(cmd *cobra.Command, args []string) {
 	if restartService != "" {
-		msg := restartUnsupportedMessage(restartService)
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrUnsupported, msg)
-		} else {
-			fmt.Fprintln(os.Stderr, msg)
-		}
-		os.Exit(2)
+		restartSingleService(cmd)
+		return
 	}
 
 	prevStopService := stopService
@@ -56,4 +48,87 @@ func runRestart(cmd *cobra.Command, args []string) {
 
 	cmd.Flags().Set("detach", "true")
 	runRun(cmd, args)
+}
+
+// findRestartEntry returns the run-state entry for a service, or an error if
+// it was never started in the current detached run.
+func findRestartEntry(st utils.RunState, service string) (utils.RunStateEntry, error) {
+	for _, e := range st.Services {
+		if e.Name == service {
+			return e, nil
+		}
+	}
+	return utils.RunStateEntry{}, fmt.Errorf(
+		"service %q is not in the current detached run; start it with corgi run --detach first", service)
+}
+
+// updateServiceEntry replaces the named service's run-state entry with a fresh
+// running entry, leaving every other entry untouched.
+func updateServiceEntry(st utils.RunState, name string, pid int, command string, port int) utils.RunState {
+	now := time.Now().UTC()
+	for i := range st.Services {
+		if st.Services[i].Name == name {
+			st.Services[i].PID = pid
+			st.Services[i].PGID = pid
+			st.Services[i].Command = command
+			st.Services[i].Port = port
+			st.Services[i].Status = "running"
+			st.Services[i].StartedAt = now
+			st.Services[i].StatusChangedAt = now
+			st.Services[i].ExitCode = nil
+		}
+	}
+	return st
+}
+
+func emitRestartError(code, msg string) {
+	if utils.JSONOutput {
+		utils.JSONError(code, msg)
+	} else {
+		fmt.Fprintln(os.Stderr, msg)
+	}
+}
+
+// restartSingleService restarts one service of a detached run, leaving the rest
+// untouched. It refuses to start a service that was never in the run-state.
+func restartSingleService(cmd *cobra.Command) {
+	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
+	st, err := utils.ReadRunState(statePath)
+	if err != nil {
+		emitRestartError(utils.ErrNotRunning, "no detached run found for this project")
+		os.Exit(1)
+	}
+	entry, err := findRestartEntry(st, restartService)
+	if err != nil {
+		emitRestartError(utils.ErrNotRunning, err.Error())
+		os.Exit(1)
+	}
+
+	corgi, cerr := utils.GetCorgiServices(cmd)
+	if cerr != nil {
+		emitRestartError(utils.ErrConfig, cerr.Error())
+		os.Exit(1)
+	}
+	svc := findService(corgi, restartService)
+	if svc == nil {
+		emitRestartError(utils.ErrServiceNotFound, "service not declared in corgi-compose.yml")
+		os.Exit(1)
+	}
+
+	_ = stopProcessGroup(entry) // terminate the old process group
+	command := strings.Join(svc.Start, " && ")
+	proc, serr := utils.StartDetached(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(*svc))
+	if serr != nil {
+		emitRestartError(utils.ErrExecFailed, serr.Error())
+		os.Exit(1)
+	}
+
+	updated := updateServiceEntry(st, restartService, proc.Pid, command, svc.Port)
+	_ = utils.WriteRunState(statePath, updated)
+
+	if utils.JSONOutput {
+		utils.PrintJSON(updated)
+	} else {
+		utils.Infof("🔁 restarted %s (pid %d)\n", restartService, proc.Pid)
+	}
 }
