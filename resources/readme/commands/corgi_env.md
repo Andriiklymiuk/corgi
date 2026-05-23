@@ -1,37 +1,30 @@
-# corgi fork
+# corgi env
 
-## corgi fork
+## corgi env
 
-Fork an existing service repositories to new repos.
+Print services' fully-resolved environment (read-only)
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Resolves and prints each service's environment exactly as corgi would
+generate it (db deps, service deps, ports, literal environment, copied env files,
+and cross-service references), with the source of each variable. Writes nothing.
+
+  corgi env                 # all services, masked, human view
+  corgi env api             # one service
+  eval $(corgi env api --export)
+  corgi env --json
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi env [service...] [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+      --export export KEY=VALUE   Emit eval-able export KEY=VALUE lines (real values)
+  -h, --help                      help for env
+      --reveal                    Do not mask secret values in the human view (human view only)
 ```
 
 ### Options inherited from parent commands

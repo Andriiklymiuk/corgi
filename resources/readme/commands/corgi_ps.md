@@ -1,37 +1,26 @@
-# corgi fork
+# corgi ps
 
-## corgi fork
+## corgi ps
 
-Fork an existing service repositories to new repos.
+Runtime snapshot of declared services and db_services
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Reports the topology declared in corgi-compose.yml — name, kind, port —
+and infers running/stopped from a port-listening probe where a port is known.
+
+Unlike a single 'corgi run', 'corgi ps' is a separate process and cannot see
+in-memory PIDs, so it reports declared topology plus a cheap port probe rather
+than live process health.
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi ps [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+  -h, --help   help for ps
 ```
 
 ### Options inherited from parent commands

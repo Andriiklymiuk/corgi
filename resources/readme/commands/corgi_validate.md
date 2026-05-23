@@ -1,37 +1,38 @@
-# corgi fork
+# corgi validate
 
-## corgi fork
+## corgi validate
 
-Fork an existing service repositories to new repos.
+Statically validate corgi-compose.yml
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Runs static semantic checks over corgi-compose.yml without starting
+containers, cloning repos, or touching the network.
+
+Errors (exit 1):
+  - depends_on_services / depends_on_db references a name that doesn't exist
+  - a cycle exists in the depends_on_services graph
+  - db_services.driver is not a known driver
+  - a service exposes a port but has no start command and no docker runner
+  - two services / db_services bind the same host port
+
+Warnings (non-fatal, fatal under --strict):
+  - a depended-on service has no healthCheck (TCP probe used)
+  - cloneFrom is set without a branch
+
+Flags:
+      --json     Emit {"ok":bool,"errors":[...],"warnings":[...]}
+      --strict   Treat warnings as failures
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi validate [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+  -h, --help     help for validate
+      --strict   Treat warnings as failures
 ```
 
 ### Options inherited from parent commands

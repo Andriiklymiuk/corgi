@@ -1,37 +1,26 @@
-# corgi fork
+# corgi stop
 
-## corgi fork
+## corgi stop
 
-Fork an existing service repositories to new repos.
+Stop detached services and db_services started with corgi run --detach
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Reads corgi_services/.state.json, terminates each detached service's
+process group, runs afterStart hooks, and brings db_service containers down.
+
+Idempotent: with no run-state or nothing running it exits 0. Use --service to
+stop a single service and leave the rest running.
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi stop [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+  -h, --help             help for stop
+      --service string   Stop only this service (leave others running)
 ```
 
 ### Options inherited from parent commands

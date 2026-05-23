@@ -1,37 +1,38 @@
-# corgi fork
+# corgi test
 
-## corgi fork
+## corgi test
 
-Fork an existing service repositories to new repos.
+Run each service's `test` script in its resolved environment
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Run the test script configured for each selected service, in that service's
+working directory with the same env corgi uses for its start commands. corgi
+test does NOT start databases or services — that is corgi run's job; with
+--ensure-deps it only WAITS for already-starting dependencies to be ready.
+
+A service runs if it has a script named "test" in its scripts. Services without
+one are skipped (not failed). Multi-command test scripts run sequentially and
+stop on the first non-zero exit.
+
+Examples:
+  corgi test
+  corgi test --service api
+  corgi test --profile backend --json
+  corgi test --ensure-deps
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi test [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+      --ensure-deps              Wait for each service's depends_on_db and depends_on_services to be ready before testing.
+  -h, --help                     help for test
+      --profile string           Narrow to services in this profile (comma-separated for a union) before selecting test scripts.
+      --ready-timeout duration   Max time to wait for dependencies when --ensure-deps is set. (default 15s)
+      --service string           Only run the test script for this service.
 ```
 
 ### Options inherited from parent commands

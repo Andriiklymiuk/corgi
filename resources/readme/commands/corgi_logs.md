@@ -1,37 +1,35 @@
-# corgi fork
+# corgi logs
 
-## corgi fork
+## corgi logs
 
-Fork an existing service repositories to new repos.
+Browse and follow persisted service logs
 
 ### Synopsis
 
-This is command, that helps to start new projects using currently cloned/created repos and pushing them to newly created ones.
+Browse logs captured by corgi run --logs.
+
+Without flags: interactive picker — choose a service then a run, and
+the log is streamed to stdout (follows new writes like tail -f).
+
+Examples:
+  corgi logs                      # interactive picker
+  corgi logs --service api        # jump straight to run picker for "api"
+  corgi logs --all                # merge the newest run of every service into one stream
+  corgi logs --idle 0             # tail forever (until Ctrl-C)
+  corgi logs --prune              # delete all .logs/ directories
 
 ```
-corgi fork [flags]
-```
-
-### Examples
-
-```
-corgi fork --all
-
-corgi fork
-
-corgi fork --all --private --useSameRepoName --gitProvider github
+corgi logs [flags]
 ```
 
 ### Options
 
 ```
-      --all                  Fork all repos
-      --gitProvider string   Git provider for new repo
-  -h, --help                 help for fork
-      --newName string       Name for the new repo (defaults to the service name)
-      --private              Create private repo
-      --service string       Service to fork (skips picker; required in non-interactive mode unless --all)
-      --useSameRepoName      Use previous repo name for new repo
+      --all              Merge the newest run of every service into one timestamp-sorted stream
+  -h, --help             help for logs
+      --idle duration    Exit after this much dead-air on the file (set 0 to tail forever) (default 30s)
+      --prune            Delete all captured log files (corgi_services/.logs/)
+      --service string   Service name to show logs for (skips service picker)
 ```
 
 ### Options inherited from parent commands
