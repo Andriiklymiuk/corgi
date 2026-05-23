@@ -82,6 +82,23 @@ func createNonInteractive(cmd *cobra.Command, f createFlags) {
 	}
 
 	UpdateCorgiComposeFileWithMap(corgiMap)
+
+	if utils.JSONOutput {
+		utils.PrintJSON(createResult{
+			Created: true,
+			Kind:    f.kind,
+			Name:    f.name,
+			Path:    utils.CorgiComposePath,
+		})
+	}
+}
+
+// createResult is the --json shape for a non-interactive create.
+type createResult struct {
+	Created bool   `json:"created"`
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Path    string `json:"path"`
 }
 
 // Deep copy DbService
