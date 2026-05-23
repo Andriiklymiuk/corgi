@@ -1,6 +1,10 @@
 package utils
 
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
 
 // EnvVar is one resolved environment entry with the part of the compose that
 // produced it.
@@ -54,6 +58,35 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 		}
 		chunk := generateEnvForDbDependentService(svc, dep, *db)
 		entries = append(entries, parseChunkInOrder(chunk, "db:"+dep.Name)...)
+	}
+
+	// self port
+	if svc.Port != 0 {
+		alias := "PORT"
+		if svc.PortAlias != "" {
+			alias = svc.PortAlias
+		}
+		entries = append(entries, EnvVar{Key: alias, Value: fmt.Sprint(svc.Port), Source: "self:port"})
+	}
+
+	// literal environment: lines (own ${VAR} + cross-service ${producer.VAR})
+	if len(svc.Environment) > 0 {
+		existing := map[string]string{}
+		for _, e := range entries {
+			existing[e.Key] = e.Value
+		}
+		for _, raw := range svc.Environment {
+			expanded, err := substituteCrossServiceRefs(raw, svc, currentExportsMap)
+			if err != nil {
+				var skipped *producerSkippedError
+				if errors.As(err, &skipped) {
+					continue // producer not in selection; generator drops it too
+				}
+				return nil, err
+			}
+			expanded = substituteEnvVarReferences(expanded, existing)
+			entries = append(entries, parseChunkInOrder(expanded, "literal")...)
+		}
 	}
 
 	return dedupeLastWins(entries), nil

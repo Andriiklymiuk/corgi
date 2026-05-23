@@ -44,3 +44,26 @@ func TestResolveServiceEnv_ServiceSource(t *testing.T) {
 	}
 	t.Fatalf("no var attributed to service:api; got %+v", got)
 }
+
+func TestResolveServiceEnv_PortAndLiteral(t *testing.T) {
+	corgi := &CorgiCompose{
+		Services: []Service{
+			{ServiceName: "api", Port: 8080, PortAlias: "API_PORT",
+				Environment: []string{"LOG_LEVEL=debug"}},
+		},
+	}
+	got, err := ResolveServiceEnv(corgi.Services[0], corgi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := map[string]EnvVar{}
+	for _, e := range got {
+		m[e.Key] = e
+	}
+	if m["API_PORT"].Source != "self:port" || m["API_PORT"].Value != "8080" {
+		t.Fatalf("port entry wrong: %+v", m["API_PORT"])
+	}
+	if m["LOG_LEVEL"].Source != "literal" || m["LOG_LEVEL"].Value != "debug" {
+		t.Fatalf("literal entry wrong: %+v", m["LOG_LEVEL"])
+	}
+}
