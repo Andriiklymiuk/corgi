@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -61,5 +62,36 @@ func TestReconcileStableWhenUnchanged(t *testing.T) {
 	out := ReconcileRunState(s, func(int, string) bool { return true }, func(string) string { return "" })
 	if !out.Services[0].StatusChangedAt.Equal(t0) {
 		t.Error("statusChangedAt must not change when status is unchanged")
+	}
+}
+
+func TestReconcileSkipsPidZeroService(t *testing.T) {
+	s := RunState{Services: []RunStateEntry{
+		{Name: "docker-svc", Kind: "service", PID: 0, Status: "running"},
+	}}
+	called := false
+	alive := func(int, string) bool { called = true; return false }
+	out := ReconcileRunState(s, alive, func(string) string { return "" })
+	if called {
+		t.Error("pid==0 service must not be pid-probed")
+	}
+	if out.Services[0].Status != "running" {
+		t.Errorf("pid==0 service should stay running, got %q", out.Services[0].Status)
+	}
+}
+
+func TestLockRunState(t *testing.T) {
+	dir := t.TempDir()
+	unlock, err := LockRunState(dir)
+	if err != nil {
+		t.Fatalf("LockRunState: %v", err)
+	}
+	lockPath := filepath.Join(dir, "corgi_services", ".state.lock")
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Error("lock file should exist while held")
+	}
+	unlock()
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Error("lock file should be removed on unlock")
 	}
 }

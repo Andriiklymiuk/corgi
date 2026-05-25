@@ -100,7 +100,7 @@ func runStop(cmd *cobra.Command, _ []string) {
 	st = utils.ReconcileRunState(st, utils.PidAlive, utils.ContainerRunning)
 
 	if stopService == "" && !anythingRunning(st) {
-		os.Remove(statePath)
+		removeStateLocked(statePath)
 		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
 		return
 	}
@@ -112,6 +112,10 @@ func runStop(cmd *cobra.Command, _ []string) {
 			continue
 		}
 		if t.Status != "running" {
+			continue
+		}
+		// pid==0 → docker-runner container; cleanup() brings it down, not a pgroup kill.
+		if t.PID == 0 {
 			continue
 		}
 		if err := stopProcessGroup(t); err != nil {
@@ -126,8 +130,11 @@ func runStop(cmd *cobra.Command, _ []string) {
 		if len(corgi.DatabaseServices) != 0 {
 			utils.ExecuteForEachService("down")
 		}
-		os.Remove(statePath)
+		removeStateLocked(statePath)
 	} else {
+		if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
+			defer unlock()
+		}
 		st.Services = removeStateEntry(st.Services, stopService)
 		st.DBServices = removeStateEntry(st.DBServices, stopService)
 		if err := utils.WriteRunState(statePath, st); err != nil {
@@ -138,6 +145,16 @@ func runStop(cmd *cobra.Command, _ []string) {
 	emitStopSummary(summary)
 	if len(summary.Failed) > 0 {
 		os.Exit(1)
+	}
+}
+
+// removeStateLocked deletes the run-state file under the advisory lock so it
+// can't clobber a concurrent restart's read-modify-write.
+func removeStateLocked(statePath string) {
+	unlock, _ := utils.LockRunState(utils.CorgiComposePathDir)
+	_ = os.Remove(statePath)
+	if unlock != nil {
+		unlock()
 	}
 }
 
