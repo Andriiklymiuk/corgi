@@ -820,22 +820,26 @@ func TestStartDetached(t *testing.T) {
 	})
 }
 
-func TestStartDetachedWritesToLogWriter(t *testing.T) {
-	t.Cleanup(CloseAllLogWriters)
-	prev := ProcessHandles
-	ProcessHandles = nil
-	t.Cleanup(func() { ProcessHandles = prev })
-
-	w := &fakeLogWriter{}
-	SetLogWriter("svc", w)
-	proc, err := StartDetached("svc", "echo detached-out", t.TempDir())
+func TestLogWriterFile(t *testing.T) {
+	dir := t.TempDir()
+	w, err := OpenLogWriter(dir, "svc")
 	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
+		t.Fatalf("OpenLogWriter: %v", err)
 	}
-	_, _ = proc.Wait()
-	removeProcess(proc)
-	if got := w.written(); !strings.Contains(got, "detached-out") {
-		t.Errorf("detached output not written to log writer, got %q", got)
+	t.Cleanup(func() { _ = w.Close() })
+	if logWriterFile(w) == nil {
+		t.Error("expected *os.File for *logWriter")
+	}
+	f, _ := os.CreateTemp(dir, "f")
+	t.Cleanup(func() { _ = f.Close() })
+	if logWriterFile(f) != f {
+		t.Error("expected the same *os.File back")
+	}
+	if logWriterFile(&fakeLogWriter{}) != nil {
+		t.Error("non-file writer must return nil (detached child goes to /dev/null, not a dying pipe)")
+	}
+	if logWriterFile(nil) != nil {
+		t.Error("nil writer must return nil")
 	}
 }
 
@@ -908,5 +912,40 @@ func TestRunCleanupCommandsSourcesEnv(t *testing.T) {
 	}
 	if strings.TrimSpace(string(got)) != "present" {
 		t.Errorf("env not sourced, got %q", got)
+	}
+}
+
+func TestStartDetached_WritesDirectlyToLogFile(t *testing.T) {
+	dir := t.TempDir()
+	w, err := OpenLogWriter(dir, "svc")
+	if err != nil {
+		t.Fatalf("OpenLogWriter: %v", err)
+	}
+	SetLogWriter("svc", w)
+	defer CloseAllLogWriters()
+
+	if logWriterFile(w) == nil {
+		t.Fatal("logWriterFile returned nil for *logWriter")
+	}
+
+	proc, err := StartDetached("svc", "printf 'hello\\nworld\\n'", dir)
+	if err != nil {
+		t.Fatalf("StartDetached: %v", err)
+	}
+	if _, err := proc.Wait(); err != nil {
+		t.Fatalf("child wait: %v", err)
+	}
+
+	data, err := os.ReadFile(LogFilePath("svc"))
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "hello") || !strings.Contains(got, "world") {
+		t.Errorf("log missing child output, got %q", got)
+	}
+	// Child writes to the fd directly, so lines are raw (no timestamp prefix).
+	if strings.HasPrefix(got, "20") && got[10:11] == "T" {
+		t.Errorf("expected raw lines without timestamp prefix, got %q", got)
 	}
 }

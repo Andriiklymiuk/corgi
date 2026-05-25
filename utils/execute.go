@@ -308,9 +308,10 @@ func StartDetached(serviceName, command, path string, envFile ...string) (*os.Pr
 	shellCommand := withEnvSource(command, resolvedEnvFile)
 	cmd := exec.Command("/bin/sh", "-c", shellCommand)
 	cmd.Dir = path
-	if lw := getLogWriter(serviceName); lw != nil {
-		cmd.Stdout = lw
-		cmd.Stderr = lw
+	// Direct *os.File so the detached child keeps logging after corgi exits.
+	if f := logWriterFile(getLogWriter(serviceName)); f != nil {
+		cmd.Stdout = f
+		cmd.Stderr = f
 	}
 	SetProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
