@@ -49,6 +49,19 @@ type logWriter struct {
 // Path returns the underlying file path. Used by tests and rename-on-close.
 func (lw *logWriter) Path() string { return lw.path }
 
+// logWriterFile returns the *os.File backing a registered writer, or nil.
+// Detached children write straight to this fd so their logs survive corgi exit.
+func logWriterFile(w io.Writer) *os.File {
+	switch v := w.(type) {
+	case *logWriter:
+		return v.f
+	case *os.File:
+		return v
+	default:
+		return nil
+	}
+}
+
 // SetStatus records the exit status. The file is renamed with a matching
 // suffix on Close.
 func (lw *logWriter) SetStatus(s LogStatus) {

@@ -68,12 +68,17 @@ type detachedProc struct {
 	port    int
 	pid     int
 	pgid    int
+	status  string
 }
 
 func buildDetachState(composePath string, procs []detachedProc, dbs []utils.RunStateEntry) utils.RunState {
 	now := time.Now().UTC()
 	services := make([]utils.RunStateEntry, 0, len(procs))
 	for _, p := range procs {
+		status := p.status
+		if status == "" {
+			status = "running"
+		}
 		services = append(services, utils.RunStateEntry{
 			Name:            p.name,
 			Kind:            "service",
@@ -82,7 +87,7 @@ func buildDetachState(composePath string, procs []detachedProc, dbs []utils.RunS
 			Port:            p.port,
 			Command:         p.command,
 			LogFile:         p.logFile,
-			Status:          "running",
+			Status:          status,
 			StartedAt:       now,
 			StatusChangedAt: now,
 		})
@@ -466,6 +471,18 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	detach, _ := cmd.Flags().GetBool("detach")
 
+	if detach {
+		if tf, _ := cmd.Flags().GetBool("tunnel"); tf {
+			msg := "--tunnel cannot be combined with --detach (tunnels run in-process); run `corgi tunnel` separately"
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrUnsupported, msg)
+			} else {
+				fmt.Fprintln(os.Stderr, msg)
+			}
+			os.Exit(1)
+		}
+	}
+
 	if !detach {
 		stopSignalHandler := installSignalHandler(cmd)
 		defer stopSignalHandler()
@@ -525,10 +542,18 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	}
 
 	procs := spawnDetachedServices(corgi)
+	settleDetached(procs)
 	dbs := detachedDBEntries(corgi)
 	state := buildDetachState(utils.CorgiComposePath, procs, dbs)
 	if err := utils.WriteRunState(statePath, state); err != nil {
-		fmt.Fprintln(os.Stderr, "could not write run-state:", err)
+		killDetached(procs)
+		msg := "could not write run-state: " + err.Error()
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrExecFailed, msg)
+		} else {
+			fmt.Fprintln(os.Stderr, msg)
+		}
+		os.Exit(1)
 	}
 
 	if utils.JSONOutput {
@@ -548,11 +573,18 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 	}
 	prev = utils.ReconcileRunState(prev, utils.PidAlive, utils.ContainerRunning)
 	if force {
+		var dockerRunners []string
 		for _, s := range prev.Services {
-			if s.Status == "running" {
-				_ = stopProcessGroup(s)
+			if s.Status != "running" {
+				continue
 			}
+			if s.PID == 0 {
+				dockerRunners = append(dockerRunners, s.Name) // container, not a pgroup
+				continue
+			}
+			_ = stopProcessGroup(s)
 		}
+		utils.StopDockerRunnerServices(dockerRunners)
 		os.Remove(statePath)
 		return false
 	}
@@ -573,7 +605,28 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 	procs := []detachedProc{}
 	for _, svc := range corgi.Services {
-		if shouldSkipManualRun(svc) || len(svc.Start) == 0 {
+		if shouldSkipManualRun(svc) {
+			continue
+		}
+		runDetachedBeforeStart(svc)
+
+		// docker-runner services run as containers (no tracked pid); reconcile
+		// and stop key off pid==0 and let cleanup bring them down.
+		if svc.Runner.Name == "docker" && svc.Port != 0 {
+			if err := utils.ExecuteServiceCommandRun(svc.ServiceName, "make", "up"); err != nil {
+				fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
+				continue
+			}
+			procs = append(procs, detachedProc{
+				name:    svc.ServiceName,
+				command: "make up",
+				logFile: utils.LogFilePath(svc.ServiceName),
+				port:    svc.Port,
+			})
+			continue
+		}
+
+		if len(svc.Start) == 0 {
 			continue
 		}
 		command := strings.Join(svc.Start, " && ")
@@ -592,6 +645,48 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 		})
 	}
 	return procs
+}
+
+func runDetachedBeforeStart(svc utils.Service) {
+	if svc.BeforeStart == nil || omitServiceCmd("beforeStart") {
+		return
+	}
+	utils.RunServiceCommands(
+		"beforeStart",
+		svc.ServiceName,
+		svc.BeforeStart,
+		svc.AbsolutePath,
+		false,
+		false,
+		getServiceEnv(svc),
+	)
+}
+
+// settleDetached gives freshly spawned services a moment to crash, then records
+// each one's real status so the state file doesn't claim a dead service is running.
+func settleDetached(procs []detachedProc) {
+	if len(procs) == 0 {
+		return
+	}
+	time.Sleep(300 * time.Millisecond)
+	for i := range procs {
+		if procs[i].pid == 0 {
+			continue
+		}
+		if utils.PidAlive(procs[i].pid, procs[i].command) {
+			procs[i].status = "running"
+		} else {
+			procs[i].status = "crashed"
+		}
+	}
+}
+
+func killDetached(procs []detachedProc) {
+	for _, p := range procs {
+		if p.pgid > 0 {
+			_ = utils.KillProcessGroup(p.pgid)
+		}
+	}
 }
 
 func detachedDBEntries(corgi *utils.CorgiCompose) []utils.RunStateEntry {
