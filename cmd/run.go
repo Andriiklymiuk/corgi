@@ -471,6 +471,18 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	detach, _ := cmd.Flags().GetBool("detach")
 
+	if detach {
+		if tf, _ := cmd.Flags().GetBool("tunnel"); tf {
+			msg := "--tunnel cannot be combined with --detach (tunnels run in-process); run `corgi tunnel` separately"
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrUnsupported, msg)
+			} else {
+				fmt.Fprintln(os.Stderr, msg)
+			}
+			os.Exit(1)
+		}
+	}
+
 	if !detach {
 		stopSignalHandler := installSignalHandler(cmd)
 		defer stopSignalHandler()

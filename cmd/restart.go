@@ -119,6 +119,10 @@ func restartSingleService(cmd *cobra.Command) {
 		os.Exit(1)
 	}
 
+	if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
+		defer unlock()
+	}
+
 	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
 	st, entry, svc, code, err := resolveRestartTarget(statePath, corgi, restartService)
 	if err != nil {

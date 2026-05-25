@@ -132,6 +132,9 @@ func runStop(cmd *cobra.Command, _ []string) {
 		}
 		os.Remove(statePath)
 	} else {
+		if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
+			defer unlock()
+		}
 		st.Services = removeStateEntry(st.Services, stopService)
 		st.DBServices = removeStateEntry(st.DBServices, stopService)
 		if err := utils.WriteRunState(statePath, st); err != nil {
