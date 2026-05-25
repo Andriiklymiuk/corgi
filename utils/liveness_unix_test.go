@@ -4,12 +4,14 @@ package utils
 
 import (
 	"os/exec"
-	"strings"
+	"syscall"
 	"testing"
 )
 
-func TestPidAliveCommandMatch(t *testing.T) {
+func TestPidAliveGroupLeader(t *testing.T) {
+	// Own process group → pid is its own group leader, like a detached proc.
 	cmd := exec.Command("sleep", "30")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start sleep: %v", err)
 	}
@@ -17,29 +19,22 @@ func TestPidAliveCommandMatch(t *testing.T) {
 	pid := cmd.Process.Pid
 
 	if !PidAlive(pid, "") {
-		t.Error("empty command should report alive (back-compat)")
+		t.Error("group-leader process should report alive")
 	}
 	if !PidAlive(pid, "sleep 30") {
-		t.Error("matching command should report alive")
-	}
-	if PidAlive(pid, "some-other-binary-xyz") {
-		t.Error("mismatched command must report dead (PID-reuse guard)")
+		t.Error("command arg must not change the result")
 	}
 }
 
-func TestCommandNeedle(t *testing.T) {
-	cases := map[string]string{
-		"npm run dev && echo done": "npm run dev",
-		"short":                    "short",
-		"  spaced  ":               "spaced",
+func TestPidAliveNonLeader(t *testing.T) {
+	// Without Setpgid the child joins the test runner's group, so pgid != pid:
+	// stands in for a recycled pid that isn't its own group leader.
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
 	}
-	for in, want := range cases {
-		if got := commandNeedle(in); got != want {
-			t.Errorf("commandNeedle(%q) = %q, want %q", in, got, want)
-		}
-	}
-	long := strings.Repeat("x", 100)
-	if got := commandNeedle(long); len(got) != 60 {
-		t.Errorf("long command needle len = %d, want 60", len(got))
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	if PidAlive(cmd.Process.Pid, "") {
+		t.Error("non-group-leader pid must report dead (PID-reuse guard)")
 	}
 }
