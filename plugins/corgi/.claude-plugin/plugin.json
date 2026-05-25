@@ -1,7 +1,7 @@
 {
   "name": "corgi",
   "description": "Teach Claude how to use the corgi CLI: author corgi-compose.yml, run services, interpret doctor/status output, debug common failures.",
-  "version": "1.19.2",
+  "version": "1.19.3",
   "author": {
     "name": "Andrii Klymiuk",
     "url": "https://github.com/Andriiklymiuk"
