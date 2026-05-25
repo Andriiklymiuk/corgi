@@ -58,6 +58,10 @@ func ReconcileRunState(
 	now := time.Now().UTC()
 	for i := range s.Services {
 		e := &s.Services[i]
+		// pid==0 → container-managed (docker-runner); can't probe by pid, leave as-is.
+		if e.PID == 0 {
+			continue
+		}
 		newStatus := "running"
 		if !pidAlive(e.PID, e.Command) {
 			newStatus = "crashed"

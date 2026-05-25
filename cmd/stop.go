@@ -114,6 +114,10 @@ func runStop(cmd *cobra.Command, _ []string) {
 		if t.Status != "running" {
 			continue
 		}
+		// pid==0 → docker-runner container; cleanup() brings it down, not a pgroup kill.
+		if t.PID == 0 {
+			continue
+		}
 		if err := stopProcessGroup(t); err != nil {
 			summary.Failed = append(summary.Failed, stopFailure{Name: t.Name, Error: err.Error()})
 			continue

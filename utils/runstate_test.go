@@ -63,3 +63,18 @@ func TestReconcileStableWhenUnchanged(t *testing.T) {
 		t.Error("statusChangedAt must not change when status is unchanged")
 	}
 }
+
+func TestReconcileSkipsPidZeroService(t *testing.T) {
+	s := RunState{Services: []RunStateEntry{
+		{Name: "docker-svc", Kind: "service", PID: 0, Status: "running"},
+	}}
+	called := false
+	alive := func(int, string) bool { called = true; return false }
+	out := ReconcileRunState(s, alive, func(string) string { return "" })
+	if called {
+		t.Error("pid==0 service must not be pid-probed")
+	}
+	if out.Services[0].Status != "running" {
+		t.Errorf("pid==0 service should stay running, got %q", out.Services[0].Status)
+	}
+}

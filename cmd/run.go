@@ -573,7 +573,28 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 	procs := []detachedProc{}
 	for _, svc := range corgi.Services {
-		if shouldSkipManualRun(svc) || len(svc.Start) == 0 {
+		if shouldSkipManualRun(svc) {
+			continue
+		}
+		runDetachedBeforeStart(svc)
+
+		// docker-runner services run as containers (no tracked pid); reconcile
+		// and stop key off pid==0 and let cleanup bring them down.
+		if svc.Runner.Name == "docker" && svc.Port != 0 {
+			if err := utils.ExecuteServiceCommandRun(svc.ServiceName, "make", "up"); err != nil {
+				fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
+				continue
+			}
+			procs = append(procs, detachedProc{
+				name:    svc.ServiceName,
+				command: "make up",
+				logFile: utils.LogFilePath(svc.ServiceName),
+				port:    svc.Port,
+			})
+			continue
+		}
+
+		if len(svc.Start) == 0 {
 			continue
 		}
 		command := strings.Join(svc.Start, " && ")
@@ -592,6 +613,21 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 		})
 	}
 	return procs
+}
+
+func runDetachedBeforeStart(svc utils.Service) {
+	if svc.BeforeStart == nil || omitServiceCmd("beforeStart") {
+		return
+	}
+	utils.RunServiceCommands(
+		"beforeStart",
+		svc.ServiceName,
+		svc.BeforeStart,
+		svc.AbsolutePath,
+		false,
+		false,
+		getServiceEnv(svc),
+	)
 }
 
 func detachedDBEntries(corgi *utils.CorgiCompose) []utils.RunStateEntry {
