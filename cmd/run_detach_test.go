@@ -37,3 +37,21 @@ func TestApplyRunFlags_CIEnablesCIMode(t *testing.T) {
 		t.Error("expected CIMode true after --ci")
 	}
 }
+
+func TestBuildDetachState_StatusFromProc(t *testing.T) {
+	procs := []detachedProc{
+		{name: "api", pid: 111, pgid: 111, status: "running"},
+		{name: "web", pid: 222, pgid: 222, status: "crashed"},
+		{name: "dockersvc", pid: 0, command: "make up"}, // empty status → running
+	}
+	st := buildDetachState("/tmp/corgi-compose.yml", procs, nil)
+	if len(st.Services) != 3 {
+		t.Fatalf("expected 3 services, got %d", len(st.Services))
+	}
+	want := map[string]string{"api": "running", "web": "crashed", "dockersvc": "running"}
+	for _, s := range st.Services {
+		if want[s.Name] != s.Status {
+			t.Errorf("%s status = %q, want %q", s.Name, s.Status, want[s.Name])
+		}
+	}
+}
