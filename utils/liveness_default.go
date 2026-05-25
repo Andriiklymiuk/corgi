@@ -2,12 +2,7 @@
 
 package utils
 
-import (
-	"os/exec"
-	"strconv"
-	"strings"
-	"syscall"
-)
+import "syscall"
 
 // PidAlive reports whether pid is a live process still owned by corgi. The bare
 // kill(pid,0) check isn't enough: after a detached service exits the OS recycles
@@ -32,13 +27,9 @@ func PidAlive(pid int, command string) bool {
 	return pgid == pid
 }
 
-// processPGID returns pid's process-group id via ps (works on darwin + linux).
+// processPGID returns pid's process-group id via getpgid(2) — no fork.
 func processPGID(pid int) (int, bool) {
-	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "pgid=").Output()
-	if err != nil {
-		return 0, false
-	}
-	pgid, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	pgid, err := syscall.Getpgid(pid)
 	if err != nil {
 		return 0, false
 	}

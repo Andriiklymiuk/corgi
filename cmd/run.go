@@ -573,11 +573,18 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 	}
 	prev = utils.ReconcileRunState(prev, utils.PidAlive, utils.ContainerRunning)
 	if force {
+		var dockerRunners []string
 		for _, s := range prev.Services {
-			if s.Status == "running" {
-				_ = stopProcessGroup(s)
+			if s.Status != "running" {
+				continue
 			}
+			if s.PID == 0 {
+				dockerRunners = append(dockerRunners, s.Name) // container, not a pgroup
+				continue
+			}
+			_ = stopProcessGroup(s)
 		}
+		utils.StopDockerRunnerServices(dockerRunners)
 		os.Remove(statePath)
 		return false
 	}
