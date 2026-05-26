@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,5 +99,44 @@ func TestRequireServiceForDBShell(t *testing.T) {
 	}
 	if requireServiceForDBShell("", false, []string{"postgres"}) != nil {
 		t.Error("interactive mode should allow empty service")
+	}
+}
+
+func TestWaitForDbsReady_AllReady(t *testing.T) {
+	dbs := []utils.DatabaseService{
+		{ServiceName: "pg", Port: 5432},
+		{ServiceName: "redis", Port: 6379},
+	}
+	var probed []string
+	ready := func(_ context.Context, db utils.DatabaseService) error {
+		probed = append(probed, db.ServiceName)
+		return nil
+	}
+	if err := waitForDbsReady(context.Background(), dbs, ready); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(probed) != 2 {
+		t.Fatalf("want both probed, got %v", probed)
+	}
+}
+
+func TestWaitForDbsReady_SkipsPortless(t *testing.T) {
+	dbs := []utils.DatabaseService{{ServiceName: "noport", Port: 0}}
+	called := false
+	ready := func(_ context.Context, _ utils.DatabaseService) error { called = true; return nil }
+	if err := waitForDbsReady(context.Background(), dbs, ready); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("port==0 db should be skipped")
+	}
+}
+
+func TestWaitForDbsReady_WrapsError(t *testing.T) {
+	dbs := []utils.DatabaseService{{ServiceName: "pg", Port: 5432}}
+	ready := func(_ context.Context, _ utils.DatabaseService) error { return errors.New("timeout") }
+	err := waitForDbsReady(context.Background(), dbs, ready)
+	if err == nil || !strings.Contains(err.Error(), "pg") {
+		t.Fatalf("want error naming pg, got %v", err)
 	}
 }
