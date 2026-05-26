@@ -207,7 +207,7 @@ type Service struct {
 	DependsOnServices   []DependsOnService `yaml:"depends_on_services,omitempty"`
 	DependsOnDb         []DependsOnDb      `yaml:"depends_on_db,omitempty"`
 	Exports             []string           `yaml:"exports,omitempty"`
-	BeforeStart         []string           `yaml:"beforeStart,omitempty"`
+	BeforeStart         BeforeStartSteps   `yaml:"beforeStart,omitempty"`
 	Start               []string           `yaml:"start,omitempty"`
 	AfterStart          []string           `yaml:"afterStart,omitempty"`
 	Scripts             []Script           `yaml:"scripts,omitempty"`

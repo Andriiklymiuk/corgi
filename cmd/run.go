@@ -711,7 +711,7 @@ func runDetachedBeforeStart(svc utils.Service) {
 	utils.RunServiceCommands(
 		"beforeStart",
 		svc.ServiceName,
-		svc.BeforeStart,
+		svc.BeforeStart.Commands(),
 		svc.AbsolutePath,
 		false,
 		false,
@@ -1039,7 +1039,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		utils.RunServiceCommands(
 			"beforeStart",
 			service.ServiceName,
-			service.BeforeStart,
+			service.BeforeStart.Commands(),
 			service.AbsolutePath,
 			false,
 			false,
