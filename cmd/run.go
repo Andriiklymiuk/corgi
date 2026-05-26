@@ -193,6 +193,7 @@ nothing. Composes with --services/--omit/--dbServices as an intersection
 service's env dir and the tier's default dbServices. Empty = default.`,
 	)
 	runCmd.PersistentFlags().Bool("yes", false, "Skip confirmation prompts (e.g. for a tier marked confirm)")
+	runCmd.PersistentFlags().Bool("kill-port", false, "Reclaim service ports already in use (kill the holder) instead of aborting")
 	runCmd.PersistentFlags().String(
 		"host",
 		"",
@@ -506,6 +507,19 @@ func runRun(cmd *cobra.Command, _ []string) {
 	// --dry-run branches before any side effect: plan only, then exit.
 	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
 		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi)))
+	}
+
+	// Service-port preflight (skip on hot-reload: that path manages its own lifecycle).
+	if !runReloading.Load() {
+		killPort, _ := cmd.Flags().GetBool("kill-port")
+		if err := portPreflight(corgi, killPort); err != nil {
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrPortConflict, err.Error())
+			} else {
+				fmt.Fprintln(os.Stderr, "❌", err)
+			}
+			os.Exit(1)
+		}
 	}
 
 	if CheckClonedReposExistence(corgi.Services) {
