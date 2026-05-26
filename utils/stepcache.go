@@ -1,0 +1,49 @@
+package utils
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+const cacheDirName = ".cache"
+
+// Hash the contents of the cacheKey files (relative to baseDir). Missing files
+// hash to a stable marker so a step still has a deterministic key.
+func hashCacheKeyFiles(baseDir string, files []string) string {
+	h := sha256.New()
+	for _, f := range files {
+		data, err := os.ReadFile(filepath.Join(baseDir, f))
+		if err != nil {
+			fmt.Fprintf(h, "%s\x00MISSING\n", f)
+			continue
+		}
+		sum := sha256.Sum256(data)
+		fmt.Fprintf(h, "%s\x00%x\n", f, sum)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func stepCachePath(service Service, stepIndex int) string {
+	return filepath.Join(CorgiComposePathDir, "corgi_services", cacheDirName,
+		sanitizeName(service.ServiceName), strconv.Itoa(stepIndex))
+}
+
+func readStepHash(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func writeStepHash(path, hash string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(hash), 0o644)
+}
