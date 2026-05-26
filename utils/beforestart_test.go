@@ -37,3 +37,22 @@ beforeStart:
 	}
 }
 
+
+// Old all-string beforeStart must parse + behave exactly as before.
+func TestBeforeStartSteps_LegacyAllStrings(t *testing.T) {
+	data := `
+beforeStart:
+  - npm install
+  - npm run build
+`
+	var y Service
+	if err := yaml.Unmarshal([]byte(data), &y); err != nil {
+		t.Fatal(err)
+	}
+	if y.BeforeStart.HasCacheKeys() {
+		t.Fatal("legacy strings must not opt into caching")
+	}
+	if !reflect.DeepEqual(y.BeforeStart.Commands(), []string{"npm install", "npm run build"}) {
+		t.Fatalf("Commands() must match the original strings, got %v", y.BeforeStart.Commands())
+	}
+}
