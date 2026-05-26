@@ -169,6 +169,7 @@ Reflection-driven prompts cover: scalars (string/int), `[]string` lists, nested 
 Database lifecycle helper. Flags:
 - `-s, --stopAll` — stop all db containers
 - `-u, --upAll` — start all db containers
+- `--wait` — with `--upAll`: block until each db with a port accepts connections (replaces manual `sleep`). Hard-fails on timeout (`E_READINESS_TIMEOUT` under `--json`); good for CI gating.
 - `-d, --downAll` — stop + remove all db containers
 - `-r, --removeAll` — remove all db containers (preserves volumes? verify before destructive use)
 - `--seedAll` — run seed scripts for all dbs

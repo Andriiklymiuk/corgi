@@ -26,8 +26,14 @@ func runUpAll(cmd *cobra.Command, dbs []utils.DatabaseService) {
 	if wait, _ := cmd.Flags().GetBool("wait"); wait {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultReadyTimeout)
 		defer cancel()
+		// Explicit --wait gates: a timeout is a hard failure (useful in CI).
 		if err := waitForDbsReady(ctx, dbs, utils.WaitForDBReady); err != nil {
-			utils.Infof("⚠️  %s\n", err)
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
+			} else {
+				fmt.Fprintln(os.Stderr, "❌", err)
+			}
+			os.Exit(1)
 		}
 	}
 
