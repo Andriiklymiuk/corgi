@@ -116,7 +116,8 @@ portAlias:               string   # Env var name for port (default: PORT)
 manualRun:               bool
 ignore_env:              bool     # Skip .env generation
 envPath:                 string   # Where .env lives inside the repo (default: .env)
-copyEnvFromFilePath:     string   # Template .env to copy in
+copyEnvFromFilePath:     string   # Template .env to copy in; if missing, falls back to repo's .env-example / .env.example
+placeholderTokens:       [string] # Tokens marking unfilled values; corgi warns (not fails) if resolved env still contains any
 localhostNameInEnv:      string   # Default: localhost; becomes host.docker.internal under Docker
 environment:             [string] # Extra env vars (KEY=value). Supports ${OWN_VAR} (own env) and ${producer.VAR} (cross-service exports)
 autoSourceEnv:           bool     # Default true. False = corgi skips auto-`set -a; . .env; set +a` prefix on commands (avoids leaking secrets to subprocesses)
