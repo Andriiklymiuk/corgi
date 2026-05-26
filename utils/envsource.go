@@ -7,20 +7,14 @@ import (
 	"strings"
 )
 
-// ActiveTierName / ActiveTierDir hold the tier selected by `corgi run --tier`
-// (and `corgi env --tier`). Empty = no tier; env resolution stays on the
-// default path. Mirrors the HostOverride global convention.
+// Tier selected by --tier; empty = default path. Like HostOverride.
 var (
 	ActiveTierName string
 	ActiveTierDir  string
 )
 
-// resolveEnvSourceFile picks the source env file for a service, in order:
-// explicit copyEnvFromFilePath (with ${tier} substituted) if it exists → the
-// active tier's convention file <tierDir>/<service>.env → the service repo's
-// .env-example / .env.example. Returns "" when none exist. copyEnvFilePath
-// overrides the service field (used by scripts). tierName/tierDir are empty
-// when no tier is active, leaving resolution byte-for-byte the default path.
+// Source env file: explicit copyEnvFromFilePath (${tier} substituted) →
+// <tierDir>/<service>.env → repo .env-example/.env.example. "" if none.
 func resolveEnvSourceFile(composeDir string, service Service, copyEnvFilePath, tierName, tierDir string) string {
 	rel := resolveCopyEnvPath(service, copyEnvFilePath)
 	if rel != "" {
@@ -47,8 +41,7 @@ func resolveEnvSourceFile(composeDir string, service Service, copyEnvFilePath, t
 	return ""
 }
 
-// placeholderWarning returns a warning when the resolved env still contains any
-// of the service's declared placeholder tokens. Empty = nothing to warn.
+// Warn if resolved env still contains a declared placeholder token. "" = none.
 func placeholderWarning(service Service, envBody string) string {
 	var found []string
 	for _, token := range service.EnvPlaceholdersToCheck {

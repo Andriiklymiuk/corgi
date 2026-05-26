@@ -257,9 +257,7 @@ type Required struct {
 	CheckCmd string   `yaml:"checkCmd,omitempty"`
 }
 
-// EnvTier is a named bundle of run settings selected by `corgi run --tier`:
-// which env-file dir feeds each service, a default db_services selection, and
-// whether to confirm before running (e.g. prod).
+// Named run-settings bundle selected by --tier.
 type EnvTier struct {
 	Dir        string `yaml:"dir,omitempty"`
 	DbServices string `yaml:"dbServices,omitempty"`
