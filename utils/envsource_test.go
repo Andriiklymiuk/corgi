@@ -23,7 +23,7 @@ func TestResolveEnvSourceFile_ExplicitPathWins(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "api.env"), "A=1")
 	svc := Service{AbsolutePath: dir + "/", CopyEnvFromFilePath: "api.env"}
 
-	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "")
+	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "", "")
 	want := filepath.Join(dir, "api.env")
 	if got != want {
 		t.Fatalf("want explicit path %q, got %q", want, got)
@@ -40,7 +40,7 @@ func TestResolveEnvSourceFile_FallsBackToEnvExample(t *testing.T) {
 	writeFile(t, filepath.Join(dir, ".env-example"), "A=1")
 	svc := Service{AbsolutePath: dir + "/", CopyEnvFromFilePath: "missing.env"}
 
-	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "")
+	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "", "")
 	want := filepath.Join(dir, ".env-example")
 	if got != want {
 		t.Fatalf("want .env-example fallback %q, got %q", want, got)
@@ -57,7 +57,7 @@ func TestResolveEnvSourceFile_FallsBackToDotEnvExample(t *testing.T) {
 	writeFile(t, filepath.Join(dir, ".env.example"), "A=1")
 	svc := Service{AbsolutePath: dir + "/"}
 
-	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "")
+	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "", "")
 	want := filepath.Join(dir, ".env.example")
 	if got != want {
 		t.Fatalf("want .env.example fallback %q, got %q", want, got)
@@ -140,7 +140,7 @@ func TestResolveEnvSourceFile_NoneExist(t *testing.T) {
 
 	svc := Service{AbsolutePath: dir + "/", CopyEnvFromFilePath: "missing.env"}
 
-	if got := resolveEnvSourceFile(CorgiComposePathDir, svc, ""); got != "" {
+	if got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "", ""); got != "" {
 		t.Fatalf("want empty when nothing exists, got %q", got)
 	}
 }

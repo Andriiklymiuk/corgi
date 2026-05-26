@@ -632,7 +632,7 @@ func appendEnvironmentLines(envForService string, service Service) (string, erro
 
 func buildServiceEnvBody(service Service, corgiCompose *CorgiCompose, copyEnvFilePath string, ignoreDependentServicesEnvs bool) (string, error) {
 	var envForService string
-	if sourceFile := resolveEnvSourceFile(CorgiComposePathDir, service, copyEnvFilePath); sourceFile != "" {
+	if sourceFile := resolveEnvSourceFile(CorgiComposePathDir, service, copyEnvFilePath, ActiveTierName, ActiveTierDir); sourceFile != "" {
 		envForService = getEnvFromFile(sourceFile, corgiGeneratedMessage)
 	}
 
