@@ -47,3 +47,27 @@ func writeStepHash(path, hash string) error {
 	}
 	return os.WriteFile(path, []byte(hash), 0o644)
 }
+
+// StepNeedsRun reports whether a beforeStart step must run, plus the current
+// cacheKey hash to persist after success. No cacheKey = always run. noCache forces run.
+func StepNeedsRun(service Service, stepIndex int, step BeforeStartStep, noCache bool) (run bool, hash string) {
+	if len(step.CacheKey) == 0 {
+		return true, ""
+	}
+	hash = hashCacheKeyFiles(service.AbsolutePath, step.CacheKey)
+	if noCache {
+		return true, hash
+	}
+	if readStepHash(stepCachePath(service, stepIndex)) == hash {
+		return false, hash
+	}
+	return true, hash
+}
+
+// PersistStepHash records a step's hash so an unchanged future run can skip it.
+func PersistStepHash(service Service, stepIndex int, hash string) {
+	if hash == "" {
+		return
+	}
+	_ = writeStepHash(stepCachePath(service, stepIndex), hash)
+}

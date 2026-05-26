@@ -46,3 +46,60 @@ func TestStepHash_WriteRead(t *testing.T) {
 		t.Fatalf("missing cache should read empty, got %q", got)
 	}
 }
+
+func TestStepNeedsRun_NoCacheKeyAlwaysRuns(t *testing.T) {
+	run, hash := StepNeedsRun(Service{ServiceName: "s", AbsolutePath: t.TempDir() + "/"}, 0, BeforeStartStep{Run: "x"}, false)
+	if !run || hash != "" {
+		t.Fatalf("no cacheKey should always run with empty hash, got run=%v hash=%q", run, hash)
+	}
+}
+
+func TestStepNeedsRun_SkipsWhenUnchanged(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	svcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(svcDir, "lock"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := Service{ServiceName: "api", AbsolutePath: svcDir + "/"}
+	step := BeforeStartStep{Run: "yarn", CacheKey: []string{"lock"}}
+
+	run, hash := StepNeedsRun(svc, 0, step, false)
+	if !run {
+		t.Fatal("first run should execute")
+	}
+	PersistStepHash(svc, 0, hash)
+
+	run2, _ := StepNeedsRun(svc, 0, step, false)
+	if run2 {
+		t.Fatal("unchanged inputs should skip")
+	}
+}
+
+func TestStepNeedsRun_NoCacheForcesRun(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+	svcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(svcDir, "lock"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := Service{ServiceName: "api", AbsolutePath: svcDir + "/"}
+	step := BeforeStartStep{Run: "yarn", CacheKey: []string{"lock"}}
+	_, hash := StepNeedsRun(svc, 0, step, false)
+	PersistStepHash(svc, 0, hash)
+	if run, _ := StepNeedsRun(svc, 0, step, true); !run {
+		t.Fatal("--no-cache should force run")
+	}
+}
+
+func TestHasCacheKeys(t *testing.T) {
+	if (BeforeStartSteps{{Run: "a"}}).HasCacheKeys() {
+		t.Fatal("no cacheKey -> false")
+	}
+	if !(BeforeStartSteps{{Run: "a", CacheKey: []string{"x"}}}).HasCacheKeys() {
+		t.Fatal("cacheKey -> true")
+	}
+}
