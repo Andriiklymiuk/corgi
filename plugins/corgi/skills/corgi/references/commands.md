@@ -35,6 +35,8 @@ Notable flags:
 - `--pull` — `git pull` in service dirs before starting
 - `--no-watch` — disable auto-reload on compose file change
 - `--host <ip|auto>` — host substituted for `localhost` in service URL env vars (LAN access from phones, etc.). `auto` picks first non-loopback IPv4. db_services stay on localhost.
+- `--tier <name>` — select a compose `envTiers` entry: resolves each service's env from the tier's `dir` (`<dir>/<service>.env`, with `${tier}` substituted in `copyEnvFromFilePath`), and applies the tier's default `dbServices` unless `--dbServices` is passed. A tier with `confirm: true` prompts before running. Also on `corgi env --tier`.
+- `--yes` — skip confirmation prompts (e.g. a tier marked `confirm: true`). Required when non-interactive/`--json`.
 - `--tunnel` — open public HTTPS tunnels alongside the stack for every service with a `tunnel:` block. Equivalent to a parallel `corgi tunnel`, bundled into the one process.
 - `--logs` — persist stdout/stderr of every service and db_service to `corgi_services/.logs/<name>/<timestamp>.log`. Capped 50 MB per file, keeps 10 newest runs per service, older pruned automatically. A `.logs/` entry is auto-added to `corgi_services/.gitignore`. Read back with `corgi logs`.
 - `--ci` — CI mode: suppress spinners, banners, color output. Plain log lines only. Auto-enabled when any common CI environment variable is set: `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`, `BUILDKITE`, `JENKINS_URL`, `TEAMCITY_VERSION`, `TRAVIS`, `DRONE`, `BITBUCKET_BUILD_NUMBER`, `CODEBUILD_BUILD_ID`. Pair with `--runOnce` for pipelines.

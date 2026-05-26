@@ -18,7 +18,25 @@ afterStart:   [string]              # Shell commands run on shutdown (SIGINT/SIG
 db_services:  map<name, DbService>  # See below
 services:     map<name, Service>    # See below
 required:     map<tool, Required>   # See below
+envTiers:     map<name, EnvTier>    # Optional. `corgi run --tier <name>` selects one
 ```
+
+## `envTiers.<name>` (optional)
+
+Named bundle of run settings selected by `corgi run --tier <name>` (also `corgi env --tier`).
+
+```yaml
+envTiers:
+  staging:
+    dir: env/staging      # per-service env lookup: env/staging/<service>.env
+    dbServices: none      # default --dbServices for the tier (overridden by explicit --dbServices)
+  prod:
+    dir: env/prod
+    dbServices: none
+    confirm: true         # prompt before running (bypass with --yes)
+```
+
+Resolution per service under a tier: `${tier}`-substituted `copyEnvFromFilePath` → `<dir>/<service>.env` → repo `.env-example`/`.env.example`. No tier / no `--tier` = default behavior.
 
 ## Global `${VAR}` interpolation
 

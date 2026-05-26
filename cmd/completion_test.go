@@ -122,6 +122,24 @@ func TestLoadComposeForCompletionValid(t *testing.T) {
 	}
 }
 
+func TestCompleteTier(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "compose.yml")
+	body := `envTiers:
+  staging:
+    dir: env/staging
+  prod:
+    dir: env/prod
+`
+	if err := os.WriteFile(yml, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := completeTier(newCompletionCmd(yml), nil, "")
+	if len(got) != 2 || got[0] != "prod" || got[1] != "staging" {
+		t.Errorf("want sorted [prod staging], got %v", got)
+	}
+}
+
 func TestCompleteServicesNoCompose(t *testing.T) {
 	c := newCompletionCmd("/nonexistent/zzz.yml")
 	got, _ := completeServices(c, nil, "")
