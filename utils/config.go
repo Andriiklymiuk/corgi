@@ -257,10 +257,20 @@ type Required struct {
 	CheckCmd string   `yaml:"checkCmd,omitempty"`
 }
 
+// EnvTier is a named bundle of run settings selected by `corgi run --tier`:
+// which env-file dir feeds each service, a default db_services selection, and
+// whether to confirm before running (e.g. prod).
+type EnvTier struct {
+	Dir        string `yaml:"dir,omitempty"`
+	DbServices string `yaml:"dbServices,omitempty"`
+	Confirm    bool   `yaml:"confirm,omitempty"`
+}
+
 type CorgiCompose struct {
 	DatabaseServices []DatabaseService
 	Services         []Service
 	Required         []Required
+	EnvTiers         map[string]EnvTier `yaml:"envTiers,omitempty"`
 	// cannot combine from one common struct (yaml serialization), so have to repeat
 	Init        []string `yaml:"init,omitempty"`
 	BeforeStart []string `yaml:"beforeStart,omitempty"`
@@ -278,6 +288,7 @@ type CorgiComposeYaml struct {
 	DatabaseServices map[string]DatabaseService `yaml:"db_services"`
 	Services         map[string]Service         `yaml:"services"`
 	Required         map[string]Required        `yaml:"required"`
+	EnvTiers         map[string]EnvTier         `yaml:"envTiers,omitempty"`
 	// cannot combine from one common struct (yaml serialization), so have to repeat
 	Init        []string `yaml:"init,omitempty"`
 	BeforeStart []string `yaml:"beforeStart,omitempty"`
@@ -374,6 +385,7 @@ func buildBaseCorgi(y CorgiComposeYaml) CorgiCompose {
 		UseAwsVpn:   y.UseAwsVpn,
 		Name:        y.Name,
 		Description: y.Description,
+		EnvTiers:    y.EnvTiers,
 	}
 }
 
