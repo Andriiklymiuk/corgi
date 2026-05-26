@@ -42,6 +42,19 @@
       "items": { "type": "string" },
       "description": "Top-level commands run consecutively after the CLI exits."
     },
+    "envTiers": {
+      "type": "object",
+      "description": "Named env tiers selected by `corgi run --tier`. Each picks the env dir feeding services, a default dbServices selection, and whether to confirm before running.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Root dir for per-service env lookup: <dir>/<service>.env." },
+          "dbServices": { "type": "string", "description": "Default --dbServices for this tier (e.g. \"none\" to skip local dbs). Overridden by an explicit --dbServices." },
+          "confirm": { "type": "boolean", "description": "Prompt before running this tier (e.g. prod). Bypassed with --yes." }
+        },
+        "additionalProperties": false
+      }
+    },
     "services": {
       "type": "object",
       "description": "Map of service name to its definition.",
@@ -72,16 +85,59 @@
         "branch": { "type": "string", "description": "Git branch to check out after cloning." },
         "environment": { "type": "array", "items": { "type": "string" }, "description": "Env vars copied into the service env file.", "examples": [["YOUR_ENV=dev"]] },
         "envPath": { "type": "string", "description": "Path to the .env file in the target repo. Defaults to .env." },
-        "copyEnvFromFilePath": { "type": "string", "description": "Path to an .env whose content is copied into the service .env." },
+        "copyEnvFromFilePath": { "type": "string", "description": "Path to an .env whose content is copied into the service .env. If missing, falls back to the service repo's .env-example / .env.example." },
+        "envPlaceholdersToCheck": { "type": "array", "items": { "type": "string" }, "description": "Tokens that mark unfilled values; corgi warns (does not fail) when the resolved env still contains any of them.", "examples": [["<supabase-id>", "your-anon-key"]] },
         "localhostNameInEnv": { "type": "string", "description": "Localhost name used in the env file. Defaults to localhost." },
         "port": { "type": "integer", "description": "Service port added to the env file.", "examples": [5432] },
         "portAlias": { "type": "string", "description": "Env var name for the port. Defaults to PORT." },
         "depends_on_services": { "type": "array", "items": { "$ref": "#/definitions/dependsOnService" }, "description": "Other services this service depends on." },
         "depends_on_db": { "type": "array", "items": { "$ref": "#/definitions/dependsOnDb" }, "description": "Database services this service depends on." },
         "exports": { "type": "array", "items": { "type": "string" }, "description": "Whitelist of env vars exported to dependents." },
-        "beforeStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively before start." },
+        "beforeStart": {
+          "type": "array",
+          "description": "Commands run consecutively before start. Each entry is a string, or an object {run, cacheKey} where cacheKey lists files whose unchanged hash lets corgi skip that step (--no-cache forces run).",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "run": { "type": "string", "description": "The command to run." },
+                  "cacheKey": { "type": "array", "items": { "type": "string" }, "description": "Files (relative to the service dir) whose combined hash gates this step." }
+                },
+                "required": ["run"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
         "start": { "type": "array", "items": { "type": "string" }, "description": "Commands run in parallel for the service." },
-        "afterStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively when the CLI exits." },
+        "afterStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively when the CLI exits (also on single-service stop/restart)." },
+        "restartPolicy": {
+          "type": "object",
+          "description": "Auto-heal a detached service that crashes at startup.",
+          "properties": {
+            "mode": { "type": "string", "enum": ["on-failure", "never"], "description": "on-failure relaunches on crash; never (default) does nothing." },
+            "maxRetries": { "type": "integer", "minimum": 0, "description": "Relaunch attempts before giving up." },
+            "backoffSeconds": { "type": "integer", "minimum": 0, "description": "Delay between relaunch attempts." }
+          },
+          "additionalProperties": false
+        },
+        "openOnReady": {
+          "description": "Open the service URL in the browser when its healthCheck passes (only with `corgi run --open`). true = http://localhost:<port>/, or an object to customize.",
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "description": "URL path (default /), e.g. /login." },
+                "scheme": { "type": "string", "description": "http (default) or https." },
+                "browser": { "type": "string", "description": "Specific browser app (macOS `open -a`), e.g. \"Google Chrome\"." }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
         "scripts": { "type": "array", "items": { "$ref": "#/definitions/script" }, "description": "Named scripts available for the service." },
         "interactiveInput": { "type": "boolean", "description": "Allow interactive stdin for this service." },
         "autoSourceEnv": { "type": "boolean", "description": "Toggle the auto `set -a; . <env>; set +a` prefix. Default on." },

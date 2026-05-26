@@ -31,11 +31,26 @@ func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 	errs = append(errs, checkMissingStart(c)...)
 	errs = append(errs, checkPortConflicts(c)...)
 	errs = append(errs, checkInvalidConditions(c)...)
+	errs = append(errs, checkRestartPolicies(c)...)
 
 	warns = append(warns, checkDependedWithoutHealthcheck(c)...)
 	warns = append(warns, checkCloneWithoutBranch(c)...)
 
 	return errs, warns
+}
+
+func checkRestartPolicies(c *CorgiCompose) []ValidationIssue {
+	var out []ValidationIssue
+	for _, s := range c.Services {
+		if err := ValidateRestartPolicy(s.RestartPolicy); err != nil {
+			out = append(out, ValidationIssue{
+				Code:    ErrUsage,
+				Message: fmt.Sprintf("service %q: %v", s.ServiceName, err),
+				Field:   fmt.Sprintf("services.%s.restartPolicy", s.ServiceName),
+			})
+		}
+	}
+	return out
 }
 
 // composeNames returns the known service / db names in the compose.

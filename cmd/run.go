@@ -16,6 +16,7 @@ import (
 	"andriiklymiuk/corgi/utils/art"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
@@ -184,6 +185,18 @@ nothing. Composes with --services/--omit/--dbServices as an intersection
 		false,
 		"Dusable watch for changes in corgi-compose file",
 	)
+	runCmd.PersistentFlags().StringVar(
+		&utils.EnvTierFromFlag,
+		"tier",
+		"",
+		`Env tier from the compose envTiers block (e.g. staging, prod). Selects each
+service's env dir and the tier's default dbServices. Empty = default.`,
+	)
+	runCmd.PersistentFlags().Bool("yes", false, "Skip confirmation prompts (e.g. for a tier marked confirm)")
+	runCmd.PersistentFlags().Bool("kill-port", false, "Reclaim service ports already in use (kill the holder) instead of aborting")
+	runCmd.PersistentFlags().Bool("no-cache", false, "Ignore beforeStart cacheKey fingerprints; run every beforeStart step")
+	runCmd.PersistentFlags().BoolVar(&utils.WithDepsFromFlag, "with-deps", false, "With --services: also start each service's depends_on closure (services + dbs)")
+	runCmd.PersistentFlags().Bool("open", false, "Open each service's URL in the browser when it passes its healthCheck (services with openOnReady set)")
 	runCmd.PersistentFlags().String(
 		"host",
 		"",
@@ -270,8 +283,10 @@ const defaultReadyTimeout = 15 * time.Second
 
 // Resolved --gate-deps / --ready-timeout for the current run, set by applyRunFlags.
 var (
-	gateDepsFlag bool
-	readyTimeout = defaultReadyTimeout
+	gateDepsFlag       bool
+	noBeforeStartCache bool
+	openOnReadyFlag    bool
+	readyTimeout       = defaultReadyTimeout
 )
 
 // exitInProgress guards the terminal-exit path. Reset on cleanup-setup
@@ -435,6 +450,31 @@ func resolveHostFlag(cmd *cobra.Command) error {
 	return nil
 }
 
+// Block on a tier marked confirm:true unless --yes. Non-interactive needs --yes.
+func confirmTier(cmd *cobra.Command, corgi *utils.CorgiCompose) error {
+	if utils.ActiveTierName == "" {
+		return nil
+	}
+	tier, ok := corgi.EnvTiers[utils.ActiveTierName]
+	if !ok || !tier.Confirm {
+		return nil
+	}
+	if yes, _ := cmd.Flags().GetBool("yes"); yes {
+		return nil
+	}
+	if utils.NonInteractive || utils.JSONOutput {
+		return fmt.Errorf("tier %q requires confirmation; pass --yes", utils.ActiveTierName)
+	}
+	prompt := promptui.Prompt{
+		Label:     fmt.Sprintf("Run against %q tier", utils.ActiveTierName),
+		IsConfirm: true,
+	}
+	if _, err := prompt.Run(); err != nil {
+		return fmt.Errorf("aborted")
+	}
+	return nil
+}
+
 func runRun(cmd *cobra.Command, _ []string) {
 	applyRunFlags(cmd)
 
@@ -456,6 +496,15 @@ func runRun(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
+	if err := confirmTier(cmd, corgi); err != nil {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrUsage, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(1)
+	}
+
 	// Single filter point: narrow services/db_services before anything reads them.
 	// The --services/--omit/--dbServices filters then intersect this narrowed set.
 	applyProfileFilter(cmd, corgi)
@@ -463,6 +512,19 @@ func runRun(cmd *cobra.Command, _ []string) {
 	// --dry-run branches before any side effect: plan only, then exit.
 	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
 		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi)))
+	}
+
+	// Service-port preflight (skip on hot-reload: that path manages its own lifecycle).
+	if !runReloading.Load() {
+		killPort, _ := cmd.Flags().GetBool("kill-port")
+		if err := portPreflight(corgi, killPort); err != nil {
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrPortConflict, err.Error())
+			} else {
+				fmt.Fprintln(os.Stderr, "❌", err)
+			}
+			os.Exit(1)
+		}
 	}
 
 	if CheckClonedReposExistence(corgi.Services) {
@@ -543,6 +605,7 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 
 	procs := spawnDetachedServices(corgi)
 	settleDetached(procs)
+	healCrashedDetached(corgi, procs)
 	dbs := detachedDBEntries(corgi)
 	state := buildDetachState(utils.CorgiComposePath, procs, dbs)
 	if err := utils.WriteRunState(statePath, state); err != nil {
@@ -647,19 +710,68 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 	return procs
 }
 
-func runDetachedBeforeStart(svc utils.Service) {
-	if svc.BeforeStart == nil || omitServiceCmd("beforeStart") {
+// runServiceBeforeStart runs a service's beforeStart. When no step declares a
+// cacheKey it uses the original joined-&&-chain (unchanged behavior). When any
+// step has a cacheKey, steps run individually so unchanged ones can be skipped.
+func runServiceBeforeStart(service utils.Service, envFile string) {
+	if service.BeforeStart == nil || omitServiceCmd("beforeStart") {
 		return
 	}
-	utils.RunServiceCommands(
-		"beforeStart",
-		svc.ServiceName,
-		svc.BeforeStart,
-		svc.AbsolutePath,
-		false,
-		false,
-		getServiceEnv(svc),
-	)
+	if !service.BeforeStart.HasCacheKeys() {
+		utils.RunServiceCommands(
+			"beforeStart", service.ServiceName, service.BeforeStart.Commands(),
+			service.AbsolutePath, false, false, envFile,
+		)
+		return
+	}
+	if err := runCachedBeforeStart(service, noBeforeStartCache, func(c string) error {
+		return utils.RunServiceCmd(service.ServiceName, c, service.AbsolutePath, false, envFile)
+	}); err != nil {
+		utils.Infof("aborting beforeStart for %s: %v\n", service.ServiceName, err)
+	}
+}
+
+// Run beforeStart per step: skip unchanged cacheKey steps, persist hash on success. run injected for tests.
+func runCachedBeforeStart(service utils.Service, noCache bool, run func(string) error) error {
+	for i, step := range service.BeforeStart {
+		needs, hash := utils.StepNeedsRun(service, i, step, noCache)
+		if !needs {
+			utils.Infof("⏭️  beforeStart skipped (cacheKey unchanged): %s\n", step.Run)
+			continue
+		}
+		if err := run(step.Run); err != nil {
+			return err
+		}
+		utils.PersistStepHash(service, i, hash)
+	}
+	return nil
+}
+
+func runDetachedBeforeStart(svc utils.Service) {
+	runServiceBeforeStart(svc, getServiceEnv(svc))
+}
+
+// browserOpener is overridable in tests.
+var browserOpener = launchBrowser
+
+// Open a service's URL once ready, when --open is set and it opted in.
+func maybeOpenOnReady(service utils.Service) {
+	if !openOnReadyFlag || service.Port == 0 || service.OpenOnReady == nil || !service.OpenOnReady.Enabled {
+		return
+	}
+	o := service.OpenOnReady
+	if err := browserOpener(o.URL(service.Port), o.Browser); err != nil {
+		utils.Infof("could not open %s: %v\n", service.ServiceName, err)
+	}
+}
+
+// Run one service's afterStart teardown on single-service stop/restart.
+func runServiceAfterStop(corgi *utils.CorgiCompose, name string) {
+	svc := findService(corgi, name)
+	if svc == nil || svc.AfterStart == nil || omitServiceCmd("afterStart") {
+		return
+	}
+	utils.RunCleanupCommands("afterStart", svc.ServiceName, svc.AfterStart, svc.AbsolutePath, getServiceEnv(*svc))
 }
 
 // settleDetached gives freshly spawned services a moment to crash, then records
@@ -748,6 +860,8 @@ func applyRunFlags(cmd *cobra.Command) {
 		utils.SetCIMode(true)
 	}
 	gateDepsFlag, _ = cmd.Flags().GetBool("gate-deps")
+	noBeforeStartCache, _ = cmd.Flags().GetBool("no-cache")
+	openOnReadyFlag, _ = cmd.Flags().GetBool("open")
 	if d, err := cmd.Flags().GetDuration("ready-timeout"); err == nil && d > 0 {
 		readyTimeout = d
 	}
@@ -979,15 +1093,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
 		utils.Info("\nBefore start commands:")
-		utils.RunServiceCommands(
-			"beforeStart",
-			service.ServiceName,
-			service.BeforeStart,
-			service.AbsolutePath,
-			false,
-			false,
-			getServiceEnv(service),
-		)
+		runServiceBeforeStart(service, getServiceEnv(service))
 	}
 
 	if utils.ShutdownRequested() {
@@ -1005,8 +1111,11 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
 				defer cancel()
-				_ = utils.WaitForServiceReady(ctx, service) // close even on timeout
+				err := utils.WaitForServiceReady(ctx, service)
 				sig.markReady()
+				if err == nil {
+					maybeOpenOnReady(service)
+				}
 			}()
 		}
 	}

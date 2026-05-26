@@ -402,7 +402,7 @@ func TestRunService_BailsOnShutdownBeforeSpawning(t *testing.T) {
 	wg.Add(1)
 	runService(utils.Service{
 		ServiceName:  "x",
-		BeforeStart:  []string{"touch should-not-run"},
+		BeforeStart:  utils.BeforeStartSteps{{Run: "touch should-not-run"}},
 		Start:        []string{"sleep 30"},
 		AbsolutePath: t.TempDir(),
 	}, cmd, &wg, nil)
@@ -467,7 +467,7 @@ func TestRunServiceWithBeforeStart(t *testing.T) {
 	wg.Add(1)
 	runService(utils.Service{
 		ServiceName:  "x",
-		BeforeStart:  []string{"echo before"},
+		BeforeStart:  utils.BeforeStartSteps{{Run: "echo before"}},
 		AbsolutePath: dir,
 	}, cmd, &wg, nil)
 	wg.Wait()

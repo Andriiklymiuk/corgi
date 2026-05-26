@@ -54,21 +54,33 @@ func openTargets(corgi *utils.CorgiCompose, names []string) []openTarget {
 	return targets
 }
 
-// browserCommand returns the OS launcher command + args for a URL.
-func browserCommand(url string) (string, []string) {
+// browserCommand returns the OS launcher command + args for a URL. A non-empty
+// browser opens in that specific app (macOS `open -a`; Linux best-effort via the
+// named binary; Windows falls back to the default handler).
+func browserCommand(url, browser string) (string, []string) {
 	switch runtime.GOOS {
 	case "darwin":
+		if browser != "" {
+			return "open", []string{"-a", browser, url}
+		}
 		return "open", []string{url}
 	case "windows":
 		return "rundll32", []string{"url.dll,FileProtocolHandler", url}
 	default:
+		if browser != "" {
+			return browser, []string{url}
+		}
 		return "xdg-open", []string{url}
 	}
 }
 
 // launcher is overridable in tests.
 var launcher = func(url string) error {
-	name, cmdArgs := browserCommand(url)
+	return launchBrowser(url, "")
+}
+
+func launchBrowser(url, browser string) error {
+	name, cmdArgs := browserCommand(url, browser)
 	return exec.Command(name, cmdArgs...).Start()
 }
 

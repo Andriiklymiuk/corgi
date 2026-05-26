@@ -18,7 +18,25 @@ afterStart:   [string]              # Shell commands run on shutdown (SIGINT/SIG
 db_services:  map<name, DbService>  # See below
 services:     map<name, Service>    # See below
 required:     map<tool, Required>   # See below
+envTiers:     map<name, EnvTier>    # Optional. `corgi run --tier <name>` selects one
 ```
+
+## `envTiers.<name>` (optional)
+
+Named bundle of run settings selected by `corgi run --tier <name>` (also `corgi env --tier`).
+
+```yaml
+envTiers:
+  staging:
+    dir: env/staging      # per-service env lookup: env/staging/<service>.env
+    dbServices: none      # default --dbServices for the tier (overridden by explicit --dbServices)
+  prod:
+    dir: env/prod
+    dbServices: none
+    confirm: true         # prompt before running (bypass with --yes)
+```
+
+Resolution per service under a tier: `${tier}`-substituted `copyEnvFromFilePath` → `<dir>/<service>.env` → repo `.env-example`/`.env.example`. No tier / no `--tier` = default behavior.
 
 ## Global `${VAR}` interpolation
 
@@ -116,7 +134,8 @@ portAlias:               string   # Env var name for port (default: PORT)
 manualRun:               bool
 ignore_env:              bool     # Skip .env generation
 envPath:                 string   # Where .env lives inside the repo (default: .env)
-copyEnvFromFilePath:     string   # Template .env to copy in
+copyEnvFromFilePath:     string   # Template .env to copy in; if missing, falls back to repo's .env-example / .env.example
+envPlaceholdersToCheck:       [string] # Tokens marking unfilled values; corgi warns (not fails) if resolved env still contains any
 localhostNameInEnv:      string   # Default: localhost; becomes host.docker.internal under Docker
 environment:             [string] # Extra env vars (KEY=value). Supports ${OWN_VAR} (own env) and ${producer.VAR} (cross-service exports)
 autoSourceEnv:           bool     # Default true. False = corgi skips auto-`set -a; . .env; set +a` prefix on commands (avoids leaking secrets to subprocesses)
@@ -141,9 +160,18 @@ exports:                 [string]   # Whitelist of vars exported to dependents.
 runner:
   name: string                    # "docker" or custom
 
-beforeStart:  [string]            # Run before `start`
+beforeStart:  [string|object]     # Run before `start`. Entry = string, or {run, cacheKey}:
+                                  #   - run: yarn install
+                                  #     cacheKey: [yarn.lock]   # skip step if these files' hash unchanged
+                                  # (cacheKey steps run in their own shell; --no-cache forces run)
 start:        [string]            # Main blocking command(s)
-afterStart:   [string]            # Run on exit
+afterStart:   [string]            # Run on exit (also on single-service stop/restart)
+restartPolicy:                    # Auto-heal a detached service that crashes at startup
+  mode: on-failure                #   on-failure | never (default)
+  maxRetries: 3
+  backoffSeconds: 5
+openOnReady:   bool|object        # Open URL when healthCheck passes (needs `corgi run --open`).
+                                  #   true → http://localhost:<port>/  ; or { path, scheme, browser }
 
 scripts:                          # Named scripts invoked via `corgi script -n <name>`
   - name: string
