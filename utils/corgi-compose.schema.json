@@ -73,7 +73,7 @@
         "environment": { "type": "array", "items": { "type": "string" }, "description": "Env vars copied into the service env file.", "examples": [["YOUR_ENV=dev"]] },
         "envPath": { "type": "string", "description": "Path to the .env file in the target repo. Defaults to .env." },
         "copyEnvFromFilePath": { "type": "string", "description": "Path to an .env whose content is copied into the service .env. If missing, falls back to the service repo's .env-example / .env.example." },
-        "placeholderTokens": { "type": "array", "items": { "type": "string" }, "description": "Tokens that mark unfilled values; corgi warns (does not fail) when the resolved env still contains any of them.", "examples": [["<supabase-id>", "your-anon-key"]] },
+        "envPlaceholdersToCheck": { "type": "array", "items": { "type": "string" }, "description": "Tokens that mark unfilled values; corgi warns (does not fail) when the resolved env still contains any of them.", "examples": [["<supabase-id>", "your-anon-key"]] },
         "localhostNameInEnv": { "type": "string", "description": "Localhost name used in the env file. Defaults to localhost." },
         "port": { "type": "integer", "description": "Service port added to the env file.", "examples": [5432] },
         "portAlias": { "type": "string", "description": "Env var name for the port. Defaults to PORT." },

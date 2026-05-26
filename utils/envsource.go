@@ -32,7 +32,7 @@ func resolveEnvSourceFile(composeDir string, service Service, copyEnvFilePath st
 // of the service's declared placeholder tokens. Empty = nothing to warn.
 func placeholderWarning(service Service, envBody string) string {
 	var found []string
-	for _, token := range service.PlaceholderTokens {
+	for _, token := range service.EnvPlaceholdersToCheck {
 		if token != "" && strings.Contains(envBody, token) {
 			found = append(found, token)
 		}

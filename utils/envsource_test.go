@@ -83,7 +83,7 @@ func TestBuildServiceEnvBody_UsesEnvExampleFallback(t *testing.T) {
 }
 
 func TestPlaceholderWarning_TokenPresent(t *testing.T) {
-	svc := Service{ServiceName: "broker", PlaceholderTokens: []string{"<supabase-id>", "your-anon-key"}}
+	svc := Service{ServiceName: "broker", EnvPlaceholdersToCheck: []string{"<supabase-id>", "your-anon-key"}}
 	body := "VITE_SUPABASE_URL=https://<supabase-id>.supabase.co\nVITE_KEY=real"
 
 	got := placeholderWarning(svc, body)
@@ -103,7 +103,7 @@ func TestPlaceholderWarning_NoneDeclared(t *testing.T) {
 }
 
 func TestPlaceholderWarning_DeclaredButAbsent(t *testing.T) {
-	svc := Service{ServiceName: "api", PlaceholderTokens: []string{"<placeholder>"}}
+	svc := Service{ServiceName: "api", EnvPlaceholdersToCheck: []string{"<placeholder>"}}
 	if got := placeholderWarning(svc, "A=real\nB=value"); got != "" {
 		t.Fatalf("want empty when no token present, got %q", got)
 	}
@@ -119,7 +119,7 @@ func TestGenerateEnvForService_WarnsOnPlaceholder(t *testing.T) {
 	svc := Service{
 		ServiceName:       "broker",
 		AbsolutePath:      dir + "/",
-		PlaceholderTokens: []string{"<placeholder>"},
+		EnvPlaceholdersToCheck: []string{"<placeholder>"},
 	}
 
 	out := captureStdout(t, func() {
