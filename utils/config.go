@@ -191,29 +191,29 @@ type Runner struct {
 }
 
 type Service struct {
-	ServiceName         string             `yaml:"service_name,omitempty"`
-	Path                string             `yaml:"path,omitempty"`
-	IgnoreEnv           bool               `yaml:"ignore_env,omitempty"`
-	ManualRun           bool               `yaml:"manualRun,omitempty"`
-	CloneFrom           string             `yaml:"cloneFrom,omitempty"`
-	Branch              string             `yaml:"branch,omitempty"`
-	Environment         []string           `yaml:"environment,omitempty"`
-	EnvPath             string             `yaml:"envPath,omitempty"`
-	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath,omitempty"`
-	EnvPlaceholdersToCheck   []string           `yaml:"envPlaceholdersToCheck,omitempty"`
-	LocalhostNameInEnv  string             `yaml:"localhostNameInEnv,omitempty"`
-	Port                int                `yaml:"port,omitempty"`
-	PortAlias           string             `yaml:"portAlias,omitempty"`
-	DependsOnServices   []DependsOnService `yaml:"depends_on_services,omitempty"`
-	DependsOnDb         []DependsOnDb      `yaml:"depends_on_db,omitempty"`
-	Exports             []string           `yaml:"exports,omitempty"`
-	BeforeStart         BeforeStartSteps   `yaml:"beforeStart,omitempty"`
-	Start               []string           `yaml:"start,omitempty"`
-	AfterStart          []string           `yaml:"afterStart,omitempty"`
-	RestartPolicy       *RestartPolicy     `yaml:"restartPolicy,omitempty"`
-	OpenOnReady         *OpenOnReady       `yaml:"openOnReady,omitempty"`
-	Scripts             []Script           `yaml:"scripts,omitempty"`
-	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
+	ServiceName            string             `yaml:"service_name,omitempty"`
+	Path                   string             `yaml:"path,omitempty"`
+	IgnoreEnv              bool               `yaml:"ignore_env,omitempty"`
+	ManualRun              bool               `yaml:"manualRun,omitempty"`
+	CloneFrom              string             `yaml:"cloneFrom,omitempty"`
+	Branch                 string             `yaml:"branch,omitempty"`
+	Environment            []string           `yaml:"environment,omitempty"`
+	EnvPath                string             `yaml:"envPath,omitempty"`
+	CopyEnvFromFilePath    string             `yaml:"copyEnvFromFilePath,omitempty"`
+	EnvPlaceholdersToCheck []string           `yaml:"envPlaceholdersToCheck,omitempty"`
+	LocalhostNameInEnv     string             `yaml:"localhostNameInEnv,omitempty"`
+	Port                   int                `yaml:"port,omitempty"`
+	PortAlias              string             `yaml:"portAlias,omitempty"`
+	DependsOnServices      []DependsOnService `yaml:"depends_on_services,omitempty"`
+	DependsOnDb            []DependsOnDb      `yaml:"depends_on_db,omitempty"`
+	Exports                []string           `yaml:"exports,omitempty"`
+	BeforeStart            BeforeStartSteps   `yaml:"beforeStart,omitempty"`
+	Start                  []string           `yaml:"start,omitempty"`
+	AfterStart             []string           `yaml:"afterStart,omitempty"`
+	RestartPolicy          *RestartPolicy     `yaml:"restartPolicy,omitempty"`
+	OpenOnReady            *OpenOnReady       `yaml:"openOnReady,omitempty"`
+	Scripts                []Script           `yaml:"scripts,omitempty"`
+	InteractiveInput       bool               `yaml:"interactiveInput,omitempty"`
 	// AutoSourceEnv toggles the `set -a; . <envFile>; set +a` prefix corgi
 	// adds to start/beforeStart/afterStart commands. nil/true = on (default),
 	// false = off. Off avoids exporting every var to subprocesses (e.g. when
@@ -539,35 +539,35 @@ func buildService(indexName string, service Service) Service {
 	absolutePath := computeAbsolutePath(service.Path)
 
 	return Service{
-		ServiceName:         indexName,
-		Path:                service.Path,
-		AbsolutePath:        absolutePath,
-		IgnoreEnv:           service.IgnoreEnv,
-		ManualRun:           service.ManualRun,
-		CloneFrom:           service.CloneFrom,
-		Branch:              service.Branch,
-		DependsOnServices:   service.DependsOnServices,
-		DependsOnDb:         service.DependsOnDb,
-		Exports:             service.Exports,
-		Environment:         service.Environment,
-		EnvPath:             service.EnvPath,
-		CopyEnvFromFilePath: service.CopyEnvFromFilePath,
-		EnvPlaceholdersToCheck:   service.EnvPlaceholdersToCheck,
-		LocalhostNameInEnv:  service.LocalhostNameInEnv,
-		Port:                service.Port,
-		PortAlias:           service.PortAlias,
-		BeforeStart:         service.BeforeStart,
-		AfterStart:          service.AfterStart,
-		RestartPolicy:       service.RestartPolicy,
-		OpenOnReady:         service.OpenOnReady,
-		Start:               service.Start,
-		Scripts:             service.Scripts,
-		InteractiveInput:    service.InteractiveInput,
-		AutoSourceEnv:       service.AutoSourceEnv,
-		Runner:              service.Runner,
-		Tunnel:              service.Tunnel,
-		HealthCheck:         service.HealthCheck,
-		Profiles:            service.Profiles,
+		ServiceName:            indexName,
+		Path:                   service.Path,
+		AbsolutePath:           absolutePath,
+		IgnoreEnv:              service.IgnoreEnv,
+		ManualRun:              service.ManualRun,
+		CloneFrom:              service.CloneFrom,
+		Branch:                 service.Branch,
+		DependsOnServices:      service.DependsOnServices,
+		DependsOnDb:            service.DependsOnDb,
+		Exports:                service.Exports,
+		Environment:            service.Environment,
+		EnvPath:                service.EnvPath,
+		CopyEnvFromFilePath:    service.CopyEnvFromFilePath,
+		EnvPlaceholdersToCheck: service.EnvPlaceholdersToCheck,
+		LocalhostNameInEnv:     service.LocalhostNameInEnv,
+		Port:                   service.Port,
+		PortAlias:              service.PortAlias,
+		BeforeStart:            service.BeforeStart,
+		AfterStart:             service.AfterStart,
+		RestartPolicy:          service.RestartPolicy,
+		OpenOnReady:            service.OpenOnReady,
+		Start:                  service.Start,
+		Scripts:                service.Scripts,
+		InteractiveInput:       service.InteractiveInput,
+		AutoSourceEnv:          service.AutoSourceEnv,
+		Runner:                 service.Runner,
+		Tunnel:                 service.Tunnel,
+		HealthCheck:            service.HealthCheck,
+		Profiles:               service.Profiles,
 	}
 }
 

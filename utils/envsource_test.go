@@ -117,8 +117,8 @@ func TestGenerateEnvForService_WarnsOnPlaceholder(t *testing.T) {
 
 	writeFile(t, filepath.Join(dir, ".env-example"), "KEY=<placeholder>")
 	svc := Service{
-		ServiceName:       "broker",
-		AbsolutePath:      dir + "/",
+		ServiceName:            "broker",
+		AbsolutePath:           dir + "/",
 		EnvPlaceholdersToCheck: []string{"<placeholder>"},
 	}
 

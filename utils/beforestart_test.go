@@ -37,7 +37,6 @@ beforeStart:
 	}
 }
 
-
 // Old all-string beforeStart must parse + behave exactly as before.
 func TestBeforeStartSteps_LegacyAllStrings(t *testing.T) {
 	data := `

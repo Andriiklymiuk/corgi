@@ -50,7 +50,6 @@ func TestSeedDbReadDirError(t *testing.T) {
 	}
 }
 
-
 func TestDumpAndSeedDbMissingSource(t *testing.T) {
 	err := DumpAndSeedDb(utils.DatabaseService{
 		ServiceName:      "db1",
