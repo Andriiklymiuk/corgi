@@ -170,6 +170,8 @@ restartPolicy:                    # Auto-heal a detached service that crashes at
   mode: on-failure                #   on-failure | never (default)
   maxRetries: 3
   backoffSeconds: 5
+openOnReady:   bool|object        # Open URL when healthCheck passes (needs `corgi run --open`).
+                                  #   true → http://localhost:<port>/  ; or { path, scheme, browser }
 
 scripts:                          # Named scripts invoked via `corgi script -n <name>`
   - name: string

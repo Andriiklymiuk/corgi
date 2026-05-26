@@ -196,6 +196,7 @@ service's env dir and the tier's default dbServices. Empty = default.`,
 	runCmd.PersistentFlags().Bool("kill-port", false, "Reclaim service ports already in use (kill the holder) instead of aborting")
 	runCmd.PersistentFlags().Bool("no-cache", false, "Ignore beforeStart cacheKey fingerprints; run every beforeStart step")
 	runCmd.PersistentFlags().BoolVar(&utils.WithDepsFromFlag, "with-deps", false, "With --services: also start each service's depends_on closure (services + dbs)")
+	runCmd.PersistentFlags().Bool("open", false, "Open each service's URL in the browser when it passes its healthCheck (services with openOnReady set)")
 	runCmd.PersistentFlags().String(
 		"host",
 		"",
@@ -284,6 +285,7 @@ const defaultReadyTimeout = 15 * time.Second
 var (
 	gateDepsFlag       bool
 	noBeforeStartCache bool
+	openOnReadyFlag    bool
 	readyTimeout       = defaultReadyTimeout
 )
 
@@ -749,6 +751,20 @@ func runDetachedBeforeStart(svc utils.Service) {
 	runServiceBeforeStart(svc, getServiceEnv(svc))
 }
 
+// browserOpener is overridable in tests.
+var browserOpener = launchBrowser
+
+// Open a service's URL once ready, when --open is set and it opted in.
+func maybeOpenOnReady(service utils.Service) {
+	if !openOnReadyFlag || service.Port == 0 || service.OpenOnReady == nil || !service.OpenOnReady.Enabled {
+		return
+	}
+	o := service.OpenOnReady
+	if err := browserOpener(o.URL(service.Port), o.Browser); err != nil {
+		utils.Infof("could not open %s: %v\n", service.ServiceName, err)
+	}
+}
+
 // Run one service's afterStart teardown on single-service stop/restart.
 func runServiceAfterStop(corgi *utils.CorgiCompose, name string) {
 	svc := findService(corgi, name)
@@ -845,6 +861,7 @@ func applyRunFlags(cmd *cobra.Command) {
 	}
 	gateDepsFlag, _ = cmd.Flags().GetBool("gate-deps")
 	noBeforeStartCache, _ = cmd.Flags().GetBool("no-cache")
+	openOnReadyFlag, _ = cmd.Flags().GetBool("open")
 	if d, err := cmd.Flags().GetDuration("ready-timeout"); err == nil && d > 0 {
 		readyTimeout = d
 	}
@@ -1094,8 +1111,11 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
 				defer cancel()
-				_ = utils.WaitForServiceReady(ctx, service) // close even on timeout
+				err := utils.WaitForServiceReady(ctx, service)
 				sig.markReady()
+				if err == nil {
+					maybeOpenOnReady(service)
+				}
 			}()
 		}
 	}

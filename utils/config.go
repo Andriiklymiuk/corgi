@@ -211,6 +211,7 @@ type Service struct {
 	Start               []string           `yaml:"start,omitempty"`
 	AfterStart          []string           `yaml:"afterStart,omitempty"`
 	RestartPolicy       *RestartPolicy     `yaml:"restartPolicy,omitempty"`
+	OpenOnReady         *OpenOnReady       `yaml:"openOnReady,omitempty"`
 	Scripts             []Script           `yaml:"scripts,omitempty"`
 	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
 	// AutoSourceEnv toggles the `set -a; . <envFile>; set +a` prefix corgi
@@ -558,6 +559,7 @@ func buildService(indexName string, service Service) Service {
 		BeforeStart:         service.BeforeStart,
 		AfterStart:          service.AfterStart,
 		RestartPolicy:       service.RestartPolicy,
+		OpenOnReady:         service.OpenOnReady,
 		Start:               service.Start,
 		Scripts:             service.Scripts,
 		InteractiveInput:    service.InteractiveInput,

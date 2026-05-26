@@ -123,6 +123,21 @@
           },
           "additionalProperties": false
         },
+        "openOnReady": {
+          "description": "Open the service URL in the browser when its healthCheck passes (only with `corgi run --open`). true = http://localhost:<port>/, or an object to customize.",
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "description": "URL path (default /), e.g. /login." },
+                "scheme": { "type": "string", "description": "http (default) or https." },
+                "browser": { "type": "string", "description": "Specific browser app (macOS `open -a`), e.g. \"Google Chrome\"." }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
         "scripts": { "type": "array", "items": { "$ref": "#/definitions/script" }, "description": "Named scripts available for the service." },
         "interactiveInput": { "type": "boolean", "description": "Allow interactive stdin for this service." },
         "autoSourceEnv": { "type": "boolean", "description": "Toggle the auto `set -a; . <env>; set +a` prefix. Default on." },
