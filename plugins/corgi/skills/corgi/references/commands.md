@@ -272,6 +272,7 @@ Run named scripts declared under `services.<name>.scripts`.
 - `-n, --names <list>` — comma-separated script names
 - `--services <list>` — restrict to specific services
 - `--ignore-dependent-services` — skip running on dependents
+- `--continue-on-error` — run the script across all matching services, print a pass/fail summary, and exit non-zero if any failed (replaces hand-rolled lintAll/testAll loops). Without it, exit code is unchanged (0).
 
 ### `corgi fork`
 
