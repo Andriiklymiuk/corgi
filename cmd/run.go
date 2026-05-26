@@ -195,6 +195,7 @@ service's env dir and the tier's default dbServices. Empty = default.`,
 	runCmd.PersistentFlags().Bool("yes", false, "Skip confirmation prompts (e.g. for a tier marked confirm)")
 	runCmd.PersistentFlags().Bool("kill-port", false, "Reclaim service ports already in use (kill the holder) instead of aborting")
 	runCmd.PersistentFlags().Bool("no-cache", false, "Ignore beforeStart cacheKey fingerprints; run every beforeStart step")
+	runCmd.PersistentFlags().BoolVar(&utils.WithDepsFromFlag, "with-deps", false, "With --services: also start each service's depends_on closure (services + dbs)")
 	runCmd.PersistentFlags().String(
 		"host",
 		"",
