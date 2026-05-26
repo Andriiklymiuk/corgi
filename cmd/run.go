@@ -188,8 +188,8 @@ nothing. Composes with --services/--omit/--dbServices as an intersection
 		"host",
 		"",
 		`IP to use instead of "localhost" in service URL env vars (so a phone
-on the LAN can hit your dev API). Pass an explicit IP or "auto" to
-detect the first non-loopback IPv4. db_services stay on localhost.
+on the LAN can hit your dev API). Pass an explicit IP or "auto"/"ip"
+to detect the first non-loopback IPv4. db_services stay on localhost.
 		`,
 	)
 	runCmd.PersistentFlags().Bool(
@@ -421,13 +421,13 @@ func resolveHostFlag(cmd *cobra.Command) error {
 		utils.HostOverride = ""
 		return nil
 	}
-	if raw == "auto" {
+	if raw == "auto" || raw == "ip" {
 		ip, err := utils.DetectHostIP()
 		if err != nil {
 			return fmt.Errorf("auto-detect: %w", err)
 		}
 		utils.HostOverride = ip
-		utils.Info(art.BlueColor, "🌐 --host auto resolved to", ip, art.WhiteColor)
+		utils.Info(art.BlueColor, "🌐 --host", raw, "resolved to", ip, art.WhiteColor)
 		return nil
 	}
 	utils.HostOverride = raw

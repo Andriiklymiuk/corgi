@@ -77,6 +77,22 @@ func TestResolveHostFlag_Auto(t *testing.T) {
 	}
 }
 
+func TestResolveHostFlag_IP(t *testing.T) {
+	defer func() { utils.HostOverride = "" }()
+	c := newRunCmdForTest()
+	if err := c.Flags().Set("host", "ip"); err != nil {
+		t.Fatal(err)
+	}
+	err := resolveHostFlag(c)
+	if err != nil {
+		// CI without a non-loopback iface — acceptable, skip.
+		t.Skipf("no detectable LAN iface in test env: %v", err)
+	}
+	if utils.HostOverride == "" || utils.HostOverride == "ip" {
+		t.Fatalf("expected detected IP, got %q", utils.HostOverride)
+	}
+}
+
 func TestHasDatabaseToRun(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		if hasDatabaseToRun(nil) {
