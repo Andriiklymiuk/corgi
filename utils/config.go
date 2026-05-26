@@ -318,6 +318,10 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 
 	corgi := buildBaseCorgi(corgiYaml)
 
+	if err := applyEnvTier(&corgi); err != nil {
+		return nil, err
+	}
+
 	if err := SaveExecPath(corgi.Name, corgi.Description, pathToCorgiComposeFile); err != nil {
 		Info("failed to save corgi-compose file path: ", err)
 	}

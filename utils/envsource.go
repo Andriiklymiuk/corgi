@@ -4,14 +4,46 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
 // Tier selected by --tier; empty = default path. Like HostOverride.
 var (
-	ActiveTierName string
-	ActiveTierDir  string
+	EnvTierFromFlag string
+	ActiveTierName  string
+	ActiveTierDir   string
 )
+
+// Resolve --tier against the compose's envTiers: set the active tier globals
+// and, unless the user passed --dbServices, apply the tier's db default.
+func applyEnvTier(corgi *CorgiCompose) error {
+	ActiveTierName, ActiveTierDir = "", ""
+	if EnvTierFromFlag == "" {
+		return nil
+	}
+	tier, ok := corgi.EnvTiers[EnvTierFromFlag]
+	if !ok {
+		return fmt.Errorf("unknown tier %q (declared envTiers: %s)", EnvTierFromFlag, strings.Join(tierNames(corgi.EnvTiers), ", "))
+	}
+	ActiveTierName, ActiveTierDir = EnvTierFromFlag, tier.Dir
+	if tier.DbServices != "" && len(DbServicesItemsFromFlag) == 0 {
+		DbServicesItemsFromFlag = strings.Split(tier.DbServices, ",")
+		for i := range DbServicesItemsFromFlag {
+			DbServicesItemsFromFlag[i] = strings.TrimSpace(DbServicesItemsFromFlag[i])
+		}
+	}
+	return nil
+}
+
+func tierNames(tiers map[string]EnvTier) []string {
+	names := make([]string, 0, len(tiers))
+	for n := range tiers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // Source env file: explicit copyEnvFromFilePath (${tier} substituted) →
 // <tierDir>/<service>.env → repo .env-example/.env.example. "" if none.

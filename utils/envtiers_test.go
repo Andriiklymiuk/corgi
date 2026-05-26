@@ -95,6 +95,98 @@ envTiers:
 	}
 }
 
+func resetTierGlobals(t *testing.T) {
+	t.Helper()
+	pn, pd, pf, pdb := ActiveTierName, ActiveTierDir, EnvTierFromFlag, DbServicesItemsFromFlag
+	t.Cleanup(func() {
+		ActiveTierName, ActiveTierDir, EnvTierFromFlag, DbServicesItemsFromFlag = pn, pd, pf, pdb
+	})
+	ActiveTierName, ActiveTierDir, EnvTierFromFlag, DbServicesItemsFromFlag = "", "", "", nil
+}
+
+func TestApplyEnvTier_SetsGlobalsAndDbDefault(t *testing.T) {
+	resetTierGlobals(t)
+	EnvTierFromFlag = "staging"
+	corgi := &CorgiCompose{EnvTiers: map[string]EnvTier{
+		"staging": {Dir: "env/staging", DbServices: "none"},
+	}}
+
+	if err := applyEnvTier(corgi); err != nil {
+		t.Fatal(err)
+	}
+	if ActiveTierName != "staging" || ActiveTierDir != "env/staging" {
+		t.Fatalf("globals not set: %q %q", ActiveTierName, ActiveTierDir)
+	}
+	if len(DbServicesItemsFromFlag) != 1 || DbServicesItemsFromFlag[0] != "none" {
+		t.Fatalf("want db default [none], got %v", DbServicesItemsFromFlag)
+	}
+}
+
+func TestApplyEnvTier_ExplicitDbServicesWins(t *testing.T) {
+	resetTierGlobals(t)
+	EnvTierFromFlag = "staging"
+	DbServicesItemsFromFlag = []string{"api-db"}
+	corgi := &CorgiCompose{EnvTiers: map[string]EnvTier{"staging": {Dir: "env/staging", DbServices: "none"}}}
+
+	if err := applyEnvTier(corgi); err != nil {
+		t.Fatal(err)
+	}
+	if len(DbServicesItemsFromFlag) != 1 || DbServicesItemsFromFlag[0] != "api-db" {
+		t.Fatalf("explicit --dbServices should win, got %v", DbServicesItemsFromFlag)
+	}
+}
+
+func TestApplyEnvTier_UnknownTierErrors(t *testing.T) {
+	resetTierGlobals(t)
+	EnvTierFromFlag = "bogus"
+	corgi := &CorgiCompose{EnvTiers: map[string]EnvTier{"staging": {Dir: "env/staging"}}}
+
+	if err := applyEnvTier(corgi); err == nil {
+		t.Fatal("want error for unknown tier")
+	}
+}
+
+func TestApplyEnvTier_NoFlagIsNoop(t *testing.T) {
+	resetTierGlobals(t)
+	corgi := &CorgiCompose{EnvTiers: map[string]EnvTier{"staging": {Dir: "env/staging"}}}
+
+	if err := applyEnvTier(corgi); err != nil {
+		t.Fatal(err)
+	}
+	if ActiveTierName != "" {
+		t.Fatalf("want no active tier, got %q", ActiveTierName)
+	}
+}
+
+func TestResolveServiceEnv_HonorsActiveTier(t *testing.T) {
+	resetTierGlobals(t)
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	if err := os.MkdirAll(filepath.Join(dir, "env", "staging"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "env", "staging", "api.env"), "TIER_VAR=staging-value")
+	ActiveTierName, ActiveTierDir = "staging", "env/staging"
+
+	svc := Service{ServiceName: "api", AbsolutePath: dir + "/"}
+	entries, err := ResolveServiceEnv(svc, &CorgiCompose{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range entries {
+		if e.Key == "TIER_VAR" && e.Value == "staging-value" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("want TIER_VAR from tier dir, got %+v", entries)
+	}
+}
+
 func TestEnvTiers_AbsentIsNil(t *testing.T) {
 	var y CorgiComposeYaml
 	if err := yaml.Unmarshal([]byte("name: x\n"), &y); err != nil {

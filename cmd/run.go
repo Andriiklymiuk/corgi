@@ -184,6 +184,13 @@ nothing. Composes with --services/--omit/--dbServices as an intersection
 		false,
 		"Dusable watch for changes in corgi-compose file",
 	)
+	runCmd.PersistentFlags().StringVar(
+		&utils.EnvTierFromFlag,
+		"tier",
+		"",
+		`Env tier from the compose envTiers block (e.g. staging, prod). Selects each
+service's env dir and the tier's default dbServices. Empty = default.`,
+	)
 	runCmd.PersistentFlags().String(
 		"host",
 		"",
