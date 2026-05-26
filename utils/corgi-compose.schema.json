@@ -112,7 +112,17 @@
           }
         },
         "start": { "type": "array", "items": { "type": "string" }, "description": "Commands run in parallel for the service." },
-        "afterStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively when the CLI exits." },
+        "afterStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively when the CLI exits (also on single-service stop/restart)." },
+        "restartPolicy": {
+          "type": "object",
+          "description": "Auto-heal a detached service that crashes at startup.",
+          "properties": {
+            "mode": { "type": "string", "enum": ["on-failure", "never"], "description": "on-failure relaunches on crash; never (default) does nothing." },
+            "maxRetries": { "type": "integer", "minimum": 0, "description": "Relaunch attempts before giving up." },
+            "backoffSeconds": { "type": "integer", "minimum": 0, "description": "Delay between relaunch attempts." }
+          },
+          "additionalProperties": false
+        },
         "scripts": { "type": "array", "items": { "$ref": "#/definitions/script" }, "description": "Named scripts available for the service." },
         "interactiveInput": { "type": "boolean", "description": "Allow interactive stdin for this service." },
         "autoSourceEnv": { "type": "boolean", "description": "Toggle the auto `set -a; . <env>; set +a` prefix. Default on." },

@@ -165,7 +165,11 @@ beforeStart:  [string|object]     # Run before `start`. Entry = string, or {run,
                                   #     cacheKey: [yarn.lock]   # skip step if these files' hash unchanged
                                   # (cacheKey steps run in their own shell; --no-cache forces run)
 start:        [string]            # Main blocking command(s)
-afterStart:   [string]            # Run on exit
+afterStart:   [string]            # Run on exit (also on single-service stop/restart)
+restartPolicy:                    # Auto-heal a detached service that crashes at startup
+  mode: on-failure                #   on-failure | never (default)
+  maxRetries: 3
+  backoffSeconds: 5
 
 scripts:                          # Named scripts invoked via `corgi script -n <name>`
   - name: string
