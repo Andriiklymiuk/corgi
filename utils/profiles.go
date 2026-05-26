@@ -1,6 +1,49 @@
 package utils
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
+
+// WithDepsFromFlag is the --with-deps flag: expand --services through its
+// depends_on closure.
+var WithDepsFromFlag bool
+
+// applyWithDeps rewrites the --services/--dbServices flag globals to the
+// depends_on closure of the selected services. No-op unless --with-deps and a
+// non-empty --services were given.
+func applyWithDeps(servicesMap map[string]Service) {
+	if !WithDepsFromFlag || len(ServicesItemsFromFlag) == 0 {
+		return
+	}
+	svcs, dbs := expandWithDeps(servicesMap, ServicesItemsFromFlag)
+	if len(svcs) == 0 {
+		return
+	}
+	ServicesItemsFromFlag = sortedSetKeys(svcs)
+
+	set := map[string]bool{}
+	for _, d := range DbServicesItemsFromFlag {
+		if d != "" && d != "none" {
+			set[d] = true
+		}
+	}
+	for d := range dbs {
+		set[d] = true
+	}
+	if len(set) > 0 {
+		DbServicesItemsFromFlag = sortedSetKeys(set)
+	}
+}
+
+func sortedSetKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // ParseProfiles splits a comma-separated --profile value into trimmed,
 // non-empty tokens. Returns nil when nothing meaningful is present.
@@ -93,6 +136,25 @@ func walkDepClosure(svcByName map[string]Service, services, dbs map[string]bool,
 			}
 		}
 	}
+}
+
+// expandWithDeps returns the seed services plus their transitive depends_on
+// closure (services + dbs), for `corgi run --services X --with-deps`.
+func expandWithDeps(servicesMap map[string]Service, seeds []string) (services, dbs map[string]bool) {
+	services = map[string]bool{}
+	dbs = map[string]bool{}
+	var queue []string
+	for _, s := range seeds {
+		if s == "" || s == "none" {
+			continue
+		}
+		if _, ok := servicesMap[s]; ok {
+			services[s] = true
+			queue = append(queue, s)
+		}
+	}
+	walkDepClosure(servicesMap, services, dbs, queue)
+	return services, dbs
 }
 
 // intersects reports whether any wanted profile is present in have.

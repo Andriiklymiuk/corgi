@@ -142,6 +142,7 @@ func restartSingleService(cmd *cobra.Command) {
 	}
 
 	_ = stopProcessGroup(entry)
+	runServiceAfterStop(corgi, restartService) // teardown stragglers before relaunch
 	runDetachedBeforeStart(*svc)
 
 	pid, command, serr := relaunchDetachedService(*svc)

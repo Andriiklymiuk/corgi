@@ -3,6 +3,7 @@ package utils
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -44,11 +45,10 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	}
 	var entries []EnvVar
 
-	// copied env file (lowest precedence)
-	if svc.CopyEnvFromFilePath != "" {
-		path := fmt.Sprintf("%s/%s", CorgiComposePathDir, svc.CopyEnvFromFilePath)
-		chunk := getEnvFromFile(path, corgiGeneratedMessage)
-		entries = append(entries, parseChunkInOrder(chunk, "file:"+svc.CopyEnvFromFilePath)...)
+	// copied env file (lowest precedence); honors tier + .env-example fallback
+	if src := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir); src != "" {
+		chunk := getEnvFromFile(src, corgiGeneratedMessage)
+		entries = append(entries, parseChunkInOrder(chunk, "file:"+filepath.Base(src))...)
 	}
 
 	// service dependencies

@@ -78,7 +78,7 @@ func TestRunOpen_NonInteractiveSkipsLauncher(t *testing.T) {
 }
 
 func TestBrowserCommand(t *testing.T) {
-	name, args := browserCommand("http://localhost:3000")
+	name, args := browserCommand("http://localhost:3000", "")
 	if name == "" || len(args) == 0 {
 		t.Fatalf("browserCommand returned empty: %q %v", name, args)
 	}

@@ -132,6 +132,7 @@ func runStop(cmd *cobra.Command, _ []string) {
 		}
 		removeStateLocked(statePath)
 	} else {
+		runServiceAfterStop(corgi, stopService)
 		if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
 			defer unlock()
 		}

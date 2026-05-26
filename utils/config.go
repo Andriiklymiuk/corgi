@@ -191,26 +191,29 @@ type Runner struct {
 }
 
 type Service struct {
-	ServiceName         string             `yaml:"service_name,omitempty"`
-	Path                string             `yaml:"path,omitempty"`
-	IgnoreEnv           bool               `yaml:"ignore_env,omitempty"`
-	ManualRun           bool               `yaml:"manualRun,omitempty"`
-	CloneFrom           string             `yaml:"cloneFrom,omitempty"`
-	Branch              string             `yaml:"branch,omitempty"`
-	Environment         []string           `yaml:"environment,omitempty"`
-	EnvPath             string             `yaml:"envPath,omitempty"`
-	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath,omitempty"`
-	LocalhostNameInEnv  string             `yaml:"localhostNameInEnv,omitempty"`
-	Port                int                `yaml:"port,omitempty"`
-	PortAlias           string             `yaml:"portAlias,omitempty"`
-	DependsOnServices   []DependsOnService `yaml:"depends_on_services,omitempty"`
-	DependsOnDb         []DependsOnDb      `yaml:"depends_on_db,omitempty"`
-	Exports             []string           `yaml:"exports,omitempty"`
-	BeforeStart         []string           `yaml:"beforeStart,omitempty"`
-	Start               []string           `yaml:"start,omitempty"`
-	AfterStart          []string           `yaml:"afterStart,omitempty"`
-	Scripts             []Script           `yaml:"scripts,omitempty"`
-	InteractiveInput    bool               `yaml:"interactiveInput,omitempty"`
+	ServiceName            string             `yaml:"service_name,omitempty"`
+	Path                   string             `yaml:"path,omitempty"`
+	IgnoreEnv              bool               `yaml:"ignore_env,omitempty"`
+	ManualRun              bool               `yaml:"manualRun,omitempty"`
+	CloneFrom              string             `yaml:"cloneFrom,omitempty"`
+	Branch                 string             `yaml:"branch,omitempty"`
+	Environment            []string           `yaml:"environment,omitempty"`
+	EnvPath                string             `yaml:"envPath,omitempty"`
+	CopyEnvFromFilePath    string             `yaml:"copyEnvFromFilePath,omitempty"`
+	EnvPlaceholdersToCheck []string           `yaml:"envPlaceholdersToCheck,omitempty"`
+	LocalhostNameInEnv     string             `yaml:"localhostNameInEnv,omitempty"`
+	Port                   int                `yaml:"port,omitempty"`
+	PortAlias              string             `yaml:"portAlias,omitempty"`
+	DependsOnServices      []DependsOnService `yaml:"depends_on_services,omitempty"`
+	DependsOnDb            []DependsOnDb      `yaml:"depends_on_db,omitempty"`
+	Exports                []string           `yaml:"exports,omitempty"`
+	BeforeStart            BeforeStartSteps   `yaml:"beforeStart,omitempty"`
+	Start                  []string           `yaml:"start,omitempty"`
+	AfterStart             []string           `yaml:"afterStart,omitempty"`
+	RestartPolicy          *RestartPolicy     `yaml:"restartPolicy,omitempty"`
+	OpenOnReady            *OpenOnReady       `yaml:"openOnReady,omitempty"`
+	Scripts                []Script           `yaml:"scripts,omitempty"`
+	InteractiveInput       bool               `yaml:"interactiveInput,omitempty"`
 	// AutoSourceEnv toggles the `set -a; . <envFile>; set +a` prefix corgi
 	// adds to start/beforeStart/afterStart commands. nil/true = on (default),
 	// false = off. Off avoids exporting every var to subprocesses (e.g. when
@@ -256,10 +259,18 @@ type Required struct {
 	CheckCmd string   `yaml:"checkCmd,omitempty"`
 }
 
+// Named run-settings bundle selected by --tier.
+type EnvTier struct {
+	Dir        string `yaml:"dir,omitempty"`
+	DbServices string `yaml:"dbServices,omitempty"`
+	Confirm    bool   `yaml:"confirm,omitempty"`
+}
+
 type CorgiCompose struct {
 	DatabaseServices []DatabaseService
 	Services         []Service
 	Required         []Required
+	EnvTiers         map[string]EnvTier `yaml:"envTiers,omitempty"`
 	// cannot combine from one common struct (yaml serialization), so have to repeat
 	Init        []string `yaml:"init,omitempty"`
 	BeforeStart []string `yaml:"beforeStart,omitempty"`
@@ -277,6 +288,7 @@ type CorgiComposeYaml struct {
 	DatabaseServices map[string]DatabaseService `yaml:"db_services"`
 	Services         map[string]Service         `yaml:"services"`
 	Required         map[string]Required        `yaml:"required"`
+	EnvTiers         map[string]EnvTier         `yaml:"envTiers,omitempty"`
 	// cannot combine from one common struct (yaml serialization), so have to repeat
 	Init        []string `yaml:"init,omitempty"`
 	BeforeStart []string `yaml:"beforeStart,omitempty"`
@@ -307,6 +319,12 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	}
 
 	corgi := buildBaseCorgi(corgiYaml)
+
+	if err := applyEnvTier(&corgi); err != nil {
+		return nil, err
+	}
+
+	applyWithDeps(corgiYaml.Services)
 
 	if err := SaveExecPath(corgi.Name, corgi.Description, pathToCorgiComposeFile); err != nil {
 		Info("failed to save corgi-compose file path: ", err)
@@ -373,6 +391,7 @@ func buildBaseCorgi(y CorgiComposeYaml) CorgiCompose {
 		UseAwsVpn:   y.UseAwsVpn,
 		Name:        y.Name,
 		Description: y.Description,
+		EnvTiers:    y.EnvTiers,
 	}
 }
 
@@ -520,32 +539,35 @@ func buildService(indexName string, service Service) Service {
 	absolutePath := computeAbsolutePath(service.Path)
 
 	return Service{
-		ServiceName:         indexName,
-		Path:                service.Path,
-		AbsolutePath:        absolutePath,
-		IgnoreEnv:           service.IgnoreEnv,
-		ManualRun:           service.ManualRun,
-		CloneFrom:           service.CloneFrom,
-		Branch:              service.Branch,
-		DependsOnServices:   service.DependsOnServices,
-		DependsOnDb:         service.DependsOnDb,
-		Exports:             service.Exports,
-		Environment:         service.Environment,
-		EnvPath:             service.EnvPath,
-		CopyEnvFromFilePath: service.CopyEnvFromFilePath,
-		LocalhostNameInEnv:  service.LocalhostNameInEnv,
-		Port:                service.Port,
-		PortAlias:           service.PortAlias,
-		BeforeStart:         service.BeforeStart,
-		AfterStart:          service.AfterStart,
-		Start:               service.Start,
-		Scripts:             service.Scripts,
-		InteractiveInput:    service.InteractiveInput,
-		AutoSourceEnv:       service.AutoSourceEnv,
-		Runner:              service.Runner,
-		Tunnel:              service.Tunnel,
-		HealthCheck:         service.HealthCheck,
-		Profiles:            service.Profiles,
+		ServiceName:            indexName,
+		Path:                   service.Path,
+		AbsolutePath:           absolutePath,
+		IgnoreEnv:              service.IgnoreEnv,
+		ManualRun:              service.ManualRun,
+		CloneFrom:              service.CloneFrom,
+		Branch:                 service.Branch,
+		DependsOnServices:      service.DependsOnServices,
+		DependsOnDb:            service.DependsOnDb,
+		Exports:                service.Exports,
+		Environment:            service.Environment,
+		EnvPath:                service.EnvPath,
+		CopyEnvFromFilePath:    service.CopyEnvFromFilePath,
+		EnvPlaceholdersToCheck: service.EnvPlaceholdersToCheck,
+		LocalhostNameInEnv:     service.LocalhostNameInEnv,
+		Port:                   service.Port,
+		PortAlias:              service.PortAlias,
+		BeforeStart:            service.BeforeStart,
+		AfterStart:             service.AfterStart,
+		RestartPolicy:          service.RestartPolicy,
+		OpenOnReady:            service.OpenOnReady,
+		Start:                  service.Start,
+		Scripts:                service.Scripts,
+		InteractiveInput:       service.InteractiveInput,
+		AutoSourceEnv:          service.AutoSourceEnv,
+		Runner:                 service.Runner,
+		Tunnel:                 service.Tunnel,
+		HealthCheck:            service.HealthCheck,
+		Profiles:               service.Profiles,
 	}
 }
 

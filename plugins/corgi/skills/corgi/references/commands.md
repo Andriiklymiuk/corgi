@@ -35,6 +35,12 @@ Notable flags:
 - `--pull` — `git pull` in service dirs before starting
 - `--no-watch` — disable auto-reload on compose file change
 - `--host <ip|auto>` — host substituted for `localhost` in service URL env vars (LAN access from phones, etc.). `auto` picks first non-loopback IPv4. db_services stay on localhost.
+- `--tier <name>` — select a compose `envTiers` entry: resolves each service's env from the tier's `dir` (`<dir>/<service>.env`, with `${tier}` substituted in `copyEnvFromFilePath`), and applies the tier's default `dbServices` unless `--dbServices` is passed. A tier with `confirm: true` prompts before running. Also on `corgi env --tier`.
+- `--yes` — skip confirmation prompts (e.g. a tier marked `confirm: true`). Required when non-interactive/`--json`.
+- `--kill-port` — before starting, if a (non-manual) service's port is already in use, kill the holder and reclaim it. Without this flag a busy service port aborts the run with `E_PORT_CONFLICT` naming the owner. db_services ports are not preflighted (corgi reuses already-running db containers).
+- `--no-cache` — ignore beforeStart `cacheKey` fingerprints; run every beforeStart step (otherwise a step whose `cacheKey` files are unchanged is skipped).
+- `--with-deps` — with `--services X`: also start X's transitive `depends_on` closure (upstream services + their db_services), instead of needing to list `--dbServices` manually. Narrows db_services to what the selected services need.
+- `--open` — open each service's URL in the browser when it passes its `healthCheck`, for services that declare `openOnReady` (replaces `sleep N && open <url>`).
 - `--tunnel` — open public HTTPS tunnels alongside the stack for every service with a `tunnel:` block. Equivalent to a parallel `corgi tunnel`, bundled into the one process.
 - `--logs` — persist stdout/stderr of every service and db_service to `corgi_services/.logs/<name>/<timestamp>.log`. Capped 50 MB per file, keeps 10 newest runs per service, older pruned automatically. A `.logs/` entry is auto-added to `corgi_services/.gitignore`. Read back with `corgi logs`.
 - `--ci` — CI mode: suppress spinners, banners, color output. Plain log lines only. Auto-enabled when any common CI environment variable is set: `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`, `BUILDKITE`, `JENKINS_URL`, `TEAMCITY_VERSION`, `TRAVIS`, `DRONE`, `BITBUCKET_BUILD_NUMBER`, `CODEBUILD_BUILD_ID`. Pair with `--runOnce` for pipelines.
@@ -167,8 +173,9 @@ Reflection-driven prompts cover: scalars (string/int), `[]string` lists, nested 
 Database lifecycle helper. Flags:
 - `-s, --stopAll` — stop all db containers
 - `-u, --upAll` — start all db containers
-- `-d, --downAll` — stop + remove all db containers
-- `-r, --removeAll` — remove all db containers (preserves volumes? verify before destructive use)
+- `--wait` — with `--upAll`: block until each db with a port accepts connections (replaces manual `sleep`). Hard-fails on timeout (`E_READINESS_TIMEOUT` under `--json`); good for CI gating.
+- `-d, --downAll` — stop + remove all db containers **and their volumes** (`docker compose down --volumes`, consistent across all docker drivers; supabase uses `supabase stop`). Destructive: wipes local db data. Use `--stopAll` to keep data.
+- `-r, --removeAll` — remove all db containers
 - `--seedAll` — run seed scripts for all dbs
 
 Without flags, opens an interactive menu — avoid from an agent.
@@ -266,6 +273,7 @@ Run named scripts declared under `services.<name>.scripts`.
 - `-n, --names <list>` — comma-separated script names
 - `--services <list>` — restrict to specific services
 - `--ignore-dependent-services` — skip running on dependents
+- `--continue-on-error` — run the script across all matching services, print a pass/fail summary, and exit non-zero if any failed (replaces hand-rolled lintAll/testAll loops). Without it, exit code is unchanged (0).
 
 ### `corgi fork`
 

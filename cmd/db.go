@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,47 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/spf13/cobra"
 )
+
+// runUpAll mirrors the --upAll path of CheckForFlagAndExecuteMake, adding an
+// optional --wait readiness gate before the --runOnce exit.
+func runUpAll(cmd *cobra.Command, dbs []utils.DatabaseService) {
+	if up, _ := cmd.Flags().GetBool("upAll"); !up {
+		return
+	}
+	utils.ExecuteForEachService("up")
+
+	if wait, _ := cmd.Flags().GetBool("wait"); wait {
+		ctx, cancel := context.WithTimeout(context.Background(), defaultReadyTimeout)
+		defer cancel()
+		// Explicit --wait gates: a timeout is a hard failure (useful in CI).
+		if err := waitForDbsReady(ctx, dbs, utils.WaitForDBReady); err != nil {
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
+			} else {
+				fmt.Fprintln(os.Stderr, "❌", err)
+			}
+			os.Exit(1)
+		}
+	}
+
+	if once, _ := cmd.Root().Flags().GetBool("runOnce"); once {
+		utils.PrintFinalMessage()
+		os.Exit(0)
+	}
+}
+
+// Wait for each db with a port to accept connections. ready is injected for tests.
+func waitForDbsReady(ctx context.Context, dbs []utils.DatabaseService, ready func(context.Context, utils.DatabaseService) error) error {
+	for _, db := range dbs {
+		if db.Port == 0 {
+			continue
+		}
+		if err := ready(ctx, db); err != nil {
+			return fmt.Errorf("%s not ready: %w", db.ServiceName, err)
+		}
+	}
+	return nil
+}
 
 const errMakeCommandFailed = "Make command failed"
 
@@ -35,6 +77,7 @@ func init() {
 	dbCmd.PersistentFlags().BoolP("stopAll", "s", false, "Stop all database services")
 	dbCmd.PersistentFlags().BoolP("removeAll", "r", false, "Remove all database services")
 	dbCmd.PersistentFlags().BoolP("upAll", "u", false, "Up all database services, start all")
+	dbCmd.PersistentFlags().Bool("wait", false, "With --upAll: block until each db with a port accepts connections")
 	dbCmd.PersistentFlags().BoolP("downAll", "d", false, "Down all database services, stop and remove all")
 	dbCmd.PersistentFlags().BoolP("seedAll", "", false, "Seed all database services")
 	dbShellCmd.Flags().StringP("exec", "e", "",
@@ -89,7 +132,7 @@ func runDb(cobra *cobra.Command, args []string) {
 	utils.CheckForFlagAndExecuteMake(cobra, "stopAll", "stop")
 	utils.CheckForFlagAndExecuteMake(cobra, "removeAll", "remove")
 	utils.CheckForFlagAndExecuteMake(cobra, "downAll", "down")
-	utils.CheckForFlagAndExecuteMake(cobra, "upAll", "up")
+	runUpAll(cobra, corgi.DatabaseServices)
 	checkForSeedAllFlag(cobra, corgi.DatabaseServices)
 
 	targetService, err := utils.GetTargetService()

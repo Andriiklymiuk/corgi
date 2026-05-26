@@ -1,0 +1,146 @@
+package utils
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResolveEnvSourceFile_ExplicitPathWins(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	writeFile(t, filepath.Join(dir, "api.env"), "A=1")
+	svc := Service{AbsolutePath: dir + "/", CopyEnvFromFilePath: "api.env"}
+
+	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "", "")
+	want := filepath.Join(dir, "api.env")
+	if got != want {
+		t.Fatalf("want explicit path %q, got %q", want, got)
+	}
+}
+
+func TestResolveEnvSourceFile_FallsBackToEnvExample(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	// explicit source missing; .env-example present in the service dir
+	writeFile(t, filepath.Join(dir, ".env-example"), "A=1")
+	svc := Service{AbsolutePath: dir + "/", CopyEnvFromFilePath: "missing.env"}
+
+	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "", "")
+	want := filepath.Join(dir, ".env-example")
+	if got != want {
+		t.Fatalf("want .env-example fallback %q, got %q", want, got)
+	}
+}
+
+func TestResolveEnvSourceFile_FallsBackToDotEnvExample(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	// only .env.example variant present, no explicit source
+	writeFile(t, filepath.Join(dir, ".env.example"), "A=1")
+	svc := Service{AbsolutePath: dir + "/"}
+
+	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "", "")
+	want := filepath.Join(dir, ".env.example")
+	if got != want {
+		t.Fatalf("want .env.example fallback %q, got %q", want, got)
+	}
+}
+
+func TestBuildServiceEnvBody_UsesEnvExampleFallback(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	writeFile(t, filepath.Join(dir, ".env-example"), "FOO=bar")
+	svc := Service{ServiceName: "api", AbsolutePath: dir + "/", CopyEnvFromFilePath: "missing.env"}
+
+	body, err := buildServiceEnvBody(svc, &CorgiCompose{}, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, "FOO=bar") {
+		t.Fatalf("want env body from .env-example fallback, got %q", body)
+	}
+}
+
+func TestPlaceholderWarning_TokenPresent(t *testing.T) {
+	svc := Service{ServiceName: "broker", EnvPlaceholdersToCheck: []string{"<supabase-id>", "your-anon-key"}}
+	body := "VITE_SUPABASE_URL=https://<supabase-id>.supabase.co\nVITE_KEY=real"
+
+	got := placeholderWarning(svc, body)
+	if !strings.Contains(got, "broker") || !strings.Contains(got, "<supabase-id>") {
+		t.Fatalf("want warning naming service + token, got %q", got)
+	}
+	if strings.Contains(got, "your-anon-key") {
+		t.Fatalf("absent token should not be listed, got %q", got)
+	}
+}
+
+func TestPlaceholderWarning_NoneDeclared(t *testing.T) {
+	svc := Service{ServiceName: "api"}
+	if got := placeholderWarning(svc, "A=<supabase-id>"); got != "" {
+		t.Fatalf("want empty when no tokens declared, got %q", got)
+	}
+}
+
+func TestPlaceholderWarning_DeclaredButAbsent(t *testing.T) {
+	svc := Service{ServiceName: "api", EnvPlaceholdersToCheck: []string{"<placeholder>"}}
+	if got := placeholderWarning(svc, "A=real\nB=value"); got != "" {
+		t.Fatalf("want empty when no token present, got %q", got)
+	}
+}
+
+func TestGenerateEnvForService_WarnsOnPlaceholder(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	writeFile(t, filepath.Join(dir, ".env-example"), "KEY=<placeholder>")
+	svc := Service{
+		ServiceName:            "broker",
+		AbsolutePath:           dir + "/",
+		EnvPlaceholdersToCheck: []string{"<placeholder>"},
+	}
+
+	out := captureStdout(t, func() {
+		if err := GenerateEnvForService(&CorgiCompose{}, svc, "", true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "broker") || !strings.Contains(out, "<placeholder>") {
+		t.Fatalf("want placeholder warning on stdout, got %q", out)
+	}
+}
+
+func TestResolveEnvSourceFile_NoneExist(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	svc := Service{AbsolutePath: dir + "/", CopyEnvFromFilePath: "missing.env"}
+
+	if got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "", ""); got != "" {
+		t.Fatalf("want empty when nothing exists, got %q", got)
+	}
+}

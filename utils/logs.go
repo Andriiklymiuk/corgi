@@ -268,8 +268,12 @@ func PruneLogs(corgiServicesPath, serviceName string, keepN int) {
 // EnsureLogsGitignore adds the .logs/ entry to corgi_services/.gitignore,
 // creating the file if it does not exist. Idempotent.
 func EnsureLogsGitignore(corgiServicesPath string) {
+	EnsureCorgiServicesIgnore(corgiServicesPath, ".logs/")
+}
+
+// EnsureCorgiServicesIgnore appends entry to corgi_services/.gitignore once.
+func EnsureCorgiServicesIgnore(corgiServicesPath, entry string) {
 	path := filepath.Join(corgiServicesPath, ".gitignore")
-	const entry = ".logs/"
 
 	data, _ := os.ReadFile(path)
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))

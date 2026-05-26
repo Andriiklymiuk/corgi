@@ -197,3 +197,72 @@ func TestSelectByProfileDbDeclaredDirectly(t *testing.T) {
 		t.Errorf("dbs = %v, want [metrics]", got)
 	}
 }
+
+func TestExpandWithDeps_PullsTransitiveClosure(t *testing.T) {
+	services := map[string]Service{
+		"api": {
+			DependsOnServices: []DependsOnService{{Name: "broker"}},
+			DependsOnDb:       []DependsOnDb{{Name: "api-db"}},
+		},
+		"broker": {DependsOnDb: []DependsOnDb{{Name: "broker-db"}}},
+		"web":    {},
+	}
+	svcs, dbs := expandWithDeps(services, []string{"api"})
+
+	if !svcs["api"] || !svcs["broker"] {
+		t.Fatalf("want api+broker, got %v", svcs)
+	}
+	if svcs["web"] {
+		t.Fatal("web is unrelated, should not be included")
+	}
+	if !dbs["api-db"] || !dbs["broker-db"] {
+		t.Fatalf("want both dbs transitively, got %v", dbs)
+	}
+}
+
+func TestExpandWithDeps_SkipsNoneAndUnknown(t *testing.T) {
+	services := map[string]Service{"api": {}}
+	svcs, _ := expandWithDeps(services, []string{"none", "ghost"})
+	if len(svcs) != 0 {
+		t.Fatalf("none/unknown seeds select nothing, got %v", svcs)
+	}
+}
+
+func TestApplyWithDeps_RewritesFlags(t *testing.T) {
+	ps, pd, pf := ServicesItemsFromFlag, DbServicesItemsFromFlag, WithDepsFromFlag
+	t.Cleanup(func() {
+		ServicesItemsFromFlag, DbServicesItemsFromFlag, WithDepsFromFlag = ps, pd, pf
+	})
+
+	services := map[string]Service{
+		"api":    {DependsOnServices: []DependsOnService{{Name: "broker"}}, DependsOnDb: []DependsOnDb{{Name: "api-db"}}},
+		"broker": {},
+		"web":    {},
+	}
+	WithDepsFromFlag = true
+	ServicesItemsFromFlag = []string{"api"}
+	DbServicesItemsFromFlag = nil
+
+	applyWithDeps(services)
+
+	if !containsString(ServicesItemsFromFlag, "api") || !containsString(ServicesItemsFromFlag, "broker") {
+		t.Fatalf("services not expanded: %v", ServicesItemsFromFlag)
+	}
+	if containsString(ServicesItemsFromFlag, "web") {
+		t.Fatalf("web should not be included: %v", ServicesItemsFromFlag)
+	}
+	if !containsString(DbServicesItemsFromFlag, "api-db") {
+		t.Fatalf("db dep not added: %v", DbServicesItemsFromFlag)
+	}
+}
+
+func TestApplyWithDeps_NoopWhenFlagOff(t *testing.T) {
+	ps, pf := ServicesItemsFromFlag, WithDepsFromFlag
+	t.Cleanup(func() { ServicesItemsFromFlag, WithDepsFromFlag = ps, pf })
+	WithDepsFromFlag = false
+	ServicesItemsFromFlag = []string{"api"}
+	applyWithDeps(map[string]Service{"api": {DependsOnServices: []DependsOnService{{Name: "broker"}}}})
+	if containsString(ServicesItemsFromFlag, "broker") {
+		t.Fatal("flag off must not expand")
+	}
+}

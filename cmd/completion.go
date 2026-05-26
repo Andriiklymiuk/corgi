@@ -271,6 +271,19 @@ func completeGitProvider(_ *cobra.Command, _ []string, _ string) ([]string, cobr
 	return []string{"github", "gitlab"}, cobra.ShellCompDirectiveNoFileComp
 }
 
+func completeTier(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	c := loadComposeForCompletion(cmd)
+	if c == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	names := make([]string, 0, len(c.EnvTiers))
+	for n := range c.EnvTiers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names, cobra.ShellCompDirectiveNoFileComp
+}
+
 func completeHost(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	// "auto" and "ip" are aliases; an explicit IP is also valid but can't be suggested.
 	return []string{
@@ -309,6 +322,8 @@ func registerCompletions() {
 
 	_ = runCmd.RegisterFlagCompletionFunc("omit", completeRunOmit)
 	_ = runCmd.RegisterFlagCompletionFunc("host", completeHost)
+	_ = runCmd.RegisterFlagCompletionFunc("tier", completeTier)
+	_ = envCmd.RegisterFlagCompletionFunc("tier", completeTier)
 
 	_ = restartCmd.RegisterFlagCompletionFunc("service", completeServices)
 	_ = restartCmd.RegisterFlagCompletionFunc("host", completeHost)
