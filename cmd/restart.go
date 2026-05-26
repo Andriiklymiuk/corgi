@@ -29,7 +29,7 @@ func init() {
 	restartCmd.Flags().StringVar(&restartService, "service", "", "Restart only this service (leave others running)")
 	restartCmd.Flags().Bool("detach", true, "Start services detached (always on for restart)")
 	restartCmd.Flags().Bool("force", true, "Ignore stale run-state and start anyway")
-	restartCmd.Flags().String("host", "", "IP to use instead of localhost in service URL env vars")
+	restartCmd.Flags().String("host", "", `IP to use instead of localhost in service URL env vars. Pass an explicit IP or "auto"/"ip" to detect the first non-loopback IPv4.`)
 }
 
 func runRestart(cmd *cobra.Command, args []string) {
@@ -113,6 +113,11 @@ func resolveRestartTarget(statePath string, corgi *utils.CorgiCompose, service s
 // restartSingleService restarts one service of a detached run, leaving the rest
 // untouched. It refuses to start a service that was never in the run-state.
 func restartSingleService(cmd *cobra.Command) {
+	if herr := resolveHostFlag(cmd); herr != nil {
+		emitRestartError(utils.ErrConfig, herr.Error())
+		os.Exit(1)
+	}
+
 	corgi, cerr := utils.GetCorgiServices(cmd)
 	if cerr != nil {
 		emitRestartError(utils.ErrConfig, cerr.Error())

@@ -236,6 +236,49 @@ func completeTunnelProvider(_ *cobra.Command, _ []string, _ string) ([]string, c
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeProfiles suggests profile names declared on any service or
+// db_service. CSV-aware (test --profile takes a comma-separated union).
+func completeProfiles(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	c := loadComposeForCompletion(cmd)
+	if c == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	prefix, _, already := splitCsv(toComplete)
+	seen := map[string]struct{}{}
+	add := func(profiles []string) {
+		for _, p := range profiles {
+			if _, dup := already[p]; dup {
+				continue
+			}
+			seen[p] = struct{}{}
+		}
+	}
+	for _, svc := range c.Services {
+		add(svc.Profiles)
+	}
+	for _, db := range c.DatabaseServices {
+		add(db.Profiles)
+	}
+	names := make([]string, 0, len(seen))
+	for p := range seen {
+		names = append(names, p)
+	}
+	sort.Strings(names)
+	return withCsvPrefix(prefix, names)
+}
+
+func completeGitProvider(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{"github", "gitlab"}, cobra.ShellCompDirectiveNoFileComp
+}
+
+func completeHost(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	// "auto" and "ip" are aliases; an explicit IP is also valid but can't be suggested.
+	return []string{
+		"auto\tdetect first non-loopback IPv4",
+		"ip\talias for auto",
+	}, cobra.ShellCompDirectiveNoFileComp
+}
+
 func completeDockerContext(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	return []string{"default", "orbctl", "colima"}, cobra.ShellCompDirectiveNoFileComp
 }
@@ -265,6 +308,18 @@ func registerCompletions() {
 	_ = cleanCmd.RegisterFlagCompletionFunc("items", completeCleanItems)
 
 	_ = runCmd.RegisterFlagCompletionFunc("omit", completeRunOmit)
+	_ = runCmd.RegisterFlagCompletionFunc("host", completeHost)
+
+	_ = restartCmd.RegisterFlagCompletionFunc("service", completeServices)
+	_ = restartCmd.RegisterFlagCompletionFunc("host", completeHost)
+
+	_ = testCmd.RegisterFlagCompletionFunc("service", completeServices)
+	_ = testCmd.RegisterFlagCompletionFunc("profile", completeProfiles)
+
+	_ = forkCmd.RegisterFlagCompletionFunc("service", completeServices)
+	_ = forkCmd.RegisterFlagCompletionFunc("gitProvider", completeGitProvider)
+
+	_ = mcpCmd.RegisterFlagCompletionFunc("tunnel-provider", completeTunnelProvider)
 
 	_ = tunnelCmd.RegisterFlagCompletionFunc("provider", completeTunnelProvider)
 
