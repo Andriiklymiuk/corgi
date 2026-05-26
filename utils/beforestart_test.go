@@ -36,3 +36,4 @@ beforeStart:
 		t.Fatalf("Commands() wrong: %v", s.BeforeStart.Commands())
 	}
 }
+

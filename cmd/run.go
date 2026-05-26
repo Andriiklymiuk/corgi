@@ -749,6 +749,17 @@ func runDetachedBeforeStart(svc utils.Service) {
 	runServiceBeforeStart(svc, getServiceEnv(svc))
 }
 
+// runServiceAfterStop runs a service's afterStart teardown (after its process
+// group is killed) on single-service stop/restart — the same hook the full
+// shutdown path runs, just scoped to one service. No-op when none declared.
+func runServiceAfterStop(corgi *utils.CorgiCompose, name string) {
+	svc := findService(corgi, name)
+	if svc == nil || svc.AfterStart == nil || omitServiceCmd("afterStart") {
+		return
+	}
+	utils.RunCleanupCommands("afterStart", svc.ServiceName, svc.AfterStart, svc.AbsolutePath, getServiceEnv(*svc))
+}
+
 // settleDetached gives freshly spawned services a moment to crash, then records
 // each one's real status so the state file doesn't claim a dead service is running.
 func settleDetached(procs []detachedProc) {
