@@ -741,6 +741,10 @@ func GenerateEnvForService(
 		return err
 	}
 
+	if w := placeholderWarning(service, envForService); w != "" {
+		Info(w)
+	}
+
 	if err := recordExportsForService(service, envForService); err != nil {
 		return err
 	}

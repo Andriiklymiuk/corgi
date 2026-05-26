@@ -82,6 +82,56 @@ func TestBuildServiceEnvBody_UsesEnvExampleFallback(t *testing.T) {
 	}
 }
 
+func TestPlaceholderWarning_TokenPresent(t *testing.T) {
+	svc := Service{ServiceName: "broker", PlaceholderTokens: []string{"<supabase-id>", "your-anon-key"}}
+	body := "VITE_SUPABASE_URL=https://<supabase-id>.supabase.co\nVITE_KEY=real"
+
+	got := placeholderWarning(svc, body)
+	if !strings.Contains(got, "broker") || !strings.Contains(got, "<supabase-id>") {
+		t.Fatalf("want warning naming service + token, got %q", got)
+	}
+	if strings.Contains(got, "your-anon-key") {
+		t.Fatalf("absent token should not be listed, got %q", got)
+	}
+}
+
+func TestPlaceholderWarning_NoneDeclared(t *testing.T) {
+	svc := Service{ServiceName: "api"}
+	if got := placeholderWarning(svc, "A=<supabase-id>"); got != "" {
+		t.Fatalf("want empty when no tokens declared, got %q", got)
+	}
+}
+
+func TestPlaceholderWarning_DeclaredButAbsent(t *testing.T) {
+	svc := Service{ServiceName: "api", PlaceholderTokens: []string{"<placeholder>"}}
+	if got := placeholderWarning(svc, "A=real\nB=value"); got != "" {
+		t.Fatalf("want empty when no token present, got %q", got)
+	}
+}
+
+func TestGenerateEnvForService_WarnsOnPlaceholder(t *testing.T) {
+	dir := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	writeFile(t, filepath.Join(dir, ".env-example"), "KEY=<placeholder>")
+	svc := Service{
+		ServiceName:       "broker",
+		AbsolutePath:      dir + "/",
+		PlaceholderTokens: []string{"<placeholder>"},
+	}
+
+	out := captureStdout(t, func() {
+		if err := GenerateEnvForService(&CorgiCompose{}, svc, "", true); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "broker") || !strings.Contains(out, "<placeholder>") {
+		t.Fatalf("want placeholder warning on stdout, got %q", out)
+	}
+}
+
 func TestResolveEnvSourceFile_NoneExist(t *testing.T) {
 	dir := t.TempDir()
 	prev := CorgiComposePathDir

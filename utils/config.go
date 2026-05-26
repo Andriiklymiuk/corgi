@@ -200,6 +200,7 @@ type Service struct {
 	Environment         []string           `yaml:"environment,omitempty"`
 	EnvPath             string             `yaml:"envPath,omitempty"`
 	CopyEnvFromFilePath string             `yaml:"copyEnvFromFilePath,omitempty"`
+	PlaceholderTokens   []string           `yaml:"placeholderTokens,omitempty"`
 	LocalhostNameInEnv  string             `yaml:"localhostNameInEnv,omitempty"`
 	Port                int                `yaml:"port,omitempty"`
 	PortAlias           string             `yaml:"portAlias,omitempty"`
@@ -533,6 +534,7 @@ func buildService(indexName string, service Service) Service {
 		Environment:         service.Environment,
 		EnvPath:             service.EnvPath,
 		CopyEnvFromFilePath: service.CopyEnvFromFilePath,
+		PlaceholderTokens:   service.PlaceholderTokens,
 		LocalhostNameInEnv:  service.LocalhostNameInEnv,
 		Port:                service.Port,
 		PortAlias:           service.PortAlias,

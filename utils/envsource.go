@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // resolveEnvSourceFile picks the source env file for a service: the explicit
@@ -24,6 +26,22 @@ func resolveEnvSourceFile(composeDir string, service Service, copyEnvFilePath st
 		}
 	}
 	return ""
+}
+
+// placeholderWarning returns a warning when the resolved env still contains any
+// of the service's declared placeholder tokens. Empty = nothing to warn.
+func placeholderWarning(service Service, envBody string) string {
+	var found []string
+	for _, token := range service.PlaceholderTokens {
+		if token != "" && strings.Contains(envBody, token) {
+			found = append(found, token)
+		}
+	}
+	if len(found) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("⚠️  %s env still has placeholder(s): %s — replace with real values",
+		service.ServiceName, strings.Join(found, ", "))
 }
 
 func fileExists(path string) bool {
