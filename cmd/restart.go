@@ -135,20 +135,43 @@ func restartSingleService(cmd *cobra.Command) {
 		os.Exit(1)
 	}
 
-	_ = stopProcessGroup(entry) // terminate the old process group
-	command := strings.Join(svc.Start, " && ")
-	proc, serr := utils.StartDetached(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(*svc))
+	// bakes --host override + cross-service exports into the .env
+	if eerr := utils.GenerateEnvForServices(corgi); eerr != nil {
+		emitRestartError(utils.ErrConfig, eerr.Error())
+		os.Exit(1)
+	}
+
+	_ = stopProcessGroup(entry)
+	runDetachedBeforeStart(*svc)
+
+	pid, command, serr := relaunchDetachedService(*svc)
 	if serr != nil {
 		emitRestartError(utils.ErrExecFailed, serr.Error())
 		os.Exit(1)
 	}
 
-	updated := updateServiceEntry(st, restartService, proc.Pid, command, svc.Port)
+	updated := updateServiceEntry(st, restartService, pid, command, svc.Port)
 	_ = utils.WriteRunState(statePath, updated)
 
 	if utils.JSONOutput {
 		utils.PrintJSON(updated)
 	} else {
-		utils.Infof("🔁 restarted %s (pid %d)\n", restartService, proc.Pid)
+		utils.Infof("🔁 restarted %s (pid %d)\n", restartService, pid)
 	}
+}
+
+// relaunchDetachedService mirrors the runner branching in spawnDetachedServices.
+func relaunchDetachedService(svc utils.Service) (pid int, command string, err error) {
+	if svc.Runner.Name == "docker" && svc.Port != 0 {
+		if uerr := utils.ExecuteServiceCommandRun(svc.ServiceName, "make", "up"); uerr != nil {
+			return 0, "make up", uerr
+		}
+		return 0, "make up", nil
+	}
+	command = strings.Join(svc.Start, " && ")
+	proc, serr := utils.StartDetached(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(svc))
+	if serr != nil {
+		return 0, command, serr
+	}
+	return proc.Pid, command, nil
 }
