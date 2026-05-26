@@ -16,6 +16,7 @@ import (
 	"andriiklymiuk/corgi/utils/art"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
@@ -191,6 +192,7 @@ nothing. Composes with --services/--omit/--dbServices as an intersection
 		`Env tier from the compose envTiers block (e.g. staging, prod). Selects each
 service's env dir and the tier's default dbServices. Empty = default.`,
 	)
+	runCmd.PersistentFlags().Bool("yes", false, "Skip confirmation prompts (e.g. for a tier marked confirm)")
 	runCmd.PersistentFlags().String(
 		"host",
 		"",
@@ -442,6 +444,31 @@ func resolveHostFlag(cmd *cobra.Command) error {
 	return nil
 }
 
+// Block on a tier marked confirm:true unless --yes. Non-interactive needs --yes.
+func confirmTier(cmd *cobra.Command, corgi *utils.CorgiCompose) error {
+	if utils.ActiveTierName == "" {
+		return nil
+	}
+	tier, ok := corgi.EnvTiers[utils.ActiveTierName]
+	if !ok || !tier.Confirm {
+		return nil
+	}
+	if yes, _ := cmd.Flags().GetBool("yes"); yes {
+		return nil
+	}
+	if utils.NonInteractive || utils.JSONOutput {
+		return fmt.Errorf("tier %q requires confirmation; pass --yes", utils.ActiveTierName)
+	}
+	prompt := promptui.Prompt{
+		Label:     fmt.Sprintf("Run against %q tier", utils.ActiveTierName),
+		IsConfirm: true,
+	}
+	if _, err := prompt.Run(); err != nil {
+		return fmt.Errorf("aborted")
+	}
+	return nil
+}
+
 func runRun(cmd *cobra.Command, _ []string) {
 	applyRunFlags(cmd)
 
@@ -459,6 +486,15 @@ func runRun(cmd *cobra.Command, _ []string) {
 		}
 		if runReloading.Load() {
 			return
+		}
+		os.Exit(1)
+	}
+
+	if err := confirmTier(cmd, corgi); err != nil {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrUsage, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
 		}
 		os.Exit(1)
 	}
