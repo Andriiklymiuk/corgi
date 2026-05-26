@@ -93,7 +93,24 @@
         "depends_on_services": { "type": "array", "items": { "$ref": "#/definitions/dependsOnService" }, "description": "Other services this service depends on." },
         "depends_on_db": { "type": "array", "items": { "$ref": "#/definitions/dependsOnDb" }, "description": "Database services this service depends on." },
         "exports": { "type": "array", "items": { "type": "string" }, "description": "Whitelist of env vars exported to dependents." },
-        "beforeStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively before start." },
+        "beforeStart": {
+          "type": "array",
+          "description": "Commands run consecutively before start. Each entry is a string, or an object {run, cacheKey} where cacheKey lists files whose unchanged hash lets corgi skip that step (--no-cache forces run).",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "run": { "type": "string", "description": "The command to run." },
+                  "cacheKey": { "type": "array", "items": { "type": "string" }, "description": "Files (relative to the service dir) whose combined hash gates this step." }
+                },
+                "required": ["run"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
         "start": { "type": "array", "items": { "type": "string" }, "description": "Commands run in parallel for the service." },
         "afterStart": { "type": "array", "items": { "type": "string" }, "description": "Commands run consecutively when the CLI exits." },
         "scripts": { "type": "array", "items": { "$ref": "#/definitions/script" }, "description": "Named scripts available for the service." },

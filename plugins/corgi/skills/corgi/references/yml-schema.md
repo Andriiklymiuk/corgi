@@ -160,7 +160,10 @@ exports:                 [string]   # Whitelist of vars exported to dependents.
 runner:
   name: string                    # "docker" or custom
 
-beforeStart:  [string]            # Run before `start`
+beforeStart:  [string|object]     # Run before `start`. Entry = string, or {run, cacheKey}:
+                                  #   - run: yarn install
+                                  #     cacheKey: [yarn.lock]   # skip step if these files' hash unchanged
+                                  # (cacheKey steps run in their own shell; --no-cache forces run)
 start:        [string]            # Main blocking command(s)
 afterStart:   [string]            # Run on exit
 
