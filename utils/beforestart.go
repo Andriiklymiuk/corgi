@@ -38,6 +38,16 @@ func (s *BeforeStartSteps) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// HasCacheKeys reports whether any step opts into caching.
+func (s BeforeStartSteps) HasCacheKeys() bool {
+	for _, st := range s {
+		if len(st.CacheKey) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // Commands returns just the command strings, for the existing runners.
 func (s BeforeStartSteps) Commands() []string {
 	out := make([]string, 0, len(s))

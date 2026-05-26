@@ -194,6 +194,7 @@ service's env dir and the tier's default dbServices. Empty = default.`,
 	)
 	runCmd.PersistentFlags().Bool("yes", false, "Skip confirmation prompts (e.g. for a tier marked confirm)")
 	runCmd.PersistentFlags().Bool("kill-port", false, "Reclaim service ports already in use (kill the holder) instead of aborting")
+	runCmd.PersistentFlags().Bool("no-cache", false, "Ignore beforeStart cacheKey fingerprints; run every beforeStart step")
 	runCmd.PersistentFlags().String(
 		"host",
 		"",
@@ -280,8 +281,9 @@ const defaultReadyTimeout = 15 * time.Second
 
 // Resolved --gate-deps / --ready-timeout for the current run, set by applyRunFlags.
 var (
-	gateDepsFlag bool
-	readyTimeout = defaultReadyTimeout
+	gateDepsFlag       bool
+	noBeforeStartCache bool
+	readyTimeout       = defaultReadyTimeout
 )
 
 // exitInProgress guards the terminal-exit path. Reset on cleanup-setup
@@ -704,19 +706,36 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 	return procs
 }
 
-func runDetachedBeforeStart(svc utils.Service) {
-	if svc.BeforeStart == nil || omitServiceCmd("beforeStart") {
+// runServiceBeforeStart runs a service's beforeStart. When no step declares a
+// cacheKey it uses the original joined-&&-chain (unchanged behavior). When any
+// step has a cacheKey, steps run individually so unchanged ones can be skipped.
+func runServiceBeforeStart(service utils.Service, envFile string) {
+	if service.BeforeStart == nil || omitServiceCmd("beforeStart") {
 		return
 	}
-	utils.RunServiceCommands(
-		"beforeStart",
-		svc.ServiceName,
-		svc.BeforeStart.Commands(),
-		svc.AbsolutePath,
-		false,
-		false,
-		getServiceEnv(svc),
-	)
+	if !service.BeforeStart.HasCacheKeys() {
+		utils.RunServiceCommands(
+			"beforeStart", service.ServiceName, service.BeforeStart.Commands(),
+			service.AbsolutePath, false, false, envFile,
+		)
+		return
+	}
+	for i, step := range service.BeforeStart {
+		run, hash := utils.StepNeedsRun(service, i, step, noBeforeStartCache)
+		if !run {
+			utils.Infof("⏭  %s beforeStart cached, skipping: %s\n", service.ServiceName, step.Run)
+			continue
+		}
+		if err := utils.RunServiceCmd(service.ServiceName, step.Run, service.AbsolutePath, false, envFile); err != nil {
+			utils.Infof("aborting beforeStart for %s: %v\n", service.ServiceName, err)
+			return // don't persist hash on failure
+		}
+		utils.PersistStepHash(service, i, hash)
+	}
+}
+
+func runDetachedBeforeStart(svc utils.Service) {
+	runServiceBeforeStart(svc, getServiceEnv(svc))
 }
 
 // settleDetached gives freshly spawned services a moment to crash, then records
@@ -805,6 +824,7 @@ func applyRunFlags(cmd *cobra.Command) {
 		utils.SetCIMode(true)
 	}
 	gateDepsFlag, _ = cmd.Flags().GetBool("gate-deps")
+	noBeforeStartCache, _ = cmd.Flags().GetBool("no-cache")
 	if d, err := cmd.Flags().GetDuration("ready-timeout"); err == nil && d > 0 {
 		readyTimeout = d
 	}
@@ -1036,15 +1056,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 
 	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
 		utils.Info("\nBefore start commands:")
-		utils.RunServiceCommands(
-			"beforeStart",
-			service.ServiceName,
-			service.BeforeStart.Commands(),
-			service.AbsolutePath,
-			false,
-			false,
-			getServiceEnv(service),
-		)
+		runServiceBeforeStart(service, getServiceEnv(service))
 	}
 
 	if utils.ShutdownRequested() {
