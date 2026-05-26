@@ -45,6 +45,7 @@ func writeStepHash(path, hash string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	EnsureCorgiServicesIgnore(filepath.Join(CorgiComposePathDir, "corgi_services"), cacheDirName+"/")
 	return os.WriteFile(path, []byte(hash), 0o644)
 }
 

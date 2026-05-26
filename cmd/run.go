@@ -720,18 +720,29 @@ func runServiceBeforeStart(service utils.Service, envFile string) {
 		)
 		return
 	}
+	if err := runCachedBeforeStart(service, noBeforeStartCache, func(c string) error {
+		return utils.RunServiceCmd(service.ServiceName, c, service.AbsolutePath, false, envFile)
+	}); err != nil {
+		utils.Infof("aborting beforeStart for %s: %v\n", service.ServiceName, err)
+	}
+}
+
+// runCachedBeforeStart runs beforeStart per step, skipping steps whose cacheKey
+// hash is unchanged and persisting the hash only after a step succeeds. run is
+// injected for tests. Used only when a service opts in with cacheKey.
+func runCachedBeforeStart(service utils.Service, noCache bool, run func(string) error) error {
 	for i, step := range service.BeforeStart {
-		run, hash := utils.StepNeedsRun(service, i, step, noBeforeStartCache)
-		if !run {
-			utils.Infof("⏭  %s beforeStart cached, skipping: %s\n", service.ServiceName, step.Run)
+		needs, hash := utils.StepNeedsRun(service, i, step, noCache)
+		if !needs {
+			utils.Infof("⏭️  beforeStart skipped (cacheKey unchanged): %s\n", step.Run)
 			continue
 		}
-		if err := utils.RunServiceCmd(service.ServiceName, step.Run, service.AbsolutePath, false, envFile); err != nil {
-			utils.Infof("aborting beforeStart for %s: %v\n", service.ServiceName, err)
-			return // don't persist hash on failure
+		if err := run(step.Run); err != nil {
+			return err
 		}
 		utils.PersistStepHash(service, i, hash)
 	}
+	return nil
 }
 
 func runDetachedBeforeStart(svc utils.Service) {

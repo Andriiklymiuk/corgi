@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -101,5 +102,18 @@ func TestHasCacheKeys(t *testing.T) {
 	}
 	if !(BeforeStartSteps{{Run: "a", CacheKey: []string{"x"}}}).HasCacheKeys() {
 		t.Fatal("cacheKey -> true")
+	}
+}
+
+func TestEnsureCorgiServicesIgnore_AddsAndIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	EnsureCorgiServicesIgnore(dir, ".cache/")
+	EnsureCorgiServicesIgnore(dir, ".cache/")
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := strings.Count(string(data), ".cache/"); c != 1 {
+		t.Fatalf("want exactly one .cache/ entry, got %d in %q", c, string(data))
 	}
 }
