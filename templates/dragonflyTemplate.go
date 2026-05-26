@@ -26,7 +26,7 @@ networks:
 var MakefileDragonfly = `up:
 	docker-compose up -d
 down:
-	docker-compose down
+	docker-compose down --volumes
 stop:
 	docker stop dragonfly-{{.ServiceName}}
 restart:

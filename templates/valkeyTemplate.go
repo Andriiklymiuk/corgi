@@ -24,7 +24,7 @@ networks:
 var MakefileValkey = `up:
 	docker-compose up -d
 down:
-	docker-compose down
+	docker-compose down --volumes
 stop:
 	docker stop valkey-{{.ServiceName}}
 restart:
