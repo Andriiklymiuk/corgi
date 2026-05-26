@@ -602,6 +602,7 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 
 	procs := spawnDetachedServices(corgi)
 	settleDetached(procs)
+	healCrashedDetached(corgi, procs)
 	dbs := detachedDBEntries(corgi)
 	state := buildDetachState(utils.CorgiComposePath, procs, dbs)
 	if err := utils.WriteRunState(statePath, state); err != nil {
@@ -727,9 +728,7 @@ func runServiceBeforeStart(service utils.Service, envFile string) {
 	}
 }
 
-// runCachedBeforeStart runs beforeStart per step, skipping steps whose cacheKey
-// hash is unchanged and persisting the hash only after a step succeeds. run is
-// injected for tests. Used only when a service opts in with cacheKey.
+// Run beforeStart per step: skip unchanged cacheKey steps, persist hash on success. run injected for tests.
 func runCachedBeforeStart(service utils.Service, noCache bool, run func(string) error) error {
 	for i, step := range service.BeforeStart {
 		needs, hash := utils.StepNeedsRun(service, i, step, noCache)
@@ -749,9 +748,7 @@ func runDetachedBeforeStart(svc utils.Service) {
 	runServiceBeforeStart(svc, getServiceEnv(svc))
 }
 
-// runServiceAfterStop runs a service's afterStart teardown (after its process
-// group is killed) on single-service stop/restart — the same hook the full
-// shutdown path runs, just scoped to one service. No-op when none declared.
+// Run one service's afterStart teardown on single-service stop/restart.
 func runServiceAfterStop(corgi *utils.CorgiCompose, name string) {
 	svc := findService(corgi, name)
 	if svc == nil || svc.AfterStart == nil || omitServiceCmd("afterStart") {

@@ -40,3 +40,19 @@ func TestValidateRestartPolicy(t *testing.T) {
 		t.Fatal("negative maxRetries should error")
 	}
 }
+
+func TestValidateCompose_FlagsBadRestartPolicy(t *testing.T) {
+	c := &CorgiCompose{Services: []Service{
+		{ServiceName: "api", Start: []string{"run"}, RestartPolicy: &RestartPolicy{Mode: "bogus"}},
+	}}
+	errs, _ := ValidateCompose(c)
+	var found bool
+	for _, e := range errs {
+		if e.Field == "services.api.restartPolicy" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("want restartPolicy validation error, got %+v", errs)
+	}
+}
