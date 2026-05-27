@@ -27,8 +27,11 @@ func getEnvFromFile(filePath, corgiGeneratedMessage string) string {
 	return strings.Join(envFileNormalizedContent, "\n") + "\n"
 }
 
-func createEnvString(envForService, envName, host, port, suffix string) string {
-	return fmt.Sprintf("%s%s=http://%s:%s%s\n", envForService, envName, host, port, suffix)
+func createEnvString(envForService, envName, scheme, host, port, suffix string) string {
+	if scheme == "" {
+		scheme = "http"
+	}
+	return fmt.Sprintf("%s%s=%s://%s:%s%s\n", envForService, envName, scheme, host, port, suffix)
 }
 
 func findServiceByName(services []Service, serviceName string) *Service {
@@ -66,12 +69,12 @@ func appendDependentServiceEnv(envForService string, dep DependsOnService, corgi
 	}
 
 	if s.Port != 0 {
-		return createEnvString(envForService, envNameToUse, ServiceHost(), fmt.Sprint(s.Port), dep.Suffix)
+		return createEnvString(envForService, envNameToUse, dep.Scheme, ServiceHost(), fmt.Sprint(s.Port), dep.Suffix)
 	}
 	for _, envLine := range s.Environment {
 		parts := strings.SplitN(envLine, "=", 2)
 		if len(parts) == 2 && parts[0] == "PORT" {
-			envForService = createEnvString(envForService, envNameToUse, ServiceHost(), parts[1], dep.Suffix)
+			envForService = createEnvString(envForService, envNameToUse, dep.Scheme, ServiceHost(), parts[1], dep.Suffix)
 		}
 	}
 	return envForService

@@ -81,10 +81,13 @@ func TestRemoveFromToIndexes(t *testing.T) {
 }
 
 func TestCreateEnvString(t *testing.T) {
-	got := createEnvString("PREFIX_\n", "API_URL", "localhost", "3030", "/v1")
+	got := createEnvString("PREFIX_\n", "API_URL", "", "localhost", "3030", "/v1")
 	want := "PREFIX_\nAPI_URL=http://localhost:3030/v1\n"
 	if got != want {
 		t.Errorf("got %q want %q", got, want)
+	}
+	if https := createEnvString("", "API_URL", "https", "localhost", "3030", ""); https != "API_URL=https://localhost:3030\n" {
+		t.Errorf("https scheme: got %q", https)
 	}
 }
 
