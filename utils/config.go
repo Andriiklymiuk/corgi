@@ -165,7 +165,7 @@ type DependsOnService struct {
 	Name        string `yaml:"name,omitempty"`
 	EnvAlias    string `yaml:"envAlias,omitempty"`
 	Suffix      string `yaml:"suffix,omitempty"`
-	Scheme      string `yaml:"scheme,omitempty"` // URL scheme for the generated env (default http)
+	Scheme      string `yaml:"scheme,omitempty"`
 	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
 	// Condition gates startup: "ready" waits for the readiness probe, "started"
 	// waits only until corgi launched it. Empty = no gating unless --gate-deps.
