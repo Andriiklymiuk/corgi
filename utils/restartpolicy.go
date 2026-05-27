@@ -4,9 +4,9 @@ import "fmt"
 
 // Per-service auto-heal policy for detached runs.
 type RestartPolicy struct {
-	Mode           string `yaml:"mode,omitempty"`           // "on-failure" | "never" (default)
-	MaxRetries     int    `yaml:"maxRetries,omitempty"`     // 0 = no retries
-	BackoffSeconds int    `yaml:"backoffSeconds,omitempty"` // delay between retries
+	Mode           string `yaml:"mode,omitempty"`
+	MaxRetries     int    `yaml:"maxRetries,omitempty"`
+	BackoffSeconds int    `yaml:"backoffSeconds,omitempty"`
 }
 
 // ValidateRestartPolicy checks mode + non-negative counters. nil = valid (off).
