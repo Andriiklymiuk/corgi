@@ -208,6 +208,7 @@
         "name": { "type": "string", "description": "Name of the service depended on." },
         "envAlias": { "type": "string", "description": "Prefix used for the injected env var." },
         "suffix": { "type": "string", "description": "Suffix appended to the resolved value." },
+        "scheme": { "type": "string", "description": "URL scheme for the generated <alias>=<scheme>://host:port (default http). Set https for an SSL service." },
         "forceUseEnv": { "type": "boolean", "description": "Force resolving the value from the producer's env." },
         "condition": { "type": "string", "enum": ["ready", "started"], "description": "Gate startup: wait until the dependency is ready (probe passes) or started (launched)." }
       }

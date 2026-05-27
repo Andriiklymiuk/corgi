@@ -151,6 +151,7 @@ depends_on_services:
   - name:           string
     envAlias:       string        # Env var name for that service's URL
     suffix:         string        # Appended to URL (e.g. /api/v1)
+    scheme:         string        # URL scheme: default http; set https for an SSL service
     forceUseEnv:    bool
 
 exports:                 [string]   # Whitelist of vars exported to dependents.
