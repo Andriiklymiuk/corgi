@@ -18,7 +18,7 @@ description: All corgi CLI commands and global flags with aliases, key flags, an
 | `--privateToken <token>` | Auth token for cloning private repos listed in `cloneFrom:` |
 | `--silent` | Suppress welcome / informational output |
 | `--fromScratch` | Wipe `corgi_services/` before running |
-| `--describe` | Print a human summary of the compose file, don't run |
+| `--describe` | During parse, dump each db/service/required as indented JSON. Does **not** short-circuit — `corgi run --describe` prints then still runs. For a rendered, side-effect-free doc use `/corgi-describe`. |
 | `--dockerContext <ctx>` | `default`, `orbctl`, or `colima` |
 
 ## Commands
