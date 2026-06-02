@@ -52,6 +52,7 @@ While in services you can create whatever you want, but in db services **for now
 - [couchdb](https://couchdb.apache.org)
 - [dgraph](https://dgraph.io)
 - [meilisearch](https://www.meilisearch.com)
+- [mailpit](https://mailpit.axllent.org) — mail-mock SMTP + web UI (the local mail server Supabase uses); web UI port via `port2`
 - [faunadb](https://fauna.com)
 - [yugabytedb](https://www.yugabyte.com)
 - [skytable](https://skytable.io)

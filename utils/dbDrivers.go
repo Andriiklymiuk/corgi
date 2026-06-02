@@ -528,6 +528,24 @@ var DriverConfigs = map[string]DriverConfig{
 			{fileMakefile, templates.MakefileMeiliSearch},
 		},
 	},
+	"mailpit": {
+		Prefix: "MAILPIT_",
+		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
+			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
+			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
+			uiPort := db.Port2
+			if uiPort == 0 {
+				uiPort = 8025
+			}
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, uiPort))
+
+			return fmt.Sprintf("%s%s%s", host, port, dashboardUrl)
+		},
+		FilesToCreate: []FilenameForService{
+			{fileDockerCompose, templates.DockerComposeMailpit},
+			{fileMakefile, templates.MakefileMailpit},
+		},
+	},
 	"faunadb": {
 		Prefix: "FAUNADB_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
