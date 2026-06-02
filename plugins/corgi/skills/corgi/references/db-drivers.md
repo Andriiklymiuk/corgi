@@ -7,29 +7,31 @@ description: Full list of supported corgi db_services drivers with default ports
 
 Set the driver with `driver: <name>`. Corgi generates a `docker-compose.yml` and `Makefile` for each db under `corgi_services/db_services/<name>/`.
 
+No hardcoded host-port default per driver — host port is whatever you set in `port:`. The port column below shows the conventional/container port (generateEnv.go falls back to the postgres `default` config for unknown drivers).
+
 ## Driver table
 
 | Driver | Default port | Env prefix | Image | Notes |
 |---|---|---|---|---|
-| `postgres` | 5432 | `DB_` | `postgres:latest` | |
-| `pgvector` | 5432 | `DB_` | `pgvector/pgvector:latest` | Postgres + pgvector extension. Same env prefix as postgres. |
-| `postgis` | 5432 | `POSTGIS_` | `postgis/postgis:latest` | Postgres + GIS extension |
+| `postgres` | 5432 | `DB_` | `postgres:<version>-alpine` | |
+| `pgvector` | 5432 | `DB_` | `pgvector/pgvector:pg16` | Postgres + pgvector extension. Same env prefix as postgres. |
+| `postgis` | 5432 | `POSTGIS_` | `postgis/postgis:<version>-alpine` | Postgres + GIS extension |
 | `timescaledb` | 5432 | `TIMESCALE_DB_` | `timescale/timescaledb:latest` | Postgres-based |
 | `mongodb` | 27017 | `MONGO_` | `mongo:latest` | |
 | `mysql` | 3306 | `MYSQL_` | `mysql:latest` | |
 | `mariadb` | 3306 | `MARIADB_` | `mariadb:latest` | |
-| `mssql` | 1433 | `MSSQL_` | `mcr.microsoft.com/mssql/server:latest` | Password must be >= 8 chars |
-| `cockroachdb` | 26257 | `COCKROACH_` | `cockroachdb/cockroach:latest` | |
+| `mssql` | 1433 | `MSSQL_` | `mcr.microsoft.com/mssql/server:2022-latest` | Password must be >= 8 chars |
+| `cockroach` | 26257 | `COCKROACH_` | `cockroachdb/cockroach:latest` | `driver: cockroachdb` silently falls back to the postgres default config — use `cockroach`. |
 | `clickhouse` | 9000 | `CLICKHOUSE_` | `clickhouse/clickhouse-server:latest` | |
 | `cassandra` | 9042 | `CASSANDRA_` | `cassandra:latest` | |
 | `scylla` | 9042 | `SCYLLA_` | `scylladb/scylla:latest` | Cassandra-compatible |
-| `redis` | 6379 | `REDIS_` | `redis:latest` | Supports `users.acl` |
-| `redis-server` | 6379 | `REDIS_` | `redis:latest` | Same as redis |
+| `redis` | 6379 | `REDIS_` | `redis/redis-stack:latest` | Supports `users.acl` |
+| `redis-server` | 6379 | `REDIS_` | `redis:<version>-alpine` | Same as redis |
 | `keydb` | 6379 | `KEYDB_` | `eqalpha/keydb:latest` | Redis-compatible |
-| `dragonfly` | 6379 | `DRAGONFLY_` | `dragonflydb/dragonfly:latest` | Redis-compatible |
-| `redict` | 6379 | `REDICT_` | `redict/redict:latest` | Redis fork |
-| `valkey` | 6379 | `VALKEY_` | `valkey/valkey:latest` | Redis fork |
-| `rabbitmq` | 5672 | `RABBITMQ_` | `rabbitmq:latest` | Supports `additional.definitionPath` for JSON definitions |
+| `dragonfly` | 6379 | `DRAGONFLY_` | `docker.dragonflydb.io/dragonflydb/dragonfly:latest` | Redis-compatible |
+| `redict` | 6380 | `REDICT_` | `registry.redict.io/redict:latest` | Redis fork |
+| `valkey` | 8080 | `VALKEY_` | `valkey/valkey:unstable` | Redis fork |
+| `rabbitmq` | 5672 | `RABBITMQ_` | `rabbitmq:<version>-management` | Supports `additional.definitionPath` for JSON definitions |
 | `kafka` | 9092 | `KAFKA_` | `confluentinc/cp-kafka:latest` | |
 | `surrealdb` | 8000 | `SURREALDB_` | `surrealdb/surrealdb:latest` | |
 | `influxdb` | 8086 | `INFLUXDB_` | `influxdb:latest` | |
@@ -42,7 +44,7 @@ Set the driver with `driver: <name>`. Corgi generates a `docker-compose.yml` and
 | `faunadb` | 8443 | `FAUNADB_` | `fauna/faunadb:latest` | Password hardcoded to `secret` in template |
 | `yugabytedb` | 5433 | `YUGABYTEDB_` | `yugabytedb/yugabyte:latest` | Dashboard on `:15433` |
 | `skytable` | 2003 | `SKYTABLE_` | `skytable/skytable:latest` | |
-| `dynamodb` | 8000 | `DYNAMODB_` | `amazon/dynamodb-local:latest` | Standalone local emulator |
+| `dynamodb` | 4566 | `DYNAMODB_` | `localstack/localstack:3.8` (`SERVICES=dynamodb`) | localstack-backed local emulator |
 | `localstack` | 4566 | `AWS_` | `localstack/localstack:latest` | Unified AWS emulator — see below |
 | `supabase` | 54321 | `SUPABASE_` | wraps `supabase` CLI | Local auth + storage. Reads ports from `supabase/config.toml`. Seeds `buckets:` + `authUsers:` on `up`. See below + [docs/drivers/supabase.md](../../../../docs/drivers/supabase.md) |
 | `image` | (you set) | `<SERVICE>_` | (you set via `image:`) | Generic stateless docker-image driver. For services that ship as a public image with no DB/state (gotenberg, mailhog, jaeger). See below |
@@ -192,11 +194,11 @@ db_services:
 ## Port collisions to watch for
 
 - 5432: `postgres`, `pgvector`, `postgis`, `timescaledb` — only one can bind per project.
-- 6379: `redis`, `keydb`, `dragonfly`, `redict`, `valkey` — same.
+- 6379: `redis`, `keydb`, `dragonfly` — same. (`redict` exposes 6380, `valkey` exposes 8080 — not 6379.)
 - 3306: `mysql`, `mariadb`.
 - 9042: `cassandra`, `scylla`.
-- 8000: `surrealdb` and `dynamodb` both default here — change one if using both.
-- 4566: `localstack`, `sqs`, `s3` all share this; only one at a time.
+- 8000: `surrealdb`.
+- 4566: `localstack`, `dynamodb`, `sqs`, `s3` all share this; only one at a time.
 - 54321..54324: `supabase` driver claims api/db/studio/inbucket here. Override via compose `port:` (api), `dbPort:`, `studioPort:`, `inbucketPort:` — driver patches config.toml + emits matching env URLs.
 
 If two drivers need the same port, change `port:` on one of them. Corgi will substitute it into the generated compose file and env vars.

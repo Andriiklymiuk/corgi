@@ -9,17 +9,17 @@ Corgi's output is colored plain text, not JSON. Look for `❌` markers and the l
 
 ## `corgi doctor` failures
 
-### `❌ <tool> is missing`
+### `❌ <name> is not installed` / `❌ <name> is not found: <err>`
 
 A tool in `required:` failed its `checkCmd`. The `install:` commands for that tool are shown; offer to run them, or let the user do so. Don't retry `corgi doctor` without installing first.
 
-### `❌ Docker daemon is not running`
+### `❌ Docker daemon is not reachable — start Docker Desktop / colima / dockerd`
 
 - macOS: start Docker Desktop, OrbStack, or Colima (whichever the user has).
 - Check `--dockerContext` if the user is on a non-default context.
 - Don't try to fix this inside corgi — it's an environment problem.
 
-### `❌ <port> busy — needed for <service> — held by: <pid>/<name>`
+### `❌ <port> busy — needed for <service> — held by: <name>(pid=<pid>)`
 
 Three options in order of preference:
 1. Stop the offending process (if it's leftover: `corgi clean -i db`, or `kill <pid>` for something unrelated).
@@ -30,7 +30,7 @@ Never silently edit the user's compose to change a port — confirm first, becau
 
 ## `corgi run` failures
 
-### "couldn't find corgi-compose.yml"
+### "no corgi-compose.yml found and no terminal to pick one; pass -f <path> or run from a directory containing corgi-compose.yml"
 
 User is in the wrong directory, or the file is named non-default. Options:
 - `cd` to the repo root.
@@ -52,7 +52,7 @@ Corgi streams the service's own error. Read the lines above the crash for the ac
 
 If the crash output already scrolled off the terminal, restart with `corgi run --logs` to persist each service's stdout/stderr under `corgi_services/.logs/<name>/<timestamp>.log`. Read back with `corgi logs` (interactive picker) or `corgi logs --service <name>`. Logs are capped 50 MB per run and rotated (10 newest kept), so leaving `--logs` on for development is cheap.
 
-If a service crashed unattended, enable desktop notifications once with `corgi doctor` — subsequent runs fire a system toast whenever a service exits non-zero (suppressed during corgi's own shutdown so Ctrl-C never alerts).
+If a service crashed unattended, enable desktop notifications once with `corgi notifications on` — subsequent runs fire a system toast whenever a service exits non-zero (suppressed during corgi's own shutdown so Ctrl-C never alerts).
 
 ### "env file exists but is empty" / wrong values
 
@@ -117,7 +117,7 @@ If `corgi tunnel <svc>` falls back to Quick mode despite a `tunnel:` block being
 - Confirm the env var resolves. Hostname `${VAR}` is read from shell env → `<service-dir>/.env` → `env/source/<svc>.env`. If unset everywhere, expect a strict error (`env vars not set for tunnel.hostname: …`), not a silent Quick fallback.
 - If error path missing too, suspect stale binary: rebuild from source and re-test before debugging further.
 
-See `../../../docs/tunnel.md` for full provider matrix + Quick Tunnel limitations.
+See repo-root `docs/tunnel.md` for full provider matrix + Quick Tunnel limitations.
 
 ## "It was working yesterday" recipes
 

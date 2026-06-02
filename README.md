@@ -105,7 +105,11 @@ This repo ships a [Claude Code](https://claude.com/claude-code) plugin so an AI 
 /plugin install corgi@corgi
 ```
 
-Then in any project that has a `corgi-compose.yml`, Claude will recognize it and use `corgi run` / `corgi doctor` / `corgi status` instead of inventing its own commands. A `/corgi-new` slash command scaffolds a fresh `corgi-compose.yml` from a short conversation.
+Then in any project that has a `corgi-compose.yml`, Claude will recognize it and use `corgi run` / `corgi doctor` / `corgi status` instead of inventing its own commands. The plugin also adds:
+
+- **`/corgi-new`** — scaffold a fresh `corgi-compose.yml` from a short conversation.
+- **`/corgi-describe`** — write a Markdown service map plus a Mermaid relationship diagram for the project.
+- **`corgi:stories`** — hand Claude a batch of tracker issues (Linear or Jira) or just a feature description, and it investigates, writes a spec per item behind one sign-off gate, branches per service, tests and reviews each, and opens draft PRs/MRs (GitHub or GitLab). Runs automatically when you give it issues to ship, or invoke it with `/corgi:stories`.
 
 ## Install
 
