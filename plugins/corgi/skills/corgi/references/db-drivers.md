@@ -41,6 +41,7 @@ No hardcoded host-port default per driver — host port is whatever you set in `
 | `elasticsearch` | 9200 | `ELASTIC_` | `docker.elastic.co/elasticsearch/elasticsearch:latest` | Pairs with Kibana on `:5601` |
 | `couchdb` | 5984 | `COUCHDB_` | `couchdb:latest` | UI at `:<port>/_utils` |
 | `meilisearch` | 7700 | `MEILISEARCH_` | `getmeili/meilisearch:latest` | |
+| `mailpit` | 1025 | `MAILPIT_` | `axllent/mailpit:latest` | Mail-mock SMTP server (what Supabase uses locally). Web UI on `port2` (default 8025); no SQL shell. `MAILPIT_DASHBOARD_URL` points at the UI. |
 | `faunadb` | 8443 | `FAUNADB_` | `fauna/faunadb:latest` | Password hardcoded to `secret` in template |
 | `yugabytedb` | 5433 | `YUGABYTEDB_` | `yugabytedb/yugabyte:latest` | Dashboard on `:15433` |
 | `skytable` | 2003 | `SKYTABLE_` | `skytable/skytable:latest` | |
