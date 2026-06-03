@@ -151,13 +151,12 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
 ### Triage: actionable vs blocked — controls POSTING, not writing
 
 - **Actionable → post.**
-  - **Spec:** Linear ⇒ attach (`prepare_attachment_upload` →
-    `curl -X PUT --data-binary @<spec>` with returned headers verbatim, 60 s
-    expiry → `create_attachment_from_upload`; base64 `create_attachment` =
-    deprecated fallback). Jira ⇒ **comment** (`addCommentToJiraIssue`) — no Jira
-    attachment; spec + what-to-test both ride as comments.
-  - **What to test → comment** (non-engineer reads inline). Plain QA: clicks +
-    outcome, no code/file refs, end `Expected:`. Skip non-testable stories.
+  - **Spec → a comment** on the issue (human-readable, not a `.md` attachment).
+    Linear `save_comment({ issueId, body })`; Jira `addCommentToJiraIssue`.
+    Literal newlines / markdown; re-run with the returned comment id to update,
+    not duplicate.
+  - **What to test → a separate comment** (non-engineer reads inline). Plain QA:
+    clicks + outcome, no code/file refs, end `Expected:`. Skip non-testable stories.
 - **Blocked → do NOT post.** Spec local only; mark `Status: BLOCKED` + **Decision
   needed**; surface the choice to the user. Hold it; rest of batch proceeds.
 
