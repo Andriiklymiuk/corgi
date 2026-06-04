@@ -1,4 +1,4 @@
-# Forge API Reference — gh / glab incantations
+# GitHub / GitLab commands — gh / glab incantations
 
 Copy-pasteable commands for fetching PR/MR data and posting review output.
 Cited by SKILL.md phases P1 (fetch) and P5 (post). **Both forges are first-class

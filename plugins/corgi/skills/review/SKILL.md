@@ -43,7 +43,7 @@ auto-expand silently.**
 ## Phase 1 — Fetch (no checkout)
 
 Per PR/MR, fetch **without checking out the branch** (non-destructive — never touch
-the user's working tree). Exact commands live in `references/forge-api.md` §1; pick
+the user's working tree). Exact commands live in `references/github-gitlab-commands.md` §1; pick
 the `gh` or `glab` column that matches the ref's forge.
 
 Fetch per PR/MR:
@@ -60,7 +60,7 @@ truncation degrading review quality:
 rtk proxy gh pr diff <n> --repo <owner>/<repo> --patch
 rtk proxy glab mr diff <n> --repo <host>/<group>/<proj> --color=never
 ```
-See `references/forge-api.md` §0 for the rule of thumb: rtk-filtered for
+See `references/github-gitlab-commands.md` §0 for the rule of thumb: rtk-filtered for
 everything except the diff content (and any file body read in full).
 
 **State.** Read the PR/MR state on fetch.
@@ -244,7 +244,7 @@ rewrites it; re-preview before proceeding. Not every finding has to go up.
 
 ## Phase 5 — Post
 
-Exact commands live in `references/forge-api.md` §2–4; use the forge from P0.
+Exact commands live in `references/github-gitlab-commands.md` §2–4; use the forge from P0.
 
 **GitHub** — one review call (`event=COMMENT`): `body` = the PR's human summary
 (tagged `<!-- corgi-review -->`), `comments[]` = all inline findings, each
