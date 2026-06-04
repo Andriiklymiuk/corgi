@@ -35,10 +35,12 @@ same repo share one standards note (P2) and one area sweep (P3) — the core tok
 saving.
 
 **Auto-detect siblings (optional).** Given a single PR/MR, read its branch name; if
-a `corgi-compose.yml` is in cwd, look for PRs/MRs on the **same branch** in the
-workspace's other services' repos (stories opens sibling PRs with the same branch
-name). Found → confirm the expanded set with the user before reviewing. **Never
-auto-expand silently.**
+a `corgi-compose.yml` is in cwd, resolve each other (non-`manualRun`) service's
+repo (the P2 mapping) and enumerate same-branch PRs/MRs there:
+`gh pr list --head <branch> --repo <o>/<r>` / `glab mr list --source-branch <branch> -R <repo>`
+(commands in `references/github-gitlab-commands.md` §1). stories opens sibling PRs
+with the same branch name, so this finds the rest of a story's set. Found → confirm
+the expanded set with the user before reviewing. **Never auto-expand silently.**
 
 ## Phase 1 — Fetch (no checkout)
 
@@ -46,12 +48,14 @@ Per PR/MR, fetch **without checking out the branch** (non-destructive — never 
 the user's working tree). Exact commands live in `references/github-gitlab-commands.md` §1; pick
 the `gh` or `glab` column that matches the ref's forge.
 
-Fetch per PR/MR:
-- Title, body, author, base branch, head branch, changed-file list, URL, state,
-  isDraft — metadata via `gh pr view … --json …` / `glab mr view …`.
-- Unified diff — via `gh pr diff` / `glab mr diff`.
-- Anchoring SHAs for inline comments: GitHub uses `path`+`line`+`side` on the
-  latest head commit; GitLab needs `diff_refs` (`base_sha`/`head_sha`/`start_sha`).
+Fetch per PR/MR — **metadata + anchoring SHAs + commits in one call**, diff
+separately (don't make a second call just for a SHA):
+- GitHub: `gh pr view <n> --json title,body,author,baseRefName,headRefName,state,isDraft,files,url,headRefOid,baseRefOid,commits`.
+- GitLab: `glab mr view <n> -R <repo> -F json` — its JSON already includes
+  `diff_refs` (`base_sha`/`head_sha`/`start_sha`), `state`, `draft`, `commits`.
+- Unified diff (raw, §0) — `gh pr diff` / `glab mr diff`.
+- Inline anchoring later (P5): GitHub uses `path`+`line`+`side`; GitLab uses native
+  `--file`/`--line`/`--old-line` (no `diff_refs` needed for the primary post path).
 
 **rtk:** metadata, status, and list calls go through rtk automatically (the Claude
 Code hook rewrites `git`/`gh`/`glab`). Fetch the **reviewable diff raw** to avoid
@@ -69,9 +73,11 @@ everything except the diff content (and any file body read in full).
 
 **Stacked PRs.** `gh pr diff` / `glab mr diff` diff each PR against its own base.
 If PR B's base is PR A's branch, B's diff is already just its own delta — review
-as-is. If both target trunk and B contains A's commits, detect the shared commit
-range and review B only against the non-shared commits, so no lines are reviewed
-twice. State the stacking in the report.
+as-is. If both target trunk and B's `commits` (from the P1 fetch) contain A's,
+isolate B's own changes with the **compare API — no checkout**
+(`gh api repos/<o>/<r>/compare/<A-head>...<B-head>`; never `git diff A..B` on a
+tree you didn't fetch). Can't isolate cleanly → review the full diff and note the
+double-review. State the stacking in the report.
 
 **Noise filter.** Drop generated/vendored/binary paths from the review surface:
 lockfiles (`*.lock`, `package-lock.json`, `go.sum`, …), `vendor/`, `node_modules/`,
@@ -82,7 +88,10 @@ count of paths skipped.
 ## Phase 1.5 — Tracker enrichment (intent)
 
 Scan the **input** and **each PR/MR body** for ticket references:
-`linear.app/…`, `atlassian.net/…`, or a bare `ABC-123` key.
+`linear.app/…`, `atlassian.net/…`, or a bare `ABC-123` key. **Dedupe keys across
+the whole set first** — a shared ticket (the common api+web case) is fetched
+**once** and its intent note reused by every PR that references it, same as P2's
+per-repo note. Never re-fetch the same key per PR.
 
 - **Linear** → `mcp__linear-server__get_issue` (+ comments); view screenshots by
   `curl`-ing the signed `uploads.linear.app` URLs (they expire ~5 min — re-fetch
@@ -172,6 +181,12 @@ ticket's reasoning.
 ```
 { pr, file, line, side, severity: blocking|nit, title, explanation, suggestedReplacement? }
 ```
+`line`/`side` come straight from the diff hunk: `line` = the line number in the
+**new** file (from the `@@ … +start,count @@` header, counting forward);
+`side` = `RIGHT` for an added/context line, `LEFT` for a removed line. A finding
+that isn't on a diffed line has no anchor → goes in the summary (P5). See
+`references/github-gitlab-commands.md` §2.
+
 Plus a **2–4 sentence human summary per PR** written above the findings list.
 
 **Token discipline (stories model):**
@@ -251,9 +266,12 @@ Exact commands live in `references/github-gitlab-commands.md` §2–4; use the f
 suggestion a ` ```suggestion ` block for one-click apply. Summary + all inline
 in **one** call.
 
-**GitLab** — summary via `glab mr note create` (tagged `<!-- corgi-review -->`);
-each inline finding as a separate `discussions` call with a `position` object;
-suggested change as a ` ```suggestion:-0+0 ` block (Apply button).
+**GitLab** — summary piped to `glab mr note create … --unique` (the body on stdin,
+**not** `-m -`; tagged `<!-- corgi-review -->`); each inline finding via the native
+`glab mr note create --file <path> --line <n>` (or `--old-line` for a removed line),
+suggested change as a ` ```suggestion:-0+0 ` block (Apply button). (Those flags are
+experimental — fall back to the raw `discussions` + `position` API in §3b if they
+error.)
 
 **Finding that cannot be inlined** (line not in the diff) → fold into that PR's summary;
 note it in the report. Never silently drop.
@@ -261,11 +279,15 @@ note it in the report. Never silently drop.
 **Cross-service contract finding** → post to **both** sides, each cross-linked
 (`see <other-PR-link>`), so each reviewer sees the full picture.
 
-**Idempotency (summary + inline):**
-- Every corgi-posted comment is tagged `<!-- corgi-review -->`.
-- Re-run → detect the prior corgi summary → offer **update vs new** (patch the
-  existing comment rather than stacking a duplicate).
-- Inline deduped by `(file, line, title)` — same finding never posted twice.
+**Idempotency (summary + inline) — dedup on a deterministic marker, never on the
+LLM-generated title:**
+- Summary tagged `<!-- corgi-review -->`; every inline comment starts with
+  `<!-- corgi-review:<file>:<line> -->`.
+- Before posting, list existing comments (§4) and **skip any whose body already
+  carries the matching marker** — so re-runs never stack duplicates. GitLab
+  `--unique` is an extra backstop.
+- Re-run summary → **update vs new**: GitHub `PUT …/reviews/<id>` (a review body
+  can't be PATCHed via a `comments` route); GitLab edit/replace the tagged note.
 - Findings whose line the author already changed are skipped (forge marks them
   outdated).
 
@@ -276,11 +298,12 @@ note it in the report. Never silently drop.
    silent; don't spam.
 2. **Nits only, no blockers** — inline the nits; summary headline "No blockers,
    N nits" so it doesn't read as alarming.
-3. **Head moved during the gate** — re-fetch the head SHA right before posting.
-   If it changed: warn, re-anchor inline findings against the new diff, drop
-   any whose line vanished (fold into summary). If the diff changed materially,
-   offer a re-review instead of posting stale comments. **Never post inline
-   against a stale SHA.**
+3. **Head moved during the gate** — re-fetch metadata (head SHA) right before
+   posting. If it changed: warn, re-fetch the new diff, and **relocate each
+   finding by its anchored source-line text + surrounding hunk context** → take
+   the new line/side. A finding whose exact line content is absent from every
+   new-head hunk = vanished → fold into the summary. If the diff changed
+   materially, offer a re-review instead. **Never post inline against a stale SHA.**
 4. **Partial post failure** (inline rejected — line outside diff `422`, rate
    limit, transient `5xx`) — retry transient errors with backoff; fold
    still-failing findings into the summary; report posted-vs-failed counts. No
