@@ -24,8 +24,10 @@ to the cwd repo** — fine for a same-repo batch; for a multi-repo set, require 
 or confirm the inferred repo per number.
 
 **Verify tooling:** check the matched CLI is installed + authed
-(`gh auth status` / `glab auth status`). Missing → stop with an install/auth hint;
-don't guess.
+(`gh auth status` / `glab auth status`). For a **self-hosted GitLab** ref, check
+auth against *that host* (`glab auth status --hostname <host>`) — a healthy
+gitlab.com token doesn't mean the internal instance is configured. Missing → stop
+with a host-specific install/auth hint; don't guess.
 
 A set may **span forges** (e.g. api MR on GitLab, web PR on GitHub) — resolve each
 ref independently. Both forges are first-class.
@@ -68,7 +70,8 @@ See `references/github-gitlab-commands.md` §0 for the rule of thumb: rtk-filter
 everything except the diff content (and any file body read in full).
 
 **State.** Read the PR/MR state on fetch.
-- Merged/closed → warn and skip by default; ask before reviewing a closed one (usually a mistake).
+- **Merged or closed → warn and ask** before reviewing either (usually pasted by
+  mistake); skip by default if declined.
 - Draft → review normally (reviewing drafts is the common case).
 
 **Stacked PRs.** `gh pr diff` / `glab mr diff` diff each PR against its own base.
@@ -82,13 +85,19 @@ double-review. State the stacking in the report.
 **Noise filter.** Drop generated/vendored/binary paths from the review surface:
 lockfiles (`*.lock`, `package-lock.json`, `go.sum`, …), `vendor/`, `node_modules/`,
 codegen output, images/binaries, and anything matching the repo's
-`linguist-generated` / `.gitattributes` markers. Never comment on these; note the
-count of paths skipped.
+`linguist-generated` / `.gitattributes` markers. Also catch **unmarked** codegen:
+common globs (`*.pb.go`, `*_gen.go`, `*.generated.*`, OpenAPI/GraphQL client dirs)
++ a header-sentinel scan (`@generated` / `DO NOT EDIT` in the first lines). Never
+comment on these; note the count skipped. **But** if a lockfile changed, add one
+report line — "N dependency changes in `<lockfile>` — not line-reviewed" — so a
+risky transitive bump isn't invisible.
 
 ## Phase 1.5 — Tracker enrichment (intent)
 
-Scan the **input** and **each PR/MR body** for ticket references:
-`linear.app/…`, `atlassian.net/…`, or a bare `ABC-123` key. **Dedupe keys across
+Scan the **input**, **each PR/MR body**, AND the **branch name**
+(`headRefName`/`source_branch` — e.g. `feature/HUM-1063/...` carries `HUM-1063`)
+for ticket references: `linear.app/…`, `atlassian.net/…`, or a bare `ABC-123` key.
+**Dedupe keys across
 the whole set first** — a shared ticket (the common api+web case) is fetched
 **once** and its intent note reused by every PR that references it, same as P2's
 per-repo note. Never re-fetch the same key per PR.
@@ -149,7 +158,13 @@ services** — reference-only, same as stories.
 
 **Remote-only repo (not on disk)** → best-effort API fetch of just `CLAUDE.md`/
 `AGENTS.md` + the one relevant lint config (`gh api repos/<o>/<r>/contents/<f>` /
-`glab api`). **No full clone.** Missing → skip, don't chase.
+`glab api`). **No full clone.** A `404` = genuinely absent → skip. A `403`/auth
+error ≠ absent → note "standards skipped (no access)" so a private repo doesn't
+silently get a weaker review.
+
+**Monorepo with >1 service** → still read each canonical file once, but **scope the
+note per service area** (keyed by the compose path prefix, e.g. `api/` vs `web/`)
+so a `web` convention isn't applied to `api` code.
 
 Distilled note = naming conventions, test patterns, forbidden patterns, code-style
 rules the repo **explicitly** spells out. Target a short note (~a dozen bullets),
@@ -165,7 +180,7 @@ review untouched code.
 - Correctness bugs.
 - Missing or weak tests.
 - Security issues.
-- **Leaked secrets** — flag the file + line + that a secret is present; never echo the value into a finding or comment.
+- **Leaked secrets** — always `severity: blocking`; flag the file + line + that a secret is present; never echo the value into a finding or comment.
 - Repo-standard / convention violations (names, patterns, style).
 - Scope creep (changes outside the ticket's stated scope).
 - Perf footguns.
@@ -198,7 +213,9 @@ Plus a **2–4 sentence human summary per PR** written above the findings list.
 - Big **set** → dispatch per-PR reviews to parallel subagents, each scoped to
   its diff + the shared note.
 - Big **single PR** (large diff / many files) → split that one PR's diff by
-  file/dir group across parallel subagents, then merge + dedupe findings.
+  file/dir group across parallel subagents (cap group size so each fits context),
+  then merge + dedupe, plus **one cross-slice reconcile pass** so a
+  caller-in-slice-A / definition-in-slice-B issue isn't missed between slices.
 - Same-repo sibling PRs touching the same code → add a short **interaction
   note** (do they conflict or overlap?).
 
@@ -210,9 +227,15 @@ crossed by two PRs in different repos **or** by a single monorepo PR editing
 two services' dirs (e.g. `api/` + `web/`). A set touching only one service
 skips P3.5.
 
+**No compose on disk (remote-only / cross-forge set)** — don't silently skip the
+pass. Fall back: infer the service boundary from **changed-file path prefixes**
+(distinct top-level dirs / repos = distinct services), and where compose can't
+give the dependency direction, infer producer/consumer from the diffs themselves
+(below).
+
 One reviewer sees **all boundary-crossing diffs together** plus the dependency
-direction from `corgi-compose.yml`: `depends_on_services`, `exports`,
-`${producer.VAR}` substitutions.
+direction from `corgi-compose.yml` (`depends_on_services`, `exports`,
+`${producer.VAR}`) **when present**.
 
 **Checks across the boundary:**
 - Request/response shape, field names + types, nullability.
@@ -225,10 +248,17 @@ direction from `corgi-compose.yml`: `depends_on_services`, `exports`,
 - Type, enum, or nullability mismatch across the boundary.
 - Producer change with no matching consumer update (or an orphan consumer
   change with no producer change).
-- **Merge order** (producer PR first) — state it explicitly in the output.
+- **Merge order** (producer PR first) — state it explicitly in the output. If
+  compose doesn't encode the dependency (an HTTP response-field contract usually
+  isn't a `depends_on` edge), infer it from the diffs: the PR that **adds/changes
+  the field** is the producer → merge it first.
 
-Contract findings are structured the same as P3 findings (same shape); tag
-each with both affected PRs so P5 can post to both sides.
+A contract finding spans two sides, so it carries a **per-side anchor list** —
+`anchors: [{ pr, file, line, side }]`, one entry per affected PR (the producer's
+file/line and the consumer's are different, and GitHub vs GitLab anchor
+differently). P5 posts each side against **its own** anchor and cross-links; a
+side with no valid anchor folds into that PR's summary. (Plain single-side
+findings keep the normal `{pr,file,line,side}` shape.)
 
 ## Phase 4 — Preview + confirm (the gate)
 
@@ -244,7 +274,8 @@ Print to terminal, per PR in the set:
 ```
 
 If P3.5 ran, append a **Contract** section after all per-PR blocks listing
-cross-service findings and the stated merge order (producer first).
+cross-service findings and the stated merge order (producer first). Many findings
+→ paginate the preview (don't print an unbounded wall before the gate).
 
 Then ask (one prompt for the whole set):
 
@@ -252,7 +283,11 @@ Then ask (one prompt for the whole set):
 > **cancel**
 
 *Edit* = interactive pruning — present each finding; user keeps, drops, or
-rewrites it; re-preview before proceeding. Not every finding has to go up.
+rewrites it; re-preview before proceeding. Not every finding has to go up. When a
+PR already has a corgi summary from a prior run, the gate also asks **update the
+existing summary vs post new** (default, and under `--yes`: **update**). Zero
+findings → no *edit* option (nothing to prune); just post the clean summary or
+cancel.
 
 - Gate **on** by default — posting is outward-facing.
 - `--yes` skips the gate and posts immediately.
@@ -276,20 +311,26 @@ error.)
 **Finding that cannot be inlined** (line not in the diff) → fold into that PR's summary;
 note it in the report. Never silently drop.
 
-**Cross-service contract finding** → post to **both** sides, each cross-linked
-(`see <other-PR-link>`), so each reviewer sees the full picture.
+**Cross-service contract finding** → post to **both** sides, each against **its own
+per-side anchor** (P3.5 `anchors[]`), each cross-linked (`see <other-PR-link>`), so
+each reviewer sees the full picture. A side lacking a valid anchor → that side folds
+into its PR's summary; the other still posts.
 
 **Idempotency (summary + inline) — dedup on a deterministic marker, never on the
 LLM-generated title:**
 - Summary tagged `<!-- corgi-review -->`; every inline comment starts with
   `<!-- corgi-review:<file>:<line> -->`.
-- Before posting, list existing comments (§4) and **skip any whose body already
-  carries the matching marker** — so re-runs never stack duplicates. GitLab
-  `--unique` is an extra backstop.
-- Re-run summary → **update vs new**: GitHub `PUT …/reviews/<id>` (a review body
-  can't be PATCHed via a `comments` route); GitLab edit/replace the tagged note.
-- Findings whose line the author already changed are skipped (forge marks them
-  outdated).
+- **Order matters: re-anchor first (scenario 3), THEN dedup** — compute each
+  marker from the *re-anchored* (current-head) line, then list existing comments
+  (§4) and **skip any whose body already carries that marker**. Doing it in this
+  order means a finding that shifted lines between runs still matches its prior
+  comment instead of posting a duplicate. GitLab `--unique` is an extra backstop.
+- Re-run summary → **update vs new** (decided at the P4 gate): GitHub
+  `PUT …/reviews/<id>` (a review body can't be PATCHed via a `comments` route);
+  GitLab edit/replace the tagged note.
+- **One rule for a finding whose line no longer matches head: fold it into the
+  summary** (so the user still sees it). Reserve "skip" only for threads the forge
+  has already marked outdated/resolved — never silently drop a live finding.
 
 **Posting scenarios:**
 
@@ -302,8 +343,10 @@ LLM-generated title:**
    posting. If it changed: warn, re-fetch the new diff, and **relocate each
    finding by its anchored source-line text + surrounding hunk context** → take
    the new line/side. A finding whose exact line content is absent from every
-   new-head hunk = vanished → fold into the summary. If the diff changed
-   materially, offer a re-review instead. **Never post inline against a stale SHA.**
+   new-head hunk = vanished → fold into the summary. **Material change** = any kept
+   finding's anchor line changed or vanished vs this run's P1 head; on a material
+   change, re-print the affected lines and re-confirm (or offer re-review) before
+   posting. **Never post inline against a stale SHA.**
 4. **Partial post failure** (inline rejected — line outside diff `422`, rate
    limit, transient `5xx`) — retry transient errors with backoff; fold
    still-failing findings into the summary; report posted-vs-failed counts. No
@@ -311,9 +354,11 @@ LLM-generated title:**
 5. **Suggestion can't apply** (pure deletion, non-contiguous range, lines don't
    line up) — fall back to a normal inline comment with the proposed code in a
    **plain fenced block** (not ` ```suggestion `). Avoids a broken Apply button.
-6. **No comment permission** (`403`, not a collaborator) — print the full review
-   locally and tell the user to post manually or get access. Detect before
-   attempting any posts; don't lose the work.
+6. **No comment permission** — **pre-flight probe before the gate**: check write
+   access (`gh api repos/<o>/<r> -q .permissions` / GitLab member check). No write
+   → tell the user up front and switch the gate to **print-locally-only** (don't
+   offer "post all" for an action that can't succeed). Also catch a `403` reactively
+   at post time as a backstop. Either way print the full review; don't lose the work.
 7. **Body/size limits** (GitHub body ~65k chars; many findings) — cap inline
    count per PR, truncate/split the summary, push overflow into a follow-up
    comment, and say so in the report. No silent dropping.
@@ -339,6 +384,11 @@ PR crossing a service boundary) — lists cross-service findings and merge order
 ```
 N findings: B blocking, K nits;  P posted inline, S folded into summary.
 ```
+Zero findings → `0 findings — clean.`. Wholly permission-blocked (scenario 6) →
+`0 posted — printed locally (no write access).`.
+
+**Skipped** line — list every ref that was NOT reviewed and why (merged/closed and
+declined, blocked) so a skipped target isn't lost between P1 and the report.
 
 List anything that couldn't be inlined explicitly (file, line, reason) — no
 silent drops.
