@@ -6,7 +6,7 @@ Open service URLs in the browser
 
 ### Synopsis
 
-Opens http://localhost:`<port>` for each selected service that has a port.
+Opens `http://localhost:<port>` for each selected service that has a port.
 With no args, opens every service that has a port. db_services are skipped.
 
 In --json mode or when there is no terminal, the URLs are printed instead of

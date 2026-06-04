@@ -471,24 +471,21 @@ func escapeProseLine(line string) string {
 	return strings.Join(segments, "`")
 }
 
-// escapeProseSegment wraps <placeholder> and {expression} runs in inline code.
-// Backslash escapes and HTML entities don't survive Docusaurus' MDX pipeline, but
-// inline code is rendered verbatim, so that's the only reliable escape here.
+// escapeProseSegment wraps the parts MDX would misread in inline code. Backslash
+// escapes and HTML entities don't survive Docusaurus' MDX pipeline; inline code is
+// rendered verbatim, so it's the only reliable escape here. Braces first (JSON
+// snippets can contain spaces), then whole tokens carrying a '<'.
 func escapeProseSegment(s string) string {
+	return wrapAngleTokens(wrapBraceSpans(s))
+}
+
+// wrapBraceSpans wraps each balanced {...} run in inline code so MDX doesn't read
+// it as a JS expression.
+func wrapBraceSpans(s string) string {
 	runes := []rune(s)
 	var b strings.Builder
 	for i := 0; i < len(runes); i++ {
-		switch runes[i] {
-		case '<':
-			if end := matchAnglePlaceholder(runes, i); end > i {
-				b.WriteByte('`')
-				b.WriteString(string(runes[i : end+1]))
-				b.WriteByte('`')
-				i = end
-				continue
-			}
-			b.WriteString("`<`")
-		case '{':
+		if runes[i] == '{' {
 			if end := matchBraceSpan(runes, i); end > i {
 				b.WriteByte('`')
 				b.WriteString(string(runes[i : end+1]))
@@ -496,29 +493,10 @@ func escapeProseSegment(s string) string {
 				i = end
 				continue
 			}
-			b.WriteString("`{`")
-		default:
-			b.WriteRune(runes[i])
 		}
+		b.WriteRune(runes[i])
 	}
 	return b.String()
-}
-
-// matchAnglePlaceholder returns the index of the closing '>' for a <name>-style
-// placeholder starting at i, or i if it isn't one (so real less-than stays put).
-func matchAnglePlaceholder(runes []rune, i int) int {
-	for j := i + 1; j < len(runes); j++ {
-		switch runes[j] {
-		case '>':
-			if j > i+1 {
-				return j
-			}
-			return i
-		case '<', ' ', '\t':
-			return i
-		}
-	}
-	return i
 }
 
 // matchBraceSpan returns the index of the brace that balances the '{' at i, or i
@@ -537,4 +515,66 @@ func matchBraceSpan(runes []rune, i int) int {
 		}
 	}
 	return i
+}
+
+// wrapAngleTokens wraps every whitespace-delimited token containing '<' in inline
+// code, skipping tokens already inside an inline `code` span. The whole token is
+// wrapped (not just <name>) so a placeholder abutting a URL ends up inside the code
+// span — otherwise GFM's literal-URL autolink swallows the backtick and MDX then
+// parses <name> as a JSX tag.
+func wrapAngleTokens(s string) string {
+	parts := strings.Split(s, "`")
+	for i := range parts {
+		if i%2 == 1 {
+			continue
+		}
+		parts[i] = wrapAngleTokensInProse(parts[i])
+	}
+	return strings.Join(parts, "`")
+}
+
+func wrapAngleTokensInProse(s string) string {
+	runes := []rune(s)
+	var b strings.Builder
+	for i := 0; i < len(runes); {
+		if runes[i] == ' ' || runes[i] == '\t' {
+			b.WriteRune(runes[i])
+			i++
+			continue
+		}
+		start, hasAngle := i, false
+		for i < len(runes) && runes[i] != ' ' && runes[i] != '\t' {
+			if runes[i] == '<' {
+				hasAngle = true
+			}
+			i++
+		}
+		token := runes[start:i]
+		if !hasAngle {
+			b.WriteString(string(token))
+			continue
+		}
+		// Wrap up to the last '>' and leave trailing sentence punctuation outside
+		// the code span, so e.g. `localhost:<port>.` keeps its period in prose.
+		wrapEnd := len(token)
+		for wrapEnd > 0 && isTrailingPunct(token[wrapEnd-1]) {
+			wrapEnd--
+		}
+		if wrapEnd == 0 || token[wrapEnd-1] != '>' {
+			wrapEnd = len(token) // no clean placeholder end; wrap the whole token
+		}
+		b.WriteByte('`')
+		b.WriteString(string(token[:wrapEnd]))
+		b.WriteByte('`')
+		b.WriteString(string(token[wrapEnd:]))
+	}
+	return b.String()
+}
+
+func isTrailingPunct(r rune) bool {
+	switch r {
+	case '.', ',', ';', ':', '!', '?', ')':
+		return true
+	}
+	return false
 }
