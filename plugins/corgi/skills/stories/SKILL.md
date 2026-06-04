@@ -207,45 +207,75 @@ worktree, check whether those edits touch the story's files. Overlap → the wor
 would silently diverge → **STOP, ask the user to commit/stash or confirm**. No
 overlap → worktree is safe.
 
-**Must-run producer overrides the table.** A producer that must be *running* for a
-consumer to verify (Phase 4) **can't** be worktree'd — `corgi run` only sees its
-`path:`. It goes **in place** even if the table said worktree. Dirty there → ask
-the user to stash/commit first; can't isolate it. (Everything else follows the
-table.)
+**Must-run producer in a worktree → run it with `--service-dir`.** A producer that
+must be *running* for a consumer to verify (Phase 4) can still live in a worktree:
+point corgi at it with `corgi run --service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>`
+(below). Only if your corgi lacks that flag (`corgi run --help | grep service-dir`)
+must such a producer go **in place** instead — dirty there → ask the user to
+stash/commit first.
 
-- **Branch in place** (clean tree, or a must-run producer after stash/commit).
-  Branch straight off the fetched remote
+- **Branch in place** (clean tree; or a must-run producer when `--service-dir` is
+  unavailable, after stash/commit). Branch straight off the fetched remote
   base — no `checkout <base>`/`pull` dance, no local-divergence trap:
   `git -C <dir> fetch origin && git -C <dir> checkout -b <branch> origin/<base>`.
-- **Worktree** (dirty tree, or several stories in one repo). `<wt-id>` =
-  `<issue-key>`, or the `<kebab-slug>` for a no-ticket story. Branch off
-  `origin/<base>` — never touches `<dir>`'s working tree:
+- **Worktree** (dirty tree, or several stories in one repo). Path
+  `/tmp/corgi-wt/<wt-id>-<service>` — `<wt-id>` = `<issue-key>` (or `<kebab-slug>`
+  for a no-ticket story), `<service>` = the service name, so a multi-repo story's
+  repos never collide on one dir. Branch off `origin/<base>` — never touches
+  `<dir>`'s working tree:
   ```bash
   git -C <dir> fetch origin
-  git -C <dir> worktree prune                                  # drop stale entries
-  rm -rf /tmp/corgi-wt/<wt-id>                                 # clear a leftover dir (re-run/crash)
-  git -C <dir> worktree add -b <branch> /tmp/corgi-wt/<wt-id> origin/<base>
+  git -C <dir> worktree prune                                # drop stale entries
+  rm -rf /tmp/corgi-wt/<wt-id>-<service>                     # clear a leftover dir (re-run/crash)
+  git -C <dir> worktree add -b <branch> /tmp/corgi-wt/<wt-id>-<service> origin/<base>
   # deps dir (node_modules / vendor / target / .venv) gitignored → symlink main
   # checkout's for SEQUENTIAL runs; real install for CONCURRENT runs.
-  ln -s "$PWD/<dir>/node_modules" /tmp/corgi-wt/<wt-id>/node_modules
+  ln -s "$PWD/<dir>/node_modules" /tmp/corgi-wt/<wt-id>-<service>/node_modules
   ```
   The worktree dir is now this repo's **working dir** — implement, gate, review,
   commit, push and open the PR/MR from it (Phases 3.5–5 use it instead of `<dir>`).
-  - **corgi can't see a worktree.** `corgi run` resolves a service from its
-    `path:` = the main `<dir>`, **not** `/tmp/corgi-wt/...`. So a producer that
-    must be *running* for a consumer to verify (Phase 4) serves **stale** code if
-    it lives in a worktree. Fix: implement that producer **in place** (commit, then
-    `corgi run` picks it up) — never `corgi run` a worktree'd producer and trust
-    the generated output.
-  - **Success →** `git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>` once the PR
-    is up. **Failure (Stop rule) →** leave it; report its `/tmp` path so the
-    partial work isn't lost. Never `worktree remove` a failed story.
+  - **Run a worktree'd service with `--service-dir` (only for services in
+    `corgi-compose.yml`).** corgi resolves a service from its `path:` (main
+    `<dir>`), so to *run* the worktree's code — e.g. a producer a consumer verifies
+    against (Phase 4) — pass `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>`;
+    corgi runs that service's env, beforeStart/afterStart and process from the
+    worktree, main checkout untouched. The flag is per-service and repeatable, so
+    you can mix — some services from worktrees, the rest from their compose `path:`:
+    ```bash
+    corgi run --detach \
+      --service-dir api=/tmp/corgi-wt/ABC-200-api \
+      --service-dir web=/tmp/corgi-wt/ABC-200-web
+    # services not named (admin, worker, db_services) run from their compose path:
+    ```
+    Use `--service-dir` here — it runs the **exact** code in the story's own
+    worktree. (corgi also has `--service-branch <svc>=<branch>`, which makes its
+    *own* reused worktree off a branch, and `--service-checkout <svc>=<branch>` for
+    an in-place checkout — handy for ad-hoc "just run this branch", but for stories
+    point at the worktree you're implementing in.)
+    Needs a corgi with the flag (`corgi run --help | grep service-dir`); without
+    it, run such a producer in place. A branched repo that **isn't** a corgi
+    service → no `--service-dir`; just run its runner in the worktree dir.
+  - **Success →** `git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>-<service>`
+    once the PR is up. **Failure (Stop rule) →** leave it; report its `/tmp` path
+    so the partial work isn't lost. Never `worktree remove` a failed story.
 
 Implement to spec; reuse before building. **Minimum diff — no opportunistic
 refactor, no over-engineering, no code comments** unless the file already
 comments heavily. Run the **per-service gate** (tests + typecheck + lint) BEFORE
 commit. Tests for every change, matching existing patterns.
 
+- **Run the gate through corgi when the service is defined in `corgi-compose.yml`**
+  — it gives the worktree the service's full resolved env, deps and cwd, so you
+  don't guess the runner or hand-build env:
+  - Service has a `test` script → `corgi test --service <svc> --service-dir <svc>=<worktree-dir>`
+    (worktree'd) or plain `corgi test --service <svc>` (in place).
+  - Any other command (typecheck/lint/migrate/one-off) →
+    `corgi exec <svc> --service-dir <svc>=<worktree-dir> --ensure-deps -- <cmd>`.
+  - Service not in the compose, no `test` script, or no compose → run the
+    discovered runner (Phase 0) directly in the worktree dir.
+  Same `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>` mapping as `corgi run`
+  (Phase 3); drop it for in-place branches. Needs a corgi with the flag
+  (`corgi run --help | grep service-dir`).
 - **Bug tier: red test first** — write it, confirm it **FAILS on base**, then make
   it pass. Adjustments skip.
 - **Multi-repo consumer:** can't verify (codegen/typecheck) until its producer is
@@ -287,9 +317,9 @@ format; re-stage if rewritten.
   ```
   Until up, consumer's generated types are stale → won't typecheck. Producer from
   the `depends_on_services`/`exports` graph (Phase 0). `corgi stop` when done.
-  **`corgi run` serves the producer's `path:` (main checkout), not a worktree** —
-  so a producer needed *running* here must be implemented **in place**, not
-  worktree'd (Phase 3).
+  **Producer in a worktree?** `corgi run` serves its `path:` (main checkout) by
+  default, so add `--service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` to run the
+  worktree's code (Phase 3). Without that flag, implement the producer in place.
 - Consumers regenerate, commit generated output, finish their slice.
 - **Merge order:** producer PR first, consumers after. State in spec + every PR
   body.
@@ -297,7 +327,7 @@ format; re-stage if rewritten.
 ## Phase 5 — Push + draft PR/MR per repo
 
 Per repo, forge from Phase 0. **`<dir>` below = the repo's working dir** — the
-worktree dir (`/tmp/corgi-wt/<wt-id>`) if it was worktree'd in Phase 3, else the
+worktree dir (`/tmp/corgi-wt/<wt-id>-<service>`) if it was worktree'd in Phase 3, else the
 checkout. Run `gh`/`glab` **from inside that dir** (they read the repo from cwd;
 `git -C` only sets git's dir, and the spec `--body-file`/`cat` path is relative to
 cwd).

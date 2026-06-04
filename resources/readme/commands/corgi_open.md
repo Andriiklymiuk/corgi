@@ -1,27 +1,25 @@
-# corgi create
+# corgi open
 
-## corgi create
+## corgi open
 
-A command to create configurations for corgi
+Open service URLs in the browser
 
 ### Synopsis
 
-A command to interactively prompt the user to create configurations for corgi and save to corgi-compose.yml.
+Opens http://localhost:<port> for each selected service that has a port.
+With no args, opens every service that has a port. db_services are skipped.
+
+In --json mode or when there is no terminal, the URLs are printed instead of
+launched.
 
 ```
-corgi create [flags]
+corgi open [services...] [flags]
 ```
 
 ### Options
 
 ```
-      --driver string   db_service driver (e.g. postgres); required for kind=db_service
-  -h, --help            help for create
-      --image string    db_service docker image (image driver)
-      --kind string     Entry kind: db_service|service|required (required in non-interactive mode)
-      --name string     Entry name (required in non-interactive mode)
-      --path string     service path
-      --port int        port for db_service/service
+  -h, --help   help for open
 ```
 
 ### Options inherited from parent commands

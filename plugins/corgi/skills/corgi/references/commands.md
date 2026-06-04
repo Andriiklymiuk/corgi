@@ -49,6 +49,25 @@ Notable flags:
 - `--dry-run` — compute and print the start plan with no side effects (no clone, no `make up`, no spawn, no `.env` writes). Runs validation first. Pair with `--json` for a machine plan: `{valid, order, databases, services, warnings, errors}`. Exit 0 if valid, 1 on validation errors.
 - `--gate-deps` — gate startup on dependency readiness for every `depends_on` edge (default: only edges with `condition: ready|started` are gated; otherwise parallel start).
 - `--ready-timeout <dur>` — max wait for a db/dependency to become ready (default `15s`, non-fatal on timeout).
+- `--service-dir <name=path>` — run the named service from `path` instead of its compose `path:` (repeatable). Points run at an external checkout — e.g. a git worktree — so its env generation, `beforeStart`/`afterStart` and process all happen there; the rest of the stack is untouched. The dir must exist (unknown name or missing dir is a hard error). Opt-in; no flag = unchanged behaviour. Lets the `stories` skill run a worktree'd producer without committing it to the main checkout.
+- `--service-branch <name=branch>` — run the named service on a git branch via a **reused** worktree under `corgi_services/.worktrees/<svc>-<branch>` (repeatable). corgi prunes stale entries then reuses the worktree if healthy, or creates it (`git worktree add`) when missing — keeping installed deps and any uncommitted work across runs. **Non-destructive**: the service's main checkout is never touched. The rest of `--service-dir`'s behaviour applies (env/beforeStart/process from the worktree). Clean up with `corgi worktree prune`. The branch must exist (local or remote).
+- `--service-checkout <name=branch>` — run the named service on a branch by checking it out **in place** in its compose `path:` (repeatable). **Refuses on a dirty tree** (commit/stash first, or use `--service-branch`). Leaves the repo on that branch afterwards. Use when you want the actual checkout switched, not an isolated worktree.
+
+A service may appear in only one of `--service-dir`/`--service-branch`/`--service-checkout`. All three funnel into the same working-dir override, so env, deps, `beforeStart`/`afterStart`, the process, and `corgi test`/`corgi exec` all operate there.
+
+**Tips — picking the override (none of these edit `corgi-compose.yml`):**
+- Want to run a **branch** and keep your checkout intact → `--service-branch svc=branch`. Reused worktree, non-destructive, deps persist. Best default for "try this branch."
+- Already have a **checkout/worktree** somewhere → `--service-dir svc=/path`. corgi runs it as-is.
+- Want your repo **actually on** the branch (not a worktree) → `--service-checkout svc=branch`. Clean tree only.
+- **Mix freely** — flag the few services you're changing, the rest run from their compose `path:`:
+  ```bash
+  corgi run --detach \
+    --service-branch api=feature/login \
+    --service-dir web=/tmp/wt/web
+  # admin, worker, db_services → compose path:
+  ```
+- **Compare two branches** of one service side by side: run on branch A in one terminal, point a second stack at branch B (different ports) — each isolated in its own worktree.
+- Worktrees accumulate one-per-branch under `corgi_services/.worktrees/`; `corgi worktree prune` clears them. Re-running the same branch reuses the dir (fast, keeps `node_modules`).
 
 `depends_on_db`/`depends_on_services` entries take an optional `condition: ready` (wait for readiness probe) or `condition: started` (wait until launched). Empty = no gating unless `--gate-deps`.
 
@@ -70,6 +89,9 @@ Flags:
 - `--json` — emit `{service, exitCode, durationMs}`; child output is routed to stderr so stdout stays pure JSON.
 - `--ensure-deps` — wait for the service's `depends_on_db`/`depends_on_services` to be reachable first.
 - `--ready-timeout <dur>` — cap that wait (default `15s`).
+- `--service-dir <name=path>` — run from `path` instead of the compose `path:` (repeatable), e.g. a git worktree. The dir must exist.
+- `--service-branch <name=branch>` — run on a branch via a reused worktree (see `corgi run`). Non-destructive.
+- `--service-checkout <name=branch>` — run on a branch by in-place checkout (refuses on a dirty tree).
 
 Unknown service exits 2 (`E_SERVICE_NOT_FOUND`); readiness timeout exits 1 (`E_READINESS_TIMEOUT`).
 
@@ -86,6 +108,9 @@ Flags:
 - `--service <name>` — only this service (unknown name exits 2).
 - `--profile <name>` — narrow to a profile first.
 - `--ensure-deps` / `--ready-timeout <dur>` — gate on dependency readiness.
+- `--service-dir <name=path>` — test from `path` instead of the compose `path:` (repeatable), e.g. a git worktree. The dir must exist.
+- `--service-branch <name=branch>` — test on a branch via a reused worktree (see `corgi run`). Non-destructive.
+- `--service-checkout <name=branch>` — test on a branch by in-place checkout (refuses on a dirty tree).
 - `--json` — emit `{"services": [{name, exitCode, durationMs, passed}|{name, skipped:true}], "passed": bool}`.
 
 Exit 0 if all pass (skips don't count) / 1 if any fail / 2 on unknown `--service`.
@@ -260,7 +285,14 @@ Required flag: `-i, --items <db|services|corgi_services|all>`.
 - `corgi_services` — removes the generated `corgi_services/` folder
 - `all` — all of the above
 
-Confirm with the user before running `clean -i services` or `clean -i all`. It can delete cloned repos that have local changes.
+Confirm with the user before running `clean -i services` or `clean -i all`. It can delete cloned repos that have local changes. `clean` also `git worktree remove`s any worktrees corgi made for `--service-branch` (so source repos don't keep dangling entries).
+
+### `corgi worktree` (alias: `wt`)
+
+Manage the worktrees corgi creates for `run/exec/test --service-branch` (under `corgi_services/.worktrees/`).
+
+- `corgi worktree list` — print each corgi-created worktree path.
+- `corgi worktree prune` (alias `clean`) — `git worktree remove` them all and prune the source repos' admin entries. Safe to run anytime; recreated on next `--service-branch`.
 
 ### `corgi pull`
 
