@@ -9,7 +9,7 @@ Open public HTTPS tunnels for declared services
 Spawns one tunnel subprocess per selected service and prints public URLs.
 Default provider: cloudflared (free, no signup, Quick Tunnels).
 
-By default tunnels every services.<name> in corgi-compose.yml that has a
+By default tunnels every services.`<name>` in corgi-compose.yml that has a
 `port:` field set and is not manualRun. Pass service names (csv) to
 narrow the set, or --port to tunnel a raw local port without compose lookup.
 

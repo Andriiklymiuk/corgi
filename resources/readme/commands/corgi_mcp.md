@@ -10,7 +10,7 @@ Starts a Model Context Protocol server over stdio. AI agent clients spawn
 this as a subprocess and call corgi's commands as structured tools.
 
 Register it in .mcp.json (project) or ~/.claude.json:
-  { "mcpServers": { "corgi": { "command": "corgi", "args": ["mcp"] } } }
+  `{ "mcpServers": { "corgi": { "command": "corgi", "args": ["mcp"] } } }`
 
 ```
 corgi mcp [flags]
