@@ -188,28 +188,58 @@ Key also goes in the commit + PR/MR title (Phases 4–5). Same branch name acros
 repos so multi-repo PRs group.
 
 **Pick branch vs worktree per repo — check the working tree first:**
-`git -C <dir> status --porcelain` — empty = clean, any output = dirty.
+`git -C <dir> status --porcelain --untracked-files=no` — empty = clean, any
+output = dirty. (Ignore stray untracked files; `checkout -b` doesn't disturb
+them, so they don't force a worktree.)
 
 | Repo state | Stories touching this repo | Mode |
 |------------|---------------------------|------|
 | **clean** | one | **branch in place** |
-| **dirty** | one | **worktree** — don't disturb the user's uncommitted work, and skip the destructive base checkout/pull on a dirty tree |
+| **dirty** | one | **worktree** — don't disturb the user's uncommitted work, and skip the destructive base checkout on a dirty tree |
 | any | several | **worktree per story** (parallel isolation) |
 
-- **Branch in place** (clean tree only). Update base, then branch:
-  `git -C <dir> fetch origin && git -C <dir> checkout <base> && git -C <dir> pull --ff-only && git -C <dir> checkout -b <branch>`.
-- **Worktree** (dirty tree, or several stories in one repo). Branch straight off
-  `origin/<base>` — never touches `<dir>`'s working tree, so uncommitted work
-  stays put:
+Count "stories touching this repo" **across the whole batch up front** — two
+single-repo stories that both hit one repo are "several" → both worktree.
+
+**Dirty + overlap guard.** A worktree branches from clean `origin/<base>`, so it
+**excludes the user's uncommitted edits**. Before routing a dirty repo to a
+worktree, check whether those edits touch the story's files. Overlap → the work
+would silently diverge → **STOP, ask the user to commit/stash or confirm**. No
+overlap → worktree is safe.
+
+**Must-run producer overrides the table.** A producer that must be *running* for a
+consumer to verify (Phase 4) **can't** be worktree'd — `corgi run` only sees its
+`path:`. It goes **in place** even if the table said worktree. Dirty there → ask
+the user to stash/commit first; can't isolate it. (Everything else follows the
+table.)
+
+- **Branch in place** (clean tree, or a must-run producer after stash/commit).
+  Branch straight off the fetched remote
+  base — no `checkout <base>`/`pull` dance, no local-divergence trap:
+  `git -C <dir> fetch origin && git -C <dir> checkout -b <branch> origin/<base>`.
+- **Worktree** (dirty tree, or several stories in one repo). `<wt-id>` =
+  `<issue-key>`, or the `<kebab-slug>` for a no-ticket story. Branch off
+  `origin/<base>` — never touches `<dir>`'s working tree:
   ```bash
   git -C <dir> fetch origin
-  git -C <dir> worktree add -b <branch> /tmp/corgi-wt/<issue-key> origin/<base>
-  # deps dir (node_modules / vendor / target) gitignored → symlink main checkout's
-  # for SEQUENTIAL runs; real install for CONCURRENT runs.
-  ln -s "$PWD/<dir>/node_modules" /tmp/corgi-wt/<issue-key>/node_modules
+  git -C <dir> worktree prune                                  # drop stale entries
+  rm -rf /tmp/corgi-wt/<wt-id>                                 # clear a leftover dir (re-run/crash)
+  git -C <dir> worktree add -b <branch> /tmp/corgi-wt/<wt-id> origin/<base>
+  # deps dir (node_modules / vendor / target / .venv) gitignored → symlink main
+  # checkout's for SEQUENTIAL runs; real install for CONCURRENT runs.
+  ln -s "$PWD/<dir>/node_modules" /tmp/corgi-wt/<wt-id>/node_modules
   ```
-  Implement / test / commit / push / open the PR/MR from the worktree dir, then
-  `git -C <dir> worktree remove /tmp/corgi-wt/<issue-key>` once the PR is up.
+  The worktree dir is now this repo's **working dir** — implement, gate, review,
+  commit, push and open the PR/MR from it (Phases 3.5–5 use it instead of `<dir>`).
+  - **corgi can't see a worktree.** `corgi run` resolves a service from its
+    `path:` = the main `<dir>`, **not** `/tmp/corgi-wt/...`. So a producer that
+    must be *running* for a consumer to verify (Phase 4) serves **stale** code if
+    it lives in a worktree. Fix: implement that producer **in place** (commit, then
+    `corgi run` picks it up) — never `corgi run` a worktree'd producer and trust
+    the generated output.
+  - **Success →** `git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>` once the PR
+    is up. **Failure (Stop rule) →** leave it; report its `/tmp` path so the
+    partial work isn't lost. Never `worktree remove` a failed story.
 
 Implement to spec; reuse before building. **Minimum diff — no opportunistic
 refactor, no over-engineering, no code comments** unless the file already
@@ -257,14 +287,20 @@ format; re-stage if rewritten.
   ```
   Until up, consumer's generated types are stale → won't typecheck. Producer from
   the `depends_on_services`/`exports` graph (Phase 0). `corgi stop` when done.
+  **`corgi run` serves the producer's `path:` (main checkout), not a worktree** —
+  so a producer needed *running* here must be implemented **in place**, not
+  worktree'd (Phase 3).
 - Consumers regenerate, commit generated output, finish their slice.
 - **Merge order:** producer PR first, consumers after. State in spec + every PR
   body.
 
 ## Phase 5 — Push + draft PR/MR per repo
 
-Per repo, forge from Phase 0. Run `gh`/`glab` **from inside `<dir>`** (they read
-the repo from cwd; `git -C` only sets git's dir).
+Per repo, forge from Phase 0. **`<dir>` below = the repo's working dir** — the
+worktree dir (`/tmp/corgi-wt/<wt-id>`) if it was worktree'd in Phase 3, else the
+checkout. Run `gh`/`glab` **from inside that dir** (they read the repo from cwd;
+`git -C` only sets git's dir, and the spec `--body-file`/`cat` path is relative to
+cwd).
 
 **GitHub (`gh`):**
 ```bash
@@ -291,19 +327,32 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 
 ### Grouped report (final output)
 
-One line per PR/MR: `[<issue-key>] <Service>: <PR/MR title>`, link on its own line
-directly below. **No `(draft)` suffix** on the title — draft status is implied.
-No-ticket story → drop the `[<issue-key>] ` prefix. Multi-repo story repeats the
-line per repo (same key). Blocked → one-line question instead of a link.
+`<subject>` = the PR/MR title **without** its trailing `[<issue-key>]` (Phase 5
+puts the key in the title — don't print it twice). **No `(draft)` suffix.** One
+blank line between stories.
+
+- **Single-repo story** → one line `[<issue-key>] <Service>: <subject>`, link on
+  its own line directly below.
+- **Multi-repo story** → a **header line `[<issue-key>] <story description>`**,
+  then each repo on its own `<Service>: <subject>` line with the link below it —
+  no key repeated, no blank line between repos.
+- **No-ticket story** → swap `[<issue-key>]` for a short `[<slug>]` tag (header for
+  multi-repo, inline for single) so the lines still group.
+- **Blocked / failed** → no link, one line: `[<key>] <Service>: BLOCKED — <the
+  decision needed>` (or `needs attention — <reason>`, + the worktree `/tmp` path
+  if partial work is parked there).
 
 ```
 [ABC-123] web: Remove address step from mobile signup
 https://github.com/<org>/<repo>/pull/<n>
 
-[ABC-124] api: Add rate limit to login
-https://gitlab.com/<group>/<repo>/-/merge_requests/<n>
-[ABC-124] web: Add rate limit to login
-https://gitlab.com/<group>/<repo>/-/merge_requests/<n>
+[ABC-200] Add phone field to user
+api: Add phone field to user
+https://github.com/<org>/api/pull/<n>
+web: Add phone field to user
+https://github.com/<org>/web/pull/<n>
+
+[ABC-125] api: BLOCKED — which auth scope gates the endpoint?
 ```
 
 ---
