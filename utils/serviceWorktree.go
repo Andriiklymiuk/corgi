@@ -78,6 +78,9 @@ func EnsureServiceWorktree(repo, branch, dest string) error {
 			return err
 		}
 	}
+	if cur, _ := gitOut(repo, "rev-parse", "--abbrev-ref", "HEAD"); cur == branch {
+		return fmt.Errorf("branch %q is checked out in the main repo (%s); switch it to a different branch there, or run without --service-branch", branch, repo)
+	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
@@ -95,26 +98,16 @@ func cmdStringArray(cmd *cobra.Command, name string) []string {
 	return v
 }
 
-// MaterializeServiceWorktrees applies --service-branch (reused worktree) and
-// --service-checkout (in-place checkout) by repointing AbsolutePath, the single
-// source of every service cwd. Side-effecting (git), so callers run it after any
-// dry-run guard.
-func MaterializeServiceWorktrees(cmd *cobra.Command, corgi *CorgiCompose) error {
-	branchPairs := cmdStringArray(cmd, "service-branch")
-	checkoutPairs := cmdStringArray(cmd, "service-checkout")
-	if len(branchPairs) == 0 && len(checkoutPairs) == 0 {
-		return nil
-	}
-	if err := assertNoServiceWorkdirConflict(cmd); err != nil {
-		return err
-	}
-
+func indexServices(corgi *CorgiCompose) map[string]*Service {
 	byName := map[string]*Service{}
 	for i := range corgi.Services {
 		byName[corgi.Services[i].ServiceName] = &corgi.Services[i]
 	}
+	return byName
+}
 
-	for _, pair := range checkoutPairs {
+func applyCheckoutPairs(byName map[string]*Service, pairs []string) error {
+	for _, pair := range pairs {
 		name, branch, err := cutServicePair(pair)
 		if err != nil {
 			return fmt.Errorf("--service-checkout %v", err)
@@ -138,8 +131,11 @@ func MaterializeServiceWorktrees(cmd *cobra.Command, corgi *CorgiCompose) error 
 		}
 		Info("service-checkout:", name, "→", branch, "(in place)")
 	}
+	return nil
+}
 
-	for _, pair := range branchPairs {
+func applyBranchPairs(byName map[string]*Service, pairs []string) error {
+	for _, pair := range pairs {
 		name, branch, err := cutServicePair(pair)
 		if err != nil {
 			return fmt.Errorf("--service-branch %v", err)
@@ -158,11 +154,11 @@ func MaterializeServiceWorktrees(cmd *cobra.Command, corgi *CorgiCompose) error 
 	return nil
 }
 
-// A service may appear in only one of --service-dir/--service-branch/--service-checkout.
-func assertNoServiceWorkdirConflict(cmd *cobra.Command) error {
+// conflictAcross errors if a service appears in more than one of the groups.
+func conflictAcross(groups map[string][]string) error {
 	seen := map[string]string{}
 	for _, flag := range []string{"service-dir", "service-branch", "service-checkout"} {
-		for _, pair := range cmdStringArray(cmd, flag) {
+		for _, pair := range groups[flag] {
 			name, _, err := cutServicePair(pair)
 			if err != nil {
 				continue
@@ -174,6 +170,55 @@ func assertNoServiceWorkdirConflict(cmd *cobra.Command) error {
 		}
 	}
 	return nil
+}
+
+func assertNoServiceWorkdirConflict(cmd *cobra.Command) error {
+	return conflictAcross(map[string][]string{
+		"service-dir":      cmdStringArray(cmd, "service-dir"),
+		"service-branch":   cmdStringArray(cmd, "service-branch"),
+		"service-checkout": cmdStringArray(cmd, "service-checkout"),
+	})
+}
+
+// MaterializeServiceWorktrees applies the --service-branch/--service-checkout
+// flags. Side-effecting (git) — call after any dry-run guard.
+func MaterializeServiceWorktrees(cmd *cobra.Command, corgi *CorgiCompose) error {
+	branchPairs := cmdStringArray(cmd, "service-branch")
+	checkoutPairs := cmdStringArray(cmd, "service-checkout")
+	if len(branchPairs) == 0 && len(checkoutPairs) == 0 {
+		return nil
+	}
+	if err := assertNoServiceWorkdirConflict(cmd); err != nil {
+		return err
+	}
+	byName := indexServices(corgi)
+	if err := applyCheckoutPairs(byName, checkoutPairs); err != nil {
+		return err
+	}
+	return applyBranchPairs(byName, branchPairs)
+}
+
+// ApplyServiceWorkdirs applies dir/branch/checkout overrides from name=value
+// slices (e.g. the MCP server).
+func ApplyServiceWorkdirs(corgi *CorgiCompose, dirPairs, branchPairs, checkoutPairs []string) error {
+	if len(dirPairs) == 0 && len(branchPairs) == 0 && len(checkoutPairs) == 0 {
+		return nil
+	}
+	if err := conflictAcross(map[string][]string{
+		"service-dir":      dirPairs,
+		"service-branch":   branchPairs,
+		"service-checkout": checkoutPairs,
+	}); err != nil {
+		return err
+	}
+	if err := overrideServiceDirs(corgi, dirPairs); err != nil {
+		return err
+	}
+	byName := indexServices(corgi)
+	if err := applyCheckoutPairs(byName, checkoutPairs); err != nil {
+		return err
+	}
+	return applyBranchPairs(byName, branchPairs)
 }
 
 // CleanCorgiWorktrees removes every corgi-created worktree (git worktree remove,

@@ -438,9 +438,21 @@ func mcpPs(args validateArgs) ([]psRow, error) {
 }
 
 type upArgs struct {
-	ComposePath string `json:"composePath"`
-	Profile     string `json:"profile"`
-	Seed        bool   `json:"seed"`
+	ComposePath   string `json:"composePath"`
+	Profile       string `json:"profile"`
+	Seed          bool   `json:"seed"`
+	ServiceBranch string `json:"serviceBranch"`
+	ServiceDir    string `json:"serviceDir"`
+}
+
+func splitPairs(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // mcpUp always starts DETACHED so the tool returns promptly: it mirrors the
@@ -466,12 +478,17 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 	}
 
 	var (
-		state  utils.RunState
-		envErr error
+		state       utils.RunState
+		envErr      error
+		overrideErr error
 	)
 	withStdoutToStderr(func() {
 		if CheckClonedReposExistence(corgi.Services) {
 			CloneServices(corgi.Services)
+		}
+		// After clone (so it doesn't clobber the worktree), before env/beforeStart.
+		if overrideErr = utils.ApplyServiceWorkdirs(corgi, splitPairs(args.ServiceDir), splitPairs(args.ServiceBranch), nil); overrideErr != nil {
+			return
 		}
 		runPreflight(ctx.cmd, corgi)
 		runBeforeStart(corgi)
@@ -486,6 +503,9 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 		dbs := detachedDBEntries(corgi)
 		state = buildDetachState(utils.CorgiComposePath, procs, dbs)
 	})
+	if overrideErr != nil {
+		return utils.RunState{}, fmt.Errorf(errFmt, utils.ErrConfig, overrideErr)
+	}
 	if envErr != nil {
 		return utils.RunState{}, fmt.Errorf(errFmt, utils.ErrExecFailed, envErr)
 	}
@@ -614,10 +634,12 @@ func tailLogFile(path string, n int) ([]string, error) {
 }
 
 type execArgs struct {
-	ComposePath string `json:"composePath"`
-	Service     string `json:"service"`
-	Command     string `json:"command"`
-	EnsureDeps  bool   `json:"ensureDeps"`
+	ComposePath   string `json:"composePath"`
+	Service       string `json:"service"`
+	Command       string `json:"command"`
+	EnsureDeps    bool   `json:"ensureDeps"`
+	ServiceBranch string `json:"serviceBranch"`
+	ServiceDir    string `json:"serviceDir"`
 }
 
 type execResult struct {
@@ -636,6 +658,14 @@ func mcpExec(args execArgs) (execResult, error) {
 	corgi, err := loadComposeForMCP(args.ComposePath)
 	if err != nil {
 		return execResult{}, composeLoadError(err)
+	}
+
+	var overrideErr error
+	withStdoutToStderr(func() {
+		overrideErr = utils.ApplyServiceWorkdirs(corgi, splitPairs(args.ServiceDir), splitPairs(args.ServiceBranch), nil)
+	})
+	if overrideErr != nil {
+		return execResult{}, fmt.Errorf(errFmt, utils.ErrConfig, overrideErr)
 	}
 
 	var service *utils.Service
@@ -681,10 +711,12 @@ func mcpExec(args execArgs) (execResult, error) {
 }
 
 type testArgs struct {
-	ComposePath string `json:"composePath"`
-	Service     string `json:"service"`
-	Profile     string `json:"profile"`
-	EnsureDeps  bool   `json:"ensureDeps"`
+	ComposePath   string `json:"composePath"`
+	Service       string `json:"service"`
+	Profile       string `json:"profile"`
+	EnsureDeps    bool   `json:"ensureDeps"`
+	ServiceBranch string `json:"serviceBranch"`
+	ServiceDir    string `json:"serviceDir"`
 }
 
 type testRunResult struct {
@@ -699,6 +731,13 @@ func mcpTest(args testArgs) (testRunResult, error) {
 	corgi, err := loadComposeForMCP(args.ComposePath)
 	if err != nil {
 		return testRunResult{}, composeLoadError(err)
+	}
+	var overrideErr error
+	withStdoutToStderr(func() {
+		overrideErr = utils.ApplyServiceWorkdirs(corgi, splitPairs(args.ServiceDir), splitPairs(args.ServiceBranch), nil)
+	})
+	if overrideErr != nil {
+		return testRunResult{}, fmt.Errorf(errFmt, utils.ErrConfig, overrideErr)
 	}
 	sel, err := resolveSelection(corgi, args.Service, args.Profile)
 	if err != nil {
@@ -841,6 +880,8 @@ func withStdoutToStderr(fn func()) {
 // --- MCP tool registration (thin wrappers over the cores above) ---
 
 const profileDesc = "Only these profiles (comma-separated union, e.g. backend,worker)"
+const serviceBranchDesc = `Run service(s) on a git branch via an isolated reused worktree, without editing path: in corgi-compose.yml. Format "svc=branch[,svc2=branch2]". Non-destructive — the main checkout is untouched.`
+const serviceDirDesc = `Run service(s) from an existing directory, e.g. a git worktree. Format "svc=/path[,svc2=/path2]".`
 
 func registerMCPTools(s *server.MCPServer) {
 	composeOpt := mcp.WithString("composePath", mcp.Description("compose path (default: cwd)"))
@@ -887,11 +928,15 @@ func registerMCPTools(s *server.MCPServer) {
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
 		mcp.WithBoolean("seed", mcp.Description("Seed db_services that have a dump/seed source")),
+		mcp.WithString("serviceBranch", mcp.Description(serviceBranchDesc)),
+		mcp.WithString("serviceDir", mcp.Description(serviceDirDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpUp(upArgs{
-			ComposePath: r.GetString("composePath", ""),
-			Profile:     r.GetString("profile", ""),
-			Seed:        r.GetBool("seed", false),
+			ComposePath:   r.GetString("composePath", ""),
+			Profile:       r.GetString("profile", ""),
+			Seed:          r.GetBool("seed", false),
+			ServiceBranch: r.GetString("serviceBranch", ""),
+			ServiceDir:    r.GetString("serviceDir", ""),
 		})
 	}))
 
@@ -921,12 +966,16 @@ func registerMCPTools(s *server.MCPServer) {
 		serviceOpt,
 		mcp.WithString("command", mcp.Required(), mcp.Description("Command line to run (via /bin/sh -c)")),
 		mcp.WithBoolean("ensureDeps", mcp.Description("Wait for depends_on_db/services to be ready first")),
+		mcp.WithString("serviceBranch", mcp.Description(serviceBranchDesc)),
+		mcp.WithString("serviceDir", mcp.Description(serviceDirDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpExec(execArgs{
-			ComposePath: r.GetString("composePath", ""),
-			Service:     r.GetString("service", ""),
-			Command:     r.GetString("command", ""),
-			EnsureDeps:  r.GetBool("ensureDeps", false),
+			ComposePath:   r.GetString("composePath", ""),
+			Service:       r.GetString("service", ""),
+			Command:       r.GetString("command", ""),
+			EnsureDeps:    r.GetBool("ensureDeps", false),
+			ServiceBranch: r.GetString("serviceBranch", ""),
+			ServiceDir:    r.GetString("serviceDir", ""),
 		})
 	}))
 
@@ -936,12 +985,16 @@ func registerMCPTools(s *server.MCPServer) {
 		mcp.WithString("service", mcp.Description("Only test this service")),
 		mcp.WithString("profile", mcp.Description(profileDesc)),
 		mcp.WithBoolean("ensureDeps", mcp.Description("Wait for depends_on_db/services to be ready first")),
+		mcp.WithString("serviceBranch", mcp.Description(serviceBranchDesc)),
+		mcp.WithString("serviceDir", mcp.Description(serviceDirDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpTest(testArgs{
-			ComposePath: r.GetString("composePath", ""),
-			Service:     r.GetString("service", ""),
-			Profile:     r.GetString("profile", ""),
-			EnsureDeps:  r.GetBool("ensureDeps", false),
+			ComposePath:   r.GetString("composePath", ""),
+			Service:       r.GetString("service", ""),
+			Profile:       r.GetString("profile", ""),
+			EnsureDeps:    r.GetBool("ensureDeps", false),
+			ServiceBranch: r.GetString("serviceBranch", ""),
+			ServiceDir:    r.GetString("serviceDir", ""),
 		})
 	}))
 

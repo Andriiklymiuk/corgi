@@ -352,6 +352,9 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 
 - **Draft only.** Report each PR/MR's diff summary + link; human flips to ready.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
+- **Run-locally line in the body** — include the same one-paste
+  `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report below)
+  so a reviewer can spin the branch up without hunting for the command.
 - Canonical spec already on the tracker (Phase 1); PR/MR comment is a convenience
   copy.
 
@@ -368,6 +371,17 @@ blank line between stories.
   no key repeated, no blank line between repos.
 - **No-ticket story** → swap `[<issue-key>]` for a short `[<slug>]` tag (header for
   multi-repo, inline for single) so the lines still group.
+- **Run line** → after the link(s), one **copy-paste** `corgi run` that spins up
+  every impacted service on its branch via `--service-branch <svc>=<branch>` (corgi
+  builds the worktree from the pushed branch — reviewer needs nothing else). Same
+  `<branch>` across repos. Add `--with-deps` so dependencies/dbs come up. One
+  `--service-branch` per impacted service. Skip for blocked/failed stories.
+  Needs a corgi with the flag (`corgi run --help | grep service-branch`); else
+  fallback `git checkout <branch> && corgi run --services <svc>`.
+  Same line works for **you locally and the reviewer** — the branch is committed by
+  now, so no separate `--service-dir` variant is needed here. (`--service-dir` at
+  the live impl worktree belongs to the Phase 3 gate, where the code is still
+  uncommitted.)
 - **Blocked / failed** → no link, one line: `[<key>] <Service>: BLOCKED — <the
   decision needed>` (or `needs attention — <reason>`, + the worktree `/tmp` path
   if partial work is parked there).
@@ -375,12 +389,14 @@ blank line between stories.
 ```
 [ABC-123] web: Remove address step from mobile signup
 https://github.com/<org>/<repo>/pull/<n>
+▶ corgi run --service-branch web=feature/ABC-123/remove-address-step --with-deps
 
 [ABC-200] Add phone field to user
 api: Add phone field to user
 https://github.com/<org>/api/pull/<n>
 web: Add phone field to user
 https://github.com/<org>/web/pull/<n>
+▶ corgi run --with-deps --service-branch api=feature/ABC-200/user-phone --service-branch web=feature/ABC-200/user-phone
 
 [ABC-125] api: BLOCKED — which auth scope gates the endpoint?
 ```
