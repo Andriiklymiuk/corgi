@@ -395,14 +395,146 @@ func generateCobraDocs(cmd *cobra.Command) {
 
 	err = doc.GenMarkdownTreeCustom(
 		cmd.Root(),
-		"./resources/readme/commands",
+		commandsDocsDir,
 		filePrepender,
 		linkHandler,
 	)
 	if err != nil {
 		fmt.Println("Cobra docs are not regenerated: ", err)
-	} else {
-		fmt.Println("Cobra docs are generated, exiting ..")
+		os.Exit(0)
 	}
+
+	if err := makeCommandDocsMDXSafe(commandsDocsDir); err != nil {
+		fmt.Println("Cobra docs generated, but MDX escaping failed: ", err)
+		os.Exit(0)
+	}
+
+	fmt.Println("Cobra docs are generated, exiting ..")
 	os.Exit(0)
+}
+
+const commandsDocsDir = "./resources/readme/commands"
+
+// makeCommandDocsMDXSafe rewrites the generated cobra docs so Docusaurus' MDX
+// parser doesn't choke on `<` and `{`, which it reads as JSX/expression syntax.
+// Cobra's Long descriptions contain things like localhost:<port> and JSON
+// snippets in prose; left raw they break the docs build.
+func makeCommandDocsMDXSafe(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, []byte(escapeMDXProse(string(raw))), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// escapeMDXProse makes prose MDX-safe, leaving fenced code blocks untouched so
+// usage/options examples stay literal.
+func escapeMDXProse(content string) string {
+	lines := strings.Split(content, "\n")
+	inFence := false
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		lines[i] = escapeProseLine(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// escapeProseLine wraps the parts of a line MDX would misread, skipping content
+// already inside inline `code` spans (odd segments after splitting on backticks).
+func escapeProseLine(line string) string {
+	segments := strings.Split(line, "`")
+	for i := range segments {
+		if i%2 == 1 {
+			continue
+		}
+		segments[i] = escapeProseSegment(segments[i])
+	}
+	return strings.Join(segments, "`")
+}
+
+// escapeProseSegment wraps <placeholder> and {expression} runs in inline code.
+// Backslash escapes and HTML entities don't survive Docusaurus' MDX pipeline, but
+// inline code is rendered verbatim, so that's the only reliable escape here.
+func escapeProseSegment(s string) string {
+	runes := []rune(s)
+	var b strings.Builder
+	for i := 0; i < len(runes); i++ {
+		switch runes[i] {
+		case '<':
+			if end := matchAnglePlaceholder(runes, i); end > i {
+				b.WriteByte('`')
+				b.WriteString(string(runes[i : end+1]))
+				b.WriteByte('`')
+				i = end
+				continue
+			}
+			b.WriteString("`<`")
+		case '{':
+			if end := matchBraceSpan(runes, i); end > i {
+				b.WriteByte('`')
+				b.WriteString(string(runes[i : end+1]))
+				b.WriteByte('`')
+				i = end
+				continue
+			}
+			b.WriteString("`{`")
+		default:
+			b.WriteRune(runes[i])
+		}
+	}
+	return b.String()
+}
+
+// matchAnglePlaceholder returns the index of the closing '>' for a <name>-style
+// placeholder starting at i, or i if it isn't one (so real less-than stays put).
+func matchAnglePlaceholder(runes []rune, i int) int {
+	for j := i + 1; j < len(runes); j++ {
+		switch runes[j] {
+		case '>':
+			if j > i+1 {
+				return j
+			}
+			return i
+		case '<', ' ', '\t':
+			return i
+		}
+	}
+	return i
+}
+
+// matchBraceSpan returns the index of the brace that balances the '{' at i, or i
+// if the braces don't balance on this line.
+func matchBraceSpan(runes []rune, i int) int {
+	depth := 0
+	for j := i; j < len(runes); j++ {
+		switch runes[j] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return j
+			}
+		}
+	}
+	return i
 }

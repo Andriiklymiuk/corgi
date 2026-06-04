@@ -21,7 +21,7 @@ Warnings (non-fatal, fatal under --strict):
   - cloneFrom is set without a branch
 
 Flags:
-      --json     Emit {"ok":bool,"errors":[...],"warnings":[...]}
+      --json     Emit `{"ok":bool,"errors":[...],"warnings":[...]}`
       --strict   Treat warnings as failures
 
 ```
