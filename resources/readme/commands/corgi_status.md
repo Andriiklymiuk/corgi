@@ -10,13 +10,13 @@ Verifies every db_service and (non-manualRun) service declared in
 corgi-compose.yml is reachable on its port.
 
 For each db_service:
-  - TCP connect on localhost:`<port>`. If 'healthCheck' is set, or the driver is
+  - TCP connect on `localhost:<port>`. If 'healthCheck' is set, or the driver is
     'localstack', corgi additionally does an HTTP GET and accepts any non-5xx
     response as healthy.
 
 For each service:
-  - TCP connect on localhost:`<port>`. If 'healthCheck' is set, corgi does
-    GET http://localhost:`<port>``<healthCheck>` and accepts any non-5xx response.
+  - TCP connect on `localhost:<port>`. If 'healthCheck' is set, corgi does
+    GET `http://localhost:<port><healthCheck>` and accepts any non-5xx response.
 
 Exit code is non-zero if anything's down so CI / scripts can consume it.
 
