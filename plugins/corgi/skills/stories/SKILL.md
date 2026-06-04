@@ -187,17 +187,29 @@ token):
 Key also goes in the commit + PR/MR title (Phases 4–5). Same branch name across
 repos so multi-repo PRs group.
 
-**Branch from an up-to-date base:**
-`git -C <dir> fetch origin && git -C <dir> checkout <base> && git -C <dir> pull --ff-only`.
+**Pick branch vs worktree per repo — check the working tree first:**
+`git -C <dir> status --porcelain` — empty = clean, any output = dirty.
 
-- **One story per repo** → in place: `git -C <dir> checkout -b <branch>`.
-- **Several stories, SAME repo** → worktrees:
+| Repo state | Stories touching this repo | Mode |
+|------------|---------------------------|------|
+| **clean** | one | **branch in place** |
+| **dirty** | one | **worktree** — don't disturb the user's uncommitted work, and skip the destructive base checkout/pull on a dirty tree |
+| any | several | **worktree per story** (parallel isolation) |
+
+- **Branch in place** (clean tree only). Update base, then branch:
+  `git -C <dir> fetch origin && git -C <dir> checkout <base> && git -C <dir> pull --ff-only && git -C <dir> checkout -b <branch>`.
+- **Worktree** (dirty tree, or several stories in one repo). Branch straight off
+  `origin/<base>` — never touches `<dir>`'s working tree, so uncommitted work
+  stays put:
   ```bash
+  git -C <dir> fetch origin
   git -C <dir> worktree add -b <branch> /tmp/corgi-wt/<issue-key> origin/<base>
   # deps dir (node_modules / vendor / target) gitignored → symlink main checkout's
   # for SEQUENTIAL runs; real install for CONCURRENT runs.
   ln -s "$PWD/<dir>/node_modules" /tmp/corgi-wt/<issue-key>/node_modules
   ```
+  Implement / test / commit / push / open the PR/MR from the worktree dir, then
+  `git -C <dir> worktree remove /tmp/corgi-wt/<issue-key>` once the PR is up.
 
 Implement to spec; reuse before building. **Minimum diff — no opportunistic
 refactor, no over-engineering, no code comments** unless the file already
@@ -279,20 +291,19 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 
 ### Grouped report (final output)
 
-One block per story: heading (`<title> [<issue-key>]`), then per repo a
-`<Service>: <PR/MR title>` line, link on its own line below. Multi-repo repeats
-per repo under one heading. Blocked → one-line question instead of a link.
+One line per PR/MR: `[<issue-key>] <Service>: <PR/MR title>`, link on its own line
+directly below. **No `(draft)` suffix** on the title — draft status is implied.
+No-ticket story → drop the `[<issue-key>] ` prefix. Multi-repo story repeats the
+line per repo (same key). Blocked → one-line question instead of a link.
 
 ```
-<Story title> [ABC-123]
-  web: <PR title>
-  https://github.com/<org>/<repo>/pull/<n>
+[ABC-123] web: Remove address step from mobile signup
+https://github.com/<org>/<repo>/pull/<n>
 
-<Story title> [ABC-124]
-  api: <MR title>
-  https://gitlab.com/<group>/<repo>/-/merge_requests/<n>
-  web: <MR title>
-  https://gitlab.com/<group>/<repo>/-/merge_requests/<n>
+[ABC-124] api: Add rate limit to login
+https://gitlab.com/<group>/<repo>/-/merge_requests/<n>
+[ABC-124] web: Add rate limit to login
+https://gitlab.com/<group>/<repo>/-/merge_requests/<n>
 ```
 
 ---
