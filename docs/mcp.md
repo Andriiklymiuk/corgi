@@ -96,11 +96,11 @@ still bind to `localhost` or front it with an authenticated proxy.
 | `corgi_status` | `{composePath?}` | `[{label, port, kind, url, healthy, detail}]` | `collectStatusRows` + `probeAll` |
 | `corgi_env` | `{composePath?}` | `{service: {KEY: {value, source}}}` | `utils.ResolveAllEnv` |
 | `corgi_ps` | `{composePath?}` | `[{name, kind, port, status, url}]` | `buildPsRows` |
-| `corgi_up` | `{composePath?, profile?, seed?}` | run-state (`services[]`, `dbServices[]`) — **always detached** | run prelude + `runDetached` machinery |
+| `corgi_up` | `{composePath?, profile?, seed?, serviceBranch?, serviceDir?}` | run-state (`services[]`, `dbServices[]`) — **always detached** | run prelude + `runDetached` machinery |
 | `corgi_down` | `{composePath?}` | `{stopped[], failed[]}` | stop machinery (`stopProcessGroup`) |
 | `corgi_logs` | `{service, lines?}` | `{service, lines[]}` | newest captured log run |
-| `corgi_exec` | `{service, command, ensureDeps?}` | `{exitCode, output, durationMs}` | `RunServiceCommandExitCode` (output captured) |
-| `corgi_test` | `{composePath?, service?, profile?, ensureDeps?}` | `{services[], passed}` | `runTests` (does not start db/services) |
+| `corgi_exec` | `{service, command, ensureDeps?, serviceBranch?, serviceDir?}` | `{exitCode, output, durationMs}` | `RunServiceCommandExitCode` (output captured) |
+| `corgi_test` | `{composePath?, service?, profile?, ensureDeps?, serviceBranch?, serviceDir?}` | `{services[], passed}` | `runTests` (does not start db/services) |
 | `corgi_doctor` | `{composePath?}` | `{ok, checks[]}` | `buildDoctorResult` (required tools, Docker, ports) |
 | `corgi_restart` | `{composePath?, profile?}` | run-state — **always detached** | `corgi_down` then `corgi_up` |
 | `corgi_db_query` | `{composePath?, service, query}` | `{service, output}` | `utils.ExecDBQueryCapture` (non-interactive) |
@@ -109,6 +109,11 @@ still bind to `localhost` or front it with an authenticated proxy.
 `corgi_up` is **always detached**: it brings databases up, generates env, then
 spawns each service as a detached process group and writes
 `corgi_services/.state.json`, returning immediately. Use `corgi_down` to stop.
+
+`serviceBranch` / `serviceDir` (on `corgi_up` / `corgi_exec` / `corgi_test`) run
+service(s) from a git branch (isolated reused worktree, non-destructive) or an
+existing dir, without editing `path:` in `corgi-compose.yml`. Format
+`"svc=branch[,svc2=branch2]"` / `"svc=/path"`.
 
 ## Resources
 

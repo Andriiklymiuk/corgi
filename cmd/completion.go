@@ -98,6 +98,23 @@ func completeServices(cmd *cobra.Command, _ []string, toComplete string) ([]stri
 	return withCsvPrefix(prefix, names)
 }
 
+// completeServiceEquals suggests "<service>=" for the name=value workdir flags.
+func completeServiceEquals(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if strings.Contains(toComplete, "=") {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	c := loadComposeForCompletion(cmd)
+	if c == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	names := make([]string, 0, len(c.Services))
+	for name := range c.Services {
+		names = append(names, name+"=")
+	}
+	sort.Strings(names)
+	return names, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+}
+
 // completeTunnelableServices is `corgi tunnel <args>` specific — only
 // services with port: > 0 (no port = nothing to tunnel). manualRun is
 // allowed: tunnel cmd respects explicit positional args even for them.
@@ -312,6 +329,12 @@ func completeTemplateName(_ *cobra.Command, _ []string, _ string) ([]string, cob
 func registerCompletions() {
 	_ = runCmd.RegisterFlagCompletionFunc("services", completeServices)
 	_ = runCmd.RegisterFlagCompletionFunc("dbServices", completeDbServices)
+
+	for _, f := range []string{"service-dir", "service-branch", "service-checkout"} {
+		_ = runCmd.RegisterFlagCompletionFunc(f, completeServiceEquals)
+		_ = execCmd.RegisterFlagCompletionFunc(f, completeServiceEquals)
+		_ = testCmd.RegisterFlagCompletionFunc(f, completeServiceEquals)
+	}
 
 	_ = scriptCmd.RegisterFlagCompletionFunc("services", completeServices)
 	_ = scriptCmd.RegisterFlagCompletionFunc("names", completeScriptNames)

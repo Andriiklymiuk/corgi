@@ -60,6 +60,30 @@ func TestAssertNoServiceWorkdirConflict(t *testing.T) {
 	}
 }
 
+func TestApplyServiceWorkdirs(t *testing.T) {
+	wt := t.TempDir()
+	mk := func() *CorgiCompose {
+		return &CorgiCompose{Services: []Service{{ServiceName: "api", AbsolutePath: "/orig/api"}}}
+	}
+
+	c := mk()
+	if err := ApplyServiceWorkdirs(c, []string{"api=" + wt}, nil, nil); err != nil {
+		t.Fatalf("dir override: %v", err)
+	}
+	if c.Services[0].AbsolutePath != wt {
+		t.Errorf("api dir = %q, want %q", c.Services[0].AbsolutePath, wt)
+	}
+
+	if err := ApplyServiceWorkdirs(mk(), []string{"api=" + wt}, []string{"api=feat"}, nil); err == nil {
+		t.Error("same service in dir+branch should conflict")
+	}
+
+	c2 := mk()
+	if err := ApplyServiceWorkdirs(c2, nil, nil, nil); err != nil || c2.Services[0].AbsolutePath != "/orig/api" {
+		t.Error("empty input should be a no-op")
+	}
+}
+
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
