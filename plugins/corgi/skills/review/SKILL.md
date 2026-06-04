@@ -202,8 +202,141 @@ each with both affected PRs so P5 can post to both sides.
 
 ## Phase 4 — Preview + confirm (the gate)
 
+Print to terminal, per PR in the set:
+
+```
+[<repo>#<n>] <PR title>
+<2–4 sentence summary>
+
+  <file>:<line> · blocking · <problem> · <fix>
+  <file>:<line> · nit      · <problem> · <fix>
+  …
+```
+
+If P3.5 ran, append a **Contract** section after all per-PR blocks listing
+cross-service findings and the stated merge order (producer first).
+
+Then ask (one prompt for the whole set):
+
+> **post** all / **edit** (drop or keep individual findings, tweak wording) /
+> **cancel**
+
+*Edit* = interactive pruning — present each finding; user keeps, drops, or
+rewrites it; re-preview before proceeding. Not every finding has to go up.
+
+- Gate **on** by default — posting is outward-facing.
+- `--yes` skips the gate and posts immediately.
+
 ## Phase 5 — Post
+
+Exact commands live in `references/forge-api.md` §2–4; use the forge from P0.
+
+**GitHub** — one review call (`event=COMMENT`): `body` = the PR's human summary
+(tagged `<!-- corgi-review -->`), `comments[]` = all inline findings, each
+suggestion a ` ```suggestion ` block for one-click apply. Summary + all inline
+in **one** call.
+
+**GitLab** — summary via `glab mr note create` (tagged `<!-- corgi-review -->`);
+each inline finding as a separate `discussions` call with a `position` object;
+suggested change as a ` ```suggestion:-0+0 ` block (Apply button).
+
+**Finding that cannot be inlined** (line not in the diff) → fold into that PR's summary;
+note it in the report. Never silently drop.
+
+**Cross-service contract finding** → post to **both** sides, each cross-linked
+(`see <other-PR-link>`), so each reviewer sees the full picture.
+
+**Idempotency (summary + inline):**
+- Every corgi-posted comment is tagged `<!-- corgi-review -->`.
+- Re-run → detect the prior corgi summary → offer **update vs new** (patch the
+  existing comment rather than stacking a duplicate).
+- Inline deduped by `(file, line, title)` — same finding never posted twice.
+- Findings whose line the author already changed are skipped (forge marks them
+  outdated).
+
+**Posting scenarios:**
+
+1. **Clean PR (no findings)** — post one short "Reviewed — no blocking issues"
+   summary (+ a line of what was checked / any praise). No inline. Don't go
+   silent; don't spam.
+2. **Nits only, no blockers** — inline the nits; summary headline "No blockers,
+   N nits" so it doesn't read as alarming.
+3. **Head moved during the gate** — re-fetch the head SHA right before posting.
+   If it changed: warn, re-anchor inline findings against the new diff, drop
+   any whose line vanished (fold into summary). If the diff changed materially,
+   offer a re-review instead of posting stale comments. **Never post inline
+   against a stale SHA.**
+4. **Partial post failure** (inline rejected — line outside diff `422`, rate
+   limit, transient `5xx`) — retry transient errors with backoff; fold
+   still-failing findings into the summary; report posted-vs-failed counts. No
+   silent half-post.
+5. **Suggestion can't apply** (pure deletion, non-contiguous range, lines don't
+   line up) — fall back to a normal inline comment with the proposed code in a
+   **plain fenced block** (not ` ```suggestion `). Avoids a broken Apply button.
+6. **No comment permission** (`403`, not a collaborator) — print the full review
+   locally and tell the user to post manually or get access. Detect before
+   attempting any posts; don't lose the work.
+7. **Body/size limits** (GitHub body ~65k chars; many findings) — cap inline
+   count per PR, truncate/split the summary, push overflow into a follow-up
+   comment, and say so in the report. No silent dropping.
+8. **Cross-service dual-post ordering** — resolve the `see <other-PR-link>`
+   cross-link only after both PR IDs exist; post both. If one side fails, still
+   post the other with a one-sided link and flag the gap in the report.
+9. **Throughput** — GitHub posts summary + all inline in one review call. GitLab
+   is one call per discussion → throttle with backoff across many findings / many
+   PRs to avoid rate limits.
 
 ## Phase 6 — Grouped report
 
+**Single PR** → one line `[<repo>] <summary headline>` + link, then counts.
+
+**Multi-PR** → per-PR line + link (same `[<repo>] <summary headline>` form,
+one per PR).
+
+**Contract** section — whenever P3.5 ran (multi-PR set **or** a single monorepo
+PR crossing a service boundary) — lists cross-service findings and merge order
+(producer first).
+
+**Totals line:**
+```
+N findings: B blocking, K nits;  P posted inline, S folded into summary.
+```
+
+List anything that couldn't be inlined explicitly (file, line, reason) — no
+silent drops.
+
+**Footer line** (always last):
+> review only — does not approve, request changes, or merge.
+
+Example:
+
+```
+[api] No blockers, 2 nits
+https://github.com/<org>/api/pull/42
+
+[web] 1 blocking: missing null-check on user.address
+https://github.com/<org>/web/pull/37
+
+Contract
+  api#42 + web#37: api adds address?: string | null; web reads .address without null guard (blocking, posted to both)
+  Merge order: api first, then web.
+
+3 findings: 1 blocking, 2 nits;  3 posted inline, 0 folded into summary.
+
+review only — does not approve, request changes, or merge.
+```
+
 ## Guardrails (non-negotiable)
+
+- **Comments only.** Never set a formal approve / request-changes state, never
+  merge, never push, never modify the branch.
+- **Gate before posting** unless `--yes`. Posting is outward-facing; the gate
+  is not optional by default.
+- **Read-only on the repo.** Never check out / write the PR branch; review from
+  the fetched diff only.
+- **No secret values** echoed into comments — flag location + that a secret is
+  present; never paste the value.
+- **Human voice.** Comments terse, kind, specific: problem + fix. No
+  AI-attribution trailer. No walls of text. Match the repo's comment density.
+- **Never touch `manualRun` services** when mapping via `corgi-compose.yml` —
+  reference-only, same as stories.
