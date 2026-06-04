@@ -1,7 +1,28 @@
 # Forge API Reference — gh / glab incantations
 
 Copy-pasteable commands for fetching PR/MR data and posting review output.
-Cited by SKILL.md phases P1 (fetch) and P5 (post).
+Cited by SKILL.md phases P1 (fetch) and P5 (post). **Both forges are first-class
+and kept at parity** — every GitHub command has a GitLab equivalent below; resolve
+the forge per ref (P0) and use the matching column.
+
+## 0. Token efficiency (rtk) — without degrading review quality
+
+`rtk` (the user's token-killer proxy) filters/compresses command output. The Claude
+Code hook auto-rewrites `git`/`gh`/`glab` calls through it, so **metadata, status,
+and list calls get the savings for free** — that's safe, the review doesn't need
+those verbatim.
+
+**One hard exception: the diff that gets reviewed must be full-fidelity.** A
+filtered/truncated diff = a bad review. So fetch the reviewable diff **raw**:
+
+```bash
+rtk proxy gh pr diff <n> --repo <owner>/<repo> --patch        # raw, unfiltered
+rtk proxy glab mr diff <n> --repo <host>/<group>/<proj> --color=never
+```
+
+Rule of thumb: **rtk-filtered for everything except the diff content under review**
+(and any file body you actually need to read in full). When in doubt about
+fidelity, `rtk proxy` it.
 
 ---
 
