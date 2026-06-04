@@ -340,6 +340,10 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	corgi.Services = parseServices(corgiYaml.Services, describeFlag)
 	corgi.Required = parseRequired(corgiYaml.Required, describeFlag)
 
+	if err := applyServiceDirOverrides(cobra, &corgi); err != nil {
+		return nil, err
+	}
+
 	CorgiComposeFileContent = &corgi
 	return &corgi, nil
 }
@@ -619,6 +623,50 @@ func computeAbsolutePath(path string) string {
 	return CorgiComposePathDir + "/" + path
 }
 
+// overrideServiceDirs repoints named services (name=path) at an external working
+// dir, e.g. a git worktree. AbsolutePath is the only source of cwd, so this is
+// enough. Unknown name / missing dir is a hard error — a typo running the wrong
+// tree is worse than a stop.
+func overrideServiceDirs(corgi *CorgiCompose, pairs []string) error {
+	if len(pairs) == 0 {
+		return nil
+	}
+	byName := map[string]*Service{}
+	for i := range corgi.Services {
+		byName[corgi.Services[i].ServiceName] = &corgi.Services[i]
+	}
+	for _, pair := range pairs {
+		name, dir, err := cutServicePair(pair)
+		if err != nil {
+			return fmt.Errorf("--service-dir %v", err)
+		}
+		svc, found := byName[name]
+		if !found {
+			return fmt.Errorf("--service-dir: no service named %q in corgi-compose.yml", name)
+		}
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return fmt.Errorf("--service-dir %s: %v", name, err)
+		}
+		if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+			return fmt.Errorf("--service-dir %s: %q is not an existing directory", name, abs)
+		}
+		Info("service-dir override:", name, "→", abs)
+		svc.AbsolutePath = abs
+	}
+	return nil
+}
+
+// applyServiceDirOverrides applies --service-dir if the command defines it
+// (run/exec/test); others (e.g. clean) are unaffected.
+func applyServiceDirOverrides(cmd *cobra.Command, corgi *CorgiCompose) error {
+	pairs, err := cmd.Flags().GetStringArray("service-dir")
+	if err != nil {
+		return nil
+	}
+	return overrideServiceDirs(corgi, pairs)
+}
+
 func parseRequired(requiredData map[string]Required, describeFlag bool) []Required {
 	if len(requiredData) == 0 {
 		Info("no required instructions provided in file.")
@@ -668,6 +716,8 @@ func CleanFromScratch(cmd *cobra.Command, corgi CorgiCompose) {
 }
 
 func CleanCorgiServicesFolder() {
+	// git worktree remove before rm so source repos don't keep dangling entries.
+	_ = CleanCorgiWorktrees()
 	err := os.RemoveAll("./corgi_services/")
 	if err != nil {
 		fmt.Println("couldn't delete corgi_services folder: ", err)

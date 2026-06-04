@@ -40,6 +40,7 @@ func init() {
 		defaultReadyTimeout,
 		"Max time to wait for dependencies when --ensure-deps is set.",
 	)
+	registerServiceWorkdirFlags(execCmd.Flags())
 }
 
 // splitExecArgs separates the service name from the command tokens. dash is
@@ -89,6 +90,10 @@ func runExec(cmd *cobra.Command, args []string) {
 
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
+		emitExecError(utils.ErrConfig, err.Error(), 1)
+	}
+
+	if err := utils.MaterializeServiceWorktrees(cmd, corgi); err != nil {
 		emitExecError(utils.ErrConfig, err.Error(), 1)
 	}
 

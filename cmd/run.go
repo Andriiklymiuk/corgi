@@ -275,6 +275,7 @@ machine-readable plan. Exit 0 if valid, 1 if validation finds errors.`,
 before proceeding anyway (non-fatal). Applies to readiness gating and the
 database readiness probe.`,
 	)
+	registerServiceWorkdirFlags(runCmd.PersistentFlags())
 }
 
 // defaultReadyTimeout bounds the wait for a db/dependency to become reachable
@@ -560,6 +561,18 @@ func runRun(cmd *cobra.Command, _ []string) {
 	}
 
 	utils.CleanFromScratch(cmd, *corgi)
+
+	// After clone + fromScratch clean (so neither clobbers the worktree), before
+	// beforeStart/env/run read AbsolutePath.
+	if err := utils.MaterializeServiceWorktrees(cmd, corgi); err != nil {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrConfig, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, "❌", err)
+		}
+		os.Exit(1)
+	}
+
 	runPreflight(cmd, corgi)
 	runBeforeStart(corgi)
 

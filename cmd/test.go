@@ -45,6 +45,7 @@ func init() {
 		defaultReadyTimeout,
 		"Max time to wait for dependencies when --ensure-deps is set.",
 	)
+	registerServiceWorkdirFlags(testCmd.Flags())
 }
 
 // testResult is one service's outcome. A skipped service never counts as failure.
@@ -65,6 +66,15 @@ type selection struct {
 func runTestCmd(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrConfig, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(1)
+	}
+
+	if err := utils.MaterializeServiceWorktrees(cmd, corgi); err != nil {
 		if utils.JSONOutput {
 			utils.JSONError(utils.ErrConfig, err.Error())
 		} else {
