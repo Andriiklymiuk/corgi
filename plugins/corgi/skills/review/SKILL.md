@@ -109,27 +109,42 @@ No ticket linked → skip; review on repo standards alone.
 
 ## Phase 2 — Standards note (once per repo)
 
-Build one compact standards note **per repo** — same-repo PRs share it, never
-rebuild it.
+Build **one compact, distilled** standards note **per repo** — same-repo PRs
+share it, never rebuild it. The note is the orchestrator's cache (stories model):
+a handful of bullets the reviewer reads, **not** raw files dumped into context.
 
-**Source files** (read each that exists):
-`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `CONTRIBUTING.md`, `.cursorrules`;
-lint/format config: `.eslintrc*`, `biome.json`, `.prettierrc`, `.golangci.yml`,
-`ruff.toml`, `.editorconfig`; language manifest (`package.json`,
-`pyproject.toml`, `go.mod`, …).
+**Keep it cheap — this is the token-sensitive phase.** Don't read everything.
+1. **Canonical first, stop early.** Read `CLAUDE.md` (or `AGENTS.md`) — usually
+   small and authoritative. If it covers conventions well, that + the lint config
+   is the whole note. `GEMINI.md`/`.cursorrules`/`CONTRIBUTING.md` overlap heavily
+   — read one only if the canonical file is absent. Don't read all five.
+2. **One lint/format config, relevance-gated by the diff's languages.** Diff is
+   all TS → read the JS/TS config (`biome.json` / `.eslintrc*` / `.prettierrc`),
+   skip `.golangci.yml`/`ruff.toml`. Don't read configs for languages not in the
+   diff.
+3. **Size cap.** Skip any standards file over ~400 lines / 40 KB — sample its
+   headings instead of reading whole. The manifest is read only for the test/lint
+   *scripts*, not in full.
+4. **Neighbor files are lazy, not upfront.** Don't pre-read source files. The diff
+   already carries surrounding context; only open **1–2** neighbor files **if** a
+   specific convention question comes up mid-review (e.g. "is this the repo's error
+   pattern?"), scoped to the diff's area.
+5. **Most repos have no CLAUDE.md** → the note is just "lint config X + conventions
+   observed in the diff." Near-zero cost. Don't manufacture standards that aren't
+   written down.
 
 **On-disk service (repo is a local corgi service)** — map repo → service via
-`corgi-compose.yml` (`path:`/`cloneFrom:`). Read those files from the service
-dir. Reuse the service's README for "what this service does" context. **Never
-map or read `manualRun` services** — reference-only, same as stories.
+`corgi-compose.yml` (`path:`/`cloneFrom:`), read from the service dir, reuse its
+README one-liner for "what this service does". **Never map or read `manualRun`
+services** — reference-only, same as stories.
 
-**Remote-only repo (not on disk)** → best-effort API fetch only:
-`gh api repos/<o>/<r>/contents/<f>` (GitHub) or `glab api` (GitLab) for
-`CLAUDE.md`/`AGENTS.md` + the main lint config. **No full clone.**
+**Remote-only repo (not on disk)** → best-effort API fetch of just `CLAUDE.md`/
+`AGENTS.md` + the one relevant lint config (`gh api repos/<o>/<r>/contents/<f>` /
+`glab api`). **No full clone.** Missing → skip, don't chase.
 
-Distill into a compact note: naming conventions, test patterns, forbidden
-patterns, code-style rules, anything the repo explicitly spells out. Two PRs in
-the same repo reuse this single note unchanged.
+Distilled note = naming conventions, test patterns, forbidden patterns, code-style
+rules the repo **explicitly** spells out. Target a short note (~a dozen bullets),
+reused unchanged across every PR in that repo.
 
 ## Phase 3 — Review each PR (subagent, scoped)
 
