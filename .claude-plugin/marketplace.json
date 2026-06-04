@@ -8,7 +8,7 @@
     {
       "name": "corgi",
       "source": "./plugins/corgi",
-      "description": "AI skill for authoring corgi-compose.yml, running and debugging corgi projects, and shipping batches of Linear/Jira issues or a feature description as draft PRs/MRs"
+      "description": "AI skill for authoring corgi-compose.yml, running and debugging corgi projects, shipping batches of Linear/Jira issues or a feature description as draft PRs/MRs, and reviewing existing PRs/MRs with inline suggestions"
     }
   ]
 }

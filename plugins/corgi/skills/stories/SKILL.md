@@ -382,6 +382,10 @@ blank line between stories.
   now, so no separate `--service-dir` variant is needed here. (`--service-dir` at
   the live impl worktree belongs to the Phase 3 gate, where the code is still
   uncommitted.)
+- **Review hint** → after the link(s) for each actionable (non-blocked) story, one
+  line per PR/MR: `↳ review it: /corgi-review <pr-or-mr-link>` — hands the reviewer
+  straight to the `review` skill (it checks the diff against repo standards + the
+  ticket, posts inline suggestions). Skip for blocked/failed stories (no link).
 - **Blocked / failed** → no link, one line: `[<key>] <Service>: BLOCKED — <the
   decision needed>` (or `needs attention — <reason>`, + the worktree `/tmp` path
   if partial work is parked there).
@@ -389,6 +393,7 @@ blank line between stories.
 ```
 [ABC-123] web: Remove address step from mobile signup
 https://github.com/<org>/<repo>/pull/<n>
+↳ review it: /corgi-review https://github.com/<org>/<repo>/pull/<n>
 ▶ corgi run --service-branch web=feature/ABC-123/remove-address-step --with-deps
 
 [ABC-200] Add phone field to user
@@ -396,6 +401,7 @@ api: Add phone field to user
 https://github.com/<org>/api/pull/<n>
 web: Add phone field to user
 https://github.com/<org>/web/pull/<n>
+↳ review it: /corgi-review https://github.com/<org>/api/pull/<n> https://github.com/<org>/web/pull/<n>
 ▶ corgi run --with-deps --service-branch api=feature/ABC-200/user-phone --service-branch web=feature/ABC-200/user-phone
 
 [ABC-125] api: BLOCKED — which auth scope gates the endpoint?
