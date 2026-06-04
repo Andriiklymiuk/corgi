@@ -109,9 +109,96 @@ No ticket linked → skip; review on repo standards alone.
 
 ## Phase 2 — Standards note (once per repo)
 
+Build one compact standards note **per repo** — same-repo PRs share it, never
+rebuild it.
+
+**Source files** (read each that exists):
+`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `CONTRIBUTING.md`, `.cursorrules`;
+lint/format config: `.eslintrc*`, `biome.json`, `.prettierrc`, `.golangci.yml`,
+`ruff.toml`, `.editorconfig`; language manifest (`package.json`,
+`pyproject.toml`, `go.mod`, …).
+
+**On-disk service (repo is a local corgi service)** — map repo → service via
+`corgi-compose.yml` (`path:`/`cloneFrom:`). Read those files from the service
+dir. Reuse the service's README for "what this service does" context. **Never
+map or read `manualRun` services** — reference-only, same as stories.
+
+**Remote-only repo (not on disk)** → best-effort API fetch only:
+`gh api repos/<o>/<r>/contents/<f>` (GitHub) or `glab api` (GitLab) for
+`CLAUDE.md`/`AGENTS.md` + the main lint config. **No full clone.**
+
+Distill into a compact note: naming conventions, test patterns, forbidden
+patterns, code-style rules, anything the repo explicitly spells out. Two PRs in
+the same repo reuse this single note unchanged.
+
 ## Phase 3 — Review each PR (subagent, scoped)
 
+Hand a review subagent: that PR's diff + title/body + the repo's standards note
++ (if any) the intent note from P1.5. Scope **strictly to the diff** — don't
+review untouched code.
+
+**Hunt for:**
+- Correctness bugs.
+- Missing or weak tests.
+- Security issues.
+- **Leaked secrets** — flag the file + line + that a secret is present; never echo the value into a finding or comment.
+- Repo-standard / convention violations (names, patterns, style).
+- Scope creep (changes outside the ticket's stated scope).
+- Perf footguns.
+- Ticket-intent mismatch (diff doesn't do what the ticket asked).
+
+**Temper with the intent note** — before emitting any finding, check it against
+the ticket's rationale, constraints, and discussion. A choice the ticket
+explicitly justifies (deliberate hack, scoped approach, known debt with a
+follow-up) is not a bug; drop it or downgrade to a soft note citing the
+ticket's reasoning.
+
+**Finding shape** (exact — used by P4/P5):
+```
+{ pr, file, line, side, severity: blocking|nit, title, explanation, suggestedReplacement? }
+```
+Plus a **2–4 sentence human summary per PR** written above the findings list.
+
+**Token discipline (stories model):**
+- **One Explore sweep per service+area, not per PR.** Orchestrator holds the
+  investigation note (the cache); subagents reference it, never re-explore the
+  same files.
+- **Reuse ledger** — shared components/contracts recorded once; each review
+  cites, doesn't re-derive.
+- Big **set** → dispatch per-PR reviews to parallel subagents, each scoped to
+  its diff + the shared note.
+- Big **single PR** (large diff / many files) → split that one PR's diff by
+  file/dir group across parallel subagents, then merge + dedupe findings.
+- Same-repo sibling PRs touching the same code → add a short **interaction
+  note** (do they conflict or overlap?).
+
 ## Phase 3.5 — Cross-service contract pass
+
+Triggers on a **service boundary being crossed** — not a repo boundary. Map
+each changed file to its service via `corgi-compose.yml` paths. The boundary is
+crossed by two PRs in different repos **or** by a single monorepo PR editing
+two services' dirs (e.g. `api/` + `web/`). A set touching only one service
+skips P3.5.
+
+One reviewer sees **all boundary-crossing diffs together** plus the dependency
+direction from `corgi-compose.yml`: `depends_on_services`, `exports`,
+`${producer.VAR}` substitutions.
+
+**Checks across the boundary:**
+- Request/response shape, field names + types, nullability.
+- New/removed endpoints, enum values, error codes.
+- GraphQL schema / OpenAPI / protobuf / shared types.
+
+**Flags:**
+- Producer changed a field the consumer still reads the old way; or consumer
+  expects a field the producer didn't add.
+- Type, enum, or nullability mismatch across the boundary.
+- Producer change with no matching consumer update (or an orphan consumer
+  change with no producer change).
+- **Merge order** (producer PR first) — state it explicitly in the output.
+
+Contract findings are structured the same as P3 findings (same shape); tag
+each with both affected PRs so P5 can post to both sides.
 
 ## Phase 4 — Preview + confirm (the gate)
 
