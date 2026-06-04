@@ -39,3 +39,4 @@ docs/superpowers/
 # local-only vscode extension (not a tracked submodule)
 corgi_vscode_extension/
 corgi-docs/
+corgi_examples/
