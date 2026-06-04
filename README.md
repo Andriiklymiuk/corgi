@@ -25,6 +25,21 @@ No more long meetings, explanations of how to run new project with multiple micr
 
 Auto git cloning, db seeding, concurrent running and much more.
 
+## Quick start
+
+```bash
+brew install andriiklymiuk/homebrew-tools/corgi   # or see Install below
+
+corgi run -l        # browse runnable examples, pick one to try
+
+# in your own project, next to a corgi-compose.yml:
+corgi doctor        # check required tools, ports, docker
+corgi run           # start every db_service + service, concurrently
+corgi status -w     # live health of each service
+```
+
+No `corgi-compose.yml` yet? `corgi create` scaffolds one — or let an AI agent do it with `/corgi-new` (see [AI agents](#ai-agents--claude-code)).
+
 While in services you can create whatever you want, but in db services **for now it supports**:
 
 - [postgres](https://www.postgresql.org), [example](https://github.com/Andriiklymiuk/corgi_examples/tree/main/postgres)
@@ -87,9 +102,34 @@ Default provider = [Cloudflare Quick Tunnels](https://developers.cloudflare.com/
 
 Auth-needing providers (e.g. ngrok) are detected before any subprocess starts — corgi prints the exact login command and exits without partial state.
 
+## Run a branch or worktree
+
+Point any service at a git branch or an external checkout for a single run — no
+edit to `corgi-compose.yml`. Per-service and repeatable; any service you don't
+flag runs from its compose `path:`. Works on `run`, `exec`, and `test`.
+
+```bash
+# run a feature branch of api in an isolated, reused worktree (your checkout stays put)
+corgi run --service-branch api=feature/login
+
+# mix: api on a branch, web from an explicit dir, the rest from compose path:
+corgi run --service-branch api=feature/login --service-dir web=/tmp/wt/web
+
+# switch the actual checkout in place instead (refuses if the tree is dirty)
+corgi run --service-checkout api=hotfix/x
+```
+
+- **`--service-branch <svc>=<branch>`** — reused git worktree under `corgi_services/.worktrees/`. Non-destructive (main checkout untouched); deps and uncommitted work persist across runs.
+- **`--service-dir <svc>=<path>`** — run from an existing dir you already have.
+- **`--service-checkout <svc>=<branch>`** — `git checkout` in place; leaves the repo on that branch.
+
+Manage the worktrees with `corgi worktree list` / `corgi worktree prune` (also cleaned by `corgi clean`). Handy for reviewing PR branches, comparing two branches side by side on different ports, or letting an AI agent run an isolated branch while another runs `main`.
+
 ## Documentation
 
 You can check documentation on https://andriiklymiuk.github.io/corgi/
+
+Driving corgi from a script or AI agent? See [docs/agents.md](docs/agents.md) — non-interactive mode, `--json` output, stable exit/error codes, and the detached lifecycle.
 
 And here is small 2 min video showcase https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY
 
@@ -97,20 +137,28 @@ And here is small 2 min video showcase https://youtu.be/rlMCjs4EoFs?si=o3SQaymM5
 
 You can install [corgi extension](https://marketplace.visualstudio.com/items?itemName=corgi.corgi) to get syntax highlights and much more
 
-## Claude Code users
+## AI agents & Claude Code
 
-This repo ships a [Claude Code](https://claude.com/claude-code) plugin so an AI agent can author your `corgi-compose.yml`, run corgi, and debug failures accurately.
+corgi is built to be driven by AI agents, not only just typed by hand. It detects
+agent/CI environments and never hangs on a prompt, speaks pure JSON on stdout with
+`--json`, and exposes stable exit + error codes an agent can branch on — so an LLM
+can run your stack, read real status, and fix the right thing. Full guide:
+[docs/agents.md](docs/agents.md).
+
+This repo also ships a [Claude Code](https://claude.com/claude-code) plugin:
 
 ```
 /plugin marketplace add Andriiklymiuk/corgi
 /plugin install corgi@corgi
 ```
 
-Then in any project that has a `corgi-compose.yml`, Claude will recognize it and use `corgi run` / `corgi doctor` / `corgi status` instead of inventing its own commands. The plugin also adds:
+Then in any project with a `corgi-compose.yml`, Claude recognizes it and uses
+`corgi run` / `corgi doctor` / `corgi status` instead of inventing commands. The
+plugin adds:
 
 - **`/corgi-new`** — scaffold a fresh `corgi-compose.yml` from a short conversation.
 - **`/corgi-describe`** — write a Markdown service map plus a Mermaid relationship diagram for the project.
-- **`corgi:stories`** — hand Claude a batch of tracker issues (Linear or Jira) or just a feature description, and it investigates, writes a spec per item behind one sign-off gate, branches per service, tests and reviews each, and opens draft PRs/MRs (GitHub or GitLab). Runs automatically when you give it issues to ship, or invoke it with `/corgi:stories`.
+- **`corgi:stories`** — hand Claude a batch of tracker issues (Linear or Jira) or just a feature description, and it investigates, writes a spec per item behind one sign-off gate, branches per service, tests and reviews each, and opens draft PRs/MRs (GitHub or GitLab). It runs each service in its own git worktree (`--service-branch`), so parallel work never collides with your checkout. Runs automatically when you give it issues to ship, or invoke it with `/corgi:stories`.
 
 ## Install
 

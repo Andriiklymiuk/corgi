@@ -130,6 +130,50 @@ no control channel into a live foreground `corgi run`.
   `ps`/`status`, not via a live notification.
 - Windows: detach and liveness checks are best-effort.
 
+## Run a branch or external dir (no compose edit)
+
+For reviewing a PR branch, running an agent's worktree, or pointing a service at a
+checkout elsewhere — without touching `path:` in `corgi-compose.yml`. Repeatable,
+per-service; any service you don't flag runs from its compose `path:`. Available
+on `run`, `exec`, and `test`. All three repoint the service's working dir, so its
+env generation, `beforeStart`/`afterStart`, and process all run there.
+
+- `--service-dir <name>=<path>` — run from an existing dir (e.g. a worktree you
+  already made). The dir must exist.
+- `--service-branch <name>=<branch>` — run on a git branch via a **reused**
+  worktree under `corgi_services/.worktrees/<svc>-<branch>`. **Non-destructive**:
+  the main checkout is untouched. Re-runs reuse the worktree (deps + uncommitted
+  work persist); the branch must exist (local or remote).
+- `--service-checkout <name>=<branch>` — `git checkout <branch>` in place in the
+  service's `path:`. **Refuses on a dirty tree** (commit/stash, or use
+  `--service-branch`). Leaves the repo on that branch.
+
+A service may appear in only one of the three (else an `E_CONFIG` error). Detached
+works too — the override is applied before the attached/detached split.
+
+```bash
+# run a feature branch of api, rest of the stack from compose path:
+corgi run --detach --service-branch api=feature/login
+
+# mix: api on a branch, web from an explicit worktree dir
+corgi run --detach --service-branch api=feature/login --service-dir web=/tmp/wt/web
+
+# test / one-off on a branch
+corgi test --service api --service-branch api=feature/login
+corgi exec api --service-branch api=feature/login --ensure-deps -- npm run migrate
+```
+
+Worktrees accumulate one-per-branch under `corgi_services/.worktrees/`. Manage them:
+
+```bash
+corgi worktree list     # print created worktree paths
+corgi worktree prune    # git worktree remove them all (also done by corgi clean)
+```
+
+This is what lets one agent run an isolated branch while another runs `main`, or a
+multi-service story verify a producer from its worktree without committing to the
+main checkout.
+
 ## Exit codes
 
 | Code | Meaning |

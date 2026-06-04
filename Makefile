@@ -9,6 +9,13 @@ tag:
 
 generateDocs:
 	go run . docs --generate
+	@if [ -d corgi-docs/docs ]; then \
+		rm -rf corgi-docs/docs/commands; \
+		cp -R resources/readme/commands corgi-docs/docs/commands; \
+		echo "Copied command docs into corgi-docs/docs/commands"; \
+	else \
+		echo "corgi-docs/ not found, skipping site copy"; \
+	fi
 
 VERSION := $(shell grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}')
 
