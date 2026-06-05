@@ -139,6 +139,28 @@ Run `corgi run` and it clones anything missing, starts Postgres in Docker and se
 
 Want to see every field? Run `corgi docs`, or browse the [examples repo](https://github.com/Andriiklymiuk/corgi_examples).
 
+## Getting it running on a real project
+
+The examples use public repos. Real projects have private repos, prerequisites, and first-run hiccups — here's the honest version.
+
+**What you need:** `git`, and Docker (only if you declare `db_services`). Everything else is whatever your project lists under `required:` — `corgi doctor` checks those, and `corgi doctor --fix` can install them by running the `install:` commands you put in the file. Homebrew is just one way to install corgi, not a requirement.
+
+**Private repos just work.** corgi clones with plain `git`, so your existing SSH keys or credential helper are used as-is — private GitHub/GitLab services clone fine if your `git` is already set up. There's no corgi-specific auth to configure.
+
+**Joining a team that already uses corgi?** `git pull`, then `corgi run`. No `corgi-compose.yml` yet? You don't have to hand-write it — `corgi create` (or `/corgi-new` with Claude) inspects the repos and scaffolds one. Adding corgi is a single committed file, and teammates who don't use it aren't affected, since everything corgi generates is gitignored (see below).
+
+**When the first run trips up:**
+- _Port already in use_ — `corgi doctor` names the process holding it; `corgi run --kill-port` frees it.
+- _Missing tool, or Docker not running_ — `corgi doctor --fix`.
+- _A clone failed_ — you don't have git access to that repo yet; fix your SSH/token and re-run.
+- _Seeding failed_ — check the `seedFromFilePath` path and that the dump matches the driver.
+
+### Secrets & env files
+
+corgi writes each service's `.env` for you — DB host/port/credentials, sibling-service URLs — and sources it before your commands run. On first init it also adds `.env*` and `corgi_services/*` to your project's `.gitignore`, so **generated env files and any secrets in them never get committed**. Your own secrets (API keys, tokens) go in a service's env or a tier file like `env/staging/web.env` — also gitignored, also staying on your machine. The `corgi-compose.yml` itself holds config, not secrets, so it's safe to commit and share.
+
+**Low lock-in:** your services stay ordinary git repos, your databases are standard Docker images (corgi even writes a plain `docker-compose.yml` per database under `corgi_services/db_services/`), and the wiring is just `.env` files. Stop using corgi and you keep all of it.
+
 ## Supported databases & services
 
 In `services` you can run anything you like. In `db_services`, corgi ships managed drivers that handle the container, seeding, a native shell, and env vars for you. A couple are whole stacks rather than single containers — `localstack` stands up a fleet of AWS services, and `supabase` brings up auth, storage, and studio — all from the same file.
@@ -267,6 +289,15 @@ Now Claude recognizes any project with a `corgi-compose.yml` and reaches for rea
 
 Both wait for your go-ahead and only ever open **draft** PRs — they never merge or ship on their own. Two more helpers round things out: **`/corgi-new`** scaffolds a fresh `corgi-compose.yml` from a quick chat, and **`/corgi-describe`** writes a service map with a Mermaid diagram.
 
+## Security & scope
+
+corgi is a **local inner-loop tool** — for running your stack on your own machine, not for staging, production, or deploys.
+
+- A `corgi-compose.yml` runs its `beforeStart` / `start` commands on your machine, so only run files you trust — especially `corgi run -t <url>`, which downloads and runs a remote one.
+- `corgi doctor --fix` starts Docker for you automatically, but **installing a tool or killing a port-holding process always asks first** (or needs `--yes` in CI).
+- `corgi mcp` runs over stdio (local, no network) by default. `--http` is **unauthenticated** — only expose it with `--tunnel`, which adds a bearer token. Its tools can start, stop, and run commands in your stack, so treat that URL + token like a credential.
+- `corgi tunnel` gives a local service a public HTTPS URL — exactly what you want for testing signing/webhook callbacks from an outside tool. The default Cloudflare quick-tunnel URL is public and ephemeral, so shut it down when you're done.
+
 ## Documentation
 
 - Full docs: https://andriiklymiuk.github.io/corgi/
@@ -357,6 +388,9 @@ Brew installs `_corgi` (zsh), `corgi.bash`, `corgi.fish` automatically. After th
 - `corgi tunnel <TAB>` → tunnelable services
 - `corgi clean -i <TAB>` → clean targets — and completions are wired for `corgi tunnel --provider`, `corgi run --omit`, and the global `--dockerContext` / `--fromTemplateName` too
 
+<details>
+<summary><strong>Completion showing filenames instead of names? (zsh fpath / Linux setup)</strong></summary>
+
 **zsh users — if `<TAB>` shows files instead of names**, your shell isn't loading brew's site-functions dir. One-time fix in `~/.zshrc` (works for every brew CLI, not just corgi):
 
 ```sh
@@ -389,6 +423,8 @@ corgi completion bash | sudo tee /etc/bash_completion.d/corgi >/dev/null
 # fish
 corgi completion fish > ~/.config/fish/completions/corgi.fish
 ```
+
+</details>
 
 ## Credits & thanks
 
