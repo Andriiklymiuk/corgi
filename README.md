@@ -65,21 +65,19 @@ corgi isn't a one-time setup tool you forget about — it's how you run the proj
 
 - **The whole stack, one command.** `corgi run` brings up every database and service together — and starts Docker for you if it isn't running, so there's no "wait, is Docker up?" dance. Need AWS or a backend locally? LocalStack and Supabase stand in, so there's no VPN or shared environment to wrestle with.
 - **Just the databases.** Running a service straight from your IDE or debugger? `corgi db -u` brings the databases up on their own and leaves the rest to you.
-- **Local, staging, or a mix.** Declare your env tiers once in the file:
+- **Local, staging, or a mix.** Define an env tier once — a folder of per-service env files, plus whether to skip the local databases:
   ```yml
   envTiers:
     staging:
-      dir: env/staging      # per-service env at env/staging/<service>.env
-      dbServices: none      # don't start local databases — use staging's
-    prod:
-      dir: env/prod
-      confirm: true         # ask before running against prod
+      dir: env/staging   # you create env/staging/<service>.env with the staging URLs/keys
+      dbServices: none   # skip local databases — the staging env already points at staging's
   ```
-  Then switch with a flag — everything local, or part of your stack pointed at a shared environment:
+  Then pick it with a flag — run everything locally, or just the frontend against staging:
   ```bash
   corgi run                                  # everything local
-  corgi run --tier staging --services web    # just the frontend, talking to staging
+  corgi run --tier staging --services web    # only the web app, talking to staging
   ```
+  (A tier can also set `confirm: true` to prompt before you run against a sensitive one.)
 - **New project? Start with corgi.** The first thing to do in a fresh repo is write a `corgi-compose.yml` — `corgi create` or `/corgi-new` gets you one in a minute — so "how do I run this?" has a permanent answer.
 - **Let Claude plan the work.** Drop a few tickets into `/corgi:stories` and Claude plans the feature across your services, back to front, and opens a draft PR for each.
 
