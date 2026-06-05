@@ -1,7 +1,10 @@
 <div align="center">
   <img width="300" height="300" src="./resources/corgi.png">
-  
+
   # 🐶 CORGI 🐶
+
+  **One file to run your whole local stack — repos cloned, databases seeded, env wired, every service up. Friendly to humans and AI agents alike.**
+
   [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
   [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=bugs)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
   [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
@@ -19,11 +22,58 @@
 
 </div>
 
-Send someone your project yml file, init and run it in minutes.
+corgi is how you run your project locally — every day, with one command. You describe the stack once in a `corgi-compose.yml`, and `corgi run` brings the whole thing up: repos cloned, databases seeded, `.env` files written, every service started. It even starts Docker for you, so the infra just happens and you stop thinking about it.
 
-No more long meetings, explanations of how to run new project with multiple microservices and configs. Just send corgi-compose.yml file to your team and corgi will do the rest.
+Onboarding falls out for free: hand a teammate the same file and they go from nothing to a running stack in minutes — no setup call, no digging through old READMEs, no "works on my machine". And because corgi never blocks on a prompt and speaks plain JSON, an AI agent or a CI job can drive it exactly the way you do.
 
-Auto git cloning, db seeding, concurrent running and much more.
+## Why corgi?
+
+Wiring up a multi-service project by hand is the same slog every time — joining a team, setting up a new laptop, or starting a fresh repo. You end up having to:
+
+- clone four different repos,
+- install Postgres, Redis, Kafka… and the right Go / Node / Yarn versions,
+- create the databases and fill them with test data,
+- copy `.env` files and point each service at the others,
+- pick ports that don't clash,
+- and finally start everything in the right order, across a row of terminal tabs.
+
+That's most of a day gone — and it breaks again on the next laptop.
+
+`docker-compose` handles the _containers_. Corgi handles everything around them too: the repos, the seeded data, the env wiring, the tools you need. Your databases run in Docker; your services run as normal processes (`go run .`, `yarn dev`). One file, one command — and it keeps paying off long after setup, because it's also how you run the stack from then on.
+
+## What corgi does for you
+
+- **Your repos** — Corgi clones each service from its Git URL the first time you run. It can also pull them all at once, fork them, or run one service on a branch in a throwaway worktree — without disturbing the checkout you're working in.
+- **Your databases** — 40+ ready-to-go drivers. Corgi starts them in Docker and **seeds** them from a dump or a remote DB, so you get real data instead of an empty schema. Open a shell with `corgi db shell` and the password is already filled in. Need AWS or Supabase locally? LocalStack and Supabase come up from the same file.
+- **Your services** — Everything starts together, in the right order, with env vars already wired between them. Press `Ctrl-C` and it all winds down cleanly. Prefer the background? `corgi run -d`, then check on it with `corgi ps`.
+- **The fiddly bits** — A preflight that catches missing tools and busy ports _before_ they bite (`corgi doctor`), live health (`corgi status -w`), public HTTPS URLs for webhook testing (`corgi tunnel`), saved logs, and a desktop ping when something crashes.
+- **Made for AI agents** — Predictable JSON and exit codes, an MCP server, and a Claude Code plugin that takes a pile of tickets and ships them as draft PRs — then reviews them for you.
+
+## In your day-to-day
+
+corgi isn't a one-time setup tool you forget about — it's how you run the project, in whatever shape the day calls for:
+
+- **The whole stack, one command.** `corgi run` brings up every database and service together — and starts Docker for you if it isn't running, so there's no "wait, is Docker up?" dance. Need AWS or a backend locally? LocalStack and Supabase stand in, so there's no VPN or shared environment to wrestle with.
+- **Just the databases.** Running a service straight from your IDE or debugger? `corgi db -u` brings the databases up on their own and leaves the rest to you.
+- **Local, staging, or a mix.** Declare your env tiers once in the file:
+  ```yml
+  envTiers:
+    staging:
+      dir: env/staging      # per-service env at env/staging/<service>.env
+      dbServices: none      # don't start local databases — use staging's
+    prod:
+      dir: env/prod
+      confirm: true         # ask before running against prod
+  ```
+  Then switch with a flag — everything local, or part of your stack pointed at a shared environment:
+  ```bash
+  corgi run                                  # everything local
+  corgi run --tier staging --services web    # just the frontend, talking to staging
+  ```
+- **New project? Start with corgi.** The first thing to do in a fresh repo is write a `corgi-compose.yml` — `corgi create` or `/corgi-new` gets you one in a minute — so "how do I run this?" has a permanent answer.
+- **Let Claude plan the work.** Drop a few tickets into `/corgi:stories` and Claude plans the feature across your services, back to front, and opens a draft PR for each.
+
+The point isn't any single command — it's that you stop babysitting infrastructure. No "is Docker running?", no VPN to a shared environment, no stale `.env`, no five terminal tabs in the right order. You run one thing and get back to building.
 
 ## Quick start
 
@@ -34,13 +84,60 @@ corgi run -l        # browse runnable examples, pick one to try
 
 # in your own project, next to a corgi-compose.yml:
 corgi doctor        # check required tools, ports, docker
-corgi run           # start every db_service + service, concurrently
-corgi status -w     # live health of each service
+corgi run           # start every database + service, together
+corgi status -w     # watch each service turn healthy
 ```
 
-No `corgi-compose.yml` yet? `corgi create` scaffolds one — or let an AI agent do it with `/corgi-new` (see [AI agents](#ai-agents--claude-code)).
+Don't have a `corgi-compose.yml` yet? `corgi create` scaffolds one — or let Claude write it with `/corgi-new` (see [AI agents](#ai-agents-mcp--claude-code)).
 
-While in services you can create whatever you want, but in db services **for now it supports**:
+## What the file looks like
+
+Here's the whole setup for a seeded Postgres, an auto-cloned Go API, and a web app — wired together:
+
+```yml
+db_services:
+  db:
+    driver: postgres
+    databaseName: app
+    port: 5432
+    seedFromFilePath: ./seed.sql            # loaded on first run
+
+services:
+  api:
+    cloneFrom: https://github.com/acme/api.git   # cloned if ./api isn't there yet
+    path: ./api
+    port: 7012
+    depends_on_db:
+      - name: db                            # puts DB_HOST/DB_PORT/DB_NAME/... in api/.env
+    start:
+      - go run .
+  web:
+    cloneFrom: https://github.com/acme/web.git
+    path: ./web
+    depends_on_services:
+      - name: api                           # puts api's URL in web/.env
+    beforeStart:
+      - yarn install
+    start:
+      - yarn dev
+
+required:                                   # checked by `corgi doctor` before run
+  docker:
+    checkCmd: docker -v
+  go:
+    checkCmd: go version
+```
+
+Run `corgi run` and it clones anything missing, starts Postgres in Docker and seeds it, writes the `.env` files (and sources them for you — no boilerplate), then runs `api` and `web` together. `Ctrl-C` shuts it all back down and runs any cleanup steps.
+
+Want to see every field? Run `corgi docs`, or browse the [examples repo](https://github.com/Andriiklymiuk/corgi_examples).
+
+## Supported databases & services
+
+In `services` you can run anything you like. In `db_services`, corgi ships managed drivers that handle the container, seeding, a native shell, and env vars for you. A couple are whole stacks rather than single containers — `localstack` stands up a fleet of AWS services, and `supabase` brings up auth, storage, and studio — all from the same file.
+
+<details>
+<summary><strong>40+ database & infra drivers</strong> (click to expand)</summary>
 
 - [postgres](https://www.postgresql.org), [example](https://github.com/Andriiklymiuk/corgi_examples/tree/main/postgres)
 - [mongodb](https://www.mongodb.com), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/mongodb/mongodb-go.corgi-compose.yml)
@@ -80,89 +177,101 @@ While in services you can create whatever you want, but in db services **for now
 - [supabase](https://supabase.com/docs/guides/local-development) — wraps `supabase init`/`start`. Emits `SUPABASE_*` + S3 vars, ports from config.toml. Seeds `buckets:` and `authUsers:` on `up`; `jwtSecret:` re-signs keys; `configTomlPath:` makes corgi own config.toml under `corgi_services/`; `port:`/`dbPort:`/`studioPort:`/`inbucketPort:` patch the matching `[section].port`. Full docs: [docs/drivers/supabase.md](docs/drivers/supabase.md)
 - `image` — generic docker-image driver for any public image (gotenberg, mailhog, jaeger, meilisearch, …). Set `image:` + `port:` + optional `containerPort:`/`environment:`/`volumes:`/`command:`. Full docs: [docs/drivers/image.md](docs/drivers/image.md)
 
-## Preflight & healthcheck
+</details>
 
-- `corgi doctor` (aliases: `check`, `preflight`) — before `corgi run`: verifies every tool in `required:`, Docker is up, and every port in `db_services.*.port` / `services.*.port` is free (lists the offending process if not). Add `--fix` to auto-remediate: start Docker, install missing tools, free busy ports (destructive fixes ask first, or pass `--yes`).
-- `corgi open [services...]` — open each service's `http://localhost:<port>` in the browser. No args = all services with a port.
-- `corgi status` (aliases: `health`, `healthcheck`) — after `corgi run`: TCP-probes every declared port. If a service sets `healthCheck: /some/path`, corgi does an HTTP probe and accepts any non-5xx response as healthy. The `localstack` driver defaults to `GET /_localstack/health`. Flags: `-w/--watch` (live monitor), `-r/--ready` (block until all healthy or `--timeout`), `--service <csv>` (narrow scope), `--json` (machine output), `-q/--quiet` (exit-code-only).
+**Once a database is up**, corgi keeps helping:
 
-## Tunneling
+- **Seed it** with real data from a file (`seedFromFilePath:`) or another database (`seedFromDb:`). `corgi run --seed` loads it; the dump format is chosen per driver automatically.
+- **Open a shell** with `corgi db shell [name]` — the right tool (`psql`, `mongosh`, `redis-cli`, …) with credentials already filled in. Add `-e '<query>'` to run one query and exit.
+- **Manage them** from the `corgi db` menu — bring containers up or down, seed, or dump.
 
-`corgi tunnel` opens public HTTPS tunnels to declared services. Useful for webhook testing (Stripe, GitHub apps, e-sign providers, etc.) without ngrok-style signup.
+## Working across many repos
 
-```bash
-corgi tunnel                       # tunnel every services.<name> with port: set
-corgi tunnel api                   # single service
-corgi tunnel api,api-2     # csv
-corgi tunnel --port 3030           # raw port, skips compose lookup
-corgi tunnel --provider ngrok      # default: cloudflared (free, no signup)
-```
+This is the part `docker-compose` leaves to you. Corgi treats your repos as part of the stack:
 
-Default provider = [Cloudflare Quick Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) via `cloudflared`. Anonymous, free, ephemeral URLs (rotate per restart). For stable URLs, use Cloudflare Named Tunnels (login required) or another provider.
-
-Auth-needing providers (e.g. ngrok) are detected before any subprocess starts — corgi prints the exact login command and exits without partial state.
-
-## Run a branch or worktree
-
-Point any service at a git branch or an external checkout for a single run — no
-edit to `corgi-compose.yml`. Per-service and repeatable; any service you don't
-flag runs from its compose `path:`. Works on `run`, `exec`, and `test`.
+- **Auto-clone** — a service with `cloneFrom:` is cloned the first time its folder is missing.
+- **`corgi pull`** — `git pull` everything at once, including nested corgi projects.
+- **`corgi fork`** — fork the cloned repos to your own GitHub/GitLab and update the file to match.
+- **Run a service on a branch** — point one service at a branch or another folder for a single run, no file edit needed:
 
 ```bash
-# run a feature branch of api in an isolated, reused worktree (your checkout stays put)
+# run api's feature branch in its own worktree — your checkout stays exactly as it is
 corgi run --service-branch api=feature/login
 
-# mix: api on a branch, web from an explicit dir, the rest from compose path:
+# mix and match: api on a branch, web from a folder, everything else as usual
 corgi run --service-branch api=feature/login --service-dir web=/tmp/wt/web
 
-# switch the actual checkout in place instead (refuses if the tree is dirty)
+# or actually switch the checkout in place (refuses if you have uncommitted changes)
 corgi run --service-checkout api=hotfix/x
 ```
 
-- **`--service-branch <svc>=<branch>`** — reused git worktree under `corgi_services/.worktrees/`. Non-destructive (main checkout untouched); deps and uncommitted work persist across runs.
-- **`--service-dir <svc>=<path>`** — run from an existing dir you already have.
-- **`--service-checkout <svc>=<branch>`** — `git checkout` in place; leaves the repo on that branch.
+The worktrees live under `corgi_services/.worktrees/` and are reused between runs, so dependencies and uncommitted work stick around. List or clean them with `corgi worktree list` / `corgi worktree prune`. Great for trying a PR branch, comparing two branches side by side on different ports, or letting an agent work on a branch while you keep running `main`.
 
-Manage the worktrees with `corgi worktree list` / `corgi worktree prune` (also cleaned by `corgi clean`). Handy for reviewing PR branches, comparing two branches side by side on different ports, or letting an AI agent run an isolated branch while another runs `main`.
+## The rest of the toolbox
 
-## Documentation
+**Check before you run.** `corgi doctor` confirms your required tools are installed, Docker is running, and the ports are free — and tells you which process is hogging a port if one isn't. Add `--fix` and it'll start Docker, install what's missing, and free the ports for you.
 
-You can check documentation on https://andriiklymiuk.github.io/corgi/
+**Watch it stay healthy.** `corgi status` pings every service. Use `-w` to watch live, or `-r` to block until everything's ready (handy in scripts). Set a `healthCheck:` path on a service and corgi will hit it over HTTP instead of just checking the port.
 
-Driving corgi from a script or AI agent? See [docs/agents.md](docs/agents.md) — non-interactive mode, `--json` output, stable exit/error codes, and the detached lifecycle.
+**Keep it running in the background.** `corgi run -d` starts everything detached and returns right away — no daemon, corgi just remembers what it started. Check in with `corgi ps`, restart one piece with `corgi restart --service api`, or stop it all with `corgi stop`.
 
-And here is small 2 min video showcase https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY
+**Read the logs later.** `corgi run --logs` saves each service's output; `corgi logs` lets you browse and follow past runs, with crashes clearly marked.
 
-## VSCODE users
+**Get pinged on a crash.** `corgi notifications on` sends a desktop notification when a service falls over mid-run.
 
-You can install [corgi extension](https://marketplace.visualstudio.com/items?itemName=corgi.corgi) to get syntax highlights and much more
+**Share a local service over HTTPS.** `corgi tunnel` gives your services public URLs — perfect for testing webhooks (Stripe, GitHub apps, e-sign callbacks) without any signup:
 
-## AI agents & Claude Code
+```bash
+corgi tunnel                       # tunnel every service that has a port
+corgi tunnel api                   # just one
+corgi tunnel --port 3030           # a raw port, skip the compose lookup
+corgi tunnel --provider ngrok      # default is cloudflared (free, no signup)
+```
 
-corgi is built to be driven by AI agents, not only just typed by hand. It detects
-agent/CI environments and never hangs on a prompt, speaks pure JSON on stdout with
-`--json`, and exposes stable exit + error codes an agent can branch on — so an LLM
-can run your stack, read real status, and fix the right thing. Full guide:
-[docs/agents.md](docs/agents.md).
+By default it uses [Cloudflare Quick Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) — free and anonymous, but the URL changes every restart. For a stable URL, use a Cloudflare named tunnel (login required) or another provider. If a provider needs auth, corgi tells you the exact login command up front instead of failing halfway.
 
-This repo also ships a [Claude Code](https://claude.com/claude-code) plugin:
+## AI agents, MCP & Claude Code
+
+corgi is meant to be driven by AI agents and CI, not just typed by hand. It notices when it's running in an agent or pipeline and never blocks on a prompt, prints clean JSON with `--json`, and returns predictable exit codes (`0` ok, `1` failed, `2` bad usage) plus a documented [error-code list](docs/agents.md) — so a tool can read what happened and react. There are quiet, scriptable entry points too: `corgi env` (the exact env a service will see, and where each value came from), `corgi exec`, `corgi test`, and `corgi run --dry-run --json` to preview a run without touching anything. Full guide: [docs/agents.md](docs/agents.md).
+
+### MCP server
+
+Run `corgi mcp` and any MCP-speaking agent can control your stack through proper tools instead of guessing at shell commands. It runs over stdio by default (no network at all), or over HTTP with `--http` / `--tunnel` when you want it remote. It exposes around a dozen tools — bring up, tear down, status, env, exec, test, logs, db queries — plus read-only resources like the compose schema and live status. One caution: plain `--http` has no auth; corgi only adds a bearer token when you expose it through a public tunnel. Full docs: [docs/mcp.md](docs/mcp.md).
+
+### Claude Code plugin
+
+If you use [Claude Code](https://claude.com/claude-code), install the plugin:
 
 ```
 /plugin marketplace add Andriiklymiuk/corgi
 /plugin install corgi@corgi
 ```
 
-Then in any project with a `corgi-compose.yml`, Claude recognizes it and uses
-`corgi run` / `corgi doctor` / `corgi status` instead of inventing commands. The
-plugin adds:
+Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. Two workflows do the heavy lifting day to day:
 
-- **`/corgi-new`** — scaffold a fresh `corgi-compose.yml` from a short conversation.
-- **`/corgi-describe`** — write a Markdown service map plus a Mermaid relationship diagram for the project.
-- **`corgi:stories`** — hand Claude a batch of tracker issues (Linear or Jira) or just a feature description, and it investigates, writes a spec per item behind one sign-off gate, branches per service, tests and reviews each, and opens draft PRs/MRs (GitHub or GitLab). It runs each service in its own git worktree (`--service-branch`), so parallel work never collides with your checkout. Runs automatically when you give it issues to ship, or invoke it with `/corgi:stories`.
+- **Ship a batch of work — `/corgi:stories`.** Hand Claude some tracker issues (Linear or Jira) or just describe a feature. It investigates the codebase, writes a short spec for each item and waits for your sign-off, then branches per service, runs the tests, reviews its own changes, and opens **draft** PRs/MRs. Each service works in its own git worktree, so parallel stories never step on each other or on your checkout.
+- **Review the result — `/corgi:review`.** Point it at the PRs/MRs (yours or the ones it just opened). It reviews them against your repo's standards and any linked ticket, checks that changes line up across services, and — after you preview — posts a summary plus inline suggestions.
+
+```
+/corgi:stories ABC-123 ABC-124       # spec → branch per service → draft PRs
+/corgi:review  https://github.com/acme/api/pull/42
+```
+
+Both wait for your go-ahead and only ever open **draft** PRs — they never merge or ship on their own. Two more helpers round things out: **`/corgi-new`** scaffolds a fresh `corgi-compose.yml` from a quick chat, and **`/corgi-describe`** writes a service map with a Mermaid diagram.
+
+## Documentation
+
+- Full docs: https://andriiklymiuk.github.io/corgi/
+- 2-min video showcase: https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY
+- Driving corgi from a script or agent? See [docs/agents.md](docs/agents.md) and [docs/mcp.md](docs/mcp.md).
+
+### VSCode users
+
+Install the [corgi extension](https://marketplace.visualstudio.com/items?itemName=corgi.corgi) for syntax highlighting, autocompletion, and one-click commands.
 
 ## Install
 
-After install, `corgi` is available globally — run it from any folder.
+Once installed, `corgi` works from any folder.
 
 ### macOS / Linux — [Homebrew](https://brew.sh)
 
@@ -172,15 +281,15 @@ brew install andriiklymiuk/homebrew-tools/corgi
 
 ### macOS / Linux — install script
 
-No Homebrew? One-liner that picks the right OS/arch binary from GitHub releases:
+No Homebrew? This one-liner grabs the right binary for your OS/arch from GitHub releases:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh
 ```
 
-Installs to `/usr/local/bin` if writable, otherwise `~/.local/bin` (auto-added to PATH for zsh/bash/fish).
+Installs to `/usr/local/bin` if it can, otherwise `~/.local/bin` (and adds it to your PATH for zsh/bash/fish).
 
-Useful overrides:
+A few optional overrides:
 
 - `CORGI_VERSION=1.10.0` — pin a version
 - `CORGI_INSTALL_DIR=$HOME/bin` — force a directory
@@ -222,7 +331,13 @@ pkgx install corgi    # to PATH
 corgi -h
 ```
 
-`corgi update` (alias `corgi upgrade`) detects how you installed and uses the matching method to upgrade.
+`corgi update` (alias `corgi upgrade`) notices how you installed corgi and upgrades the same way.
+
+Want to try it cold? Run the expo + hono example straight from a URL:
+
+```bash
+corgi run -t https://github.com/Andriiklymiuk/corgi_examples/blob/main/honoExpoTodo/hono-bun-expo.corgi-compose.yml
+```
 
 ### Shell tab-completion
 
@@ -267,14 +382,10 @@ corgi completion bash | sudo tee /etc/bash_completion.d/corgi >/dev/null
 corgi completion fish > ~/.config/fish/completions/corgi.fish
 ```
 
-Try it with expo + hono server example
-
-```bash
-corgi run -t https://github.com/Andriiklymiuk/corgi_examples/blob/main/honoExpoTodo/hono-bun-expo.corgi-compose.yml
-```
-
 ## Credits & thanks
 
 - `corgi tunnel` defaults to [cloudflared](https://github.com/cloudflare/cloudflared) ([Apache 2.0](https://github.com/cloudflare/cloudflared/blob/master/LICENSE)) and its free, no-signup [Quick Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/). Big thanks to Cloudflare for shipping this open and free — makes local webhook testing painless.
 - Optional providers: [ngrok](https://ngrok.com) (closed source, free tier with authtoken) and [localtunnel](https://github.com/localtunnel/localtunnel) ([MIT](https://github.com/localtunnel/localtunnel/blob/master/LICENSE)) — thanks to both projects for the alternatives.
 - <a href="https://www.freepik.com/free-vector/cute-corgi-dog-astronaut-floating-space-cartoon-vector-icon-illustration-animal-science-icon-concept-isolated-premium-vector-flat-cartoon-style_22271104.htm#query=corgi%20icon&position=7&from_view=keyword">Corgi image by catalyststuff</a> on Freepik
+</content>
+</invoke>
