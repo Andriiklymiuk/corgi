@@ -36,6 +36,21 @@ brew install andriiklymiuk/homebrew-tools/corgi
 corgi run -l      # browse runnable examples, pick one to try
 ```
 
+Here's what `corgi run` does, end to end:
+
+```mermaid
+flowchart LR
+    F["corgi-compose.yml<br/>(one committed file)"] --> R(["corgi run"])
+    R --> C["clone missing repos"]
+    R --> DB["start and seed<br/>databases in Docker"]
+    R --> ENV["write and wire .env<br/>between services"]
+    R --> SVC["run services as<br/>host processes"]
+    C --> OUT["whole stack running 🐶"]
+    DB --> OUT
+    ENV --> OUT
+    SVC --> OUT
+```
+
 ## Why corgi?
 
 Wiring up a multi-service project by hand is the same slog every time — joining a team, setting up a new laptop, or starting a fresh repo. You end up having to:
@@ -51,11 +66,13 @@ That's most of a day gone — and it breaks again on the next laptop.
 
 `docker-compose` handles the _containers_. Corgi handles everything around them too: the repos, the seeded data, the env wiring, the tools you need. Your databases run in Docker; your services run as normal processes (`go run .`, `yarn dev`). One file, one command — and it keeps paying off long after setup, because it's also how you run the stack from then on.
 
+In practice, a real multi-repo stack — backend, frontend, and a mobile app — can eat **more than a day** of cloning and debugging setup by hand. With corgi that drops to **~an hour** the first time someone uses it, and **~10 minutes** on the next project once they know the tool. And when you come back to a project months later and can't remember how to run it, the answer is just `corgi run` — no per-project setup scripts to write or keep alive.
+
 ## What corgi does for you
 
 - **Your repos** — Corgi clones each service from its Git URL the first time you run. It can also pull them all at once, fork them, or run one service on a branch in a throwaway worktree — without disturbing the checkout you're working in.
 - **Your databases** — 38 ready-to-go drivers. Corgi starts them in Docker and **seeds** them from a dump or a remote DB, so you get real data instead of an empty schema. Open a shell with `corgi db shell` and the password is already filled in. Need AWS or Supabase locally? LocalStack and Supabase come up from the same file.
-- **Your services** — Everything starts together, in the right order, with env vars already wired between them. Press `Ctrl-C` and it all winds down cleanly. Prefer the background? `corgi run -d`, then check on it with `corgi ps`.
+- **Your services** — Everything starts together with the env vars already wired between them. They boot in parallel by default; when one genuinely needs another up first, gate it with `condition: ready` on the dependency (or `--gate-deps` for all of them). Press `Ctrl-C` and it all winds down cleanly. Prefer the background? `corgi run -d`, then check on it with `corgi ps`.
 - **The fiddly bits** — A preflight that catches missing tools and busy ports _before_ they bite (`corgi doctor`), live health (`corgi status -w`), public HTTPS URLs for webhook testing (`corgi tunnel`), saved logs, and a desktop ping when something crashes.
 - **Made for AI agents** — it speaks clean JSON, returns exit codes an agent can branch on, runs an MCP server, and ships a Claude Code plugin that turns a pile of tickets into draft PRs (and reviews them for you).
 
@@ -129,11 +146,15 @@ services:
     start:
       - yarn dev
 
-required:                                   # checked by `corgi doctor` before run
+required:                                   # corgi doctor checks these; --fix installs them
   docker:
     checkCmd: docker -v
   go:
+    why:
+      - Build and run the api
     checkCmd: go version
+    install:
+      - brew install go
 ```
 
 Run `corgi run` and it clones anything missing, starts Postgres in Docker and seeds it, writes the `.env` files (and sources them for you — no boilerplate), then runs `api` and `web` together. `Ctrl-C` shuts it all back down and runs any cleanup steps.
@@ -144,7 +165,9 @@ Want to see every field? Run `corgi docs`, or browse the [examples repo](https:/
 
 The examples use public repos. Real projects have private repos, prerequisites, and first-run hiccups — here's the honest version.
 
-**What you need:** `git`, and Docker (only if you declare `db_services`). Everything else is whatever your project lists under `required:` — `corgi doctor` checks those, and `corgi doctor --fix` can install them by running the `install:` commands you put in the file. Homebrew is just one way to install corgi, not a requirement.
+**What you need:** `git`, and Docker (only if you declare `db_services`). Everything else lives in your project's `required:` block. Homebrew is just one way to install corgi itself, not a requirement.
+
+That `required:` block is more than a checklist — it's a committed, runnable record of everything the project needs. Each entry has `why:` (so teammates know what it's for), `checkCmd:` (how to verify it — check a specific version here if you want), and `install:` (the commands to get it). `install:` runs whatever it takes: a `brew install`, a `pyenv`/`rbenv` install to pin Python 3.12 or Ruby 3.4, a native lib, a cert via `mkcert -install`. `corgi doctor` runs every `checkCmd`; `corgi doctor --fix` runs the `install:` steps for you — so "what do I need installed?" is answered in the file, not a wiki.
 
 **Private repos just work.** corgi clones with plain `git`, so your existing SSH keys or credential helper are used as-is — private GitHub/GitLab services clone fine if your `git` is already set up. There's no corgi-specific auth to configure.
 
@@ -155,10 +178,13 @@ The examples use public repos. Real projects have private repos, prerequisites, 
 - _Missing tool, or Docker not running_ — `corgi doctor --fix`.
 - _A clone failed_ — you don't have git access to that repo yet; fix your SSH/token and re-run.
 - _Seeding failed_ — check the `seedFromFilePath` path and that the dump matches the driver.
+- _Want a clean slate?_ `corgi stop` tears down a detached run; `corgi clean -i db,corgi_services` drops the databases and generated files (add `services` to also remove the cloned repos).
 
 ### Secrets & env files
 
 corgi writes each service's `.env` for you — DB host/port/credentials, sibling-service URLs — and sources it before your commands run. On first init it also adds `.env*` and `corgi_services/*` to your project's `.gitignore`, so **generated env files and any secrets in them never get committed**. Your own secrets (API keys, tokens) go in a service's env or a tier file like `env/staging/web.env` — also gitignored, also staying on your machine. The `corgi-compose.yml` itself holds config, not secrets, so it's safe to commit and share.
+
+**What gets wired.** A `depends_on_db` edge writes the database's connection vars — for Postgres that's `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`; other drivers use their own prefix (`REDIS_`, `MYSQL_`, `MONGO_`, …), and `envAlias:` renames it (`envAlias: DATABASE` → `DATABASE_HOST`, …). A `depends_on_services` edge writes `<SERVICE>_URL` (e.g. `API_URL=http://localhost:7012`). Run `corgi env <service>` to see the exact, fully-resolved set a service will get, and where each value came from.
 
 **Low lock-in:** your services stay ordinary git repos, your databases are standard Docker images (corgi even writes a plain `docker-compose.yml` per database under `corgi_services/db_services/`), and the wiring is just `.env` files. Stop using corgi and you keep all of it.
 
@@ -290,9 +316,20 @@ Now Claude recognizes any project with a `corgi-compose.yml` and reaches for rea
 
 Both wait for your go-ahead and only ever open **draft** PRs — they never merge or ship on their own. Two more helpers round things out: **`/corgi-new`** scaffolds a fresh `corgi-compose.yml` from a quick chat, and **`/corgi-describe`** writes a service map with a Mermaid diagram.
 
+## How it compares
+
+The honest version of "why not just use X":
+
+- **vs `docker-compose`** — Compose runs containers; that's where it stops. corgi runs your whole inner loop: it clones the repos, runs and seeds the databases (it even generates a real `docker-compose.yml` per database under the hood), wires the env between services, checks your tools, and runs your services as ordinary host processes — so you keep your usual debugger and hot-reload. The two coexist fine.
+- **vs Tilt / Skaffold** — Great when your inner loop is Kubernetes and you want live container rebuilds. corgi deliberately keeps your services out of containers — no image rebuild between edits — so it's lighter for a "repos + databases + processes" stack, and not the tool if you genuinely need k8s.
+- **vs Procfile runners (foreman / overmind)** — They start a list of processes. corgi does that _and_ the repos, databases, seeding, env wiring, and tool checks around them.
+- **vs devcontainers / Nix** — They pin a stricter, fully reproducible environment at the OS level. corgi's `required:` block installs and verifies the exact tools each service needs — a pinned `pyenv`/`rbenv` version, native libs, certs — without the container or Nix buy-in. Lighter, though not full OS isolation.
+
+**What corgi isn't:** a deploy tool. It runs and tests your stack locally — shipping to staging/prod stays with your CI/CD (you test with corgi, then deploy as usual). It's also not the fit if your dev loop must run _inside_ Kubernetes, or if you want a fully sandboxed, OS-level environment (devcontainers/Nix territory).
+
 ## Security & scope
 
-corgi is a **local inner-loop tool** — for running your stack on your own machine, not for staging, production, or deploys.
+corgi runs your stack on your own machine — the local inner loop. It doesn't deploy or build production artifacts (that's your CI/CD pipeline's job), though it _can_ point local services at a staging or prod environment via env tiers.
 
 - A `corgi-compose.yml` runs its `beforeStart` / `start` commands on your machine, so only run files you trust — especially `corgi run -t <url>`, which downloads and runs a remote one.
 - `corgi doctor --fix` starts Docker for you automatically, but **installing a tool or killing a port-holding process always asks first** (or needs `--yes` in CI).
@@ -327,7 +364,7 @@ No Homebrew? This one-liner grabs the right binary for your OS/arch from GitHub 
 curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh
 ```
 
-Installs to `/usr/local/bin` if it can, otherwise `~/.local/bin` (and adds it to your PATH for zsh/bash/fish).
+It verifies the release's sha256 checksum before installing, to `/usr/local/bin` if it can, otherwise `~/.local/bin` (and adds it to your PATH for zsh/bash/fish).
 
 A few optional overrides:
 
