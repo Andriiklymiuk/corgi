@@ -36,19 +36,16 @@ brew install andriiklymiuk/homebrew-tools/corgi
 corgi run -l      # browse runnable examples, pick one to try
 ```
 
-Here's what `corgi run` does, end to end:
+Here's what `corgi run` does, end to end — one file in, whole stack out:
 
-```mermaid
-flowchart LR
-    F["corgi-compose.yml<br/>(one committed file)"] --> R(["corgi run"])
-    R --> C["clone missing repos"]
-    R --> DB["start and seed<br/>databases in Docker"]
-    R --> ENV["write and wire .env<br/>between services"]
-    R --> SVC["run services as<br/>host processes"]
-    C --> OUT["whole stack running 🐶"]
-    DB --> OUT
-    ENV --> OUT
-    SVC --> OUT
+```text
+corgi-compose.yml  ─►  corgi run
+                         ├─ clone missing repos
+                         ├─ start + seed databases (in Docker)
+                         ├─ write + wire .env between services
+                         └─ run services as host processes
+                                    ↓
+                         whole stack running 🐶   (Ctrl-C tears it all down)
 ```
 
 ## Why corgi?
@@ -289,7 +286,7 @@ By default it uses [Cloudflare Quick Tunnels](https://developers.cloudflare.com/
 
 ## AI agents, MCP & Claude Code
 
-corgi is meant to be driven by AI agents and CI, not just typed by hand. It notices when it's running in an agent or pipeline and never blocks on a prompt, prints clean JSON with `--json`, and returns predictable exit codes (`0` ok, `1` failed, `2` bad usage) plus a documented [error-code list](docs/agents.md) — so a tool can read what happened and react. There are quiet, scriptable entry points too: `corgi env` (the exact env a service will see, and where each value came from), `corgi exec`, `corgi test`, and `corgi run --dry-run --json` to preview a run without touching anything. Full guide: [docs/agents.md](docs/agents.md).
+corgi is meant to be driven by AI agents and CI, not just typed by hand. It's a small single Go binary — no daemon, no runtime to install — that notices when it's running in an agent or pipeline and never blocks on a prompt, prints clean JSON with `--json`, and returns predictable exit codes (`0` ok, `1` failed, `2` bad usage) plus a documented [error-code list](docs/agents.md) — so a tool can read what happened and react. That same non-interactive contract is exactly what a CI job needs, so it's light to drop into one. There are quiet, scriptable entry points too: `corgi env` (the exact env a service will see, and where each value came from), `corgi exec`, `corgi test`, and `corgi run --dry-run --json` to preview a run without touching anything. Full guide: [docs/agents.md](docs/agents.md).
 
 ### MCP server
 
@@ -323,7 +320,7 @@ The honest version of "why not just use X":
 - **vs `docker-compose`** — Compose runs containers; that's where it stops. corgi runs your whole inner loop: it clones the repos, runs and seeds the databases (it even generates a real `docker-compose.yml` per database under the hood), wires the env between services, checks your tools, and runs your services as ordinary host processes — so you keep your usual debugger and hot-reload. The two coexist fine.
 - **vs Tilt / Skaffold** — Great when your inner loop is Kubernetes and you want live container rebuilds. corgi deliberately keeps your services out of containers — no image rebuild between edits — so it's lighter for a "repos + databases + processes" stack, and not the tool if you genuinely need k8s.
 - **vs Procfile runners (foreman / overmind)** — They start a list of processes. corgi does that _and_ the repos, databases, seeding, env wiring, and tool checks around them.
-- **vs devcontainers / Nix** — They pin a stricter, fully reproducible environment at the OS level. corgi's `required:` block installs and verifies the exact tools each service needs — a pinned `pyenv`/`rbenv` version, native libs, certs — without the container or Nix buy-in. Lighter, though not full OS isolation.
+- **vs devcontainers / Nix** — These give you a more isolated, prebuilt environment — Nix in particular is fully hermetic. corgi takes the opposite bet: it runs on your real machine with your real tools, debugger, and hot-reload, and its `required:` block still installs and pins exactly what each service needs (a `pyenv`/`rbenv` version, native libs, certs). Simpler to live in day to day; it's not a hermetic sandbox, by design.
 
 **What corgi isn't:** a deploy tool. It runs and tests your stack locally — shipping to staging/prod stays with your CI/CD (you test with corgi, then deploy as usual). It's also not the fit if your dev loop must run _inside_ Kubernetes, or if you want a fully sandboxed, OS-level environment (devcontainers/Nix territory).
 
