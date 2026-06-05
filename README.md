@@ -26,6 +26,13 @@ corgi is how you run your project locally — every day, with one command. You d
 
 Onboarding falls out for free: hand a teammate the same file and they go from nothing to a running stack in minutes — no setup call, no digging through old READMEs, no "works on my machine". And because corgi never blocks on a prompt and speaks plain JSON, an AI agent or a CI job can drive it exactly the way you do.
 
+Install it and take a ready-made example for a spin:
+
+```bash
+brew install andriiklymiuk/homebrew-tools/corgi
+corgi run -l      # browse runnable examples, pick one to try
+```
+
 ## Why corgi?
 
 Wiring up a multi-service project by hand is the same slog every time — joining a team, setting up a new laptop, or starting a fresh repo. You end up having to:
@@ -44,7 +51,7 @@ That's most of a day gone — and it breaks again on the next laptop.
 ## What corgi does for you
 
 - **Your repos** — Corgi clones each service from its Git URL the first time you run. It can also pull them all at once, fork them, or run one service on a branch in a throwaway worktree — without disturbing the checkout you're working in.
-- **Your databases** — 40+ ready-to-go drivers. Corgi starts them in Docker and **seeds** them from a dump or a remote DB, so you get real data instead of an empty schema. Open a shell with `corgi db shell` and the password is already filled in. Need AWS or Supabase locally? LocalStack and Supabase come up from the same file.
+- **Your databases** — 35+ ready-to-go drivers. Corgi starts them in Docker and **seeds** them from a dump or a remote DB, so you get real data instead of an empty schema. Open a shell with `corgi db shell` and the password is already filled in. Need AWS or Supabase locally? LocalStack and Supabase come up from the same file.
 - **Your services** — Everything starts together, in the right order, with env vars already wired between them. Press `Ctrl-C` and it all winds down cleanly. Prefer the background? `corgi run -d`, then check on it with `corgi ps`.
 - **The fiddly bits** — A preflight that catches missing tools and busy ports _before_ they bite (`corgi doctor`), live health (`corgi status -w`), public HTTPS URLs for webhook testing (`corgi tunnel`), saved logs, and a desktop ping when something crashes.
 - **Made for AI agents** — Predictable JSON and exit codes, an MCP server, and a Claude Code plugin that takes a pile of tickets and ships them as draft PRs — then reviews them for you.
@@ -137,12 +144,13 @@ Want to see every field? Run `corgi docs`, or browse the [examples repo](https:/
 In `services` you can run anything you like. In `db_services`, corgi ships managed drivers that handle the container, seeding, a native shell, and env vars for you. A couple are whole stacks rather than single containers — `localstack` stands up a fleet of AWS services, and `supabase` brings up auth, storage, and studio — all from the same file.
 
 <details>
-<summary><strong>40+ database & infra drivers</strong> (click to expand)</summary>
+<summary><strong>35+ database & infra drivers</strong> (click to expand)</summary>
 
 - [postgres](https://www.postgresql.org), [example](https://github.com/Andriiklymiuk/corgi_examples/tree/main/postgres)
 - [mongodb](https://www.mongodb.com), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/mongodb/mongodb-go.corgi-compose.yml)
 - [rabbitmq](https://www.rabbitmq.com), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/rabbitmq/rabbitmq-go-nestjs.corgi-compose.yml)
-- [aws sqs](https://docs.localstack.cloud/user-guide/aws/sqs/), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/aws_sqs/aws_sqs_postgres_go_deno.corgi-compose.yml)
+- [sqs](https://docs.localstack.cloud/user-guide/aws/sqs/) — local AWS SQS, [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/aws_sqs/aws_sqs_postgres_go_deno.corgi-compose.yml)
+- [s3](https://docs.localstack.cloud/user-guide/aws/s3/) — local AWS S3 buckets
 - [redis](https://redis.io), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/redis/redis-bun-expo.corgi-compose.yml)
 - [redis-server](https://redis.io)
 - [mysql](https://www.mysql.com)
@@ -151,7 +159,7 @@ In `services` you can run anything you like. In `db_services`, corgi ships manag
 - [kafka](https://kafka.apache.org)
 - [mssql](https://www.microsoft.com/en-us/sql-server/sql-server-downloads)
 - [cassandra](https://cassandra.apache.org/_/index.html)
-- [cockroachDb](https://www.cockroachlabs.com)
+- [cockroach](https://www.cockroachlabs.com)
 - [clickhouse](https://clickhouse.com)
 - [scylla](https://www.scylladb.com)
 - [keydb](https://docs.keydb.dev)
@@ -347,7 +355,7 @@ Brew installs `_corgi` (zsh), `corgi.bash`, `corgi.fish` automatically. After th
 - `corgi run --dbServices <TAB>` → db_services
 - `corgi script -n <TAB>` → script names per service (filters by `--services` if set)
 - `corgi tunnel <TAB>` → tunnelable services
-- `corgi clean -i <TAB>`, `--provider`, `--omit`, `--dockerContext`, `--fromTemplateName` — also wired
+- `corgi clean -i <TAB>` → clean targets — and completions are wired for `corgi tunnel --provider`, `corgi run --omit`, and the global `--dockerContext` / `--fromTemplateName` too
 
 **zsh users — if `<TAB>` shows files instead of names**, your shell isn't loading brew's site-functions dir. One-time fix in `~/.zshrc` (works for every brew CLI, not just corgi):
 
