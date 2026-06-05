@@ -25,7 +25,7 @@
 
 </div>
 
-corgi is how you run your project locally — every day, with one command. You describe the stack once in a `corgi-compose.yml`, and `corgi run` brings the whole thing up: repos cloned, databases seeded, `.env` files written, every service started. It even starts Docker for you, so the infra just happens and you stop thinking about it.
+Corgi is how you run your project locally — every day, with one command. You describe the stack once in a `corgi-compose.yml`, and `corgi run` brings the whole thing up: repos cloned, databases seeded, `.env` files written, every service started. It even starts Docker for you, so the infra just happens and you stop thinking about it.
 
 Onboarding falls out for free: hand a teammate the same file and they go from nothing to a running stack in minutes — no setup call, no digging through old READMEs, no "works on my machine". And because corgi never blocks on a prompt and speaks plain JSON, an AI agent or a CI job can drive it exactly the way you do.
 
