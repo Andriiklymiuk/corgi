@@ -3,7 +3,7 @@
 
   # 🐶 CORGI 🐶
 
-  **One file to run your whole local stack — repos cloned, databases seeded, env wired, every service up. Friendly to humans and AI agents alike.**
+  **Run your whole local stack from one file — repos, databases, env, every service. And let AI agents ship and review work across it.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
@@ -47,6 +47,8 @@ corgi-compose.yml  ─►  corgi run
                                     ↓
                          whole stack running 🐶   (Ctrl-C tears it all down)
 ```
+
+That's the _running_ side. corgi works the other direction too: because it already knows how your services fit together, its Claude Code plugin lets an agent **build across the stack** — hand it a few tickets and `/corgi:stories` ships them as draft PRs across your services, while `/corgi:review` reviews them with inline suggestions ([more below](#ai-agents-mcp--claude-code)).
 
 ## Why corgi?
 
