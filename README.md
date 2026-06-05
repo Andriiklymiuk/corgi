@@ -51,10 +51,10 @@ That's most of a day gone — and it breaks again on the next laptop.
 ## What corgi does for you
 
 - **Your repos** — Corgi clones each service from its Git URL the first time you run. It can also pull them all at once, fork them, or run one service on a branch in a throwaway worktree — without disturbing the checkout you're working in.
-- **Your databases** — 35+ ready-to-go drivers. Corgi starts them in Docker and **seeds** them from a dump or a remote DB, so you get real data instead of an empty schema. Open a shell with `corgi db shell` and the password is already filled in. Need AWS or Supabase locally? LocalStack and Supabase come up from the same file.
+- **Your databases** — 38 ready-to-go drivers. Corgi starts them in Docker and **seeds** them from a dump or a remote DB, so you get real data instead of an empty schema. Open a shell with `corgi db shell` and the password is already filled in. Need AWS or Supabase locally? LocalStack and Supabase come up from the same file.
 - **Your services** — Everything starts together, in the right order, with env vars already wired between them. Press `Ctrl-C` and it all winds down cleanly. Prefer the background? `corgi run -d`, then check on it with `corgi ps`.
 - **The fiddly bits** — A preflight that catches missing tools and busy ports _before_ they bite (`corgi doctor`), live health (`corgi status -w`), public HTTPS URLs for webhook testing (`corgi tunnel`), saved logs, and a desktop ping when something crashes.
-- **Made for AI agents** — Predictable JSON and exit codes, an MCP server, and a Claude Code plugin that takes a pile of tickets and ships them as draft PRs — then reviews them for you.
+- **Made for AI agents** — it speaks clean JSON, returns exit codes an agent can branch on, runs an MCP server, and ships a Claude Code plugin that turns a pile of tickets into draft PRs (and reviews them for you).
 
 ## In your day-to-day
 
@@ -144,7 +144,7 @@ Want to see every field? Run `corgi docs`, or browse the [examples repo](https:/
 In `services` you can run anything you like. In `db_services`, corgi ships managed drivers that handle the container, seeding, a native shell, and env vars for you. A couple are whole stacks rather than single containers — `localstack` stands up a fleet of AWS services, and `supabase` brings up auth, storage, and studio — all from the same file.
 
 <details>
-<summary><strong>35+ database & infra drivers</strong> (click to expand)</summary>
+<summary><strong>38 database & infra drivers</strong> (click to expand)</summary>
 
 - [postgres](https://www.postgresql.org), [example](https://github.com/Andriiklymiuk/corgi_examples/tree/main/postgres)
 - [mongodb](https://www.mongodb.com), [example](https://github.com/Andriiklymiuk/corgi_examples/blob/main/mongodb/mongodb-go.corgi-compose.yml)
