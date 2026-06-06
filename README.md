@@ -48,7 +48,7 @@ corgi-compose.yml  ─►  corgi run
                          whole stack running 🐶   (Ctrl-C tears it all down)
 ```
 
-That's the _running_ side. corgi works the other direction too: because it already knows how your services fit together, its Claude Code plugin lets an agent **build across the stack** — hand it a few tickets and `/corgi:stories` ships them as draft PRs across your services, while `/corgi:review` reviews them with inline suggestions ([more below](#ai-agents-mcp--claude-code)).
+That's the _running_ side. corgi works the other direction too: because it already knows how your services fit together, its [Claude Code plugin](#ai-agents-mcp--claude-code) lets an agent **build across the stack** — turning a pile of tickets into draft PRs and reviewing them for you.
 
 ## Why corgi?
 
@@ -77,9 +77,9 @@ In practice, a real multi-repo stack — backend, frontend, and a mobile app —
 
 ## In your day-to-day
 
-corgi isn't a one-time setup tool you forget about — it's how you run the project, in whatever shape the day calls for:
+corgi flexes to whatever the day calls for:
 
-- **The whole stack, one command.** `corgi run` brings up every database and service together — and starts Docker for you if it isn't running, so there's no "wait, is Docker up?" dance. Need AWS or a backend locally? LocalStack and Supabase stand in, so there's no VPN or shared environment to wrestle with.
+- **The whole stack.** `corgi run` brings up every database and service together.
 - **Just the databases.** Running a service straight from your IDE or debugger? `corgi db -u` brings the databases up on their own and leaves the rest to you.
 - **Local, staging, or a mix.** Define an env tier once — a folder of per-service env files, plus whether to skip the local databases:
   ```yml
@@ -94,10 +94,10 @@ corgi isn't a one-time setup tool you forget about — it's how you run the proj
   corgi run --tier staging --services web    # only the web app, talking to staging
   ```
   (A tier can also set `confirm: true` to prompt before you run against a sensitive one.)
-- **New project? Start with corgi.** The first thing to do in a fresh repo is write a `corgi-compose.yml` — `corgi create` or `/corgi-new` gets you one in a minute — so "how do I run this?" has a permanent answer.
-- **Let Claude plan the work.** Drop a few tickets into `/corgi:stories` and Claude plans the feature across your services, back to front, and opens a draft PR for each.
+- **A new project.** The first thing to do in a fresh repo is write a `corgi-compose.yml` — `corgi create` or `/corgi-new` gets you one in a minute — so "how do I run this?" has a permanent answer.
+- **Hand work to Claude.** Drop a few tickets into `/corgi:stories` and Claude plans the feature across your services and opens a draft PR for each ([more below](#ai-agents-mcp--claude-code)).
 
-The point isn't any single command — it's that you stop babysitting infrastructure. No "is Docker running?", no VPN to a shared environment, no stale `.env`, no five terminal tabs in the right order. You run one thing and get back to building.
+The point isn't any single command — it's that you stop babysitting infrastructure and get back to building.
 
 ## Quick start
 
@@ -322,13 +322,13 @@ The honest version of "why not just use X":
 - **vs `docker-compose`** — Compose runs containers; that's where it stops. corgi runs your whole inner loop: it clones the repos, runs and seeds the databases (it even generates a real `docker-compose.yml` per database under the hood), wires the env between services, checks your tools, and runs your services as ordinary host processes — so you keep your usual debugger and hot-reload. The two coexist fine.
 - **vs Tilt / Skaffold** — Great when your inner loop is Kubernetes and you want live container rebuilds. corgi deliberately keeps your services out of containers — no image rebuild between edits — so it's lighter for a "repos + databases + processes" stack, and not the tool if you genuinely need k8s.
 - **vs Procfile runners (foreman / overmind)** — They start a list of processes. corgi does that _and_ the repos, databases, seeding, env wiring, and tool checks around them.
-- **vs devcontainers / Nix** — These give you a more isolated, prebuilt environment — Nix in particular is fully hermetic. corgi takes the opposite bet: it runs on your real machine with your real tools, debugger, and hot-reload, and its `required:` block still installs and pins exactly what each service needs (a `pyenv`/`rbenv` version, native libs, certs). Simpler to live in day to day; it's not a hermetic sandbox, by design.
+- **vs devcontainers / Nix** — These give you a more isolated, prebuilt environment — Nix in particular is fully hermetic. corgi takes the opposite bet: it runs on your real machine with your real tools, and its `required:` block still installs and pins exactly what each service needs (a `pyenv`/`rbenv` version, native libs, certs). Simpler to live in day to day; it's not a hermetic sandbox, by design.
 
 **What corgi isn't:** a deploy tool. It runs and tests your stack locally — shipping to staging/prod stays with your CI/CD (you test with corgi, then deploy as usual). It's also not the fit if your dev loop must run _inside_ Kubernetes, or if you want a fully sandboxed, OS-level environment (devcontainers/Nix territory).
 
 ## Security & scope
 
-corgi runs your stack on your own machine — the local inner loop. It doesn't deploy or build production artifacts (that's your CI/CD pipeline's job), though it _can_ point local services at a staging or prod environment via env tiers.
+corgi runs your stack on your own machine — the local inner loop — and can point local services at a staging or prod environment via env tiers. A few things worth knowing:
 
 - A `corgi-compose.yml` runs its `beforeStart` / `start` commands on your machine, so only run files you trust — especially `corgi run -t <url>`, which downloads and runs a remote one.
 - `corgi doctor --fix` starts Docker for you automatically, but **installing a tool or killing a port-holding process always asks first** (or needs `--yes` in CI).
