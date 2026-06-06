@@ -169,6 +169,21 @@ Common patterns:
 - Live monitor: `corgi status --watch`.
 - Pipeline: `corgi status --json | jq '.[] | select(.healthy==false)'`.
 
+### `corgi ps` (alias: `processes`)
+
+Runtime snapshot of a detached run. Reads + reconciles + persists
+`corgi_services/.state.json`, falling back to a port probe where only a port is known.
+
+- `--json` — array of rows: `{name, kind, port, status, url, startedAt}`. `port`,
+  `url`, `startedAt` are `omitempty` (absent when zero). `startedAt` (RFC3339) gives
+  uptime (`now − startedAt`); a service that never spawned is absent from the array.
+- `status` reflects PID/container existence, **not** live readiness — use
+  `corgi status` for the live TCP/HTTP probe. db_services go `running`/`stopped` only
+  (never `crashed`).
+- Docker-runner (pid 0) services are confirmed by a port probe; a container still
+  booting (port not yet listening) keeps its status for a short grace, then a closed
+  port marks it `stopped`.
+
 ### `corgi tunnel [services]`
 
 Open public HTTPS tunnels to declared services. Default provider `cloudflared` (Cloudflare Quick Tunnels — free, no signup). Spawns one subprocess per target, prints URLs as they appear, blocks until Ctrl+C.

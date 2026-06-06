@@ -122,9 +122,11 @@ service(s) before speccing:
 
 Described feature = usually **Feature tier**: `superpowers:brainstorming` (or
 inline Q&A) to settle scope → `superpowers:writing-plans` for the spec. After
-sign-off (Phase 2), **offer to create a tracker issue** (Linear `save_issue` /
-Jira `createJiraIssue`) for a key + auto-link; declined → spec stays local + on
-PR, branch drops the key segment (Phase 3).
+sign-off (Phase 2), **offer to create a tracker issue** (Linear `mcp__linear-server__create_issue` /
+Jira `mcp__atlassian__createJiraIssue`) for a key + auto-link; declined → spec stays local + on
+PR, branch drops the key segment (Phase 3). **A caller (e.g. the `suggest` skill)
+that already created the issue and hands you its key + spec → use that key, don't
+re-create the issue.**
 
 ### Investigate once — don't re-research
 
@@ -138,6 +140,10 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
    re-explore.
 4. **Reuse ledger** — shared components/contracts recorded once; stories cite,
    don't re-derive.
+5. **Need runtime/deployed data** to resolve a story (a staging/prod error, a
+   request trace, logs you can't get locally)? Invoke the **`debug`** skill (Step 4 —
+   provider data) and fold its findings into the investigation note; don't hand off
+   the whole flow.
 
 ### Write the spec — every story
 
@@ -152,7 +158,7 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
 
 - **Actionable → post.**
   - **Spec → a comment** on the issue (human-readable, not a `.md` attachment).
-    Linear `save_comment({ issueId, body })`; Jira `addCommentToJiraIssue`.
+    Linear `mcp__linear-server__create_comment({ issueId, body })`; Jira `mcp__atlassian__addCommentToJiraIssue`.
     Literal newlines / markdown; re-run with the returned comment id to update,
     not duplicate.
   - **What to test → a separate comment** (non-engineer reads inline). Plain QA:

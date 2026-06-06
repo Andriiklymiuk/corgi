@@ -8,7 +8,7 @@ description: How to invoke `corgi run` (and other long-running corgi commands li
 Two shapes:
 
 - **Foreground** `corgi run` / `corgi tunnel` — block indefinitely, stream logs, watch the compose file. Synchronous in a Bash call → agent hangs until the 10-min timeout. Background them, OR prefer `--detach`.
-- **Detached** `corgi run --detach` — starts services in process groups that outlive corgi, persists state, returns immediately. The modern, agent-friendly path. Pairs with `corgi ps` / `corgi stop` / `corgi restart` / `corgi logs`.
+- **Detached** `corgi run --detach` — starts services in process groups that outlive corgi, persists state, and returns once each service's `beforeStart` completes and the processes are spawned (immediate when `beforeStart` is cached/warm; **minutes on a cold first run** — clones, installs, migrations). The modern, agent-friendly path. Pairs with `corgi ps` / `corgi stop` / `corgi restart` / `corgi logs`.
 
 For agents: KillShell still works for a backgrounded foreground run, but `--detach` + `corgi stop` is cleaner — no orphaned shell, survives across sessions, and `corgi ps` gives real status.
 
@@ -24,7 +24,7 @@ corgi stop                  # tear it all down
 ### `corgi run --detach` / `-d`
 
 - Each service → its own detached process group that survives corgi exiting.
-- Persists run-state to `corgi_services/.state.json`, prints a startup summary (JSON with `--json`), returns immediately. No streaming, no watch.
+- Persists run-state to `corgi_services/.state.json`, prints a startup summary (JSON with `--json`), and returns once `beforeStart` completes and services are spawned — immediate when warm, **minutes on a cold first run**. No streaming, no watch.
 - `--tunnel` cannot combine with `--detach` (tunnels run in-process) — run `corgi tunnel` separately.
 
 Use this instead of `Bash(corgi run, run_in_background: true)` + KillShell.

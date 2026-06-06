@@ -6,16 +6,18 @@ import (
 	"os"
 	"sort"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 )
 
 type psRow struct {
-	Name   string `json:"name"`
-	Kind   string `json:"kind"`
-	Port   int    `json:"port,omitempty"`
-	Status string `json:"status"`
-	URL    string `json:"url,omitempty"`
+	Name      string     `json:"name"`
+	Kind      string     `json:"kind"`
+	Port      int        `json:"port,omitempty"`
+	Status    string     `json:"status"`
+	URL       string     `json:"url,omitempty"`
+	StartedAt *time.Time `json:"startedAt,omitempty"`
 }
 
 var psCmd = &cobra.Command{
@@ -70,7 +72,44 @@ func psRowFromEntry(e utils.RunStateEntry) psRow {
 	if e.Port != 0 {
 		row.URL = fmt.Sprintf("http://localhost:%d", e.Port)
 	}
+	if !e.StartedAt.IsZero() {
+		t := e.StartedAt
+		row.StartedAt = &t
+	}
 	return row
+}
+
+// dockerRunnerBootGrace: a container-backed service whose port isn't listening yet
+// may still be booting. Don't demote it to "stopped" within this window of start.
+const dockerRunnerBootGrace = 15 * time.Second
+
+// probeDockerRunnerServices confirms pid==0 (container-backed / docker-runner)
+// service entries by a port probe. Reconcile can't pid-track them, so without this a
+// service whose container has died lingers as a stale "running". A not-yet-listening
+// container within dockerRunnerBootGrace of start is left as-is (still booting);
+// after that a closed port marks it "stopped". On a real status change StatusChangedAt
+// is advanced (same invariant as ReconcileRunState). db_services keep their own
+// container-state reconciliation.
+func probeDockerRunnerServices(st utils.RunState, probe func(port int) bool, now time.Time) utils.RunState {
+	for i := range st.Services {
+		e := &st.Services[i]
+		if e.PID != 0 || e.Port == 0 {
+			continue
+		}
+		listening := probe(e.Port)
+		if !listening && !e.StartedAt.IsZero() && now.Sub(e.StartedAt) < dockerRunnerBootGrace {
+			continue // freshly started; port may not be open yet
+		}
+		newStatus := "stopped"
+		if listening {
+			newStatus = "running"
+		}
+		if newStatus != e.Status {
+			e.Status = newStatus
+			e.StatusChangedAt = now
+		}
+	}
+	return st
 }
 
 func makePsRow(name, kind string, port int, probe func(port int) bool) psRow {
@@ -104,6 +143,7 @@ func runPs(cmd *cobra.Command, _ []string) {
 		st, rerr := utils.ReadRunState(statePath)
 		if rerr == nil {
 			reconciled := utils.ReconcileRunState(st, utils.PidAlive, utils.ContainerRunning)
+			reconciled = probeDockerRunnerServices(reconciled, utils.IsPortListening, time.Now().UTC())
 			_ = utils.WriteRunState(statePath, reconciled)
 			rows = psRowsFromState(reconciled)
 		}

@@ -1,6 +1,6 @@
 ---
 name: corgi
-description: Author corgi-compose.yml files, run and debug corgi projects. Use when a corgi-compose.yml is present, when the user mentions corgi (the CLI tool), or when the user asks to start a multi-service project that uses corgi. Corgi is a Go CLI (`brew install andriiklymiuk/homebrew-tools/corgi`) that spins up databases, services, and required tools from one yml file — think docker-compose for services plus databases plus tool checks.
+description: Author and explain corgi-compose.yml files and the corgi CLI. Use when writing or editing a corgi-compose.yml, picking db drivers / healthchecks / tunnels, or explaining corgi concepts, commands, and flags. Corgi is a Go CLI (`brew install andriiklymiuk/homebrew-tools/corgi`) that spins up databases, services, and required tools from one yml file — think docker-compose for services plus databases plus tool checks. NOT for starting a stack (use the run skill) or diagnosing a broken one (use the debug skill).
 ---
 
 # Corgi
