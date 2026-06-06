@@ -81,6 +81,7 @@ corgi flexes to whatever the day calls for:
 
 - **The whole stack.** `corgi run` brings up every database and service together.
 - **Just the databases.** Running a service straight from your IDE or debugger? `corgi db -u` brings the databases up on their own and leaves the rest to you.
+- **A phone or another device on your LAN.** `corgi run --host auto` puts your machine's LAN IP into the service-URL env vars instead of `localhost`, so a real device or simulator can reach your dev API (pass an explicit IP instead of `auto` if you prefer). Databases stay on `localhost`.
 - **Local, staging, or a mix.** Define an env tier once — a folder of per-service env files, plus whether to skip the local databases:
   ```yml
   envTiers:
@@ -164,7 +165,7 @@ Want to see every field? Run `corgi docs`, or browse the [examples repo](https:/
 
 The examples use public repos. Real projects have private repos, prerequisites, and first-run hiccups — here's the honest version.
 
-**What you need:** `git`, and Docker (only if you declare `db_services`). Everything else lives in your project's `required:` block. Homebrew is just one way to install corgi itself, not a requirement.
+**What you need:** `git`, and Docker (only if you declare `db_services`). Everything else lives in your project's `required:` block. Homebrew is just one way to install corgi itself, not a requirement. corgi runs on macOS, Linux, and Windows (PowerShell or WSL), so a mixed-OS team shares the same `corgi-compose.yml`.
 
 That `required:` block is more than a checklist — it's a committed, runnable record of everything the project needs. Each entry has `why:` (so teammates know what it's for), `checkCmd:` (how to verify it — check a specific version here if you want), and `install:` (the commands to get it). `install:` runs whatever it takes: a `brew install`, a `pyenv`/`rbenv` install to pin Python 3.12 or Ruby 3.4, a native lib, a cert via `mkcert -install`. `corgi doctor` runs every `checkCmd`; `corgi doctor --fix` runs the `install:` steps for you — so "what do I need installed?" is answered in the file, not a wiki.
 
@@ -245,7 +246,7 @@ In `services` you can run anything you like. In `db_services`, corgi ships manag
 
 This is the part `docker-compose` leaves to you. Corgi treats your repos as part of the stack:
 
-- **Auto-clone** — a service with `cloneFrom:` is cloned the first time its folder is missing.
+- **Auto-clone** — a service with `cloneFrom:` is cloned the first time its folder is missing. `cloneFrom:` is optional — a service with just a `path:` (a monorepo subfolder, or a repo you keep checked out yourself) is used in place, no cloning. Mix both freely in one file.
 - **`corgi pull`** — `git pull` everything at once, including nested corgi projects.
 - **`corgi fork`** — fork the cloned repos to your own GitHub/GitLab and update the file to match.
 - **Run a service on a branch** — point one service at a branch or another folder for a single run, no file edit needed:
@@ -303,23 +304,29 @@ If you use [Claude Code](https://claude.com/claude-code), install the plugin:
 /plugin install corgi@corgi
 ```
 
-Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. Two workflows do the heavy lifting day to day:
+Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. The plugin adds slash-commands plus auto-invoking skills that cover the whole loop — run, debug, suggest, ship, review:
 
-- **Ship a batch of work — `/corgi:stories`.** Hand Claude some tracker issues (Linear or Jira) or just describe a feature. It investigates the codebase, writes a short spec for each item and waits for your sign-off, then branches per service, runs the tests, reviews its own changes, and opens **draft** PRs/MRs. Each service works in its own git worktree, so parallel stories never step on each other or on your checkout.
-- **Review the result — `/corgi:review`.** Point it at the PRs/MRs (yours or the ones it just opened). It reviews them against your repo's standards and any linked ticket, checks that changes line up across services, and — after you preview — posts a summary plus inline suggestions.
+- **Run it — `/corgi-run`.** "Run the stack" — or a slice, with a tunnel + logs, against a remote backend, for a mobile emulator, or a single service on a feature/PR branch or worktree (`--service-branch`/`--service-dir`, the reviewer "Run line"). Boots **detached**, waits until healthy, and flags anything stuck.
+- **Debug it — `/corgi-debug`.** A service won't start, or you're chasing a bug and need runtime/deployed data. Local-first (`ps` / `status` / `doctor` / `logs`), then your stack's own logs/analytics provider (Coralogix, CloudWatch/ECS, Datadog… — auto-detected from your README) on demand.
+- **Suggest work — `/corgi-suggest`.** Ranked, evidence-backed product **and** engineering improvements, each tied to a measurable outcome; it specs the one you pick and can open a tracker story.
+- **Ship a batch — `/corgi:stories`.** Hand Claude some tracker issues (Linear or Jira) or just describe a feature. It investigates the codebase, writes a short spec for each item and waits for your sign-off, then branches per service, runs the tests, reviews its own changes, and opens **draft** PRs/MRs — each service in its own git worktree.
+- **Review the result — `/corgi:review`.** Point it at the PRs/MRs. It reviews them against your repo's standards and any linked ticket, checks that changes line up across services, and — after you preview — posts a summary plus inline suggestions.
 
 ```
+/corgi-run                           # boot the stack detached, wait until healthy
+/corgi-debug                         # diagnose a service / pull deployed logs
+/corgi-suggest                       # ranked, measurable improvement ideas
 /corgi:stories ABC-123 ABC-124       # spec → branch per service → draft PRs
 /corgi:review  https://github.com/acme/api/pull/42
 ```
 
-Both wait for your go-ahead and only ever open **draft** PRs — they never merge or ship on their own. Two more helpers round things out: **`/corgi-new`** scaffolds a fresh `corgi-compose.yml` from a quick chat, and **`/corgi-describe`** writes a service map with a Mermaid diagram.
+Ship and review wait for your go-ahead and only ever open **draft** PRs — they never merge or ship on their own. Two more helpers round things out: **`/corgi-new`** scaffolds a fresh `corgi-compose.yml` from a quick chat, and **`/corgi-describe`** writes a service map with a Mermaid diagram.
 
 ## How it compares
 
 The honest version of "why not just use X":
 
-- **vs `docker-compose`** — Compose runs containers; that's where it stops. corgi runs your whole inner loop: it clones the repos, runs and seeds the databases (it even generates a real `docker-compose.yml` per database under the hood), wires the env between services, checks your tools, and runs your services as ordinary host processes — so you keep your usual debugger and hot-reload. The two coexist fine.
+- **vs `docker-compose`** — Compose runs containers; that's where it stops. corgi runs your whole inner loop: it clones the repos, runs and seeds the databases (it even generates a real `docker-compose.yml` per database under the hood), wires the env between services, checks your tools, and runs your services as ordinary host processes — so you keep your usual debugger and hot-reload, and your laptop runs N processes instead of N containers (lighter on RAM). Already have a Compose file? Keep it — let corgi own the repos, env wiring, and tool checks while Compose runs your containers; the two coexist fine.
 - **vs Tilt / Skaffold** — Great when your inner loop is Kubernetes and you want live container rebuilds. corgi deliberately keeps your services out of containers — no image rebuild between edits — so it's lighter for a "repos + databases + processes" stack, and not the tool if you genuinely need k8s.
 - **vs Procfile runners (foreman / overmind)** — They start a list of processes. corgi does that _and_ the repos, databases, seeding, env wiring, and tool checks around them.
 - **vs devcontainers / Nix** — These give you a more isolated, prebuilt environment — Nix in particular is fully hermetic. corgi takes the opposite bet: it runs on your real machine with your real tools, and its `required:` block still installs and pins exactly what each service needs (a `pyenv`/`rbenv` version, native libs, certs). Simpler to live in day to day; it's not a hermetic sandbox, by design.
@@ -334,6 +341,7 @@ corgi runs your stack on your own machine — the local inner loop — and can p
 - `corgi doctor --fix` starts Docker for you automatically, but **installing a tool or killing a port-holding process always asks first** (or needs `--yes` in CI).
 - `corgi mcp` runs over stdio (local, no network) by default. `--http` is **unauthenticated** — only expose it with `--tunnel`, which adds a bearer token. Its tools can start, stop, and run commands in your stack, so treat that URL + token like a credential.
 - `corgi tunnel` gives a local service a public HTTPS URL — exactly what you want for testing signing/webhook callbacks from an outside tool. The default Cloudflare quick-tunnel URL is public and ephemeral, so shut it down when you're done.
+- **No telemetry.** corgi collects no analytics and sends nothing about your usage anywhere — it runs entirely on your machine. The only outbound call it makes on its own is `corgi update` checking GitHub for a newer release.
 
 ## Documentation
 
@@ -407,7 +415,7 @@ pkgx install corgi    # to PATH
 corgi -h
 ```
 
-`corgi update` (alias `corgi upgrade`) notices how you installed corgi and upgrades the same way.
+`corgi update` (alias `corgi upgrade`) notices how you installed corgi and upgrades the same way. corgi is a single binary on a steady semver release train (1.x) — pin the whole team to one version with `CORGI_VERSION` (install script) or mise, so everyone runs the same corgi.
 
 Want to try it cold? Run the expo + hono example straight from a URL:
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPsRowsJSONShape(t *testing.T) {
@@ -58,6 +59,55 @@ func TestPsRowsFromState(t *testing.T) {
 	}
 	if rows[1].Name != "pg" || rows[1].Status != "stopped" {
 		t.Errorf("bad db row: %+v", rows[1])
+	}
+}
+
+func TestPsRowFromEntryStartedAt(t *testing.T) {
+	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	row := psRowFromEntry(utils.RunStateEntry{
+		Name: "api", Kind: "service", Port: 8080, Status: "running", StartedAt: ts,
+	})
+	if row.StartedAt == nil || !row.StartedAt.Equal(ts) {
+		t.Fatalf("startedAt not carried: %+v", row)
+	}
+	// zero startedAt → nil pointer → omitted from JSON
+	row2 := psRowFromEntry(utils.RunStateEntry{Name: "x", Kind: "service", Status: "running"})
+	if row2.StartedAt != nil {
+		t.Errorf("zero startedAt must be nil, got %v", row2.StartedAt)
+	}
+	var buf bytes.Buffer
+	utils.PrintJSONTo(&buf, []psRow{row2})
+	if strings.Contains(buf.String(), "startedAt") {
+		t.Errorf("zero startedAt must be omitted, got %q", buf.String())
+	}
+}
+
+func TestProbeDockerRunnerServices(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	old := now.Add(-time.Hour) // well past the boot grace
+	st := utils.RunState{Services: []utils.RunStateEntry{
+		{Name: "tracked", PID: 123, Port: 8080, Status: "running", StartedAt: old},         // pid-tracked → untouched
+		{Name: "container-up", PID: 0, Port: 9000, Status: "stopped", StartedAt: old},      // port open → running (flip)
+		{Name: "container-dead", PID: 0, Port: 9001, Status: "running", StartedAt: old},    // port closed, past grace → stopped (flip)
+		{Name: "container-booting", PID: 0, Port: 9002, Status: "running", StartedAt: now}, // port closed, within grace → untouched
+		{Name: "no-port", PID: 0, Status: "running", StartedAt: old},                       // no port → untouched
+	}}
+	out := probeDockerRunnerServices(st, func(p int) bool { return p == 9000 }, now)
+
+	if out.Services[0].Status != "running" {
+		t.Errorf("pid-tracked service must be untouched, got %q", out.Services[0].Status)
+	}
+	if out.Services[1].Status != "running" || !out.Services[1].StatusChangedAt.Equal(now) {
+		t.Errorf("container-up should flip to running with StatusChangedAt=now, got %+v", out.Services[1])
+	}
+	if out.Services[2].Status != "stopped" || !out.Services[2].StatusChangedAt.Equal(now) {
+		t.Errorf("container-dead should flip to stopped with StatusChangedAt=now, got %+v", out.Services[2])
+	}
+	if out.Services[3].Status != "running" || !out.Services[3].StatusChangedAt.IsZero() {
+		t.Errorf("booting container within grace must be untouched, got %+v", out.Services[3])
+	}
+	if out.Services[4].Status != "running" {
+		t.Errorf("pid 0 with no port must be untouched, got %q", out.Services[4].Status)
 	}
 }
 
