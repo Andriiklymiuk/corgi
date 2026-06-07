@@ -339,6 +339,17 @@ You don't need the slash-commands or any jargon — talk to it like a teammate. 
 - _"I just joined — what should I pick up first?"_ or _"find me something to build and just do it."_ (new hire / engineer) → it pulls the build-ready **`agent`** queue (or specific tickets you name), you confirm, and stories builds them into draft PRs.
 - _"Every hour, grab whatever's marked for the agent and open draft PRs."_ (lead, automating) → `/loop 1h /corgi-queue`, unattended.
 
+Prefer the exact commands? Same flows, precise form — pass a focus in plain words, or nothing for the default:
+
+```
+/corgi-tracker standup                      # status: where are we, what's blocked
+/corgi-tracker sort the new bugs            # triage: label + prioritize the inbox
+/corgi-tracker break EPIC-9 into tickets    # decompose an epic into ordered tickets
+/corgi-queue                                # auto-pick the `agent` queue → draft PRs
+/corgi-queue ABC-140 ABC-141                # build exactly these tickets
+/loop 1h /corgi-queue                       # drain the queue unattended
+```
+
 **What fires when you pick work.** Picking one ticket quietly engages the rest of the loop. tracker (correlate, drift-skip) → stories (build), and _inside_ the build, stories reads your `corgi-compose.yml`, calls **debug** if it needs runtime/staging data, uses **`corgi run`** to stand a producer up so a consumer can verify against it, runs an internal review pass, **moves the ticket to In Progress**, and opens **draft** PRs. It then points you to the next steps it printed — _"review it"_ against your standards + the ticket, _"run it"_ to see the branch live, _"debug it"_ if CI is red — and then you land it. **suggest** sits upstream of all this: it's how work gets _proposed_ before it's even a ticket.
 
 ## How it compares
