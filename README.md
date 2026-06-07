@@ -3,7 +3,7 @@
 
   # 🐶 CORGI 🐶
 
-  **Run your whole local stack from one file — repos, databases, env, every service. And let AI agents ship and review work across it.**
+  **Run your whole local stack from one file — repos, databases, env, every service. And let AI agents plan, build, and review work across it.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
@@ -48,7 +48,7 @@ corgi-compose.yml  ─►  corgi run
                          whole stack running 🐶   (Ctrl-C tears it all down)
 ```
 
-That's the _running_ side. corgi works the other direction too: because it already knows how your services fit together, its [Claude Code plugin](#ai-agents-mcp--claude-code) lets an agent **build across the stack** — turning a pile of tickets into draft PRs and reviewing them for you.
+That's the _running_ side. corgi works the other direction too: because it already knows how your services fit together, its [Claude Code plugin](#ai-agents-mcp--claude-code) lets an agent **work across the stack** — read your Linear/Jira board, pick up ready tickets, turn them into draft PRs, and review them for you.
 
 ## Why corgi?
 
@@ -73,7 +73,7 @@ In practice, a real multi-repo stack — backend, frontend, and a mobile app —
 - **Your databases** — 38 ready-to-go drivers. Corgi starts them in Docker and **seeds** them from a dump or a remote DB, so you get real data instead of an empty schema. Open a shell with `corgi db shell` and the password is already filled in. Need AWS or Supabase locally? LocalStack and Supabase come up from the same file.
 - **Your services** — Everything starts together with the env vars already wired between them. They boot in parallel by default; when one genuinely needs another up first, gate it with `condition: ready` on the dependency (or `--gate-deps` for all of them). Press `Ctrl-C` and it all winds down cleanly. Prefer the background? `corgi run -d`, then check on it with `corgi ps`.
 - **The fiddly bits** — A preflight that catches missing tools and busy ports _before_ they bite (`corgi doctor`), live health (`corgi status -w`), public HTTPS URLs for webhook testing (`corgi tunnel`), saved logs, and a desktop ping when something crashes.
-- **Made for AI agents** — it speaks clean JSON, returns exit codes an agent can branch on, runs an MCP server, and ships a Claude Code plugin that turns a pile of tickets into draft PRs (and reviews them for you).
+- **Made for AI agents** — it speaks clean JSON, returns exit codes an agent can branch on, runs an MCP server, and ships a Claude Code plugin that plans from your Linear/Jira board, picks up ready tickets and turns them into draft PRs (and reviews them for you).
 
 ## In your day-to-day
 
@@ -304,8 +304,10 @@ If you use [Claude Code](https://claude.com/claude-code), install the plugin:
 /plugin install corgi@corgi
 ```
 
-Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. The plugin adds slash-commands plus auto-invoking skills that cover the whole loop — run, debug, suggest, ship, review:
+Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. The plugin adds slash-commands plus auto-invoking skills that cover the whole loop — plan, run, debug, suggest, ship, review:
 
+- **Plan the work — `/corgi-tracker`.** Standup / status, triage, or decompose an epic into tickets — from Linear or Jira. Its edge over the tracker's own UI: it ties each ticket to its **real code state** — branch, draft/open/merged PR, CI — across every service, so drift like "In Progress but no branch" or "Todo but the PR already merged" surfaces. Read-only until one confirm gate guards any tracker write; hands the tickets it shapes to `/corgi:stories`.
+- **Drain the queue — `/corgi-queue`.** Pick up build-ready tickets and build them. Pass explicit Linear/Jira links to build exactly those, or a scope in plain words — nothing = the **`agent`** queue (tickets labelled `agent`), _"in ready"_ = that status column, _"from backlog"_ = the backlog, _"most impactful"_ = highest-priority first (all filtered to not In Progress/Done). It skips anything already merged, you confirm the picks, then it hands them to `/corgi:stories` to branch per service and open draft PRs — **moving each ticket to your tracker's In-Progress state as work starts**, which also stops a looping run from grabbing the same ticket twice. Loop it (`/loop 1h /corgi-queue`) to drain the queue unattended.
 - **Run it — `/corgi-run`.** "Run the stack" — or a slice, with a tunnel + logs, against a remote backend, for a mobile emulator, or a single service on a feature/PR branch or worktree (`--service-branch`/`--service-dir`, the reviewer "Run line"). Boots **detached**, waits until healthy, and flags anything stuck.
 - **Debug it — `/corgi-debug`.** A service won't start, or you're chasing a bug and need runtime/deployed data. Local-first (`ps` / `status` / `doctor` / `logs`), then your stack's own logs/analytics provider (Coralogix, CloudWatch/ECS, Datadog… — auto-detected from your README) on demand.
 - **Suggest work — `/corgi-suggest`.** Ranked, evidence-backed product **and** engineering improvements, each tied to a measurable outcome; it specs the one you pick and can open a tracker story.
@@ -313,6 +315,8 @@ Now Claude recognizes any project with a `corgi-compose.yml` and reaches for rea
 - **Review the result — `/corgi:review`.** Point it at the PRs/MRs. It reviews them against your repo's standards and any linked ticket, checks that changes line up across services, and — after you preview — posts a summary plus inline suggestions.
 
 ```
+/corgi-tracker                       # standup / triage / decompose, tied to real PR + CI state
+/corgi-queue                         # build-ready tickets (explicit, or the `agent` queue) → draft PRs
 /corgi-run                           # boot the stack detached, wait until healthy
 /corgi-debug                         # diagnose a service / pull deployed logs
 /corgi-suggest                       # ranked, measurable improvement ideas
@@ -321,6 +325,35 @@ Now Claude recognizes any project with a `corgi-compose.yml` and reaches for rea
 ```
 
 Ship and review wait for your go-ahead and only ever open **draft** PRs — they never merge or ship on their own. Two more helpers round things out: **`/corgi-new`** scaffolds a fresh `corgi-compose.yml` from a quick chat, and **`/corgi-describe`** writes a service map with a Mermaid diagram.
+
+#### Working the loop — say it however you'd say it
+
+You don't need the slash-commands or any jargon — talk to it like a teammate. It routes on **intent, not exact words**, so a new hire, a founder, and a staff engineer can each ask in their own style and land in the same place. The same loop, the way different people actually ask:
+
+- _"How's the team doing this week — anything stuck?"_ (founder) → a status read that leads with blockers and **drift** ("In Progress but no branch", "Done but the PR's still open").
+- _"Are we going to make the release? what's blocked?"_ (manager) → the cycle reconciled against real PRs + CI, with a burn read of whether it lands in time.
+- _"standup"_ (senior eng, terse) → the same status digest.
+- _"Please show what's done, what's in progress, and what's not started yet."_ (plain and clear) → grouped status, no jargon needed.
+- _"We've got a pile of new bug reports — can you sort and prioritize them?"_ (PM) → it labels them, sets priorities, spots duplicates, and flags what needs more info, behind one confirm. _(This is what "triage" means, in plain words: turning a messy inbox into labelled, prioritized work.)_
+- _"I want a referral program — break it into tasks across the services."_ (founder with an idea) → decomposed into ordered, service-mapped tickets you approve, then build.
+- _"I just joined — what should I pick up first?"_ or _"find me something to build and just do it."_ (new hire / engineer) → it pulls the build-ready **`agent`** queue (or specific tickets you name), you confirm, and stories builds them into draft PRs.
+- _"Every hour, grab whatever's marked for the agent and open draft PRs."_ (lead, automating) → `/loop 1h /corgi-queue`, unattended.
+
+Prefer the exact commands? Same flows, precise form — pass a focus in plain words, or nothing for the default:
+
+```
+/corgi-tracker standup                      # status: where are we, what's blocked
+/corgi-tracker sort the new bugs            # triage: label + prioritize the inbox
+/corgi-tracker break EPIC-9 into tickets    # decompose an epic into ordered tickets
+/corgi-queue                                # auto-pick the `agent` queue → draft PRs
+/corgi-queue ABC-140 ABC-141                # build exactly these tickets
+/corgi-queue in ready                       # build what's in your Ready column
+/corgi-queue from backlog                   # pull from the backlog
+/corgi-queue most impactful                 # highest-priority ready work first
+/loop 1h /corgi-queue                       # drain the queue unattended
+```
+
+**What fires when you pick work.** Picking one ticket quietly engages the rest of the loop. tracker (correlate, drift-skip) → stories (build), and _inside_ the build, stories reads your `corgi-compose.yml`, calls **debug** if it needs runtime/staging data, uses **`corgi run`** to stand a producer up so a consumer can verify against it, runs an internal review pass, **moves the ticket to In Progress**, and opens **draft** PRs. It then points you to the next steps it printed — _"review it"_ against your standards + the ticket, _"run it"_ to see the branch live, _"debug it"_ if CI is red — and then you land it. **suggest** sits upstream of all this: it's how work gets _proposed_ before it's even a ticket.
 
 ## How it compares
 
@@ -348,6 +381,7 @@ corgi runs your stack on your own machine — the local inner loop — and can p
 - Full docs: https://andriiklymiuk.github.io/corgi/
 - 2-min video showcase: https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY
 - Driving corgi from a script or agent? See [docs/agents.md](docs/agents.md) and [docs/mcp.md](docs/mcp.md).
+- Planning + picking up work from your tracker (Linear/Jira)? See [docs/tracker.md](docs/tracker.md).
 
 ### VSCode users
 
