@@ -1,6 +1,6 @@
 ---
 name: stories
-description: Use when the user wants to ship work across a corgi-compose workspace — EITHER a batch of tracker issues (Linear or Jira links/keys like ABC-123; "do these stories", "implement these tickets", "ship X and Y") OR a free-text feature description with no ticket ("build a feature that …", "add X across the services"). Investigates once, writes a spec per item behind one sign-off gate, branches per service (paths from corgi-compose.yml), tests + reviews each, opens draft PRs/MRs on GitHub or GitLab, and can create a tracker issue from the approved spec. NOT for authoring/running corgi-compose itself (use the corgi skill) or a trivial one-line edit you'd just make directly.
+description: Use when the user wants to ship work across a corgi-compose workspace — EITHER a batch of tracker issues (Linear or Jira links/keys like ABC-123; "do these stories", "implement these tickets", "ship X and Y") OR a free-text feature description with no ticket ("build a feature that …", "add X across the services") OR a "find/pick what to work on" request with nothing named ("pick the stories", "what should I work on", "grab some agent tickets") — which it resolves to the `agent` queue via the tracker pickup, then builds. Investigates once, writes a spec per item behind one sign-off gate, branches per service (paths from corgi-compose.yml), tests + reviews each, opens draft PRs/MRs on GitHub or GitLab, and can create a tracker issue from the approved spec. NOT for authoring/running corgi-compose itself (use the corgi skill) or a trivial one-line edit you'd just make directly.
 ---
 
 # Corgi stories
@@ -101,6 +101,14 @@ Always available, all the flow needs: `git`, `gh`/`glab`, `corgi`,
 
 ## Phase 1 — Investigate (once), then spec
 
+**Route the intake first — what am I building?**
+- **Explicit tickets** (keys/links) or a **free-text feature** → continue below.
+- **"Find/pick what to work on"** with nothing named ("pick the stories", "what
+  should I work on", "grab some work") → **don't guess which tickets.** Resolve the
+  set via the `tracker` skill's **pickup** — the `agent` queue (label `agent`, not In
+  Progress/Done), drift-skipped — confirm the picks, then build them here. Same
+  selection as `/corgi-queue`: selection lives in `tracker`, building lives here.
+
 **Tracker issue:** fetch, **view screenshots**, read real code paths.
 - Fetch: Linear `get_issue`; Jira `getJiraIssue`.
 - Screenshots: Linear = `curl` the `uploads.linear.app` URLs (signed, expire
@@ -192,6 +200,17 @@ token):
 
 Key also goes in the commit + PR/MR title (Phases 4–5). Same branch name across
 repos so multi-repo PRs group.
+
+**Move the ticket to in-progress when its work starts.** As each actionable,
+ticketed story's branch is created (post sign-off), transition its issue to the
+team's **started** state — **resolve the state, don't hardcode "In Progress":**
+Linear `update_issue` to the team's `started`-type state (find it via
+`list_issue_statuses`); Jira `transitionJiraIssue` to the transition whose target is
+the In-Progress status (`mcp__atlassian__getTransitionsForJiraIssue`). Idempotent —
+skip if already there; skip no-ticket and blocked stories. This is also what stops a
+looping `/corgi-queue` from re-grabbing a story already in flight (its auto-pick only
+takes not-In-Progress tickets). Optionally move to the team's **review** state when
+the draft PR opens (Phase 5).
 
 **Pick branch vs worktree per repo — check the working tree first:**
 `git -C <dir> status --porcelain --untracked-files=no` — empty = clean, any
