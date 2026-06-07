@@ -193,6 +193,17 @@ token):
 Key also goes in the commit + PR/MR title (Phases 4–5). Same branch name across
 repos so multi-repo PRs group.
 
+**Move the ticket to in-progress when its work starts.** As each actionable,
+ticketed story's branch is created (post sign-off), transition its issue to the
+team's **started** state — **resolve the state, don't hardcode "In Progress":**
+Linear `update_issue` to the team's `started`-type state (find it via
+`list_issue_statuses`); Jira `transitionJiraIssue` to the transition whose target is
+the In-Progress status (`mcp__atlassian__getTransitionsForJiraIssue`). Idempotent —
+skip if already there; skip no-ticket and blocked stories. This is also what stops a
+looping `/corgi-queue` from re-grabbing a story already in flight (its auto-pick only
+takes not-In-Progress tickets). Optionally move to the team's **review** state when
+the draft PR opens (Phase 5).
+
 **Pick branch vs worktree per repo — check the working tree first:**
 `git -C <dir> status --porcelain --untracked-files=no` — empty = clean, any
 output = dirty. (Ignore stray untracked files; `checkout -b` doesn't disturb

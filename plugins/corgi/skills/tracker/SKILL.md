@@ -131,8 +131,11 @@ and its spec sign-off gate are `stories`' job;** this flow only selects + dispat
 3. **Present + confirm** — one line each, size + service(s); you pick (auto-pick
    default = all ready).
 4. **Hand the picked keys to `stories`** (auto) — it owns build + spec gate +
-   branch-per-service + draft PRs. `/corgi-queue` is the front door; loop it
-   (`/loop 1h /corgi-queue`) to drain the agent queue unattended.
+   branch-per-service + draft PRs, and **moves each ticket to the team's in-progress
+   state as its branch is created** (`stories` Phase 3). That status move is what
+   de-dupes a looping `/corgi-queue`: auto-pick only takes not-In-Progress tickets, so
+   a story already in flight is never re-grabbed. `/corgi-queue` is the front door;
+   loop it (`/loop 1h /corgi-queue`) to drain the agent queue unattended.
 
 Empty queue / all drift → say so; don't invent work.
 

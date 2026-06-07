@@ -56,3 +56,20 @@ glab ci status -R <repo>                                    # CI for the branch
 
 Map each ticket → `{ pr: none|draft|open|merged|closed, link, ci: pass|fail|pending }`
 and apply the drift table in the skill's Phase 1.
+
+## Status transitions (set when work starts — done by `stories`, not here)
+
+Pickup hands off to `stories`, which moves each ticket to the team's **in-progress**
+state as its branch is created (`stories` Phase 3). **Resolve the state, never
+hardcode the name** — teams rename it ("In Progress", "Doing", "Started"):
+
+- **Linear** — states have a `type` (`backlog`/`unstarted`/`started`/`completed`/
+  `canceled`). List the team's states (`list_issue_statuses`), pick the `started`
+  one, `update_issue({ id, stateId })`. Review state = a later `started`/custom one.
+- **Jira** — transitions are workflow-specific. `getTransitionsForJiraIssue` →
+  pick the transition whose target status has `statusCategory = "In Progress"` →
+  `transitionJiraIssue({ issueIdOrKey, transitionId })`.
+
+Idempotent: skip if the issue is already in that state. This keeps a looping
+`/corgi-queue` from re-picking an in-flight ticket (auto-pick takes only
+not-In-Progress tickets).
