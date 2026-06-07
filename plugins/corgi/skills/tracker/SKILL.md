@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Tracker-side work for a corgi workspace (Linear or Jira). Four jobs — status/standup ("where are we", "what's blocked", "generate standup", "is the sprint on track"); triage ("triage the inbox", "label these", "dupes"); decompose ("break this epic into tickets", "turn this feature into stories"); pickup ("/corgi-queue", "pick up the agent tickets", "what's ready to build" — build-ready tickets, drift-skipped, handed to the stories skill to build). Its edge over the tracker UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR, CI — across every corgi-compose.yml service (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but already merged" surfaces. Read-only itself (it dispatches to stories, never writes code); one confirm gate guards any tracker write. NOT for implementing tickets (stories), ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
+description: Tracker-side work for a corgi workspace (Linear or Jira) — triggers on plain language, no command names or jargon needed; match on intent, not exact words. Four jobs: (1) STATUS / standup — "where are we", "what's blocked", "what's stuck", "are we on track for the release", "how's the sprint going", "show what's done / in progress / not started", "give me an update"; (2) SORT THE INBOX (a.k.a. triage) — "sort/organize/clean up the new issues", "label and prioritize these tickets", "which of these matter", "any duplicates", "go through the new bug reports"; (3) BREAK WORK DOWN (decompose) — "break this epic/feature into tickets", "split this into tasks", "turn this idea into stories", "plan the work for X"; (4) PICK UP WORK (pickup / "/corgi-queue") — "find me something to work on", "what should I work on", "what's ready to build", "pick the next ticket", "grab the agent tickets", "I'm free, what should I do" — build-ready tickets (the `agent`-labelled queue, or links you pass), drift-skipped, handed to the stories skill to build. Edge over the tracker UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR, CI — across every corgi-compose.yml service (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but already merged" surfaces. Read-only itself (dispatches to stories, never writes code); one confirm gate guards any tracker write. NOT for implementing tickets (stories), ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
 ---
 
 # Corgi tracker
@@ -73,8 +73,9 @@ group by status column, no burn line. "Plan next sprint" → propose a set withi
 capacity (tracker velocity if exposed, else ask), carry-over first,
 producer-before-consumer; offer to move it in (gate).
 
-## Job 2 — Triage
+## Job 2 — Triage (sort & prioritize the inbox)
 
+Plain asks: "sort the new bugs", "which of these matter", "clean up the inbox".
 Per untriaged issue, propose (don't apply): **label/area** (map text → service via
 compose + READMEs), **priority** (real signals, else `needs-info` + the question),
 **assignee** (by ownership if known, else leave), **duplicate** (link a candidate).

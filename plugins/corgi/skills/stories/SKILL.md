@@ -1,6 +1,6 @@
 ---
 name: stories
-description: Use when the user wants to ship work across a corgi-compose workspace — EITHER a batch of tracker issues (Linear or Jira links/keys like ABC-123; "do these stories", "implement these tickets", "ship X and Y") OR a free-text feature description with no ticket ("build a feature that …", "add X across the services"). Investigates once, writes a spec per item behind one sign-off gate, branches per service (paths from corgi-compose.yml), tests + reviews each, opens draft PRs/MRs on GitHub or GitLab, and can create a tracker issue from the approved spec. NOT for authoring/running corgi-compose itself (use the corgi skill) or a trivial one-line edit you'd just make directly.
+description: Use when the user wants to ship work across a corgi-compose workspace — EITHER a batch of tracker issues (Linear or Jira links/keys like ABC-123; "do these stories", "implement these tickets", "ship X and Y") OR a free-text feature description with no ticket ("build a feature that …", "add X across the services") OR a "find/pick what to work on" request with nothing named ("pick the stories", "what should I work on", "grab some agent tickets") — which it resolves to the `agent` queue via the tracker pickup, then builds. Investigates once, writes a spec per item behind one sign-off gate, branches per service (paths from corgi-compose.yml), tests + reviews each, opens draft PRs/MRs on GitHub or GitLab, and can create a tracker issue from the approved spec. NOT for authoring/running corgi-compose itself (use the corgi skill) or a trivial one-line edit you'd just make directly.
 ---
 
 # Corgi stories
@@ -100,6 +100,14 @@ Always available, all the flow needs: `git`, `gh`/`glab`, `corgi`,
    `getAccessibleAtlassianResources` for sites). Bare key + both connected → ask.
 
 ## Phase 1 — Investigate (once), then spec
+
+**Route the intake first — what am I building?**
+- **Explicit tickets** (keys/links) or a **free-text feature** → continue below.
+- **"Find/pick what to work on"** with nothing named ("pick the stories", "what
+  should I work on", "grab some work") → **don't guess which tickets.** Resolve the
+  set via the `tracker` skill's **pickup** — the `agent` queue (label `agent`, not In
+  Progress/Done), drift-skipped — confirm the picks, then build them here. Same
+  selection as `/corgi-queue`: selection lives in `tracker`, building lives here.
 
 **Tracker issue:** fetch, **view screenshots**, read real code paths.
 - Fetch: Linear `get_issue`; Jira `getJiraIssue`.

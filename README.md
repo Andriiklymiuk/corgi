@@ -326,6 +326,21 @@ Now Claude recognizes any project with a `corgi-compose.yml` and reaches for rea
 
 Ship and review wait for your go-ahead and only ever open **draft** PRs — they never merge or ship on their own. Two more helpers round things out: **`/corgi-new`** scaffolds a fresh `corgi-compose.yml` from a quick chat, and **`/corgi-describe`** writes a service map with a Mermaid diagram.
 
+#### Working the loop — say it however you'd say it
+
+You don't need the slash-commands or any jargon — talk to it like a teammate. It routes on **intent, not exact words**, so a new hire, a founder, and a staff engineer can each ask in their own style and land in the same place. The same loop, the way different people actually ask:
+
+- _"How's the team doing this week — anything stuck?"_ (founder) → a status read that leads with blockers and **drift** ("In Progress but no branch", "Done but the PR's still open").
+- _"Are we going to make the release? what's blocked?"_ (manager) → the cycle reconciled against real PRs + CI, with a burn read of whether it lands in time.
+- _"standup"_ (senior eng, terse) → the same status digest.
+- _"Please show what's done, what's in progress, and what's not started yet."_ (plain and clear) → grouped status, no jargon needed.
+- _"We've got a pile of new bug reports — can you sort and prioritize them?"_ (PM) → it labels them, sets priorities, spots duplicates, and flags what needs more info, behind one confirm. _(This is what "triage" means, in plain words: turning a messy inbox into labelled, prioritized work.)_
+- _"I want a referral program — break it into tasks across the services."_ (founder with an idea) → decomposed into ordered, service-mapped tickets you approve, then build.
+- _"I just joined — what should I pick up first?"_ or _"find me something to build and just do it."_ (new hire / engineer) → it pulls the build-ready **`agent`** queue (or specific tickets you name), you confirm, and stories builds them into draft PRs.
+- _"Every hour, grab whatever's marked for the agent and open draft PRs."_ (lead, automating) → `/loop 1h /corgi-queue`, unattended.
+
+**What fires when you pick work.** Picking one ticket quietly engages the rest of the loop. tracker (correlate, drift-skip) → stories (build), and _inside_ the build, stories reads your `corgi-compose.yml`, calls **debug** if it needs runtime/staging data, uses **`corgi run`** to stand a producer up so a consumer can verify against it, runs an internal review pass, **moves the ticket to In Progress**, and opens **draft** PRs. It then points you to the next steps it printed — _"review it"_ against your standards + the ticket, _"run it"_ to see the branch live, _"debug it"_ if CI is red — and then you land it. **suggest** sits upstream of all this: it's how work gets _proposed_ before it's even a ticket.
+
 ## How it compares
 
 The honest version of "why not just use X":
