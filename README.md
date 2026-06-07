@@ -381,6 +381,7 @@ corgi runs your stack on your own machine — the local inner loop — and can p
 - Full docs: https://andriiklymiuk.github.io/corgi/
 - 2-min video showcase: https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY
 - Driving corgi from a script or agent? See [docs/agents.md](docs/agents.md) and [docs/mcp.md](docs/mcp.md).
+- Planning + picking up work from your tracker (Linear/Jira)? See [docs/tracker.md](docs/tracker.md).
 
 ### VSCode users
 
