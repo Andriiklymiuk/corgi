@@ -35,6 +35,21 @@ project instead; there's no burn line.
 Key = `key` (`PROJ-123`). `openSprints()` only works on Scrum boards → use the
 Kanban row for everything else.
 
+## Pickup scope (Job 4) — resolve from the user's words
+
+Default = the **agent queue** (rows above). Other scopes the user may say, all under
+the same floor (**not In Progress / not Done / not blocked**):
+
+| User says | Linear | Jira |
+|-----------|--------|------|
+| (nothing) | `list_issues` `label:"agent"`, unstarted/backlog states | JQL `labels = agent AND statusCategory = "To Do"` |
+| "in ready" / a column | `list_issues` `state:"Ready"` (the column name) | JQL `status = "Ready"` |
+| "from backlog" | the Backlog row above | JQL `sprint is EMPTY ORDER BY Rank` |
+| "most impactful" / "highest priority" | take the candidate set, **order by `priority`** (1=urgent…4=low), top first | append `ORDER BY priority DESC` (or sort the result) |
+
+"Most impactful" = **priority ordering**, not a business-impact score — if the user
+wants real impact/ROI, that's `suggest`, not pickup.
+
 ## Forge — correlate a key to its PRs (read-only, no checkout)
 
 Prefer the tracker's own git links (above). Fallback: search PRs by the key, across

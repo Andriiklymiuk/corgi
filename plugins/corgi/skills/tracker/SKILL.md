@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Tracker-side work for a corgi workspace (Linear or Jira) — triggers on plain language, no command names or jargon needed; match on intent, not exact words. Four jobs: (1) STATUS / standup — "where are we", "what's blocked", "what's stuck", "are we on track for the release", "how's the sprint going", "show what's done / in progress / not started", "give me an update"; (2) SORT THE INBOX (a.k.a. triage) — "sort/organize/clean up the new issues", "label and prioritize these tickets", "which of these matter", "any duplicates", "go through the new bug reports"; (3) BREAK WORK DOWN (decompose) — "break this epic/feature into tickets", "split this into tasks", "turn this idea into stories", "plan the work for X"; (4) PICK UP WORK (pickup / "/corgi-queue") — "find me something to work on", "what should I work on", "what's ready to build", "pick the next ticket", "grab the agent tickets", "I'm free, what should I do" — build-ready tickets (the `agent`-labelled queue, or links you pass), drift-skipped, handed to the stories skill to build. Edge over the tracker UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR, CI — across every corgi-compose.yml service (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but already merged" surfaces. Read-only itself (dispatches to stories, never writes code); one confirm gate guards any tracker write. NOT for implementing tickets (stories), ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
+description: Tracker-side work for a corgi workspace (Linear or Jira) — triggers on plain language, matching intent not exact words. Four jobs: (1) STATUS / standup — "where are we", "what's blocked", "are we on track", "give me an update"; (2) SORT THE INBOX (triage) — "sort/prioritize the new issues", "which of these matter", "any duplicates"; (3) BREAK WORK DOWN (decompose) — "break this epic/feature into tickets", "turn this idea into tasks", "plan the work for X"; (4) PICK UP WORK ("/corgi-queue") — "find me something to work on", "what's ready to build", "work on the stories in ready", "pick from the backlog", "what's most impactful", "grab the agent tickets" — build-ready tickets resolved by scope (the `agent` queue by default, OR a status like "ready", the backlog, the most impactful by priority, OR links you pass), drift-skipped, handed to the stories skill to build. Edge over the tracker UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR, CI — across every corgi-compose.yml service (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but already merged" surfaces. Read-only itself (dispatches to stories, never writes code); one confirm gate guards any tracker write. NOT for implementing tickets (stories), ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
 ---
 
 # Corgi tracker
@@ -97,10 +97,21 @@ Feature/epic → **buildable, ordered tickets** (what `stories` wants):
 
 Two ways in, same dispatch. **Read-only here — `stories` owns the build + its spec
 gate.**
-1. **Resolve:** explicit links/keys passed in → those; **none → auto-pick the agent
-   queue** (label `agent`, not In Progress/Done, not blocked).
+1. **Resolve the set — read the scope from the user's words; default to the `agent`
+   label:**
+   - **explicit links/keys** passed in → exactly those.
+   - **no scope said** → the **`agent` queue** (label `agent`).
+   - **"in ready" / "todo" / a named column** → that **status**.
+   - **"from backlog"** → the **backlog** (unstarted, below the active cycle).
+   - **"most impactful" / "highest priority" / "what matters most"** → take the
+     candidate set and **order by tracker priority + value signals** (linked
+     customers/issues), surface the top. Say it's a priority ordering, **not** a
+     business-impact analysis — that's `suggest`.
+
+   All scopes apply the same floor: **not In Progress / not Done, not blocked.** Calls
+   per tracker: `references/tracker-and-forge.md`.
 2. **Drop drift** (Phase 1): skip anything already merged or with an open PR — flag,
-   don't rebuild. Both modes.
+   don't rebuild. All scopes.
 3. **Present + confirm** (one line each, size + service; auto-pick default = all
    ready).
 4. **Hand picked keys to `stories`** — it builds and **moves each ticket to the
