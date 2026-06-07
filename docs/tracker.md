@@ -6,13 +6,13 @@ agent loop**: they read your issue tracker (Linear or Jira) **and** your
 plan, a triaged inbox, or build-ready work handed straight to the `stories` skill.
 
 ```
-tracker / queue  →  stories  →  review  →  you land it
-  (plan, pick)      (build →    (review)
-                     draft PRs)
+suggest  →  tracker / queue  →  stories  →  review  →  you land it
+ (ideas)      (plan, pick)       (build →    (review)
+                                  draft PRs)
 ```
 
-The full loop: **plan → suggest → stories → review**, with `run`/`debug` operating
-throughout.
+The full loop: **suggest → plan → stories → review**, with `run`/`debug` operating
+throughout. `suggest` is upstream — it proposes work before it's even a ticket.
 
 ## Setup
 
@@ -59,16 +59,19 @@ flags the drift the tracker can't see:
 /corgi-queue                    # tickets labelled `agent` that are ready
 /corgi-queue in ready           # your Ready status column
 /corgi-queue from backlog       # the backlog
-/corgi-queue most impactful     # highest-priority ready work first
+/corgi-queue most impactful     # highest-priority ready work first (= "most roi")
+/corgi-queue bugs               # ready bug-type tickets (built bug-tier: red test first)
 /corgi-queue ABC-140 ABC-141    # exactly these tickets
-/loop 1h /corgi-queue           # drain the queue unattended
+/loop 1h /corgi-queue           # keep draining on a schedule (you still approve each spec)
 ```
 
 Every scope filters to **not In Progress / not Done / not blocked**, then
 **drift-skips** anything already merged or in-flight (so nothing gets built twice).
 
-> "Most impactful" means **priority ordering**, not a business-impact score. For real
-> impact/ROI analysis of *new* ideas, use the `suggest` skill instead.
+The loop isn't zero-touch: each round's **batch** of picks passes through `stories`'
+**one spec sign-off** before any branch — batch-level (all the round's specs in a
+single gate, not one per ticket). The loop *stages* a batch for your approval, then
+builds the approved ones. Convenient, not autonomous.
 
 ## What happens when you pick work
 
@@ -79,9 +82,10 @@ Picking one ticket quietly engages the rest of the loop:
    calls **`debug`** if it needs runtime/staging data, uses **`corgi run`** to stand a
    producer up so a consumer can verify, runs an internal review pass, and opens
    **draft** PRs.
-3. As each branch is created, **stories moves the ticket to your tracker's
-   In-Progress state** (resolved from the tracker, never hardcoded). This is also what
-   stops a looping `/corgi-queue` from grabbing the same ticket twice.
+3. As each branch is created, **stories moves the ticket to In-Progress and assigns it
+   to you** (states resolved from the tracker, never hardcoded), then **to Code Review /
+   In Review when its draft PR opens** (if your team has that state). The In-Progress
+   move also stops a looping `/corgi-queue` from grabbing the same ticket twice.
 4. It then points you to the next steps: **`/corgi-review`** to review against your
    standards + the ticket, **`/corgi-run --service-branch …`** to see the branch live,
    **`/corgi-debug`** if CI is red — then you land it (`gh pr merge` / `glab mr merge`).

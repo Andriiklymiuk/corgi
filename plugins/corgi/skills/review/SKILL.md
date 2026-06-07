@@ -1,11 +1,31 @@
 ---
 name: review
-description: Use when the user wants a code review of one or more EXISTING pull/merge requests — any phrasing of "review this PR/MR" alongside GitHub PR or GitLab MR links/numbers (e.g. "review these MRs <link> <link>", "look over this PR <link>", "code review <link>", "check the api + web MRs for ABC-123", or a bare PR/MR link with "thoughts?"). Reviews against the repo's own standards (CLAUDE.md/AGENTS.md, lint config), pulls intent from any linked Linear/Jira ticket, runs a cross-service contract check when the set spans services, then posts a human summary comment + inline suggestions behind a preview gate. NOT for creating PRs from issues/feature text (that is the stories skill) or reviewing the local uncommitted diff (that is the built-in /code-review).
+description: Use when the user wants a code review of one or more EXISTING pull/merge requests — any phrasing of "review this PR/MR" alongside GitHub PR or GitLab MR links/numbers (e.g. "review these MRs <link> <link>", "look over this PR <link>", "code review <link>", "check the api + web MRs for ABC-123", or a bare PR/MR link with "thoughts?"). Reviews against the repo's own standards (CLAUDE.md/AGENTS.md, lint config), pulls intent from any linked Linear/Jira ticket, runs a cross-service contract check when the set spans services, then posts a human summary comment + inline suggestions behind a preview gate. ALSO use to **address review feedback on your OWN PR/MR** — "fix the comments on this MR", "answer the review and reply", "address the feedback for story ABC-123": it reads the incoming reviewer threads, applies the valid ones (pushing back on the wrong ones), replies to + resolves the threads, and pushes the fixes to the PR branch — resolve the target from a link, a bare number, or a tracker story-id. NOT for creating PRs from issues/feature text (that is the stories skill) or reviewing the local uncommitted diff (that is the built-in /code-review).
 ---
 
 # Corgi review
 
 Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR — all behind a preview gate before anything goes public. It is the direct counterpart to the `stories` skill: stories **creates** draft PRs/MRs from issues or feature text; review **consumes** existing ones. It reuses stories' workspace model (services, dirs, and forges resolved from `corgi-compose.yml`) and stories' token-efficiency model (cluster by service+area, investigate once, orchestrator-as-cache, reuse ledger).
+
+## Two modes — route from the verb
+
+- **A · Give review** (default) — *review / look over / check* a PR, a pasted PR/MR
+  link, "thoughts?". Post a summary + inline suggestions; **comments only, never
+  touches the branch.** Phases 0–6 below.
+- **B · Address review** — *fix / address / answer / respond to* the comments on
+  **your** PR ("fix the comments on this MR", "answer the review", "address the
+  feedback for story ABC-123"). Read the incoming threads, apply the valid ones, reply
+  + resolve, **push the fixes.** See *Mode B* near the end.
+
+Ambiguous ("check my PR for story X") → ask which. A story-id with no link → resolve it
+to its PR the way `tracker` does. **Bare "fix this PR" / "fix them"** (no mention of
+comments) → default **Mode B** (address feedback); but if the PR has **no open human
+threads and CI is red**, the problem is the build, not comments → hand to `debug`
+(Step 5), not a comment fix.
+
+---
+
+**Mode A — give review. Phases 0–6:**
 
 ## Phase 0 — Resolve target(s)
 
@@ -414,17 +434,70 @@ Contract
 review only — does not approve, request changes, or merge.
 ```
 
+---
+
+## Mode B — Address review feedback on your PR/MR
+
+Apply reviewer feedback on **your own** PR, reply per thread, push. **Writes the
+branch** — see Mode B guardrails.
+
+**Target — one PR or a whole set:**
+- a **link** / **bare number** → that one PR.
+- a **story-id** (`ABC-123`) → correlate like `tracker` (issue git links / dev-panel,
+  else `gh pr list --search <KEY>` / `glab mr list --search <KEY>` across the service
+  repos). A multi-repo story = **several PRs, one per service, same branch** → address
+  the **whole set**. Genuinely ambiguous (two competing PRs in one repo) → ask; none →
+  stop.
+
+Run steps 1–5 **per PR in the set** — cluster threads by repo, one checkout per repo
+(`stories` token model). A thread asking for a **contract change** that spans services
+(producer field + consumer read) → fix **producer first, consumer after** (`stories`
+P4 order) and cross-link the two replies. Then one combined report (6).
+
+1. **Read threads** (§5) — keep the **unresolved, human** ones; skip your own
+   `<!-- corgi-review -->` bots + resolved. Group by file; read each thread's full
+   back-and-forth (a later reply can change the ask).
+2. **Judge — apply or push back.** `superpowers:receiving-code-review` if installed,
+   else inline. **Never blind-apply.** Valid + in scope → fix. Wrong / out-of-scope /
+   regresses → **reply why, don't apply** (push-back is a real answer). Needs an owner
+   call → ask.
+3. **Checkout the PR's OWN branch → fix → gate.** Clean tree → `gh pr checkout <n>` /
+   `glab mr checkout <n>` (its head — **not** a new branch off base). Dirty tree →
+   `git worktree add` off the fetched head so the user's work is untouched (`stories`
+   P3 worktree rules). Gate: `corgi test --service` / `corgi exec` + scoped self-review
+   (`stories` P3.5). **Minimum diff — only what the threads ask.**
+4. **Reply + resolve per thread** (§5) — what changed (commit/line), or why you pushed
+   back. **Resolve only what you addressed**; a pushed-back thread stays **open**.
+5. **Gate → push.** Preview fixes + replies for the whole set in **one** gate (P4;
+   `--yes` skips) → commit (repo style, issue key, no AI trailer) → `git push` each
+   branch. **Draft stays draft; no force-push, no merge, no approve.** Fork PR / no
+   push access → post replies only, say so.
+6. **Report** — grouped by PR: per thread **applied** (commit/line) / **pushed back**
+   (reason) / **needs you** (question); + each PR's push result + link. Multi-repo →
+   state the producer-first push order.
+
 ## Guardrails (non-negotiable)
 
-- **Comments only.** Never set a formal approve / request-changes state, never
-  merge, never push, never modify the branch.
-- **Gate before posting** unless `--yes`. Posting is outward-facing; the gate
-  is not optional by default.
-- **Read-only on the repo.** Never check out / write the PR branch; review from
-  the fetched diff only.
-- **No secret values** echoed into comments — flag location + that a secret is
-  present; never paste the value.
-- **Human voice.** Comments terse, kind, specific: problem + fix. No
-  AI-attribution trailer. No walls of text. Match the repo's comment density.
-- **Never touch `manualRun` services** when mapping via `corgi-compose.yml` —
-  reference-only, same as stories.
+**Both modes:** **no secret values** echoed into comments/replies — flag location +
+that a secret is present, never paste it. **Human voice** — terse, kind, specific
+(problem + fix); no AI-attribution trailer, no walls, match the repo's density.
+**Never touch `manualRun` services** when mapping via `corgi-compose.yml`.
+
+**Mode A (give review):**
+- **Comments only.** Never set a formal approve / request-changes state, never merge,
+  never push, never modify the branch.
+- **Read-only on the repo.** Never check out / write the PR branch; review from the
+  fetched diff only.
+- **Gate before posting** unless `--yes`. Posting is outward-facing.
+
+**Mode B (address review):**
+- **Explicit target only — never infer-and-push.** The PR/MR must come from a link, a
+  bare number, or a story-id the user gave; it must be **your own** branch (you can
+  push). Someone else's PR / a producer you don't own → stay in Mode A (comment), never
+  write. One target ambiguous between several PRs → ask, don't pick.
+- **Writes the branch — bounded.** Edit + push the PR's **own** branch only; **draft
+  stays draft, never force-push, never merge, never approve.**
+- **Gate before pushing** unless `--yes` — preview the fixes + replies first.
+- **Don't blind-apply.** A wrong / out-of-scope suggestion gets a reasoned reply, not
+  a commit. **Resolve only threads you addressed**; leave pushed-back ones open.
+  **Minimum diff.**

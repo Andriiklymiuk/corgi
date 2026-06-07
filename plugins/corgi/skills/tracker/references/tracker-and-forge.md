@@ -46,9 +46,12 @@ the same floor (**not In Progress / not Done / not blocked**):
 | "in ready" / a column | `list_issues` `state:"Ready"` (the column name) | JQL `status = "Ready"` |
 | "from backlog" | the Backlog row above | JQL `sprint is EMPTY ORDER BY Rank` |
 | "most impactful" / "highest priority" | take the candidate set, **order by `priority`** (1=urgent…4=low), top first | append `ORDER BY priority DESC` (or sort the result) |
+| "most ROI" / "most valuable" (existing) | same as most impactful — **order by `priority`**, top first | same — `ORDER BY priority DESC` |
+| "bugs" / "bugs to fix" | `list_issues` filtered to the **Bug** type/label, ready states | JQL `issuetype = Bug AND statusCategory = "To Do"` |
 
-"Most impactful" = **priority ordering**, not a business-impact score — if the user
-wants real impact/ROI, that's `suggest`, not pickup.
+"Most impactful" / "most ROI" **of tickets we already have** = **priority ordering**,
+not a business-impact score. Real impact/ROI of **new, untracked** ideas → `suggest`,
+not pickup.
 
 ## Forge — correlate a key to its PRs (read-only, no checkout)
 
@@ -64,9 +67,11 @@ gh pr checks <n>          # CI detail for one PR
 `statusCheckRollup` gives CI without a second call; `state`+`isDraft` →
 none/draft/open/merged/closed.
 
-**GitLab (`glab`)** — `-R <host>/<group>/<proj>` for cross-repo:
+**GitLab (`glab`)** — `-R <host>/<group>/<proj>` for cross-repo. Prefer the tracker's
+own dev-panel links; fall back to searching by key:
 ```
-glab mr list --source-branch "*<KEY>*" -R <repo> -F json   # or search the title
+glab mr list -R <repo> -F json --search "<KEY>"            # match KEY in title/desc (most reliable)
+# if --search is unsupported on your glab: --source-branch "*<KEY>*" (glob is often exact-only — verify)
 glab mr view <iid> -R <repo> -F json                       # state, draft, sha
 glab ci status -R <repo>                                    # CI for the branch
 ```
@@ -74,19 +79,25 @@ glab ci status -R <repo>                                    # CI for the branch
 Map each ticket → `{ pr: none|draft|open|merged|closed, link, ci: pass|fail|pending }`
 and apply the drift table in the skill's Phase 1.
 
-## Status transitions (set when work starts — done by `stories`, not here)
+## Status transitions + assignment (done by `stories`, not here)
 
-Pickup hands off to `stories`, which moves each ticket to the team's **in-progress**
-state as its branch is created (`stories` Phase 3). **Resolve the state, never
-hardcode the name** — teams rename it ("In Progress", "Doing", "Started"):
+`stories` moves each ticket on two events: **branch created** → in-progress + assign
+to the mover (Phase 3); **draft PR opened** → review (Phase 5). **Resolve the state,
+never hardcode the name** — teams rename it ("In Progress", "Doing", "Code Review",
+"In Review"):
 
 - **Linear** — states have a `type` (`backlog`/`unstarted`/`started`/`completed`/
-  `canceled`). List the team's states (`list_issue_statuses`), pick the `started`
-  one, `update_issue({ id, stateId })`. Review state = a later `started`/custom one.
-- **Jira** — transitions are workflow-specific. `getTransitionsForJiraIssue` →
-  pick the transition whose target status has `statusCategory = "In Progress"` →
-  `transitionJiraIssue({ issueIdOrKey, transitionId })`.
+  `canceled`). `list_issue_statuses` → the `started` state for in-progress,
+  `update_issue({ id, stateId })`. **Review** = a later `started`/custom state named
+  Review / Code Review (same list). **Assign:** `update_issue({ id, assigneeId })`
+  with the current user (the viewer).
+- **Jira** — transitions are workflow-specific. `getTransitionsForJiraIssue` → the
+  transition whose target `statusCategory = "In Progress"` (in-progress) or whose
+  target is named *In Review* / *Code Review* (review) →
+  `transitionJiraIssue({ issueIdOrKey, transitionId })`. **Assign:** `editJiraIssue`
+  assignee = current user (id via `atlassianUserInfo`).
 
-Idempotent: skip if the issue is already in that state. This keeps a looping
-`/corgi-queue` from re-picking an in-flight ticket (auto-pick takes only
-not-In-Progress tickets).
+Idempotent: skip if already in that state / already assigned. **Don't steal an
+existing assignee** — self-assign only when unassigned. **No review-type state on the
+team → leave it In Progress.** The in-progress move keeps a looping `/corgi-queue`
+from re-picking an in-flight ticket (auto-pick takes only not-In-Progress tickets).

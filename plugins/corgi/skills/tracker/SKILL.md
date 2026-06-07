@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Tracker-side work for a corgi workspace (Linear or Jira) — triggers on plain language, matching intent not exact words. Four jobs: (1) STATUS / standup — "where are we", "what's blocked", "are we on track", "give me an update"; (2) SORT THE INBOX (triage) — "sort/prioritize the new issues", "which of these matter", "any duplicates"; (3) BREAK WORK DOWN (decompose) — "break this epic/feature into tickets", "turn this idea into tasks", "plan the work for X"; (4) PICK UP WORK ("/corgi-queue") — "find me something to work on", "what's ready to build", "work on the stories in ready", "pick from the backlog", "what's most impactful", "grab the agent tickets" — build-ready tickets resolved by scope (the `agent` queue by default, OR a status like "ready", the backlog, the most impactful by priority, OR links you pass), drift-skipped, handed to the stories skill to build. Edge over the tracker UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR, CI — across every corgi-compose.yml service (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but already merged" surfaces. Read-only itself (dispatches to stories, never writes code); one confirm gate guards any tracker write. NOT for implementing tickets (stories), ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
+description: Tracker-side work for a corgi workspace (Linear or Jira) — triggers on plain language, matching intent not exact words. Four jobs: (1) STATUS / standup — "where are we", "what's blocked", "are we on track", "give me an update"; (2) SORT THE INBOX (triage) — "sort/prioritize the new issues", "which of these matter", "any duplicates"; (3) BREAK WORK DOWN (decompose) — "break this epic/feature into tickets", "turn this idea into tasks", "plan the work for X"; (4) PICK UP WORK ("/corgi-queue") — "find me something to work on", "what's ready to build", "what should I start with", "work on the stories in ready", "pick from the backlog", "what's most impactful", "pick the most ROI story we have", "any bugs to solve", "grab the agent tickets" — build-ready tickets resolved by scope (the `agent` queue by default, OR a status like "ready", the backlog, the most impactful/ROI by priority, ready bugs, OR links you pass), drift-skipped, handed to the stories skill to build. Edge over the tracker UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR, CI — across every corgi-compose.yml service (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but already merged" surfaces. Read-only itself (dispatches to stories, never writes code); one confirm gate guards any tracker write. NOT for implementing tickets (stories), ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
 ---
 
 # Corgi tracker
@@ -69,7 +69,8 @@ Cycle 24 · day 6/10 · 14 issues
 ```
 End with the **burn read** (can the open points land in the days left? why not) +
 next actions routed to skills. **No cycle** (Jira Kanban / Linear without cycles) →
-group by status column, no burn line. "Plan next sprint" → propose a set within
+group by status column, no burn line. **Asked "who"** (owner / who to unblock) → add
+the assignee per line. "Plan next sprint" → propose a set within
 capacity (tracker velocity if exposed, else ask), carry-over first,
 producer-before-consumer; offer to move it in (gate).
 
@@ -84,8 +85,11 @@ Table → gate → batch-write. Ambiguous → leave it, flag.
 ## Job 3 — Decompose epic → tickets
 
 Feature/epic → **buildable, ordered tickets** (what `stories` wants):
-1. Scope it (read the epic + existing children to not dup; free-text → settle the
-   boundary first).
+1. Scope it (read the epic + existing children to not dup). Source = a tracker epic
+   **or a local doc** ("turn this roadmap/PRD into tickets" → read the file from
+   `docs/`, treat it as the epic). Large / ambiguous / free-text → settle the boundary
+   first with `superpowers:brainstorming` (if installed, else inline Q&A) before
+   cutting tickets.
 2. **One ticket per unit of work per service.** Cross-service → a **producer** ticket
    + **consumer**(s), blocks-links encoding order.
 3. Each: title, intent, service(s), acceptance criteria, T-shirt size (never
@@ -103,21 +107,30 @@ gate.**
    - **no scope said** → the **`agent` queue** (label `agent`).
    - **"in ready" / "todo" / a named column** → that **status**.
    - **"from backlog"** → the **backlog** (unstarted, below the active cycle).
-   - **"most impactful" / "highest priority" / "what matters most"** → take the
-     candidate set and **order by tracker priority + value signals** (linked
-     customers/issues), surface the top. Say it's a priority ordering, **not** a
-     business-impact analysis — that's `suggest`.
+   - **"most impactful" / "highest priority" / "most ROI" / "most valuable"** (of work
+     we **already have**) → order the candidate set by **tracker priority + value
+     signals** (linked customers/issues), surface the top. Say it's a priority
+     ordering, **not** a business-impact score. ROI/value of *new, untracked* ideas →
+     `suggest`, not pickup.
+   - **"bugs" / "bugs to fix"** → ready **bug-type** tickets (Linear type/label Bug;
+     Jira `issuetype = Bug`). `stories` builds them **bug-tier** (red test first).
 
    All scopes apply the same floor: **not In Progress / not Done, not blocked.** Calls
-   per tracker: `references/tracker-and-forge.md`.
+   per tracker: `references/tracker-and-forge.md`. **A question or singular ask** ("do
+   we have bugs?", "what should I start with?") → **answer the inventory first** (count
+   + one line each), then offer to build — don't auto-build the whole set off a
+   question.
 2. **Drop drift** (Phase 1): skip anything already merged or with an open PR — flag,
    don't rebuild. All scopes.
-3. **Present + confirm** (one line each, size + service; auto-pick default = all
-   ready).
-4. **Hand picked keys to `stories`** — it builds and **moves each ticket to the
-   team's in-progress state as its branch is created** (`stories` Phase 3). That move
-   de-dupes a looping `/corgi-queue` (auto-pick takes only not-In-Progress). Loop
-   `/loop 1h /corgi-queue` to drain unattended. Empty / all-drift → say so.
+3. **Present + confirm** (one line each, size + service; tag **"has spec"** when the
+   ticket already carries one — `stories` reuses **and re-verifies** it). Auto-pick =
+   all ready for a **batch** ask; a singular/question ask → present, let the user pick.
+4. **Hand picked keys to `stories`** — it builds and, as each branch is created,
+   **moves the ticket to in-progress + self-assigns** (then → the team's review state
+   when its draft PR opens) — `stories` Phases 3 & 5. The in-progress move de-dupes a
+   looping `/corgi-queue` (auto-pick takes only not-In-Progress). Loop
+   `/loop 1h /corgi-queue` to keep draining on a schedule (each round's batch still
+   passes the one spec gate — not zero-touch). Empty / all-drift → say so.
 
 ## The write gate
 
