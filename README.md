@@ -307,6 +307,7 @@ If you use [Claude Code](https://claude.com/claude-code), install the plugin:
 Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. The plugin adds slash-commands plus auto-invoking skills that cover the whole loop — plan, run, debug, suggest, ship, review:
 
 - **Plan the work — `/corgi-tracker`.** Standup / status, triage, or decompose an epic into tickets — from Linear or Jira. Its edge over the tracker's own UI: it ties each ticket to its **real code state** — branch, draft/open/merged PR, CI — across every service, so drift like "In Progress but no branch" or "Todo but the PR already merged" surfaces. Read-only until one confirm gate guards any tracker write; hands the tickets it shapes to `/corgi:stories`.
+- **Drain the queue — `/corgi-queue`.** Pick up build-ready tickets and build them. Pass explicit Linear/Jira links to build exactly those, or pass nothing to auto-pick the **`agent`** queue (tickets labelled `agent` that aren't In Progress/Done). It skips anything already merged, you confirm the picks, then it hands them to `/corgi:stories` to branch per service and open draft PRs. Loop it (`/loop 1h /corgi-queue`) to drain the queue unattended.
 - **Run it — `/corgi-run`.** "Run the stack" — or a slice, with a tunnel + logs, against a remote backend, for a mobile emulator, or a single service on a feature/PR branch or worktree (`--service-branch`/`--service-dir`, the reviewer "Run line"). Boots **detached**, waits until healthy, and flags anything stuck.
 - **Debug it — `/corgi-debug`.** A service won't start, or you're chasing a bug and need runtime/deployed data. Local-first (`ps` / `status` / `doctor` / `logs`), then your stack's own logs/analytics provider (Coralogix, CloudWatch/ECS, Datadog… — auto-detected from your README) on demand.
 - **Suggest work — `/corgi-suggest`.** Ranked, evidence-backed product **and** engineering improvements, each tied to a measurable outcome; it specs the one you pick and can open a tracker story.
@@ -315,6 +316,7 @@ Now Claude recognizes any project with a `corgi-compose.yml` and reaches for rea
 
 ```
 /corgi-tracker                       # standup / triage / decompose, tied to real PR + CI state
+/corgi-queue                         # build-ready tickets (explicit, or the `agent` queue) → draft PRs
 /corgi-run                           # boot the stack detached, wait until healthy
 /corgi-debug                         # diagnose a service / pull deployed logs
 /corgi-suggest                       # ranked, measurable improvement ideas

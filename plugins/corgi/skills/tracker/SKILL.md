@@ -1,14 +1,15 @@
 ---
 name: tracker
-description: Use for the tracker side of a corgi workspace — Linear or Jira. Three jobs: (1) status / standup — "where are we", "what's blocked", "generate standup", "is the sprint on track"; (2) triage — "triage the inbox", "label these", "any duplicates"; (3) decompose — "break this epic into tickets", "turn this feature into stories". Its edge over the tracker's own UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR/MR, CI — across every service in corgi-compose.yml (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but the PR already merged" surfaces. Read-only until a single confirm gate guards any tracker write. Manager / lead / founder lens. NOT for implementing tickets (stories), improvement ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi). Hands its tickets to stories.
+description: Use for the tracker side of a corgi workspace — Linear or Jira. Four jobs: (1) status / standup — "where are we", "what's blocked", "generate standup", "is the sprint on track"; (2) triage — "triage the inbox", "label these", "any duplicates"; (3) decompose — "break this epic into tickets", "turn this feature into stories"; (4) pickup — drain the agent work queue ("/corgi-queue", "pick up the agent tickets", "what's ready to build"): tickets labelled `agent` that are ready (not In Progress / not Done), drift-skipped, confirmed, then handed to the stories skill to build. Its edge over the tracker's own UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR/MR, CI — across every service in corgi-compose.yml (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but the PR already merged" surfaces. Read-only itself (it dispatches to stories, never writes code); a single confirm gate guards any tracker write. Manager / lead / founder lens. NOT for implementing tickets (stories does that), improvement ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
 ---
 
 # Corgi tracker
 
 Read the issue tracker (Linear or Jira) **and** the `corgi-compose.yml` workspace,
-**tie each ticket to its real code state**, and answer three kinds of question:
-**status**, **triage**, **decompose**. It feeds **`stories`** (build) the same way
-**`review`** feeds the back of the loop. Reports and plans — it never writes code.
+**tie each ticket to its real code state**, and do four jobs: **status**,
+**triage**, **decompose**, and **pickup** (dispatch build-ready tickets to
+**`stories`**). It feeds `stories` the same way **`review`** feeds the back of the
+loop. Reports, plans, and dispatches — it never writes code itself.
 
 **The one thing a tracker UI can't do:** it doesn't know your service→repo map, so it
 can't tell you a ticket marked *In Progress* has no branch, or a *Todo* whose PR
@@ -109,6 +110,31 @@ wants):
 4. Preview the set + the order → **gate** → create in the tracker (parented, linked).
 5. Offer "build these now?" → hand the **keys** to **`stories`** (don't let it
    re-create the issues).
+
+## Job 4 — Pickup (build-ready tickets → stories)
+
+Get tickets built, **two ways in, same dispatch out**. **Read-only here — the build
+and its spec sign-off gate are `stories`' job;** this flow only selects + dispatches.
+
+1. **Resolve the set:**
+   - **Explicit** — links/keys passed in (`/corgi-queue ABC-1 ABC-2`, pasted
+     Linear/Jira URLs) → use exactly those.
+   - **Auto-pick** (no keys given) — the **agent queue**: tickets carrying the agent
+     label (default `agent`; confirm if absent) that are **not In Progress and not
+     Done** (Todo/Backlog/ready) and not blocked. Linear `list_issues` label+state
+     filter; Jira JQL `labels = agent AND statusCategory = "To Do"`
+     (`references/tracker-and-forge.md`).
+2. **Drop drift** (Phase 1 correlation) — **skip any whose PR already merged**
+   (shipped, not closed) or that has an open PR (in flight); surface those separately
+   to close/route, don't rebuild. Applies to **both** modes — an explicit link to an
+   already-merged ticket gets flagged, not rebuilt.
+3. **Present + confirm** — one line each, size + service(s); you pick (auto-pick
+   default = all ready).
+4. **Hand the picked keys to `stories`** (auto) — it owns build + spec gate +
+   branch-per-service + draft PRs. `/corgi-queue` is the front door; loop it
+   (`/loop 1h /corgi-queue`) to drain the agent queue unattended.
+
+Empty queue / all drift → say so; don't invent work.
 
 ## The write gate
 
