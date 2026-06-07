@@ -3,7 +3,7 @@
 
   # 🐶 CORGI 🐶
 
-  **Run your whole local stack from one file — repos, databases, env, every service. And let AI agents plan, build, and review work across it.**
+  **Run your whole local stack from one file — repos, databases, env, every service. And let AI agents plan, build, and review work across it.** 
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
