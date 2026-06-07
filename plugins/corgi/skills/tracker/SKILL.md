@@ -1,162 +1,127 @@
 ---
 name: tracker
-description: Use for the tracker side of a corgi workspace — Linear or Jira. Four jobs: (1) status / standup — "where are we", "what's blocked", "generate standup", "is the sprint on track"; (2) triage — "triage the inbox", "label these", "any duplicates"; (3) decompose — "break this epic into tickets", "turn this feature into stories"; (4) pickup — drain the agent work queue ("/corgi-queue", "pick up the agent tickets", "what's ready to build"): tickets labelled `agent` that are ready (not In Progress / not Done), drift-skipped, confirmed, then handed to the stories skill to build. Its edge over the tracker's own UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR/MR, CI — across every service in corgi-compose.yml (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but the PR already merged" surfaces. Read-only itself (it dispatches to stories, never writes code); a single confirm gate guards any tracker write. Manager / lead / founder lens. NOT for implementing tickets (stories does that), improvement ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
+description: Tracker-side work for a corgi workspace (Linear or Jira). Four jobs — status/standup ("where are we", "what's blocked", "generate standup", "is the sprint on track"); triage ("triage the inbox", "label these", "dupes"); decompose ("break this epic into tickets", "turn this feature into stories"); pickup ("/corgi-queue", "pick up the agent tickets", "what's ready to build" — build-ready tickets, drift-skipped, handed to the stories skill to build). Its edge over the tracker UI: it ties each ticket to its REAL code state — branch, draft/open/merged PR, CI — across every corgi-compose.yml service (GitHub or GitLab), so drift like "In Progress but no branch" or "Todo but already merged" surfaces. Read-only itself (it dispatches to stories, never writes code); one confirm gate guards any tracker write. NOT for implementing tickets (stories), ideas (suggest), reviewing PRs (review), running/diagnosing the stack (run/debug), or authoring corgi-compose.yml (corgi).
 ---
 
 # Corgi tracker
 
-Read the issue tracker (Linear or Jira) **and** the `corgi-compose.yml` workspace,
-**tie each ticket to its real code state**, and do four jobs: **status**,
-**triage**, **decompose**, and **pickup** (dispatch build-ready tickets to
-**`stories`**). It feeds `stories` the same way **`review`** feeds the back of the
-loop. Reports, plans, and dispatches — it never writes code itself.
+Read the tracker (Linear or Jira) **and** `corgi-compose.yml`, **tie each ticket to
+its real code state**, and do four jobs: **status**, **triage**, **decompose**,
+**pickup**. Reports, plans, and dispatches to `stories` — never writes code itself.
 
-**The one thing a tracker UI can't do:** it doesn't know your service→repo map, so it
-can't tell you a ticket marked *In Progress* has no branch, or a *Todo* whose PR
-already merged. This skill does — that correlation is its whole reason to exist. When
-the compose is on disk, never report tracker status without it.
+**Why not just the tracker UI:** it doesn't know your service→repo map, so it can't
+tell you an *In Progress* ticket has no branch or a *Todo* whose PR already merged.
+That correlation is the point — when compose is on disk, never report status without
+it.
+
+**Exact tracker calls (Linear + Jira tools, JQL, forge queries) live in
+`references/tracker-and-forge.md` — read it before calling the tracker; don't guess a
+tool name.**
 
 ## Guardrails
 
-- **Read-only until the gate.** Pulling tracker + forge state is free and silent. Any
-  **write** (create / move / label / set priority / comment) is batched behind **one
-  confirm**. `--yes` skips the asking.
-- **Correlate, don't assume.** A ticket's true state = tracker status **+** its PR/CI
-  state. Report the mismatch; never paper over it. Never invent an estimate, status,
-  or assignee the tracker doesn't have.
-- **Plan, don't build.** Output is a report or tracker tickets. Code → `stories`;
-  ideas → `suggest`. Hand off; don't cross the line.
-- **Never touch `manualRun` services** when mapping work to repos.
+- **Read-only until the gate.** Reading tracker + forge is free; any **write**
+  (create/move/label/priority/comment) batches behind **one confirm** (`--yes` skips
+  asking).
+- **Correlate, don't assume.** True state = tracker status **+** PR/CI. Report
+  mismatches; never invent an estimate/status/assignee the tracker lacks.
+- **Plan, don't build** — code → `stories`, ideas → `suggest`. **Never touch
+  `manualRun`.**
 
 ## Phase 0 — Workspace + tracker + forge
 
-- **Workspace** — `ls corgi-compose.yml *.corgi-compose.yml`. Present → read the
-  **service → dir** map + dependency order (`path`/`cloneFrom`, `depends_on_services`;
-  exclude `manualRun`; schema `../corgi/references/yml-schema.md`). Absent → degrade:
-  tracker-only, skip Phase 1, and **say** the code column wasn't checked.
-- **Forge per repo** — `git -C <dir> remote get-url origin` → `gh`/`glab` (a workspace
-  may span both). Needed to read PR/CI state.
-- **Tracker** — Linear (`linear.app` / key shape) → `mcp__linear-server__*`; Jira
-  (`atlassian.net` / project key) → `mcp__atlassian__*`. Both connected + a bare key →
-  ask. **Neither connected** → name what to connect + offer a git-only digest (open
-  PRs + recent commits). Tool names + the cycle/board/search calls per tracker:
-  `references/tracker-and-forge.md`.
+- **Workspace** — `ls corgi-compose.yml *.corgi-compose.yml`; read service→dir +
+  dependency order (`path`/`cloneFrom`, `depends_on_services`, exclude `manualRun`;
+  schema `../corgi/references/yml-schema.md`). Absent → tracker-only; skip Phase 1,
+  say the code column wasn't checked.
+- **Forge** — `git -C <dir> remote get-url origin` → `gh`/`glab` (may span both).
+- **Tracker** — Linear (`linear.app`/key) → `mcp__linear-server__*`; Jira
+  (`atlassian.net`/project key) → `mcp__atlassian__*`. Both + bare key → ask. Neither
+  connected → name what to connect, offer a git-only digest.
 
 ## Phase 1 — Correlate ticket ↔ code (the superpower)
 
-For each in-scope ticket (skip only when no compose on disk):
+Per in-scope ticket (skip only if no compose): find its PRs — prefer the tracker's
+own git links (Linear attachments / Jira dev-panel), else list PRs whose head branch
+contains the key per repo. Record **none/draft/open/merged/closed** + link + CI.
+Read-only; no checkout. Then flag drift:
 
-1. **Find its PRs.** Prefer the tracker's **own git links** (Linear attachments /
-   Jira dev-panel). Fallback: list PRs/MRs whose head branch **contains the key**
-   across each non-`manualRun` repo (`stories` uses `feature/<KEY>/<slug>`, same name
-   per repo). Record per ticket: **none / draft / open / merged / closed** + the link
-   + **CI** (`gh pr checks` / `glab ci status`). Read-only; never check out a branch.
-2. **Flag the drift** — the part the tracker can't see:
+| Tracker | Code | Report as |
+|---------|------|-----------|
+| In Progress | no branch/PR | **not started** |
+| In Progress | open PR, CI red | **blocked on CI** → `/corgi-debug` |
+| In Review | no PR | drift — nothing to review |
+| Todo/Backlog | PR merged | **stale — close** (gate) |
+| Done | PR open | **premature done** |
+| any | open PR, no review | needs a reviewer → `/corgi-review` |
 
-   | Tracker | Code | Report as |
-   |---------|------|-----------|
-   | In Progress | no branch/PR | **not actually started** |
-   | In Progress | open PR, CI red | **blocked on CI** → `/corgi-debug` |
-   | In Review | no PR | drift — nothing to review |
-   | Todo / Backlog | PR merged | **stale — close it** (gate) |
-   | Done | PR open | **premature done** |
-   | any | open PR, no review | needs a reviewer → `/corgi-review` |
-
-Hold this in one cache; the jobs below read it, never re-query.
+Hold one cache; the jobs below read it, never re-query.
 
 ## Job 1 — Status / standup
 
-Group the correlated tickets, lead with **blockers + drift** (that's what standup is
-for), each line carrying its PR + CI:
-
+Group the cache, lead with **blockers + drift**, each line carrying PR + CI:
 ```
 Cycle 24 · day 6/10 · 14 issues
-🔴 Blocked / drift
-   ABC-122 api  Webhook retries   PR #255 open, CI ✗      → /corgi-debug
-   ABC-130 web  New onboarding    In Progress 4d, no branch  ⚠
-🟢 On track
-   ABC-118 api  Add phone field   PR #251 draft, CI ✓     → ready to land
-✅ Done (5) · 🗒 Todo (3) · ⏳ Stale (1: ABC-077, 23d)
+🔴 ABC-122 api  Webhook retries  PR #255 open, CI ✗  → /corgi-debug
+   ABC-130 web  New onboarding   In Progress 4d, no branch ⚠
+🟢 ABC-118 api  Add phone field  PR #251 draft, CI ✓ → ready to land
+✅ Done 5 · 🗒 Todo 3 · ⏳ Stale 1 (ABC-077, 23d)
 ```
-
-End with the **burn read** (can the open points land in the days left? name the
-reason if not) and next actions, each routed to a skill. **No cycle/sprint** (Jira
-Kanban, Linear without cycles) → group by board column / status instead — same
-correlation, no burn line. Read-only by default; "plan next sprint" → propose a set
-that fits capacity (tracker's velocity if it exposes one, else ask — never invent
-one), carry-over first, producer-before-consumer order; offer to move it in (gate).
+End with the **burn read** (can the open points land in the days left? why not) +
+next actions routed to skills. **No cycle** (Jira Kanban / Linear without cycles) →
+group by status column, no burn line. "Plan next sprint" → propose a set within
+capacity (tracker velocity if exposed, else ask), carry-over first,
+producer-before-consumer; offer to move it in (gate).
 
 ## Job 2 — Triage
 
-For each untriaged issue propose — don't apply yet — **label/area** (map the text to
-a service via compose names + READMEs), **priority** (from real signals, else
-`needs-info` + the question), **assignee** (by area ownership if known, else leave
-it), **duplicate** (link a candidate, never auto-merge). Present a table → gate →
-batch the writes. Ambiguous → leave for the human, flag it.
+Per untriaged issue, propose (don't apply): **label/area** (map text → service via
+compose + READMEs), **priority** (real signals, else `needs-info` + the question),
+**assignee** (by ownership if known, else leave), **duplicate** (link a candidate).
+Table → gate → batch-write. Ambiguous → leave it, flag.
 
 ## Job 3 — Decompose epic → tickets
 
-Turn a feature/epic/roadmap into **buildable, ordered tickets** (the input `stories`
-wants):
-
+Feature/epic → **buildable, ordered tickets** (what `stories` wants):
 1. Scope it (read the epic + existing children to not dup; free-text → settle the
-   boundary with the user first).
-2. **One ticket per coherent unit of work per service** (the grain `stories` branches
-   from). Cross-service feature → a **producer** ticket (contract owner) + **consumer**
-   ticket(s), with blocks-links encoding the order.
-3. Each ticket: title, intent, the service(s), acceptance criteria, a labelled
-   T-shirt estimate (never a false-precise number). Multi-service → a one-line
-   contract note.
-4. Preview the set + the order → **gate** → create in the tracker (parented, linked).
-5. Offer "build these now?" → hand the **keys** to **`stories`** (don't let it
-   re-create the issues).
+   boundary first).
+2. **One ticket per unit of work per service.** Cross-service → a **producer** ticket
+   + **consumer**(s), blocks-links encoding order.
+3. Each: title, intent, service(s), acceptance criteria, T-shirt size (never
+   false-precise). Multi-service → a one-line contract note.
+4. Preview set + order → gate → create (parented, linked) → offer "build these now?"
+   → hand **keys** to `stories` (don't let it re-create them).
 
 ## Job 4 — Pickup (build-ready tickets → stories)
 
-Get tickets built, **two ways in, same dispatch out**. **Read-only here — the build
-and its spec sign-off gate are `stories`' job;** this flow only selects + dispatches.
-
-1. **Resolve the set:**
-   - **Explicit** — links/keys passed in (`/corgi-queue ABC-1 ABC-2`, pasted
-     Linear/Jira URLs) → use exactly those.
-   - **Auto-pick** (no keys given) — the **agent queue**: tickets carrying the agent
-     label (default `agent`; confirm if absent) that are **not In Progress and not
-     Done** (Todo/Backlog/ready) and not blocked. Linear `list_issues` label+state
-     filter; Jira JQL `labels = agent AND statusCategory = "To Do"`
-     (`references/tracker-and-forge.md`).
-2. **Drop drift** (Phase 1 correlation) — **skip any whose PR already merged**
-   (shipped, not closed) or that has an open PR (in flight); surface those separately
-   to close/route, don't rebuild. Applies to **both** modes — an explicit link to an
-   already-merged ticket gets flagged, not rebuilt.
-3. **Present + confirm** — one line each, size + service(s); you pick (auto-pick
-   default = all ready).
-4. **Hand the picked keys to `stories`** (auto) — it owns build + spec gate +
-   branch-per-service + draft PRs, and **moves each ticket to the team's in-progress
-   state as its branch is created** (`stories` Phase 3). That status move is what
-   de-dupes a looping `/corgi-queue`: auto-pick only takes not-In-Progress tickets, so
-   a story already in flight is never re-grabbed. `/corgi-queue` is the front door;
-   loop it (`/loop 1h /corgi-queue`) to drain the agent queue unattended.
-
-Empty queue / all drift → say so; don't invent work.
+Two ways in, same dispatch. **Read-only here — `stories` owns the build + its spec
+gate.**
+1. **Resolve:** explicit links/keys passed in → those; **none → auto-pick the agent
+   queue** (label `agent`, not In Progress/Done, not blocked).
+2. **Drop drift** (Phase 1): skip anything already merged or with an open PR — flag,
+   don't rebuild. Both modes.
+3. **Present + confirm** (one line each, size + service; auto-pick default = all
+   ready).
+4. **Hand picked keys to `stories`** — it builds and **moves each ticket to the
+   team's in-progress state as its branch is created** (`stories` Phase 3). That move
+   de-dupes a looping `/corgi-queue` (auto-pick takes only not-In-Progress). Loop
+   `/loop 1h /corgi-queue` to drain unattended. Empty / all-drift → say so.
 
 ## The write gate
 
-One preview, one confirm, for the whole batch (never per-issue):
+One confirm for the whole batch (never per-issue):
 ```
-Write to <Linear|Jira>:  create 3 under EPIC-9 (api×1, web×2) + links · move ABC-118 to Cycle 25 · set GHI-4 High
-Proceed?  apply / edit / cancel
+Write to <Linear|Jira>:  create 3 under EPIC-9 + links · move ABC-118 to Cycle 25 · set GHI-4 High
+apply / edit / cancel
 ```
-Gate on by default; `--yes` skips it. **Preflight the MCP is connected** before
-promising a write — not connected → keep the plan + a paste-ready body + the new-issue
-URL and stop. Idempotent: match on title/key, update instead of double-creating.
+On by default (`--yes` skips). **Preflight the MCP is connected** — if not, keep the
+plan + a paste-ready body + the new-issue URL, stop. Idempotent: match on title/key,
+update not duplicate.
 
 ## Hand-offs & degrade
 
-- Build a ticket → **`stories`** · need ideas → **`suggest`** · open unreviewed PR →
-  **`review`** · blocked on a failing/deployed thing → **`debug`** · draft + green,
-  ready to land → the ship/land flow.
-- **No tracker MCP** → git/forge-only digest. **No compose** → tracker-only, code
-  column omitted (say so). **Mixed forges / both trackers** → resolve per repo/issue.
-- Big cycle (>~30 issues) → one `Explore` per service-area for the Phase 1
-  correlation in parallel, merge into the one cache. Daily cadence → wrap in `/loop`,
-  don't build a scheduler here.
+- Build → `stories` · ideas → `suggest` · unreviewed PR → `review` · blocked/deployed
+  → `debug` · draft + green → land it (`gh pr merge` / `glab mr merge`).
+- **No tracker MCP** → git-only digest. **No compose** → tracker-only (code column
+  omitted, say so). **Mixed forges/trackers** → resolve per repo/issue.
+- Big cycle (>~30) → one `Explore` per service-area for Phase 1, merge into the cache.

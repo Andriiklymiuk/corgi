@@ -11,6 +11,7 @@ calls under **write** (all behind the skill's gate).
 | Active cycle + its issues | `list_cycles` (team, current) → `list_issues` (cycle id) |
 | Backlog (planning) | `list_issues` filtered to unstarted, ordered by priority |
 | Untriaged (triage) | `list_issues` filtered to no-status / Triage / no-label |
+| Agent queue (pickup) | `list_issues` `label:"agent"`, then keep states of type `backlog`/`unstarted` (drop `started`/`completed`/`canceled`) — no negative state filter, so filter client-side |
 | One issue (+ git links) | `get_issue` → read `attachments[]` for linked PR URLs |
 | **write** | `create_issue`, `update_issue` (state/assignee/labels/priority/cycle), `create_comment` |
 
@@ -27,6 +28,7 @@ project instead; there's no burn line.
 | **Kanban (no sprint)** | `searchJiraIssuesUsingJql` — `project = <P> AND statusCategory != Done` (group by status column) |
 | Backlog | JQL `project = <P> AND sprint is EMPTY ORDER BY Rank` |
 | Untriaged | JQL `project = <P> AND statusCategory = "To Do" AND labels is EMPTY` (or the team's triage filter) |
+| Agent queue (pickup) | JQL `project = <P> AND labels = agent AND statusCategory = "To Do"` |
 | One issue (+ git links) | `getJiraIssue`; PR links via `getJiraIssueRemoteIssueLinks` / the dev-panel if exposed |
 | **write** | `createJiraIssue`, `editJiraIssue`, `transitionJiraIssue`, `addCommentToJiraIssue` |
 
