@@ -73,6 +73,10 @@ corgi logs --all           # merge newest run of every service into one timestam
 corgi logs --idle 0        # tail forever (default exits after 30s of dead-air)
 corgi logs --prune         # delete all captured logs
 corgi doctor               # preflight checks (tools, docker, ports)
+corgi validate             # statically validate corgi-compose.yml
+corgi test --service api   # run a service's `test` script in its resolved env (--ensure-deps waits on deps)
+corgi exec api -- <cmd>    # one-off command in a service's resolved env (migrate/seed/etc); --ensure-deps to wait on deps
+corgi env api              # print a service's fully-resolved environment (read-only)
 corgi config               # show current user settings (~/.corgi/config.yml)
 corgi notifications on|off|test            # toggle/test desktop crash notifications
 corgi status               # health check (one-shot)

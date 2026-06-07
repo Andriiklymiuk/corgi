@@ -182,9 +182,53 @@ Removed-line: use `"old_path"` + `"old_line"` instead of `new_path`/`new_line`.
 
 ---
 
+## 5. Mode B — read incoming threads, reply, resolve
+
+For the **address-review** mode (SKILL Mode B). Read the **human** review threads,
+reply, and resolve **only** the ones you addressed. Push fixes with `git push` (no
+force) from the PR's branch — never merge, never undraft.
+
+**GitHub** (review-thread resolution state lives only in GraphQL):
+```bash
+# inline review comments — id, path, line, author, reply chain, body
+gh api repos/<owner>/<repo>/pulls/<n>/comments \
+  -q '.[] | {id, path, line, user: .user.login, reply_to: .in_reply_to_id, body}'
+# thread ids + isResolved (skip resolved; skip your own <!-- corgi-review --> bodies):
+gh api graphql -F o=<owner> -F r=<repo> -F n=<n> -f query='
+  query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){
+    pullRequest(number:$n){reviewThreads(first:100){nodes{
+      id isResolved comments(first:1){nodes{path line author{login} body}}}}}}}'
+# reply into a thread (in_reply_to = the thread's ROOT comment id):
+gh api --method POST repos/<owner>/<repo>/pulls/<n>/comments \
+  -F in_reply_to=<root_comment_id> -f body='Fixed in <sha> — …'
+# resolve a thread you addressed (threadId from the GraphQL above):
+gh api graphql -F t=<thread_id> -f query='
+  mutation($t:ID!){resolveReviewThread(input:{threadId:$t}){thread{isResolved}}}'
+```
+
+**GitLab** (discussions carry `resolvable`/`resolved` inline):
+```bash
+# discussions — each .notes[] has author.username, resolvable, resolved, body
+glab api "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> \
+  -q '.[] | {id, notes: [.notes[] | {author: .author.username, resolvable, resolved, body}]}'
+# reply into a discussion:
+glab api --method POST \
+  "projects/<group>%2F<proj>/merge_requests/<n>/discussions/<discussion_id>/notes" \
+  --hostname <host> -f body='Fixed in <sha> — …'
+# resolve a discussion you addressed:
+glab api --method PUT \
+  "projects/<group>%2F<proj>/merge_requests/<n>/discussions/<discussion_id>?resolved=true" \
+  --hostname <host>
+```
+
+Keep an unaddressed / pushed-back thread **open** — only resolve what you applied.
+
+---
+
 ## Context
 
-- Cited by review SKILL.md P0 (sibling enum), P1 (fetch), P5 (post). Command-focused.
+- Cited by review SKILL.md P0 (sibling enum), P1 (fetch), P5 (post — Mode A), Mode B
+  (§5 read/reply/resolve). Command-focused.
 - The hidden markers `<!-- corgi-review -->` (summary) and
   `<!-- corgi-review:<file>:<line> -->` (inline) MUST appear exactly — they are the
   idempotency keys.

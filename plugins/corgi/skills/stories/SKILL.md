@@ -116,10 +116,28 @@ Always available, all the flow needs: `git`, `gh`/`glab`, `corgi`,
   returns attachment metadata, not image bytes — fetch the attachment
   (`mcp__atlassian__fetch` / its URL; may need auth) then read.
 
+### Reuse an existing spec — then re-verify it (may be stale)
+
+Before speccing from scratch, check the **three** places a prior spec may already
+live — a human's, a past `stories` run's, or a `decompose` ticket's acceptance
+criteria:
+1. **Ticket description** — the body often already carries the intended approach.
+2. **Ticket comments** — list them (Linear `list_comments`; Jira comments via
+   `getJiraIssue` / the dev panel). A comment opening with `<!-- corgi-spec -->` is a
+   spec a previous run posted.
+3. **Local `docs/`** — `docs/stories/<issue-key>-*.md` (this skill's own output) and
+   any hand-written design doc in `docs/` whose name/heading matches the work.
+
+Found one → treat it as a **starting hypothesis, not ground truth.** Re-resolve every
+`file:line` against the current tree and re-confirm the contract — code moves, specs
+rot. Say what drifted, rewrite the stale parts, keep what still holds. Nothing found →
+spec from scratch.
+
 ### Free-text feature (no ticket) — locate work first
 
-Description, not links → no fetch, nothing says *where* code goes. Find target
-service(s) before speccing:
+Description, not links → no fetch, nothing says *where* code goes. (First check
+`docs/` for an existing design doc for this feature — *Reuse an existing spec* above.)
+Find target service(s) before speccing:
 1. **Map intent → service(s)** from `corgi-compose.yml` (names, paths,
    `depends_on_services`) + the **README next to the compose** + per-service
    READMEs (they say what each service does). Don't guess.
@@ -167,8 +185,9 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
 - **Actionable → post.**
   - **Spec → a comment** on the issue (human-readable, not a `.md` attachment).
     Linear `mcp__linear-server__create_comment({ issueId, body })`; Jira `mcp__atlassian__addCommentToJiraIssue`.
-    Literal newlines / markdown; re-run with the returned comment id to update,
-    not duplicate.
+    Literal newlines / markdown. **Open the body with `<!-- corgi-spec -->`** so a
+    later run (new session, no comment id) finds it — list comments, match the marker,
+    **update** that one instead of posting a duplicate.
   - **What to test → a separate comment** (non-engineer reads inline). Plain QA:
     clicks + outcome, no code/file refs, end `Expected:`. Skip non-testable stories.
 - **Blocked → do NOT post.** Spec local only; mark `Status: BLOCKED` + **Decision
@@ -201,16 +220,21 @@ token):
 Key also goes in the commit + PR/MR title (Phases 4–5). Same branch name across
 repos so multi-repo PRs group.
 
-**Move the ticket to in-progress when its work starts.** As each actionable,
-ticketed story's branch is created (post sign-off), transition its issue to the
-team's **started** state — **resolve the state, don't hardcode "In Progress":**
-Linear `update_issue` to the team's `started`-type state (find it via
-`list_issue_statuses`); Jira `transitionJiraIssue` to the transition whose target is
-the In-Progress status (`mcp__atlassian__getTransitionsForJiraIssue`). Idempotent —
-skip if already there; skip no-ticket and blocked stories. This is also what stops a
-looping `/corgi-queue` from re-grabbing a story already in flight (its auto-pick only
-takes not-In-Progress tickets). Optionally move to the team's **review** state when
-the draft PR opens (Phase 5).
+**Move the ticket to in-progress + assign it when work starts.** As each actionable,
+ticketed story's branch is created (post sign-off):
+- **Transition to the team's started state** — **resolve it, don't hardcode "In
+  Progress":** Linear `update_issue` to the team's `started`-type state (find it via
+  `list_issue_statuses`); Jira `transitionJiraIssue` to the transition whose target is
+  the In-Progress status (`mcp__atlassian__getTransitionsForJiraIssue`).
+- **Assign it to the mover** — the **current tracker user**: Linear `update_issue`
+  `assigneeId` = the viewer/me; Jira `editJiraIssue` assignee = current user (id via
+  `mcp__atlassian__atlassianUserInfo`). **Don't steal** — already assigned to someone
+  else → leave it, note who; unassigned → take it.
+
+Idempotent — skip the move/assign if already set; skip no-ticket and blocked stories.
+The in-progress move is also what stops a looping `/corgi-queue` from re-grabbing a
+story already in flight (auto-pick takes only not-In-Progress tickets). The **review**
+transition fires later, when the draft PR opens — Phase 5.
 
 **Pick branch vs worktree per repo — check the working tree first:**
 `git -C <dir> status --porcelain --untracked-files=no` — empty = clean, any
@@ -303,6 +327,13 @@ commit. Tests for every change, matching existing patterns.
   (`corgi run --help | grep service-dir`).
 - **Bug tier: red test first** — write it, confirm it **FAILS on base**, then make
   it pass. Adjustments skip.
+- **Webhook / callback feature** (a new inbound endpoint an external provider calls —
+  Stripe, GitHub, Twilio, e-sign…) → **test with a simulated signed payload, not a
+  live call:** assert the signature check + handler behaviour against a sample event
+  (repeatable, CI-safe). **Don't gate on live delivery** — it needs provider config a
+  draft PR can't assume. Put the **live check** in the spec's manual-verification + the
+  PR body: `corgi tunnel <svc>` for a public URL, point the provider (or its CLI, e.g.
+  `stripe listen --forward-to <url>`) at it.
 - **Multi-repo consumer:** can't verify (codegen/typecheck) until its producer is
   committed **and running** — do Phase 4's contract-owner-first step (start
   producer, `corgi status --ready`) BEFORE running this gate on the consumer.
@@ -376,6 +407,12 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 ```
 
 - **Draft only.** Report each PR/MR's diff summary + link; human flips to ready.
+- **Move the ticket to the review state** once its draft PR/MR is up — **resolve it,
+  don't hardcode:** Linear a `Code Review`/`In Review` state (a later `started`-type or
+  custom state from `list_issue_statuses`); Jira the transition whose target is named
+  *In Review* / *Code Review* (`getTransitionsForJiraIssue`). **No such state on the
+  team → leave it In Progress.** Idempotent; skip no-ticket/blocked. Multi-repo story →
+  move once **all** its PRs are open, not per-repo.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
 - **Run-locally line in the body** — include the same one-paste
   `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report below)

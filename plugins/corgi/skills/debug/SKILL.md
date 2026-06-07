@@ -1,17 +1,23 @@
 ---
 name: debug
-description: Use to diagnose a corgi stack OR to gather runtime data while investigating a bug. Two entry modes — (1) a stack misbehaves: a service won't start, crashed, is stuck/unhealthy, hangs on boot ("debug the stack", "why is X not starting", "the api is down"); (2) you're working a bug ticket (Jira/Linear) and hit "need more data" — pull logs, request traces, or analytics, local or deployed ("pull the logs for this request", "what do the staging logs say", "check the 500s"). Local-first (corgi ps/status/doctor/logs + targeted retries); escalates to whatever logs/analytics provider the repo uses (CloudWatch/ECS, Coralogix, Datadog, Sentry, Grafana/Loki, New Relic, … — auto-detected from the repo's README) on demand and after asking. Callable from the stories skill mid-investigation. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or reviewing PRs (review skill).
+description: Use to diagnose a corgi stack OR to gather runtime data while investigating a bug. Two entry modes — (1) a stack misbehaves: a service won't start, crashed, is stuck/unhealthy, hangs on boot ("debug the stack", "why is X not starting", "the api is down"); (2) you're working a bug ticket (Jira/Linear) and hit "need more data" — pull logs, request traces, analytics, or backend perf data, local or deployed ("pull the logs for this request", "what do the staging logs say", "check the 500s", "why is this endpoint/query slow"); client-side/UI perf (render jank, slow animation, bundle) is the app framework's profiling job, not this. Local-first (corgi ps/status/doctor/logs + targeted retries); escalates to whatever logs/analytics provider the repo uses (CloudWatch/ECS, Coralogix, Datadog, Sentry, Grafana/Loki, New Relic, … — auto-detected from the repo's README) on demand and after asking. Callable from the stories skill mid-investigation. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or reviewing PRs (review skill).
 ---
 
 # Corgi debug
 
-Two entry modes:
+Three entry modes:
 
 - **Broken stack** — a service won't start, crashed, is unhealthy, or hangs on
   boot. Steps 0–3 (local); Step 4 only if a deployed env is implicated.
 - **Bug investigation** — on a ticket, hit *"need more data"*: runtime logs, a
-  request trace, analytics — **local or deployed**. Stack may be fine; often jump
-  straight to **Step 4** (provider data), Steps 0–2 only if it reproduces locally.
+  request trace, analytics, or **backend perf** ("why is order fetching slow", a slow
+  endpoint/query) — **local or deployed**. Stack may be fine; often jump straight to
+  **Step 4** (provider data / APM trace), Steps 0–2 only if it reproduces locally.
+  **Client-side / UI perf** (render jank, slow animation, first-load, bundle size) is
+  app-profiling — **not** corgi's stack data → the app framework's perf tooling, not here.
+- **CI red on a PR** — a pushed branch's checks failed ("why is CI red", "the build
+  broke on my PR"). corgi has **no CI command** — the failing job log comes from the
+  **forge CLI**, then reproduce locally → **Step 5**.
 
 **Local-first.** Exhaust the fast local probes before anything external. The
 provider is read from the repo (`README`/`CLAUDE.md`), never hard-coded, queried on
@@ -112,6 +118,12 @@ Smallest change that could work, then re-gate. **Never foreground a `corgi run`.
 
 - **Service with dependencies** → `corgi run --services <x> --with-deps --detach --logs`.
   Without `--with-deps` an isolated retry against a down dependency just re-crashes.
+- **A consumer can't reach a healthy producer** (404 / connection-refused to another
+  service, not a crash) → the producer is fine; check the **consumer's resolved env**:
+  `corgi env <consumer>` for a stale or wrong dependency URL — a prior `--host`/remote
+  run rewrote it, the producer was excluded from the run set so no
+  `depends_on_services` alias got generated, or the `.env` was hand-edited. Re-run
+  without the override / with `--with-deps` so corgi regenerates the wiring.
 - **Reproduce a suspect service on its branch / worktree** →
   `corgi run --services <x> --with-deps --detach --logs --service-branch <x>=<branch>`
   (corgi makes a non-destructive worktree off the pushed branch; main checkout
@@ -132,8 +144,9 @@ Red after ~2 tries → `needs attention` + the error, move on.
 ## Step 4 — Logs / analytics from the provider (on demand, ask first)
 
 **Use when** the ticket needs runtime/deployed data (a staging/prod request, a 500
-you can't reproduce locally) **or** local logs don't explain a local bug. For a bug
-investigation this is **first-class, not a last resort**.
+you can't reproduce locally, **or a slow backend path's trace/timing** — APM /
+slow-query log) **or** local logs don't explain a local bug. For a bug investigation
+this is **first-class, not a last resort**.
 
 **Before the ask-gate:** (a) if the symptom carries a ticket key whose tracker MCP is
 connected, read the ticket first (`mcp__linear-server__get_issue` /
@@ -162,6 +175,22 @@ collect scoping you can't use.
    relevant lines; never dump raw payloads or secrets.
 4. **MCP not connected** → tell the user exactly what to connect, and point at the
    repo's logs/observability README section.
+
+## Step 5 — CI red on a PR (forge logs, then reproduce locally)
+
+A pushed branch's checks failed. corgi has no CI command — pull the failing job's log
+from the **forge CLI**, then reproduce with the service's own gate.
+
+1. **Failing log** (read-only): GitHub — `gh pr checks <n>` (which failed) →
+   `gh run view <run-id> --log-failed`. GitLab — `glab ci status -R <repo>` →
+   `glab ci trace -R <repo>` (the failing job).
+2. **Read the first real error** — stacktrace / failing test / lint / build; skip the
+   green jobs.
+3. **Reproduce locally with the gate**, don't guess: `corgi test --service <x>` (or
+   `corgi exec <x> --ensure-deps -- <lint/build cmd>`). Green locally but red in CI →
+   an env gap (a CI-only var, a tool/node version, stale cache) — name it.
+4. **Fix → push**, re-check `gh pr checks` / `glab ci status`. ~2 tries, then report
+   `needs attention` + the failing job.
 
 ## Report
 
