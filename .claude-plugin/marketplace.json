@@ -8,7 +8,7 @@
     {
       "name": "corgi",
       "source": "./plugins/corgi",
-      "description": "AI skills for authoring corgi-compose.yml, running a stack detached and waiting until healthy, debugging local or deployed issues, suggesting ranked product + engineering improvements, shipping batches of Linear/Jira issues or a feature description as draft PRs/MRs, and reviewing existing PRs/MRs with inline suggestions"
+      "description": "AI skills for authoring corgi-compose.yml, running a stack detached and waiting until healthy, debugging local or deployed issues, tracker-side planning (Linear/Jira standup, triage, and epic-decompose tied to real PR+CI state across services), suggesting ranked product + engineering improvements, shipping batches of Linear/Jira issues or a feature description as draft PRs/MRs, and reviewing existing PRs/MRs with inline suggestions"
     }
   ]
 }
