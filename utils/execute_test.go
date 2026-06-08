@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -496,6 +497,73 @@ func TestRunCommandsParallelNoOp(t *testing.T) {
 	runCommandsParallel("test", "svc", []string{"echo hi"}, t.TempDir(), false, nil)
 }
 
+func TestRunCommandsParallelJoinsGoroutines(t *testing.T) {
+	ResetShutdownForTests()
+	t.Cleanup(ResetShutdownForTests)
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "done")
+	before := runtime.NumGoroutine()
+
+	runCommandsParallel("test", "svc", []string{"sleep 0.2 && touch " + marker}, dir, false, nil)
+
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("marker not present after call returned (goroutine not joined): %v", err)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	if got := runtime.NumGoroutine(); got > before+1 {
+		t.Fatalf("goroutine leak: before=%d after=%d", before, got)
+	}
+}
+
+func TestRunCommandsParallelSkipsAfterShutdown(t *testing.T) {
+	ResetShutdownForTests()
+	t.Cleanup(ResetShutdownForTests)
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "done")
+
+	RequestShutdown()
+	runCommandsParallel("test", "svc", []string{"touch " + marker}, dir, false, nil)
+
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("expected marker to be absent after shutdown, stat err=%v", err)
+	}
+}
+
+func TestRunManagedRemovesHandleOnSuccess(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	RunServiceCommands("test", "svc", []string{"echo hi"}, t.TempDir(), false, false)
+
+	if len(ProcessHandles) != 0 {
+		t.Fatalf("expected ProcessHandles empty on success, got %d", len(ProcessHandles))
+	}
+}
+
+func TestKillAllStoredProcessesEmptiesHandlesRace(t *testing.T) {
+	prev := ProcessHandles
+	ProcessHandles = nil
+	t.Cleanup(func() { ProcessHandles = prev })
+
+	dir := t.TempDir()
+	for i := 0; i < 2; i++ {
+		if _, err := StartDetached("svc", "sleep 0.1", dir); err != nil {
+			t.Fatalf("StartDetached: %v", err)
+		}
+	}
+
+	KillAllStoredProcesses()
+	if len(ProcessHandles) != 0 {
+		t.Fatalf("expected ProcessHandles empty after kill, got %d", len(ProcessHandles))
+	}
+	// Second sweep must be a safe no-op.
+	KillAllStoredProcesses()
+}
+
 func TestHandleCommandFailureKnownCmdInstallFails(t *testing.T) {
 	err := handleCommandFailure(
 		fmt.Errorf("executable file not found in $PATH"),
@@ -641,11 +709,6 @@ func (f *fakeLogWriter) Write(p []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.buf.Write(p)
-}
-func (f *fakeLogWriter) written() string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.buf.String()
 }
 func (f *fakeLogWriter) SetStatus(s LogStatus)    { f.status = s }
 func (f *fakeLogWriter) CurrentStatus() LogStatus { return f.status }

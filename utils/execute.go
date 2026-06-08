@@ -168,8 +168,10 @@ func KillAllStoredProcesses() {
 	pidMutex.Lock()
 	defer pidMutex.Unlock()
 	for _, proc := range ProcessHandles {
-		KillProcessGroup(proc.Pid)
-		proc.Release()
+		// Signal the group only. Don't Release(): managed procs are reaped by
+		// the concurrent cmd.Wait() in runManaged (calling Release here races
+		// that Wait), and detached procs' handles are freed at process exit.
+		_ = KillProcessGroup(proc.Pid)
 	}
 	ProcessHandles = []*os.Process{}
 }
@@ -252,8 +254,8 @@ func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand,
 		return err
 	}
 	addProcess(cmd.Process)
+	defer removeProcess(cmd.Process)
 	if err := cmd.Wait(); err != nil {
-		removeProcess(cmd.Process)
 		if !ShutdownRequested() {
 			markServiceLogStatus(serviceName, LogStatusCrashed)
 			if fn := onServiceCrash.Load(); fn != nil {
@@ -360,11 +362,20 @@ func RunServiceCommands(
 }
 
 func runCommandsParallel(commandsName, serviceName string, commands []string, path string, interactive bool, envFile []string) {
+	if ShutdownRequested() {
+		return
+	}
+	var wg sync.WaitGroup
 	for _, command := range commands {
+		if ShutdownRequested() {
+			break
+		}
+		wg.Add(1)
 		go func(command string) {
+			defer wg.Done()
 			err := RunServiceCmd(serviceName, command, path, interactive, envFile...)
 			if err != nil {
-				fmt.Println(
+				Info(
 					art.RedColor,
 					fmt.Sprintf("aborting %s command `%s` for %s, because of %s", commandsName, command, serviceName, err),
 					art.WhiteColor,
@@ -376,6 +387,7 @@ func runCommandsParallel(commandsName, serviceName string, commands []string, pa
 			}
 		}(command)
 	}
+	wg.Wait()
 }
 
 // RunCleanupCommands runs cleanup commands sequentially with a per-cmd
