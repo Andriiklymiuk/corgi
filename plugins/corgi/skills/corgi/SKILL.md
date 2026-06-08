@@ -85,6 +85,8 @@ corgi status --watch       # live monitor, transitions only
 corgi tunnel               # public HTTPS tunnels (long-running) — default cloudflared
 corgi db shell [name]                       # interactive DB shell inside running container (psql/redis-cli/mongosh/…)
 corgi db shell [name] -e "SELECT 1"         # one-shot query, exit; CI-friendly
+corgi db snapshot [name] [svc]              # fast physical Postgres snapshot (built indexes+matviews); postgres family only
+corgi db restore  [name] [svc]              # restore pgdata from a snapshot → up on built data, zero recompute
 corgi init                 # scaffold db_services/ + cloned repos
 corgi create               # interactive yml editor
 corgi clean -i db          # stop+remove db containers (also: services, corgi_services, all)

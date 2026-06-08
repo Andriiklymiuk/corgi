@@ -884,3 +884,75 @@ func TestGetCorgiConfigFromAlertNonInteractive(t *testing.T) {
 		t.Errorf("expected empty path, got %q", path)
 	}
 }
+
+func TestCleanCorgiServicesFolderPreservesSnapshots(t *testing.T) {
+	prev := CorgiComposePathDir
+	dir := t.TempDir()
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	// chdir so the relative "./corgi_services/" in CleanCorgiServicesFolder resolves here
+	wd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(wd) })
+
+	snapDir := filepath.Join(dir, "corgi_services", "db_services", "main", "snapshots")
+	if err := os.MkdirAll(snapDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(snapDir, "x.tar.zst"), []byte("z"), 0o644)
+	// a non-snapshot artifact that SHOULD be removed
+	os.MkdirAll(filepath.Join(dir, "corgi_services", "db_services", "main"), 0o755)
+	os.WriteFile(filepath.Join(dir, "corgi_services", "db_services", "main", "dump.sql"), []byte("d"), 0o644)
+
+	CleanCorgiServicesFolder()
+
+	if _, err := os.Stat(filepath.Join(snapDir, "x.tar.zst")); err != nil {
+		t.Error("snapshot should be preserved by CleanCorgiServicesFolder")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "corgi_services", "db_services", "main", "dump.sql")); err == nil {
+		t.Error("non-snapshot artifact should be removed")
+	}
+}
+
+// A symlink inside corgi_services pointing at an external dir must be removed as
+// a link only — the target and its contents must survive (no recursion through it).
+func TestCleanCorgiServicesFolderPreservesSnapshotsDoesNotFollowSymlinks(t *testing.T) {
+	prev := CorgiComposePathDir
+	dir := t.TempDir()
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	wd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(wd) })
+
+	// external dir living OUTSIDE corgi_services, with files that must not be touched
+	outside := filepath.Join(dir, "OUTSIDE")
+	if err := os.MkdirAll(filepath.Join(outside, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(outside, "a.txt"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(outside, "nested", "b.txt"), []byte("b"), 0o644)
+
+	servicesDir := filepath.Join(dir, "corgi_services", "services")
+	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(servicesDir, "link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	CleanCorgiServicesFolder()
+
+	if _, err := os.Lstat(link); err == nil {
+		t.Error("symlink inside corgi_services should be removed")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "a.txt")); err != nil {
+		t.Error("external file a.txt must survive — symlink target must not be followed")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "nested", "b.txt")); err != nil {
+		t.Error("external file nested/b.txt must survive — symlink target must not be followed")
+	}
+}

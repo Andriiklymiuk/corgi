@@ -252,6 +252,29 @@ Errors:
 - `no interactive shell defined for driver "<x>"` — that driver isn't in the map. Connect manually with the generated env in `corgi_services/db_services/<name>/.env`.
 - `container "<x>" is not running` — start it first: `corgi db --upAll` or `corgi run`.
 
+#### `corgi db snapshot [name] [service]`
+
+Physical snapshot of a Postgres data dir — the *built* state (indexes, populated matviews) as on-disk files. Restore recomputes nothing (vs a logical `dump.sql` seed that rebuilds indexes + re-runs `REFRESH MATERIALIZED VIEW`). Multi-hour reseed → minutes.
+
+- Postgres family only: `postgres`, `postgis`, `pgvector`, `timescaledb`. Any other driver **fails first** (physical format is data-dir specific).
+- Writes 2 files to `corgi_services/db_services/<service>/snapshots/`: `<name>.tar.zst` + `<name>.meta.json` (pg version, arch, image, sha256) — both required to be valid. Gitignored; survives `corgi clean` unless `-i snapshots`.
+- `name` defaults to a timestamp. `service` optional when one postgres-family db, else required.
+- How: clean-stop container → `docker cp` data dir out → zstd in-process → restart. No external tools.
+
+Flags: `--force` (overwrite same name) · `--list` (list snapshots: name, pg, arch, size, age; honors `--json`) · `--rm <name>` (delete a snapshot, both files).
+
+Share: copy the 2 files, then `corgi db restore <path>.tar.zst` (same arch + pg-major + image required).
+
+#### `corgi db restore [name|path] [service]`
+
+Restore a Postgres data dir from a snapshot, then bring the db up on already-built data — matviews included, zero recompute. `name` resolves under the service's `snapshots/`; or pass an explicit `.tar.zst` path (sibling `.meta.json` must be beside it).
+
+- **Destructive**: wipes the current data volume. Prompts unless `-y`/`--yes`.
+- Pre-flight, before any wipe: postgres-family driver (else fail first); snapshot pg-major + arch + image must match target (mismatch refused, both sides named; `--force` overrides). Always a decompress-probe; explicit-path snapshots also full-sha256-verified.
+- Restored db keeps the **baked credentials** (`POSTGRES_*` apply only on init; compose-cred mismatch is warned). Matviews frozen as of snapshot time.
+
+Flags: `-y, --yes` (skip confirm) · `--force` (override version/arch/image mismatch).
+
 ### `corgi logs` (alias: `log`)
 
 Browse and follow per-service logs captured by `corgi run --logs`.
@@ -298,9 +321,12 @@ Required flag: `-i, --items <db|services|corgi_services|all>`.
 - `db` — stops + removes db containers
 - `services` — removes cloned service repos (**destructive** — can drop uncommitted work)
 - `corgi_services` — removes the generated `corgi_services/` folder
-- `all` — all of the above
+- `snapshots` — removes saved db snapshots (`corgi_services/db_services/*/snapshots/`)
+- `all` — all of the above **except** `snapshots`
 
-Confirm with the user before running `clean -i services` or `clean -i all`. It can delete cloned repos that have local changes. `clean` also `git worktree remove`s any worktrees corgi made for `--service-branch` (so source repos don't keep dangling entries).
+`corgi_services` and `all` preserve `snapshots/` dirs by default (a db snapshot is expensive to rebuild) — delete them deliberately with `clean -i snapshots`.
+
+Confirm with the user before running `clean -i services`, `clean -i snapshots`, or `clean -i all`. It can delete cloned repos that have local changes. `clean` also `git worktree remove`s any worktrees corgi made for `--service-branch` (so source repos don't keep dangling entries).
 
 ### `corgi worktree` (alias: `wt`)
 

@@ -718,12 +718,74 @@ func CleanFromScratch(cmd *cobra.Command, corgi CorgiCompose) {
 func CleanCorgiServicesFolder() {
 	// git worktree remove before rm so source repos don't keep dangling entries.
 	_ = CleanCorgiWorktrees()
-	err := os.RemoveAll("./corgi_services/")
+	root := "./corgi_services"
+	entries, err := os.ReadDir(root)
 	if err != nil {
-		fmt.Println("couldn't delete corgi_services folder: ", err)
+		if os.IsNotExist(err) {
+			return
+		}
+		fmt.Println("couldn't read corgi_services folder: ", err)
 		return
 	}
-	fmt.Println("🗑️ Cleaned up corgi_services")
+	for _, e := range entries {
+		// snapshots are expensive to rebuild — preserved here, dropped only by `clean -i snapshots`
+		if err := removeExceptSnapshots(filepath.Join(root, e.Name())); err != nil {
+			fmt.Println("couldn't clean", e.Name(), ":", err)
+		}
+	}
+	if remaining, err := os.ReadDir(root); err == nil && len(remaining) == 0 {
+		_ = os.Remove(root)
+	}
+	fmt.Println("🗑️ Cleaned up corgi_services (snapshots preserved)")
+}
+
+// Recursively removes path but keeps any "snapshots" dir. Lstat (not Stat) so a
+// symlink out of corgi_services is removed as a link, never followed and emptied.
+func removeExceptSnapshots(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return os.Remove(path)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	keptAny := false
+	for _, e := range entries {
+		if e.IsDir() && e.Name() == "snapshots" {
+			keptAny = true
+			continue
+		}
+		if err := removeExceptSnapshots(filepath.Join(path, e.Name())); err != nil {
+			return err
+		}
+		if e.IsDir() {
+			if _, statErr := os.Lstat(filepath.Join(path, e.Name())); statErr == nil {
+				keptAny = true
+			}
+		}
+	}
+	if keptAny {
+		return nil
+	}
+	return os.Remove(path)
+}
+
+func CleanSnapshots() {
+	root := "./corgi_services/db_services"
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			_ = os.RemoveAll(filepath.Join(root, e.Name(), "snapshots"))
+		}
+	}
+	fmt.Println("🗑️ Cleaned up db snapshots")
 }
 
 func getDbSourceFromPath(path string) SeedFromDb {

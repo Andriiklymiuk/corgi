@@ -53,6 +53,8 @@ func runClean(cobra *cobra.Command, _ []string) {
 			utils.CleanCorgiServicesFolder()
 		case "services":
 			cleanServices(cobra)
+		case "snapshots":
+			utils.CleanSnapshots()
 		}
 	}
 }
@@ -87,10 +89,11 @@ func init() {
 		`Slice of items to clean, like: db,corgi_services,services. 
 		
 db - down all databases, that were added to corgi_services folder.
-corgi_services - clean corgi_services folder.
+corgi_services - clean corgi_services folder (db snapshots are preserved).
 services - delete all services folders (useful, when you want to clean cloned repos folders)
+snapshots - delete all db snapshots under db_services/<svc>/snapshots/.
 
-all - equal to writing db,corgi_services,services in items
+all - equal to writing db,corgi_services,services in items (snapshots are preserved; remove them with snapshots)
 		`,
 	)
 	cleanCmd.MarkFlagRequired("items")

@@ -86,6 +86,14 @@ func init() {
 			"arguments containing spaces (e.g. SET foo \"hello world\") are not\n"+
 			"preserved — wrap them in a script file or use the interactive shell.")
 	dbCmd.AddCommand(dbShellCmd)
+
+	dbSnapshotCmd.Flags().BoolVar(&snapList, "list", false, "List snapshots for the service")
+	dbSnapshotCmd.Flags().StringVar(&snapRM, "rm", "", "Delete a snapshot by name (its .tar.zst + .meta.json)")
+	dbSnapshotCmd.Flags().BoolVar(&snapForce, "force", false, "Overwrite an existing snapshot")
+	dbRestoreCmd.Flags().BoolVarP(&restoreYes, "yes", "y", false, "Skip the destructive-wipe confirmation")
+	dbRestoreCmd.Flags().BoolVar(&restoreForce, "force", false, "Override a version/arch/image mismatch")
+	dbCmd.AddCommand(dbSnapshotCmd)
+	dbCmd.AddCommand(dbRestoreCmd)
 }
 
 // dbShellCmd opens an interactive shell inside the running container for a
