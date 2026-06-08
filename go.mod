@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	github.com/briandowns/spinner v1.23.2
+	github.com/klauspost/compress v1.18.6
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mark3labs/mcp-go v0.54.0
 	github.com/spf13/cobra v1.10.2
@@ -30,6 +31,6 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/pflag v1.0.10
 	golang.org/x/sys v0.43.0 // indirect
 )
