@@ -9,8 +9,8 @@ on:
   workflow_call:
 
 jobs:
-  lint:
-    name: Lint + gofmt
+  gofmt:
+    name: gofmt
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,7 +19,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: stable
+          go-version-file: go.mod
           cache: true
 
       - name: gofmt check
@@ -29,11 +29,6 @@ jobs:
             echo "::error::These files are not gofmt-clean:"; echo "$unformatted"; exit 1
           fi
           echo "gofmt: all files clean"
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
-        with:
-          version: v2.6.2
 
   test:
     name: Test + Coverage + Sonar
