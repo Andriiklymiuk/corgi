@@ -199,6 +199,10 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
    request trace, logs you can't get locally)? Invoke the **`debug`** skill (Step 4 —
    provider data) and fold its findings into the investigation note; don't hand off
    the whole flow.
+6. **Workspace memory (read)** — if `.corgi/memory/` exists, read it first
+   (`corgi memory list --json` / `index.md`, then matching facts; see the `memory`
+   skill): honor any `decision` constraint, reuse an `incident` fix for a regression,
+   ground a free-text feature in `domain` facts. Absent → skip.
 
 ### Write the spec — every story
 
@@ -409,6 +413,14 @@ tokens).
 repo already does). **Concise subject** + the **issue key**; body only if truly
 needed, never a wall. **No `Co-authored-by` / AI trailer.** Let pre-commit hooks
 format; re-stage if rewritten.
+
+**Record a fact when it'll matter later (confirm first).** A non-obvious bug root
+cause that could recur, or a cross-service contract decision, earns a memory fact —
+draft it, show it, write on OK via `corgi memory add …` then `corgi memory index`
+(see the `memory` skill). After writing a `fix` fact, run the
+learned-skill recurrence check (`corgi memory list --type fix --json`; a `pattern` ≥
+3× → write a **proposal** and stop — never auto-install). No `.corgi/memory/` → offer
+to create it; declined → skip. **Never put a secret in a fact.**
 
 **Multi-service** (one issue → N repos → N PRs):
 - **Same branch name** in every repo.

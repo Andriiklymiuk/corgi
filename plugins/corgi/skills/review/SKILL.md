@@ -468,6 +468,10 @@ P4 order) and cross-link the two replies. Then one combined report (6).
    (`stories` P3.5). **Minimum diff — only what the threads ask.**
 4. **Reply + resolve per thread** (§5) — what changed (commit/line), or why you pushed
    back. **Resolve only what you addressed**; a pushed-back thread stays **open**.
+   **Durable convention → memory (confirm first).** If a resolved thread settles a
+   lasting convention/decision for the stack and `.corgi/memory/` exists, draft a
+   `decision` fact, show it, and write it on OK (`corgi memory add --type decision …`,
+   then `corgi memory index`; see the `memory` skill). Absent → skip. **No secrets.**
 5. **Gate → push.** Preview fixes + replies for the whole set in **one** gate (P4;
    `--yes` skips) → commit (repo style, issue key, no AI trailer) → `git push` each
    branch. **Draft stays draft; no force-push, no merge, no approve.** Fork PR / no

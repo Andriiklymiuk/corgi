@@ -42,6 +42,10 @@ Read once:
 - **Business + existing features** — workspace README + per-service READMEs: what the
   product does, **who the users are, the business model**, what already exists.
   Product suggestions anchor to *this* domain — don't invent a generic SaaS.
+- **Workspace memory** — if `.corgi/memory/` exists, run `corgi memory list --json`
+  (or read `index.md`) and open the matching facts (see the `memory` skill). Don't
+  propose what a `decision` rejected; ground a product idea in a `domain` fact; cite a
+  past `incident` as evidence. Absent → skip silently.
 
 ## Phase 1 — Gather evidence (investigate once, parallel lenses)
 
