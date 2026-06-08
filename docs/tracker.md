@@ -14,6 +14,12 @@ suggest  →  tracker / queue  →  stories  →  review  →  you land it
 The full loop: **suggest → plan → stories → review**, with `run`/`debug` operating
 throughout. `suggest` is upstream — it proposes work before it's even a ticket.
 
+`suggest` can also run **proactively on a schedule** (`/corgi-suggest-proactive` armed
+via `/schedule`): each run reuses the suggest ranking, dedupes the top idea against open
+tickets + recently-dismissed ones, and — behind the same tracker write gate — either
+proposes it (default) or, only if you opt in, files **one** rate-limited **draft** ticket.
+See the `suggest-proactive` skill.
+
 ## Setup
 
 You need the tracker's MCP server connected to Claude Code:
