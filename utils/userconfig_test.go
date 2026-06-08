@@ -91,6 +91,44 @@ func TestSaveUserConfig_StampsCurrentVersion(t *testing.T) {
 	}
 }
 
+func TestLoadUserConfig_SuggestDefaults(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+
+	cfg, err := LoadUserConfig()
+	if err != nil {
+		t.Fatalf("expected no error for missing config, got: %v", err)
+	}
+	if cfg.Suggest.AutoFileDrafts {
+		t.Error("expected Suggest.AutoFileDrafts=false by default")
+	}
+	if cfg.Suggest.MaxPerWeek != 0 {
+		t.Errorf("expected Suggest.MaxPerWeek=0 (use-default), got %d", cfg.Suggest.MaxPerWeek)
+	}
+}
+
+func TestSaveAndLoadUserConfig_SuggestRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+
+	want := &UserConfig{Suggest: SuggestConfig{AutoFileDrafts: true, MaxPerWeek: 2}}
+	if err := SaveUserConfig(want); err != nil {
+		t.Fatalf("SaveUserConfig failed: %v", err)
+	}
+	got, err := LoadUserConfig()
+	if err != nil {
+		t.Fatalf("LoadUserConfig failed: %v", err)
+	}
+	if !got.Suggest.AutoFileDrafts {
+		t.Error("expected Suggest.AutoFileDrafts=true to survive round-trip")
+	}
+	if got.Suggest.MaxPerWeek != 2 {
+		t.Errorf("expected Suggest.MaxPerWeek=2 to survive round-trip, got %d", got.Suggest.MaxPerWeek)
+	}
+}
+
 func TestLoadUserConfig_MigratesUnversionedFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
