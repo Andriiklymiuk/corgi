@@ -89,6 +89,39 @@ func TestResolveRestoreSource(t *testing.T) {
 	}
 }
 
+func TestListSnapshots(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	// no snapshots dir yet → the "no snapshots" branch (text) and an empty JSON array
+	listSnapshots("main")
+	prevJSON := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = prevJSON })
+	listSnapshots("main")
+
+	// one valid pair → both the JSON and the text listing branches
+	arc, meta, err := utils.SnapshotPaths("main", "build1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(arc), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(arc, []byte("z"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := utils.WriteSnapshotMeta(meta, utils.SnapshotMeta{
+		Service: "main", PgVersionMajor: "17", Arch: "arm64", SizeBytes: 1, CreatedAt: "2026-06-07T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	listSnapshots("main") // JSON
+	utils.JSONOutput = false
+	listSnapshots("main") // text
+}
+
 func TestSnapshotRemovePaths(t *testing.T) {
 	prev := utils.CorgiComposePathDir
 	utils.CorgiComposePathDir = t.TempDir()
