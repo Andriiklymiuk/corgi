@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,6 +49,24 @@ func TestAutopilotHeartbeatStampsTime(t *testing.T) {
 	}
 	if st.Iteration != 1 {
 		t.Fatalf("iteration not incremented: %d", st.Iteration)
+	}
+}
+
+// Writing the state must keep it out of commits: the per-developer file is
+// gitignored via corgi_services/.gitignore (the skill/docs promise "gitignored").
+func TestWriteAutopilotStateGitignoresItself(t *testing.T) {
+	dir := t.TempDir()
+	path := AutopilotStatePath(dir) // <dir>/corgi_services/.autopilot.json
+	if err := WriteAutopilotState(path, AutopilotState{Mode: AutopilotRunning}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	gi := filepath.Join(filepath.Dir(path), ".gitignore")
+	body, err := os.ReadFile(gi)
+	if err != nil {
+		t.Fatalf("expected a corgi_services/.gitignore, got: %v", err)
+	}
+	if !strings.Contains(string(body), ".autopilot.json") {
+		t.Fatalf(".autopilot.json not ignored; .gitignore = %q", body)
 	}
 }
 

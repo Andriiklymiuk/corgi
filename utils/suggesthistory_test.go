@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -102,6 +103,16 @@ func TestAppendSuggestEntry_CreatesDirAndRoundTrips(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0o644 {
 		t.Errorf("history file mode = %o, want 0644", fi.Mode().Perm())
+	}
+
+	// Per-developer state must be gitignored (docs/skill promise it stays
+	// out of commits), via corgi_services/.gitignore.
+	gi, err := os.ReadFile(filepath.Join(root, "corgi_services", ".gitignore"))
+	if err != nil {
+		t.Fatalf("expected corgi_services/.gitignore: %v", err)
+	}
+	if !strings.Contains(string(gi), suggestHistoryFileName) {
+		t.Errorf("%s not gitignored; .gitignore = %q", suggestHistoryFileName, gi)
 	}
 
 	h, err := LoadSuggestHistory(root)

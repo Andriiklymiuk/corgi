@@ -44,9 +44,12 @@ func WriteAutopilotState(path string, s AutopilotState) error {
 	if s.StartedAt.IsZero() {
 		s.StartedAt = s.UpdatedAt
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	// This is per-developer state, not shared config — keep it out of commits.
+	EnsureCorgiServicesIgnore(dir, filepath.Base(path))
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

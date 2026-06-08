@@ -77,9 +77,12 @@ func AppendSuggestEntry(workspaceRoot string, e SuggestEntry) error {
 	h.Entries = append(h.Entries, e)
 
 	path := SuggestHistoryPath(workspaceRoot)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create corgi_services dir: %w", err)
 	}
+	// Per-developer audit/dedupe state — keep it out of commits.
+	EnsureCorgiServicesIgnore(dir, suggestHistoryFileName)
 	data, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal suggest history: %w", err)
