@@ -132,12 +132,16 @@ func ListSnapshots(serviceName string) ([]SnapshotListItem, error) {
 	return out, nil
 }
 
-func CheckRestoreCompatibility(m SnapshotMeta, targetImage, targetArch string) error {
+func CheckRestoreCompatibility(m SnapshotMeta, targetImage, targetArch, targetPgMajor string) error {
 	if m.Image != targetImage {
 		return fmt.Errorf("image mismatch: snapshot is %q but target is %q — physical snapshots are image-specific (extensions + uid). Use --force to override", m.Image, targetImage)
 	}
 	if m.Arch != targetArch {
 		return fmt.Errorf("arch mismatch: snapshot is %q but target is %q — physical format is architecture-specific. Use --force to override", m.Arch, targetArch)
+	}
+	// Only compare when both sides recorded a version; older snapshots may lack it.
+	if m.PgVersionMajor != "" && targetPgMajor != "" && m.PgVersionMajor != targetPgMajor {
+		return fmt.Errorf("pg version mismatch: snapshot is major %q but target is major %q — a physical data dir is not portable across major versions. Use --force to override", m.PgVersionMajor, targetPgMajor)
 	}
 	return nil
 }
@@ -513,7 +517,9 @@ func RunRestore(req RestoreRequest) error {
 	if err != nil {
 		return err
 	}
-	if cerr := CheckRestoreCompatibility(meta, image, arch); cerr != nil {
+	container := ContainerName(req.Driver, req.Service)
+	targetPgMajor, _ := containerPgVersionMajor(container) // best-effort; "" skips the gate
+	if cerr := CheckRestoreCompatibility(meta, image, arch, targetPgMajor); cerr != nil {
 		if !req.Force {
 			return cerr
 		}
@@ -523,10 +529,10 @@ func RunRestore(req RestoreRequest) error {
 	if err := probeArchive(req.ArchivePath); err != nil {
 		return err
 	}
-	if req.FromPath {
-		if err := verifyArchiveSHA(req.ArchivePath, meta.SHA256); err != nil {
-			return err
-		}
+	// Integrity check runs for every restore — a corrupt named snapshot must be
+	// caught BEFORE `compose down --volumes` wipes the live db.
+	if err := verifyArchiveSHA(req.ArchivePath, meta.SHA256); err != nil {
+		return err
 	}
 
 	// destructive from here: the db is wiped and unusable until inject+start succeed.
@@ -549,7 +555,6 @@ func RunRestore(req RestoreRequest) error {
 	if err := composeInDir(serviceDir, "up", "--no-start"); err != nil {
 		return err
 	}
-	container := ContainerName(req.Driver, req.Service)
 	if err := injectArchive(container, req.ArchivePath); err != nil {
 		return fmt.Errorf("restore failed after wipe — db needs another restore: %w", err)
 	}

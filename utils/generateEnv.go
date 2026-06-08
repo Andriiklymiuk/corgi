@@ -674,6 +674,15 @@ func recordExportsForService(service Service, envForService string) error {
 	return nil
 }
 
+// localhostHostRe matches "localhost" only when it is a standalone host token —
+// not preceded or followed by a hostname character — so URL authorities are
+// rewritten while identifiers like "localhostname" are left untouched.
+var localhostHostRe = regexp.MustCompile(`(^|[^A-Za-z0-9_-])localhost($|[^A-Za-z0-9_-])`)
+
+func replaceLocalhostHost(content, repl string) string {
+	return localhostHostRe.ReplaceAllString(content, "${1}"+repl+"${2}")
+}
+
 func renderEnvFileContent(pathToEnvFile string, envForService string, service Service) string {
 	envFileContent := GetFileContent(pathToEnvFile)
 	var corgiEnvPosition []int
@@ -695,13 +704,14 @@ func renderEnvFileContent(pathToEnvFile string, envForService string, service Se
 			corgiGeneratedMessage,
 		)
 	}
-	// Rewrite "localhost" in the file. LocalhostNameInEnv wins if set;
-	// otherwise --host catches user-written URLs (e.g. Supabase) too.
+	// Rewrite the "localhost" host token only. LocalhostNameInEnv wins if set;
+	// otherwise --host catches user-written URLs (e.g. Supabase) too. Scoped to
+	// host authorities so identifiers like LOCALHOST_NAME=localhostname survive.
 	switch {
 	case service.LocalhostNameInEnv != "":
-		envFileContentString = strings.ReplaceAll(envFileContentString, "localhost", service.LocalhostNameInEnv)
+		envFileContentString = replaceLocalhostHost(envFileContentString, service.LocalhostNameInEnv)
 	case HostOverride != "":
-		envFileContentString = strings.ReplaceAll(envFileContentString, "localhost", HostOverride)
+		envFileContentString = replaceLocalhostHost(envFileContentString, HostOverride)
 	}
 	return envFileContentString
 }
@@ -710,12 +720,17 @@ func writeEnvFile(pathToEnvFile, content string) error {
 	if content == "" {
 		return nil
 	}
-	f, err := os.OpenFile(pathToEnvFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	f, err := os.OpenFile(pathToEnvFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		Info(err)
 		return err
 	}
 	defer f.Close()
+	// O_TRUNC keeps an existing file's old mode, so tighten any looser perms.
+	if err := f.Chmod(0o600); err != nil {
+		Info(err)
+		return err
+	}
 	if _, err := f.WriteString(content); err != nil {
 		Info(err)
 		return err
