@@ -2,6 +2,7 @@ package utils
 
 import (
 	"andriiklymiuk/corgi/utils/art"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -38,6 +39,17 @@ var DbServicesItemsFromFlag []string
 // that aren't running, instead of erroring.
 var SkippedServices = map[string]bool{}
 var SkippedDbServices = map[string]bool{}
+
+// UnknownComposeFields holds keys the strict YAML decoder did not recognize on
+// the most recent load (likely typos). Surfaced warn-first via ValidateCompose;
+// reset on every load. Warn-now/error-later: a future release may upgrade these
+// to hard errors once configs are clean.
+var UnknownComposeFields []string
+
+// DuplicateComposeKeys lists keys that appeared more than once within a single
+// services/db_services/required map on the most recent load. YAML silently
+// keeps only the last; ValidateCompose reports these. Reset per load.
+var DuplicateComposeKeys []string
 
 type DatabaseService struct {
 	ServiceName       string                   `yaml:"service_name,omitempty"`
@@ -380,10 +392,82 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 	file, _ = InterpolateTolerant(file, EnvThenDotEnv(dotenv))
 
 	var corgiYaml CorgiComposeYaml
-	if err := yaml.Unmarshal(file, &corgiYaml); err != nil {
-		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't unmarshal file %s: %v", pathToCorgiComposeFile, err)
+	UnknownComposeFields = nil
+	DuplicateComposeKeys = nil
+	dec := yaml.NewDecoder(bytes.NewReader(file))
+	dec.KnownFields(true)
+	if err := dec.Decode(&corgiYaml); err != nil {
+		// KnownFields surfaces typo'd keys as an error. To stay non-breaking we
+		// record them as warnings and re-decode tolerantly so the load succeeds.
+		if fields := unknownFieldsFromYAMLError(err); len(fields) > 0 {
+			UnknownComposeFields = fields
+			corgiYaml = CorgiComposeYaml{}
+			if err2 := yaml.Unmarshal(file, &corgiYaml); err2 != nil {
+				return "", CorgiComposeYaml{}, fmt.Errorf("couldn't unmarshal file %s: %v", pathToCorgiComposeFile, err2)
+			}
+		} else {
+			return "", CorgiComposeYaml{}, fmt.Errorf("couldn't unmarshal file %s: %v", pathToCorgiComposeFile, err)
+		}
 	}
+	DuplicateComposeKeys = detectDuplicateComposeKeys(file)
 	return pathToCorgiComposeFile, corgiYaml, nil
+}
+
+// detectDuplicateComposeKeys parses the document as raw nodes and reports any
+// duplicated key under the top-level services / db_services / required maps,
+// which a normal decode would silently collapse.
+func detectDuplicateComposeKeys(file []byte) []string {
+	var root yaml.Node
+	if err := yaml.Unmarshal(file, &root); err != nil || len(root.Content) == 0 {
+		return nil
+	}
+	doc := root.Content[0]
+	if doc.Kind != yaml.MappingNode {
+		return nil
+	}
+	var dups []string
+	for i := 0; i+1 < len(doc.Content); i += 2 {
+		section := doc.Content[i].Value
+		if section != "services" && section != "db_services" && section != "required" {
+			continue
+		}
+		m := doc.Content[i+1]
+		if m.Kind != yaml.MappingNode {
+			continue
+		}
+		seen := map[string]bool{}
+		for j := 0; j+1 < len(m.Content); j += 2 {
+			key := m.Content[j].Value
+			if seen[key] {
+				dups = append(dups, fmt.Sprintf("%s.%s", section, key))
+			}
+			seen[key] = true
+		}
+	}
+	return dups
+}
+
+// unknownFieldsFromYAMLError pulls the offending key names out of a yaml.v3
+// KnownFields(true) error. Returns nil if the error is not about unknown
+// fields (so genuine parse errors still propagate as hard failures).
+func unknownFieldsFromYAMLError(err error) []string {
+	if err == nil {
+		return nil
+	}
+	var fields []string
+	for _, line := range strings.Split(err.Error(), "\n") {
+		const marker = "field "
+		i := strings.Index(line, marker)
+		if i < 0 || !strings.Contains(line, "not found in type") {
+			continue
+		}
+		rest := line[i+len(marker):]
+		name := strings.TrimSpace(strings.SplitN(rest, " ", 2)[0])
+		if name != "" {
+			fields = append(fields, name)
+		}
+	}
+	return fields
 }
 
 func buildBaseCorgi(y CorgiComposeYaml) CorgiCompose {
@@ -623,6 +707,25 @@ func computeAbsolutePath(path string) string {
 	return CorgiComposePathDir + "/" + path
 }
 
+// ServiceRepoDir resolves a service's compose `path:` to an absolute repo dir,
+// reusing the same logic env generation uses. Used by mission-control's probe.
+func ServiceRepoDir(path string) string { return computeAbsolutePath(path) }
+
+// JoinUnderComposeDir resolves a compose-relative path against CorgiComposePathDir
+// and rejects anything that escapes it (via `..` or an absolute path), so a
+// crafted definitionPath / seedFromFilePath can't read files outside the project.
+func JoinUnderComposeDir(rel string) (string, error) {
+	if filepath.IsAbs(rel) {
+		return "", fmt.Errorf("path %q escapes the compose directory", rel)
+	}
+	joined := filepath.Clean(filepath.Join(CorgiComposePathDir, rel))
+	base := filepath.Clean(CorgiComposePathDir)
+	if joined != base && !strings.HasPrefix(joined, base+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path %q escapes the compose directory", rel)
+	}
+	return joined, nil
+}
+
 // overrideServiceDirs repoints named services (name=path) at an external working
 // dir, e.g. a git worktree. AbsolutePath is the only source of cwd, so this is
 // enough. Unknown name / missing dir is a hard error — a typo running the wrong
@@ -791,20 +894,28 @@ func CleanSnapshots() {
 func getDbSourceFromPath(path string) SeedFromDb {
 	var seedFromDb SeedFromDb
 	for _, envLine := range GetFileContent(path) {
-		envLineValues := strings.Split(envLine, "=")
-		switch strings.ToUpper(envLineValues[0]) {
+		line := strings.TrimSpace(envLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue // no '=', not a key=value line
+		}
+		key, value := strings.ToUpper(strings.TrimSpace(parts[0])), parts[1]
+		switch key {
 		case "DB_HOST":
-			seedFromDb.Host = envLineValues[1]
+			seedFromDb.Host = value
 		case "DB_NAME":
-			seedFromDb.DatabaseName = envLineValues[1]
+			seedFromDb.DatabaseName = value
 		case "DB_PASSWORD":
-			seedFromDb.Password = envLineValues[1]
+			seedFromDb.Password = value
 		case "DB_USER":
-			seedFromDb.User = envLineValues[1]
+			seedFromDb.User = value
 		case "DB_PORT":
-			intVar, err := strconv.Atoi(envLineValues[1])
+			intVar, err := strconv.Atoi(strings.TrimSpace(value))
 			if err != nil {
-				fmt.Println(err)
+				Info(err)
 				continue
 			}
 			seedFromDb.Port = intVar

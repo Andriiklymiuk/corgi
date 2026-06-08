@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"andriiklymiuk/corgi/utils/art"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +11,7 @@ import (
 const (
 	WarnNoHealthcheck = "W_NO_HEALTHCHECK"
 	WarnNoBranch      = "W_NO_BRANCH"
+	WarnUnknownField  = "W_UNKNOWN_FIELD" // strict-decode found a key not in the schema (likely a typo)
 )
 
 // ValidationIssue is one problem found by ValidateCompose.
@@ -32,11 +34,94 @@ func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 	errs = append(errs, checkPortConflicts(c)...)
 	errs = append(errs, checkInvalidConditions(c)...)
 	errs = append(errs, checkRestartPolicies(c)...)
+	errs = append(errs, checkDuplicateNames(c)...)
+	errs = append(errs, checkPortRanges(c)...)
 
 	warns = append(warns, checkDependedWithoutHealthcheck(c)...)
 	warns = append(warns, checkCloneWithoutBranch(c)...)
+	warns = append(warns, checkUnknownFields(c)...)
 
 	return errs, warns
+}
+
+// checkUnknownFields surfaces keys the strict YAML decoder did not recognize
+// (likely typos like `enviroment`). Warn-first: non-fatal today, candidate to
+// become an error in a future release.
+func checkUnknownFields(c *CorgiCompose) []ValidationIssue {
+	var out []ValidationIssue
+	for _, f := range UnknownComposeFields {
+		out = append(out, ValidationIssue{
+			Code:    WarnUnknownField,
+			Message: fmt.Sprintf("unknown field %q in corgi-compose.yml — possible typo; it was ignored", f),
+			Field:   f,
+		})
+	}
+	return out
+}
+
+// CollectValidationErrors returns only the hard errors from ValidateCompose,
+// for callers (run/exec) that must abort but ignore advisory warnings.
+func CollectValidationErrors(c *CorgiCompose) []ValidationIssue {
+	errs, _ := ValidateCompose(c)
+	return errs
+}
+
+// AbortOnValidationErrors validates c and, if there are hard errors, reports
+// them (JSON via JSONError, else human lines to stderr) and returns false so
+// the caller can stop before any side effect. true means safe to proceed.
+// Warnings are intentionally ignored here — `corgi validate` surfaces those.
+func AbortOnValidationErrors(c *CorgiCompose) bool {
+	errs := CollectValidationErrors(c)
+	if len(errs) == 0 {
+		return true
+	}
+	if JSONOutput {
+		// One JSONError per issue keeps the agent contract per-code.
+		for _, e := range errs {
+			JSONError(e.Code, e.Message)
+		}
+		return false
+	}
+	Infof("%s✗ corgi-compose.yml has %d validation error(s):%s\n", art.RedColor, len(errs), art.WhiteColor)
+	for _, e := range errs {
+		field := ""
+		if e.Field != "" {
+			field = fmt.Sprintf(" (%s)", e.Field)
+		}
+		Infof("  %s✗ [%s] %s%s%s\n", art.RedColor, e.Code, e.Message, field, art.WhiteColor)
+	}
+	return false
+}
+
+// checkDuplicateNames flags a name claimed by both a service and a db_service.
+// Same-section duplicate keys are caught at decode time (YAML maps collapse
+// them); see DuplicateComposeKeys.
+func checkDuplicateNames(c *CorgiCompose) []ValidationIssue {
+	var out []ValidationIssue
+	services, dbs := composeNames(c)
+	names := make([]string, 0, len(services))
+	for n := range services {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if dbs[n] {
+			out = append(out, ValidationIssue{
+				Code:    ErrDuplicateName,
+				Message: fmt.Sprintf("name %q is used by both a service and a db_service — names must be unique", n),
+				Field:   fmt.Sprintf("services.%s", n),
+			})
+		}
+	}
+	// Same-section duplicate keys, detected at decode time.
+	for _, dup := range DuplicateComposeKeys {
+		out = append(out, ValidationIssue{
+			Code:    ErrDuplicateName,
+			Message: fmt.Sprintf("duplicate key %q — YAML keeps only the last; remove the duplicate", dup),
+			Field:   dup,
+		})
+	}
+	return out
 }
 
 func checkRestartPolicies(c *CorgiCompose) []ValidationIssue {
@@ -300,6 +385,32 @@ func checkPortConflicts(c *CorgiCompose) []ValidationIssue {
 			Message: fmt.Sprintf("port %d is bound by %s", p, strings.Join(labels, ", ")),
 			Field:   owners[0].field,
 		})
+	}
+	return out
+}
+
+// checkPortRanges flags any configured port outside 1..65535. 0 means "unset"
+// and is ignored (consistent with checkPortConflicts).
+func checkPortRanges(c *CorgiCompose) []ValidationIssue {
+	var out []ValidationIssue
+	flag := func(port int, label, field string) {
+		if port == 0 || (port >= 1 && port <= 65535) {
+			return
+		}
+		out = append(out, ValidationIssue{
+			Code:    ErrPortRange,
+			Message: fmt.Sprintf("%s port %d is out of range (must be 1-65535)", label, port),
+			Field:   field,
+		})
+	}
+	for _, db := range c.DatabaseServices {
+		flag(db.Port, fmt.Sprintf("db_service %q", db.ServiceName), fmt.Sprintf("db_services.%s.port", db.ServiceName))
+		flag(db.Port2, fmt.Sprintf("db_service %q port2", db.ServiceName), fmt.Sprintf("db_services.%s.port2", db.ServiceName))
+		flag(db.ContainerPort, fmt.Sprintf("db_service %q containerPort", db.ServiceName), fmt.Sprintf("db_services.%s.containerPort", db.ServiceName))
+		flag(db.StudioPort, fmt.Sprintf("db_service %q studioPort", db.ServiceName), fmt.Sprintf("db_services.%s.studioPort", db.ServiceName))
+	}
+	for _, s := range c.Services {
+		flag(s.Port, fmt.Sprintf("service %q", s.ServiceName), fmt.Sprintf("services.%s.port", s.ServiceName))
 	}
 	return out
 }
