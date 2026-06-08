@@ -16,7 +16,9 @@ Lighter than a full multi-agent pipeline. **One blocking gate** on the
 adjustment/bug fast path; complex stories add superpowers checkpoints on top.
 
 - **Gate (blocking): spec sign-off** (Phase 2). Confirm intent before any branch
-  spawns. Cheap, guards whole batch at once. Never skip.
+  spawns. Cheap, guards whole batch at once. Never skip — but a clear up-front
+  directive collapses it to inline diagnosis (Phase 2 fast-path): still confirms
+  intent, no separate approval pause.
 - **No final gate.** Draft PR/MR instead: push, open draft, scoped review, report
   diff + link; human flips to *ready*. Draft = no CI/notify, reversible.
 
@@ -30,6 +32,16 @@ adjustment/bug fast path; complex stories add superpowers checkpoints on top.
 
 **Tier ≠ span.** Complexity axis vs single/multi-service (Phase 4). Multi-service
 adjustment is still an adjustment. Most stories = adjustments → fastest path.
+
+**Bug sub-type — logic vs visual.** "Regression test FAILS on base" assumes a unit
+test can *see* it. **Visual/layout bug** (z-index/stacking, overflow, position,
+breakpoint, CSS specificity/cascade) → jsdom can't catch it; a green unit test proves
+nothing. Don't fake one.
+- **Repo has a visual/e2e harness** (Playwright, Cypress, Storybook visual diff) →
+  red check **there**, same FAILS-on-base.
+- **None** → **manual-only is legit, not a skip.** Spec + PR body carry repro steps +
+  before/after screenshot; report says manually verified, no auto guard. Still post the
+  **QA "what to test" comment** — a human must re-check visual.
 
 ### Complex story → superpowers
 
@@ -111,10 +123,21 @@ Always available, all the flow needs: `git`, `gh`/`glab`, `corgi`,
 
 **Tracker issue:** fetch, **view screenshots**, read real code paths.
 - Fetch: Linear `get_issue`; Jira `getJiraIssue`.
-- Screenshots: Linear = `curl` the `uploads.linear.app` URLs (signed, expire
-  ~5 min — re-fetch issue for fresh URLs) then read. Jira = `getJiraIssue`
-  returns attachment metadata, not image bytes — fetch the attachment
-  (`mcp__atlassian__fetch` / its URL; may need auth) then read.
+- Screenshots — **visual/QA bug from text alone = guess. Get the image.**
+  - **Linear** = `curl` the `uploads.linear.app` URL (signed, expires ~5 min —
+    re-fetch issue for a fresh URL), read.
+  - **Jira** = `getJiraIssue` gives attachment **metadata only** (filename +
+    `content` URL `/rest/api/3/attachment/content/<id>`), no bytes.
+    **`mcp__atlassian__fetch` won't get bytes** — ARIs only; an attachment id
+    mis-resolves to the wrong issue. No MCP tool returns attachment bytes. Unlike
+    Linear (URL pre-signed → bare curl works), Jira's URL needs an auth header you
+    don't hold. So:
+    1. Have creds (`$JIRA_EMAIL` / `$JIRA_API_TOKEN`)? `curl -u
+       "$JIRA_EMAIL:$JIRA_API_TOKEN" -L -o /tmp/<name> "<content-url>"`, read.
+       Usually not in env — don't assume.
+    2. No creds / 401 / 403 → **stop guessing. Ask the user to download + share the
+       path** (drop in `~/Downloads`), `ls -t ~/Downloads | head`, read. One ask
+       beats reasoning blind.
 
 ### Reuse an existing spec — then re-verify it (may be stale)
 
@@ -132,6 +155,12 @@ Found one → treat it as a **starting hypothesis, not ground truth.** Re-resolv
 `file:line` against the current tree and re-confirm the contract — code moves, specs
 rot. Say what drifted, rewrite the stale parts, keep what still holds. Nothing found →
 spec from scratch.
+
+**Bug tier — check for a dead prior fix first.** `git blame` / `git log -S"<symptom>"`
+the suspect lines. Prior fix present but bug persists → it's inert (overridden, lost
+specificity, runtime-injected style wins, wrong selector, behind a flag). Explain *why*
+it's dead, then revive/correct it — don't stack a second half-fix. Note the why in the
+spec's root-cause.
 
 ### Free-text feature (no ticket) — locate work first
 
@@ -202,6 +231,25 @@ Present all actionable specs in **one round**; sign-off before any branch —
 batch-level, not per-branch. Re-present only changed specs. Blocked held out.
 Superpowers-escalated stories pass here too: their `writing-plans` output is the
 spec.
+
+**Fast-path — collapse the approval round to inline diagnosis ONLY when all hold.**
+Gate just confirms intent before branching. Collapse it (state diagnosis + the exact
+change inline, then go — that *is* the gate, they can still stop you) **only when every
+one is true — checkable, not a vibe:**
+- exactly **one** named item (one ticket, or one specific fix the user named),
+- tier is **adjustment or bug** (never feature),
+- **single service**, no cross-service contract,
+- you can state the **exact change in one sentence**, no open question.
+
+**Any one false → full gate, no collapse:** feature tier · >1 story · multi-service ·
+ambiguous target · you had to ask yourself a clarifying question · you can't name the
+change in one sentence. **Unsure → full gate.** "User said 'just fix it'" is **not**
+clearance if you can't say exactly what "it" is — a vague directive is *open* intent, so
+it gets the gate. The fast-path skips the *pause*, never the *thinking*.
+
+**Fast-path drops the approval pause, NOT the tracker artifacts.** Even on a one-liner,
+still post the **spec comment + QA "what to test" comment** (Phase 1 triage) — durable
+record, and a visual/QA defect is what a human must re-verify. Cheap; don't skip.
 
 ## Phase 3 — Branch + implement + verify per story
 
