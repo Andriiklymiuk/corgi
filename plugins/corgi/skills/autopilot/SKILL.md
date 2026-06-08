@@ -25,7 +25,11 @@ A supervised loop: one iteration = one `/corgi-queue` pickup → `stories` (spec
 
 ## Phase 0 — Preflight (mode + workspace + tracker)
 
-1. **Mode check first.** `corgi autopilot status --json`. `mode: stopped` or `paused` → emit a heartbeat noting why and **end the iteration** (no pickup). `mode: running` (or no state file yet — first run) → continue. First run with no state → `corgi autopilot resume --json` to initialize `running` (idempotent).
+1. **Mode check first.** `corgi autopilot status --json`. Branch on `mode`:
+   - `mode: uninitialized` (no state file yet — a genuine **first run**, NOT a stop) → `corgi autopilot resume --json` to initialize `running`, then continue.
+   - `mode: running` → continue.
+   - `mode: stopped` (kill switch) or `mode: paused` → emit a heartbeat noting why and **end the iteration** (no pickup).
+   The `uninitialized` sentinel is what tells a first run apart from an explicit `stop` — both used to look like `stopped`; don't mistake the first run for the kill switch.
 2. **Workspace + tracker** — exactly as `tracker` Phase 0: `ls corgi-compose.yml *.corgi-compose.yml`; detect Linear/Jira MCP. No compose or no tracker MCP → `corgi autopilot pause` with a note, surface what to connect, stop. Don't guess a layout.
 
 ## Phase 1 — Resolve a batch (delegate to tracker pickup)
@@ -65,5 +69,5 @@ Each scheduled run is a fresh agent session — the durable `corgi autopilot` st
 
 - `corgi autopilot stop` — kill switch; next iteration sees `stopped` and no-ops. (Cancelling the `/loop`/`/schedule` job also works; state stays consistent.)
 - `corgi autopilot pause` / `resume` — toggle without losing config.
-- `corgi autopilot status [--json]` — `mode`, `lastHeartbeat` + age, last iteration summary. Heartbeat age > interval ⇒ a stalled loop a supervisor can flag.
+- `corgi autopilot status [--json]` — `mode` (`uninitialized` first run · `running` · `paused` · `stopped`), `lastHeartbeat` + age, last iteration summary. Heartbeat age > interval ⇒ a stalled loop a supervisor can flag.
 State lives in `corgi_services/.autopilot.json` (gitignored, per project). No daemon.

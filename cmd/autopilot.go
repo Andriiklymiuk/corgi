@@ -34,14 +34,16 @@ func autopilotStateDir(cmd *cobra.Command) string {
 	return utils.CorgiComposePathDir
 }
 
-// loadAutopilotStatus reads state for the compose dir; absent file → a stopped,
-// uninitialized state (never an error — status must always answer).
+// loadAutopilotStatus reads state for the compose dir; absent file → an
+// uninitialized state (a genuine first run, distinct from an explicit stop), so
+// the loop can start instead of mistaking it for the kill switch. Never errors
+// on absence — status must always answer.
 func loadAutopilotStatus(composeDir string) (utils.AutopilotState, error) {
 	path := utils.AutopilotStatePath(composeDir)
 	st, err := utils.ReadAutopilotState(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return utils.AutopilotState{Mode: utils.AutopilotStopped}, nil
+			return utils.AutopilotState{Mode: utils.AutopilotUninitialized}, nil
 		}
 		return st, err
 	}

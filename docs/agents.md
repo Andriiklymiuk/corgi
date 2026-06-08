@@ -29,7 +29,7 @@ stderr. Commands that emit pure-JSON stdout:
 - `create --kind ... --json` (non-interactive) → `{"created","kind","name","path"}`
 - `restart --service <name> --json` → updated run-state object
 - `mission-control --json` (one MissionSnapshot object; `--watch`: one object per refresh)
-- `autopilot status/pause/resume/stop/heartbeat --json` → the autopilot loop state object (`{mode, iteration, lastHeartbeat, lastSummary}`)
+- `autopilot status/pause/resume/stop/heartbeat --json` → the autopilot loop state object (`{mode, iteration, lastHeartbeat, lastSummary}`); `mode` ∈ `uninitialized` (no state file yet — a first run, distinct from a stop) · `running` · `paused` · `stopped`
 - `memory list --json` (array of facts), `memory lint --json` (`{"ok":bool,"errors":[...],"warnings":[...]}`), `memory add --json` / `memory index --json` (created/index summary)
 - `suggest-history list --json` (`{"version","entries":[...]}`), `suggest-history check --slug <s> --json` (`{"skip":bool,"reason":"filed|dismissed|proposed|rate-limit|...","slug":...}`), `suggest-history record --json` (echoes the written entry), `suggest-history config --json` (`{"autoFileDrafts":bool,"maxPerWeek":n}`)
 - `docs --json-schema`

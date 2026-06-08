@@ -13,6 +13,11 @@ const (
 	AutopilotRunning AutopilotMode = "running"
 	AutopilotPaused  AutopilotMode = "paused"
 	AutopilotStopped AutopilotMode = "stopped"
+	// AutopilotUninitialized is a read-only sentinel for "no state file yet"
+	// (a genuine first run). It is never persisted — resume/pause/stop/heartbeat
+	// always write running/paused/stopped. It lets the loop tell a first run
+	// (start it) apart from an explicit stop (kill switch — stay stopped).
+	AutopilotUninitialized AutopilotMode = "uninitialized"
 )
 
 // AutopilotIteration is the compact per-iteration summary the loop emits.

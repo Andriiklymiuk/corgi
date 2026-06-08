@@ -7,15 +7,16 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-func TestAutopilotStatusMissingStateReportsIdle(t *testing.T) {
+func TestAutopilotStatusMissingStateReportsUninitialized(t *testing.T) {
 	dir := t.TempDir()
 	st, err := loadAutopilotStatus(dir)
 	if err != nil {
 		t.Fatalf("status on empty dir should not error: %v", err)
 	}
-	// No file yet → reported as stopped/uninitialized, never a crash.
-	if st.Mode != utils.AutopilotStopped {
-		t.Fatalf("empty status mode = %q, want stopped", st.Mode)
+	// No file yet → a first run, distinct from an explicit stop, so the loop
+	// starts rather than treating it as the kill switch. Never a crash.
+	if st.Mode != utils.AutopilotUninitialized {
+		t.Fatalf("empty status mode = %q, want uninitialized", st.Mode)
 	}
 }
 
