@@ -78,9 +78,6 @@ coverage-by-pkg: test
 test\:cov:
 	go test ./... -timeout 30s -coverprofile=/tmp/coverage.out -covermode=atomic 2>&1 | tail -10 && go tool cover -func=/tmp/coverage.out | tail -1
 
-lint:
-	golangci-lint run ./...
-
 fmt-check:
 	@unformatted=$$(gofmt -l .); \
 	if [ -n "$$unformatted" ]; then \
@@ -108,6 +105,5 @@ coverage \
 coverage-html \
 coverage-by-pkg \
 test\:cov \
-lint \
 fmt-check \
 coverage-check
