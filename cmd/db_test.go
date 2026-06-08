@@ -33,7 +33,7 @@ func TestSeedDbMissingDump(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := SeedDb("db1")
+	err := SeedDb(utils.DatabaseService{ServiceName: "db1"})
 	if err == nil || !strings.Contains(err.Error(), "dump file doesn't exist") {
 		t.Errorf("expected dump-not-found error, got %v", err)
 	}
@@ -44,9 +44,38 @@ func TestSeedDbReadDirError(t *testing.T) {
 	utils.CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-	err := SeedDb("nonexistent-svc")
+	err := SeedDb(utils.DatabaseService{ServiceName: "nonexistent-svc"})
 	if err == nil {
 		t.Error("expected err")
+	}
+}
+
+func TestSeedDbReturnsOnUpFailure(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	dir := filepath.Join(utils.CorgiComposePathDir, utils.RootDbServicesFolder, "db1")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// dump present so we get past the dump-exists guard
+	if err := os.WriteFile(filepath.Join(dir, "dump.sql"), []byte("-- dump"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	readyCalled := false
+	prevReady := seedReady
+	seedReady = func(context.Context, utils.DatabaseService) error { readyCalled = true; return nil }
+	t.Cleanup(func() { seedReady = prevReady })
+
+	// No Makefile/`make up` target exists in the temp dir, so `make up` fails.
+	err := SeedDb(utils.DatabaseService{ServiceName: "db1"})
+	if err == nil {
+		t.Fatal("expected SeedDb to return the make-up error")
+	}
+	if readyCalled {
+		t.Error("readiness wait must not run after a failed `make up`")
 	}
 }
 
