@@ -46,7 +46,7 @@ func runRestart(cmd *cobra.Command, args []string) {
 	stopService = prevStopService
 	stopSummaryToStderr = prevToStderr
 
-	cmd.Flags().Set("detach", "true")
+	_ = cmd.Flags().Set("detach", "true")
 	runRun(cmd, args)
 }
 

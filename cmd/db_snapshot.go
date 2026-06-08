@@ -175,7 +175,7 @@ func runDbRestore(cmd *cobra.Command, args []string) {
 		fmt.Printf("⚠️  This WIPES the current %q data volume and restores %s. Continue? [y/N] ",
 			svc.ServiceName, filepath.Base(archive))
 		var ans string
-		fmt.Scanln(&ans)
+		_, _ = fmt.Scanln(&ans)
 		if strings.ToLower(strings.TrimSpace(ans)) != "y" {
 			utils.Info("aborted")
 			return

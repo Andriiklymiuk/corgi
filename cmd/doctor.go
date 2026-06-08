@@ -91,7 +91,7 @@ func classifyCheck(name string) (fixKind, bool) {
 
 func portFromCheckName(name string) int {
 	var p int
-	fmt.Sscanf(name, "port:%d", &p)
+	_, _ = fmt.Sscanf(name, "port:%d", &p)
 	return p
 }
 
@@ -476,4 +476,3 @@ func checkRequiredIsFound(required utils.Required) (bool, string) {
 
 	return true, fmt.Sprintf("\n✅ %s is found\n", required.Name)
 }
-

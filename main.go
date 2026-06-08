@@ -134,7 +134,7 @@ func showWelcomeMessage() {
 func runClearCmd(name string, arg ...string) {
 	cmd := exec.Command(name, arg...)
 	cmd.Stdout = os.Stdout
-	cmd.Run()
+	_ = cmd.Run()
 }
 
 func ClearTerminal() {

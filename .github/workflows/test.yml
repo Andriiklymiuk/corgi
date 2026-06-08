@@ -1,14 +1,42 @@
-name: Test & Coverage
+name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  # Allow release.yml to invoke this workflow as a gate.
+  workflow_call:
 
 jobs:
+  lint:
+    name: Lint + gofmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: gofmt check
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-clean:"; echo "$unformatted"; exit 1
+          fi
+          echo "gofmt: all files clean"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.6.2
+
   test:
-    name: Test + Sonar
+    name: Test + Coverage + Sonar
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,6 +56,9 @@ jobs:
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
+
+      - name: Coverage floor gate
+        run: ./scripts/coverage-floor.sh coverage.out
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

@@ -52,7 +52,6 @@ func TestGetFileContent(t *testing.T) {
 	}
 }
 
-
 func TestGetFoldersListInDirectory(t *testing.T) {
 	prev := CorgiComposePathDir
 	CorgiComposePathDir = t.TempDir()
