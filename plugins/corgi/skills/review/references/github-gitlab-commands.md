@@ -50,6 +50,20 @@ rtk proxy gh pr diff <n> --repo <owner>/<repo> --patch
 rtk proxy glab mr diff <n> -R <repo> --color=never
 ```
 
+CI / pipeline status — cross-check for SKILL P3.6 ("is a build/test-fails finding real?"):
+```bash
+gh pr view <n> --repo <owner>/<repo> --json statusCheckRollup    # GitHub: rollup + per-check state
+glab ci status -R <repo> --branch <source_branch>                # GitLab: per-job pass/fail
+glab mr view <n> -R <repo> -F json -q '.pipeline.status'         # GitLab: head-pipeline status
+```
+A GitLab pipeline reads `success` even when an `allow_failure` job failed (the
+"passed with warnings" badge) — scan the per-job list for a failed allow_failure job;
+it's often the real red spec a finding points at. Pull a failing job's log to confirm:
+```bash
+gh run view <run-id> --repo <owner>/<repo> --log-failed           # GitHub
+glab ci trace -R <repo> --branch <source_branch>                  # GitLab (pick the failed job)
+```
+
 **Sibling enumeration** (P0 auto-detect — find same-branch PRs/MRs in other repos):
 ```bash
 gh pr list --head <branch> --repo <owner>/<repo> --json number,title,url,state,isDraft
@@ -128,7 +142,14 @@ Off-by-one here.
 glab mr note create <n> -R <repo> --file src/foo.py --old-line 7 -m '<!-- corgi-review:src/foo.py:7 -->
 Why was this removed?'
 ```
-`--file/--line` are EXPERIMENTAL (may be unstable). If they error, use §3b.
+`--file/--line` are EXPERIMENTAL and **absent from many `glab` builds** (not just
+flaky — some installs lack the flags entirely). Probe once instead of guessing:
+```bash
+glab mr note create --help 2>&1 | grep -q -- --file || echo "no --file → use §3b"
+```
+Missing or erroring → §3b (the raw discussions API; every `glab` has it). The
+` ```suggestion:-0+0 ` block in the comment body works on **both** paths — keep it
+when you fall back to §3b; don't downgrade an applicable suggestion to plain prose.
 
 ### 3b. Raw discussions API (fallback)
 
@@ -185,7 +206,9 @@ Removed-line: use `"old_path"` + `"old_line"` instead of `new_path`/`new_line`.
 ## 5. Mode B — read incoming threads, reply, resolve
 
 For the **address-review** mode (SKILL Mode B). Read the **human** review threads,
-reply, and resolve **only** the ones you addressed. Push fixes with `git push` (no
+reply, and resolve **only** the ones you addressed. (**Mode A** uses the *read*
+commands here too — to prune findings a human already raised, the author already
+answered, or that sit on a resolved thread — but never the reply/resolve ones.) Push fixes with `git push` (no
 force) from the PR's branch — never merge, never undraft.
 
 **GitHub** (review-thread resolution state lives only in GraphQL):

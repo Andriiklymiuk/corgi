@@ -72,12 +72,19 @@ the `gh` or `glab` column that matches the ref's forge.
 
 Fetch per PR/MR — **metadata + anchoring SHAs + commits in one call**, diff
 separately (don't make a second call just for a SHA):
-- GitHub: `gh pr view <n> --json title,body,author,baseRefName,headRefName,state,isDraft,files,url,headRefOid,baseRefOid,commits`.
+- GitHub: `gh pr view <n> --json title,body,author,baseRefName,headRefName,state,isDraft,files,url,headRefOid,baseRefOid,commits,statusCheckRollup`.
 - GitLab: `glab mr view <n> -R <repo> -F json` — its JSON already includes
-  `diff_refs` (`base_sha`/`head_sha`/`start_sha`), `state`, `draft`, `commits`.
+  `diff_refs` (`base_sha`/`head_sha`/`start_sha`), `state`, `draft`, `commits`, and
+  the head `pipeline` status.
 - Unified diff (raw, §0) — `gh pr diff` / `glab mr diff`.
 - Inline anchoring later (P5): GitHub uses `path`+`line`+`side`; GitLab uses native
   `--file`/`--line`/`--old-line` (no `diff_refs` needed for the primary post path).
+- **CI status** — read it on fetch (GitHub `statusCheckRollup`; GitLab the head
+  `pipeline.status`, or `glab ci status -R <repo>`). It's the cross-check for P3.6:
+  a **green** pipeline contradicts any "this fails to build/test" finding, so verify
+  before posting. And a pipeline that reads green **only because a failed job is
+  `allow_failure`** ("passed with warnings") hides a real red job — list the jobs
+  (`references/github-gitlab-commands.md` §1) and see which finding it confirms.
 
 **rtk:** metadata, status, and list calls go through rtk automatically (the Claude
 Code hook rewrites `git`/`gh`/`glab`). Fetch the **reviewable diff raw** to avoid
@@ -101,6 +108,13 @@ isolate B's own changes with the **compare API — no checkout**
 (`gh api repos/<o>/<r>/compare/<A-head>...<B-head>`; never `git diff A..B` on a
 tree you didn't fetch). Can't isolate cleanly → review the full diff and note the
 double-review. State the stacking in the report.
+
+**Existing discussion.** List the PR/MR's current review threads/comments on fetch
+(`references/github-gitlab-commands.md` §5 read commands work for Mode A too — read
+only, no reply). You need them twice: to **dedup** (P5 marker skip) and, more
+importantly, to **stay relevant** — a point a human already raised, the author
+already answered, or anything on a **resolved** thread is not a fresh finding. Carry
+this thread list into P3.6's prune pass. Don't re-litigate settled threads.
 
 **Noise filter.** Drop generated/vendored/binary paths from the review surface:
 lockfiles (`*.lock`, `package-lock.json`, `go.sum`, …), `vendor/`, `node_modules/`,
@@ -214,13 +228,19 @@ ticket's reasoning.
 
 **Finding shape** (exact — used by P4/P5):
 ```
-{ pr, file, line, side, severity: blocking|nit, title, explanation, suggestedReplacement? }
+{ pr, file, line, side, anchorText, severity: blocking|nit, title, explanation, suggestedReplacement? }
 ```
-`line`/`side` come straight from the diff hunk: `line` = the line number in the
-**new** file (from the `@@ … +start,count @@` header, counting forward);
-`side` = `RIGHT` for an added/context line, `LEFT` for a removed line. A finding
-that isn't on a diffed line has no anchor → goes in the summary (P5). See
-`references/github-gitlab-commands.md` §2.
+`side` = `RIGHT` for an added/context line, `LEFT` for a removed line.
+`anchorText` = the **verbatim source line** the finding sits on — this, not the
+number, is the real anchor.
+**Do not trust a subagent's `line`.** A subagent counting forward from
+`@@ … +start,count @@` returns a *diff offset*, not the new-file line number, and
+posting that anchors the comment to the wrong code. Before the P4 gate the
+orchestrator **resolves every `line` by matching `anchorText` against the fetched
+diff hunks** (new-file number for a `RIGHT` line, old-file number for `LEFT`) — so
+the preview already shows the line that will actually be posted, not a guess. A
+finding whose `anchorText` matches no diffed line has no anchor → goes in the
+summary (P5). See `references/github-gitlab-commands.md` §2.
 
 Plus a **2–4 sentence human summary per PR** written above the findings list.
 
@@ -280,6 +300,30 @@ differently). P5 posts each side against **its own** anchor and cross-links; a
 side with no valid anchor folds into that PR's summary. (Plain single-side
 findings keep the normal `{pr,file,line,side}` shape.)
 
+## Phase 3.6 — Verify + prune (before the gate)
+
+Two passes over the findings before anything reaches the preview.
+
+**Verify the blockers.** A wrong `blocking` finding posted publicly is worse than a
+missed nit. Re-check every `blocking` finding against the **actual source** — re-read
+the cited lines (and the symbol it calls/asserts) from the diff or file, not from the
+subagent's summary. Drop or downgrade any that don't hold. A finding that
+**contradicts CI** is the loudest tell: claims a spec/build fails but the pipeline is
+green → one of them is wrong, verify before posting. Conversely a "passed with
+warnings" pipeline (a failed `allow_failure` job) often hides the real red job a
+finding points at — pull that job's log (`references/github-gitlab-commands.md` §1)
+to confirm. State how each contradiction resolved in the report.
+
+**Prune against existing discussion.** Drop any finding a human already raised, the
+author already answered, or that sits on a **resolved** thread (the existing-thread
+list from P1). Re-reviewing a settled point is noise — the fastest way to get the
+whole review muted. If the existing answer looks wrong, that's a *reply on the
+existing thread* (out of Mode A's scope — note it in the report), not a fresh
+duplicate comment.
+
+Nits skip the blocker-verify pass (lower stakes) but still get pruned against
+existing discussion.
+
 ## Phase 4 — Preview + confirm (the gate)
 
 Print to terminal, per PR in the set:
@@ -296,6 +340,19 @@ Print to terminal, per PR in the set:
 If P3.5 ran, append a **Contract** section after all per-PR blocks listing
 cross-service findings and the stated merge order (producer first). Many findings
 → paginate the preview (don't print an unbounded wall before the gate).
+
+**Plain lines, never tables.** One finding per line in the shape above — no
+box-drawing/ASCII tables. Wide `┌─┬─┐` grids wrap and smear in a narrow terminal
+(columns collide, text corrupts) right when the user has to decide what posts. Keep
+each line short; truncate a long `<problem>`/`<fix>` rather than wrap a cell.
+
+**Default lean and human, not exhaustive.** What posts inline = the blockers + the
+few nits that genuinely help. Fold low-value nits and style quibbles into the summary
+as one brief "minor:" line, not a wall of inline comments — a review with 3 sharp
+comments gets read; one with 15 gets muted. Each comment is a terse, kind, human
+one-liner (problem + fix), not a robot paragraph; match the repo's comment density.
+The *edit* option still lets the user trim more, but the default should already be
+this lean — they shouldn't have to ask.
 
 Then ask (one prompt for the whole set):
 
@@ -325,8 +382,17 @@ in **one** call.
 **not** `-m -`; tagged `<!-- corgi-review -->`); each inline finding via the native
 `glab mr note create --file <path> --line <n>` (or `--old-line` for a removed line),
 suggested change as a ` ```suggestion:-0+0 ` block (Apply button). (Those flags are
-experimental — fall back to the raw `discussions` + `position` API in §3b if they
-error.)
+experimental and **absent from many `glab` builds** — probe once (§3a) and, if
+missing or erroring, post via the raw `discussions` + `position` API in §3b.)
+
+**Applicable suggestions are the useful part — supply them on both forges.** A
+finding with a concrete fix (a changed line or a small range) posts as a suggestion
+block — GitHub ` ```suggestion `, GitLab ` ```suggestion:-0+0 ` — so the author gets
+a one-click **Apply**, not prose to retype. GitLab suggestion blocks render through
+**both** the native `--file/--line` path (§3a) *and* the raw discussions API (§3b):
+if §3a's flags are missing and you fall back to §3b, **keep the fenced block** —
+don't downgrade to a plain comment. The small fixes are exactly the ones Apply saves
+time on. Reserve plain prose only for findings with no single right fix (scenario 5).
 
 **Finding that cannot be inlined** (line not in the diff) → fold into that PR's summary;
 note it in the report. Never silently drop.
@@ -413,8 +479,11 @@ declined, blocked) so a skipped target isn't lost between P1 and the report.
 List anything that couldn't be inlined explicitly (file, line, reason) — no
 silent drops.
 
-**Footer line** (always last):
-> review only — does not approve, request changes, or merge.
+**No ceremony footer.** Don't append "review only — does not approve/merge" to every
+report; it reads like a bot covering itself, and the user knows what a review is. The
+*behaviour* stays hard-enforced (Guardrails) — just don't narrate it each time. Say
+it in plain words **only** if it's actually in question (e.g. someone asks "so did
+you block it?").
 
 Example:
 
@@ -430,8 +499,6 @@ Contract
   Merge order: api first, then web.
 
 3 findings: 1 blocking, 2 nits;  3 posted inline, 0 folded into summary.
-
-review only — does not approve, request changes, or merge.
 ```
 
 ---
