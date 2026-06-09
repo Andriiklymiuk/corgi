@@ -1,69 +1,71 @@
 ---
 name: stories
-description: Use when the user wants to ship work across a corgi-compose workspace — EITHER a batch of tracker issues (Linear or Jira links/keys like ABC-123; "do these stories", "implement these tickets", "ship X and Y") OR a free-text feature description with no ticket ("build a feature that …", "add X across the services") OR a "find/pick what to work on" request with nothing named ("pick the stories", "what should I work on", "grab some agent tickets") — which it resolves to the `agent` queue via the tracker pickup, then builds. Investigates once, writes a spec per item behind one sign-off gate, branches per service (paths from corgi-compose.yml), tests + reviews each, opens draft PRs/MRs on GitHub or GitLab, and can create a tracker issue from the approved spec. NOT for authoring/running corgi-compose itself (use the corgi skill) or a trivial one-line edit you'd just make directly.
+description: Use when the user wants to ship work across a corgi-compose workspace — EITHER a batch of tracker issues (Linear/Jira links/keys like ABC-123; "do these stories", "implement these tickets", "ship X and Y") OR a free-text feature ("build a feature that …", "add X across the services") OR "find/pick what to work on" with nothing named ("pick the stories", "what should I work on", "grab some agent tickets"). NOT for authoring/running corgi-compose itself (use the corgi skill) or a trivial one-line edit you'd just make directly.
 ---
 
 # Corgi stories
 
-Work items — tracker issues (Linear/Jira) **or** a free-text feature description
-— → spec each → isolated branch(es) → tested + reviewed code → **draft** PR/MR
-per repo → grouped report. Services, dirs, dependency order: all from
-`corgi-compose.yml`. Never hard-code them.
+Work items — tracker issues (Linear/Jira) **or** a free-text feature — → spec each
+→ isolated branch(es) → tested + reviewed → **draft** PR/MR per repo → grouped
+report. Services, dirs, dependency order: all from `corgi-compose.yml`. Never
+hard-code.
 
 ## Speed model
 
 Lighter than a full multi-agent pipeline. **One blocking gate** on the
-adjustment/bug fast path; complex stories add superpowers checkpoints on top.
+adjustment/bug fast path; complex stories add superpowers checkpoints.
 
-- **Gate (blocking): spec sign-off** (Phase 2). Confirm intent before any branch
-  spawns. Cheap, guards whole batch at once. Never skip — but a clear up-front
-  directive collapses it to inline diagnosis (Phase 2 fast-path): still confirms
-  intent, no separate approval pause.
-- **No final gate.** Draft PR/MR instead: push, open draft, scoped review, report
-  diff + link; human flips to *ready*. Draft = no CI/notify, reversible.
+- **Gate (blocking): spec sign-off** (Phase 2). Confirm intent before any branch.
+  Cheap, guards the whole batch. Never skip — a clear up-front directive collapses
+  it to inline diagnosis (Phase 2 fast-path): still confirms intent, no separate
+  pause.
+- **No final gate.** Draft PR/MR: push, open draft, scoped review, report diff +
+  link; human flips to _ready_. Draft = no CI/notify, reversible.
 
 ### Story tiers — set per story (Phase 1), drives rigor
 
-| Tier | What | Extra rigor |
-|------|------|-------------|
-| **Adjustment** | clear-spec UI/copy/flag/config; unambiguous | just a test for the new behaviour |
-| **Bug** | broken / regressed | regression test **FAILS on base branch** before fix, passes after |
-| **Feature** | new behaviour, real design, or new/changed cross-service contract | hand to **superpowers** if installed, else equivalent inline (below) |
+| Tier           | What                                                              | Extra rigor                                                          |
+| -------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Adjustment** | clear-spec UI/copy/flag/config; unambiguous                       | just a test for the new behaviour                                    |
+| **Bug**        | broken / regressed                                                | regression test **FAILS on base branch** before fix, passes after    |
+| **Feature**    | new behaviour, real design, or new/changed cross-service contract | hand to **superpowers** if installed, else equivalent inline (below) |
 
 **Tier ≠ span.** Complexity axis vs single/multi-service (Phase 4). Multi-service
 adjustment is still an adjustment. Most stories = adjustments → fastest path.
 
-**Bug sub-type — logic vs visual.** "Regression test FAILS on base" assumes a unit
-test can *see* it. **Visual/layout bug** (z-index/stacking, overflow, position,
-breakpoint, CSS specificity/cascade) → jsdom can't catch it; a green unit test proves
-nothing. Don't fake one.
+**Bug sub-type — logic vs visual.** "FAILS on base" assumes a unit test can _see_
+it. **Visual/layout bug** (z-index/stacking, overflow, position, breakpoint, CSS
+specificity/cascade) → jsdom can't catch it; a green unit test proves nothing.
+Don't fake one.
+
 - **Repo has a visual/e2e harness** (Playwright, Cypress, Storybook visual diff) →
   red check **there**, same FAILS-on-base.
-- **None** → **manual-only is legit, not a skip.** Spec + PR body carry repro steps +
-  before/after screenshot; report says manually verified, no auto guard. Still post the
-  **QA "what to test" comment** — a human must re-check visual.
+- **None** → **manual-only is legit, not a skip.** Spec + PR body carry repro steps
+  - before/after screenshot; report says manually verified, no auto guard. Still
+    post the **QA "what to test" comment** — a human must re-check visual.
 
 ### Complex story → superpowers
 
-Bigger than adjustment (real design, unclear approach, large surface, new
-contract) → don't force one-shot. If **superpowers installed**, via `Skill`:
+Bigger than adjustment (real design, unclear approach, large surface, new contract)
+→ don't force one-shot. **superpowers installed**, via `Skill`:
+
 - `superpowers:brainstorming` — settle intent + approach before code.
-- `superpowers:writing-plans` — becomes the story's spec doc.
+- `superpowers:writing-plans` — becomes the spec doc.
 - `superpowers:test-driven-development` + `superpowers:executing-plans` — build,
   tests first.
 - `superpowers:verification-before-completion` — prove before draft PR.
 
-Not installed → equivalent inline: settle approach with user, write plan into
-spec, tests first, verify before push. Either way flows back through this skill —
-same spec doc, one gate, per-story review, draft PR, grouped report.
+Not installed → equivalent inline: settle approach with user, plan into spec, tests
+first, verify before push. Either way flows back here — same spec doc, one gate,
+per-story review, draft PR, grouped report.
 
 ## Guardrails (non-negotiable)
 
-- **Never touch `manualRun` services/db_services.** Reference-only — corgi
-  doesn't start them, this flow doesn't change them. Fix lands there → STOP, flag
-  as out-of-band.
+- **Never touch `manualRun` services/db_services.** Reference-only — corgi doesn't
+  start them, this flow doesn't change them. Fix lands there → STOP, flag
+  out-of-band.
 - **Draft PRs/MRs only.** Never non-draft, never merge, never force-push.
-- **One blocking gate** — spec sign-off (Phase 2); the sign-off *is* the branch
+- **One blocking gate** — spec sign-off (Phase 2); the sign-off _is_ the branch
   authorization.
 - **No destructive git without explicit OK** — checkout off a dirty tree, branch
   deletes, force-push, pushing shared branches.
@@ -72,159 +74,181 @@ same spec doc, one gate, per-story review, draft PR, grouped report.
 ## Optional tooling (degrade gracefully)
 
 Stands alone. Used if present, never required:
-- **`superpowers:*`** (separate plugin) — complex-story engine + nicest review.
-  Missing → do it inline. Don't block on a missing plugin.
-- **A code-review command** (e.g. `/code-review`) — Phase 3.5 if you have it;
-  else a review subagent works everywhere.
 
-Always available, all the flow needs: `git`, `gh`/`glab`, `corgi`,
-`Explore`/`Task` agents, tracker MCP.
+- **`superpowers:*`** (separate plugin) — complex-story engine + nicest review.
+  Missing → inline. Don't block on a missing plugin.
+- **A code-review command** (e.g. `/code-review`) — Phase 3.5 if present; else a
+  review subagent works everywhere.
+
+Always available, all the flow needs: `git`, `gh`/`glab`, `corgi`, `Explore`/`Task`
+agents, tracker MCP.
 
 ---
 
 ## Phase 0 — Read workspace from corgi-compose.yml
 
-1. Locate it (`ls corgi-compose.yml *.corgi-compose.yml`). None → `/corgi-new`
-   first, or ask which repos; don't guess a layout.
+1. Locate (`ls corgi-compose.yml *.corgi-compose.yml`). None → `/corgi-new` first,
+   or ask which repos; don't guess a layout.
 2. **Read the yaml, extract only needed keys** —
-   `services.<name>.{path,cloneFrom,manualRun}`, `depends_on_services`,
-   `exports` (schema: `skills/corgi/references/yml-schema.md`). Don't render the
-   whole project: `/corgi-describe` is a full doc (too many tokens here), and
-   `corgi --describe` doesn't short-circuit (it dumps JSON then still runs the
-   command). Build:
+   `services.<name>.{path,cloneFrom,manualRun}`, `depends_on_services`, `exports`
+   (schema: `skills/corgi/references/yml-schema.md`). Don't render the whole
+   project: `/corgi-describe` is too many tokens; `corgi --describe` dumps JSON then
+   still runs the command. Build:
    - **Service → dir map.** `path:` (local) or `cloneFrom:` (clone target) = the
-     repo you branch in. `cloneFrom` not on disk → `corgi init` clones it first.
+     repo you branch in. `cloneFrom` not on disk → `corgi init` clones first.
    - **Dependency/order graph** from `depends_on_services` + `exports`/
-     `${producer.VAR}`. Depended-on service (schema/contract owner) goes first;
-     consumers follow. Cycles → flag.
+     `${producer.VAR}`. Depended-on service (schema/contract owner) first; consumers
+     follow. Cycles → flag.
    - **manualRun set** → exclude (Guardrails).
-3. **Per repo: forge, base branch, commands.**
-   - Forge: `git -C <dir> remote get-url origin` → `*github.com*` = `gh`;
-     `*gitlab*` = `glab`. A batch may span both.
+3. **Per repo: forge, base, commands.**
+   - Forge: `git -C <dir> remote get-url origin` → `*github.com*` = `gh`; `*gitlab*`
+     = `glab`. A batch may span both.
    - Base: `git -C <dir> symbolic-ref --short refs/remotes/origin/HEAD` (or
      `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` /
-     `glab repo view`). This is `<base>` for branch, red test, PR target.
+     `glab repo view`). `<base>` for branch, red test, PR target.
    - Test/typecheck/lint/build: discover from `package.json` scripts, `Makefile`,
-     `pyproject`/`go.mod`, and the service's `start`/`beforeStart`/`scripts`.
-     Don't assume a runner.
+     `pyproject`/`go.mod`, service `start`/`beforeStart`/`scripts`. Don't assume a
+     runner.
 4. **Detect tracker.** `linear.app` URL → Linear (`mcp__linear-server__*`).
-   `atlassian.net`/Jira project → Jira (`mcp__atlassian__*`;
-   `getAccessibleAtlassianResources` for sites). Bare key + both connected → ask.
+   `atlassian.net`/Jira → Jira (`mcp__atlassian__*`; `getAccessibleAtlassianResources`
+   for sites). Bare key + both connected → ask.
 
 ## Phase 1 — Investigate (once), then spec
 
 **Route the intake first — what am I building?**
+
 - **Explicit tickets** (keys/links) or a **free-text feature** → continue below.
-- **"Find/pick what to work on"** with nothing named ("pick the stories", "what
-  should I work on", "grab some work") → **don't guess which tickets.** Resolve the
-  set via the `tracker` skill's **pickup** — the `agent` queue (label `agent`, not In
-  Progress/Done), drift-skipped — confirm the picks, then build them here. Same
-  selection as `/corgi-queue`: selection lives in `tracker`, building lives here.
+- **"Find/pick what to work on"**, nothing named → **don't guess tickets.** Resolve
+  via the `tracker` skill's **pickup** — the `agent` queue (label `agent`, not In
+  Progress/Done), drift-skipped — confirm picks, then build here. Same selection as
+  `/corgi-queue`: selection in `tracker`, building here.
 
 **Tracker issue:** fetch, **view screenshots**, read real code paths.
-- Fetch: Linear `get_issue`; Jira `getJiraIssue`.
+
+- Fetch **with relations** — Linear `get_issue` `includeRelations: true`; Jira issue
+  links. `duplicateOf` / `relatedTo` / parent epic often already carries or shipped
+  the work — see _Already shipped?_ below.
 - Screenshots — **visual/QA bug from text alone = guess. Get the image.**
   - **Linear** = `curl` the `uploads.linear.app` URL (signed, expires ~5 min —
     re-fetch issue for a fresh URL), read.
   - **Jira** = `getJiraIssue` gives attachment **metadata only** (filename +
     `content` URL `/rest/api/3/attachment/content/<id>`), no bytes.
     **`mcp__atlassian__fetch` won't get bytes** — ARIs only; an attachment id
-    mis-resolves to the wrong issue. No MCP tool returns attachment bytes. Unlike
-    Linear (URL pre-signed → bare curl works), Jira's URL needs an auth header you
-    don't hold. So:
-    1. Have creds (`$JIRA_EMAIL` / `$JIRA_API_TOKEN`)? `curl -u
-       "$JIRA_EMAIL:$JIRA_API_TOKEN" -L -o /tmp/<name> "<content-url>"`, read.
-       Usually not in env — don't assume.
-    2. No creds / 401 / 403 → **stop guessing. Ask the user to download + share the
-       path** (drop in `~/Downloads`), `ls -t ~/Downloads | head`, read. One ask
-       beats reasoning blind.
+    mis-resolves to the wrong issue. No MCP tool returns bytes. Jira's URL needs an
+    auth header you don't hold. So: 1. Have creds (`$JIRA_EMAIL`/`$JIRA_API_TOKEN`)?
+    `curl -u "$JIRA_EMAIL:$JIRA_API_TOKEN" -L -o /tmp/<name> "<content-url>"`, read.
+    Usually not in env. 2. No creds / 401 / 403 → **stop guessing. Ask the user to
+    download + share the path** (`~/Downloads`), `ls -t ~/Downloads | head`, read.
+- **Local / user-pointed design assets.** User names a folder/file
+  (`design-screenshots/`, Figma export on disk, "see mockup") → read direct,
+  outranks prose. **Build as drawn** — exact icon/emoji, colour, copy, spacing,
+  placement. No near-equivalent; a human compares the result to the design.
 
 ### Reuse an existing spec — then re-verify it (may be stale)
 
-Before speccing from scratch, check the **three** places a prior spec may already
-live — a human's, a past `stories` run's, or a `decompose` ticket's acceptance
-criteria:
-1. **Ticket description** — the body often already carries the intended approach.
-2. **Ticket comments** — list them (Linear `list_comments`; Jira comments via
-   `getJiraIssue` / the dev panel). A comment opening with `<!-- corgi-spec -->` is a
-   spec a previous run posted.
-3. **Local `docs/`** — `docs/stories/<issue-key>-*.md` (this skill's own output) and
-   any hand-written design doc in `docs/` whose name/heading matches the work.
+Before speccing from scratch, check **three** places a prior spec may live — a
+human's, a past `stories` run's, a `decompose` ticket's acceptance criteria:
 
-Found one → treat it as a **starting hypothesis, not ground truth.** Re-resolve every
-`file:line` against the current tree and re-confirm the contract — code moves, specs
-rot. Say what drifted, rewrite the stale parts, keep what still holds. Nothing found →
-spec from scratch.
+1. **Ticket description** — the body often carries the intended approach.
+2. **Ticket comments** — list them (Linear `list_comments`; Jira via `getJiraIssue`
+   / dev panel). A comment whose first heading is `## Spec` is a prior run's spec.
+3. **Local `docs/`** — `docs/stories/<issue-key>-*.md` (this skill's output) + any
+   hand-written design doc whose name/heading matches.
+
+Found one → **starting hypothesis, not ground truth.** Re-resolve every `file:line`
+against the current tree, re-confirm the contract — code moves, specs rot. Say what
+drifted, rewrite stale parts, keep what holds. Nothing found → spec from scratch.
 
 **Bug tier — check for a dead prior fix first.** `git blame` / `git log -S"<symptom>"`
-the suspect lines. Prior fix present but bug persists → it's inert (overridden, lost
-specificity, runtime-injected style wins, wrong selector, behind a flag). Explain *why*
-it's dead, then revive/correct it — don't stack a second half-fix. Note the why in the
-spec's root-cause.
+the suspect lines. Prior fix present but bug persists → inert (overridden, lost
+specificity, runtime style wins, wrong selector, behind a flag). Explain _why_ it's
+dead, revive/correct it — don't stack a second half-fix. Note the why in root-cause.
+
+### Already shipped? — verify before spec or branch
+
+Reuse-spec check (above) finds a prior _spec_; this finds the _deliverable already
+built on `<base>`_ — by a **sibling / related / duplicate ticket**, or an earlier PR
+that bundled it. Re-build wastes the batch + opens a dup PR. Before speccing an
+**actionable** story, prove it is NOT already done:
+
+- **Read relations** (fetched above). Open any `duplicateOf` / `relatedTo` / parent
+  epic — its description or **merged PR** often already covers this ask.
+- **Grep `<base>` for what the story adds** — component, copy string, route, flag:
+  `git -C <dir> log --oneline -S"<symbol>" -- <area>`, `git grep "<copy>" origin/<base>`.
+  Present + wired → shipped.
+- **Open the real file to confirm** — not an `Explore` summary. Explore hands you
+  code that already satisfies the story; "found it" ≠ "needs building."
+
+Shipped → **do NOT branch.** Mark `Status: ALREADY DONE`, comment the lineage
+(commit/PR that delivered it) + recommend close as duplicate, report no-op.
+**Comment ≠ close** — ask before changing ticket state. Phase 1 finding → surfaces
+_at the gate_, not after a wasted branch.
 
 ### Free-text feature (no ticket) — locate work first
 
-Description, not links → no fetch, nothing says *where* code goes. (First check
-`docs/` for an existing design doc for this feature — *Reuse an existing spec* above.)
-Find target service(s) before speccing:
-1. **Map intent → service(s)** from `corgi-compose.yml` (names, paths,
-   `depends_on_services`) + the **README next to the compose** + per-service
-   READMEs (they say what each service does). Don't guess.
-2. **Confirm with `Explore`** scoped to candidate service(s) — find the real
-   files.
-3. Genuinely ambiguous service → spec-gate question (ask, or
-   `superpowers:brainstorming`); don't guess.
+Description, not links → no fetch, nothing says _where_ code goes. (First check
+`docs/` for an existing design doc — _Reuse an existing spec_.) Find target
+service(s) before speccing:
 
-Described feature = usually **Feature tier**: `superpowers:brainstorming` (or
-inline Q&A) to settle scope → `superpowers:writing-plans` for the spec. After
-sign-off (Phase 2), **offer to create a tracker issue** (Linear `mcp__linear-server__create_issue` /
-Jira `mcp__atlassian__createJiraIssue`) for a key + auto-link; declined → spec stays local + on
-PR, branch drops the key segment (Phase 3). **A caller (e.g. the `suggest` skill)
-that already created the issue and hands you its key + spec → use that key, don't
-re-create the issue.**
+1. **Map intent → service(s)** from `corgi-compose.yml` (names, paths,
+   `depends_on_services`) + the **README next to the compose** + per-service READMEs.
+   Don't guess.
+2. **Confirm with `Explore`** scoped to candidate service(s) — find real files.
+3. Genuinely ambiguous → spec-gate question (ask, or `superpowers:brainstorming`);
+   don't guess.
+
+Described feature = usually **Feature tier**: `superpowers:brainstorming` (or inline
+Q&A) to settle scope → `superpowers:writing-plans` for the spec. After sign-off
+(Phase 2), **offer to create a tracker issue** (Linear `mcp__linear-server__create_issue`
+/ Jira `mcp__atlassian__createJiraIssue`) for a key + auto-link; declined → spec stays
+local + on PR, branch drops the key segment (Phase 3). **A caller (e.g. `suggest`)
+that already created the issue + hands you key + spec → use that key, don't re-create.**
 
 ### Investigate once — don't re-research
 
 Batched stories overlap. Re-exploring per story doubles tokens. So:
+
 1. **Cluster** by **service + area** before dispatching.
 2. **One `Explore` sweep per area, not per story** — all that area's questions in
    one agent. Never per-story over the same files.
 3. **Orchestrator = the cache.** Subagents can't share context mid-flight: scope
    sweeps to not overlap, collect each into one **investigation note** (scratch —
-   memory or a gitignored file), specs reference it. Read the map, don't
-   re-explore.
-4. **Reuse ledger** — shared components/contracts recorded once; stories cite,
-   don't re-derive.
-5. **Need runtime/deployed data** to resolve a story (a staging/prod error, a
-   request trace, logs you can't get locally)? Invoke the **`debug`** skill (Step 4 —
-   provider data) and fold its findings into the investigation note; don't hand off
-   the whole flow.
-6. **Workspace memory (read)** — if `.corgi/memory/` exists, read it first
-   (`corgi memory list --json` / `index.md`, then matching facts; see the `memory`
-   skill): honor any `decision` constraint, reuse an `incident` fix for a regression,
-   ground a free-text feature in `domain` facts. Absent → skip.
+   memory or a gitignored file), specs reference it.
+4. **Reuse ledger** — shared components/contracts recorded once; stories cite, don't
+   re-derive.
+5. **Need runtime/deployed data** (staging/prod error, request trace, logs you can't
+   get locally)? Invoke the **`debug`** skill (Step 4 — provider data), fold findings
+   into the note; don't hand off the whole flow.
+6. **Workspace memory (read)** — `.corgi/memory/` exists → read first
+   (`corgi memory list --json` / `index.md`, then matching facts; see `memory` skill):
+   honor a
+   `decision` constraint, reuse an `incident` fix for a regression, ground a
+   free-text feature in `domain` facts. Absent → skip.
 
 ### Write the spec — every story
 
 `docs/stories/<issue-key>-<slug>.md`, actionable or not:
+
 - Problem (quote issue) + **which services** (drives branch/PR count).
 - **Tier** — adjustment/bug/feature.
 - Root cause / current behaviour, `file:line` refs.
-- Change plan (snippets) **grouped by service**, tests, manual verification,
-  risks. Multi-service: `## Contract` + cross-service order.
+- Change plan (snippets) **grouped by service**, tests, manual verification, risks.
+  Multi-service: `## Contract` + cross-service order.
 
 ### Triage: actionable vs blocked — controls POSTING, not writing
 
 - **Actionable → post.**
   - **Spec → a comment** on the issue (human-readable, not a `.md` attachment).
-    Linear `mcp__linear-server__create_comment({ issueId, body })`; Jira `mcp__atlassian__addCommentToJiraIssue`.
-    Literal newlines / markdown. **Open the body with `<!-- corgi-spec -->`** so a
-    later run (new session, no comment id) finds it — list comments, match the marker,
-    **update** that one instead of posting a duplicate.
+    Linear `mcp__linear-server__create_comment({ issueId, body })`; Jira
+    `mcp__atlassian__addCommentToJiraIssue`. Literal newlines/markdown. **Open with a
+    `## Spec` heading** — no HTML comment marker (trackers render `<!-- … -->` as
+    visible text), no footer badge. That heading is how a later run (new session, no
+    comment id) finds it: list comments, match the one whose first heading is `## Spec`,
+    **update** it instead of duplicating.
   - **What to test → a separate comment** (non-engineer reads inline). Plain QA:
     clicks + outcome, no code/file refs, end `Expected:`. Skip non-testable stories.
 - **Blocked → do NOT post.** Spec local only; mark `Status: BLOCKED` + **Decision
-  needed**; surface the choice to the user. Hold it; rest of batch proceeds.
+  needed**; surface the choice. Hold it; rest of batch proceeds.
 
 `superpowers:brainstorming` / `superpowers:systematic-debugging` (if installed) to
 resolve ambiguity before blocking.
@@ -238,92 +262,89 @@ spec.
 
 **Fast-path — collapse the approval round to inline diagnosis ONLY when all hold.**
 Gate just confirms intent before branching. Collapse it (state diagnosis + the exact
-change inline, then go — that *is* the gate, they can still stop you) **only when every
-one is true — checkable, not a vibe:**
+change inline, then go — that _is_ the gate, they can still stop you) **only when
+every one is true:**
+
 - exactly **one** named item (one ticket, or one specific fix the user named),
-- tier is **adjustment or bug** (never feature),
+- tier **adjustment or bug** (never feature),
 - **single service**, no cross-service contract,
 - you can state the **exact change in one sentence**, no open question.
 
-**Any one false → full gate, no collapse:** feature tier · >1 story · multi-service ·
-ambiguous target · you had to ask yourself a clarifying question · you can't name the
-change in one sentence. **Unsure → full gate.** "User said 'just fix it'" is **not**
-clearance if you can't say exactly what "it" is — a vague directive is *open* intent, so
-it gets the gate. The fast-path skips the *pause*, never the *thinking*.
+**Any one false → full gate:** feature tier · >1 story · multi-service · ambiguous
+target · you had to ask yourself a clarifying question · can't name the change in one
+sentence. **Unsure → full gate.** "User said 'just fix it'" is **not** clearance if
+you can't say exactly what "it" is — a vague directive = _open_ intent → gate. The
+fast-path skips the _pause_, never the _thinking_.
 
-**Fast-path drops the approval pause, NOT the tracker artifacts.** Even on a one-liner,
-still post the **spec comment + QA "what to test" comment** (Phase 1 triage) — durable
-record, and a visual/QA defect is what a human must re-verify. Cheap; don't skip.
+**Fast-path drops the approval pause, NOT the tracker artifacts.** Even on a
+one-liner, post the **spec comment + QA "what to test" comment** (Phase 1 triage) —
+durable record, and a visual/QA defect is what a human must re-verify. Don't skip.
 
 ## Phase 3 — Branch + implement + verify per story
 
 Branch: `feature/<issue-key>/<kebab-slug>`, same name in every affected repo.
 
-**Get `<issue-key>` from the tracker, don't invent it** (it's the auto-link
-token):
+**Get `<issue-key>` from the tracker, don't invent it** (auto-link token):
+
 - **Linear** — `get_issue` → `identifier` (`ABC-123`) + suggested `gitBranchName`.
   Use `identifier`; Linear links any branch containing it (case-insensitive). (Or
-  use `gitBranchName` verbatim.)
-- **Jira** — `getJiraIssue` → `key` (`PROJ-123`). Jira dev panel / Smart Commits
-  link by that token.
-- **No ticket** — `feature/<kebab-slug>`, no key segment (or the key of an issue
-  you created in Phase 1).
+  `gitBranchName` verbatim.)
+- **Jira** — `getJiraIssue` → `key` (`PROJ-123`). Dev panel / Smart Commits link by
+  that token.
+- **No ticket** — `feature/<kebab-slug>`, no key segment (or the key of an issue you
+  created in Phase 1).
 
-Key also goes in the commit + PR/MR title (Phases 4–5). Same branch name across
-repos so multi-repo PRs group.
+Key also in commit + PR/MR title (Phases 4–5). Same branch name across repos so
+multi-repo PRs group.
 
-**Move the ticket to in-progress + assign it when work starts.** As each actionable,
+**Move the ticket to in-progress + assign when work starts.** As each actionable,
 ticketed story's branch is created (post sign-off):
-- **Transition to the team's started state** — **resolve it, don't hardcode "In
-  Progress":** Linear `update_issue` to the team's `started`-type state (find it via
-  `list_issue_statuses`); Jira `transitionJiraIssue` to the transition whose target is
-  the In-Progress status (`mcp__atlassian__getTransitionsForJiraIssue`).
-- **Assign it to the mover** — the **current tracker user**: Linear `update_issue`
-  `assigneeId` = the viewer/me; Jira `editJiraIssue` assignee = current user (id via
-  `mcp__atlassian__atlassianUserInfo`). **Don't steal** — already assigned to someone
-  else → leave it, note who; unassigned → take it.
 
-Idempotent — skip the move/assign if already set; skip no-ticket and blocked stories.
-The in-progress move is also what stops a looping `/corgi-queue` from re-grabbing a
-story already in flight (auto-pick takes only not-In-Progress tickets). The **review**
-transition fires later, when the draft PR opens — Phase 5.
+- **Transition to the team's started state** — **resolve, don't hardcode "In
+  Progress":** Linear `update_issue` to the `started`-type state (`list_issue_statuses`);
+  Jira `transitionJiraIssue` to the transition whose target is In-Progress
+  (`mcp__atlassian__getTransitionsForJiraIssue`).
+- **Assign to the mover** — current tracker user: Linear `update_issue` `assigneeId`
+  = viewer/me; Jira `editJiraIssue` assignee = current user (`mcp__atlassian__atlassianUserInfo`).
+  **Don't steal** — assigned to someone else → leave it, note who; unassigned → take
+  it.
+
+Idempotent — skip if already set; skip no-ticket + blocked. The in-progress move
+also stops a looping `/corgi-queue` re-grabbing a story in flight (auto-pick takes
+only not-In-Progress). The **review** transition fires later, at draft PR — Phase 5.
 
 **Pick branch vs worktree per repo — check the working tree first:**
-`git -C <dir> status --porcelain --untracked-files=no` — empty = clean, any
-output = dirty. (Ignore stray untracked files; `checkout -b` doesn't disturb
-them, so they don't force a worktree.)
+`git -C <dir> status --porcelain --untracked-files=no` — empty = clean, any output =
+dirty. (Ignore stray untracked; `checkout -b` doesn't disturb them.)
 
-| Repo state | Stories touching this repo | Mode |
-|------------|---------------------------|------|
-| **clean** | one | **branch in place** |
-| **dirty** | one | **worktree** — don't disturb the user's uncommitted work, and skip the destructive base checkout on a dirty tree |
-| any | several | **worktree per story** (parallel isolation) |
+| Repo state | Stories touching this repo | Mode                                                                                                             |
+| ---------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **clean**  | one                        | **branch in place**                                                                                              |
+| **dirty**  | one                        | **worktree** — don't disturb the user's uncommitted work, and skip the destructive base checkout on a dirty tree |
+| any        | several                    | **worktree per story** (parallel isolation)                                                                      |
 
 Count "stories touching this repo" **across the whole batch up front** — two
-single-repo stories that both hit one repo are "several" → both worktree.
+single-repo stories both hitting one repo = "several" → both worktree.
 
 **Dirty + overlap guard.** A worktree branches from clean `origin/<base>`, so it
-**excludes the user's uncommitted edits**. Before routing a dirty repo to a
-worktree, check whether those edits touch the story's files. Overlap → the work
-would silently diverge → **STOP, ask the user to commit/stash or confirm**. No
-overlap → worktree is safe.
+**excludes the user's uncommitted edits**. Before routing a dirty repo to a worktree,
+check whether those edits touch the story's files. Overlap → work silently diverges →
+**STOP, ask the user to commit/stash or confirm**. No overlap → worktree safe.
 
 **Must-run producer in a worktree → run it with `--service-dir`.** A producer that
-must be *running* for a consumer to verify (Phase 4) can still live in a worktree:
-point corgi at it with `corgi run --service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>`
-(below). Only if your corgi lacks that flag (`corgi run --help | grep service-dir`)
-must such a producer go **in place** instead — dirty there → ask the user to
-stash/commit first.
+must be _running_ for a consumer to verify (Phase 4) can live in a worktree:
+`corgi run --service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` (below). Only if
+corgi lacks the flag (`corgi run --help | grep service-dir`) must it go **in place** —
+dirty → ask the user to stash/commit first.
 
 - **Branch in place** (clean tree; or a must-run producer when `--service-dir` is
-  unavailable, after stash/commit). Branch straight off the fetched remote
-  base — no `checkout <base>`/`pull` dance, no local-divergence trap:
+  unavailable, after stash/commit). Branch straight off the fetched remote base — no
+  `checkout <base>`/`pull` dance, no local-divergence trap:
   `git -C <dir> fetch origin && git -C <dir> checkout -b <branch> origin/<base>`.
 - **Worktree** (dirty tree, or several stories in one repo). Path
   `/tmp/corgi-wt/<wt-id>-<service>` — `<wt-id>` = `<issue-key>` (or `<kebab-slug>`
-  for a no-ticket story), `<service>` = the service name, so a multi-repo story's
-  repos never collide on one dir. Branch off `origin/<base>` — never touches
-  `<dir>`'s working tree:
+  for no-ticket), `<service>` = service name, so a multi-repo story's repos never
+  collide. Branch off `origin/<base>` — never touches `<dir>`'s tree:
   ```bash
   git -C <dir> fetch origin
   git -C <dir> worktree prune                                # drop stale entries
@@ -334,121 +355,134 @@ stash/commit first.
   ln -s "$PWD/<dir>/node_modules" /tmp/corgi-wt/<wt-id>-<service>/node_modules
   ```
   The worktree dir is now this repo's **working dir** — implement, gate, review,
-  commit, push and open the PR/MR from it (Phases 3.5–5 use it instead of `<dir>`).
-  - **Run a worktree'd service with `--service-dir` (only for services in
-    `corgi-compose.yml`).** corgi resolves a service from its `path:` (main
-    `<dir>`), so to *run* the worktree's code — e.g. a producer a consumer verifies
-    against (Phase 4) — pass `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>`;
-    corgi runs that service's env, beforeStart/afterStart and process from the
-    worktree, main checkout untouched. The flag is per-service and repeatable, so
-    you can mix — some services from worktrees, the rest from their compose `path:`:
+  commit, push, open the PR/MR from it (Phases 3.5–5).
+  - **Run a worktree'd service with `--service-dir` (only services in
+    `corgi-compose.yml`).** corgi resolves a service from its `path:` (main `<dir>`);
+    to _run_ the worktree's code — e.g. a producer a consumer verifies against
+    (Phase 4) — pass `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>`; corgi runs
+    that service's env, beforeStart/afterStart, process from the worktree, main
+    checkout untouched. Per-service, repeatable — mix worktree + compose `path:`
+    services:
     ```bash
     corgi run --detach \
       --service-dir api=/tmp/corgi-wt/ABC-200-api \
       --service-dir web=/tmp/corgi-wt/ABC-200-web
     # services not named (admin, worker, db_services) run from their compose path:
     ```
-    Use `--service-dir` here — it runs the **exact** code in the story's own
-    worktree. (corgi also has `--service-branch <svc>=<branch>`, which makes its
-    *own* reused worktree off a branch, and `--service-checkout <svc>=<branch>` for
-    an in-place checkout — handy for ad-hoc "just run this branch", but for stories
-    point at the worktree you're implementing in.)
-    Needs a corgi with the flag (`corgi run --help | grep service-dir`); without
-    it, run such a producer in place. A branched repo that **isn't** a corgi
-    service → no `--service-dir`; just run its runner in the worktree dir.
-  - **Success →** `git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>-<service>`
-    once the PR is up. **Failure (Stop rule) →** leave it; report its `/tmp` path
-    so the partial work isn't lost. Never `worktree remove` a failed story.
+    `--service-dir` runs the **exact** worktree code. (corgi also has
+    `--service-branch <svc>=<branch>` — its _own_ reused worktree off a branch — and
+    `--service-checkout <svc>=<branch>` for an in-place checkout; handy for ad-hoc
+    "run this branch", but for stories point at your impl worktree.) Needs the flag
+    (`corgi run --help | grep service-dir`); without it, run such a producer in
+    place. A branched repo that **isn't** a corgi service → no `--service-dir`; run
+    its runner in the worktree dir.
+  - **Success →** `git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>-<service>` once
+    the PR is up. **Failure (Stop rule) →** leave it; report its `/tmp` path. Never
+    `worktree remove` a failed story.
 
-Implement to spec; reuse before building. **Minimum diff — no opportunistic
-refactor, no over-engineering, no code comments** unless the file already
-comments heavily. Run the **per-service gate** (tests + typecheck + lint) BEFORE
-commit. Tests for every change, matching existing patterns.
+Implement to spec; reuse before building. **Minimum diff — no opportunistic refactor,
+no over-engineering, no code comments** unless the file already comments heavily. Run
+the **per-service gate** (tests + typecheck + lint) BEFORE commit. Tests for every
+change, matching existing patterns.
 
-- **Run the gate through corgi when the service is defined in `corgi-compose.yml`**
-  — it gives the worktree the service's full resolved env, deps and cwd, so you
-  don't guess the runner or hand-build env:
-  - Service has a `test` script → `corgi test --service <svc> --service-dir <svc>=<worktree-dir>`
-    (worktree'd) or plain `corgi test --service <svc>` (in place).
-  - Any other command (typecheck/lint/migrate/one-off) →
+- **Run the gate through corgi when the service is in `corgi-compose.yml`** — gives
+  the worktree full resolved env, deps, cwd, so you don't guess the runner or
+  hand-build env:
+  - `test` script → `corgi test --service <svc> --service-dir <svc>=<worktree-dir>`
+    (worktree'd) or `corgi test --service <svc>` (in place).
+  - Other command (typecheck/lint/migrate/one-off) →
     `corgi exec <svc> --service-dir <svc>=<worktree-dir> --ensure-deps -- <cmd>`.
-  - Service not in the compose, no `test` script, or no compose → run the
-    discovered runner (Phase 0) directly in the worktree dir.
-  Same `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>` mapping as `corgi run`
-  (Phase 3); drop it for in-place branches. Needs a corgi with the flag
-  (`corgi run --help | grep service-dir`).
-- **Bug tier: red test first** — write it, confirm it **FAILS on base**, then make
-  it pass. Adjustments skip.
+  - Not in compose, no `test` script, or no compose → run the discovered runner
+    (Phase 0) in the worktree dir. Same `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>`
+    mapping as `corgi run` (Phase 3); drop for in-place. Needs the flag.
+- **Bug tier: red test first** — write it, confirm **FAILS on base**, then make it
+  pass. Adjustments skip.
+- **Pre-existing red baseline.** Repo typecheck/lint may already fail on `<base>`,
+  unrelated. Don't chase a whole-repo green that never existed; don't let baseline
+  noise hide your breakage. Gate on **no NEW errors** — filter the run to changed
+  files, or diff the base error set. Touched files clean; baseline left as-is, not
+  "fixed" (scope creep).
+- **Scoped test run can false-green.** Path/pattern selector can match **nothing**
+  yet exit 0 — jest reads `app/(app)/…` parens + `[id]` brackets as regex, so the
+  target suite silently never runs while another file prints PASS. Confirm the
+  **intended suite ran** (assert test count > 0); match by filename substring or
+  escape the path. Green exit ≠ tests ran.
+- **Edited a generated artifact's source → regen + commit the output** (even
+  single-service). Touch an i18n catalog, GraphQL schema, snapshot, or other codegen
+  input → run the repo's regen step (`generate:types`, `codegen`, …; in
+  `package.json` / Makefile), commit the result, or the gate fails on the new
+  key/type.
 - **Webhook / callback feature** (a new inbound endpoint an external provider calls —
   Stripe, GitHub, Twilio, e-sign…) → **test with a simulated signed payload, not a
   live call:** assert the signature check + handler behaviour against a sample event
   (repeatable, CI-safe). **Don't gate on live delivery** — it needs provider config a
-  draft PR can't assume. Put the **live check** in the spec's manual-verification + the
-  PR body: `corgi tunnel <svc>` for a public URL, point the provider (or its CLI, e.g.
-  `stripe listen --forward-to <url>`) at it.
+  draft PR can't assume. Put the **live check** in the spec's manual-verification +
+  PR body: `corgi tunnel <svc>` for a public URL, point the provider (or its CLI,
+  e.g. `stripe listen --forward-to <url>`) at it.
 - **Multi-repo consumer:** can't verify (codegen/typecheck) until its producer is
-  committed **and running** — do Phase 4's contract-owner-first step (start
-  producer, `corgi status --ready`) BEFORE running this gate on the consumer.
-- **Stop rule:** can't pass the gate after ~2 honest tries → STOP, leave
-  un-pushed, report `needs attention` + failure, rest ships. Never push red.
+  committed **and running** — do Phase 4's contract-owner-first step (start producer,
+  `corgi status --ready`) BEFORE this gate on the consumer.
+- **Stop rule:** can't pass after ~2 honest tries → STOP, leave un-pushed, report
+  `needs attention` + failure, rest ships. Never push red.
 - **Re-tier mid-flight:** adjustment reveals real design → STOP, bump to feature,
-  hand to superpowers. If it also **widens span** (now needs another repo or a
-  new contract), loop back to Phase 1–2 — re-spec (add `## Contract`), re-gate,
-  create the producer branch — don't escalate in place.
+  hand to superpowers. Also **widens span** (another repo or a new contract) → loop
+  back to Phase 1–2 — re-spec (add `## Contract`), re-gate, create the producer
+  branch — don't escalate in place.
 
 ## Phase 3.5 — Per-story review (scoped, right after gate is green)
 
 Review **each story as it finishes**, scoped to **only its diff** — incremental,
 bounded context, NOT one giant end-of-batch review (re-reads everything, burns
 tokens).
-- Review `git -C <branch-dir> diff <base>...HEAD` — via a review subagent passed
-  only that diff + the spec (works everywhere), or `/code-review` /
-  `superpowers:requesting-code-review` if you have them.
+
+- Review `git -C <branch-dir> diff <base>...HEAD` — a review subagent passed only
+  that diff + the spec (works everywhere), or `/code-review` /
+  `superpowers:requesting-code-review` if present.
 - Fix **blocking** findings (correctness, missing test, scope creep), re-run gate.
   Cap ~1 extra round; still blocked → Stop rule. Non-blocking → PR body.
 
 ## Phase 4 — Commit, then multi-repo ordering
 
-**Commit:** match the repo's `git log` style (Conventional prefix only if the
-repo already does). **Concise subject** + the **issue key**; body only if truly
-needed, never a wall. **No `Co-authored-by` / AI trailer.** Let pre-commit hooks
-format; re-stage if rewritten.
+**Commit:** match the repo's `git log` style (Conventional prefix only if the repo
+does). **Concise subject** + **issue key**; body only if truly needed, never a wall.
+**No `Co-authored-by` / AI trailer.** Let pre-commit hooks format; re-stage if
+rewritten.
 
 **Record a fact when it'll matter later (confirm first).** A non-obvious bug root
 cause that could recur, or a cross-service contract decision, earns a memory fact —
-draft it, show it, write on OK via `corgi memory add …` then `corgi memory index`
-(see the `memory` skill). After writing a `fix` fact, run the
-learned-skill recurrence check (`corgi memory list --type fix --json`; a `pattern` ≥
-3× → write a **proposal** and stop — never auto-install). No `.corgi/memory/` → offer
-to create it; declined → skip. **Never put a secret in a fact.**
+draft, show, write on OK via `corgi memory add …` then `corgi memory index` (see
+`memory` skill). After a `fix` fact, run the recurrence check
+(`corgi memory list --type fix --json`; a `pattern` ≥ 3× → write a **proposal**, stop —
+never auto-install). No `.corgi/memory/` → offer to create; declined → skip.
+**Never put a secret in a fact.**
 
 **Multi-service** (one issue → N repos → N PRs):
+
 - **Same branch name** in every repo.
 - **Contract owner first.** Consumer regenerates types/clients from a producer
-  (GraphQL codegen, OpenAPI, protobuf, shared schema)? Producer must be
-  implemented, committed, AND **running** before the consumer verifies:
+  (GraphQL codegen, OpenAPI, protobuf, shared schema)? Producer must be implemented,
+  committed, AND **running** before the consumer verifies:
   ```bash
   corgi run --services <producer> --with-deps --detach   # or: corgi run --detach
   corgi status --ready --service <producer>               # block until healthy
   ```
-  Until up, consumer's generated types are stale → won't typecheck. Producer from
-  the `depends_on_services`/`exports` graph (Phase 0). `corgi stop` when done.
-  **Producer in a worktree?** `corgi run` serves its `path:` (main checkout) by
-  default, so add `--service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` to run the
-  worktree's code (Phase 3). Without that flag, implement the producer in place.
+  Until up, consumer's generated types are stale → won't typecheck. Producer from the
+  `depends_on_services`/`exports` graph (Phase 0). `corgi stop` when done. **Producer
+  in a worktree?** `corgi run` serves its `path:` (main checkout) by default — add
+  `--service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` to run the worktree's
+  code (Phase 3). Without the flag, implement the producer in place.
 - Consumers regenerate, commit generated output, finish their slice.
-- **Merge order:** producer PR first, consumers after. State in spec + every PR
-  body.
+- **Merge order:** producer PR first, consumers after. State in spec + every PR body.
 
 ## Phase 5 — Push + draft PR/MR per repo
 
-Per repo, forge from Phase 0. **`<dir>` below = the repo's working dir** — the
-worktree dir (`/tmp/corgi-wt/<wt-id>-<service>`) if it was worktree'd in Phase 3, else the
-checkout. Run `gh`/`glab` **from inside that dir** (they read the repo from cwd;
-`git -C` only sets git's dir, and the spec `--body-file`/`cat` path is relative to
-cwd).
+Per repo, forge from Phase 0. **`<dir>` = the repo's working dir** — the worktree dir
+(`/tmp/corgi-wt/<wt-id>-<service>`) if worktree'd in Phase 3, else the checkout. Run
+`gh`/`glab` **from inside that dir** (they read the repo from cwd; `git -C` only sets
+git's dir, and the spec `--body-file`/`cat` path is relative to cwd).
 
 **GitHub (`gh`):**
+
 ```bash
 git -C <dir> push -u origin <branch>
 gh pr create --draft --base <base> --head <branch> \
@@ -458,6 +492,7 @@ gh pr comment <n> --body-file docs/stories/<issue-key>-<slug>.md   # spec on PR
 ```
 
 **GitLab (`glab`):**
+
 ```bash
 git -C <dir> push -u origin <branch>
 glab mr create --draft --source-branch <branch> --target-branch <base> \
@@ -467,50 +502,48 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 ```
 
 - **Draft only.** Report each PR/MR's diff summary + link; human flips to ready.
-- **Move the ticket to the review state** once its draft PR/MR is up — **resolve it,
-  don't hardcode:** Linear a `Code Review`/`In Review` state (a later `started`-type or
-  custom state from `list_issue_statuses`); Jira the transition whose target is named
-  *In Review* / *Code Review* (`getTransitionsForJiraIssue`). **No such state on the
-  team → leave it In Progress.** Idempotent; skip no-ticket/blocked. Multi-repo story →
-  move once **all** its PRs are open, not per-repo.
+- **Move the ticket to the review state** once its draft PR/MR is up — **resolve,
+  don't hardcode:** Linear a `Code Review`/`In Review` state (later `started`-type or
+  custom, from `list_issue_statuses`); Jira the transition whose target is named
+  _In Review_/_Code Review_ (`getTransitionsForJiraIssue`). **No such state → leave
+  In Progress.** Idempotent; skip no-ticket/blocked. Multi-repo → move once **all**
+  PRs are open, not per-repo.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
-- **Run-locally line in the body** — include the same one-paste
-  `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report below)
-  so a reviewer can spin the branch up without hunting for the command.
+- **Run-locally line in the body** — the same one-paste
+  `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report) so a
+  reviewer spins the branch up without hunting.
 - Canonical spec already on the tracker (Phase 1); PR/MR comment is a convenience
   copy.
 
 ### Grouped report (final output)
 
-`<subject>` = the PR/MR title **without** its trailing `[<issue-key>]` (Phase 5
-puts the key in the title — don't print it twice). **No `(draft)` suffix.** One
-blank line between stories.
+`<subject>` = the PR/MR title **without** its trailing `[<issue-key>]` (Phase 5 puts
+the key in the title — don't print it twice). **No `(draft)` suffix.** One blank line
+between stories.
 
-- **Single-repo story** → one line `[<issue-key>] <Service>: <subject>`, link on
-  its own line directly below.
-- **Multi-repo story** → a **header line `[<issue-key>] <story description>`**,
-  then each repo on its own `<Service>: <subject>` line with the link below it —
-  no key repeated, no blank line between repos.
-- **No-ticket story** → swap `[<issue-key>]` for a short `[<slug>]` tag (header for
-  multi-repo, inline for single) so the lines still group.
-- **Run line** → after the link(s), one **copy-paste** `corgi run` that spins up
-  every impacted service on its branch via `--service-branch <svc>=<branch>` (corgi
-  builds the worktree from the pushed branch — reviewer needs nothing else). Same
-  `<branch>` across repos. Add `--with-deps` so dependencies/dbs come up. One
-  `--service-branch` per impacted service. Skip for blocked/failed stories.
-  Needs a corgi with the flag (`corgi run --help | grep service-branch`); else
-  fallback `git checkout <branch> && corgi run --services <svc>`.
-  Same line works for **you locally and the reviewer** — the branch is committed by
-  now, so no separate `--service-dir` variant is needed here. (`--service-dir` at
-  the live impl worktree belongs to the Phase 3 gate, where the code is still
+- **Single-repo** → one line `[<issue-key>] <Service>: <subject>`, link directly
+  below.
+- **Multi-repo** → a **header `[<issue-key>] <story description>`**, then each repo
+  on its own `<Service>: <subject>` line with the link below — no key repeated, no
+  blank line between repos.
+- **No-ticket** → swap `[<issue-key>]` for a short `[<slug>]` tag so the lines still
+  group.
+- **Run line** → after the link(s), one **copy-paste** `corgi run` spinning up every
+  impacted service on its branch via `--service-branch <svc>=<branch>` (corgi builds
+  the worktree from the pushed branch — reviewer needs nothing else). Same `<branch>`
+  across repos. `--with-deps` so deps/dbs come up. One `--service-branch` per service.
+  Skip blocked/failed. Needs the flag (`corgi run --help | grep service-branch`);
+  else `git checkout <branch> && corgi run --services <svc>`. Same line for you +
+  reviewer — the branch is committed now, no `--service-dir` variant needed.
+  (`--service-dir` at the live impl worktree belongs to the Phase 3 gate, code still
   uncommitted.)
-- **Review hint** → after the link(s) for each actionable (non-blocked) story, one
-  line per PR/MR: `↳ review it: /corgi-review <pr-or-mr-link>` — hands the reviewer
-  straight to the `review` skill (it checks the diff against repo standards + the
-  ticket, posts inline suggestions). Skip for blocked/failed stories (no link).
-- **Blocked / failed** → no link, one line: `[<key>] <Service>: BLOCKED — <the
-  decision needed>` (or `needs attention — <reason>`, + the worktree `/tmp` path
-  if partial work is parked there).
+- **Review hint** → after the link(s) per actionable (non-blocked) story, one line
+  per PR/MR: `↳ review it: /corgi-review <pr-or-mr-link>` — hands the reviewer to the
+  `review` skill (checks the diff against repo standards + the ticket, posts inline
+  suggestions). Skip blocked/failed.
+- **Blocked / failed** → no link, one line:
+  `[<key>] <Service>: BLOCKED — <decision needed>` (or `needs attention — <reason>`, +
+  the worktree `/tmp` path if partial work is parked there).
 
 ```
 [ABC-123] web: Remove address step from mobile signup
@@ -533,8 +566,8 @@ https://github.com/<org>/web/pull/<n>
 
 ## Scenarios & scaling
 
-- **Big batch → bound context.** >~4–5 stories → dispatch per-branch
-  implementation to subagents (`superpowers:subagent-driven-development` /
+- **Big batch → bound context.** >~4–5 stories → dispatch per-branch implementation
+  to subagents (`superpowers:subagent-driven-development` /
   `dispatching-parallel-agents`), one per branch, scoped to its spec + the shared
   note. Orchestrator stays gate-keeper, collects reports + reviews. Chunk a huge
   batch.
