@@ -13,7 +13,7 @@ calls under **write** (all behind the skill's gate).
 | Untriaged (triage) | `list_issues` filtered to no-status / Triage / no-label |
 | Agent queue (pickup) | `list_issues` `label:"agent"`, then keep states of type `backlog`/`unstarted` (drop `started`/`completed`/`canceled`) — no negative state filter, so filter client-side |
 | One issue (+ git links) | `get_issue` → read `attachments[]` for linked PR URLs |
-| **write** | `create_issue`, `update_issue` (state/assignee/labels/priority/cycle), `create_comment` |
+| **write** | `save_issue` (create: `title`+`team`, no `id`; update: pass `id` — state/assignee/labels/priority/cycle), `save_comment` (create: `issueId`+`body`; update: pass `id`) |
 
 Issue key = `identifier` (`ABC-123`). No cycle configured → group by `state` /
 project instead; there's no burn line.
@@ -88,8 +88,8 @@ never hardcode the name** — teams rename it ("In Progress", "Doing", "Code Rev
 
 - **Linear** — states have a `type` (`backlog`/`unstarted`/`started`/`completed`/
   `canceled`). `list_issue_statuses` → the `started` state for in-progress,
-  `update_issue({ id, stateId })`. **Review** = a later `started`/custom state named
-  Review / Code Review (same list). **Assign:** `update_issue({ id, assigneeId })`
+  `save_issue({ id, state })` (`state` takes a type/name/id). **Review** = a later `started`/custom state named
+  Review / Code Review (same list). **Assign:** `save_issue({ id, assignee: "me" })`
   with the current user (the viewer).
 - **Jira** — transitions are workflow-specific. `getTransitionsForJiraIssue` → the
   transition whose target `statusCategory = "In Progress"` (in-progress) or whose

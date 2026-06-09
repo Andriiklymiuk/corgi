@@ -199,8 +199,9 @@ service(s) before speccing:
 
 Described feature = usually **Feature tier**: `superpowers:brainstorming` (or inline
 Q&A) to settle scope → `superpowers:writing-plans` for the spec. After sign-off
-(Phase 2), **offer to create a tracker issue** (Linear `mcp__linear-server__create_issue`
-/ Jira `mcp__atlassian__createJiraIssue`) for a key + auto-link; declined → spec stays
+(Phase 2), **offer to create a tracker issue** (Linear `mcp__linear-server__save_issue`
+with `title`+`team` and no `id` / Jira `mcp__atlassian__createJiraIssue`) for a key +
+auto-link; declined → spec stays
 local + on PR, branch drops the key segment (Phase 3). **A caller (e.g. `suggest`)
 that already created the issue + hands you key + spec → use that key, don't re-create.**
 
@@ -239,12 +240,13 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
 
 - **Actionable → post.**
   - **Spec → a comment** on the issue (human-readable, not a `.md` attachment).
-    Linear `mcp__linear-server__create_comment({ issueId, body })`; Jira
+    Linear `mcp__linear-server__save_comment({ issueId, body })` (create-or-update:
+    omit `id` to create, pass `id` to update); Jira
     `mcp__atlassian__addCommentToJiraIssue`. Literal newlines/markdown. **Open with a
     `## Spec` heading** — no HTML comment marker (trackers render `<!-- … -->` as
     visible text), no footer badge. That heading is how a later run (new session, no
     comment id) finds it: list comments, match the one whose first heading is `## Spec`,
-    **update** it instead of duplicating.
+    **update** it (`save_comment({ id, body })`) instead of duplicating.
   - **What to test → a separate comment** (non-engineer reads inline). Plain QA:
     clicks + outcome, no code/file refs, end `Expected:`. Skip non-testable stories.
 - **Blocked → do NOT post.** Spec local only; mark `Status: BLOCKED` + **Decision
@@ -301,11 +303,12 @@ multi-repo PRs group.
 ticketed story's branch is created (post sign-off):
 
 - **Transition to the team's started state** — **resolve, don't hardcode "In
-  Progress":** Linear `update_issue` to the `started`-type state (`list_issue_statuses`);
+  Progress":** Linear `save_issue({ id, state })` to the `started`-type state (`state`
+  takes a type/name/id; resolve via `list_issue_statuses`);
   Jira `transitionJiraIssue` to the transition whose target is In-Progress
   (`mcp__atlassian__getTransitionsForJiraIssue`).
-- **Assign to the mover** — current tracker user: Linear `update_issue` `assigneeId`
-  = viewer/me; Jira `editJiraIssue` assignee = current user (`mcp__atlassian__atlassianUserInfo`).
+- **Assign to the mover** — current tracker user: Linear `save_issue({ id, assignee: "me" })`
+  (`assignee` accepts a user id/name/email/`"me"`); Jira `editJiraIssue` assignee = current user (`mcp__atlassian__atlassianUserInfo`).
   **Don't steal** — assigned to someone else → leave it, note who; unassigned → take
   it.
 

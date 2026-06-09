@@ -119,8 +119,8 @@ anything. Missing → don't silently create in the wrong tracker: keep
 `docs/suggestions/<slug>.md` as the deliverable + a paste-ready issue body + the
 tracker's new-issue URL, and stop.
 
-Connected → create the issue from the spec (Linear `mcp__linear-server__create_issue`
-/ Jira `mcp__atlassian__createJiraIssue`) at the chosen location, link the spec,
+Connected → create the issue from the spec (Linear `mcp__linear-server__save_issue`
+with `title`+`team` and no `id` / Jira `mcp__atlassian__createJiraIssue`) at the chosen location, link the spec,
 report the key/link. Then offer **"Implement it now?"** → hand the approved spec
 **and the created issue key** to the **`stories`** skill (it branches per service off
 that key — don't let it re-create the issue). Declined → leave the spec; done.
