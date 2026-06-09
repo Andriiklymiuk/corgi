@@ -1,15 +1,15 @@
 ---
 name: debug
-description: Use to diagnose a corgi stack OR to gather runtime data while investigating a bug. Two entry modes — (1) a stack misbehaves: a service won't start, crashed, is stuck/unhealthy, hangs on boot ("debug the stack", "why is X not starting", "the api is down"); (2) you're working a bug ticket (Jira/Linear) and hit "need more data" — pull logs, request traces, analytics, or backend perf data, local or deployed ("pull the logs for this request", "what do the staging logs say", "check the 500s", "why is this endpoint/query slow"); client-side/UI perf (render jank, slow animation, bundle) is the app framework's profiling job, not this. Local-first (corgi ps/status/doctor/logs + targeted retries); escalates to whatever logs/analytics provider the repo uses (CloudWatch/ECS, Coralogix, Datadog, Sentry, Grafana/Loki, New Relic, … — auto-detected from the repo's README) on demand and after asking. Callable from the stories skill mid-investigation. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or reviewing PRs (review skill).
+description: Use to diagnose a corgi stack OR to gather runtime data while investigating a bug. Entry modes — (1) a stack misbehaves: a service won't start, crashed, is stuck/unhealthy, hangs on boot ("debug the stack", "why is X not starting", "the api is down"); (2) you're working a bug ticket (Jira/Linear) and hit "need more data" — pull logs, request traces, analytics, or backend perf data, local or deployed ("pull the logs for this request", "what do the staging logs say", "check the 500s", "why is this endpoint/query slow"); (3) env/version skew — the SAME code behaves differently across environments or app versions ("works on staging not prod", "an old store build works, the latest release is broken", "fine locally but 500 in prod on the same request", "do we need to deploy something on the api"): a deploy-state + contract investigation — build the version✕env repro matrix, pin the deployed commit per env (don't read main HEAD), diff the client contract against the DEPLOYED server schema (an unknown GraphQL field rejects the whole query → blank screen), and weight any prior same-class incident in CLAUDE.md / hotfix branches. Client-side/UI perf (render jank, slow animation, bundle) is the app framework's profiling job, not this. Local-first (corgi ps/status/doctor/logs + targeted retries); escalates to whatever logs/analytics provider the repo uses (CloudWatch/ECS, Coralogix, Datadog, Sentry, Grafana/Loki, New Relic, … — auto-detected from the repo's README) on demand and after asking. Callable from the stories skill mid-investigation. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or reviewing PRs (review skill).
 ---
 
 # Corgi debug
 
-Three entry modes:
+Four entry modes:
 
 - **Broken stack** — a service won't start, crashed, is unhealthy, or hangs on
   boot. Steps 0–3 (local); Step 4 only if a deployed env is implicated.
-- **Bug investigation** — on a ticket, hit *"need more data"*: runtime logs, a
+- **Bug investigation** — on a ticket, hit _"need more data"_: runtime logs, a
   request trace, analytics, or **backend perf** ("why is order fetching slow", a slow
   endpoint/query) — **local or deployed**. Stack may be fine; often jump straight to
   **Step 4** (provider data / APM trace), Steps 0–2 only if it reproduces locally.
@@ -18,6 +18,10 @@ Three entry modes:
 - **CI red on a PR** — a pushed branch's checks failed ("why is CI red", "the build
   broke on my PR"). corgi has **no CI command** — the failing job log comes from the
   **forge CLI**, then reproduce locally → **Step 5**.
+- **Env / version skew** — _same code, different behavior across environment or app
+  version_: "works on staging not prod", "an old app build works, the new one is broken", "fine locally,
+  500 in prod on the same request". Usually **not** a stack fault and **not** in the
+  logs — a deploy-state + contract problem. Skip the local ladder → **Step 6**.
 
 **Local-first.** Exhaust the fast local probes before anything external. The
 provider is read from the repo (`README`/`CLAUDE.md`), never hard-coded, queried on
@@ -27,7 +31,7 @@ whole ladder for a one-liner.
 ## Guardrails (non-negotiable)
 
 - **Never foreground a `corgi run` from a Bash call** — `beforeStart` runs inline
-  *before* run-state is written and `corgi run` streams forever, so a sync call hangs
+  _before_ run-state is written and `corgi run` streams forever, so a sync call hangs
   (10-min timeout) and never reaches the next step. Always `--detach` (or
   `run_in_background: true`). See `../corgi/references/long-running.md`.
 - **Bound every read.** Logs via idle-limited `corgi logs` (`--idle <Ns>`); raw files
@@ -42,6 +46,11 @@ whole ladder for a one-liner.
   provider, ask first, read-only, scope to service+env+window, **never echo secrets**.
 - **Run safe fixes; ask before destructive/remote** (`--force`, dropping a DB,
   killing a port the user may want, anything hitting a deployed env).
+- **Cross-env / cross-version bug → build the repro matrix and pin the deployed
+  version BEFORE reading code.** "Works in A not B" is its own bug class (Step 6).
+  Don't diff against `main` HEAD or theorize about data until you know which
+  commit/version each env actually runs — the report's own version string (a
+  screenshot build number, "broke in the latest release") is evidence; use it, don't substitute `main`.
 - **~2 honest tries per service**, then report `needs attention` + what you saw.
 
 ## Step 0 — Snapshot (broken-stack mode)
@@ -53,19 +62,19 @@ corgi status --json    # live TCP/HTTP probe — the ONLY liveness truth
 ```
 
 **Trust `corgi status` (live probe) for liveness, not `corgi ps` status.** ps
-`status` only means the PID/container *exists* — `db_services` only go
+`status` only means the PID/container _exists_ — `db_services` only go
 `running`/`stopped`, never `crashed`, and a container-backed service (docker runner,
 pid 0) isn't refreshed by a liveness check, so a crash won't flip it to `crashed`.
 Judge those by `corgi status` + `docker ps`.
 
 Classify on **real signals** (JSON keys lowercase):
 
-| State | Tell | Next |
-|-------|------|------|
-| **healthy** | `corgi status` `healthy:true` | not the problem |
-| **crashed** | ps `status:"crashed"` OR a newest `*.crashed.log` | Step 2 |
-| **up but probe red** | ps `status:"running"` BUT `corgi status` `healthy:false` | Step 2 + check the `healthCheck:` path |
-| **never spawned / mid-beforeStart** | entry **absent** from `.state.json` | Step 1 |
+| State                               | Tell                                                     | Next                                   |
+| ----------------------------------- | -------------------------------------------------------- | -------------------------------------- |
+| **healthy**                         | `corgi status` `healthy:true`                            | not the problem                        |
+| **crashed**                         | ps `status:"crashed"` OR a newest `*.crashed.log`        | Step 2                                 |
+| **up but probe red**                | ps `status:"running"` BUT `corgi status` `healthy:false` | Step 2 + check the `healthCheck:` path |
+| **never spawned / mid-beforeStart** | entry **absent** from `.state.json`                      | Step 1                                 |
 
 Uptime = now − `startedAt`; call out "X up 4m, Y never came up". **No exit code in
 `.state.json`** — read it from the log body (Step 2), not the file or the `.crashed`
@@ -77,6 +86,7 @@ symptom and reuse the recorded fix before re-deriving it (see the `memory` skill
 Absent → skip.
 
 **"Stuck" splits** (corgi has no booting-vs-ready flag):
+
 - **Hung in `beforeStart`** → `corgi run --detach` itself never returned; service
   **absent** from `.state.json`. Launched in a Bash call → still blocking; check that
   run's output / `--logs`; `--omit beforeStart` to isolate.
@@ -134,11 +144,11 @@ Smallest change that could work, then re-gate. **Never foreground a `corgi run`.
   (corgi makes a non-destructive worktree off the pushed branch; main checkout
   untouched), or `--service-dir <x>=<worktree-dir>` for live/uncommitted code. Guard:
   `corgi run --help | grep service-branch` (absent → `git checkout <branch> &&
-  corgi run --services <x>`).
+corgi run --services <x>`).
 - **DB is the problem** (most common) → `corgi run --dbServices <db> --services none
-  --detach`, then `corgi status --json` / its logs.
+--detach`, then `corgi status --json` / its logs.
 - **Full-stack flake** → `corgi restart`.
-- **A `beforeStart` step wrongly skipped** → `--no-cache` (re-runs *every*
+- **A `beforeStart` step wrongly skipped** → `--no-cache` (re-runs _every_
   `beforeStart` step, ignoring `cacheKey` — **not** an image/deps rebuild). Truly
   stale generated artifacts → `corgi clean -i corgi_services` / `corgi run --fromScratch`.
 - **Env wrong** → `corgi env <x>`. **Compose wrong** → `corgi validate`.
@@ -197,10 +207,51 @@ from the **forge CLI**, then reproduce with the service's own gate.
 4. **Fix → push**, re-check `gh pr checks` / `glab ci status`. ~2 tries, then report
    `needs attention` + the failing job.
 
+## Step 6 — Env / version skew (works in one env or version, not another)
+
+Same code, different behavior across environment or app version. Not a crash, not in
+the stack logs — a **deploy-state + contract** problem. Don't read `main` HEAD; read
+what's actually deployed.
+
+1. **Build the repro matrix first.** version(s) ✕ environment ✕ last-known-good. The
+   bug report is evidence — a screenshot build string (app version + build number), the
+   env, "used to work in the previous version" — use it; don't substitute `main`. Missing
+   a cell → **ask**
+   ("which version/env reproduces, when did it last work") before digging.
+2. **Pin the deployed artifact per env** — the crux, and the thing you usually can't
+   see from the repo. Find the real commit/version each env runs: a `/version`/`/health`
+   endpoint, a build-embedded SHA, the container image tag/label, the forge's
+   deployments/releases, CI's last-deploy. Can't find it → **ask; never speculate on
+   data you can't see.** Watch for a frozen prod or a `hotfix/*` branch that diverges
+   from `main`.
+3. **Diff the contract against the DEPLOYED peer, not `main`.** Client↔server skew:
+   does the client call a field / route / param the _deployed_ server actually has? For
+   GraphQL an unknown field is a **validation error that rejects the WHOLE operation**
+   (no partial data, `errorPolicy` can't save it) → one new field blanks the entire
+   query/screen. Decisive 2-command check: `git grep <field> <deployed-sha>` vs the
+   client query. Same shape for REST (new required param, dropped response field),
+   enums, or a missing DB column.
+4. **Weight in-repo precedent.** Hit this class before? `grep` CLAUDE.md + recent
+   commits + `hotfix/*` branches for prior deploy-lag / dropped-or-renamed-field
+   incidents, and `.corgi/memory/incidents/`. A documented precedent is a strong prior
+   — check it early, not after theorizing.
+5. **Cheapest decisive check first.** The actual error string from the failing
+   env/client (the GraphQL `Cannot query field …`, the 4xx body, the stack line) settles
+   it in one read — pull it before building data / edge-case theories.
+
+Root cause is usually **deploy order**: a client shipped a contract change before the
+peer reached that env. Fix = deploy the lagging peer (often API-first) and/or a
+client-side tolerance net; always flag the order so it doesn't recur.
+
 ## Report
 
 What was wrong, what you ran, what fixed it (or what's still `needs attention` and
 why). Stopped at the analytics ask-gate → name the provider and the query you'd run.
+
+**Posting to the ticket** (only if asked): human and concise — symptom → why, framed in
+the repro matrix (which env/version breaks and why the others don't) → fix → one
+prevention line. Link SHAs / PRs, don't dump them. Preview before posting; don't
+post-then-revise.
 
 ## Called from another skill
 
