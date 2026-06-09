@@ -46,6 +46,16 @@ func resolveAdditionalConfig(db DatabaseService, serviceName string) (Additional
 	if db.Additional.DefinitionPath == "" {
 		return AdditionalDatabaseConfig{}, ""
 	}
+	// A compose-relative definitionPath must stay under the compose dir; an
+	// absolute path is taken as-is (existing behavior). Escapes are a hard error.
+	if !filepath.IsAbs(db.Additional.DefinitionPath) {
+		resolved, err := JoinUnderComposeDir(db.Additional.DefinitionPath)
+		if err != nil {
+			fmt.Printf("Error: definition file %s for service %s rejected: %s\n", db.Additional.DefinitionPath, serviceName, err)
+			return AdditionalDatabaseConfig{}, ""
+		}
+		db.Additional.DefinitionPath = resolved
+	}
 	if _, err := os.Stat(db.Additional.DefinitionPath); err != nil {
 		fmt.Printf("Warning: Definition file %s not found for service %s, skipping additional config\n", db.Additional.DefinitionPath, serviceName)
 		return AdditionalDatabaseConfig{}, ""

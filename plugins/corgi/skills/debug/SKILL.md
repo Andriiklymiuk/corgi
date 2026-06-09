@@ -71,6 +71,11 @@ Uptime = now − `startedAt`; call out "X up 4m, Y never came up". **No exit cod
 `.state.json`** — read it from the log body (Step 2), not the file or the `.crashed`
 suffix.
 
+**Seen this before?** If `.corgi/memory/` exists, scan `incidents/`
+(`corgi memory list --type incident --json`) for a past failure matching the
+symptom and reuse the recorded fix before re-deriving it (see the `memory` skill).
+Absent → skip.
+
 **"Stuck" splits** (corgi has no booting-vs-ready flag):
 - **Hung in `beforeStart`** → `corgi run --detach` itself never returned; service
   **absent** from `.state.json`. Launched in a Bash call → still blocking; check that

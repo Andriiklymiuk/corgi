@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 )
@@ -455,31 +457,38 @@ func TestMCPDriversResource(t *testing.T) {
 // TestMCPWithStdoutToStderr verifies the stdout swap keeps incidental prints off
 // the real stdout (the JSON-RPC channel) and restores os.Stdout afterward.
 func TestMCPWithStdoutToStderr(t *testing.T) {
+	// withStdoutToStderr now redirects corgi's human/console output via the
+	// goroutine-safe console override (utils.Info/ConsoleOut), WITHOUT mutating
+	// the process-global os.Stdout. Capture the real stdout to prove Info does
+	// not leak onto the JSON-RPC channel.
 	orig := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("os.Pipe: %v", err)
 	}
 	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = orig })
 
 	withStdoutToStderr(func() {
-		fmt.Println("SHOULD_NOT_APPEAR")
+		// os.Stdout must NOT be swapped under the override approach.
+		if os.Stdout != w {
+			t.Errorf("os.Stdout was mutated: got %v want %v", os.Stdout, w)
+		}
+		utils.Info("SHOULD_NOT_APPEAR")
 	})
 
-	// (b) os.Stdout must be restored to what it was before the swap.
-	if os.Stdout != w {
-		t.Errorf("os.Stdout not restored: got %v want %v", os.Stdout, w)
+	if utils.OverrideWriter() != nil {
+		t.Error("console override not cleared after withStdoutToStderr")
 	}
-	os.Stdout = orig
 
-	// (a) nothing should have reached the captured real stdout.
 	w.Close()
+	os.Stdout = orig
 	data, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("read pipe: %v", err)
 	}
 	if len(data) != 0 {
-		t.Errorf("expected nothing on real stdout during swap, got %q", string(data))
+		t.Errorf("expected nothing on real stdout, got %q", string(data))
 	}
 }
 
@@ -554,5 +563,60 @@ func TestCapMCPOutput(t *testing.T) {
 	gotB, truncB := capMCPOutput(huge, 200, 16384)
 	if !truncB || len(gotB) > 16384+200 {
 		t.Fatalf("byte cap failed: trunc=%v len=%d", truncB, len(gotB))
+	}
+}
+
+func TestMCPDoesNotMutateGlobalStdout(t *testing.T) {
+	orig := os.Stdout
+	var duringEqual bool
+	withStdoutToStderr(func() {
+		duringEqual = os.Stdout == orig
+		utils.Info("x")
+	})
+	if !duringEqual {
+		t.Fatal("os.Stdout was mutated during withStdoutToStderr")
+	}
+	if os.Stdout != orig {
+		t.Fatal("os.Stdout not restored after withStdoutToStderr")
+	}
+	if utils.OverrideWriter() != nil {
+		t.Fatal("console override not cleared after withStdoutToStderr")
+	}
+}
+
+func TestStartMCPTunnelDoneClosesOnMissingBinary(t *testing.T) {
+	// Force the provider binary to be absent so tunnel.Run emits an err Event
+	// and returns immediately; the join channel must then close promptly.
+	t.Setenv("PATH", t.TempDir())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	opts := mcpHTTPOpts{tunnel: true, tunnelProvider: "cloudflared"}
+	done := startMCPTunnel(ctx, "127.0.0.1:8765", "", opts)
+	if done == nil {
+		t.Fatal("startMCPTunnel returned nil channel")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("tunnel done channel did not close after runner exited")
+	}
+}
+
+func TestStartMCPTunnelDoneClosesOnCancel(t *testing.T) {
+	// A present binary that blocks: cancel must drain the runner and close done.
+	t.Setenv("PATH", t.TempDir())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	opts := mcpHTTPOpts{tunnel: true, tunnelProvider: "cloudflared"}
+	done := startMCPTunnel(ctx, "127.0.0.1:8765", "", opts)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("tunnel done channel did not close after cancel")
 	}
 }

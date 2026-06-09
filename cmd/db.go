@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -57,6 +58,10 @@ func waitForDbsReady(ctx context.Context, dbs []utils.DatabaseService, ready fun
 }
 
 const errMakeCommandFailed = "Make command failed"
+
+// seedReady waits for a db to accept connections before seeding. Indirected
+// through a var so tests can stub the readiness probe.
+var seedReady = utils.WaitForDBReady
 
 // dbCmd represents the db command
 var dbCmd = &cobra.Command{
@@ -228,7 +233,7 @@ func showMakeCommands(
 		fmt.Println("Container id: ", containerId)
 
 	case "seed":
-		err = SeedDb(targetService)
+		err = SeedDb(serviceConfig)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -244,7 +249,8 @@ func showMakeCommands(
 	}
 }
 
-func SeedDb(targetService string) error {
+func SeedDb(dbService utils.DatabaseService) error {
+	targetService := dbService.ServiceName
 	dumpFileExists, err := utils.CheckIfFilesExistsInDirectory(
 		fmt.Sprintf("%s/%s/%s",
 			utils.CorgiComposePathDir,
@@ -267,11 +273,14 @@ func SeedDb(targetService string) error {
 		fmt.Printf("Getting target service info failed: %s\n", err)
 	}
 	if !serviceIsRunning {
-		err := utils.ExecuteCommandRun(targetService, "make", "up")
-		if err != nil {
-			fmt.Println(errMakeCommandFailed, err)
+		if err := utils.ExecuteCommandRun(targetService, "make", "up"); err != nil {
+			return fmt.Errorf("%s: %w", errMakeCommandFailed, err)
 		}
-		time.Sleep(time.Second * 15)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultReadyTimeout)
+		defer cancel()
+		if err := seedReady(ctx, utils.DatabaseService{ServiceName: targetService}); err != nil {
+			return fmt.Errorf("%s not ready for seeding: %w", targetService, err)
+		}
 	}
 
 	containerId, err := utils.GetContainerId(targetService)
@@ -283,6 +292,26 @@ func SeedDb(targetService string) error {
 	s.Suffix = fmt.Sprintf(" seeding of database in service %s", targetService)
 	if !utils.CIMode {
 		s.Start()
+	}
+
+	if dbService.Driver == "postgres" {
+		// Postgres seed runs via exec.Command argv so the container id is never
+		// re-expanded through the `make`/`/bin/sh` recipe.
+		serviceDir, perr := utils.GetPathToDbService(targetService)
+		if perr != nil {
+			if !utils.CIMode {
+				s.Stop()
+			}
+			return perr
+		}
+		err = utils.RunPgSeed(serviceDir, "dump.sql", containerId, dbService)
+		if !utils.CIMode {
+			s.Stop()
+		}
+		if err != nil {
+			return fmt.Errorf("seed failed: %s", err)
+		}
+		return nil
 	}
 
 	output, err := utils.ExecuteSeedMakeCommand(
@@ -303,6 +332,31 @@ func SeedDb(targetService string) error {
 
 // Get dump either from seedDb or from self, if isSelf true, that dump is from current db
 func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
+	if serviceConfig.Driver == "postgres" {
+		// Postgres dumps run via exec.Command argv with PGPASSWORD in cmd.Env,
+		// so the password never lands on argv or in a re-expanding make recipe.
+		source := serviceConfig
+		if !isSelf {
+			s := serviceConfig.SeedFromDb
+			source = utils.DatabaseService{
+				Host: s.Host, Port: s.Port, User: s.User,
+				Password: s.Password, DatabaseName: s.DatabaseName,
+				Driver: "postgres",
+			}
+		}
+		serviceDir, err := utils.GetPathToDbService(serviceConfig.ServiceName)
+		if err != nil {
+			fmt.Println(errMakeCommandFailed, err)
+			return
+		}
+		if err := utils.RunPgDump(source, serviceDir, "dump.sql"); err != nil {
+			fmt.Println(errMakeCommandFailed, err)
+			return
+		}
+		fmt.Printf("✅ Successfully added database dump to %s\n", serviceConfig.ServiceName)
+		return
+	}
+
 	var password string
 	var cmdName string
 
@@ -331,6 +385,15 @@ func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
 func DumpAndSeedDb(dbService utils.DatabaseService) error {
 	if dbService.SeedFromFilePath != "" {
 		src := dbService.SeedFromFilePath
+		// A compose-relative seedFromFilePath must stay under the compose dir; an
+		// absolute path is taken as-is (existing behavior).
+		if !filepath.IsAbs(src) {
+			resolved, err := utils.JoinUnderComposeDir(src)
+			if err != nil {
+				return err
+			}
+			src = resolved
+		}
 		path, err := utils.GetPathToDbService(dbService.ServiceName)
 		if err != nil {
 			return fmt.Errorf("path to target service is not found: %s", err)
@@ -345,7 +408,7 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 			return err
 		}
 
-		err = os.WriteFile(dest, bytesRead, 0644)
+		err = os.WriteFile(dest, bytesRead, 0o600)
 
 		if err != nil {
 			return err
@@ -358,7 +421,7 @@ func DumpAndSeedDb(dbService utils.DatabaseService) error {
 		GetDump(dbService, false)
 	}
 
-	err := SeedDb(dbService.ServiceName)
+	err := SeedDb(dbService)
 	if err != nil {
 		return err
 	}

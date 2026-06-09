@@ -143,14 +143,21 @@ func TestListSnapshotsEmptyDir(t *testing.T) {
 func TestCheckRestoreCompatibility(t *testing.T) {
 	m := SnapshotMeta{PgVersionMajor: "16", Arch: "arm64", Image: "postgis/postgis:16-3.4"}
 
-	if err := CheckRestoreCompatibility(m, "postgis/postgis:16-3.4", "arm64"); err != nil {
+	if err := CheckRestoreCompatibility(m, "postgis/postgis:16-3.4", "arm64", "16"); err != nil {
 		t.Errorf("matching should pass, got %v", err)
 	}
-	if err := CheckRestoreCompatibility(m, "postgres:16-alpine", "arm64"); err == nil {
+	if err := CheckRestoreCompatibility(m, "postgres:16-alpine", "arm64", "16"); err == nil {
 		t.Error("image mismatch should fail")
 	}
-	if err := CheckRestoreCompatibility(m, "postgis/postgis:16-3.4", "amd64"); err == nil {
+	if err := CheckRestoreCompatibility(m, "postgis/postgis:16-3.4", "amd64", "16"); err == nil {
 		t.Error("arch mismatch should fail")
+	}
+	if err := CheckRestoreCompatibility(m, "postgis/postgis:16-3.4", "arm64", "17"); err == nil {
+		t.Error("pg-major mismatch should fail")
+	}
+	// An unknown target version (e.g. unreadable PG_VERSION) skips the gate.
+	if err := CheckRestoreCompatibility(m, "postgis/postgis:16-3.4", "arm64", ""); err != nil {
+		t.Errorf("empty target pg-major should skip the gate, got %v", err)
 	}
 }
 

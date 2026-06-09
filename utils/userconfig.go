@@ -14,11 +14,19 @@ const (
 	UserConfigSchemaVersion = 1
 )
 
+// SuggestConfig holds opt-in settings for proactive scheduled suggest. The
+// zero value is the safe default: propose-and-ask, weekly cap of 1.
+type SuggestConfig struct {
+	AutoFileDrafts bool `yaml:"autoFileDrafts"` // opt-in: file ONE draft ticket per run unattended
+	MaxPerWeek     int  `yaml:"maxPerWeek"`     // 0 = use default 1; hard ceiling 3 enforced in the helper
+}
+
 // UserConfig is the on-disk shape of ~/.corgi/config.yml. Version == 0
 // means an old file with no version stamp; LoadUserConfig migrates it.
 type UserConfig struct {
-	Version       int  `yaml:"version"`
-	Notifications bool `yaml:"notifications"`
+	Version       int           `yaml:"version"`
+	Notifications bool          `yaml:"notifications"`
+	Suggest       SuggestConfig `yaml:"suggest"`
 }
 
 // GetUserConfigDir is the ~/.corgi directory path.

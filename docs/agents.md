@@ -28,6 +28,10 @@ stderr. Commands that emit pure-JSON stdout:
 - `db shell <svc> -e "<query>" --json` → `{"service","output"}`
 - `create --kind ... --json` (non-interactive) → `{"created","kind","name","path"}`
 - `restart --service <name> --json` → updated run-state object
+- `mission-control --json` (one MissionSnapshot object; `--watch`: one object per refresh)
+- `autopilot status/pause/resume/stop/heartbeat --json` → the autopilot loop state object (`{mode, iteration, lastHeartbeat, lastSummary}`); `mode` ∈ `uninitialized` (no state file yet — a first run, distinct from a stop) · `running` · `paused` · `stopped`
+- `memory list --json` (array of facts), `memory lint --json` (`{"ok":bool,"errors":[...],"warnings":[...]}`), `memory add --json` / `memory index --json` (created/index summary)
+- `suggest-history list --json` (`{"version","entries":[...]}`), `suggest-history check --slug <s> --json` (`{"skip":bool,"reason":"filed|dismissed|proposed|rate-limit|...","slug":...}`), `suggest-history record --json` (echoes the written entry), `suggest-history config --json` (`{"autoFileDrafts":bool,"maxPerWeek":n}`)
 - `docs --json-schema`
 
 Not yet pure-JSON: `fork` and the `db` bulk lifecycle flags (`--upAll` etc.)
@@ -212,6 +216,17 @@ message text (messages may change wording). The catalog:
 | `E_NOT_RUNNING` | no matching detached service to act on | start it with `corgi run --detach` first |
 | `E_CONFIG_PATH` | cannot resolve the user-config dir | check `~/.corgi` perms |
 | `E_CONFIG_READ` | cannot read the user-config file | check `~/.corgi/config.yml` |
+| `E_DUPLICATE_NAME` | a name is used by more than one service/db_service (or duplicated within a section) | rename so every service/db_service name is unique |
+| `E_PORT_RANGE` | a configured port is outside 1-65535 | use a port in the valid range |
+| `E_MEMORY_SECRET` | a secret-shaped string is in committed memory | remove it — memory is committed; secrets stay in gitignored `.env` |
+| `E_MEMORY_TYPE_MISMATCH` | a fact's `type` doesn't match its folder | move the file or fix `type:` |
+| `E_MEMORY_BAD_NAME` | `name` isn't kebab-case or doesn't match the filename | rename so `name` == filename stem |
+| `E_MEMORY_NO_FRONTMATTER` | a memory fact is missing its `name`/`description` frontmatter | add the frontmatter block |
+
+Validation also emits advisory warnings (not errors): `W_NO_HEALTHCHECK`,
+`W_NO_BRANCH`, and `W_UNKNOWN_FIELD` (an unknown/typo'd key was ignored — warn
+now, may become an error later). Warnings never abort `run`/`exec`. `corgi memory lint`
+also emits `E_MEMORY_DANGLING_LINK` as a warning (a `[[link]]` points at no existing fact).
 
 Note: a few codes were renamed for consistency — `INPUT_REQUIRED` →
 `E_INTERACTIVE_REQUIRED`, `config` → `E_CONFIG`, `ALREADY_RUNNING` →
@@ -227,6 +242,7 @@ pass the flag:
 - `db shell` → service-name arg, or `-e "<query>"` for one-shot
 - `create` → `--kind <db_service|service|required> --name <name>`
 - `fork` → `--all` **or** `--service <name>`, plus `--gitProvider <github|gitlab>`
+- `suggest-history check` → `--slug <s>`; `suggest-history record` → `--slug <s> --status <filed|dismissed|proposed|skipped>` (else exit 2). `--workspace <path>` overrides cwd (cron passes an absolute path).
 - any command needing the compose file → run from a dir containing
   `corgi-compose.yml`, or pass `-f <path>`
 
@@ -520,3 +536,14 @@ corgi docs --json-schema | jq '.properties | keys'
 # ["afterStart","beforeStart","db_services","description","init",
 #  "name","required","services","start","useAwsVpn","useDocker"]
 ```
+
+## Workspace memory (`corgi memory`)
+
+`.corgi/memory/` is an **opt-in, committed** store of stack decisions, incidents,
+domain facts, and recurring fixes — the team/agent's shared memory of *why*, keyed to
+this `corgi-compose.yml`. Absent → every subcommand is a no-op (exit 0). One fact per
+Markdown file (`<type>/<name>.md`) with `name`/`description`/`type` frontmatter and
+`[[links]]`; `index.md` is generated. **Never commit secrets** — `corgi memory lint`
+fails the store on a key-shaped string. The agent skills read it before acting and
+append to it (confirmed) after a notable fix; a fix `pattern:` seen ≥3× is *proposed*
+as a learned skill/template (human-approved, never auto-installed).

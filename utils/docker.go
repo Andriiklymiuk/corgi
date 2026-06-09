@@ -65,35 +65,34 @@ func CheckDockerStatus() error {
 }
 
 func IsServiceRunning(containerName string) (bool, error) {
+	// Anchor the filter so a request for "postgres-main" doesn't match
+	// "postgres-main-replica".
 	cmd := exec.Command(
 		"docker",
 		"ps",
 		"--all",
 		"--filter",
-		fmt.Sprintf("name=%s", containerName),
+		fmt.Sprintf("name=^%s$", containerName),
 		"--format",
 		"{{.Names}}\t{{.Status}}",
 	)
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	err := cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return false, fmt.Errorf("error executing docker ps: %v", err)
 	}
 
-	lines := strings.Split(out.String(), "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(out.String(), "\n") {
 		parts := strings.Fields(line)
-		if len(parts) > 1 {
-			fmt.Printf("parts: %s\n", parts)
-			containerName := parts[0]
-			containerStatus := parts[1]
-
-			if strings.Contains(containerName, containerName) &&
-				strings.HasPrefix(containerStatus, "Up") &&
-				parts[len(parts)-1] != "(Paused)" {
-				return true, nil
-			}
+		if len(parts) < 2 {
+			continue
+		}
+		listedName := parts[0]
+		listedStatus := parts[1]
+		if listedName == containerName &&
+			strings.HasPrefix(listedStatus, "Up") &&
+			parts[len(parts)-1] != "(Paused)" {
+			return true, nil
 		}
 	}
 

@@ -20,8 +20,8 @@ func TestMaskSecret(t *testing.T) {
 		{"LOG_LEVEL", "debug", "debug"}, // not a secret
 		{"DATABASE_URL", "postgres://u:pw@h:5432/d", "postgres://u:****@h:5432/d"},
 		{"DB_DSN", "user:pw@tcp(h:3306)/db", "user:****@tcp(h:3306)/db"}, // scheme-less DSN
-		{"PORT", "5432", "5432"},                                        // no creds, untouched
-		{"ADDR", "localhost:5432", "localhost:5432"},                    // host:port, no @, untouched
+		{"PORT", "5432", "5432"},                                         // no creds, untouched
+		{"ADDR", "localhost:5432", "localhost:5432"},                     // host:port, no @, untouched
 	}
 	for _, c := range cases {
 		if got := maskSecret(c.key, c.val); got != c.want {

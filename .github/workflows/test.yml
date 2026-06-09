@@ -1,23 +1,46 @@
-name: Test & Coverage
+name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  # Allow release.yml to invoke this workflow as a gate.
+  workflow_call:
 
 jobs:
-  test:
-    name: Test + Sonar
+  gofmt:
+    name: gofmt
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt check
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-clean:"; echo "$unformatted"; exit 1
+          fi
+          echo "gofmt: all files clean"
+
+  test:
+    name: Test + Coverage + Sonar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
           cache: true
@@ -29,8 +52,11 @@ jobs:
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
 
+      - name: Coverage floor gate
+        run: ./scripts/coverage-floor.sh coverage.out
+
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-report
           path: coverage.out
@@ -38,7 +64,7 @@ jobs:
 
       - name: SonarCloud Scan
         if: github.repository == 'Andriiklymiuk/corgi'
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402 # v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

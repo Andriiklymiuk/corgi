@@ -141,6 +141,26 @@ func TestComputeAbsolutePath(t *testing.T) {
 	}
 }
 
+func TestJoinUnderComposeDir_RejectsEscape(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = "/proj"
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	if _, err := JoinUnderComposeDir("../../etc/passwd"); err == nil {
+		t.Fatal("expected error for .. escape")
+	}
+	if _, err := JoinUnderComposeDir("/etc/passwd"); err == nil {
+		t.Fatal("expected error for absolute escape")
+	}
+	got, err := JoinUnderComposeDir("./db_services/api/dump.sql")
+	if err != nil {
+		t.Fatalf("clean relative path should pass: %v", err)
+	}
+	if got != "/proj/db_services/api/dump.sql" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestResolveServicePathFromCloneFromGitURL(t *testing.T) {
 	s := Service{CloneFrom: "git@github.com:foo/bar.git"}
 	resolveServicePathFromCloneFrom(&s)
@@ -352,6 +372,26 @@ func TestGetDbSourceFromPathBadPort(t *testing.T) {
 	got := getDbSourceFromPath(envFile)
 	if got.Port != 0 {
 		t.Errorf("expected 0 for bad port, got %d", got.Port)
+	}
+}
+
+func TestGetDbSourceFromPathMalformedLines(t *testing.T) {
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+	// blank line, comment, a line with no '=', and a password that contains '='
+	body := "\n# a comment\nNOEQUALS\nDB_HOST=h\nDB_PASSWORD=p=a==b\nDB_PORT=5432\n"
+	if err := os.WriteFile(envFile, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := getDbSourceFromPath(envFile) // must NOT panic
+	if got.Host != "h" {
+		t.Errorf("host = %q", got.Host)
+	}
+	if got.Password != "p=a==b" {
+		t.Errorf("password with '=' truncated: %q", got.Password)
+	}
+	if got.Port != 5432 {
+		t.Errorf("port = %d", got.Port)
 	}
 }
 
@@ -657,6 +697,96 @@ services:
 	}
 }
 
+func TestLoadCorgiComposeUnknownFieldWarns(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := `name: t
+services:
+  api:
+    port: 3000
+    start: ["x"]
+    enviroment:           # typo of "environment"
+      - FOO=bar
+`
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	c := newCobraWithRootFlags()
+	c.Flags().Bool("global", false, "")
+	corgi, err := GetCorgiServices(c)
+	if err != nil {
+		t.Fatalf("typo'd key must NOT fail the load (warn-first): %v", err)
+	}
+	// The typo'd value is dropped (proves it was unknown) ...
+	for _, s := range corgi.Services {
+		if s.ServiceName == "api" && len(s.Environment) != 0 {
+			t.Errorf("enviroment typo should not populate environment, got %v", s.Environment)
+		}
+	}
+	// ... and validation reports it as a warning.
+	_, warns := ValidateCompose(corgi)
+	if countCode(warns, WarnUnknownField) == 0 {
+		t.Errorf("expected a %s warning, got %v", WarnUnknownField, codesOf(warns))
+	}
+}
+
+func TestLoadCorgiComposeKnownFieldsNoWarn(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := `name: t
+db_services:
+  mydb:
+    driver: postgres
+    port: 5432
+services:
+  api:
+    port: 3000
+    start: ["x"]
+    environment:
+      - FOO=bar
+`
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	c := newCobraWithRootFlags()
+	c.Flags().Bool("global", false, "")
+	corgi, err := GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, warns := ValidateCompose(corgi); countCode(warns, WarnUnknownField) != 0 {
+		t.Errorf("valid config must not warn unknown-field, got %v", codesOf(warns))
+	}
+}
+
+func TestDetectDuplicateComposeKeys(t *testing.T) {
+	doc := []byte(`name: t
+services:
+  api:
+    port: 3000
+  api:
+    port: 3001
+`)
+	dups := detectDuplicateComposeKeys(doc)
+	found := false
+	for _, d := range dups {
+		if d == "services.api" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected services.api duplicate, got %v", dups)
+	}
+}
+
 func TestDetermineCorgiComposePathWithFilenameFlag(t *testing.T) {
 	dir := t.TempDir()
 	yml := filepath.Join(dir, "custom.yml")
@@ -868,7 +998,6 @@ func TestDetermineCorgiComposePathGlobalNoData(t *testing.T) {
 		t.Error("expected err for no global path")
 	}
 }
-
 
 func TestGetCorgiConfigFromAlertNonInteractive(t *testing.T) {
 	t.Chdir(t.TempDir()) // empty dir: no corgi-compose.yml present

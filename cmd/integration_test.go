@@ -104,7 +104,7 @@ func TestSeedDbDirMissing(t *testing.T) {
 	prev := utils.CorgiComposePathDir
 	utils.CorgiComposePathDir = "/nonexistent/zz"
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
-	if err := SeedDb("x"); err == nil {
+	if err := SeedDb(utils.DatabaseService{ServiceName: "x"}); err == nil {
 		t.Error("expected err")
 	}
 }

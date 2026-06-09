@@ -59,7 +59,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 	filesToIgnore = getGitignoreServicePath(corgi.Services, filesToIgnore)
 
 	for _, fileToIgnore := range filesToIgnore {
-		addFileToGitignore(fileToIgnore)
+		_ = addFileToGitignore(fileToIgnore)
 	}
 }
 

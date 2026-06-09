@@ -419,12 +419,27 @@ func startAllServices(corgi *utils.CorgiCompose, cmd *cobra.Command) {
 		startTunnelsForRun(corgi.Services)
 	}
 
-	for startCmdPresent {
-		time.Sleep(5 * 60 * time.Second)
-		fmt.Println("😉 corgi is still running")
+	servicesDone := make(chan struct{})
+	go func() {
+		serviceWaitGroup.Wait()
+		close(servicesDone)
+	}()
+
+	if !startCmdPresent {
+		utils.Info("No service or start command to run")
+		<-servicesDone
+		return
 	}
-	fmt.Println("No service or start command to run")
-	serviceWaitGroup.Wait()
+
+	utils.Info("😉 corgi is running — Ctrl+C to stop")
+	select {
+	case <-servicesDone:
+		// All start commands exited on their own.
+	case <-utils.ShutdownCh():
+		// SIGINT/SIGTERM handler runs cleanup + os.Exit; wait here so the
+		// joined goroutines unwind before the process tears down.
+		<-servicesDone
+	}
 }
 
 func resolveHostFlag(cmd *cobra.Command) error {
@@ -491,6 +506,13 @@ func runRun(cmd *cobra.Command, _ []string) {
 		} else {
 			fmt.Fprintln(os.Stderr, err)
 		}
+		if runReloading.Load() {
+			return
+		}
+		os.Exit(1)
+	}
+
+	if !utils.AbortOnValidationErrors(corgi) {
 		if runReloading.Load() {
 			return
 		}
@@ -689,7 +711,7 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 		// docker-runner services run as containers (no tracked pid); reconcile
 		// and stop key off pid==0 and let cleanup bring them down.
 		if svc.Runner.Name == "docker" && svc.Port != 0 {
-			if err := utils.ExecuteServiceCommandRun(svc.ServiceName, "make", "up"); err != nil {
+			if err := dockerRunnerUp(svc.ServiceName); err != nil {
 				fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
 				continue
 			}
@@ -706,7 +728,7 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 			continue
 		}
 		command := strings.Join(svc.Start, " && ")
-		proc, err := utils.StartDetached(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(svc))
+		proc, err := startDetachedFn(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(svc))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
 			continue
@@ -766,6 +788,15 @@ func runDetachedBeforeStart(svc utils.Service) {
 
 // browserOpener is overridable in tests.
 var browserOpener = launchBrowser
+
+// startDetachedFn and dockerRunnerUp are overridable in tests so the detached
+// spawn path can be exercised without forking real processes.
+var (
+	startDetachedFn = utils.StartDetached
+	dockerRunnerUp  = func(serviceName string) error {
+		return utils.ExecuteServiceCommandRun(serviceName, "make", "up")
+	}
+)
 
 // Open a service's URL once ready, when --open is set and it opted in.
 func maybeOpenOnReady(service utils.Service) {
@@ -890,12 +921,12 @@ func applyRunFlags(cmd *cobra.Command) {
 func runPreflight(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	if corgi.UseAwsVpn {
 		if err := utils.AwsVpnInit(); err != nil {
-			fmt.Println("AWS VPN init failed", err)
+			utils.Info("AWS VPN init failed", err)
 		}
 	}
 	if usesDocker(corgi) {
 		if err := utils.DockerInit(cmd); err != nil {
-			fmt.Println("Docker init failed:", err)
+			utils.Info("Docker init failed:", err)
 		}
 	}
 }
@@ -974,7 +1005,7 @@ func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseSe
 	}
 
 	if err := utils.DockerInit(cmd); err != nil {
-		fmt.Println(err)
+		utils.Info(err)
 		return
 	}
 
@@ -1010,14 +1041,14 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	containerName := fmt.Sprintf("%s-%s", dbService.Driver, dbService.ServiceName)
 	serviceIsRunning, err := utils.IsServiceRunning(containerName)
 	if err != nil {
-		fmt.Printf("Getting target service info failed: %s\n", err)
+		utils.Infof("Getting target service info failed: %s\n", err)
 	}
 	if serviceIsRunning {
 		return
 	}
 	utils.Info(art.BlueColor, "\n🤖 Starting database", dbService.ServiceName, art.WhiteColor)
 	if err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up"); err != nil {
-		fmt.Println("Starting service failed", err)
+		utils.Info("Starting service failed", err)
 	}
 	// Bounded readiness probe (non-fatal on timeout so services still get a chance).
 	ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
@@ -1053,7 +1084,7 @@ func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 		service.AbsolutePath,
 		true,
 	); err != nil {
-		fmt.Println("corgi pull failed for", service.ServiceName, "error:", err)
+		utils.Info("corgi pull failed for", service.ServiceName, "error:", err)
 	}
 }
 
@@ -1061,7 +1092,7 @@ func startServiceProcess(service utils.Service) {
 	if service.Runner.Name == "docker" && service.Port != 0 {
 		utils.Info(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
 		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up"); err != nil {
-			fmt.Println("Starting service failed", err)
+			utils.Info("Starting service failed", err)
 		}
 		return
 	}
@@ -1114,16 +1145,32 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 	}
 
 	// Mark started, then probe readiness in the background since
-	// startServiceProcess blocks on the start command.
+	// startServiceProcess blocks on the start command. The probe is joined
+	// before runService returns so it can't outlive the service goroutine.
+	var probeWG sync.WaitGroup
+	defer probeWG.Wait()
+
 	if sig != nil {
 		sig.markStarted()
 		if service.Port == 0 {
 			// Nothing to probe — dependents waiting on `ready` proceed at once.
 			sig.markReady()
 		} else {
+			probeWG.Add(1)
 			go func() {
+				defer probeWG.Done()
 				ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
 				defer cancel()
+				done := make(chan struct{})
+				defer close(done)
+				// Abort the probe promptly if corgi is shutting down.
+				go func() {
+					select {
+					case <-utils.ShutdownCh():
+						cancel()
+					case <-done:
+					}
+				}()
 				err := utils.WaitForServiceReady(ctx, service)
 				sig.markReady()
 				if err == nil {
@@ -1222,7 +1269,7 @@ func handleComposeWriteEvent(watcher *fsnotify.Watcher, cmd *cobra.Command, even
 		return false
 	}
 	fmt.Println("Detected corgi compose change in", eventName)
-	watcher.Remove(utils.CorgiComposePath)
+	_ = watcher.Remove(utils.CorgiComposePath)
 	utils.SendRestart()
 	return false
 }
@@ -1266,7 +1313,7 @@ func setupLogWriters(corgi *utils.CorgiCompose) {
 	utils.CloseAllLogWriters()
 	base := filepath.Join(utils.CorgiComposePathDir, "corgi_services")
 	if err := os.MkdirAll(base, 0o755); err != nil {
-		fmt.Printf("⚠ logs: could not create %s: %v\n", base, err)
+		utils.Infof("⚠ logs: could not create %s: %v\n", base, err)
 		return
 	}
 	utils.EnsureLogsGitignore(base)
@@ -1274,7 +1321,7 @@ func setupLogWriters(corgi *utils.CorgiCompose) {
 	registerLog := func(name string) {
 		w, err := utils.OpenLogWriter(base, name)
 		if err != nil {
-			fmt.Printf("⚠ logs: could not open log for %s: %v\n", name, err)
+			utils.Infof("⚠ logs: could not open log for %s: %v\n", name, err)
 			return
 		}
 		if w != nil {

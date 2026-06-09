@@ -26,4 +26,6 @@ const (
 	ErrNotRunning       = "E_NOT_RUNNING"     // no matching detached service to act on
 	ErrConfigPath       = "E_CONFIG_PATH"     // cannot resolve user-config dir
 	ErrConfigRead       = "E_CONFIG_READ"     // cannot read user-config file
+	ErrDuplicateName    = "E_DUPLICATE_NAME"  // a name is used by more than one service/db_service
+	ErrPortRange        = "E_PORT_RANGE"      // a port is outside the valid 1..65535 range
 )

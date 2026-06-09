@@ -96,5 +96,5 @@ snapshots - delete all db snapshots under db_services/<svc>/snapshots/.
 all - equal to writing db,corgi_services,services in items (snapshots are preserved; remove them with snapshots)
 		`,
 	)
-	cleanCmd.MarkFlagRequired("items")
+	_ = cleanCmd.MarkFlagRequired("items")
 }

@@ -93,6 +93,10 @@ func runExec(cmd *cobra.Command, args []string) {
 		emitExecError(utils.ErrConfig, err.Error(), 1)
 	}
 
+	if !utils.AbortOnValidationErrors(corgi) {
+		os.Exit(1)
+	}
+
 	if err := utils.MaterializeServiceWorktrees(cmd, corgi); err != nil {
 		emitExecError(utils.ErrConfig, err.Error(), 1)
 	}
