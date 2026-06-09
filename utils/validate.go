@@ -47,7 +47,7 @@ func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 // checkUnknownFields surfaces keys the strict YAML decoder did not recognize
 // (likely typos like `enviroment`). Warn-first: non-fatal today, candidate to
 // become an error in a future release.
-func checkUnknownFields(c *CorgiCompose) []ValidationIssue {
+func checkUnknownFields(_ *CorgiCompose) []ValidationIssue {
 	var out []ValidationIssue
 	for _, f := range UnknownComposeFields {
 		out = append(out, ValidationIssue{
@@ -286,31 +286,39 @@ func markCycleFrom(stack []string, target string, inCycle map[string]bool) {
 	}
 }
 
+// Supported depends_on condition values. The run path treats any other value as
+// condReady, so checkInvalidConditions surfaces unknown ones as errors.
+const (
+	condReady   = "ready"
+	condStarted = "started"
+)
+
 // checkInvalidConditions flags a depends_on entry whose condition is set to
 // something other than the supported "ready"/"started" values. The run path
 // silently treats unknown values as "ready", so surface them as errors here.
 func checkInvalidConditions(c *CorgiCompose) []ValidationIssue {
 	valid := func(cond string) bool {
-		return cond == "" || cond == "ready" || cond == "started"
+		return cond == "" || cond == condReady || cond == condStarted
+	}
+	invalidCondition := func(svc, cond, field string) ValidationIssue {
+		return ValidationIssue{
+			Code:    ErrInvalidCondition,
+			Message: fmt.Sprintf("service %q has invalid depends_on condition %q (use %q or %q)", svc, cond, condReady, condStarted),
+			Field:   field,
+		}
 	}
 	var out []ValidationIssue
 	for _, s := range c.Services {
 		for i, dep := range s.DependsOnServices {
 			if !valid(dep.Condition) {
-				out = append(out, ValidationIssue{
-					Code:    ErrInvalidCondition,
-					Message: fmt.Sprintf("service %q has invalid depends_on condition %q (use %q or %q)", s.ServiceName, dep.Condition, "ready", "started"),
-					Field:   fmt.Sprintf("services.%s.depends_on_services[%d].condition", s.ServiceName, i),
-				})
+				out = append(out, invalidCondition(s.ServiceName, dep.Condition,
+					fmt.Sprintf("services.%s.depends_on_services[%d].condition", s.ServiceName, i)))
 			}
 		}
 		for i, dep := range s.DependsOnDb {
 			if !valid(dep.Condition) {
-				out = append(out, ValidationIssue{
-					Code:    ErrInvalidCondition,
-					Message: fmt.Sprintf("service %q has invalid depends_on condition %q (use %q or %q)", s.ServiceName, dep.Condition, "ready", "started"),
-					Field:   fmt.Sprintf("services.%s.depends_on_db[%d].condition", s.ServiceName, i),
-				})
+				out = append(out, invalidCondition(s.ServiceName, dep.Condition,
+					fmt.Sprintf("services.%s.depends_on_db[%d].condition", s.ServiceName, i)))
 			}
 		}
 	}

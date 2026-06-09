@@ -37,6 +37,16 @@ func failSuggestHistory(err error) {
 	os.Exit(1)
 }
 
+// failUsage reports a bad-usage error (JSON via JSONError, else stderr) and exits 2.
+func failUsage(msg string) {
+	if utils.JSONOutput {
+		utils.JSONError(utils.ErrUsage, msg)
+	} else {
+		fmt.Fprintln(os.Stderr, msg)
+	}
+	os.Exit(2)
+}
+
 var suggestHistoryCmd = &cobra.Command{
 	Use:   "suggest-history",
 	Short: "Read/append the proactive-suggest dedupe + rate-limit state (corgi_services/suggest-history.json)",
@@ -95,12 +105,7 @@ var suggestHistoryCheckCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		slug, _ := cmd.Flags().GetString("slug")
 		if slug == "" {
-			if utils.JSONOutput {
-				utils.JSONError(utils.ErrUsage, "suggest-history check requires --slug")
-			} else {
-				fmt.Fprintln(os.Stderr, "suggest-history check requires --slug")
-			}
-			os.Exit(2)
+			failUsage("suggest-history check requires --slug")
 		}
 		root := suggestHistoryRoot(cmd)
 		h, err := utils.LoadSuggestHistory(root)
@@ -114,10 +119,10 @@ var suggestHistoryCheckCmd = &cobra.Command{
 			cooldown = suggestHistoryDefaultCooldown
 		}
 		// --max overrides config; else fall back to the user config (0 → helper default).
-		max, _ := cmd.Flags().GetInt("max")
+		maxPerWeek, _ := cmd.Flags().GetInt("max")
 		if !cmd.Flags().Changed("max") {
 			if cfg, cerr := utils.LoadUserConfig(); cerr == nil {
-				max = cfg.Suggest.MaxPerWeek
+				maxPerWeek = cfg.Suggest.MaxPerWeek
 			}
 		}
 
@@ -126,7 +131,7 @@ var suggestHistoryCheckCmd = &cobra.Command{
 		if skip, reason := utils.ShouldSkip(h, slug, now, cooldown); skip {
 			res.Skip = true
 			res.Reason = reason
-		} else if utils.RateLimited(h, now, max) {
+		} else if utils.RateLimited(h, now, maxPerWeek) {
 			res.Skip = true
 			res.Reason = "rate-limit"
 		}
@@ -150,22 +155,12 @@ var suggestHistoryRecordCmd = &cobra.Command{
 		slug, _ := cmd.Flags().GetString("slug")
 		status, _ := cmd.Flags().GetString("status")
 		if slug == "" || status == "" {
-			if utils.JSONOutput {
-				utils.JSONError(utils.ErrUsage, "suggest-history record requires --slug and --status")
-			} else {
-				fmt.Fprintln(os.Stderr, "suggest-history record requires --slug and --status")
-			}
-			os.Exit(2)
+			failUsage("suggest-history record requires --slug and --status")
 		}
 		switch status {
 		case "filed", "dismissed", "proposed", "skipped":
 		default:
-			if utils.JSONOutput {
-				utils.JSONError(utils.ErrUsage, "status must be one of: filed|dismissed|proposed|skipped")
-			} else {
-				fmt.Fprintln(os.Stderr, "status must be one of: filed|dismissed|proposed|skipped")
-			}
-			os.Exit(2)
+			failUsage("status must be one of: filed|dismissed|proposed|skipped")
 		}
 		ticket, _ := cmd.Flags().GetString("ticket")
 		title, _ := cmd.Flags().GetString("title")

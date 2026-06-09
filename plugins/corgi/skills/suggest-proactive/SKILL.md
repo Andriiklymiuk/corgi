@@ -5,119 +5,60 @@ description: Use when the user wants corgi to PROACTIVELY surface improvements o
 
 # Corgi proactive suggest
 
-A scheduled **push** wrapper around `suggest`: on a cadence (owned by `/schedule`),
-it runs the `suggest` ranking, takes the top idea, dedupes it against open tickets +
-recently-dismissed ones, and then either **proposes it and asks** (the default) or —
-only if the workspace opted in — files exactly **one draft** tracker ticket. It
-**reuses `suggest` for ranking and `tracker` for the write gate — it does NOT
-duplicate either.** Default is propose-and-ask; the opt-in files one draft per run,
-rate-limited + deduped. Inspired by the "proactive engineer" idea: push, not pull.
+A scheduled **push** wrapper around `suggest`: on a cadence (owned by `/schedule`), runs the `suggest` ranking, takes the top idea, dedupes it against open tickets + recently-dismissed ones, then either **proposes it and asks** (default) or — only if the workspace opted in — files exactly **one draft** tracker ticket. **Reuses `suggest` for ranking and `tracker` for the write gate — does NOT duplicate either.** Default is propose-and-ask; the opt-in files one draft per run, rate-limited + deduped. Inspired by the "proactive engineer" idea: push, not pull.
 
 ## Guardrails (non-negotiable)
 
-- **Reuse, don't duplicate.** Ranking + evidence + measurable-outcome rules are owned
-  by `suggest`; issue creation goes through the `tracker` write gate + MCP preflight.
-  Never re-implement either, and never reinvent scheduling — `/schedule` owns it.
-- **One ticket per run, max.** Per-week cap (default 1, **hard ceiling 3**) enforced
-  via `corgi_services/suggest-history.json` (`corgi suggest-history check/record`).
-- **Default is propose+ask.** Auto-file requires the explicit `suggest.autoFileDrafts`
-  flag in `~/.corgi/config.yml` and is **draft-only**: never assign, never move past
-  draft/backlog, never trigger `stories`/a build, never open a PR.
-- **Dedupe before filing:** open tickets, the state file (`filed` always + `dismissed`
-  within cooldown + `proposed` within cooldown), and [[workspace-memory]] (loose,
-  best-effort — see `memory` skill).
-- **Headless = never silently file in `propose` mode.** No human to confirm → record
-  `proposed`, notify, exit. The cron fires while the REPL is idle — treat it as headless.
+- **Reuse, don't duplicate.** Ranking + evidence + measurable-outcome rules are owned by `suggest`; issue creation goes through the `tracker` write gate + MCP preflight. Never re-implement either, never reinvent scheduling — `/schedule` owns it.
+- **One ticket per run, max.** Per-week cap (default 1, **hard ceiling 3**) enforced via `corgi_services/suggest-history.json` (`corgi suggest-history check/record`).
+- **Default is propose+ask.** Auto-file requires the explicit `suggest.autoFileDrafts` flag in `~/.corgi/config.yml` and is **draft-only**: never assign, never move past draft/backlog, never trigger `stories`/a build, never open a PR.
+- **Dedupe before filing:** open tickets, the state file (`filed` always + `dismissed` within cooldown + `proposed` within cooldown), and [[workspace-memory]] (loose, best-effort — see `memory` skill).
+- **Headless = never silently file in `propose` mode.** No human to confirm → record `proposed`, notify, exit. The cron fires while the REPL is idle — treat it as headless.
 - **Idempotent.** Match on slug/title; update or skip, never create a duplicate.
 - **Print the active mode at the top of every run** so it's never a surprise.
 
 ## Phase 0 — Resolve workspace + mode + state
 
-1. **Workspace.** Resolve the path from `$ARGUMENTS` (absolute) or cwd. `cd` there.
-   Require `corgi-compose.yml` (`ls corgi-compose.yml *.corgi-compose.yml`) — absent →
-   stop with the "open the workspace folder" message. The cron fires with no implied
-   cwd, so the schedule prompt always names the absolute path (Phase 5).
-2. **Mode.** Read `corgi suggest-history config --json` → `{autoFileDrafts, maxPerWeek}`
-   (fallback: read `~/.corgi/config.yml` directly; absent → propose, cap 1). Print the
-   active mode line, e.g. `proactive suggest · mode=propose · cap=1/week`.
-3. **State.** Load history via `corgi suggest-history list --json` (fallback: read
-   `corgi_services/suggest-history.json`; absent → empty). The helper is optional at runtime —
-   if the binary predates it, read/append the JSON directly with the same shape.
+1. **Workspace.** Resolve the path from `$ARGUMENTS` (absolute) or cwd. `cd` there. Require `corgi-compose.yml` (`ls corgi-compose.yml *.corgi-compose.yml`) — absent → stop with the "open the workspace folder" message. The cron fires with no implied cwd, so the schedule prompt always names the absolute path (Phase 5).
+2. **Mode.** Read `corgi suggest-history config --json` → `{autoFileDrafts, maxPerWeek}` (fallback: read `~/.corgi/config.yml` directly; absent → propose, cap 1). Print the active mode line, e.g. `proactive suggest · mode=propose · cap=1/week`.
+3. **State.** Load history via `corgi suggest-history list --json` (fallback: read `corgi_services/suggest-history.json`; absent → empty). The helper is optional at runtime — if the binary predates it, read/append the JSON directly with the same shape.
 
 ## Phase 1 — Rank (reuse `suggest`)
 
-- Invoke the `suggest` skill flow (its **Phases 0–3**) **scoped to this workspace, both
-  lenses**, to produce the ranked shortlist. Do NOT re-spec everything — only the chosen
-  survivor gets specced (Phase 3), and only after it survives dedupe.
-- State explicitly to yourself: **ranking + evidence + measurable-outcome rules are
-  owned by `suggest`; this skill only consumes the ranked list.**
+- Invoke the `suggest` skill flow (its **Phases 0–3**) **scoped to this workspace, both lenses**, to produce the ranked shortlist. Do NOT re-spec everything — only the chosen survivor gets specced (Phase 3), and only after it survives dedupe.
+- State explicitly to yourself: **ranking + evidence + measurable-outcome rules are owned by `suggest`; this skill only consumes the ranked list.**
 
 ## Phase 2 — Dedupe + rate-limit
 
-- Derive a `slug` per candidate deterministically from its title (lowercase,
-  non-alphanumeric → `-`, collapse repeats, trim) — same idea ⇒ stable key across runs.
-  (`corgi suggest-history record` and the helper use the same `Slugify`.)
-- **Top candidate down**, for each: `corgi suggest-history check --slug <slug> --json` →
-  `{ "skip": bool, "reason": "filed|dismissed|proposed|rate-limit", "slug": ... }`.
-  Also fuzzy-match the candidate title/slug against **open tickets** via `tracker`
-  Phase-0/1 (the `corgi-suggest` label set + title match) — a hit there is `open-ticket`,
-  skip. And consult [[workspace-memory]] (below): a matching "dismissed suggestion" /
-  "won't build" slug is treated like a `dismissed` state-file entry.
-- The **first surviving candidate wins**. If none survive, or `check` returns
-  `reason=rate-limit` (the week cap is already used) → **no-op**: record a `skipped`
-  audit entry (`corgi suggest-history record --slug <slug> --status skipped`), report
-  what was deduped and why, and go to Phase 5. Don't file anything.
+- Derive a `slug` per candidate deterministically from its title (lowercase, non-alphanumeric → `-`, collapse repeats, trim) — same idea ⇒ stable key across runs. (`corgi suggest-history record` and the helper use the same `Slugify`.)
+- **Top candidate down**, for each: `corgi suggest-history check --slug <slug> --json` → `{ "skip": bool, "reason": "filed|dismissed|proposed|rate-limit", "slug": ... }`. Also fuzzy-match the candidate title/slug against **open tickets** via `tracker` Phase-0/1 (the `corgi-suggest` label set + title match) — a hit there is `open-ticket`, skip. And consult [[workspace-memory]] (below): a matching "dismissed suggestion" / "won't build" slug is treated like a `dismissed` state-file entry.
+- The **first surviving candidate wins**. If none survive, or `check` returns `reason=rate-limit` (week cap already used) → **no-op**: record a `skipped` audit entry (`corgi suggest-history record --slug <slug> --status skipped`), report what was deduped and why, go to Phase 5. Don't file anything.
 
 ## Phase 3 — Decide: propose vs auto-file-draft
 
-- **`propose` (default):** spec the survivor — reuse `suggest`'s **Phase 4** spec shape →
-  `docs/suggestions/<slug>.md` — and present it. Then:
-  - **Human present** → ask **"file this as a tracker story?"** (identical to interactive
-    `suggest` Phase 5). Yes → Phase 4 (the `tracker` write gate). No → record `dismissed`
-    so the cron won't re-propose it within the cooldown; stop.
-  - **Headless** (cron, idle REPL, no one to answer) → **do not file.** Record `proposed`
-    (`corgi suggest-history record --slug <slug> --status proposed --title <…> --lens <…>`),
-    fire a `PushNotification` if available, and stop. Surface it next time a human is present.
+- **`propose` (default):** spec the survivor — reuse `suggest`'s **Phase 4** spec shape → `docs/suggestions/<slug>.md` — and present it. Then:
+  - **Human present** → ask **"file this as a tracker story?"** (identical to interactive `suggest` Phase 5). Yes → Phase 4 (the `tracker` write gate). No → record `dismissed` so the cron won't re-propose it within the cooldown; stop.
+  - **Headless** (cron, idle REPL, no one to answer) → **do not file.** Record `proposed` (`corgi suggest-history record --slug <slug> --status proposed --title <…> --lens <…>`), fire a `PushNotification` if available, stop. Surface it next time a human is present.
 - **`auto-file-drafts` (explicit opt-in):** go straight to Phase 4 to file **one** draft.
 
 ## Phase 4 — File (reuse `tracker` write gate) OR record-and-report
 
-- **Preflight the matching tracker MCP** (Linear `mcp__linear-server__*` vs Jira
-  `mcp__atlassian__*`, detected as in `suggest` Phase 5 / `tracker` Phase 0). **Not
-  connected → do NOT silently file:** keep `docs/suggestions/<slug>.md` + a paste-ready
-  body + the tracker's new-issue URL, record `proposed`, and stop.
-- **Connected →** create the issue **in the draft/triage/backlog-equivalent state**,
-  labels `corgi-suggest` + `draft`, **no assignee**, link the spec. Reuse the same
-  `tracker` write path — do not hand-roll the MCP call shape. Then record it:
-  `corgi suggest-history record --slug <slug> --status filed --ticket <KEY> --title <…> --lens <…>`.
-- **Never offer "implement it now?" here.** That's the interactive `suggest`/`stories`
-  path — proactive stays hands-off: never assign, never move past draft, never build,
-  never open a PR.
+- **Preflight the matching tracker MCP** (Linear `mcp__linear-server__*` vs Jira `mcp__atlassian__*`, detected as in `suggest` Phase 5 / `tracker` Phase 0). **Not connected → do NOT silently file:** keep `docs/suggestions/<slug>.md` + a paste-ready body + the tracker's new-issue URL, record `proposed`, stop.
+- **Connected →** create the issue **in the draft/triage/backlog-equivalent state**, labels `corgi-suggest` + `draft`, **no assignee**, link the spec. Reuse the same `tracker` write path — do not hand-roll the MCP call shape. Then record it: `corgi suggest-history record --slug <slug> --status filed --ticket <KEY> --title <…> --lens <…>`.
+- **Never offer "implement it now?" here.** That's the interactive `suggest`/`stories` path — proactive stays hands-off: never assign, never move past draft, never build, never open a PR.
 
 ## Phase 5 — Arm/maintain the schedule
 
 - Point at `references/schedule-config.md` for the literal CronCreate args.
-- If the user asked to set it up: emit the config (weekly, **off-:00 minute**,
-  `durable: true`, the **absolute workspace path** in the prompt) and **warn about the
-  7-day auto-expire** (CronCreate recurring jobs fire a final time then delete after 7
-  days) — offer to re-arm, and offer a `--once` next-Monday one-shot as the conservative
-  default for first-time users.
+- If the user asked to set it up: emit the config (weekly, **off-:00 minute**, `durable: true`, the **absolute workspace path** in the prompt) and **warn about the 7-day auto-expire** (CronCreate recurring jobs fire a final time then delete after 7 days) — offer to re-arm, and offer a `--once` next-Monday one-shot as the conservative default for first-time users.
 - Disarm: `CronList` → `CronDelete` by id (see the reference).
 
 ## [[workspace-memory]] integration (loose)
 
-If a workspace-memory store is present (`.corgi/memory/`, the `memory` skill), do a
-**best-effort** read for entries tagged "dismissed suggestion" / "won't build" and treat
-a matching slug the same as a `dismissed` state-file entry — so an idea the user
-explicitly rejected in conversation isn't re-proposed by the cron. Advisory only: it
-degrades silently when no memory store exists, and the **state file remains the source of
-truth.** Match on slug/title text; never block on the memory API. Do not duplicate the
-memory convention here — see the `memory` skill.
+If a workspace-memory store is present (`.corgi/memory/`, the `memory` skill), do a **best-effort** read for entries tagged "dismissed suggestion" / "won't build" and treat a matching slug the same as a `dismissed` state-file entry — so an idea the user explicitly rejected in conversation isn't re-proposed by the cron. Advisory only: degrades silently when no memory store exists, and the **state file remains the source of truth.** Match on slug/title text; never block on the memory API. Don't duplicate the memory convention here — see the `memory` skill.
 
 ## Scenarios
 
-- **First-time setup** → prefer the `--once` next-Monday one-shot; explain the 7-day
-  expire before arming anything recurring.
-- **Every candidate deduped / week cap hit** → a clean no-op with a `skipped` audit entry,
-  so `gain`/`suggest-history list` shows the job ran and why nothing filed.
+- **First-time setup** → prefer the `--once` next-Monday one-shot; explain the 7-day expire before arming anything recurring.
+- **Every candidate deduped / week cap hit** → a clean no-op with a `skipped` audit entry, so `gain`/`suggest-history list` shows the job ran and why nothing filed.
 - **No tracker MCP** → never guess a tracker; record `proposed` and report the new-issue URL.

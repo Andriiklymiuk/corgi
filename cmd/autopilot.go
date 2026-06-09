@@ -19,17 +19,23 @@ in corgi_services/.autopilot.json and coordinates iterations across /loop or
 /schedule runs. Draft PRs only; never merges.`,
 }
 
+// failAutopilot reports a config/IO error (JSON via JSONError, else a human line
+// routed through utils.Info so --json stdout stays pure) and exits 1.
+func failAutopilot(humanMsg string, err error) {
+	if utils.JSONOutput {
+		utils.JSONError(utils.ErrConfig, err.Error())
+	} else {
+		utils.Infof("%s: %s\n", humanMsg, err)
+	}
+	os.Exit(1)
+}
+
 // autopilotStateDir resolves the compose dir the same way sibling commands do
 // (loads corgi-compose.yml, which sets utils.CorgiComposePathDir). On a resolve
 // failure it emits the shared E_CONFIG error and exits 1.
 func autopilotStateDir(cmd *cobra.Command) string {
 	if _, err := utils.GetCorgiServices(cmd); err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			utils.Infof("couldn't get services config: %s\n", err)
-		}
-		os.Exit(1)
+		failAutopilot("couldn't get services config", err)
 	}
 	return utils.CorgiComposePathDir
 }

@@ -169,7 +169,8 @@ func AddFact(root string, f Fact) (string, error) {
 	_ = enc.Close()
 	b.WriteString("---\n\n")
 	if f.Body != "" {
-		b.WriteString(f.Body + "\n")
+		b.WriteString(f.Body)
+		b.WriteByte('\n')
 	}
 	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
 		return "", err
