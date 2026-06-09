@@ -18,11 +18,12 @@ import (
 // real with no daemon.
 //
 // Knobs (set after installFakeDocker):
-//   FAKE_FAIL          space-separated: exec|version|stop|cp|cpimport — those calls exit 1
-//   FAKE_FAIL_COMPOSE  space-separated compose subcommands to fail (down|up|start)
-//   FAKE_INSPECT_CODE  container exit code reported by `docker inspect` (default 0)
-//   FAKE_ARCH          arch reported by `docker version` (default arm64)
-//   FAKE_IMAGE         image reported by `docker compose config` (default postgres:17-alpine)
+//
+//	FAKE_FAIL          space-separated: exec|version|stop|cp|cpimport — those calls exit 1
+//	FAKE_FAIL_COMPOSE  space-separated compose subcommands to fail (down|up|start)
+//	FAKE_INSPECT_CODE  container exit code reported by `docker inspect` (default 0)
+//	FAKE_ARCH          arch reported by `docker version` (default arm64)
+//	FAKE_IMAGE         image reported by `docker compose config` (default postgres:17-alpine)
 const fakeDockerScript = `#!/bin/sh
 fail_has() { for x in $FAKE_FAIL; do [ "$x" = "$1" ] && return 0; done; return 1; }
 case "$1" in
@@ -118,6 +119,11 @@ func craftSnapshot(t *testing.T, name string, meta SnapshotMeta) (archive, metaP
 	}
 	if meta.Arch == "" {
 		meta.Arch = "arm64"
+	}
+	// Record the archive's real SHA by default so the now-always-on integrity
+	// check passes for callers that craft a good snapshot.
+	if meta.SHA256 == "" {
+		meta.SHA256 = fileSHA(t, archive)
 	}
 	if err := WriteSnapshotMeta(metaPath, meta); err != nil {
 		t.Fatal(err)
@@ -298,6 +304,38 @@ func TestRunRestoreFromPathVerifiesSHA(t *testing.T) {
 		Service: "main", Driver: "postgres", ArchivePath: archive, MetaPath: metaPath, FromPath: true,
 	}); err == nil {
 		t.Error("a sha mismatch on an explicit path must abort")
+	}
+}
+
+func TestRunRestoreNamedVerifiesSHA(t *testing.T) {
+	useTempStack(t)
+	installFakeDocker(t)
+	archive, metaPath := craftSnapshot(t, "named", SnapshotMeta{})
+	// corrupt the recorded checksum on a *named* (not --from-path) restore
+	if err := WriteSnapshotMeta(metaPath, mergeDefaults(SnapshotMeta{SHA256: "deadbeef"})); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunRestore(RestoreRequest{
+		Service: "main", Driver: "postgres", ArchivePath: archive, MetaPath: metaPath,
+	}); err == nil {
+		t.Error("a sha mismatch on a named snapshot must abort before the wipe")
+	}
+}
+
+func TestRunRestorePgVersionGate(t *testing.T) {
+	useTempStack(t)
+	installFakeDocker(t) // fake reports PG_VERSION 17
+	archive, metaPath := craftSnapshot(t, "pg15", SnapshotMeta{PgVersionMajor: "15"})
+
+	if err := RunRestore(RestoreRequest{
+		Service: "main", Driver: "postgres", ArchivePath: archive, MetaPath: metaPath,
+	}); err == nil {
+		t.Error("pg-major mismatch without --force should abort")
+	}
+	if err := RunRestore(RestoreRequest{
+		Service: "main", Driver: "postgres", ArchivePath: archive, MetaPath: metaPath, Force: true,
+	}); err != nil {
+		t.Errorf("--force should override the pg-major mismatch, got %v", err)
 	}
 }
 

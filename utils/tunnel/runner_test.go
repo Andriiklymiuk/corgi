@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type fakeProvider struct {
@@ -24,8 +25,8 @@ func (fakeProvider) ExtractURL(line string) string {
 	}
 	return ""
 }
-func (fakeProvider) InstallHint() string { return "fake install" }
-func (fakeProvider) AcceptsStdin() bool  { return false }
+func (fakeProvider) InstallHint() string  { return "fake install" }
+func (fakeProvider) AcceptsStdin() bool   { return false }
 func (fakeProvider) PreflightAuth() error { return nil }
 func (fakeProvider) CmdNamed(port int, cfg NamedConfig) ([]string, error) {
 	return []string{"/bin/echo", "https://" + cfg.Hostname}, nil
@@ -99,16 +100,81 @@ func TestRunMissingBinary(t *testing.T) {
 	}
 }
 
+func TestRunSendsRespectCancel(t *testing.T) {
+	// Unbuffered: any send blocks unless drained. We never drain, so the only
+	// way Run returns is by abandoning its sends on ctx cancel.
+	events := make(chan Event)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		Run(ctx, fakeProvider{}, "svc", 3000, nil, events)
+		close(done)
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after ctx cancel (send blocked on dead consumer)")
+	}
+}
+
+func TestRunSupervisedRestartsWithBackoff(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := make(chan Event, 64)
+
+	var mu sync.Mutex
+	var doneCount int
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		for ev := range events {
+			if ev.Done {
+				mu.Lock()
+				doneCount++
+				mu.Unlock()
+			}
+		}
+	}()
+
+	supervisedDone := make(chan struct{})
+	go func() {
+		defer close(supervisedDone)
+		RunSupervised(ctx, fakeProvider{}, "svc", 3000, nil, events,
+			BackoffConfig{Base: 5 * time.Millisecond, Max: 20 * time.Millisecond})
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-supervisedDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("RunSupervised did not return within 2s of cancel")
+	}
+	close(events)
+	<-drainDone
+
+	mu.Lock()
+	got := doneCount
+	mu.Unlock()
+	if got < 2 {
+		t.Fatalf("expected >=2 Done events (restarted), got %d", got)
+	}
+}
+
 type fakeProviderMissing struct{}
 
 func (fakeProviderMissing) Name() string { return "missing" }
 func (fakeProviderMissing) Cmd(port int) []string {
 	return []string{"this-binary-cannot-exist-zzz", "--port", "3000"}
 }
-func (fakeProviderMissing) ExtractURL(line string) string         { return "" }
-func (fakeProviderMissing) InstallHint() string                    { return "" }
-func (fakeProviderMissing) AcceptsStdin() bool                     { return false }
-func (fakeProviderMissing) PreflightAuth() error                   { return nil }
+func (fakeProviderMissing) ExtractURL(line string) string { return "" }
+func (fakeProviderMissing) InstallHint() string           { return "" }
+func (fakeProviderMissing) AcceptsStdin() bool            { return false }
+func (fakeProviderMissing) PreflightAuth() error          { return nil }
 func (fakeProviderMissing) CmdNamed(int, NamedConfig) ([]string, error) {
 	return nil, nil
 }

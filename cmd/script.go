@@ -87,7 +87,7 @@ func runScriptsForService(corgi *utils.CorgiCompose, service utils.Service) []sc
 			continue
 		}
 		if scriptServiceCmd.CopyEnvFromFilePath != "" {
-			utils.GenerateEnvForService(
+			_ = utils.GenerateEnvForService(
 				corgi,
 				service,
 				scriptServiceCmd.CopyEnvFromFilePath,
@@ -99,7 +99,7 @@ func runScriptsForService(corgi *utils.CorgiCompose, service utils.Service) []sc
 	}
 
 	// return to previous state of .env file
-	utils.GenerateEnvForService(corgi, service, "", false)
+	_ = utils.GenerateEnvForService(corgi, service, "", false)
 	return results
 }
 

@@ -353,7 +353,6 @@ func TestBuildLocalEnvCustomPortAlias(t *testing.T) {
 	}
 }
 
-
 func TestGetEnvFromFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, ".env")
@@ -604,20 +603,20 @@ func TestGenerateEnvForServicesCodependentFallback(t *testing.T) {
 	c := &CorgiCompose{
 		Services: []Service{
 			{
-				ServiceName:  "a",
-				AbsolutePath: dir1,
-				Port:         3001,
-				Exports:      []string{"A_URL=http://localhost:3001"},
+				ServiceName:       "a",
+				AbsolutePath:      dir1,
+				Port:              3001,
+				Exports:           []string{"A_URL=http://localhost:3001"},
 				DependsOnServices: []DependsOnService{{Name: "b"}},
-				Environment: []string{"X=${b.B_URL}"},
+				Environment:       []string{"X=${b.B_URL}"},
 			},
 			{
-				ServiceName:  "b",
-				AbsolutePath: dir2,
-				Port:         3002,
-				Exports:      []string{"B_URL=http://localhost:3002"},
+				ServiceName:       "b",
+				AbsolutePath:      dir2,
+				Port:              3002,
+				Exports:           []string{"B_URL=http://localhost:3002"},
 				DependsOnServices: []DependsOnService{{Name: "a"}},
-				Environment: []string{"Y=${a.A_URL}"},
+				Environment:       []string{"Y=${a.A_URL}"},
 			},
 		},
 	}
@@ -761,5 +760,19 @@ func TestGenerateEnvForServiceWithExports(t *testing.T) {
 	}
 	if err := GenerateEnvForService(&CorgiCompose{}, svc, "", false); err != nil {
 		t.Errorf("unexpected err: %v", err)
+	}
+}
+
+func TestWriteEnvFile_Mode0600(t *testing.T) {
+	p := filepath.Join(t.TempDir(), ".env")
+	if err := writeEnvFile(p, "SECRET=value\n"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("mode = %o, want 600", got)
 	}
 }

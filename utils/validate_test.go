@@ -192,6 +192,45 @@ func TestValidateCompose(t *testing.T) {
 			wantErr: map[string]int{ErrInvalidCondition: 0},
 		},
 		{
+			name: "db port out of range",
+			compose: &CorgiCompose{
+				DatabaseServices: []DatabaseService{{ServiceName: "db", Driver: "postgres", Port: 70000}},
+			},
+			wantErr: map[string]int{ErrPortRange: 1},
+		},
+		{
+			name: "negative service port",
+			compose: &CorgiCompose{
+				Services: []Service{{ServiceName: "api", Port: -1, Start: []string{"x"}}},
+			},
+			wantErr: map[string]int{ErrPortRange: 1},
+		},
+		{
+			name: "image driver containerPort and studioPort out of range",
+			compose: &CorgiCompose{
+				DatabaseServices: []DatabaseService{
+					{ServiceName: "db", Driver: "image", Port: 8080, ContainerPort: 99999, StudioPort: -5},
+				},
+			},
+			wantErr: map[string]int{ErrPortRange: 2},
+		},
+		{
+			name: "valid ports do not flag range",
+			compose: &CorgiCompose{
+				DatabaseServices: []DatabaseService{{ServiceName: "db", Driver: "postgres", Port: 5432, Port2: 5433}},
+				Services:         []Service{{ServiceName: "api", Port: 3000, Start: []string{"x"}}},
+			},
+			wantErr: map[string]int{ErrPortRange: 0},
+		},
+		{
+			name: "service and db_service share a name",
+			compose: &CorgiCompose{
+				DatabaseServices: []DatabaseService{{ServiceName: "core", Driver: "postgres"}},
+				Services:         []Service{{ServiceName: "core", Start: []string{"x"}}},
+			},
+			wantErr: map[string]int{ErrDuplicateName: 1},
+		},
+		{
 			name: "cloneFrom without branch warns",
 			compose: &CorgiCompose{
 				Services: []Service{
@@ -233,6 +272,26 @@ func TestValidateCompose(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAbortOnValidationErrors(t *testing.T) {
+	// Clean compose → no error, no abort.
+	clean := &CorgiCompose{
+		Services: []Service{{ServiceName: "api", Port: 3000, Start: []string{"x"}}},
+	}
+	if errs := CollectValidationErrors(clean); len(errs) != 0 {
+		t.Fatalf("clean compose should have no errors, got %v", codesOf(errs))
+	}
+
+	// Port conflict → exactly the same code the validate command reports.
+	bad := &CorgiCompose{
+		DatabaseServices: []DatabaseService{{ServiceName: "db", Driver: "postgres", Port: 8080}},
+		Services:         []Service{{ServiceName: "api", Port: 8080, Start: []string{"x"}}},
+	}
+	errs := CollectValidationErrors(bad)
+	if countCode(errs, ErrPortConflict) != 1 {
+		t.Fatalf("want 1 port-conflict error, got %v", codesOf(errs))
 	}
 }
 

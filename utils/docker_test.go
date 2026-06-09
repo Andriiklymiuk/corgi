@@ -1,6 +1,9 @@
 package utils
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -83,6 +86,63 @@ func TestIsServiceRunningFalseForFakeContainer(t *testing.T) {
 	}
 	if running {
 		t.Error("expected not running")
+	}
+}
+
+// installFakeDockerPS writes a `docker ps` stub that mimics how the real
+// daemon treats the `--filter name=...` value: an anchored `^name$` matches
+// only the exact container, while a bare `name` substring-matches every
+// container whose name contains it. running is the set of up containers; the
+// stub prints "<name>\tUp 3 seconds" for each that satisfies the filter.
+func installFakeDockerPS(t *testing.T, running []string) {
+	t.Helper()
+	binDir := t.TempDir()
+	var sb strings.Builder
+	sb.WriteString("#!/bin/sh\n")
+	sb.WriteString(`filter=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--filter" ]; then filter=$(echo "$arg" | sed 's/^name=//'); fi
+  prev="$arg"
+done
+anchored=0
+case "$filter" in
+  ^*$) anchored=1; filter=$(echo "$filter" | sed -e 's/^\^//' -e 's/\$$//') ;;
+esac
+emit() {
+  if [ "$anchored" = "1" ]; then
+    [ "$1" = "$filter" ] && printf '%s\tUp 3 seconds\n' "$1"
+  else
+    case "$1" in *"$filter"*) printf '%s\tUp 3 seconds\n' "$1" ;; esac
+  fi
+}
+`)
+	for _, name := range running {
+		fmt.Fprintf(&sb, "emit %s\n", name)
+	}
+	sb.WriteString("exit 0\n")
+
+	script := filepath.Join(binDir, "docker")
+	if err := os.WriteFile(script, []byte(sb.String()), 0o755); err != nil {
+		t.Fatalf("write fake docker: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestIsServiceRunningExactMatch(t *testing.T) {
+	// "postgres-main-replica" is up but "postgres-main" is NOT — an unanchored
+	// substring filter would wrongly report postgres-main as running.
+	installFakeDockerPS(t, []string{"postgres-main-replica"})
+
+	if ok, err := IsServiceRunning("postgres-main"); err != nil || ok {
+		t.Fatalf("postgres-main must be down (only the replica is up): ok=%v err=%v", ok, err)
+	}
+	if ok, err := IsServiceRunning("postgres-main-replica"); err != nil || !ok {
+		t.Fatalf("postgres-main-replica should be running: ok=%v err=%v", ok, err)
+	}
+	// A wholly absent container is down.
+	if ok, err := IsServiceRunning("absent"); err != nil || ok {
+		t.Fatalf("absent must be down: ok=%v err=%v", ok, err)
 	}
 }
 

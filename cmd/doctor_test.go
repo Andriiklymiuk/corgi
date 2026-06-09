@@ -80,7 +80,6 @@ func TestCollectDeclaredPorts_DescIncludesDriver(t *testing.T) {
 	}
 }
 
-
 func TestRunRequiredEmpty(t *testing.T) {
 	if !RunRequired(nil) {
 		t.Error("want true for empty")
@@ -307,7 +306,6 @@ func TestRunDoctorJSON_EmptyComposePasses(t *testing.T) {
 		t.Errorf("expected ok:true JSON for empty compose, got %q", out)
 	}
 }
-
 
 func TestFixDecision(t *testing.T) {
 	cases := []struct {

@@ -6,7 +6,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -357,4 +359,35 @@ func TestCollectRunTargetsWithTunnelError(t *testing.T) {
 	if len(targets) != 0 {
 		t.Errorf("expected 0 targets, got %d", len(targets))
 	}
+}
+
+func TestStopRunTunnelsWaitsForGoroutines(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	runTunnelsCancel = cancel
+	runTunnelsDone = make(chan struct{})
+	t.Cleanup(func() { runTunnelsCancel = nil; runTunnelsDone = nil })
+
+	var closed atomic.Bool
+	go func() {
+		<-ctx.Done()
+		time.Sleep(20 * time.Millisecond)
+		closed.Store(true)
+		close(runTunnelsDone)
+	}()
+
+	stopRunTunnels()
+
+	if !closed.Load() {
+		t.Fatal("stopRunTunnels returned before the runner goroutine drained")
+	}
+}
+
+func TestStopRunTunnelsNoCancelNoop(t *testing.T) {
+	prevCancel := runTunnelsCancel
+	prevDone := runTunnelsDone
+	runTunnelsCancel = nil
+	runTunnelsDone = nil
+	t.Cleanup(func() { runTunnelsCancel = prevCancel; runTunnelsDone = prevDone })
+
+	stopRunTunnels() // must not panic
 }

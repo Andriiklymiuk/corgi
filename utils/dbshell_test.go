@@ -5,6 +5,41 @@ import (
 	"testing"
 )
 
+func TestDriverShells_DragonflyAuthViaEnv(t *testing.T) {
+	for _, d := range []string{"dragonfly", "redict", "valkey"} {
+		cfg := driverShells[d]
+		db := DatabaseService{Password: "secret"}
+		if args := cfg.argsFunc(db); len(args) != 0 {
+			t.Errorf("%s: password must not be on argv, got %v", d, args)
+		}
+		if cfg.envFunc == nil || cfg.envFunc(db)["REDISCLI_AUTH"] != "secret" {
+			t.Errorf("%s: expected REDISCLI_AUTH=secret via env", d)
+		}
+	}
+}
+
+func TestBuildDockerExecArgs_MysqlPasswordViaEnvNotArgv(t *testing.T) {
+	cfg := driverShells["mysql"]
+	db := DatabaseService{User: "root", Password: "p w", DatabaseName: "d"}
+	args, env, err := buildDockerExecArgs(cfg, db, "", "cid", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The secret must never reach the mysql CLI as a -p<pw> flag (visible in `ps`).
+	for _, a := range args {
+		if strings.HasPrefix(a, "-p") && strings.Contains(a, db.Password) {
+			t.Fatalf("password leaked onto mysql CLI argv: %v", args)
+		}
+	}
+	if env["MYSQL_PWD"] != db.Password {
+		t.Fatalf("MYSQL_PWD = %q, want %q", env["MYSQL_PWD"], db.Password)
+	}
+	// the env value must be carried as `docker exec -e MYSQL_PWD=...` before the container id.
+	if !containsArg(args, "-e", "MYSQL_PWD="+db.Password) {
+		t.Fatalf("expected -e MYSQL_PWD=<pw> in docker args, got %v", args)
+	}
+}
+
 func TestSupportedShellDrivers_NotEmpty(t *testing.T) {
 	drivers := SupportedShellDrivers()
 	if len(drivers) == 0 {
@@ -75,16 +110,18 @@ func TestDriverShells_RedisNoPassword(t *testing.T) {
 func TestDriverShells_RedisWithPassword(t *testing.T) {
 	cfg := driverShells["redis"]
 	db := DatabaseService{Password: "secret"}
-	args := cfg.argsFunc(db)
-	if len(args) < 2 || args[0] != "-a" || args[1] != "secret" {
-		t.Errorf("expected [-a secret] for redis with password, got %v", args)
+	if args := cfg.argsFunc(db); len(args) != 0 {
+		t.Errorf("expected no -a on argv for redis, got %v", args)
+	}
+	if cfg.envFunc(db)["REDISCLI_AUTH"] != "secret" {
+		t.Errorf("expected REDISCLI_AUTH=secret via env for redis")
 	}
 }
 
 func TestExecArgs_PostgresAppendsDashC(t *testing.T) {
 	cfg := driverShells["postgres"]
 	args := cfg.execArgsFunc(DatabaseService{User: "u", DatabaseName: "d"}, "SELECT 1")
-	if got := args[len(args)-2 : len(args)]; got[0] != "-c" || got[1] != "SELECT 1" {
+	if got := args[len(args)-2:]; got[0] != "-c" || got[1] != "SELECT 1" {
 		t.Errorf("expected trailing -c SELECT 1, got %v", args)
 	}
 }
@@ -228,19 +265,19 @@ func TestDriverArgBuilders_AllDrivers(t *testing.T) {
 		{
 			driver:       "redis",
 			db:           DatabaseService{Password: "pw"},
-			wantArgs:     []string{"-a", "pw"},
-			wantExecTail: []string{"-a", "pw", "GET", "k"},
+			wantArgs:     nil, // password rides REDISCLI_AUTH env, not argv
+			wantExecTail: []string{"GET", "k"},
 		},
 		{
 			driver:       "dragonfly",
-			db:           DatabaseService{Password: "ignored"},
+			db:           DatabaseService{Password: "pw"},
 			wantArgs:     nil,
 			wantExecTail: []string{"GET", "k"},
 		},
 		{
 			driver:       "mysql",
 			db:           DatabaseService{User: "u", Password: "pw", DatabaseName: "d"},
-			wantArgs:     []string{"-u", "u", "-ppw", "d"},
+			wantArgs:     []string{"-u", "u", "d"}, // password rides MYSQL_PWD env, not argv
 			wantExecTail: []string{"-e", q},
 		},
 		{
@@ -326,7 +363,7 @@ func TestMysqlArgs_NoPasswordNoDb(t *testing.T) {
 
 func TestBuildDockerExecArgs_InteractivePostgres(t *testing.T) {
 	cfg := driverShells["postgres"]
-	got, err := buildDockerExecArgs(cfg, DatabaseService{User: "u", DatabaseName: "d"}, "", "abc123", true)
+	got, _, err := buildDockerExecArgs(cfg, DatabaseService{User: "u", DatabaseName: "d"}, "", "abc123", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,11 +375,12 @@ func TestBuildDockerExecArgs_InteractivePostgres(t *testing.T) {
 
 func TestBuildDockerExecArgs_NonInteractiveMysql(t *testing.T) {
 	cfg := driverShells["mysql"]
-	got, err := buildDockerExecArgs(cfg, DatabaseService{User: "root", Password: "pw", DatabaseName: "d"}, "SELECT 1", "cid", false)
+	got, _, err := buildDockerExecArgs(cfg, DatabaseService{User: "root", Password: "pw", DatabaseName: "d"}, "SELECT 1", "cid", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"exec", "cid", "mysql", "-u", "root", "-ppw", "d", "-e", "SELECT 1"}
+	// password rides `-e MYSQL_PWD=pw` (before the container id), never on argv.
+	want := []string{"exec", "-e", "MYSQL_PWD=pw", "cid", "mysql", "-u", "root", "d", "-e", "SELECT 1"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -350,7 +388,7 @@ func TestBuildDockerExecArgs_NonInteractiveMysql(t *testing.T) {
 
 func TestBuildDockerExecArgs_NonInteractiveMongo(t *testing.T) {
 	cfg := driverShells["mongodb"]
-	got, err := buildDockerExecArgs(cfg, DatabaseService{Port: 27017}, "db.x.find()", "cid", false)
+	got, _, err := buildDockerExecArgs(cfg, DatabaseService{Port: 27017}, "db.x.find()", "cid", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,7 +404,7 @@ func TestBuildDockerExecArgs_NonInteractiveMongo(t *testing.T) {
 func TestBuildDockerExecArgs_DropsEmptyTokens(t *testing.T) {
 	// redis with no password → argsFunc returns nil, no stray "" left in output.
 	cfg := driverShells["redis"]
-	got, err := buildDockerExecArgs(cfg, DatabaseService{}, "", "cid", true)
+	got, _, err := buildDockerExecArgs(cfg, DatabaseService{}, "", "cid", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +422,7 @@ func TestBuildDockerExecArgs_DropsEmptyTokens(t *testing.T) {
 func TestBuildDockerExecArgs_NoExecSupport(t *testing.T) {
 	// A config without execArgsFunc must error in non-interactive mode.
 	cfg := shellConfig{cmd: "x", argsFunc: func(DatabaseService) []string { return nil }}
-	_, err := buildDockerExecArgs(cfg, DatabaseService{Driver: "x"}, "q", "cid", false)
+	_, _, err := buildDockerExecArgs(cfg, DatabaseService{Driver: "x"}, "q", "cid", false)
 	if err == nil || !strings.Contains(err.Error(), "does not support --exec") {
 		t.Fatalf("expected --exec unsupported error, got %v", err)
 	}

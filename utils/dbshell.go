@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -15,10 +16,27 @@ const redisCLITool = "redis-cli"
 // shellConfig is the per-driver mapping from corgi DatabaseService to the
 // CLI tool that opens its shell (psql, mongosh, ...). argsFunc builds args
 // for interactive mode; execArgsFunc is the non-interactive --exec variant.
+// envFunc (optional) returns env vars passed into the container via
+// `docker exec -e`, so secrets like MYSQL_PWD never land on argv.
 type shellConfig struct {
 	cmd          string
 	argsFunc     func(db DatabaseService) []string
 	execArgsFunc func(db DatabaseService, query string) []string
+	envFunc      func(db DatabaseService) map[string]string
+}
+
+func mysqlEnv(db DatabaseService) map[string]string {
+	if db.Password == "" {
+		return nil
+	}
+	return map[string]string{"MYSQL_PWD": db.Password}
+}
+
+func redisEnv(db DatabaseService) map[string]string {
+	if db.Password == "" {
+		return nil
+	}
+	return map[string]string{"REDISCLI_AUTH": db.Password}
 }
 
 func postgresArgs(db DatabaseService) []string {
@@ -33,9 +51,8 @@ func postgresExecArgs(db DatabaseService, query string) []string {
 }
 
 func redisArgs(db DatabaseService) []string {
-	if db.Password != "" {
-		return []string{"-a", db.Password}
-	}
+	// Password travels via the REDISCLI_AUTH container env (see redisEnv), never
+	// on argv where another process in the container could read it via `ps`.
 	return nil
 }
 
@@ -70,10 +87,9 @@ func mongoExecArgs(db DatabaseService, query string) []string {
 }
 
 func mysqlArgs(db DatabaseService) []string {
+	// The password travels via the MYSQL_PWD container env (see mysqlEnv), never
+	// on argv where `ps` could read it.
 	args := []string{"-u", defaultStr(db.User, "root")}
-	if db.Password != "" {
-		args = append(args, fmt.Sprintf("-p%s", db.Password))
-	}
 	if db.DatabaseName != "" {
 		args = append(args, db.DatabaseName)
 	}
@@ -110,10 +126,10 @@ func cassandraExecArgs(db DatabaseService, query string) []string {
 
 // driverShells maps driver names to their interactive shell configurations.
 var driverShells = map[string]shellConfig{
-	"postgres":     {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
-	"postgis":      {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
-	"pgvector":     {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
-	"timescaledb":  {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
+	"postgres":    {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
+	"postgis":     {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
+	"pgvector":    {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
+	"timescaledb": {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
 	"cockroachdb": {
 		cmd:          "cockroach",
 		argsFunc:     func(db DatabaseService) []string { return []string{"sql", "--insecure"} },
@@ -135,15 +151,15 @@ var driverShells = map[string]shellConfig{
 			}
 		},
 	},
-	"redis":        {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs},
-	"redis-server": {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs},
-	"keydb":        {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs},
-	"dragonfly":    {cmd: redisCLITool, argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
-	"redict":       {cmd: redisCLITool, argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
-	"valkey":       {cmd: redisCLITool, argsFunc: func(db DatabaseService) []string { return nil }, execArgsFunc: func(db DatabaseService, q string) []string { return strings.Fields(q) }},
+	"redis":        {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs, envFunc: redisEnv},
+	"redis-server": {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs, envFunc: redisEnv},
+	"keydb":        {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs, envFunc: redisEnv},
+	"dragonfly":    {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs, envFunc: redisEnv},
+	"redict":       {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs, envFunc: redisEnv},
+	"valkey":       {cmd: redisCLITool, argsFunc: redisArgs, execArgsFunc: redisExecArgs, envFunc: redisEnv},
 	"mongodb":      {cmd: "mongosh", argsFunc: mongoArgs, execArgsFunc: mongoExecArgs},
-	"mysql":        {cmd: "mysql", argsFunc: mysqlArgs, execArgsFunc: mysqlExecArgs},
-	"mariadb":      {cmd: "mysql", argsFunc: mysqlArgs, execArgsFunc: mysqlExecArgs},
+	"mysql":        {cmd: "mysql", argsFunc: mysqlArgs, execArgsFunc: mysqlExecArgs, envFunc: mysqlEnv},
+	"mariadb":      {cmd: "mysql", argsFunc: mysqlArgs, execArgsFunc: mysqlExecArgs, envFunc: mysqlEnv},
 	"mssql":        {cmd: "sqlcmd", argsFunc: mssqlArgs, execArgsFunc: mssqlExecArgs},
 	"cassandra":    {cmd: "cqlsh", argsFunc: cassandraArgs, execArgsFunc: cassandraExecArgs},
 	"scylla": {
@@ -176,19 +192,30 @@ func ExecDBQueryCapture(db DatabaseService, query string) (string, error) {
 
 // buildDockerExecArgs assembles the `docker exec ...` argument list for a db
 // service + query. Pure: no docker or container lookup. containerID is the
-// already-resolved target. Empty tokens are dropped so optional flags (e.g.
-// redis with no password) don't leave a stray "".
-func buildDockerExecArgs(cfg shellConfig, db DatabaseService, query, containerID string, interactive bool) ([]string, error) {
+// already-resolved target. Secrets from cfg.envFunc are carried into the
+// container as `-e KEY=VALUE` (before the container id), never on argv. Empty
+// tokens are dropped so optional flags (e.g. redis with no password) don't
+// leave a stray "". Also returns the env map for assertion/inspection.
+func buildDockerExecArgs(cfg shellConfig, db DatabaseService, query, containerID string, interactive bool) ([]string, map[string]string, error) {
 	dockerArgs := []string{"exec"}
 	if interactive {
 		dockerArgs = append(dockerArgs, "-it")
 	}
+
+	var env map[string]string
+	if cfg.envFunc != nil {
+		env = cfg.envFunc(db)
+	}
+	for _, k := range sortedKeys(env) {
+		dockerArgs = append(dockerArgs, "-e", k+"="+env[k])
+	}
+
 	dockerArgs = append(dockerArgs, containerID, cfg.cmd)
 	if interactive {
 		dockerArgs = append(dockerArgs, cfg.argsFunc(db)...)
 	} else {
 		if cfg.execArgsFunc == nil {
-			return nil, fmt.Errorf("driver %q does not support --exec", db.Driver)
+			return nil, nil, fmt.Errorf("driver %q does not support --exec", db.Driver)
 		}
 		dockerArgs = append(dockerArgs, cfg.execArgsFunc(db, query)...)
 	}
@@ -199,7 +226,17 @@ func buildDockerExecArgs(cfg shellConfig, db DatabaseService, query, containerID
 			filtered = append(filtered, a)
 		}
 	}
-	return filtered, nil
+	return filtered, env, nil
+}
+
+// sortedKeys returns m's keys sorted so the emitted -e flags are deterministic.
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func runDBShell(db DatabaseService, query string, interactive bool, stdout, stderr io.Writer) error {
@@ -216,7 +253,7 @@ func runDBShell(db DatabaseService, query string, interactive bool, stdout, stde
 		return fmt.Errorf("cannot find running container for %s: %w", db.ServiceName, err)
 	}
 
-	filtered, err := buildDockerExecArgs(cfg, db, query, containerID, interactive)
+	filtered, _, err := buildDockerExecArgs(cfg, db, query, containerID, interactive)
 	if err != nil {
 		return err
 	}

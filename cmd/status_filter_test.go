@@ -4,7 +4,20 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"andriiklymiuk/corgi/utils"
 )
+
+func TestEmitNoMatch_JSONGoesToStderrNotStdout(t *testing.T) {
+	prev := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = prev })
+
+	out := captureStdout(t, func() { emitNoMatch([]string{"nope"}) })
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("--json no-match must not write the human line to stdout, got %q", out)
+	}
+}
 
 func TestFilterRows(t *testing.T) {
 	rows := []statusRow{

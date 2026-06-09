@@ -20,6 +20,10 @@ const (
 	logTimeFormat  = "2006-01-02T15:04:05.000Z07:00"
 )
 
+// logFileSizeCap is the per-file byte cap before the writer rotates to a
+// sibling .partN.log. A var (not the const) so tests can lower it.
+var logFileSizeCap int64 = maxLogFileSize
+
 // LogStatus is how a service exited; used to rename the log file with a
 // meaningful suffix on close.
 type LogStatus int
@@ -42,6 +46,7 @@ type logWriter struct {
 	written     int64
 	closed      bool
 	capWarned   bool
+	rotations   int    // count of .partN siblings opened so far
 	pending     []byte // bytes received without a trailing newline yet
 	pendingTime time.Time
 }
@@ -85,9 +90,14 @@ func (lw *logWriter) Write(p []byte) (int, error) {
 	if lw.closed {
 		return len(p), nil
 	}
-	if lw.written >= maxLogFileSize {
-		lw.maybeWriteCapWarning()
-		return len(p), nil
+	// At the size cap, rotate to a sibling .partN.log so output is never
+	// silently dropped. If rotation fails, degrade to the old warn-once-then-
+	// drop behavior rather than erroring the caller.
+	if lw.written >= logFileSizeCap {
+		if err := lw.rotateLocked(); err != nil {
+			lw.maybeWriteCapWarning()
+			return len(p), nil
+		}
 	}
 
 	consumed := len(p)
@@ -111,7 +121,32 @@ func (lw *logWriter) maybeWriteCapWarning() {
 		return
 	}
 	lw.capWarned = true
-	_, _ = lw.f.WriteString(nowTimestamp() + " [corgi] log file reached " + fmt.Sprintf("%d", maxLogFileSize) + " bytes, further output dropped\n")
+	_, _ = lw.f.WriteString(nowTimestamp() + " [corgi] log file reached " + fmt.Sprintf("%d", logFileSizeCap) + " bytes, further output dropped\n")
+}
+
+// rotateLocked closes the full log file and continues in a sibling
+// <base>.partN.log so output is never silently dropped at the size cap.
+// Caller must hold lw.mu. The first file keeps its original <timestamp>.log
+// name; rotation siblings only appear once a single run exceeds the cap.
+func (lw *logWriter) rotateLocked() error {
+	lw.flushPendingLocked()
+	if err := lw.f.Close(); err != nil {
+		return err
+	}
+	lw.rotations++
+	ext := filepath.Ext(lw.path)             // ".log"
+	base := strings.TrimSuffix(lw.path, ext) // ".../<timestamp>" or ".../<timestamp>.partN"
+	base = strings.TrimSuffix(base, fmt.Sprintf(".part%d", lw.rotations-1))
+	newPath := fmt.Sprintf("%s.part%d%s", base, lw.rotations, ext)
+	f, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	lw.f = f
+	lw.path = newPath
+	lw.written = 0
+	lw.capWarned = false
+	return nil
 }
 
 func (lw *logWriter) bufferPartialLine(chunk []byte) {
@@ -353,11 +388,17 @@ func runSortKey(path string) string {
 }
 
 // sanitizeName makes a service name safe to use as a directory component.
+// Separators and shell-unsafe runes map to '_', and the empty/"."/".." cases
+// collapse to a placeholder so a crafted name can't escape the logs dir.
 func sanitizeName(name string) string {
-	return strings.Map(func(r rune) rune {
+	mapped := strings.Map(func(r rune) rune {
 		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
 			return '_'
 		}
 		return r
 	}, name)
+	if mapped == "" || mapped == "." || mapped == ".." {
+		return "_"
+	}
+	return mapped
 }

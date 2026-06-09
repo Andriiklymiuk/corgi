@@ -115,11 +115,23 @@ func resolveStatusRows(cmd *cobra.Command) []statusRow {
 	if len(serviceFilter) > 0 {
 		rows = filterRows(rows, serviceFilter)
 		if len(rows) == 0 {
-			fmt.Printf("No matching services for filter %v.\n", serviceFilter)
+			emitNoMatch(serviceFilter)
 			os.Exit(1)
 		}
 	}
 	return rows
+}
+
+// emitNoMatch reports an empty service-filter result. In --json mode it emits a
+// structured error to stderr so stdout stays pure JSON; otherwise a plain human
+// line via utils.Info (which already routes to stderr under --json).
+func emitNoMatch(filter []string) {
+	msg := fmt.Sprintf("No matching services for filter %v.", filter)
+	if utils.JSONOutput {
+		utils.WriteJSONError(os.Stderr, utils.ErrServiceNotFound, msg)
+	} else {
+		utils.Info(msg)
+	}
 }
 
 func runStatusOnce(rows []statusRow, f statusFlags) {

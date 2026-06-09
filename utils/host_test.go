@@ -41,17 +41,17 @@ func TestDetectHostIP_ReturnsValidIPv4(t *testing.T) {
 
 func TestIsVirtualIface(t *testing.T) {
 	cases := map[string]bool{
-		"en0":          false,
-		"eth0":         false,
-		"wlan0":        false,
-		"utun0":        true,
-		"bridge100":    true,
-		"vmnet1":       true,
-		"docker0":      true,
-		"awdl0":        true,
-		"llw0":         true,
-		"lo0":          true,
-		"tun0":         true,
+		"en0":       false,
+		"eth0":      false,
+		"wlan0":     false,
+		"utun0":     true,
+		"bridge100": true,
+		"vmnet1":    true,
+		"docker0":   true,
+		"awdl0":     true,
+		"llw0":      true,
+		"lo0":       true,
+		"tun0":      true,
 	}
 	for name, want := range cases {
 		if got := isVirtualIface(name); got != want {

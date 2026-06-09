@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -61,6 +62,23 @@ const (
 // utils.CorgiComposePath*) that isn't concurrency-safe. Held across the entire
 // handler body so the stdout swap and compose/flag mutation never overlap.
 var mcpHandlerMu sync.Mutex
+
+// mcpPublicTunnelActive is set once a public tunnel URL is published (from the
+// tunnel goroutine) and read per-call by the dangerous-tool handlers, so it's
+// atomic to stay race-free.
+var mcpPublicTunnelActive atomic.Bool
+
+// dangerousToolBlockedMsg is returned by corgi_exec / corgi_db_query when they
+// are reachable over a public tunnel without the explicit opt-in.
+const dangerousToolBlockedMsg = "corgi_exec/corgi_db_query are disabled over a public tunnel; set CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1 to allow"
+
+// dangerousTunnelToolsAllowed reports whether corgi_exec / corgi_db_query may
+// run. They are always allowed over stdio or a plain (non-tunneled) HTTP
+// endpoint; over a public tunnel they require an explicit opt-in so arbitrary
+// command + DB execution isn't exposed to anyone with the URL.
+func dangerousTunnelToolsAllowed(publicTunnel bool) bool {
+	return !publicTunnel || os.Getenv("CORGI_MCP_ALLOW_DANGEROUS_TUNNEL") == "1"
+}
 
 func runMCP(cmd *cobra.Command, _ []string) {
 	// Route corgi's own logging to stderr so stdout stays the JSON-RPC channel.
@@ -194,8 +212,9 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	var tunnelDone <-chan struct{}
 	if opts.tunnel {
-		startMCPTunnel(ctx, addr, token, opts)
+		tunnelDone = startMCPTunnel(ctx, addr, token, opts)
 	}
 
 	// Cancel the tunnel ctx on signal so its subprocess dies with the server.
@@ -210,13 +229,22 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
+		cancel() // kill the tunnel subprocess (exec.CommandContext) before exit
+		if tunnelDone != nil {
+			select {
+			case <-tunnelDone:
+			case <-time.After(2 * time.Second):
+			}
+		}
 		os.Exit(1)
 	}
 }
 
 // startMCPTunnel opens one tunnel to addr's local port using the shared
-// tunnel.Run runner, bound to ctx so it dies with the server.
-func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) {
+// tunnel.Run runner, bound to ctx so it dies with the server. The returned
+// channel closes once the tunnel runner drains, letting callers join the child
+// before exiting (so os.Exit doesn't orphan cloudflared/ngrok).
+func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <-chan struct{} {
 	provider, named, err := buildMCPTunnelConfig(opts.tunnelProvider, opts.tunnelHostname, opts.tunnelName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tunnel:", err)
@@ -228,25 +256,35 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) {
 		os.Exit(2)
 	}
 	if token == "" {
-		fmt.Fprintln(os.Stderr, "⚠️⚠️⚠️  --tunnel --insecure exposes corgi control (corgi_up/corgi_exec ⇒ arbitrary command execution) to ANYONE with the URL. Do not use on untrusted networks.")
+		fmt.Fprintln(os.Stderr, "⚠️⚠️⚠️  --tunnel --insecure exposes corgi control (corgi_up ⇒ arbitrary command execution) to ANYONE with the URL. Do not use on untrusted networks.")
 	}
+	fmt.Fprintln(os.Stderr, "⚠️  corgi_exec/corgi_db_query are disabled over a public tunnel; set CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1 to allow.")
 
+	done := make(chan struct{})
 	events := make(chan tunnel.Event, 32)
 	go func() {
 		tunnel.Run(ctx, provider, "mcp", port, named, events)
 		close(events) // terminate the consumer below when the tunnel exits
 	}()
 	go func() {
+		defer close(done)
 		for ev := range events {
 			switch {
 			case ev.Err != nil:
 				fmt.Fprintf(os.Stderr, "🌐 ✗ tunnel: %s\n", ev.Err)
 			case ev.URL != "":
+				mcpPublicTunnelActive.Store(true)
 				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
-				printMCPClientConfig(os.Stderr, ev.URL+"/mcp", token)
+				// Don't reprint the bearer token in a pasteable block on the
+				// public side — the local config (printed earlier) already has it.
+				printMCPClientConfig(os.Stderr, ev.URL+"/mcp", "")
+				if token != "" {
+					fmt.Fprintln(os.Stderr, "token configured; see the local config above for the Authorization header")
+				}
 			}
 		}
 	}()
+	return done
 }
 
 // mcpAddrPort extracts the numeric port from a listen addr like ":8765" or
@@ -868,12 +906,13 @@ func composeLoadError(err error) error {
 	return fmt.Errorf(errFmt, utils.ErrComposeNotFound, err)
 }
 
-// withStdoutToStderr runs fn with os.Stdout pointed at os.Stderr, keeping the
-// run/stop paths' progress prints off the JSON-RPC channel.
+// withStdoutToStderr runs fn with corgi's human/console output redirected to
+// os.Stderr via the goroutine-safe console override, keeping the run/stop
+// paths' progress prints off the JSON-RPC stdout channel without mutating the
+// process-global os.Stdout (which races under the HTTP transport).
 func withStdoutToStderr(fn func()) {
-	orig := os.Stdout
-	os.Stdout = os.Stderr
-	defer func() { os.Stdout = orig }()
+	utils.SetConsoleOverride(os.Stderr)
+	defer utils.ClearConsoleOverride()
 	fn()
 }
 
@@ -969,6 +1008,9 @@ func registerMCPTools(s *server.MCPServer) {
 		mcp.WithString("serviceBranch", mcp.Description(serviceBranchDesc)),
 		mcp.WithString("serviceDir", mcp.Description(serviceDirDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return nil, fmt.Errorf("%s", dangerousToolBlockedMsg)
+		}
 		return mcpExec(execArgs{
 			ComposePath:   r.GetString("composePath", ""),
 			Service:       r.GetString("service", ""),
@@ -1022,6 +1064,9 @@ func registerMCPTools(s *server.MCPServer) {
 		serviceOpt,
 		mcp.WithString("query", mcp.Required(), mcp.Description("Query/command to run (e.g. SQL for psql)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return nil, fmt.Errorf("%s", dangerousToolBlockedMsg)
+		}
 		return mcpDBQuery(dbQueryArgs{
 			ComposePath: r.GetString("composePath", ""),
 			Service:     r.GetString("service", ""),

@@ -297,6 +297,40 @@ func TestLogWriter_FlushesPendingOnClose(t *testing.T) {
 	}
 }
 
+func TestLogWriterRotatesAtCap(t *testing.T) {
+	prev := logFileSizeCap
+	logFileSizeCap = 64 // tiny cap so a few writes trigger rotation
+	t.Cleanup(func() { logFileSizeCap = prev })
+
+	dir := t.TempDir()
+	w, err := OpenLogWriter(dir, "api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Write well past the tiny cap across several lines.
+	for i := 0; i < 20; i++ {
+		if _, err := w.Write([]byte("a line of output that is long enough\n")); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	w.Close()
+
+	files, err := ListServiceRuns(dir, "api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Expect the original run file PLUS at least one rotation sibling.
+	var rotated int
+	for _, f := range files {
+		if strings.Contains(filepath.Base(f), ".part") {
+			rotated++
+		}
+	}
+	if rotated == 0 {
+		t.Errorf("expected at least one .partN.log rotation file, got files: %v", files)
+	}
+}
+
 func TestSanitizeName(t *testing.T) {
 	cases := []struct{ in, out string }{
 		{"simple", "simple"},
@@ -308,5 +342,16 @@ func TestSanitizeName(t *testing.T) {
 		if got != tc.out {
 			t.Errorf("sanitizeName(%q) = %q, want %q", tc.in, got, tc.out)
 		}
+	}
+}
+
+func TestSanitizeName_RejectsTraversal(t *testing.T) {
+	for _, bad := range []string{"", ".", "..", "../etc"} {
+		if got := sanitizeName(bad); got == "." || got == ".." || got == "" {
+			t.Errorf("sanitizeName(%q) = %q, must not be a traversal/empty component", bad, got)
+		}
+	}
+	if got := sanitizeName("api"); got != "api" {
+		t.Errorf("normal name changed: %q", got)
 	}
 }

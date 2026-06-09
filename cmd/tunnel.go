@@ -317,6 +317,10 @@ func envFilePaths(s utils.Service) []string {
 // handler calls it before os.Exit so the subprocesses die first.
 var runTunnelsCancel context.CancelFunc
 
+// runTunnelsDone closes once the run tunnels' runner + consumer goroutines
+// have drained, so stopRunTunnels can join them instead of guessing a sleep.
+var runTunnelsDone chan struct{}
+
 // Spawns one tunnel per service with a resolvable `tunnel:` block,
 // alongside `corgi run`. Skips (with a warning) when env vars are missing
 // or auth isn't set up — keeps the rest of the stack running.
@@ -366,6 +370,7 @@ func startTunnelsForRun(services []utils.Service) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runTunnelsCancel = cancel
+	runTunnelsDone = make(chan struct{})
 
 	events := make(chan tunnel.Event, 32)
 	var wg sync.WaitGroup
@@ -381,6 +386,7 @@ func startTunnelsForRun(services []utils.Service) {
 		close(events)
 	}()
 	go func() {
+		defer close(runTunnelsDone)
 		urls := map[string]string{}
 		for ev := range events {
 			switch {
@@ -394,16 +400,21 @@ func startTunnelsForRun(services []utils.Service) {
 	}()
 }
 
-// Called from run.go on SIGINT, before os.Exit. Cancels the tunnel ctx
-// so exec.CommandContext sends SIGKILL, then sleeps briefly so the kill
-// syscalls land before the parent exits.
+// Called from run.go on SIGINT, before os.Exit. Cancels the tunnel ctx so
+// exec.CommandContext sends SIGKILL, then joins the runner/consumer goroutines
+// (bounded) so the kills land before the parent exits.
 func stopRunTunnels() {
 	if runTunnelsCancel == nil {
 		return
 	}
 	fmt.Println("🌐 closing tunnels...")
 	runTunnelsCancel()
-	time.Sleep(300 * time.Millisecond)
+	if runTunnelsDone != nil {
+		select {
+		case <-runTunnelsDone:
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 func firstLine(s string) string {

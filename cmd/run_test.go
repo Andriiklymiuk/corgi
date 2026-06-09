@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -202,6 +203,38 @@ func TestStartAllServicesNoStartCmd(t *testing.T) {
 	startAllServices(corgi, cmd)
 }
 
+func TestStartAllServicesReturnsOnShutdown(t *testing.T) {
+	utils.ResetShutdownForTests()
+	t.Cleanup(utils.ResetShutdownForTests)
+
+	prevHandles := utils.ProcessHandles
+	utils.ProcessHandles = nil
+	t.Cleanup(func() { utils.ProcessHandles = prevHandles })
+
+	corgi := &utils.CorgiCompose{Services: []utils.Service{
+		{ServiceName: "s1", Start: []string{"sleep 30"}, AbsolutePath: t.TempDir()},
+	}}
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("tunnel", false, "")
+	cmd.Flags().Bool("pull", false, "")
+
+	done := make(chan struct{})
+	go func() {
+		startAllServices(corgi, cmd)
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	utils.RequestShutdown()
+	utils.KillAllStoredProcesses()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("startAllServices did not return after shutdown")
+	}
+}
+
 func TestInstallSignalHandlerStopIsIdempotent(t *testing.T) {
 	stop := installSignalHandler(&cobra.Command{})
 	stop()
@@ -226,6 +259,42 @@ func TestRunServiceSkipsManual(t *testing.T) {
 	wg.Add(1)
 	runService(utils.Service{ServiceName: "manual", ManualRun: true}, cmd, &wg, nil)
 	wg.Wait()
+}
+
+func TestRunServiceJoinsReadinessProbe(t *testing.T) {
+	utils.ResetShutdownForTests()
+	t.Cleanup(utils.ResetShutdownForTests)
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = nil })
+	utils.ServicesItemsFromFlag = nil
+
+	prev := readyTimeout
+	readyTimeout = 5 * time.Second
+	t.Cleanup(func() { readyTimeout = prev })
+
+	before := runtime.NumGoroutine()
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("pull", false, "")
+
+	svc := utils.Service{ServiceName: "x", Port: 65535, AbsolutePath: t.TempDir()}
+	signals := map[string]*readySignal{
+		svc.ServiceName: {started: make(chan struct{}), ready: make(chan struct{})},
+	}
+
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		utils.RequestShutdown()
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	runService(svc, cmd, &wg, signals)
+	wg.Wait()
+
+	time.Sleep(100 * time.Millisecond)
+	if got := runtime.NumGoroutine(); got > before+2 {
+		t.Fatalf("readiness probe goroutine outlived the call: before=%d after=%d", before, got)
+	}
 }
 
 func TestSetupComposeWatcherNoWatch(t *testing.T) {
@@ -306,6 +375,35 @@ func TestGetCorgiServicesViaCobra(t *testing.T) {
 	}
 	if corgi.Name != "test" {
 		t.Errorf("name = %q", corgi.Name)
+	}
+}
+
+func TestRunPathRejectsInvalidCompose(t *testing.T) {
+	dir := t.TempDir()
+	yml := filepath.Join(dir, "corgi-compose.yml")
+	content := `name: t
+services:
+  api:
+    port: 3000
+    start: ["x"]
+    depends_on_services:
+      - name: ghost
+`
+	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, c := newTestComposeCommand()
+	corgi, err := utils.GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := utils.CollectValidationErrors(corgi)
+	if len(errs) == 0 {
+		t.Fatal("run path should see validation errors for a dangling dep")
 	}
 }
 
