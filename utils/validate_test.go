@@ -147,6 +147,15 @@ func TestValidateCompose(t *testing.T) {
 			wantErr: map[string]int{ErrMissingStart: 0},
 		},
 		{
+			name: "manualRun port without start is fine",
+			compose: &CorgiCompose{
+				Services: []Service{
+					{ServiceName: "api", Port: 3000, ManualRun: true},
+				},
+			},
+			wantErr: map[string]int{ErrMissingStart: 0},
+		},
+		{
 			name: "port conflict service vs db",
 			compose: &CorgiCompose{
 				DatabaseServices: []DatabaseService{{ServiceName: "db", Driver: "postgres", Port: 8080}},
@@ -155,6 +164,26 @@ func TestValidateCompose(t *testing.T) {
 				},
 			},
 			wantErr: map[string]int{ErrPortConflict: 1},
+		},
+		{
+			name: "manualRun service does not conflict on shared port",
+			compose: &CorgiCompose{
+				Services: []Service{
+					{ServiceName: "web", Port: 3100, Start: []string{"npm start"}},
+					{ServiceName: "web-alt", Port: 3100, ManualRun: true, Start: []string{"npm start"}},
+				},
+			},
+			wantErr: map[string]int{ErrPortConflict: 0},
+		},
+		{
+			name: "manualRun db does not conflict on shared port",
+			compose: &CorgiCompose{
+				DatabaseServices: []DatabaseService{
+					{ServiceName: "db", Driver: "postgres", Port: 5432},
+					{ServiceName: "db-alt", Driver: "postgres", Port: 5432, ManualRun: true},
+				},
+			},
+			wantErr: map[string]int{ErrPortConflict: 0},
 		},
 		{
 			name: "zero ports never conflict",
