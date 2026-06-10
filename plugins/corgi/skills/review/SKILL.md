@@ -383,7 +383,10 @@ in **one** call.
 `glab mr note create --file <path> --line <n>` (or `--old-line` for a removed line),
 suggested change as a ` ```suggestion:-0+0 ` block (Apply button). (Those flags are
 experimental and **absent from many `glab` builds** — probe once (§3a) and, if
-missing or erroring, post via the raw `discussions` + `position` API in §3b.)
+missing or erroring, post via the raw `discussions` + `position` API in §3b.) On the
+§3b path the position **must** be one `--input` JSON object — never `-F 'position[…]'`
+bracket fields, which post unanchored with a misleading 201 — then **verify each
+inline note anchored** (`position != null`) and delete+repost any that didn't (§3b/§4).
 
 **Applicable suggestions are the useful part — supply them on both forges.** A
 finding with a concrete fix (a changed line or a small range) posts as a suggestion
@@ -436,7 +439,11 @@ LLM-generated title:**
 4. **Partial post failure** (inline rejected — line outside diff `422`, rate
    limit, transient `5xx`) — retry transient errors with backoff; fold
    still-failing findings into the summary; report posted-vs-failed counts. No
-   silent half-post.
+   silent half-post. **GitLab silent-unanchored:** a malformed §3b position posts
+   with a misleading `201` (not a `422`) as a general comment — so exit code alone
+   isn't proof. After posting, re-fetch and confirm every inline note's
+   `position != null`; delete + repost any that didn't anchor (§4). Don't count an
+   unanchored note as posted.
 5. **Suggestion can't apply** (pure deletion, non-contiguous range, lines don't
    line up) — fall back to a normal inline comment with the proposed code in a
    **plain fenced block** (not ` ```suggestion `). Avoids a broken Apply button.
