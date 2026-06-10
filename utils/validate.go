@@ -328,10 +328,12 @@ func checkInvalidConditions(c *CorgiCompose) []ValidationIssue {
 
 // checkMissingStart flags a service that exposes a port but has neither a
 // start command nor a docker runner (which provides its own entrypoint).
+// manualRun services are exempt — declaring a port without start is the
+// pattern for processes the user runs by hand.
 func checkMissingStart(c *CorgiCompose) []ValidationIssue {
 	var out []ValidationIssue
 	for _, s := range c.Services {
-		if s.Port == 0 {
+		if s.Port == 0 || s.ManualRun {
 			continue
 		}
 		if len(s.Start) > 0 || s.Runner.Name == "docker" {
@@ -347,7 +349,9 @@ func checkMissingStart(c *CorgiCompose) []ValidationIssue {
 }
 
 // checkPortConflicts reports any host port claimed by more than one
-// service / db_service. Port 0 (unset) is ignored.
+// service / db_service. Port 0 (unset) is ignored, as are manualRun
+// entries — corgi does not bind those, so sharing a port with one is the
+// alternate-service pattern.
 func checkPortConflicts(c *CorgiCompose) []ValidationIssue {
 	type owner struct {
 		label string
@@ -355,7 +359,7 @@ func checkPortConflicts(c *CorgiCompose) []ValidationIssue {
 	}
 	byPort := make(map[int][]owner)
 	for _, db := range c.DatabaseServices {
-		if db.Port == 0 {
+		if db.Port == 0 || db.ManualRun {
 			continue
 		}
 		byPort[db.Port] = append(byPort[db.Port], owner{
@@ -364,7 +368,7 @@ func checkPortConflicts(c *CorgiCompose) []ValidationIssue {
 		})
 	}
 	for _, s := range c.Services {
-		if s.Port == 0 {
+		if s.Port == 0 || s.ManualRun {
 			continue
 		}
 		byPort[s.Port] = append(byPort[s.Port], owner{
