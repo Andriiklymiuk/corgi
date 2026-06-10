@@ -968,6 +968,15 @@ func getCorgiConfigFilePath() (string, error) {
 		return defaultCorgiConfigName, nil
 	}
 
+	// No config here — try one level up (e.g. run from a service folder while the
+	// corgi-compose.yml lives in the onboarding/workspace dir above it).
+	parentConfig := filepath.Join("..", defaultCorgiConfigName)
+	parentExists, err := CheckIfFileExistsInDirectory("..", defaultCorgiConfigName)
+	if err == nil && parentExists {
+		Info("No corgi-compose.yml here; using the one one level up:", parentConfig)
+		return parentConfig, nil
+	}
+
 	chosenCorgiPath, err := getCorgiConfigFromAlert()
 	if err != nil || chosenCorgiPath == "" {
 		return "", err
@@ -1000,6 +1009,10 @@ func getCorgiConfigFromAlert() (string, error) {
 	if err != nil {
 		fmt.Println(err)
 		return "", err
+	}
+
+	if len(files) == 0 {
+		return "", fmt.Errorf("no corgi-compose.yml found in this directory or one level up; run from a corgi workspace or pass -f <path>")
 	}
 
 	if NonInteractive {
