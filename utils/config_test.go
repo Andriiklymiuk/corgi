@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -655,6 +656,139 @@ func TestGetCorgiConfigFilePathExists(t *testing.T) {
 	}
 	if got != CorgiComposeDefaultName {
 		t.Errorf("got %q", got)
+	}
+}
+
+// Running from a service subfolder with no config falls back to the
+// corgi-compose.yml one level up (onboarding/workspace dir above the service).
+func TestGetCorgiConfigFilePathParentDir(t *testing.T) {
+	parent := t.TempDir()
+	if err := os.WriteFile(filepath.Join(parent, CorgiComposeDefaultName), []byte("name: t\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(parent, "api")
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(child)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	got, err := getCorgiConfigFilePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join("..", CorgiComposeDefaultName)
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// No config here and none one level up → clear abort, not an empty picker.
+func TestGetCorgiConfigFilePathNoneAborts(t *testing.T) {
+	prevNI := NonInteractive
+	NonInteractive = false
+	t.Cleanup(func() { NonInteractive = prevNI })
+
+	parent := t.TempDir()
+	child := filepath.Join(parent, "api")
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(child)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	_, err := getCorgiConfigFilePath()
+	if err == nil {
+		t.Fatal("expected error when no config here or one level up")
+	}
+	if !strings.Contains(err.Error(), "one level up") {
+		t.Errorf("error should mention the parent lookup, got %q", err)
+	}
+}
+
+// An explicit -f/--filename wins and never triggers the parent-dir lookup,
+// even when a corgi-compose.yml sits one level up.
+func TestDetermineCorgiComposePathFilenameFlagWins(t *testing.T) {
+	parent := t.TempDir()
+	if err := os.WriteFile(filepath.Join(parent, CorgiComposeDefaultName), []byte("name: parent\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(parent, "api")
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(child)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	c := newCobraWithRootFlags()
+	c.Flags().Bool("global", false, "")
+	if err := c.Flags().Set("filename", "custom-compose.yml"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := determineCorgiComposePath(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "custom-compose.yml" {
+		t.Errorf("got %q, want the -f value verbatim (no parent lookup)", got)
+	}
+}
+
+// Full path: from a service subfolder, GetCorgiServices loads the parent's
+// config and resolves the workspace dir to the parent (so db_services and
+// service dirs generate under it, not the cwd).
+func TestGetCorgiServicesFromParentDir(t *testing.T) {
+	parent := t.TempDir()
+	content := `name: testapp
+db_services:
+  mydb:
+    driver: postgres
+    host: localhost
+    user: root
+    password: secret
+    databaseName: mydb
+    port: 5432
+services:
+  api:
+    port: 3000
+    cloneFrom: ""
+    path: ""
+`
+	if err := os.WriteFile(filepath.Join(parent, CorgiComposeDefaultName), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(parent, "api")
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	os.Chdir(child)
+	t.Cleanup(func() { os.Chdir(cwd) })
+
+	c := newCobraWithRootFlags()
+	c.Flags().Bool("global", false, "")
+	corgi, err := GetCorgiServices(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(corgi.DatabaseServices) != 1 {
+		t.Fatalf("expected 1 db service from parent config, got %d", len(corgi.DatabaseServices))
+	}
+	if db := corgi.DatabaseServices[0]; db.ServiceName != "mydb" || db.Driver != "postgres" || db.Port != 5432 {
+		t.Errorf("db service not parsed cleanly: %+v", db)
+	}
+	if len(corgi.Services) != 1 {
+		t.Errorf("expected 1 service from parent config, got %d", len(corgi.Services))
+	}
+	// Workspace dir must be the parent (where the config lives), so generated
+	// services land beside it, not in the service subfolder we ran from.
+	wd, _ := os.Getwd()
+	if want := filepath.Dir(wd); CorgiComposePathDir != want {
+		t.Errorf("CorgiComposePathDir = %q, want parent %q", CorgiComposePathDir, want)
 	}
 }
 
