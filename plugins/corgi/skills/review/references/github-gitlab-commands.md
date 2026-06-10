@@ -157,21 +157,44 @@ Needs the URL-encoded project path in the URL (glab does **not** fill `:id` from
 `-F id=`; it resolves placeholders from the cwd repo, which is wrong here) and
 `--hostname` for self-hosted. `diff_refs` come from §1's `glab mr view -F json`.
 
+> **Send the position as ONE JSON object via `--input`. NEVER build it from
+> `-F 'position[position_type]=text' -F 'position[new_line]=42'` bracket fields.**
+> glab does not encode nested bracket form params — the API silently ignores them
+> and the note posts as a **general MR comment with `position: null`**, returning
+> **HTTP 201 (success)** with no error. The comment is NOT attached to the file/line,
+> a ` ```suggestion ` block in it renders as plain text (no Apply button), and you
+> only find out when a human complains. This is the single most common way GitLab
+> inline posting goes wrong. Always `--input` a JSON body, and verify after (§4).
+
+`position` requires **both** `new_path` AND `old_path` (GitLab rejects or
+mis-anchors a text position missing `old_path`) plus at least one of
+`new_line`/`old_line`. For an added/context line set `new_line` (and
+`old_path = new_path`); for a removed line set `old_line`.
+
 ```bash
 glab api --method POST \
   "projects/<group>%2F<proj>/merge_requests/<n>/discussions" \
-  --hostname <host> --input - <<'JSON'
+  --hostname <host> -H 'Content-Type: application/json' --input - <<'JSON'
 {
   "body": "<!-- corgi-review:src/foo.py:42 -->\nOff-by-one here.\n```suggestion:-0+0\n  for i in range(len - 1):\n```",
   "position": {
     "position_type": "text",
     "base_sha": "<base_sha>", "head_sha": "<head_sha>", "start_sha": "<start_sha>",
-    "new_path": "src/foo.py", "new_line": 42
+    "new_path": "src/foo.py", "old_path": "src/foo.py", "new_line": 42
   }
 }
 JSON
 ```
-Removed-line: use `"old_path"` + `"old_line"` instead of `new_path`/`new_line`.
+Removed-line: keep `new_path`+`old_path`, drop `new_line`, add `"old_line": <n>`.
+For a complex body (multi-line ` ```suggestion `, backticks), write the JSON to a
+temp file and `--input file.json` rather than wrestling heredoc/shell quoting.
+
+**rtk caveat for POST calls.** The Claude Code hook auto-rewrites `glab`→`rtk glab`,
+whose wrapper passes through only a subset of flags — it can drop `--input`,
+`-H`, or nested `-F`, so a posting call routed through it lands malformed. For any
+**write** (`reviews`, `discussions`, `notes`, `--input` bodies) invoke the real
+binary directly (`$(command -v glab)` / full path) or `rtk proxy glab …`; don't
+rely on the auto-rewrite. Read/list/status calls through rtk are fine (§0).
 
 ---
 
@@ -187,6 +210,23 @@ Removed-line: use `"old_path"` + `"old_line"` instead of `new_path`/`new_line`.
   glab api "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> -q '.[].notes[].body'
   ```
   GitLab native posting can also pass `--unique` as a backstop.
+- **GitLab — verify each inline note actually anchored (silent-unanchored guard).**
+  GitLab returns 201 even when a position is malformed/ignored (§3b warning), so a
+  successful exit code does **not** mean the comment attached. After posting, re-fetch
+  and assert every inline note carries a non-null `position`:
+  ```bash
+  glab api "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> \
+    -q '.[].notes[] | select(.body|test("corgi-review:")) | {id, anchored: (.position!=null), path: .position.new_path, line: .position.new_line}'
+  ```
+  Any `anchored:false` landed as a general comment → **delete it and repost via §3b
+  JSON** (don't leave the broken one):
+  ```bash
+  glab api --method DELETE \
+    "projects/<group>%2F<proj>/merge_requests/<n>/discussions/<discussion_id>/notes/<note_id>" --hostname <host>
+  ```
+  (GitHub doesn't have this trap — its reviews API rejects an off-diff line with a
+  loud `422` instead of posting unanchored. GitHub inline cleanup, if ever needed:
+  `gh api --method DELETE repos/<owner>/<repo>/pulls/comments/<comment_id>`.)
 - **Finding not in the diff** → can't inline → append to the summary body.
 - **Suggestion can't apply** (pure deletion, non-contiguous range, lines don't line
   up) → post a normal inline comment with the proposed code in a **plain fenced
