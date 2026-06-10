@@ -196,34 +196,35 @@ func checkDanglingDeps(c *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// checkDependencyCycles reports one issue per service that participates in a
-// cycle in the depends_on_services graph (edges to unknown services are
-// ignored — those surface as dangling deps).
+// checkDependencyCycles flags cycles of condition:-gated edges only — those
+// wait on each other and time out. Plain edges are env-injection only, so
+// cycles over them are a supported pattern.
 func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
-	adj := buildServiceDepAdjacency(c)
+	adj := buildGatedServiceDepAdjacency(c)
 	cyclic := findCyclicServices(c, adj)
 
 	var out []ValidationIssue
 	for _, n := range cyclic {
 		out = append(out, ValidationIssue{
 			Code:    ErrDependencyCycle,
-			Message: fmt.Sprintf("service %q is part of a depends_on_services cycle", n),
+			Message: fmt.Sprintf("service %q is part of a condition:-gated depends_on_services cycle — gated deps in a cycle wait on each other and time out", n),
 			Field:   fmt.Sprintf("services.%s.depends_on_services", n),
 		})
 	}
 	return out
 }
 
-// buildServiceDepAdjacency maps each service to the known services it depends
-// on. Edges to unknown services are dropped (those surface as dangling deps).
-func buildServiceDepAdjacency(c *CorgiCompose) map[string][]string {
+// buildGatedServiceDepAdjacency keeps only condition:-gated edges to known
+// services (unknown ones surface as dangling deps).
+func buildGatedServiceDepAdjacency(c *CorgiCompose) map[string][]string {
 	services, _ := composeNames(c)
 	adj := make(map[string][]string, len(c.Services))
 	for _, s := range c.Services {
 		for _, dep := range s.DependsOnServices {
-			if dep.Name != "" && services[dep.Name] {
-				adj[s.ServiceName] = append(adj[s.ServiceName], dep.Name)
+			if dep.Name == "" || !services[dep.Name] || dep.Condition == "" {
+				continue
 			}
+			adj[s.ServiceName] = append(adj[s.ServiceName], dep.Name)
 		}
 	}
 	return adj

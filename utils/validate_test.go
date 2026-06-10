@@ -65,23 +65,54 @@ func TestValidateCompose(t *testing.T) {
 			wantErr: map[string]int{ErrDanglingDep: 1},
 		},
 		{
-			name: "two-node cycle",
+			name: "ungated two-node cycle is env-only, allowed",
 			compose: &CorgiCompose{
 				Services: []Service{
 					{ServiceName: "a", DependsOnServices: []DependsOnService{{Name: "b"}}},
 					{ServiceName: "b", DependsOnServices: []DependsOnService{{Name: "a"}}},
 				},
 			},
-			wantErr: map[string]int{ErrDependencyCycle: 2},
+			wantErr: map[string]int{ErrDependencyCycle: 0},
 		},
 		{
-			name: "self cycle",
+			name: "ungated self cycle is env-only, allowed",
 			compose: &CorgiCompose{
 				Services: []Service{
 					{ServiceName: "a", DependsOnServices: []DependsOnService{{Name: "a"}}},
 				},
 			},
+			wantErr: map[string]int{ErrDependencyCycle: 0},
+		},
+		{
+			name: "gated two-node cycle errors",
+			compose: &CorgiCompose{
+				Services: []Service{
+					{ServiceName: "a", DependsOnServices: []DependsOnService{{Name: "b", Condition: "ready"}}},
+					{ServiceName: "b", DependsOnServices: []DependsOnService{{Name: "a", Condition: "started"}}},
+				},
+			},
+			wantErr: map[string]int{ErrDependencyCycle: 2},
+		},
+		{
+			name: "gated self cycle errors",
+			compose: &CorgiCompose{
+				Services: []Service{
+					{ServiceName: "a", DependsOnServices: []DependsOnService{{Name: "a", Condition: "ready"}}},
+				},
+			},
 			wantErr: map[string]int{ErrDependencyCycle: 1},
+		},
+		{
+			name: "mixed: gated loop errors, env-only loop allowed",
+			compose: &CorgiCompose{
+				Services: []Service{
+					{ServiceName: "a", DependsOnServices: []DependsOnService{{Name: "b", Condition: "ready"}}},
+					{ServiceName: "b", DependsOnServices: []DependsOnService{{Name: "a", Condition: "ready"}}},
+					{ServiceName: "c", DependsOnServices: []DependsOnService{{Name: "d"}}},
+					{ServiceName: "d", DependsOnServices: []DependsOnService{{Name: "c"}}},
+				},
+			},
+			wantErr: map[string]int{ErrDependencyCycle: 2},
 		},
 		{
 			name: "unknown driver",
