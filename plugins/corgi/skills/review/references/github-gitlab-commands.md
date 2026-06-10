@@ -204,10 +204,13 @@ rely on the auto-rewrite. Read/list/status calls through rtk are fine (§0).
   `<!-- corgi-review:<file>:<line> -->`; the summary with `<!-- corgi-review -->`.
   Dedup on the MARKER, never on the (LLM-generated, unstable) finding title.
 - **Skip duplicates before posting.** List existing comments and skip any whose
-  body already carries the matching marker:
+  body already carries the matching marker. **Always `--paginate`** — the default
+  page is ~20, so on a busy MR (many bot/review threads) a prior corgi summary or
+  finding sits on page 2+ and a non-paginated list silently misses it → you post a
+  duplicate or wrongly conclude "no existing comments":
   ```bash
-  gh api repos/<owner>/<repo>/pulls/<n>/comments -q '.[].body'
-  glab api "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> -q '.[].notes[].body'
+  gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments -q '.[].body'
+  glab api --paginate "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> -q '.[].notes[].body'
   ```
   GitLab native posting can also pass `--unique` as a backstop.
 - **GitLab — verify each inline note actually anchored (silent-unanchored guard).**
@@ -215,14 +218,16 @@ rely on the auto-rewrite. Read/list/status calls through rtk are fine (§0).
   successful exit code does **not** mean the comment attached. After posting, re-fetch
   and assert every inline note carries a non-null `position`:
   ```bash
-  glab api "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> \
+  glab api --paginate "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> \
     -q '.[].notes[] | select(.body|test("corgi-review:")) | {id, anchored: (.position!=null), path: .position.new_path, line: .position.new_line}'
   ```
   Any `anchored:false` landed as a general comment → **delete it and repost via §3b
-  JSON** (don't leave the broken one):
+  JSON** (don't leave the broken one). The note-id `DELETE` works directly off the
+  MR (no discussion-id needed) — handy for cleaning up a batch of unanchored notes:
   ```bash
   glab api --method DELETE \
-    "projects/<group>%2F<proj>/merge_requests/<n>/discussions/<discussion_id>/notes/<note_id>" --hostname <host>
+    "projects/<group>%2F<proj>/merge_requests/<n>/notes/<note_id>" --hostname <host>
+  # (or the discussions/<discussion_id>/notes/<note_id> form if you have the discussion id)
   ```
   (GitHub doesn't have this trap — its reviews API rejects an off-diff line with a
   loud `422` instead of posting unanchored. GitHub inline cleanup, if ever needed:
