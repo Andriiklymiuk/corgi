@@ -38,11 +38,15 @@ it. **Visual/layout bug** (z-index/stacking, overflow, position, breakpoint, CSS
 specificity/cascade) → jsdom can't catch it; a green unit test proves nothing.
 Don't fake one.
 
-- **Repo has a visual/e2e harness** (Playwright, Cypress, Storybook visual diff) →
-  red check **there**, same FAILS-on-base.
+- **Repo has a visual/e2e harness** (Playwright, Cypress, Storybook visual diff;
+  Maestro for Expo/RN — `references/expo-verification.md`) → red check **there**,
+  same FAILS-on-base.
 - **None** → **manual-only is legit, not a skip.** Spec + PR body carry repro steps
   - before/after screenshot; report says manually verified, no auto guard. Still
     post the **QA "what to test" comment** — a human must re-check visual.
+  - **Expo/RN service on a macOS host → not manual-only:** drive the simulator
+    with Maestro + screenshots even without a committed harness
+    (`references/expo-verification.md`).
 
 ### Complex story → superpowers
 
@@ -77,6 +81,10 @@ Stands alone. Used if present, never required:
 
 - **`superpowers:*`** (separate plugin) — complex-story engine + nicest review.
   Missing → inline. Don't block on a missing plugin.
+- **`expo:*`** (separate plugin) — when a service is an Expo/RN app, its skills
+  (`expo:expo-dev-client`, `expo:building-native-ui`, …) deepen the simulator
+  verification in `references/expo-verification.md`. Missing → the reference
+  alone suffices.
 - **A code-review command** (e.g. `/code-review`) — Phase 3.5 if present; else a
   review subagent works everywhere.
 
@@ -410,11 +418,44 @@ change, matching existing patterns.
   target suite silently never runs while another file prints PASS. Confirm the
   **intended suite ran** (assert test count > 0); match by filename substring or
   escape the path. Green exit ≠ tests ran.
+- **Scoped run misses downstream importers — prefer the repo's FULL suite.** Running
+  only the suites for the files you touched can pass while a **barrel/`index`/sibling
+  suite that imports your changed module** fails to even load — a new import you added
+  pulls an unmocked native/heavy dep into that suite's graph. corgi gives you the
+  resolved env, so the full suite is cheap: run the repo's whole `test` script via
+  `corgi test --service <svc>` (what CI runs) instead of cherry-picking files. If you
+  must scope, also run any suite that **imports** the module you changed. A green
+  cherry-picked run that skips the importer is how a red CI slips through.
 - **Edited a generated artifact's source → regen + commit the output** (even
   single-service). Touch an i18n catalog, GraphQL schema, snapshot, or other codegen
   input → run the repo's regen step (`generate:types`, `codegen`, …; in
   `package.json` / Makefile), commit the result, or the gate fails on the new
   key/type.
+- **Schema migration → author it against a LIVE DB (corgi brings the DB up), never
+  hand-write the migration file.** A change to the ORM schema (Prisma / Drizzle /
+  TypeORM / knex / Alembic / …) needs a migration **generated + applied against a real
+  database** so it's validated — a hand-authored SQL/migration file is unverified and
+  breaks CI / deploy. **The DB being down is not a reason to fake it: corgi starts it.**
+  `corgi run --services <svc> --with-deps --detach` brings up the service's
+  `db_services` (no full stack needed), then run the repo's own migrate command through
+  corgi — `corgi exec <svc> --ensure-deps -- <migrate cmd>` (the script that wraps
+  `prisma migrate dev` / `drizzle-kit generate` / `knex migrate:make` / `alembic
+  revision --autogenerate`). Commit the generated migration **and** the regenerated
+  client. `corgi stop` when done.
+- **Expo / React Native service → verify on a simulator, not just jest**
+  (`references/expo-verification.md`). Detect: `package.json` depends on `expo`
+  (or `react-native` + `ios/`/`android/`). Jest-green is not done: Metro
+  interop, native modules, permissions/entitlements, and visual layout only
+  fail on device. Native-scoped change (new native dep, `app.json`
+  plugins/permissions) → rebuild dev client (prebuild → `LANG=en_US.UTF-8 pod
+  install` → xcodebuild) and re-install; JS-only → existing build + Metro
+  reload. Drive the changed flow with **Maestro** (flows in `e2e/`, committed
+  with the PR), confirm with `simctl` screenshots, watch the Metro log for
+  runtime errors. Multi-device features (P2P/LAN): clone simulators — they
+  share the host's network/Bonjour, so the real radio path is testable. Use the
+  `expo:*` plugin skills for SDK-specific guidance when installed. On a
+  non-macOS host (no simulator) → fall back to the visual-bug manual-only path:
+  spec + PR carry repro steps; say so in the report.
 - **Webhook / callback feature** (a new inbound endpoint an external provider calls —
   Stripe, GitHub, Twilio, e-sign…) → **test with a simulated signed payload, not a
   live call:** assert the signature check + handler behaviour against a sample event
@@ -424,7 +465,14 @@ change, matching existing patterns.
   e.g. `stripe listen --forward-to <url>`) at it.
 - **Multi-repo consumer:** can't verify (codegen/typecheck) until its producer is
   committed **and running** — do Phase 4's contract-owner-first step (start producer,
-  `corgi status --ready`) BEFORE this gate on the consumer.
+  `corgi status --ready`) BEFORE this gate on the consumer. When the consumer's types
+  come from **introspecting a running producer** (GraphQL introspection codegen,
+  OpenAPI client-gen against a live server), you MUST start the producer with corgi and
+  run the real codegen against it — **never hand-edit the generated client/types as a
+  shortcut because the producer is down.** A hand-edited generated file drifts from the
+  real schema, isn't validated, and the next real `codegen` run silently overwrites it.
+  Producer down → bring it up (`corgi run --services <producer> --with-deps --detach`),
+  don't fake the output.
 - **Stop rule:** can't pass after ~2 honest tries → STOP, leave un-pushed, report
   `needs attention` + failure, rest ships. Never push red.
 - **Re-tier mid-flight:** adjustment reveals real design → STOP, bump to feature,
