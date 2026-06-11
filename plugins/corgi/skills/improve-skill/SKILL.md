@@ -33,6 +33,9 @@ Pinpoint, concrete. No vague "could be tighter."
 1. **Name the gap in one sentence**, grounded in the session. Fuzzy → confirm first.
 2. **Read target `SKILL.md`.** Find where it belongs. **Already covered?** → sharpen
    wording / close the loophole, not a duplicate bullet.
+   **Symlink check:** target folder, `SKILL.md`, or its plugin dir a symlink → say so,
+   resolve the real path, edit the real target. The diff (and any commit) lands in THAT
+   repo, not the one you're standing in — name it in the preview.
 3. **Draft minimal edit** in the skill's voice + density: one bullet, a tightened line,
    a red-flag, a closed loophole. Not a rewrite. `description` = triggers only, never a
    workflow summary (agents follow it instead of reading the body).
