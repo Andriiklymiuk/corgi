@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 )
@@ -16,7 +17,7 @@ func checkPortConflicts(ports []portOwnerInfo, isBusy func(int) bool, owner func
 		}
 		who := owner(p.Port)
 		if who == "" {
-			who = "unknown (lsof unavailable)"
+			who = fmt.Sprintf("an unidentified process (try: sudo lsof -nP -i:%d)", p.Port)
 		}
 		conflicts = append(conflicts, fmt.Sprintf("port %d busy (%s) — held by %s", p.Port, p.Desc, who))
 	}
@@ -45,10 +46,16 @@ func portPreflight(corgi *utils.CorgiCompose, killPort bool) error {
 	ports := collectServicePorts(corgi)
 	if killPort {
 		for _, p := range ports {
-			if utils.IsPortListening(p.Port) {
-				if err := utils.KillPortOwner(p.Port); err != nil {
-					utils.Infof("⚠️  could not free port %d: %v\n", p.Port, err)
-				}
+			if !utils.IsPortListening(p.Port) {
+				continue
+			}
+			if err := utils.KillPortOwner(p.Port); err != nil {
+				utils.Infof("⚠️  could not free port %d: %v\n", p.Port, err)
+				continue
+			}
+			// wait for the socket to release before the re-check below.
+			if !utils.WaitPortFree(p.Port, 3*time.Second) {
+				utils.Infof("⚠️  port %d still busy after kill\n", p.Port)
 			}
 		}
 	}

@@ -6,11 +6,41 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 	"time"
 )
+
+// lsofPath resolves lsof, falling back to absolute locations when PATH omits
+// /usr/sbin (GUI/launchd/IDE shells). Returns "" if lsof is absent.
+func lsofPath() string {
+	if p, err := exec.LookPath("lsof"); err == nil {
+		return p
+	}
+	for _, p := range []string{"/usr/sbin/lsof", "/usr/bin/lsof", "/sbin/lsof", "/bin/lsof"} {
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+// WaitPortFree polls until port is free or timeout elapses. A kill doesn't
+// release the socket synchronously, so callers must wait before re-checking.
+func WaitPortFree(port int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if !IsPortListening(port) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
 
 // IsPortListening returns true if something is listening on localhost:<port>.
 // Used both by `corgi doctor` (expects false) and `corgi status` (expects true).
@@ -27,8 +57,12 @@ func IsPortListening(port int) bool {
 // port, or empty string if nothing is listening or the platform can't answer.
 // macOS/Linux only — uses lsof, which isn't on Windows.
 func PortOwner(port int) string {
+	lsof := lsofPath()
+	if lsof == "" {
+		return ""
+	}
 	out, err := exec.Command(
-		"lsof", "-nP",
+		lsof, "-nP",
 		fmt.Sprintf("-iTCP:%d", port),
 		"-sTCP:LISTEN",
 	).Output()

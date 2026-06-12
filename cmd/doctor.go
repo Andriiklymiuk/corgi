@@ -397,7 +397,7 @@ func runPortChecks(corgi *utils.CorgiCompose) bool {
 		if utils.IsPortListening(p.Port) {
 			owner := utils.PortOwner(p.Port)
 			if owner == "" {
-				owner = "(unknown — lsof unavailable)"
+				owner = fmt.Sprintf("(unidentified — try: sudo lsof -nP -i:%d)", p.Port)
 			}
 			fmt.Printf("  %s ❌ %d busy — needed for %s — held by: %s%s\n",
 				art.RedColor, p.Port, p.Desc, owner, art.WhiteColor)
