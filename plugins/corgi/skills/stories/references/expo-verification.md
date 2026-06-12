@@ -27,6 +27,18 @@ When unsure: did `package.json` native deps or `app.json` change? → native.
 
 ## 2. Build + run (iOS simulator, macOS host)
 
+**Pick a current-OS simulator.** Verifying on a stale-OS sim wastes a build and
+shows non-representative behavior (OS-specific layout/permission bugs you'd never
+ship into). Choose the newest installed runtime, and create one if the only sims
+are old:
+
+```bash
+xcrun simctl list runtimes | grep -i ios          # → highest version available
+# none recent, or only an old-OS sim? create one on the newest device + runtime:
+xcrun simctl create "<name>" <newest-iPhone-devicetype> <newest-ios-runtime>
+xcrun simctl delete <stale-udid>                  # don't leave wrong-OS sims around
+```
+
 ```bash
 # Metro — exactly ONE instance per app; a stale Metro for the same app can hang
 # builds and serve old bundles. Check first, reuse or kill.
@@ -79,6 +91,11 @@ Quirks that WILL bite (each cost a failed run once):
 - **Watch the Metro log** (`/tmp/metro-<svc>.log`) after each flow — runtime
   `WARN`/`ERROR` (e.g. a swallowed exception behind an error state in the UI)
   shows up there, not in Maestro output.
+- **A slow screen-open is a finding, not a wait.** If a heavy/native screen takes
+  seconds to appear, that's a bug to fix, not a quirk to tolerate: profile the
+  mount — per-element work built N× (an image / material / layout regenerated per
+  item) that should be built once and reused is the usual cause — and add a loader
+  so navigation never blocks on it.
 
 ## 4. Multi-device features (P2P / LAN / lobby)
 
