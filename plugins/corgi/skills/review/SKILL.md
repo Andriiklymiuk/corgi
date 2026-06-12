@@ -218,6 +218,9 @@ review untouched code.
 - Repo-standard / convention violations (names, patterns, style).
 - Scope creep (changes outside the ticket's stated scope).
 - Perf footguns.
+- **User-facing copy that names internal tech** — a string/label exposing an
+  engine, library, vendor, or infra detail to end users (`nit`); suggest selling
+  the user benefit, not the mechanism. Skip if the ticket is about that copy.
 - Ticket-intent mismatch (diff doesn't do what the ticket asked).
 
 **Temper with the intent note** — before emitting any finding, check it against
