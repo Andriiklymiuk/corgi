@@ -33,6 +33,21 @@ adjustment/bug fast path; complex stories add superpowers checkpoints.
 **Tier ≠ span.** Complexity axis vs single/multi-service (Phase 4). Multi-service
 adjustment is still an adjustment. Most stories = adjustments → fastest path.
 
+**Express lane — micro adjustment.** Adjustment whose whole change is a handful of
+files you can already name (asset/copy/flag/style swap, one component) → lighter
+steps, same guardrails:
+
+- **No `Explore` subagent** — grep + read the 2–3 files inline; a subagent returns a
+  full report to map one component, the orchestrator's own search is cheaper. Reserve
+  `Explore` for unclear surface or real fan-out.
+- **No local `docs/stories/*.md`** — the `## Spec` tracker comment IS the spec, don't
+  write both (multi-service/feature still gets the file).
+- **Right-size proof** — gate once (typecheck/lint/test) + the single proof the change
+  needs (visual swap → one screenshot/serve check). Don't stack every proof.
+
+Still mandatory: gate sign-off, spec + QA comments, branch, per-story review, draft
+PR, report. Unsure it's micro → take the normal path.
+
 **Bug sub-type — logic vs visual.** "FAILS on base" assumes a unit test can _see_
 it. **Visual/layout bug** (z-index/stacking, overflow, position, breakpoint, CSS
 specificity/cascade) → jsdom can't catch it; a green unit test proves nothing.
@@ -222,7 +237,8 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
 
 1. **Cluster** by **service + area** before dispatching.
 2. **One `Explore` sweep per area, not per story** — all that area's questions in
-   one agent. Never per-story over the same files.
+   one agent. Never per-story over the same files. (Micro adjustment → no subagent at
+   all; grep inline — _Express lane_.)
 3. **Orchestrator = the cache.** Subagents can't share context mid-flight: scope
    sweeps to not overlap, collect each into one **investigation note** (scratch —
    memory or a gitignored file), specs reference it.
@@ -239,7 +255,8 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
 
 ### Write the spec — every story
 
-`docs/stories/<issue-key>-<slug>.md`, actionable or not:
+`docs/stories/<issue-key>-<slug>.md`, actionable or not (micro adjustment → skip the
+file; the `## Spec` comment is the spec — _Express lane_):
 
 - Problem (quote issue) + **which services** (drives branch/PR count).
 - **Tier** — adjustment/bug/feature.
