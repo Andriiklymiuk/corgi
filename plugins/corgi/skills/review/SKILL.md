@@ -544,7 +544,11 @@ P4 order) and cross-link the two replies. Then one combined report (6).
    P3 worktree rules). Gate: `corgi test --service` / `corgi exec` + scoped self-review
    (`stories` P3.5). **Minimum diff — only what the threads ask.**
 4. **Reply + resolve per thread** (§5) — what changed (commit/line), or why you pushed
-   back. **Resolve only what you addressed**; a pushed-back thread stays **open**.
+   back. **Reply INSIDE the reviewer's thread** — GitHub `in_reply_to`, GitLab
+   `POST …/discussions/<id>/notes`; never `gh pr comment` / `glab mr note create`,
+   which post a standalone PR-level note detached from the thread (reads as ignoring
+   the reviewer, and resolving leaves their question visually unanswered).
+   **Resolve only what you addressed**; a pushed-back thread stays **open**.
    **Durable convention → memory (confirm first).** If a resolved thread settles a
    lasting convention/decision for the stack and `.corgi/memory/` exists, draft a
    `decision` fact, show it, and write it on OK (`corgi memory add --type decision …`,

@@ -291,6 +291,11 @@ glab api --method PUT \
 
 Keep an unaddressed / pushed-back thread **open** — only resolve what you applied.
 
+**Anti-pattern:** replying with `gh pr comment` / `glab mr note create -m`. Both post
+a **standalone PR/MR-level note**, not a thread reply — the reviewer's thread stays
+visually unanswered and the reply floats detached. Always use the thread forms above
+(`in_reply_to` / `discussions/<id>/notes`).
+
 ---
 
 ## Context
