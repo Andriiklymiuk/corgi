@@ -116,7 +116,10 @@ agents, tracker MCP.
      `glab repo view`). `<base>` for branch, red test, PR target.
    - Test/typecheck/lint/build: discover from `package.json` scripts, `Makefile`,
      `pyproject`/`go.mod`, service `start`/`beforeStart`/`scripts`. Don't assume a
-     runner.
+     runner. **Also find the CI gate the PR will actually face** — a coverage-threshold
+     script (`test:cov:check`, a `check-coverage` step, a `--coverage` floor) or the CI
+     workflow (`.github/workflows`, `.gitlab-ci.yml`). Note it; Phase 3 runs that same
+     gate before the PR, not just a scoped test.
 4. **Detect tracker.** `linear.app` URL → Linear (`mcp__linear-server__*`).
    `atlassian.net`/Jira → Jira (`mcp__atlassian__*`; `getAccessibleAtlassianResources`
    for sites). Bare key + both connected → ask.
@@ -426,6 +429,14 @@ change, matching existing patterns.
   `corgi test --service <svc>` (what CI runs) instead of cherry-picking files. If you
   must scope, also run any suite that **imports** the module you changed. A green
   cherry-picked run that skips the importer is how a red CI slips through.
+- **Run the repo's CI gate, not just tests — a coverage threshold counts.** Many repos
+  fail CI on a **per-changed-file coverage floor** (`test:cov:check` / `check-coverage`),
+  computed over the diff vs `<base>` and often **aggregated across all changed files** —
+  one 0%-covered file sinks the average. A green test run (scoped or full) says nothing
+  about coverage; run that exact gate before pushing (Phase 0 found it). Key trap:
+  **touching a previously-UNTESTED file makes it a "changed file"** subject to the floor —
+  a pure refactor/extraction into (or an edit of) an uncovered file fails the gate though
+  behaviour is unchanged. Editing an uncovered file = add a test for it, or don't touch it.
 - **Edited a generated artifact's source → regen + commit the output** (even
   single-service). Touch an i18n catalog, GraphQL schema, snapshot, or other codegen
   input → run the repo's regen step (`generate:types`, `codegen`, …; in
@@ -558,7 +569,9 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
   custom, from `list_issue_statuses`); Jira the transition whose target is named
   _In Review_/_Code Review_ (`getTransitionsForJiraIssue`). **No such state → leave
   In Progress.** Idempotent; skip no-ticket/blocked. Multi-repo → move once **all**
-  PRs are open, not per-repo.
+  PRs are open, not per-repo. **Best-effort:** a tracker↔forge automation may treat a
+  **draft** PR as _in progress_ and revert this move — the review state only sticks once
+  the PR is marked _ready_. Set it once; don't fight a revert.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
 - **Run-locally line in the body** — the same one-paste
   `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report) so a
