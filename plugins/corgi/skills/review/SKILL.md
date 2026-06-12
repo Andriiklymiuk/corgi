@@ -300,6 +300,13 @@ direction from `corgi-compose.yml` (`depends_on_services`, `exports`,
   compose doesn't encode the dependency (an HTTP response-field contract usually
   isn't a `depends_on` edge), infer it from the diffs: the PR that **adds/changes
   the field** is the producer → merge it first.
+- **Shared-registry collision** — two+ PRs in the set each *append in parallel* to
+  the same shared list (an enum / string-literal union, a generated client-types
+  file, a locale bundle, a snapshot fixture), not a producer/consumer edge. Additive
+  in meaning, but they **conflict textually once the first lands**. Call it out with
+  a land order so only the last sibling rebases — keeping **all** entries and
+  **regenerating** generated artifacts (snapshots, codegen output) rather than
+  hand-merging them.
 
 A contract finding spans two sides, so it carries a **per-side anchor list** —
 `anchors: [{ pr, file, line, side }]`, one entry per affected PR (the producer's
