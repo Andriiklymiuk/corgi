@@ -33,9 +33,14 @@ adjustment/bug fast path; complex stories add superpowers checkpoints.
 **Tier ≠ span.** Complexity axis vs single/multi-service (Phase 4). Multi-service
 adjustment is still an adjustment. Most stories = adjustments → fastest path.
 
-**Express lane — micro adjustment.** Adjustment whose whole change is a handful of
-files you can already name (asset/copy/flag/style swap, one component) → lighter
-steps, same guardrails:
+**Express lane — small-surface adjustment.** Reuses the Phase 2 fast-path's _tier +
+span_ bar — **adjustment/bug, single service, no cross-service contract** — but NOT
+its "one item / one sentence / no open question" half: that gates the approval
+_pause_; this gates _machinery_. They're independent — a small change with an open
+design question (which variant? what scope?) still takes the express lane: skip the
+subagent, just don't skip the gate. Fires whenever the surface is locatable up front
+— one component or a few files you can name (asset/copy/flag/style swap, small
+wiring). Lighter steps, same guardrails:
 
 - **No `Explore` subagent** — grep + read the 2–3 files inline; a subagent returns a
   full report to map one component, the orchestrator's own search is cheaper. Reserve
@@ -46,7 +51,8 @@ steps, same guardrails:
   needs (visual swap → one screenshot/serve check). Don't stack every proof.
 
 Still mandatory: gate sign-off, spec + QA comments, branch, per-story review, draft
-PR, report. Unsure it's micro → take the normal path.
+PR, report. Unsure on scope → a quick inline grep settles it; don't default to the
+heavy path.
 
 **Bug sub-type — logic vs visual.** "FAILS on base" assumes a unit test can _see_
 it. **Visual/layout bug** (z-index/stacking, overflow, position, breakpoint, CSS
