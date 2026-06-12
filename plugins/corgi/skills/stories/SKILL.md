@@ -608,6 +608,10 @@ between stories.
 - **Blocked / failed** → no link, one line:
   `[<key>] <Service>: BLOCKED — <decision needed>` (or `needs attention — <reason>`, +
   the worktree `/tmp` path if partial work is parked there).
+- **Review-channel blurb (only when asked)** — user asks for a message for the
+  team's review channel → exactly two lines: `<Service>: <short title>` then the
+  bare PR/MR link. No pitch, no root-cause paragraph, no emoji, no "please review"
+  — the link unfurls; the channel convention is terse.
 
 ```
 [ABC-123] web: Remove address step from mobile signup

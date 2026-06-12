@@ -159,6 +159,11 @@ Distill into a compact **intent note** the review uses two ways in P3:
 
 No ticket linked → skip; review on repo standards alone.
 
+Ticket resolves but is **clearly unrelated** to the diff (stale/recycled key in
+the branch or title) → treat as no-ticket: review on standards alone, and add a
+one-line summary note about the mislink — tracker automation will bind the PR
+to the wrong story until the key is fixed.
+
 ## Phase 2 — Standards note (once per repo)
 
 Build **one compact, distilled** standards note **per repo** — same-repo PRs
@@ -357,6 +362,12 @@ one-liner (problem + fix), not a robot paragraph; match the repo's comment densi
 The *edit* option still lets the user trim more, but the default should already be
 this lean — they shouldn't have to ask.
 
+Severity (`blocking|nit`) is triage metadata for the preview and the report —
+never print the label in a posted comment body. State the fact and the fix
+options ("this is what's failing the pipeline: …") and let the team assign
+severity; a public "blocking" tag from a reviewer-bot reads as a verdict, not
+a review.
+
 Then ask (one prompt for the whole set):
 
 > **post** all / **edit** (drop or keep individual findings, tweak wording) /
@@ -423,6 +434,9 @@ LLM-generated title:**
 - **One rule for a finding whose line no longer matches head: fold it into the
   summary** (so the user still sees it). Reserve "skip" only for threads the forge
   has already marked outdated/resolved — never silently drop a live finding.
+- **User rejects findings after posting** → delete those notes by id and edit
+  the tagged summary so it matches the trimmed set (keep the markers). Never
+  leave the summary advertising findings that no longer exist below it.
 
 **Posting scenarios:**
 
