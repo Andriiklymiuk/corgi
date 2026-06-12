@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -45,13 +46,23 @@ func KillPortOwner(port int) error {
 	if runtime.GOOS == "windows" {
 		return exec.Command(name, args...).Run()
 	}
-	out, err := exec.Command(name, args...).Output()
-	if err != nil {
-		return err
+	lsof := lsofPath()
+	if lsof == "" {
+		return fmt.Errorf(
+			"lsof not found on PATH or in /usr/sbin, /usr/bin, /sbin — cannot identify the process on port %d",
+			port)
 	}
+	// lsof exits non-zero when nothing matches — decide on the parsed pids.
+	out, _ := exec.Command(lsof, args...).Output()
 	pids := strings.Fields(strings.TrimSpace(string(out)))
 	if len(pids) == 0 {
-		return nil
+		return fmt.Errorf(
+			"no process found listening on port %d (it may be owned by another user — try: sudo lsof -nP -i:%d)",
+			port, port)
 	}
-	return exec.Command("kill", pids...).Run()
+	if err := exec.Command("kill", pids...).Run(); err != nil {
+		return fmt.Errorf("failed to kill pid(s) %s on port %d: %w",
+			strings.Join(pids, ","), port, err)
+	}
+	return nil
 }
