@@ -1,9 +1,9 @@
 ---
 name: improve-skill
-description: Use when the user wants to refine an EXISTING agent skill from what happened this conversation — "improve my <X> skill", "update the skill so next time it does Y", "the skill should've caught Z", "fix the stories/review/debug skill", or hands you a SKILL.md / skill folder to sharpen. Lived failure or friction in this session is the evidence. NOT for a brand-new skill (superpowers:writing-skills), corgi-compose (corgi skill), or normal code edits.
+description: Use when the user wants to refine OR create an agent skill from what happened this conversation — "improve my <X> skill", "update the skill so next time it does Y", "the skill should've caught Z", "fix the stories/review/debug skill", "make a skill for <workflow we just did>", or hands you a SKILL.md / skill folder to sharpen. Lived failure or friction (or a workflow you just drove) in this session is the evidence. If the path points at a skill that does NOT exist yet, it SCAFFOLDS a new one there from the same evidence (a big or discipline-enforcing skill defers to superpowers:writing-skills). NOT for corgi-compose (corgi skill) or normal code edits.
 ---
 
-# Improve a skill
+# Improve or scaffold a skill
 
 ## Overview
 Skill improves only from **real observed gap** — thing an agent (often you, just now)
@@ -14,11 +14,13 @@ edit, stripped of workspace-specific detail.
 **Evidence, never imagination.** No "while I'm here" adds. No session moment (or
 explicit user ask) behind a change → don't make it.
 
-## Two modes — branch on path
+## Three modes — branch on path + whether it exists
 - **No path** → **summary only, NO edit.** Dump a conversation digest of gaps + fixes,
   stop. User points at a skill later.
-- **Path given** (skill folder / `SKILL.md`) → **edit mode.** Close the gap in that
-  skill (Method).
+- **Path to an EXISTING skill** (folder / `SKILL.md`) → **edit mode.** Close the gap in
+  that skill (Edit mode).
+- **Path to a skill that does NOT exist yet** → **create mode.** Scaffold it from the
+  session evidence + the user's intent (Create mode). Confirm it's genuinely new first.
 
 ## Summary mode (no path)
 Edit nothing. Return:
@@ -52,6 +54,32 @@ Big or discipline-enforcing change (needs baseline / pressure testing) +
 `superpowers:writing-skills` installed → use it. This skill = fast path for a precise
 edit from a gap you lived.
 
+## Create mode (path given, target missing)
+The named folder / `SKILL.md` doesn't exist — the user wants a skill BORN from what just
+happened (this session's friction, or a workflow you just drove end to end).
+1. **Confirm it's genuinely new** — scan the skills dir; not a typo / rename of an
+   existing skill. Close match → it's an edit on that one, not a create.
+2. **Name the skill + its trigger** in one sentence: what it's for, the phrases that fire
+   it. Fuzzy → confirm before scaffolding.
+3. **Scaffold `SKILL.md`** at the path, matching the plugin's voice + density (read a
+   sibling skill): frontmatter `name` (the folder name) + a `description` that is
+   **triggers only** (phrases the user will say, never a workflow summary), then a tight
+   body — Overview, the steps / modes, Guardrails, Red flags — every line grounded in the
+   lived evidence, no filler. Pair a command file ONLY if the plugin gives each skill one
+   (match its naming).
+4. **De-leak — non-negotiable.** Same as edit: strip every workspace / company / service /
+   ticket / secret / internal-URL token; generalize to `<svc>` / `<scheme>` / placeholders.
+   A real example is fine only after every identifying token is gone.
+5. **Preview the new file(s) + one-line rationale. Gate.** Wait for OK before write — a
+   shared / committed skill repo. **Symlink check** as in edit: resolve + write the real
+   target, name the repo the diff lands in.
+6. **Check after write:** frontmatter valid, description leads with triggers, body in
+   voice, zero workspace tokens. One skill per run.
+
+Big or discipline-enforcing skill (needs baseline + pressure testing) +
+`superpowers:writing-skills` installed → use it; this create path is the fast scaffold for
+a skill you can already describe from lived evidence.
+
 ## Guardrails
 - **Evidence-only** — every change traces to a session moment or explicit ask.
 - **Minimum diff** — close the gap, don't refactor around it.
@@ -67,3 +95,7 @@ edit from a gap you lived.
 - Edit before naming the gap → name first.
 - Rule already there → sharpen, don't duplicate.
 - Edit when no path given → wrong mode, switch to summary.
+- Scaffolding a new skill that nearly duplicates an existing one → it's an edit on that
+  one, not a create.
+- Creating from an imagined workflow with no session evidence → only scaffold what you
+  actually drove or the user explicitly described.
