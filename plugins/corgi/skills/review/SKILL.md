@@ -377,8 +377,8 @@ a review.
 
 Then ask (one prompt for the whole set):
 
-> **post** all / **edit** (drop or keep individual findings, tweak wording) /
-> **cancel**
+> **post** all / **fix** (own PR — apply findings + push, skip posting) /
+> **edit** (keep/drop/reword findings) / **cancel**
 
 *Edit* = interactive pruning — present each finding; user keeps, drops, or
 rewrites it; re-preview before proceeding. Not every finding has to go up. When a
@@ -386,6 +386,12 @@ PR already has a corgi summary from a prior run, the gate also asks **update the
 existing summary vs post new** (default, and under `--yes`: **update**). Zero
 findings → no *edit* option (nothing to prune); just post the clean summary or
 cancel.
+
+*Fix* (own PR only — you can push) — owner wants findings applied, not posted: take
+Mode B's apply path on the **in-hand** findings (checkout the PR's own branch,
+minimum-diff fix each valid one, re-gate, push). Don't post-then-address; don't
+re-read threads — findings already in hand. Pushed-back finding → skip, note why.
+Not your PR → no *fix* (no push access); post or cancel.
 
 - Gate **on** by default — posting is outward-facing.
 - `--yes` skips the gate and posts immediately.
