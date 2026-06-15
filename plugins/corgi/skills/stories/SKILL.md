@@ -487,9 +487,15 @@ change, matching existing patterns.
   with the PR), confirm with `simctl` screenshots, watch the Metro log for
   runtime errors. Multi-device features (P2P/LAN): clone simulators — they
   share the host's network/Bonjour, so the real radio path is testable. Use the
-  `expo:*` plugin skills for SDK-specific guidance when installed. On a
-  non-macOS host (no simulator) → fall back to the visual-bug manual-only path:
-  spec + PR carry repro steps; say so in the report.
+  `expo:*` plugin skills for SDK-specific guidance when installed; the
+  same-plugin **`mobile`** skill is the canonical device-driving loop + the build
+  gotchas (Maestro flow-as-file + `--device`, non-login `LANG` pod builds,
+  `--clear` redbox, apple-targets extension creds + App Group, stale autolinking,
+  tee/exit-code masking) — invoke it for the VERIFY. **Never run its
+  local-build → TestFlight/Play *ship* from a story** — shipping is a separate,
+  owner-approved step, only when the ticket/spec explicitly calls for a release.
+  On a non-macOS host (no simulator) → fall back to the visual-bug manual-only
+  path: spec + PR carry repro steps; say so in the report.
 - **Webhook / callback feature** (a new inbound endpoint an external provider calls —
   Stripe, GitHub, Twilio, e-sign…) → **test with a simulated signed payload, not a
   live call:** assert the signature check + handler behaviour against a sample event

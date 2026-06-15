@@ -1,5 +1,11 @@
 # Expo / React Native service — verify on a simulator, not just jest
 
+> The same-plugin **`mobile`** skill is the canonical device-driving loop + the
+> build/Maestro gotchas — invoke it for the actual drive + screenshots. This file
+> is the build-time "is the Expo change verified?" checklist; it defers there.
+> (Don't run mobile's local-build → store *ship* from a story — that's a separate,
+> owner-approved step.)
+
 A service is an **Expo app** when its `package.json` depends on `expo` (or
 `react-native` with `ios/`/`android/` dirs). For these, a green jest run is NOT
 proof the story works: Metro module interop, native modules, permissions,
