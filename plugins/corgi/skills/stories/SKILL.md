@@ -195,6 +195,11 @@ drifted, rewrite stale parts, keep what holds. Nothing found → spec from scrat
 the suspect lines. Prior fix present but bug persists → inert (overridden, lost
 specificity, runtime style wins, wrong selector, behind a flag). Explain _why_ it's
 dead, revive/correct it — don't stack a second half-fix. Note the why in root-cause.
+Re-opened ticket whose prior fix already **merged**? Read the prior PR/MR's state
+(`gh pr view <n> --json state` / `glab mr view`): MERGED + closed → its branch is
+dead (often deleted) and the fix already sits on `<base>` — branch **fresh off
+`<base>`**, never reopen/continue the merged branch; its old `## Spec` comment is the
+insufficient fix, so update that comment, don't follow it.
 
 ### Already shipped? — verify before spec or branch
 
