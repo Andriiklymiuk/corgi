@@ -47,6 +47,11 @@ across a long run of many screens × locales × devices.
 - **Locale switch is in-app**, not external — the locale store is MMKV (not writable from
   the host). Open Settings, tap the language. **Language autonyms are stable across
   locales** (e.g. "Français" reads the same in every UI language) → tap by autonym.
+- **If the locale store IS host-writable (AsyncStorage/zustand-persist), bake the locale
+  into the relaunch instead.** A FRESH mount renders **native tab-bar labels** (`NativeTabs`)
+  in the target language; an in-app switch updates the JS content but leaves NativeTabs'
+  **cached native labels stale** (mixed-language tab bar in the shot). Set the persisted
+  locale key in the same manifest patch as the seed (below), then relaunch.
 - **Persisted game state needs recreating per locale.** A life counter / saved match keeps
   the player names from when it was first created → shows the wrong language. Recreate it
   in-flow (open the mode → start a fresh game) so names localize; dismiss any first-run
@@ -55,6 +60,23 @@ across a long run of many screens × locales × devices.
   ("Skip" / localized) once. Watch out: onboarding often contains the **app name**, so a
   home-anchor `extendedWaitUntil` *false-passes* on it — skip onboarding before relying on
   the anchor.
+
+**Seed realistic content host-side, not via an in-app route.** Empty apps shoot empty (a
+tracker's blank calendar, a zero-state dashboard). The tempting fix — a throwaway
+`<scheme>://seed` route that fills the store — fails on real apps: a root `NativeTabs` (or
+fixed `Stack`) has **no container to render an ad-hoc route**, expo-router **excludes
+`_`-prefixed files** from routing, and a route added mid-session only registers after a
+Metro **cold restart**. Patch the persisted store from the host instead, then relaunch:
+- zustand-persist / AsyncStorage apps store values **inline as JSON strings** in
+  `…/Library/Application Support/<bundle>/RCTAsyncLocalStorage_V1/manifest.json` (each key
+  + a `<key>__mtime`). Read it, overwrite the data / theme / locale blobs, write back, then
+  `simctl terminate` + `launch` so the store rehydrates.
+- **Seed time-relative data into the visible window** — an entry on the **1st of the current
+  month** lands on-screen on the calendar, not off in history. Bake the **brand appearance**
+  (light/dark + accent) into the theme blob so the deck matches the palette regardless of
+  the device setting.
+- MMKV-backed stores aren't host-writable → fall back to driving the UI with Maestro to
+  create the data.
 
 **Per-device gotchas:**
 - **iPad SpringBoard "Open in app?" confirm fires on every `simctl openurl`** (not on
@@ -73,6 +95,16 @@ across a long run of many screens × locales × devices.
   the dock without losing UI. Gboard may crash-loop on the tablet AVD ("Gboard keeps
   stopping") → dismiss + `pm disable-user com.google.android.inputmethod.latin`.
 - **Clean status bar:** iOS `xcrun simctl status_bar <dev> override --time 9:41 --batteryState charged --batteryLevel 100 …`; Android SystemUI demo mode (`am broadcast -a com.android.systemui.demo …`). Force dark to match (`simctl ui <dev> appearance dark` / `cmd uimode night yes`).
+
+**Expo dev-client (dev build) gotchas:**
+- **Hide the floating "Tools" FAB or it lands in every shot.** Add
+  `["expo-dev-client", { showFloatingButton: false }]` to `app.config` plugins, and/or
+  toggle **"Tools button"** off in the dev menu (persists per install — do it once before
+  the run; survives relaunch).
+- **Load the build from Metro deterministically:** `simctl openurl <udid>
+  "<scheme>://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"`, then tap the
+  SpringBoard **"Open?"** confirm (Maestro `tapOn` the localized "Open"). Plain
+  `simctl launch` **reuses the cached bundle** — it won't pick up a new route / fresh JS.
 
 **Temporary app edits for clean DEV captures (revert after, flag to the user):**
 - Silence the dev LogBox toast: `LogBox.ignoreAllLogs(true)` at the entry.
@@ -149,7 +181,7 @@ diff per locale beats hand-editing a dozen `.txt` files; keep keys at parity acr
 - Snaps drifting to home/settings deep into a run → device degraded; stabilize per locale / hard-reboot.
 - Uploading raw 1080×2400 phone shots to Play → over 2:1, rejected; frame to 1080×1920.
 - Uploading a 6.3" iPhone capture to App Store → not a valid slot; scale to 6.9".
-- Reusing vela's Keychain item for `deliver` → that's an `altool` app-specific password; deliver needs an API key or the real Apple-ID password.
+- Reusing an `altool`/Transporter app-specific password from Keychain for `deliver` → deliver/spaceship can't use that; it needs an API key or the real Apple-ID password.
 
 ## See also
 - **[`mobile`](../mobile/SKILL.md)** — the single-device drive loop (deep links, Maestro
