@@ -304,6 +304,12 @@ If you use [Claude Code](https://claude.com/claude-code), install the plugin:
 /plugin install corgi@corgi
 ```
 
+Using another agent (Cursor, Codex, Copilot, …)? Install the skills via [skills.sh](https://www.skills.sh):
+
+```
+npx skills add Andriiklymiuk/corgi
+```
+
 Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. The plugin adds slash-commands plus auto-invoking skills that cover the whole loop — plan, run, debug, suggest, ship, review:
 
 - **Plan the work — `/corgi-tracker`.** Standup / status, triage, or decompose an epic into tickets — from Linear or Jira. Its edge over the tracker's own UI: it ties each ticket to its **real code state** — branch, draft/open/merged PR, CI — across every service, so drift like "In Progress but no branch" or "Todo but the PR already merged" surfaces. Read-only until one confirm gate guards any tracker write; hands the tickets it shapes to `/corgi:stories`.
