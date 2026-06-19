@@ -1,6 +1,6 @@
 ---
 name: mobile
-description: Use when verifying a mobile (Expo / React Native) change on a real device — "test on the emulator", "run it on the simulator", "screenshot the app", "drive it with Maestro", "does this screen render", "check it on Android/iOS", "tap through the app", "is the animation right" — or when a local iOS/Android build + TestFlight/Play ship needs driving. Covers the device-driving loop (deep links, Maestro flows, screenshots, sips crops) AND the gotchas that actually bite — Maestro ASCII-only input, non-login-shell pod builds, Metro `--clear` redbox desync, native-needs-rebuild, SceneKit magenta-at-runtime, square particles, apple-targets widget/App-Clip extension creds + App Group capability, stale Android autolinking package, low-disk local-build ENOSPC, Maestro `launchApp` resuming the last screen. NOT for writing the app code (normal edits) or authoring corgi-compose (corgi skill).
+description: Use when verifying a mobile (Expo / React Native) change on a real device — "test on the emulator", "run it on the simulator", "screenshot the app", "drive it with Maestro", "does this screen render", "check it on Android/iOS", "tap through the app", "is the animation right" — or when a local iOS/Android build + TestFlight/Play ship needs driving. Covers the device-driving loop (deep links, Maestro flows, screenshots, sips crops) AND the gotchas that actually bite — Maestro ASCII-only input, non-login-shell pod builds, Metro `--clear` redbox desync, native-needs-rebuild, SceneKit magenta-at-runtime, square particles, apple-targets widget/App-Clip extension creds + App Group capability, stale Android autolinking package, low-disk local-build ENOSPC, native dep/ABI skew → dyld symbol-missing launch crash, Maestro `launchApp` resuming the last screen. NOT for writing the app code (normal edits) or authoring corgi-compose (corgi skill).
 ---
 
 # Verify mobile change on device
@@ -63,6 +63,13 @@ before "works".
   soft radial (white→transparent) puff texture → smoke/fire/splash read as round puffs.
 - **`expo-doctor` non-zero during a build usually benign** (peer-dep + RN-directory-metadata
   warnings) — doesn't fail the build or the submit.
+- **Native dep version/ABI skew → `DYLD Symbol missing` CRASH AT LAUNCH.** A native module
+  built against a different core ABI than the one linked — usually one dep drifted off the
+  SDK's pinned version, a single patch is enough → `Termination Reason: DYLD … Symbol not
+  found … (terminated at launch; ignore backtrace)`. Build + store upload pass CLEAN, no JS
+  runs, the build just won't open. PRE-SHIP gate: run the SDK's version-alignment check (Expo:
+  `npx expo install --check`) and pin the offender EXACT — a `~` range re-resolves it right
+  back up — then reinstall + clean rebuild.
 - **System dialog over the app blocks Maestro** — iCloud "verify password" re-auth, a push
   / ATT / location permission — reads as `element not found` (UI occluded, not gone).
   Dismiss step taps the SYSTEM button ("Not Now" / "Allow"), not the app's "Cancel" /
@@ -119,6 +126,11 @@ target — own bundle id, profile, capabilities. Each bites once:
 - **Verify-before-ship:** native visual changes (shaders, particles, a 3D scene) invisible
   to the compiler — a real on-device render is the only proof. Magenta + square particles
   pass the build.
+- **A build that compiles + uploads can still DIE AT LAUNCH** — a native version/ABI-skew
+  (dyld symbol-missing) crash shows in NEITHER the build NOR the store upload, only when the
+  build OPENS on a device. Install + open it ONCE before trusting the ship; if it bounces,
+  read the device crashlog (Console.app / Devices & Simulators → View Device Logs).
+  `DYLD … Symbol not found` = native version skew (see Gotchas), not app code.
 
 ## Red flags — stop
 - "Renders fine" no screenshot you opened → drive it, read it.
@@ -144,6 +156,10 @@ target — own bundle id, profile, capabilities. Each bites once:
   with a misleading error; free GBs first.
 - Maestro flow tapping from "home" after `launchApp` → it resumes the last screen;
   deep-link or clearState to a known start.
+- Native dep off the SDK's pinned versions (a `~` resolved it up) → `DYLD Symbol missing`
+  launch crash that builds + ships clean. Run the SDK version-alignment check; pin exact.
+- "Uploaded = done" with nobody opening the build → a launch-time version/ABI-skew crash
+  passes build + upload; install, open once, read the crashlog.
 
 ## See also
 - **`expo:*` plugin skills** (separate plugin, when installed) — SDK-specific depth:
