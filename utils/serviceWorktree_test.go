@@ -117,14 +117,18 @@ func TestEnsureServiceWorktreeReuseDirtyClean(t *testing.T) {
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
 	dest := worktreeDest("api", "feature/x")
-	if err := EnsureServiceWorktree(repo, "feature/x", dest); err != nil {
+	dir, err := EnsureServiceWorktree(repo, "feature/x", dest)
+	if err != nil {
 		t.Fatalf("create: %v", err)
+	}
+	if dir != dest {
+		t.Fatalf("expected worktree dest %s, got %s", dest, dir)
 	}
 	if !insideWorktree(dest) {
 		t.Fatal("dest is not a worktree")
 	}
 	// reuse: second call on the existing healthy worktree must not error
-	if err := EnsureServiceWorktree(repo, "feature/x", dest); err != nil {
+	if _, err := EnsureServiceWorktree(repo, "feature/x", dest); err != nil {
 		t.Fatalf("reuse: %v", err)
 	}
 
@@ -143,5 +147,34 @@ func TestEnsureServiceWorktreeReuseDirtyClean(t *testing.T) {
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
 		t.Fatalf("worktree dir still present after clean")
+	}
+}
+
+func TestEnsureServiceWorktreeMainAlreadyOnBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	repo := filepath.Join(root, "api")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(repo, "f.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-m", "init")
+
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = root
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dir, err := EnsureServiceWorktree(repo, "main", worktreeDest("api", "main"))
+	if err != nil {
+		t.Fatalf("main already on branch should not error: %v", err)
+	}
+	if dir != repo {
+		t.Fatalf("expected main checkout %s, got %s", repo, dir)
 	}
 }

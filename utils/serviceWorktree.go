@@ -57,11 +57,15 @@ func cutServicePair(pair string) (name, val string, err error) {
 	return name, val, nil
 }
 
-// EnsureServiceWorktree prunes stale entries, reuses a healthy worktree at dest,
-// and only creates one when missing or broken — keeping deps and uncommitted work.
-func EnsureServiceWorktree(repo, branch, dest string) error {
+// EnsureServiceWorktree returns the dir to run a branch-pinned service from:
+// the main checkout when it's already on that branch, else a reused/created
+// worktree at dest (keeping deps and uncommitted work).
+func EnsureServiceWorktree(repo, branch, dest string) (string, error) {
 	if !isGitRepo(repo) {
-		return fmt.Errorf("%s is not a git repository (run corgi init first)", repo)
+		return "", fmt.Errorf("%s is not a git repository (run corgi init first)", repo)
+	}
+	if cur, _ := gitOut(repo, "rev-parse", "--abbrev-ref", "HEAD"); cur == branch {
+		return repo, nil
 	}
 	_ = gitRun(repo, "worktree", "prune")
 	if info, statErr := os.Stat(dest); statErr == nil && info.IsDir() {
@@ -69,25 +73,22 @@ func EnsureServiceWorktree(repo, branch, dest string) error {
 			cur, _ := gitOut(dest, "rev-parse", "--abbrev-ref", "HEAD")
 			if cur != branch {
 				if err := gitRun(dest, "checkout", branch); err != nil {
-					return fmt.Errorf("reuse worktree %s on %s: %v", dest, branch, err)
+					return "", fmt.Errorf("reuse worktree %s on %s: %v", dest, branch, err)
 				}
 			}
-			return nil
+			return dest, nil
 		}
 		if err := os.RemoveAll(dest); err != nil {
-			return err
+			return "", err
 		}
 	}
-	if cur, _ := gitOut(repo, "rev-parse", "--abbrev-ref", "HEAD"); cur == branch {
-		return fmt.Errorf("branch %q is checked out in the main repo (%s); switch it to a different branch there, or run without --service-branch", branch, repo)
-	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return err
+		return "", err
 	}
 	if err := gitRun(repo, "worktree", "add", dest, branch); err != nil {
-		return fmt.Errorf("git worktree add %s %s: %v", dest, branch, err)
+		return "", fmt.Errorf("git worktree add %s %s: %v", dest, branch, err)
 	}
-	return nil
+	return dest, nil
 }
 
 func cmdStringArray(cmd *cobra.Command, name string) []string {
@@ -145,11 +146,16 @@ func applyBranchPairs(byName map[string]*Service, pairs []string) error {
 			return fmt.Errorf("--service-branch: no service named %q in corgi-compose.yml", name)
 		}
 		dest := worktreeDest(name, branch)
-		if err := EnsureServiceWorktree(svc.AbsolutePath, branch, dest); err != nil {
+		dir, err := EnsureServiceWorktree(svc.AbsolutePath, branch, dest)
+		if err != nil {
 			return fmt.Errorf("--service-branch %s: %v", name, err)
 		}
-		Info("service-branch:", name, "→", branch, "@", dest)
-		svc.AbsolutePath = dest
+		if dir == svc.AbsolutePath {
+			Info("service-branch:", name, "→", branch, "(main checkout already on branch)")
+		} else {
+			Info("service-branch:", name, "→", branch, "@", dir)
+		}
+		svc.AbsolutePath = dir
 	}
 	return nil
 }
