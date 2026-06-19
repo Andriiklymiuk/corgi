@@ -62,6 +62,15 @@ is `<name>-supabase` → selects **nothing**, stack boots with a dead db URL). R
 every name against `corgi-compose.yml` keys; or `--with-deps` to let corgi resolve
 the db closure from `depends_on_db` instead of hand-listing.
 
+**Omitting a dependency from a hand-picked slice hard-fails preflight** with
+`E_DANGLING_DEP: service "<x>" depends on unknown service/db_service "<y>"` — corgi
+validates the *whole* selected graph, and `--services`/`--dbServices` do **not**
+auto-pull what the named services `depends_on`. Don't chase it by hand-listing every
+dependency; `corgi run --services <x> --with-deps --detach` resolves the full
+`depends_on` closure (services + their dbs) in one command. A `runOnly<X>` make target
+that hand-lists `--dbServices … --services <x>` without `--with-deps` dangles the
+moment `<x>` gains a new `depends_on` — prefer `--with-deps`.
+
 **Carry the Makefile target's env-var prefix verbatim.** `WEB_DEV_CMD=dev:host
 MOBILE_PLATFORM=android corgi run --services …` sets *process* env vars a service's
 `start:` reads (`yarn ${WEB_DEV_CMD:-dev}`, `bun ${MOBILE_PLATFORM:-ios}`). corgi
