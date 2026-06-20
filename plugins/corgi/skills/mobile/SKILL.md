@@ -141,6 +141,17 @@ before "works".
   modules)` / `iOS Bundled …` line appeared in the Metro log SINCE your edit; if not, force a
   reload (re-launch the dev-client URL, or dev-menu → Reload) and re-shoot. A delta bundle
   (`… (1 module)`) is the proof it picked up the change.
+- **Two apps on the machine → the dev client attaches to the WRONG Metro.** When a second
+  Expo project is already running `expo start`, it owns the default Metro port 8081, so a
+  freshly-launched dev client auto-attaches there and serves the OTHER project's bundle —
+  a baffling redbox (e.g. a "missing native module" naming a module/file the current app
+  doesn't even use, or just the wrong screen). `expo run:ios --port 8082` moves THIS
+  project's Metro to a free port, but the launched binary still asks for 8081, and the
+  `<scheme>://expo-development-client/?url=http://localhost:<port>` deep link often does
+  NOT redirect it. Fix: set the binary's saved packager location, then relaunch — iOS
+  `xcrun simctl spawn booted defaults write <bundleId> RCT_jsLocation "localhost:<port>"`;
+  Android `adb reverse tcp:<port> tcp:<port>` then the dev-client `?url=` deep link.
+  Symptom = wrong-app bundle, not a code bug.
 
 ## Native extension targets (apple-targets widgets / App Clips)
 A widget / App Clip / share extension via `@bacons/apple-targets` is a SECOND signed
