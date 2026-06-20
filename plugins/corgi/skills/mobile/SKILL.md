@@ -16,6 +16,12 @@ before "works".
 - **Native (Swift / Kotlin / SceneKit / new native dep / config plugin)** → NO hot-reload.
   Rebuild (`expo run:ios` / `expo run:android`) to see. JS reload won't.
 - One Metro serves both Android + iOS; `expo run:*` reuses a running one.
+- **Fast ≠ representative — a JS/style edit still renders DIFFERENTLY iOS↔Android.** Absolute
+  positioning, `overflow`/clipping, font metrics, shadows and safe-area diverge per platform
+  (this is exactly how an Android-only run ships an iOS-only clip / mis-centre / cut-off).
+  The Android emulator is the fast inner loop; for any shape- or layout-sensitive change,
+  spot-check the SAME screen on the iOS sim before you trust it or ship — don't conclude
+  from one platform.
 
 ## Drive loop
 1. **Navigate** — deep link beats menu-tapping:
@@ -29,6 +35,21 @@ before "works".
    screenshot f.png`. Zoom detail: `sips -c <H> <W> --cropOffset <top> <left> f.png --out
    crop.png`.
 4. **READ it.** Never assert "renders fine" on a frame you didn't open.
+5. **Geometry bug? MEASURE, don't eyeball.** A wrong shape (circle gone square,
+   clipped / oval disc, mis-aligned pill, off-centre number) is INVISIBLE at
+   full-frame scale — confirm it by the node's real box, not by squinting:
+   - Android: `adb shell uiautomator dump /sdcard/u.xml && adb pull /sdcard/u.xml .`,
+     then grep `content-desc="…" …bounds="[x1,y1][x2,y2]"` — `x2-x1` / `y2-y1` is
+     the true px size (a square where you want a circle, or a cell far larger than
+     its disc, is the tell).
+   - Crop + UPSCALE that box: `sips -c <h> <w> --cropOffset <top> <left> f.png --out
+     c.png && sips -z <H> <W> c.png` (then open `c.png`).
+   - Re-toggle the state and re-measure: a bug that only shows AFTER a state change
+     (a freshly-toggled day) won't appear on first paint.
+6. **Mutating action? Confirm it PERSISTED.** After a tap that writes state (toggle a
+   day, save a value), re-open the screen — or a DIFFERENT view of the same data — and
+   check the change is still there. The optimistic first frame can lie; the round-trip
+   through the store is the proof it actually wrote.
 
 ## Gotchas (each bit a real session)
 - **Maestro `inputText` ASCII-only** — no Cyrillic / non-Latin. Use ASCII query, or text
@@ -91,6 +112,35 @@ before "works".
   switch are separate elements. Tap the switch control (`point` on the row's right edge);
   gate it with the `checked` selector (`when: notVisible: { id, checked: true }`) so it
   flips only when off.
+- **A gesture-handler `Pressable` as the SIZED flex cell stretches its child — circle →
+  square.** RNGH `Pressable` doesn't hold a fixed pixel width the way a plain `View` does,
+  and an INLINE / dynamic width style (worse with React Compiler on) lets the child disc
+  grow to fill the cell → a "circle" renders as a rounded square — and often only AFTER a
+  re-render (a freshly-toggled day) while the first-paint ones still look right. Fix: size
+  the cell with a plain `View` / STATIC `StyleSheet` entry, keep the shape a FIXED, centred
+  child, and mirror the screen's already-working sibling cell (e.g. the month-view DayCell)
+  instead of re-deriving sizes inline. `onLayout` on an RNGH Pressable is flaky too — put
+  it on a plain wrapper.
+- **Absolute-fill background behind a separately-centred label clips / offsets on iOS.** A
+  disc drawn as a `position:absolute` layer BEHIND a sibling number can sit off-centre or
+  get clipped at the top on iOS (fine on Android). Fix: make it ONE in-flow element — a
+  fixed circle with the label INSIDE it — so the cell centres the whole unit. (Keep an
+  absolute layer only for a shape that must bleed past the cell, like a joined period
+  pill.)
+- **Attach a dev client to Metro + recover a blank screen (Android).** Boot the emulator
+  detached, `expo start --dev-client`, `adb reverse tcp:8081 tcp:8081`, then deep-link
+  `<scheme>://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081` to attach and pull
+  the bundle. The dev-launcher menu re-appears after a `force-stop` (Continue, or
+  `keyevent 4`, to dismiss). But `adb shell input keyevent 4` (back) on a top-level route
+  drops the app to a BLANK screen — you backed OUT of the route, it didn't crash — recover
+  by re-launching the dev-client URL (or `<scheme>://<route>`), not by waiting.
+- **An agent / tool file-write may not trip Metro fast-refresh — you read the OLD bundle.** A
+  save that doesn't come from the editor's own save sometimes never reaches Metro's watcher,
+  so the device still runs the PREVIOUS code and your "fix" looks unchanged (or falsely
+  passes). Before trusting any after-edit screenshot, confirm a fresh `Android Bundled … (N
+  modules)` / `iOS Bundled …` line appeared in the Metro log SINCE your edit; if not, force a
+  reload (re-launch the dev-client URL, or dev-menu → Reload) and re-shoot. A delta bundle
+  (`… (1 module)`) is the proof it picked up the change.
 
 ## Native extension targets (apple-targets widgets / App Clips)
 A widget / App Clip / share extension via `@bacons/apple-targets` is a SECOND signed
@@ -160,6 +210,22 @@ target — own bundle id, profile, capabilities. Each bites once:
   launch crash that builds + ships clean. Run the SDK version-alignment check; pin exact.
 - "Uploaded = done" with nobody opening the build → a launch-time version/ABI-skew crash
   passes build + upload; install, open once, read the crashlog.
+- "Looks like a circle" from a full-frame screenshot → MEASURE the node bounds + zoom-crop;
+  square discs, top-clipped shapes and off-centre numbers are invisible at scale.
+- RNGH `Pressable` sized with an inline / dynamic width (React Compiler on) → child stretches
+  (circle → square, often only after a re-render); size with a plain View + static StyleSheet,
+  fixed centred child.
+- `keyevent 4` left a blank screen → you backed out of the route, not a crash; re-launch the
+  dev-client URL to recover.
+- Concluded a layout / shape change is fine from ONE platform → iOS and Android clip, centre
+  and size differently; spot-check shape-sensitive UI on the iOS sim too before ship.
+- Hand-building a custom cell / shape with inline, per-render sizes → mirror the screen's
+  existing working component and lift sizes into a static StyleSheet; inline / dynamic styles
+  are where shape bugs (and React Compiler surprises) hide.
+- Your edit isn't showing on device → you may be reading the OLD bundle; confirm a new Metro
+  `Bundled` line since the edit (force a reload if none) before concluding anything.
+- Verified a mutating tap by the optimistic frame only → re-open the screen / another view and
+  confirm the write PERSISTED through the store, not just the instant paint.
 
 ## See also
 - **`expo:*` plugin skills** (separate plugin, when installed) — SDK-specific depth:
