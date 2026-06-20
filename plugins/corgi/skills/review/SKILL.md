@@ -322,7 +322,12 @@ Two passes over the findings before anything reaches the preview.
 **Verify the blockers.** A wrong `blocking` finding posted publicly is worse than a
 missed nit. Re-check every `blocking` finding against the **actual source** — re-read
 the cited lines (and the symbol it calls/asserts) from the diff or file, not from the
-subagent's summary. Drop or downgrade any that don't hold. A finding that
+subagent's summary. Drop or downgrade any that don't hold. When a blocker hinges on
+**framework/library runtime behavior** rather than logic visible in the diff (an ORM's
+undefined-vs-null update semantics, a validation/transform decorator that fires only on
+present keys, a serializer's default coercion), re-reading source can't settle it — run a
+quick **empirical probe** (a throwaway test in the repo's own runner, or a REPL one-liner)
+and let the observed result, not the assumed behavior, decide. A finding that
 **contradicts CI** is the loudest tell: claims a spec/build fails but the pipeline is
 green → one of them is wrong, verify before posting. Conversely a "passed with
 warnings" pipeline (a failed `allow_failure` job) often hides the real red job a
@@ -592,7 +597,13 @@ P4 order) and cross-link the two replies. Then one combined report (6).
 
 **Both modes:** **no secret values** echoed into comments/replies — flag location +
 that a secret is present, never paste it. **Human voice** — terse, kind, specific
-(problem + fix); no AI-attribution trailer, no walls, match the repo's density.
+(problem + fix); each comment and suggestion is one or two lines, not a paragraph; no
+AI-attribution trailer, no walls, match the repo's density. Post only what genuinely
+helps — a few sharp comments beat many; drop low-value nits rather than pad the count.
+A posted **summary body** is plain prose — a few short sentences, at most a couple of
+bullets, the way a person types into the PR box. Not a structured document: no `##`
+section headers, no long numbered-question lists, no pasted spec / code-map dumps.
+That report shape belongs in the terminal output (P6), never in the comment.
 **Never touch `manualRun` services** when mapping via `corgi-compose.yml`.
 
 **Mode A (give review):**
