@@ -9,7 +9,9 @@ description: Use when the user wants to refine OR create an agent skill from wha
 Skill improves only from **real observed gap** — thing an agent (often you, just now)
 did wrong, slow, or worked around, that sharper wording prevents. This conversation IS
 the failing test. Don't imagine the gap — you watched it. Close with smallest generic
-edit, stripped of workspace-specific detail.
+edit, stripped of workspace-specific detail AND of environment-specific assumptions —
+assert only the lesson that transfers to other apps, not a one-stack quirk as a universal
+rule.
 
 **Evidence, never imagination.** No "while I'm here" adds. No session moment (or
 explicit user ask) behind a change → don't make it.
@@ -84,6 +86,10 @@ a skill you can already describe from lived evidence.
 - **Evidence-only** — every change traces to a session moment or explicit ask.
 - **Minimum diff** — close the gap, don't refactor around it.
 - **No leak** — zero workspace / company / secret tokens reach the skill.
+- **Generalize the lesson, don't just de-leak names** — strip over-specific stack /
+  version / device assumptions too; assert only what transfers, and frame a setup-specific
+  quirk conditionally ("if X in your stack…") so the edit helps other apps, not just the
+  one you saw it on. A reproducible bug+fix is universal; one app's rendering quirk is not.
 - **Preview before write** — never silently edit a shared skill repo.
 - **No path → summary only**, never edit.
 - **One skill at a time.**
@@ -94,6 +100,8 @@ a skill you can already describe from lived evidence.
 - Rewrite half the skill for a one-line gap → minimum diff.
 - Edit before naming the gap → name first.
 - Rule already there → sharpen, don't duplicate.
+- Asserting a one-stack / one-version / one-device quirk as a universal rule → conditionalize
+  it ("if X on yours…") and state only the transferable fix; verify-per-app, don't assume.
 - Edit when no path given → wrong mode, switch to summary.
 - Scaffolding a new skill that nearly duplicates an existing one → it's an edit on that
   one, not a create.

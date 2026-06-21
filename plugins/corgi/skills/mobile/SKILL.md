@@ -50,6 +50,14 @@ before "works".
    day, save a value), re-open the screen — or a DIFFERENT view of the same data — and
    check the change is still there. The optimistic first frame can lie; the round-trip
    through the store is the proof it actually wrote.
+7. **Setting that drives output? CHANGE it and watch the value RECOMPUTE.** Don't just
+   confirm a setting saved — change it and verify every dependent screen moves (the
+   countdown, the prediction, the badge, the chart). If the setting "saves" but the output
+   doesn't budge, a DERIVED value is overriding it — a history/auto average, a cached
+   default, something computed from the data instead of from the setting. That silent
+   override (the setting only *looks* applied) is a common, screenshot-invisible bug, and
+   the on-device before/after is the only proof. The fix is usually to make the screen read
+   the setting directly and surface the computed value as a *suggestion*, not an override.
 
 ## Gotchas (each bit a real session)
 - **Maestro `inputText` ASCII-only** — no Cyrillic / non-Latin. Use ASCII query, or text
@@ -152,6 +160,24 @@ before "works".
   `xcrun simctl spawn booted defaults write <bundleId> RCT_jsLocation "localhost:<port>"`;
   Android `adb reverse tcp:<port> tcp:<port>` then the dev-client `?url=` deep link.
   Symptom = wrong-app bundle, not a code bug.
+- **Native `headerSearchBarOptions` (react-native-screens) on iOS 26 floats to the bottom by
+  default.** The default `placement: "automatic"` drops the search field to the BOTTOM of the
+  screen, overlapping content (a UIKit root-screen toolbar-integration bug) → set
+  `placement: "stacked"` and it anchors below the title bar as expected (rn-screens forces
+  `allowToolbarIntegration:false` for stacked, which dodges the bug). These header/search
+  options are JS nav config → they HOT-RELOAD on an already-built dev client (no native
+  rebuild), so iterate the layout live on the sim. (`headerLargeTitle` can also render blank
+  in some expo-router setups — if it does on yours, draw the big title in-content instead of
+  fighting it; verify per-app, don't assume.) A documented "native X can't anchor / doesn't
+  work here" is often a STALE, fixable conclusion — re-test the native option on-device first.
+- **"Search visible at rest AND tucking on scroll" (Telegram-style) wants a working large
+  title; without one, drive it from JS.** `hideWhenScrolling: true` on its own leaves a
+  stacked search HIDDEN at rest (pull-to-reveal). To show it at the top and hide it once the
+  list scrolls, keep `headerSearchBarOptions` mounted and REMOVE it (set `undefined`) past a
+  scroll threshold — with hysteresis whose gap clears the search bar's own height, or the
+  layout shift from removing it bounces the offset back over the threshold (flicker loop).
+  Gate to iOS — a Material toolbar search icon (Android) is compact and shouldn't hide on
+  scroll.
 
 ## Native extension targets (apple-targets widgets / App Clips)
 A widget / App Clip / share extension via `@bacons/apple-targets` is a SECOND signed
@@ -228,6 +254,10 @@ target — own bundle id, profile, capabilities. Each bites once:
   fixed centred child.
 - `keyevent 4` left a blank screen → you backed out of the route, not a crash; re-launch the
   dev-client URL to recover.
+- Native search floating at the bottom of the screen on iOS 26 → default
+  `headerSearchBarOptions` placement; set `placement: "stacked"`. (Large title blank in your
+  setup? draw it in-content.) Re-test any stale "native X doesn't work here" on-device —
+  header/search options hot-reload, so it's cheap.
 - Concluded a layout / shape change is fine from ONE platform → iOS and Android clip, centre
   and size differently; spot-check shape-sensitive UI on the iOS sim too before ship.
 - Hand-building a custom cell / shape with inline, per-render sizes → mirror the screen's
@@ -237,6 +267,11 @@ target — own bundle id, profile, capabilities. Each bites once:
   `Bundled` line since the edit (force a reload if none) before concluding anything.
 - Verified a mutating tap by the optimistic frame only → re-open the screen / another view and
   confirm the write PERSISTED through the store, not just the instant paint.
+- Changed a setting and nothing downstream moved → a derived / auto value (an average, a
+  cached default, a value computed from the data) is overriding it; the setting isn't the
+  source of truth. True for ANY setting → output — units, theme, thresholds, sort order, a
+  prediction — so change-it-and-watch is the universal test; the fix is to read the setting
+  directly and demote the computed value to a suggestion.
 
 ## See also
 - **`expo:*` plugin skills** (separate plugin, when installed) — SDK-specific depth:
