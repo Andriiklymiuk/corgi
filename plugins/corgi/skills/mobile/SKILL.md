@@ -149,6 +149,14 @@ before "works".
   modules)` / `iOS Bundled …` line appeared in the Metro log SINCE your edit; if not, force a
   reload (re-launch the dev-client URL, or dev-menu → Reload) and re-shoot. A delta bundle
   (`… (1 module)`) is the proof it picked up the change.
+- **A cold relaunch (force-stop → launcher / deep-link) RE-BUNDLES over Metro — a black /
+  blank frame with NO mounted UI for tens of seconds is NORMAL, not a crash.** The first
+  probe after a kill catches the bundle still loading: empty view tree (Android `uiautomator
+  dump` returns nothing / your target node missing), a blank iOS screenshot, Maestro
+  `element not found`. Don't read it as a failure and burn retries — poll: re-dump / re-shoot
+  in a loop until a known node appears, or watch the Metro log for the `Bundled` line, THEN
+  screenshot / navigate / assert. Hits BOTH platforms (the JS bundle loads on cold start
+  either way); a dev/Metro build pays it on every relaunch, a release build doesn't.
 - **Two apps on the machine → the dev client attaches to the WRONG Metro.** When a second
   Expo project is already running `expo start`, it owns the default Metro port 8081, so a
   freshly-launched dev client auto-attaches there and serves the OTHER project's bundle —
@@ -254,6 +262,9 @@ target — own bundle id, profile, capabilities. Each bites once:
   fixed centred child.
 - `keyevent 4` left a blank screen → you backed out of the route, not a crash; re-launch the
   dev-client URL to recover.
+- Black/blank frame, empty view tree, or Maestro `element not found` right after a
+  force-stop relaunch → still re-bundling over Metro (both platforms), not a crash; poll for
+  a known node or the Metro `Bundled` line before shooting or concluding.
 - Native search floating at the bottom of the screen on iOS 26 → default
   `headerSearchBarOptions` placement; set `placement: "stacked"`. (Large title blank in your
   setup? draw it in-content.) Re-test any stale "native X doesn't work here" on-device —
