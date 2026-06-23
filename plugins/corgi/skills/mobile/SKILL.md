@@ -135,6 +135,28 @@ before "works".
   fixed circle with the label INSIDE it — so the cell centres the whole unit. (Keep an
   absolute layer only for a shape that must bleed past the cell, like a joined period
   pill.)
+- **A native 3D / Skia view (SceneKit, react-native-skia, a Metal/GL surface) inside a
+  react-navigation `formSheet` (`sheetAllowedDetents: "fitToContents"`) breaks RN layout for
+  its SIBLINGS.** A sibling box (a toggle row, a label) overlaps the native view no matter
+  the child order, a wrapper `View`, a fixed-height slot, OR `position:absolute` — `maestro
+  hierarchy` shows the two `bounds` overlapping by tens of px (the sheet's content-fit
+  measure + the native view reporting no intrinsic box). MEASURE with `maestro hierarchy`
+  before reshuffling flex for an hour; clean separation may need the native view in its own
+  detent-sized container (or dropping the sibling). It renders fine on a plain (non-sheet)
+  screen — so it's the sheet, not your styles.
+- **Dismiss an iOS `formSheet` in Maestro with a grabber swipe-down, not a backdrop tap.**
+  The backdrop tap is racy (works once, misses the next — leaving the sheet open so the next
+  step fails); `swipe: { start: "50%,38%", end: "50%,97%", duration: 600 }` is reliable. And
+  in a capture SWEEP (open → `takeScreenshot` → dismiss → next), the screenshot can race the
+  present animation and silently grab the PREVIOUS screen — the flow logs `COMPLETED` but the
+  PNG is the list behind the sheet. READ every captured frame; `COMPLETED` ≠ the right screen.
+- **To drive or screenshot a PAYWALL, the product must be UNOWNED** — tapping an OWNED premium
+  item usually EQUIPS it (no sheet opens), so a sweep silently captures the store grid instead.
+  Reset the purchases SDK's anonymous user to all-unowned by reinstalling the SAME build
+  (`simctl uninstall` + `simctl install <existing .app>` — also re-triggers onboarding, Skip
+  it; no rebuild needed). A sandbox/test SDK key (e.g. RevenueCat Test Store `test_…`) returns
+  SDK-configured prices, so set those to match prod to capture prod-looking paywalls without
+  waiting on store approval.
 - **Attach a dev client to Metro + recover a blank screen (Android).** Boot the emulator
   detached, `expo start --dev-client`, `adb reverse tcp:8081 tcp:8081`, then deep-link
   `<scheme>://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081` to attach and pull
@@ -148,7 +170,12 @@ before "works".
   passes). Before trusting any after-edit screenshot, confirm a fresh `Android Bundled … (N
   modules)` / `iOS Bundled …` line appeared in the Metro log SINCE your edit; if not, force a
   reload (re-launch the dev-client URL, or dev-menu → Reload) and re-shoot. A delta bundle
-  (`… (1 module)`) is the proof it picked up the change.
+  (`… (1 module)`) is the proof it picked up the change. **WORSE after a prod build's
+  `cleanPrebuild` (`rm ios/android`):** the still-running Metro from `expo run:ios`
+  detaches — a tool-write, a `touch`, AND a cold app relaunch all fail to re-bundle (you
+  keep running the OLD code; a stray `(1 module)` delta for an unrelated file fools you into
+  thinking it reloaded). Only KILL Metro (`lsof -ti :8081 | xargs kill`) + restart
+  `expo start --dev-client --clear` — a full `(N modules)` re-bundle — loads the new code.
 - **A cold relaunch (force-stop → launcher / deep-link) RE-BUNDLES over Metro — a black /
   blank frame with NO mounted UI for tens of seconds is NORMAL, not a crash.** The first
   probe after a kill catches the bundle still loading: empty view tree (Android `uiautomator
@@ -276,6 +303,15 @@ target — own bundle id, profile, capabilities. Each bites once:
   are where shape bugs (and React Compiler surprises) hide.
 - Your edit isn't showing on device → you may be reading the OLD bundle; confirm a new Metro
   `Bundled` line since the edit (force a reload if none) before concluding anything.
+- Edit still not loading after a prod build's `cleanPrebuild` → Metro detached; a touch /
+  relaunch won't do it — KILL Metro + `expo start --dev-client --clear` for a full re-bundle.
+- An hour reshuffling flex because a toggle / label overlaps a native (SceneKit / Skia)
+  preview → it's the native-view-inside-`formSheet` layout limit; `maestro hierarchy` to
+  measure, give the native view its own detent-sized container or drop the sibling.
+- Backdrop-tap to dismiss a `formSheet` in a capture sweep → racy; grabber swipe-down, and
+  READ every captured frame (a sweep can log `COMPLETED` yet grab the prior screen).
+- `tapOn` a premium item opens no paywall / it just equips → the product is OWNED; reset to
+  unowned (reinstall the same build) so the paywall sheet opens.
 - Verified a mutating tap by the optimistic frame only → re-open the screen / another view and
   confirm the write PERSISTED through the store, not just the instant paint.
 - Changed a setting and nothing downstream moved → a derived / auto value (an average, a
