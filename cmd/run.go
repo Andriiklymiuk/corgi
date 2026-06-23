@@ -245,6 +245,19 @@ startup summary, and return immediately (no streaming, no watch).`,
 removing the stale state file first.`,
 	)
 	runCmd.PersistentFlags().Bool(
+		"wait",
+		false,
+		`With --detach: block until every service and database is reachable
+(via its healthCheck or port) before returning, instead of returning as soon
+as the processes are spawned. A timeout is a hard failure (useful in CI and
+scripts that run a command against the stack straight after).`,
+	)
+	runCmd.PersistentFlags().Duration(
+		"wait-timeout",
+		5*time.Minute,
+		"With --detach --wait: max time to wait for the whole stack to become healthy.",
+	)
+	runCmd.PersistentFlags().Bool(
 		"notify",
 		true,
 		`Send a desktop notification when a service crashes unexpectedly.
@@ -654,11 +667,51 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		os.Exit(1)
 	}
 
+	// --wait gates the return on the whole stack becoming reachable. The state
+	// file is already written, so the services keep running and `corgi stop`
+	// still works even if the wait times out.
+	if wait, _ := cmd.Flags().GetBool("wait"); wait {
+		timeout, _ := cmd.Flags().GetDuration("wait-timeout")
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		if err := waitDetachedReady(ctx, corgi); err != nil {
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
+			} else {
+				fmt.Fprintln(os.Stderr, "❌", err)
+			}
+			os.Exit(1)
+		}
+	}
+
 	if utils.JSONOutput {
 		utils.PrintJSON(state)
 	} else {
 		utils.Infof("🐶 corgi running detached — %d service(s), state: %s\n", len(procs), statePath)
 	}
+}
+
+// waitDetachedReady blocks until every service (with a port) and database is
+// reachable, or ctx expires. Returns the first readiness error.
+func waitDetachedReady(ctx context.Context, corgi *utils.CorgiCompose) error {
+	if err := waitForServicesReady(ctx, corgi.Services, utils.WaitForServiceReady); err != nil {
+		return err
+	}
+	return waitForDbsReady(ctx, corgi.DatabaseServices, utils.WaitForDBReady)
+}
+
+// waitForServicesReady waits for each service with a port to become reachable.
+// ready is injected for tests.
+func waitForServicesReady(ctx context.Context, services []utils.Service, ready func(context.Context, utils.Service) error) error {
+	for _, svc := range services {
+		if svc.Port == 0 {
+			continue
+		}
+		if err := ready(ctx, svc); err != nil {
+			return fmt.Errorf("%s not ready: %w", svc.ServiceName, err)
+		}
+	}
+	return nil
 }
 
 func detachAlreadyRunning(statePath string, force bool) bool {
