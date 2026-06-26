@@ -3,6 +3,7 @@ package cmd
 import (
 	"andriiklymiuk/corgi/utils"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -36,6 +37,14 @@ func runPull(cmd *cobra.Command, _ []string) {
 		return
 	}
 	for _, service := range corgi.Services {
+		// Repo not cloned yet (e.g. fresh checkout). Clone instead of pulling a missing dir.
+		if service.CloneFrom != "" && service.AbsolutePath != "" {
+			if _, statErr := os.Stat(service.AbsolutePath); os.IsNotExist(statErr) {
+				cloneOneService(service)
+				continue
+			}
+		}
+
 		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
 			service.AbsolutePath,
 			utils.CorgiComposeDefaultName,
