@@ -63,15 +63,29 @@ before "works".
 - **Maestro `inputText` ASCII-only** — no Cyrillic / non-Latin. Use ASCII query, or text
   via `adb`. Prove cross-locale: type a Latin word matching only via another locale's
   string.
+- **A fixed-coordinate tap on a CTA misses after the screen reflows.** Tapping a remembered
+  `(x,y)` for "Start" / "Submit" / "Continue" lands on the WRONG control once selecting an
+  option REMOVED a line above it (a "need ≥2 players" warning clears, a validation row
+  disappears) — the button shifted UP, your tap hits whatever is now there (often a
+  destructive "Leave" / "Cancel" below it), and the flow silently resets. Re-read the
+  node's REAL bounds AFTER the state change (`uiautomator dump` + grep the `text=` bounds,
+  or Maestro `tapOn:` by text), never reuse pre-change coordinates across a mutating tap.
 - **Local iOS build MUST be a NON-LOGIN shell — which then MUST re-export `LANG`.**
   `nohup bash -c 'export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8; …; make <prod-target>'` — NOT
   `bash -lc`. Login profile puts a broken Ruby on PATH → `pod install` dies with a
   misleading `visionos` CocoaPods error at prebuild. BUT non-login shell drops the
   profile's locale → without the explicit `LANG`, `pod install` dies with
-  `Encoding::CompatibilityError` ("CocoaPods requires UTF-8"). Need BOTH.
-- **Long builds → background + poll log.** `nohup … > build/log 2>&1 &`, then `sleep N;
-  grep -iE "error:|BUILD FAILED|Installing on|Submitting|successfully uploaded" build/log`.
-  No foreground tool for 20 min.
+  `Encoding::CompatibilityError` ("CocoaPods requires UTF-8"). Need BOTH. **It bites
+  again one level down:** `eas build --local` runs its OWN nested prebuild + `pod
+  install` that inherits the PARENT shell's env — so a Makefile that sets `LANG`
+  *inline* on its prebuild step is necessary but NOT sufficient; the ambient shell must
+  `export LANG`/`LC_ALL` too, or EAS's internal pod install dies the same way while the
+  Makefile's own one succeeded (a baffling "pods worked, then the build failed on pods").
+- **Long builds → background + poll log.** `nohup … > build/log 2>&1 &`, then poll:
+  `until grep -qiE "BUILD SUCCEEDED|BUILD FAILED|Submitting|successfully uploaded|error:" build/log; do sleep 20; done`.
+  The `nohup … &` WRAPPER returns instantly — a task-runner marks THAT "complete" the
+  moment it backgrounds, so there is **no completion event for the real build**; never
+  wait for a done signal, poll the log for milestones. No foreground tool for 20 min.
 - **Local iOS archive needs GBs of free disk — `df -h` FIRST.** A local prod build writes
   DerivedData + an archive + the IPA (10 GB+). Run low mid-build and `pod install` / the
   archive dies with an ENOSPC or a generic install failure — NOT a clear "disk full."
@@ -241,6 +255,9 @@ target — own bundle id, profile, capabilities. Each bites once:
   `expo-target.config.js` — delete it by hand. Gitignore the generated artifacts.
 
 ## Ship (local build → store)
+The full local-build → store-submit flow (LANG/shell rules, no-double-bump, background +
+poll, ground-truth verify, `stopShip`) is the **`ship` skill** — this section is the
+on-device render gate it leans on. In short:
 - iOS: repo's prod build-and-submit target (`make`/script step) = clean prebuild → IPA →
   `eas submit` to TestFlight, in the non-login shell. Bump the marketing version first if
   the last already shipped — but a build that FAILED after a bump leaves that version
@@ -321,6 +338,12 @@ target — own bundle id, profile, capabilities. Each bites once:
   directly and demote the computed value to a suggestion.
 
 ## See also
+- **`ship` skill** — driving a local-build → App Store / Play submit (LANG/shell rules,
+  no-double-bump, background+poll, ground-truth verify, `stopShip`). It gates on THIS
+  skill's device render before submitting.
+- **`purchases` skill** — IAP / store-metadata + RevenueCat: a version-controlled
+  source-of-truth for product ids + App Review notes, and pushing IAP `reviewNote` via the
+  App Store Connect API (fastlane `deliver` can't).
 - **`expo:*` plugin skills** (separate plugin, when installed) — SDK-specific depth:
   `expo:expo-dev-client` (dev client + TestFlight), `expo:building-native-ui`,
   `expo:expo-module` (native modules), `expo:upgrading-expo`, … This skill is the
