@@ -131,6 +131,11 @@ just that service with `--logs` (Step 3).
 
 Smallest change that could work, then re-gate. **Never foreground a `corgi run`.**
 
+**Minimal code comments.** Don't narrate the change in code comments — it should read
+from the diff and the PR/commit message. Add a comment only for a genuinely non-obvious
+invariant that would otherwise be lost, and only where the file already comments. No
+"// added/changed X" notes.
+
 - **Service with dependencies** → `corgi run --services <x> --with-deps --detach --logs`.
   Without `--with-deps` an isolated retry against a down dependency just re-crashes.
 - **A consumer can't reach a healthy producer** (404 / connection-refused to another
