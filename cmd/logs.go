@@ -25,7 +25,7 @@ var logsCmd = &cobra.Command{
 	Use:     "logs",
 	Short:   "Browse and follow persisted service logs",
 	Aliases: []string{"log"},
-	Long: `Browse logs captured by corgi run --logs.
+	Long: `Browse logs captured by corgi run (capture is on unless --logs=false).
 
 Without flags: interactive picker — choose a service then a run, and
 the log is streamed to stdout (follows new writes like tail -f).
@@ -146,7 +146,7 @@ func requireServiceForLogs(service string, nonInteractive bool, available []stri
 func pickLogService(base string) (string, error) {
 	services, err := utils.ListLoggedServices(base)
 	if err != nil || len(services) == 0 {
-		return "", fmt.Errorf("no log directories found under %s/.logs/\nRe-run with: corgi run --logs", base)
+		return "", fmt.Errorf("no log directories found under %s/.logs/\nRun the stack first: corgi run (capture is on unless --logs=false)", base)
 	}
 	return utils.PickItemFromListPrompt("Select service", services, "⬅️  cancel")
 }
@@ -371,7 +371,7 @@ func (h *mergeHeap) Pop() interface{} {
 func followAllLogs(base string) error {
 	services, err := utils.ListLoggedServices(base)
 	if err != nil || len(services) == 0 {
-		return fmt.Errorf("no log directories found under %s/.logs/\nRe-run with: corgi run --logs", base)
+		return fmt.Errorf("no log directories found under %s/.logs/\nRun the stack first: corgi run (capture is on unless --logs=false)", base)
 	}
 
 	h := buildMergeHeap(base, services)

@@ -224,11 +224,12 @@ Pair with --once for CI pipeline use: corgi run --once --ci`,
 	)
 	runCmd.PersistentFlags().Bool(
 		"logs",
-		false,
+		true,
 		`Persist stdout/stderr of every service and db_service to
 corgi_services/.logs/<name>/<timestamp>.log.
 Keeps the last 10 runs per service; older logs are pruned automatically.
-Read them afterwards with: corgi logs`,
+Read them afterwards with: corgi logs
+Pass --logs=false to disable for a single run.`,
 	)
 	runCmd.PersistentFlags().BoolP(
 		"detach",

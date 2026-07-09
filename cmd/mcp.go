@@ -637,7 +637,7 @@ func mcpLogs(args logsArgs) (logsResult, error) {
 	base := logsBase()
 	runs, err := utils.ListServiceRuns(base, args.Service)
 	if err != nil || len(runs) == 0 {
-		return logsResult{}, fmt.Errorf("%s: no logs found for %q (run with corgi run --logs)", utils.ErrServiceNotFound, args.Service)
+		return logsResult{}, fmt.Errorf("%s: no logs found for %q (start it with corgi run; capture is on unless --logs=false)", utils.ErrServiceNotFound, args.Service)
 	}
 	lines, err := tailLogFile(runs[0], n)
 	if err != nil {
