@@ -272,7 +272,7 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
 
 **Keep it running in the background.** `corgi run -d` starts everything detached and returns right away — no daemon, corgi just remembers what it started. Check in with `corgi ps`, restart one piece with `corgi restart --service api`, or stop it all with `corgi stop`.
 
-**Read the logs later.** `corgi run --logs` saves each service's output; `corgi logs` lets you browse and follow past runs, with crashes clearly marked.
+**Read the logs later.** `corgi run` saves each service's output by default (`--logs=false` turns it off); `corgi logs` lets you browse and follow past runs, with crashes clearly marked.
 
 **Get pinged on a crash.** `corgi notifications on` sends a desktop notification when a service falls over mid-run.
 

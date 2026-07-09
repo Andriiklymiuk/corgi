@@ -63,11 +63,12 @@ corgi restart --service api --json
 ### Logs
 
 ```
-corgi run --logs            # persist stdout/stderr while running
+corgi run                   # persists stdout/stderr while running (default)
+corgi run --logs=false      # opt out of capture
 corgi logs                  # browse/follow afterwards (alias: log)
 ```
 
-- `--logs` writes `corgi_services/.logs/<service>/<timestamp>.log`, keeps last 10 runs/service (older pruned).
+- Capture is on by default and writes `corgi_services/.logs/<service>/<timestamp>.log`, keeps last 10 runs/service (older pruned).
 - `corgi logs`: interactive picker → follows like `tail -f`. Flags: `--service <name>`, `--all` (merge newest run of every service, timestamp-sorted), `--prune` (delete all `.logs/`), `--idle <dur>` (exit after dead-air; `0` = tail forever).
 
 ### Already-running guard
