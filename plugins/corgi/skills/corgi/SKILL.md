@@ -61,13 +61,13 @@ Load only what the task needs. Do not read every reference every time.
 ## Quick command cheatsheet
 
 ```
-corgi run                  # start everything (long-running, background it)
-corgi run --logs           # also persist each service's stdout/stderr to corgi_services/.logs/
+corgi run                  # start everything (long-running, background it); persists stdout/stderr to corgi_services/.logs/
+corgi run --logs=false     # opt out of log capture for this run
 corgi run --ci             # CI-friendly: suppress spinners, banners, colors (auto-on when CI=true)
 corgi run --service-branch api=feat/x   # run a service on a branch in an isolated reused worktree (non-destructive)
 corgi run --service-dir api=/path       # run a service from an existing dir (e.g. a git worktree); repeatable, mix freely
 corgi worktree list|prune               # list / remove worktrees corgi made for --service-branch
-corgi logs                 # interactive picker: browse + tail persisted logs (needs prior --logs run)
+corgi logs                 # interactive picker: browse + tail persisted logs (needs a prior corgi run)
 corgi logs --service api   # skip service picker, jump to run picker for "api"
 corgi logs --all           # merge newest run of every service into one timestamp-sorted stream
 corgi logs --idle 0        # tail forever (default exits after 30s of dead-air)

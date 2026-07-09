@@ -116,7 +116,7 @@ failure** → only on `corgi run -s`; check `seedFrom*`; **env unset/wrong** →
 
 ## Step 2 — Local logs
 
-Needs a `--logs` run. Default = bounded, single service:
+Needs a prior `corgi run` (capture is on unless `--logs=false`). Default = bounded, single service:
 
 ```
 corgi logs --service <x> --json --idle 3s    # the stuck/crashed one, bounded

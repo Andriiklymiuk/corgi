@@ -42,7 +42,7 @@ Notable flags:
 - `--with-deps` — with `--services X`: also start X's transitive `depends_on` closure (upstream services + their db_services), instead of needing to list `--dbServices` manually. Narrows db_services to what the selected services need.
 - `--open` — open each service's URL in the browser when it passes its `healthCheck`, for services that declare `openOnReady` (replaces `sleep N && open <url>`).
 - `--tunnel` — open public HTTPS tunnels alongside the stack for every service with a `tunnel:` block. Equivalent to a parallel `corgi tunnel`, bundled into the one process.
-- `--logs` — persist stdout/stderr of every service and db_service to `corgi_services/.logs/<name>/<timestamp>.log`. Capped 50 MB per file, keeps 10 newest runs per service, older pruned automatically. A `.logs/` entry is auto-added to `corgi_services/.gitignore`. Read back with `corgi logs`.
+- `--logs` — persist stdout/stderr of every service and db_service to `corgi_services/.logs/<name>/<timestamp>.log`. **On by default**; pass `--logs=false` to opt out. Capped 50 MB per file, keeps 10 newest runs per service, older pruned automatically. A `.logs/` entry is auto-added to `corgi_services/.gitignore`. Read back with `corgi logs`.
 - `--ci` — CI mode: suppress spinners, banners, color output. Plain log lines only. Auto-enabled when any common CI environment variable is set: `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`, `BUILDKITE`, `JENKINS_URL`, `TEAMCITY_VERSION`, `TRAVIS`, `DRONE`, `BITBUCKET_BUILD_NUMBER`, `CODEBUILD_BUILD_ID`. Pair with `--runOnce` for pipelines.
 - `--notify` (default `true`) — send a desktop notification when a service exits non-zero (and corgi is not shutting down). Requires a one-time opt-in via `corgi doctor`; never fires on Ctrl-C. Duplicate notifications with the same title+body are throttled to one per 30 seconds so a crash-looping service can't spam the desktop. Pass `--notify=false` to silence per-run. macOS uses `osascript`, Linux `notify-send`, Windows PowerShell toast.
 - `--profile <name>` — run only services/db_services whose `profiles:` list contains `<name>`, plus their transitive `depends_on` closure. Accepts a comma-separated list for the union, e.g. `--profile backend,worker`. No `--profile` runs everything. Unknown profile runs nothing (warns); a partially-unknown list uses the matches. Composes with `--services`/`--omit`/`--dbServices` as an intersection.
@@ -277,7 +277,7 @@ Flags: `-y, --yes` (skip confirm) · `--force` (override version/arch/image mism
 
 ### `corgi logs` (alias: `log`)
 
-Browse and follow per-service logs captured by `corgi run --logs`.
+Browse and follow per-service logs captured by `corgi run` (capture is on by default; `--logs=false` disables it).
 
 Without flags: two-step interactive picker — choose a service, then a run. The chosen log is streamed to stdout and tails new writes like `tail -f`. Auto-exits after the configured `--idle` window of inactivity (default 30s) or when the producing service stops (mtime-based heuristic). Ctrl-C exits at any time.
 
@@ -296,13 +296,14 @@ Each line written by a corgi-managed service is prefixed with an RFC3339 UTC tim
 
 `db_services` are captured differently: their containers run detached, so corgi follows `docker logs -f <driver>-<serviceName>` into the same file. Consequence — the file can include container output from before this `corgi run`, and db runs always show `⏳ in-progress` (the ✅/❌ status suffix tracks service-process exits, not followed containers).
 
-Layout on disk: `corgi_services/.logs/<service>/<ISO-timestamp>.log`. Filenames sort chronologically. Each file is capped at 50 MB; the 10 newest runs per service are kept. Older files are pruned automatically by `corgi run --logs`.
+Layout on disk: `corgi_services/.logs/<service>/<ISO-timestamp>.log`. Filenames sort chronologically. Each file is capped at 50 MB; the 10 newest runs per service are kept. Older files are pruned automatically by `corgi run`.
 
-The `.logs/` directory is auto-added to `corgi_services/.gitignore` on the first `--logs` run, so captures never get committed.
+The `.logs/` directory is auto-added to `corgi_services/.gitignore` on the first capturing run, so captures never get committed.
 
 Examples:
 ```
-corgi run --logs            # in one terminal — start the stack with capture on
+corgi run                   # in one terminal — capture is on by default
+corgi run --logs=false      # opt out of capture for this run
 corgi logs                  # in another terminal — pick a service + run
 corgi logs --service api    # straight to api's runs
 corgi logs --all            # merge newest run of every service, sorted by timestamp
@@ -311,7 +312,7 @@ corgi logs --prune          # wipe all captures
 ```
 
 Errors:
-- `no log directories found under …/.logs/` — re-run with `corgi run --logs` first.
+- `no log directories found under …/.logs/` — run the stack first (`corgi run`), and check it wasn't started with `--logs=false`.
 - `no log files found for <service>` — the service is logged but hasn't produced a file yet (very early in boot), or the name doesn't match.
 
 ### `corgi clean` (alias: `clear`)
