@@ -373,7 +373,8 @@ Upgrade via Homebrew to the latest GitHub release. Safe no-op if already current
 
 ### `corgi version` (alias: `-v`, `--version`)
 
-Prints version string, exits 0.
+Prints version string, exits 0. No banner, so it is safe to parse. `--json`
+emits `{"version", "changelog"}` — use it to assert a minimum version in CI.
 
 ### `corgi help`
 
