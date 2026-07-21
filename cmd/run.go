@@ -708,7 +708,7 @@ func waitDetachedReady(ctx context.Context, corgi *utils.CorgiCompose) error {
 // ready is injected for tests.
 func waitForServicesReady(ctx context.Context, services []utils.Service, ready func(context.Context, utils.Service) error) error {
 	for _, svc := range services {
-		if svc.Port == 0 {
+		if svc.Port == 0 || skipReadinessWait(svc) {
 			continue
 		}
 		if err := ready(ctx, svc); err != nil {
@@ -1113,6 +1113,18 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	if err := utils.WaitForDBReady(ctx, dbService); err != nil {
 		utils.Infof("⚠️  %s\n", err)
 	}
+}
+
+// skipReadinessWait reports whether this run declined to start the service,
+// in which case waiting for it can only burn the timeout.
+func skipReadinessWait(service utils.Service) bool {
+	if !service.ManualRun {
+		return false
+	}
+	if len(utils.ServicesItemsFromFlag) == 0 {
+		return true
+	}
+	return !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName)
 }
 
 func shouldSkipManualRun(service utils.Service) bool {
