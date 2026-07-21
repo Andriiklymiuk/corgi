@@ -131,3 +131,28 @@ func TestWaitForDbsReadySkipsManualRun(t *testing.T) {
 		t.Errorf("probed %v", probed)
 	}
 }
+
+// The launcher and the readiness gate must agree; disagreeing is the bug this
+// pair of functions exists to prevent.
+func TestSkipReadinessWaitAgreesWithLauncher(t *testing.T) {
+	prev := utils.ServicesItemsFromFlag
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = prev })
+
+	cases := []struct {
+		name     string
+		selected []string
+		service  utils.Service
+	}{
+		{"plain service", nil, utils.Service{ServiceName: "api"}},
+		{"manual, nothing selected", nil, utils.Service{ServiceName: "m", ManualRun: true}},
+		{"manual, selected", []string{"m"}, utils.Service{ServiceName: "m", ManualRun: true}},
+		{"manual, other selected", []string{"api"}, utils.Service{ServiceName: "m", ManualRun: true}},
+		{"plain, other selected", []string{"api"}, utils.Service{ServiceName: "web"}},
+	}
+	for _, c := range cases {
+		utils.ServicesItemsFromFlag = c.selected
+		if got, want := skipReadinessWait(c.service), shouldSkipManualRun(c.service); got != want {
+			t.Errorf("%s: wait skips=%v but launcher skips=%v", c.name, got, want)
+		}
+	}
+}
