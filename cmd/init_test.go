@@ -662,3 +662,23 @@ func TestNestedInitInheritsDepth(t *testing.T) {
 		t.Errorf("nested init = %q", got)
 	}
 }
+
+func TestCloneServicesReportsFailures(t *testing.T) {
+	dir := t.TempDir()
+	// A cloneFrom that cannot resolve: the clone must be reported, not swallowed.
+	failed := CloneServices([]utils.Service{{
+		ServiceName:  "broken",
+		Path:         "./broken",
+		AbsolutePath: filepath.Join(dir, "broken"),
+		CloneFrom:    "https://invalid.invalid/nope/nope.git",
+	}})
+	if len(failed) != 1 || failed[0] != "broken" {
+		t.Errorf("expected the failing service to be reported, got %v", failed)
+	}
+}
+
+func TestCloneServicesNoPathIsNotAFailure(t *testing.T) {
+	if failed := CloneServices([]utils.Service{{ServiceName: "inplace"}}); len(failed) != 0 {
+		t.Errorf("a service with no path runs in place; not a clone failure, got %v", failed)
+	}
+}
