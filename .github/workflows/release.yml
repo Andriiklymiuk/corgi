@@ -40,19 +40,19 @@ jobs:
           echo "TAG: $TAG"
 
           # Check if the tag exists
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/$TAG)
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${GITHUB_TOKEN}" "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}")
 
           if [ "$HTTP_STATUS" -ne 200 ]
           then
             echo "Tag does not exist, creating new tag"
             git config --global user.email "action@github.com"
             git config --global user.name "GitHub Action"
-            git tag $TAG
-            git push origin $TAG
-            echo "TAG_EXISTS=false" >> $GITHUB_ENV
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "TAG_EXISTS=false" >> "$GITHUB_ENV"
           else
             echo "Tag already exists"
-            echo "TAG_EXISTS=true" >> $GITHUB_ENV
+            echo "TAG_EXISTS=true" >> "$GITHUB_ENV"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
@@ -66,5 +66,20 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+      # The GitHub Action is consumed as andriiklymiuk/corgi@v1, so that tag has
+      # to follow each release or callers would be stuck on whatever it pointed
+      # at when they wrote their workflow. Moving a major tag is the convention
+      # actions/checkout and friends use.
+      - name: Move the major tag to this release
+        if: env.TAG_EXISTS == 'false'
+        run: |
+          TAG="v${VERSION}"
+          MAJOR="v${VERSION%%.*}"
+          echo "pointing $MAJOR at $TAG"
+          git tag --force "$MAJOR" "$TAG"
+          git push --force origin "$MAJOR"
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}

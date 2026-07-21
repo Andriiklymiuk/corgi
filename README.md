@@ -293,7 +293,7 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
 
 | input | |
 |---|---|
-| `version` | Minimum corgi version. A floor, not a pin: newer is fine, older fails the step with the version it found. Omit to accept whatever installs. |
+| `version` | corgi version to install, without the leading `v`. Omit to take the latest release. Pinning keeps a workflow reproducible. |
 | `working-directory` | Where `corgi-compose.yml` lives. Defaults to the repo root; the cache outputs are derived from it. |
 
 | output | |
@@ -303,6 +303,8 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
 | `cache-key` | Key that changes whenever any `cacheKey` file changes — pass straight to its `key`. |
 
 `@v1` moves with each release, so you get fixes without editing workflows. Pin an exact tag (`@v1.20.13`) if you would rather bump deliberately.
+
+The action downloads the release archive for the runner's platform and checks it against the published `checksums.txt` before installing, so a tampered or truncated download fails rather than executing.
 
 Two things worth knowing before you write the rest of the job:
 

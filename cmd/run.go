@@ -672,7 +672,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
 	force, _ := cmd.Flags().GetBool("force")
-	if blocked := detachAlreadyRunning(statePath, force); blocked {
+	if detachAlreadyRunning(statePath, force) {
 		return
 	}
 
@@ -717,6 +717,8 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), remaining)
 		defer cancel()
+		// No-op unless --follow replaces it, so the failure path can stop the
+		// stream unconditionally.
 		stopFollow := func() {}
 		if follow, _ := cmd.Flags().GetBool("follow"); follow {
 			stopFollow = startLogFollow()

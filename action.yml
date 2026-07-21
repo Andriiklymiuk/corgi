@@ -1,5 +1,5 @@
 name: Setup corgi
-description: Install corgi, enforce a minimum version, and expose what a CI cache should persist.
+description: Install corgi from a verified release archive and expose what a CI cache should persist.
 author: Andrii Klymiuk
 
 branding:
@@ -9,8 +9,8 @@ branding:
 inputs:
   version:
     description: >-
-      Minimum corgi version required by this workflow. A floor, not a pin: a
-      newer corgi is fine, an older one fails the step with the version it found.
+      corgi version to install, without the leading v (e.g. 1.20.13). Omit to
+      take the latest release. Pinning keeps a workflow reproducible.
     required: false
     default: ""
   working-directory:
@@ -40,32 +40,67 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        MINIMUM: ${{ inputs.version }}
+        REQUESTED_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
 
-        curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | bash
+        # --proto '=https' refuses any non-https URL, including one arrived at
+        # through a redirect, so a hijacked redirect cannot downgrade the
+        # transport. --tlsv1.2 rules out obsolete TLS.
+        curl_opts=(--fail --silent --show-error --location --proto '=https' --tlsv1.2)
+
+        version="${REQUESTED_VERSION#v}"
+        if [ -z "$version" ]; then
+          version="$(curl "${curl_opts[@]}" \
+            https://api.github.com/repos/Andriiklymiuk/corgi/releases/latest \
+            | jq -r .tag_name)"
+          version="${version#v}"
+        fi
+
+        case "$(uname -s)" in
+          Linux) os=linux ;;
+          Darwin) os=darwin ;;
+          *) echo "::error::corgi action supports Linux and macOS runners, not $(uname -s)"; exit 1 ;;
+        esac
+        case "$(uname -m)" in
+          x86_64|amd64) arch=amd64 ;;
+          aarch64|arm64) arch=arm64 ;;
+          *) echo "::error::unsupported architecture $(uname -m)"; exit 1 ;;
+        esac
+
+        archive="corgi_${version}_${os}_${arch}.tar.gz"
+        base="https://github.com/Andriiklymiuk/corgi/releases/download/v${version}"
+        tmp="$(mktemp -d)"
+
+        curl "${curl_opts[@]}" -o "$tmp/$archive" "$base/$archive"
+        curl "${curl_opts[@]}" -o "$tmp/checksums.txt" "$base/checksums.txt"
+
+        # Verify before anything is executed: the release publishes checksums,
+        # so a tampered or truncated download fails here rather than running.
+        (
+          cd "$tmp"
+          if command -v sha256sum >/dev/null 2>&1; then
+            grep " ${archive}\$" checksums.txt | sha256sum --check --status -
+          else
+            grep " ${archive}\$" checksums.txt | shasum --algorithm 256 --check --status -
+          fi
+        ) || { echo "::error::checksum mismatch for $archive — refusing to install"; exit 1; }
+
+        tar -xzf "$tmp/$archive" -C "$tmp" corgi
+        sudo install -m 0755 "$tmp/corgi" /usr/local/bin/corgi
+        rm -rf "$tmp"
 
         installed="$(corgi version --json | jq -r .version)"
         echo "version=$installed" >> "$GITHUB_OUTPUT"
+        echo "corgi $installed (verified against checksums.txt)"
 
-        if [ -n "$MINIMUM" ]; then
-          # sort -V, because a string compare reads 1.20.9 as newer than 1.20.10.
-          oldest="$(printf '%s\n%s\n' "$MINIMUM" "$installed" | sort -V | head -1)"
-          if [ "$oldest" != "$MINIMUM" ] && [ "$installed" != "$MINIMUM" ]; then
-            echo "::error::corgi $installed is older than the required $MINIMUM"
-            exit 1
-          fi
-        fi
-        echo "corgi $installed${MINIMUM:+ (minimum $MINIMUM)}"
-
-        # Only available once a compose file exists; a workflow that installs
-        # corgi before checking out should still succeed here.
-        if [ -f corgi-compose.yml ] || ls ./*corgi-compose.yml >/dev/null 2>&1; then
+        # Only available once a compose file exists; installing corgi before
+        # the checkout should still succeed here.
+        if ls ./*corgi-compose.yml >/dev/null 2>&1 || [ -f corgi-compose.yml ]; then
           {
-            echo "cache-paths<<CORGI_EOF"
+            echo "cache-paths<<CORGI_ACTION_EOF"
             corgi cache paths
-            echo "CORGI_EOF"
+            echo "CORGI_ACTION_EOF"
           } >> "$GITHUB_OUTPUT"
           echo "cache-key=$(corgi cache paths --key)" >> "$GITHUB_OUTPUT"
         else
