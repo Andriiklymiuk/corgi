@@ -565,7 +565,10 @@ func runRun(cmd *cobra.Command, _ []string) {
 	}
 
 	if CheckClonedReposExistence(corgi.Services) {
-		CloneServices(corgi.Services)
+		if failures := CloneServices(corgi.Services); len(failures) > 0 {
+			utils.Info("⚠️  could not clone:", strings.Join(failures, ", "),
+				"— those services will fail to start")
+		}
 	}
 
 	detach, _ := cmd.Flags().GetBool("detach")
