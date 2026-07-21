@@ -99,3 +99,27 @@ func TestWarmupDefaults(t *testing.T) {
 		t.Error("explicit values must win")
 	}
 }
+
+// buildService copies fields one by one, so a new field parses correctly and
+// is then dropped on the way to the code that uses it. That is how warmup
+// shipped silently doing nothing: the yaml test passed, the feature did not.
+func TestBuildServiceKeepsWarmup(t *testing.T) {
+	parsed := Service{
+		Path:        "./web",
+		Port:        3101,
+		HealthCheck: "/health",
+		Warmup:      &WarmupCheck{Path: "/", Timeout: 7 * time.Minute, Expect: "root"},
+	}
+
+	built := buildService("web", parsed)
+
+	if built.Warmup == nil {
+		t.Fatal("warmup was dropped between the compose file and the service")
+	}
+	if built.Warmup.Path != "/" || built.Warmup.Expect != "root" || built.Warmup.Timeout != 7*time.Minute {
+		t.Errorf("warmup lost detail: %+v", built.Warmup)
+	}
+	if built.HealthCheck != "/health" {
+		t.Errorf("healthCheck = %q", built.HealthCheck)
+	}
+}
