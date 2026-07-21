@@ -44,6 +44,31 @@ func withEnvSource(command, envFile string) string {
 // SkipAutoSourceEnv disables auto-sourcing for a single command.
 const SkipAutoSourceEnv = "<<corgi:no-env-source>>"
 
+var (
+	serviceShellOnce sync.Once
+	serviceShellPath string
+)
+
+// ServiceShell is the shell corgi runs compose commands with. It prefers bash,
+// because people write these commands in their own shell and reach for `source`
+// and `[[ ]]` without thinking about it: /bin/sh is bash on macOS but dash on
+// most Linux, so a command that works on a laptop exits 127 in CI. $CORGI_SHELL
+// overrides; /bin/sh is the fallback where bash is absent.
+func ServiceShell() string {
+	serviceShellOnce.Do(func() {
+		if override := os.Getenv("CORGI_SHELL"); override != "" {
+			serviceShellPath = override
+			return
+		}
+		if bash, err := exec.LookPath("bash"); err == nil {
+			serviceShellPath = bash
+			return
+		}
+		serviceShellPath = "/bin/sh"
+	})
+	return serviceShellPath
+}
+
 func resolveEnvFile(path string, envFileOverride []string) string {
 	if path == "" {
 		return ""
@@ -219,7 +244,7 @@ func executeShellLine(serviceName, finalCommand, path string, interactive bool, 
 		return nil
 	}
 	shellCommand := withEnvSource(finalCommand, resolvedEnvFile)
-	cmd := exec.Command("/bin/sh", "-c", shellCommand)
+	cmd := exec.Command(ServiceShell(), "-c", shellCommand)
 	cmd.Dir = path
 
 	if interactive {
@@ -280,7 +305,7 @@ func RunServiceCommandExitCode(
 ) (int, error) {
 	resolvedEnvFile := resolveEnvFile(path, envFile)
 	shellCommand := withEnvSource(command, resolvedEnvFile)
-	cmd := exec.Command("/bin/sh", "-c", shellCommand)
+	cmd := exec.Command(ServiceShell(), "-c", shellCommand)
 	cmd.Dir = path
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -308,7 +333,7 @@ func RunServiceCommandExitCode(
 func StartDetached(serviceName, command, path string, envFile ...string) (*os.Process, error) {
 	resolvedEnvFile := resolveEnvFile(path, envFile)
 	shellCommand := withEnvSource(command, resolvedEnvFile)
-	cmd := exec.Command("/bin/sh", "-c", shellCommand)
+	cmd := exec.Command(ServiceShell(), "-c", shellCommand)
 	cmd.Dir = path
 	// Direct *os.File so the detached child keeps logging after corgi exits.
 	if f := logWriterFile(getLogWriter(serviceName)); f != nil {
@@ -422,7 +447,7 @@ func runCleanupCommand(commandsName, serviceName, command, path, resolvedEnvFile
 	ctx, cancel := context.WithTimeout(context.Background(), AfterStartTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", shellCommand)
+	cmd := exec.CommandContext(ctx, ServiceShell(), "-c", shellCommand)
 	cmd.Dir = path
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

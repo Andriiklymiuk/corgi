@@ -1012,3 +1012,46 @@ func TestStartDetached_WritesDirectlyToLogFile(t *testing.T) {
 		t.Errorf("expected raw lines without timestamp prefix, got %q", got)
 	}
 }
+
+func TestServiceShellPrefersBash(t *testing.T) {
+	resetServiceShell()
+	t.Cleanup(resetServiceShell)
+
+	got := ServiceShell()
+	if bash, err := exec.LookPath("bash"); err == nil {
+		if got != bash {
+			t.Errorf("bash is available, so it should be used: got %q want %q", got, bash)
+		}
+		return
+	}
+	if got != "/bin/sh" {
+		t.Errorf("without bash it must fall back to /bin/sh, got %q", got)
+	}
+}
+
+func TestServiceShellRespectsOverride(t *testing.T) {
+	resetServiceShell()
+	t.Setenv("CORGI_SHELL", "/some/other/shell")
+	t.Cleanup(resetServiceShell)
+
+	if got := ServiceShell(); got != "/some/other/shell" {
+		t.Errorf("CORGI_SHELL must win, got %q", got)
+	}
+}
+
+// The resolved shell must actually run a bash-ism; that is the whole point.
+func TestServiceShellRunsBashBuiltins(t *testing.T) {
+	resetServiceShell()
+	t.Cleanup(resetServiceShell)
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+
+	out, err := exec.Command(ServiceShell(), "-c", "[[ 1 == 1 ]] && echo works").CombinedOutput()
+	if err != nil {
+		t.Fatalf("a bash-only construct must run: %v (%s)", err, out)
+	}
+	if strings.TrimSpace(string(out)) != "works" {
+		t.Errorf("got %q", out)
+	}
+}
