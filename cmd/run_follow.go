@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"os"
+	"strings"
 	"sync"
 	"time"
+
+	"andriiklymiuk/corgi/utils"
 )
 
 // startLogFollow streams every service's log in the background while the
@@ -62,4 +66,41 @@ func followUntil(done <-chan struct{}) {
 		default:
 		}
 	}
+}
+
+// failureLogTailLines is enough to show a stack trace or a failed install
+// without burying the error that preceded it.
+const failureLogTailLines = 80
+
+// printFailureLogs shows the tail of every service's newest log after a failed
+// boot. Grouped per service so a reader can find the one that matters.
+func printFailureLogs() {
+	base := logsBase()
+	services, err := utils.ListLoggedServices(base)
+	if err != nil || len(services) == 0 {
+		return
+	}
+	utils.Info("\n─── service logs ───")
+	for _, svc := range services {
+		runs, runErr := utils.ListServiceRuns(base, svc)
+		if runErr != nil || len(runs) == 0 {
+			continue
+		}
+		utils.Infof("\n── %s ──\n", svc)
+		for _, line := range tailLines(runs[0], failureLogTailLines) {
+			utils.Info(line)
+		}
+	}
+}
+
+func tailLines(path string, n int) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return lines
 }

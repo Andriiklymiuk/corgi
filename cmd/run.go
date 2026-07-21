@@ -22,6 +22,10 @@ import (
 
 var omitItems []string
 
+// bootStartedAt marks the beginning of a boot so --wait-timeout can cover
+// beforeStart as well as the readiness wait.
+var bootStartedAt time.Time
+
 type runSummary struct {
 	Started []runSummaryItem `json:"started"`
 	Failed  []runSummaryItem `json:"failed"`
@@ -244,6 +248,13 @@ startup summary, and return immediately (no streaming, no watch).`,
 		false,
 		`With --detach: ignore an existing run-state and start anyway,
 removing the stale state file first.`,
+	)
+	runCmd.PersistentFlags().Bool(
+		"dump-on-failure",
+		true,
+		`When a --wait boot fails, print the tail of every service log. The
+reason is in the logs rather than in the error, and in CI they are otherwise
+only reachable after the job has ended. Pass --dump-on-failure=false to skip.`,
 	)
 	runCmd.PersistentFlags().Bool(
 		"follow",
@@ -580,6 +591,11 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	detach, _ := cmd.Flags().GetBool("detach")
 
+	// Started before beforeStart, so --wait-timeout is a budget for the whole
+	// boot. Installs, migrations and builds are usually the slow part; timing
+	// only the readiness wait made the flag mean far less than it looks.
+	bootStartedAt = time.Now()
+
 	if detach {
 		if tf, _ := cmd.Flags().GetBool("tunnel"); tf {
 			msg := "--tunnel cannot be combined with --detach (tunnels run in-process); run `corgi tunnel` separately"
@@ -683,7 +699,19 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	// still works even if the wait times out.
 	if wait, _ := cmd.Flags().GetBool("wait"); wait {
 		timeout, _ := cmd.Flags().GetDuration("wait-timeout")
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		remaining := timeout - time.Since(bootStartedAt)
+		if remaining <= 0 {
+			msg := fmt.Sprintf(
+				"%s: beforeStart alone took %s, over the %s budget — raise --wait-timeout or make the setup cheaper",
+				utils.ErrReadinessTimeout, time.Since(bootStartedAt).Round(time.Second), timeout)
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrReadinessTimeout, msg)
+			} else {
+				fmt.Fprintln(os.Stderr, "❌", msg)
+			}
+			os.Exit(1)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), remaining)
 		defer cancel()
 		if follow, _ := cmd.Flags().GetBool("follow"); follow {
 			stop := startLogFollow()
@@ -694,6 +722,10 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
 			} else {
 				fmt.Fprintln(os.Stderr, "❌", err)
+			}
+			// The reason a boot failed is in the service logs, not up here.
+			if dump, _ := cmd.Flags().GetBool("dump-on-failure"); dump {
+				printFailureLogs()
 			}
 			os.Exit(1)
 		}

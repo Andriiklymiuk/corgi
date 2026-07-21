@@ -14,6 +14,7 @@
       "type": "string",
       "description": "Short description of what this corgi project sets up."
     },
+    "e2e": { "$ref": "#/definitions/e2e", "description": "Cross-service test suite for the whole stack." },
     "useDocker": {
       "type": "boolean",
       "description": "Run supported pieces via Docker."
@@ -144,7 +145,18 @@
         "runner": { "$ref": "#/definitions/runner", "description": "Runner config (e.g. docker)." },
         "tunnel": { "$ref": "#/definitions/tunnel", "description": "Optional public HTTPS tunnel config." },
         "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset. Must be cheap: it is polled, so an endpoint that does work (a dev server compiling on demand) starves the machine and never settles — put that in warmup instead.", "examples": ["/health"] },
-        "warmup": { "$ref": "#/definitions/warmup", "description": "One expensive request made once the service is listening, before it counts as ready." },
+        "e2e": {
+      "type": "object",
+      "description": "A cross-service test suite belonging to the stack. Run with `corgi test --e2e` against an already-running stack; services keep their own scripts.test for their own tests.",
+      "additionalProperties": false,
+      "properties": {
+        "workdir": { "type": "string", "description": "Directory the suite lives in, relative to corgi-compose.yml.", "examples": ["./e2e"] },
+        "install": { "type": "string", "description": "Optional command to install the suite's dependencies first.", "examples": ["npm ci"] },
+        "run": { "type": "string", "description": "Command that runs the suite. Non-zero fails.", "examples": ["npm run e2e"] },
+        "artifacts": { "type": "array", "items": { "type": "string" }, "description": "Paths (relative to workdir) worth keeping when the suite fails — screenshots, traces, reports.", "examples": [["flows/artifacts"]] }
+      }
+    },
+    "warmup": { "$ref": "#/definitions/warmup", "description": "One expensive request made once the service is listening, before it counts as ready." },
         "profiles": { "type": "array", "items": { "type": "string" }, "description": "Run profiles this service belongs to. `corgi run --profile P` runs only members of P plus their depends_on closure. No profiles = runs only when no --profile is passed.", "examples": [["backend", "full"]] }
       }
     },
