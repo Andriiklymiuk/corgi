@@ -658,3 +658,57 @@ func TestWorktreeForBranchAbsent(t *testing.T) {
 		t.Errorf("a non-repo yields nothing, got %q", got)
 	}
 }
+
+func TestCheckoutFeatureBranchInPlace(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	repo := filepath.Join(root, "api")
+	initRepo(t, repo)
+	git(t, repo, "branch", "feature/x")
+
+	switched, err := CheckoutFeatureBranch(repo, "feature/x")
+	if err != nil || !switched {
+		t.Fatalf("switch: (%v, %v)", switched, err)
+	}
+	if cur, _ := gitOut(repo, "rev-parse", "--abbrev-ref", "HEAD"); cur != "feature/x" {
+		t.Errorf("HEAD = %q, want feature/x", cur)
+	}
+
+	if switched, err := CheckoutFeatureBranch(repo, "feature/x"); err != nil || !switched {
+		t.Errorf("already on the branch is still a switch: (%v, %v)", switched, err)
+	}
+	if switched, err := CheckoutFeatureBranch(repo, "nope"); err != nil || switched {
+		t.Errorf("a missing branch is a no-op, got (%v, %v)", switched, err)
+	}
+	if switched, err := CheckoutFeatureBranch(repo, ""); err != nil || switched {
+		t.Errorf("no branch is a no-op, got (%v, %v)", switched, err)
+	}
+	if switched, err := CheckoutFeatureBranch(filepath.Join(root, "nothing"), "x"); err != nil || switched {
+		t.Errorf("a non-repo is a no-op, got (%v, %v)", switched, err)
+	}
+}
+
+func TestCheckoutFeatureBranchFromRemoteOnly(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin")
+	initRepo(t, origin)
+	git(t, origin, "branch", "feature/x")
+
+	clone := filepath.Join(root, "clone")
+	if out, err := exec.Command("git", "clone", "--depth", "1", "--branch", "main", "file://"+origin, clone).CombinedOutput(); err != nil {
+		t.Fatalf("clone: %v\n%s", err, out)
+	}
+
+	switched, err := CheckoutFeatureBranch(clone, "feature/x")
+	if err != nil || !switched {
+		t.Fatalf("a shallow clone must still reach a remote-only branch: (%v, %v)", switched, err)
+	}
+	if cur, _ := gitOut(clone, "rev-parse", "--abbrev-ref", "HEAD"); cur != "feature/x" {
+		t.Errorf("HEAD = %q, want feature/x", cur)
+	}
+}
