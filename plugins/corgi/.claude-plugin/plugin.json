@@ -1,7 +1,7 @@
 {
   "name": "corgi",
   "description": "Teach Claude how to use the corgi CLI: author corgi-compose.yml, start a stack (or a slice) detached and wait until healthy, debug a misbehaving stack local-first then escalate to its logs/analytics provider, interpret doctor/status output, plan from the tracker (Linear/Jira) with standup/triage/epic-decompose tied to real PR+CI state across services, pick up build-ready tickets (explicit links or the `agent`-labelled queue) and dispatch them to stories, suggest ranked evidence-backed product + engineering improvements, ship batches of tracker issues or a feature description across the workspace as tested, reviewed draft PRs/MRs, review existing GitHub/GitLab PRs/MRs against repo standards with inline suggestions, and run a supervised autopilot loop that drains the agent ticket queue into draft PRs with one spec gate per batch, a heartbeat, and a kill switch, plus a committed workspace-memory store the skills read before acting and append to (confirmed) after a notable fix, and run suggest proactively on a schedule to auto-propose (or, opt-in, auto-file as a draft) one rate-limited tracker ticket for the top win.",
-  "version": "1.20.4",
+  "version": "1.20.5",
   "author": {
     "name": "Andrii Klymiuk",
     "url": "https://github.com/Andriiklymiuk"
