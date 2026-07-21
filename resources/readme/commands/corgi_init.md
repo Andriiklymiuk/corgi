@@ -21,6 +21,8 @@ corgi init [flags]
       --feature string   Check out this branch in every service repo that has it, leaving the rest
                          on their default branch. Same rule as run --feature, applied to the checkouts
                          themselves, so anything reading a repo's files afterwards sees the branch.
+                         Wins over a service's compose branch: when the repo has it; where it does not,
+                         the compose branch: still applies.
   -h, --help             help for init
 ```
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"andriiklymiuk/corgi/utils"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -681,4 +682,49 @@ func TestCloneServicesNoPathIsNotAFailure(t *testing.T) {
 	if failed := CloneServices([]utils.Service{{ServiceName: "inplace"}}); len(failed) != 0 {
 		t.Errorf("a service with no path runs in place; not a clone failure, got %v", failed)
 	}
+}
+
+func TestCheckoutFeatureBranchesOverridesComposeBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	repo := filepath.Join(root, "api")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "-b", "main"}, {"commit", "--allow-empty", "-m", "init"},
+		{"branch", "develop"}, {"branch", "feature/x"}, {"checkout", "develop"},
+	} {
+		c := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		c.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	svc := utils.Service{ServiceName: "api", AbsolutePath: repo, Branch: "develop"}
+
+	// --feature wins over the compose branch: the flag is the more specific intent.
+	checkoutFeatureBranches([]utils.Service{svc}, "feature/x")
+	if cur := currentBranch(t, repo); cur != "feature/x" {
+		t.Errorf("--feature should win over compose branch:, on %q", cur)
+	}
+
+	// A repo without the feature branch keeps whatever it was on.
+	checkoutFeatureBranches([]utils.Service{svc}, "absent")
+	if cur := currentBranch(t, repo); cur != "feature/x" {
+		t.Errorf("a missing feature branch must not move the checkout, on %q", cur)
+	}
+}
+
+func currentBranch(t *testing.T, repo string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(out))
 }
