@@ -447,3 +447,114 @@ func TestDumpNewestLogsSkipsEmptyServiceDirs(t *testing.T) {
 		t.Errorf("a service with no runs must be skipped, got %v", entries)
 	}
 }
+
+func writeLine(t *testing.T, path, line string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(line); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func logsRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = root
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+	return root
+}
+
+func serviceLog(t *testing.T, root, service string) string {
+	t.Helper()
+	dir := filepath.Join(root, "corgi_services", ".logs", service)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(dir, "2026-01-01T00-00-00.log")
+}
+
+// The bug this replaces: --all drained to EOF and returned, so it printed the
+// existing lines once and exited instead of following.
+func TestFollowAllLogsKeepsTailing(t *testing.T) {
+	root := logsRoot(t)
+	log := serviceLog(t, root, "api")
+	writeLine(t, log, "first\n")
+
+	prev := logsIdleFlag
+	logsIdleFlag = 900 * time.Millisecond
+	t.Cleanup(func() { logsIdleFlag = prev })
+
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		writeLine(t, log, "written later\n")
+	}()
+
+	out := captureStdout(t, func() {
+		if err := followAllLogs(logsBase()); err != nil {
+			t.Errorf("follow: %v", err)
+		}
+	})
+	for _, want := range []string{"first", "written later"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in %q", want, out)
+		}
+	}
+}
+
+// A service that starts slowly has no log file when the follow begins.
+func TestFollowAllLogsAdoptsALateService(t *testing.T) {
+	root := logsRoot(t)
+	writeLine(t, serviceLog(t, root, "api"), "api up\n")
+
+	prev := logsIdleFlag
+	logsIdleFlag = 1200 * time.Millisecond
+	t.Cleanup(func() { logsIdleFlag = prev })
+
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		writeLine(t, serviceLog(t, root, "web"), "web up\n")
+	}()
+
+	out := captureStdout(t, func() {
+		if err := followAllLogs(logsBase()); err != nil {
+			t.Errorf("follow: %v", err)
+		}
+	})
+	if !strings.Contains(out, "web up") {
+		t.Errorf("a service that starts logging later must be picked up; got %q", out)
+	}
+}
+
+// A line still being written must not be printed, then printed again whole.
+func TestFollowAllLogsHoldsBackAPartialLine(t *testing.T) {
+	root := logsRoot(t)
+	log := serviceLog(t, root, "api")
+	writeLine(t, log, "complete\n")
+	writeLine(t, log, "BEGIN")
+
+	prev := logsIdleFlag
+	logsIdleFlag = 900 * time.Millisecond
+	t.Cleanup(func() { logsIdleFlag = prev })
+
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		writeLine(t, log, "-END\n")
+	}()
+
+	out := captureStdout(t, func() {
+		if err := followAllLogs(logsBase()); err != nil {
+			t.Errorf("follow: %v", err)
+		}
+	})
+	if strings.Count(out, "BEGIN") != 1 {
+		t.Errorf("the half-written line must be emitted exactly once; got %q", out)
+	}
+	if !strings.Contains(out, "BEGIN-END") {
+		t.Errorf("it must be emitted whole, not in fragments; got %q", out)
+	}
+}

@@ -246,6 +246,13 @@ startup summary, and return immediately (no streaming, no watch).`,
 removing the stale state file first.`,
 	)
 	runCmd.PersistentFlags().Bool(
+		"follow",
+		false,
+		`With --detach --wait: stream every service's log while waiting for the
+stack to become ready. A detached boot is otherwise silent for as long as the
+installs take, which is exactly when you want to see what it is doing.`,
+	)
+	runCmd.PersistentFlags().Bool(
 		"wait",
 		false,
 		`With --detach: block until every service and database is reachable
@@ -678,6 +685,10 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		timeout, _ := cmd.Flags().GetDuration("wait-timeout")
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
+		if follow, _ := cmd.Flags().GetBool("follow"); follow {
+			stop := startLogFollow()
+			defer stop()
+		}
 		if err := waitDetachedReady(ctx, corgi); err != nil {
 			if utils.JSONOutput {
 				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
