@@ -25,11 +25,36 @@ This is used to create db service from template.
 }
 
 var initDepthFlag int
+var initFeatureFlag string
 
 func init() {
 	rootCmd.AddCommand(initCmd)
 	initCmd.Flags().IntVar(&initDepthFlag, "depth", 0,
 		"Clone each service repo shallow, keeping this many commits (0 = full clone)")
+	initCmd.Flags().StringVar(&initFeatureFlag, "feature", "",
+		`Check out this branch in every service repo that has it, leaving the rest
+on their default branch. Same rule as run --feature, applied to the checkouts
+themselves, so anything reading a repo's files afterwards sees the branch.`)
+}
+
+// checkoutFeatureBranches switches the freshly cloned repos to the feature
+// branch, so a later step reading their files gets the code under review rather
+// than the default branch.
+func checkoutFeatureBranches(services []utils.Service, branch string) {
+	if branch == "" {
+		return
+	}
+	for _, service := range services {
+		switched, err := utils.CheckoutFeatureBranch(service.AbsolutePath, branch)
+		switch {
+		case err != nil:
+			fmt.Printf("feature: %s → %v\n", service.ServiceName, err)
+		case switched:
+			utils.Info("feature:", service.ServiceName, "→", branch)
+		default:
+			utils.Info("feature:", service.ServiceName, "→ no", branch, "branch, staying on its default")
+		}
+	}
 }
 
 func runInit(cmd *cobra.Command, _ []string) {
@@ -44,6 +69,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 	CreateDatabaseServices(corgi.DatabaseServices)
 	CreateServices(corgi.Services)
 	cloneFailures := CloneServices(corgi.Services)
+	checkoutFeatureBranches(corgi.Services, initFeatureFlag)
 	RunRequired(corgi.Required)
 
 	utils.RunServiceCommands(

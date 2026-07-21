@@ -349,6 +349,41 @@ func isRepoRoot(dir string) bool {
 	return root == self
 }
 
+// CheckoutFeatureBranch switches repo to branch in place when it carries it,
+// fetching from origin first. Reports whether it switched. Unlike the worktree
+// path this is for freshly cloned repos, where there is no work to preserve.
+func CheckoutFeatureBranch(repo, branch string) (bool, error) {
+	if branch == "" || !isGitRepo(repo) {
+		return false, nil
+	}
+	if cur, _ := gitOut(repo, "rev-parse", "--abbrev-ref", "HEAD"); cur == branch {
+		return true, nil
+	}
+	local, remote := branchIsKnown(repo, branch)
+	if !local && !remote {
+		return false, nil
+	}
+	if !local {
+		spec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
+		args := []string{"fetch", "--no-tags"}
+		if isShallowRepo(repo) {
+			args = append(args, "--depth", "1")
+		}
+		args = append(args, "origin", spec)
+		if err := gitRunNoPrompt(repo, args...); err != nil {
+			return false, fmt.Errorf("fetch origin %s: %v", branch, err)
+		}
+		if err := gitRun(repo, "checkout", "-B", branch, "refs/remotes/origin/"+branch); err != nil {
+			return false, fmt.Errorf("checkout %s: %v", branch, err)
+		}
+		return true, nil
+	}
+	if err := gitRun(repo, "checkout", branch); err != nil {
+		return false, fmt.Errorf("checkout %s: %v", branch, err)
+	}
+	return true, nil
+}
+
 // EnsureFeatureWorktree materializes branch for repo when it exists locally or
 // on origin, fetching the remote head first. Returns an empty dir and no error
 // when the repo does not carry the branch.

@@ -17,8 +17,11 @@ corgi init [flags]
 ### Options
 
 ```
-      --depth int   Clone each service repo shallow, keeping this many commits (0 = full clone)
-  -h, --help        help for init
+      --depth int        Clone each service repo shallow, keeping this many commits (0 = full clone)
+      --feature string   Check out this branch in every service repo that has it, leaving the rest
+                         on their default branch. Same rule as run --feature, applied to the checkouts
+                         themselves, so anything reading a repo's files afterwards sees the branch.
+  -h, --help             help for init
 ```
 
 ### Options inherited from parent commands
