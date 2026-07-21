@@ -75,9 +75,10 @@ macOS and dash on Linux (fixed in corgi 1.20.9, which prefers bash — but a rep
 pinning an older corgi still needs POSIX `.` rather than `source`).
 
 **Env vars validated at construction crash the service, not the request.** An
-empty `SES_SMTP_USER` threw inside a transport constructor, so the service never
-started and readiness polled forever. Before trusting a CI env file, grep the
-services for startup validation: `grep -rn "is required" <service>/src`.
+empty credential threw inside a mail transport's constructor, so the service
+never started and readiness polled forever — an empty value is not the same as
+an unused one. Before trusting a CI env file, grep the services for startup
+validation: `grep -rn "is required" <service>/src`.
 
 **Node version decides npm version.** Node 22 ships npm 10.x; a repo requiring
 `npm >= 11.5.0` fails `npm ci` with `EBADENGINE`. Node 24 bundles npm 11.

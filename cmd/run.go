@@ -698,6 +698,11 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 // waitDetachedReady blocks until every service (with a port) and database is
 // reachable, or ctx expires. Returns the first readiness error.
 func waitDetachedReady(ctx context.Context, corgi *utils.CorgiCompose) error {
+	// A service whose beforeStart failed is never going to listen, so waiting
+	// for it only delays the real error by the whole timeout.
+	if err := utils.BeforeStartFailureError(); err != nil {
+		return err
+	}
 	if err := waitForServicesReady(ctx, corgi.Services, utils.WaitForServiceReady); err != nil {
 		return err
 	}
@@ -820,6 +825,7 @@ func runServiceBeforeStart(service utils.Service, envFile string) {
 		return utils.RunServiceCmd(service.ServiceName, c, service.AbsolutePath, false, envFile)
 	}); err != nil {
 		utils.Infof("aborting beforeStart for %s: %v\n", service.ServiceName, err)
+		utils.RecordBeforeStartFailure(service.ServiceName, err)
 	}
 }
 
