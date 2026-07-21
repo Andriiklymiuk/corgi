@@ -3,6 +3,7 @@ package utils
 import (
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -437,4 +438,10 @@ func TestSubstituteCrossServiceRefs_OwnVarUnchanged(t *testing.T) {
 	if got != "X=${PORT}" {
 		t.Fatalf("own ${VAR} must not be touched, got %q", got)
 	}
+}
+
+// resetServiceShell clears the once-cached shell so each test resolves fresh.
+func resetServiceShell() {
+	serviceShellOnce = sync.Once{}
+	serviceShellPath = ""
 }
