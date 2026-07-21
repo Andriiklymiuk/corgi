@@ -269,7 +269,25 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
 
 `--feature` is the cross-repo version: pass one branch name and corgi asks every service's repo whether it has it (locally or on `origin`), running the ones that do from a worktree and leaving the rest on their default checkout. A missing branch isn't an error — a feature rarely touches the whole stack. Remote-only branches are fetched first, so it works on a fresh or shallow clone.
 
-**Run the whole stack in CI.** corgi already detects CI (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) and goes quiet and non-interactive. Add `corgi init --depth 1` for shallow clones, `--feature "$BRANCH"` to pull in every repo carrying the change, `--detach --wait --timeout` to block until healthy, and `corgi logs --dump ./ci-logs` in an always-run step so a failure leaves you every service's log as an artifact. Tools only a human needs can be marked `skipInCi: true`. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
+**Run the whole stack in CI.** corgi already detects CI (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) and goes quiet and non-interactive. Add `corgi init --depth 1` for shallow clones, `--feature "$BRANCH"` to pull in every repo carrying the change, `--detach --wait --timeout` to block until healthy, and `corgi logs --dump ./ci-logs` in an always-run step so a failure leaves you every service's log as an artifact. Tools only a human needs can be marked `skipInCi: true`. In GitHub Actions the whole thing is a handful of lines:
+
+```yaml
+- uses: Andriiklymiuk/corgi@v1
+  id: corgi
+  with:
+    version: "1.20.12"
+
+- uses: actions/cache@v4
+  with:
+    path: ${{ steps.corgi.outputs.cache-paths }}
+    key: ${{ steps.corgi.outputs.cache-key }}
+
+- run: corgi init --depth 1 --feature "$BRANCH"
+- run: corgi run --feature "$BRANCH" --wait --follow
+- run: corgi test --e2e
+```
+
+`corgi cache paths` derives what to persist from each service's `beforeStart` cacheKey, so the list never drifts as services come and go. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
 
 ## The rest of the toolbox
 

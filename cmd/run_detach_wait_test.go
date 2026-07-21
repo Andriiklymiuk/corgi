@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +157,51 @@ func TestSkipReadinessWaitAgreesWithLauncher(t *testing.T) {
 		if got, want := skipReadinessWait(c.service), shouldSkipManualRun(c.service); got != want {
 			t.Errorf("%s: wait skips=%v but launcher skips=%v", c.name, got, want)
 		}
+	}
+}
+
+// The reason a boot failed is in the logs; a failed run should not make the
+// reader go looking for them.
+func TestPrintFailureLogsShowsEachServiceTail(t *testing.T) {
+	root := t.TempDir()
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = root
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	for _, svc := range []string{"api", "web"} {
+		dir := filepath.Join(root, "corgi_services", ".logs", svc)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "noise\n" + svc + " exploded\n"
+		if err := os.WriteFile(filepath.Join(dir, "2026-01-01T00-00-00.log"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out := captureStdout(t, printFailureLogs)
+	for _, want := range []string{"api", "api exploded", "web", "web exploded"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in the failure output, got %q", want, out)
+		}
+	}
+}
+
+func TestTailLinesKeepsOnlyTheEnd(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.log")
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&b, "line-%d\n", i)
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := tailLines(path, 10)
+	if len(got) != 10 || got[0] != "line-190" || got[9] != "line-199" {
+		t.Errorf("expected the last 10 lines, got %v", got)
+	}
+	if tailLines(filepath.Join(dir, "missing.log"), 10) != nil {
+		t.Error("a missing file yields nothing, not a panic")
 	}
 }

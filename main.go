@@ -82,6 +82,7 @@ func canShowWelcomeMessages() bool {
 			arg == "healthcheck" ||
 			arg == "completion" ||
 			arg == "version" ||
+			arg == "cache" ||
 			arg == "mcp" || // mcp owns stdout (JSON-RPC) — no banner allowed
 			arg == "__complete" ||
 			arg == "__completeNoDesc" ||
@@ -149,6 +150,7 @@ func ClearTerminal() {
 			arg == "docs" ||
 			arg == "completion" ||
 			arg == "version" ||
+			arg == "cache" ||
 			arg == "mcp" ||
 			arg == "__complete" ||
 			arg == "__completeNoDesc" ||

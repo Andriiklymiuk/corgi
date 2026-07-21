@@ -1,0 +1,73 @@
+name: Setup corgi
+description: Install corgi, enforce a minimum version, and expose what a CI cache should persist.
+author: Andrii Klymiuk
+
+branding:
+  icon: box
+  color: orange
+
+inputs:
+  version:
+    description: >-
+      Minimum corgi version required by this workflow. A floor, not a pin: a
+      newer corgi is fine, an older one fails the step with the version it found.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory holding corgi-compose.yml. Cache outputs are derived from it.
+    required: false
+    default: "."
+
+outputs:
+  version:
+    description: The corgi version that was installed.
+    value: ${{ steps.setup.outputs.version }}
+  cache-paths:
+    description: >-
+      Newline-separated directories worth caching, derived from every service's
+      beforeStart cacheKey. Pass straight to actions/cache's path input.
+    value: ${{ steps.setup.outputs.cache-paths }}
+  cache-key:
+    description: >-
+      Cache key that changes whenever any cacheKey file changes. Pass straight
+      to actions/cache's key input.
+    value: ${{ steps.setup.outputs.cache-key }}
+
+runs:
+  using: composite
+  steps:
+    - id: setup
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        MINIMUM: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | bash
+
+        installed="$(corgi version --json | jq -r .version)"
+        echo "version=$installed" >> "$GITHUB_OUTPUT"
+
+        if [ -n "$MINIMUM" ]; then
+          # sort -V, because a string compare reads 1.20.9 as newer than 1.20.10.
+          oldest="$(printf '%s\n%s\n' "$MINIMUM" "$installed" | sort -V | head -1)"
+          if [ "$oldest" != "$MINIMUM" ] && [ "$installed" != "$MINIMUM" ]; then
+            echo "::error::corgi $installed is older than the required $MINIMUM"
+            exit 1
+          fi
+        fi
+        echo "corgi $installed${MINIMUM:+ (minimum $MINIMUM)}"
+
+        # Only available once a compose file exists; a workflow that installs
+        # corgi before checking out should still succeed here.
+        if [ -f corgi-compose.yml ] || ls ./*corgi-compose.yml >/dev/null 2>&1; then
+          {
+            echo "cache-paths<<CORGI_EOF"
+            corgi cache paths
+            echo "CORGI_EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "cache-key=$(corgi cache paths --key)" >> "$GITHUB_OUTPUT"
+        else
+          echo "::notice::no corgi-compose.yml in ${{ inputs.working-directory }} yet, so no cache outputs"
+        fi

@@ -30,11 +30,17 @@ func OverrideWriter() io.Writer {
 // infoWriter is where human-facing log lines go: the console override when set,
 // else stderr in JSON mode so the JSON payload on stdout stays clean, else
 // stdout.
+// PayloadOnStdout marks a command whose stdout is meant to be read by another
+// program — `corgi cache paths` feeding a CI cache action, say. Human-facing
+// lines then go to stderr, exactly as they do in JSON mode, so a command
+// substitution captures the payload and nothing else.
+var PayloadOnStdout bool
+
 func infoWriter() io.Writer {
 	if w := OverrideWriter(); w != nil {
 		return w
 	}
-	if JSONOutput {
+	if JSONOutput || PayloadOnStdout {
 		return os.Stderr
 	}
 	return os.Stdout

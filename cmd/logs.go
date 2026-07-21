@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -371,27 +372,53 @@ func hasTimestampShape(b []byte) bool {
 	return b[23] == 'Z' && b[24] == ' '
 }
 
-// mergeStream is one input to the k-way merge — a service's log file
-// scanned line by line, with the current head buffered for heap compare.
+// mergeStream is one input to the k-way merge — a service's log file read line
+// by line, with the current head buffered for heap compare.
+//
+// Deliberately a Reader rather than a Scanner: a Scanner stops for good at EOF,
+// but a log being written to reaches EOF constantly and gains more later. The
+// handle keeps its offset, and a trailing line without a newline is held back
+// until the rest of it arrives.
 type mergeStream struct {
 	service string
-	scanner *bufio.Scanner
+	reader  *bufio.Reader
 	f       *os.File
 	headTS  string
 	headBuf string
+	partial string
 	eof     bool
+}
+
+// readLine returns the next complete line. An incomplete trailing line is kept
+// until its newline shows up, so a half-written line is never printed twice.
+func (s *mergeStream) readLine() (string, bool) {
+	chunk, err := s.reader.ReadString('\n')
+	if err != nil {
+		s.partial += chunk
+		return "", false
+	}
+	line := s.partial + strings.TrimRight(chunk, "\n")
+	s.partial = ""
+	return line, true
+}
+
+func (s *mergeStream) close() {
+	if s.f != nil {
+		s.f.Close()
+		s.f = nil
+	}
 }
 
 func (s *mergeStream) advance() bool {
 	if s.eof {
 		return false
 	}
-	if !s.scanner.Scan() {
+	line, ok := s.readLine()
+	if !ok {
 		s.eof = true
-		s.f.Close()
+		s.close()
 		return false
 	}
-	line := s.scanner.Text()
 	if hasTimestampShape([]byte(line)) {
 		s.headTS = line[:utils.LogTimestampLen-1]
 		s.headBuf = line[utils.LogTimestampLen:]
@@ -430,17 +457,83 @@ func followAllLogs(base string) error {
 		return fmt.Errorf("no log directories found under %s/.logs/\nRun the stack first: corgi run (capture is on unless --logs=false)", base)
 	}
 
-	h := buildMergeHeap(base, services)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
-	for h.Len() > 0 {
-		s := heap.Pop(h).(*mergeStream)
-		writeMergedLine(out, s)
-		if s.advance() {
-			heap.Push(h, s)
+
+	streams := map[string]*mergeStream{}
+	defer func() {
+		for _, st := range streams {
+			st.close()
+		}
+	}()
+
+	var idleSince time.Time
+	for {
+		adoptNewServices(base, streams)
+		wrote := drainStreams(out, streams)
+		out.Flush()
+
+		if wrote > 0 {
+			idleSince = time.Time{}
+		}
+		if !keepFollowing(&idleSince) {
+			return nil
+		}
+		time.Sleep(followPollInterval)
+	}
+}
+
+// followPollInterval is how often the tail checks for new content. Short
+// enough to feel live, long enough not to spin.
+const followPollInterval = 250 * time.Millisecond
+
+// keepFollowing stops after --idle of dead air. --idle 0 tails forever, which
+// is what a CI job wants alongside a booting stack.
+func keepFollowing(idleSince *time.Time) bool {
+	if idleSince.IsZero() {
+		*idleSince = time.Now()
+	}
+	if logsIdleFlag <= 0 {
+		return true
+	}
+	return time.Since(*idleSince) <= logsIdleFlag
+}
+
+// adoptNewServices picks up services that started logging after the follow
+// began — a slow one has no log file when the first pass runs.
+func adoptNewServices(base string, streams map[string]*mergeStream) {
+	services, err := utils.ListLoggedServices(base)
+	if err != nil {
+		return
+	}
+	for _, svc := range services {
+		if _, known := streams[svc]; known {
+			continue
+		}
+		if st := openMergeStream(base, svc); st != nil {
+			streams[svc] = st
 		}
 	}
-	return nil
+}
+
+// drainStreams writes every line currently available, oldest first, and
+// reports how many. Each file is already in order, so sorting one tick's batch
+// is enough to interleave services correctly.
+func drainStreams(out *bufio.Writer, streams map[string]*mergeStream) int {
+	type entry struct {
+		ts, line, service string
+	}
+	var batch []entry
+	for _, st := range streams {
+		for st.advanceTail() {
+			batch = append(batch, entry{st.headTS, st.headBuf, st.service})
+		}
+	}
+	sort.SliceStable(batch, func(i, j int) bool { return batch[i].ts < batch[j].ts })
+	for _, e := range batch {
+		writeMergedLine(out, &mergeStream{service: e.service, headTS: e.ts, headBuf: e.line})
+	}
+	return len(batch)
 }
 
 func buildMergeHeap(base string, services []string) *mergeHeap {
@@ -460,6 +553,27 @@ func buildMergeHeap(base string, services []string) *mergeHeap {
 	return h
 }
 
+// advanceTail is advance for a file still being written: EOF means "nothing
+// more yet", not "finished".
+func (s *mergeStream) advanceTail() bool {
+	line, ok := s.readLine()
+	if !ok {
+		return false
+	}
+	s.setHead(line)
+	return true
+}
+
+func (s *mergeStream) setHead(line string) {
+	if hasTimestampShape([]byte(line)) {
+		s.headTS = line[:utils.LogTimestampLen-1]
+		s.headBuf = line[utils.LogTimestampLen:]
+		return
+	}
+	s.headTS = ""
+	s.headBuf = line
+}
+
 func openMergeStream(base, svc string) *mergeStream {
 	runs, err := utils.ListServiceRuns(base, svc)
 	if err != nil || len(runs) == 0 {
@@ -469,9 +583,7 @@ func openMergeStream(base, svc string) *mergeStream {
 	if err != nil {
 		return nil
 	}
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64*1024), 1024*1024)
-	return &mergeStream{service: svc, scanner: sc, f: f}
+	return &mergeStream{service: svc, reader: bufio.NewReader(f), f: f}
 }
 
 func writeMergedLine(out *bufio.Writer, s *mergeStream) {

@@ -45,6 +45,13 @@ func init() {
 		defaultReadyTimeout,
 		"Max time to wait for dependencies when --ensure-deps is set.",
 	)
+	testCmd.Flags().Bool(
+		"e2e",
+		false,
+		`Run the stack's e2e: block against the already-running stack, instead of
+each service's own test script. A suite that drives several services at once
+belongs to the stack rather than to any one of them.`,
+	)
 	registerServiceWorkdirFlags(testCmd.Flags())
 }
 
@@ -64,6 +71,11 @@ type selection struct {
 }
 
 func runTestCmd(cmd *cobra.Command, args []string) {
+	if e2e, _ := cmd.Flags().GetBool("e2e"); e2e {
+		runE2ESuite(cmd)
+		return
+	}
+
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		if utils.JSONOutput {

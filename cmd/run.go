@@ -22,6 +22,10 @@ import (
 
 var omitItems []string
 
+// bootStartedAt marks the beginning of a boot so --wait-timeout can cover
+// beforeStart as well as the readiness wait.
+var bootStartedAt time.Time
+
 type runSummary struct {
 	Started []runSummaryItem `json:"started"`
 	Failed  []runSummaryItem `json:"failed"`
@@ -244,6 +248,20 @@ startup summary, and return immediately (no streaming, no watch).`,
 		false,
 		`With --detach: ignore an existing run-state and start anyway,
 removing the stale state file first.`,
+	)
+	runCmd.PersistentFlags().Bool(
+		"dump-on-failure",
+		true,
+		`When a --wait boot fails, print the tail of every service log. The
+reason is in the logs rather than in the error, and in CI they are otherwise
+only reachable after the job has ended. Pass --dump-on-failure=false to skip.`,
+	)
+	runCmd.PersistentFlags().Bool(
+		"follow",
+		false,
+		`With --detach --wait: stream every service's log while waiting for the
+stack to become ready. A detached boot is otherwise silent for as long as the
+installs take, which is exactly when you want to see what it is doing.`,
 	)
 	runCmd.PersistentFlags().Bool(
 		"wait",
@@ -573,6 +591,15 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	detach, _ := cmd.Flags().GetBool("detach")
 
+	// Started before beforeStart, so --wait-timeout is a budget for the whole
+	// boot. Installs, migrations and builds are usually the slow part; timing
+	// only the readiness wait made the flag mean far less than it looks.
+	bootStartedAt = time.Now()
+
+	// corgi restart and the compose watcher re-enter this in the same process,
+	// so a failure from the previous boot would otherwise fail the next one.
+	utils.ResetBeforeStartFailures()
+
 	if detach {
 		if tf, _ := cmd.Flags().GetBool("tunnel"); tf {
 			msg := "--tunnel cannot be combined with --detach (tunnels run in-process); run `corgi tunnel` separately"
@@ -676,13 +703,37 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	// still works even if the wait times out.
 	if wait, _ := cmd.Flags().GetBool("wait"); wait {
 		timeout, _ := cmd.Flags().GetDuration("wait-timeout")
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		remaining := timeout - time.Since(bootStartedAt)
+		if remaining <= 0 {
+			msg := fmt.Sprintf(
+				"%s: beforeStart alone took %s, over the %s budget — raise --wait-timeout or make the setup cheaper",
+				utils.ErrReadinessTimeout, time.Since(bootStartedAt).Round(time.Second), timeout)
+			if utils.JSONOutput {
+				utils.JSONError(utils.ErrReadinessTimeout, msg)
+			} else {
+				fmt.Fprintln(os.Stderr, "❌", msg)
+			}
+			os.Exit(1)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), remaining)
 		defer cancel()
+		stopFollow := func() {}
+		if follow, _ := cmd.Flags().GetBool("follow"); follow {
+			stopFollow = startLogFollow()
+			defer stopFollow()
+		}
 		if err := waitDetachedReady(ctx, corgi); err != nil {
+			// Stop the tail first: os.Exit skips defers, and a stream still
+			// running would interleave with the failure dump below.
+			stopFollow()
 			if utils.JSONOutput {
 				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
 			} else {
 				fmt.Fprintln(os.Stderr, "❌", err)
+			}
+			// The reason a boot failed is in the service logs, not up here.
+			if dump, _ := cmd.Flags().GetBool("dump-on-failure"); dump {
+				printFailureLogs()
 			}
 			os.Exit(1)
 		}
@@ -698,6 +749,11 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 // waitDetachedReady blocks until every service (with a port) and database is
 // reachable, or ctx expires. Returns the first readiness error.
 func waitDetachedReady(ctx context.Context, corgi *utils.CorgiCompose) error {
+	// A service whose beforeStart failed is never going to listen, so waiting
+	// for it only delays the real error by the whole timeout.
+	if err := utils.BeforeStartFailureError(); err != nil {
+		return err
+	}
 	if err := waitForServicesReady(ctx, corgi.Services, utils.WaitForServiceReady); err != nil {
 		return err
 	}
@@ -820,6 +876,7 @@ func runServiceBeforeStart(service utils.Service, envFile string) {
 		return utils.RunServiceCmd(service.ServiceName, c, service.AbsolutePath, false, envFile)
 	}); err != nil {
 		utils.Infof("aborting beforeStart for %s: %v\n", service.ServiceName, err)
+		utils.RecordBeforeStartFailure(service.ServiceName, err)
 	}
 }
 

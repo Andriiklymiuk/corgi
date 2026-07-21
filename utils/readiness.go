@@ -34,7 +34,11 @@ func WaitForServiceReady(ctx context.Context, svc Service) error {
 	if svc.Port == 0 {
 		return nil
 	}
-	return pollReady(ctx, svc.ServiceName, svc.Port, svc.HealthCheck)
+	if err := pollReady(ctx, svc.ServiceName, svc.Port, svc.HealthCheck); err != nil {
+		return err
+	}
+	// Only once the service is listening, and only once.
+	return RunWarmup(ctx, svc.ServiceName, svc.Port, svc.Warmup)
 }
 
 // pollReady probes a target every readinessPollInterval until reachable or ctx

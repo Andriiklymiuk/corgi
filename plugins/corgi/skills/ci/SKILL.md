@@ -47,16 +47,66 @@ the team shares one branch name per change (the usual tracker-key convention) �
 explicit `--service-branch <svc>=<branch>` pairs resolved from an explicit
 manifest instead.
 
+## The failures that actually happen
+
+Every one of these was found the expensive way — a 20-30 minute cycle each, some
+several. Check them before writing a line, not after a red run.
+
+**A health check that is polled must never do work.** This is the big one. An
+Expo dev server builds a bundle per request and Vite pre-bundles dependencies on
+first hit, so polling `/` queues dozens of concurrent builds on a 4-core runner:
+single-module bundles took two minutes and the stack never converged. The probing
+*causes* the unhealthiness. Give such services a **port probe** for readiness
+(omit `healthCheck:`) and check that they really serve exactly once, with one
+patient request, before the tests run — the server holds the connection until it
+is ready, so retrying only queues more work.
+
+**corgi does not fail when a `beforeStart` fails.** It prints `aborting
+beforeStart for <service>` and carries on, so a dead service reads as a slow boot
+until the readiness timeout, with the cause thousands of lines earlier. Grep for
+it and fail loudly:
+
+```bash
+grep -rh "aborting beforeStart" corgi_services/.logs/ && exit 1
+```
+
+**A compose that works on macOS can die on Linux.** `/bin/sh` is bash-like on
+macOS and dash on Linux (fixed in corgi 1.20.9, which prefers bash — but a repo
+pinning an older corgi still needs POSIX `.` rather than `source`).
+
+**Env vars validated at construction crash the service, not the request.** An
+empty credential threw inside a mail transport's constructor, so the service
+never started and readiness polled forever — an empty value is not the same as
+an unused one. Before trusting a CI env file, grep the services for startup
+validation: `grep -rn "is required" <service>/src`.
+
+**Node version decides npm version.** Node 22 ships npm 10.x; a repo requiring
+`npm >= 11.5.0` fails `npm ci` with `EBADENGINE`. Node 24 bundles npm 11.
+
+**`set -e` applies inside a trap.** `wait` on a child you just killed returns 143,
+which aborts the handler — so a *successful* run exits 143. Every cleanup command
+needs its own `|| true`. Background a tail directly, never in a subshell, or the
+pid you recorded is the subshell's and the real tail keeps the step's stdout open
+until the step times out.
+
+**The dependency cache only saves on a successful job.** Until one run goes green
+you pay every install every time — do not read early runs as the steady state.
+
 ## Non-negotiables
 
 - **Never run the job inside a container** (`jobs.<id>.container:` on GitHub,
   `image:` with dind on GitLab). The database containers publish to `localhost`,
   which is exactly what every generated connection string assumes; a containerised
   job no longer shares that. Run steps on the VM/shell runner.
+- **Assert a corgi version floor**, not the presence of individual flags:
+  `corgi version --json | jq -r .version`, compared with `sort -V`. Naive string
+  comparison gets `1.20.9` vs `1.20.10` backwards.
 - **`corgi logs --dump` in an always-executed step** (`if: always()` /
   `when: always`). The logs matter precisely when the job failed.
-- **Bound the wait** (`--wait --timeout 20m`) so a wedged service fails the job
-  instead of burning the runner's whole budget.
+- **Bound the wait, and the step.** `--wait-timeout` only covers the readiness
+  wait — `beforeStart` (installs, migrations, builds) runs before that timer
+  starts and is unbounded. Put a `timeout-minutes` on the step too, or a slow
+  boot quietly eats the whole job.
 - **Free disk before booting** on hosted runners. A full stack is several GB of
   images plus every service's dependencies; hosted runners are provisioned tighter
   than that, and the failure mode when it runs out is unrecognisable as a disk

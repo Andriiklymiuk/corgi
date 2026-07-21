@@ -478,6 +478,9 @@ func runCommandsSequential(commandsName, serviceName string, commands []string, 
 			fmt.Sprintf("aborting %s commands for %s, because of %s", commandsName, serviceName, err),
 			art.WhiteColor,
 		)
+		if commandsName == "beforeStart" {
+			RecordBeforeStartFailure(serviceName, err)
+		}
 	}
 }
 
