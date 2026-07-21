@@ -43,7 +43,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 	CreateMissingEnvFiles(corgi.Services)
 	CreateDatabaseServices(corgi.DatabaseServices)
 	CreateServices(corgi.Services)
-	CloneServices(corgi.Services)
+	cloneFailures := CloneServices(corgi.Services)
 	RunRequired(corgi.Required)
 
 	utils.RunServiceCommands(
@@ -64,6 +64,17 @@ func runInit(cmd *cobra.Command, _ []string) {
 
 	for _, fileToIgnore := range filesToIgnore {
 		_ = addFileToGitignore(fileToIgnore)
+	}
+
+	if len(cloneFailures) > 0 {
+		msg := fmt.Sprintf("could not clone: %s — check the remote URLs and your git credentials",
+			strings.Join(cloneFailures, ", "))
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrConfig, msg)
+		} else {
+			fmt.Fprintln(os.Stderr, "❌", msg)
+		}
+		os.Exit(1)
 	}
 }
 
@@ -318,16 +329,23 @@ func CheckClonedReposExistence(services []utils.Service) bool {
 	return someRepoShouldBeCloned
 }
 
-func CloneServices(services []utils.Service) {
+// CloneServices clones every service that needs it, returning the names that
+// could not be cloned. A caller that carries on regardless — CI, typically —
+// otherwise fails much later with an error that says nothing about the clone.
+func CloneServices(services []utils.Service) []string {
+	var failed []string
 	for _, service := range services {
-		cloneOneService(service)
+		if !cloneOneService(service) {
+			failed = append(failed, service.ServiceName)
+		}
 	}
+	return failed
 }
 
-func cloneOneService(service utils.Service) {
+func cloneOneService(service utils.Service) bool {
 	if service.Path == "" {
 		fmt.Println("\nNo path for", service.ServiceName, ". Using current directory")
-		return
+		return true
 	}
 
 	_, statErr := os.Stat(service.AbsolutePath)
@@ -336,14 +354,15 @@ func cloneOneService(service utils.Service) {
 		handleExistingServiceDir(service)
 	case errors.Is(statErr, os.ErrNotExist):
 		if !cloneMissingServiceDir(service) {
-			return
+			return false
 		}
 	default:
 		fmt.Println(statErr)
-		return
+		return false
 	}
 
 	maybeRunNestedCorgiInit(service)
+	return true
 }
 
 func cloneMissingServiceDir(service utils.Service) bool {
