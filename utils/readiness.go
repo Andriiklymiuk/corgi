@@ -9,6 +9,15 @@ import (
 // readinessPollInterval is how often readiness probes retry while waiting.
 const readinessPollInterval = 500 * time.Millisecond
 
+// readinessProbeTimeout is how long one probe may take before it counts as a
+// failure. Deliberately far longer than the poll interval: a dev server does
+// real work on its first request — Vite pre-bundles dependencies, Metro builds
+// a bundle, Nest warms up — and on a machine busy starting a whole stack that
+// easily takes seconds. Timing out in half a second reports a healthy service
+// as down.
+// ReadinessProbeTimeout is exported so status probes share the same tolerance.
+const ReadinessProbeTimeout = 10 * time.Second
+
 // WaitForDBReady blocks until the db is reachable or ctx is done. With no known
 // port it falls back to a short fixed wait (legacy behavior).
 func WaitForDBReady(ctx context.Context, db DatabaseService) error {
@@ -48,7 +57,7 @@ func pollReady(ctx context.Context, name string, port int, healthCheck string) e
 func probeOnce(port int, healthCheck string) bool {
 	if healthCheck != "" {
 		url := fmt.Sprintf("http://localhost:%d%s", port, healthCheck)
-		healthy, _, _ := IsHTTPHealthy(url, readinessPollInterval)
+		healthy, _, _ := IsHTTPHealthy(url, ReadinessProbeTimeout)
 		return healthy
 	}
 	return IsPortListening(port)
