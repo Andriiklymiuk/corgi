@@ -274,8 +274,6 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
 ```yaml
 - uses: Andriiklymiuk/corgi@v1
   id: corgi
-  with:
-    version: "1.20.12"
 
 - uses: actions/cache@v4
   with:
@@ -288,6 +286,28 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
 ```
 
 `corgi cache paths` derives what to persist from each service's `beforeStart` cacheKey, so the list never drifts as services come and go. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
+
+### Using the action
+
+`Andriiklymiuk/corgi@v1` installs corgi, optionally enforces a minimum version, and tells `actions/cache` what to keep.
+
+| input | |
+|---|---|
+| `version` | Minimum corgi version. A floor, not a pin: newer is fine, older fails the step with the version it found. Omit to accept whatever installs. |
+| `working-directory` | Where `corgi-compose.yml` lives. Defaults to the repo root; the cache outputs are derived from it. |
+
+| output | |
+|---|---|
+| `version` | The corgi version that was installed. |
+| `cache-paths` | Newline-separated directories worth caching — pass straight to `actions/cache`'s `path`. |
+| `cache-key` | Key that changes whenever any `cacheKey` file changes — pass straight to its `key`. |
+
+`@v1` moves with each release, so you get fixes without editing workflows. Pin an exact tag (`@v1.20.13`) if you would rather bump deliberately.
+
+Two things worth knowing before you write the rest of the job:
+
+- **Do not run the job inside a container.** Database containers publish to `localhost`, which is what every generated connection string assumes; a containerised job no longer shares it, and the failure reads as "the api cannot reach postgres".
+- **Health checks are polled, so they must be cheap.** A dev server that compiles on demand rebuilds for every probe. Put the expensive check in `warmup:`, which corgi performs once when the port is live.
 
 ## The rest of the toolbox
 
