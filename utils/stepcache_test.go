@@ -117,3 +117,69 @@ func TestEnsureCorgiServicesIgnore_AddsAndIdempotent(t *testing.T) {
 		t.Fatalf("want exactly one .cache/ entry, got %d in %q", c, string(data))
 	}
 }
+
+func TestCacheScopeIsolatesRelocatedWorkdir(t *testing.T) {
+	root := t.TempDir()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = root
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	lock := filepath.Join(root, "lock.json")
+	if err := os.WriteFile(lock, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	step := BeforeStartStep{Run: "install", CacheKey: []string{"lock.json"}}
+
+	main := Service{ServiceName: "api", AbsolutePath: root}
+	run, hash := StepNeedsRun(main, 0, step, false)
+	if !run {
+		t.Fatal("first run must not be cached")
+	}
+	PersistStepHash(main, 0, hash)
+	if run, _ := StepNeedsRun(main, 0, step, false); run {
+		t.Fatal("second run on the same dir should be cached")
+	}
+
+	worktree := Service{ServiceName: "api", AbsolutePath: root, CacheScope: CacheScopeForDir("/elsewhere/api")}
+	if run, _ := StepNeedsRun(worktree, 0, step, false); !run {
+		t.Fatal("a relocated workdir must not inherit the main checkout's marker")
+	}
+}
+
+func TestStepCacheDirName(t *testing.T) {
+	if got := stepCacheDirName(Service{ServiceName: "api"}); got != "api" {
+		t.Errorf("unscoped dir name = %q, want api", got)
+	}
+	if got := stepCacheDirName(Service{ServiceName: "api", CacheScope: "abc123"}); got != "api-abc123" {
+		t.Errorf("scoped dir name = %q, want api-abc123", got)
+	}
+}
+
+func TestCacheScopeForDirIsStableAndDistinct(t *testing.T) {
+	if CacheScopeForDir("/a") != CacheScopeForDir("/a") {
+		t.Error("same dir must hash the same")
+	}
+	if CacheScopeForDir("/a") == CacheScopeForDir("/b") {
+		t.Error("different dirs must hash differently")
+	}
+	if len(CacheScopeForDir("/a")) != 8 {
+		t.Error("scope should be 8 chars")
+	}
+}
+
+func TestActiveRequiredSkipInCi(t *testing.T) {
+	required := []Required{{Name: "docker"}, {Name: "tunnel-client", SkipInCi: true}}
+
+	prev := CIMode
+	t.Cleanup(func() { CIMode = prev })
+
+	CIMode = false
+	if got := ActiveRequired(required); len(got) != 2 {
+		t.Errorf("outside CI nothing is skipped, got %d", len(got))
+	}
+	CIMode = true
+	got := ActiveRequired(required)
+	if len(got) != 1 || got[0].Name != "docker" {
+		t.Errorf("in CI skipInCi tools must drop out, got %v", got)
+	}
+}

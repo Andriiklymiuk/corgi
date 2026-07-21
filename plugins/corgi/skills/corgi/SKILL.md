@@ -44,6 +44,7 @@ Detached lifecycle (preferred for agents): `corgi run --detach` (starts services
 | Persisting / re-reading service logs after a crash | `references/commands.md#corgi-logs` (`corgi run --logs` + `corgi logs`) |
 | Opening a DB shell (psql / redis-cli / mongosh / …) | `references/commands.md#corgi-db-shell-service-name` |
 | Running corgi in CI / disabling spinners and color | `references/commands.md#corgi-run-flags` (`--ci`, auto-detected from `CI` env) |
+| Booting the whole stack in a CI job / cross-repo e2e on PR branches | the `ci` skill |
 | Desktop notifications on service crash | `references/commands.md#corgi-notifications` (`corgi notifications on\|off\|test`) |
 
 Load only what the task needs. Do not read every reference every time.
@@ -66,7 +67,10 @@ corgi run --logs=false     # opt out of log capture for this run
 corgi run --ci             # CI-friendly: suppress spinners, banners, colors (auto-on when CI=true)
 corgi run --service-branch api=feat/x   # run a service on a branch in an isolated reused worktree (non-destructive)
 corgi run --service-dir api=/path       # run a service from an existing dir (e.g. a git worktree); repeatable, mix freely
+corgi run --feature ABC-123             # every repo that has this branch runs from a worktree for it; the rest stay put
 corgi worktree list|prune               # list / remove worktrees corgi made for --service-branch
+corgi init --depth 1                    # shallow-clone every service repo (CI)
+corgi logs --dump ./ci-logs             # copy each service's newest run into a dir (CI artifacts)
 corgi logs                 # interactive picker: browse + tail persisted logs (needs a prior corgi run)
 corgi logs --service api   # skip service picker, jump to run picker for "api"
 corgi logs --all           # merge newest run of every service into one timestamp-sorted stream

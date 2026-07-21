@@ -26,4 +26,12 @@ Non-destructive — the main checkout is untouched. Clean up with: corgi worktre
 --service-checkout name=branch (repeatable). Refuses on a dirty tree; leaves the
 repo on that branch afterwards.`,
 	)
+	fs.String(
+		"feature",
+		"",
+		`Run every service that has this branch (locally or on origin) from a
+worktree for it; services without the branch stay on their current checkout.
+For a change spanning several repos that share one branch name. Per-service
+flags win over it. Clean up with: corgi worktree prune.`,
+	)
 }

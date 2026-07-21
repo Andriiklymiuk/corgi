@@ -20,6 +20,7 @@ var logsServiceFlag string
 var logsPruneFlag bool
 var logsAllFlag bool
 var logsIdleFlag time.Duration
+var logsDumpFlag string
 
 var logsCmd = &cobra.Command{
 	Use:     "logs",
@@ -45,6 +46,7 @@ func init() {
 	logsCmd.Flags().BoolVar(&logsPruneFlag, "prune", false, "Delete all captured log files (corgi_services/.logs/)")
 	logsCmd.Flags().BoolVar(&logsAllFlag, "all", false, "Merge the newest run of every service into one timestamp-sorted stream")
 	logsCmd.Flags().DurationVar(&logsIdleFlag, "idle", 30*time.Second, "Exit after this much dead-air on the file (set 0 to tail forever)")
+	logsCmd.Flags().StringVar(&logsDumpFlag, "dump", "", "Copy the newest run of every service into this directory and exit (for CI artifacts)")
 }
 
 func logJSONLine(service, ts, level, line string) string {
@@ -78,6 +80,14 @@ func runLogs(cmd *cobra.Command, _ []string) {
 
 	if logsPruneFlag {
 		pruneAllLogs(base)
+		return
+	}
+
+	if logsDumpFlag != "" {
+		if err := dumpNewestLogs(base, logsDumpFlag); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -133,6 +143,52 @@ func pruneAllLogs(base string) {
 		return
 	}
 	fmt.Println(art.GreenColor, "✅ All log files removed.", art.WhiteColor)
+}
+
+// dumpNewestLogs copies each service's newest run into dir as <service>.log.
+func dumpNewestLogs(base, dir string) error {
+	services, err := utils.ListLoggedServices(base)
+	if err != nil || len(services) == 0 {
+		return fmt.Errorf("no log directories found under %s/.logs/", base)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	var copied int
+	for _, svc := range services {
+		runs, runErr := utils.ListServiceRuns(base, svc)
+		if runErr != nil || len(runs) == 0 {
+			continue
+		}
+		if err := copyFile(runs[0], filepath.Join(dir, sanitizeLogName(svc)+".log")); err != nil {
+			return fmt.Errorf("dump %s: %v", svc, err)
+		}
+		copied++
+	}
+	if copied == 0 {
+		return fmt.Errorf("no log files found under %s/.logs/", base)
+	}
+	fmt.Printf("dumped %d service logs to %s\n", copied, dir)
+	return nil
+}
+
+func sanitizeLogName(name string) string {
+	return strings.NewReplacer("/", "-", string(filepath.Separator), "-").Replace(name)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }
 
 func requireServiceForLogs(service string, nonInteractive bool, available []string) error {
