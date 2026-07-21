@@ -700,6 +700,7 @@ func buildService(indexName string, service Service) Service {
 		Runner:                 service.Runner,
 		Tunnel:                 service.Tunnel,
 		HealthCheck:            service.HealthCheck,
+		Warmup:                 service.Warmup,
 		Profiles:               service.Profiles,
 	}
 }
