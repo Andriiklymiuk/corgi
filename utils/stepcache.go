@@ -28,9 +28,27 @@ func hashCacheKeyFiles(baseDir string, files []string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// CacheScopeForDir derives a stable marker suffix for a relocated working dir.
+// Hashed on the resolved path so two spellings of one directory share a scope.
+func CacheScopeForDir(dir string) string {
+	if resolved, ok := realPath(dir); ok {
+		dir = resolved
+	}
+	sum := sha256.Sum256([]byte(dir))
+	return hex.EncodeToString(sum[:])[:8]
+}
+
+func stepCacheDirName(service Service) string {
+	name := sanitizeName(service.ServiceName)
+	if service.CacheScope == "" {
+		return name
+	}
+	return name + "-" + service.CacheScope
+}
+
 func stepCachePath(service Service, stepIndex int) string {
 	return filepath.Join(CorgiComposePathDir, "corgi_services", cacheDirName,
-		sanitizeName(service.ServiceName), strconv.Itoa(stepIndex))
+		stepCacheDirName(service), strconv.Itoa(stepIndex))
 }
 
 func readStepHash(path string) string {

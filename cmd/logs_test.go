@@ -355,3 +355,95 @@ func TestPrintFollowedLine_JSON(t *testing.T) {
 type errLogTest string
 
 func (e errLogTest) Error() string { return string(e) }
+
+func TestDumpNewestLogs(t *testing.T) {
+	root := t.TempDir()
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = root
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	svcLogs := filepath.Join(root, "corgi_services", ".logs", "api")
+	if err := os.MkdirAll(svcLogs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	older := filepath.Join(svcLogs, "2020-01-01T00-00-00.ok.log")
+	newer := filepath.Join(svcLogs, "2021-01-01T00-00-00.ok.log")
+	if err := os.WriteFile(older, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newer, []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(root, "dump")
+	if err := dumpNewestLogs(logsBase(), out); err != nil {
+		t.Fatalf("dump: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(out, "api.log"))
+	if err != nil {
+		t.Fatalf("dumped file: %v", err)
+	}
+	if string(got) != "new\n" {
+		t.Errorf("dumped %q, want the newest run", got)
+	}
+}
+
+func TestDumpNewestLogsNoLogs(t *testing.T) {
+	root := t.TempDir()
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = root
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	if err := dumpNewestLogs(logsBase(), filepath.Join(root, "dump")); err == nil {
+		t.Error("expected an error when no logs exist")
+	}
+}
+
+func TestSanitizeLogName(t *testing.T) {
+	if got := sanitizeLogName("api"); got != "api" {
+		t.Errorf("plain name = %q", got)
+	}
+	if got := sanitizeLogName("group/api"); got != "group-api" {
+		t.Errorf("separators must not create subdirectories, got %q", got)
+	}
+}
+
+func TestCopyFileMissingSource(t *testing.T) {
+	dir := t.TempDir()
+	if err := copyFile(filepath.Join(dir, "nope"), filepath.Join(dir, "out")); err == nil {
+		t.Error("expected an error for a missing source")
+	}
+	if err := copyFile(filepath.Join(dir, "nope"), filepath.Join(dir, "no-such-dir", "out")); err == nil {
+		t.Error("expected an error for an unwritable destination")
+	}
+}
+
+func TestDumpNewestLogsSkipsEmptyServiceDirs(t *testing.T) {
+	root := t.TempDir()
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = root
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	logs := filepath.Join(root, "corgi_services", ".logs")
+	if err := os.MkdirAll(filepath.Join(logs, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(logs, "api"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(logs, "api", "2021-01-01T00-00-00.ok.log"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(root, "dump")
+	if err := dumpNewestLogs(logsBase(), out); err != nil {
+		t.Fatalf("dump: %v", err)
+	}
+	entries, err := os.ReadDir(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "api.log" {
+		t.Errorf("a service with no runs must be skipped, got %v", entries)
+	}
+}

@@ -24,8 +24,12 @@ This is used to create db service from template.
 	Aliases: []string{"initialize", "clone"},
 }
 
+var initDepthFlag int
+
 func init() {
 	rootCmd.AddCommand(initCmd)
+	initCmd.Flags().IntVar(&initDepthFlag, "depth", 0,
+		"Clone each service repo shallow, keeping this many commits (0 = full clone)")
 }
 
 func runInit(cmd *cobra.Command, _ []string) {
@@ -365,10 +369,17 @@ func cloneMissingServiceDir(service utils.Service) bool {
 	return true
 }
 
+func gitCloneCmd(service utils.Service, depth int) string {
+	if depth > 0 {
+		return fmt.Sprintf("git clone --depth %d %s %s", depth, service.CloneFrom, service.AbsolutePath)
+	}
+	return fmt.Sprintf("git clone %s %s", service.CloneFrom, service.AbsolutePath)
+}
+
 func runGitClone(service utils.Service, pathWithoutLastFolder string) bool {
 	err := utils.RunServiceCmd(
 		service.ServiceName,
-		fmt.Sprintf("git clone %s %s", service.CloneFrom, service.AbsolutePath),
+		gitCloneCmd(service, initDepthFlag),
 		pathWithoutLastFolder,
 		true,
 	)
@@ -409,6 +420,13 @@ func handleExistingServiceDir(service utils.Service) {
 	}
 }
 
+func nestedInitCmd() string {
+	if initDepthFlag > 0 {
+		return fmt.Sprintf("corgi init --silent --depth %d", initDepthFlag)
+	}
+	return "corgi init --silent"
+}
+
 func maybeRunNestedCorgiInit(service utils.Service) {
 	corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(service.AbsolutePath, utils.CorgiComposeDefaultName)
 	if err != nil {
@@ -417,8 +435,9 @@ func maybeRunNestedCorgiInit(service utils.Service) {
 	if !corgiComposeExists || service.CloneFrom == "" {
 		return
 	}
-	if err := utils.RunServiceCmd(service.ServiceName, "corgi init --silent", service.AbsolutePath, true); err != nil {
-		fmt.Printf("output error: %s, in path %s with corgi init --silent %s\n", err, service.AbsolutePath, service.Branch)
+	nested := nestedInitCmd()
+	if err := utils.RunServiceCmd(service.ServiceName, nested, service.AbsolutePath, true); err != nil {
+		fmt.Printf("output error: %s, in path %s with %s\n", err, service.AbsolutePath, nested)
 	}
 }
 
