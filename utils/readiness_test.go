@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -122,5 +123,35 @@ func TestReadiness_DBListeningReturnsNil(t *testing.T) {
 
 	if err := WaitForDBReady(ctx, DatabaseService{ServiceName: "db", Port: port}); err != nil {
 		t.Fatalf("expected ready, got %v", err)
+	}
+}
+
+// A dev server doing work on its first request must not be reported as down.
+func TestReadinessProbeToleratesASlowFirstResponse(t *testing.T) {
+	var mu sync.Mutex
+	first := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		slow := first
+		first = false
+		mu.Unlock()
+		if slow {
+			// Longer than the poll interval, well inside the probe timeout.
+			time.Sleep(2 * time.Second)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	healthy, _, reason := IsHTTPHealthy(srv.URL, ReadinessProbeTimeout)
+	if !healthy {
+		t.Errorf("a 2s first response must still count as healthy, got %q", reason)
+	}
+}
+
+func TestReadinessProbeTimeoutExceedsPollInterval(t *testing.T) {
+	if ReadinessProbeTimeout <= readinessPollInterval {
+		t.Errorf("probe timeout %s must exceed the poll interval %s, or a server slower than one poll is reported down",
+			ReadinessProbeTimeout, readinessPollInterval)
 	}
 }

@@ -540,7 +540,7 @@ func collectStatusRows(corgi *utils.CorgiCompose) []statusRow {
 
 func probe(r statusRow) (bool, string) {
 	if r.Kind == "http" {
-		ok, code, reason := utils.IsHTTPHealthy(r.URL, 5*time.Second)
+		ok, code, reason := utils.IsHTTPHealthy(r.URL, utils.ReadinessProbeTimeout)
 		if ok {
 			return true, fmt.Sprintf("%s [HTTP %d]", r.URL, code)
 		}
