@@ -252,6 +252,10 @@ type Service struct {
 	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 
 	AbsolutePath string
+
+	// CacheScope isolates beforeStart step-cache markers when the service runs
+	// from a relocated dir. Empty for the declared checkout.
+	CacheScope string `json:"-"`
 }
 
 // TunnelConfig describes a stable public HTTPS tunnel for one service.
@@ -270,6 +274,24 @@ type Required struct {
 	Install  []string `yaml:"install,omitempty"`
 	Optional bool     `yaml:"optional,omitempty"`
 	CheckCmd string   `yaml:"checkCmd,omitempty"`
+	// SkipInCi drops this tool from preflight when corgi detects CI.
+	SkipInCi bool `yaml:"skipInCi,omitempty"`
+}
+
+// ActiveRequired filters out tools declared skipInCi when running in CI.
+func ActiveRequired(required []Required) []Required {
+	if !CIMode {
+		return required
+	}
+	active := make([]Required, 0, len(required))
+	for _, r := range required {
+		if r.SkipInCi {
+			Info("required:", r.Name, "skipped (skipInCi, CI detected)")
+			continue
+		}
+		active = append(active, r)
+	}
+	return active
 }
 
 // Named run-settings bundle selected by --tier.
@@ -755,7 +777,7 @@ func overrideServiceDirs(corgi *CorgiCompose, pairs []string) error {
 			return fmt.Errorf("--service-dir %s: %q is not an existing directory", name, abs)
 		}
 		Info("service-dir override:", name, "→", abs)
-		svc.AbsolutePath = abs
+		pointServiceAt(svc, abs)
 	}
 	return nil
 }
@@ -785,6 +807,7 @@ func parseRequired(requiredData map[string]Required, describeFlag bool) []Requir
 			Install:  required.Install,
 			Optional: required.Optional,
 			CheckCmd: required.CheckCmd,
+			SkipInCi: required.SkipInCi,
 		}
 		requiredInstructions = append(requiredInstructions, requiredToAdd)
 		if describeFlag {

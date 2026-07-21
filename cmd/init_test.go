@@ -634,3 +634,31 @@ func TestRunInitNoComposeFile(t *testing.T) {
 	}
 	runInit(c, nil)
 }
+
+func TestGitCloneCmdDepth(t *testing.T) {
+	svc := utils.Service{CloneFrom: "https://example.com/r.git", AbsolutePath: "/w/r"}
+	full := gitCloneCmd(svc, 0)
+	if full != "git clone https://example.com/r.git /w/r" {
+		t.Errorf("depth 0 must keep the plain clone, got %q", full)
+	}
+	if got := gitCloneCmd(svc, -1); got != full {
+		t.Errorf("negative depth must fall back to a full clone, got %q", got)
+	}
+	if got := gitCloneCmd(svc, 1); got != "git clone --depth 1 https://example.com/r.git /w/r" {
+		t.Errorf("depth 1 = %q", got)
+	}
+}
+
+func TestNestedInitInheritsDepth(t *testing.T) {
+	prev := initDepthFlag
+	t.Cleanup(func() { initDepthFlag = prev })
+
+	initDepthFlag = 0
+	if got := nestedInitCmd(); got != "corgi init --silent" {
+		t.Errorf("without --depth the nested call must be unchanged, got %q", got)
+	}
+	initDepthFlag = 1
+	if got := nestedInitCmd(); got != "corgi init --silent --depth 1" {
+		t.Errorf("nested init = %q", got)
+	}
+}

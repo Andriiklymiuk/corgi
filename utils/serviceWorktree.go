@@ -1,14 +1,18 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
+
+const remoteProbeTimeout = 30 * time.Second
 
 // git output goes to stderr so --json stdout stays pure JSON.
 func gitRun(dir string, args ...string) error {
@@ -19,6 +23,27 @@ func gitRun(dir string, args ...string) error {
 
 func gitOut(dir string, args ...string) (string, error) {
 	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+// noPromptEnv keeps a git call that reaches the network from blocking on an
+// interactive credential prompt. Configured credential helpers still apply; only
+// the terminal fallback is disabled, so an unreachable remote fails fast.
+func noPromptEnv() []string {
+	return append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=")
+}
+
+func gitRunNoPrompt(dir string, args ...string) error {
+	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	c.Env = noPromptEnv()
+	c.Stdout, c.Stderr = os.Stderr, os.Stderr
+	return c.Run()
+}
+
+func gitOutNoPrompt(dir string, args ...string) (string, error) {
+	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	c.Env = noPromptEnv()
+	out, err := c.Output()
 	return strings.TrimSpace(string(out)), err
 }
 
@@ -40,13 +65,40 @@ func isGitRepo(dir string) bool {
 	return err == nil
 }
 
+func isShallowRepo(dir string) bool {
+	out, err := gitOut(dir, "rev-parse", "--is-shallow-repository")
+	return err == nil && out == "true"
+}
+
 func branchSlug(branch string) string {
 	return strings.NewReplacer("/", "-", " ", "-", ":", "-").Replace(branch)
 }
 
 // worktreeDest is deterministic per (service, branch) so re-runs reuse one dir.
 func worktreeDest(service, branch string) string {
-	return filepath.Join(CorgiComposePathDir, "corgi_services", ".worktrees", service+"-"+branchSlug(branch))
+	return filepath.Join(worktreesBase(), service+"-"+branchSlug(branch))
+}
+
+func worktreesBase() string {
+	return filepath.Join(CorgiComposePathDir, "corgi_services", ".worktrees")
+}
+
+// isCorgiWorktreePath guards destructive cleanup: only paths corgi itself owns
+// may be removed.
+func isCorgiWorktreePath(dest string) bool {
+	base, err := filepath.Abs(worktreesBase())
+	if err != nil {
+		return false
+	}
+	abs, err := filepath.Abs(dest)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(base, abs)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func cutServicePair(pair string) (name, val string, err error) {
@@ -68,6 +120,9 @@ func EnsureServiceWorktree(repo, branch, dest string) (string, error) {
 		return repo, nil
 	}
 	_ = gitRun(repo, "worktree", "prune")
+	if existing := worktreeForBranch(repo, branch); existing != "" {
+		return preferSpelling(existing, dest), nil
+	}
 	if info, statErr := os.Stat(dest); statErr == nil && info.IsDir() {
 		if insideWorktree(dest) {
 			cur, _ := gitOut(dest, "rev-parse", "--abbrev-ref", "HEAD")
@@ -85,16 +140,81 @@ func EnsureServiceWorktree(repo, branch, dest string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
 	}
-	if err := gitRun(repo, "worktree", "add", dest, branch); err != nil {
-		return "", fmt.Errorf("git worktree add %s %s: %v", dest, branch, err)
+	if err := addWorktree(repo, branch, dest); err != nil {
+		return "", err
 	}
 	return dest, nil
+}
+
+// preferSpelling returns dest when it names the same directory as path. git
+// reports symlink-resolved paths, and corgi's own spelling keeps logs and cache
+// scopes consistent across runs.
+func preferSpelling(path, dest string) string {
+	a, okA := realPath(path)
+	b, okB := realPath(dest)
+	if okA && okB && a == b {
+		return dest
+	}
+	return path
+}
+
+// worktreeForBranch returns the path of an existing worktree already holding
+// branch, or "". git allows a branch in only one worktree, so reusing it is the
+// only way a second service (or a differently named dest) can run that branch.
+func worktreeForBranch(repo, branch string) string {
+	out, err := gitOut(repo, "worktree", "list", "--porcelain")
+	if err != nil {
+		return ""
+	}
+	want := "branch refs/heads/" + branch
+	var path string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			path = strings.TrimPrefix(line, "worktree ")
+		case line == want && path != "":
+			if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
+				return path
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// addWorktree adds dest at branch, falling back to a local branch off
+// origin/<branch> when only the remote-tracking ref exists.
+func addWorktree(repo, branch, dest string) error {
+	err := gitRun(repo, "worktree", "add", dest, branch)
+	if err == nil {
+		return nil
+	}
+	remoteRef := "refs/remotes/origin/" + branch
+	if _, refErr := gitOut(repo, "rev-parse", "--verify", "--quiet", remoteRef); refErr != nil {
+		return fmt.Errorf("git worktree add %s %s: %v", dest, branch, err)
+	}
+	if isCorgiWorktreePath(dest) {
+		_ = os.RemoveAll(dest)
+	}
+	if err := gitRun(repo, "worktree", "add", "-b", branch, dest, remoteRef); err != nil {
+		return fmt.Errorf("git worktree add -b %s %s %s: %v", branch, dest, remoteRef, err)
+	}
+	return nil
 }
 
 func cmdStringArray(cmd *cobra.Command, name string) []string {
 	v, err := cmd.Flags().GetStringArray(name)
 	if err != nil {
 		return nil
+	}
+	return v
+}
+
+func cmdString(cmd *cobra.Command, name string) string {
+	v, err := cmd.Flags().GetString(name)
+	if err != nil {
+		return ""
 	}
 	return v
 }
@@ -155,9 +275,162 @@ func applyBranchPairs(byName map[string]*Service, pairs []string) error {
 		} else {
 			Info("service-branch:", name, "→", branch, "@", dir)
 		}
-		svc.AbsolutePath = dir
+		pointServiceAt(svc, dir)
 	}
 	return nil
+}
+
+// pointServiceAt moves a service's working dir, scoping its beforeStart step
+// cache when the dir is not the declared checkout — a worktree's dependency dir
+// is empty even when the lockfile hash matches.
+func pointServiceAt(svc *Service, dir string) {
+	if dir != svc.AbsolutePath {
+		svc.CacheScope = CacheScopeForDir(dir)
+	}
+	svc.AbsolutePath = dir
+}
+
+func branchIsKnown(repo, branch string) (local, remote bool) {
+	if _, err := gitOut(repo, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		local = true
+	}
+	if out, err := gitProbeRemote(repo, branch); err == nil && out != "" {
+		remote = true
+	}
+	return local, remote
+}
+
+// gitProbeRemote asks origin about one branch. Bounded, because this runs once
+// per service and an unreachable remote would otherwise hang the whole run.
+func gitProbeRemote(repo, branch string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), remoteProbeTimeout)
+	defer cancel()
+	c := exec.CommandContext(ctx, "git", "-C", repo, "ls-remote", "--heads", "origin", branch)
+	c.Env = noPromptEnv()
+	out, err := c.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+// realPath resolves a path for comparison. git reports symlink-resolved paths,
+// so a workspace reached through a symlink (/tmp on macOS, for one) would
+// otherwise never compare equal to its own repository root.
+func realPath(path string) (string, bool) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", false
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return abs, true
+	}
+	return resolved, true
+}
+
+func repoRoot(dir string) (string, bool) {
+	out, err := gitOut(dir, "rev-parse", "--show-toplevel")
+	if err != nil || out == "" {
+		return "", false
+	}
+	return realPath(out)
+}
+
+// isRepoRoot reports whether dir is the top level of its repository. A service
+// living in a subdirectory cannot be relocated by swapping in a worktree path —
+// the worktree root is the repo, not the subdirectory.
+func isRepoRoot(dir string) bool {
+	root, ok := repoRoot(dir)
+	if !ok {
+		return false
+	}
+	self, ok := realPath(dir)
+	if !ok {
+		return false
+	}
+	return root == self
+}
+
+// EnsureFeatureWorktree materializes branch for repo when it exists locally or
+// on origin, fetching the remote head first. Returns an empty dir and no error
+// when the repo does not carry the branch.
+func EnsureFeatureWorktree(repo, branch, dest string) (string, error) {
+	if !isGitRepo(repo) {
+		return "", nil
+	}
+	local, remote := branchIsKnown(repo, branch)
+	if !local && !remote {
+		return "", nil
+	}
+	if !local {
+		spec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
+		args := []string{"fetch", "--no-tags"}
+		if isShallowRepo(repo) {
+			args = append(args, "--depth", "1")
+		}
+		args = append(args, "origin", spec)
+		if err := gitRunNoPrompt(repo, args...); err != nil {
+			return "", fmt.Errorf("fetch origin %s: %v", branch, err)
+		}
+	}
+	return EnsureServiceWorktree(repo, branch, dest)
+}
+
+// ApplyFeatureBranch points every service whose repo carries branch at a
+// worktree for it, leaving the rest on their default checkout. Services pinned
+// by an explicit per-service flag are skipped.
+func ApplyFeatureBranch(corgi *CorgiCompose, branch string, pinned, only map[string]bool) error {
+	if branch == "" {
+		return nil
+	}
+	byRoot := map[string]string{}
+	for i := range corgi.Services {
+		svc := &corgi.Services[i]
+		if pinned[svc.ServiceName] {
+			continue
+		}
+		if only != nil && !only[svc.ServiceName] {
+			continue
+		}
+		if !isGitRepo(svc.AbsolutePath) {
+			continue
+		}
+		if !isRepoRoot(svc.AbsolutePath) {
+			Info("feature:", svc.ServiceName, "→ skipped, it lives in a subdirectory of its repository")
+			continue
+		}
+		root, _ := repoRoot(svc.AbsolutePath)
+		dir, seen := byRoot[root]
+		if !seen {
+			var err error
+			dir, err = EnsureFeatureWorktree(svc.AbsolutePath, branch, worktreeDest(svc.ServiceName, branch))
+			if err != nil {
+				return fmt.Errorf("--feature %s: %v", svc.ServiceName, err)
+			}
+			byRoot[root] = dir
+		}
+		if dir == "" {
+			Info("feature:", svc.ServiceName, "→ no", branch, "branch, staying on current checkout")
+			continue
+		}
+		if dir == svc.AbsolutePath {
+			Info("feature:", svc.ServiceName, "→", branch, "(main checkout already on branch)")
+		} else {
+			Info("feature:", svc.ServiceName, "→", branch, "@", dir)
+		}
+		pointServiceAt(svc, dir)
+	}
+	return nil
+}
+
+func pinnedServices(groups ...[]string) map[string]bool {
+	pinned := map[string]bool{}
+	for _, group := range groups {
+		for _, pair := range group {
+			if name, _, err := cutServicePair(pair); err == nil {
+				pinned[name] = true
+			}
+		}
+	}
+	return pinned
 }
 
 // conflictAcross errors if a service appears in more than one of the groups.
@@ -186,12 +459,13 @@ func assertNoServiceWorkdirConflict(cmd *cobra.Command) error {
 	})
 }
 
-// MaterializeServiceWorktrees applies the --service-branch/--service-checkout
-// flags. Side-effecting (git) — call after any dry-run guard.
+// MaterializeServiceWorktrees applies the --service-branch/--service-checkout/
+// --feature flags. Side-effecting (git) — call after any dry-run guard.
 func MaterializeServiceWorktrees(cmd *cobra.Command, corgi *CorgiCompose) error {
 	branchPairs := cmdStringArray(cmd, "service-branch")
 	checkoutPairs := cmdStringArray(cmd, "service-checkout")
-	if len(branchPairs) == 0 && len(checkoutPairs) == 0 {
+	feature := cmdString(cmd, "feature")
+	if len(branchPairs) == 0 && len(checkoutPairs) == 0 && feature == "" {
 		return nil
 	}
 	if err := assertNoServiceWorkdirConflict(cmd); err != nil {
@@ -201,13 +475,38 @@ func MaterializeServiceWorktrees(cmd *cobra.Command, corgi *CorgiCompose) error 
 	if err := applyCheckoutPairs(byName, checkoutPairs); err != nil {
 		return err
 	}
-	return applyBranchPairs(byName, branchPairs)
+	if err := applyBranchPairs(byName, branchPairs); err != nil {
+		return err
+	}
+	return ApplyFeatureBranch(corgi, feature,
+		pinnedServices(cmdStringArray(cmd, "service-dir"), branchPairs, checkoutPairs),
+		selectedServices())
+}
+
+// selectedServices narrows --feature to the services this run actually starts,
+// so a sliced run does not probe and lay down worktrees for the whole workspace.
+// nil means every service.
+func selectedServices() map[string]bool {
+	if len(ServicesItemsFromFlag) == 0 {
+		return nil
+	}
+	only := map[string]bool{}
+	for _, name := range ServicesItemsFromFlag {
+		only[name] = true
+	}
+	return only
 }
 
 // ApplyServiceWorkdirs applies dir/branch/checkout overrides from name=value
 // slices (e.g. the MCP server).
 func ApplyServiceWorkdirs(corgi *CorgiCompose, dirPairs, branchPairs, checkoutPairs []string) error {
-	if len(dirPairs) == 0 && len(branchPairs) == 0 && len(checkoutPairs) == 0 {
+	return ApplyServiceWorkdirsWithFeature(corgi, dirPairs, branchPairs, checkoutPairs, "")
+}
+
+// ApplyServiceWorkdirsWithFeature is ApplyServiceWorkdirs plus a fleet-wide
+// feature branch applied to every service not already pinned.
+func ApplyServiceWorkdirsWithFeature(corgi *CorgiCompose, dirPairs, branchPairs, checkoutPairs []string, feature string) error {
+	if len(dirPairs) == 0 && len(branchPairs) == 0 && len(checkoutPairs) == 0 && feature == "" {
 		return nil
 	}
 	if err := conflictAcross(map[string][]string{
@@ -224,7 +523,10 @@ func ApplyServiceWorkdirs(corgi *CorgiCompose, dirPairs, branchPairs, checkoutPa
 	if err := applyCheckoutPairs(byName, checkoutPairs); err != nil {
 		return err
 	}
-	return applyBranchPairs(byName, branchPairs)
+	if err := applyBranchPairs(byName, branchPairs); err != nil {
+		return err
+	}
+	return ApplyFeatureBranch(corgi, feature, pinnedServices(dirPairs, branchPairs, checkoutPairs), nil)
 }
 
 // CleanCorgiWorktrees removes every corgi-created worktree (git worktree remove,

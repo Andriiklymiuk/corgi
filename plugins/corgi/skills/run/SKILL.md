@@ -126,6 +126,14 @@ missing → no fallback; use `git checkout <branch> && corgi run --services <svc
   `/tmp/corgi-wt/<wt-id>-<svc>`). (`--service-checkout <svc>=<branch>` = in-place
   checkout of the service's own dir; refuses on a dirty tree, leaves the dir on that
   branch.)
+- **One branch name across repos** — `--feature <branch>` (no `<svc>=`). corgi asks
+  every service's repo whether that branch exists **locally or on `origin`**; the
+  ones that do run from a worktree for it, the ones that don't stay on their current
+  checkout — a missing branch is **not** an error. Remote-only branches are fetched
+  first, so a fresh/shallow clone works. Use it when one change spans repos under a
+  shared branch name (the usual tracker-key convention) instead of writing N
+  `--service-branch` pairs. Per-service flags **win**: a svc named by
+  `--service-branch`/`--service-dir`/`--service-checkout` ignores `--feature`.
 - `--with-deps` only expands the `--services` set through `depends_on` — it does
   **not** auto-worktree pulled-in deps; you get a worktree/dir only for svcs you name.
 
@@ -134,6 +142,8 @@ missing → no fallback; use `git checkout <branch> && corgi run --services <svc
 corgi run --with-deps --detach \
   --service-branch api=feature/ABC-200/user-phone \
   --service-branch web=feature/ABC-200/user-phone
+# same thing when every repo shares the branch name
+corgi run --with-deps --detach --feature feature/ABC-200/user-phone
 # live worktree code for some, compose path: for the rest
 corgi run --detach \
   --service-dir api=/tmp/corgi-wt/ABC-200-api \

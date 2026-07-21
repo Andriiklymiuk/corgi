@@ -198,7 +198,8 @@
         "why": { "type": "array", "items": { "type": "string" }, "description": "Reasons this tool is needed." },
         "install": { "type": "array", "items": { "type": "string" }, "description": "Install commands run if the tool is missing." },
         "optional": { "type": "boolean", "description": "If true, prompt before installing. Default false." },
-        "checkCmd": { "type": "string", "description": "Command used to check if the tool is installed. Defaults to the name.", "examples": ["docker -v"] }
+        "checkCmd": { "type": "string", "description": "Command used to check if the tool is installed. Defaults to the name.", "examples": ["docker -v"] },
+        "skipInCi": { "type": "boolean", "description": "Drop this tool from preflight when corgi detects CI (CI, GITHUB_ACTIONS, GITLAB_CI, ...). For tools only a human needs, e.g. a tunnel client. Default false." }
       }
     },
     "dependsOnService": {

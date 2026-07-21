@@ -270,7 +270,7 @@ func runDoctorJSON(corgi *utils.CorgiCompose) {
 func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 	var res doctorResult
 
-	for _, r := range corgi.Required {
+	for _, r := range utils.ActiveRequired(corgi.Required) {
 		found, _ := checkRequiredIsFoundQuiet(r)
 		c := doctorCheck{Name: "required:" + r.Name, OK: found}
 		if !found {
@@ -319,6 +319,7 @@ func checkRequiredIsFoundQuiet(required utils.Required) (bool, string) {
 // RunRequired is kept for backwards compatibility with cmd/init.go.
 // It returns whether all required tools were found.
 func RunRequired(required []utils.Required) bool {
+	required = utils.ActiveRequired(required)
 	if len(required) == 0 {
 		return true
 	}

@@ -1219,3 +1219,21 @@ func TestCleanCorgiServicesFolderPreservesSnapshotsDoesNotFollowSymlinks(t *test
 		t.Error("external file nested/b.txt must survive — symlink target must not be followed")
 	}
 }
+
+func TestParseRequiredKeepsSkipInCi(t *testing.T) {
+	got := parseRequired(map[string]Required{
+		"docker": {},
+		"tunnel": {SkipInCi: true},
+	}, false)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 required tools, got %d", len(got))
+	}
+	for _, r := range got {
+		if r.Name == "tunnel" && !r.SkipInCi {
+			t.Error("skipInCi must survive parsing")
+		}
+		if r.Name == "docker" && r.SkipInCi {
+			t.Error("skipInCi must default to false")
+		}
+	}
+}

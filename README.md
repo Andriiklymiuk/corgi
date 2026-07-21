@@ -260,9 +260,16 @@ corgi run --service-branch api=feature/login --service-dir web=/tmp/wt/web
 
 # or actually switch the checkout in place (refuses if you have uncommitted changes)
 corgi run --service-checkout api=hotfix/x
+
+# one change spanning several repos — every repo that has the branch joins in
+corgi run --feature ABC-123-checkout-flow
 ```
 
 The worktrees live under `corgi_services/.worktrees/` and are reused between runs, so dependencies and uncommitted work stick around. List or clean them with `corgi worktree list` / `corgi worktree prune`. Great for trying a PR branch, comparing two branches side by side on different ports, or letting an agent work on a branch while you keep running `main`.
+
+`--feature` is the cross-repo version: pass one branch name and corgi asks every service's repo whether it has it (locally or on `origin`), running the ones that do from a worktree and leaving the rest on their default checkout. A missing branch isn't an error — a feature rarely touches the whole stack. Remote-only branches are fetched first, so it works on a fresh or shallow clone.
+
+**Run the whole stack in CI.** corgi already detects CI (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) and goes quiet and non-interactive. Add `corgi init --depth 1` for shallow clones, `--feature "$BRANCH"` to pull in every repo carrying the change, `--detach --wait --timeout` to block until healthy, and `corgi logs --dump ./ci-logs` in an always-run step so a failure leaves you every service's log as an artifact. Tools only a human needs can be marked `skipInCi: true`. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
 
 ## The rest of the toolbox
 
