@@ -248,6 +248,13 @@ type Service struct {
 	// If unset, status falls back to a TCP connect on the port.
 	HealthCheck string `yaml:"healthCheck,omitempty"`
 
+	// Warmup is a single expensive request made once the service is live,
+	// before it counts as ready. A polled healthCheck has to be cheap: a dev
+	// server that compiles on demand does the work again for every probe, so
+	// polling one starves the machine and the stack never settles. Put the
+	// expensive check here instead — it runs once and waits.
+	Warmup *WarmupCheck `yaml:"warmup,omitempty"`
+
 	// Run profiles this service belongs to; empty runs only when no --profile.
 	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 
@@ -317,6 +324,18 @@ type CorgiCompose struct {
 
 	Name        string `yaml:"name,omitempty"`
 	Description string `yaml:"description,omitempty"`
+
+	E2E *E2ESuite `yaml:"e2e,omitempty"`
+}
+
+// E2ESuite is a cross-service test suite that belongs to the stack rather than
+// to any one service. Services have their own `scripts.test`; a suite that
+// drives several of them at once has nowhere else to live.
+type E2ESuite struct {
+	Workdir   string   `yaml:"workdir,omitempty"`
+	Install   string   `yaml:"install,omitempty"`
+	Run       string   `yaml:"run,omitempty"`
+	Artifacts []string `yaml:"artifacts,omitempty"`
 }
 
 type CorgiComposeYaml struct {
@@ -335,6 +354,8 @@ type CorgiComposeYaml struct {
 
 	Name        string `yaml:"name,omitempty"`
 	Description string `yaml:"description,omitempty"`
+
+	E2E *E2ESuite `yaml:"e2e,omitempty"`
 }
 
 var CorgiComposePath string
@@ -373,6 +394,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 
 	corgi.Services = parseServices(corgiYaml.Services, describeFlag)
 	corgi.Required = parseRequired(corgiYaml.Required, describeFlag)
+	corgi.E2E = corgiYaml.E2E
 
 	if err := applyServiceDirOverrides(cobra, &corgi); err != nil {
 		return nil, err
