@@ -68,3 +68,91 @@ func TestWaitDetachedReady_UnreachableServiceTimesOut(t *testing.T) {
 		t.Fatal("expected a timeout error for an unreachable service")
 	}
 }
+
+func TestWaitForServicesReadySkipsManualRun(t *testing.T) {
+	prev := utils.ServicesItemsFromFlag
+	utils.ServicesItemsFromFlag = nil
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = prev })
+
+	var probed []string
+	ready := func(_ context.Context, svc utils.Service) error {
+		probed = append(probed, svc.ServiceName)
+		return nil
+	}
+
+	err := waitForServicesReady(context.Background(), []utils.Service{
+		{ServiceName: "api", Port: 3000},
+		{ServiceName: "manual", Port: 3001, ManualRun: true},
+		{ServiceName: "noport"},
+	}, ready)
+	if err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if len(probed) != 1 || probed[0] != "api" {
+		t.Errorf("a manualRun service is never started, so it must not be waited for; probed %v", probed)
+	}
+}
+
+func TestWaitForServicesReadyWaitsForExplicitlySelectedManualRun(t *testing.T) {
+	prev := utils.ServicesItemsFromFlag
+	utils.ServicesItemsFromFlag = []string{"manual"}
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = prev })
+
+	var probed []string
+	ready := func(_ context.Context, svc utils.Service) error {
+		probed = append(probed, svc.ServiceName)
+		return nil
+	}
+
+	if err := waitForServicesReady(context.Background(), []utils.Service{
+		{ServiceName: "manual", Port: 3001, ManualRun: true},
+	}, ready); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if len(probed) != 1 {
+		t.Errorf("--services asked for it, so it does start and must be waited for; probed %v", probed)
+	}
+}
+
+func TestWaitForDbsReadySkipsManualRun(t *testing.T) {
+	var probed []string
+	ready := func(_ context.Context, db utils.DatabaseService) error {
+		probed = append(probed, db.ServiceName)
+		return nil
+	}
+
+	if err := waitForDbsReady(context.Background(), []utils.DatabaseService{
+		{ServiceName: "pg", Port: 5432},
+		{ServiceName: "manual", Port: 5433, ManualRun: true},
+	}, ready); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if len(probed) != 1 || probed[0] != "pg" {
+		t.Errorf("probed %v", probed)
+	}
+}
+
+// The launcher and the readiness gate must agree; disagreeing is the bug this
+// pair of functions exists to prevent.
+func TestSkipReadinessWaitAgreesWithLauncher(t *testing.T) {
+	prev := utils.ServicesItemsFromFlag
+	t.Cleanup(func() { utils.ServicesItemsFromFlag = prev })
+
+	cases := []struct {
+		name     string
+		selected []string
+		service  utils.Service
+	}{
+		{"plain service", nil, utils.Service{ServiceName: "api"}},
+		{"manual, nothing selected", nil, utils.Service{ServiceName: "m", ManualRun: true}},
+		{"manual, selected", []string{"m"}, utils.Service{ServiceName: "m", ManualRun: true}},
+		{"manual, other selected", []string{"api"}, utils.Service{ServiceName: "m", ManualRun: true}},
+		{"plain, other selected", []string{"api"}, utils.Service{ServiceName: "web"}},
+	}
+	for _, c := range cases {
+		utils.ServicesItemsFromFlag = c.selected
+		if got, want := skipReadinessWait(c.service), shouldSkipManualRun(c.service); got != want {
+			t.Errorf("%s: wait skips=%v but launcher skips=%v", c.name, got, want)
+		}
+	}
+}

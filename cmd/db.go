@@ -47,7 +47,7 @@ func runUpAll(cmd *cobra.Command, dbs []utils.DatabaseService) {
 // Wait for each db with a port to accept connections. ready is injected for tests.
 func waitForDbsReady(ctx context.Context, dbs []utils.DatabaseService, ready func(context.Context, utils.DatabaseService) error) error {
 	for _, db := range dbs {
-		if db.Port == 0 {
+		if db.Port == 0 || db.ManualRun {
 			continue
 		}
 		if err := ready(ctx, db); err != nil {

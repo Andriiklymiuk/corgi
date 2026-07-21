@@ -708,7 +708,7 @@ func waitDetachedReady(ctx context.Context, corgi *utils.CorgiCompose) error {
 // ready is injected for tests.
 func waitForServicesReady(ctx context.Context, services []utils.Service, ready func(context.Context, utils.Service) error) error {
 	for _, svc := range services {
-		if svc.Port == 0 {
+		if svc.Port == 0 || skipReadinessWait(svc) {
 			continue
 		}
 		if err := ready(ctx, svc); err != nil {
@@ -1115,19 +1115,27 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	}
 }
 
-func shouldSkipManualRun(service utils.Service) bool {
+// skipReadinessWait reports whether this run declined to start the service, in
+// which case waiting for it can only burn the timeout. One predicate, because
+// a launcher and a readiness gate that disagree is the bug this fixes.
+func skipReadinessWait(service utils.Service) bool {
 	if !service.ManualRun {
+		return false
+	}
+	return len(utils.ServicesItemsFromFlag) == 0 ||
+		!utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName)
+}
+
+func shouldSkipManualRun(service utils.Service) bool {
+	if !skipReadinessWait(service) {
 		return false
 	}
 	if len(utils.ServicesItemsFromFlag) == 0 {
 		utils.Info(service.ServiceName, "is not run, because it should be run manually (manualRun)")
-		return true
-	}
-	if !utils.IsServiceIncludedInFlag(utils.ServicesItemsFromFlag, service.ServiceName) {
+	} else {
 		utils.Info(service.ServiceName, "is not run, because it should be added manually")
-		return true
 	}
-	return false
+	return true
 }
 
 func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
