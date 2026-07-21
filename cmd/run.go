@@ -596,6 +596,10 @@ func runRun(cmd *cobra.Command, _ []string) {
 	// only the readiness wait made the flag mean far less than it looks.
 	bootStartedAt = time.Now()
 
+	// corgi restart and the compose watcher re-enter this in the same process,
+	// so a failure from the previous boot would otherwise fail the next one.
+	utils.ResetBeforeStartFailures()
+
 	if detach {
 		if tf, _ := cmd.Flags().GetBool("tunnel"); tf {
 			msg := "--tunnel cannot be combined with --detach (tunnels run in-process); run `corgi tunnel` separately"
@@ -713,11 +717,15 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), remaining)
 		defer cancel()
+		stopFollow := func() {}
 		if follow, _ := cmd.Flags().GetBool("follow"); follow {
-			stop := startLogFollow()
-			defer stop()
+			stopFollow = startLogFollow()
+			defer stopFollow()
 		}
 		if err := waitDetachedReady(ctx, corgi); err != nil {
+			// Stop the tail first: os.Exit skips defers, and a stream still
+			// running would interleave with the failure dump below.
+			stopFollow()
 			if utils.JSONOutput {
 				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
 			} else {

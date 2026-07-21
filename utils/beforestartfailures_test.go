@@ -39,3 +39,20 @@ func TestBeforeStartFailuresRecordAndReport(t *testing.T) {
 		}
 	}
 }
+
+// corgi restart re-enters the run in the same process; a failure from the last
+// boot must not fail the next one.
+func TestBeforeStartFailuresResetBetweenRuns(t *testing.T) {
+	ResetBeforeStartFailures()
+	t.Cleanup(ResetBeforeStartFailures)
+
+	RecordBeforeStartFailure("api", errors.New("exit status 1"))
+	if BeforeStartFailureError() == nil {
+		t.Fatal("expected the failure to register")
+	}
+
+	ResetBeforeStartFailures()
+	if err := BeforeStartFailureError(); err != nil {
+		t.Errorf("a new run starts clean, got %v", err)
+	}
+}
