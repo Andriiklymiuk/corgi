@@ -129,6 +129,19 @@ func CachePathsFor(corgi *CorgiCompose) CachePlan {
 	return CachePlan{Paths: sortedPathSet(paths), Key: aggregate, Groups: groups}
 }
 
+// serviceOutputDirs returns the directories installing this lockfile produces
+// inside the service. Nil when the key is not a lockfile corgi knows, or when
+// the ecosystem installs only into a shared home cache.
+func serviceOutputDirs(cacheKey string) []string {
+	name := filepath.Base(cacheKey)
+	for _, eco := range ecosystems {
+		if name == eco.lockfile {
+			return eco.serviceDirs
+		}
+	}
+	return nil
+}
+
 func groupFor(cacheKey string) string {
 	name := filepath.Base(cacheKey)
 	for _, eco := range ecosystems {

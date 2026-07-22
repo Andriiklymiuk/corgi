@@ -183,3 +183,36 @@ func TestActiveRequiredSkipInCi(t *testing.T) {
 		t.Errorf("in CI skipInCi tools must drop out, got %v", got)
 	}
 }
+
+func TestStepNeedsRunWhenCachedOutputIsGone(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	svcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(svcDir, "package-lock.json"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nodeModules := filepath.Join(svcDir, "node_modules")
+	if err := os.Mkdir(nodeModules, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := Service{ServiceName: "api", AbsolutePath: svcDir + "/"}
+	step := BeforeStartStep{Run: "npm ci", CacheKey: []string{"package-lock.json"}}
+
+	_, hash := StepNeedsRun(svc, 0, step, false)
+	PersistStepHash(svc, 0, hash)
+
+	if run, _ := StepNeedsRun(svc, 0, step, false); run {
+		t.Fatal("marker plus node_modules present should skip")
+	}
+
+	// The markers cache restored, the node cache did not.
+	if err := os.RemoveAll(nodeModules); err != nil {
+		t.Fatal(err)
+	}
+	if run, _ := StepNeedsRun(svc, 0, step, false); !run {
+		t.Fatal("a marker without its node_modules must not skip the install")
+	}
+}
