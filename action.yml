@@ -32,6 +32,14 @@ outputs:
       Cache key that changes whenever any cacheKey file changes. Pass straight
       to actions/cache's key input.
     value: ${{ steps.setup.outputs.cache-key }}
+  cache-groups:
+    description: >-
+      The same plan split per ecosystem, as JSON: a list of
+      {id, key, paths, pathsText}. One actions/cache step per entry keeps a
+      change to one language's lockfile from evicting every other language's
+      packages. pathsText is newline-joined because an Actions expression
+      cannot build that string itself.
+    value: ${{ steps.setup.outputs.cache-groups }}
 
 runs:
   using: composite
@@ -103,6 +111,7 @@ runs:
             echo "CORGI_ACTION_EOF"
           } >> "$GITHUB_OUTPUT"
           echo "cache-key=$(corgi cache paths --key)" >> "$GITHUB_OUTPUT"
+          echo "cache-groups=$(corgi cache paths --json | jq -c '.groups // []')" >> "$GITHUB_OUTPUT"
         else
           echo "::notice::no corgi-compose.yml in ${{ inputs.working-directory }} yet, so no cache outputs"
         fi
