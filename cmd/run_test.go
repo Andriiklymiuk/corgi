@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -902,5 +903,84 @@ func TestBuildRunSummaryKinds(t *testing.T) {
 	}
 	if kinds["api"] != "service" {
 		t.Errorf("api kind = %q, want service", kinds["api"])
+	}
+}
+
+func TestWaitsForDatabasesDefaultsToWaiting(t *testing.T) {
+	no := false
+	yes := true
+	cases := []struct {
+		name string
+		flag *bool
+		want bool
+	}{
+		{"unset waits", nil, true},
+		{"explicit true waits", &yes, true},
+		{"false opts out", &no, false},
+	}
+	for _, c := range cases {
+		if got := (utils.Service{WaitForDatabases: c.flag}).WaitsForDatabases(); got != c.want {
+			t.Errorf("%s: WaitsForDatabases() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestOrderedByDatabaseGatePutsOptedOutFirst(t *testing.T) {
+	no := false
+	services := []utils.Service{
+		{ServiceName: "api"},
+		{ServiceName: "web", WaitForDatabases: &no},
+		{ServiceName: "worker"},
+	}
+	var got []string
+	for _, s := range orderedByDatabaseGate(services) {
+		got = append(got, s.ServiceName)
+	}
+	want := []string{"web", "api", "worker"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+}
+
+// Without an opt-out the order must be byte-for-byte what it always was.
+func TestOrderedByDatabaseGateKeepsOrderWhenNobodyOptsOut(t *testing.T) {
+	services := []utils.Service{
+		{ServiceName: "api"},
+		{ServiceName: "web"},
+		{ServiceName: "worker"},
+	}
+	var got []string
+	for _, s := range orderedByDatabaseGate(services) {
+		got = append(got, s.ServiceName)
+	}
+	want := []string{"api", "web", "worker"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+}
+
+func TestAnyServiceStartsWithDatabases(t *testing.T) {
+	no := false
+	plain := &utils.CorgiCompose{Services: []utils.Service{{ServiceName: "api"}}}
+	if utils.AnyServiceStartsWithDatabases(plain) {
+		t.Fatal("no opt-out must keep the inline database phase")
+	}
+	opted := &utils.CorgiCompose{Services: []utils.Service{
+		{ServiceName: "api"},
+		{ServiceName: "web", WaitForDatabases: &no},
+	}}
+	if !utils.AnyServiceStartsWithDatabases(opted) {
+		t.Fatal("an opt-out must make the phase concurrent")
+	}
+}
+
+// The gate must start open. Anything that never runs the database phase — every
+// other command, and tests driving the launchers directly — would otherwise
+// block on it forever.
+func TestDatabaseGateStartsOpen(t *testing.T) {
+	select {
+	case <-dbsReady:
+	case <-time.After(time.Second):
+		t.Fatal("dbsReady must start closed, or a service with no database phase hangs")
 	}
 }
