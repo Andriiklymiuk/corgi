@@ -56,11 +56,14 @@ PLUGIN_VERSION := $(shell grep -E -o '"version"\s*:\s*"[^"]*"' $(PLUGIN_FILE) | 
 getPluginVersion:
 	echo $(PLUGIN_VERSION)
 
-# Force plugin.json to match the current app VERSION (cmd/root.go). Run by
+# Force plugin.json to match the version in cmd/root.go, re-read at recipe time
+# so a stale `VERSION=` on the command line (make exports it to this sub-make)
+# cannot pin the old number. Run by
 # every incrementVersion* target; also runnable standalone to re-align.
 syncPluginVersion:
-	sed -i "" "s/\"version\": \"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\"/\"version\": \"$(VERSION)\"/" $(PLUGIN_FILE)
-	@echo "plugin.json version synced to $(VERSION)"
+	@v=$$(grep -E -o 'APP_VERSION\s*=\s*"[^"]*"' cmd/root.go | awk -F '"' '{print $$2}'); \
+	sed -i "" "s/\"version\": \"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\"/\"version\": \"$$v\"/" $(PLUGIN_FILE); \
+	echo "plugin.json version synced to $$v"
 
 
 test:
