@@ -291,7 +291,7 @@ var dbServiceItems = []CorgiComposeItems{
 		item:        "inbucketPort",
 		example:     "54324",
 		itemType:    "int",
-		description: "supabase driver only. Override [inbucket].port (local email capture). Patched on every up. Default 54324.",
+		description: "supabase driver only. Override the local email capture port — [local_smtp].port, or [inbucket].port on CLI older than 2.109. Patched on every up. Default 54324.",
 	},
 	{
 		item:        "healthCheck",
