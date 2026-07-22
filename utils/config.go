@@ -576,43 +576,18 @@ func buildDatabaseService(indexName string, db DatabaseService) (DatabaseService
 		}
 	}
 
-	return DatabaseService{
-		ServiceName:       indexName,
-		Driver:            driver,
-		Version:           db.Version,
-		Host:              host,
-		DatabaseName:      db.DatabaseName,
-		User:              finalUser,
-		Password:          finalPassword,
-		Port:              db.Port,
-		Port2:             db.Port2,
-		ManualRun:         db.ManualRun,
-		SeedFromDb:        seedFromDb,
-		SeedFromDbEnvPath: db.SeedFromDbEnvPath,
-		SeedFromFilePath:  db.SeedFromFilePath,
-		Additional:        additional,
-		Services:          services,
-		Queues:            db.Queues,
-		Buckets:           db.Buckets,
-		Topics:            db.Topics,
-		Subscriptions:     db.Subscriptions,
-		Secrets:           db.Secrets,
-		Parameters:        db.Parameters,
-		Streams:           db.Streams,
-		JWTSecret:         db.JWTSecret,
-		AuthUsers:         db.AuthUsers,
-		ConfigTomlPath:    db.ConfigTomlPath,
-		StudioPort:        db.StudioPort,
-		InbucketPort:      db.InbucketPort,
-		DbPort:            db.DbPort,
-		Image:             db.Image,
-		ContainerPort:     db.ContainerPort,
-		Environment:       db.Environment,
-		Volumes:           db.Volumes,
-		Command:           db.Command,
-		HealthCheck:       db.HealthCheck,
-		Profiles:          db.Profiles,
-	}, nil
+	// Copy what was parsed, then set only what corgi computes. Listing fields by
+	// hand dropped each new compose key until someone remembered to add a line.
+	built := db
+	built.ServiceName = indexName
+	built.Driver = driver
+	built.Host = host
+	built.User = finalUser
+	built.Password = finalPassword
+	built.SeedFromDb = seedFromDb
+	built.Additional = additional
+	built.Services = services
+	return built, nil
 }
 
 func mergeSeedFromDb(db DatabaseService) SeedFromDb {
