@@ -112,3 +112,21 @@ func TestSignSupabaseJWTSecretMatters(t *testing.T) {
 		t.Error("different secrets must produce different sigs")
 	}
 }
+
+// supabase CLI 2.109 renamed [inbucket] to [local_smtp]. Reading only the old
+// name would silently hand back the default port for a project that moved.
+func TestReadSupabasePortsAcceptsLocalSmtp(t *testing.T) {
+	dir := t.TempDir()
+	toml := filepath.Join(dir, "config.toml")
+	body := "[api]\nport = 64321\n\n[local_smtp]\nenabled = true\nport = 64324\nsmtp_port = 64325\n"
+	if err := os.WriteFile(toml, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ReadSupabasePorts(toml)
+	if got.Inbucket != 64324 {
+		t.Fatalf("[local_smtp].port = %d, want 64324", got.Inbucket)
+	}
+	if got.API != 64321 {
+		t.Fatalf("API port = %d, want 64321", got.API)
+	}
+}
