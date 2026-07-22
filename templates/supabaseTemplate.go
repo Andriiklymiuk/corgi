@@ -62,7 +62,9 @@ func ReadSupabasePorts(pathOrRoot string) SupabasePorts {
 				got.DB = p
 			case "studio":
 				got.Studio = p
-			case "inbucket":
+			// supabase renamed [inbucket] to [local_smtp] in CLI 2.109; both
+			// still parse, so read whichever the project uses.
+			case "inbucket", "local_smtp":
 				got.Inbucket = p
 			}
 		}
@@ -152,6 +154,7 @@ up:
 	$(call _patch_supabase_port,db,$(DESIRED_DB_PORT))
 	$(call _patch_supabase_port,studio,$(DESIRED_STUDIO_PORT))
 	$(call _patch_supabase_port,inbucket,$(DESIRED_INBUCKET_PORT))
+	$(call _patch_supabase_port,local_smtp,$(DESIRED_INBUCKET_PORT))
 	@cd "$(WORKDIR)" && if supabase status >/dev/null 2>&1; then \
 		echo "✓ supabase already running"; \
 	else \
