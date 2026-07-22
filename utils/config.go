@@ -669,40 +669,13 @@ func buildService(indexName string, service Service) Service {
 	resolveDockerExposedPort(&service)
 	resolveServicePathFromCloneFrom(&service)
 	normalizeServicePath(&service)
-	absolutePath := computeAbsolutePath(service.Path)
 
-	return Service{
-		ServiceName:            indexName,
-		Path:                   service.Path,
-		AbsolutePath:           absolutePath,
-		IgnoreEnv:              service.IgnoreEnv,
-		ManualRun:              service.ManualRun,
-		CloneFrom:              service.CloneFrom,
-		Branch:                 service.Branch,
-		DependsOnServices:      service.DependsOnServices,
-		DependsOnDb:            service.DependsOnDb,
-		Exports:                service.Exports,
-		Environment:            service.Environment,
-		EnvPath:                service.EnvPath,
-		CopyEnvFromFilePath:    service.CopyEnvFromFilePath,
-		EnvPlaceholdersToCheck: service.EnvPlaceholdersToCheck,
-		LocalhostNameInEnv:     service.LocalhostNameInEnv,
-		Port:                   service.Port,
-		PortAlias:              service.PortAlias,
-		BeforeStart:            service.BeforeStart,
-		AfterStart:             service.AfterStart,
-		RestartPolicy:          service.RestartPolicy,
-		OpenOnReady:            service.OpenOnReady,
-		Start:                  service.Start,
-		Scripts:                service.Scripts,
-		InteractiveInput:       service.InteractiveInput,
-		AutoSourceEnv:          service.AutoSourceEnv,
-		Runner:                 service.Runner,
-		Tunnel:                 service.Tunnel,
-		HealthCheck:            service.HealthCheck,
-		Warmup:                 service.Warmup,
-		Profiles:               service.Profiles,
-	}
+	// Copy what was parsed, then set only what corgi computes: listing fields
+	// by hand dropped each new compose key until someone added a line here.
+	built := service
+	built.ServiceName = indexName
+	built.AbsolutePath = computeAbsolutePath(service.Path)
+	return built
 }
 
 func resolveDockerExposedPort(service *Service) {
@@ -824,14 +797,8 @@ func parseRequired(requiredData map[string]Required, describeFlag bool) []Requir
 	}
 	var requiredInstructions []Required
 	for indexName, required := range requiredData {
-		requiredToAdd := Required{
-			Name:     indexName,
-			Why:      required.Why,
-			Install:  required.Install,
-			Optional: required.Optional,
-			CheckCmd: required.CheckCmd,
-			SkipInCi: required.SkipInCi,
-		}
+		requiredToAdd := required
+		requiredToAdd.Name = indexName
 		requiredInstructions = append(requiredInstructions, requiredToAdd)
 		if describeFlag {
 			describeServiceInfo(requiredToAdd)
