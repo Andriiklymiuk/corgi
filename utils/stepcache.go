@@ -77,10 +77,25 @@ func StepNeedsRun(service Service, stepIndex int, step BeforeStartStep, noCache 
 	if noCache {
 		return true, hash
 	}
-	if readStepHash(stepCachePath(service, stepIndex)) == hash {
+	if readStepHash(stepCachePath(service, stepIndex)) == hash && stepOutputPresent(service, step) {
 		return false, hash
 	}
 	return true, hash
+}
+
+// A marker only proves the step ran once, on some machine. CI stores the
+// markers and the dependency directories as separate cache entries that expire
+// independently, so the marker can come back while node_modules does not —
+// skipping the install then leaves nothing to run against.
+func stepOutputPresent(service Service, step BeforeStartStep) bool {
+	for _, key := range step.CacheKey {
+		for _, dir := range serviceOutputDirs(key) {
+			if _, err := os.Stat(filepath.Join(service.AbsolutePath, dir)); err != nil {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // PersistStepHash records a step's hash so an unchanged future run can skip it.
