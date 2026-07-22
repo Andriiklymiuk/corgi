@@ -643,9 +643,8 @@ func runRun(cmd *cobra.Command, _ []string) {
 	runBeforeStart(corgi)
 
 	CreateDatabaseServices(corgi.DatabaseServices)
-	runDatabaseServices(cmd, corgi.DatabaseServices)
 
-	if err := utils.GenerateEnvForServices(corgi); err != nil {
+	if err := startDatabasePhase(cmd, corgi); err != nil {
 		fmt.Println(art.RedColor, "aborting corgi run:", err, art.WhiteColor)
 		os.Exit(1)
 	}
@@ -817,9 +816,16 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 
 func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 	procs := []detachedProc{}
-	for _, svc := range corgi.Services {
+	waited := false
+	for _, svc := range orderedByDatabaseGate(corgi.Services) {
 		if shouldSkipManualRun(svc) {
 			continue
+		}
+		// Detached services start one after another, so the gate is taken once,
+		// at the first service that still wants the databases.
+		if svc.WaitsForDatabases() && !waited {
+			<-dbsReady
+			waited = true
 		}
 		runDetachedBeforeStart(svc)
 
@@ -1114,6 +1120,61 @@ func maybeHintNotifications() {
 		art.CyanColor, art.WhiteColor)
 }
 
+// dbsReady closes once the database phase is done. It starts closed so that any
+// path which never runs that phase — every other command, and tests driving the
+// launchers directly — is not gated by it. Only the concurrent phase installs a
+// fresh, open gate.
+var dbsReady = closedGate()
+
+func closedGate() chan struct{} {
+	c := make(chan struct{})
+	close(c)
+	return c
+}
+
+// startDatabasePhase brings the databases up and writes each service's env.
+//
+// With every service on the default gate this is exactly the old sequence:
+// databases, then env. When a service opted out, the phase moves to the
+// background so that service can start against the databases still coming up.
+// Env is written first either way — corgi derives it from corgi-compose.yml and
+// each driver's config, never from a running container.
+func startDatabasePhase(cmd *cobra.Command, corgi *utils.CorgiCompose) error {
+	if !utils.AnyServiceStartsWithDatabases(corgi) {
+		runDatabaseServices(cmd, corgi.DatabaseServices)
+		return utils.GenerateEnvForServices(corgi)
+	}
+
+	if err := utils.GenerateEnvForServices(corgi); err != nil {
+		return err
+	}
+	gate := make(chan struct{})
+	dbsReady = gate
+	go func() {
+		defer close(gate)
+		runDatabaseServices(cmd, corgi.DatabaseServices)
+	}()
+	return nil
+}
+
+// orderedByDatabaseGate puts the services that opted out of the gate first, so
+// a sequential launcher starts them while the databases are still coming up.
+// Order is otherwise preserved.
+func orderedByDatabaseGate(services []utils.Service) []utils.Service {
+	ordered := make([]utils.Service, 0, len(services))
+	for _, s := range services {
+		if !s.WaitsForDatabases() {
+			ordered = append(ordered, s)
+		}
+	}
+	for _, s := range services {
+		if s.WaitsForDatabases() {
+			ordered = append(ordered, s)
+		}
+	}
+	return ordered
+}
+
 func runDatabaseServices(cmd *cobra.Command, databaseServices []utils.DatabaseService) {
 	if !hasDatabaseToRun(databaseServices) {
 		utils.Info("No database service to run")
@@ -1251,6 +1312,14 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 	}
 	if shouldSkipManualRun(service) {
 		return
+	}
+
+	if service.WaitsForDatabases() {
+		select {
+		case <-dbsReady:
+		case <-utils.ShutdownCh():
+			return
+		}
 	}
 
 	waitForServiceDeps(service, signals)
