@@ -117,6 +117,12 @@ var serviceItems = []CorgiComposeItems{
 		description: "Determines if the service will be run with run cmd.\n\t\t\tIf it is true, that to run you add `--services manual_to_run_service` to run cmd.\n\t\t\tBy default it is false.",
 	},
 	{
+		item:        "waitForDatabases",
+		example:     "false",
+		itemType:    "boolean",
+		description: "Whether this service waits for the database phase before starting. Default true.\n\t\t\tSet false for a service that only needs the databases' env — a bundler that\n\t\t\tspends a minute compiling can do it while the databases come up. Its\n\t\t\tdepends_on_db entries still supply env; only the wait is skipped, so a\n\t\t\tservice whose beforeStart talks to a database must keep the default.",
+	},
+	{
 		item:        "depends_on_db",
 		example:     "- name: db_name_from_db_services\n\t- envAlias: NAME_BEFORE_DB_IN_ENV",
 		itemType:    "[]DependsOnDb",

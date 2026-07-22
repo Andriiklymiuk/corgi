@@ -219,14 +219,19 @@ type Service struct {
 	PortAlias              string             `yaml:"portAlias,omitempty"`
 	DependsOnServices      []DependsOnService `yaml:"depends_on_services,omitempty"`
 	DependsOnDb            []DependsOnDb      `yaml:"depends_on_db,omitempty"`
-	Exports                []string           `yaml:"exports,omitempty"`
-	BeforeStart            BeforeStartSteps   `yaml:"beforeStart,omitempty"`
-	Start                  []string           `yaml:"start,omitempty"`
-	AfterStart             []string           `yaml:"afterStart,omitempty"`
-	RestartPolicy          *RestartPolicy     `yaml:"restartPolicy,omitempty"`
-	OpenOnReady            *OpenOnReady       `yaml:"openOnReady,omitempty"`
-	Scripts                []Script           `yaml:"scripts,omitempty"`
-	InteractiveInput       bool               `yaml:"interactiveInput,omitempty"`
+	// WaitForDatabases gates this service on the database phase. nil/true =
+	// wait (the default). false starts it alongside the databases, for a
+	// service that only needs their env — a bundler that spends a minute
+	// compiling before it serves anything should not spend it idle.
+	WaitForDatabases *bool            `yaml:"waitForDatabases,omitempty"`
+	Exports          []string         `yaml:"exports,omitempty"`
+	BeforeStart      BeforeStartSteps `yaml:"beforeStart,omitempty"`
+	Start            []string         `yaml:"start,omitempty"`
+	AfterStart       []string         `yaml:"afterStart,omitempty"`
+	RestartPolicy    *RestartPolicy   `yaml:"restartPolicy,omitempty"`
+	OpenOnReady      *OpenOnReady     `yaml:"openOnReady,omitempty"`
+	Scripts          []Script         `yaml:"scripts,omitempty"`
+	InteractiveInput bool             `yaml:"interactiveInput,omitempty"`
 	// AutoSourceEnv toggles the `set -a; . <envFile>; set +a` prefix corgi
 	// adds to start/beforeStart/afterStart commands. nil/true = on (default),
 	// false = off. Off avoids exporting every var to subprocesses (e.g. when
@@ -1179,4 +1184,21 @@ func CompareCorgiFiles(c1, c2 *CorgiCompose) bool {
 	}
 
 	return true
+}
+
+// WaitsForDatabases reports whether this service must hold until the database
+// phase finishes. Default true; waitForDatabases: false opts a service out.
+func (s Service) WaitsForDatabases() bool {
+	return s.WaitForDatabases == nil || *s.WaitForDatabases
+}
+
+// AnyServiceStartsWithDatabases reports whether any service opted out of the
+// database gate, which is what makes corgi run that phase concurrently.
+func AnyServiceStartsWithDatabases(corgi *CorgiCompose) bool {
+	for _, s := range corgi.Services {
+		if !s.WaitsForDatabases() {
+			return true
+		}
+	}
+	return false
 }
