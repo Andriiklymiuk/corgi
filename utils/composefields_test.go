@@ -18,6 +18,19 @@ var computedRequiredFields = map[string]bool{
 	"Name": true,
 }
 
+// Fields buildDatabaseService derives (defaults, credential processing, the
+// localstack service injection) rather than passing straight through.
+var computedDatabaseFields = map[string]bool{
+	"ServiceName": true,
+	"Driver":      true,
+	"Host":        true,
+	"User":        true,
+	"Password":    true,
+	"SeedFromDb":  true,
+	"Additional":  true,
+	"Services":    true,
+}
+
 func setRecognisableValues(t *testing.T, v reflect.Value) {
 	t.Helper()
 	for i := 0; i < v.NumField(); i++ {
@@ -97,4 +110,21 @@ func TestParseRequiredKeepsEveryComposeField(t *testing.T) {
 	assertNoFieldDropped(t,
 		reflect.ValueOf(parsed), reflect.ValueOf(out[0]),
 		computedRequiredFields, "parseRequired")
+}
+
+func TestBuildDatabaseServiceKeepsEveryComposeField(t *testing.T) {
+	var parsed DatabaseService
+	setRecognisableValues(t, reflect.ValueOf(&parsed).Elem())
+	// A recognisable value in every field would otherwise trip the localstack
+	// validation, which is not what this test is about.
+	parsed.Driver = "postgres"
+
+	built, err := buildDatabaseService("api-db", parsed)
+	if err != nil {
+		t.Fatalf("buildDatabaseService: %v", err)
+	}
+
+	assertNoFieldDropped(t,
+		reflect.ValueOf(parsed), reflect.ValueOf(built),
+		computedDatabaseFields, "buildDatabaseService")
 }
