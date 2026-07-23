@@ -365,7 +365,7 @@ and so belongs to the stack rather than to any one of them:
 e2e:
   workdir: ./e2e            # resolved relative to the compose file
   install: npm ci           # optional, runs before the suite
-  run: npx playwright test
+  run: maestro test flows/  # or: npx playwright test · cypress run · ./e2e.sh
 ```
 
 It never starts anything: boot the stack first (`corgi run -d --wait`), then run
