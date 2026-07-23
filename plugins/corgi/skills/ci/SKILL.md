@@ -41,7 +41,7 @@ service repo PR ──► reusable workflow in the workspace repo
                           + cache-paths/cache-key/cache-groups outputs)
                       2. restore caches (from the action outputs / corgi cache paths)
                       3. corgi init --depth 1
-                      4. corgi run --feature "$BRANCH" --detach --wait --timeout
+                      4. corgi run --feature "$BRANCH" --detach --wait --wait-timeout
                       5. corgi status --json          (gate)
                       6. corgi test --e2e             (or the suite's own command)
                       7. ALWAYS: corgi logs --dump, upload artifacts

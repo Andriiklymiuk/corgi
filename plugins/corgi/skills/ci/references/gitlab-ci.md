@@ -36,7 +36,7 @@ stack-e2e:
     - cd workspace
     - mkdir -p env/source && printf '%s' "$API_ENV" > env/source/api.env
     - corgi init --depth 1
-    - corgi run --feature "$[[ inputs.branch ]]" --detach --wait --timeout 20m
+    - corgi run --feature "$[[ inputs.branch ]]" --detach --wait --wait-timeout 20m
     - corgi status --json
     # Runs the compose file's e2e: block against the live stack. No e2e: block?
     # Fall back to the suite's own command (npm --prefix e2e ci && npm --prefix e2e test).
