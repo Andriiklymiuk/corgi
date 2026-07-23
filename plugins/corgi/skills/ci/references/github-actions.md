@@ -20,7 +20,7 @@ on:
       corgi-version:
         required: false
         type: string
-        default: "1.20.4"
+        default: "1.20.17"   # ≥1.20.13 for test --e2e / cache paths; ≥1.20.17 for cache-groups
     secrets:
       REPO_TOKEN:
         required: true
@@ -41,28 +41,40 @@ jobs:
           dotnet: true
           haskell: true
 
+      # Checksum-verified install + a cache plan derived from the compose file
+      # (cache-paths / cache-key / cache-groups outputs).
       - name: Install corgi
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh \
-            | bash -s -- v${{ inputs.corgi-version }}
-          corgi version
+        uses: Andriiklymiuk/corgi@v1
+        id: corgi
+        with:
+          version: ${{ inputs.corgi-version }}
 
       # Every service repo is private: let git use the token for all of them.
       - name: Authenticate git
         run: |
           git config --global url."https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      # The plan covers each service's dependency dir + corgi_services/.cache
+      # (the beforeStart skip markers). On a polyglot stack, prefer one
+      # actions/cache step per entry of steps.corgi.outputs.cache-groups so one
+      # lockfile change doesn't evict every other language's packages.
       - name: Restore dependency caches
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.corgi.outputs.cache-paths }}
+          key: ${{ steps.corgi.outputs.cache-key }}
+          restore-keys: corgi-deps-
+
+      # Package-manager caches are outside the compose-derived plan but cheap.
+      - name: Restore package-manager caches
         uses: actions/cache@v4
         with:
           path: |
             ~/.npm
             ~/.bun/install/cache
             ~/.cache/uv
-            */node_modules
-            corgi_services/.cache
-          key: corgi-deps-${{ runner.os }}-${{ hashFiles('*/package-lock.json', '*/bun.lock', '*/uv.lock') }}
-          restore-keys: corgi-deps-${{ runner.os }}-
+          key: pm-${{ runner.os }}-${{ hashFiles('*/package-lock.json', '*/bun.lock', '*/uv.lock') }}
+          restore-keys: pm-${{ runner.os }}-
 
       - name: Materialise env files
         env:
@@ -81,8 +93,11 @@ jobs:
       - name: Health gate
         run: corgi status --json
 
+      # Runs the compose file's e2e: block (workdir/install/run) against the
+      # live stack. No e2e: block in the workspace? Fall back to the suite's own
+      # command, e.g. `npm --prefix e2e ci && npm --prefix e2e test`.
       - name: e2e
-        run: npm --prefix e2e ci && npm --prefix e2e test
+        run: corgi test --e2e
 
       - name: Collect logs
         if: always()

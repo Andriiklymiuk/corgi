@@ -339,6 +339,8 @@ Flags:
 - `--profile <name>` — narrow to a profile first (see [Profiles](#profiles)).
 - `--ensure-deps` / `--ready-timeout <dur>` — gate on dependency readiness, as
   in `exec`.
+- `--e2e` — run the compose file's stack-level `e2e:` block instead of the
+  per-service test scripts (see below).
 - `--json` — emit the results object.
 
 ```json
@@ -353,6 +355,25 @@ Flags:
 
 Exit 0 if every run test passes (skips don't count), 1 if any fail, 2 on an
 unknown `--service`.
+
+### `corgi test --e2e`
+
+Runs the top-level `e2e:` block — a suite that drives several services at once
+and so belongs to the stack rather than to any one of them:
+
+```yaml
+e2e:
+  workdir: ./e2e            # resolved relative to the compose file
+  install: npm ci           # optional, runs before the suite
+  run: npx playwright test
+```
+
+It never starts anything: boot the stack first (`corgi run -d --wait`), then run
+the suite, so a failure always tells you which half broke. No `e2e:` block →
+exit 1 with an explanatory error. The usual CI sequence is
+`corgi run --feature "$BRANCH" --detach --wait --timeout 20m && corgi test --e2e`;
+the full pipeline recipe lives in
+[the CI guide](https://andriiklymiuk.github.io/corgi/docs/ci).
 
 ## Profiles
 

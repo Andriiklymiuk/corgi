@@ -13,7 +13,7 @@ spec:
     branch:
       description: Branch name to look for in every service repo
     corgi_version:
-      default: "1.20.4"
+      default: "1.20.17"   # ≥1.20.13 for test --e2e / cache paths; ≥1.20.17 for cache-groups
     workspace_ref:
       default: main
 ---
@@ -38,10 +38,15 @@ stack-e2e:
     - corgi init --depth 1
     - corgi run --feature "$[[ inputs.branch ]]" --detach --wait --timeout 20m
     - corgi status --json
-    - npm --prefix e2e ci && npm --prefix e2e test
+    # Runs the compose file's e2e: block against the live stack. No e2e: block?
+    # Fall back to the suite's own command (npm --prefix e2e ci && npm --prefix e2e test).
+    - corgi test --e2e
   after_script:
     - cd workspace && corgi logs --dump ../ci-logs || true
     - cd workspace && corgi stop || true
+  # GitLab cache config is static YAML, so it cannot read the plan at runtime —
+  # run `corgi cache paths` locally when authoring this job and mirror its list
+  # here (each service's dependency dir + corgi_services/.cache).
   cache:
     key:
       files:
