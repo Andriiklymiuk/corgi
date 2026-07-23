@@ -82,6 +82,7 @@ corgi flexes to whatever the day calls for:
 
 - **The whole stack.** `corgi run` brings up every database and service together.
 - **Just the databases.** Running a service straight from your IDE or debugger? `corgi db -u` brings the databases up on their own and leaves the rest to you.
+- **Every PR, against the whole stack.** The same file runs in CI: push a branch and the pipeline boots every service from the branches under review, then runs your e2e suite against the live stack. The "green in every repo, broken together" kind of bug dies before merge instead of in production.
 - **A phone or another device on your LAN.** `corgi run --host auto` puts your machine's LAN IP into the service-URL env vars instead of `localhost`, so a real device or simulator can reach your dev API (pass an explicit IP instead of `auto` if you prefer). Databases stay on `localhost`.
 - **Local, staging, or a mix.** Define an env tier once — a folder of per-service env files, plus whether to skip the local databases:
   ```yml
