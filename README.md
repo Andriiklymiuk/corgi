@@ -7,21 +7,9 @@
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
-
-  [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-  [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=bugs)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-  [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-
-[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
-[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+  [![Platforms](https://img.shields.io/badge/platform-macOS%20·%20Linux%20·%20Windows-blue.svg)](#install)
+  [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+  [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
 
 </div>
 
@@ -50,7 +38,7 @@ corgi-compose.yml  ─►  corgi run
 
 That's the _running_ side — and the same file keeps paying off twice more. Because corgi already knows how your services fit together, its [Claude Code plugin](#ai-agents-mcp--claude-code) lets an agent **work across the stack**: read your Linear/Jira board, pick up ready tickets, turn them into draft PRs, and review them for you. And [CI can boot that exact same stack](#run-the-whole-stack-in-ci) from the branches under review and run e2e against it — so a change that spans repos gets caught before merge, not in production.
 
-One file. Your laptop runs it, your agents build on it, your CI proves it.
+One file. Your laptop runs it, your agents build on it, your CI proves it. Prefer watching to reading? Here's the [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
 ## Why corgi?
 
@@ -370,7 +358,15 @@ By default it uses [Cloudflare Quick Tunnels](https://developers.cloudflare.com/
 
 ## AI agents, MCP & Claude Code
 
-corgi is meant to be driven by AI agents and CI, not just typed by hand. It's a small single Go binary — no daemon, no runtime to install — that notices when it's running in an agent or pipeline and never blocks on a prompt, prints clean JSON with `--json`, and returns predictable exit codes (`0` ok, `1` failed, `2` bad usage) plus a documented [error-code list](docs/agents.md) — so a tool can read what happened and react. That same non-interactive contract is exactly what a CI job needs, so it's light to drop into one. There are quiet, scriptable entry points too: `corgi env` (the exact env a service will see, and where each value came from), `corgi exec`, `corgi test`, and `corgi run --dry-run --json` to preview a run without touching anything. `corgi mission-control` (alias `mc`) is the one-glance view — the live stack plus each service's git/PR/CI state — with `--json` for a single snapshot or `--watch` to follow it. And `corgi memory` is an opt-in, committed `.corgi/memory/` store of stack decisions and recurring fixes (with a `corgi memory lint` secret-scan) that the skills read before acting. Full guide: [docs/agents.md](docs/agents.md).
+corgi is meant to be driven by AI agents and CI, not just typed by hand — a small single Go binary, no daemon, no runtime to install. What makes it a good tool for a tool to use:
+
+- **It never blocks on a prompt.** corgi notices it's running in an agent or pipeline and either skips the question or fails with a clear error instead of hanging. That same non-interactive contract is exactly what a CI job needs.
+- **It speaks machine.** Clean JSON with `--json`, predictable exit codes (`0` ok, `1` failed, `2` bad usage), and a documented [error-code list](docs/agents.md) — so a tool can read what happened and react, instead of parsing log noise.
+- **Quiet, scriptable entry points.** `corgi env <service>` shows the exact env a service will get and where each value came from; `corgi exec` and `corgi test` run commands and tests in that same env; `corgi run --dry-run --json` previews a whole run without touching anything.
+- **One-glance state.** `corgi mission-control` (alias `mc`) shows the live stack plus each service's git/PR/CI state — `--json` for a single snapshot, `--watch` to follow along.
+- **Workspace memory.** `corgi memory` is an opt-in, committed `.corgi/memory/` store of stack decisions and recurring fixes (with a `corgi memory lint` secret-scan) that the skills read before acting — so lessons survive between sessions.
+
+Full guide: [docs/agents.md](docs/agents.md).
 
 ### MCP server
 
@@ -433,7 +429,20 @@ No slash-commands or jargon needed — talk to it like a teammate; it routes on 
 
 ## How it compares
 
-The honest version of "why not just use X":
+At a glance — what each tool takes off your plate:
+
+| | docker-compose | Tilt / Skaffold | foreman / overmind | corgi |
+|---|:---:|:---:|:---:|:---:|
+| Databases in containers | ✓ | ✓ (k8s) | — | ✓ |
+| Services as host processes (your debugger, hot-reload) | — | — | ✓ | ✓ |
+| Clones & pulls your repos | — | — | — | ✓ |
+| Seeds databases with real data | — | — | — | ✓ |
+| Wires env between services | — | — | — | ✓ |
+| Checks & installs required tools | — | — | — | ✓ |
+| Cross-repo e2e in CI (`--feature`) | — | — | — | ✓ |
+| Built for AI agents (JSON, MCP, skills) | — | — | — | ✓ |
+
+And the honest version of "why not just use X":
 
 - **vs `docker-compose`** — Compose runs containers; that's where it stops. corgi runs your whole inner loop: it clones the repos, runs and seeds the databases (it even generates a real `docker-compose.yml` per database under the hood), wires the env between services, checks your tools, and runs your services as ordinary host processes — so you keep your usual debugger and hot-reload, and your laptop runs N processes instead of N containers (lighter on RAM). Already have a Compose file? Keep it — let corgi own the repos, env wiring, and tool checks while Compose runs your containers; the two coexist fine.
 - **vs Tilt / Skaffold** — Great when your inner loop is Kubernetes and you want live container rebuilds. corgi deliberately keeps your services out of containers — no image rebuild between edits — so it's lighter for a "repos + databases + processes" stack, and not the tool if you genuinely need k8s.
@@ -581,6 +590,22 @@ corgi completion fish > ~/.config/fish/completions/corgi.fish
 ```
 
 </details>
+
+## Project health
+
+Continuously analyzed by [SonarCloud](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi):
+
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=bugs)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
+
+If corgi saved you a setup day, [a star](https://github.com/Andriiklymiuk/corgi) helps other teams find it. 🐶
 
 ## Credits & thanks
 
