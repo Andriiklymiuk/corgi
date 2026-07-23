@@ -138,6 +138,10 @@ services:
     start:
       - yarn dev
 
+e2e:                                        # optional: one test suite for the whole stack
+  workdir: ./e2e
+  run: npx playwright test
+
 required:                                   # corgi doctor checks these; --fix installs them
   docker:
     checkCmd: docker -v
@@ -149,7 +153,7 @@ required:                                   # corgi doctor checks these; --fix i
       - brew install go
 ```
 
-Run `corgi run` and it clones anything missing, starts Postgres in Docker and seeds it, writes the `.env` files (and sources them for you — no boilerplate), then runs `api` and `web` together. `Ctrl-C` shuts it all back down and runs any cleanup steps.
+Run `corgi run` and it clones anything missing, starts Postgres in Docker and seeds it, writes the `.env` files (and sources them for you — no boilerplate), then runs `api` and `web` together. `Ctrl-C` shuts it all back down and runs any cleanup steps. And once the stack is up, `corgi test --e2e` runs that `e2e:` suite against it — same command on your laptop and [in CI](#run-the-whole-stack-in-ci).
 
 Want to see every field? Run `corgi docs`, or browse the [examples repo](https://github.com/Andriiklymiuk/corgi_examples).
 
@@ -336,6 +340,8 @@ Two things worth knowing before you write the rest of the job:
 ## The rest of the toolbox
 
 **Check before you run.** `corgi doctor` confirms your required tools are installed, Docker is running, and the ports are free — and tells you which process is hogging a port if one isn't. Add `--fix` and it'll start Docker, install what's missing, and free the ports for you.
+
+**See the whole picture.** `corgi mission-control` (alias `corgi mc`) is the one view worth keeping open: every service's live health next to its git branch, open PR, and CI state — so "what's running, what's in review, what's red" is a single glance. `--watch` keeps it fresh, `--json` feeds a script.
 
 **Watch it stay healthy.** `corgi status` pings every service. Use `-w` to watch live, or `-r` to block until everything's ready (handy in scripts). Set a `healthCheck:` path on a service and corgi will hit it over HTTP instead of just checking the port.
 
