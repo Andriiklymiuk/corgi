@@ -48,7 +48,9 @@ corgi-compose.yml  ─►  corgi run
                          whole stack running 🐶   (Ctrl-C tears it all down)
 ```
 
-That's the _running_ side. corgi works the other direction too: because it already knows how your services fit together, its [Claude Code plugin](#ai-agents-mcp--claude-code) lets an agent **work across the stack** — read your Linear/Jira board, pick up ready tickets, turn them into draft PRs, and review them for you.
+That's the _running_ side — and the same file keeps paying off twice more. Because corgi already knows how your services fit together, its [Claude Code plugin](#ai-agents-mcp--claude-code) lets an agent **work across the stack**: read your Linear/Jira board, pick up ready tickets, turn them into draft PRs, and review them for you. And [CI can boot that exact same stack](#run-the-whole-stack-in-ci) from the branches under review and run e2e against it — so a change that spans repos gets caught before merge, not in production.
+
+One file. Your laptop runs it, your agents build on it, your CI proves it.
 
 ## Why corgi?
 
