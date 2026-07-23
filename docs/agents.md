@@ -371,7 +371,7 @@ e2e:
 It never starts anything: boot the stack first (`corgi run -d --wait`), then run
 the suite, so a failure always tells you which half broke. No `e2e:` block →
 exit 1 with an explanatory error. The usual CI sequence is
-`corgi run --feature "$BRANCH" --detach --wait --timeout 20m && corgi test --e2e`;
+`corgi run --feature "$BRANCH" --detach --wait --wait-timeout 20m && corgi test --e2e`;
 the full pipeline recipe lives in
 [the CI guide](https://andriiklymiuk.github.io/corgi/docs/ci).
 

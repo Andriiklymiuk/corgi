@@ -277,14 +277,14 @@ corgi detects CI on its own (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) a
     key: ${{ steps.corgi.outputs.cache-key }}
 
 - run: corgi init --depth 1 --feature "$BRANCH"    # shallow-clone every repo carrying the change
-- run: corgi run --feature "$BRANCH" --wait --follow
+- run: corgi run --feature "$BRANCH" --detach --wait --wait-timeout 20m --follow
 - run: corgi test --e2e                            # the stack-level suite, against the live stack
 
 - run: corgi logs --dump ./ci-logs                 # a failure leaves every service's log as an artifact
   if: always()
 ```
 
-`--feature "$BRANCH"` is the cross-repo hinge: every service repo that has the PR's branch joins the run from a worktree, the rest stay on their default checkout — so each PR is tested against the exact combination it will ship into. `--wait` blocks until every service is actually healthy (no `sleep 60` guesswork) and a `--timeout` fails the job instead of hanging the runner. Tools only a human needs can be marked `skipInCi: true`. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
+`--feature "$BRANCH"` is the cross-repo hinge: every service repo that has the PR's branch joins the run from a worktree, the rest stay on their default checkout — so each PR is tested against the exact combination it will ship into. `--wait` blocks until every service is actually healthy (no `sleep 60` guesswork) and `--wait-timeout` fails the job instead of hanging the runner. Tools only a human needs can be marked `skipInCi: true`. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
 
 ### One e2e suite for the whole stack
 
@@ -313,7 +313,7 @@ e2e:
 | `version` | The corgi version that was installed. |
 | `cache-paths` | Newline-separated directories worth caching — pass straight to `actions/cache`'s `path`. |
 | `cache-key` | Key that changes whenever any `cacheKey` file changes — pass straight to its `key`. |
-| `cache-groups` | The same plan split per ecosystem, as JSON (`{id, key, paths}` per group) — one `actions/cache` step per group, so a change to one language's lockfile doesn't evict every other language's packages. |
+| `cache-groups` | The same plan split per ecosystem, as JSON (`{id, key, paths, pathsText}` per group) — one `actions/cache` step per group, so a change to one language's lockfile doesn't evict every other language's packages. |
 
 The cache plan comes from `corgi cache paths`: it derives what to persist from each service's `beforeStart` `cacheKey`, so the list can never drift as services come and go — add a service and the cache follows automatically. On a polyglot stack, feed `cache-groups` into a small matrix instead of one big cache:
 
@@ -445,7 +445,7 @@ At a glance — what each tool takes off your plate:
 
 And the honest version of "why not just use X":
 
-- **vs writing your own script** — Every team has one: a `dev.sh` or Makefile that clones, seeds, and starts everything — until its author changes teams, a new laptop breaks it, and nobody dares touch it again. That script _is_ the job corgi does, minus everything around it: a declarative file instead of imperative bash, services booting **concurrently** instead of one `&&` at a time — every service installs and starts in its own goroutine, with readiness gates only where you declare them — the same behavior on macOS/Linux/Windows, and `doctor`, `status`, saved logs, tunnels, worktrees, and CI for free. And `corgi-compose.yml` doubles as documentation of how the stack fits together — the script never did.
+- **vs writing your own script** — Every team has one: a `dev.sh` or Makefile that clones, seeds, and starts everything — until its author changes teams, a new laptop breaks it, and nobody dares touch it again. That script _is_ the job corgi does, minus everything around it: a declarative file instead of imperative bash, with the same behavior on macOS/Linux/Windows. It's faster, too — corgi boots every service **concurrently**, each installing and starting in its own goroutine with readiness gates only where you declare them, instead of one `&&` at a time. You get `doctor`, `status`, saved logs, tunnels, worktrees, and CI for free — and `corgi-compose.yml` doubles as documentation of how the stack fits together, which the script never did.
 - **vs `docker-compose`** — Compose runs containers; that's where it stops. corgi runs your whole inner loop: it clones the repos, runs and seeds the databases (it even generates a real `docker-compose.yml` per database under the hood), wires the env between services, checks your tools, and runs your services as ordinary host processes — so you keep your usual debugger and hot-reload, and your laptop runs N processes instead of N containers (lighter on RAM). Already have a Compose file? Keep it — let corgi own the repos, env wiring, and tool checks while Compose runs your containers; the two coexist fine.
 - **vs Tilt / Skaffold** — Great when your inner loop is Kubernetes and you want live container rebuilds. corgi deliberately keeps your services out of containers — no image rebuild between edits — so it's lighter for a "repos + databases + processes" stack, and not the tool if you genuinely need k8s.
 - **vs Turborepo / Nx** — Brilliant inside one monorepo: cached builds, `turbo dev` running every package's dev server. But they stop at your package.json scripts — no databases, no seeding, no env wiring, and no second repo. corgi runs the world around them, and the two pair naturally: a corgi service whose `start:` is `turbo dev`.

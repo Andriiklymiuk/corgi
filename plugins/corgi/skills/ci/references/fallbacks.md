@@ -28,7 +28,7 @@ for svc in api web notifications; do
     echo "$svc stays on its default branch"
   fi
 done
-corgi run "${ARGS[@]}" --detach --wait --timeout 20m
+corgi run "${ARGS[@]}" --detach --wait --wait-timeout 20m
 ```
 
 Loses: the service list is now hardcoded in the pipeline and drifts from

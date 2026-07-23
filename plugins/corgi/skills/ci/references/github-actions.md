@@ -88,7 +88,7 @@ jobs:
         run: corgi init --depth 1
 
       - name: Boot the stack
-        run: corgi run --feature "${{ inputs.branch }}" --detach --wait --timeout 20m
+        run: corgi run --feature "${{ inputs.branch }}" --detach --wait --wait-timeout 20m
 
       - name: Health gate
         run: corgi status --json
