@@ -140,7 +140,7 @@ services:
 
 e2e:                                        # optional: one test suite for the whole stack
   workdir: ./e2e
-  run: npx playwright test
+  run: maestro test flows/                  # any runner — Playwright, Cypress, a script
 
 required:                                   # corgi doctor checks these; --fix installs them
   docker:
@@ -292,14 +292,16 @@ corgi detects CI on its own (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) a
 
 ### One e2e suite for the whole stack
 
-Each service keeps its own `scripts.test` (run them with `corgi test`). But a suite that drives several services at once — a Playwright flow that signs up in the web app, hits the api, and reads the confirmation mail out of the local SMTP sink — belongs to the stack, not to any one repo. Declare it once, next to the services it tests:
+Each service keeps its own `scripts.test` (run them with `corgi test`). But a suite that drives several services at once — a Maestro flow that signs up in the app, hits the api, and reads the confirmation mail out of the local SMTP sink — belongs to the stack, not to any one repo. Declare it once, next to the services it tests:
 
 ```yml
 e2e:
   workdir: ./e2e            # where the suite lives
-  install: npm ci           # runs once before the suite
-  run: npx playwright test
+  install: npm ci           # optional setup, runs once before the suite
+  run: maestro test flows/  # or: npx playwright test · cypress run · ./e2e.sh
 ```
+
+The suite is just a command — Maestro for a mobile app, Playwright or Cypress for the web, or a plain script; corgi doesn't care what drives the stack, only that it exits non-zero on failure.
 
 `corgi test --e2e` runs it against the already-running stack — deliberately never booting anything itself, so a red run always tells you which half failed: the boot or the tests. And it's the same two commands locally as in CI: `corgi run -d --wait`, then `corgi test --e2e` — your e2e stops being a CI-only ritual.
 

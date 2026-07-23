@@ -32,7 +32,7 @@ rather than to any one service (those keep their own `scripts.test`, run with
 e2e:
   workdir: ./e2e            # where the suite lives, relative to the compose file
   install: npm ci           # optional, runs once before the suite
-  run: npx playwright test
+  run: maestro test flows/  # or: npx playwright test · cypress run · ./e2e.sh
 ```
 
 `corgi test --e2e` runs it against the already-running stack — it never boots
