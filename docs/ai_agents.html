@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.10.0">
 <title data-rh="true">AI agents | Corgi docs 🐶</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://andriiklymiuk.github.io/corgi/img/corgi-social-card.png"><meta data-rh="true" name="twitter:image" content="https://andriiklymiuk.github.io/corgi/img/corgi-social-card.png"><meta data-rh="true" property="og:url" content="https://andriiklymiuk.github.io/corgi/docs/ai_agents"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="AI agents | Corgi docs 🐶"><meta data-rh="true" name="description" content="corgi is designed to be driven by AI agents and scripts, not only typed by hand."><meta data-rh="true" property="og:description" content="corgi is designed to be driven by AI agents and scripts, not only typed by hand."><link data-rh="true" rel="icon" href="/corgi/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://andriiklymiuk.github.io/corgi/docs/ai_agents"><link data-rh="true" rel="alternate" href="https://andriiklymiuk.github.io/corgi/docs/ai_agents" hreflang="en"><link data-rh="true" rel="alternate" href="https://andriiklymiuk.github.io/corgi/docs/ai_agents" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"AI agents","item":"https://andriiklymiuk.github.io/corgi/docs/ai_agents"}]}</script><link rel="alternate" type="application/rss+xml" href="/corgi/blog/rss.xml" title="Corgi docs 🐶 RSS Feed">
 <link rel="alternate" type="application/atom+xml" href="/corgi/blog/atom.xml" title="Corgi docs 🐶 Atom Feed"><link rel="stylesheet" href="/corgi/assets/css/styles.d43d84bd.css">
-<script src="/corgi/assets/js/runtime~main.7488317f.js" defer="defer"></script>
+<script src="/corgi/assets/js/runtime~main.fd025e93.js" defer="defer"></script>
 <script src="/corgi/assets/js/main.c9d4ac80.js" defer="defer"></script>
 </head>
 <body>
@@ -59,6 +59,9 @@ logs, remote-backend, emulator-host, and per-service branch/worktree
 <li class=""><code>/corgi-debug</code> — diagnose a stack local-first (<code>ps</code>/<code>status</code>/<code>doctor</code>/<code>logs</code>), or
 pull runtime/deployed logs for a bug from your stack&#x27;s own provider (Coralogix,
 CloudWatch/ECS, Datadog… — auto-detected from your README), on demand.</li>
+<li class=""><code>/corgi-ci</code> — generate (or fix) the CI pipeline that boots the whole stack and runs
+cross-repo e2e on every PR — GitHub Actions or GitLab CI, with caching, health
+gates, and log artifacts baked in. See <a class="" href="/corgi/docs/ci">Run the stack in CI</a>.</li>
 <li class=""><code>/corgi-suggest</code> — ranked, evidence-backed product + engineering improvements, each
 tied to a measurable outcome; specs the one you pick and can open a tracker story.</li>
 <li class=""><code>corgi:stories</code> — turn tracker issues or a feature description into spec&#x27;d, tested,
