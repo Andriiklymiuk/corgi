@@ -3,7 +3,7 @@
 
   # 🐶 CORGI 🐶
 
-  **Run your whole local stack from one file — repos, databases, env, every service. And let AI agents plan, build, and review work across it.** 
+  **Run your whole local stack from one file — repos, databases, env, every service. Let AI agents plan, build, and review work across it. Then run the same stack in CI, so your e2e finally tests all the repos together.** 
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
@@ -73,6 +73,7 @@ In practice, a real multi-repo stack — backend, frontend, and a mobile app —
 - **Your databases** — 38 ready-to-go drivers. Corgi starts them in Docker and **seeds** them from a dump or a remote DB, so you get real data instead of an empty schema. Open a shell with `corgi db shell` and the password is already filled in. Need AWS or Supabase locally? LocalStack and Supabase come up from the same file.
 - **Your services** — Everything starts together with the env vars already wired between them. They boot in parallel by default; when one genuinely needs another up first, gate it with `condition: ready` on the dependency (or `--gate-deps` for all of them). Press `Ctrl-C` and it all winds down cleanly. Prefer the background? `corgi run -d`, then check on it with `corgi ps`.
 - **The fiddly bits** — A preflight that catches missing tools and busy ports _before_ they bite (`corgi doctor`), live health (`corgi status -w`), public HTTPS URLs for webhook testing (`corgi tunnel`), saved logs, and a desktop ping when something crashes.
+- **Your CI** — The same file boots a CI runner. The official [GitHub Action](#using-the-action) installs corgi and hands `actions/cache` a ready-made dependency-cache plan, `--feature` runs every repo carrying the PR's branch together, and `corgi test --e2e` drives one end-to-end suite across the live stack — the check that catches cross-repo breakage every per-repo pipeline misses. [Details below](#run-the-whole-stack-in-ci).
 - **Made for AI agents** — it speaks clean JSON, returns exit codes an agent can branch on, runs an MCP server, and ships a Claude Code plugin that plans from your Linear/Jira board, picks up ready tickets and turns them into draft PRs (and reviews them for you).
 
 ## In your day-to-day
@@ -269,10 +270,14 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
 
 `--feature` is the cross-repo version: pass one branch name and corgi asks every service's repo whether it has it (locally or on `origin`), running the ones that do from a worktree and leaving the rest on their default checkout. A missing branch isn't an error — a feature rarely touches the whole stack. Remote-only branches are fetched first, so it works on a fresh or shallow clone.
 
-**Run the whole stack in CI.** corgi already detects CI (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) and goes quiet and non-interactive. Add `corgi init --depth 1` for shallow clones, `--feature "$BRANCH"` to pull in every repo carrying the change, `--detach --wait --timeout` to block until healthy, and `corgi logs --dump ./ci-logs` in an always-run step so a failure leaves you every service's log as an artifact. Tools only a human needs can be marked `skipInCi: true`. In GitHub Actions the whole thing is a handful of lines:
+## Run the whole stack in CI
+
+Here's where the same file pays off a second time. Each repo's pipeline only proves that repo: a change that spans services — a schema field, a new event, an endpoint the frontend calls — can leave every individual pipeline green while the combination is broken. corgi closes that gap. A CI runner boots the whole stack the same way your laptop does, from the branches under review, then runs one e2e suite against the live stack.
+
+corgi detects CI on its own (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) and goes quiet and non-interactive — no special flags. With the official action, the whole job is a handful of lines:
 
 ```yaml
-- uses: Andriiklymiuk/corgi@v1
+- uses: Andriiklymiuk/corgi@v1                     # install corgi (checksum-verified) + a cache plan
   id: corgi
 
 - uses: actions/cache@v4
@@ -280,12 +285,28 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
     path: ${{ steps.corgi.outputs.cache-paths }}
     key: ${{ steps.corgi.outputs.cache-key }}
 
-- run: corgi init --depth 1 --feature "$BRANCH"
+- run: corgi init --depth 1 --feature "$BRANCH"    # shallow-clone every repo carrying the change
 - run: corgi run --feature "$BRANCH" --wait --follow
-- run: corgi test --e2e
+- run: corgi test --e2e                            # the stack-level suite, against the live stack
+
+- run: corgi logs --dump ./ci-logs                 # a failure leaves every service's log as an artifact
+  if: always()
 ```
 
-`corgi cache paths` derives what to persist from each service's `beforeStart` cacheKey, so the list never drifts as services come and go. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
+`--feature "$BRANCH"` is the cross-repo hinge: every service repo that has the PR's branch joins the run from a worktree, the rest stay on their default checkout — so each PR is tested against the exact combination it will ship into. `--wait` blocks until every service is actually healthy (no `sleep 60` guesswork) and a `--timeout` fails the job instead of hanging the runner. Tools only a human needs can be marked `skipInCi: true`. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
+
+### One e2e suite for the whole stack
+
+Each service keeps its own `scripts.test` (run them with `corgi test`). But a suite that drives several services at once — a Playwright flow that signs up in the web app, hits the api, and reads the confirmation mail out of the local SMTP sink — belongs to the stack, not to any one repo. Declare it once, next to the services it tests:
+
+```yml
+e2e:
+  workdir: ./e2e            # where the suite lives
+  install: npm ci           # runs once before the suite
+  run: npx playwright test
+```
+
+`corgi test --e2e` runs it against the already-running stack — deliberately never booting anything itself, so a red run always tells you which half failed: the boot or the tests. And it's the same two commands locally as in CI: `corgi run -d --wait`, then `corgi test --e2e` — your e2e stops being a CI-only ritual.
 
 ### Using the action
 
@@ -301,6 +322,16 @@ The worktrees live under `corgi_services/.worktrees/` and are reused between run
 | `version` | The corgi version that was installed. |
 | `cache-paths` | Newline-separated directories worth caching — pass straight to `actions/cache`'s `path`. |
 | `cache-key` | Key that changes whenever any `cacheKey` file changes — pass straight to its `key`. |
+| `cache-groups` | The same plan split per ecosystem, as JSON (`{id, key, paths}` per group) — one `actions/cache` step per group, so a change to one language's lockfile doesn't evict every other language's packages. |
+
+The cache plan comes from `corgi cache paths`: it derives what to persist from each service's `beforeStart` `cacheKey`, so the list can never drift as services come and go — add a service and the cache follows automatically. On a polyglot stack, feed `cache-groups` into a small matrix instead of one big cache:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: ${{ fromJSON(steps.corgi.outputs.cache-groups)[0].pathsText }}
+    key: ${{ fromJSON(steps.corgi.outputs.cache-groups)[0].key }}
+```
 
 `@v1` moves with each release, so you get fixes without editing workflows. Pin an exact tag (`@v1.20.13`) if you would rather bump deliberately.
 
@@ -357,13 +388,14 @@ Using another agent (Cursor, Codex, Copilot, …)? Install the skills via [skill
 npx skills add Andriiklymiuk/corgi
 ```
 
-Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. The plugin adds slash-commands plus auto-invoking skills that cover the whole loop — plan, run, debug, suggest, ship, review:
+Now Claude recognizes any project with a `corgi-compose.yml` and reaches for real `corgi run` / `corgi doctor` / `corgi status` commands instead of inventing its own. The plugin adds slash-commands plus auto-invoking skills that cover the whole loop — plan, run, debug, suggest, ship, review, and wiring up CI:
 
 - **Plan the work — `/corgi-tracker`.** Standup / status, triage, or decompose an epic into tickets — from Linear or Jira. Its edge over the tracker's own UI: it ties each ticket to its **real code state** — branch, draft/open/merged PR, CI — across every service, so drift like "In Progress but no branch" or "Todo but the PR already merged" surfaces. Read-only until one confirm gate guards any tracker write; hands the tickets it shapes to `/corgi:stories`.
 - **Drain the queue — `/corgi-queue`.** Pick up build-ready tickets and build them — pass explicit Linear/Jira links, or a scope in plain words (the **`agent`** queue by default; also _in ready_, _from backlog_, _most impactful/ROI_, _bugs_). It drift-skips anything already merged or in-flight, you confirm the picks, then `/corgi:stories` branches per service and opens draft PRs — moving each ticket to In-Progress as work starts (which stops a loop from grabbing it twice). `/loop 1h /corgi-queue` drains on a schedule; you approve each batch's specs in one sign-off.
 - **Autopilot the loop — `/corgi-autopilot`.** A supervised loop that drains the agent queue into draft PRs — one spec gate per batch, a heartbeat, and a kill switch (`corgi autopilot stop`/`pause`/`status`). Schedule it with `/loop` or `/schedule`; it never merges.
 - **Run it — `/corgi-run`.** "Run the stack" — or a slice, with a tunnel + logs, against a remote backend, for a mobile emulator, or a single service on a feature/PR branch or worktree (`--service-branch`/`--service-dir`, the reviewer "Run line"). Boots **detached**, waits until healthy, and flags anything stuck.
 - **Debug it — `/corgi-debug`.** A service won't start, or you're chasing a bug and need runtime/deployed data. Local-first (`ps` / `status` / `doctor` / `logs`), then your stack's own logs/analytics provider (Coralogix, CloudWatch/ECS, Datadog… — auto-detected from your README) on demand.
+- **Wire up CI — `/corgi-ci`.** Ask for "e2e across api + web on the PR branch" and it writes the GitHub Actions or GitLab CI pipeline that boots the whole stack and runs cross-repo e2e — caching, health gates, and log artifacts included. It also knows the failure modes that eat CI afternoons (containerised jobs, health checks that do work, silent `beforeStart` failures) and checks for them up front. Or hand it a red job: "each repo passes but the combination breaks".
 - **Suggest work — `/corgi-suggest`.** Ranked, evidence-backed product **and** engineering improvements, each tied to a measurable outcome; it specs the one you pick and can open a tracker story.
 - **Suggest on a schedule — `/corgi-suggest-proactive`.** The same ranking, pushed on a cadence: it takes the top idea, dedupes against open and recently-dismissed tickets (`corgi suggest-history`), and either proposes it or — only if you opt in — files exactly **one** rate-limited **draft** ticket. Never assigned, never built.
 - **Ship a batch — `/corgi:stories`.** Hand Claude some tracker issues (Linear or Jira) or just describe a feature. It investigates the codebase, writes a short spec for each item and waits for your sign-off, then branches per service, runs the tests, reviews its own changes, and opens **draft** PRs/MRs — each service in its own git worktree.
@@ -377,6 +409,7 @@ Now Claude recognizes any project with a `corgi-compose.yml` and reaches for rea
 /loop 1h /corgi-autopilot            # supervised loop: drain the queue → draft PRs (one gate/batch)
 /corgi-run                           # boot the stack detached, wait until healthy
 /corgi-debug                         # diagnose a service / pull deployed or CI logs
+/corgi-ci                            # generate (or fix) the full-stack e2e pipeline
 /corgi-suggest                       # ranked, measurable improvement ideas
 /corgi:stories ABC-123 ABC-124       # spec → branch per service → draft PRs
 /corgi:review  <pr-url>              # review a PR — or "fix the comments on this MR"
@@ -419,6 +452,7 @@ corgi runs your stack on your own machine — the local inner loop — and can p
 ## Documentation
 
 - Full docs: https://andriiklymiuk.github.io/corgi/
+- Running the stack in CI (action, caching, cross-repo e2e): https://andriiklymiuk.github.io/corgi/docs/ci
 - 2-min video showcase: https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY
 - Driving corgi from a script or agent? See [docs/agents.md](docs/agents.md) and [docs/mcp.md](docs/mcp.md).
 - Planning + picking up work from your tracker (Linear/Jira)? See [docs/tracker.md](docs/tracker.md).

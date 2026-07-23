@@ -15,8 +15,14 @@ stack from the branches under review and drives real e2e against it.
 1. **`corgi run --help | grep -E 'feature|wait'`** and **`corgi init --help | grep depth`**.
    Missing → the installed corgi predates these flags. Do **not** invent them; either
    bump corgi, or fall back to the shell equivalents in `references/fallbacks.md`.
+   Also check `corgi test --help | grep e2e` and `corgi cache --help` — recent corgi
+   adds `corgi test --e2e` (runs the compose's `e2e:` block against the live stack)
+   and `corgi cache paths` (derives the CI cache plan from the compose file).
 2. **Read `corgi-compose.yml`.** Count `db_services` (each is containers + disk) and
-   services. Note every `required:` tool and which are human-only.
+   services. Note every `required:` tool and which are human-only. Check for a
+   top-level `e2e:` block — if there is one, the e2e step is `corgi test --e2e`,
+   not a hand-written npm invocation; if there isn't, offer to add one so local
+   runs and CI share the same entry point.
 3. **Find where secrets come from.** `copyEnvFromFilePath:` points at files that are
    almost always gitignored. CI has none of them. This is the single most common
    reason a first attempt never boots — settle it before writing YAML.
@@ -31,11 +37,13 @@ One implementation, living in the workspace repo (the one holding
 ```
 service repo PR ──► reusable workflow in the workspace repo
                       1. checkout workspace + install corgi
-                      2. restore caches
+                         (GitHub: uses: Andriiklymiuk/corgi@v1 — verified install
+                          + cache-paths/cache-key/cache-groups outputs)
+                      2. restore caches (from the action outputs / corgi cache paths)
                       3. corgi init --depth 1
                       4. corgi run --feature "$BRANCH" --detach --wait --timeout
                       5. corgi status --json          (gate)
-                      6. run the e2e suite
+                      6. corgi test --e2e             (or the suite's own command)
                       7. ALWAYS: corgi logs --dump, upload artifacts
 ```
 
@@ -115,6 +123,14 @@ you pay every install every time — do not read early runs as the steady state.
   (the supabase CLI, for one). Drift silently changes ports and generated keys.
 
 ## Caching
+
+Do not hand-write the path list — `corgi cache paths` derives it from the compose
+file (every `beforeStart` cacheKey's dependency dir + `corgi_services/.cache/`),
+so it cannot drift as services come and go. `--key` prints the matching cache key,
+`--json` splits the plan per ecosystem (`groups: [{id, key, paths, pathsText}]`)
+so one lockfile change doesn't evict every other language's packages. On GitHub
+the `Andriiklymiuk/corgi@v1` action exposes all of this as step outputs
+(`cache-paths`, `cache-key`, `cache-groups`) ready to feed `actions/cache`.
 
 Both halves or neither:
 

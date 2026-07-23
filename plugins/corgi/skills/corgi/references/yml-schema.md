@@ -19,7 +19,25 @@ db_services:  map<name, DbService>  # See below
 services:     map<name, Service>    # See below
 required:     map<tool, Required>   # See below
 envTiers:     map<name, EnvTier>    # Optional. `corgi run --tier <name>` selects one
+e2e:          E2ESuite              # Optional stack-level e2e suite. See below
 ```
+
+## `e2e` (optional)
+
+A test suite that drives several services at once, so it belongs to the stack
+rather than to any one service (those keep their own `scripts.test`, run with
+`corgi test`).
+
+```yaml
+e2e:
+  workdir: ./e2e            # where the suite lives, relative to the compose file
+  install: npm ci           # optional, runs once before the suite
+  run: npx playwright test
+```
+
+`corgi test --e2e` runs it against the already-running stack — it never boots
+anything itself, so start the stack first (`corgi run -d --wait`). Same entry
+point locally and in CI; the CI pipeline recipe is the `ci` skill's job.
 
 ## `envTiers.<name>` (optional)
 
