@@ -431,22 +431,24 @@ No slash-commands or jargon needed — talk to it like a teammate; it routes on 
 
 At a glance — what each tool takes off your plate:
 
-| | docker-compose | Tilt / Skaffold | foreman / overmind | corgi |
-|---|:---:|:---:|:---:|:---:|
-| Databases in containers | ✓ | ✓ (k8s) | — | ✓ |
-| Services as host processes (your debugger, hot-reload) | — | — | ✓ | ✓ |
-| Clones & pulls your repos | — | — | — | ✓ |
-| Seeds databases with real data | — | — | — | ✓ |
-| Wires env between services | — | — | — | ✓ |
-| Checks & installs required tools | — | — | — | ✓ |
-| Cross-repo e2e in CI (`--feature`) | — | — | — | ✓ |
-| Built for AI agents (JSON, MCP, skills) | — | — | — | ✓ |
+| | docker-compose | Tilt / Skaffold | Turborepo / Nx | process-compose | corgi |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Databases in containers | ✓ | ✓ (k8s) | — | — | ✓ |
+| Services as host processes (your debugger, hot-reload) | — | — | ✓ | ✓ | ✓ |
+| Works across many repos | — | — | — | — | ✓ |
+| Clones & pulls the repos for you | — | — | — | — | ✓ |
+| Seeds databases with real data | — | — | — | — | ✓ |
+| Wires env between services | — | — | — | — | ✓ |
+| Checks & installs required tools | — | — | — | — | ✓ |
+| Cross-repo e2e in CI (`--feature`) | — | — | — | — | ✓ |
+| Built for AI agents (JSON, MCP, skills) | — | — | — | — | ✓ |
 
 And the honest version of "why not just use X":
 
 - **vs `docker-compose`** — Compose runs containers; that's where it stops. corgi runs your whole inner loop: it clones the repos, runs and seeds the databases (it even generates a real `docker-compose.yml` per database under the hood), wires the env between services, checks your tools, and runs your services as ordinary host processes — so you keep your usual debugger and hot-reload, and your laptop runs N processes instead of N containers (lighter on RAM). Already have a Compose file? Keep it — let corgi own the repos, env wiring, and tool checks while Compose runs your containers; the two coexist fine.
 - **vs Tilt / Skaffold** — Great when your inner loop is Kubernetes and you want live container rebuilds. corgi deliberately keeps your services out of containers — no image rebuild between edits — so it's lighter for a "repos + databases + processes" stack, and not the tool if you genuinely need k8s.
-- **vs Procfile runners (foreman / overmind)** — They start a list of processes. corgi does that _and_ the repos, databases, seeding, env wiring, and tool checks around them.
+- **vs Turborepo / Nx** — Brilliant inside one monorepo: cached builds, `turbo dev` running every package's dev server. But they stop at your package.json scripts — no databases, no seeding, no env wiring, and no second repo. corgi runs the world around them, and the two pair naturally: a corgi service whose `start:` is `turbo dev`.
+- **vs process-compose / mprocs (and older Procfile runners like foreman)** — They start a list of processes, and do it well. corgi does that _and_ the repos, databases, seeding, env wiring, and tool checks around them — and the same file then drives your agents and CI.
 - **vs devcontainers / Nix** — These give you a more isolated, prebuilt environment — Nix in particular is fully hermetic. corgi takes the opposite bet: it runs on your real machine with your real tools, and its `required:` block still installs and pins exactly what each service needs (a `pyenv`/`rbenv` version, native libs, certs). Simpler to live in day to day; it's not a hermetic sandbox, by design.
 
 **What corgi isn't:** a deploy tool. It runs and tests your stack locally — shipping to staging/prod stays with your CI/CD (you test with corgi, then deploy as usual). It's also not the fit if your dev loop must run _inside_ Kubernetes, or if you want a fully sandboxed, OS-level environment (devcontainers/Nix territory).
