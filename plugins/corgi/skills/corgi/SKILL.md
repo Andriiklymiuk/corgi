@@ -32,6 +32,7 @@ Detached lifecycle (preferred for agents): `corgi run --detach` (starts services
 | Task | Read |
 |------|------|
 | Writing a new `corgi-compose.yml` | `references/yml-schema.md` then `references/db-drivers.md` |
+| Service repo has a Dockerfile / own docker-compose (run without `start:` scripts, `--docker` flag, runner options) | `references/yml-schema.md#dockerfile-services-when-start-is-optional` |
 | Picking a db driver (port, image, env prefix) | `references/db-drivers.md` |
 | Adding `healthCheck:` to a service or db | `references/healthchecks.md` |
 | `corgi doctor` or `corgi run` failed | `references/debugging.md` |
@@ -64,6 +65,8 @@ Load only what the task needs. Do not read every reference every time.
 ```
 corgi run                  # start everything (long-running, background it); persists stdout/stderr to corgi_services/.logs/
 corgi run --logs=false     # opt out of log capture for this run
+corgi run --docker         # run docker-capable services (Dockerfile / repo compose) in containers instead of start scripts
+corgi run --dry-run        # plan only; prints each service's resolved mode (native | docker (Dockerfile) | docker (repo compose))
 corgi run --ci             # CI-friendly: suppress spinners, banners, colors (auto-on when CI=true)
 corgi run --service-branch api=feat/x   # run a service on a branch in an isolated reused worktree (non-destructive)
 corgi run --service-dir api=/path       # run a service from an existing dir (e.g. a git worktree); repeatable, mix freely
