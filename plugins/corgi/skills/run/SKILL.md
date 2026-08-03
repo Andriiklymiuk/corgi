@@ -52,6 +52,7 @@ quirks. Match the user's words → translate to a **detached** command.
 | A subset | `corgi run --services <a,b> --detach` (`--with-deps` pulls each one's deps + dbs) |
 | Frontend(s) → **remote** backend | `corgi run --services <frontends> --dbServices none --detach`. Backend excluded → its `depends_on_services` alias is **not** generated — the frontend uses ONLY its own env file. **Read that env file** (`Read` the frontend's source `.env`) and **confirm the API URL is the remote one**, not a `localhost` default `corgi init` seeded; if localhost, user sets the remote URL there before you declare success. (Don't use `corgi env <frontend>` for this — it ignores the run set and annotates vars with `depends_on` sources for the backend you excluded, so it misleads.) |
 | Captured logs | on by default; `--logs=false` opts out |
+| In containers ("run in docker", no local toolchain) | `corgi run --docker --detach` — every service whose repo ships a Dockerfile / compose file runs containerized; the rest stay native. A service with **no** `start:` and a Dockerfile does this automatically, no flag. `corgi run --dry-run` shows each service's resolved `mode=` |
 | + webhook tunnel | can't combine with `--detach` — see **Tunnel**, Phase 2 |
 | Staging/prod tier | `--tier <name>` if `envTiers:` defines it; else the repo's `run<X>Staging` make target's underlying corgi command (tier run usually `--dbServices none` — no local dbs) |
 | One DB only | `corgi run --dbServices <name> --services none --detach` |

@@ -11,6 +11,7 @@ Before asking anything, look around:
 - `ls` the current directory. Note every subdirectory that looks like a service (has its own `package.json`, `go.mod`, `Cargo.toml`, `requirements.txt`, `Gemfile`, etc.).
 - `cat` each service's manifest to infer language/runtime and likely port.
 - Check for existing `.env`, `docker-compose.yml`, `Makefile` — pull defaults from them.
+- Note which service dirs ship a `Dockerfile` or their own compose file — those can run with no `start:` scripts at all (see the rung rule in Step 3).
 - Check for an already-existing `corgi-compose.yml`. If present, stop: ask the user whether they want to edit it (offer `/corgi-add-service` if one day that exists, otherwise read `skills/corgi/references/yml-schema.md` and edit directly) rather than overwrite.
 
 Present what you found in 3–5 bullets. Don't proceed blindly.
@@ -54,6 +55,7 @@ Rules of thumb:
 - Use `envAlias: ""` for the primary db of a service; only set an alias when the service talks to more than one db of the same driver.
 - For `services` where the repo is already cloned locally, use `path: ./<dirname>` and omit `cloneFrom:`.
 - Don't invent `start:` commands — read each service's `package.json` scripts / Makefile / README to find the right one.
+- **Smallest rung first**: a service whose repo ships a working `Dockerfile` (or its own compose file) needs no `beforeStart`/`start` — corgi builds and runs the container automatically. Emit just `cloneFrom`/`path` (+ `port` if the Dockerfile has no `EXPOSE`). Add scripts only when the user wants hot reload / a native toolchain; both can coexist and `corgi run --docker` flips to containers. Details: `skills/corgi/references/yml-schema.md#dockerfile-services-when-start-is-optional`.
 
 ## Step 4 — Verify before handoff
 
