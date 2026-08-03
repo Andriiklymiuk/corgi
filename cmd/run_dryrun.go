@@ -30,8 +30,31 @@ type dryRunService struct {
 	Name      string   `json:"name"`
 	Port      int      `json:"port"`
 	WillClone bool     `json:"willClone"`
+	Mode      string   `json:"mode"`
 	DependsOn []string `json:"dependsOn"`
 	EnvKeys   []string `json:"envKeys"`
+}
+
+// serviceRunMode mirrors ResolveRunnerModes against current disk state, for
+// the plan output. A not-yet-cloned repo can't be inspected, hence "unknown".
+func serviceRunMode(svc utils.Service) string {
+	if svc.ManualRun {
+		return "manual"
+	}
+	src := utils.DetectDockerSource(svc)
+	dockerWanted := svc.Runner.IsDocker() || len(svc.Start) == 0
+	switch {
+	case dockerWanted && src == utils.SourceRepoCompose:
+		return "docker (repo compose)"
+	case dockerWanted && src == utils.SourceDockerfile:
+		return "docker (Dockerfile)"
+	case dockerWanted && willClone(svc):
+		return "unknown until clone"
+	case len(svc.Start) > 0:
+		return "native"
+	default:
+		return "native (no start!)"
+	}
 }
 
 // computeDryRunPlan builds the plan without side effects: validate, resolve
@@ -72,6 +95,7 @@ func computeDryRunPlan(corgi *utils.CorgiCompose) dryRunPlan {
 			Name:      svc.ServiceName,
 			Port:      svc.Port,
 			WillClone: willClone(svc),
+			Mode:      serviceRunMode(svc),
 			DependsOn: deps,
 			EnvKeys:   envKeys,
 		})
@@ -269,7 +293,7 @@ func printDryRunServices(services []dryRunService) {
 	}
 	utils.Info("\nServices:")
 	for _, s := range services {
-		utils.Infof("  • %s (port=%d, willClone=%t)\n", s.Name, s.Port, s.WillClone)
+		utils.Infof("  • %s (port=%d, willClone=%t, mode=%s)\n", s.Name, s.Port, s.WillClone, s.Mode)
 		if len(s.DependsOn) > 0 {
 			utils.Infof("      depends on: %v\n", s.DependsOn)
 		}

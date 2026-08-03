@@ -3,6 +3,7 @@ package utils
 import (
 	"andriiklymiuk/corgi/utils/art"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 )
@@ -336,12 +337,23 @@ func checkMissingStart(c *CorgiCompose) []ValidationIssue {
 		if s.Port == 0 || s.ManualRun {
 			continue
 		}
-		if len(s.Start) > 0 || s.Runner.Name == "docker" {
+		if len(s.Start) > 0 || s.Runner.IsDocker() {
 			continue
+		}
+		// A repo-shipped Dockerfile/compose file makes the service runnable
+		// without start commands (docker mode kicks in at run time).
+		if DetectDockerSource(s) != SourceNone {
+			continue
+		}
+		// Not cloned yet — capability unknowable until `corgi run` clones it.
+		if s.CloneFrom != "" {
+			if _, err := os.Stat(s.AbsolutePath); err != nil {
+				continue
+			}
 		}
 		out = append(out, ValidationIssue{
 			Code:    ErrMissingStart,
-			Message: fmt.Sprintf("service %q sets port %d but has no start command and is not a docker runner", s.ServiceName, s.Port),
+			Message: fmt.Sprintf("service %q sets port %d but has no start command, no Dockerfile and no compose file", s.ServiceName, s.Port),
 			Field:   fmt.Sprintf("services.%s.start", s.ServiceName),
 		})
 	}
