@@ -70,30 +70,22 @@ func GetExposedPortFromDockerfile(service Service) (string, error) {
 		// and we don't need to check the Dockerfile for it
 		return fmt.Sprintf("%d", service.Port), nil
 	}
-	dockerfileExists, err := CheckIfFileExistsInDirectory(
-		service.AbsolutePath,
-		service.DockerfileName(),
-	)
-	if err != nil {
-		return "", fmt.Errorf("error checking for Dockerfile: %w", err)
-	}
-	if !dockerfileExists {
-		return "", fmt.Errorf("dockerfile not found in %s", service.AbsolutePath)
-	}
-
 	dockerfilePath := filepath.Join(service.AbsolutePath, service.DockerfileName())
 	content, err := os.ReadFile(dockerfilePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("dockerfile not found in %s", service.AbsolutePath)
+		}
 		return "", fmt.Errorf("error reading Dockerfile: %w", err)
 	}
 
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "EXPOSE") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				return parts[1], nil
-			}
+		fields := strings.Fields(line)
+		// EXPOSE is case-insensitive and ports may carry /tcp|/udp suffixes.
+		if len(fields) >= 2 && strings.EqualFold(fields[0], "EXPOSE") {
+			port, _, _ := strings.Cut(fields[1], "/")
+			return port, nil
 		}
 	}
 

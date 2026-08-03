@@ -87,7 +87,7 @@ func runStop(cmd *cobra.Command, _ []string) {
 	}
 	// Re-derive docker mode: run resolved it in another process, and cleanup's
 	// container teardown keys off Runner.Name. Detection errors don't block stop.
-	if resolved, rerr := utils.ResolveRunnerModes(corgi.Services, false); rerr == nil {
+	if resolved, rerr := utils.ResolveRunnerModes(corgi.Services, false, false); rerr == nil {
 		corgi.Services = resolved
 	}
 
@@ -106,7 +106,7 @@ func runStop(cmd *cobra.Command, _ []string) {
 	// pid==0 entries are container-backed; pid reconciliation can't see them.
 	st = probeDockerRunnerServices(st, utils.IsPortListening, time.Now().UTC())
 
-	if stopService == "" && !anythingRunning(st) {
+	if stopService == "" && !anythingRunning(st) && !hasContainerBackedEntries(st) {
 		removeStateLocked(statePath)
 		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
 		return
@@ -180,6 +180,18 @@ func containerBackedNotInCompose(st utils.RunState, corgi *utils.CorgiCompose) [
 		}
 	}
 	return names
+}
+
+// hasContainerBackedEntries: exited containers (restart: unless-stopped) come
+// back on the next daemon restart unless `make down` runs — so an all-stopped
+// state with pid==0 entries still needs the teardown pass.
+func hasContainerBackedEntries(st utils.RunState) bool {
+	for _, e := range st.Services {
+		if e.PID == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func findStateEntry(entries []utils.RunStateEntry, name string) (utils.RunStateEntry, bool) {

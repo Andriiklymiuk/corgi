@@ -43,6 +43,25 @@ func TestBuildDockerServiceDataVolumesRewritten(t *testing.T) {
 	}
 }
 
+func TestBuildDockerServiceDataNamedAndRoVolumes(t *testing.T) {
+	s := dockerSvc(t, "EXPOSE 3000\n")
+	s.Runner.Volumes = []string{"mydata:/var/lib/x", "./src:/app/src:ro"}
+	d, err := BuildDockerServiceData(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Volumes[0] != "mydata:/var/lib/x" {
+		t.Fatalf("named volume must pass through, got %q", d.Volumes[0])
+	}
+	if len(d.NamedVolumes) != 1 || d.NamedVolumes[0] != "mydata" {
+		t.Fatalf("named volume must be declared top-level, got %v", d.NamedVolumes)
+	}
+	wantRo := filepath.Join(s.AbsolutePath, "src") + ":/app/src:ro"
+	if d.Volumes[1] != wantRo {
+		t.Fatalf("ro bind must keep options, got %q", d.Volumes[1])
+	}
+}
+
 func TestBuildDockerServiceDataContainerPortPrecedence(t *testing.T) {
 	s := dockerSvc(t, "EXPOSE 3000\n")
 	s.Runner.ContainerPort = 8080

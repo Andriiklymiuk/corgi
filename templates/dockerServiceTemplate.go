@@ -4,15 +4,15 @@ var DockerComposeService = `services:
   {{.DockerName}}:
     container_name: {{.DockerName}}
     build:
-      context: {{.BuildContext}}
-      dockerfile: {{.DockerfilePath}}
+      context: {{yamlQuote .BuildContext}}
+      dockerfile: {{yamlQuote .DockerfilePath}}
 {{- if .Target}}
-      target: {{.Target}}
+      target: {{yamlQuote .Target}}
 {{- end}}
 {{- if .BuildArgs}}
       args:
 {{- range $k, $v := .BuildArgs}}
-        {{$k}}: "{{$v}}"
+        {{$k}}: {{yamlQuote $v}}
 {{- end}}
 {{- end}}
     ports:
@@ -22,11 +22,11 @@ var DockerComposeService = `services:
 {{- if .Volumes}}
     volumes:
 {{- range .Volumes}}
-      - {{.}}
+      - {{yamlQuote .}}
 {{- end}}
 {{- end}}
 {{- if .Command}}
-    command: {{.Command}}
+    command: {{yamlQuote .Command}}
 {{- end}}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -37,6 +37,13 @@ var DockerComposeService = `services:
 networks:
   corgi-network:
     driver: bridge
+{{- if .NamedVolumes}}
+
+volumes:
+{{- range .NamedVolumes}}
+  {{.}}:
+{{- end}}
+{{- end}}
 `
 
 var MakefileService = `up:
@@ -63,7 +70,7 @@ help:
 .PHONY: up upd down stop id remove logs followLogs build help
 `
 
-var MakefileRepoCompose = `COMPOSE := docker compose -f {{.RepoComposeFile}} --env-file {{.EnvFilePath}}
+var MakefileRepoCompose = `COMPOSE := docker compose -f "{{.RepoComposeFile}}" --env-file "{{.EnvFilePath}}"
 up:
 	$(COMPOSE) up --build
 upd:

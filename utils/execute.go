@@ -640,7 +640,7 @@ func FollowServiceContainerLogs(serviceName string) {
 	cmd.Stderr = w
 	SetProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
-		fmt.Printf("⚠ logs: cannot follow %s: %v\n", serviceName, err)
+		Infof("⚠ logs: cannot follow %s: %v\n", serviceName, err)
 		return
 	}
 	addProcess(cmd.Process)
@@ -658,7 +658,8 @@ func ExecuteServiceCommandRun(targetService string, command ...string) error {
 
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = path
-	cmd.Stdout = os.Stdout
+	// ConsoleOut keeps stdout pure JSON under --json (child output → stderr).
+	cmd.Stdout = ConsoleOut()
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {

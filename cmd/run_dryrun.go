@@ -41,6 +41,13 @@ func serviceRunMode(svc utils.Service, dockerFlag bool) string {
 	if svc.ManualRun {
 		return "manual"
 	}
+	// Surface the same config errors the real run aborts on.
+	if _, err := utils.ResolveRunnerModes([]utils.Service{svc}, dockerFlag, false); err != nil {
+		if willClone(svc) {
+			return "unknown until clone"
+		}
+		return "error: " + err.Error()
+	}
 	src := utils.DetectDockerSource(svc)
 	dockerWanted := svc.Runner.IsDocker() || len(svc.Start) == 0 || dockerFlag
 	switch {

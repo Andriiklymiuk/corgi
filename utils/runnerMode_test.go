@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -10,7 +11,14 @@ func mkModeService(t *testing.T, files ...string) Service {
 	t.Helper()
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0644); err != nil {
+		content := "x"
+		if strings.HasPrefix(filepath.Base(f), "Dockerfile") {
+			content = "FROM alpine\nEXPOSE 3000\n"
+		}
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, f)), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, f), []byte(content), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -71,7 +79,7 @@ func TestResolveRunnerModes(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			out, err := ResolveRunnerModes([]Service{c.svc(t)}, c.dockerFlag)
+			out, err := ResolveRunnerModes([]Service{c.svc(t)}, c.dockerFlag, false)
 			if c.wantErr != (err != nil) {
 				t.Fatalf("err=%v", err)
 			}
@@ -86,10 +94,93 @@ func TestResolveRunnerModes(t *testing.T) {
 	}
 }
 
+func TestBuildFieldsBeatRepoCompose(t *testing.T) {
+	s := mkModeService(t, "Dockerfile.dev", "docker-compose.yml")
+	s.Runner = Runner{Name: "docker", Dockerfile: "Dockerfile.dev", Target: "dev"}
+	out, err := ResolveRunnerModes([]Service{s}, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0].ResolvedDockerSource != SourceDockerfile {
+		t.Fatal("declared build fields must pin the Dockerfile, not the repo compose")
+	}
+}
+
+func TestExplicitRunnerPrefersDockerfileOverRepoCompose(t *testing.T) {
+	s := mkModeService(t, "Dockerfile", "docker-compose.yml")
+	s.Runner.Name = "docker"
+	out, err := ResolveRunnerModes([]Service{s}, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0].ResolvedDockerSource != SourceDockerfile {
+		t.Fatal("explicit runner: docker must keep pre-existing Dockerfile behavior")
+	}
+}
+
+func TestSubdirDockerfileDetected(t *testing.T) {
+	s := mkModeService(t, "docker/Dockerfile.dev")
+	s.Runner = Runner{Name: "docker", Dockerfile: "docker/Dockerfile.dev"}
+	out, err := ResolveRunnerModes([]Service{s}, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0].ResolvedDockerSource != SourceDockerfile {
+		t.Fatal("dockerfile in a subdirectory must be found")
+	}
+}
+
+func TestAutoDockerResolvesPortFromExpose(t *testing.T) {
+	s := mkModeService(t, "Dockerfile") // EXPOSE 3000 in fixture
+	out, err := ResolveRunnerModes([]Service{s}, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out[0].Runner.IsDocker() || out[0].Port != 3000 {
+		t.Fatalf("want docker with port 3000 from EXPOSE, got docker=%v port=%d",
+			out[0].Runner.IsDocker(), out[0].Port)
+	}
+}
+
+func TestAutoDockerNoExposeFallsBackNative(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := Service{ServiceName: "s", AbsolutePath: dir}
+	out, err := ResolveRunnerModes([]Service{s}, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0].Runner.IsDocker() {
+		t.Fatal("no port + no EXPOSE must not flip to docker (stays inert like before)")
+	}
+}
+
+func TestExplicitRunnerNoExposeNoPortErrors(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := Service{ServiceName: "s", AbsolutePath: dir}
+	s.Runner.Name = "docker"
+	if _, err := ResolveRunnerModes([]Service{s}, false, false); err == nil {
+		t.Fatal("declared docker runner without any port must be a config error")
+	}
+}
+
+func TestClonedRepoWithNothingRunnableErrors(t *testing.T) {
+	s := mkModeService(t) // dir exists, empty
+	s.Port = 3000
+	if _, err := ResolveRunnerModes([]Service{s}, false, false); err == nil {
+		t.Fatal("port + no start + no docker source must error post-clone")
+	}
+}
+
 func TestComposeFileAndBuildFieldsMutuallyExclusive(t *testing.T) {
 	s := mkModeService(t, "compose.yml")
 	s.Runner = Runner{Name: "docker", ComposeFile: "./compose.yml", Target: "dev"}
-	if _, err := ResolveRunnerModes([]Service{s}, false); err == nil {
+	if _, err := ResolveRunnerModes([]Service{s}, false, false); err == nil {
 		t.Fatal("want error")
 	}
 }

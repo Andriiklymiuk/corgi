@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // DockerServiceTemplateData feeds the generated docker-compose.yml/Makefile
@@ -16,7 +17,8 @@ type DockerServiceTemplateData struct {
 	BuildArgs       map[string]string
 	Port            int
 	ContainerPort   int
-	Volumes         []string // host side absolute
+	Volumes         []string // host side absolute; named volumes verbatim
+	NamedVolumes    []string // docker named volumes needing a top-level block
 	Command         string
 	RepoComposeFile string // non-empty => delegate to the repo's compose file
 	EnvFilePath     string // absolute path to the corgi env copy
@@ -75,26 +77,33 @@ func BuildDockerServiceData(s Service) (DockerServiceTemplateData, error) {
 	}
 
 	for _, v := range s.Runner.Volumes {
-		d.Volumes = append(d.Volumes, absoluteVolumeSpec(s.AbsolutePath, v))
+		spec, named := resolveVolumeSpec(s.AbsolutePath, v)
+		d.Volumes = append(d.Volumes, spec)
+		if named != "" {
+			d.NamedVolumes = append(d.NamedVolumes, named)
+		}
 	}
 	return d, nil
 }
 
-// absoluteVolumeSpec rewrites a relative host path in "host:container[:opts]"
-// against the service dir; anonymous volumes ("/path") pass through.
-func absoluteVolumeSpec(base, spec string) string {
+// resolveVolumeSpec rewrites a relative host path in "host:container[:opts]"
+// against the service dir. Anonymous volumes ("/path") and absolute binds pass
+// through; a bare-name host ("mydata:/var/lib/x") is a docker named volume —
+// returned as named so the compose file can declare it top-level.
+func resolveVolumeSpec(base, spec string) (out, named string) {
 	host, rest, found := splitVolumeSpec(spec)
 	if !found || host == "" || filepath.IsAbs(host) {
-		return spec
+		return spec, ""
 	}
-	return filepath.Join(base, host) + ":" + rest
+	if strings.HasPrefix(host, ".") || strings.ContainsAny(host, "/\\") {
+		return filepath.Join(base, host) + ":" + rest, ""
+	}
+	return spec, host
 }
 
 func splitVolumeSpec(spec string) (host, rest string, found bool) {
-	for i := 0; i < len(spec); i++ {
-		if spec[i] == ':' {
-			return spec[:i], spec[i+1:], true
-		}
+	if i := strings.IndexByte(spec, ':'); i >= 0 {
+		return spec[:i], spec[i+1:], true
 	}
 	return "", spec, false
 }

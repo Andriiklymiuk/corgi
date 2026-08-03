@@ -200,15 +200,15 @@ type Script struct {
 }
 
 type Runner struct {
-	Name          string            `yaml:"name,omitempty" options:"docker,"`
-	Dockerfile    string            `yaml:"dockerfile,omitempty"`
-	Context       string            `yaml:"context,omitempty"`
-	Target        string            `yaml:"target,omitempty"`
-	Args          map[string]string `yaml:"args,omitempty"`
-	Volumes       []string          `yaml:"volumes,omitempty"`
-	ContainerPort int               `yaml:"containerPort,omitempty"`
-	Command       string            `yaml:"command,omitempty"`
-	ComposeFile   string            `yaml:"composeFile,omitempty"`
+	Name          string    `yaml:"name,omitempty" options:"docker,"`
+	Dockerfile    string    `yaml:"dockerfile,omitempty"`
+	Context       string    `yaml:"context,omitempty"`
+	Target        string    `yaml:"target,omitempty"`
+	Args          BuildArgs `yaml:"args,omitempty"`
+	Volumes       []string  `yaml:"volumes,omitempty"`
+	ContainerPort int       `yaml:"containerPort,omitempty"`
+	Command       string    `yaml:"command,omitempty"`
+	ComposeFile   string    `yaml:"composeFile,omitempty"`
 }
 
 type Service struct {
@@ -683,7 +683,6 @@ func resolveDockerExposedPort(service *Service) {
 	}
 	port, err := strconv.Atoi(exposedPort)
 	if err != nil {
-		fmt.Println("error converting exposed port to integer:", err)
 		return
 	}
 	service.Port = port
