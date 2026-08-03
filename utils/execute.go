@@ -681,10 +681,11 @@ func StopDockerRunnerServices(serviceNames []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), AfterStartTimeout)
 		cmd := exec.CommandContext(ctx, "make", "down")
 		cmd.Dir = path
-		cmd.Stdout = os.Stdout
+		// ConsoleOut keeps `corgi stop --json` stdout pure (child output → stderr).
+		cmd.Stdout = ConsoleOut()
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			fmt.Printf("⚠ could not stop docker service %s: %v\n", name, err)
+			Infof("⚠ could not stop docker service %s: %v\n", name, err)
 		}
 		cancel()
 	}

@@ -41,23 +41,24 @@ func serviceRunMode(svc utils.Service, dockerFlag bool) string {
 	if svc.ManualRun {
 		return "manual"
 	}
-	// Surface the same config errors the real run aborts on.
-	if _, err := utils.ResolveRunnerModes([]utils.Service{svc}, dockerFlag, false); err != nil {
+	// Derive the label from the real resolver so dry-run can't drift from
+	// what `corgi run` will actually do.
+	resolved, err := utils.ResolveRunnerModes([]utils.Service{svc}, dockerFlag, false)
+	if err != nil {
 		if willClone(svc) {
 			return "unknown until clone"
 		}
 		return "error: " + err.Error()
 	}
-	src := utils.DetectDockerSource(svc)
-	dockerWanted := svc.Runner.IsDocker() || len(svc.Start) == 0 || dockerFlag
+	r := resolved[0]
 	switch {
-	case dockerWanted && src == utils.SourceRepoCompose:
+	case r.Runner.IsDocker() && r.ResolvedDockerSource == utils.SourceRepoCompose:
 		return "docker (repo compose)"
-	case dockerWanted && src == utils.SourceDockerfile:
+	case r.Runner.IsDocker() && r.ResolvedDockerSource == utils.SourceDockerfile:
 		return "docker (Dockerfile)"
-	case dockerWanted && willClone(svc):
+	case len(r.Start) == 0 && willClone(r):
 		return "unknown until clone"
-	case len(svc.Start) > 0:
+	case len(r.Start) > 0:
 		return "native"
 	default:
 		return "native (no start!)"

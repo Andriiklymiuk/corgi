@@ -195,3 +195,20 @@ func TestRepoComposeFileDetection(t *testing.T) {
 		t.Fatalf("want empty, got %q", got)
 	}
 }
+
+func TestDeclaredDockerfileMissingErrors(t *testing.T) {
+	s := mkModeService(t, "docker-compose.yml")
+	s.Runner = Runner{Name: "docker", Dockerfile: "Dockerfile.dev"}
+	if _, err := ResolveRunnerModes([]Service{s}, false, false); err == nil {
+		t.Fatal("missing declared dockerfile must not silently fall back to repo compose")
+	}
+}
+
+func TestDeclaredDockerfileMissingIgnoredForNativeService(t *testing.T) {
+	s := mkModeService(t)
+	s.Start = []string{"npm run dev"}
+	s.Runner.Dockerfile = "Dockerfile.dev"
+	if _, err := ResolveRunnerModes([]Service{s}, false, false); err != nil {
+		t.Fatalf("native scripted run must not fail on stale dockerfile config: %v", err)
+	}
+}

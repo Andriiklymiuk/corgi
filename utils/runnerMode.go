@@ -84,6 +84,15 @@ func ResolveRunnerModes(services []Service, dockerFlag, announce bool) ([]Servic
 				"service %s: runner.composeFile and build fields (dockerfile/context/target/args/volumes/containerPort/command) are mutually exclusive",
 				s.ServiceName)
 		}
+		// A declared dockerfile that doesn't exist is a config error (typo),
+		// not a cue to silently fall back to a repo compose file — but only
+		// when docker mode would actually engage for this service.
+		if s.Runner.Dockerfile != "" && !dockerfileExists(s) &&
+			(s.Runner.IsDocker() || dockerFlag || len(s.Start) == 0) {
+			return nil, fmt.Errorf(
+				"service %s: runner.dockerfile %q not found in %s",
+				s.ServiceName, s.Runner.Dockerfile, s.AbsolutePath)
+		}
 		src := DetectDockerSource(s)
 		switch {
 		case s.Runner.IsDocker():
