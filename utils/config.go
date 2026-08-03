@@ -276,6 +276,10 @@ type Service struct {
 	// CacheScope isolates beforeStart step-cache markers when the service runs
 	// from a relocated dir. Empty for the declared checkout.
 	CacheScope string `json:"-"`
+
+	// ResolvedDockerSource is stamped by ResolveRunnerModes for docker-mode
+	// services: repo compose file vs generated Dockerfile wrapper.
+	ResolvedDockerSource DockerSource `yaml:"-" json:"-"`
 }
 
 // TunnelConfig describes a stable public HTTPS tunnel for one service.
