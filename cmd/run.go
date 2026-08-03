@@ -300,6 +300,13 @@ reports the resolved start order and each service's port, dependencies,
 generated env keys, and whether it would be cloned. Pair with --json for a
 machine-readable plan. Exit 0 if valid, 1 if validation finds errors.`,
 	)
+	runCmd.PersistentFlags().Bool(
+		"docker",
+		false,
+		`Run docker-capable services in containers instead of their start scripts.
+A service is docker-capable when its repo ships a Dockerfile or compose file
+(or declares one via runner). Services without either keep their scripts.`,
+	)
 	runCmd.PersistentFlags().Duration(
 		"ready-timeout",
 		defaultReadyTimeout,
@@ -639,6 +646,19 @@ func runRun(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
+	dockerFlag, _ := cmd.Flags().GetBool("docker")
+	resolved, err := utils.ResolveRunnerModes(corgi.Services, dockerFlag)
+	if err != nil {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrConfig, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, "❌", err)
+		}
+		os.Exit(1)
+	}
+	corgi.Services = resolved
+	hintDockerCapable(corgi.Services, dockerFlag)
+
 	runPreflight(cmd, corgi)
 	runBeforeStart(corgi)
 
@@ -925,6 +945,22 @@ var (
 func isDockerRunnable(svc utils.Service) bool {
 	return svc.Runner.IsDocker() &&
 		(svc.Port != 0 || svc.ResolvedDockerSource == utils.SourceRepoCompose)
+}
+
+// hintDockerCapable tells script-mode users once that --docker exists.
+func hintDockerCapable(services []utils.Service, dockerFlag bool) {
+	if dockerFlag {
+		return
+	}
+	for _, s := range services {
+		if s.Runner.IsDocker() || s.ManualRun || len(s.Start) == 0 {
+			continue
+		}
+		if utils.DetectDockerSource(s) != utils.SourceNone {
+			utils.Infof("tip: %s also has a Dockerfile — `corgi run --docker` runs it in a container\n", s.ServiceName)
+			return
+		}
+	}
 }
 
 // Open a service's URL once ready, when --open is set and it opted in.
