@@ -573,7 +573,8 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	// --dry-run branches before any side effect: plan only, then exit.
 	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
-		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi)))
+		dockerFlag, _ := cmd.Flags().GetBool("docker")
+		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi, dockerFlag)))
 	}
 
 	// Service-port preflight (skip on hot-reload: that path manages its own lifecycle).

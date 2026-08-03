@@ -40,7 +40,7 @@ func sampleDryRunCompose(dir string) *utils.CorgiCompose {
 
 func TestComputeDryRunPlan_Valid(t *testing.T) {
 	dir := t.TempDir()
-	plan := computeDryRunPlan(sampleDryRunCompose(dir))
+	plan := computeDryRunPlan(sampleDryRunCompose(dir), false)
 
 	if !plan.Valid {
 		t.Fatalf("expected valid plan, got errors: %v", plan.Errors)
@@ -69,7 +69,7 @@ func TestComputeDryRunPlan_Valid(t *testing.T) {
 
 func TestComputeDryRunPlan_ServiceDetails(t *testing.T) {
 	dir := t.TempDir()
-	plan := computeDryRunPlan(sampleDryRunCompose(dir))
+	plan := computeDryRunPlan(sampleDryRunCompose(dir), false)
 
 	var api dryRunService
 	for _, s := range plan.Services {
@@ -103,7 +103,7 @@ func TestComputeDryRunPlan_ServiceDetails(t *testing.T) {
 
 func TestComputeDryRunPlan_DatabaseEntries(t *testing.T) {
 	dir := t.TempDir()
-	plan := computeDryRunPlan(sampleDryRunCompose(dir))
+	plan := computeDryRunPlan(sampleDryRunCompose(dir), false)
 	if len(plan.Databases) != 1 {
 		t.Fatalf("want 1 db, got %d", len(plan.Databases))
 	}
@@ -125,7 +125,7 @@ func TestComputeDryRunPlan_Invalid(t *testing.T) {
 			},
 		},
 	}
-	plan := computeDryRunPlan(c)
+	plan := computeDryRunPlan(c, false)
 	if plan.Valid {
 		t.Error("expected invalid plan for dangling dep")
 	}
@@ -186,7 +186,7 @@ func TestEmitDryRunPlan_NoSideEffects(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(wd) })
 
-	plan := computeDryRunPlan(sampleDryRunCompose(dir))
+	plan := computeDryRunPlan(sampleDryRunCompose(dir), false)
 	if code := emitDryRunPlan(plan); code != 0 {
 		t.Errorf("valid plan should exit 0, got %d", code)
 	}
@@ -207,7 +207,7 @@ func TestEmitDryRunPlan_JSONValid(t *testing.T) {
 	t.Cleanup(func() { utils.JSONOutput = prev })
 
 	dir := t.TempDir()
-	plan := computeDryRunPlan(sampleDryRunCompose(dir))
+	plan := computeDryRunPlan(sampleDryRunCompose(dir), false)
 
 	var code int
 	out := captureStdout(t, func() { code = emitDryRunPlan(plan) })
@@ -234,7 +234,7 @@ func TestEmitDryRunPlan_JSONInvalidExit1(t *testing.T) {
 				DependsOnServices: []utils.DependsOnService{{Name: "ghost"}}},
 		},
 	}
-	plan := computeDryRunPlan(c)
+	plan := computeDryRunPlan(c, false)
 
 	var code int
 	out := captureStdout(t, func() { code = emitDryRunPlan(plan) })
@@ -257,7 +257,7 @@ func TestEmitDryRunPlan_HumanInvalidExit1(t *testing.T) {
 				DependsOnServices: []utils.DependsOnService{{Name: "ghost"}}},
 		},
 	}
-	plan := computeDryRunPlan(c)
+	plan := computeDryRunPlan(c, false)
 
 	var code int
 	out := captureStdout(t, func() { code = emitDryRunPlan(plan) })

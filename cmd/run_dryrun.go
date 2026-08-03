@@ -37,12 +37,12 @@ type dryRunService struct {
 
 // serviceRunMode mirrors ResolveRunnerModes against current disk state, for
 // the plan output. A not-yet-cloned repo can't be inspected, hence "unknown".
-func serviceRunMode(svc utils.Service) string {
+func serviceRunMode(svc utils.Service, dockerFlag bool) string {
 	if svc.ManualRun {
 		return "manual"
 	}
 	src := utils.DetectDockerSource(svc)
-	dockerWanted := svc.Runner.IsDocker() || len(svc.Start) == 0
+	dockerWanted := svc.Runner.IsDocker() || len(svc.Start) == 0 || dockerFlag
 	switch {
 	case dockerWanted && src == utils.SourceRepoCompose:
 		return "docker (repo compose)"
@@ -59,7 +59,7 @@ func serviceRunMode(svc utils.Service) string {
 
 // computeDryRunPlan builds the plan without side effects: validate, resolve
 // start order, report per-item details.
-func computeDryRunPlan(corgi *utils.CorgiCompose) dryRunPlan {
+func computeDryRunPlan(corgi *utils.CorgiCompose, dockerFlag bool) dryRunPlan {
 	errs, warns := utils.ValidateCompose(corgi)
 	if errs == nil {
 		errs = []utils.ValidationIssue{}
@@ -95,7 +95,7 @@ func computeDryRunPlan(corgi *utils.CorgiCompose) dryRunPlan {
 			Name:      svc.ServiceName,
 			Port:      svc.Port,
 			WillClone: willClone(svc),
-			Mode:      serviceRunMode(svc),
+			Mode:      serviceRunMode(svc, dockerFlag),
 			DependsOn: deps,
 			EnvKeys:   envKeys,
 		})
