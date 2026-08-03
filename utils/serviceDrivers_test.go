@@ -78,6 +78,36 @@ func TestGetExposedPortFromDockerfile(t *testing.T) {
 	})
 }
 
+func TestGetExposedPortHonorsCustomDockerfileName(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile.dev"),
+		[]byte("FROM alpine\nEXPOSE 4567\nCMD echo\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := Service{AbsolutePath: dir}
+	s.Runner.Dockerfile = "Dockerfile.dev"
+	got, err := GetExposedPortFromDockerfile(s)
+	if err != nil || got != "4567" {
+		t.Fatalf("port=%q err=%v", got, err)
+	}
+}
+
+func TestBuildServiceResolvesExposeAfterAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"),
+		[]byte("EXPOSE 4568\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	defer func() { CorgiComposePathDir = prev }()
+	svc := Service{Path: ".", Runner: Runner{Name: "docker"}}
+	built := buildService("svc", svc)
+	if built.Port != 4568 {
+		t.Fatalf("want 4568, got %d", built.Port)
+	}
+}
+
 func TestDockerSafeName(t *testing.T) {
 	tests := map[string]string{
 		"MyApi":    "myapi",

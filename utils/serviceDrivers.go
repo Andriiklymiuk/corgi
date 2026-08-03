@@ -78,7 +78,7 @@ func GetExposedPortFromDockerfile(service Service) (string, error) {
 	}
 	dockerfileExists, err := CheckIfFileExistsInDirectory(
 		service.AbsolutePath,
-		"Dockerfile",
+		service.DockerfileName(),
 	)
 	if err != nil {
 		return "", fmt.Errorf("error checking for Dockerfile: %w", err)
@@ -87,7 +87,7 @@ func GetExposedPortFromDockerfile(service Service) (string, error) {
 		return "", fmt.Errorf("dockerfile not found in %s", service.AbsolutePath)
 	}
 
-	dockerfilePath := filepath.Join(service.AbsolutePath, "Dockerfile")
+	dockerfilePath := filepath.Join(service.AbsolutePath, service.DockerfileName())
 	content, err := os.ReadFile(dockerfilePath)
 	if err != nil {
 		return "", fmt.Errorf("error reading Dockerfile: %w", err)
