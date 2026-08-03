@@ -856,6 +856,7 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 				fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
 				continue
 			}
+			utils.FollowServiceContainerLogs(svc.ServiceName)
 			procs = append(procs, detachedProc{
 				name:    svc.ServiceName,
 				command: "make upd",
