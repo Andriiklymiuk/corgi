@@ -831,14 +831,14 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 
 		// docker-runner services run as containers (no tracked pid); reconcile
 		// and stop key off pid==0 and let cleanup bring them down.
-		if svc.Runner.Name == "docker" && svc.Port != 0 {
+		if isDockerRunnable(svc) {
 			if err := dockerRunnerUp(svc.ServiceName); err != nil {
 				fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
 				continue
 			}
 			procs = append(procs, detachedProc{
 				name:    svc.ServiceName,
-				command: "make up",
+				command: "make upd",
 				logFile: utils.LogFilePath(svc.ServiceName),
 				port:    svc.Port,
 			})
@@ -916,9 +916,16 @@ var browserOpener = launchBrowser
 var (
 	startDetachedFn = utils.StartDetached
 	dockerRunnerUp  = func(serviceName string) error {
-		return utils.ExecuteServiceCommandRun(serviceName, "make", "up")
+		return utils.ExecuteServiceCommandRun(serviceName, "make", "upd")
 	}
 )
+
+// isDockerRunnable says the service boots via its generated docker seam:
+// a port mapping exists, or the repo's own compose file declares its own.
+func isDockerRunnable(svc utils.Service) bool {
+	return svc.Runner.IsDocker() &&
+		(svc.Port != 0 || svc.ResolvedDockerSource == utils.SourceRepoCompose)
+}
 
 // Open a service's URL once ready, when --open is set and it opted in.
 func maybeOpenOnReady(service utils.Service) {
@@ -1274,7 +1281,7 @@ func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 }
 
 func startServiceProcess(service utils.Service) {
-	if service.Runner.Name == "docker" && service.Port != 0 {
+	if isDockerRunnable(service) {
 		utils.Info(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
 		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up"); err != nil {
 			utils.Info("Starting service failed", err)

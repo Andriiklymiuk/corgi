@@ -8,6 +8,7 @@ import (
 	"strings"
 	"text/template"
 
+	"andriiklymiuk/corgi/templates"
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 
@@ -195,39 +196,50 @@ func applyDriverPostInit(service utils.DatabaseService) error {
 	return nil
 }
 
-func shouldCreateService(service utils.Service) bool {
-	if service.Runner.Name == "" || service.Runner.Name != "docker" {
+func shouldCreateService(service *utils.Service) bool {
+	if !service.Runner.IsDocker() {
 		return false
 	}
-	if service.Port == 0 {
+	// corgi init runs before run-time mode resolution stamps the source.
+	if service.ResolvedDockerSource == utils.SourceNone {
+		service.ResolvedDockerSource = utils.DetectDockerSource(*service)
+	}
+	if service.ResolvedDockerSource == utils.SourceNone {
 		fmt.Printf(
-			"Service %s does not have port specified, skipping docker runner creation\n",
+			"Service %s has a docker runner but no %s or compose file in %s\n",
 			service.ServiceName,
+			service.DockerfileName(),
+			service.AbsolutePath,
 		)
 		return false
 	}
-	dockerfileExists, err := utils.CheckIfFileExistsInDirectory(
-		service.AbsolutePath,
-		"Dockerfile",
-	)
-	if err != nil {
-		fmt.Println(err)
-	}
-	if !dockerfileExists {
+	// Repo compose files declare their own port mappings.
+	if service.ResolvedDockerSource == utils.SourceDockerfile && service.Port == 0 {
 		fmt.Printf(
-			"Service %s does not have Dockerfile in path %s\n",
+			"Service %s has no port and no EXPOSE in its dockerfile, skipping docker runner creation\n",
 			service.ServiceName,
-			service.AbsolutePath,
 		)
 		return false
 	}
 	return true
 }
 
-func writeServiceFiles(service utils.Service) bool {
-	for _, file := range getServiceFilesToCreate(service.Runner.Name) {
+func dockerServiceFiles(source utils.DockerSource) []utils.FilenameForService {
+	if source == utils.SourceRepoCompose {
+		return []utils.FilenameForService{
+			{Name: "Makefile", Template: templates.MakefileRepoCompose},
+		}
+	}
+	return []utils.FilenameForService{
+		{Name: "docker-compose.yml", Template: templates.DockerComposeService},
+		{Name: "Makefile", Template: templates.MakefileService},
+	}
+}
+
+func writeServiceFiles(service utils.Service, data utils.DockerServiceTemplateData) bool {
+	for _, file := range dockerServiceFiles(service.ResolvedDockerSource) {
 		err := createFileFromTemplate(
-			service,
+			data,
 			file.Name,
 			file.Template,
 			service.ServiceName,
@@ -247,17 +259,22 @@ func writeServiceFiles(service utils.Service) bool {
 }
 
 func createSingleService(service utils.Service) {
-	if !shouldCreateService(service) {
+	if !shouldCreateService(&service) {
 		return
 	}
 
 	if err := copyEnvFileWithSubstitutions(service); err != nil {
 		fmt.Printf("Error copying .env file for service %s: %s\n", service.ServiceName, err)
-	} else {
-		fmt.Printf("Successfully copied .env file for service %s with substitutions\n", service.ServiceName)
 	}
 
-	if writeServiceFiles(service) {
+	data, err := utils.BuildDockerServiceData(service)
+	if err != nil {
+		fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
+		fmt.Printf("Service %s had error during creation: %s\n", service.ServiceName, err)
+		return
+	}
+
+	if writeServiceFiles(service, data) {
 		fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
 		fmt.Printf("Service %s was successfully created\n", service.ServiceName)
 	} else {
@@ -276,21 +293,15 @@ func copyEnvFileWithSubstitutions(service utils.Service) error {
 	envPath := utils.GetPathToEnv(service)
 	sourceEnvPath := fmt.Sprintf("%s/%s", service.AbsolutePath, envPath)
 
-	_, err := os.Stat(sourceEnvPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("%s file does not exist at %s", envPath, sourceEnvPath)
-		}
-		return fmt.Errorf("error checking %s file at %s: %w", envPath, sourceEnvPath, err)
+	// Missing source env is fine (a bare cloneFrom service may have none) —
+	// still write an empty file so the compose env_file reference resolves.
+	var modifiedContent string
+	if content, err := os.ReadFile(sourceEnvPath); err == nil {
+		modifiedContent = strings.ReplaceAll(string(content), "localhost", "host.docker.internal")
+		modifiedContent = strings.ReplaceAll(modifiedContent, "127.0.0.1", "host.docker.internal")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("error reading %s file at %s: %w", envPath, sourceEnvPath, err)
 	}
-
-	content, err := os.ReadFile(sourceEnvPath)
-	if err != nil {
-		return fmt.Errorf("error reading .env file at %s: %w", sourceEnvPath, err)
-	}
-
-	modifiedContent := strings.ReplaceAll(string(content), "localhost", "host.docker.internal")
-	modifiedContent = strings.ReplaceAll(modifiedContent, "127.0.0.1", "host.docker.internal")
 
 	destPath := fmt.Sprintf("%s/%s/%s/.env",
 		utils.CorgiComposePathDir,
@@ -302,13 +313,11 @@ func copyEnvFileWithSubstitutions(service utils.Service) error {
 		utils.RootServicesFolder,
 		service.ServiceName)
 
-	err = os.MkdirAll(destDir, os.ModePerm)
-	if err != nil {
+	if err := os.MkdirAll(destDir, os.ModePerm); err != nil {
 		return fmt.Errorf("error creating directory %s: %w", destDir, err)
 	}
 
-	err = os.WriteFile(destPath, []byte(modifiedContent), 0644)
-	if err != nil {
+	if err := os.WriteFile(destPath, []byte(modifiedContent), 0644); err != nil {
 		return fmt.Errorf("error writing modified .env file for docker to %s: %w", destPath, err)
 	}
 
@@ -319,15 +328,6 @@ func getFilesToCreate(driver string) []utils.FilenameForService {
 	driverConfig, ok := utils.DriverConfigs[driver]
 	if !ok {
 		driverConfig = utils.DriverConfigs["default"]
-	}
-
-	return driverConfig.FilesToCreate
-}
-
-func getServiceFilesToCreate(driver string) []utils.FilenameForService {
-	driverConfig, ok := utils.ServiceConfigs[driver]
-	if !ok {
-		return nil
 	}
 
 	return driverConfig.FilesToCreate
@@ -576,21 +576,6 @@ func createFileFromTemplate(
 		return fmt.Errorf("error of creating %s, error: %s", filePath, err)
 	}
 	defer f.Close()
-
-	if sv, ok := service.(utils.Service); ok && fileName == "docker-compose.yml" {
-		exposedPort, err := utils.GetExposedPortFromDockerfile(sv)
-		if err != nil {
-			fmt.Printf("Warning: %v\n", err)
-			fmt.Println("To fix this, add an EXPOSE directive to your Dockerfile, e.g., EXPOSE 3020")
-		} else {
-			fileTemplate = strings.Replace(
-				fileTemplate,
-				"${DOCKERFILE_PORT}",
-				exposedPort,
-				-1,
-			)
-		}
-	}
 
 	tmp := template.Must(template.New("simple").Parse(fileTemplate))
 	err = tmp.Execute(f, service)
