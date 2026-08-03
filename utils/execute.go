@@ -621,6 +621,35 @@ func FollowDatabaseLogs(driver, serviceName string) {
 	}()
 }
 
+// FollowServiceContainerLogs streams a detached docker-runner service's
+// container logs into its --logs writer, via the generated Makefile's
+// followLogs target (works for both the wrapper and repo-compose modes).
+// Same rationale as FollowDatabaseLogs: detached containers bypass runManaged.
+func FollowServiceContainerLogs(serviceName string) {
+	w := getLogWriter(serviceName)
+	if w == nil {
+		return
+	}
+	path, err := GetPathToService(serviceName)
+	if err != nil {
+		return
+	}
+	cmd := exec.Command("make", "followLogs")
+	cmd.Dir = path
+	cmd.Stdout = w
+	cmd.Stderr = w
+	SetProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		fmt.Printf("⚠ logs: cannot follow %s: %v\n", serviceName, err)
+		return
+	}
+	addProcess(cmd.Process)
+	go func() {
+		_ = cmd.Wait()
+		removeProcess(cmd.Process)
+	}()
+}
+
 func ExecuteServiceCommandRun(targetService string, command ...string) error {
 	path, err := GetPathToService(targetService)
 	if err != nil {
