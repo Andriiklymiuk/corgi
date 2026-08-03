@@ -457,6 +457,85 @@ func TestCloneServicesEmpty(t *testing.T) {
 	CloneServices(nil)
 }
 
+func TestWriteServiceFilesQuotesPathsWithSpaces(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	base := t.TempDir()
+	dir := filepath.Join(base, "My Projects", "api")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine\nEXPOSE 80\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	svc := utils.Service{
+		ServiceName:          "api",
+		Runner:               utils.Runner{Name: "docker", Command: "npm run dev", Args: utils.BuildArgs{"NODE_VERSION": "22"}},
+		Port:                 80,
+		AbsolutePath:         dir,
+		ResolvedDockerSource: utils.SourceDockerfile,
+	}
+	data, err := utils.BuildDockerServiceData(svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !writeServiceFiles(svc, data) {
+		t.Fatal("expected write to succeed")
+	}
+	raw, err := os.ReadFile(filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "api", "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, `context: "`+dir+`"`) {
+		t.Errorf("context must be quoted, got:\n%s", got)
+	}
+	if !strings.Contains(got, `command: "npm run dev"`) || !strings.Contains(got, `NODE_VERSION: "22"`) {
+		t.Errorf("command/args must be quoted, got:\n%s", got)
+	}
+}
+
+func TestWriteServiceFilesRepoComposeQuotesMakefilePaths(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	base := t.TempDir()
+	dir := filepath.Join(base, "My Projects", "api")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte("services: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	svc := utils.Service{
+		ServiceName:          "api",
+		Runner:               utils.Runner{Name: "docker"},
+		AbsolutePath:         dir,
+		ResolvedDockerSource: utils.SourceRepoCompose,
+	}
+	data, err := utils.BuildDockerServiceData(svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !writeServiceFiles(svc, data) {
+		t.Fatal("expected write to succeed")
+	}
+	raw, err := os.ReadFile(filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "api", "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, `-f "`+filepath.Join(dir, "docker-compose.yml")+`"`) {
+		t.Errorf("compose file path must be quoted, got:\n%s", got)
+	}
+	if !strings.Contains(got, `--env-file "`) {
+		t.Errorf("env-file path must be quoted, got:\n%s", got)
+	}
+}
+
 func TestCreateServicesIterates(t *testing.T) {
 	CreateServices([]utils.Service{
 		{ServiceName: "x", Runner: utils.Runner{Name: ""}},

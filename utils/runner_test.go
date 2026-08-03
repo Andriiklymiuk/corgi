@@ -53,6 +53,17 @@ func TestRunnerUnmarshalComposeFile(t *testing.T) {
 	}
 }
 
+func TestRunnerArgsAcceptUnquotedScalars(t *testing.T) {
+	src := "runner:\n  name: docker\n  args:\n    NODE_VERSION: 22\n    DEBUG: true\n"
+	var s Service
+	if err := yaml.Unmarshal([]byte(src), &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.Runner.Args["NODE_VERSION"] != "22" || s.Runner.Args["DEBUG"] != "true" {
+		t.Fatalf("scalar args must coerce to strings: %+v", s.Runner.Args)
+	}
+}
+
 func TestDockerfileNameDefault(t *testing.T) {
 	s := Service{}
 	if s.DockerfileName() != "Dockerfile" {

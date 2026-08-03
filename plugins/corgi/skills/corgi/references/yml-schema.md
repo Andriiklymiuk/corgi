@@ -219,7 +219,11 @@ A service runs in docker instead of scripts when, in priority order:
    Dockerfile or compose file flips to a container; the rest stay native.
 3. It has no `start:` commands and its repo ships a `Dockerfile` or its own
    compose file (`docker-compose.yml`/`.yaml`, `compose.yml`/`.yaml`) →
-   automatically. A repo compose file wins over a plain Dockerfile.
+   automatically. For zero-config services a repo compose file wins over a
+   plain Dockerfile; any declared `runner:` build field (or `runner: docker`)
+   pins the Dockerfile instead. Repo-compose caveat: corgi's `--env-file`
+   only interpolates `${VAR}` in that compose file — container env stays
+   whatever the repo's compose declares.
 
 `beforeStart` still runs host-side in docker mode (certs, migrations, env);
 the container replaces only `start:`. `afterStart` runs on stop. `port:` may

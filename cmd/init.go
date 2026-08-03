@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -70,8 +71,9 @@ func runInit(cmd *cobra.Command, _ []string) {
 
 	CreateMissingEnvFiles(corgi.Services)
 	CreateDatabaseServices(corgi.DatabaseServices)
-	CreateServices(corgi.Services)
+	// Clone before creating docker seams — detection reads the cloned repo.
 	cloneFailures := CloneServices(corgi.Services)
+	CreateServices(corgi.Services)
 	checkoutFeatureBranches(corgi.Services, initFeatureFlag)
 	RunRequired(corgi.Required)
 
@@ -205,7 +207,7 @@ func shouldCreateService(service *utils.Service) bool {
 		service.ResolvedDockerSource = utils.DetectDockerSource(*service)
 	}
 	if service.ResolvedDockerSource == utils.SourceNone {
-		fmt.Printf(
+		utils.Infof(
 			"Service %s has a docker runner but no %s or compose file in %s\n",
 			service.ServiceName,
 			service.DockerfileName(),
@@ -215,7 +217,7 @@ func shouldCreateService(service *utils.Service) bool {
 	}
 	// Repo compose files declare their own port mappings.
 	if service.ResolvedDockerSource == utils.SourceDockerfile && service.Port == 0 {
-		fmt.Printf(
+		utils.Infof(
 			"Service %s has no port and no EXPOSE in its dockerfile, skipping docker runner creation\n",
 			service.ServiceName,
 		)
@@ -577,7 +579,9 @@ func createFileFromTemplate(
 	}
 	defer f.Close()
 
-	tmp := template.Must(template.New("simple").Parse(fileTemplate))
+	tmp := template.Must(template.New("simple").
+		Funcs(template.FuncMap{"yamlQuote": strconv.Quote}).
+		Parse(fileTemplate))
 	err = tmp.Execute(f, service)
 	if err != nil {
 		return fmt.Errorf(

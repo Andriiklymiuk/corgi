@@ -274,7 +274,7 @@
             "volumes": { "type": "array", "items": { "type": "string" }, "description": "Volume mounts (host paths relative to the service dir).", "examples": [["./src:/app/src"]] },
             "containerPort": { "type": "integer", "description": "Port inside the container. Defaults to the Dockerfile's first EXPOSE, else the service port." },
             "command": { "type": "string", "description": "Override the image CMD." },
-            "composeFile": { "type": "string", "description": "Delegate to a compose file the service repo ships instead of generating one. Mutually exclusive with the build fields.", "examples": ["./docker-compose.dev.yml"] }
+            "composeFile": { "type": "string", "description": "Delegate to a compose file the service repo ships instead of generating one. Mutually exclusive with the build fields (dockerfile/context/target/args/volumes/containerPort/command). Note: corgi's env feeds ${VAR} interpolation of that file, not container env.", "examples": ["./docker-compose.dev.yml"] }
           }
         }
       ]

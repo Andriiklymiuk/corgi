@@ -648,7 +648,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 	}
 
 	dockerFlag, _ := cmd.Flags().GetBool("docker")
-	resolved, err := utils.ResolveRunnerModes(corgi.Services, dockerFlag)
+	resolved, err := utils.ResolveRunnerModes(corgi.Services, dockerFlag, true)
 	if err != nil {
 		if utils.JSONOutput {
 			utils.JSONError(utils.ErrConfig, err.Error())
@@ -949,7 +949,8 @@ func isDockerRunnable(svc utils.Service) bool {
 		(svc.Port != 0 || svc.ResolvedDockerSource == utils.SourceRepoCompose)
 }
 
-// hintDockerCapable tells script-mode users once that --docker exists.
+// hintDockerCapable tells script-mode users that --docker exists — at most
+// one line per `corgi run` invocation.
 func hintDockerCapable(services []utils.Service, dockerFlag bool) {
 	if dockerFlag {
 		return
