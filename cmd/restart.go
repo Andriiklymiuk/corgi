@@ -123,6 +123,10 @@ func restartSingleService(cmd *cobra.Command) {
 		emitRestartError(utils.ErrConfig, cerr.Error())
 		os.Exit(1)
 	}
+	// Same re-derivation as stop: the relaunch branch keys off Runner.Name.
+	if resolved, rerr := utils.ResolveRunnerModes(corgi.Services, false); rerr == nil {
+		corgi.Services = resolved
+	}
 
 	if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
 		defer unlock()
