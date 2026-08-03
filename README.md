@@ -155,6 +155,8 @@ required:                                   # corgi doctor checks these; --fix i
 
 Run `corgi run` and it clones anything missing, starts Postgres in Docker and seeds it, writes the `.env` files (and sources them for you — no boilerplate), then runs `api` and `web` together. `Ctrl-C` shuts it all back down and runs any cleanup steps. And once the stack is up, `corgi test --e2e` runs that `e2e:` suite against it — same command on your laptop and [in CI](#run-the-whole-stack-in-ci).
 
+A service doesn't even need `start:` commands — if its repo ships a `Dockerfile` (or its own `docker-compose.yml`), `cloneFrom` + `port` is enough and corgi builds and runs the container for you. A service with both scripts and a Dockerfile runs its scripts by default; `corgi run --docker` flips it into a container. Details: [Dockerfile services](https://andriiklymiuk.github.io/corgi/docs/dockerfile_services).
+
 Want to see every field? Run `corgi docs`, or browse the [examples repo](https://github.com/Andriiklymiuk/corgi_examples).
 
 ## Getting it running on a real project
