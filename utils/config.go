@@ -654,7 +654,6 @@ func parseServices(servicesData map[string]Service, describeFlag bool) []Service
 }
 
 func buildService(indexName string, service Service) Service {
-	resolveDockerExposedPort(&service)
 	resolveServicePathFromCloneFrom(&service)
 	normalizeServicePath(&service)
 
@@ -663,6 +662,8 @@ func buildService(indexName string, service Service) Service {
 	built := service
 	built.ServiceName = indexName
 	built.AbsolutePath = computeAbsolutePath(service.Path)
+	// Port resolution needs AbsolutePath (reads EXPOSE from the Dockerfile).
+	resolveDockerExposedPort(&built)
 	return built
 }
 
@@ -670,10 +671,9 @@ func resolveDockerExposedPort(service *Service) {
 	if service.Runner.Name != "docker" || service.Port != 0 {
 		return
 	}
-	exposedPort, err := GetExposedPortFromDockerfile(*service)
-	if err != nil {
-		fmt.Println("couldn't get exposed port from Dockerfile: ", err)
-	}
+	// Quiet on error: at parse time the repo may not be cloned yet; run-time
+	// mode resolution reports missing dockerfiles properly.
+	exposedPort, _ := GetExposedPortFromDockerfile(*service)
 	if exposedPort == "" {
 		return
 	}
