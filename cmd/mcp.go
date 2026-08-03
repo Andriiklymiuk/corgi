@@ -416,7 +416,7 @@ func mcpPlan(args planArgs) (dryRunPlan, error) {
 	if args.Profile != "" {
 		filterByProfile(corgi, args.Profile)
 	}
-	return computeDryRunPlan(corgi), nil
+	return computeDryRunPlan(corgi, false), nil
 }
 
 type statusEntry struct {
