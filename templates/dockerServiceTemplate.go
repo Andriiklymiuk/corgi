@@ -4,16 +4,32 @@ var DockerComposeService = `services:
   {{.DockerName}}:
     container_name: {{.DockerName}}
     build:
-      context: ../../..
-      dockerfile: Dockerfile
+      context: {{.BuildContext}}
+      dockerfile: {{.DockerfilePath}}
+{{- if .Target}}
+      target: {{.Target}}
+{{- end}}
+{{- if .BuildArgs}}
+      args:
+{{- range $k, $v := .BuildArgs}}
+        {{$k}}: "{{$v}}"
+{{- end}}
+{{- end}}
     ports:
-      - "{{.Port}}:${DOCKERFILE_PORT}"
+      - "{{.Port}}:{{.ContainerPort}}"
     env_file:
       - .env
+{{- if .Volumes}}
     volumes:
-      - ../../../:/app
-      - /app/node_modules
-      - /app/dist
+{{- range .Volumes}}
+      - {{.}}
+{{- end}}
+{{- end}}
+{{- if .Command}}
+    command: {{.Command}}
+{{- end}}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
       - corgi-network
@@ -24,7 +40,9 @@ networks:
 `
 
 var MakefileService = `up:
-	docker compose up
+	docker compose up --build
+upd:
+	docker compose up -d --build
 down:
 	docker compose down --volumes
 stop:
@@ -35,10 +53,33 @@ remove:
 	docker rm --volumes {{.DockerName}}
 logs:
 	docker logs {{.DockerName}}
+followLogs:
+	docker logs -f {{.DockerName}}
 build:
-	docker compose build {{.DockerName}}
+	docker compose build
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove logs build help
+.PHONY: up upd down stop id remove logs followLogs build help
+`
+
+var MakefileRepoCompose = `COMPOSE := docker compose -f {{.RepoComposeFile}} --env-file {{.EnvFilePath}}
+up:
+	$(COMPOSE) up --build
+upd:
+	$(COMPOSE) up -d --build
+down:
+	$(COMPOSE) down
+stop:
+	$(COMPOSE) stop
+logs:
+	$(COMPOSE) logs
+followLogs:
+	$(COMPOSE) logs -f
+build:
+	$(COMPOSE) build
+help:
+	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
+
+.PHONY: up upd down stop logs followLogs build help
 `

@@ -65,7 +65,7 @@ func TestSpawnDetachedServices_DockerRunnerViaSeam(t *testing.T) {
 		{ServiceName: "dbx", Port: 5432, Runner: utils.Runner{Name: "docker"}},
 	}}
 	procs := spawnDetachedServices(corgi)
-	if len(procs) != 1 || procs[0].command != "make up" || procs[0].pid != 0 {
+	if len(procs) != 1 || procs[0].command != "make upd" || procs[0].pid != 0 {
 		t.Fatalf("expected one docker-runner proc with pid 0, got %+v", procs)
 	}
 	if len(up) != 1 || up[0] != "dbx" {

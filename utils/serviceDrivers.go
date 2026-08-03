@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"andriiklymiuk/corgi/templates"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,9 +8,8 @@ import (
 )
 
 type ServiceConfig struct {
-	Prefix        string
-	EnvGenerator  func(string, Service) string
-	FilesToCreate []FilenameForService
+	Prefix       string
+	EnvGenerator func(string, Service) string
 }
 
 var ServiceConfigs = map[string]ServiceConfig{
@@ -22,10 +20,6 @@ var ServiceConfigs = map[string]ServiceConfig{
 			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, service.Port)
 
 			return fmt.Sprintf("%s%s", host, port)
-		},
-		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeService},
-			{"Makefile", templates.MakefileService},
 		},
 	},
 }

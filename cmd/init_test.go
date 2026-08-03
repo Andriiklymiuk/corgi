@@ -55,38 +55,47 @@ func TestGetFilesToCreateUnknownFallsBackToDefault(t *testing.T) {
 	}
 }
 
-func TestGetServiceFilesToCreate(t *testing.T) {
-	files := getServiceFilesToCreate("docker")
-	if len(files) == 0 {
-		t.Errorf("expected docker service files")
+func TestDockerServiceFiles(t *testing.T) {
+	files := dockerServiceFiles(utils.SourceDockerfile)
+	if len(files) != 2 {
+		t.Errorf("expected compose + Makefile, got %v", files)
 	}
-	if got := getServiceFilesToCreate("nope"); got != nil {
-		t.Errorf("expected nil for unknown driver")
+	files = dockerServiceFiles(utils.SourceRepoCompose)
+	if len(files) != 1 || files[0].Name != "Makefile" {
+		t.Errorf("repo compose mode writes only a Makefile, got %v", files)
 	}
 }
 
 func TestShouldCreateServiceNotDocker(t *testing.T) {
-	if shouldCreateService(utils.Service{Runner: utils.Runner{Name: ""}}) {
+	s := utils.Service{Runner: utils.Runner{Name: ""}}
+	if shouldCreateService(&s) {
 		t.Error("want false for empty runner")
 	}
-	if shouldCreateService(utils.Service{Runner: utils.Runner{Name: "node"}}) {
+	s = utils.Service{Runner: utils.Runner{Name: "node"}}
+	if shouldCreateService(&s) {
 		t.Error("want false for non-docker runner")
 	}
 }
 
 func TestShouldCreateServiceDockerNoPort(t *testing.T) {
-	if shouldCreateService(utils.Service{Runner: utils.Runner{Name: "docker"}, Port: 0}) {
-		t.Error("want false when no port")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := utils.Service{Runner: utils.Runner{Name: "docker"}, Port: 0, AbsolutePath: dir}
+	if shouldCreateService(&s) {
+		t.Error("want false when no port and no EXPOSE")
 	}
 }
 
 func TestShouldCreateServiceDockerNoDockerfile(t *testing.T) {
 	dir := t.TempDir()
-	if shouldCreateService(utils.Service{
+	s := utils.Service{
 		Runner:       utils.Runner{Name: "docker"},
 		Port:         8080,
 		AbsolutePath: dir,
-	}) {
+	}
+	if shouldCreateService(&s) {
 		t.Error("want false when no Dockerfile")
 	}
 }
@@ -96,12 +105,33 @@ func TestShouldCreateServiceDockerWithDockerfile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if !shouldCreateService(utils.Service{
+	s := utils.Service{
 		Runner:       utils.Runner{Name: "docker"},
 		Port:         8080,
 		AbsolutePath: dir,
-	}) {
+	}
+	if !shouldCreateService(&s) {
 		t.Error("want true when Dockerfile present")
+	}
+	if s.ResolvedDockerSource != utils.SourceDockerfile {
+		t.Error("source must be stamped")
+	}
+}
+
+func TestShouldCreateServiceRepoComposeNoPort(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte("services: {}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := utils.Service{
+		Runner:       utils.Runner{Name: "docker"},
+		AbsolutePath: dir,
+	}
+	if !shouldCreateService(&s) {
+		t.Error("repo compose needs no corgi port")
+	}
+	if s.ResolvedDockerSource != utils.SourceRepoCompose {
+		t.Error("source must be repo compose")
 	}
 }
 
@@ -259,13 +289,22 @@ func TestCreateFileFromTemplateNestedPath(t *testing.T) {
 	}
 }
 
-func TestCopyEnvFileWithSubstitutionsMissing(t *testing.T) {
+func TestCopyEnvFileWithSubstitutionsMissingWritesEmpty(t *testing.T) {
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
 	err := copyEnvFileWithSubstitutions(utils.Service{
 		ServiceName:  "api",
 		AbsolutePath: t.TempDir(),
 	})
-	if err == nil || !strings.Contains(err.Error(), "does not exist") {
-		t.Errorf("expected missing error, got %v", err)
+	if err != nil {
+		t.Fatalf("missing source env must not error, got %v", err)
+	}
+	dest := filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "api", ".env")
+	raw, err := os.ReadFile(dest)
+	if err != nil || len(raw) != 0 {
+		t.Errorf("expected empty .env at %s, err=%v len=%d", dest, err, len(raw))
 	}
 }
 
@@ -360,13 +399,18 @@ func TestWriteServiceFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine\nEXPOSE 80\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	got := writeServiceFiles(utils.Service{
-		ServiceName:  "api",
-		Runner:       utils.Runner{Name: "docker"},
-		Port:         80,
-		AbsolutePath: dir,
-	})
-	if !got {
+	svc := utils.Service{
+		ServiceName:          "api",
+		Runner:               utils.Runner{Name: "docker"},
+		Port:                 80,
+		AbsolutePath:         dir,
+		ResolvedDockerSource: utils.SourceDockerfile,
+	}
+	data, err := utils.BuildDockerServiceData(svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !writeServiceFiles(svc, data) {
 		t.Error("expected true")
 	}
 }
@@ -380,21 +424,27 @@ func TestWriteServiceFilesUppercaseName(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine\nEXPOSE 80\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if !writeServiceFiles(utils.Service{
-		ServiceName:  "MyApi",
-		Runner:       utils.Runner{Name: "docker"},
-		Port:         80,
-		AbsolutePath: dir,
-	}) {
+	svc := utils.Service{
+		ServiceName:          "MyApi",
+		Runner:               utils.Runner{Name: "docker"},
+		Port:                 80,
+		AbsolutePath:         dir,
+		ResolvedDockerSource: utils.SourceDockerfile,
+	}
+	data, err := utils.BuildDockerServiceData(svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !writeServiceFiles(svc, data) {
 		t.Fatal("expected true")
 	}
 
 	compose := filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "MyApi", "docker-compose.yml")
-	data, err := os.ReadFile(compose)
+	raw, err := os.ReadFile(compose)
 	if err != nil {
 		t.Fatalf("read compose: %v", err)
 	}
-	got := string(data)
+	got := string(raw)
 	if !strings.Contains(got, "container_name: myapi") {
 		t.Errorf("expected docker-safe container_name, got:\n%s", got)
 	}
