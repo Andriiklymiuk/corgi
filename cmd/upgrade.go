@@ -23,7 +23,7 @@ var upgradeCmd = &cobra.Command{
 	Use:     "upgrade",
 	Short:   "Upgrade corgi to the latest version",
 	Long:    `Upgrade corgi using whichever install method you originally used (Homebrew, curl install script, or PowerShell installer on Windows).`,
-	Aliases: []string{"update"},
+	Aliases: []string{"update", "upd"},
 	Run:     upgradeRun,
 }
 
