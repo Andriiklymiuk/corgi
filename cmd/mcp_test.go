@@ -122,7 +122,7 @@ func TestMCPPlanParity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	want := computeDryRunPlan(corgi)
+	want := computeDryRunPlan(corgi, false)
 
 	gotJSON, _ := json.Marshal(got)
 	wantJSON, _ := json.Marshal(want)
@@ -175,7 +175,7 @@ func TestMCPPlanProfileParity(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	filterByProfile(corgi, profile)
-	want := computeDryRunPlan(corgi)
+	want := computeDryRunPlan(corgi, false)
 
 	gotJSON, _ := json.Marshal(got)
 	wantJSON, _ := json.Marshal(want)

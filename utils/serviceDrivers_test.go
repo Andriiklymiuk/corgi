@@ -78,6 +78,77 @@ func TestGetExposedPortFromDockerfile(t *testing.T) {
 	})
 }
 
+func TestGetExposedPortHonorsCustomDockerfileName(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile.dev"),
+		[]byte("FROM alpine\nEXPOSE 4567\nCMD echo\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := Service{AbsolutePath: dir}
+	s.Runner.Dockerfile = "Dockerfile.dev"
+	got, err := GetExposedPortFromDockerfile(s)
+	if err != nil || got != "4567" {
+		t.Fatalf("port=%q err=%v", got, err)
+	}
+}
+
+func TestGetExposedPortStripsProtocolSuffix(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"),
+		[]byte("FROM alpine\nEXPOSE 8000/tcp\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetExposedPortFromDockerfile(Service{AbsolutePath: dir})
+	if err != nil || got != "8000" {
+		t.Fatalf("port=%q err=%v", got, err)
+	}
+}
+
+func TestGetExposedPortLowercaseExpose(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"),
+		[]byte("from alpine\nexpose 8001\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetExposedPortFromDockerfile(Service{AbsolutePath: dir})
+	if err != nil || got != "8001" {
+		t.Fatalf("port=%q err=%v", got, err)
+	}
+}
+
+func TestGetExposedPortSubdirDockerfile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docker"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docker", "Dockerfile.dev"),
+		[]byte("EXPOSE 8002\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := Service{AbsolutePath: dir}
+	s.Runner.Dockerfile = "docker/Dockerfile.dev"
+	got, err := GetExposedPortFromDockerfile(s)
+	if err != nil || got != "8002" {
+		t.Fatalf("port=%q err=%v", got, err)
+	}
+}
+
+func TestBuildServiceResolvesExposeAfterAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"),
+		[]byte("EXPOSE 4568\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	defer func() { CorgiComposePathDir = prev }()
+	svc := Service{Path: ".", Runner: Runner{Name: "docker"}}
+	built := buildService("svc", svc)
+	if built.Port != 4568 {
+		t.Fatalf("want 4568, got %d", built.Port)
+	}
+}
+
 func TestDockerSafeName(t *testing.T) {
 	tests := map[string]string{
 		"MyApi":    "myapi",

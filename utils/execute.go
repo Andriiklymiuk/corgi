@@ -605,13 +605,40 @@ func FollowDatabaseLogs(driver, serviceName string) {
 	if w == nil {
 		return
 	}
-	containerName := fmt.Sprintf("%s-%s", driver, serviceName)
+	containerName := ContainerName(driver, serviceName)
 	cmd := exec.Command("docker", "logs", "-f", containerName)
 	cmd.Stdout = w
 	cmd.Stderr = w
 	SetProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("⚠ logs: cannot follow %s: %v\n", containerName, err)
+		return
+	}
+	addProcess(cmd.Process)
+	go func() {
+		_ = cmd.Wait()
+		removeProcess(cmd.Process)
+	}()
+}
+
+// FollowServiceContainerLogs streams a detached docker service's container
+// logs into its --logs writer (detached containers bypass runManaged).
+func FollowServiceContainerLogs(serviceName string) {
+	w := getLogWriter(serviceName)
+	if w == nil {
+		return
+	}
+	path, err := GetPathToService(serviceName)
+	if err != nil {
+		return
+	}
+	cmd := exec.Command("make", "followLogs")
+	cmd.Dir = path
+	cmd.Stdout = w
+	cmd.Stderr = w
+	SetProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		Infof("⚠ logs: cannot follow %s: %v\n", serviceName, err)
 		return
 	}
 	addProcess(cmd.Process)
@@ -629,7 +656,8 @@ func ExecuteServiceCommandRun(targetService string, command ...string) error {
 
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = path
-	cmd.Stdout = os.Stdout
+	// ConsoleOut keeps stdout pure JSON under --json (child output → stderr).
+	cmd.Stdout = ConsoleOut()
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {
@@ -651,10 +679,11 @@ func StopDockerRunnerServices(serviceNames []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), AfterStartTimeout)
 		cmd := exec.CommandContext(ctx, "make", "down")
 		cmd.Dir = path
-		cmd.Stdout = os.Stdout
+		// ConsoleOut keeps `corgi stop --json` stdout pure (child output → stderr).
+		cmd.Stdout = ConsoleOut()
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			fmt.Printf("⚠ could not stop docker service %s: %v\n", name, err)
+			Infof("⚠ could not stop docker service %s: %v\n", name, err)
 		}
 		cancel()
 	}

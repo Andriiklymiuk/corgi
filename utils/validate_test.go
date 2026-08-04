@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -372,5 +374,41 @@ func TestKnownDriversNonEmpty(t *testing.T) {
 		if !found {
 			t.Errorf("expected driver %q in KnownDrivers", d)
 		}
+	}
+}
+
+func TestMissingStartAllowsDockerfileService(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("EXPOSE 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	c := &CorgiCompose{Services: []Service{
+		{ServiceName: "s", Port: 3000, AbsolutePath: dir},
+	}}
+	if got := checkMissingStart(c); len(got) != 0 {
+		t.Fatalf("dockerfile service must not error: %v", got)
+	}
+}
+
+func TestMissingStartAllowsRepoComposeService(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte("services: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	c := &CorgiCompose{Services: []Service{
+		{ServiceName: "s", Port: 3000, AbsolutePath: dir},
+	}}
+	if got := checkMissingStart(c); len(got) != 0 {
+		t.Fatalf("repo compose service must not error: %v", got)
+	}
+}
+
+func TestMissingStartUnclonedDefers(t *testing.T) {
+	c := &CorgiCompose{Services: []Service{
+		{ServiceName: "s", Port: 3000, CloneFrom: "git@example.com:o/r.git",
+			AbsolutePath: filepath.Join(t.TempDir(), "missing")},
+	}}
+	if got := checkMissingStart(c); len(got) != 0 {
+		t.Fatalf("uncloned service must defer: %v", got)
 	}
 }
