@@ -15,6 +15,8 @@ const (
 	SourceRepoCompose
 	// SourceDockerfile generates a compose wrapper around the Dockerfile.
 	SourceDockerfile
+	// SourceImage runs a registry image directly (runner.image) — no build.
+	SourceImage
 )
 
 var repoComposeNames = []string{
@@ -53,6 +55,9 @@ func dockerfileExists(s Service) bool {
 // silently override what the user configured. Only for zero-config services
 // does a repo compose file win over a plain Dockerfile.
 func DetectDockerSource(s Service) DockerSource {
+	if s.Runner.Image != "" {
+		return SourceImage
+	}
 	dockerfilePinned := hasBuildFields(s.Runner) || s.Runner.IsDocker()
 	if dockerfilePinned && s.Runner.ComposeFile == "" && dockerfileExists(s) {
 		return SourceDockerfile
@@ -82,6 +87,16 @@ func ResolveRunnerModes(services []Service, dockerFlag, announce bool) ([]Servic
 		if s.Runner.ComposeFile != "" && hasBuildFields(s.Runner) {
 			return nil, fmt.Errorf(
 				"service %s: runner.composeFile and build fields (dockerfile/context/target/args/volumes/containerPort/command) are mutually exclusive",
+				s.ServiceName)
+		}
+		if s.Runner.Image != "" && (s.Runner.ComposeFile != "" || s.Runner.Dockerfile != "" || s.Runner.Context != "" || s.Runner.Target != "" || len(s.Runner.Args) > 0) {
+			return nil, fmt.Errorf(
+				"service %s: runner.image and build sources (dockerfile/context/target/args/composeFile) are mutually exclusive",
+				s.ServiceName)
+		}
+		if s.Runner.Image != "" && s.Port == 0 {
+			return nil, fmt.Errorf(
+				"service %s: runner.image needs `port:` — there is no Dockerfile to read EXPOSE from",
 				s.ServiceName)
 		}
 		// A declared dockerfile that doesn't exist is a config error (typo),
@@ -174,8 +189,12 @@ func resolveDockerPortDefaults(s *Service, announce bool) error {
 }
 
 func sourceLabel(src DockerSource) string {
-	if src == SourceRepoCompose {
+	switch src {
+	case SourceRepoCompose:
 		return "the repo's compose file"
+	case SourceImage:
+		return "its image"
+	default:
+		return "Dockerfile"
 	}
-	return "Dockerfile"
 }

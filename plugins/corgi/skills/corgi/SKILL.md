@@ -66,7 +66,8 @@ Load only what the task needs. Do not read every reference every time.
 corgi run                  # start everything (long-running, background it); persists stdout/stderr to corgi_services/.logs/
 corgi run --logs=false     # opt out of log capture for this run
 corgi run --docker         # run docker-capable services (Dockerfile / repo compose) in containers instead of start scripts
-corgi run --dry-run        # plan only; prints each service's resolved mode (native | docker (Dockerfile) | docker (repo compose))
+corgi run --dry-run        # plan only; prints each service's resolved mode (native | docker (Dockerfile) | docker (repo compose) | docker (image))
+corgi build                # pre-build all docker-capable service images in parallel, start nothing (CI cache warmer)
 corgi run --ci             # CI-friendly: suppress spinners, banners, colors (auto-on when CI=true)
 corgi run --service-branch api=feat/x   # run a service on a branch in an isolated reused worktree (non-destructive)
 corgi run --service-dir api=/path       # run a service from an existing dir (e.g. a git worktree); repeatable, mix freely

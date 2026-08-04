@@ -3,6 +3,9 @@ package templates
 var DockerComposeService = `services:
   {{.DockerName}}:
     container_name: {{.DockerName}}
+{{- if .Image}}
+    image: {{yamlQuote .Image}}
+{{- else}}
     build:
       context: {{yamlQuote .BuildContext}}
       dockerfile: {{yamlQuote .DockerfilePath}}
@@ -13,6 +16,13 @@ var DockerComposeService = `services:
       args:
 {{- range $k, $v := .BuildArgs}}
         {{$k}}: {{yamlQuote $v}}
+{{- end}}
+{{- end}}
+{{- if .Watch}}
+    develop:
+      watch:
+        - action: rebuild
+          path: {{yamlQuote .BuildContext}}
 {{- end}}
 {{- end}}
     ports:
@@ -48,6 +58,8 @@ volumes:
 
 var MakefileService = `up:
 	docker compose up --build
+upw:
+	docker compose up --build --watch
 upd:
 	docker compose up -d --build
 down:
@@ -67,10 +79,10 @@ build:
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up upd down stop id remove logs followLogs build help
+.PHONY: up upw upd down stop id remove logs followLogs build help
 `
 
-var MakefileRepoCompose = `COMPOSE := docker compose -f "{{.RepoComposeFile}}" --env-file "{{.EnvFilePath}}"
+var MakefileRepoCompose = `COMPOSE := docker compose -f "{{.RepoComposeFile}}"{{if .OverrideFile}} -f "{{.OverrideFile}}"{{end}} --env-file "{{.EnvFilePath}}"
 up:
 	$(COMPOSE) up --build
 upd:

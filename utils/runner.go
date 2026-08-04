@@ -35,6 +35,10 @@ func (r *Runner) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*r = Runner(a)
+	// runner: {image: nginx:alpine} alone means docker — spare the boilerplate.
+	if r.Image != "" && r.Name == "" {
+		r.Name = "docker"
+	}
 	return nil
 }
 

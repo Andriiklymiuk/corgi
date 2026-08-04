@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -117,5 +118,82 @@ func TestBuildDockerServiceDataCustomContext(t *testing.T) {
 	}
 	if d.BuildContext != sub || d.DockerfilePath != filepath.Join("..", "Dockerfile.dev") {
 		t.Fatalf("%+v", d)
+	}
+}
+
+func TestBuildDockerServiceDataImageMode(t *testing.T) {
+	s := Service{ServiceName: "pdf", AbsolutePath: t.TempDir(), Port: 3005}
+	s.Runner = Runner{Name: "docker", Image: "gotenberg/gotenberg:8", ContainerPort: 3000}
+	s.ResolvedDockerSource = SourceImage
+	d, err := BuildDockerServiceData(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Image != "gotenberg/gotenberg:8" || d.ContainerPort != 3000 || d.Port != 3005 {
+		t.Fatalf("%+v", d)
+	}
+	if d.BuildContext != "" {
+		t.Fatal("image mode must not set a build context")
+	}
+}
+
+func TestBuildDockerServiceDataImageContainerPortDefaultsToPort(t *testing.T) {
+	s := Service{ServiceName: "pdf", AbsolutePath: t.TempDir(), Port: 3005}
+	s.Runner = Runner{Name: "docker", Image: "nginx:alpine"}
+	s.ResolvedDockerSource = SourceImage
+	d, _ := BuildDockerServiceData(s)
+	if d.ContainerPort != 3005 {
+		t.Fatalf("want 3005, got %d", d.ContainerPort)
+	}
+}
+
+func TestRepoComposeServiceNames(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "docker-compose.yml")
+	if err := os.WriteFile(p, []byte("services:\n  web:\n    image: x\n  db:\n    image: y\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	names := RepoComposeServiceNames(p)
+	if len(names) != 2 || names[0] != "db" || names[1] != "web" {
+		t.Fatalf("got %v", names)
+	}
+	if RepoComposeServiceNames(filepath.Join(dir, "missing.yml")) != nil {
+		t.Fatal("missing file must yield nil")
+	}
+	bad := filepath.Join(dir, "bad.yml")
+	os.WriteFile(bad, []byte(":{not yaml"), 0644)
+	if RepoComposeServiceNames(bad) != nil {
+		t.Fatal("unparsable file must yield nil")
+	}
+}
+
+func TestRenderRepoComposeEnvOverride(t *testing.T) {
+	out := RenderRepoComposeEnvOverride([]string{"db", "web"}, "/some dir/.env")
+	for _, want := range []string{"services:", "  db:", "  web:", `- "/some dir/.env"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestRepoComposeDataGetsOverrideFile(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	defer func() { CorgiComposePathDir = prev }()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"),
+		[]byte("services:\n  web:\n    image: x\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := Service{ServiceName: "api", AbsolutePath: dir}
+	s.Runner.Name = "docker"
+	s.ResolvedDockerSource = SourceRepoCompose
+	d, err := BuildDockerServiceData(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.OverrideFile == "" || !strings.HasSuffix(d.OverrideFile, "corgi.env.override.yml") {
+		t.Fatalf("override file expected, got %q", d.OverrideFile)
 	}
 }

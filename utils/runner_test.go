@@ -74,3 +74,13 @@ func TestDockerfileNameDefault(t *testing.T) {
 		t.Fatal("declared name must win")
 	}
 }
+
+func TestRunnerImageImpliesDocker(t *testing.T) {
+	var s Service
+	if err := yaml.Unmarshal([]byte("runner:\n  image: nginx:alpine\n"), &s); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Runner.IsDocker() || s.Runner.Image != "nginx:alpine" {
+		t.Fatalf("image alone must imply docker: %+v", s.Runner)
+	}
+}

@@ -216,6 +216,13 @@ func shouldCreateService(service *utils.Service) bool {
 		return false
 	}
 	// Repo compose files declare their own port mappings.
+	if service.ResolvedDockerSource == utils.SourceImage && service.Port == 0 {
+		utils.Infof(
+			"Service %s uses runner.image but has no port, skipping docker runner creation\n",
+			service.ServiceName,
+		)
+		return false
+	}
 	if service.ResolvedDockerSource == utils.SourceDockerfile && service.Port == 0 {
 		utils.Infof(
 			"Service %s has no port and no EXPOSE in its dockerfile, skipping docker runner creation\n",
@@ -276,6 +283,15 @@ func createSingleService(service utils.Service) {
 		return
 	}
 
+	if data.OverrideFile != "" {
+		names := utils.RepoComposeServiceNames(data.RepoComposeFile)
+		content := utils.RenderRepoComposeEnvOverride(names, data.EnvFilePath)
+		if werr := os.WriteFile(data.OverrideFile, []byte(content), 0644); werr != nil {
+			utils.Infof("Service %s: couldn't write env override, container env injection off: %s\n", service.ServiceName, werr)
+			data.OverrideFile = ""
+		}
+	}
+
 	if writeServiceFiles(service, data) {
 		fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
 		fmt.Printf("Service %s was successfully created\n", service.ServiceName)
@@ -292,8 +308,8 @@ func CreateServices(services []utils.Service) {
 }
 
 func copyEnvFileWithSubstitutions(service utils.Service) error {
-	envPath := utils.GetPathToEnv(service)
-	sourceEnvPath := fmt.Sprintf("%s/%s", service.AbsolutePath, envPath)
+	// GetPathToEnv is already absolute (AbsolutePath + envPath).
+	sourceEnvPath := utils.GetPathToEnv(service)
 
 	// Missing source env is fine (a bare cloneFrom service may have none) —
 	// still write an empty file so the compose env_file reference resolves.
@@ -302,7 +318,7 @@ func copyEnvFileWithSubstitutions(service utils.Service) error {
 		modifiedContent = strings.ReplaceAll(string(content), "localhost", "host.docker.internal")
 		modifiedContent = strings.ReplaceAll(modifiedContent, "127.0.0.1", "host.docker.internal")
 	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("error reading %s file at %s: %w", envPath, sourceEnvPath, err)
+		return fmt.Errorf("error reading env file at %s: %w", sourceEnvPath, err)
 	}
 
 	destPath := fmt.Sprintf("%s/%s/%s/.env",
