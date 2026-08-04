@@ -46,9 +46,10 @@ func DockerSafeName(name string) string {
 	return out
 }
 
-// DockerName is the docker-safe service name for generated compose/Makefile templates.
+// DockerName is the docker-safe container name for generated compose/Makefile
+// templates. Honors scopeContainers.
 func (s Service) DockerName() string {
-	return DockerSafeName(s.ServiceName)
+	return ServiceContainerName(s.ServiceName)
 }
 
 // DockerRunnerServiceNames returns the names of docker-runner services. They run

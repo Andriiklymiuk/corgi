@@ -47,13 +47,9 @@ func dockerfileExists(s Service) bool {
 	return fileExists(filepath.Join(s.AbsolutePath, s.DockerfileName()))
 }
 
-// DetectDockerSource inspects the service dir. AbsolutePath must be final
-// (post clone / worktree materialization).
-//
-// Precedence: declared build fields (dockerfile/target/args/…) or an explicit
-// docker runner pin the Dockerfile — a repo's own compose file must never
-// silently override what the user configured. Only for zero-config services
-// does a repo compose file win over a plain Dockerfile.
+// DetectDockerSource inspects the service dir (AbsolutePath must be final).
+// Declared config pins the Dockerfile; only zero-config services let a repo
+// compose file win.
 func DetectDockerSource(s Service) DockerSource {
 	if s.Runner.Image != "" {
 		return SourceImage
@@ -144,10 +140,8 @@ func ResolveRunnerModes(services []Service, dockerFlag, announce bool) ([]Servic
 	return out, nil
 }
 
-// tryDockerFlip stamps docker mode on a service corgi chose (flag or
-// auto-detect). A Dockerfile with no resolvable port isn't a hard error here —
-// the user didn't declare docker intent — so the service stays native with a
-// hint instead of failing the whole run.
+// tryDockerFlip stamps docker mode when corgi (not the user) chose it; an
+// unresolvable port falls back to native with a hint instead of failing.
 func tryDockerFlip(s Service, src DockerSource, announce bool, why string) (Service, bool) {
 	flipped := s
 	flipped.Runner.Name = "docker"
@@ -166,9 +160,7 @@ func tryDockerFlip(s Service, src DockerSource, announce bool, why string) (Serv
 	return flipped, true
 }
 
-// resolveDockerPortDefaults fills Port from the Dockerfile's EXPOSE for
-// docker-mode services that declared none. Parse-time resolution only covers
-// services with runner declared in yml; auto-detected ones land here.
+// resolveDockerPortDefaults fills Port from EXPOSE when none is declared.
 func resolveDockerPortDefaults(s *Service, announce bool) error {
 	if s.Port != 0 {
 		return nil

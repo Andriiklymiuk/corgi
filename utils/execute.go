@@ -605,7 +605,7 @@ func FollowDatabaseLogs(driver, serviceName string) {
 	if w == nil {
 		return
 	}
-	containerName := fmt.Sprintf("%s-%s", driver, serviceName)
+	containerName := ContainerName(driver, serviceName)
 	cmd := exec.Command("docker", "logs", "-f", containerName)
 	cmd.Stdout = w
 	cmd.Stderr = w
@@ -621,10 +621,8 @@ func FollowDatabaseLogs(driver, serviceName string) {
 	}()
 }
 
-// FollowServiceContainerLogs streams a detached docker-runner service's
-// container logs into its --logs writer, via the generated Makefile's
-// followLogs target (works for both the wrapper and repo-compose modes).
-// Same rationale as FollowDatabaseLogs: detached containers bypass runManaged.
+// FollowServiceContainerLogs streams a detached docker service's container
+// logs into its --logs writer (detached containers bypass runManaged).
 func FollowServiceContainerLogs(serviceName string) {
 	w := getLogWriter(serviceName)
 	if w == nil {

@@ -19,6 +19,10 @@
       "type": "boolean",
       "description": "Run supported pieces via Docker."
     },
+    "scopeContainers": {
+      "type": "boolean",
+      "description": "Prefix every container with the workspace name (from name:, else the compose dir) so two workspaces sharing service names don't collide in docker. Opt-in; off keeps today's names."
+    },
     "useAwsVpn": {
       "type": "boolean",
       "description": "Enable AWS VPN handling."

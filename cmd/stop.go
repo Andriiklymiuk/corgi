@@ -182,9 +182,8 @@ func containerBackedNotInCompose(st utils.RunState, corgi *utils.CorgiCompose) [
 	return names
 }
 
-// hasContainerBackedEntries: exited containers (restart: unless-stopped) come
-// back on the next daemon restart unless `make down` runs — so an all-stopped
-// state with pid==0 entries still needs the teardown pass.
+// Exited containers (restart: unless-stopped) resurrect on daemon restart
+// unless `make down` runs, so pid==0 entries always need the teardown pass.
 func hasContainerBackedEntries(st utils.RunState) bool {
 	for _, e := range st.Services {
 		if e.PID == 0 {

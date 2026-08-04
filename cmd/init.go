@@ -126,10 +126,14 @@ Provide them in corgi-compose.yml file`)
 
 	for _, service := range databaseServices {
 		filesToCreate := getFilesToCreate(service.Driver)
+		// Templates build container names as <driver>-<ServiceName>; the copy
+		// carries the scoped name while files stay under the original one.
+		templateData := service
+		templateData.ServiceName = utils.ScopedContainerBase(service.ServiceName)
 		var errDuringFileCreation bool
 		for _, file := range filesToCreate {
 			err := createFileFromTemplate(
-				service,
+				templateData,
 				file.Name,
 				file.Template,
 				service.ServiceName,
