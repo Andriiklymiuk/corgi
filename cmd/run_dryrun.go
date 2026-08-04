@@ -30,13 +30,46 @@ type dryRunService struct {
 	Name      string   `json:"name"`
 	Port      int      `json:"port"`
 	WillClone bool     `json:"willClone"`
+	Mode      string   `json:"mode"`
 	DependsOn []string `json:"dependsOn"`
 	EnvKeys   []string `json:"envKeys"`
 }
 
+// serviceRunMode mirrors ResolveRunnerModes against current disk state, for
+// the plan output. A not-yet-cloned repo can't be inspected, hence "unknown".
+func serviceRunMode(svc utils.Service, dockerFlag bool) string {
+	if svc.ManualRun {
+		return "manual"
+	}
+	// Derive the label from the real resolver so dry-run can't drift from
+	// what `corgi run` will actually do.
+	resolved, err := utils.ResolveRunnerModes([]utils.Service{svc}, dockerFlag, false)
+	if err != nil {
+		if willClone(svc) {
+			return "unknown until clone"
+		}
+		return "error: " + err.Error()
+	}
+	r := resolved[0]
+	switch {
+	case r.Runner.IsDocker() && r.ResolvedDockerSource == utils.SourceImage:
+		return "docker (image)"
+	case r.Runner.IsDocker() && r.ResolvedDockerSource == utils.SourceRepoCompose:
+		return "docker (repo compose)"
+	case r.Runner.IsDocker() && r.ResolvedDockerSource == utils.SourceDockerfile:
+		return "docker (Dockerfile)"
+	case len(r.Start) == 0 && willClone(r):
+		return "unknown until clone"
+	case len(r.Start) > 0:
+		return "native"
+	default:
+		return "native (no start!)"
+	}
+}
+
 // computeDryRunPlan builds the plan without side effects: validate, resolve
 // start order, report per-item details.
-func computeDryRunPlan(corgi *utils.CorgiCompose) dryRunPlan {
+func computeDryRunPlan(corgi *utils.CorgiCompose, dockerFlag bool) dryRunPlan {
 	errs, warns := utils.ValidateCompose(corgi)
 	if errs == nil {
 		errs = []utils.ValidationIssue{}
@@ -72,6 +105,7 @@ func computeDryRunPlan(corgi *utils.CorgiCompose) dryRunPlan {
 			Name:      svc.ServiceName,
 			Port:      svc.Port,
 			WillClone: willClone(svc),
+			Mode:      serviceRunMode(svc, dockerFlag),
 			DependsOn: deps,
 			EnvKeys:   envKeys,
 		})
@@ -269,7 +303,7 @@ func printDryRunServices(services []dryRunService) {
 	}
 	utils.Info("\nServices:")
 	for _, s := range services {
-		utils.Infof("  • %s (port=%d, willClone=%t)\n", s.Name, s.Port, s.WillClone)
+		utils.Infof("  • %s (port=%d, willClone=%t, mode=%s)\n", s.Name, s.Port, s.WillClone, s.Mode)
 		if len(s.DependsOn) > 0 {
 			utils.Infof("      depends on: %v\n", s.DependsOn)
 		}

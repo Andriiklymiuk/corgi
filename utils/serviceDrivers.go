@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"andriiklymiuk/corgi/templates"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,9 +8,8 @@ import (
 )
 
 type ServiceConfig struct {
-	Prefix        string
-	EnvGenerator  func(string, Service) string
-	FilesToCreate []FilenameForService
+	Prefix       string
+	EnvGenerator func(string, Service) string
 }
 
 var ServiceConfigs = map[string]ServiceConfig{
@@ -22,10 +20,6 @@ var ServiceConfigs = map[string]ServiceConfig{
 			port := fmt.Sprintf("\n%sPORT=%d", serviceNameInEnv, service.Port)
 
 			return fmt.Sprintf("%s%s", host, port)
-		},
-		FilesToCreate: []FilenameForService{
-			{"docker-compose.yml", templates.DockerComposeService},
-			{"Makefile", templates.MakefileService},
 		},
 	},
 }
@@ -52,9 +46,10 @@ func DockerSafeName(name string) string {
 	return out
 }
 
-// DockerName is the docker-safe service name for generated compose/Makefile templates.
+// DockerName is the docker-safe container name for generated compose/Makefile
+// templates. Honors scopeContainers.
 func (s Service) DockerName() string {
-	return DockerSafeName(s.ServiceName)
+	return ServiceContainerName(s.ServiceName)
 }
 
 // DockerRunnerServiceNames returns the names of docker-runner services. They run
@@ -76,30 +71,22 @@ func GetExposedPortFromDockerfile(service Service) (string, error) {
 		// and we don't need to check the Dockerfile for it
 		return fmt.Sprintf("%d", service.Port), nil
 	}
-	dockerfileExists, err := CheckIfFileExistsInDirectory(
-		service.AbsolutePath,
-		"Dockerfile",
-	)
-	if err != nil {
-		return "", fmt.Errorf("error checking for Dockerfile: %w", err)
-	}
-	if !dockerfileExists {
-		return "", fmt.Errorf("dockerfile not found in %s", service.AbsolutePath)
-	}
-
-	dockerfilePath := filepath.Join(service.AbsolutePath, "Dockerfile")
+	dockerfilePath := filepath.Join(service.AbsolutePath, service.DockerfileName())
 	content, err := os.ReadFile(dockerfilePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("dockerfile not found in %s", service.AbsolutePath)
+		}
 		return "", fmt.Errorf("error reading Dockerfile: %w", err)
 	}
 
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "EXPOSE") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				return parts[1], nil
-			}
+		fields := strings.Fields(line)
+		// EXPOSE is case-insensitive and ports may carry /tcp|/udp suffixes.
+		if len(fields) >= 2 && strings.EqualFold(fields[0], "EXPOSE") {
+			port, _, _ := strings.Cut(fields[1], "/")
+			return port, nil
 		}
 	}
 

@@ -85,6 +85,11 @@ func runStop(cmd *cobra.Command, _ []string) {
 		}
 		os.Exit(1)
 	}
+	// Re-derive docker mode: run resolved it in another process, and cleanup's
+	// container teardown keys off Runner.Name. Detection errors don't block stop.
+	if resolved, rerr := utils.ResolveRunnerModes(corgi.Services, false, false); rerr == nil {
+		corgi.Services = resolved
+	}
 
 	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
 	if _, err := os.Stat(statePath); err != nil {
@@ -98,8 +103,10 @@ func runStop(cmd *cobra.Command, _ []string) {
 		return
 	}
 	st = utils.ReconcileRunState(st, utils.PidAlive, utils.ContainerRunning)
+	// pid==0 entries are container-backed; pid reconciliation can't see them.
+	st = probeDockerRunnerServices(st, utils.IsPortListening, time.Now().UTC())
 
-	if stopService == "" && !anythingRunning(st) {
+	if stopService == "" && !anythingRunning(st) && !hasContainerBackedEntries(st) {
 		removeStateLocked(statePath)
 		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
 		return
@@ -114,8 +121,12 @@ func runStop(cmd *cobra.Command, _ []string) {
 		if t.Status != "running" {
 			continue
 		}
-		// pid==0 → docker-runner container; cleanup() brings it down, not a pgroup kill.
+		// pid==0 → docker-runner container; cleanup() brings it down, not a
+		// pgroup kill. Count it as stopped so the summary reflects reality.
 		if t.PID == 0 {
+			if stopService == "" {
+				summary.Stopped = append(summary.Stopped, t.Name)
+			}
 			continue
 		}
 		if err := stopProcessGroup(t); err != nil {
@@ -127,11 +138,16 @@ func runStop(cmd *cobra.Command, _ []string) {
 
 	if stopService == "" {
 		cleanup(corgi)
+		utils.StopDockerRunnerServices(containerBackedNotInCompose(st, corgi))
 		if len(corgi.DatabaseServices) != 0 {
 			utils.ExecuteForEachService("down")
 		}
 		removeStateLocked(statePath)
 	} else {
+		if entry, ok := findStateEntry(st.Services, stopService); ok && entry.PID == 0 {
+			utils.StopDockerRunnerServices([]string{stopService})
+			summary.Stopped = append(summary.Stopped, stopService)
+		}
 		runServiceAfterStop(corgi, stopService)
 		if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
 			defer unlock()
@@ -147,6 +163,43 @@ func runStop(cmd *cobra.Command, _ []string) {
 	if len(summary.Failed) > 0 {
 		os.Exit(1)
 	}
+}
+
+// containerBackedNotInCompose returns pid==0 (container-backed) service names
+// from the run state that compose resolution did not flag as docker runners —
+// e.g. a `corgi run --docker` flip stopped by a later plain `corgi stop`.
+func containerBackedNotInCompose(st utils.RunState, corgi *utils.CorgiCompose) []string {
+	known := map[string]bool{}
+	for _, name := range utils.DockerRunnerServiceNames(corgi.Services) {
+		known[name] = true
+	}
+	var names []string
+	for _, e := range st.Services {
+		if e.PID == 0 && !known[e.Name] {
+			names = append(names, e.Name)
+		}
+	}
+	return names
+}
+
+// Exited containers (restart: unless-stopped) resurrect on daemon restart
+// unless `make down` runs, so pid==0 entries always need the teardown pass.
+func hasContainerBackedEntries(st utils.RunState) bool {
+	for _, e := range st.Services {
+		if e.PID == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func findStateEntry(entries []utils.RunStateEntry, name string) (utils.RunStateEntry, bool) {
+	for _, e := range entries {
+		if e.Name == name {
+			return e, true
+		}
+	}
+	return utils.RunStateEntry{}, false
 }
 
 // removeStateLocked deletes the run-state file under the advisory lock so it

@@ -96,12 +96,15 @@ func probeDockerRunnerServices(st utils.RunState, probe func(port int) bool, now
 		if e.PID != 0 || e.Port == 0 {
 			continue
 		}
-		listening := probe(e.Port)
-		if !listening && !e.StartedAt.IsZero() && now.Sub(e.StartedAt) < dockerRunnerBootGrace {
+		// Container state beats a port probe: a booting app is running even
+		// though its port isn't open yet. Repo-compose containers carry their
+		// own names, so a not-found container falls back to the port probe.
+		alive := containerCheck(utils.ServiceContainerName(e.Name)) || probe(e.Port)
+		if !alive && !e.StartedAt.IsZero() && now.Sub(e.StartedAt) < dockerRunnerBootGrace {
 			continue // freshly started; port may not be open yet
 		}
 		newStatus := "stopped"
-		if listening {
+		if alive {
 			newStatus = "running"
 		}
 		if newStatus != e.Status {
@@ -110,6 +113,12 @@ func probeDockerRunnerServices(st utils.RunState, probe func(port int) bool, now
 		}
 	}
 	return st
+}
+
+// containerCheck is overridable in tests.
+var containerCheck = func(containerName string) bool {
+	running, err := utils.IsServiceRunning(containerName)
+	return err == nil && running
 }
 
 func makePsRow(name, kind string, port int, probe func(port int) bool) psRow {

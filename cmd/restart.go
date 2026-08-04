@@ -30,6 +30,7 @@ func init() {
 	restartCmd.Flags().Bool("detach", true, "Start services detached (always on for restart)")
 	restartCmd.Flags().Bool("force", true, "Ignore stale run-state and start anyway")
 	restartCmd.Flags().String("host", "", `IP to use instead of localhost in service URL env vars. Pass an explicit IP or "auto"/"ip" to detect the first non-loopback IPv4.`)
+	restartCmd.Flags().Bool("docker", false, "Restart docker-capable services in containers (same as corgi run --docker); like other run flags it does not persist from the previous run")
 }
 
 func runRestart(cmd *cobra.Command, args []string) {
@@ -123,6 +124,11 @@ func restartSingleService(cmd *cobra.Command) {
 		emitRestartError(utils.ErrConfig, cerr.Error())
 		os.Exit(1)
 	}
+	// Same re-derivation as stop: the relaunch branch keys off Runner.Name.
+	dockerFlag, _ := cmd.Flags().GetBool("docker")
+	if resolved, rerr := utils.ResolveRunnerModes(corgi.Services, dockerFlag, false); rerr == nil {
+		corgi.Services = resolved
+	}
 
 	if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
 		defer unlock()
@@ -163,11 +169,12 @@ func restartSingleService(cmd *cobra.Command) {
 
 // relaunchDetachedService mirrors the runner branching in spawnDetachedServices.
 func relaunchDetachedService(svc utils.Service) (pid int, command string, err error) {
-	if svc.Runner.Name == "docker" && svc.Port != 0 {
-		if uerr := utils.ExecuteServiceCommandRun(svc.ServiceName, "make", "up"); uerr != nil {
-			return 0, "make up", uerr
+	if isDockerRunnable(svc) {
+		if uerr := utils.ExecuteServiceCommandRun(svc.ServiceName, "make", "upd"); uerr != nil {
+			return 0, "make upd", uerr
 		}
-		return 0, "make up", nil
+		utils.FollowServiceContainerLogs(svc.ServiceName)
+		return 0, "make upd", nil
 	}
 	command = strings.Join(svc.Start, " && ")
 	proc, serr := utils.StartDetached(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(svc))

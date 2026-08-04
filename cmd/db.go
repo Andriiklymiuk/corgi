@@ -168,11 +168,7 @@ func runDb(cobra *cobra.Command, args []string) {
 		log.Println("Getting target service config failed", err)
 		return
 	}
-	serviceToCheck := fmt.Sprintf(
-		"%s-%s",
-		serviceConfig.Driver,
-		serviceConfig.ServiceName,
-	)
+	serviceToCheck := utils.ContainerName(serviceConfig.Driver, serviceConfig.ServiceName)
 	serviceIsRunning, err := utils.IsServiceRunning(
 		serviceToCheck,
 	)

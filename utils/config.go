@@ -200,7 +200,21 @@ type Script struct {
 }
 
 type Runner struct {
-	Name string `yaml:"name,omitempty" options:"docker,"`
+	Name          string    `yaml:"name,omitempty" options:"docker,"`
+	Dockerfile    string    `yaml:"dockerfile,omitempty"`
+	Context       string    `yaml:"context,omitempty"`
+	Target        string    `yaml:"target,omitempty"`
+	Args          BuildArgs `yaml:"args,omitempty"`
+	Volumes       []string  `yaml:"volumes,omitempty"`
+	ContainerPort int       `yaml:"containerPort,omitempty"`
+	Command       string    `yaml:"command,omitempty"`
+	ComposeFile   string    `yaml:"composeFile,omitempty"`
+	// Image runs the service straight from a registry image — no repo, no
+	// build. Mutually exclusive with dockerfile/composeFile sources.
+	Image string `yaml:"image,omitempty"`
+	// Watch rebuilds + restarts the container on context changes
+	// (docker compose up --watch); effective in foreground runs only.
+	Watch bool `yaml:"watch,omitempty"`
 }
 
 type Service struct {
@@ -268,6 +282,10 @@ type Service struct {
 	// CacheScope isolates beforeStart step-cache markers when the service runs
 	// from a relocated dir. Empty for the declared checkout.
 	CacheScope string `json:"-"`
+
+	// ResolvedDockerSource is stamped by ResolveRunnerModes for docker-mode
+	// services: repo compose file vs generated Dockerfile wrapper.
+	ResolvedDockerSource DockerSource `yaml:"-" json:"-"`
 }
 
 // TunnelConfig describes a stable public HTTPS tunnel for one service.
@@ -326,6 +344,8 @@ type CorgiCompose struct {
 
 	UseDocker bool `yaml:"useDocker,omitempty"`
 	UseAwsVpn bool `yaml:"useAwsVpn,omitempty"`
+	// Opt-in: prefix all containers with the workspace name (cross-workspace collisions).
+	ScopeContainers bool `yaml:"scopeContainers,omitempty"`
 
 	Name        string `yaml:"name,omitempty"`
 	Description string `yaml:"description,omitempty"`
@@ -357,6 +377,8 @@ type CorgiComposeYaml struct {
 	UseDocker bool `yaml:"useDocker,omitempty"`
 	UseAwsVpn bool `yaml:"useAwsVpn,omitempty"`
 
+	ScopeContainers bool `yaml:"scopeContainers,omitempty"`
+
 	Name        string `yaml:"name,omitempty"`
 	Description string `yaml:"description,omitempty"`
 
@@ -384,6 +406,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	if err := applyEnvTier(&corgi); err != nil {
 		return nil, err
 	}
+	SetContainerScope(&corgi)
 
 	applyWithDeps(corgiYaml.Services)
 
@@ -521,15 +544,16 @@ func unknownFieldsFromYAMLError(err error) []string {
 
 func buildBaseCorgi(y CorgiComposeYaml) CorgiCompose {
 	return CorgiCompose{
-		Init:        y.Init,
-		BeforeStart: y.BeforeStart,
-		Start:       y.Start,
-		AfterStart:  y.AfterStart,
-		UseDocker:   y.UseDocker,
-		UseAwsVpn:   y.UseAwsVpn,
-		Name:        y.Name,
-		Description: y.Description,
-		EnvTiers:    y.EnvTiers,
+		Init:            y.Init,
+		BeforeStart:     y.BeforeStart,
+		Start:           y.Start,
+		AfterStart:      y.AfterStart,
+		UseDocker:       y.UseDocker,
+		UseAwsVpn:       y.UseAwsVpn,
+		ScopeContainers: y.ScopeContainers,
+		Name:            y.Name,
+		Description:     y.Description,
+		EnvTiers:        y.EnvTiers,
 	}
 }
 
@@ -646,7 +670,6 @@ func parseServices(servicesData map[string]Service, describeFlag bool) []Service
 }
 
 func buildService(indexName string, service Service) Service {
-	resolveDockerExposedPort(&service)
 	resolveServicePathFromCloneFrom(&service)
 	normalizeServicePath(&service)
 
@@ -655,6 +678,8 @@ func buildService(indexName string, service Service) Service {
 	built := service
 	built.ServiceName = indexName
 	built.AbsolutePath = computeAbsolutePath(service.Path)
+	// Port resolution needs AbsolutePath (reads EXPOSE from the Dockerfile).
+	resolveDockerExposedPort(&built)
 	return built
 }
 
@@ -662,16 +687,14 @@ func resolveDockerExposedPort(service *Service) {
 	if service.Runner.Name != "docker" || service.Port != 0 {
 		return
 	}
-	exposedPort, err := GetExposedPortFromDockerfile(*service)
-	if err != nil {
-		fmt.Println("couldn't get exposed port from Dockerfile: ", err)
-	}
+	// Quiet on error: at parse time the repo may not be cloned yet; run-time
+	// mode resolution reports missing dockerfiles properly.
+	exposedPort, _ := GetExposedPortFromDockerfile(*service)
 	if exposedPort == "" {
 		return
 	}
 	port, err := strconv.Atoi(exposedPort)
 	if err != nil {
-		fmt.Println("error converting exposed port to integer:", err)
 		return
 	}
 	service.Port = port

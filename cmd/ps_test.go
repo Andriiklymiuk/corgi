@@ -83,6 +83,9 @@ func TestPsRowFromEntryStartedAt(t *testing.T) {
 }
 
 func TestProbeDockerRunnerServices(t *testing.T) {
+	prev := containerCheck
+	containerCheck = func(string) bool { return false }
+	t.Cleanup(func() { containerCheck = prev })
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	old := now.Add(-time.Hour) // well past the boot grace
 	st := utils.RunState{Services: []utils.RunStateEntry{

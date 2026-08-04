@@ -300,6 +300,13 @@ reports the resolved start order and each service's port, dependencies,
 generated env keys, and whether it would be cloned. Pair with --json for a
 machine-readable plan. Exit 0 if valid, 1 if validation finds errors.`,
 	)
+	runCmd.PersistentFlags().Bool(
+		"docker",
+		false,
+		`Run docker-capable services in containers instead of their start scripts.
+A service is docker-capable when its repo ships a Dockerfile or compose file
+(or declares one via runner). Services without either keep their scripts.`,
+	)
 	runCmd.PersistentFlags().Duration(
 		"ready-timeout",
 		defaultReadyTimeout,
@@ -566,7 +573,8 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	// --dry-run branches before any side effect: plan only, then exit.
 	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
-		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi)))
+		dockerFlag, _ := cmd.Flags().GetBool("docker")
+		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi, dockerFlag)))
 	}
 
 	// Service-port preflight (skip on hot-reload: that path manages its own lifecycle).
@@ -638,6 +646,19 @@ func runRun(cmd *cobra.Command, _ []string) {
 		}
 		os.Exit(1)
 	}
+
+	dockerFlag, _ := cmd.Flags().GetBool("docker")
+	resolved, err := utils.ResolveRunnerModes(corgi.Services, dockerFlag, true)
+	if err != nil {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrConfig, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, "❌", err)
+		}
+		os.Exit(1)
+	}
+	corgi.Services = resolved
+	hintDockerCapable(corgi.Services, dockerFlag)
 
 	runPreflight(cmd, corgi)
 	runBeforeStart(corgi)
@@ -831,14 +852,22 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 
 		// docker-runner services run as containers (no tracked pid); reconcile
 		// and stop key off pid==0 and let cleanup bring them down.
-		if svc.Runner.Name == "docker" && svc.Port != 0 {
+		if isDockerRunnable(svc) {
+			if svc.Runner.Watch {
+				if svc.ResolvedDockerSource == utils.SourceDockerfile {
+					utils.Infof("👀 %s: watch needs a foreground run — detached start skips it\n", svc.ServiceName)
+				} else {
+					utils.Infof("👀 %s: watch only applies to Dockerfile-built services — ignored\n", svc.ServiceName)
+				}
+			}
 			if err := dockerRunnerUp(svc.ServiceName); err != nil {
 				fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
 				continue
 			}
+			utils.FollowServiceContainerLogs(svc.ServiceName)
 			procs = append(procs, detachedProc{
 				name:    svc.ServiceName,
-				command: "make up",
+				command: "make upd",
 				logFile: utils.LogFilePath(svc.ServiceName),
 				port:    svc.Port,
 			})
@@ -916,9 +945,33 @@ var browserOpener = launchBrowser
 var (
 	startDetachedFn = utils.StartDetached
 	dockerRunnerUp  = func(serviceName string) error {
-		return utils.ExecuteServiceCommandRun(serviceName, "make", "up")
+		return utils.ExecuteServiceCommandRun(serviceName, "make", "upd")
 	}
 )
+
+// isDockerRunnable says the service boots via its generated docker seam:
+// a port mapping exists, or the repo's own compose file declares its own.
+func isDockerRunnable(svc utils.Service) bool {
+	return svc.Runner.IsDocker() &&
+		(svc.Port != 0 || svc.ResolvedDockerSource == utils.SourceRepoCompose)
+}
+
+// hintDockerCapable tells script-mode users that --docker exists — at most
+// one line per `corgi run` invocation.
+func hintDockerCapable(services []utils.Service, dockerFlag bool) {
+	if dockerFlag {
+		return
+	}
+	for _, s := range services {
+		if s.Runner.IsDocker() || s.ManualRun || len(s.Start) == 0 {
+			continue
+		}
+		if utils.DetectDockerSource(s) != utils.SourceNone {
+			utils.Infof("tip: %s also has a Dockerfile — `corgi run --docker` runs it in a container\n", s.ServiceName)
+			return
+		}
+	}
+}
 
 // Open a service's URL once ready, when --open is set and it opted in.
 func maybeOpenOnReady(service utils.Service) {
@@ -976,7 +1029,7 @@ func detachedDBEntries(corgi *utils.CorgiCompose) []utils.RunStateEntry {
 		dbs = append(dbs, utils.RunStateEntry{
 			Name:      db.ServiceName,
 			Kind:      "db_service",
-			Container: fmt.Sprintf("%s-%s", db.Driver, db.ServiceName),
+			Container: utils.ContainerName(db.Driver, db.ServiceName),
 			Port:      db.Port,
 			Status:    "running",
 		})
@@ -1050,6 +1103,34 @@ func runPreflight(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		if err := utils.DockerInit(cmd); err != nil {
 			utils.Info("Docker init failed:", err)
 		}
+		warnLegacyContainers(corgi)
+	}
+}
+
+// Pre-scope containers left running would fight for the same ports.
+func warnLegacyContainers(corgi *utils.CorgiCompose) {
+	if utils.ContainerScope() == "" {
+		return
+	}
+	var legacy []string
+	for _, db := range corgi.DatabaseServices {
+		name := db.Driver + "-" + db.ServiceName
+		if running, _ := utils.IsServiceRunning(name); running {
+			legacy = append(legacy, name)
+		}
+	}
+	for _, s := range corgi.Services {
+		if !s.Runner.IsDocker() {
+			continue
+		}
+		name := utils.DockerSafeName(s.ServiceName)
+		if running, _ := utils.IsServiceRunning(name); running {
+			legacy = append(legacy, name)
+		}
+	}
+	if len(legacy) > 0 {
+		utils.Info("⚠ containers from before scopeContainers are still running:", legacy)
+		utils.Info("  stop them (docker rm -f) or they will fight for the same ports")
 	}
 }
 
@@ -1215,7 +1296,7 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	if dbService.ManualRun {
 		return
 	}
-	containerName := fmt.Sprintf("%s-%s", dbService.Driver, dbService.ServiceName)
+	containerName := utils.ContainerName(dbService.Driver, dbService.ServiceName)
 	serviceIsRunning, err := utils.IsServiceRunning(containerName)
 	if err != nil {
 		utils.Infof("Getting target service info failed: %s\n", err)
@@ -1274,9 +1355,18 @@ func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 }
 
 func startServiceProcess(service utils.Service) {
-	if service.Runner.Name == "docker" && service.Port != 0 {
+	if isDockerRunnable(service) {
 		utils.Info(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
-		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up"); err != nil {
+		target := "up"
+		if service.Runner.Watch {
+			if service.ResolvedDockerSource == utils.SourceDockerfile {
+				target = "upw"
+				utils.Info("👀 watch on — rebuilds on file changes")
+			} else {
+				utils.Infof("👀 %s: watch only applies to Dockerfile-built services — ignored\n", service.ServiceName)
+			}
+		}
+		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", target); err != nil {
 			utils.Info("Starting service failed", err)
 		}
 		return

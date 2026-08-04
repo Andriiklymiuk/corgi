@@ -3,17 +3,43 @@ package templates
 var DockerComposeService = `services:
   {{.DockerName}}:
     container_name: {{.DockerName}}
+{{- if .Image}}
+    image: {{yamlQuote .Image}}
+{{- else}}
     build:
-      context: ../../..
-      dockerfile: Dockerfile
+      context: {{yamlQuote .BuildContext}}
+      dockerfile: {{yamlQuote .DockerfilePath}}
+{{- if .Target}}
+      target: {{yamlQuote .Target}}
+{{- end}}
+{{- if .BuildArgs}}
+      args:
+{{- range $k, $v := .BuildArgs}}
+        {{$k}}: {{yamlQuote $v}}
+{{- end}}
+{{- end}}
+{{- if .Watch}}
+    develop:
+      watch:
+        - action: rebuild
+          path: {{yamlQuote .BuildContext}}
+{{- end}}
+{{- end}}
     ports:
-      - "{{.Port}}:${DOCKERFILE_PORT}"
+      - "{{.Port}}:{{.ContainerPort}}"
     env_file:
       - .env
+{{- if .Volumes}}
     volumes:
-      - ../../../:/app
-      - /app/node_modules
-      - /app/dist
+{{- range .Volumes}}
+      - {{yamlQuote .}}
+{{- end}}
+{{- end}}
+{{- if .Command}}
+    command: {{yamlQuote .Command}}
+{{- end}}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
       - corgi-network
@@ -21,10 +47,21 @@ var DockerComposeService = `services:
 networks:
   corgi-network:
     driver: bridge
+{{- if .NamedVolumes}}
+
+volumes:
+{{- range .NamedVolumes}}
+  {{.}}:
+{{- end}}
+{{- end}}
 `
 
 var MakefileService = `up:
-	docker compose up
+	docker compose up --build
+upw:
+	docker compose up --build --watch
+upd:
+	docker compose up -d --build
 down:
 	docker compose down --volumes
 stop:
@@ -35,10 +72,33 @@ remove:
 	docker rm --volumes {{.DockerName}}
 logs:
 	docker logs {{.DockerName}}
+followLogs:
+	docker logs -f {{.DockerName}}
 build:
-	docker compose build {{.DockerName}}
+	docker compose build
 help:
 	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
 
-.PHONY: up down stop id remove logs build help
+.PHONY: up upw upd down stop id remove logs followLogs build help
+`
+
+var MakefileRepoCompose = `COMPOSE := docker compose -f "{{.RepoComposeFile}}"{{if .OverrideFile}} -f "{{.OverrideFile}}"{{end}} --env-file "{{.EnvFilePath}}"
+up:
+	$(COMPOSE) up --build
+upd:
+	$(COMPOSE) up -d --build
+down:
+	$(COMPOSE) down
+stop:
+	$(COMPOSE) stop
+logs:
+	$(COMPOSE) logs
+followLogs:
+	$(COMPOSE) logs -f
+build:
+	$(COMPOSE) build
+help:
+	make -qpRr | egrep -e '^[a-z].*:$$' | sed -e 's~:~~g' | sort
+
+.PHONY: up upd down stop logs followLogs build help
 `

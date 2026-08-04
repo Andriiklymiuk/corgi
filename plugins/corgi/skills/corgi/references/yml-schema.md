@@ -22,6 +22,13 @@ envTiers:     map<name, EnvTier>    # Optional. `corgi run --tier <name>` select
 e2e:          E2ESuite              # Optional stack-level e2e suite. See below
 ```
 
+## `scopeContainers` (optional, top-level)
+
+`scopeContainers: true` prefixes every container (services + dbs) with the
+docker-safe workspace name (`name:`, else the compose dir name). Fixes
+cross-workspace container-name collisions. Opt-in — default keeps legacy
+names; recommend it when scaffolding a new corgi-compose.yml.
+
 ## `e2e` (optional)
 
 A test suite that drives several services at once, so it belongs to the stack
@@ -176,8 +183,21 @@ exports:                 [string]   # Whitelist of vars exported to dependents.
                                     #   "NAME"           re-export own env var (must exist)
                                     #   "NAME=value"     inline literal (${OWN_VAR} expanded)
 
+runner: docker                    # Scalar shorthand, or the object form:
 runner:
-  name: string                    # "docker" or custom
+  name: string                    # "docker"
+  dockerfile: string              # Path relative to service dir (default: Dockerfile)
+  context: string                 # Build context (default: service dir)
+  target: string                  # Multi-stage build target
+  args: {KEY: value}              # Build args
+  volumes: [string]               # Mounts; host paths relative to service dir ("./src:/app/src")
+  containerPort: int              # Port inside the container (default: first EXPOSE, else port)
+  command: string                 # Override image CMD
+  composeFile: string             # Delegate to the repo's own compose file (mutually exclusive with build fields)
+  image: string                   # Run a registry image directly — no repo, no build. Requires port:. Excludes dockerfile/composeFile
+  watch: bool                     # Rebuild+restart container on file changes (foreground runs only)
+
+waitForDatabases: bool            # Default true. False = start alongside the databases (still gets their env)
 
 beforeStart:  [string|object]     # Run before `start`. Entry = string, or {run, cacheKey}:
                                   #   - run: yarn install
@@ -198,6 +218,37 @@ scripts:                          # Named scripts invoked via `corgi script -n <
     commands: [string]
     copyEnvFromFilePath: string
 ```
+
+## Dockerfile services (when `start:` is optional)
+
+A service runs in docker instead of scripts when, in priority order:
+
+1. `runner: docker` is declared → always.
+2. `corgi run --docker` is passed → every service whose repo has a
+   Dockerfile or compose file flips to a container; the rest stay native.
+3. It has no `start:` commands and its repo ships a `Dockerfile` or its own
+   compose file (`docker-compose.yml`/`.yaml`, `compose.yml`/`.yaml`) →
+   automatically. For zero-config services a repo compose file wins over a
+   plain Dockerfile; any declared `runner:` build field (or `runner: docker`)
+   pins the Dockerfile instead. Repo-compose mode injects corgi's generated
+   env into every container via an auto-generated override file (repo-set
+   values win); `${VAR}` in the compose file also interpolates.
+
+Also: `runner: {image: nginx:alpine}` runs a registry image with no repo at
+all (port: required); `corgi build` pre-builds every docker-capable image in
+parallel without starting anything.
+
+`beforeStart` still runs host-side in docker mode (certs, migrations, env);
+the container replaces only `start:`. `afterStart` runs on stop. `port:` may
+be omitted when the Dockerfile has `EXPOSE` — corgi reads it.
+
+**When scaffolding a corgi-compose.yml, prefer the smallest rung**: if a
+service repo ships a working Dockerfile or compose file and the user has no
+local dev flow for it, emit just `cloneFrom` (+ `port` if no EXPOSE) — no
+beforeStart/start. Reserve scripts for services that need hot reload or a
+native toolchain. Both can coexist; scripts stay the default,
+`corgi run --docker` flips. Verify with `corgi run --dry-run` (prints
+`mode=` per service).
 
 ## `required.<tool>`
 
