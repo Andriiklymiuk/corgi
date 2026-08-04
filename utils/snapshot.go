@@ -33,7 +33,9 @@ var postgresFamily = map[string]bool{
 
 func IsPostgresFamilyDriver(driver string) bool { return postgresFamily[driver] }
 
-func ContainerName(driver, serviceName string) string { return driver + "-" + serviceName }
+func ContainerName(driver, serviceName string) string {
+	return driver + "-" + ScopedContainerBase(serviceName)
+}
 
 func SnapshotsDir(serviceName string) (string, error) {
 	base, err := GetPathToDbService(serviceName)

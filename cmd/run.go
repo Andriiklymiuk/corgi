@@ -1029,7 +1029,7 @@ func detachedDBEntries(corgi *utils.CorgiCompose) []utils.RunStateEntry {
 		dbs = append(dbs, utils.RunStateEntry{
 			Name:      db.ServiceName,
 			Kind:      "db_service",
-			Container: fmt.Sprintf("%s-%s", db.Driver, db.ServiceName),
+			Container: utils.ContainerName(db.Driver, db.ServiceName),
 			Port:      db.Port,
 			Status:    "running",
 		})
@@ -1103,6 +1103,34 @@ func runPreflight(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		if err := utils.DockerInit(cmd); err != nil {
 			utils.Info("Docker init failed:", err)
 		}
+		warnLegacyContainers(corgi)
+	}
+}
+
+// Pre-scope containers left running would fight for the same ports.
+func warnLegacyContainers(corgi *utils.CorgiCompose) {
+	if utils.ContainerScope() == "" {
+		return
+	}
+	var legacy []string
+	for _, db := range corgi.DatabaseServices {
+		name := db.Driver + "-" + db.ServiceName
+		if running, _ := utils.IsServiceRunning(name); running {
+			legacy = append(legacy, name)
+		}
+	}
+	for _, s := range corgi.Services {
+		if !s.Runner.IsDocker() {
+			continue
+		}
+		name := utils.DockerSafeName(s.ServiceName)
+		if running, _ := utils.IsServiceRunning(name); running {
+			legacy = append(legacy, name)
+		}
+	}
+	if len(legacy) > 0 {
+		utils.Info("⚠ containers from before scopeContainers are still running:", legacy)
+		utils.Info("  stop them (docker rm -f) or they will fight for the same ports")
 	}
 }
 
@@ -1268,7 +1296,7 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	if dbService.ManualRun {
 		return
 	}
-	containerName := fmt.Sprintf("%s-%s", dbService.Driver, dbService.ServiceName)
+	containerName := utils.ContainerName(dbService.Driver, dbService.ServiceName)
 	serviceIsRunning, err := utils.IsServiceRunning(containerName)
 	if err != nil {
 		utils.Infof("Getting target service info failed: %s\n", err)

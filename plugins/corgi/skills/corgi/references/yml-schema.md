@@ -22,6 +22,13 @@ envTiers:     map<name, EnvTier>    # Optional. `corgi run --tier <name>` select
 e2e:          E2ESuite              # Optional stack-level e2e suite. See below
 ```
 
+## `scopeContainers` (optional, top-level)
+
+`scopeContainers: true` prefixes every container (services + dbs) with the
+docker-safe workspace name (`name:`, else the compose dir name). Fixes
+cross-workspace container-name collisions. Opt-in — default keeps legacy
+names; recommend it when scaffolding a new corgi-compose.yml.
+
 ## `e2e` (optional)
 
 A test suite that drives several services at once, so it belongs to the stack

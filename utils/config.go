@@ -344,6 +344,8 @@ type CorgiCompose struct {
 
 	UseDocker bool `yaml:"useDocker,omitempty"`
 	UseAwsVpn bool `yaml:"useAwsVpn,omitempty"`
+	// Opt-in: prefix all containers with the workspace name (cross-workspace collisions).
+	ScopeContainers bool `yaml:"scopeContainers,omitempty"`
 
 	Name        string `yaml:"name,omitempty"`
 	Description string `yaml:"description,omitempty"`
@@ -375,6 +377,8 @@ type CorgiComposeYaml struct {
 	UseDocker bool `yaml:"useDocker,omitempty"`
 	UseAwsVpn bool `yaml:"useAwsVpn,omitempty"`
 
+	ScopeContainers bool `yaml:"scopeContainers,omitempty"`
+
 	Name        string `yaml:"name,omitempty"`
 	Description string `yaml:"description,omitempty"`
 
@@ -402,6 +406,7 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	if err := applyEnvTier(&corgi); err != nil {
 		return nil, err
 	}
+	SetContainerScope(&corgi)
 
 	applyWithDeps(corgiYaml.Services)
 
@@ -539,15 +544,16 @@ func unknownFieldsFromYAMLError(err error) []string {
 
 func buildBaseCorgi(y CorgiComposeYaml) CorgiCompose {
 	return CorgiCompose{
-		Init:        y.Init,
-		BeforeStart: y.BeforeStart,
-		Start:       y.Start,
-		AfterStart:  y.AfterStart,
-		UseDocker:   y.UseDocker,
-		UseAwsVpn:   y.UseAwsVpn,
-		Name:        y.Name,
-		Description: y.Description,
-		EnvTiers:    y.EnvTiers,
+		Init:            y.Init,
+		BeforeStart:     y.BeforeStart,
+		Start:           y.Start,
+		AfterStart:      y.AfterStart,
+		UseDocker:       y.UseDocker,
+		UseAwsVpn:       y.UseAwsVpn,
+		ScopeContainers: y.ScopeContainers,
+		Name:            y.Name,
+		Description:     y.Description,
+		EnvTiers:        y.EnvTiers,
 	}
 }
 

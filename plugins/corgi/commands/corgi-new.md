@@ -36,6 +36,7 @@ Use `skills/corgi/references/yml-schema.md` for exact key names. Structure:
 ```yaml
 name: <project>
 description: <one line>
+scopeContainers: true # new projects: workspace-prefixed container names
 
 required:
   docker:

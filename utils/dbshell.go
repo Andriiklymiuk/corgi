@@ -247,7 +247,7 @@ func runDBShell(db DatabaseService, query string, interactive bool, stdout, stde
 			db.Driver, db.ServiceName)
 	}
 
-	containerName := fmt.Sprintf("%s-%s", db.Driver, db.ServiceName)
+	containerName := ContainerName(db.Driver, db.ServiceName)
 	containerID, err := getRunningContainerID(containerName)
 	if err != nil {
 		return fmt.Errorf("cannot find running container for %s: %w", db.ServiceName, err)
