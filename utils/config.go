@@ -209,6 +209,12 @@ type Runner struct {
 	ContainerPort int       `yaml:"containerPort,omitempty"`
 	Command       string    `yaml:"command,omitempty"`
 	ComposeFile   string    `yaml:"composeFile,omitempty"`
+	// Image runs the service straight from a registry image — no repo, no
+	// build. Mutually exclusive with dockerfile/composeFile sources.
+	Image string `yaml:"image,omitempty"`
+	// Watch rebuilds + restarts the container on context changes
+	// (docker compose up --watch); effective in foreground runs only.
+	Watch bool `yaml:"watch,omitempty"`
 }
 
 type Service struct {

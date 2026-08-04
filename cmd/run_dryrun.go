@@ -52,6 +52,8 @@ func serviceRunMode(svc utils.Service, dockerFlag bool) string {
 	}
 	r := resolved[0]
 	switch {
+	case r.Runner.IsDocker() && r.ResolvedDockerSource == utils.SourceImage:
+		return "docker (image)"
 	case r.Runner.IsDocker() && r.ResolvedDockerSource == utils.SourceRepoCompose:
 		return "docker (repo compose)"
 	case r.Runner.IsDocker() && r.ResolvedDockerSource == utils.SourceDockerfile:

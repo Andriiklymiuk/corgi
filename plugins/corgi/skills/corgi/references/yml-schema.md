@@ -187,6 +187,8 @@ runner:
   containerPort: int              # Port inside the container (default: first EXPOSE, else port)
   command: string                 # Override image CMD
   composeFile: string             # Delegate to the repo's own compose file (mutually exclusive with build fields)
+  image: string                   # Run a registry image directly — no repo, no build. Requires port:. Excludes dockerfile/composeFile
+  watch: bool                     # Rebuild+restart container on file changes (foreground runs only)
 
 waitForDatabases: bool            # Default true. False = start alongside the databases (still gets their env)
 
@@ -221,9 +223,13 @@ A service runs in docker instead of scripts when, in priority order:
    compose file (`docker-compose.yml`/`.yaml`, `compose.yml`/`.yaml`) →
    automatically. For zero-config services a repo compose file wins over a
    plain Dockerfile; any declared `runner:` build field (or `runner: docker`)
-   pins the Dockerfile instead. Repo-compose caveat: corgi's `--env-file`
-   only interpolates `${VAR}` in that compose file — container env stays
-   whatever the repo's compose declares.
+   pins the Dockerfile instead. Repo-compose mode injects corgi's generated
+   env into every container via an auto-generated override file (repo-set
+   values win); `${VAR}` in the compose file also interpolates.
+
+Also: `runner: {image: nginx:alpine}` runs a registry image with no repo at
+all (port: required); `corgi build` pre-builds every docker-capable image in
+parallel without starting anything.
 
 `beforeStart` still runs host-side in docker mode (certs, migrations, env);
 the container replaces only `start:`. `afterStart` runs on stop. `port:` may

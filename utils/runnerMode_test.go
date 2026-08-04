@@ -212,3 +212,32 @@ func TestDeclaredDockerfileMissingIgnoredForNativeService(t *testing.T) {
 		t.Fatalf("native scripted run must not fail on stale dockerfile config: %v", err)
 	}
 }
+
+func TestImageRunnerResolvesToSourceImage(t *testing.T) {
+	s := Service{ServiceName: "pdf", AbsolutePath: t.TempDir(), Port: 3005}
+	s.Runner = Runner{Name: "docker", Image: "nginx:alpine"}
+	out, err := ResolveRunnerModes([]Service{s}, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0].ResolvedDockerSource != SourceImage {
+		t.Fatalf("want SourceImage, got %v", out[0].ResolvedDockerSource)
+	}
+}
+
+func TestImageRunnerWithoutPortErrors(t *testing.T) {
+	s := Service{ServiceName: "pdf", AbsolutePath: t.TempDir()}
+	s.Runner = Runner{Name: "docker", Image: "nginx:alpine"}
+	if _, err := ResolveRunnerModes([]Service{s}, false, false); err == nil {
+		t.Fatal("image without port must error")
+	}
+}
+
+func TestImageAndDockerfileMutuallyExclusive(t *testing.T) {
+	s := mkModeService(t, "Dockerfile")
+	s.Port = 3000
+	s.Runner = Runner{Name: "docker", Image: "nginx:alpine", Dockerfile: "Dockerfile"}
+	if _, err := ResolveRunnerModes([]Service{s}, false, false); err == nil {
+		t.Fatal("image + dockerfile must error")
+	}
+}

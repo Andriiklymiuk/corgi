@@ -853,6 +853,9 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 		// docker-runner services run as containers (no tracked pid); reconcile
 		// and stop key off pid==0 and let cleanup bring them down.
 		if isDockerRunnable(svc) {
+			if svc.Runner.Watch {
+				utils.Infof("👀 %s: watch needs a foreground run — detached start skips it\n", svc.ServiceName)
+			}
 			if err := dockerRunnerUp(svc.ServiceName); err != nil {
 				fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
 				continue
@@ -1322,7 +1325,12 @@ func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 func startServiceProcess(service utils.Service) {
 	if isDockerRunnable(service) {
 		utils.Info(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
-		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", "up"); err != nil {
+		target := "up"
+		if service.Runner.Watch && service.ResolvedDockerSource == utils.SourceDockerfile {
+			target = "upw"
+			utils.Info("👀 watch on — rebuilds on file changes")
+		}
+		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", target); err != nil {
 			utils.Info("Starting service failed", err)
 		}
 		return
