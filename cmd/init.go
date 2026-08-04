@@ -273,31 +273,33 @@ func createSingleService(service utils.Service) {
 	}
 
 	if err := copyEnvFileWithSubstitutions(service); err != nil {
-		fmt.Printf("Error copying .env file for service %s: %s\n", service.ServiceName, err)
+		utils.Infof("Error copying .env file for service %s: %s\n", service.ServiceName, err)
 	}
 
 	data, err := utils.BuildDockerServiceData(service)
 	if err != nil {
-		fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
-		fmt.Printf("Service %s had error during creation: %s\n", service.ServiceName, err)
+		utils.Info(art.RedColor, "❌", art.WhiteColor)
+		utils.Infof("Service %s had error during creation: %s\n", service.ServiceName, err)
 		return
 	}
 
 	if data.OverrideFile != "" {
 		names := utils.RepoComposeServiceNames(data.RepoComposeFile)
-		content := utils.RenderRepoComposeEnvOverride(names, data.EnvFilePath)
-		if werr := os.WriteFile(data.OverrideFile, []byte(content), 0644); werr != nil {
-			utils.Infof("Service %s: couldn't write env override, container env injection off: %s\n", service.ServiceName, werr)
+		if len(names) == 0 {
 			data.OverrideFile = ""
+		} else {
+			content := utils.RenderRepoComposeEnvOverride(names, data.EnvFilePath)
+			if werr := os.WriteFile(data.OverrideFile, []byte(content), 0644); werr != nil {
+				utils.Infof("Service %s: couldn't write env override, container env injection off: %s\n", service.ServiceName, werr)
+				data.OverrideFile = ""
+			}
 		}
 	}
 
 	if writeServiceFiles(service, data) {
-		fmt.Print(art.GreenColor, "✅ ", art.WhiteColor)
-		fmt.Printf("Service %s was successfully created\n", service.ServiceName)
+		utils.Infof("✅ Service %s was successfully created\n", service.ServiceName)
 	} else {
-		fmt.Print(art.RedColor, "❌ ", art.WhiteColor)
-		fmt.Printf("Service %s had error during creation\n", service.ServiceName)
+		utils.Infof("❌ Service %s had error during creation\n", service.ServiceName)
 	}
 }
 

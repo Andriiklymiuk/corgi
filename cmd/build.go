@@ -23,7 +23,21 @@ skipped. Exit 1 if any build fails.`,
 
 func init() {
 	rootCmd.AddCommand(buildCmd)
+	buildCmd.Flags().StringSliceVar(
+		&utils.ServicesItemsFromFlag,
+		"services",
+		[]string{},
+		"Build only these services (--services api,web)",
+	)
+	buildCmd.Flags().IntVar(
+		&buildParallelism,
+		"parallel",
+		4,
+		"Max concurrent image builds",
+	)
 }
+
+var buildParallelism int
 
 type buildResult struct {
 	Name  string `json:"name"`
@@ -42,9 +56,26 @@ func runBuild(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
+	// Resolution reads the repo dir — a not-yet-cloned service would produce a
+	// misleading "no dockerfile found" error, so filter those out up front.
+	var cloned []utils.Service
+	var notCloned []string
+	for _, s := range corgi.Services {
+		if s.CloneFrom != "" {
+			if _, serr := os.Stat(s.AbsolutePath); serr != nil {
+				notCloned = append(notCloned, s.ServiceName)
+				continue
+			}
+		}
+		cloned = append(cloned, s)
+	}
+	if len(notCloned) > 0 {
+		utils.Info("skipping not-yet-cloned services (run corgi init first):", notCloned)
+	}
+
 	// --docker semantics don't matter here: build targets every service that
 	// has a docker source, scripted or not.
-	resolved, rerr := utils.ResolveRunnerModes(corgi.Services, true, false)
+	resolved, rerr := utils.ResolveRunnerModes(cloned, true, false)
 	if rerr != nil {
 		if utils.JSONOutput {
 			utils.JSONError(utils.ErrConfig, rerr.Error())
@@ -73,12 +104,18 @@ func runBuild(cmd *cobra.Command, _ []string) {
 
 	utils.Info(art.BlueColor, fmt.Sprintf("🔨 building %d image(s) in parallel", len(buildable)), art.WhiteColor)
 
+	if buildParallelism < 1 {
+		buildParallelism = 1
+	}
 	results := make([]buildResult, len(buildable))
+	sem := make(chan struct{}, buildParallelism)
 	var wg sync.WaitGroup
 	for i, svc := range buildable {
 		wg.Add(1)
 		go func(i int, svc utils.Service) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			if err := utils.ExecuteServiceCommandRun(svc.ServiceName, "make", "build"); err != nil {
 				results[i] = buildResult{Name: svc.ServiceName, Error: err.Error()}
 				return
