@@ -93,7 +93,9 @@ Quirks that WILL bite (each cost a failed run once):
   accessibility tree as JSON — parse the value out instead of guessing.
 - **Verify visually**: `xcrun simctl io <udid> screenshot /tmp/x.png`, then Read
   the image. Assertions prove presence; the screenshot proves it looks right —
-  attach the before/after to the PR for visual stories.
+  attach the before/after to the PR for visual stories. Story has a design
+  reference (ticket/bug screenshot, mockup, Figma export)? Read it **alongside**
+  the capture and compare spacing, colour, type, icons — don't stop at presence.
 - **Watch the Metro log** (`/tmp/metro-<svc>.log`) after each flow — runtime
   `WARN`/`ERROR` (e.g. a swallowed exception behind an error state in the UI)
   shows up there, not in Maestro output.
