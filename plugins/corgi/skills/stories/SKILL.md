@@ -189,7 +189,19 @@ agents, tracker MCP.
 - **Local / user-pointed design assets.** User names a folder/file
   (`design-screenshots/`, Figma export on disk, "see mockup") → read direct,
   outranks prose. **Build as drawn** — exact icon/emoji, colour, copy, spacing,
-  placement. No near-equivalent; a human compares the result to the design.
+  placement. No near-equivalent.
+- **Design reference = the verify target, not just spec input.** Any visual
+  reference (screenshot, mockup, attachment, design-tool link, or a **reference
+  app/prototype repo** — e.g. an AI-generated one), **wherever it surfaces** —
+  ticket, comments, prior spec/docs, chat, disk — is what Phase 3's visual
+  compare checks the implementation against; record its path/URL in the spec.
+  Link with no image on disk → fetch/export it (design-tool MCP if connected,
+  else ask the user). Reference is a runnable app/repo → run it and screenshot
+  the relevant screens (that capture becomes the target image), and read its
+  styles/components direct for exact values. Don't build a UI story from prose
+  while a design exists unseen. **No design, or the user waives it → fine:** build from
+  prose, verify functionally, note "no design reference" in the spec/PR — the
+  compare only applies when a reference exists, never blocks a story without one.
 
 ### Reuse an existing spec — then re-verify it (may be stale)
 
@@ -525,6 +537,15 @@ change, matching existing patterns.
   owner-approved step, only when the ticket/spec explicitly calls for a release.
   On a non-macOS host (no simulator) → fall back to the visual-bug manual-only
   path: spec + PR carry repro steps; say so in the report.
+- **Frontend change with a design reference → screenshot + compare, not just
+  green tests.** Spec recorded a reference (Phase 1: screenshot, mockup, design
+  export, prototype-app capture)? Done = the rendered UI **matches it**. Capture the
+  implemented screen (web → the repo's e2e/screenshot harness or a headless
+  browser; Expo/RN → the Maestro/simctl loop above), **Read reference + capture
+  side by side** and compare layout, spacing, colour, typography, icons, copy.
+  Bug screenshot = the "before" — your capture must show it fixed at that spot.
+  Mismatch → fix, or list as intentional deviation in the PR body; attach both
+  images to the PR. Functionally perfect + visually off = not done.
 - **Webhook / callback feature** (a new inbound endpoint an external provider calls —
   Stripe, GitHub, Twilio, e-sign…) → **test with a simulated signed payload, not a
   live call:** assert the signature check + handler behaviour against a sample event

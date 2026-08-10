@@ -150,6 +150,13 @@ per-repo note. Never re-fetch the same key per PR.
   bars.
 - Discussion/comments — later clarifications that override the original ask.
 - Linked specs/docs + sub-tasks — follow one hop for design context.
+- **Design screenshots / Figma links on a UI ticket = the visual acceptance
+  bar.** View them; a UI diff whose PR carries no screenshot evidence, or whose
+  screenshots visibly diverge from the design (layout, spacing, colour, icons,
+  copy), is a **finding** — ask for the visual proof / flag the divergence, not
+  a pass. **No design on the ticket, or it explicitly waives one → not a
+  finding:** review the UI on standards alone; don't demand a design that was
+  never promised.
 
 Distill into a compact **intent note** the review uses two ways in P3:
 1. **Check** — does the diff do what the ticket asked?

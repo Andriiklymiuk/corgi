@@ -34,7 +34,10 @@ before "works".
 3. **Screenshot** — `adb exec-out screencap -p > f.png` / `xcrun simctl io booted
    screenshot f.png`. Zoom detail: `sips -c <H> <W> --cropOffset <top> <left> f.png --out
    crop.png`.
-4. **READ it.** Never assert "renders fine" on a frame you didn't open.
+4. **READ it.** Never assert "renders fine" on a frame you didn't open. Design
+   reference at hand (Figma export, ticket mockup / bug screenshot) → Read it NEXT
+   to the capture and compare spacing / colour / type / icons — "renders" ≠
+   "matches design".
 5. **Geometry bug? MEASURE, don't eyeball.** A wrong shape (circle gone square,
    clipped / oval disc, mis-aligned pill, off-centre number) is INVISIBLE at
    full-frame scale — confirm it by the node's real box, not by squinting:
