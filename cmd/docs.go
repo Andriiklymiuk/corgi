@@ -548,33 +548,41 @@ func wrapAngleTokensInProse(s string) string {
 			i++
 			continue
 		}
-		start, hasAngle := i, false
-		for i < len(runes) && runes[i] != ' ' && runes[i] != '\t' {
-			if runes[i] == '<' {
-				hasAngle = true
-			}
-			i++
-		}
-		token := runes[start:i]
+		token, next, hasAngle := scanProseToken(runes, i)
+		i = next
 		if !hasAngle {
 			b.WriteString(string(token))
 			continue
 		}
-		// Wrap up to the last '>' and leave trailing sentence punctuation outside
-		// the code span, so e.g. `localhost:<port>.` keeps its period in prose.
-		wrapEnd := len(token)
-		for wrapEnd > 0 && isTrailingPunct(token[wrapEnd-1]) {
-			wrapEnd--
-		}
-		if wrapEnd == 0 || token[wrapEnd-1] != '>' {
-			wrapEnd = len(token) // no clean placeholder end; wrap the whole token
-		}
-		b.WriteByte('`')
-		b.WriteString(string(token[:wrapEnd]))
-		b.WriteByte('`')
-		b.WriteString(string(token[wrapEnd:]))
+		writeAngleWrappedToken(&b, token)
 	}
 	return b.String()
+}
+
+func scanProseToken(runes []rune, start int) (token []rune, next int, hasAngle bool) {
+	i := start
+	for i < len(runes) && runes[i] != ' ' && runes[i] != '\t' {
+		if runes[i] == '<' {
+			hasAngle = true
+		}
+		i++
+	}
+	return runes[start:i], i, hasAngle
+}
+
+// wraps up to the last '>' so `localhost:<port>.` keeps its period in prose
+func writeAngleWrappedToken(b *strings.Builder, token []rune) {
+	wrapEnd := len(token)
+	for wrapEnd > 0 && isTrailingPunct(token[wrapEnd-1]) {
+		wrapEnd--
+	}
+	if wrapEnd == 0 || token[wrapEnd-1] != '>' {
+		wrapEnd = len(token) // no clean placeholder end; wrap the whole token
+	}
+	b.WriteByte('`')
+	b.WriteString(string(token[:wrapEnd]))
+	b.WriteByte('`')
+	b.WriteString(string(token[wrapEnd:]))
 }
 
 func isTrailingPunct(r rune) bool {

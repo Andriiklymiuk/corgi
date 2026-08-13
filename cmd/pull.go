@@ -37,37 +37,41 @@ func runPull(cmd *cobra.Command, _ []string) {
 		return
 	}
 	for _, service := range corgi.Services {
-		// Repo not cloned yet (e.g. fresh checkout). Clone instead of pulling a missing dir.
-		if service.CloneFrom != "" && service.AbsolutePath != "" {
-			if _, statErr := os.Stat(service.AbsolutePath); os.IsNotExist(statErr) {
-				cloneOneService(service)
-				continue
-			}
-		}
+		pullOneService(service, isRunOnce)
+	}
+}
 
-		corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
-			service.AbsolutePath,
-			utils.CorgiComposeDefaultName,
-		)
-		if err != nil {
-			fmt.Println(err)
+func pullOneService(service utils.Service, isRunOnce bool) {
+	// Repo not cloned yet (e.g. fresh checkout). Clone instead of pulling a missing dir.
+	if service.CloneFrom != "" && service.AbsolutePath != "" {
+		if _, statErr := os.Stat(service.AbsolutePath); os.IsNotExist(statErr) {
+			cloneOneService(service)
+			return
 		}
+	}
 
-		var pullCmdToExecute string
-		if corgiComposeExists && !isRunOnce {
-			pullCmdToExecute = "corgi pull --silent --runOnce"
-		} else {
-			pullCmdToExecute = "git pull"
-		}
+	corgiComposeExists, err := utils.CheckIfFileExistsInDirectory(
+		service.AbsolutePath,
+		utils.CorgiComposeDefaultName,
+	)
+	if err != nil {
+		fmt.Println(err)
+	}
 
-		err = utils.RunServiceCmd(
-			service.ServiceName,
-			pullCmdToExecute,
-			service.AbsolutePath,
-			true,
-		)
-		if err != nil {
-			fmt.Println("pull failed for", service.ServiceName, "error:", err)
-		}
+	var pullCmdToExecute string
+	if corgiComposeExists && !isRunOnce {
+		pullCmdToExecute = "corgi pull --silent --runOnce"
+	} else {
+		pullCmdToExecute = "git pull"
+	}
+
+	err = utils.RunServiceCmd(
+		service.ServiceName,
+		pullCmdToExecute,
+		service.AbsolutePath,
+		true,
+	)
+	if err != nil {
+		fmt.Println("pull failed for", service.ServiceName, "error:", err)
 	}
 }

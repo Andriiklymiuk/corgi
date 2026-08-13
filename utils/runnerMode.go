@@ -80,64 +80,81 @@ func hasBuildFields(r Runner) bool {
 func ResolveRunnerModes(services []Service, dockerFlag, announce bool) ([]Service, error) {
 	out := make([]Service, len(services))
 	for i, s := range services {
-		if s.Runner.ComposeFile != "" && hasBuildFields(s.Runner) {
-			return nil, fmt.Errorf(
-				"service %s: runner.composeFile and build fields (dockerfile/context/target/args/volumes/containerPort/command) are mutually exclusive",
-				s.ServiceName)
+		if err := validateRunnerConfig(s, dockerFlag); err != nil {
+			return nil, err
 		}
-		if s.Runner.Image != "" && (s.Runner.ComposeFile != "" || s.Runner.Dockerfile != "" || s.Runner.Context != "" || s.Runner.Target != "" || len(s.Runner.Args) > 0) {
-			return nil, fmt.Errorf(
-				"service %s: runner.image and build sources (dockerfile/context/target/args/composeFile) are mutually exclusive",
-				s.ServiceName)
+		resolved, err := deriveRunnerMode(s, dockerFlag, announce)
+		if err != nil {
+			return nil, err
 		}
-		if s.Runner.Image != "" && s.Port == 0 {
-			return nil, fmt.Errorf(
-				"service %s: runner.image needs `port:` — there is no Dockerfile to read EXPOSE from",
-				s.ServiceName)
-		}
-		// A declared dockerfile that doesn't exist is a config error (typo),
-		// not a cue to silently fall back to a repo compose file — but only
-		// when docker mode would actually engage for this service.
-		if s.Runner.Dockerfile != "" && !dockerfileExists(s) &&
-			(s.Runner.IsDocker() || dockerFlag || len(s.Start) == 0) {
-			return nil, fmt.Errorf(
-				"service %s: runner.dockerfile %q not found in %s",
-				s.ServiceName, s.Runner.Dockerfile, s.AbsolutePath)
-		}
-		src := DetectDockerSource(s)
-		switch {
-		case s.Runner.IsDocker():
-			if src == SourceNone {
-				return nil, fmt.Errorf(
-					"service %s: runner is docker but no dockerfile %q or compose file found in %s",
-					s.ServiceName, s.DockerfileName(), s.AbsolutePath)
-			}
-			s.ResolvedDockerSource = src
-			// Declared intent — a missing port here is a hard config error.
-			if src == SourceDockerfile {
-				if err := resolveDockerPortDefaults(&s, announce); err != nil {
-					return nil, err
-				}
-			}
-		case s.ManualRun:
-		case dockerFlag && src != SourceNone:
-			if flipped, ok := tryDockerFlip(s, src, announce, "--docker,"); ok {
-				s = flipped
-			}
-		case len(s.Start) == 0 && src != SourceNone:
-			if flipped, ok := tryDockerFlip(s, src, announce, "no start scripts —"); ok {
-				s = flipped
-			}
-		case len(s.Start) == 0 && s.Port != 0:
-			// Post-clone parity with E_MISSING_START: the repo turned out to
-			// ship neither scripts nor a dockerfile/compose file.
-			return nil, fmt.Errorf(
-				"service %s: sets port %d but has no start command, no Dockerfile and no compose file in %s",
-				s.ServiceName, s.Port, s.AbsolutePath)
-		}
-		out[i] = s
+		out[i] = resolved
 	}
 	return out, nil
+}
+
+func validateRunnerConfig(s Service, dockerFlag bool) error {
+	if s.Runner.ComposeFile != "" && hasBuildFields(s.Runner) {
+		return fmt.Errorf(
+			"service %s: runner.composeFile and build fields (dockerfile/context/target/args/volumes/containerPort/command) are mutually exclusive",
+			s.ServiceName)
+	}
+	if s.Runner.Image != "" && (s.Runner.ComposeFile != "" || s.Runner.Dockerfile != "" || s.Runner.Context != "" || s.Runner.Target != "" || len(s.Runner.Args) > 0) {
+		return fmt.Errorf(
+			"service %s: runner.image and build sources (dockerfile/context/target/args/composeFile) are mutually exclusive",
+			s.ServiceName)
+	}
+	if s.Runner.Image != "" && s.Port == 0 {
+		return fmt.Errorf(
+			"service %s: runner.image needs `port:` — there is no Dockerfile to read EXPOSE from",
+			s.ServiceName)
+	}
+	// missing declared dockerfile = config error, not a compose-file fallback
+	if s.Runner.Dockerfile != "" && !dockerfileExists(s) &&
+		(s.Runner.IsDocker() || dockerFlag || len(s.Start) == 0) {
+		return fmt.Errorf(
+			"service %s: runner.dockerfile %q not found in %s",
+			s.ServiceName, s.Runner.Dockerfile, s.AbsolutePath)
+	}
+	return nil
+}
+
+func deriveRunnerMode(s Service, dockerFlag, announce bool) (Service, error) {
+	src := DetectDockerSource(s)
+	switch {
+	case s.Runner.IsDocker():
+		return applyDeclaredDockerMode(s, src, announce)
+	case s.ManualRun:
+	case dockerFlag && src != SourceNone:
+		if flipped, ok := tryDockerFlip(s, src, announce, "--docker,"); ok {
+			s = flipped
+		}
+	case len(s.Start) == 0 && src != SourceNone:
+		if flipped, ok := tryDockerFlip(s, src, announce, "no start scripts —"); ok {
+			s = flipped
+		}
+	case len(s.Start) == 0 && s.Port != 0:
+		// post-clone parity with E_MISSING_START
+		return s, fmt.Errorf(
+			"service %s: sets port %d but has no start command, no Dockerfile and no compose file in %s",
+			s.ServiceName, s.Port, s.AbsolutePath)
+	}
+	return s, nil
+}
+
+func applyDeclaredDockerMode(s Service, src DockerSource, announce bool) (Service, error) {
+	if src == SourceNone {
+		return s, fmt.Errorf(
+			"service %s: runner is docker but no dockerfile %q or compose file found in %s",
+			s.ServiceName, s.DockerfileName(), s.AbsolutePath)
+	}
+	s.ResolvedDockerSource = src
+	// Declared intent — a missing port here is a hard config error.
+	if src == SourceDockerfile {
+		if err := resolveDockerPortDefaults(&s, announce); err != nil {
+			return s, err
+		}
+	}
+	return s, nil
 }
 
 // tryDockerFlip stamps docker mode when corgi (not the user) chose it; an

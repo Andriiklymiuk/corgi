@@ -452,31 +452,44 @@ func substituteServiceVars(vars map[string]string, consumer Service, out Exports
 		if !crossServiceRefRe.MatchString(val) {
 			continue
 		}
-		newVal, subErr := substituteCrossServiceRefs(val, consumer, out)
-		if subErr != nil {
-			var skipped *producerSkippedError
-			if errors.As(subErr, &skipped) {
-				// Strip skipped refs so findStuckExports doesn't flag a fake cycle.
-				stripped := crossServiceRefRe.ReplaceAllStringFunc(val, func(match string) string {
-					m := crossServiceRefRe.FindStringSubmatch(match)
-					if SkippedServices[m[1]] {
-						return ""
-					}
-					return match
-				})
-				if stripped != val {
-					vars[varName] = stripped
-					changed = true
-				}
-			}
-			continue
-		}
-		if newVal != val {
-			vars[varName] = newVal
+		if substituteSingleExportVar(vars, varName, val, consumer, out) {
 			changed = true
 		}
 	}
 	return changed
+}
+
+func substituteSingleExportVar(vars map[string]string, varName, val string, consumer Service, out ExportsMap) bool {
+	newVal, subErr := substituteCrossServiceRefs(val, consumer, out)
+	if subErr != nil {
+		var skipped *producerSkippedError
+		if !errors.As(subErr, &skipped) {
+			return false
+		}
+		stripped := stripSkippedProducerRefs(val)
+		if stripped != val {
+			vars[varName] = stripped
+			return true
+		}
+		return false
+	}
+	if newVal != val {
+		vars[varName] = newVal
+		return true
+	}
+	return false
+}
+
+// stripSkippedProducerRefs strips skipped refs so findStuckExports doesn't
+// flag a fake cycle.
+func stripSkippedProducerRefs(val string) string {
+	return crossServiceRefRe.ReplaceAllStringFunc(val, func(match string) string {
+		m := crossServiceRefRe.FindStringSubmatch(match)
+		if SkippedServices[m[1]] {
+			return ""
+		}
+		return match
+	})
 }
 
 func findStuckExports(out ExportsMap) []string {

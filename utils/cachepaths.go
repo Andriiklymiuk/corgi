@@ -69,46 +69,9 @@ var ecosystems = []ecosystem{
 // cacheKey files. A service opts in by declaring a cacheKey; without one corgi
 // cannot skip the install anyway, so caching its output would be misleading.
 func CachePathsFor(corgi *CorgiCompose) CachePlan {
-	paths := map[string]bool{}
-	aggregateHash := sha256.New()
-
-	groupPaths := map[string]map[string]bool{}
-	groupHash := map[string]hash.Hash{}
-
-	for _, service := range sortedServices(corgi) {
-		for _, step := range service.BeforeStart {
-			for _, key := range step.CacheKey {
-				addEcosystemPaths(paths, service, key)
-				line := fmt.Sprintf("%s\x00%s\x00%s\n",
-					service.ServiceName, key, hashFileContents(service.AbsolutePath, key))
-				fmt.Fprint(aggregateHash, line)
-
-				id := groupFor(key)
-				if id == "" {
-					continue
-				}
-				if groupPaths[id] == nil {
-					groupPaths[id] = map[string]bool{}
-					groupHash[id] = sha256.New()
-				}
-				addEcosystemPaths(groupPaths[id], service, key)
-				fmt.Fprint(groupHash[id], line)
-			}
-		}
-	}
-
-	aggregate := "corgi-deps-" + hex.EncodeToString(aggregateHash.Sum(nil))[:16]
-
-	var groups []CacheGroup
-	for _, id := range sortedGroupIDs(groupPaths) {
-		p := sortedPathSet(groupPaths[id])
-		groups = append(groups, CacheGroup{
-			ID:        id,
-			Paths:     p,
-			Key:       fmt.Sprintf("corgi-deps-%s-%s", id, hex.EncodeToString(groupHash[id].Sum(nil))[:16]),
-			PathsText: strings.Join(p, "\n"),
-		})
-	}
+	acc := collectCacheKeys(corgi)
+	aggregate := "corgi-deps-" + hex.EncodeToString(acc.aggregateHash.Sum(nil))[:16]
+	groups := acc.cacheGroups()
 
 	// corgi's own step markers say "this install already ran". Restoring them
 	// next to a dependency directory that did NOT come back would make corgi
@@ -116,7 +79,7 @@ func CachePathsFor(corgi *CorgiCompose) CachePlan {
 	// lockfile at once: any change and the markers stay behind while each
 	// unchanged ecosystem still restores its packages.
 	markers := filepath.Join("corgi_services", cacheDirName)
-	paths[markers] = true
+	acc.paths[markers] = true
 	if len(groups) > 0 {
 		groups = append(groups, CacheGroup{
 			ID:        "markers",
@@ -126,7 +89,63 @@ func CachePathsFor(corgi *CorgiCompose) CachePlan {
 		})
 	}
 
-	return CachePlan{Paths: sortedPathSet(paths), Key: aggregate, Groups: groups}
+	return CachePlan{Paths: sortedPathSet(acc.paths), Key: aggregate, Groups: groups}
+}
+
+type cacheAccumulator struct {
+	paths         map[string]bool
+	aggregateHash hash.Hash
+	groupPaths    map[string]map[string]bool
+	groupHash     map[string]hash.Hash
+}
+
+func collectCacheKeys(corgi *CorgiCompose) *cacheAccumulator {
+	acc := &cacheAccumulator{
+		paths:         map[string]bool{},
+		aggregateHash: sha256.New(),
+		groupPaths:    map[string]map[string]bool{},
+		groupHash:     map[string]hash.Hash{},
+	}
+	for _, service := range sortedServices(corgi) {
+		for _, step := range service.BeforeStart {
+			for _, key := range step.CacheKey {
+				acc.recordCacheKey(service, key)
+			}
+		}
+	}
+	return acc
+}
+
+func (acc *cacheAccumulator) recordCacheKey(service Service, key string) {
+	addEcosystemPaths(acc.paths, service, key)
+	line := fmt.Sprintf("%s\x00%s\x00%s\n",
+		service.ServiceName, key, hashFileContents(service.AbsolutePath, key))
+	fmt.Fprint(acc.aggregateHash, line)
+
+	id := groupFor(key)
+	if id == "" {
+		return
+	}
+	if acc.groupPaths[id] == nil {
+		acc.groupPaths[id] = map[string]bool{}
+		acc.groupHash[id] = sha256.New()
+	}
+	addEcosystemPaths(acc.groupPaths[id], service, key)
+	fmt.Fprint(acc.groupHash[id], line)
+}
+
+func (acc *cacheAccumulator) cacheGroups() []CacheGroup {
+	var groups []CacheGroup
+	for _, id := range sortedGroupIDs(acc.groupPaths) {
+		p := sortedPathSet(acc.groupPaths[id])
+		groups = append(groups, CacheGroup{
+			ID:        id,
+			Paths:     p,
+			Key:       fmt.Sprintf("corgi-deps-%s-%s", id, hex.EncodeToString(acc.groupHash[id].Sum(nil))[:16]),
+			PathsText: strings.Join(p, "\n"),
+		})
+	}
+	return groups
 }
 
 // serviceOutputDirs returns the directories installing this lockfile produces

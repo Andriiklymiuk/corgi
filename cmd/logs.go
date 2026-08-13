@@ -101,19 +101,8 @@ func runLogs(cmd *cobra.Command, _ []string) {
 
 	serviceName := logsServiceFlag
 	if serviceName == "" {
-		if utils.NonInteractive {
-			available, _ := utils.ListLoggedServices(base)
-			if err := requireServiceForLogs(serviceName, true, available); err != nil {
-				if utils.JSONOutput {
-					utils.JSONError(utils.ErrInteractiveReq, err.Error())
-				} else {
-					fmt.Fprintln(os.Stderr, err)
-				}
-				os.Exit(2)
-			}
-		}
 		var err error
-		serviceName, err = pickLogService(base)
+		serviceName, err = chooseLogService(base)
 		if err != nil {
 			utils.Info(err)
 			return
@@ -127,6 +116,16 @@ func runLogs(cmd *cobra.Command, _ []string) {
 	}
 
 	followLog(runFile)
+}
+
+func chooseLogService(base string) (string, error) {
+	if utils.NonInteractive {
+		available, _ := utils.ListLoggedServices(base)
+		if err := requireServiceForLogs("", true, available); err != nil {
+			exitWithError(utils.ErrInteractiveReq, err, 2)
+		}
+	}
+	return pickLogService(base)
 }
 
 func logsBase() string {
@@ -345,31 +344,25 @@ func looksLikeStampedLog(path string) bool {
 	return hasTimestampShape(buf)
 }
 
-// hasTimestampShape checks `YYYY-MM-DDTHH:MM:SS.sssZ ` (25 bytes).
+// timestampShapePattern: 'd' = any digit, every other byte literal (25 bytes).
+const timestampShapePattern = "dddd-dd-ddTdd:dd:dd.dddZ "
+
+// hasTimestampShape checks `YYYY-MM-DDTHH:MM:SS.sssZ `.
 func hasTimestampShape(b []byte) bool {
-	if len(b) < utils.LogTimestampLen {
+	if len(b) < len(timestampShapePattern) {
 		return false
 	}
-	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }
-	if !isDigit(b[0]) || !isDigit(b[1]) || !isDigit(b[2]) || !isDigit(b[3]) {
-		return false
+	for i := 0; i < len(timestampShapePattern); i++ {
+		switch p := timestampShapePattern[i]; {
+		case p == 'd':
+			if b[i] < '0' || b[i] > '9' {
+				return false
+			}
+		case b[i] != p:
+			return false
+		}
 	}
-	if b[4] != '-' || b[7] != '-' || b[10] != 'T' {
-		return false
-	}
-	if !isDigit(b[5]) || !isDigit(b[6]) || !isDigit(b[8]) || !isDigit(b[9]) {
-		return false
-	}
-	if !isDigit(b[11]) || !isDigit(b[12]) || b[13] != ':' || b[16] != ':' {
-		return false
-	}
-	if !isDigit(b[14]) || !isDigit(b[15]) || !isDigit(b[17]) || !isDigit(b[18]) {
-		return false
-	}
-	if b[19] != '.' || !isDigit(b[20]) || !isDigit(b[21]) || !isDigit(b[22]) {
-		return false
-	}
-	return b[23] == 'Z' && b[24] == ' '
+	return true
 }
 
 // mergeStream is one input to the k-way merge — a service's log file read line

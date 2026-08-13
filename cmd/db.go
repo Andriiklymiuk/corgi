@@ -245,8 +245,7 @@ func showMakeCommands(
 	}
 }
 
-func SeedDb(dbService utils.DatabaseService) error {
-	targetService := dbService.ServiceName
+func ensureSeedDumpExists(targetService string) error {
 	dumpFileExists, err := utils.CheckIfFilesExistsInDirectory(
 		fmt.Sprintf("%s/%s/%s",
 			utils.CorgiComposePathDir,
@@ -264,19 +263,54 @@ func SeedDb(dbService utils.DatabaseService) error {
 			targetService,
 		)
 	}
+	return nil
+}
+
+func ensureDbRunningForSeed(targetService string) error {
 	serviceIsRunning, err := utils.GetStatusOfService(targetService)
 	if err != nil {
 		fmt.Printf("Getting target service info failed: %s\n", err)
 	}
-	if !serviceIsRunning {
-		if err := utils.ExecuteCommandRun(targetService, "make", "up"); err != nil {
-			return fmt.Errorf("%s: %w", errMakeCommandFailed, err)
+	if serviceIsRunning {
+		return nil
+	}
+	if err := utils.ExecuteCommandRun(targetService, "make", "up"); err != nil {
+		return fmt.Errorf("%s: %w", errMakeCommandFailed, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultReadyTimeout)
+	defer cancel()
+	if err := seedReady(ctx, utils.DatabaseService{ServiceName: targetService}); err != nil {
+		return fmt.Errorf("%s not ready for seeding: %w", targetService, err)
+	}
+	return nil
+}
+
+// argv exec: container id never re-expanded by make's shell
+func seedPostgresFromDump(dbService utils.DatabaseService, containerId string, s *spinner.Spinner) error {
+	serviceDir, perr := utils.GetPathToDbService(dbService.ServiceName)
+	if perr != nil {
+		if !utils.CIMode {
+			s.Stop()
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), defaultReadyTimeout)
-		defer cancel()
-		if err := seedReady(ctx, utils.DatabaseService{ServiceName: targetService}); err != nil {
-			return fmt.Errorf("%s not ready for seeding: %w", targetService, err)
-		}
+		return perr
+	}
+	err := utils.RunPgSeed(serviceDir, "dump.sql", containerId, dbService)
+	if !utils.CIMode {
+		s.Stop()
+	}
+	if err != nil {
+		return fmt.Errorf("seed failed: %s", err)
+	}
+	return nil
+}
+
+func SeedDb(dbService utils.DatabaseService) error {
+	targetService := dbService.ServiceName
+	if err := ensureSeedDumpExists(targetService); err != nil {
+		return err
+	}
+	if err := ensureDbRunningForSeed(targetService); err != nil {
+		return err
 	}
 
 	containerId, err := utils.GetContainerId(targetService)
@@ -291,23 +325,7 @@ func SeedDb(dbService utils.DatabaseService) error {
 	}
 
 	if dbService.Driver == "postgres" {
-		// Postgres seed runs via exec.Command argv so the container id is never
-		// re-expanded through the `make`/`/bin/sh` recipe.
-		serviceDir, perr := utils.GetPathToDbService(targetService)
-		if perr != nil {
-			if !utils.CIMode {
-				s.Stop()
-			}
-			return perr
-		}
-		err = utils.RunPgSeed(serviceDir, "dump.sql", containerId, dbService)
-		if !utils.CIMode {
-			s.Stop()
-		}
-		if err != nil {
-			return fmt.Errorf("seed failed: %s", err)
-		}
-		return nil
+		return seedPostgresFromDump(dbService, containerId, s)
 	}
 
 	output, err := utils.ExecuteSeedMakeCommand(
@@ -454,6 +472,58 @@ func requireServiceForDBShell(service string, nonInteractive bool, available []s
 		strings.Join(available, ", "))
 }
 
+func exitDbShellWhenNonInteractive(dbs []utils.DatabaseService) {
+	available := make([]string, len(dbs))
+	for i, db := range dbs {
+		available[i] = db.ServiceName
+	}
+	if err := requireServiceForDBShell("", true, available); err != nil {
+		exitWithError(utils.ErrInteractiveReq, err, 2)
+	}
+}
+
+func promptDbShellTarget(dbs []utils.DatabaseService) (string, bool) {
+	labels := make([]string, len(dbs))
+	labelToName := make(map[string]string, len(dbs))
+	for i, db := range dbs {
+		label := fmt.Sprintf("%s (%s)", db.ServiceName, db.Driver)
+		labels[i] = label
+		labelToName[label] = db.ServiceName
+	}
+	chosen, err := utils.PickItemFromListPrompt("Select db_service", labels, "⬅️  cancel")
+	if err != nil {
+		fmt.Println(err)
+		return "", false
+	}
+	return labelToName[chosen], true
+}
+
+func resolveDbShellTarget(args []string, dbs []utils.DatabaseService) (string, bool) {
+	if len(args) > 0 {
+		return args[0], true
+	}
+	if utils.NonInteractive {
+		exitDbShellWhenNonInteractive(dbs)
+	}
+	return promptDbShellTarget(dbs)
+}
+
+func runDbShellQuery(dbService utils.DatabaseService, query string) {
+	if utils.JSONOutput {
+		out, qerr := utils.ExecDBQueryCapture(dbService, query)
+		if qerr != nil {
+			utils.JSONError(utils.ErrExecFailed, qerr.Error())
+			os.Exit(1)
+		}
+		utils.PrintJSON(dbQueryResult{Service: dbService.ServiceName, Output: out})
+		return
+	}
+	if err := utils.ExecDBQuery(dbService, query); err != nil {
+		fmt.Printf("%s❌ Query failed: %v%s\n", art.RedColor, err, art.WhiteColor)
+		os.Exit(1)
+	}
+}
+
 func runDbShell(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
@@ -466,37 +536,9 @@ func runDbShell(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	var targetName string
-	if len(args) > 0 {
-		targetName = args[0]
-	} else {
-		if utils.NonInteractive {
-			available := make([]string, len(corgi.DatabaseServices))
-			for i, db := range corgi.DatabaseServices {
-				available[i] = db.ServiceName
-			}
-			if err := requireServiceForDBShell(targetName, true, available); err != nil {
-				if utils.JSONOutput {
-					utils.JSONError(utils.ErrInteractiveReq, err.Error())
-				} else {
-					fmt.Fprintln(os.Stderr, err)
-				}
-				os.Exit(2)
-			}
-		}
-		labels := make([]string, len(corgi.DatabaseServices))
-		labelToName := make(map[string]string, len(corgi.DatabaseServices))
-		for i, db := range corgi.DatabaseServices {
-			label := fmt.Sprintf("%s (%s)", db.ServiceName, db.Driver)
-			labels[i] = label
-			labelToName[label] = db.ServiceName
-		}
-		chosen, err := utils.PickItemFromListPrompt("Select db_service", labels, "⬅️  cancel")
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		targetName = labelToName[chosen]
+	targetName, ok := resolveDbShellTarget(args, corgi.DatabaseServices)
+	if !ok {
+		return
 	}
 
 	dbService, err := utils.GetDbServiceByName(targetName, corgi.DatabaseServices)
@@ -507,19 +549,7 @@ func runDbShell(cmd *cobra.Command, args []string) {
 
 	query, _ := cmd.Flags().GetString("exec")
 	if query != "" {
-		if utils.JSONOutput {
-			out, qerr := utils.ExecDBQueryCapture(dbService, query)
-			if qerr != nil {
-				utils.JSONError(utils.ErrExecFailed, qerr.Error())
-				os.Exit(1)
-			}
-			utils.PrintJSON(dbQueryResult{Service: dbService.ServiceName, Output: out})
-			return
-		}
-		if err := utils.ExecDBQuery(dbService, query); err != nil {
-			fmt.Printf("%s❌ Query failed: %v%s\n", art.RedColor, err, art.WhiteColor)
-			os.Exit(1)
-		}
+		runDbShellQuery(dbService, query)
 		return
 	}
 

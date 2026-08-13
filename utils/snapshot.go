@@ -337,28 +337,11 @@ func RunSnapshot(req SnapshotRequest, now time.Time) (SnapshotMeta, error) {
 		return meta, err
 	}
 
-	archive, metaPath, err := SnapshotPaths(req.Service, req.Name)
+	archive, metaPath, err := prepareSnapshotArchive(req)
 	if err != nil {
 		return meta, err
 	}
-	if !req.Force {
-		if _, err := os.Stat(archive); err == nil {
-			return meta, fmt.Errorf("snapshot %q already exists — use --force to overwrite", req.Name)
-		}
-	}
-	if err := os.MkdirAll(filepath.Dir(archive), 0o755); err != nil {
-		return meta, err
-	}
-
-	pgMajor, err := containerPgVersionMajor(container)
-	if err != nil {
-		return meta, fmt.Errorf("%s: nothing built to snapshot? %w", req.Service, err)
-	}
-	arch, err := dockerServerArch()
-	if err != nil {
-		return meta, err
-	}
-	image, err := composeImage(serviceDir)
+	pgMajor, arch, image, err := snapshotSourceInfo(req, container, serviceDir)
 	if err != nil {
 		return meta, err
 	}
@@ -403,6 +386,38 @@ func RunSnapshot(req SnapshotRequest, now time.Time) (SnapshotMeta, error) {
 		return meta, err
 	}
 	return meta, nil
+}
+
+func prepareSnapshotArchive(req SnapshotRequest) (string, string, error) {
+	archive, metaPath, err := SnapshotPaths(req.Service, req.Name)
+	if err != nil {
+		return "", "", err
+	}
+	if !req.Force {
+		if _, err := os.Stat(archive); err == nil {
+			return "", "", fmt.Errorf("snapshot %q already exists — use --force to overwrite", req.Name)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(archive), 0o755); err != nil {
+		return "", "", err
+	}
+	return archive, metaPath, nil
+}
+
+func snapshotSourceInfo(req SnapshotRequest, container, serviceDir string) (pgMajor, arch, image string, err error) {
+	pgMajor, err = containerPgVersionMajor(container)
+	if err != nil {
+		return "", "", "", fmt.Errorf("%s: nothing built to snapshot? %w", req.Service, err)
+	}
+	arch, err = dockerServerArch()
+	if err != nil {
+		return "", "", "", err
+	}
+	image, err = composeImage(serviceDir)
+	if err != nil {
+		return "", "", "", err
+	}
+	return pgMajor, arch, image, nil
 }
 
 // probeArchive cheaply confirms the payload decompresses+tars, reading only a
@@ -499,41 +514,8 @@ type RestoreRequest struct {
 // RunRestore validates everything BEFORE wiping, then down → up --no-start →
 // inject → start (data must land before start so the image skips initdb).
 func RunRestore(req RestoreRequest) error {
-	serviceDir, err := GetPathToDbService(req.Service)
+	serviceDir, container, err := validateRestore(req)
 	if err != nil {
-		return err
-	}
-	if _, err := os.Stat(req.ArchivePath); err != nil {
-		return fmt.Errorf("snapshot archive not found: %s", req.ArchivePath)
-	}
-	meta, err := ReadSnapshotMeta(req.MetaPath)
-	if err != nil {
-		return fmt.Errorf("snapshot metadata missing/unreadable (%s) — both .tar.zst and .meta.json are required: %w", filepath.Base(req.MetaPath), err)
-	}
-
-	arch, err := dockerServerArch()
-	if err != nil {
-		return err
-	}
-	image, err := composeImage(serviceDir)
-	if err != nil {
-		return err
-	}
-	container := ContainerName(req.Driver, req.Service)
-	targetPgMajor, _ := containerPgVersionMajor(container) // best-effort; "" skips the gate
-	if cerr := CheckRestoreCompatibility(meta, image, arch, targetPgMajor); cerr != nil {
-		if !req.Force {
-			return cerr
-		}
-		Infof("⚠️  --force: ignoring %v\n", cerr)
-	}
-
-	if err := probeArchive(req.ArchivePath); err != nil {
-		return err
-	}
-	// Integrity check runs for every restore — a corrupt named snapshot must be
-	// caught BEFORE `compose down --volumes` wipes the live db.
-	if err := verifyArchiveSHA(req.ArchivePath, meta.SHA256); err != nil {
 		return err
 	}
 
@@ -564,4 +546,45 @@ func RunRestore(req RestoreRequest) error {
 		return fmt.Errorf("snapshot injected but container failed to start: %w", err)
 	}
 	return nil
+}
+
+func validateRestore(req RestoreRequest) (serviceDir, container string, err error) {
+	serviceDir, err = GetPathToDbService(req.Service)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := os.Stat(req.ArchivePath); err != nil {
+		return "", "", fmt.Errorf("snapshot archive not found: %s", req.ArchivePath)
+	}
+	meta, err := ReadSnapshotMeta(req.MetaPath)
+	if err != nil {
+		return "", "", fmt.Errorf("snapshot metadata missing/unreadable (%s) — both .tar.zst and .meta.json are required: %w", filepath.Base(req.MetaPath), err)
+	}
+
+	arch, err := dockerServerArch()
+	if err != nil {
+		return "", "", err
+	}
+	image, err := composeImage(serviceDir)
+	if err != nil {
+		return "", "", err
+	}
+	container = ContainerName(req.Driver, req.Service)
+	targetPgMajor, _ := containerPgVersionMajor(container) // best-effort; "" skips the gate
+	if cerr := CheckRestoreCompatibility(meta, image, arch, targetPgMajor); cerr != nil {
+		if !req.Force {
+			return "", "", cerr
+		}
+		Infof("⚠️  --force: ignoring %v\n", cerr)
+	}
+
+	if err := probeArchive(req.ArchivePath); err != nil {
+		return "", "", err
+	}
+	// Integrity check runs for every restore — a corrupt named snapshot must be
+	// caught BEFORE `compose down --volumes` wipes the live db.
+	if err := verifyArchiveSHA(req.ArchivePath, meta.SHA256); err != nil {
+		return "", "", err
+	}
+	return serviceDir, container, nil
 }
