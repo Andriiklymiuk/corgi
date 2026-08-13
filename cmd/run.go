@@ -755,7 +755,7 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 }
 
 // waitDetachedReadyOrExit returns the cleanup the caller defers, so the log
-// follow and timeout context live until runDetached itself returns.
+// follow lives until runDetached itself returns.
 func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func() {
 	timeout, _ := cmd.Flags().GetDuration("wait-timeout")
 	remaining := timeout - time.Since(bootStartedAt)
@@ -771,6 +771,7 @@ func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func
 		os.Exit(1)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), remaining)
+	defer cancel()
 	stopFollow := func() {
 		// No-op unless --follow replaces it, so the failure path can
 		// stop the stream unconditionally.
@@ -793,10 +794,7 @@ func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func
 		}
 		os.Exit(1)
 	}
-	return func() {
-		stopFollow()
-		cancel()
-	}
+	return stopFollow
 }
 
 // waitDetachedReady blocks until every service (with a port) and database is
