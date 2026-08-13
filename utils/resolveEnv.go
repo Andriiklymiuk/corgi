@@ -44,20 +44,44 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 		return []EnvVar{}, nil
 	}
 	var entries []EnvVar
+	entries = append(entries, copiedEnvFileEntries(svc)...)
+	entries = append(entries, dependentServiceEntries(svc, corgi)...)
+	entries = append(entries, databaseDependencyEntries(svc, corgi)...)
+	entries = append(entries, selfPortEntry(svc)...)
 
-	// copied env file (lowest precedence); honors tier + .env-example fallback
-	if src := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir); src != "" {
-		chunk := getEnvFromFile(src, corgiGeneratedMessage)
-		entries = append(entries, parseChunkInOrder(chunk, "file:"+filepath.Base(src))...)
+	literal, err := literalEnvironmentEntries(svc, entries)
+	if err != nil {
+		return nil, err
 	}
+	entries = append(entries, literal...)
 
-	// service dependencies
+	resolved := dedupeLastWins(entries)
+	rewriteLocalhostInEntries(resolved, svc)
+	return resolved, nil
+}
+
+// copiedEnvFileEntries is the copied env file (lowest precedence); honors
+// tier + .env-example fallback.
+func copiedEnvFileEntries(svc Service) []EnvVar {
+	src := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir)
+	if src == "" {
+		return nil
+	}
+	chunk := getEnvFromFile(src, corgiGeneratedMessage)
+	return parseChunkInOrder(chunk, "file:"+filepath.Base(src))
+}
+
+func dependentServiceEntries(svc Service, corgi *CorgiCompose) []EnvVar {
+	var entries []EnvVar
 	for _, dep := range svc.DependsOnServices {
 		chunk := appendDependentServiceEnv("", dep, *corgi)
 		entries = append(entries, parseChunkInOrder(chunk, "service:"+dep.Name)...)
 	}
+	return entries
+}
 
-	// db dependencies
+func databaseDependencyEntries(svc Service, corgi *CorgiCompose) []EnvVar {
+	var entries []EnvVar
 	for _, dep := range svc.DependsOnDb {
 		db := findDbByName(corgi.DatabaseServices, dep.Name)
 		if db == nil || (db.ManualRun && !dep.ForceUseEnv) {
@@ -66,41 +90,51 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 		chunk := generateEnvForDbDependentService(svc, dep, *db)
 		entries = append(entries, parseChunkInOrder(chunk, "db:"+dep.Name)...)
 	}
+	return entries
+}
 
-	// self port
-	if svc.Port != 0 {
-		alias := "PORT"
-		if svc.PortAlias != "" {
-			alias = svc.PortAlias
-		}
-		entries = append(entries, EnvVar{Key: alias, Value: fmt.Sprint(svc.Port), Source: "self:port"})
+func selfPortEntry(svc Service) []EnvVar {
+	if svc.Port == 0 {
+		return nil
 	}
+	alias := "PORT"
+	if svc.PortAlias != "" {
+		alias = svc.PortAlias
+	}
+	return []EnvVar{{Key: alias, Value: fmt.Sprint(svc.Port), Source: "self:port"}}
+}
 
-	// literal environment: lines (own ${VAR} + cross-service ${producer.VAR})
-	if len(svc.Environment) > 0 {
-		existing := map[string]string{}
-		for _, e := range entries {
-			existing[e.Key] = e.Value
-		}
-		for _, raw := range svc.Environment {
-			expanded, err := substituteCrossServiceRefs(raw, svc, currentExportsMap)
-			if err != nil {
-				var skipped *producerSkippedError
-				if errors.As(err, &skipped) {
-					continue // producer not in selection; generator drops it too
-				}
-				return nil, err
+// literalEnvironmentEntries covers literal environment: lines (own ${VAR} +
+// cross-service ${producer.VAR}).
+func literalEnvironmentEntries(svc Service, entries []EnvVar) ([]EnvVar, error) {
+	if len(svc.Environment) == 0 {
+		return nil, nil
+	}
+	existing := map[string]string{}
+	for _, e := range entries {
+		existing[e.Key] = e.Value
+	}
+	var out []EnvVar
+	for _, raw := range svc.Environment {
+		expanded, err := substituteCrossServiceRefs(raw, svc, currentExportsMap)
+		if err != nil {
+			var skipped *producerSkippedError
+			if errors.As(err, &skipped) {
+				continue // producer not in selection; generator drops it too
 			}
-			expanded = substituteEnvVarReferences(expanded, existing)
-			entries = append(entries, parseChunkInOrder(expanded, "literal")...)
+			return nil, err
 		}
+		expanded = substituteEnvVarReferences(expanded, existing)
+		out = append(out, parseChunkInOrder(expanded, "literal")...)
 	}
+	return out, nil
+}
 
-	resolved := dedupeLastWins(entries)
-
-	// Mirror renderEnvFileContent's final host rewrite (generateEnv.go) so
-	// reported values match the written .env. LocalhostNameInEnv wins if set;
-	// otherwise --host (HostOverride) catches user-written URLs too.
+// rewriteLocalhostInEntries mirrors renderEnvFileContent's final host rewrite
+// (generateEnv.go) so reported values match the written .env.
+// LocalhostNameInEnv wins if set; otherwise --host (HostOverride) catches
+// user-written URLs too.
+func rewriteLocalhostInEntries(resolved []EnvVar, svc Service) {
 	switch {
 	case svc.LocalhostNameInEnv != "":
 		for i := range resolved {
@@ -111,8 +145,6 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 			resolved[i].Value = strings.ReplaceAll(resolved[i].Value, "localhost", HostOverride)
 		}
 	}
-
-	return resolved, nil
 }
 
 // ResolveAllEnv resolves every service's env, keyed by service name. It primes

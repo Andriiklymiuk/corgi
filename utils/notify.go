@@ -85,7 +85,9 @@ func NotifyRaw(title, body string) {
 var sendNotificationOverride func(title, body string)
 
 func SilenceNotificationsForTests() {
-	sendNotificationOverride = func(string, string) {}
+	sendNotificationOverride = func(string, string) {
+		// no desktop alerts in tests
+	}
 }
 
 func sendNotification(title, body string) {

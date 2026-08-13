@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -538,34 +539,12 @@ func runRun(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	corgi, err := utils.GetCorgiServices(cmd)
-	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		if runReloading.Load() {
-			return
-		}
-		os.Exit(1)
+	corgi := loadRunCompose(cmd)
+	if corgi == nil {
+		return
 	}
 
-	if !utils.AbortOnValidationErrors(corgi) {
-		if runReloading.Load() {
-			return
-		}
-		os.Exit(1)
-	}
-
-	if err := confirmTier(cmd, corgi); err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrUsage, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(1)
-	}
+	confirmTierOrExit(cmd, corgi)
 
 	// Single filter point: narrow services/db_services before anything reads them.
 	// The --services/--omit/--dbServices filters then intersect this narrowed set.
@@ -577,25 +556,9 @@ func runRun(cmd *cobra.Command, _ []string) {
 		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi, dockerFlag)))
 	}
 
-	// Service-port preflight (skip on hot-reload: that path manages its own lifecycle).
-	if !runReloading.Load() {
-		killPort, _ := cmd.Flags().GetBool("kill-port")
-		if err := portPreflight(corgi, killPort); err != nil {
-			if utils.JSONOutput {
-				utils.JSONError(utils.ErrPortConflict, err.Error())
-			} else {
-				fmt.Fprintln(os.Stderr, "❌", err)
-			}
-			os.Exit(1)
-		}
-	}
+	runPortPreflightOrExit(cmd, corgi)
 
-	if CheckClonedReposExistence(corgi.Services) {
-		if failures := CloneServices(corgi.Services); len(failures) > 0 {
-			utils.Info("⚠️  could not clone:", strings.Join(failures, ", "),
-				"— those services will fail to start")
-		}
-	}
+	cloneMissingRepos(corgi.Services)
 
 	detach, _ := cmd.Flags().GetBool("detach")
 
@@ -608,57 +571,23 @@ func runRun(cmd *cobra.Command, _ []string) {
 	// so a failure from the previous boot would otherwise fail the next one.
 	utils.ResetBeforeStartFailures()
 
-	if detach {
-		if tf, _ := cmd.Flags().GetBool("tunnel"); tf {
-			msg := "--tunnel cannot be combined with --detach (tunnels run in-process); run `corgi tunnel` separately"
-			if utils.JSONOutput {
-				utils.JSONError(utils.ErrUnsupported, msg)
-			} else {
-				fmt.Fprintln(os.Stderr, msg)
-			}
-			os.Exit(1)
-		}
-	}
+	rejectTunnelWithDetachOrExit(cmd, detach)
 
 	if !detach {
-		stopSignalHandler := installSignalHandler(cmd)
-		defer stopSignalHandler()
-
-		watcher, err := setupComposeWatcher(cmd)
-		if err != nil {
-			fmt.Println(err)
+		cleanup, ok := startForegroundGuards(cmd)
+		if !ok {
 			return
 		}
-		if watcher != nil {
-			defer watcher.Close()
-		}
+		defer cleanup()
 	}
 
 	utils.CleanFromScratch(cmd, *corgi)
 
 	// After clone + fromScratch clean (so neither clobbers the worktree), before
 	// beforeStart/env/run read AbsolutePath.
-	if err := utils.MaterializeServiceWorktrees(cmd, corgi); err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, "❌", err)
-		}
-		os.Exit(1)
-	}
+	materializeWorktreesOrExit(cmd, corgi)
 
-	dockerFlag, _ := cmd.Flags().GetBool("docker")
-	resolved, err := utils.ResolveRunnerModes(corgi.Services, dockerFlag, true)
-	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, "❌", err)
-		}
-		os.Exit(1)
-	}
-	corgi.Services = resolved
-	hintDockerCapable(corgi.Services, dockerFlag)
+	resolveRunnerModesOrExit(cmd, corgi)
 
 	runPreflight(cmd, corgi)
 	runBeforeStart(corgi)
@@ -687,6 +616,98 @@ func runRun(cmd *cobra.Command, _ []string) {
 		utils.PrintJSON(buildRunSummary(corgi))
 	}
 	startAllServices(corgi, cmd)
+}
+
+func loadRunCompose(cmd *cobra.Command) *utils.CorgiCompose {
+	corgi, err := utils.GetCorgiServices(cmd)
+	if err != nil {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrConfig, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		if runReloading.Load() {
+			return nil
+		}
+		os.Exit(1)
+	}
+
+	if !utils.AbortOnValidationErrors(corgi) {
+		if runReloading.Load() {
+			return nil
+		}
+		os.Exit(1)
+	}
+	return corgi
+}
+
+func confirmTierOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) {
+	if err := confirmTier(cmd, corgi); err != nil {
+		exitWithError(utils.ErrUsage, err, 1)
+	}
+}
+
+// Service-port preflight (skip on hot-reload: that path manages its own lifecycle).
+func runPortPreflightOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) {
+	if runReloading.Load() {
+		return
+	}
+	killPort, _ := cmd.Flags().GetBool("kill-port")
+	if err := portPreflight(corgi, killPort); err != nil {
+		exitWithErrorPrefix(utils.ErrPortConflict, "❌", err, 1)
+	}
+}
+
+func cloneMissingRepos(services []utils.Service) {
+	if CheckClonedReposExistence(services) {
+		if failures := CloneServices(services); len(failures) > 0 {
+			utils.Info("⚠️  could not clone:", strings.Join(failures, ", "),
+				"— those services will fail to start")
+		}
+	}
+}
+
+func rejectTunnelWithDetachOrExit(cmd *cobra.Command, detach bool) {
+	if !detach {
+		return
+	}
+	if tf, _ := cmd.Flags().GetBool("tunnel"); tf {
+		exitWithError(utils.ErrUnsupported,
+			errors.New("--tunnel cannot be combined with --detach (tunnels run in-process); run `corgi tunnel` separately"), 1)
+	}
+}
+
+func startForegroundGuards(cmd *cobra.Command) (func(), bool) {
+	stopSignalHandler := installSignalHandler(cmd)
+
+	watcher, err := setupComposeWatcher(cmd)
+	if err != nil {
+		fmt.Println(err)
+		stopSignalHandler()
+		return nil, false
+	}
+	return func() {
+		if watcher != nil {
+			watcher.Close()
+		}
+		stopSignalHandler()
+	}, true
+}
+
+func materializeWorktreesOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) {
+	if err := utils.MaterializeServiceWorktrees(cmd, corgi); err != nil {
+		exitWithErrorPrefix(utils.ErrConfig, "❌", err, 1)
+	}
+}
+
+func resolveRunnerModesOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) {
+	dockerFlag, _ := cmd.Flags().GetBool("docker")
+	resolved, err := utils.ResolveRunnerModes(corgi.Services, dockerFlag, true)
+	if err != nil {
+		exitWithErrorPrefix(utils.ErrConfig, "❌", err, 1)
+	}
+	corgi.Services = resolved
+	hintDockerCapable(corgi.Services, dockerFlag)
 }
 
 func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
@@ -722,49 +743,59 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	// file is already written, so the services keep running and `corgi stop`
 	// still works even if the wait times out.
 	if wait, _ := cmd.Flags().GetBool("wait"); wait {
-		timeout, _ := cmd.Flags().GetDuration("wait-timeout")
-		remaining := timeout - time.Since(bootStartedAt)
-		if remaining <= 0 {
-			msg := fmt.Sprintf(
-				"%s: beforeStart alone took %s, over the %s budget — raise --wait-timeout or make the setup cheaper",
-				utils.ErrReadinessTimeout, time.Since(bootStartedAt).Round(time.Second), timeout)
-			if utils.JSONOutput {
-				utils.JSONError(utils.ErrReadinessTimeout, msg)
-			} else {
-				fmt.Fprintln(os.Stderr, "❌", msg)
-			}
-			os.Exit(1)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), remaining)
-		defer cancel()
-		// No-op unless --follow replaces it, so the failure path can stop the
-		// stream unconditionally.
-		stopFollow := func() {}
-		if follow, _ := cmd.Flags().GetBool("follow"); follow {
-			stopFollow = startLogFollow()
-			defer stopFollow()
-		}
-		if err := waitDetachedReady(ctx, corgi); err != nil {
-			// Stop the tail first: os.Exit skips defers, and a stream still
-			// running would interleave with the failure dump below.
-			stopFollow()
-			if utils.JSONOutput {
-				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
-			} else {
-				fmt.Fprintln(os.Stderr, "❌", err)
-			}
-			// The reason a boot failed is in the service logs, not up here.
-			if dump, _ := cmd.Flags().GetBool("dump-on-failure"); dump {
-				printFailureLogs()
-			}
-			os.Exit(1)
-		}
+		cleanup := waitDetachedReadyOrExit(cmd, corgi)
+		defer cleanup()
 	}
 
 	if utils.JSONOutput {
 		utils.PrintJSON(state)
 	} else {
 		utils.Infof("🐶 corgi running detached — %d service(s), state: %s\n", len(procs), statePath)
+	}
+}
+
+// waitDetachedReadyOrExit returns the cleanup the caller defers, so the log
+// follow and timeout context live until runDetached itself returns.
+func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func() {
+	timeout, _ := cmd.Flags().GetDuration("wait-timeout")
+	remaining := timeout - time.Since(bootStartedAt)
+	if remaining <= 0 {
+		msg := fmt.Sprintf(
+			"%s: beforeStart alone took %s, over the %s budget — raise --wait-timeout or make the setup cheaper",
+			utils.ErrReadinessTimeout, time.Since(bootStartedAt).Round(time.Second), timeout)
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrReadinessTimeout, msg)
+		} else {
+			fmt.Fprintln(os.Stderr, "❌", msg)
+		}
+		os.Exit(1)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), remaining)
+	stopFollow := func() {
+		// No-op unless --follow replaces it, so the failure path can
+		// stop the stream unconditionally.
+	}
+	if follow, _ := cmd.Flags().GetBool("follow"); follow {
+		stopFollow = startLogFollow()
+	}
+	if err := waitDetachedReady(ctx, corgi); err != nil {
+		// Stop the tail first: os.Exit skips defers, and a stream still
+		// running would interleave with the failure dump below.
+		stopFollow()
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrReadinessTimeout, err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, "❌", err)
+		}
+		// The reason a boot failed is in the service logs, not up here.
+		if dump, _ := cmd.Flags().GetBool("dump-on-failure"); dump {
+			printFailureLogs()
+		}
+		os.Exit(1)
+	}
+	return func() {
+		stopFollow()
+		cancel()
 	}
 }
 
@@ -806,21 +837,30 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 	}
 	prev = utils.ReconcileRunState(prev, utils.PidAlive, utils.ContainerRunning)
 	if force {
-		var dockerRunners []string
-		for _, s := range prev.Services {
-			if s.Status != "running" {
-				continue
-			}
-			if s.PID == 0 {
-				dockerRunners = append(dockerRunners, s.Name) // container, not a pgroup
-				continue
-			}
-			_ = stopProcessGroup(s)
-		}
-		utils.StopDockerRunnerServices(dockerRunners)
-		os.Remove(statePath)
+		forceStopPreviousRun(prev, statePath)
 		return false
 	}
+	exitIfDetachedStillRunning(prev)
+	return false
+}
+
+func forceStopPreviousRun(prev utils.RunState, statePath string) {
+	var dockerRunners []string
+	for _, s := range prev.Services {
+		if s.Status != "running" {
+			continue
+		}
+		if s.PID == 0 {
+			dockerRunners = append(dockerRunners, s.Name) // container, not a pgroup
+			continue
+		}
+		_ = stopProcessGroup(s)
+	}
+	utils.StopDockerRunnerServices(dockerRunners)
+	os.Remove(statePath)
+}
+
+func exitIfDetachedStillRunning(prev utils.RunState) {
 	for _, s := range prev.Services {
 		if s.Status == "running" {
 			msg := "corgi is already running for this project — stop or restart first (use --force to override)"
@@ -832,7 +872,6 @@ func detachAlreadyRunning(statePath string, force bool) bool {
 			os.Exit(1)
 		}
 	}
-	return false
 }
 
 func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
@@ -850,49 +889,63 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 		}
 		runDetachedBeforeStart(svc)
 
-		// docker-runner services run as containers (no tracked pid); reconcile
-		// and stop key off pid==0 and let cleanup bring them down.
-		if isDockerRunnable(svc) {
-			if svc.Runner.Watch {
-				if svc.ResolvedDockerSource == utils.SourceDockerfile {
-					utils.Infof("👀 %s: watch needs a foreground run — detached start skips it\n", svc.ServiceName)
-				} else {
-					utils.Infof("👀 %s: watch only applies to Dockerfile-built services — ignored\n", svc.ServiceName)
-				}
-			}
-			if err := dockerRunnerUp(svc.ServiceName); err != nil {
-				fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
-				continue
-			}
-			utils.FollowServiceContainerLogs(svc.ServiceName)
-			procs = append(procs, detachedProc{
-				name:    svc.ServiceName,
-				command: "make upd",
-				logFile: utils.LogFilePath(svc.ServiceName),
-				port:    svc.Port,
-			})
+		proc, ok := startDetachedService(svc)
+		if !ok {
 			continue
 		}
-
-		if len(svc.Start) == 0 {
-			continue
-		}
-		command := strings.Join(svc.Start, " && ")
-		proc, err := startDetachedFn(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(svc))
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
-			continue
-		}
-		procs = append(procs, detachedProc{
-			name:    svc.ServiceName,
-			command: command,
-			logFile: utils.LogFilePath(svc.ServiceName),
-			port:    svc.Port,
-			pid:     proc.Pid,
-			pgid:    proc.Pid,
-		})
+		procs = append(procs, proc)
 	}
 	return procs
+}
+
+func startDetachedService(svc utils.Service) (detachedProc, bool) {
+	// docker-runner services run as containers (no tracked pid); reconcile
+	// and stop key off pid==0 and let cleanup bring them down.
+	if isDockerRunnable(svc) {
+		return startDetachedDockerRunner(svc)
+	}
+	return startDetachedShellService(svc)
+}
+
+func startDetachedDockerRunner(svc utils.Service) (detachedProc, bool) {
+	if svc.Runner.Watch {
+		if svc.ResolvedDockerSource == utils.SourceDockerfile {
+			utils.Infof("👀 %s: watch needs a foreground run — detached start skips it\n", svc.ServiceName)
+		} else {
+			utils.Infof("👀 %s: watch only applies to Dockerfile-built services — ignored\n", svc.ServiceName)
+		}
+	}
+	if err := dockerRunnerUp(svc.ServiceName); err != nil {
+		fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
+		return detachedProc{}, false
+	}
+	utils.FollowServiceContainerLogs(svc.ServiceName)
+	return detachedProc{
+		name:    svc.ServiceName,
+		command: "make upd",
+		logFile: utils.LogFilePath(svc.ServiceName),
+		port:    svc.Port,
+	}, true
+}
+
+func startDetachedShellService(svc utils.Service) (detachedProc, bool) {
+	if len(svc.Start) == 0 {
+		return detachedProc{}, false
+	}
+	command := strings.Join(svc.Start, " && ")
+	proc, err := startDetachedFn(svc.ServiceName, command, svc.AbsolutePath, getServiceEnv(svc))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "failed to start", svc.ServiceName, ":", err)
+		return detachedProc{}, false
+	}
+	return detachedProc{
+		name:    svc.ServiceName,
+		command: command,
+		logFile: utils.LogFilePath(svc.ServiceName),
+		port:    svc.Port,
+		pid:     proc.Pid,
+		pgid:    proc.Pid,
+	}, true
 }
 
 // runServiceBeforeStart runs a service's beforeStart. When no step declares a
@@ -1404,12 +1457,8 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		return
 	}
 
-	if service.WaitsForDatabases() {
-		select {
-		case <-dbsReady:
-		case <-utils.ShutdownCh():
-			return
-		}
+	if !waitForDatabasesGate(service) {
+		return
 	}
 
 	waitForServiceDeps(service, signals)
@@ -1439,31 +1488,48 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 			// Nothing to probe — dependents waiting on `ready` proceed at once.
 			sig.markReady()
 		} else {
-			probeWG.Add(1)
-			go func() {
-				defer probeWG.Done()
-				ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
-				defer cancel()
-				done := make(chan struct{})
-				defer close(done)
-				// Abort the probe promptly if corgi is shutting down.
-				go func() {
-					select {
-					case <-utils.ShutdownCh():
-						cancel()
-					case <-done:
-					}
-				}()
-				err := utils.WaitForServiceReady(ctx, service)
-				sig.markReady()
-				if err == nil {
-					maybeOpenOnReady(service)
-				}
-			}()
+			launchReadinessProbe(service, sig, &probeWG)
 		}
 	}
 
 	startServiceProcess(service)
+}
+
+// waitForDatabasesGate reports false when shutdown interrupts the wait.
+func waitForDatabasesGate(service utils.Service) bool {
+	if !service.WaitsForDatabases() {
+		return true
+	}
+	select {
+	case <-dbsReady:
+		return true
+	case <-utils.ShutdownCh():
+		return false
+	}
+}
+
+func launchReadinessProbe(service utils.Service, sig *readySignal, probeWG *sync.WaitGroup) {
+	probeWG.Add(1)
+	go func() {
+		defer probeWG.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
+		defer cancel()
+		done := make(chan struct{})
+		defer close(done)
+		// Abort the probe promptly if corgi is shutting down.
+		go func() {
+			select {
+			case <-utils.ShutdownCh():
+				cancel()
+			case <-done:
+			}
+		}()
+		err := utils.WaitForServiceReady(ctx, service)
+		sig.markReady()
+		if err == nil {
+			maybeOpenOnReady(service)
+		}
+	}()
 }
 
 // waitForServiceDeps blocks until this service's gated dependencies reach their
@@ -1564,27 +1630,34 @@ func watchCorgiCompose(watcher *fsnotify.Watcher, cmd *cobra.Command) {
 		return
 	}
 
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				if event.Op&fsnotify.Write != fsnotify.Write {
-					continue
-				}
-				if handleComposeWriteEvent(watcher, cmd, event.Name) {
-					return
-				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				fmt.Println("Watcher error:", err)
+	go watchComposeEvents(watcher, cmd)
+}
+
+func watchComposeEvents(watcher *fsnotify.Watcher, cmd *cobra.Command) {
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
 			}
+			if handleComposeEvent(watcher, cmd, event) {
+				return
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			fmt.Println("Watcher error:", err)
 		}
-	}()
+	}
+}
+
+// handleComposeEvent reports true when watching should stop.
+func handleComposeEvent(watcher *fsnotify.Watcher, cmd *cobra.Command, event fsnotify.Event) bool {
+	if event.Op&fsnotify.Write != fsnotify.Write {
+		return false
+	}
+	return handleComposeWriteEvent(watcher, cmd, event.Name)
 }
 
 // setupLogWriters creates per-service log files under corgi_services/.logs/

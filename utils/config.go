@@ -503,18 +503,23 @@ func detectDuplicateComposeKeys(file []byte) []string {
 		if section != "services" && section != "db_services" && section != "required" {
 			continue
 		}
-		m := doc.Content[i+1]
-		if m.Kind != yaml.MappingNode {
-			continue
+		dups = append(dups, duplicateKeysInSection(section, doc.Content[i+1])...)
+	}
+	return dups
+}
+
+func duplicateKeysInSection(section string, m *yaml.Node) []string {
+	if m.Kind != yaml.MappingNode {
+		return nil
+	}
+	var dups []string
+	seen := map[string]bool{}
+	for j := 0; j+1 < len(m.Content); j += 2 {
+		key := m.Content[j].Value
+		if seen[key] {
+			dups = append(dups, fmt.Sprintf("%s.%s", section, key))
 		}
-		seen := map[string]bool{}
-		for j := 0; j+1 < len(m.Content); j += 2 {
-			key := m.Content[j].Value
-			if seen[key] {
-				dups = append(dups, fmt.Sprintf("%s.%s", section, key))
-			}
-			seen[key] = true
-		}
+		seen[key] = true
 	}
 	return dups
 }
@@ -872,6 +877,18 @@ func removeExceptSnapshots(path string) error {
 	if err != nil {
 		return err
 	}
+	keptAny, err := removeChildrenExceptSnapshots(path, entries)
+	if err != nil {
+		return err
+	}
+	if keptAny {
+		return nil
+	}
+	return os.Remove(path)
+}
+
+// removeChildrenExceptSnapshots reports whether anything under path was kept.
+func removeChildrenExceptSnapshots(path string, entries []os.DirEntry) (bool, error) {
 	keptAny := false
 	for _, e := range entries {
 		if e.IsDir() && e.Name() == "snapshots" {
@@ -879,7 +896,7 @@ func removeExceptSnapshots(path string) error {
 			continue
 		}
 		if err := removeExceptSnapshots(filepath.Join(path, e.Name())); err != nil {
-			return err
+			return false, err
 		}
 		if e.IsDir() {
 			if _, statErr := os.Lstat(filepath.Join(path, e.Name())); statErr == nil {
@@ -887,10 +904,7 @@ func removeExceptSnapshots(path string) error {
 			}
 		}
 	}
-	if keptAny {
-		return nil
-	}
-	return os.Remove(path)
+	return keptAny, nil
 }
 
 func CleanSnapshots() {
@@ -1001,27 +1015,7 @@ func getCorgiConfigFilePath() (string, error) {
 }
 
 func getCorgiConfigFromAlert() (string, error) {
-	var files []string
-	err := filepath.WalkDir(".", func(path string, directory fs.DirEntry, err error) error {
-		if err != nil {
-			fmt.Println(err)
-			return nil
-		}
-		if directory.IsDir() {
-			return nil
-		}
-		if filepath.Ext(path) != ".yml" && filepath.Ext(path) != ".yaml" {
-			return nil
-		}
-		if !strings.Contains(directory.Name(), "corgi") {
-			return nil
-		}
-
-		files = append(files, path)
-
-		return nil
-	})
-
+	files, err := findCorgiYamlFiles()
 	if err != nil {
 		fmt.Println(err)
 		return "", err
@@ -1046,6 +1040,30 @@ func getCorgiConfigFromAlert() (string, error) {
 	}
 
 	return file, nil
+}
+
+func findCorgiYamlFiles() ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(".", func(path string, directory fs.DirEntry, err error) error {
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		if directory.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".yml" && filepath.Ext(path) != ".yaml" {
+			return nil
+		}
+		if !strings.Contains(directory.Name(), "corgi") {
+			return nil
+		}
+
+		files = append(files, path)
+
+		return nil
+	})
+	return files, err
 }
 
 func determineCorgiComposePath(cobraCmd *cobra.Command) (string, error) {

@@ -44,43 +44,44 @@ func BuildDockerServiceData(s Service) (DockerServiceTemplateData, error) {
 	}
 
 	if s.ResolvedDockerSource == SourceRepoCompose {
-		d.RepoComposeFile = RepoComposeFile(s)
-		if d.RepoComposeFile == "" {
-			return d, fmt.Errorf("service %s: compose file disappeared from %s", s.ServiceName, s.AbsolutePath)
-		}
-		if len(RepoComposeServiceNames(d.RepoComposeFile)) > 0 {
-			d.OverrideFile = filepath.Join(
-				CorgiComposePathDir, RootServicesFolder, s.ServiceName, "corgi.env.override.yml",
-			)
-		}
-		return d, nil
+		err := fillRepoComposeData(&d, s)
+		return d, err
 	}
 
 	if s.ResolvedDockerSource == SourceImage {
-		d.Image = s.Runner.Image
-		d.ContainerPort = s.Runner.ContainerPort
-		if d.ContainerPort == 0 {
-			d.ContainerPort = s.Port
-		}
-		for _, v := range s.Runner.Volumes {
-			spec, named := resolveVolumeSpec(s.AbsolutePath, v)
-			d.Volumes = append(d.Volumes, spec)
-			if named != "" {
-				d.NamedVolumes = append(d.NamedVolumes, named)
-			}
-		}
+		fillImageData(&d, s)
 		return d, nil
 	}
 
-	d.Watch = s.Runner.Watch
-	context := s.AbsolutePath
-	if s.Runner.Context != "" {
-		if filepath.IsAbs(s.Runner.Context) {
-			context = s.Runner.Context
-		} else {
-			context = filepath.Join(s.AbsolutePath, s.Runner.Context)
-		}
+	fillDockerfileBuildData(&d, s)
+	return d, nil
+}
+
+func fillRepoComposeData(d *DockerServiceTemplateData, s Service) error {
+	d.RepoComposeFile = RepoComposeFile(s)
+	if d.RepoComposeFile == "" {
+		return fmt.Errorf("service %s: compose file disappeared from %s", s.ServiceName, s.AbsolutePath)
 	}
+	if len(RepoComposeServiceNames(d.RepoComposeFile)) > 0 {
+		d.OverrideFile = filepath.Join(
+			CorgiComposePathDir, RootServicesFolder, s.ServiceName, "corgi.env.override.yml",
+		)
+	}
+	return nil
+}
+
+func fillImageData(d *DockerServiceTemplateData, s Service) {
+	d.Image = s.Runner.Image
+	d.ContainerPort = s.Runner.ContainerPort
+	if d.ContainerPort == 0 {
+		d.ContainerPort = s.Port
+	}
+	appendRunnerVolumes(d, s)
+}
+
+func fillDockerfileBuildData(d *DockerServiceTemplateData, s Service) {
+	d.Watch = s.Runner.Watch
+	context := resolveBuildContext(s)
 	d.BuildContext = context
 
 	dockerfileAbs := filepath.Join(s.AbsolutePath, s.DockerfileName())
@@ -92,19 +93,43 @@ func BuildDockerServiceData(s Service) (DockerServiceTemplateData, error) {
 
 	d.ContainerPort = s.Runner.ContainerPort
 	if d.ContainerPort == 0 {
-		if exposed, err := GetExposedPortFromDockerfile(Service{
-			AbsolutePath: s.AbsolutePath,
-			Runner:       s.Runner,
-		}); err == nil {
-			if p, convErr := strconv.Atoi(exposed); convErr == nil {
-				d.ContainerPort = p
-			}
-		}
+		d.ContainerPort = exposedPortFromDockerfile(s)
 	}
 	if d.ContainerPort == 0 {
 		d.ContainerPort = s.Port
 	}
 
+	appendRunnerVolumes(d, s)
+}
+
+func resolveBuildContext(s Service) string {
+	context := s.AbsolutePath
+	if s.Runner.Context != "" {
+		if filepath.IsAbs(s.Runner.Context) {
+			context = s.Runner.Context
+		} else {
+			context = filepath.Join(s.AbsolutePath, s.Runner.Context)
+		}
+	}
+	return context
+}
+
+func exposedPortFromDockerfile(s Service) int {
+	exposed, err := GetExposedPortFromDockerfile(Service{
+		AbsolutePath: s.AbsolutePath,
+		Runner:       s.Runner,
+	})
+	if err != nil {
+		return 0
+	}
+	port, convErr := strconv.Atoi(exposed)
+	if convErr != nil {
+		return 0
+	}
+	return port
+}
+
+func appendRunnerVolumes(d *DockerServiceTemplateData, s Service) {
 	for _, v := range s.Runner.Volumes {
 		spec, named := resolveVolumeSpec(s.AbsolutePath, v)
 		d.Volumes = append(d.Volumes, spec)
@@ -112,7 +137,6 @@ func BuildDockerServiceData(s Service) (DockerServiceTemplateData, error) {
 			d.NamedVolumes = append(d.NamedVolumes, named)
 		}
 	}
-	return d, nil
 }
 
 // resolveVolumeSpec rewrites a relative host path in "host:container[:opts]"

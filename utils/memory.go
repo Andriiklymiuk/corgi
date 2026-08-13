@@ -96,32 +96,11 @@ func ReadFacts(root string) ([]Fact, error) {
 	}
 	var facts []Fact
 	for _, td := range typeDirs {
-		dir := filepath.Join(root, td.Dir)
-		entries, err := os.ReadDir(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
+		dirFacts, err := readFactsFromTypeDir(filepath.Join(root, td.Dir), td.Dir)
 		if err != nil {
 			return nil, err
 		}
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-				continue
-			}
-			p := filepath.Join(dir, e.Name())
-			raw, err := os.ReadFile(p)
-			if err != nil {
-				return nil, err
-			}
-			f, err := parseFact(raw, p)
-			if err != nil {
-				return nil, err
-			}
-			if f.Type == "" {
-				f.Type = typeForDir(td.Dir) // trust the folder when frontmatter omits it
-			}
-			facts = append(facts, f)
-		}
+		facts = append(facts, dirFacts...)
 	}
 	sort.SliceStable(facts, func(i, j int) bool {
 		if ri, rj := typeRank(facts[i].Type), typeRank(facts[j].Type); ri != rj {
@@ -130,6 +109,44 @@ func ReadFacts(root string) ([]Fact, error) {
 		return facts[i].Name < facts[j].Name
 	})
 	return facts, nil
+}
+
+// readFactsFromTypeDir loads the facts of one typed subdir; absent dir is empty.
+func readFactsFromTypeDir(dir, typeDir string) ([]Fact, error) {
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var facts []Fact
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		f, err := readFactFile(filepath.Join(dir, e.Name()), typeDir)
+		if err != nil {
+			return nil, err
+		}
+		facts = append(facts, f)
+	}
+	return facts, nil
+}
+
+func readFactFile(path, typeDir string) (Fact, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Fact{}, err
+	}
+	f, err := parseFact(raw, path)
+	if err != nil {
+		return Fact{}, err
+	}
+	if f.Type == "" {
+		f.Type = typeForDir(typeDir) // trust the folder when frontmatter omits it
+	}
+	return f, nil
 }
 
 func dirForType(t string) (string, bool) {
@@ -272,30 +289,37 @@ func LintFacts(root string) ([]MemoryIssue, []MemoryIssue) {
 		names[f.Name] = true
 	}
 	for _, f := range facts {
-		rel := f.Path
-		dir := filepath.Base(filepath.Dir(f.Path))
-		if f.Name == "" || f.Description == "" {
-			errs = append(errs, MemoryIssue{ErrMemoryNoFront, "missing name/description frontmatter", rel})
-			continue
-		}
-		stem := strings.TrimSuffix(filepath.Base(f.Path), ".md")
-		if f.Name != stem || !kebabRe.MatchString(f.Name) {
-			errs = append(errs, MemoryIssue{ErrMemoryBadName, "name must be kebab-case and match the filename", rel})
-		}
-		if want := typeForDir(dir); want != "" && f.Type != want {
-			errs = append(errs, MemoryIssue{ErrMemoryTypeMismatch,
-				fmt.Sprintf("type %q in %s/ (want %q)", f.Type, dir, want), rel})
-		}
-		for _, l := range f.Links {
-			if !names[l] {
-				warns = append(warns, MemoryIssue{ErrMemoryDanglingLink,
-					fmt.Sprintf("[[%s]] has no matching fact", l), rel})
-			}
-		}
+		factErrs, factWarns := lintFact(f, names)
+		errs = append(errs, factErrs...)
+		warns = append(warns, factWarns...)
 	}
 	// The secret scan covers EVERY .md under the store — loose files at the root and
 	// index.md included — so a hand-authored leak can't bypass the typed-subdir read.
 	errs = append(errs, scanStoreForSecrets(root)...)
+	return errs, warns
+}
+
+func lintFact(f Fact, names map[string]bool) ([]MemoryIssue, []MemoryIssue) {
+	rel := f.Path
+	dir := filepath.Base(filepath.Dir(f.Path))
+	if f.Name == "" || f.Description == "" {
+		return []MemoryIssue{{ErrMemoryNoFront, "missing name/description frontmatter", rel}}, nil
+	}
+	var errs, warns []MemoryIssue
+	stem := strings.TrimSuffix(filepath.Base(f.Path), ".md")
+	if f.Name != stem || !kebabRe.MatchString(f.Name) {
+		errs = append(errs, MemoryIssue{ErrMemoryBadName, "name must be kebab-case and match the filename", rel})
+	}
+	if want := typeForDir(dir); want != "" && f.Type != want {
+		errs = append(errs, MemoryIssue{ErrMemoryTypeMismatch,
+			fmt.Sprintf("type %q in %s/ (want %q)", f.Type, dir, want), rel})
+	}
+	for _, l := range f.Links {
+		if !names[l] {
+			warns = append(warns, MemoryIssue{ErrMemoryDanglingLink,
+				fmt.Sprintf("[[%s]] has no matching fact", l), rel})
+		}
+	}
 	return errs, warns
 }
 

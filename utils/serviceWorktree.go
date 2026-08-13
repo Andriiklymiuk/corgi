@@ -140,17 +140,12 @@ func EnsureServiceWorktree(repo, branch, dest string) (string, error) {
 		return preferSpelling(existing, dest), nil
 	}
 	if info, statErr := os.Stat(dest); statErr == nil && info.IsDir() {
-		if insideWorktree(dest) {
-			cur, _ := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD")
-			if cur != branch {
-				if err := gitRun(dest, "checkout", branch); err != nil {
-					return "", fmt.Errorf("reuse worktree %s on %s: %v", dest, branch, err)
-				}
-			}
-			return dest, nil
-		}
-		if err := os.RemoveAll(dest); err != nil {
+		dir, err := reuseOrRemoveWorktreeDir(dest, branch)
+		if err != nil {
 			return "", err
+		}
+		if dir != "" {
+			return dir, nil
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -160,6 +155,24 @@ func EnsureServiceWorktree(repo, branch, dest string) (string, error) {
 		return "", err
 	}
 	return dest, nil
+}
+
+// reuseOrRemoveWorktreeDir returns dest ready on branch, or "" after clearing a
+// stale non-worktree dir so the caller recreates it.
+func reuseOrRemoveWorktreeDir(dest, branch string) (string, error) {
+	if insideWorktree(dest) {
+		cur, _ := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD")
+		if cur != branch {
+			if err := gitRun(dest, "checkout", branch); err != nil {
+				return "", fmt.Errorf("reuse worktree %s on %s: %v", dest, branch, err)
+			}
+		}
+		return dest, nil
+	}
+	if err := os.RemoveAll(dest); err != nil {
+		return "", err
+	}
+	return "", nil
 }
 
 // preferSpelling returns dest when it names the same directory as path. git
@@ -245,29 +258,36 @@ func indexServices(corgi *CorgiCompose) map[string]*Service {
 
 func applyCheckoutPairs(byName map[string]*Service, pairs []string) error {
 	for _, pair := range pairs {
-		name, branch, err := cutServicePair(pair)
-		if err != nil {
-			return fmt.Errorf("--service-checkout %v", err)
+		if err := applyCheckoutPair(byName, pair); err != nil {
+			return err
 		}
-		svc, found := byName[name]
-		if !found {
-			return fmt.Errorf("--service-checkout: no service named %q in corgi-compose.yml", name)
-		}
-		if !isGitRepo(svc.AbsolutePath) {
-			return fmt.Errorf("--service-checkout %s: %s is not a git repository (run corgi init first)", name, name)
-		}
-		dirty, derr := isTreeDirty(svc.AbsolutePath)
-		if derr != nil {
-			return fmt.Errorf("--service-checkout %s: %v", name, derr)
-		}
-		if dirty {
-			return fmt.Errorf("--service-checkout %s: %s has uncommitted changes; commit/stash, or use --service-branch for an isolated worktree", name, name)
-		}
-		if err := gitRun(svc.AbsolutePath, "checkout", branch); err != nil {
-			return fmt.Errorf("--service-checkout %s: git checkout %s: %v", name, branch, err)
-		}
-		Info("service-checkout:", name, "→", branch, "(in place)")
 	}
+	return nil
+}
+
+func applyCheckoutPair(byName map[string]*Service, pair string) error {
+	name, branch, err := cutServicePair(pair)
+	if err != nil {
+		return fmt.Errorf("--service-checkout %v", err)
+	}
+	svc, found := byName[name]
+	if !found {
+		return fmt.Errorf("--service-checkout: no service named %q in corgi-compose.yml", name)
+	}
+	if !isGitRepo(svc.AbsolutePath) {
+		return fmt.Errorf("--service-checkout %s: %s is not a git repository (run corgi init first)", name, name)
+	}
+	dirty, derr := isTreeDirty(svc.AbsolutePath)
+	if derr != nil {
+		return fmt.Errorf("--service-checkout %s: %v", name, derr)
+	}
+	if dirty {
+		return fmt.Errorf("--service-checkout %s: %s has uncommitted changes; commit/stash, or use --service-branch for an isolated worktree", name, name)
+	}
+	if err := gitRun(svc.AbsolutePath, "checkout", branch); err != nil {
+		return fmt.Errorf("--service-checkout %s: git checkout %s: %v", name, branch, err)
+	}
+	Info("service-checkout:", name, "→", branch, "(in place)")
 	return nil
 }
 
@@ -380,14 +400,8 @@ func CheckoutFeatureBranch(repo, branch string) (bool, error) {
 		return false, nil
 	}
 	if !local {
-		spec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
-		args := []string{"fetch", "--no-tags"}
-		if isShallowRepo(repo) {
-			args = append(args, "--depth", "1")
-		}
-		args = append(args, "origin", spec)
-		if err := gitRunNoPrompt(repo, args...); err != nil {
-			return false, fmt.Errorf("fetch origin %s: %v", branch, err)
+		if err := fetchBranchFromOrigin(repo, branch); err != nil {
+			return false, err
 		}
 		if err := gitRun(repo, "checkout", "-B", branch, "refs/remotes/origin/"+branch); err != nil {
 			return false, fmt.Errorf("checkout %s: %v", branch, err)
@@ -398,6 +412,19 @@ func CheckoutFeatureBranch(repo, branch string) (bool, error) {
 		return false, fmt.Errorf("checkout %s: %v", branch, err)
 	}
 	return true, nil
+}
+
+func fetchBranchFromOrigin(repo, branch string) error {
+	spec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
+	args := []string{"fetch", "--no-tags"}
+	if isShallowRepo(repo) {
+		args = append(args, "--depth", "1")
+	}
+	args = append(args, "origin", spec)
+	if err := gitRunNoPrompt(repo, args...); err != nil {
+		return fmt.Errorf("fetch origin %s: %v", branch, err)
+	}
+	return nil
 }
 
 // EnsureFeatureWorktree materializes branch for repo when it exists locally or
@@ -412,14 +439,8 @@ func EnsureFeatureWorktree(repo, branch, dest string) (string, error) {
 		return "", nil
 	}
 	if !local {
-		spec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
-		args := []string{"fetch", "--no-tags"}
-		if isShallowRepo(repo) {
-			args = append(args, "--depth", "1")
-		}
-		args = append(args, "origin", spec)
-		if err := gitRunNoPrompt(repo, args...); err != nil {
-			return "", fmt.Errorf("fetch origin %s: %v", branch, err)
+		if err := fetchBranchFromOrigin(repo, branch); err != nil {
+			return "", err
 		}
 	}
 	return EnsureServiceWorktree(repo, branch, dest)

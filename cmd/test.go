@@ -78,21 +78,11 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(1)
+		exitWithError(utils.ErrConfig, err, 1)
 	}
 
 	if err := utils.MaterializeServiceWorktrees(cmd, corgi); err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(1)
+		exitWithError(utils.ErrConfig, err, 1)
 	}
 
 	serviceName, _ := cmd.Flags().GetString("service")
@@ -105,12 +95,7 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 
 	sel, err := resolveSelection(corgi, serviceName, profile)
 	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrServiceNotFound, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(2)
+		exitWithError(utils.ErrServiceNotFound, err, 2)
 	}
 
 	results, allPassed := runTests(corgi, sel, ensureDeps, readyTimeout)

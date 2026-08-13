@@ -222,25 +222,7 @@ func buildMissionFrame(snap MissionSnapshot, interval time.Duration, now time.Ti
 	var buf strings.Builder
 	buf.WriteString("🛰️  corgi mission-control\n")
 	for _, s := range snap.Services {
-		icon, color := "❌", art.RedColor
-		if s.Healthy {
-			icon, color = "✅", art.GreenColor
-		}
-		fmt.Fprintf(&buf, "  %s %s %-28s %-10s%s", color, icon, s.Name, s.RunState, art.WhiteColor)
-		if s.AgentWork != nil {
-			fmt.Fprintf(&buf, "  %s%s%s", art.CyanColor, s.AgentWork.Branch, art.WhiteColor)
-			if s.AgentWork.Dirty {
-				buf.WriteString(" *")
-			}
-			if pr := s.AgentWork.PR; pr != nil {
-				tag := pr.State
-				if pr.Draft {
-					tag = "draft"
-				}
-				fmt.Fprintf(&buf, "  PR #%d [%s] CI:%s", pr.Number, tag, pr.CI)
-			}
-		}
-		buf.WriteByte('\n')
+		writeMissionServiceLine(&buf, s)
 	}
 	footer := ""
 	if interval > 0 {
@@ -250,4 +232,30 @@ func buildMissionFrame(snap MissionSnapshot, interval time.Duration, now time.Ti
 		art.CyanColor, snap.Summary.Total, footer, snap.Summary.Up, snap.Summary.Down,
 		snap.Summary.WithOpenPR, now.Format("15:04:05"), art.WhiteColor)
 	return buf.String()
+}
+
+func writeMissionServiceLine(buf *strings.Builder, s MissionService) {
+	icon, color := "❌", art.RedColor
+	if s.Healthy {
+		icon, color = "✅", art.GreenColor
+	}
+	fmt.Fprintf(buf, "  %s %s %-28s %-10s%s", color, icon, s.Name, s.RunState, art.WhiteColor)
+	if s.AgentWork != nil {
+		writeMissionAgentWork(buf, s.AgentWork)
+	}
+	buf.WriteByte('\n')
+}
+
+func writeMissionAgentWork(buf *strings.Builder, work *utils.AgentWork) {
+	fmt.Fprintf(buf, "  %s%s%s", art.CyanColor, work.Branch, art.WhiteColor)
+	if work.Dirty {
+		buf.WriteString(" *")
+	}
+	if pr := work.PR; pr != nil {
+		tag := pr.State
+		if pr.Draft {
+			tag = "draft"
+		}
+		fmt.Fprintf(buf, "  PR #%d [%s] CI:%s", pr.Number, tag, pr.CI)
+	}
 }

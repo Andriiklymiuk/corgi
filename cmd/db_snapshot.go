@@ -14,16 +14,24 @@ import (
 
 func resolvePostgresService(name string, dbs []utils.DatabaseService) (utils.DatabaseService, error) {
 	if name != "" {
-		for _, d := range dbs {
-			if d.ServiceName == name {
-				if !utils.IsPostgresFamilyDriver(d.Driver) {
-					return d, fmt.Errorf("db snapshot/restore: driver %q is not supported — postgres-family only (postgres, postgis, pgvector, timescaledb)", d.Driver)
-				}
-				return d, nil
-			}
-		}
-		return utils.DatabaseService{}, fmt.Errorf("db_service %q not found", name)
+		return findNamedPostgresService(name, dbs)
 	}
+	return pickSolePostgresService(dbs)
+}
+
+func findNamedPostgresService(name string, dbs []utils.DatabaseService) (utils.DatabaseService, error) {
+	for _, d := range dbs {
+		if d.ServiceName == name {
+			if !utils.IsPostgresFamilyDriver(d.Driver) {
+				return d, fmt.Errorf("db snapshot/restore: driver %q is not supported — postgres-family only (postgres, postgis, pgvector, timescaledb)", d.Driver)
+			}
+			return d, nil
+		}
+	}
+	return utils.DatabaseService{}, fmt.Errorf("db_service %q not found", name)
+}
+
+func pickSolePostgresService(dbs []utils.DatabaseService) (utils.DatabaseService, error) {
 	var family []utils.DatabaseService
 	for _, d := range dbs {
 		if utils.IsPostgresFamilyDriver(d.Driver) {
@@ -74,23 +82,35 @@ func runDbSnapshot(cmd *cobra.Command, args []string) {
 	// --list / --rm manage existing snapshots; then the lone positional is the
 	// service. Otherwise args are [name] [service] and we create.
 	if snapList || snapRM != "" {
-		serviceArg := ""
-		if len(args) > 0 {
-			serviceArg = args[0]
-		}
-		svc, err := resolvePostgresService(serviceArg, corgi.DatabaseServices)
-		if err != nil {
-			utils.Info(err)
-			os.Exit(1)
-		}
-		if snapRM != "" {
-			removeSnapshot(svc.ServiceName, snapRM)
-		} else {
-			listSnapshots(svc.ServiceName)
-		}
+		manageSnapshots(args, corgi.DatabaseServices)
 		return
 	}
+	createSnapshot(args, corgi.DatabaseServices)
+}
 
+func resolvePostgresServiceOrExit(serviceArg string, dbs []utils.DatabaseService) utils.DatabaseService {
+	svc, err := resolvePostgresService(serviceArg, dbs)
+	if err != nil {
+		utils.Info(err)
+		os.Exit(1)
+	}
+	return svc
+}
+
+func manageSnapshots(args []string, dbs []utils.DatabaseService) {
+	serviceArg := ""
+	if len(args) > 0 {
+		serviceArg = args[0]
+	}
+	svc := resolvePostgresServiceOrExit(serviceArg, dbs)
+	if snapRM != "" {
+		removeSnapshot(svc.ServiceName, snapRM)
+	} else {
+		listSnapshots(svc.ServiceName)
+	}
+}
+
+func createSnapshot(args []string, dbs []utils.DatabaseService) {
 	name, serviceArg := "", ""
 	if len(args) > 0 {
 		name = args[0]
@@ -99,16 +119,12 @@ func runDbSnapshot(cmd *cobra.Command, args []string) {
 		serviceArg = args[1]
 	}
 
-	svc, err := resolvePostgresService(serviceArg, corgi.DatabaseServices)
-	if err != nil {
-		utils.Info(err)
-		os.Exit(1)
-	}
+	svc := resolvePostgresServiceOrExit(serviceArg, dbs)
 
 	if name == "" {
 		name = utils.DefaultSnapshotName(time.Now())
 	}
-	name, err = utils.SanitizeSnapshotName(name)
+	name, err := utils.SanitizeSnapshotName(name)
 	if err != nil {
 		utils.Info(err)
 		os.Exit(1)

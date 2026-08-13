@@ -6,8 +6,8 @@ description: Use when the user wants to ship work across a corgi-compose workspa
 # Corgi stories
 
 Work items — tracker issues (Linear/Jira) **or** a free-text feature — → spec each
-→ isolated branch(es) → tested + reviewed → **draft** PR/MR per repo → grouped
-report. Services, dirs, dependency order: all from `corgi-compose.yml`. Never
+→ isolated branch(es) → tested + reviewed → **draft** PR/MR per repo → review
+loop until clean (Phase 5.5) → grouped report. Services, dirs, dependency order: all from `corgi-compose.yml`. Never
 hard-code.
 
 ## Speed model
@@ -19,8 +19,8 @@ adjustment/bug fast path; complex stories add superpowers checkpoints.
   Cheap, guards the whole batch. Never skip — a clear up-front directive collapses
   it to inline diagnosis (Phase 2 fast-path): still confirms intent, no separate
   pause.
-- **No final gate.** Draft PR/MR: push, open draft, scoped review, report diff +
-  link; human flips to _ready_. Draft = not ready-for-review, no merge; CI still runs
+- **No final gate.** Draft PR/MR: push, open draft, scoped review, review loop
+  until clean (Phase 5.5), report diff + link; human flips to _ready_. Draft = not ready-for-review, no merge; CI still runs
   if the repo runs it on drafts.
 - **Pre-authorized autonomous run (opt-in).** Blanket approval up front — "I approve
   all changes", "just do it and open the PRs/MRs", "ship it and watch CI" — is standing
@@ -669,6 +669,28 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 - Canonical spec already on the tracker (Phase 1); PR/MR comment is a convenience
   copy.
 
+## Phase 5.5 — Review loop on the opened PRs/MRs (always, before the report)
+
+Phase 3.5 reviewed each story's raw diff mid-flight; this is the **closing check on
+the actual PRs/MRs** — run the **`review` skill** (the `/corgi-review` engine) on
+every PR/MR this run opened, don't just hand the reviewer the hint line. Skip
+blocked/failed stories.
+
+- One review run over the whole set when it spans services — keeps the
+  cross-service contract check; single PR → review it alone.
+- **Findings → fix, push, re-review.** Apply valid findings on the branch, re-run
+  the Phase 3 gate on any story whose code changed, push, review again. Wrong
+  finding → push back in the PR thread, don't blind-apply.
+- **Loop until a pass has zero blocking findings** — `0 findings — clean.` or a
+  totals line with `0 blocking` (nits you decline to apply don't keep the loop
+  alive). Cap ~3 rounds; still blocking → stop looping, surface the open findings
+  as _needs attention_ in the report (Stop rule).
+- **Cancelable.** "skip the review loop" / "just open the PRs" up front → skip the
+  phase; "stop the loop" mid-run (or any interrupt) → finish nothing further, keep
+  fixes already pushed. Report line stays honest: `review skipped` or
+  `✗ review open — round <n>: stopped by user`.
+- Still **draft-only** — a clean review is not a merge, human flips to ready.
+
 ### Grouped report (final output)
 
 `<subject>` = the PR/MR title **without** its trailing `[<issue-key>]` (Phase 5 puts
@@ -697,13 +719,31 @@ between stories.
   suggestions). Skip blocked/failed.
 - **CI line (when watched)** → one line per PR/MR after the link: `✓ CI green` or
   `✗ CI red — <failing job>`. Omit if CI wasn't watched.
+- **Review line** → one line per PR/MR after the link: `✓ review clean (<n> rounds)`,
+  `✗ review open — round <n>: <short finding or "stopped by user">`, or
+  `review skipped` when the phase was skipped up front (Phase 5.5 — one canonical
+  form, no variants).
 - **Blocked / failed** → no link, one line:
   `[<key>] <Service>: BLOCKED — <decision needed>` (or `needs attention — <reason>`, +
   the worktree `/tmp` path if partial work is parked there).
 - **Review-channel blurb (only when asked)** — user asks for a message for the
-  team's review channel → exactly two lines: `<Service>: <short title>` then the
-  bare PR/MR link. No pitch, no root-cause paragraph, no emoji, no "please review"
-  — the link unfurls; the channel convention is terse.
+  team's review channel → terse. No pitch, no root-cause paragraph, no emoji, no
+  "please review" — the link unfurls; the channel convention is terse.
+  - **Single-repo change** → two lines: `<Service>: <short title>` then the bare
+    PR/MR link.
+  - **Related multi-repo change** → one `<short title>` line for the whole change,
+    then one `<repo>: <bare link>` line per repo.
+  - **Unrelated changes never share a title** — each gets its own blurb, blank
+    line between:
+
+  ```
+  Profile: phone field + validation localized
+  api: https://github.com/<org>/api/pull/<n>
+  web: https://github.com/<org>/web/pull/<n>
+
+  api: fix pagination cursor on empty page
+  https://github.com/<org>/api/pull/<n>
+  ```
 
 ```
 [ABC-123] web: Remove address step from mobile signup

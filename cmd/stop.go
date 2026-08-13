@@ -76,6 +76,36 @@ func emitStopSummary(s stopSummary) {
 }
 
 func runStop(cmd *cobra.Command, _ []string) {
+	corgi := loadCorgiForStop(cmd)
+
+	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
+	st, ok := readReconciledRunState(statePath)
+	if !ok {
+		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
+		return
+	}
+
+	if stopService == "" && !anythingRunning(st) && !hasContainerBackedEntries(st) {
+		removeStateLocked(statePath)
+		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
+		return
+	}
+
+	summary := stopRunningServices(stopTargets(st, stopService), stopService == "")
+
+	if stopService == "" {
+		stopEntireStack(corgi, st, statePath)
+	} else {
+		stopSingleService(corgi, st, statePath, &summary)
+	}
+
+	emitStopSummary(summary)
+	if len(summary.Failed) > 0 {
+		os.Exit(1)
+	}
+}
+
+func loadCorgiForStop(cmd *cobra.Command) *utils.CorgiCompose {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		if utils.JSONOutput {
@@ -90,29 +120,24 @@ func runStop(cmd *cobra.Command, _ []string) {
 	if resolved, rerr := utils.ResolveRunnerModes(corgi.Services, false, false); rerr == nil {
 		corgi.Services = resolved
 	}
+	return corgi
+}
 
-	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
+func readReconciledRunState(statePath string) (utils.RunState, bool) {
 	if _, err := os.Stat(statePath); err != nil {
-		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
-		return
+		return utils.RunState{}, false
 	}
-
 	st, err := utils.ReadRunState(statePath)
 	if err != nil {
-		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
-		return
+		return utils.RunState{}, false
 	}
 	st = utils.ReconcileRunState(st, utils.PidAlive, utils.ContainerRunning)
 	// pid==0 entries are container-backed; pid reconciliation can't see them.
 	st = probeDockerRunnerServices(st, utils.IsPortListening, time.Now().UTC())
+	return st, true
+}
 
-	if stopService == "" && !anythingRunning(st) && !hasContainerBackedEntries(st) {
-		removeStateLocked(statePath)
-		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
-		return
-	}
-
-	targets := stopTargets(st, stopService)
+func stopRunningServices(targets []utils.RunStateEntry, wholeStack bool) stopSummary {
 	summary := stopSummary{Stopped: []string{}, Failed: []stopFailure{}}
 	for _, t := range targets {
 		if t.Kind != "service" {
@@ -121,47 +146,50 @@ func runStop(cmd *cobra.Command, _ []string) {
 		if t.Status != "running" {
 			continue
 		}
-		// pid==0 → docker-runner container; cleanup() brings it down, not a
-		// pgroup kill. Count it as stopped so the summary reflects reality.
-		if t.PID == 0 {
-			if stopService == "" {
-				summary.Stopped = append(summary.Stopped, t.Name)
-			}
-			continue
-		}
-		if err := stopProcessGroup(t); err != nil {
-			summary.Failed = append(summary.Failed, stopFailure{Name: t.Name, Error: err.Error()})
-			continue
-		}
-		summary.Stopped = append(summary.Stopped, t.Name)
+		stopServiceProcess(t, wholeStack, &summary)
 	}
+	return summary
+}
 
-	if stopService == "" {
-		cleanup(corgi)
-		utils.StopDockerRunnerServices(containerBackedNotInCompose(st, corgi))
-		if len(corgi.DatabaseServices) != 0 {
-			utils.ExecuteForEachService("down")
+func stopServiceProcess(t utils.RunStateEntry, wholeStack bool, summary *stopSummary) {
+	// pid==0 → docker-runner container; cleanup() brings it down, not a
+	// pgroup kill. Count it as stopped so the summary reflects reality.
+	if t.PID == 0 {
+		if wholeStack {
+			summary.Stopped = append(summary.Stopped, t.Name)
 		}
-		removeStateLocked(statePath)
-	} else {
-		if entry, ok := findStateEntry(st.Services, stopService); ok && entry.PID == 0 {
-			utils.StopDockerRunnerServices([]string{stopService})
-			summary.Stopped = append(summary.Stopped, stopService)
-		}
-		runServiceAfterStop(corgi, stopService)
-		if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
-			defer unlock()
-		}
-		st.Services = removeStateEntry(st.Services, stopService)
-		st.DBServices = removeStateEntry(st.DBServices, stopService)
-		if err := utils.WriteRunState(statePath, st); err != nil {
-			summary.Failed = append(summary.Failed, stopFailure{Name: stopService, Error: err.Error()})
-		}
+		return
 	}
+	if err := stopProcessGroup(t); err != nil {
+		summary.Failed = append(summary.Failed, stopFailure{Name: t.Name, Error: err.Error()})
+		return
+	}
+	summary.Stopped = append(summary.Stopped, t.Name)
+}
 
-	emitStopSummary(summary)
-	if len(summary.Failed) > 0 {
-		os.Exit(1)
+func stopEntireStack(corgi *utils.CorgiCompose, st utils.RunState, statePath string) {
+	cleanup(corgi)
+	utils.StopDockerRunnerServices(containerBackedNotInCompose(st, corgi))
+	if len(corgi.DatabaseServices) != 0 {
+		utils.ExecuteForEachService("down")
+	}
+	removeStateLocked(statePath)
+}
+
+func stopSingleService(corgi *utils.CorgiCompose, st utils.RunState, statePath string, summary *stopSummary) {
+	if entry, ok := findStateEntry(st.Services, stopService); ok && entry.PID == 0 {
+		utils.StopDockerRunnerServices([]string{stopService})
+		summary.Stopped = append(summary.Stopped, stopService)
+	}
+	runServiceAfterStop(corgi, stopService)
+	// unlock before the caller's os.Exit, so a failed stop can't strand the lock
+	if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
+		defer unlock()
+	}
+	st.Services = removeStateEntry(st.Services, stopService)
+	st.DBServices = removeStateEntry(st.DBServices, stopService)
+	if err := utils.WriteRunState(statePath, st); err != nil {
+		summary.Failed = append(summary.Failed, stopFailure{Name: stopService, Error: err.Error()})
 	}
 }
 

@@ -48,27 +48,10 @@ type buildResult struct {
 func runBuild(cmd *cobra.Command, _ []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, "couldn't get services config:", err)
-		}
-		os.Exit(1)
+		exitWithErrorPrefix(utils.ErrConfig, "couldn't get services config:", err, 1)
 	}
 
-	// Resolution reads the repo dir — a not-yet-cloned service would produce a
-	// misleading "no dockerfile found" error, so filter those out up front.
-	var cloned []utils.Service
-	var notCloned []string
-	for _, s := range corgi.Services {
-		if s.CloneFrom != "" {
-			if _, serr := os.Stat(s.AbsolutePath); serr != nil {
-				notCloned = append(notCloned, s.ServiceName)
-				continue
-			}
-		}
-		cloned = append(cloned, s)
-	}
+	cloned, notCloned := filterClonedServices(corgi.Services)
 	if len(notCloned) > 0 {
 		utils.Info("skipping not-yet-cloned services (run corgi init first):", notCloned)
 	}
@@ -77,20 +60,10 @@ func runBuild(cmd *cobra.Command, _ []string) {
 	// has a docker source, scripted or not.
 	resolved, rerr := utils.ResolveRunnerModes(cloned, true, false)
 	if rerr != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, rerr.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, "❌", rerr)
-		}
-		os.Exit(1)
+		exitWithErrorPrefix(utils.ErrConfig, "❌", rerr, 1)
 	}
 
-	var buildable []utils.Service
-	for _, s := range resolved {
-		if s.Runner.IsDocker() && s.ResolvedDockerSource != utils.SourceNone && s.Runner.Image == "" {
-			buildable = append(buildable, s)
-		}
-	}
+	buildable := selectBuildableServices(resolved)
 	if len(buildable) == 0 {
 		utils.Info("no docker-capable services to build")
 		if utils.JSONOutput {
@@ -104,6 +77,42 @@ func runBuild(cmd *cobra.Command, _ []string) {
 
 	utils.Info(art.BlueColor, fmt.Sprintf("🔨 building %d image(s) in parallel", len(buildable)), art.WhiteColor)
 
+	results := buildImagesInParallel(buildable)
+	failed := reportBuildResults(results)
+	if utils.JSONOutput {
+		utils.PrintJSON(results)
+	}
+	if failed > 0 {
+		os.Exit(1)
+	}
+}
+
+// Resolution reads the repo dir — a not-yet-cloned service would produce a
+// misleading "no dockerfile found" error, so filter those out up front.
+func filterClonedServices(services []utils.Service) (cloned []utils.Service, notCloned []string) {
+	for _, s := range services {
+		if s.CloneFrom != "" {
+			if _, serr := os.Stat(s.AbsolutePath); serr != nil {
+				notCloned = append(notCloned, s.ServiceName)
+				continue
+			}
+		}
+		cloned = append(cloned, s)
+	}
+	return cloned, notCloned
+}
+
+func selectBuildableServices(resolved []utils.Service) []utils.Service {
+	var buildable []utils.Service
+	for _, s := range resolved {
+		if s.Runner.IsDocker() && s.ResolvedDockerSource != utils.SourceNone && s.Runner.Image == "" {
+			buildable = append(buildable, s)
+		}
+	}
+	return buildable
+}
+
+func buildImagesInParallel(buildable []utils.Service) []buildResult {
 	if buildParallelism < 1 {
 		buildParallelism = 1
 	}
@@ -124,7 +133,10 @@ func runBuild(cmd *cobra.Command, _ []string) {
 		}(i, svc)
 	}
 	wg.Wait()
+	return results
+}
 
+func reportBuildResults(results []buildResult) int {
 	failed := 0
 	for _, r := range results {
 		if r.Ok {
@@ -134,10 +146,5 @@ func runBuild(cmd *cobra.Command, _ []string) {
 			utils.Info("❌", r.Name+":", r.Error)
 		}
 	}
-	if utils.JSONOutput {
-		utils.PrintJSON(results)
-	}
-	if failed > 0 {
-		os.Exit(1)
-	}
+	return failed
 }

@@ -524,8 +524,12 @@ LLM-generated title:**
 
 **Single PR** → one line `[<repo>] <summary headline>` + link, then counts.
 
-**Multi-PR** → per-PR line + link (same `[<repo>] <summary headline>` form,
-one per PR).
+**Multi-PR** → group by **related change**, not one flat list:
+- PRs of the **same change/story** (same issue key or branch across repos) → one
+  header `[<issue-key>] <change headline>`, then one `<repo>: <bare link> — <counts
+  or top finding>` line per repo.
+- **Unrelated targets in one batch never share a header** — each gets its own
+  block, blank line between.
 
 **Contract** section — whenever P3.5 ran (multi-PR set **or** a single monorepo
 PR crossing a service boundary) — lists cross-service findings and merge order
@@ -535,8 +539,11 @@ PR crossing a service boundary) — lists cross-service findings and merge order
 ```
 N findings: B blocking, K nits;  P posted inline, S folded into summary.
 ```
-Zero findings → `0 findings — clean.`. Wholly permission-blocked (scenario 6) →
-`0 posted — printed locally (no write access).`.
+Zero findings → `0 findings — clean.` — keep that form exact, and always print
+the totals line's `B blocking` count verbatim: a caller looping review → fix →
+re-review (`stories` P5.5) stops on `0 findings — clean.` **or** a totals line
+with `0 blocking` (nits alone don't keep its loop alive). Wholly
+permission-blocked (scenario 6) → `0 posted — printed locally (no write access).`.
 
 **Skipped** line — list every ref that was NOT reviewed and why (merged/closed and
 declined, blocked) so a skipped target isn't lost between P1 and the report.
@@ -553,11 +560,12 @@ you block it?").
 Example:
 
 ```
-[api] No blockers, 2 nits
-https://github.com/<org>/api/pull/42
+[ABC-200] Add address field to user
+api: https://github.com/<org>/api/pull/42 — no blockers, 2 nits
+web: https://github.com/<org>/web/pull/37 — 1 blocking: missing null-check on user.address
 
-[web] 1 blocking: missing null-check on user.address
-https://github.com/<org>/web/pull/37
+[api] Fix pagination cursor on empty page
+https://github.com/<org>/api/pull/45 — no blockers
 
 Contract
   api#42 + web#37: api adds address?: string | null; web reads .address without null guard (blocking, posted to both)

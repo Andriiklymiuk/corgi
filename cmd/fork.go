@@ -87,34 +87,16 @@ func runFork(cmd *cobra.Command, args []string) {
 	gitProviderFlag, _ := cmd.Flags().GetString("gitProvider")
 	servicesList := getListOfServicesWithClonedFrom(corgi.Services)
 
-	if utils.NonInteractive {
-		if err := validateForkSelection(shouldForkAllServices, serviceFlag, servicesList, gitProviderFlag, true); err != nil {
-			if utils.JSONOutput {
-				utils.JSONError(utils.ErrInteractiveReq, err.Error())
-			} else {
-				fmt.Fprintln(os.Stderr, err)
-			}
-			os.Exit(2)
-		}
-	}
+	ensureForkSelectionProvided(shouldForkAllServices, serviceFlag, gitProviderFlag, servicesList)
 
 	CloneServices(corgi.Services)
 
 	chosenService := serviceFlag
 
 	if !shouldForkAllServices && chosenService == "" {
-		backString := "🚫 abort"
-		chosenService, err = utils.PickItemFromListPrompt(
-			"Select command",
-			servicesList,
-			backString,
-		)
-		if err != nil {
-			if err.Error() == backString {
-				fmt.Println(art.RedColor, "Fork creation canceled", art.WhiteColor)
-				return
-			}
-			fmt.Println(art.RedColor, err, art.WhiteColor)
+		var ok bool
+		chosenService, ok = pickServiceToFork(servicesList)
+		if !ok {
 			return
 		}
 	}
@@ -125,6 +107,33 @@ func runFork(cmd *cobra.Command, args []string) {
 		return
 	}
 	UpdateCorgiComposeFileWithMap(corgiMap)
+}
+
+func ensureForkSelectionProvided(forkAll bool, serviceFlag, gitProviderFlag string, servicesList []string) {
+	if !utils.NonInteractive {
+		return
+	}
+	if err := validateForkSelection(forkAll, serviceFlag, servicesList, gitProviderFlag, true); err != nil {
+		exitWithError(utils.ErrInteractiveReq, err, 2)
+	}
+}
+
+func pickServiceToFork(servicesList []string) (string, bool) {
+	backString := "🚫 abort"
+	chosenService, err := utils.PickItemFromListPrompt(
+		"Select command",
+		servicesList,
+		backString,
+	)
+	if err != nil {
+		if err.Error() == backString {
+			fmt.Println(art.RedColor, "Fork creation canceled", art.WhiteColor)
+			return "", false
+		}
+		fmt.Println(art.RedColor, err, art.WhiteColor)
+		return "", false
+	}
+	return chosenService, true
 }
 
 type forkFlags struct {
