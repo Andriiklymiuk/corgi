@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -28,6 +30,7 @@ const agentDangerousBlockedMsg = "corgi_worktrees_* are disabled over a public t
 
 func registerAgentMCPTools(s *server.MCPServer) {
 	composeOpt := mcp.WithString("composePath", mcp.Description("compose path (default: cwd)"))
+	serviceOpt := mcp.WithString("service", mcp.Required(), mcp.Description("Service name"))
 
 	s.AddTool(mcp.NewTool("corgi_workspaces",
 		mcp.WithDescription(
@@ -76,6 +79,58 @@ func registerAgentMCPTools(s *server.MCPServer) {
 			return nil, fmt.Errorf("%s", agentDangerousBlockedMsg)
 		}
 		return mcpWorktreesRelease(r.GetString("composePath", ""), r.GetString("branch", ""))
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_preview_start",
+		mcp.WithDescription(
+			"Open a public tunnel to a running service so the user can watch it on their phone while you edit. "+
+				"Returns immediately with state \"starting\"; poll corgi_preview_state for the URL. "+
+				"The stack must already be up (corgi_up). Refused for a workspace marked sensitive. "+
+				"Prefer corgi_diff when the question is \"what changed\" — it needs no tunnel and survives bad signal."),
+		composeOpt,
+		serviceOpt,
+		mcp.WithString("branch", mcp.Description("Branch being previewed, recorded for context")),
+		mcp.WithString("provider", mcp.Description("Tunnel provider (cloudflared|ngrok|localtunnel)")),
+		mcp.WithString("tunnelName", mcp.Description("Named tunnel; gives a stable URL that survives a restart")),
+		mcp.WithNumber("idleMinutes", mcp.Description("Tear down after this long unwatched (default 20)")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return nil, fmt.Errorf("%s", agentDangerousBlockedMsg)
+		}
+		return mcpPreviewStart(r)
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_preview_state",
+		mcp.WithDescription(
+			"State of one preview, or all of them. States: starting (no URL yet), ready, broken (the tunnel is up "+
+				"but nothing answers on the port — usually a build in progress), stopped. "+
+				"Tell the user which state it is in rather than handing over a URL that shows a stack trace."),
+		composeOpt,
+		mcp.WithString("id", mcp.Description("Preview id or service name; omit for all")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpPreviewState(r.GetString("composePath", ""), r.GetString("id", ""))
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_preview_freeze",
+		mcp.WithDescription(
+			"Pin a preview so idle reaping leaves it alone while the user is reading it. Set frozen=false to release."),
+		composeOpt,
+		mcp.WithString("id", mcp.Required(), mcp.Description("Preview id or service name")),
+		mcp.WithBoolean("frozen", mcp.Description("Default true")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpPreviewFreeze(r.GetString("composePath", ""), r.GetString("id", ""), r.GetBool("frozen", true))
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_preview_stop",
+		mcp.WithDescription(
+			"Tear a preview down. Do this when the user is finished — a forgotten preview is a public URL onto seeded data."),
+		composeOpt,
+		mcp.WithString("id", mcp.Required(), mcp.Description("Preview id or service name")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return nil, fmt.Errorf("%s", agentDangerousBlockedMsg)
+		}
+		return mcpPreviewStop(r.GetString("composePath", ""), r.GetString("id", ""))
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_diff",
@@ -160,6 +215,90 @@ func mcpDiff(composePath, base, branch string, includePatch bool) (any, error) {
 		}
 	}
 	return utils.DiffStack(utils.ServiceDirs(corgi, set), base, includePatch), nil
+}
+
+func mcpPreviewStart(r mcp.CallToolRequest) (any, error) {
+	composePath := r.GetString("composePath", "")
+	corgi, dir, err := loadComposeForAgent(composePath)
+	if err != nil {
+		return nil, err
+	}
+	service := r.GetString("service", "")
+	port, ok := servicePort(corgi, service)
+	if !ok {
+		return nil, fmt.Errorf("%s: no service called %q in this stack", utils.ErrServiceNotFound, service)
+	}
+
+	// Reap first so a stale entry cannot masquerade as a live preview.
+	_, _ = utils.ReapPreviews(dir, time.Now())
+
+	return utils.StartPreview(utils.PreviewOptions{
+		ComposeDir:  dir,
+		Workspace:   corgi.Name,
+		Service:     service,
+		Branch:      r.GetString("branch", ""),
+		Port:        port,
+		Provider:    r.GetString("provider", ""),
+		TunnelName:  r.GetString("tunnelName", ""),
+		IdleMinutes: r.GetInt("idleMinutes", 0),
+		Sensitive:   workspaceIsSensitive(dir),
+	})
+}
+
+func mcpPreviewState(composePath, id string) (any, error) {
+	_, dir, err := loadComposeForAgent(composePath)
+	if err != nil {
+		return nil, err
+	}
+	reaped, _ := utils.ReapPreviews(dir, time.Now())
+	if id != "" {
+		p, perr := utils.PreviewStatus(dir, id)
+		if perr != nil {
+			return nil, perr
+		}
+		return p, nil
+	}
+	previews, lerr := utils.ListPreviews(dir)
+	if lerr != nil {
+		return nil, lerr
+	}
+	return map[string]any{"previews": previews, "reaped": reaped}, nil
+}
+
+func mcpPreviewFreeze(composePath, id string, frozen bool) (any, error) {
+	_, dir, err := loadComposeForAgent(composePath)
+	if err != nil {
+		return nil, err
+	}
+	return utils.FreezePreview(dir, id, frozen)
+}
+
+func mcpPreviewStop(composePath, id string) (any, error) {
+	_, dir, err := loadComposeForAgent(composePath)
+	if err != nil {
+		return nil, err
+	}
+	if err := utils.StopPreview(dir, id); err != nil {
+		return nil, err
+	}
+	return map[string]any{"stopped": id}, nil
+}
+
+// servicePort finds a service's declared port.
+func servicePort(corgi *utils.CorgiCompose, name string) (int, bool) {
+	for i := range corgi.Services {
+		if corgi.Services[i].ServiceName == name {
+			return corgi.Services[i].Port, true
+		}
+	}
+	return 0, false
+}
+
+// workspaceIsSensitive reads the committed repo config. A workspace may
+// restrict itself; that is the one thing the committed file is trusted for.
+func workspaceIsSensitive(dir string) bool {
+	repo, err := config.LoadRepo(dir)
+	return err == nil && repo != nil && repo.Workspace.Sensitive
 }
 
 // --- shared helpers ---

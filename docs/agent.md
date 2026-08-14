@@ -194,6 +194,10 @@ phone; they also work from any other MCP client.
 | `corgi_worktrees_materialize` | a worktree per repo, all on one branch |
 | `corgi_worktrees_release` | remove those worktrees, keep the branches |
 | `corgi_diff` | every repo's change against its base, in one response |
+| `corgi_preview_start` | open a public tunnel to a running service |
+| `corgi_preview_state` | starting / ready / broken / stopped, with the reason |
+| `corgi_preview_freeze` | pin it so idle reaping leaves it alone |
+| `corgi_preview_stop` | tear it down |
 
 `corgi_worktrees_*` mutate, so they join the same public-tunnel gate that
 already covers `corgi_exec` and `corgi_db_query`: over a tunnel they need
@@ -247,6 +251,56 @@ included — `git diff` alone says nothing about an untracked file, and creating
 files is the most common thing an agent does. `.gitignore` is respected, so an
 ignored secrets file never reaches a transcript. Very large patches are
 truncated rather than dropped.
+
+## Live preview
+
+A tunnel onto a service the agent is editing, so the change can be watched from
+a phone. corgi needs no refresh mechanism — the dev server already hot reloads.
+It needs to keep one tunnel open and be honest about the build state.
+
+```
+corgi_up                       # the stack must be running first
+corgi_preview_start { "service": "web", "branch": "feature/referral" }
+  → { "state": "starting" }    # returns immediately; no MCP handler may block
+corgi_preview_state
+  → { "state": "ready", "url": "https://kind-zebra-42.trycloudflare.com" }
+```
+
+The tunnel runs **detached**, writing to `corgi_services/.previews/<id>.log`,
+which is the same shape corgi already uses for detached services. So a preview
+outlives the session that started it, and a later corgi run can still find it.
+
+**States, because a banner beats a white screen.** Mid-task a worktree is often
+in a broken intermediate state — a half-written file, an import that does not
+resolve. `broken` means the tunnel is up but nothing answers on the port, which
+usually means a build in progress. Show that, rather than handing over a URL
+that renders a stack trace.
+
+**Freeze** pins a preview so idle reaping leaves it alone while someone is
+reading it. **Idle reaping** tears down anything unwatched for 20 minutes by
+default and actually kills the tunnel — a forgotten preview is a public URL onto
+seeded data.
+
+Tunnels are off unless asked for, and a workspace marked `sensitive` refuses one
+outright, pointing at `corgi_diff` instead.
+
+### What is not verified
+
+Being straight about this, because it decides whether the feature is worth
+using for your stack:
+
+- **Hot reload over a tunnel is unproven here.** Whether a dev server's HMR
+  websocket survives the round trip depends on the provider. If it does not,
+  you get a page that loads but does not update, which is worse than knowing.
+- **Vite and Next need the tunnel host allowed** (`allowedHosts` /
+  `allowedDevOrigins`) or every preview is a blocked-host error. corgi does not
+  inject that yet — add it to your dev server config.
+- **A quick tunnel changes URL when it restarts**, which breaks the link already
+  open on a phone. Use a named tunnel (`tunnelName`) for anything you want to
+  keep, and corgi reports `quickTunnel: true` so you know which you have.
+
+Try it by hand before relying on it. `corgi_diff` needs none of this and is the
+better answer to "what changed".
 
 ## Platform support
 
