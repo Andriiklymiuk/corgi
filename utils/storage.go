@@ -25,6 +25,21 @@ var (
 	storageFilePath string
 )
 
+// storagePathChosenByTest reports whether the current registry path was picked
+// by a test rather than derived from the user's real data directory. Comparing
+// against the real path keeps this correct however a test sets the seam, and
+// however many reads have already primed it.
+func storagePathChosenByTest() bool {
+	if storageFilePath == "" {
+		return false
+	}
+	dir, err := getDataPath()
+	if err != nil {
+		return true // cannot locate the real registry, so nothing to pollute
+	}
+	return storageFilePath != filepath.Join(dir, storageFileName)
+}
+
 type CorgiExecPath struct {
 	Name        string
 	Description string
@@ -39,14 +54,41 @@ func ensureDBPathExists(path string) error {
 	return nil
 }
 
+// CorgiDataDir is the per-user directory corgi keeps state in. Exported so
+// agent mode can put its files alongside the existing registry.
+func CorgiDataDir() (string, error) { return getDataPath() }
+
 func getDataPath() (string, error) {
+	// An explicit override wins everywhere, so an unusual install can point
+	// corgi at its real data directory instead of silently starting fresh.
+	if dir := strings.TrimSpace(os.Getenv("CORGI_DATA_DIR")); dir != "" {
+		return dir, nil
+	}
 	switch runtime.GOOS {
 	case "darwin":
-		brewPath, err := GetHomebrewBinPath()
+		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("failed to get Homebrew bin path: %w", err)
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
 		}
-		return filepath.Join(brewPath, "../var/corgi"), nil
+		// Keep using the historical brew location when it already holds data,
+		// so nobody loses their saved paths — but decide by looking at the
+		// filesystem, never by running `brew`. corgi runs unattended under
+		// launchd, whose PATH does not include brew: shelling out would give
+		// the daemon and the shell two different data directories, and the
+		// daemon would then read an empty registry.
+		//
+		// HOMEBREW_PREFIX covers a custom prefix, since `brew shellenv` exports
+		// it; CORGI_DATA_DIR is the explicit escape hatch when neither applies.
+		for _, prefix := range []string{os.Getenv("HOMEBREW_PREFIX"), "/opt/homebrew", "/usr/local"} {
+			if prefix == "" {
+				continue
+			}
+			legacy := filepath.Join(prefix, "var", "corgi")
+			if info, statErr := os.Stat(legacy); statErr == nil && info.IsDir() {
+				return legacy, nil
+			}
+		}
+		return filepath.Join(homeDir, "Library", "Application Support", "corgi"), nil
 	case "linux":
 		if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
 			return filepath.Join(xdgDataHome, "corgi"), nil
@@ -98,7 +140,26 @@ func ensureStorageInitialized() error {
 	return initializeStorage()
 }
 
+// runningUnderTest reports whether this process is a `go test` binary.
+//
+// Every compose parse calls SaveExecPath, so without this guard corgi's own
+// test suite writes its temp fixture directories into the user's real global
+// registry — which then shows up in `corgi list` and, worse, in agent mode's
+// workspace list.
+func runningUnderTest() bool {
+	return strings.HasSuffix(os.Args[0], ".test") ||
+		strings.Contains(os.Args[0], "/_test/") ||
+		os.Getenv("CORGI_DISABLE_EXEC_PATH_REGISTRY") == "1"
+}
+
 func SaveExecPath(name, description, path string) error {
+	if runningUnderTest() && !storagePathChosenByTest() {
+		// No test injected an explicit path, so this would hit the user's real
+		// registry. Skip rather than pollute it. Keyed on the injection flag,
+		// not on storageFilePath being empty: any earlier read primes that with
+		// the real path, which would silently re-enable the writes.
+		return nil
+	}
 	absolutePath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("failed to convert path to absolute: %w", err)

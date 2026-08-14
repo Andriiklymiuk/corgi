@@ -84,6 +84,7 @@ func canShowWelcomeMessages() bool {
 			arg == "version" ||
 			arg == "cache" ||
 			arg == "mcp" || // mcp owns stdout (JSON-RPC) — no banner allowed
+			arg == "agent" || // agent is a daemon and a status surface, not a greeting
 			arg == "__complete" ||
 			arg == "__completeNoDesc" ||
 			arg == "--silent" ||
@@ -152,6 +153,7 @@ func ClearTerminal() {
 			arg == "version" ||
 			arg == "cache" ||
 			arg == "mcp" ||
+			arg == "agent" ||
 			arg == "__complete" ||
 			arg == "__completeNoDesc" ||
 			arg == "--version" ||
