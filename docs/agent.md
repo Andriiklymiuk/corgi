@@ -309,6 +309,20 @@ using for your stack:
 Try it by hand before relying on it. `corgi_diff` needs none of this and is the
 better answer to "what changed".
 
+## Pairing a phone
+
+A phone reaches corgi over the MCP HTTP endpoint, and should never be handed the
+server's own bearer token — that token reaches `corgi_exec` and `corgi_db_query`.
+
+```bash
+corgi mcp --http 127.0.0.1:8765 --pair
+```
+
+prints a single-use code, valid two minutes, which a client exchanges once for
+its own revocable token. `corgi mcp devices revoke <name>` kills exactly one
+device without disturbing the others — which is the whole reason not to share
+one token. Full detail: [docs/mcp.md](mcp.md).
+
 ## Platform support
 
 | | supported |
