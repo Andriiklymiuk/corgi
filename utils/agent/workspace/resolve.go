@@ -159,23 +159,28 @@ func bestFuzzyMatch(w Workspace, query string) (Candidate, bool) {
 	return Candidate{}, false
 }
 
-// related reports whether two normalized strings refer to the same thing,
-// allowing either to be contained in the other so both "recipe" and
-// "the recipe app" reach a workspace called "recipe app".
+// related reports whether two normalized strings refer to the same thing.
+//
+// Matching is on whole words only. A raw substring test made "api" match
+// "rapid-prototype", and when that was the sole hit the resolver answered with
+// it confidently — exactly the wrong-repository outcome this package promises
+// never to produce.
 func related(value, query string) bool {
 	if value == "" || query == "" {
 		return false
 	}
-	if strings.Contains(value, query) || strings.Contains(query, value) {
-		return true
-	}
-	// Fall back to whole-word overlap so "fix the api" matches "api" without
-	// also matching every workspace whose name contains the letters a-p-i.
 	valueWords := strings.Fields(value)
 	queryWords := strings.Fields(query)
+
+	// One phrase containing the other, word for word: "recipe app" reached by
+	// "the recipe app", and vice versa.
+	if containsAllWords(valueWords, queryWords) || containsAllWords(queryWords, valueWords) {
+		return true
+	}
+	// Otherwise a shared whole word, long enough to identify something.
 	for _, v := range valueWords {
 		if len(v) < 3 {
-			continue // too short to identify anything on its own
+			continue
 		}
 		for _, q := range queryWords {
 			if v == q {
@@ -184,6 +189,23 @@ func related(value, query string) bool {
 		}
 	}
 	return false
+}
+
+// containsAllWords reports whether every word of want appears in have.
+func containsAllWords(have, want []string) bool {
+	if len(want) == 0 {
+		return false
+	}
+	set := make(map[string]bool, len(have))
+	for _, w := range have {
+		set[w] = true
+	}
+	for _, w := range want {
+		if !set[w] {
+			return false
+		}
+	}
+	return true
 }
 
 func allCandidates(r *Registry) []Candidate {

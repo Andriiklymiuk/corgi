@@ -257,6 +257,13 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	// mounted while a window is open.
 	var pairSession *pairing.Session
 	if opts.pair {
+		if deviceStore == "" {
+			// Without somewhere to record the device, pairing would consume the
+			// single-use code, fail to save, and leave a stray .tmp holding the
+			// token hash wherever corgi happened to be running.
+			fmt.Fprintln(os.Stderr, "corgi mcp --pair cannot be combined with --insecure, and needs a writable corgi data directory.")
+			os.Exit(2)
+		}
 		session, _, err := pairing.NewSession()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "could not start pairing:", err)
@@ -269,9 +276,15 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	srv := &http.Server{Addr: addr, Handler: mux}
 
-	if token == "" {
+	switch {
+	case token == "" && deviceStore != "":
+		// Paired devices make this endpoint authenticated even with no server
+		// token, which also means any existing tokenless client stops working.
+		fmt.Fprintln(os.Stderr, "corgi mcp --http requires a paired device token (see `corgi mcp devices`).")
+		fmt.Fprintln(os.Stderr, "Tokenless clients will be rejected; pass --token to keep one working, or --insecure for no auth.")
+	case token == "":
 		fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
-	} else {
+	default:
 		fmt.Fprintf(os.Stderr, "corgi mcp bearer token: %s\n", token)
 	}
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)

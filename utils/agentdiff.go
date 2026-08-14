@@ -71,17 +71,22 @@ func DiffStack(dirs map[string]string, base string, includePatch bool) *StackDif
 	}
 	sort.Strings(services)
 
-	// Two services can share a repository. Diffing it twice would list the same
-	// change twice and double the stack totals, so each directory is diffed
-	// once and the extra services are named on that entry.
-	byDir := map[string]int{}
+	// Two services can share a repository — including from different
+	// subdirectories of it. Keying on the raw service directory missed that and
+	// diffed the repo twice, listing every change twice and doubling the stack
+	// totals, so the key is the resolved git root.
+	byRoot := map[string]int{}
 	for _, svc := range services {
-		if i, seen := byDir[dirs[svc]]; seen {
+		key := dirs[svc]
+		if root, ok := repoRoot(key); ok {
+			key = root
+		}
+		if i, seen := byRoot[key]; seen {
 			out.Repos[i].AlsoServing = append(out.Repos[i].AlsoServing, svc)
 			continue
 		}
 		rd := diffRepo(svc, dirs[svc], base, includePatch)
-		byDir[dirs[svc]] = len(out.Repos)
+		byRoot[key] = len(out.Repos)
 		out.Repos = append(out.Repos, rd)
 		out.Additions += rd.Additions
 		out.Deletions += rd.Deletions

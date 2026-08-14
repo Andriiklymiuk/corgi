@@ -137,9 +137,10 @@ corgi agent status               # what is running, under which account
 `corgi agent doctor` output is already actionable — relay it rather than
 re-diagnosing.
 
-`corgi agent scan` registers what it finds but deliberately enables nothing.
-Tell the user to run `init` in the stacks they actually want supervised, rather
-than assuming a scan armed them.
+`corgi agent scan` registers what it finds but deliberately enables nothing —
+`autostart` is opt-in, and `corgi agent init` is what sets it. Tell the user to
+run `init` in the stacks they actually want supervised, rather than assuming a
+scan armed them. `corgi agent serve` names every workspace it skipped and why.
 
 ### If they run more than one Claude account
 

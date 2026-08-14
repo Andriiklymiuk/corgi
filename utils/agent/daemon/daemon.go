@@ -193,7 +193,10 @@ func (d *Daemon) Run(ctx context.Context, configs []supervisor.SpawnConfig) erro
 	// Stay up instead, reporting the disabled state, until asked to stop.
 	if ctx.Err() == nil {
 		utils.Info("agent: every workspace is disabled — staying up so `corgi agent status` can explain why")
-		_ = writeJSONAtomic(d.StatusPath(), d.Status())
+		// Nudge the publisher rather than writing here: both use the same
+		// status.json.tmp, and a torn file would make `corgi agent status` fail
+		// to parse exactly when it is needed to explain the disabled workspace.
+		d.requestPublish()
 		<-ctx.Done()
 	}
 	return ctx.Err()

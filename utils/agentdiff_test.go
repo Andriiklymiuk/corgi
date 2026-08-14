@@ -273,3 +273,28 @@ func TestServiceDirsWithoutWorktrees(t *testing.T) {
 		t.Errorf("api = %q", dirs["api"])
 	}
 }
+
+// Two services in different subdirectories of one repository are still one
+// repository. Keying the de-duplication on the raw service directory diffed it
+// twice and doubled the stack totals.
+func TestDiffCountsAServiceSharedRepoOnce(t *testing.T) {
+	repo := newRepo(t, filepath.Join(t.TempDir(), "monorepo"))
+	writeRepoFile(t, filepath.Join(repo, "packages", "api", "main.go"), "package main\n")
+	writeRepoFile(t, filepath.Join(repo, "packages", "web", "app.tsx"), "export {}\n")
+
+	got := DiffStack(map[string]string{
+		"api": filepath.Join(repo, "packages", "api"),
+		"web": filepath.Join(repo, "packages", "web"),
+	}, "main", true)
+
+	if len(got.Repos) != 1 {
+		t.Fatalf("repos = %d, want 1 — both services live in one repository", len(got.Repos))
+	}
+	if len(got.Repos[0].AlsoServing) != 1 {
+		t.Errorf("alsoServing = %v, want the second service named", got.Repos[0].AlsoServing)
+	}
+	if got.Additions != got.Repos[0].Additions {
+		t.Errorf("stack additions %d != repo additions %d; the repo was counted twice",
+			got.Additions, got.Repos[0].Additions)
+	}
+}

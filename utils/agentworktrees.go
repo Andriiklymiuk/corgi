@@ -208,15 +208,26 @@ func ExistingBranchWorktrees(corgi *CorgiCompose, composeDir, branch string) (*W
 		if !ok {
 			continue
 		}
-		dest := filepath.Join(base, worktreeDirName(root, branch))
-		if info, err := os.Stat(dest); err != nil || !info.IsDir() {
-			continue
+		// The main checkout counts when it is already on the branch: that is
+		// what materialize returns in that case, so requiring a directory under
+		// the worktree base would report "nothing here" for a repo that is
+		// correctly checked out, and re-running materialize could never fix it.
+		dir := ""
+		if head, err := gitOut(root, gitRevParse, gitAbbrevRef, "HEAD"); err == nil && head == branch {
+			dir = root
+		} else {
+			dest := filepath.Join(base, worktreeDirName(root, branch))
+			if info, statErr := os.Stat(dest); statErr == nil && info.IsDir() {
+				if h, herr := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); herr == nil && h == branch {
+					dir = dest
+				}
+			}
 		}
-		if head, err := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); err != nil || head != branch {
+		if dir == "" {
 			continue
 		}
 		set.Worktrees = append(set.Worktrees, RepoWorktree{
-			Service: svc.ServiceName, Repo: root, Branch: branch, Dir: dest,
+			Service: svc.ServiceName, Repo: root, Branch: branch, Dir: dir,
 		})
 	}
 	sort.Slice(set.Worktrees, func(i, j int) bool {
