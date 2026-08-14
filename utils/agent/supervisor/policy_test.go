@@ -1,0 +1,143 @@
+package supervisor
+
+import (
+	"testing"
+	"time"
+)
+
+func TestClassify(t *testing.T) {
+	healthy := 2 * time.Hour
+
+	tests := []struct {
+		name string
+		exit Exit
+		want ExitCause
+	}{
+		{
+			name: "requested stop wins over everything",
+			exit: Exit{Requested: true, Code: 1, Uptime: time.Second, Output: "not authenticated"},
+			want: CauseRequested,
+		},
+		{
+			name: "auth failure detected from output",
+			exit: Exit{Code: 1, Uptime: healthy, Output: "Remote Control requires a claude.ai subscription"},
+			want: CauseAuthFailure,
+		},
+		{
+			name: "auth marker matched case-insensitively",
+			exit: Exit{Code: 1, Uptime: healthy, Output: "ERROR: NOT AUTHENTICATED"},
+			want: CauseAuthFailure,
+		},
+		{
+			name: "auth failure beats a fast exit",
+			exit: Exit{Code: 1, Uptime: time.Second, Output: "run claude auth login"},
+			want: CauseAuthFailure,
+		},
+		{
+			name: "too-fast exit is a startup failure",
+			exit: Exit{Code: 1, Uptime: 3 * time.Second},
+			want: CauseStartupFailure,
+		},
+		{
+			name: "clean exit after a healthy run is the network timeout",
+			exit: Exit{Code: 0, Uptime: healthy},
+			want: CauseNetworkTimeout,
+		},
+		{
+			name: "non-zero exit after a healthy run is a crash",
+			exit: Exit{Code: 137, Uptime: healthy},
+			want: CauseCrash,
+		},
+		{
+			name: "exit exactly at the healthy boundary is not a startup failure",
+			exit: Exit{Code: 0, Uptime: MinHealthyUptime},
+			want: CauseNetworkTimeout,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Classify(tt.exit, 0); got != tt.want {
+				t.Errorf("Classify() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecideNetworkTimeoutRestartsAndTellsTheUser(t *testing.T) {
+	d := Decide(Exit{Code: 0, Uptime: time.Hour}, 0, 0)
+
+	if !d.Restart {
+		t.Error("network timeout must restart — it is the whole point of the supervisor")
+	}
+	if !d.Notify {
+		t.Error("a restart must notify: the previous session's context is gone, and silently pretending otherwise misleads the user")
+	}
+	if d.Disable {
+		t.Error("network timeout must not disable the workspace")
+	}
+}
+
+func TestDecideAuthFailureDoesNotLoop(t *testing.T) {
+	d := Decide(Exit{Code: 1, Uptime: time.Hour, Output: "requires a claude.ai subscription"}, 0, 0)
+
+	if d.Restart {
+		t.Error("auth failure must not restart: retrying cannot produce credentials")
+	}
+	if !d.Disable {
+		t.Error("auth failure must disable the workspace so doctor can explain it")
+	}
+	if !d.Notify {
+		t.Error("auth failure must notify once")
+	}
+}
+
+func TestDecideRequestedStopStaysStopped(t *testing.T) {
+	d := Decide(Exit{Requested: true, Code: 0, Uptime: time.Hour}, 0, 0)
+
+	if d.Restart {
+		t.Error("`corgi agent stop` must not be undone by the supervisor")
+	}
+	if d.Notify {
+		t.Error("a deliberate stop should not notify")
+	}
+}
+
+func TestDecideStopsAfterRepeatedStartupFailures(t *testing.T) {
+	fast := Exit{Code: 1, Uptime: time.Second}
+
+	for prior := 0; prior < MaxStartupFailures-1; prior++ {
+		if d := Decide(fast, prior, prior); !d.Restart {
+			t.Fatalf("with %d prior failures the supervisor should still retry", prior)
+		}
+	}
+
+	d := Decide(fast, MaxStartupFailures-1, MaxStartupFailures-1)
+	if d.Restart {
+		t.Error("a persistent startup failure must stop retrying")
+	}
+	if !d.Disable {
+		t.Error("a persistent startup failure must disable the workspace")
+	}
+}
+
+func TestBackoffIsCapped(t *testing.T) {
+	last := DefaultBackoff[len(DefaultBackoff)-1]
+
+	for _, attempt := range []int{len(DefaultBackoff), 50, 10000} {
+		if got := backoffFor(attempt); got != last {
+			t.Errorf("backoffFor(%d) = %v, want the capped %v", attempt, got, last)
+		}
+	}
+	if got := backoffFor(-1); got != DefaultBackoff[0] {
+		t.Errorf("backoffFor(-1) = %v, want %v", got, DefaultBackoff[0])
+	}
+}
+
+func TestBackoffIsMonotonic(t *testing.T) {
+	for i := 1; i < len(DefaultBackoff); i++ {
+		if DefaultBackoff[i] <= DefaultBackoff[i-1] {
+			t.Errorf("backoff step %d (%v) does not grow past %v", i, DefaultBackoff[i], DefaultBackoff[i-1])
+		}
+	}
+}
