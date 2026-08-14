@@ -31,6 +31,9 @@ type SpawnConfig struct {
 	InheritOAuthToken bool
 	// Name is the remote-control session name shown in claude.ai/code.
 	Name string
+	// WakeLock controls whether the machine is kept awake while this
+	// workspace's session runs. Empty means WakeLockSession.
+	WakeLock WakeLockMode
 }
 
 // credentialEnvVars are stripped from the child environment unless the
@@ -96,6 +99,10 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	}
 	if c.Capacity < 0 {
 		return fmt.Errorf("workspace %s: capacity cannot be negative", c.WorkspaceID)
+	}
+	if c.WakeLock != "" && !ValidWakeLockMode(c.WakeLock) {
+		return fmt.Errorf("workspace %s: unknown wakeLock %q (want always, off, session)",
+			c.WorkspaceID, c.WakeLock)
 	}
 	return nil
 }

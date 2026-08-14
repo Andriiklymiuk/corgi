@@ -65,6 +65,19 @@ type Exit struct {
 	Uptime    time.Duration
 	Output    string // tail of combined stdout/stderr
 	Requested bool   // true when corgi asked it to stop
+
+	// healthyAfter overrides MinHealthyUptime. Unexported so callers outside
+	// the package always get the documented threshold; tests set it to keep
+	// the suite fast.
+	healthyAfter time.Duration
+}
+
+// healthyThreshold is how long this run had to last to count as healthy.
+func (e Exit) healthyThreshold() time.Duration {
+	if e.healthyAfter > 0 {
+		return e.healthyAfter
+	}
+	return MinHealthyUptime
 }
 
 // Decision is what the supervisor does about an Exit.
@@ -86,7 +99,7 @@ func Classify(e Exit, consecutiveStartupFailures int) ExitCause {
 	if hasAuthFailureMarker(e.Output) {
 		return CauseAuthFailure
 	}
-	if e.Uptime < MinHealthyUptime {
+	if e.Uptime < e.healthyThreshold() {
 		return CauseStartupFailure
 	}
 	if e.Code == 0 {
