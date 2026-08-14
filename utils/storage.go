@@ -42,11 +42,17 @@ func ensureDBPathExists(path string) error {
 func getDataPath() (string, error) {
 	switch runtime.GOOS {
 	case "darwin":
-		brewPath, err := GetHomebrewBinPath()
-		if err != nil {
-			return "", fmt.Errorf("failed to get Homebrew bin path: %w", err)
+		// Prefer the historical brew location so nobody loses their saved paths
+		// on upgrade, but never depend on brew: corgi runs unattended under
+		// launchd, where a missing brew would leave the daemon with no state.
+		if brewPath, err := GetHomebrewBinPath(); err == nil {
+			return filepath.Join(brewPath, "../var/corgi"), nil
 		}
-		return filepath.Join(brewPath, "../var/corgi"), nil
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		return filepath.Join(homeDir, "Library", "Application Support", "corgi"), nil
 	case "linux":
 		if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
 			return filepath.Join(xdgDataHome, "corgi"), nil
