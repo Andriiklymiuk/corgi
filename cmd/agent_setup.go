@@ -68,13 +68,13 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_registry_write", err, 1)
 	}
 
-	if configDir != "" {
-		if err := setUserWorkspaceConfigDir(id, configDir); err != nil {
-			exitWithError("agent_write_user_config", err, 1)
-		}
+	// init is the deliberate opt-in, so it is what turns supervision on.
+	// `corgi agent scan` registers without arming anything.
+	if err := enableWorkspace(id, configDir); err != nil {
+		exitWithError("agent_write_user_config", err, 1)
 	}
 
-	utils.Infof("registered %s (%s)\n", id, cwd)
+	utils.Infof("registered %s (%s) and enabled it\n", id, cwd)
 	utils.Info("wrote .corgi/agent.yml — safe to commit, it holds identity only")
 	if configDir == "" {
 		utils.Info("no config dir set: this workspace uses your default Claude account.")
@@ -117,9 +117,9 @@ func writeRepoAgentConfig(dir, id string, aliases []string, sensitive bool) erro
 	return os.WriteFile(filepath.Join(target, "agent.yml"), append(header, body...), 0o644)
 }
 
-// setUserWorkspaceConfigDir records the Claude config directory for a workspace
-// in the trusted user-level file, creating it with owner-only permissions.
-func setUserWorkspaceConfigDir(id, configDir string) error {
+// enableWorkspace turns on supervision for a workspace, and records its Claude
+// config directory, in the trusted user-level file.
+func enableWorkspace(id, configDir string) error {
 	dir, err := agentDir()
 	if err != nil {
 		return err
@@ -130,7 +130,11 @@ func setUserWorkspaceConfigDir(id, configDir string) error {
 		return err
 	}
 	entry := user.Workspaces[id]
-	entry.ConfigDir = configDir
+	on := true
+	entry.Autostart = &on
+	if configDir != "" {
+		entry.ConfigDir = configDir
+	}
 	user.Workspaces[id] = entry
 
 	body, err := yaml.Marshal(user)
@@ -202,6 +206,7 @@ func runAgentScan(cmd *cobra.Command, args []string) {
 		exitWithError("agent_registry_write", err, 1)
 	}
 	utils.Infof("registered %d workspace(s)\n", added)
+	utils.Info("none of them are supervised yet — run `corgi agent init` in the ones you want running")
 }
 
 // skipDirs are never worth descending into when hunting for stacks.
@@ -366,7 +371,7 @@ func checkUserConfigPermissions(path string) agentCheck {
 	if err != nil {
 		return agentCheck{Name: "user config", Detail: err.Error()}
 	}
-	if mode := info.Mode().Perm(); mode&0o077 != 0 {
+	if mode := info.Mode().Perm(); runtime.GOOS != "windows" && mode&0o077 != 0 {
 		return agentCheck{
 			Name:   "user config",
 			Detail: fmt.Sprintf("%s is readable by other users (mode %04o)", path, mode),

@@ -42,10 +42,15 @@ again would be worse.
 
 ```bash
 cd ~/dev/your-stack
-corgi agent init                 # register this stack; writes .corgi/agent.yml
+corgi agent init                 # register AND enable this stack
 corgi agent install              # start at login (launchd / systemd)
 corgi agent status               # what is running, and under which account
 ```
+
+`corgi agent scan <dir>` registers stacks it finds but **does not enable them**.
+Supervision is opt-in per workspace: scanning a projects folder should not
+quietly spawn a Claude session for every stack in it. Run `corgi agent init` in
+the ones you actually want running.
 
 Then open the Claude app. Nothing to arm.
 
@@ -61,7 +66,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | command | what it does |
 |---|---|
 | `corgi agent init` | register this stack, write `.corgi/agent.yml` |
-| `corgi agent scan <dir>` | find stacks under a directory and register them |
+| `corgi agent scan <dir>` | find stacks under a directory and register them (does not enable) |
 | `corgi agent serve` | supervise Remote Control for every enabled workspace |
 | `corgi agent install` / `uninstall` | start (or stop starting) at login |
 | `corgi agent status [--json]` | what is running, restarts, which account |
@@ -296,8 +301,10 @@ using for your stack:
   `allowedDevOrigins`) or every preview is a blocked-host error. corgi does not
   inject that yet — add it to your dev server config.
 - **A quick tunnel changes URL when it restarts**, which breaks the link already
-  open on a phone. Use a named tunnel (`tunnelName`) for anything you want to
-  keep, and corgi reports `quickTunnel: true` so you know which you have.
+  open on a phone. Declare a named tunnel in the service's `tunnel:` block in
+  `corgi-compose.yml` for anything you want to keep open — there is no command
+  line flag for it — and corgi reports `quickTunnel: true` so you know which
+  kind you have.
 
 Try it by hand before relying on it. `corgi_diff` needs none of this and is the
 better answer to "what changed".

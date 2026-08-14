@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -11,8 +13,8 @@ import (
 func TestServiceFilesCarryNoSecrets(t *testing.T) {
 	// The literal templates, as installLaunchd and installSystemd render them.
 	rendered := []string{
-		renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/log", "/tmp/err"),
-		renderedSystemdUnit("/usr/local/bin/corgi"),
+		renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/log", "/tmp/err", "/usr/bin"),
+		renderedSystemdUnit("/usr/local/bin/corgi", "/usr/bin"),
 	}
 
 	forbidden := []string{
@@ -54,7 +56,7 @@ func TestInstallMechanismIsNamedHonestly(t *testing.T) {
 func TestServiceFilesDoNotFightTheSupervisorsOwnPolicy(t *testing.T) {
 	// Assert on the effective directives, not the prose: the comments in these
 	// templates deliberately name the settings they avoid.
-	plist := stripXMLComments(renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e"))
+	plist := stripXMLComments(renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", "/usr/bin"))
 	if strings.Contains(plist, "<key>SuccessfulExit</key>") {
 		t.Error("KeepAlive/SuccessfulExit=false restarts on every error exit, which is precisely the deliberate ones")
 	}
@@ -62,7 +64,7 @@ func TestServiceFilesDoNotFightTheSupervisorsOwnPolicy(t *testing.T) {
 		t.Error("the plist should still restart after a genuine crash")
 	}
 
-	unit := stripHashComments(renderedSystemdUnit("/usr/local/bin/corgi"))
+	unit := stripHashComments(renderedSystemdUnit("/usr/local/bin/corgi", "/usr/bin"))
 	if strings.Contains(unit, "Restart=always") {
 		t.Error("restarting on any exit turns a deliberate stop into a loop")
 	}
@@ -96,12 +98,53 @@ func stripHashComments(s string) string {
 }
 
 func TestPlistEscapesPathsThatWouldBreakTheXML(t *testing.T) {
-	plist := renderedLaunchdPlist(`/opt/A & B/<corgi>`, "/tmp/o", "/tmp/e")
+	plist := renderedLaunchdPlist(`/opt/A & B/<corgi>`, "/tmp/o", "/tmp/e", "/usr/bin")
 
 	if strings.Contains(plist, "A & B") {
 		t.Error("a raw & makes the plist invalid and launchctl bootstrap fails opaquely")
 	}
 	if !strings.Contains(plist, "A &amp; B") || !strings.Contains(plist, "&lt;corgi&gt;") {
 		t.Errorf("path was not escaped: %s", plist)
+	}
+}
+
+// launchd and systemd start services with a minimal PATH. Without an explicit
+// one the daemon cannot find `claude`, fails to start five times, disables the
+// workspace — and `corgi agent doctor` in the user's shell passes throughout.
+func TestServiceFilesSetAPATH(t *testing.T) {
+	plist := renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", "/opt/homebrew/bin:/usr/bin")
+	if !strings.Contains(plist, "<key>PATH</key>") || !strings.Contains(plist, "/opt/homebrew/bin") {
+		t.Errorf("plist does not set PATH: %s", plist)
+	}
+
+	unit := renderedSystemdUnit("/usr/local/bin/corgi", "/opt/homebrew/bin:/usr/bin")
+	if !strings.Contains(unit, "Environment=PATH=/opt/homebrew/bin:/usr/bin") {
+		t.Errorf("unit does not set PATH: %s", unit)
+	}
+}
+
+func TestServicePATHIncludesTheUsualClaudeLocations(t *testing.T) {
+	got := servicePATH()
+	for _, want := range []string{"/usr/local/bin", "/usr/bin"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("servicePATH() = %q, missing %q", got, want)
+		}
+	}
+	// The installing shell's PATH is where the user verified their setup.
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir != "" && !strings.Contains(got, dir) {
+			t.Errorf("servicePATH() dropped %q from the installing shell", dir)
+			break
+		}
+	}
+}
+
+func TestServicePATHHasNoDuplicates(t *testing.T) {
+	seen := map[string]bool{}
+	for _, dir := range filepath.SplitList(servicePATH()) {
+		if seen[dir] {
+			t.Errorf("duplicate entry %q", dir)
+		}
+		seen[dir] = true
 	}
 }

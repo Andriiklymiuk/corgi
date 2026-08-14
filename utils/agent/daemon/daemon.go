@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,8 +21,11 @@ import (
 // Info is the daemon's own record, written so `corgi agent status` and
 // `corgi agent stop` can find a running daemon from another process.
 type Info struct {
-	PID        int       `json:"pid"`
-	Version    string    `json:"version"`
+	PID     int    `json:"pid"`
+	Version string `json:"version"`
+	// Executable is recorded so a stale record cannot make `corgi agent stop`
+	// signal an unrelated process that happened to inherit the pid.
+	Executable string    `json:"executable,omitempty"`
 	StartedAt  time.Time `json:"startedAt"`
 	Workspaces []string  `json:"workspaces"`
 }
@@ -265,7 +269,8 @@ func diagnose(cfg supervisor.SpawnConfig, env []string) WorkspaceDiagnostic {
 
 // writeInfo records the daemon so other corgi processes can find it.
 func (d *Daemon) writeInfo(configs []supervisor.SpawnConfig) error {
-	info := Info{PID: os.Getpid(), Version: d.Version, StartedAt: time.Now().UTC()}
+	exe, _ := os.Executable()
+	info := Info{PID: os.Getpid(), Version: d.Version, Executable: exe, StartedAt: time.Now().UTC()}
 	for _, c := range configs {
 		info.Workspaces = append(info.Workspaces, c.WorkspaceID)
 	}
@@ -295,11 +300,33 @@ func ReadInfo(dir string) (*Info, error) {
 	if err := json.Unmarshal(data, &info); err != nil {
 		return nil, err
 	}
-	if info.PID <= 0 || !processAlive(info.PID) {
+	if info.PID <= 0 || !processAlive(info.PID) || !processMatchesRecord(info) {
+		// Either gone, or the pid has been recycled by something else. Treating
+		// it as absent is the safe reading: the alternative is signalling an
+		// unrelated process.
 		_ = os.Remove(path)
 		return nil, nil
 	}
 	return &info, nil
+}
+
+// processMatchesRecord checks that the pid is still running the binary that
+// wrote the record.
+//
+// Pids are recycled. Without this, a daemon.json left behind by an unclean exit
+// would make `corgi agent stop` SIGTERM whatever now holds that number, and
+// `corgi agent serve` would refuse to start because it believes a daemon is
+// already running.
+func processMatchesRecord(info Info) bool {
+	name, ok := processName(info.PID)
+	if !ok {
+		return true // cannot tell on this platform; do not invent a failure
+	}
+	if info.Executable == "" {
+		// Written by an older version. Fall back to the product name.
+		return strings.Contains(strings.ToLower(name), "corgi")
+	}
+	return strings.EqualFold(name, filepath.Base(info.Executable))
 }
 
 // processAlive is a plain liveness check. Unlike utils.PidAlive it does not
@@ -312,6 +339,9 @@ func processAlive(pid int) bool {
 	}
 	return processAliveOS(pid)
 }
+
+// itoa avoids a strconv import in the small platform files.
+func itoa(n int) string { return fmt.Sprint(n) }
 
 func writeJSONAtomic(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -96,12 +96,12 @@ func registerAgentMCPTools(s *server.MCPServer) {
 			"Open a public tunnel to a running service so the user can watch it on their phone while you edit. "+
 				"Returns immediately with state \"starting\"; poll corgi_preview_state for the URL. "+
 				"The stack must already be up (corgi_up). Refused for a workspace marked sensitive. "+
+				"A quick tunnel's URL changes if it restarts; declare a named tunnel in the service's tunnel: block for a stable one. "+
 				"Prefer corgi_diff when the question is \"what changed\" — it needs no tunnel and survives bad signal."),
 		composeOpt,
 		serviceOpt,
 		mcp.WithString("branch", mcp.Description("Branch being previewed, recorded for context")),
 		mcp.WithString("provider", mcp.Description("Tunnel provider (cloudflared|ngrok|localtunnel)")),
-		mcp.WithString("tunnelName", mcp.Description("Named tunnel; gives a stable URL that survives a restart")),
 		mcp.WithNumber("idleMinutes", mcp.Description("Tear down after this long unwatched (default 20)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
@@ -128,6 +128,11 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithString("id", mcp.Required(), mcp.Description("Preview id or service name")),
 		mcp.WithBoolean("frozen", mcp.Description("Default true")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		// Freezing disables idle reaping, which is what would otherwise close a
+		// forgotten public URL. Same gate as the rest.
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return nil, fmt.Errorf("%s", agentDangerousBlockedMsg)
+		}
 		return mcpPreviewFreeze(r.GetString("composePath", ""), r.GetString("id", ""), r.GetBool("frozen", true))
 	}))
 
@@ -254,7 +259,7 @@ func mcpPreviewStart(r mcp.CallToolRequest) (any, error) {
 		return nil, err
 	}
 	service := r.GetString("service", "")
-	port, ok := servicePort(corgi, service)
+	port, named, ok := serviceTunnelInfo(corgi, service)
 	if !ok {
 		return nil, fmt.Errorf("%s: no service called %q in this stack", utils.ErrServiceNotFound, service)
 	}
@@ -269,7 +274,7 @@ func mcpPreviewStart(r mcp.CallToolRequest) (any, error) {
 		Branch:      r.GetString("branch", ""),
 		Port:        port,
 		Provider:    r.GetString("provider", ""),
-		TunnelName:  r.GetString("tunnelName", ""),
+		NamedTunnel: named,
 		IdleMinutes: r.GetInt("idleMinutes", 0),
 		Sensitive:   workspaceIsSensitive(dir),
 	})
@@ -314,14 +319,17 @@ func mcpPreviewStop(composePath, id string) (any, error) {
 	return map[string]any{"stopped": id}, nil
 }
 
-// servicePort finds a service's declared port.
-func servicePort(corgi *utils.CorgiCompose, name string) (int, bool) {
+// serviceTunnelInfo returns a service's port and whether it declares a named
+// tunnel, which is what makes the preview URL survive a restart.
+func serviceTunnelInfo(corgi *utils.CorgiCompose, name string) (port int, named, found bool) {
 	for i := range corgi.Services {
-		if corgi.Services[i].ServiceName == name {
-			return corgi.Services[i].Port, true
+		svc := &corgi.Services[i]
+		if svc.ServiceName != name {
+			continue
 		}
+		return svc.Port, svc.Tunnel != nil && svc.Tunnel.Name != "", true
 	}
-	return 0, false
+	return 0, false, false
 }
 
 // workspaceIsSensitive reads the committed repo config. A workspace may

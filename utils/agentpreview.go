@@ -119,14 +119,17 @@ func SavePreviews(composeDir string, s *PreviewStore) error {
 
 // PreviewOptions configures a new preview.
 type PreviewOptions struct {
-	ComposeDir  string
-	Workspace   string
-	Service     string
-	Branch      string
-	Port        int
-	Provider    string // cloudflared | ngrok | localtunnel
-	TunnelName  string // named tunnel; empty means a quick tunnel
-	Hostname    string // named tunnel hostname
+	ComposeDir string
+	Workspace  string
+	Service    string
+	Branch     string
+	Port       int
+	Provider   string // cloudflared | ngrok | localtunnel
+	// NamedTunnel records that the service declares a named tunnel in its
+	// `tunnel:` block. corgi tunnel has no flag for this — it is compose
+	// configuration — but it is what keeps the URL stable across a restart, so
+	// the preview reports which kind the user has.
+	NamedTunnel bool
 	IdleMinutes int
 	// Sensitive refuses to open a public tunnel at all. Set from the
 	// workspace's committed config, which may restrict but never relax.
@@ -206,7 +209,7 @@ func StartPreview(opts PreviewOptions) (*Preview, error) {
 		StartedAt:     time.Now().UTC(),
 		LastTouched:   time.Now().UTC(),
 		IdleMinutes:   opts.IdleMinutes,
-		TunnelIsQuick: opts.TunnelName == "",
+		TunnelIsQuick: !opts.NamedTunnel,
 	}
 	store.Previews = append(store.Previews, p)
 	if err := SavePreviews(opts.ComposeDir, store); err != nil {
@@ -218,15 +221,14 @@ func StartPreview(opts PreviewOptions) (*Preview, error) {
 // spawnDetachedTunnel runs `corgi tunnel` in its own process group, writing to
 // a log file, so the preview survives the process that asked for it.
 func spawnDetachedTunnel(bin string, opts PreviewOptions, logFile string) (*os.Process, error) {
+	// `corgi tunnel` takes only --port and --provider. A named tunnel is
+	// configured in the service's `tunnel:` block in corgi-compose.yml, not on
+	// the command line: passing invented flags produced a process that exited
+	// immediately with "unknown flag", leaving a preview reporting "starting"
+	// against an already-dead pid.
 	args := []string{"tunnel", opts.Service}
 	if opts.Provider != "" {
 		args = append(args, "--provider", opts.Provider)
-	}
-	if opts.TunnelName != "" {
-		args = append(args, "--tunnel-name", opts.TunnelName)
-	}
-	if opts.Hostname != "" {
-		args = append(args, "--tunnel-hostname", opts.Hostname)
 	}
 
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
