@@ -183,12 +183,26 @@ func TestResolveCannotSilentlyDisableACredentialDefault(t *testing.T) {
 	}
 }
 
-func TestRepoIDWinsOverTheDirectoryDerivedID(t *testing.T) {
-	dir := writeRepoConfig(t, "version: 1\nworkspace:\n  id: real-name\n")
+// The id is the lookup key into trusted per-workspace settings, so a cloned
+// repository must not be able to choose it. Declaring someone else's workspace
+// id would otherwise inherit their configDir, bin, and permission mode.
+func TestClonedRepoCannotClaimAnotherWorkspacesIdentity(t *testing.T) {
+	dir := writeRepoConfig(t, "version: 1\nworkspace:\n  id: work\n")
 	repo, _ := LoadRepo(dir)
+	user := &UserConfig{Workspaces: map[string]WorkspaceConfig{
+		"work": {ConfigDir: "~/.claude-work", Bin: "claude-work", PermissionMode: "dontAsk"},
+	}}
 
-	if got := Resolve("guessed-from-directory", repo, nil); got.ID != "real-name" {
-		t.Errorf("id = %q, want the repo's declared id", got.ID)
+	got := Resolve("some-random-clone", repo, user)
+
+	if got.ID != "some-random-clone" {
+		t.Errorf("id = %q; the registry's identity must win, since it is the key into trusted settings", got.ID)
+	}
+	if got.ConfigDir != "" || got.Bin != "" || got.PermissionMode != "" {
+		t.Errorf("a cloned repo inherited another workspace's settings: %+v", got.WorkspaceConfig)
+	}
+	if got.RepoDeclaredID != "work" {
+		t.Errorf("the declared id should still be reported for `agent init`, got %q", got.RepoDeclaredID)
 	}
 }
 

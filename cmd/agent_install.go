@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"andriiklymiuk/corgi/utils"
 
@@ -115,6 +117,9 @@ func installLaunchd(binary, logDir string) {
 // credential material: files in ~/Library/LaunchAgents are world-readable and
 // land in backups, so the daemon reads its own config at start instead.
 func renderedLaunchdPlist(binary, outLog, errLog string) string {
+	// A path may contain & or <, which would produce an invalid plist and an
+	// opaque `launchctl bootstrap` failure.
+	binary, outLog, errLog = escapeXML(binary), escapeXML(outLog), escapeXML(errLog)
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -129,11 +134,16 @@ func renderedLaunchdPlist(binary, outLog, errLog string) string {
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
+	<!-- Restart only on an abnormal end. corgi decides for itself when a
+	     workspace should stay down (auth failure, repeated crashes), and
+	     SuccessfulExit=false would restart precisely those cases in a loop. -->
 	<key>KeepAlive</key>
 	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
+		<key>Crashed</key>
+		<true/>
 	</dict>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
 	<key>StandardOutPath</key>
 	<string>%s</string>
 	<key>StandardErrorPath</key>
@@ -185,7 +195,10 @@ After=network-online.target
 [Service]
 Type=simple
 ExecStart=%s agent serve
-Restart=always
+# corgi decides for itself when to stay down: an auth failure or a bad config
+# exits non-zero on purpose, so restarting on any failure would loop on exactly
+# the cases the supervisor deliberately gave up on.
+Restart=on-abnormal
 RestartSec=5
 
 [Install]
@@ -221,6 +234,15 @@ func runAgentUninstall(_ *cobra.Command, _ []string) {
 		utils.Infof("removed %s\n", unitPath)
 	}
 	utils.Info("corgi agent no longer starts at login")
+}
+
+// escapeXML makes a path safe to interpolate into the plist.
+func escapeXML(s string) string {
+	var b strings.Builder
+	if err := xml.EscapeText(&b, []byte(s)); err != nil {
+		return s
+	}
+	return b.String()
 }
 
 func currentUID() string { return fmt.Sprint(os.Getuid()) }

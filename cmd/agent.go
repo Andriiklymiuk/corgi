@@ -148,6 +148,11 @@ func spawnConfigFrom(w workspace.Workspace, r config.Resolved, foreground bool) 
 	}
 }
 
+// dirHasComposeFile reports whether dir is a corgi stack.
+//
+// It requires an actual compose file. An earlier version fell back to "is a
+// directory", which made the guard in `corgi agent init` dead: running it in
+// any folder registered that folder and the daemon then supervised it.
 func dirHasComposeFile(dir string) bool {
 	if dir == "" {
 		return false
@@ -157,8 +162,7 @@ func dirHasComposeFile(dir string) bool {
 			return true
 		}
 	}
-	info, err := os.Stat(dir)
-	return err == nil && info.IsDir()
+	return false
 }
 
 // printStartupDiagnostics is the one line per workspace that prevents the most

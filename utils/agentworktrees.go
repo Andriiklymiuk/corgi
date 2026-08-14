@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // A corgi stack spans several repositories. Claude Code's Remote Control makes
@@ -63,39 +65,70 @@ func MaterializeBranchAcrossRepos(corgi *CorgiCompose, composeDir, branch string
 	EnsureCorgiServicesIgnore(corgiServices, ".worktrees/")
 
 	set := &WorktreeSet{Branch: branch}
-	byRepo := map[string]string{} // repo root → worktree dir, so shared repos agree
+
+	// Collect the distinct repositories first. Two services can share one, and
+	// git allows a branch in exactly one worktree, so each repo is prepared once.
+	type target struct {
+		root     string
+		services []string
+	}
+	var order []string
+	byRoot := map[string]*target{}
+	var skipped []RepoWorktree
 
 	for i := range corgi.Services {
 		svc := &corgi.Services[i]
 		if len(wanted) > 0 && !wanted[svc.ServiceName] {
 			continue
 		}
-		entry := RepoWorktree{Service: svc.ServiceName, Branch: branch}
-
 		root, ok := repoRoot(svc.AbsolutePath)
 		if !ok {
-			entry.Skipped = "not a git repository"
-			set.Worktrees = append(set.Worktrees, entry)
+			skipped = append(skipped, RepoWorktree{
+				Service: svc.ServiceName, Branch: branch, Skipped: "not a git repository",
+			})
 			continue
 		}
-		entry.Repo = root
+		if t, seen := byRoot[root]; seen {
+			t.services = append(t.services, svc.ServiceName)
+			continue
+		}
+		byRoot[root] = &target{root: root, services: []string{svc.ServiceName}}
+		order = append(order, root)
+	}
 
-		if dir, seen := byRepo[root]; seen {
-			entry.Dir = dir
-			set.Worktrees = append(set.Worktrees, entry)
-			continue
-		}
+	// Prepare repositories concurrently. Each one may consult origin, which is
+	// bounded but not instant, and this runs inside an MCP handler holding a
+	// process-wide lock — so the cost must be the slowest repository, never the
+	// sum of them.
+	type result struct {
+		dir     string
+		created bool
+		err     error
+	}
+	results := make([]result, len(order))
+	var wg sync.WaitGroup
+	for i, root := range order {
+		wg.Add(1)
+		go func(i int, root string) {
+			defer wg.Done()
+			dest := filepath.Join(base, worktreeDirName(root, branch))
+			dir, created, err := ensureWorkBranchWorktree(root, branch, dest)
+			results[i] = result{dir: dir, created: created, err: err}
+		}(i, root)
+	}
+	wg.Wait()
 
-		dest := filepath.Join(base, worktreeDirName(root, branch))
-		dir, created, err := ensureWorkBranchWorktree(root, branch, dest)
-		if err != nil {
-			entry.Skipped = err.Error()
+	set.Worktrees = append(set.Worktrees, skipped...)
+	for i, root := range order {
+		for _, svc := range byRoot[root].services {
+			entry := RepoWorktree{Service: svc, Repo: root, Branch: branch}
+			if results[i].err != nil {
+				entry.Skipped = results[i].err.Error()
+			} else {
+				entry.Dir, entry.Created = results[i].dir, results[i].created
+			}
 			set.Worktrees = append(set.Worktrees, entry)
-			continue
 		}
-		entry.Dir, entry.Created = dir, created
-		byRepo[root] = dir
-		set.Worktrees = append(set.Worktrees, entry)
 	}
 
 	sort.Slice(set.Worktrees, func(i, j int) bool {
@@ -142,6 +175,41 @@ func ensureWorkBranchWorktree(repo, branch, dest string) (dir string, created bo
 	return dest, true, nil
 }
 
+// ExistingBranchWorktrees reports the worktrees a branch already has, without
+// creating anything and without touching the network.
+//
+// corgi_diff uses this: that tool is advertised as read-only and is ungated, so
+// it must not become a way around the gate on materialize.
+func ExistingBranchWorktrees(corgi *CorgiCompose, composeDir, branch string) (*WorktreeSet, error) {
+	if err := validateBranchName(branch); err != nil {
+		return nil, err
+	}
+	base := AgentWorktreeBase(composeDir)
+	set := &WorktreeSet{Branch: branch}
+
+	for i := range corgi.Services {
+		svc := &corgi.Services[i]
+		root, ok := repoRoot(svc.AbsolutePath)
+		if !ok {
+			continue
+		}
+		dest := filepath.Join(base, worktreeDirName(root, branch))
+		if info, err := os.Stat(dest); err != nil || !info.IsDir() {
+			continue
+		}
+		if head, err := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); err != nil || head != branch {
+			continue
+		}
+		set.Worktrees = append(set.Worktrees, RepoWorktree{
+			Service: svc.ServiceName, Repo: root, Branch: branch, Dir: dest,
+		})
+	}
+	sort.Slice(set.Worktrees, func(i, j int) bool {
+		return set.Worktrees[i].Service < set.Worktrees[j].Service
+	})
+	return set, nil
+}
+
 // ReleaseBranchWorktrees removes the worktrees a branch materialized, leaving
 // the branches themselves alone — the work is usually the point.
 func ReleaseBranchWorktrees(composeDir, branch string) ([]string, error) {
@@ -164,6 +232,12 @@ func ReleaseBranchWorktrees(composeDir, branch string) ([]string, error) {
 			continue
 		}
 		dest := filepath.Join(base, e.Name())
+		// The directory name is a flattened branch, so feature/login and
+		// feature-login collide there. Confirm against the real HEAD before
+		// force-removing someone else's worktree.
+		if head, herr := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); herr == nil && head != branch {
+			continue
+		}
 		common, cerr := gitOut(dest, gitRevParse, "--path-format=absolute", "--git-common-dir")
 		if cerr == nil && common != "" {
 			repo := filepath.Dir(common)
@@ -183,8 +257,14 @@ func ReleaseBranchWorktrees(composeDir, branch string) ([]string, error) {
 
 // worktreeDirName keeps repo and branch in the directory name so a release can
 // find exactly the worktrees a branch created.
+//
+// The repo's basename alone is not unique — a stack can contain ~/work/api and
+// ~/oss/api — so a short hash of the full path is appended. Without it both
+// services would resolve to the same destination and the second would silently
+// be pointed at the first repository's worktree.
 func worktreeDirName(repo, branch string) string {
-	return filepath.Base(repo) + "@" + branchDirSegment(branch)
+	sum := sha256.Sum256([]byte(repo))
+	return fmt.Sprintf("%s-%x@%s", filepath.Base(repo), sum[:3], branchDirSegment(branch))
 }
 
 // branchDirSegment flattens a branch name into one path segment.

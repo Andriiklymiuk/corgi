@@ -47,3 +47,61 @@ func TestInstallMechanismIsNamedHonestly(t *testing.T) {
 		t.Error("an unsupported platform must say so rather than naming a mechanism it cannot use")
 	}
 }
+
+// corgi decides for itself when a workspace should stay down — an auth failure
+// or repeated crashes. A service manager configured to restart on any non-zero
+// exit would undo exactly those decisions in a loop.
+func TestServiceFilesDoNotFightTheSupervisorsOwnPolicy(t *testing.T) {
+	// Assert on the effective directives, not the prose: the comments in these
+	// templates deliberately name the settings they avoid.
+	plist := stripXMLComments(renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e"))
+	if strings.Contains(plist, "<key>SuccessfulExit</key>") {
+		t.Error("KeepAlive/SuccessfulExit=false restarts on every error exit, which is precisely the deliberate ones")
+	}
+	if !strings.Contains(plist, "<key>Crashed</key>") {
+		t.Error("the plist should still restart after a genuine crash")
+	}
+
+	unit := stripHashComments(renderedSystemdUnit("/usr/local/bin/corgi"))
+	if strings.Contains(unit, "Restart=always") {
+		t.Error("restarting on any exit turns a deliberate stop into a loop")
+	}
+	if !strings.Contains(unit, "Restart=on-abnormal") {
+		t.Error("the unit should still restart after an abnormal end")
+	}
+}
+
+func stripXMLComments(s string) string {
+	for {
+		start := strings.Index(s, "<!--")
+		if start < 0 {
+			return s
+		}
+		end := strings.Index(s[start:], "-->")
+		if end < 0 {
+			return s[:start]
+		}
+		s = s[:start] + s[start+end+3:]
+	}
+}
+
+func stripHashComments(s string) string {
+	var kept []string
+	for _, line := range strings.Split(s, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "#") {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+func TestPlistEscapesPathsThatWouldBreakTheXML(t *testing.T) {
+	plist := renderedLaunchdPlist(`/opt/A & B/<corgi>`, "/tmp/o", "/tmp/e")
+
+	if strings.Contains(plist, "A & B") {
+		t.Error("a raw & makes the plist invalid and launchctl bootstrap fails opaquely")
+	}
+	if !strings.Contains(plist, "A &amp; B") || !strings.Contains(plist, "&lt;corgi&gt;") {
+		t.Errorf("path was not escaped: %s", plist)
+	}
+}
