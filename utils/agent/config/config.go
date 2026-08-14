@@ -117,13 +117,25 @@ func LoadUser(path string) (*UserConfig, error) {
 
 // Resolved is the merged settings for one workspace.
 type Resolved struct {
-	ID        string
-	Aliases   []string
-	Sensitive bool
+	// ID is the registry's identity for this workspace. Trusted.
+	ID string
+	// RepoDeclaredID is whatever the committed file called itself. Untrusted:
+	// useful to `corgi agent init`, never used to look up settings.
+	RepoDeclaredID string
+	Aliases        []string
+	Sensitive      bool
 	WorkspaceConfig
 }
 
 // Resolve merges the two files under the restrict-never-relax rule.
+//
+// id comes from the local registry and is the TRUSTED identity. The repo file
+// may not change it, because the id is the lookup key into the trusted
+// per-workspace settings: a cloned repository declaring `id: work` would
+// otherwise inherit that workspace's configDir, bin, and permissionMode —
+// the exact escalation this split exists to prevent. RepoDeclaredID is
+// reported separately so `corgi agent init` can adopt it as a deliberate local
+// act, which is the only moment a repo's own name should matter.
 //
 // repo may be nil (no committed config). Capability-granting fields come only
 // from user, whose per-workspace entry overrides its defaults.
@@ -131,14 +143,9 @@ func Resolve(id string, repo *RepoConfig, user *UserConfig) Resolved {
 	out := Resolved{ID: id}
 
 	if repo != nil {
-		if repo.Workspace.ID != "" {
-			out.ID = repo.Workspace.ID
-		}
+		out.RepoDeclaredID = repo.Workspace.ID
 		out.Aliases = repo.Workspace.Aliases
 		out.Sensitive = repo.Workspace.Sensitive
-	}
-	if out.ID == "" {
-		out.ID = id
 	}
 
 	if user == nil {

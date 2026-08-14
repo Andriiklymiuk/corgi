@@ -228,24 +228,13 @@ func findComposeDirs(root string) []string {
 		if strings.Count(path, string(filepath.Separator))-rootDepth > scanMaxDepth {
 			return filepath.SkipDir
 		}
-		if dirHasComposeFileStrict(path) {
+		if dirHasComposeFile(path) {
 			out = append(out, path)
 			return filepath.SkipDir // a stack does not contain another stack
 		}
 		return nil
 	})
 	return out
-}
-
-// dirHasComposeFileStrict requires an actual compose file, unlike the reachability
-// check used for registered workspaces which tolerates a moved compose file.
-func dirHasComposeFileStrict(dir string) bool {
-	for _, name := range []string{"corgi-compose.yml", "corgi-compose.yaml"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return true
-		}
-	}
-	return false
 }
 
 // ---------------------------------------------------------------- doctor

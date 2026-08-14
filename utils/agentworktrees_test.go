@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // stack builds a compose directory with n git repos wired as services.
@@ -247,6 +248,159 @@ func TestValidateBranchName(t *testing.T) {
 	for _, b := range invalid {
 		if err := validateBranchName(b); err == nil {
 			t.Errorf("validateBranchName(%q) = nil, want an error", b)
+		}
+	}
+}
+
+func TestWorktreeDirNameDistinguishesSameNamedRepos(t *testing.T) {
+	// A stack can hold ~/work/api and ~/oss/api. Keying on the basename alone
+	// sent both to one destination, and the second service was silently pointed
+	// at the first repository's worktree.
+	a := worktreeDirName("/home/dev/work/api", "feature/x")
+	b := worktreeDirName("/home/dev/oss/api", "feature/x")
+
+	if a == b {
+		t.Fatalf("two repos named api collided on %q", a)
+	}
+	if !strings.HasPrefix(a, "api-") || !strings.Contains(a, "@feature-x") {
+		t.Errorf("name %q should stay readable: repo, disambiguator, branch", a)
+	}
+	if a != worktreeDirName("/home/dev/work/api", "feature/x") {
+		t.Error("the name must be stable for the same repo and branch")
+	}
+}
+
+func TestMaterializeKeepsSameNamedReposApart(t *testing.T) {
+	dir := t.TempDir()
+	one := newRepo(t, filepath.Join(dir, "work", "api"))
+	two := newRepo(t, filepath.Join(dir, "oss", "api"))
+	corgi := &CorgiCompose{Services: []Service{
+		{ServiceName: "work-api", AbsolutePath: one},
+		{ServiceName: "oss-api", AbsolutePath: two},
+	}}
+
+	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if set.Worktrees[0].Dir == set.Worktrees[1].Dir {
+		t.Fatal("two different repositories must not share a worktree directory")
+	}
+	for _, w := range set.Worktrees {
+		root, _ := gitOut(w.Dir, gitRevParse, "--path-format=absolute", "--git-common-dir")
+		if !strings.HasPrefix(root, w.Repo) {
+			t.Errorf("%s points at %s, expected a worktree of %s", w.Service, root, w.Repo)
+		}
+	}
+}
+
+func TestReleaseDoesNotTouchASimilarlyNamedBranch(t *testing.T) {
+	corgi, dir := stack(t, "api")
+
+	slashed, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/login", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// feature-login flattens to the same directory segment as feature/login.
+	removed, err := ReleaseBranchWorktrees(dir, "feature-login")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(removed) != 0 {
+		t.Errorf("removed %v; a different branch that merely flattens the same must be left alone", removed)
+	}
+	if _, statErr := os.Stat(slashed.Worktrees[0].Dir); statErr != nil {
+		t.Error("feature/login's worktree was force-removed by releasing feature-login")
+	}
+}
+
+func TestExistingBranchWorktreesCreatesNothing(t *testing.T) {
+	corgi, dir := stack(t, "api")
+
+	set, err := ExistingBranchWorktrees(corgi, dir, "feature/never-made")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(set.Worktrees) != 0 {
+		t.Error("a read-only lookup must not report worktrees that do not exist")
+	}
+	if _, statErr := os.Stat(AgentWorktreeBase(dir)); !os.IsNotExist(statErr) {
+		t.Error("a read-only lookup must not create the worktree directory either")
+	}
+	if local, _ := branchIsKnown(corgi.Services[0].AbsolutePath, "feature/never-made"); local {
+		t.Error("a read-only lookup must not create the branch")
+	}
+}
+
+func TestExistingBranchWorktreesFindsMaterializedOnes(t *testing.T) {
+	corgi, dir := stack(t, "api", "web")
+	made, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := ExistingBranchWorktrees(corgi, dir, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(found.Worktrees) != len(made.Worktrees) {
+		t.Fatalf("found %d worktrees, want %d", len(found.Worktrees), len(made.Worktrees))
+	}
+	for i := range found.Worktrees {
+		if found.Worktrees[i].Dir != made.Worktrees[i].Dir {
+			t.Errorf("%s: found %q, made %q", found.Worktrees[i].Service, found.Worktrees[i].Dir, made.Worktrees[i].Dir)
+		}
+	}
+}
+
+func TestMaterializePreparesRepositoriesConcurrently(t *testing.T) {
+	// Each repository may consult origin, and this runs inside an MCP handler
+	// holding a process-wide lock. The cost must be the slowest repository, not
+	// the sum of them, or a stack with unreachable remotes freezes the server.
+	corgi, dir := stack(t, "api", "web", "mobile", "docs", "worker")
+
+	start := time.Now()
+	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(set.Worktrees) != 5 {
+		t.Fatalf("worktrees = %d, want 5", len(set.Worktrees))
+	}
+	// Generous, but a serial implementation over five repos with any remote
+	// probing at all would not come close.
+	if elapsed > 30*time.Second {
+		t.Errorf("took %v for 5 repos; preparation should overlap", elapsed)
+	}
+}
+
+func TestMaterializeStillSharesAWorktreeWhenPreparedConcurrently(t *testing.T) {
+	dir := t.TempDir()
+	repo := newRepo(t, filepath.Join(dir, "monorepo"))
+	corgi := &CorgiCompose{Services: []Service{
+		{ServiceName: "api", AbsolutePath: repo},
+		{ServiceName: "worker", AbsolutePath: repo},
+		{ServiceName: "cron", AbsolutePath: repo},
+	}}
+
+	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(set.Worktrees) != 3 {
+		t.Fatalf("worktrees = %d, want one entry per service", len(set.Worktrees))
+	}
+	for _, w := range set.Worktrees[1:] {
+		if w.Dir != set.Worktrees[0].Dir {
+			t.Errorf("%s got %q, want the shared %q", w.Service, w.Dir, set.Worktrees[0].Dir)
 		}
 	}
 }

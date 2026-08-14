@@ -150,7 +150,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 				"what changed. Large patches are truncated rather than dropped."),
 		composeOpt,
 		mcp.WithString("base", mcp.Description("Base branch to compare against (default: main)")),
-		mcp.WithString("branch", mcp.Description("Diff the worktrees of this branch instead of the main checkouts")),
+		mcp.WithString("branch", mcp.Description("Diff the existing worktrees of this branch instead of the main checkouts. Does not create anything — run corgi_worktrees_materialize first.")),
 		mcp.WithBoolean("includePatch", mcp.Description("Include the unified diff per file (default true)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpDiff(
@@ -236,10 +236,12 @@ func mcpDiff(composePath, base, branch string, includePatch bool) (any, error) {
 
 	var set *utils.WorktreeSet
 	if strings.TrimSpace(branch) != "" {
-		// Diff what the agent has been editing, not the user's own checkout.
-		set, err = utils.MaterializeBranchAcrossRepos(corgi, dir, branch, nil)
+		// Look the worktrees up; never create them. This tool is advertised as
+		// read-only and is deliberately ungated, so it must not be a way around
+		// the gate on corgi_worktrees_materialize.
+		set, err = utils.ExistingBranchWorktrees(corgi, dir, branch)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", utils.ErrExecFailed, err)
+			return nil, fmt.Errorf("%s: %w", utils.ErrUsage, err)
 		}
 	}
 	return utils.DiffStack(utils.ServiceDirs(corgi, set), base, includePatch), nil

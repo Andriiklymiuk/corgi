@@ -1,12 +1,15 @@
 package supervisor
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 	"runtime"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // fakeLock returns a WakeLock whose held process is a trivial local command,
@@ -135,5 +138,52 @@ func TestValidWakeLockMode(t *testing.T) {
 	}
 	if ValidWakeLockMode("forever-and-ever") {
 		t.Error("unknown modes must be rejected so a typo fails at startup")
+	}
+}
+
+// `always` must hold the lock across the gaps between restarts too, otherwise
+// it is identical to `session` and the machine can sleep during a five-minute
+// backoff and never come back.
+func TestWakeLockAlwaysSurvivesBetweenRestarts(t *testing.T) {
+	runs := []*fakeProcess{
+		{pid: 1, code: 1, exitNow: true},
+		{pid: 2, code: 1, exitNow: true},
+	}
+	start, _ := scriptedStarter(runs...)
+
+	lock := NewWakeLock(WakeLockAlways)
+	var held atomic.Int32
+	lock.startFn = func(int) (*exec.Cmd, error) {
+		held.Add(1)
+		cmd := exec.Command("sleep", "30")
+		return cmd, cmd.Start()
+	}
+
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp/a", WakeLock: WakeLockAlways}, start, lock)
+	r.HealthyAfter = time.Millisecond
+
+	var releasedMidLoop atomic.Bool
+	r.Sleep = func(context.Context, time.Duration) {
+		if !lock.Held() {
+			releasedMidLoop.Store(true)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+	waitFor(t, func() bool { return held.Load() > 0 })
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+
+	if releasedMidLoop.Load() {
+		t.Error("the lock was dropped between restarts; the machine could sleep during a backoff")
+	}
+	if held.Load() != 1 {
+		t.Errorf("acquired the lock %d times, want 1 for the whole supervised lifetime", held.Load())
+	}
+	if lock.Held() {
+		t.Error("Run must still release the lock when it returns")
 	}
 }

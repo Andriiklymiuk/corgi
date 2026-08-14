@@ -182,6 +182,16 @@ func (d *Daemon) Run(ctx context.Context, configs []supervisor.SpawnConfig) erro
 		}(r)
 	}
 	wg.Wait()
+
+	// Every supervisor has finished. If that was a deliberate disable — an auth
+	// failure, or repeated startup failures — exiting here would hand the
+	// decision to launchd or systemd, which would restart corgi and undo it.
+	// Stay up instead, reporting the disabled state, until asked to stop.
+	if ctx.Err() == nil {
+		utils.Info("agent: every workspace is disabled — staying up so `corgi agent status` can explain why")
+		_ = writeJSONAtomic(d.StatusPath(), d.Status())
+		<-ctx.Done()
+	}
 	return ctx.Err()
 }
 
@@ -294,13 +304,13 @@ func ReadInfo(dir string) (*Info, error) {
 
 // processAlive is a plain liveness check. Unlike utils.PidAlive it does not
 // require the process to be a group leader: the daemon is normally started by
-// launchd or a shell, so it is usually not one.
+// launchd or a shell, so it is usually not one. The probe itself differs by
+// platform — see signal_unix.go and signal_windows.go.
 func processAlive(pid int) bool {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
+	if pid <= 0 {
 		return false
 	}
-	return proc.Signal(syscallZero) == nil
+	return processAliveOS(pid)
 }
 
 func writeJSONAtomic(path string, v any) error {

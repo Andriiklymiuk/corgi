@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 )
@@ -95,6 +96,15 @@ func (r *Runner) Stop() {
 func (r *Runner) Run(ctx context.Context) error {
 	defer r.WakeLock.Release()
 
+	// `always` holds the lock for the whole supervised lifetime, including the
+	// gaps between restarts. Releasing it per-process would make the mode
+	// identical to `session`, and the machine could sleep during a five-minute
+	// backoff and never come back.
+	alwaysAwake := r.Config.WakeLockMode() == WakeLockAlways
+	if alwaysAwake {
+		_ = r.WakeLock.Acquire(os.Getpid())
+	}
+
 	attempt := 0
 	startupFailures := 0
 
@@ -122,7 +132,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		startedAt := time.Now()
 		r.markRunning(proc, startedAt)
 
-		if r.Config.WakeLockMode() != WakeLockOff {
+		if r.Config.WakeLockMode() == WakeLockSession {
 			// A failure here is not fatal: the session is more useful awake-only
 			// than not running at all. Surfaced through status instead.
 			_ = r.WakeLock.Acquire(proc.Pid())
@@ -130,7 +140,9 @@ func (r *Runner) Run(ctx context.Context) error {
 
 		code, output := proc.Wait()
 		uptime := time.Since(startedAt)
-		r.WakeLock.Release()
+		if !alwaysAwake {
+			r.WakeLock.Release()
+		}
 
 		exit := Exit{
 			Code:         code,
