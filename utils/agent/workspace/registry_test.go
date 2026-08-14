@@ -231,7 +231,7 @@ func TestMergeLegacyNeverClobbersConfiguredWorkspaces(t *testing.T) {
 	added := MergeLegacy(r, []LegacyEntry{
 		{Name: "acme", Path: "/legacy/acme/corgi-compose.yml"},
 		{Name: "fresh", Path: "/legacy/fresh/corgi-compose.yml"},
-	})
+	}, func(string) bool { return true })
 
 	if added != 1 {
 		t.Errorf("added = %d, want 1 (only the unknown one)", added)
@@ -242,5 +242,21 @@ func TestMergeLegacyNeverClobbersConfiguredWorkspaces(t *testing.T) {
 	}
 	if len(existing.Aliases) != 1 {
 		t.Error("migration erased configured aliases")
+	}
+}
+
+func TestMergeLegacySkipsPathsThatAreGone(t *testing.T) {
+	r := &Registry{}
+
+	added := MergeLegacy(r, []LegacyEntry{
+		{Name: "alive", Path: "/alive/corgi-compose.yml"},
+		{Name: "deleted", Path: "/tmp/some-old-test-fixture/corgi-compose.yml"},
+	}, func(p string) bool { return p == "/alive" })
+
+	if added != 1 {
+		t.Fatalf("added = %d, want 1", added)
+	}
+	if _, ok := r.Find("deleted"); ok {
+		t.Error("the legacy file never pruned itself; importing dead rows would fill the workspace list with noise on the first run")
 	}
 }

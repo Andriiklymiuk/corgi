@@ -62,9 +62,17 @@ func legacyID(e LegacyEntry, path string) string {
 // MergeLegacy folds legacy rows into an existing registry without overwriting
 // anything already recorded. Migration must never clobber a workspace that has
 // since been configured with aliases or a config dir.
-func MergeLegacy(r *Registry, entries []LegacyEntry) (added int) {
+//
+// pathExists filters out rows whose directory is gone. The legacy file was
+// append-only with no pruning, so it accumulates temp directories and deleted
+// projects; importing those would fill the workspace list with noise on the
+// very first run.
+func MergeLegacy(r *Registry, entries []LegacyEntry, pathExists func(string) bool) (added int) {
 	for _, w := range FromLegacy(entries) {
 		if _, exists := r.Find(w.ID); exists {
+			continue
+		}
+		if pathExists != nil && !pathExists(w.AbsPath) {
 			continue
 		}
 		r.Upsert(w)
