@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -340,5 +341,62 @@ func TestWorktreeDirsIncludesOnlyMaterializedServices(t *testing.T) {
 	}
 	if WorktreeDirs(nil) == nil {
 		t.Error("a nil set should still yield a usable empty map")
+	}
+}
+
+// git C-quotes paths with non-ASCII characters unless -z is used, and the
+// literal quoted name cannot be opened — so the file was silently dropped from
+// precisely the set an agent's work consists of: newly created files.
+func TestDiffIncludesUntrackedFilesWithAwkwardNames(t *testing.T) {
+	repo := newRepo(t, filepath.Join(t.TempDir(), "web"))
+	for _, name := range []string{"café.ts", "a file with spaces.md", "naïve.txt"} {
+		writeRepoFile(t, filepath.Join(repo, name), "one\ntwo\n")
+	}
+
+	got := DiffStack(map[string]string{"web": repo}, "main", true)
+
+	if len(got.Repos[0].Files) != 3 {
+		var names []string
+		for _, f := range got.Repos[0].Files {
+			names = append(names, f.Path)
+		}
+		t.Fatalf("files = %v, want all three", names)
+	}
+	for _, f := range got.Repos[0].Files {
+		if strings.HasPrefix(f.Path, `"`) {
+			t.Errorf("path %q is still C-quoted", f.Path)
+		}
+		if f.Additions != 2 {
+			t.Errorf("%s: additions = %d, want 2", f.Path, f.Additions)
+		}
+	}
+}
+
+// The per-file cap does not bound the response: many modest files still add up
+// to a payload a phone client cannot take.
+func TestDiffBudgetsTheWholeResponse(t *testing.T) {
+	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
+	body := strings.Repeat("a line of text\n", 4000) // ~56KB each
+	for i := range 40 {
+		writeRepoFile(t, filepath.Join(repo, fmt.Sprintf("file%02d.txt", i)), body)
+	}
+
+	got := DiffStack(map[string]string{"api": repo}, "main", true)
+
+	total := 0
+	for _, f := range got.Repos[0].Files {
+		total += len(f.Patch)
+	}
+	if total > maxStackPatchBytes+maxPatchBytes {
+		t.Errorf("total patch bytes = %d, want the response bounded near %d", total, maxStackPatchBytes)
+	}
+	if !got.PatchesTruncated {
+		t.Error("the response should say that some patch bodies were dropped")
+	}
+	// Counts survive even where the body was dropped, so the shape is complete.
+	for _, f := range got.Repos[0].Files {
+		if f.Additions == 0 {
+			t.Errorf("%s lost its line count", f.Path)
+		}
 	}
 }

@@ -88,7 +88,7 @@ func getDataPath() (string, error) {
 				return legacy, nil
 			}
 		}
-		return filepath.Join(homeDir, "Library", "Application Support", "corgi"), nil
+		return darwinFallbackDataDir(homeDir), nil
 	case "linux":
 		if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
 			return filepath.Join(xdgDataHome, "corgi"), nil
@@ -110,6 +110,42 @@ func getDataPath() (string, error) {
 	default:
 		return "", errors.New("unsupported operating system")
 	}
+}
+
+// darwinFallbackDataDir is where corgi keeps state when no Homebrew var/corgi
+// directory was found.
+//
+// A custom Homebrew prefix without HOMEBREW_PREFIX exported lands here, and the
+// user's saved paths appear to vanish from `corgi list`. Say so once rather
+// than leaving them to discover an empty registry, and name the fix.
+func darwinFallbackDataDir(homeDir string) string {
+	dir := filepath.Join(homeDir, "Library", "Application Support", "corgi")
+	warnAboutDataDirFallbackOnce.Do(func() {
+		if _, err := os.Stat(filepath.Join(dir, storageFileName)); err == nil {
+			return // already the established location; nothing surprising
+		}
+		if !brewLooksInstalled() {
+			return // no Homebrew at all, so nothing was moved
+		}
+		fmt.Fprintf(os.Stderr,
+			"corgi: using %s for its data.\n"+
+				"If your saved paths look missing, your Homebrew prefix is elsewhere — set:\n"+
+				"  export CORGI_DATA_DIR=\"$(brew --prefix)/var/corgi\"\n", dir)
+	})
+	return dir
+}
+
+var warnAboutDataDirFallbackOnce sync.Once
+
+// brewLooksInstalled checks for a Homebrew binary without running it, so the
+// answer does not depend on PATH the way the daemon's does.
+func brewLooksInstalled() bool {
+	for _, p := range []string{"/opt/homebrew/bin/brew", "/usr/local/bin/brew"} {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func initializeStorage() error {

@@ -20,6 +20,13 @@ import (
 // response size for everything else in the same call.
 const maxPatchBytes = 32 << 10
 
+// maxStackPatchBytes bounds the whole response. The per-file cap alone does not:
+// a wide branch of many modest files still adds up to a multi-megabyte payload,
+// which is the thing a phone client cannot take. Once the budget is spent the
+// remaining files keep their counts and lose only their patch bodies, so the
+// shape of the change is still complete.
+const maxStackPatchBytes = 1 << 20
+
 // FileDiff is one changed file.
 type FileDiff struct {
 	Path      string `json:"path"`
@@ -54,6 +61,9 @@ type StackDiff struct {
 	Additions int        `json:"additions"`
 	Deletions int        `json:"deletions"`
 	Repos     []RepoDiff `json:"repos"`
+	// PatchesTruncated reports that the response budget was reached and some
+	// files carry counts without a patch body.
+	PatchesTruncated bool `json:"patchesTruncated,omitempty"`
 }
 
 // DiffStack collects the diff of every service's checkout against base.
@@ -78,6 +88,7 @@ func DiffStack(dirs map[string]string, base string, includePatch bool) *StackDif
 	// diffed the repo twice, listing every change twice and doubling the stack
 	// totals, so the key is the resolved git root.
 	byRoot := map[string]int{}
+	budget := maxStackPatchBytes
 	for _, svc := range services {
 		key := dirs[svc]
 		if root, ok := repoRoot(key); ok {
@@ -88,12 +99,32 @@ func DiffStack(dirs map[string]string, base string, includePatch bool) *StackDif
 			continue
 		}
 		rd := diffRepo(svc, dirs[svc], base, includePatch)
+		budget = applyPatchBudget(&rd, budget)
 		byRoot[key] = len(out.Repos)
 		out.Repos = append(out.Repos, rd)
 		out.Additions += rd.Additions
 		out.Deletions += rd.Deletions
 	}
+	if budget <= 0 {
+		out.PatchesTruncated = true
+	}
 	return out
+}
+
+// applyPatchBudget drops patch bodies once the response budget is spent,
+// keeping every file's counts. Returns the remaining budget.
+func applyPatchBudget(rd *RepoDiff, budget int) int {
+	for i := range rd.Files {
+		if budget <= 0 {
+			if rd.Files[i].Patch != "" {
+				rd.Files[i].Patch = ""
+				rd.Files[i].Truncated = true
+			}
+			continue
+		}
+		budget -= len(rd.Files[i].Patch)
+	}
+	return budget
 }
 
 func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
@@ -156,14 +187,17 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 
 // untrackedFiles reports files git does not track yet, respecting .gitignore.
 func untrackedFiles(dir string, includePatch bool) []FileDiff {
-	out, err := gitOut(dir, "ls-files", "--others", "--exclude-standard")
+	// -z, or git C-quotes any path with non-ASCII or special characters
+	// ("caf\303\251.ts"). Opening that literal name fails, and the file was
+	// then silently dropped — from precisely the set an agent's work consists
+	// of, newly created files.
+	out, err := gitOut(dir, "ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil || strings.TrimSpace(out) == "" {
 		return nil
 	}
 	var files []FileDiff
-	for _, path := range strings.Split(out, "\n") {
-		path = strings.TrimSpace(path)
-		if path == "" {
+	for _, path := range strings.Split(out, "\x00") {
+		if strings.TrimSpace(path) == "" {
 			continue
 		}
 		f := FileDiff{Path: path, New: true}

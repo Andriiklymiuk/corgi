@@ -57,6 +57,10 @@ type Runner struct {
 	state    RunState
 	proc     Process
 	stopping bool
+	// stopped closes when Stop is called, so a backoff sleep can be cut short
+	// rather than running to completion and starting the process again.
+	stopped     chan struct{}
+	stoppedOnce sync.Once
 }
 
 // NewRunner returns a Runner with the real sleep behaviour.
@@ -67,6 +71,7 @@ func NewRunner(cfg SpawnConfig, start Starter, lock *WakeLock) *Runner {
 		WakeLock: lock,
 		Sleep:    sleepWithContext,
 		state:    RunState{WorkspaceID: cfg.WorkspaceID},
+		stopped:  make(chan struct{}),
 	}
 }
 
@@ -88,6 +93,15 @@ func (r *Runner) Stop() {
 	r.stopping = true
 	proc := r.proc
 	r.mu.Unlock()
+
+	// Wake a backoff sleep. Without this, Stop during the gap between restarts
+	// did nothing at all — no process to signal, the context still live — and
+	// the loop went on to start a session nothing would ever stop.
+	r.stoppedOnce.Do(func() {
+		if r.stopped != nil {
+			close(r.stopped)
+		}
+	})
 	if proc != nil {
 		proc.Stop()
 	}
@@ -123,6 +137,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if r.stopRequested() {
+			return nil
+		}
 
 		exit, startErr := r.runOnce(ctx, alwaysAwake)
 		decision := Decide(exit, attempt, startupFailures)
@@ -151,7 +168,21 @@ func (r *Runner) Run(ctx context.Context) error {
 		} else {
 			attempt++
 		}
-		r.Sleep(ctx, decision.Delay)
+		r.sleepUnlessStopped(ctx, decision.Delay)
+	}
+}
+
+// sleepUnlessStopped waits out the backoff, returning early if Stop is called.
+func (r *Runner) sleepUnlessStopped(ctx context.Context, d time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.Sleep(ctx, d)
+	}()
+	select {
+	case <-done:
+	case <-r.stopped:
+	case <-ctx.Done():
 	}
 }
 
