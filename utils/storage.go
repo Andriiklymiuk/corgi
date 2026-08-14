@@ -59,6 +59,11 @@ func ensureDBPathExists(path string) error {
 func CorgiDataDir() (string, error) { return getDataPath() }
 
 func getDataPath() (string, error) {
+	// An explicit override wins everywhere, so an unusual install can point
+	// corgi at its real data directory instead of silently starting fresh.
+	if dir := strings.TrimSpace(os.Getenv("CORGI_DATA_DIR")); dir != "" {
+		return dir, nil
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		homeDir, err := os.UserHomeDir()
@@ -70,8 +75,14 @@ func getDataPath() (string, error) {
 		// filesystem, never by running `brew`. corgi runs unattended under
 		// launchd, whose PATH does not include brew: shelling out would give
 		// the daemon and the shell two different data directories, and the
-		// daemon would read an empty registry.
-		for _, prefix := range []string{"/opt/homebrew", "/usr/local"} {
+		// daemon would then read an empty registry.
+		//
+		// HOMEBREW_PREFIX covers a custom prefix, since `brew shellenv` exports
+		// it; CORGI_DATA_DIR is the explicit escape hatch when neither applies.
+		for _, prefix := range []string{os.Getenv("HOMEBREW_PREFIX"), "/opt/homebrew", "/usr/local"} {
+			if prefix == "" {
+				continue
+			}
 			legacy := filepath.Join(prefix, "var", "corgi")
 			if info, statErr := os.Stat(legacy); statErr == nil && info.IsDir() {
 				return legacy, nil

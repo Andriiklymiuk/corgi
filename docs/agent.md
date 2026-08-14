@@ -172,10 +172,16 @@ defaults:
   capacity: 4
 workspaces:
   acme-stack:
+    autostart: true          # supervise this one; `corgi agent init` sets it
     configDir: ~/.claude-work
     wakeLock: session
     permissionMode: default
 ```
+
+**`autostart` is opt-in.** A registered workspace is not supervised until it
+says so, because `corgi agent scan` can register a dozen stacks and starting a
+Claude session for each of them is a surprise measured in gigabytes.
+`corgi agent init` sets it; `serve` says which workspaces it skipped and why.
 
 The rule: **untrusted config may restrict, never relax.** A cloned repository
 can mark itself `sensitive`, which only removes capability. It cannot choose
@@ -322,6 +328,21 @@ prints a single-use code, valid two minutes, which a client exchanges once for
 its own revocable token. `corgi mcp devices revoke <name>` kills exactly one
 device without disturbing the others — which is the whole reason not to share
 one token. Full detail: [docs/mcp.md](mcp.md).
+
+## When corgi cannot find its data directory
+
+corgi keeps its registry beside its other state. On macOS that is the Homebrew
+`var/corgi` directory when one already exists, otherwise
+`~/Library/Application Support/corgi`. The location is decided by looking at the
+filesystem, never by running `brew` — launchd's PATH does not include it, and
+shelling out would give the daemon and your shell two different directories.
+
+If you use a custom Homebrew prefix and `HOMEBREW_PREFIX` is not exported, point
+corgi at the right place explicitly:
+
+```bash
+export CORGI_DATA_DIR="$(brew --prefix)/var/corgi"
+```
 
 ## Platform support
 

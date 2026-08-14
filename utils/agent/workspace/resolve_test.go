@@ -173,3 +173,28 @@ func TestRelatedIgnoresVeryShortWords(t *testing.T) {
 		t.Errorf("short incidental words must not resolve a workspace, got %q", got.Workspace.ID)
 	}
 }
+
+// A raw substring test made "api" match "rapid-prototype", and when that was
+// the only hit the resolver answered with it confidently — the wrong-repository
+// outcome this package promises never to produce.
+func TestResolveDoesNotMatchOnAccidentalSubstrings(t *testing.T) {
+	r := &Registry{Workspaces: []Workspace{
+		{ID: "rapid-prototype", AbsPath: "/rapid"},
+	}}
+
+	if got := Resolve(r, "api"); got.Resolved() {
+		t.Errorf("resolved %q from an incidental substring", got.Workspace.ID)
+	}
+}
+
+func TestResolveStillMatchesWholeWordsEitherWay(t *testing.T) {
+	r := &Registry{Workspaces: []Workspace{
+		{ID: "acme-stack", Aliases: []string{"recipe app"}, AbsPath: "/acme", Services: []string{"api"}},
+	}}
+
+	for _, query := range []string{"recipe app", "the recipe app", "fix the api"} {
+		if got := Resolve(r, query); !got.Resolved() {
+			t.Errorf("query %q should still resolve: %s", query, got.Reason)
+		}
+	}
+}

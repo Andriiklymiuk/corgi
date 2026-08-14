@@ -404,3 +404,29 @@ func TestMaterializeStillSharesAWorktreeWhenPreparedConcurrently(t *testing.T) {
 		}
 	}
 }
+
+// A repository whose main checkout is already on the branch is what
+// materialize returns in that case, so the read-only lookup must recognise it —
+// otherwise corgi_diff reports "nothing here" for a correctly checked-out repo
+// and re-running materialize can never fix it.
+func TestExistingWorktreesFindsAMainCheckoutOnTheBranch(t *testing.T) {
+	corgi, dir := stack(t, "api")
+	repo := corgi.Services[0].AbsolutePath
+	gitIn(t, repo, "checkout", "-q", "-b", "feature/x")
+
+	found, err := ExistingBranchWorktrees(corgi, dir, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(found.Worktrees) != 1 {
+		t.Fatalf("worktrees = %d, want the main checkout to count", len(found.Worktrees))
+	}
+	// git reports symlink-resolved paths, which on macOS differ from t.TempDir's
+	// spelling (/var vs /private/var), so compare resolved.
+	gotDir, _ := filepath.EvalSymlinks(found.Worktrees[0].Dir)
+	wantDir, _ := filepath.EvalSymlinks(repo)
+	if gotDir != wantDir {
+		t.Errorf("dir = %q, want the repo itself %q", gotDir, wantDir)
+	}
+}

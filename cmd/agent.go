@@ -129,6 +129,9 @@ func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, for
 	}
 	resolved := config.Resolve(w.ID, repo, user)
 	if !resolved.AutostartEnabled() {
+		// Every other skip explains itself; this one is the most likely to be
+		// unexpected, since `corgi agent scan` registers without enabling.
+		utils.Infof("agent: skipping %s (not enabled — run `corgi agent init` there, or set autostart: true)\n", w.ID)
 		return supervisor.SpawnConfig{}, false
 	}
 	return spawnConfigFrom(w, resolved, foreground), true
