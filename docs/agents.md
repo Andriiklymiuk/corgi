@@ -2,6 +2,13 @@
 
 Guide for AI agents and scripts running corgi non-interactively.
 
+## Related
+
+- [Agent mode](agent.md) — keep a Claude Code Remote Control session running for
+  your stacks, and drive a multi-repo change from a phone.
+- [MCP server](mcp.md) — the tool surface, including device pairing.
+- [corgi-remote](remote-app.md) — design for a mobile control surface.
+
 ## Non-interactive mode
 
 Corgi auto-detects when it must not prompt and either skips the prompt or exits
