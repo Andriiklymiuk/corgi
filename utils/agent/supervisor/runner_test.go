@@ -275,3 +275,69 @@ func waitFor(t *testing.T, cond func() bool) {
 	}
 	t.Fatal("condition not met within timeout")
 }
+
+// The backoff must restart from the beginning after a healthy run. An earlier
+// version zeroed the counter and then incremented it in the same pass, so the
+// delay pinned at the second step forever.
+func TestBackoffResetsAfterAHealthyRun(t *testing.T) {
+	start, _ := scriptedStarter(
+		&fakeProcess{pid: 1, code: 1, exitNow: true},                 // startup failure
+		&fakeProcess{pid: 2, code: 1, exitNow: true},                 // and another
+		&fakeProcess{pid: 3, code: 0, uptime: 20 * time.Millisecond}, // healthy
+		&fakeProcess{pid: 4, code: 1, exitNow: true},                 // fails again
+	)
+	r := testRunner(t, start)
+
+	var delays []time.Duration
+	var mu sync.Mutex
+	r.Sleep = func(_ context.Context, d time.Duration) {
+		mu.Lock()
+		delays = append(delays, d)
+		mu.Unlock()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(delays) >= 4 })
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	first := DefaultBackoff[0]
+	if delays[0] != first {
+		t.Errorf("first delay = %v, want %v", delays[0], first)
+	}
+	if delays[1] == first {
+		t.Error("the second consecutive failure should back off further")
+	}
+	// The fourth restart follows a healthy run, so it starts over.
+	if delays[3] != first {
+		t.Errorf("delay after a healthy run = %v, want the backoff reset to %v", delays[3], first)
+	}
+}
+
+// Stop must keep it stopped. Without an explicit flag the loop reads the exit
+// as an ordinary one and starts the process straight back up.
+func TestStopKeepsItStopped(t *testing.T) {
+	start, calls := scriptedStarter()
+	r := testRunner(t, start)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+
+	waitFor(t, func() bool { return r.State().Running })
+	r.Stop()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() should return after Stop()")
+	}
+	if got := *calls; got != 1 {
+		t.Errorf("started %d processes, want 1 — Stop must not be undone by a restart", got)
+	}
+}

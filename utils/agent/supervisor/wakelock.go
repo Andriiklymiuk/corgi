@@ -113,12 +113,17 @@ func WakeLockCommand(pid int) []string {
 		// -i idle, -m disk, -s system; -w ties the lock's life to pid.
 		return []string{"caffeinate", "-i", "-m", "-s", "-w", strconv.Itoa(pid)}
 	case "linux":
+		// Wait on the supervised pid rather than sleeping forever, so the
+		// inhibitor dies with the process it exists for. `sleep infinity` would
+		// leave a permanent sleep inhibitor behind if the daemon were SIGKILLed
+		// — the Linux equivalent of the bug caffeinate's -w avoids.
 		return []string{
 			"systemd-inhibit",
 			"--what=idle:sleep",
 			"--why=corgi agent",
 			"--mode=block",
-			"sleep", "infinity",
+			"sh", "-c",
+			fmt.Sprintf("while kill -0 %d 2>/dev/null; do sleep 5; done", pid),
 		}
 	}
 	return nil

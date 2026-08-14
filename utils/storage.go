@@ -25,6 +25,21 @@ var (
 	storageFilePath string
 )
 
+// storagePathChosenByTest reports whether the current registry path was picked
+// by a test rather than derived from the user's real data directory. Comparing
+// against the real path keeps this correct however a test sets the seam, and
+// however many reads have already primed it.
+func storagePathChosenByTest() bool {
+	if storageFilePath == "" {
+		return false
+	}
+	dir, err := getDataPath()
+	if err != nil {
+		return true // cannot locate the real registry, so nothing to pollute
+	}
+	return storageFilePath != filepath.Join(dir, storageFileName)
+}
+
 type CorgiExecPath struct {
 	Name        string
 	Description string
@@ -46,15 +61,21 @@ func CorgiDataDir() (string, error) { return getDataPath() }
 func getDataPath() (string, error) {
 	switch runtime.GOOS {
 	case "darwin":
-		// Prefer the historical brew location so nobody loses their saved paths
-		// on upgrade, but never depend on brew: corgi runs unattended under
-		// launchd, where a missing brew would leave the daemon with no state.
-		if brewPath, err := GetHomebrewBinPath(); err == nil {
-			return filepath.Join(brewPath, "../var/corgi"), nil
-		}
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		// Keep using the historical brew location when it already holds data,
+		// so nobody loses their saved paths — but decide by looking at the
+		// filesystem, never by running `brew`. corgi runs unattended under
+		// launchd, whose PATH does not include brew: shelling out would give
+		// the daemon and the shell two different data directories, and the
+		// daemon would read an empty registry.
+		for _, prefix := range []string{"/opt/homebrew", "/usr/local"} {
+			legacy := filepath.Join(prefix, "var", "corgi")
+			if info, statErr := os.Stat(legacy); statErr == nil && info.IsDir() {
+				return legacy, nil
+			}
 		}
 		return filepath.Join(homeDir, "Library", "Application Support", "corgi"), nil
 	case "linux":
@@ -121,9 +142,11 @@ func runningUnderTest() bool {
 }
 
 func SaveExecPath(name, description, path string) error {
-	if runningUnderTest() && storageFilePath == "" {
-		// No explicit test path was injected, so this would hit the real
-		// registry. Skip rather than pollute it.
+	if runningUnderTest() && !storagePathChosenByTest() {
+		// No test injected an explicit path, so this would hit the user's real
+		// registry. Skip rather than pollute it. Keyed on the injection flag,
+		// not on storageFilePath being empty: any earlier read primes that with
+		// the real path, which would silently re-enable the writes.
 		return nil
 	}
 	absolutePath, err := filepath.Abs(path)

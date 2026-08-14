@@ -112,8 +112,8 @@ Refused for a workspace marked `sensitive`. That is deliberate; offer
 Three things are unverified and worth saying once, not repeatedly: hot reload
 over a tunnel depends on the provider passing websockets through; Vite and Next
 need the tunnel host in `allowedHosts` / `allowedDevOrigins`; and a quick tunnel
-changes URL if it restarts, so use `tunnelName` for anything they will keep
-open. If the page loads but never updates, that is the first of those, not your
+changes URL if it restarts, so a named tunnel in the service's `tunnel:` block
+is what keeps a link stable. If the page loads but never updates, that is the first of those, not your
 code.
 
 ## Running the stack
@@ -128,7 +128,7 @@ Only when the user asks for it, or when they say a remote session keeps dying.
 
 ```bash
 cd <the stack>
-corgi agent init                 # register; writes .corgi/agent.yml
+corgi agent init                 # register AND enable this stack
 corgi agent install              # start at login
 corgi agent doctor               # what is missing, and how to fix it
 corgi agent status               # what is running, under which account
@@ -136,6 +136,10 @@ corgi agent status               # what is running, under which account
 
 `corgi agent doctor` output is already actionable — relay it rather than
 re-diagnosing.
+
+`corgi agent scan` registers what it finds but deliberately enables nothing.
+Tell the user to run `init` in the stacks they actually want supervised, rather
+than assuming a scan armed them.
 
 ### If they run more than one Claude account
 

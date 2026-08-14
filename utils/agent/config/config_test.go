@@ -206,12 +206,18 @@ func TestClonedRepoCannotClaimAnotherWorkspacesIdentity(t *testing.T) {
 	}
 }
 
-func TestAutostartDefaultsToEnabled(t *testing.T) {
-	if !(Resolved{}).AutostartEnabled() {
-		t.Error("a workspace with a user-level entry was meant to run")
+// `corgi agent scan ~/projects` can register a dozen stacks. If autostart
+// defaulted to on, the next daemon start would spawn a remote-control process
+// for every one of them.
+func TestAutostartIsOptIn(t *testing.T) {
+	if (Resolved{}).AutostartEnabled() {
+		t.Error("a merely registered workspace must not be supervised until asked for")
 	}
 
-	off := false
+	on, off := true, false
+	if !(Resolved{WorkspaceConfig: WorkspaceConfig{Autostart: &on}}).AutostartEnabled() {
+		t.Error("an explicit true must be honoured")
+	}
 	if (Resolved{WorkspaceConfig: WorkspaceConfig{Autostart: &off}}).AutostartEnabled() {
 		t.Error("an explicit false must be honoured")
 	}

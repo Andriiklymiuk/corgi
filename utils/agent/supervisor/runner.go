@@ -53,9 +53,10 @@ type Runner struct {
 	// without polling. Called without the lock held.
 	OnChange func()
 
-	mu    sync.Mutex
-	state RunState
-	proc  Process
+	mu       sync.Mutex
+	state    RunState
+	proc     Process
+	stopping bool
 }
 
 // NewRunner returns a Runner with the real sleep behaviour.
@@ -78,15 +79,25 @@ func (r *Runner) State() RunState {
 	return s
 }
 
-// Stop asks the supervised process to exit. The Run loop sees the cancelled
-// context and treats the exit as requested rather than restarting it.
+// Stop asks the supervised process to exit and keeps it stopped.
+//
+// The flag matters: without it the loop sees an ordinary exit, classifies it as
+// a crash or a network timeout, and starts the process straight back up.
 func (r *Runner) Stop() {
 	r.mu.Lock()
+	r.stopping = true
 	proc := r.proc
 	r.mu.Unlock()
 	if proc != nil {
 		proc.Stop()
 	}
+}
+
+// stopRequested reports whether Stop has been called.
+func (r *Runner) stopRequested() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.stopping
 }
 
 // Run supervises until ctx is cancelled or the workspace is disabled.
@@ -148,18 +159,18 @@ func (r *Runner) Run(ctx context.Context) error {
 			Code:         code,
 			Uptime:       uptime,
 			Output:       output,
-			Requested:    ctx.Err() != nil,
+			Requested:    ctx.Err() != nil || r.stopRequested(),
 			healthyAfter: r.healthyAfter(),
 		}
 
 		decision := Decide(exit, attempt, startupFailures)
-		if decision.Cause == CauseStartupFailure {
-			startupFailures++
-		} else {
+		healthy := decision.Cause != CauseStartupFailure
+		if healthy {
 			// A run that lasted long enough to be useful clears the streak, so
 			// one bad night does not disable a workspace weeks later.
 			startupFailures = 0
-			attempt = 0
+		} else {
+			startupFailures++
 		}
 
 		r.record(decision, 0, decision.Disable)
@@ -172,7 +183,14 @@ func (r *Runner) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		attempt++
+		// Reset AFTER choosing this delay, so the next failure starts from the
+		// beginning of the backoff. Zeroing before the increment left it pinned
+		// at the second step forever.
+		if healthy {
+			attempt = 0
+		} else {
+			attempt++
+		}
 		r.Sleep(ctx, decision.Delay)
 	}
 }

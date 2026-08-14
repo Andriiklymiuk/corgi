@@ -208,14 +208,20 @@ func TestReadInfoTreatsADeadDaemonAsAbsent(t *testing.T) {
 
 func TestReadInfoFindsALiveDaemon(t *testing.T) {
 	dir := t.TempDir()
-	if err := writeJSONAtomic(filepath.Join(dir, "daemon.json"), Info{PID: os.Getpid(), Workspaces: []string{"acme"}}); err != nil {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONAtomic(filepath.Join(dir, "daemon.json"), Info{
+		PID: os.Getpid(), Executable: exe, Workspaces: []string{"acme"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	info, err := ReadInfo(dir)
+	info, rerr := ReadInfo(dir)
 
-	if err != nil || info == nil {
-		t.Fatalf("ReadInfo() = %+v, %v; want the live record", info, err)
+	if rerr != nil || info == nil {
+		t.Fatalf("ReadInfo() = %+v, %v; want the live record", info, rerr)
 	}
 	if len(info.Workspaces) != 1 || info.Workspaces[0] != "acme" {
 		t.Errorf("workspaces = %v", info.Workspaces)
@@ -243,4 +249,28 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("condition not met within timeout")
+}
+
+// Pids are recycled. A record left by an unclean exit must not make
+// `corgi agent stop` signal whatever now holds that number.
+func TestReadInfoRejectsARecycledPid(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeJSONAtomic(filepath.Join(dir, "daemon.json"), Info{
+		PID:        os.Getpid(),
+		Executable: "/usr/local/bin/something-else-entirely",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := ReadInfo(dir)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info != nil {
+		t.Error("a live pid running a different binary must read as no daemon, not as one to signal")
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "daemon.json")); !os.IsNotExist(statErr) {
+		t.Error("the stale record should be cleaned up")
+	}
 }

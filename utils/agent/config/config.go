@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"gopkg.in/yaml.v3"
 )
@@ -96,10 +97,14 @@ func LoadUser(path string) (*UserConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	if mode := info.Mode().Perm(); mode&0o077 != 0 {
-		return nil, fmt.Errorf(
-			"%s is readable by other users (mode %04o) — run: chmod 600 %s",
-			path, mode, path)
+	// Skipped on Windows: Go reports 0666 for every file there, so this would
+	// reject a config the user cannot fix, with advice that does not apply.
+	if runtime.GOOS != "windows" {
+		if mode := info.Mode().Perm(); mode&0o077 != 0 {
+			return nil, fmt.Errorf(
+				"%s is readable by other users (mode %04o) — run: chmod 600 %s",
+				path, mode, path)
+		}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -189,8 +194,12 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 }
 
 // AutostartEnabled reports whether the workspace should be supervised.
-// Absent means yes: someone who wrote a user-level entry for a workspace meant
-// it to run.
+//
+// Opt-in, not opt-out. `corgi agent scan ~/projects` can register a dozen
+// stacks, and defaulting to on would spawn a remote-control process for every
+// one of them the next time the daemon started — a surprise measured in
+// gigabytes. A workspace runs when the trusted user config says so, which
+// `corgi agent init` writes and `scan` deliberately does not.
 func (r Resolved) AutostartEnabled() bool {
-	return r.Autostart == nil || *r.Autostart
+	return r.Autostart != nil && *r.Autostart
 }
