@@ -39,6 +39,10 @@ func ensureDBPathExists(path string) error {
 	return nil
 }
 
+// CorgiDataDir is the per-user directory corgi keeps state in. Exported so
+// agent mode can put its files alongside the existing registry.
+func CorgiDataDir() (string, error) { return getDataPath() }
+
 func getDataPath() (string, error) {
 	switch runtime.GOOS {
 	case "darwin":
@@ -104,7 +108,24 @@ func ensureStorageInitialized() error {
 	return initializeStorage()
 }
 
+// runningUnderTest reports whether this process is a `go test` binary.
+//
+// Every compose parse calls SaveExecPath, so without this guard corgi's own
+// test suite writes its temp fixture directories into the user's real global
+// registry — which then shows up in `corgi list` and, worse, in agent mode's
+// workspace list.
+func runningUnderTest() bool {
+	return strings.HasSuffix(os.Args[0], ".test") ||
+		strings.Contains(os.Args[0], "/_test/") ||
+		os.Getenv("CORGI_DISABLE_EXEC_PATH_REGISTRY") == "1"
+}
+
 func SaveExecPath(name, description, path string) error {
+	if runningUnderTest() && storageFilePath == "" {
+		// No explicit test path was injected, so this would hit the real
+		// registry. Skip rather than pollute it.
+		return nil
+	}
 	absolutePath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("failed to convert path to absolute: %w", err)

@@ -48,6 +48,9 @@ type Runner struct {
 	// HealthyAfter is how long a run must last to count as healthy, resetting
 	// the failure streak. Zero means MinHealthyUptime.
 	HealthyAfter time.Duration
+	// OnChange fires after the run state changes, so a watcher can republish
+	// without polling. Called without the lock held.
+	OnChange func()
 
 	mu    sync.Mutex
 	state RunState
@@ -164,14 +167,28 @@ func (r *Runner) Run(ctx context.Context) error {
 
 func (r *Runner) markRunning(proc Process, startedAt time.Time) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.proc = proc
 	r.state.Running = true
 	r.state.PID = proc.Pid()
 	r.state.StartedAt = startedAt
+	r.mu.Unlock()
+	r.notifyChange()
+}
+
+// notifyChange runs the watcher callback with no lock held: it will read State,
+// which takes the same lock.
+func (r *Runner) notifyChange() {
+	if r.OnChange != nil {
+		r.OnChange()
+	}
 }
 
 func (r *Runner) record(d Decision, pid int, disabled bool) {
+	r.recordLocked(d, pid, disabled)
+	r.notifyChange()
+}
+
+func (r *Runner) recordLocked(d Decision, pid int, disabled bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.proc = nil
