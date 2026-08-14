@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"andriiklymiuk/corgi/utils"
@@ -97,6 +98,38 @@ func runAgentInstall(_ *cobra.Command, _ []string) {
 // shell passing all the while. The installing shell's PATH is captured, since
 // that is the one where the user verified their setup, with the usual locations
 // added in case corgi was invoked from somewhere unusual.
+// serviceEnv is the environment the supervised daemon needs to resolve the same
+// state the installing shell did.
+//
+// PATH alone is not enough: getDataPath keys on CORGI_DATA_DIR, HOMEBREW_PREFIX
+// and XDG_DATA_HOME, so a custom Homebrew prefix or a shell-set XDG_DATA_HOME
+// would leave the daemon reading a different, empty registry than the shell
+// that ran `corgi agent init` — the same skew capturing PATH exists to prevent.
+func serviceEnv() map[string]string {
+	env := map[string]string{"PATH": servicePATH()}
+	for _, key := range []string{"CORGI_DATA_DIR", "HOMEBREW_PREFIX", "XDG_DATA_HOME"} {
+		if v := os.Getenv(key); v != "" {
+			env[key] = v
+		}
+	}
+	return env
+}
+
+// sortedEnv returns the environment as stable key/value pairs, so a reinstall
+// produces an identical file.
+func sortedEnv(env map[string]string) [][2]string {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([][2]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, [2]string{k, env[k]})
+	}
+	return out
+}
+
 func servicePATH() string {
 	seen := map[string]bool{}
 	var parts []string
@@ -127,7 +160,7 @@ func installLaunchd(binary, logDir string) {
 	}
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
 
-	plist := renderedLaunchdPlist(binary, filepath.Join(logDir, "agent.log"), filepath.Join(logDir, "agent.err.log"), servicePATH())
+	plist := renderedLaunchdPlist(binary, filepath.Join(logDir, "agent.log"), filepath.Join(logDir, "agent.err.log"), serviceEnv())
 
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
 		exitWithError("agent_install", err, 1)
@@ -150,11 +183,16 @@ func installLaunchd(binary, logDir string) {
 // renderedLaunchdPlist is the plist corgi installs. It deliberately contains no
 // credential material: files in ~/Library/LaunchAgents are world-readable and
 // land in backups, so the daemon reads its own config at start instead.
-func renderedLaunchdPlist(binary, outLog, errLog, pathEnv string) string {
+func renderedLaunchdPlist(binary, outLog, errLog string, env map[string]string) string {
 	// A path may contain & or <, which would produce an invalid plist and an
 	// opaque `launchctl bootstrap` failure.
 	binary, outLog, errLog = escapeXML(binary), escapeXML(outLog), escapeXML(errLog)
-	pathEnv = escapeXML(pathEnv)
+
+	var envEntries strings.Builder
+	for _, kv := range sortedEnv(env) {
+		fmt.Fprintf(&envEntries, "\t\t<key>%s</key>\n\t\t<string>%s</string>\n",
+			escapeXML(kv[0]), escapeXML(kv[1]))
+	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -169,9 +207,7 @@ func renderedLaunchdPlist(binary, outLog, errLog, pathEnv string) string {
 	</array>
 	<key>EnvironmentVariables</key>
 	<dict>
-		<key>PATH</key>
-		<string>%s</string>
-	</dict>
+%s	</dict>
 	<key>RunAtLoad</key>
 	<true/>
 	<!-- Restart only on an abnormal end. corgi decides for itself when a
@@ -190,7 +226,7 @@ func renderedLaunchdPlist(binary, outLog, errLog, pathEnv string) string {
 	<string>%s</string>
 </dict>
 </plist>
-`, launchdLabel, binary, pathEnv, outLog, errLog)
+`, launchdLabel, binary, envEntries.String(), outLog, errLog)
 }
 
 func installSystemd(binary, logDir string) {
@@ -201,7 +237,7 @@ func installSystemd(binary, logDir string) {
 	unitDir := filepath.Join(home, ".config", "systemd", "user")
 	unitPath := filepath.Join(unitDir, systemdUnitName)
 
-	unit := renderedSystemdUnit(binary, servicePATH())
+	unit := renderedSystemdUnit(binary, serviceEnv())
 
 	if err := os.MkdirAll(unitDir, 0o755); err != nil {
 		exitWithError("agent_install", err, 1)
@@ -227,15 +263,19 @@ func installSystemd(binary, logDir string) {
 
 // renderedSystemdUnit is the user unit corgi installs. Like the plist, it
 // carries no credential material.
-func renderedSystemdUnit(binary, pathEnv string) string {
+func renderedSystemdUnit(binary string, env map[string]string) string {
+	var envLines strings.Builder
+	for _, kv := range sortedEnv(env) {
+		// Quoted: a value containing a space would otherwise truncate there.
+		fmt.Fprintf(&envLines, "Environment=\"%s=%s\"\n", kv[0], kv[1])
+	}
 	return fmt.Sprintf(`[Unit]
 Description=corgi agent — keeps Claude Code Remote Control running
 After=network-online.target
 
 [Service]
 Type=simple
-Environment="PATH=%s"
-ExecStart=%s agent serve
+%sExecStart=%s agent serve
 # corgi decides for itself when to stay down: an auth failure or a bad config
 # exits non-zero on purpose, so restarting on any failure would loop on exactly
 # the cases the supervisor deliberately gave up on.
@@ -244,7 +284,7 @@ RestartSec=5
 
 [Install]
 WantedBy=default.target
-`, pathEnv, binary)
+`, envLines.String(), binary)
 }
 
 func runAgentUninstall(_ *cobra.Command, _ []string) {

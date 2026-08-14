@@ -430,3 +430,66 @@ func TestExistingWorktreesFindsAMainCheckoutOnTheBranch(t *testing.T) {
 		t.Errorf("dir = %q, want the repo itself %q", gotDir, wantDir)
 	}
 }
+
+// `git worktree remove --force` would discard uncommitted work, while the tool
+// only promises that branches and commits survive.
+func TestReleaseKeepsAWorktreeWithUncommittedWork(t *testing.T) {
+	corgi, dir := stack(t, "api")
+	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scratch := filepath.Join(set.Worktrees[0].Dir, "half-written.txt")
+	writeRepoFile(t, scratch, "not finished\n")
+
+	removed, keptDirty, err := ReleaseBranchWorktreesReport(dir, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(removed) != 0 {
+		t.Errorf("removed %v; a dirty worktree must be kept", removed)
+	}
+	if len(keptDirty) != 1 {
+		t.Fatalf("keptDirty = %v, want the dirty worktree reported", keptDirty)
+	}
+	if _, statErr := os.Stat(scratch); statErr != nil {
+		t.Error("uncommitted work was destroyed")
+	}
+}
+
+func TestReleaseForceRemovesEvenWhenDirty(t *testing.T) {
+	corgi, dir := stack(t, "api")
+	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRepoFile(t, filepath.Join(set.Worktrees[0].Dir, "half-written.txt"), "not finished\n")
+
+	removed, wereDirty, err := ReleaseBranchWorktreesForce(dir, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(removed) != 1 {
+		t.Errorf("removed = %v, want the worktree gone when forced", removed)
+	}
+	if len(wereDirty) != 0 {
+		t.Errorf("force should not report anything as kept, got %v", wereDirty)
+	}
+}
+
+func TestReleaseStillRemovesACleanWorktree(t *testing.T) {
+	corgi, dir := stack(t, "api")
+	if _, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, keptDirty, err := ReleaseBranchWorktreesReport(dir, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 1 || len(keptDirty) != 0 {
+		t.Errorf("removed=%v keptDirty=%v; a clean worktree should just go", removed, keptDirty)
+	}
+}

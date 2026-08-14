@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -60,9 +61,16 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 
 		token, err := pairing.Pair(storePath, session, req.Code, req.Device)
 		if err != nil {
-			// Errors here are about the code or the name, both supplied by the
-			// caller, so they are safe to return verbatim and useful to a person.
-			writePairError(w, http.StatusForbidden, err.Error())
+			// Only errors about the caller's own input go back verbatim.
+			// Anything else — a permission problem, a corrupt store — would
+			// leak absolute paths and file modes to an unauthenticated, possibly
+			// tunnelled caller, so it is logged locally and reported plainly.
+			if errors.Is(err, pairing.ErrBadRequest) {
+				writePairError(w, http.StatusForbidden, err.Error())
+				return
+			}
+			utils.Infof("pairing failed: %v\n", err)
+			writePairError(w, http.StatusInternalServerError, "pairing failed on the machine — check its output")
 			return
 		}
 

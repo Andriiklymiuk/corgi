@@ -238,21 +238,42 @@ func ExistingBranchWorktrees(corgi *CorgiCompose, composeDir, branch string) (*W
 
 // ReleaseBranchWorktrees removes the worktrees a branch materialized, leaving
 // the branches themselves alone — the work is usually the point.
+//
+// A worktree with uncommitted changes is kept and reported instead of removed:
+// the tool promises only that branches and commits survive, and `git worktree
+// remove --force` would silently throw away work nobody asked it to. Pass
+// force to remove them anyway.
 func ReleaseBranchWorktrees(composeDir, branch string) ([]string, error) {
-	if err := validateBranchName(branch); err != nil {
-		return nil, err
+	removed, _, err := releaseBranchWorktrees(composeDir, branch, false)
+	return removed, err
+}
+
+// ReleaseBranchWorktreesReport is ReleaseBranchWorktrees, also reporting which
+// worktrees were kept because they held uncommitted changes.
+func ReleaseBranchWorktreesReport(composeDir, branch string) (removed, keptDirty []string, err error) {
+	return releaseBranchWorktrees(composeDir, branch, false)
+}
+
+// ReleaseBranchWorktreesForce removes them even when dirty, and reports which
+// held uncommitted work.
+func ReleaseBranchWorktreesForce(composeDir, branch string) (removed, wereDirty []string, err error) {
+	return releaseBranchWorktrees(composeDir, branch, true)
+}
+
+func releaseBranchWorktrees(composeDir, branch string, force bool) (removed, skippedDirty []string, err error) {
+	if verr := validateBranchName(branch); verr != nil {
+		return nil, nil, verr
 	}
 	base := AgentWorktreeBase(composeDir)
-	entries, err := os.ReadDir(base)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+	entries, rerr := os.ReadDir(base)
+	if rerr != nil {
+		if os.IsNotExist(rerr) {
+			return nil, nil, nil
 		}
-		return nil, err
+		return nil, nil, rerr
 	}
 
 	suffix := "@" + branchDirSegment(branch)
-	var removed []string
 	for _, e := range entries {
 		if !strings.HasSuffix(e.Name(), suffix) {
 			continue
@@ -262,6 +283,10 @@ func ReleaseBranchWorktrees(composeDir, branch string) ([]string, error) {
 		// feature-login collide there. Confirm against the real HEAD before
 		// force-removing someone else's worktree.
 		if head, herr := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); herr == nil && head != branch {
+			continue
+		}
+		if !force && hasUncommittedWork(dest) {
+			skippedDirty = append(skippedDirty, dest)
 			continue
 		}
 		common, cerr := gitOut(dest, gitRevParse, "--path-format=absolute", "--git-common-dir")
@@ -278,7 +303,19 @@ func ReleaseBranchWorktrees(composeDir, branch string) ([]string, error) {
 		}
 	}
 	sort.Strings(removed)
-	return removed, nil
+	sort.Strings(skippedDirty)
+	return removed, skippedDirty, nil
+}
+
+// hasUncommittedWork reports whether a worktree holds anything not committed,
+// including untracked files.
+//
+// isTreeDirty deliberately ignores untracked files, which is right for asking
+// "has this checkout diverged" — but wrong here. An agent's work is usually a
+// set of brand-new files, and those are the ones it would hurt most to discard.
+func hasUncommittedWork(dir string) bool {
+	out, err := gitOut(dir, "status", "--porcelain")
+	return err == nil && strings.TrimSpace(out) != ""
 }
 
 // worktreeDirName keeps repo and branch in the directory name so a release can

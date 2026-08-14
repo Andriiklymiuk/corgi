@@ -1,6 +1,7 @@
 package pairing
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -396,5 +397,29 @@ func TestConcurrentRedeemYieldsExactlyOneWinner(t *testing.T) {
 	}
 	if wins != 1 {
 		t.Errorf("%d concurrent redemptions succeeded, want exactly 1", wins)
+	}
+}
+
+// The pairing endpoint is unauthenticated and may be tunnelled, so only errors
+// about the caller's own input may be reported back. Anything else names local
+// paths and file modes.
+func TestCallerFacingErrorsAreTagged(t *testing.T) {
+	path := storeIn(t)
+	now := time.Now()
+
+	session, code := sessionAt(t, &now)
+	if _, err := Pair(path, session, "WRONGWRONG", "phone"); !errors.Is(err, ErrBadRequest) {
+		t.Errorf("a wrong code should be caller-facing, got %v", err)
+	}
+
+	session2, _ := sessionAt(t, &now)
+	if _, err := Pair(path, session2, code, ""); !errors.Is(err, ErrBadRequest) {
+		t.Errorf("a missing device name should be caller-facing, got %v", err)
+	}
+
+	session3, code3 := sessionAt(t, &now)
+	now = now.Add(CodeTTL + time.Second)
+	if _, err := Pair(path, session3, code3, "phone"); !errors.Is(err, ErrBadRequest) {
+		t.Errorf("an expired code should be caller-facing, got %v", err)
 	}
 }

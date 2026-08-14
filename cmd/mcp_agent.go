@@ -81,14 +81,16 @@ func registerAgentMCPTools(s *server.MCPServer) {
 
 	s.AddTool(mcp.NewTool("corgi_worktrees_release",
 		mcp.WithDescription(
-			"Remove the worktrees a branch materialized. The branches and their commits are left alone."),
+			"Remove the worktrees a branch materialized. Branches and commits are left alone, and a worktree "+
+				"with uncommitted changes is kept and reported rather than discarded — pass force to remove it anyway."),
 		composeOpt,
 		mcp.WithString("branch", mcp.Required(), mcp.Description("Branch whose worktrees should be removed")),
+		mcp.WithBoolean("force", mcp.Description("Remove even worktrees holding uncommitted changes")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
 			return nil, fmt.Errorf("%s", agentDangerousBlockedMsg)
 		}
-		return mcpWorktreesRelease(r.GetString("composePath", ""), r.GetString("branch", ""))
+		return mcpWorktreesRelease(r.GetString("composePath", ""), r.GetString("branch", ""), r.GetBool("force", false))
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_preview_start",
@@ -221,16 +223,28 @@ func mcpWorktreesMaterialize(composePath, branch string, services []string) (any
 	return set, nil
 }
 
-func mcpWorktreesRelease(composePath, branch string) (any, error) {
+func mcpWorktreesRelease(composePath, branch string, force bool) (any, error) {
 	_, dir, err := loadComposeForAgent(composePath)
 	if err != nil {
 		return nil, err
 	}
-	removed, err := utils.ReleaseBranchWorktrees(dir, branch)
+
+	var removed, keptDirty []string
+	if force {
+		removed, keptDirty, err = utils.ReleaseBranchWorktreesForce(dir, branch)
+	} else {
+		removed, keptDirty, err = utils.ReleaseBranchWorktreesReport(dir, branch)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", utils.ErrExecFailed, err)
 	}
-	return map[string]any{"branch": branch, "removed": removed}, nil
+
+	out := map[string]any{"branch": branch, "removed": removed}
+	if len(keptDirty) > 0 {
+		out["keptUncommitted"] = keptDirty
+		out["hint"] = "these hold uncommitted changes and were kept; pass force: true to remove them anyway"
+	}
+	return out, nil
 }
 
 func mcpDiff(composePath, base, branch string, includePatch bool) (any, error) {
@@ -256,8 +270,13 @@ func mcpDiff(composePath, base, branch string, includePatch bool) (any, error) {
 					"or omit branch to diff the main checkouts",
 				utils.ErrUsage, branch)
 		}
+		// Only the services actually on this branch. Materializing a subset
+		// leaves the rest on their main checkouts, and including those would
+		// show unrelated uncommitted work inside a diff labelled with a branch
+		// that has nothing to do with it.
+		return utils.DiffStack(utils.WorktreeDirs(set), base, includePatch), nil
 	}
-	return utils.DiffStack(utils.ServiceDirs(corgi, set), base, includePatch), nil
+	return utils.DiffStack(utils.ServiceDirs(corgi, nil), base, includePatch), nil
 }
 
 func mcpPreviewStart(r mcp.CallToolRequest) (any, error) {
