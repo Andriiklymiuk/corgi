@@ -120,9 +120,12 @@ func (p *execProcess) Stop() {
 		select {
 		case <-p.done:
 		case <-time.After(stopGrace):
-			// Kill the whole group: remote control may have spawned sessions.
-			_ = utils.KillProcessGroup(pid)
 		}
+		// Always sweep the group, not only after a timeout. Remote control
+		// spawns sessions, and a parent that exits promptly on SIGINT would
+		// otherwise leave them running — which is the whole reason the child
+		// gets its own process group.
+		_ = utils.KillProcessGroup(pid)
 	})
 }
 

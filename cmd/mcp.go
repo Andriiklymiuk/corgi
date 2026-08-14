@@ -241,8 +241,21 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	if !opts.insecure {
 		if dir, err := agentDir(); err == nil {
 			path := pairing.StorePath(dir)
-			if opts.pair || pairing.HasDevices(path) {
+			switch pairing.InspectStore(path) {
+			case pairing.StoreHasDevices:
 				deviceStore = path
+			case pairing.StoreUnreadable:
+				// Refuse rather than serve: silently continuing would drop back
+				// to whatever auth remains, and with no --token that is none at
+				// all — an unreadable file would reopen corgi_exec to anyone.
+				fmt.Fprintf(os.Stderr,
+					"corgi mcp: cannot read the paired-device store at %s.\n"+
+						"Fix its permissions (chmod 600) or remove it to start over; refusing to serve in the meantime.\n", path)
+				os.Exit(1)
+			case pairing.StoreEmpty:
+				if opts.pair {
+					deviceStore = path
+				}
 			}
 		}
 	}

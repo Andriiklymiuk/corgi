@@ -298,3 +298,47 @@ func TestDiffCountsAServiceSharedRepoOnce(t *testing.T) {
 			got.Additions, got.Repos[0].Additions)
 	}
 }
+
+// `git diff --numstat` reports a rename as the single path "old => new", which
+// is neither a usable display name nor a pathspec that matches anything — every
+// renamed file came back with an empty patch.
+func TestDiffHandlesRenamedFiles(t *testing.T) {
+	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
+	writeRepoFile(t, filepath.Join(repo, "old-name.go"), "package main\n\nfunc main() {}\n")
+	commitAll(t, repo, "add file")
+	gitIn(t, repo, "checkout", "-q", "-b", "feature/rename")
+	gitIn(t, repo, "mv", "old-name.go", "new-name.go")
+	commitAll(t, repo, "rename it")
+
+	got := DiffStack(map[string]string{"api": repo}, "main", true)
+
+	if len(got.Repos[0].Files) != 1 {
+		t.Fatalf("files = %+v, want 1", got.Repos[0].Files)
+	}
+	f := got.Repos[0].Files[0]
+	if strings.Contains(f.Path, "=>") {
+		t.Errorf("path = %q; the raw numstat rename form is not a usable path", f.Path)
+	}
+	if f.Path != "new-name.go" {
+		t.Errorf("path = %q, want the new name", f.Path)
+	}
+	if f.RenamedFrom != "old-name.go" {
+		t.Errorf("renamedFrom = %q, want the old name", f.RenamedFrom)
+	}
+}
+
+func TestWorktreeDirsIncludesOnlyMaterializedServices(t *testing.T) {
+	set := &WorktreeSet{Worktrees: []RepoWorktree{
+		{Service: "api", Dir: "/wt/api"},
+		{Service: "web", Skipped: "not a git repository"},
+	}}
+
+	dirs := WorktreeDirs(set)
+
+	if len(dirs) != 1 || dirs["api"] != "/wt/api" {
+		t.Errorf("dirs = %v; only services with a worktree belong in a branch diff", dirs)
+	}
+	if WorktreeDirs(nil) == nil {
+		t.Error("a nil set should still yield a usable empty map")
+	}
+}

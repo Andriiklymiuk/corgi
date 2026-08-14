@@ -27,8 +27,10 @@ type FileDiff struct {
 	Deletions int    `json:"deletions"`
 	Binary    bool   `json:"binary,omitempty"`
 	New       bool   `json:"new,omitempty"`
-	Patch     string `json:"patch,omitempty"`
-	Truncated bool   `json:"truncated,omitempty"`
+	// RenamedFrom is the previous path when git detected a rename.
+	RenamedFrom string `json:"renamedFrom,omitempty"`
+	Patch       string `json:"patch,omitempty"`
+	Truncated   bool   `json:"truncated,omitempty"`
 }
 
 // RepoDiff is one repository's changes against its merge base.
@@ -123,16 +125,15 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 	// Non-nil so a client can iterate the result without a null check.
 	rd.Files = []FileDiff{}
 
-	stats, err := gitOut(dir, "diff", "--numstat", ref)
+	// -z, because without it a rename is reported as the single path
+	// "old => new", which is then neither a usable display name nor a pathspec
+	// that matches anything — every renamed file came back with an empty patch.
+	stats, err := gitOut(dir, "diff", "--numstat", "-z", ref)
 	if err != nil {
 		rd.Error = err.Error()
 		return rd
 	}
-	for _, line := range strings.Split(stats, "\n") {
-		f, ok := parseNumstatLine(line)
-		if !ok {
-			continue
-		}
+	for _, f := range parseNumstatZ(stats) {
 		if includePatch {
 			f.Patch, f.Truncated = filePatch(dir, ref, f.Path)
 		}
@@ -279,21 +280,46 @@ func mergeBaseRef(dir, base string) string {
 	return ""
 }
 
-// parseNumstatLine reads one `git diff --numstat` row. Binary files report "-"
-// for both counts.
-func parseNumstatLine(line string) (FileDiff, bool) {
-	fields := strings.SplitN(strings.TrimSpace(line), "\t", 3)
-	if len(fields) != 3 {
-		return FileDiff{}, false
+// parseNumstatZ reads `git diff --numstat -z` output.
+//
+// Records are NUL-separated. An ordinary change is "adds\tdels\tpath\0"; a
+// rename drops the path from that field and follows with two more records, the
+// old path then the new one. Binary files report "-" for both counts.
+func parseNumstatZ(out string) []FileDiff {
+	records := strings.Split(out, "\x00")
+	var files []FileDiff
+
+	for i := 0; i < len(records); i++ {
+		rec := records[i]
+		if strings.TrimSpace(rec) == "" {
+			continue
+		}
+		fields := strings.SplitN(rec, "\t", 3)
+		if len(fields) < 3 {
+			continue
+		}
+		f := FileDiff{Path: fields[2]}
+		if f.Path == "" {
+			// A rename: the next two records are the old and new paths. The new
+			// one is what the change is about and what a pathspec matches.
+			if i+2 < len(records) {
+				f.Path = records[i+2]
+				f.RenamedFrom = records[i+1]
+				i += 2
+			} else {
+				continue
+			}
+		}
+		if fields[0] == "-" || fields[1] == "-" {
+			f.Binary = true
+			files = append(files, f)
+			continue
+		}
+		f.Additions, _ = strconv.Atoi(fields[0])
+		f.Deletions, _ = strconv.Atoi(fields[1])
+		files = append(files, f)
 	}
-	f := FileDiff{Path: fields[2]}
-	if fields[0] == "-" || fields[1] == "-" {
-		f.Binary = true
-		return f, true
-	}
-	f.Additions, _ = strconv.Atoi(fields[0])
-	f.Deletions, _ = strconv.Atoi(fields[1])
-	return f, true
+	return files
 }
 
 // filePatch returns one file's unified diff, truncated at maxPatchBytes.
@@ -319,6 +345,22 @@ func ServiceDirs(corgi *CorgiCompose, set *WorktreeSet) map[string]string {
 			dirs[svc.ServiceName] = svc.AbsolutePath
 		}
 	}
+	if set == nil {
+		return dirs
+	}
+	for _, w := range set.Worktrees {
+		if w.Dir != "" {
+			dirs[w.Service] = w.Dir
+		}
+	}
+	return dirs
+}
+
+// WorktreeDirs maps only the services a branch was actually materialized for.
+// Used when diffing a branch, so a partial materialize does not drag every
+// other service's main checkout into the result.
+func WorktreeDirs(set *WorktreeSet) map[string]string {
+	dirs := map[string]string{}
 	if set == nil {
 		return dirs
 	}

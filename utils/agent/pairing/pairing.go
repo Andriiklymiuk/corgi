@@ -18,6 +18,7 @@ import (
 	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,11 @@ import (
 	"sync"
 	"time"
 )
+
+// ErrBadRequest marks failures caused by the caller's own input — a wrong or
+// expired code, a bad device name. Only these are safe to report back over the
+// unauthenticated pairing endpoint; anything else names local paths.
+var ErrBadRequest = errors.New("pairing request rejected")
 
 // CodeTTL is how long a pairing code stays valid. Long enough to walk to your
 // phone, short enough that a code left on screen is not a standing invitation.
@@ -108,11 +114,37 @@ func Load(path string) (*Store, error) {
 	return &s, nil
 }
 
-// HasDevices reports whether any device is paired, without failing on a store
-// that cannot be read. Used to decide whether device tokens are in play at all.
-func HasDevices(path string) bool {
+// StoreState describes whether device tokens are in play.
+type StoreState int
+
+const (
+	// StoreEmpty means no device has been paired.
+	StoreEmpty StoreState = iota
+	// StoreHasDevices means at least one device is paired.
+	StoreHasDevices
+	// StoreUnreadable means the store exists but could not be read — bad
+	// permissions, or corrupt JSON.
+	StoreUnreadable
+)
+
+// InspectStore reports the store's state.
+//
+// The unreadable case is distinguished deliberately. Collapsing it into "no
+// devices" would let a chmod or a truncated file turn an authenticated endpoint
+// back into an open one, which is the worst possible direction for that mistake
+// to fail in.
+func InspectStore(path string) StoreState {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return StoreEmpty
+	}
 	store, err := Load(path)
-	return err == nil && len(store.Devices) > 0
+	if err != nil {
+		return StoreUnreadable
+	}
+	if len(store.Devices) == 0 {
+		return StoreEmpty
+	}
+	return StoreHasDevices
 }
 
 // Save writes the store with owner-only permissions, tmp-write then rename so a
@@ -263,23 +295,23 @@ func (s *Session) openLocked() bool {
 // window then closes, so a code observed in transit cannot be replayed.
 func (s *Session) Redeem(offered string) error {
 	if s == nil {
-		return fmt.Errorf("pairing is not open")
+		return fmt.Errorf("%w: pairing is not open", ErrBadRequest)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	switch {
 	case s.used:
-		return fmt.Errorf("that pairing code has already been used")
+		return fmt.Errorf("%w: that pairing code has already been used", ErrBadRequest)
 	case s.attempts >= MaxAttempts:
-		return fmt.Errorf("too many attempts — restart corgi mcp to pair")
+		return fmt.Errorf("%w: too many attempts — restart corgi mcp to pair", ErrBadRequest)
 	case !s.now().Before(s.expires):
-		return fmt.Errorf("that pairing code has expired — restart corgi mcp to pair")
+		return fmt.Errorf("%w: that pairing code has expired — restart corgi mcp to pair", ErrBadRequest)
 	}
 
 	s.attempts++
 	if subtle.ConstantTimeCompare([]byte(NormalizeCode(offered)), []byte(s.code)) != 1 {
-		return fmt.Errorf("that pairing code is not correct")
+		return fmt.Errorf("%w: that pairing code is not correct", ErrBadRequest)
 	}
 	s.used = true
 	return nil
@@ -300,10 +332,10 @@ func (s *Session) Close() {
 func Pair(storePath string, session *Session, code, deviceName string) (string, error) {
 	deviceName = strings.TrimSpace(deviceName)
 	if deviceName == "" {
-		return "", fmt.Errorf("a device name is required")
+		return "", fmt.Errorf("%w: a device name is required", ErrBadRequest)
 	}
 	if len(deviceName) > 64 {
-		return "", fmt.Errorf("device name is too long")
+		return "", fmt.Errorf("%w: device name is too long", ErrBadRequest)
 	}
 	if err := session.Redeem(code); err != nil {
 		return "", err

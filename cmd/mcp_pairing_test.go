@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -334,7 +335,7 @@ func TestMCPRouteStaysClosedWhilePairingIsOpen(t *testing.T) {
 // request, with no credential in existence to fix it.
 func TestNoTokenAndNoPairedDevicesStaysOpen(t *testing.T) {
 	dir := t.TempDir() // a store path that exists but holds nothing
-	if pairing.HasDevices(pairing.StorePath(dir)) {
+	if pairing.InspectStore(pairing.StorePath(dir)) != pairing.StoreEmpty {
 		t.Fatal("fixture should have no paired devices")
 	}
 
@@ -349,15 +350,37 @@ func TestNoTokenAndNoPairedDevicesStaysOpen(t *testing.T) {
 	}
 }
 
-func TestHasDevices(t *testing.T) {
+func TestInspectStore(t *testing.T) {
 	dir := t.TempDir()
 	path := pairing.StorePath(dir)
 
-	if pairing.HasDevices(path) {
-		t.Error("an absent store has no devices")
+	if got := pairing.InspectStore(path); got != pairing.StoreEmpty {
+		t.Errorf("absent store = %v, want StoreEmpty", got)
 	}
 	pairedToken(t, dir, "phone")
-	if !pairing.HasDevices(path) {
-		t.Error("a paired device should be reported")
+	if got := pairing.InspectStore(path); got != pairing.StoreHasDevices {
+		t.Errorf("paired store = %v, want StoreHasDevices", got)
+	}
+}
+
+// Collapsing "cannot read" into "no devices" would let a chmod or a truncated
+// file turn an authenticated endpoint back into an open one.
+func TestInspectStoreDistinguishesUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	pairedToken(t, dir, "phone")
+	path := pairing.StorePath(dir)
+
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := pairing.InspectStore(path); got != pairing.StoreUnreadable {
+		t.Errorf("world-readable store = %v, want StoreUnreadable", got)
+	}
+
+	if err := os.WriteFile(path, []byte("{corrupt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := pairing.InspectStore(path); got != pairing.StoreUnreadable {
+		t.Errorf("corrupt store = %v, want StoreUnreadable", got)
 	}
 }

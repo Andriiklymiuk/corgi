@@ -390,6 +390,11 @@ var agentResolveCmd = &cobra.Command{
 
 		if utils.JSONOutput {
 			utils.PrintJSON(res)
+			// Same exit code as the human path: a script must not read an
+			// ambiguous answer as a resolved one.
+			if !res.Resolved() {
+				os.Exit(2)
+			}
 			return
 		}
 		if res.Resolved() {

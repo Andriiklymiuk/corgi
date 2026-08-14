@@ -13,8 +13,8 @@ import (
 func TestServiceFilesCarryNoSecrets(t *testing.T) {
 	// The literal templates, as installLaunchd and installSystemd render them.
 	rendered := []string{
-		renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/log", "/tmp/err", "/usr/bin"),
-		renderedSystemdUnit("/usr/local/bin/corgi", "/usr/bin"),
+		renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/log", "/tmp/err", map[string]string{"PATH": "/usr/bin"}),
+		renderedSystemdUnit("/usr/local/bin/corgi", map[string]string{"PATH": "/usr/bin"}),
 	}
 
 	forbidden := []string{
@@ -56,7 +56,7 @@ func TestInstallMechanismIsNamedHonestly(t *testing.T) {
 func TestServiceFilesDoNotFightTheSupervisorsOwnPolicy(t *testing.T) {
 	// Assert on the effective directives, not the prose: the comments in these
 	// templates deliberately name the settings they avoid.
-	plist := stripXMLComments(renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", "/usr/bin"))
+	plist := stripXMLComments(renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", map[string]string{"PATH": "/usr/bin"}))
 	if strings.Contains(plist, "<key>SuccessfulExit</key>") {
 		t.Error("KeepAlive/SuccessfulExit=false restarts on every error exit, which is precisely the deliberate ones")
 	}
@@ -64,7 +64,7 @@ func TestServiceFilesDoNotFightTheSupervisorsOwnPolicy(t *testing.T) {
 		t.Error("the plist should still restart after a genuine crash")
 	}
 
-	unit := stripHashComments(renderedSystemdUnit("/usr/local/bin/corgi", "/usr/bin"))
+	unit := stripHashComments(renderedSystemdUnit("/usr/local/bin/corgi", map[string]string{"PATH": "/usr/bin"}))
 	if strings.Contains(unit, "Restart=always") {
 		t.Error("restarting on any exit turns a deliberate stop into a loop")
 	}
@@ -98,7 +98,7 @@ func stripHashComments(s string) string {
 }
 
 func TestPlistEscapesPathsThatWouldBreakTheXML(t *testing.T) {
-	plist := renderedLaunchdPlist(`/opt/A & B/<corgi>`, "/tmp/o", "/tmp/e", "/usr/bin")
+	plist := renderedLaunchdPlist(`/opt/A & B/<corgi>`, "/tmp/o", "/tmp/e", map[string]string{"PATH": "/usr/bin"})
 
 	if strings.Contains(plist, "A & B") {
 		t.Error("a raw & makes the plist invalid and launchctl bootstrap fails opaquely")
@@ -112,12 +112,12 @@ func TestPlistEscapesPathsThatWouldBreakTheXML(t *testing.T) {
 // one the daemon cannot find `claude`, fails to start five times, disables the
 // workspace — and `corgi agent doctor` in the user's shell passes throughout.
 func TestServiceFilesSetAPATH(t *testing.T) {
-	plist := renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", "/opt/homebrew/bin:/usr/bin")
+	plist := renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", map[string]string{"PATH": "/opt/homebrew/bin:/usr/bin"})
 	if !strings.Contains(plist, "<key>PATH</key>") || !strings.Contains(plist, "/opt/homebrew/bin") {
 		t.Errorf("plist does not set PATH: %s", plist)
 	}
 
-	unit := renderedSystemdUnit("/usr/local/bin/corgi", "/opt/homebrew/bin:/usr/bin")
+	unit := renderedSystemdUnit("/usr/local/bin/corgi", map[string]string{"PATH": "/opt/homebrew/bin:/usr/bin"})
 	if !strings.Contains(unit, `Environment="PATH=/opt/homebrew/bin:/usr/bin"`) {
 		t.Errorf("unit does not set PATH: %s", unit)
 	}
@@ -127,7 +127,7 @@ func TestServiceFilesSetAPATH(t *testing.T) {
 // App/bin"). Unquoted, systemd truncates the assignment there and the daemon
 // cannot find claude — the exact failure servicePATH exists to prevent.
 func TestSystemdPATHIsQuoted(t *testing.T) {
-	unit := renderedSystemdUnit("/usr/local/bin/corgi", "/opt/My Tools/bin:/usr/bin")
+	unit := renderedSystemdUnit("/usr/local/bin/corgi", map[string]string{"PATH": "/opt/My Tools/bin:/usr/bin"})
 
 	if !strings.Contains(unit, `Environment="PATH=/opt/My Tools/bin:/usr/bin"`) {
 		t.Errorf("a PATH with a space must be quoted, got: %s", unit)
@@ -157,5 +157,38 @@ func TestServicePATHHasNoDuplicates(t *testing.T) {
 			t.Errorf("duplicate entry %q", dir)
 		}
 		seen[dir] = true
+	}
+}
+
+// getDataPath keys on more than PATH. Without these the daemon resolves a
+// different, empty registry than the shell that ran `corgi agent init`.
+func TestServiceFilesCarryTheDataDirEnvironment(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", "/custom/corgi")
+	t.Setenv("HOMEBREW_PREFIX", "/opt/brew")
+
+	env := serviceEnv()
+	if env["CORGI_DATA_DIR"] != "/custom/corgi" || env["HOMEBREW_PREFIX"] != "/opt/brew" {
+		t.Fatalf("serviceEnv() = %v", env)
+	}
+
+	plist := renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", env)
+	if !strings.Contains(plist, "<key>CORGI_DATA_DIR</key>") || !strings.Contains(plist, "/custom/corgi") {
+		t.Errorf("plist does not carry CORGI_DATA_DIR: %s", plist)
+	}
+	unit := renderedSystemdUnit("/usr/local/bin/corgi", env)
+	if !strings.Contains(unit, `Environment="CORGI_DATA_DIR=/custom/corgi"`) {
+		t.Errorf("unit does not carry CORGI_DATA_DIR: %s", unit)
+	}
+}
+
+func TestServiceEnvOmitsUnsetKeys(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", "")
+	t.Setenv("XDG_DATA_HOME", "")
+
+	env := serviceEnv()
+	for _, key := range []string{"CORGI_DATA_DIR", "XDG_DATA_HOME"} {
+		if _, ok := env[key]; ok {
+			t.Errorf("%s should be omitted when unset, not exported empty", key)
+		}
 	}
 }
