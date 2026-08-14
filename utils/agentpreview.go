@@ -164,16 +164,22 @@ func StartPreview(opts PreviewOptions) (*Preview, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Reuse a live preview for the same service: a second tunnel would hand the
-	// user a different URL for the same thing.
+	// Reuse a live preview for the same service AND branch: a second tunnel
+	// would hand the user a different URL for the same thing, but matching on
+	// the service alone returned branch A's preview for a request about
+	// branch B, labelled with the wrong branch.
+	wantID := previewID(opts.Service, opts.Branch)
 	for i := range store.Previews {
-		p := &store.Previews[i]
-		if p.Service == opts.Service && previewProcessAlive(*p) {
-			p.LastTouched = time.Now().UTC()
-			_ = SavePreviews(opts.ComposeDir, store)
-			refreshPreviewFromLog(p)
-			return p, nil
+		if store.Previews[i].ID != wantID || !previewProcessAlive(store.Previews[i]) {
+			continue
 		}
+		store.Previews[i].LastTouched = time.Now().UTC()
+		// Save first, then take a copy by id: SavePreviews sorts in place, so a
+		// pointer held across it can end up aliasing a different preview.
+		if err := SavePreviews(opts.ComposeDir, store); err != nil {
+			return nil, err
+		}
+		return refreshedByID(opts.ComposeDir, wantID)
 	}
 
 	bin := opts.CorgiBin
@@ -256,6 +262,22 @@ func spawnDetachedTunnel(bin string, opts PreviewOptions, logFile string) (*os.P
 	return cmd.Process, nil
 }
 
+// refreshedByID re-reads one preview after a save, by id rather than by index.
+func refreshedByID(composeDir, id string) (*Preview, error) {
+	store, err := LoadPreviews(composeDir)
+	if err != nil {
+		return nil, err
+	}
+	for i := range store.Previews {
+		if store.Previews[i].ID == id {
+			p := store.Previews[i]
+			refreshPreviewFromLog(&p)
+			return &p, nil
+		}
+	}
+	return nil, fmt.Errorf("no preview called %q", id)
+}
+
 // PreviewStatus returns the current state of one preview, refreshed from its
 // log and a probe of the local port.
 func PreviewStatus(composeDir, id string) (*Preview, error) {
@@ -264,14 +286,14 @@ func PreviewStatus(composeDir, id string) (*Preview, error) {
 		return nil, err
 	}
 	for i := range store.Previews {
-		p := &store.Previews[i]
-		if p.ID != id && p.Service != id {
+		if store.Previews[i].ID != id && store.Previews[i].Service != id {
 			continue
 		}
-		refreshPreviewFromLog(p)
-		p.LastTouched = time.Now().UTC()
+		refreshPreviewFromLog(&store.Previews[i])
+		store.Previews[i].LastTouched = time.Now().UTC()
+		found := store.Previews[i] // copy before the save sorts the slice
 		_ = SavePreviews(composeDir, store)
-		return p, nil
+		return &found, nil
 	}
 	return nil, fmt.Errorf("no preview called %q", id)
 }
@@ -296,17 +318,19 @@ func FreezePreview(composeDir, id string, frozen bool) (*Preview, error) {
 		return nil, err
 	}
 	for i := range store.Previews {
-		p := &store.Previews[i]
-		if p.ID != id && p.Service != id {
+		if store.Previews[i].ID != id && store.Previews[i].Service != id {
 			continue
 		}
-		p.Frozen = frozen
-		p.LastTouched = time.Now().UTC()
-		refreshPreviewFromLog(p)
+		store.Previews[i].Frozen = frozen
+		store.Previews[i].LastTouched = time.Now().UTC()
+		refreshPreviewFromLog(&store.Previews[i])
+		// Copy before saving: the save sorts in place, and a pointer held
+		// across it could end up naming — and freezing — a different preview.
+		found := store.Previews[i]
 		if err := SavePreviews(composeDir, store); err != nil {
 			return nil, err
 		}
-		return p, nil
+		return &found, nil
 	}
 	return nil, fmt.Errorf("no preview called %q", id)
 }
@@ -338,12 +362,20 @@ func ReapPreviews(composeDir string, now time.Time) ([]Preview, error) {
 	var kept, reaped []Preview
 	for _, p := range store.Previews {
 		if !previewProcessAlive(p) {
+			// Report it as gone. Leaving State and URL as they were handed the
+			// caller a dead tunnel still marked ready, with a URL that no
+			// longer resolves.
+			p.State = PreviewStopped
+			p.URL = ""
+			p.Error = "tunnel process is no longer running"
 			reaped = append(reaped, p)
 			continue
 		}
 		if p.Expired(now) {
 			killPreview(p)
 			p.State = PreviewStopped
+			p.URL = ""
+			p.Error = "torn down after going unwatched"
 			reaped = append(reaped, p)
 			continue
 		}

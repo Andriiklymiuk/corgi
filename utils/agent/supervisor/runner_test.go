@@ -341,3 +341,38 @@ func TestStopKeepsItStopped(t *testing.T) {
 		t.Errorf("started %d processes, want 1 — Stop must not be undone by a restart", got)
 	}
 }
+
+// Stop during a restart backoff had nothing to signal — no process, a live
+// context, an uninterrupted sleep — so the loop went on to start a session
+// nothing would ever stop.
+func TestStopDuringBackoffDoesNotStartAgain(t *testing.T) {
+	start, calls := scriptedStarter(&fakeProcess{pid: 1, code: 1, exitNow: true})
+
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp/a", WakeLock: WakeLockOff}, start, NewWakeLock(WakeLockOff))
+	r.HealthyAfter = time.Millisecond
+
+	// A backoff long enough that only an interrupt can end it.
+	sleeping := make(chan struct{})
+	var once sync.Once
+	r.Sleep = func(ctx context.Context, _ time.Duration) {
+		once.Do(func() { close(sleeping) })
+		<-ctx.Done()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+
+	<-sleeping
+	r.Stop()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop() during a backoff must end the loop")
+	}
+	if got := *calls; got != 1 {
+		t.Errorf("started %d processes, want 1 — Stop must not be followed by another start", got)
+	}
+}
