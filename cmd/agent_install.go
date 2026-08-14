@@ -34,6 +34,9 @@ var agentUninstallCmd = &cobra.Command{
 const launchdLabel = "com.andriiklymiuk.corgi.agent"
 const systemdUnitName = "corgi-agent.service"
 
+// systemctlUser scopes systemctl to the calling user's manager.
+const systemctlUser = "--user"
+
 func installSupported() bool {
 	switch runtime.GOOS {
 	case "darwin", "linux":
@@ -213,8 +216,8 @@ func installSystemd(binary, logDir string) {
 				fmt.Errorf("systemctl %v failed: %v\n%s", args, err, out), 1)
 		}
 	}
-	run("--user", "daemon-reload")
-	run("--user", "enable", "--now", systemdUnitName)
+	run(systemctlUser, "daemon-reload")
+	run(systemctlUser, "enable", "--now", systemdUnitName)
 
 	utils.Infof("installed %s\n", unitPath)
 	utils.Info("corgi agent now starts at login. Check it with `corgi agent status`.")
@@ -231,7 +234,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-Environment=PATH=%s
+Environment="PATH=%s"
 ExecStart=%s agent serve
 # corgi decides for itself when to stay down: an auth failure or a bad config
 # exits non-zero on purpose, so restarting on any failure would loop on exactly
@@ -263,12 +266,12 @@ func runAgentUninstall(_ *cobra.Command, _ []string) {
 		}
 		utils.Infof("removed %s\n", plistPath)
 	case "linux":
-		_ = exec.Command("systemctl", "--user", "disable", "--now", systemdUnitName).Run()
+		_ = exec.Command("systemctl", systemctlUser, "disable", "--now", systemdUnitName).Run()
 		unitPath := filepath.Join(home, ".config", "systemd", "user", systemdUnitName)
 		if err := os.Remove(unitPath); err != nil && !os.IsNotExist(err) {
 			exitWithError("agent_uninstall", err, 1)
 		}
-		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		_ = exec.Command("systemctl", systemctlUser, "daemon-reload").Run()
 		utils.Infof("removed %s\n", unitPath)
 	}
 	utils.Info("corgi agent no longer starts at login")

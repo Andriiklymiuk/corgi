@@ -155,6 +155,9 @@ func generateMCPToken() string {
 	return "corgi_mcp_" + base64.RawURLEncoding.EncodeToString(b)
 }
 
+// bearerPrefix is the Authorization scheme corgi accepts.
+const bearerPrefix = "Bearer "
+
 // bearerAuth wraps next with a constant-time Bearer-token check. token=="" is
 // no-auth and returns next unchanged.
 //
@@ -164,7 +167,7 @@ func bearerAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 	if token == "" && deviceStorePath == "" {
 		return next
 	}
-	want := []byte("Bearer " + token)
+	want := []byte(bearerPrefix + token)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got := []byte(r.Header.Get("Authorization"))
 		if token != "" && subtle.ConstantTimeCompare(got, want) == 1 {
@@ -187,7 +190,7 @@ func authorizedDevice(storePath, header string) (string, bool) {
 	if storePath == "" {
 		return "", false
 	}
-	offered, ok := strings.CutPrefix(header, "Bearer ")
+	offered, ok := strings.CutPrefix(header, bearerPrefix)
 	if !ok || !strings.HasPrefix(offered, pairing.TokenPrefix) {
 		return "", false
 	}
@@ -230,9 +233,18 @@ func serveMCPStdio(s *server.MCPServer) {
 func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	httpSrv := server.NewStreamableHTTPServer(s)
 
+	// Only consult the device store when pairing is actually in play. It is
+	// otherwise always a valid path, which would defeat bearerAuth's no-auth
+	// escape and make `corgi mcp --http` (and --insecure) reject every request
+	// with no credential in existence to fix it.
 	deviceStore := ""
-	if dir, err := agentDir(); err == nil {
-		deviceStore = pairing.StorePath(dir)
+	if !opts.insecure {
+		if dir, err := agentDir(); err == nil {
+			path := pairing.StorePath(dir)
+			if opts.pair || pairing.HasDevices(path) {
+				deviceStore = path
+			}
+		}
 	}
 
 	// Only /mcp is behind the bearer check; other paths 404.

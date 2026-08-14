@@ -19,19 +19,29 @@ func TestClassify(t *testing.T) {
 			want: CauseRequested,
 		},
 		{
-			name: "auth failure detected from output",
-			exit: Exit{Code: 1, Uptime: healthy, Output: "Remote Control requires a claude.ai subscription"},
+			// Remote control cannot start without credentials, so a real auth
+			// failure always exits immediately.
+			name: "auth failure detected from a fast exit",
+			exit: Exit{Code: 1, Uptime: time.Second, Output: "Remote Control requires a claude.ai subscription"},
 			want: CauseAuthFailure,
 		},
 		{
 			name: "auth marker matched case-insensitively",
-			exit: Exit{Code: 1, Uptime: healthy, Output: "ERROR: NOT AUTHENTICATED"},
+			exit: Exit{Code: 1, Uptime: time.Second, Output: "ERROR: NOT AUTHENTICATED"},
 			want: CauseAuthFailure,
 		},
 		{
-			name: "auth failure beats a fast exit",
+			name: "auth marker beats a plain startup failure",
 			exit: Exit{Code: 1, Uptime: time.Second, Output: "run claude auth login"},
 			want: CauseAuthFailure,
+		},
+		{
+			// The output tail belongs to the SESSION. A long healthy run that
+			// merely printed the phrase — reading a log, discussing an error —
+			// must not permanently disable the workspace.
+			name: "auth marker in a long healthy run is not an auth failure",
+			exit: Exit{Code: 1, Uptime: healthy, Output: "the user asked why it said not authenticated"},
+			want: CauseCrash,
 		},
 		{
 			name: "too-fast exit is a startup failure",
@@ -79,7 +89,7 @@ func TestDecideNetworkTimeoutRestartsAndTellsTheUser(t *testing.T) {
 }
 
 func TestDecideAuthFailureDoesNotLoop(t *testing.T) {
-	d := Decide(Exit{Code: 1, Uptime: time.Hour, Output: "requires a claude.ai subscription"}, 0, 0)
+	d := Decide(Exit{Code: 1, Uptime: time.Second, Output: "requires a claude.ai subscription"}, 0, 0)
 
 	if d.Restart {
 		t.Error("auth failure must not restart: retrying cannot produce credentials")

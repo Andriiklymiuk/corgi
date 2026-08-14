@@ -9,7 +9,7 @@ func testRegistry() *Registry {
 	return &Registry{Workspaces: []Workspace{
 		{
 			ID:       "acme-stack",
-			Aliases:  []string{"acme", "todo app"},
+			Aliases:  []string{"acme", "recipe app"},
 			AbsPath:  "/home/dev/acme",
 			Repos:    []string{"api", "web", "mobile"},
 			Services: []string{"api", "web", "db"},
@@ -39,7 +39,7 @@ func TestResolveExactID(t *testing.T) {
 }
 
 func TestResolveAliasWithDifferentPunctuation(t *testing.T) {
-	for _, query := range []string{"todo app", "todo-app", "Todo App", "  TODO_APP  "} {
+	for _, query := range []string{"recipe app", "recipe-app", "Recipe App", "  RECIPE_APP  "} {
 		got := Resolve(testRegistry(), query)
 		if !got.Resolved() {
 			t.Errorf("query %q did not resolve: %s", query, got.Reason)

@@ -50,31 +50,48 @@ func MaterializeBranchAcrossRepos(corgi *CorgiCompose, composeDir, branch string
 		return nil, err
 	}
 
+	base := AgentWorktreeBase(composeDir)
+	if err := prepareWorktreeBase(composeDir); err != nil {
+		return nil, err
+	}
+
+	order, byRoot, skipped := groupServicesByRepo(corgi, branch, services)
+	results := prepareWorktrees(order, base, branch)
+
+	set := &WorktreeSet{Branch: branch}
+	set.Worktrees = append(set.Worktrees, skipped...)
+	for i, root := range order {
+		for _, svc := range byRoot[root] {
+			set.Worktrees = append(set.Worktrees, results[i].entry(svc, root, branch))
+		}
+	}
+	sort.Slice(set.Worktrees, func(i, j int) bool {
+		return set.Worktrees[i].Service < set.Worktrees[j].Service
+	})
+	return set, nil
+}
+
+// prepareWorktreeBase creates the worktree directory and keeps it out of git.
+// corgi_services/ is not wholly ignored, so each new thing under it must add
+// its own entry.
+func prepareWorktreeBase(composeDir string) error {
+	corgiServices := filepath.Join(composeDir, "corgi_services")
+	if err := os.MkdirAll(corgiServices, 0o755); err != nil {
+		return err
+	}
+	EnsureCorgiServicesIgnore(corgiServices, ".worktrees/")
+	return nil
+}
+
+// groupServicesByRepo collects the distinct repositories to prepare. Two
+// services can share one, and git allows a branch in exactly one worktree, so
+// each repository is prepared once and every service on it named afterwards.
+func groupServicesByRepo(corgi *CorgiCompose, branch string, services []string) (order []string, byRoot map[string][]string, skipped []RepoWorktree) {
 	wanted := map[string]bool{}
 	for _, s := range services {
 		wanted[strings.TrimSpace(s)] = true
 	}
-
-	base := AgentWorktreeBase(composeDir)
-	corgiServices := filepath.Join(composeDir, "corgi_services")
-	if err := os.MkdirAll(corgiServices, 0o755); err != nil {
-		return nil, err
-	}
-	// corgi_services/ is not wholly gitignored, so each new thing under it must
-	// add its own entry.
-	EnsureCorgiServicesIgnore(corgiServices, ".worktrees/")
-
-	set := &WorktreeSet{Branch: branch}
-
-	// Collect the distinct repositories first. Two services can share one, and
-	// git allows a branch in exactly one worktree, so each repo is prepared once.
-	type target struct {
-		root     string
-		services []string
-	}
-	var order []string
-	byRoot := map[string]*target{}
-	var skipped []RepoWorktree
+	byRoot = map[string][]string{}
 
 	for i := range corgi.Services {
 		svc := &corgi.Services[i]
@@ -88,24 +105,39 @@ func MaterializeBranchAcrossRepos(corgi *CorgiCompose, composeDir, branch string
 			})
 			continue
 		}
-		if t, seen := byRoot[root]; seen {
-			t.services = append(t.services, svc.ServiceName)
-			continue
+		if _, seen := byRoot[root]; !seen {
+			order = append(order, root)
 		}
-		byRoot[root] = &target{root: root, services: []string{svc.ServiceName}}
-		order = append(order, root)
+		byRoot[root] = append(byRoot[root], svc.ServiceName)
 	}
+	return order, byRoot, skipped
+}
 
-	// Prepare repositories concurrently. Each one may consult origin, which is
-	// bounded but not instant, and this runs inside an MCP handler holding a
-	// process-wide lock — so the cost must be the slowest repository, never the
-	// sum of them.
-	type result struct {
-		dir     string
-		created bool
-		err     error
+// worktreeResult is one repository's preparation outcome.
+type worktreeResult struct {
+	dir     string
+	created bool
+	err     error
+}
+
+// entry renders the result for one service.
+func (r worktreeResult) entry(service, root, branch string) RepoWorktree {
+	e := RepoWorktree{Service: service, Repo: root, Branch: branch}
+	if r.err != nil {
+		e.Skipped = r.err.Error()
+		return e
 	}
-	results := make([]result, len(order))
+	e.Dir, e.Created = r.dir, r.created
+	return e
+}
+
+// prepareWorktrees materializes each repository concurrently.
+//
+// Each one may consult origin, which is bounded but not instant, and this runs
+// inside an MCP handler holding a process-wide lock — so the cost must be the
+// slowest repository, never the sum of them.
+func prepareWorktrees(order []string, base, branch string) []worktreeResult {
+	results := make([]worktreeResult, len(order))
 	var wg sync.WaitGroup
 	for i, root := range order {
 		wg.Add(1)
@@ -113,28 +145,11 @@ func MaterializeBranchAcrossRepos(corgi *CorgiCompose, composeDir, branch string
 			defer wg.Done()
 			dest := filepath.Join(base, worktreeDirName(root, branch))
 			dir, created, err := ensureWorkBranchWorktree(root, branch, dest)
-			results[i] = result{dir: dir, created: created, err: err}
+			results[i] = worktreeResult{dir: dir, created: created, err: err}
 		}(i, root)
 	}
 	wg.Wait()
-
-	set.Worktrees = append(set.Worktrees, skipped...)
-	for i, root := range order {
-		for _, svc := range byRoot[root].services {
-			entry := RepoWorktree{Service: svc, Repo: root, Branch: branch}
-			if results[i].err != nil {
-				entry.Skipped = results[i].err.Error()
-			} else {
-				entry.Dir, entry.Created = results[i].dir, results[i].created
-			}
-			set.Worktrees = append(set.Worktrees, entry)
-		}
-	}
-
-	sort.Slice(set.Worktrees, func(i, j int) bool {
-		return set.Worktrees[i].Service < set.Worktrees[j].Service
-	})
-	return set, nil
+	return results
 }
 
 // ensureWorkBranchWorktree returns a worktree for branch, creating the branch
@@ -247,7 +262,7 @@ func ReleaseBranchWorktrees(composeDir, branch string) ([]string, error) {
 				continue
 			}
 		}
-		if rmErr := os.RemoveAll(dest); rmErr == nil {
+		if os.RemoveAll(dest) == nil {
 			removed = append(removed, dest)
 		}
 	}

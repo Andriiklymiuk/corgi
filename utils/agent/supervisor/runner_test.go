@@ -111,7 +111,7 @@ func TestRunnerRestartsAfterNetworkTimeout(t *testing.T) {
 
 func TestRunnerStopsOnAuthFailureWithoutLooping(t *testing.T) {
 	start, calls := scriptedStarter(
-		&fakeProcess{pid: 1, code: 1, uptime: 20 * time.Millisecond, output: "Remote Control requires a claude.ai subscription"},
+		&fakeProcess{pid: 1, code: 1, exitNow: true, output: "Remote Control requires a claude.ai subscription"},
 	)
 	r := testRunner(t, start)
 

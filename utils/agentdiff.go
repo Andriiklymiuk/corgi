@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -38,7 +40,10 @@ type RepoDiff struct {
 	Additions int        `json:"additions"`
 	Deletions int        `json:"deletions"`
 	Files     []FileDiff `json:"files"`
-	Error     string     `json:"error,omitempty"`
+	// AlsoServing names other services backed by this same repository, so a
+	// shared repo is reported once rather than counted twice.
+	AlsoServing []string `json:"alsoServing,omitempty"`
+	Error       string   `json:"error,omitempty"`
 }
 
 // StackDiff is the whole change, across every repository in the stack.
@@ -66,8 +71,17 @@ func DiffStack(dirs map[string]string, base string, includePatch bool) *StackDif
 	}
 	sort.Strings(services)
 
+	// Two services can share a repository. Diffing it twice would list the same
+	// change twice and double the stack totals, so each directory is diffed
+	// once and the extra services are named on that entry.
+	byDir := map[string]int{}
 	for _, svc := range services {
+		if i, seen := byDir[dirs[svc]]; seen {
+			out.Repos[i].AlsoServing = append(out.Repos[i].AlsoServing, svc)
+			continue
+		}
 		rd := diffRepo(svc, dirs[svc], base, includePatch)
+		byDir[dirs[svc]] = len(out.Repos)
 		out.Repos = append(out.Repos, rd)
 		out.Additions += rd.Additions
 		out.Deletions += rd.Deletions
@@ -81,8 +95,14 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 		rd.Error = "not a git repository"
 		return rd
 	}
+	// Every git call runs from the repository root. A service can live in a
+	// subdirectory, and `git diff --numstat` reports paths relative to the
+	// root — so running from the service directory made every pathspec miss
+	// and returned an empty patch for every file. It also silently limited the
+	// diff to that subtree.
 	if root, ok := repoRoot(dir); ok {
 		rd.Repo = root
+		dir = root
 	}
 	if branch, err := gitOut(dir, gitRevParse, gitAbbrevRef, "HEAD"); err == nil {
 		rd.Branch = branch
@@ -119,7 +139,7 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 	// An agent's first act is usually to create files, and `git diff` shows
 	// nothing for an untracked one. Without this the most common change of all
 	// would read as an empty diff.
-	for _, f := range untrackedFiles(dir, includePatch) {
+	for _, f := range untrackedFiles(rd.Repo, includePatch) {
 		rd.Files = append(rd.Files, f)
 		rd.Additions += f.Additions
 	}
@@ -141,7 +161,7 @@ func untrackedFiles(dir string, includePatch bool) []FileDiff {
 			continue
 		}
 		f := FileDiff{Path: path, New: true}
-		content, rerr := os.ReadFile(filepath.Join(dir, path))
+		content, lines, truncated, rerr := readForDiff(filepath.Join(dir, path))
 		if rerr != nil {
 			continue
 		}
@@ -150,20 +170,57 @@ func untrackedFiles(dir string, includePatch bool) []FileDiff {
 			files = append(files, f)
 			continue
 		}
-		f.Additions = countLines(content)
+		f.Additions = lines
 		if includePatch {
-			f.Patch, f.Truncated = newFilePatch(path, content)
+			f.Patch, f.Truncated = newFilePatch(path, content, truncated)
 		}
 		files = append(files, f)
 	}
 	return files
 }
 
+// readForDiff streams a file, keeping only the first maxPatchBytes for the
+// patch while counting every line. A stray multi-gigabyte file is then bounded
+// in memory, and the reported line count is still the real one — a truncated
+// patch that also under-reports its size would be misleading twice over.
+func readForDiff(path string) (head []byte, lines int, truncated bool, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	defer f.Close()
+
+	buf := make([]byte, 32<<10)
+	var total int
+	sawTrailingNewline := false
+	for {
+		n, readErr := f.Read(buf)
+		if n > 0 {
+			chunk := buf[:n]
+			total += n
+			lines += bytes.Count(chunk, []byte{'\n'})
+			sawTrailingNewline = chunk[n-1] == '\n'
+			if len(head) < maxPatchBytes {
+				head = append(head, chunk[:min(n, maxPatchBytes-len(head))]...)
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return nil, 0, false, readErr
+		}
+	}
+	if total > 0 && !sawTrailingNewline {
+		lines++ // a final line without a newline still counts
+	}
+	return head, lines, total > maxPatchBytes, nil
+}
+
 // newFilePatch renders an untracked file as a unified diff against nothing, so
 // a client renders it the same way as every other entry.
-func newFilePatch(path string, content []byte) (string, bool) {
+func newFilePatch(path string, content []byte, truncated bool) (string, bool) {
 	body := string(content)
-	truncated := false
 	if len(body) > maxPatchBytes {
 		body = body[:maxPatchBytes]
 		truncated = true

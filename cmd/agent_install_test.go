@@ -118,8 +118,19 @@ func TestServiceFilesSetAPATH(t *testing.T) {
 	}
 
 	unit := renderedSystemdUnit("/usr/local/bin/corgi", "/opt/homebrew/bin:/usr/bin")
-	if !strings.Contains(unit, "Environment=PATH=/opt/homebrew/bin:/usr/bin") {
+	if !strings.Contains(unit, `Environment="PATH=/opt/homebrew/bin:/usr/bin"`) {
 		t.Errorf("unit does not set PATH: %s", unit)
+	}
+}
+
+// A PATH entry containing a space is ordinary on macOS ("/Applications/Some
+// App/bin"). Unquoted, systemd truncates the assignment there and the daemon
+// cannot find claude — the exact failure servicePATH exists to prevent.
+func TestSystemdPATHIsQuoted(t *testing.T) {
+	unit := renderedSystemdUnit("/usr/local/bin/corgi", "/opt/My Tools/bin:/usr/bin")
+
+	if !strings.Contains(unit, `Environment="PATH=/opt/My Tools/bin:/usr/bin"`) {
+		t.Errorf("a PATH with a space must be quoted, got: %s", unit)
 	}
 }
 

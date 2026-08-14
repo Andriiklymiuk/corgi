@@ -1,6 +1,6 @@
 ---
 name: agent
-description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — "work on the todo app", "which stacks do I have", "start a branch across the api and mobile repos", "show me the diff", "keep corgi running when I'm away", "why did my remote session die", "set up agent mode", "run it under my work account". Covers resolving a stack by name, materializing one branch across every repository in it, reading a cross-repo diff, and supervising `claude remote-control` so it survives reboots and the ten-minute network timeout. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
+description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — "work on the recipe app", "which stacks do I have", "start a branch across the api and mobile repos", "show me the diff", "keep corgi running when I'm away", "why did my remote session die", "set up agent mode", "run it under my work account". Covers resolving a stack by name, materializing one branch across every repository in it, reading a cross-repo diff, and supervising `claude remote-control` so it survives reboots and the ten-minute network timeout. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
 ---
 
 # Corgi agent mode
@@ -25,7 +25,7 @@ Always resolve first, and **echo the result back before doing any work**:
 ### 1. Find it
 
 ```
-corgi_workspace_resolve { "query": "the todo app" }
+corgi_workspace_resolve { "query": "the recipe app" }
 ```
 
 Returns either one workspace, or candidates with a reason. If it returns

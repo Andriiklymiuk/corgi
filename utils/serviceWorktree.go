@@ -362,6 +362,9 @@ func realPath(path string) (string, bool) {
 	return resolved, true
 }
 
+// RepoRootOf returns the git repository root containing dir.
+func RepoRootOf(dir string) (string, bool) { return repoRoot(dir) }
+
 func repoRoot(dir string) (string, bool) {
 	out, err := gitOut(dir, gitRevParse, "--show-toplevel")
 	if err != nil || out == "" {

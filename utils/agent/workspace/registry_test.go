@@ -36,7 +36,7 @@ func TestUpsertPreservesFieldsAPartialUpdateOmits(t *testing.T) {
 	r.Upsert(Workspace{
 		ID:         "acme",
 		AbsPath:    "/a",
-		Aliases:    []string{"todo app"},
+		Aliases:    []string{"recipe app"},
 		Repos:      []string{"api", "web"},
 		Services:   []string{"api", "db"},
 		LastUsedAt: used,
@@ -46,7 +46,7 @@ func TestUpsertPreservesFieldsAPartialUpdateOmits(t *testing.T) {
 	r.Upsert(Workspace{ID: "acme", AbsPath: "/moved"})
 
 	got := r.Workspaces[0]
-	if len(got.Aliases) != 1 || got.Aliases[0] != "todo app" {
+	if len(got.Aliases) != 1 || got.Aliases[0] != "recipe app" {
 		t.Errorf("aliases = %v, want them preserved — a partial update must not erase what another path discovered", got.Aliases)
 	}
 	if len(got.Repos) != 2 || len(got.Services) != 2 {
@@ -132,7 +132,7 @@ func TestSortedIsMostRecentlyUsedFirst(t *testing.T) {
 func TestSaveThenLoadRoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "registry.json")
 	r := &Registry{}
-	r.Upsert(Workspace{ID: "acme", AbsPath: "/a", Aliases: []string{"todo app"}, Services: []string{"api"}})
+	r.Upsert(Workspace{ID: "acme", AbsPath: "/a", Aliases: []string{"recipe app"}, Services: []string{"api"}})
 
 	if err := Save(path, r); err != nil {
 		t.Fatalf("Save() = %v", err)
@@ -226,7 +226,7 @@ func TestFromLegacySkipsUnusableRows(t *testing.T) {
 
 func TestMergeLegacyNeverClobbersConfiguredWorkspaces(t *testing.T) {
 	r := &Registry{}
-	r.Upsert(Workspace{ID: "acme", AbsPath: "/configured", Aliases: []string{"todo app"}})
+	r.Upsert(Workspace{ID: "acme", AbsPath: "/configured", Aliases: []string{"recipe app"}})
 
 	added := MergeLegacy(r, []LegacyEntry{
 		{Name: "acme", Path: "/legacy/acme/corgi-compose.yml"},

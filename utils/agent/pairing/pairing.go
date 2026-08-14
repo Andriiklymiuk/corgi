@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -84,9 +85,14 @@ func Load(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if mode := info.Mode().Perm(); mode&0o077 != 0 {
-		return nil, fmt.Errorf("%s is readable by other users (mode %04o) — run: chmod 600 %s",
-			path, mode, path)
+	// Skipped on Windows, where Go reports 0666 for every file: the check would
+	// reject the store on every read, and every paired device would get a 401
+	// with nothing the user could do about it.
+	if runtime.GOOS != "windows" {
+		if mode := info.Mode().Perm(); mode&0o077 != 0 {
+			return nil, fmt.Errorf("%s is readable by other users (mode %04o) — run: chmod 600 %s",
+				path, mode, path)
+		}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -100,6 +106,13 @@ func Load(path string) (*Store, error) {
 		s.Version = storeVersion
 	}
 	return &s, nil
+}
+
+// HasDevices reports whether any device is paired, without failing on a store
+// that cannot be read. Used to decide whether device tokens are in play at all.
+func HasDevices(path string) bool {
+	store, err := Load(path)
+	return err == nil && len(store.Devices) > 0
 }
 
 // Save writes the store with owner-only permissions, tmp-write then rename so a

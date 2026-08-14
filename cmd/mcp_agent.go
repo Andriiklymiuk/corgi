@@ -52,7 +52,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 
 	s.AddTool(mcp.NewTool("corgi_workspace_resolve",
 		mcp.WithDescription(
-			"Resolve a human name like \"the todo app\" to one registered workspace. Read-only. "+
+			"Resolve a human name like \"the recipe app\" to one registered workspace. Read-only. "+
 				"Returns either a single workspace or a candidate list — it never guesses, because picking the "+
 				"wrong one means editing the wrong repository. Echo the resolved path back to the user before working."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("What the user called it")),
@@ -248,6 +248,14 @@ func mcpDiff(composePath, base, branch string, includePatch bool) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", utils.ErrUsage, err)
 		}
+		if len(set.Worktrees) == 0 {
+			// Falling back to the main checkouts here would return someone
+			// else's work labelled as this branch.
+			return nil, fmt.Errorf(
+				"%s: no worktrees exist for branch %q — run corgi_worktrees_materialize first, "+
+					"or omit branch to diff the main checkouts",
+				utils.ErrUsage, branch)
+		}
 	}
 	return utils.DiffStack(utils.ServiceDirs(corgi, set), base, includePatch), nil
 }
@@ -359,7 +367,7 @@ func agentRegistry() (*workspace.Registry, string, error) {
 			for _, e := range legacy {
 				entries = append(entries, workspace.LegacyEntry{Name: e.Name, Description: e.Description, Path: e.Path})
 			}
-			if added := workspace.MergeLegacy(registry, entries, dirHasComposeFile); added > 0 {
+			if workspace.MergeLegacy(registry, entries, dirHasComposeFile) > 0 {
 				_ = workspace.Save(path, registry)
 			}
 		}

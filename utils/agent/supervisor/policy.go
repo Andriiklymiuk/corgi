@@ -96,10 +96,14 @@ func Classify(e Exit, consecutiveStartupFailures int) ExitCause {
 	if e.Requested {
 		return CauseRequested
 	}
-	if hasAuthFailureMarker(e.Output) {
-		return CauseAuthFailure
-	}
+	// Only trust an auth marker from a run too short to have served anything.
+	// The output tail is the SESSION's, so a long-running session that merely
+	// printed "not authenticated" — reading a log, discussing an error — would
+	// otherwise permanently disable the workspace.
 	if e.Uptime < e.healthyThreshold() {
+		if hasAuthFailureMarker(e.Output) {
+			return CauseAuthFailure
+		}
 		return CauseStartupFailure
 	}
 	if e.Code == 0 {
