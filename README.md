@@ -382,6 +382,21 @@ Full guide: [docs/agents.md](docs/agents.md).
 
 Run `corgi mcp` and any MCP-speaking agent can control your stack through proper tools instead of guessing at shell commands. It runs over stdio by default (no network at all), or over HTTP with `--http` / `--tunnel` when you want it remote. It exposes around a dozen tools — bring up, tear down, status, env, exec, test, logs, db queries — plus read-only resources like the compose schema and live status. One caution: plain `--http` has no auth; corgi only adds a bearer token when you expose it through a public tunnel. Full docs: [docs/mcp.md](docs/mcp.md).
 
+### Agent mode — work on your stack from your phone
+
+Claude Code's [Remote Control](https://code.claude.com/docs/en/remote-control) already puts a session from your own machine on your phone. Two things stop it being the thing you actually want: its own docs say the local process must keep running, and that it exits after roughly ten minutes awake without network — so you have to remember to arm it. And it sees one directory, while a corgi stack is several repositories.
+
+`corgi agent` fixes exactly those two, and nothing else. It supervises `claude remote-control` so it survives reboots, crashes and that ten-minute exit (telling you when it restarted, because the new session starts clean), holds a wake lock so the machine does not sleep mid-session, and runs each workspace under its own Claude config directory. Then `corgi mcp` gains the tools a phone session needs: resolve "the todo app" to the right stack, materialize one branch across every repo in it, and read a single cross-repo diff — which needs no tunnel and no running stack, so it works on a train.
+
+```
+cd ~/dev/your-stack
+corgi agent init        # register this stack
+corgi agent install     # start at login
+corgi agent status      # what is running, and under which account
+```
+
+Opt-in: if you never run `corgi agent init`, nothing changes. macOS and Linux for now — on Windows `install` says so rather than half-working. If you keep work and personal Claude logins apart, read the multi-account section first: launchd never sources your shell aliases, so without `--config-dir` every session silently uses your default account. Full docs: [docs/agent.md](docs/agent.md).
+
 ### Claude Code plugin
 
 If you use [Claude Code](https://claude.com/claude-code), install the plugin:
@@ -480,6 +495,7 @@ corgi runs your stack on your own machine — the local inner loop — and can p
 - Running the stack in CI (action, caching, cross-repo e2e): https://andriiklymiuk.github.io/corgi/docs/ci
 - 2-min video showcase: https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY
 - Driving corgi from a script or agent? See [docs/agents.md](docs/agents.md) and [docs/mcp.md](docs/mcp.md).
+- Working on your stack from your phone, always-on? See [docs/agent.md](docs/agent.md).
 - Planning + picking up work from your tracker (Linear/Jira)? See [docs/tracker.md](docs/tracker.md).
 
 ### VSCode users
