@@ -34,6 +34,13 @@ type SpawnConfig struct {
 	// WakeLock controls whether the machine is kept awake while this
 	// workspace's session runs. Empty means WakeLockSession.
 	WakeLock WakeLockMode
+	// MirrorOutput echoes the supervised process's output to corgi's stderr.
+	//
+	// Off by default. Remote control's output can contain anything the session
+	// printed — env values, tokens, file contents — and in `serve` mode corgi's
+	// stderr is a log file on disk. Only `--foreground`, where a person is
+	// watching the terminal, turns this on.
+	MirrorOutput bool
 }
 
 // credentialEnvVars are stripped from the child environment unless the
@@ -100,11 +107,33 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	if c.Capacity < 0 {
 		return fmt.Errorf("workspace %s: capacity cannot be negative", c.WorkspaceID)
 	}
+	if _, err := SanitizeBin(c.Bin); err != nil {
+		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
+	}
 	if c.WakeLock != "" && !ValidWakeLockMode(c.WakeLock) {
 		return fmt.Errorf("workspace %s: unknown wakeLock %q (want always, off, session)",
 			c.WorkspaceID, c.WakeLock)
 	}
 	return nil
+}
+
+// SanitizeBin rejects a binary name that is a path, so no config file can
+// point the supervisor at an arbitrary executable. Only a bare command name
+// resolved through PATH is allowed.
+func SanitizeBin(bin string) (string, error) {
+	bin = strings.TrimSpace(bin)
+	if bin == "" {
+		return "claude", nil
+	}
+	if strings.ContainsAny(bin, `/\`) {
+		return "", fmt.Errorf(
+			"bin %q must be a command name found on PATH, not a path — "+
+				"a path here would let a config file choose which program the daemon runs", bin)
+	}
+	if strings.HasPrefix(bin, "-") {
+		return "", fmt.Errorf("bin %q cannot start with a dash", bin)
+	}
+	return bin, nil
 }
 
 // BuildArgs returns the argv for a workspace's remote-control process.
