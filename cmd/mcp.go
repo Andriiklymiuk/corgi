@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/pairing"
 	"andriiklymiuk/corgi/utils/tunnel"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -49,6 +50,7 @@ func init() {
 	mcpCmd.Flags().String("tunnel-name", "", "cloudflared named-tunnel name.")
 	mcpCmd.Flags().String("token", "", "Bearer token for HTTP auth (auto-generated when --tunnel is set).")
 	mcpCmd.Flags().Bool("insecure", false, "Disable bearer-token auth on the HTTP endpoint.")
+	mcpCmd.Flags().Bool("pair", false, "Open a single-use pairing window so a device can claim its own revocable token (requires --http).")
 	rootCmd.AddCommand(mcpCmd)
 }
 
@@ -91,6 +93,10 @@ func runMCP(cmd *cobra.Command, _ []string) {
 
 	httpAddr, _ := cmd.Flags().GetString("http")
 	opts := mcpHTTPOptsFromFlags(cmd)
+	if opts.pair && httpAddr == "" {
+		fmt.Fprintln(os.Stderr, "corgi mcp --pair requires --http (the addr a device connects to).")
+		os.Exit(2)
+	}
 	if opts.tunnel && httpAddr == "" {
 		fmt.Fprintln(os.Stderr, "corgi mcp --tunnel requires --http (the local addr to expose).")
 		os.Exit(2)
@@ -109,6 +115,7 @@ type mcpHTTPOpts struct {
 	tunnelName     string
 	token          string
 	insecure       bool
+	pair           bool
 }
 
 func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
@@ -119,6 +126,7 @@ func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
 	o.tunnelName, _ = cmd.Flags().GetString("tunnel-name")
 	o.token, _ = cmd.Flags().GetString("token")
 	o.insecure, _ = cmd.Flags().GetBool("insecure")
+	o.pair, _ = cmd.Flags().GetBool("pair")
 	return o
 }
 
@@ -149,21 +157,45 @@ func generateMCPToken() string {
 
 // bearerAuth wraps next with a constant-time Bearer-token check. token=="" is
 // no-auth and returns next unchanged.
-func bearerAuth(token string, next http.Handler) http.Handler {
-	if token == "" {
+//
+// deviceStorePath, when set, additionally accepts any paired device's token, so
+// a phone never has to be handed the server token itself. Empty disables that.
+func bearerAuth(token string, next http.Handler, deviceStorePath string) http.Handler {
+	if token == "" && deviceStorePath == "" {
 		return next
 	}
 	want := []byte("Bearer " + token)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got := []byte(r.Header.Get("Authorization"))
-		if subtle.ConstantTimeCompare(got, want) != 1 {
-			w.Header().Set("Content-Type", mimeJSON)
-			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+		if token != "" && subtle.ConstantTimeCompare(got, want) == 1 {
+			next.ServeHTTP(w, r)
 			return
 		}
-		next.ServeHTTP(w, r)
+		if _, ok := authorizedDevice(deviceStorePath, r.Header.Get("Authorization")); ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", mimeJSON)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
 	})
+}
+
+// authorizedDevice reports whether an Authorization header carries a paired
+// device's token.
+func authorizedDevice(storePath, header string) (string, bool) {
+	if storePath == "" {
+		return "", false
+	}
+	offered, ok := strings.CutPrefix(header, "Bearer ")
+	if !ok || !strings.HasPrefix(offered, pairing.TokenPrefix) {
+		return "", false
+	}
+	store, err := pairing.Load(storePath)
+	if err != nil {
+		return "", false
+	}
+	return store.Authorize(offered)
 }
 
 // buildMCPTunnelConfig selects a provider and builds a NamedConfig from the mcp
@@ -197,10 +229,33 @@ func serveMCPStdio(s *server.MCPServer) {
 
 func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	httpSrv := server.NewStreamableHTTPServer(s)
-	// httpSrv.ServeHTTP serves /mcp; mount it on a mux so other paths 404.
+
+	deviceStore := ""
+	if dir, err := agentDir(); err == nil {
+		deviceStore = pairing.StorePath(dir)
+	}
+
+	// Only /mcp is behind the bearer check; other paths 404.
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", httpSrv)
-	srv := &http.Server{Addr: addr, Handler: bearerAuth(token, mux)}
+	mux.Handle("/mcp", bearerAuth(token, httpSrv, deviceStore))
+
+	// /pair is deliberately NOT behind the bearer check: its whole purpose is
+	// to serve a client that has no token yet. It is guarded by the pairing
+	// code — single-use, two minutes, attempt-capped — and the route is only
+	// mounted while a window is open.
+	var pairSession *pairing.Session
+	if opts.pair {
+		session, _, err := pairing.NewSession()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "could not start pairing:", err)
+			os.Exit(1)
+		}
+		pairSession = session
+		mux.Handle("/pair", pairingHandler(session, deviceStore))
+		defer session.Close()
+	}
+
+	srv := &http.Server{Addr: addr, Handler: mux}
 
 	if token == "" {
 		fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
@@ -209,6 +264,9 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	}
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
 	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token)
+	if pairSession != nil {
+		announcePairing(pairSession.Code(), addr)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
