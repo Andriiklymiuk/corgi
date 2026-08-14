@@ -91,7 +91,31 @@ func installLaunchd(binary, logDir string) {
 	}
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
 
-	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+	plist := renderedLaunchdPlist(binary, filepath.Join(logDir, "agent.log"), filepath.Join(logDir, "agent.err.log"))
+
+	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
+		exitWithError("agent_install", err, 1)
+	}
+	if err := os.WriteFile(plistPath, []byte(plist), 0o644); err != nil {
+		exitWithError("agent_install", err, 1)
+	}
+
+	// bootout first so a reinstall picks up a changed binary path.
+	_ = exec.Command("launchctl", "bootout", "gui/"+currentUID(), plistPath).Run()
+	if out, err := exec.Command("launchctl", "bootstrap", "gui/"+currentUID(), plistPath).CombinedOutput(); err != nil {
+		exitWithError("agent_install",
+			fmt.Errorf("launchctl bootstrap failed: %v\n%s", err, out), 1)
+	}
+
+	utils.Infof("installed %s\n", plistPath)
+	utils.Info("corgi agent now starts at login. Check it with `corgi agent status`.")
+}
+
+// renderedLaunchdPlist is the plist corgi installs. It deliberately contains no
+// credential material: files in ~/Library/LaunchAgents are world-readable and
+// land in backups, so the daemon reads its own config at start instead.
+func renderedLaunchdPlist(binary, outLog, errLog string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -116,24 +140,7 @@ func installLaunchd(binary, logDir string) {
 	<string>%s</string>
 </dict>
 </plist>
-`, launchdLabel, binary, filepath.Join(logDir, "agent.log"), filepath.Join(logDir, "agent.err.log"))
-
-	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
-		exitWithError("agent_install", err, 1)
-	}
-	if err := os.WriteFile(plistPath, []byte(plist), 0o644); err != nil {
-		exitWithError("agent_install", err, 1)
-	}
-
-	// bootout first so a reinstall picks up a changed binary path.
-	_ = exec.Command("launchctl", "bootout", "gui/"+currentUID(), plistPath).Run()
-	if out, err := exec.Command("launchctl", "bootstrap", "gui/"+currentUID(), plistPath).CombinedOutput(); err != nil {
-		exitWithError("agent_install",
-			fmt.Errorf("launchctl bootstrap failed: %v\n%s", err, out), 1)
-	}
-
-	utils.Infof("installed %s\n", plistPath)
-	utils.Info("corgi agent now starts at login. Check it with `corgi agent status`.")
+`, launchdLabel, binary, outLog, errLog)
 }
 
 func installSystemd(binary, logDir string) {
@@ -144,19 +151,7 @@ func installSystemd(binary, logDir string) {
 	unitDir := filepath.Join(home, ".config", "systemd", "user")
 	unitPath := filepath.Join(unitDir, systemdUnitName)
 
-	unit := fmt.Sprintf(`[Unit]
-Description=corgi agent — keeps Claude Code Remote Control running
-After=network-online.target
-
-[Service]
-Type=simple
-ExecStart=%s agent serve
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-`, binary)
+	unit := renderedSystemdUnit(binary)
 
 	if err := os.MkdirAll(unitDir, 0o755); err != nil {
 		exitWithError("agent_install", err, 1)
@@ -178,6 +173,24 @@ WantedBy=default.target
 	utils.Info("corgi agent now starts at login. Check it with `corgi agent status`.")
 	utils.Info("If it should survive logout too: `loginctl enable-linger $USER`")
 	_ = logDir
+}
+
+// renderedSystemdUnit is the user unit corgi installs. Like the plist, it
+// carries no credential material.
+func renderedSystemdUnit(binary string) string {
+	return fmt.Sprintf(`[Unit]
+Description=corgi agent — keeps Claude Code Remote Control running
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%s agent serve
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+`, binary)
 }
 
 func runAgentUninstall(_ *cobra.Command, _ []string) {

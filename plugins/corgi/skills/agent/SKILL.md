@@ -83,6 +83,39 @@ show the parts that matter. Do not paste an enormous patch into a phone.
 branches and commits survive; only the checkout is disposable. Do not release
 until the user has the work somewhere they want it.
 
+## Showing it running
+
+When the user wants to *see* it, not just read the diff:
+
+```
+corgi_up { }                                     # the stack must be up first
+corgi_preview_start { "service": "web", "branch": "feature/x" }
+corgi_preview_state { }                          # poll until state is ready
+```
+
+`corgi_preview_start` returns immediately with `starting`. Poll
+`corgi_preview_state` for the URL. States:
+
+- `starting` — no URL yet. Say so; do not invent one.
+- `ready` — hand over the URL.
+- `broken` — the tunnel is up but nothing answers on the port, usually a build
+  in progress. **Tell them that** rather than sending a link to a stack trace.
+- `stopped` — gone; offer to start it again.
+
+`corgi_preview_freeze` while they are reading it, so idle reaping does not pull
+it away. `corgi_preview_stop` when they are done — a forgotten preview is a
+public URL onto seeded data.
+
+Refused for a workspace marked `sensitive`. That is deliberate; offer
+`corgi_diff` instead.
+
+Three things are unverified and worth saying once, not repeatedly: hot reload
+over a tunnel depends on the provider passing websockets through; Vite and Next
+need the tunnel host in `allowedHosts` / `allowedDevOrigins`; and a quick tunnel
+changes URL if it restarts, so use `tunnelName` for anything they will keep
+open. If the page loads but never updates, that is the first of those, not your
+code.
+
 ## Running the stack
 
 The existing tools still apply, pointed at the worktree directories:
