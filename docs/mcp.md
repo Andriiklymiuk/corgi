@@ -137,3 +137,55 @@ stdout is the JSON-RPC channel. The server forces non-interactive mode and
 routes all of corgi's human/JSON logging to stderr; the startup banner is
 suppressed for the `mcp` subcommand. `corgi_exec` captures the child command's
 combined output into the returned `output` field rather than streaming it.
+
+## Pairing a device
+
+A phone should never hold the server's bearer token. That token reaches
+`corgi_exec` and `corgi_db_query`, so a QR containing it is a credential for the
+whole machine — anyone who sees the screen or a photo of it has it, and there is
+no way to revoke one device without re-pairing every other.
+
+Instead, open a pairing window:
+
+```bash
+corgi mcp --http 127.0.0.1:8765 --pair
+
+  pairing code: 7KQ2M9XVBT
+  valid for 2m0s, single use
+  POST http://127.0.0.1:8765/pair  {"code":"7KQ2M9XVBT","device":"my-phone"}
+```
+
+The client posts the code once and receives its own token:
+
+```json
+{"token":"corgi_dev_…","daemon":"macbook","device":"my-phone","version":"1.20.25"}
+```
+
+That token then works as a normal `Authorization: Bearer` credential against
+`/mcp`, alongside the server token.
+
+Properties worth knowing:
+
+- **Single use.** A correct code closes the window, so a code seen in transit
+  cannot be replayed.
+- **Two minutes.** A code left on a screen is not a standing invitation.
+- **Attempt-capped.** Ten wrong codes close the window; the correct one is
+  refused after that too.
+- **Per-device and revocable.** This is the property a shared token cannot give
+  you.
+- **Stored hashed.** `devices.json` is `chmod 600` and holds SHA-256 hashes, so a
+  readable store lists which devices exist but yields no working credential.
+- **`/pair` only exists while the window is open.** Without `--pair` the route
+  is not mounted at all.
+
+Managing devices:
+
+```bash
+corgi mcp devices                 # who is paired
+corgi mcp devices revoke my-phone # kill exactly one, others keep working
+```
+
+Treat a lost phone as a compromised machine and revoke it. There is deliberately
+no "last seen" tracking: recording it would mean rewriting the device store on
+every request, and a concurrent revoke could then be undone by a write that
+loaded before it — resurrecting the device you just revoked.

@@ -216,7 +216,7 @@ func TestBearerAuth(t *testing.T) {
 				called = true
 				okHandler.ServeHTTP(w, r)
 			})
-			h := bearerAuth(tc.token, next)
+			h := bearerAuth(tc.token, next, "")
 			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 			if tc.header != "" {
 				req.Header.Set("Authorization", tc.header)
