@@ -376,28 +376,11 @@ var agentResolveCmd = &cobra.Command{
 	},
 }
 
+// mustLoadRegistry is the CLI's view of the same registry the MCP tools read.
 func mustLoadRegistry() (*workspace.Registry, string) {
-	dir, err := agentDir()
-	if err != nil {
-		exitWithError("agent_data_dir", err, 1)
-	}
-	path := agentRegistryPath(dir)
-	registry, err := workspace.Load(path)
+	registry, path, err := agentRegistry()
 	if err != nil {
 		exitWithError("agent_registry_read", err, 1)
-	}
-	if len(registry.Workspaces) == 0 {
-		// Seed from the registry corgi has been keeping all along, so agent
-		// mode knows about every stack that has ever been run.
-		if legacy, lerr := utils.ListExecPaths(); lerr == nil {
-			entries := make([]workspace.LegacyEntry, 0, len(legacy))
-			for _, e := range legacy {
-				entries = append(entries, workspace.LegacyEntry{Name: e.Name, Description: e.Description, Path: e.Path})
-			}
-			if added := workspace.MergeLegacy(registry, entries, dirHasComposeFile); added > 0 {
-				_ = workspace.Save(path, registry)
-			}
-		}
 	}
 	return registry, path
 }
