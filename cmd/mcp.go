@@ -926,6 +926,8 @@ func registerMCPTools(s *server.MCPServer) {
 	composeOpt := mcp.WithString("composePath", mcp.Description("compose path (default: cwd)"))
 	serviceOpt := mcp.WithString("service", mcp.Required(), mcp.Description("Service name"))
 
+	registerAgentMCPTools(s)
+
 	s.AddTool(mcp.NewTool("corgi_validate",
 		mcp.WithDescription("Statically validate corgi-compose.yml (no side effects). Returns {ok, errors[], warnings[]}."),
 		composeOpt,
