@@ -229,26 +229,40 @@ func runAgentStatus(_ *cobra.Command, _ []string) {
 		fmt.Println("wake lock: unsupported on this platform")
 	}
 	for _, w := range status.Workspaces {
-		state := "stopped"
-		if w.Running {
-			state = "running"
-		}
-		if w.Disabled {
-			state = "disabled"
-		}
-		fmt.Printf("  %-20s %-9s restarts=%d wakeLock=%v\n", w.WorkspaceID, state, w.Restarts, w.WakeLock)
-		if w.LastReason != "" {
-			fmt.Printf("  %-20s %s\n", "", w.LastReason)
-		}
+		printWorkspaceState(w)
 	}
 	for _, d := range status.Diagnostics {
-		fmt.Printf("  %-20s bin=%s configDir=%s\n", d.WorkspaceID, d.Bin, d.ConfigDir)
-		if len(d.Stripped) > 0 {
-			fmt.Printf("  %-20s stripped: %v\n", "", d.Stripped)
-		}
-		if d.Warning != "" {
-			fmt.Printf("  %-20s %s %s%s\n", "", art.RedColor, d.Warning, art.WhiteColor)
-		}
+		printWorkspaceDiagnostic(d)
+	}
+}
+
+func printWorkspaceState(w supervisor.RunState) {
+	fmt.Printf("  %-20s %-9s restarts=%d wakeLock=%v\n", w.WorkspaceID, workspaceState(w), w.Restarts, w.WakeLock)
+	if w.LastReason != "" {
+		fmt.Printf("  %-20s %s\n", "", w.LastReason)
+	}
+}
+
+// workspaceState collapses the flags into the one word worth reading first.
+// Disabled outranks running: a disabled workspace is the thing to explain.
+func workspaceState(w supervisor.RunState) string {
+	switch {
+	case w.Disabled:
+		return "disabled"
+	case w.Running:
+		return "running"
+	default:
+		return "stopped"
+	}
+}
+
+func printWorkspaceDiagnostic(d daemon.WorkspaceDiagnostic) {
+	fmt.Printf("  %-20s bin=%s configDir=%s\n", d.WorkspaceID, d.Bin, d.ConfigDir)
+	if len(d.Stripped) > 0 {
+		fmt.Printf("  %-20s stripped: %v\n", "", d.Stripped)
+	}
+	if d.Warning != "" {
+		fmt.Printf("  %-20s %s %s%s\n", "", art.RedColor, d.Warning, art.WhiteColor)
 	}
 }
 

@@ -314,3 +314,143 @@ func TestSavePreviewsLeavesNoTempFile(t *testing.T) {
 		t.Error("the temp file must be renamed away")
 	}
 }
+
+// The tunnel argv is what a preview actually depends on. An earlier version
+// passed --tunnel-name and --tunnel-hostname, which `corgi tunnel` does not
+// define, so every named-tunnel preview died instantly with "unknown flag"
+// while still reporting "starting".
+func TestPreviewSpawnsTunnelWithFlagsThatExist(t *testing.T) {
+	dir := previewFixture(t)
+	bin := filepath.Join(t.TempDir(), "fake-corgi")
+	argvFile := filepath.Join(dir, "argv.txt")
+	script := "#!/bin/sh\necho \"$@\" > " + argvFile + "\nsleep 30\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := StartPreview(PreviewOptions{
+		ComposeDir: dir,
+		Workspace:  "acme",
+		Service:    "web",
+		Port:       3000,
+		Provider:   "cloudflared",
+		CorgiBin:   bin,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = StopPreview(dir, p.ID) })
+
+	deadline := time.Now().Add(5 * time.Second)
+	var argv []byte
+	for time.Now().Before(deadline) {
+		if argv, err = os.ReadFile(argvFile); err == nil && len(argv) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	got := strings.TrimSpace(string(argv))
+	if got == "" {
+		t.Fatal("the tunnel process never ran")
+	}
+	if !strings.Contains(got, "tunnel web") || !strings.Contains(got, "--provider cloudflared") {
+		t.Errorf("argv = %q, want `tunnel web --provider cloudflared`", got)
+	}
+	for _, invented := range []string{"--tunnel-name", "--tunnel-hostname"} {
+		if strings.Contains(got, invented) {
+			t.Errorf("argv contains %s, which corgi tunnel does not define", invented)
+		}
+	}
+}
+
+func TestStartPreviewRecordsAndReusesTheSameTunnel(t *testing.T) {
+	dir := previewFixture(t)
+	bin := filepath.Join(t.TempDir(), "fake-corgi")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	opts := PreviewOptions{ComposeDir: dir, Workspace: "acme", Service: "web", Port: 3000, CorgiBin: bin}
+
+	first, err := StartPreview(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = StopPreview(dir, first.ID) })
+
+	second, err := StartPreview(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if second.PID != first.PID {
+		t.Error("a second request for the same service must reuse the live tunnel — a new one would hand the user a different URL for the same thing")
+	}
+	store, _ := LoadPreviews(dir)
+	if len(store.Previews) != 1 {
+		t.Errorf("previews = %d, want 1", len(store.Previews))
+	}
+}
+
+func TestPreviewStatusAndListReportTheRecordedPreview(t *testing.T) {
+	dir := previewFixture(t)
+	livePreview(t, dir, "web")
+
+	byID, err := PreviewStatus(dir, "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byID.Service != "web" {
+		t.Errorf("service = %q", byID.Service)
+	}
+
+	all, err := ListPreviews(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 {
+		t.Errorf("ListPreviews returned %d, want 1", len(all))
+	}
+}
+
+func TestPreviewStatusUnknownID(t *testing.T) {
+	if _, err := PreviewStatus(previewFixture(t), "nope"); err == nil {
+		t.Error("an unknown preview should error rather than return a zero value")
+	}
+}
+
+func TestStopPreviewUnknownID(t *testing.T) {
+	if err := StopPreview(previewFixture(t), "nope"); err == nil {
+		t.Error("stopping an unknown preview should error")
+	}
+}
+
+func TestPreviewDirIsUnderCorgiServices(t *testing.T) {
+	if got := PreviewDir("/stack"); got != filepath.Join("/stack", "corgi_services", ".previews") {
+		t.Errorf("PreviewDir = %q", got)
+	}
+}
+
+func TestReapOnAnUntouchedStackIsHarmless(t *testing.T) {
+	reaped, err := ReapPreviews(previewFixture(t), time.Now())
+
+	if err != nil {
+		t.Fatalf("reaping nothing must not error, got %v", err)
+	}
+	if len(reaped) != 0 {
+		t.Errorf("reaped = %v, want nothing", reaped)
+	}
+}
+
+func TestFreezeThenUnfreeze(t *testing.T) {
+	dir := previewFixture(t)
+	livePreview(t, dir, "web")
+
+	frozen, err := FreezePreview(dir, "web", true)
+	if err != nil || !frozen.Frozen {
+		t.Fatalf("freeze failed: %+v %v", frozen, err)
+	}
+	thawed, err := FreezePreview(dir, "web", false)
+	if err != nil || thawed.Frozen {
+		t.Fatalf("unfreeze failed: %+v %v", thawed, err)
+	}
+}
