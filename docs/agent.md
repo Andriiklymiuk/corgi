@@ -184,7 +184,7 @@ session acting on injected instructions from a file it read.
 
 ## The MCP tools
 
-`corgi mcp` gains five tools. A Remote Control session calls them from your
+`corgi mcp` gains nine tools. A Remote Control session calls them from your
 phone; they also work from any other MCP client.
 
 | tool | what it does |
