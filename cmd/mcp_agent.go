@@ -8,6 +8,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -31,6 +32,15 @@ const agentDangerousBlockedMsg = "corgi_worktrees_* are disabled over a public t
 func registerAgentMCPTools(s *server.MCPServer) {
 	composeOpt := mcp.WithString("composePath", mcp.Description("compose path (default: cwd)"))
 	serviceOpt := mcp.WithString("service", mcp.Required(), mcp.Description("Service name"))
+
+	s.AddTool(mcp.NewTool("corgi_agent_status",
+		mcp.WithDescription(
+			"Health of the corgi agent daemon: whether it is running, each workspace's supervised session, "+
+				"restart count, wake lock, and which Claude account each workspace uses. Read-only. "+
+				"Use this to answer \"is it up\" and \"why did my session die\"."),
+	), jsonHandler(func(mcp.CallToolRequest) (any, error) {
+		return mcpAgentStatus()
+	}))
 
 	s.AddTool(mcp.NewTool("corgi_workspaces",
 		mcp.WithDescription(
@@ -153,6 +163,24 @@ func registerAgentMCPTools(s *server.MCPServer) {
 }
 
 // --- handlers ---
+
+func mcpAgentStatus() (any, error) {
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	status, err := daemon.ReadStatus(dir)
+	if err != nil {
+		return nil, err
+	}
+	if status == nil {
+		return map[string]any{
+			"running": false,
+			"hint":    "start it with `corgi agent serve`, or `corgi agent install` to start at login",
+		}, nil
+	}
+	return status, nil
+}
 
 func mcpWorkspaces() (any, error) {
 	registry, path, err := agentRegistry()
