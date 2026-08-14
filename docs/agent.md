@@ -369,6 +369,13 @@ export CORGI_DATA_DIR="$(brew --prefix)/var/corgi"
   materialize branches. The permission prompts you answer from your phone are
   the defence, which is why weakening them is refused.
 
+## A phone app
+
+The Claude app already covers the conversation. What it has no concept of —
+which stacks exist, whether the daemon is up, a cross-repo diff — is sketched in
+[corgi-remote](remote-app.md). Nothing is built; the document mostly records
+what *not* to build.
+
 ## Licensing
 
 Supervising `claude remote-control` on your own machine, for your own work,
