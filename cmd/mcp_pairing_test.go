@@ -328,3 +328,36 @@ func TestMCPRouteStaysClosedWhilePairingIsOpen(t *testing.T) {
 		t.Errorf("an open pairing window must not open the MCP endpoint: reached=%v status=%d", reached, rec.Code)
 	}
 }
+
+// `corgi mcp --http` with no token is documented as unauthenticated. Consulting
+// a device store that always exists silently turned that into 401 for every
+// request, with no credential in existence to fix it.
+func TestNoTokenAndNoPairedDevicesStaysOpen(t *testing.T) {
+	dir := t.TempDir() // a store path that exists but holds nothing
+	if pairing.HasDevices(pairing.StorePath(dir)) {
+		t.Fatal("fixture should have no paired devices")
+	}
+
+	reached := false
+	h := bearerAuth("", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		reached = true
+	}), "")
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/mcp", nil))
+
+	if !reached {
+		t.Error("an endpoint the operator deliberately left open must stay open")
+	}
+}
+
+func TestHasDevices(t *testing.T) {
+	dir := t.TempDir()
+	path := pairing.StorePath(dir)
+
+	if pairing.HasDevices(path) {
+		t.Error("an absent store has no devices")
+	}
+	pairedToken(t, dir, "phone")
+	if !pairing.HasDevices(path) {
+		t.Error("a paired device should be reported")
+	}
+}

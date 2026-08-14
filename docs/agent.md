@@ -33,7 +33,7 @@ again would be worse.
         │ calls MCP tools                   │ restarts after the 10-minute exit,
         ▼                                   │ a crash, or a reboot; holds a wake lock
   corgi mcp                            corgi agent serve
-        ├─► which stack is "the todo app"?
+        ├─► which stack is "the recipe app"?
         ├─► a worktree per repo, one branch
         └─► one diff across every repo
 ```
@@ -72,7 +72,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent status [--json]` | what is running, restarts, which account |
 | `corgi agent doctor [--json]` | can this work here, and what to fix |
 | `corgi agent workspaces` | list, `forget`, `relocate` |
-| `corgi agent resolve <name>` | what "the todo app" resolves to |
+| `corgi agent resolve <name>` | what "the recipe app" resolves to |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -157,7 +157,7 @@ identity only:
 version: 1
 workspace:
   id: acme-stack
-  aliases: [acme, todo app]
+  aliases: [acme, recipe app]
   sensitive: false      # true ⇒ never open a public tunnel for this workspace
 ```
 
@@ -195,7 +195,7 @@ phone; they also work from any other MCP client.
 | tool | what it does |
 |---|---|
 | `corgi_workspaces` | every stack registered on this machine |
-| `corgi_workspace_resolve` | "the todo app" → one stack, or candidates |
+| `corgi_workspace_resolve` | "the recipe app" → one stack, or candidates |
 | `corgi_worktrees_materialize` | a worktree per repo, all on one branch |
 | `corgi_worktrees_release` | remove those worktrees, keep the branches |
 | `corgi_diff` | every repo's change against its base, in one response |
@@ -211,8 +211,8 @@ already covers `corgi_exec` and `corgi_db_query`: over a tunnel they need
 ### Resolution never guesses
 
 ```
-$ corgi agent resolve "the todo app"
-acme-stack (/Users/you/dev/acme), api + web + db, matched on alias todo app
+$ corgi agent resolve "the recipe app"
+acme-stack (/Users/you/dev/acme), api + web + db, matched on alias recipe app
 ```
 
 An ambiguous name returns candidates and starts nothing, because a wrong

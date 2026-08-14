@@ -124,47 +124,10 @@ func (r *Runner) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		proc, err := r.Start(ctx, r.Config)
-		if err != nil {
-			// A launch that never got off the ground is a startup failure, and
-			// is subject to the same give-up rule as one that exits instantly.
-			decision := Decide(Exit{Code: -1, Output: err.Error()}, attempt, startupFailures)
-			startupFailures++
-			r.record(decision, 0, decision.Disable)
-			r.announce(decision)
-			if !decision.Restart {
-				return err
-			}
-			attempt++
-			r.Sleep(ctx, decision.Delay)
-			continue
-		}
-
-		startedAt := time.Now()
-		r.markRunning(proc, startedAt)
-
-		if r.Config.WakeLockMode() == WakeLockSession {
-			// A failure here is not fatal: the session is more useful awake-only
-			// than not running at all. Surfaced through status instead.
-			_ = r.WakeLock.Acquire(proc.Pid())
-		}
-
-		code, output := proc.Wait()
-		uptime := time.Since(startedAt)
-		if !alwaysAwake {
-			r.WakeLock.Release()
-		}
-
-		exit := Exit{
-			Code:         code,
-			Uptime:       uptime,
-			Output:       output,
-			Requested:    ctx.Err() != nil || r.stopRequested(),
-			healthyAfter: r.healthyAfter(),
-		}
-
+		exit, startErr := r.runOnce(ctx, alwaysAwake)
 		decision := Decide(exit, attempt, startupFailures)
 		healthy := decision.Cause != CauseStartupFailure
+
 		if healthy {
 			// A run that lasted long enough to be useful clears the streak, so
 			// one bad night does not disable a workspace weeks later.
@@ -177,10 +140,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		r.announce(decision)
 
 		if !decision.Restart {
-			if decision.Disable {
-				return nil
-			}
-			return ctx.Err()
+			return stopReason(decision, startErr, ctx)
 		}
 
 		// Reset AFTER choosing this delay, so the next failure starts from the
@@ -193,6 +153,52 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		r.Sleep(ctx, decision.Delay)
 	}
+}
+
+// runOnce starts the process and waits for it, returning the exit to classify.
+// A launch that never got off the ground reports as an instant failure, so it
+// falls under the same give-up rule as one that exits immediately.
+func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
+	proc, err := r.Start(ctx, r.Config)
+	if err != nil {
+		return Exit{Code: -1, Output: err.Error(), healthyAfter: r.healthyAfter()}, err
+	}
+
+	startedAt := time.Now()
+	r.markRunning(proc, startedAt)
+
+	if r.Config.WakeLockMode() == WakeLockSession {
+		// A failure here is not fatal: the session is more useful awake-only
+		// than not running at all. Surfaced through status instead.
+		_ = r.WakeLock.Acquire(proc.Pid())
+	}
+
+	code, output := proc.Wait()
+	uptime := time.Since(startedAt)
+	if !alwaysAwake {
+		r.WakeLock.Release()
+	}
+
+	return Exit{
+		Code:         code,
+		Uptime:       uptime,
+		Output:       output,
+		Requested:    ctx.Err() != nil || r.stopRequested(),
+		healthyAfter: r.healthyAfter(),
+	}, nil
+}
+
+// stopReason is what Run returns when it will not restart: the launch error if
+// the process never started, nil once a workspace is deliberately disabled, and
+// otherwise whatever ended the context.
+func stopReason(d Decision, startErr error, ctx context.Context) error {
+	if startErr != nil && !d.Disable {
+		return startErr
+	}
+	if d.Disable {
+		return nil
+	}
+	return ctx.Err()
 }
 
 func (r *Runner) markRunning(proc Process, startedAt time.Time) {

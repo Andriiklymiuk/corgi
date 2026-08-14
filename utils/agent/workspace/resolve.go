@@ -37,7 +37,7 @@ type Resolution struct {
 // Resolved reports whether the query produced exactly one workspace.
 func (r Resolution) Resolved() bool { return r.Workspace != nil }
 
-// Resolve turns a human phrase like "the todo app" into a workspace.
+// Resolve turns a human phrase like "the recipe app" into a workspace.
 //
 // It never guesses. An ambiguous query returns candidates and resolves nothing,
 // because a wrong resolution means an agent editing the wrong repository, and
@@ -160,8 +160,8 @@ func bestFuzzyMatch(w Workspace, query string) (Candidate, bool) {
 }
 
 // related reports whether two normalized strings refer to the same thing,
-// allowing either to be contained in the other so both "todo" and
-// "the todo app" reach a workspace called "todo app".
+// allowing either to be contained in the other so both "recipe" and
+// "the recipe app" reach a workspace called "recipe app".
 func related(value, query string) bool {
 	if value == "" || query == "" {
 		return false
@@ -194,8 +194,8 @@ func allCandidates(r *Registry) []Candidate {
 	return out
 }
 
-// normalize lowercases and reduces punctuation to spaces so "todo-app",
-// "todo_app", and "Todo App" all compare equal.
+// normalize lowercases and reduces punctuation to spaces so "recipe-app",
+// "recipe_app", and "Recipe App" all compare equal.
 func normalize(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))

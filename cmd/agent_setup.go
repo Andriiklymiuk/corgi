@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"andriiklymiuk/corgi/utils"
@@ -63,6 +64,10 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	existing.ComposeFile = composeFileName(cwd)
 	existing.Aliases = aliases
 	existing.Status = workspace.StatusOK
+	// Cache the service names so "fix the api" can resolve to the stack that
+	// has a service called api. Without this the resolver's service matching
+	// has nothing to match against.
+	existing.Services, existing.Repos = describeStack(cwd)
 	registry.Upsert(existing)
 	if err := workspace.Save(path, registry); err != nil {
 		exitWithError("agent_registry_write", err, 1)
@@ -82,6 +87,50 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 		utils.Infof("  corgi agent init --config-dir ~/.claude-work\n")
 	}
 	utils.Info("next: `corgi agent install` to start at login, then `corgi agent status`")
+}
+
+// describeStack reads a stack's service and repository names for the registry,
+// so a phone can say "fix the api" and reach the right workspace.
+//
+// The compose file is parsed directly rather than through GetCorgiServices:
+// that path mutates global cobra flags, resolves environments, and can prompt
+// when a directory turns out not to hold a stack — none of which belongs in a
+// best-effort read that runs over whatever `agent scan` walked past.
+func describeStack(dir string) (services, repos []string) {
+	data, err := os.ReadFile(filepath.Join(dir, composeFileName(dir)))
+	if err != nil {
+		return nil, nil
+	}
+	var doc struct {
+		Services map[string]struct {
+			Path string `yaml:"path"`
+		} `yaml:"services"`
+	}
+	if yaml.Unmarshal(data, &doc) != nil {
+		return nil, nil
+	}
+
+	seenRepo := map[string]bool{}
+	for name, svc := range doc.Services {
+		services = append(services, name)
+		if svc.Path == "" {
+			continue
+		}
+		abs := svc.Path
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(dir, abs)
+		}
+		if root, ok := utils.RepoRootOf(abs); ok {
+			repoName := filepath.Base(root)
+			if !seenRepo[repoName] {
+				seenRepo[repoName] = true
+				repos = append(repos, repoName)
+			}
+		}
+	}
+	sort.Strings(services)
+	sort.Strings(repos)
+	return services, repos
 }
 
 func composeFileName(dir string) string {
@@ -185,10 +234,13 @@ func runAgentScan(cmd *cobra.Command, args []string) {
 			utils.Infof("would register %-20s %s\n", id, dir)
 			continue
 		}
+		services, repos := describeStack(dir)
 		registry.Upsert(workspace.Workspace{
 			ID:          id,
 			AbsPath:     dir,
 			ComposeFile: composeFileName(dir),
+			Services:    services,
+			Repos:       repos,
 			Status:      workspace.StatusOK,
 		})
 		added++
@@ -249,6 +301,13 @@ var agentDoctorCmd = &cobra.Command{
 	Short: "Check whether agent mode can actually work here",
 	Run:   runAgentDoctor,
 }
+
+// Check names, kept as constants so the same string is not repeated across a
+// check and its assertions.
+const (
+	checkWakeLock   = "wake lock"
+	checkUserConfig = "user config"
+)
 
 type agentCheck struct {
 	Name   string `json:"name"`
@@ -332,7 +391,7 @@ func checkAmbientAPIKey() agentCheck {
 func checkWakeLockSupport() agentCheck {
 	if !supervisor.Supported() {
 		return agentCheck{
-			Name:   "wake lock",
+			Name:   checkWakeLock,
 			Detail: "unsupported on " + runtime.GOOS,
 			Fix:    "sessions will end if the machine sleeps",
 		}
@@ -340,7 +399,7 @@ func checkWakeLockSupport() agentCheck {
 	argv := supervisor.WakeLockCommand(os.Getpid())
 	if _, err := exec.LookPath(argv[0]); err != nil {
 		return agentCheck{
-			Name:   "wake lock",
+			Name:   checkWakeLock,
 			Detail: argv[0] + " not found",
 			Fix:    "install " + argv[0] + ", or set wakeLock: off",
 		}
@@ -349,7 +408,7 @@ func checkWakeLockSupport() agentCheck {
 	if runtime.GOOS == "darwin" {
 		detail += " — note: " + supervisor.ClamshellWarning
 	}
-	return agentCheck{Name: "wake lock", OK: true, Detail: detail}
+	return agentCheck{Name: checkWakeLock, OK: true, Detail: detail}
 }
 
 func checkInstallSupport() agentCheck {
@@ -366,19 +425,19 @@ func checkInstallSupport() agentCheck {
 func checkUserConfigPermissions(path string) agentCheck {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		return agentCheck{Name: "user config", OK: true, Detail: "none yet (defaults apply)"}
+		return agentCheck{Name: checkUserConfig, OK: true, Detail: "none yet (defaults apply)"}
 	}
 	if err != nil {
-		return agentCheck{Name: "user config", Detail: err.Error()}
+		return agentCheck{Name: checkUserConfig, Detail: err.Error()}
 	}
 	if mode := info.Mode().Perm(); runtime.GOOS != "windows" && mode&0o077 != 0 {
 		return agentCheck{
-			Name:   "user config",
+			Name:   checkUserConfig,
 			Detail: fmt.Sprintf("%s is readable by other users (mode %04o)", path, mode),
 			Fix:    "chmod 600 " + path,
 		}
 	}
-	return agentCheck{Name: "user config", OK: true, Detail: path}
+	return agentCheck{Name: checkUserConfig, OK: true, Detail: path}
 }
 
 func checkRegisteredWorkspaces() agentCheck {
@@ -424,7 +483,7 @@ func checkDaemonRunning(dir string) agentCheck {
 
 func init() {
 	agentInitCmd.Flags().String("id", "", "Workspace id (defaults to the directory name)")
-	agentInitCmd.Flags().StringSlice("alias", nil, "Extra names this workspace answers to, e.g. --alias 'todo app'")
+	agentInitCmd.Flags().StringSlice("alias", nil, "Extra names this workspace answers to, e.g. --alias 'recipe app'")
 	agentInitCmd.Flags().String("config-dir", "", "CLAUDE_CONFIG_DIR for this workspace, so it runs under a specific Claude account")
 	agentInitCmd.Flags().Bool("sensitive", false, "Never open a public tunnel for this workspace")
 

@@ -107,22 +107,31 @@ func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, er
 
 	var out []supervisor.SpawnConfig
 	for _, w := range registry.Sorted() {
-		if w.Status != workspace.StatusOK {
-			utils.Infof("agent: skipping %s (%s)\n", w.ID, w.Status)
-			continue
+		if cfg, ok := spawnConfigForWorkspace(w, user, foreground); ok {
+			out = append(out, cfg)
 		}
-		repo, err := config.LoadRepo(w.AbsPath)
-		if err != nil {
-			utils.Infof("agent: skipping %s: %v\n", w.ID, err)
-			continue
-		}
-		resolved := config.Resolve(w.ID, repo, user)
-		if !resolved.AutostartEnabled() {
-			continue
-		}
-		out = append(out, spawnConfigFrom(w, resolved, foreground))
 	}
 	return out, nil
+}
+
+// spawnConfigForWorkspace decides whether one registered workspace should be
+// supervised, and with what settings. Anything skipped says why, since a
+// workspace silently not starting is the confusing failure here.
+func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, foreground bool) (supervisor.SpawnConfig, bool) {
+	if w.Status != workspace.StatusOK {
+		utils.Infof("agent: skipping %s (%s)\n", w.ID, w.Status)
+		return supervisor.SpawnConfig{}, false
+	}
+	repo, err := config.LoadRepo(w.AbsPath)
+	if err != nil {
+		utils.Infof("agent: skipping %s: %v\n", w.ID, err)
+		return supervisor.SpawnConfig{}, false
+	}
+	resolved := config.Resolve(w.ID, repo, user)
+	if !resolved.AutostartEnabled() {
+		return supervisor.SpawnConfig{}, false
+	}
+	return spawnConfigFrom(w, resolved, foreground), true
 }
 
 func spawnConfigFrom(w workspace.Workspace, r config.Resolved, foreground bool) supervisor.SpawnConfig {
