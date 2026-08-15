@@ -412,10 +412,16 @@ sorts the endpoint into a tier:
 | `public` | anyone holding the URL can reach it | blocked unless `CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1` |
 
 `private` is **only ever reached by observing it**. When the tunnel URL is
-published, corgi makes one unauthenticated request and looks at what comes back
-— a redirect to an Access login, a `cf-access-*` header, a challenge naming a
-realm. Nothing in any config file can assert protection, because a gate that
-relaxes on a claim is a gate that fails open on a typo.
+published, corgi makes one unauthenticated request to **`/mcp`** — the route the
+tools are actually served on — and looks at what comes back: a redirect to an
+Access login, a `cf-access-*` header, a challenge naming a realm. Nothing in any
+config file can assert protection, because a gate that relaxes on a claim is a
+gate that fails open on a typo.
+
+The route matters. Making a non-browser MCP client work behind Access usually
+means giving `/mcp` a service-token or bypass policy while `/` keeps redirecting
+to the login page. Probing the root would see that redirect, call the tunnel
+private, and re-enable `corgi_exec` on a route anyone with the URL can reach.
 
 ```
 🌐 ✓ public MCP endpoint: https://corgi.example/mcp

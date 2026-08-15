@@ -172,10 +172,10 @@ var forbiddenArgPrefixes = []string{
 }
 
 func checkArg(a string) error {
-	flag := strings.ToLower(strings.TrimSpace(a))
-	// Compare against the flag alone: --flag=value must be caught too.
-	if name, _, ok := strings.Cut(flag, "="); ok {
-		flag = name
+	whole := normalize(a)
+	flag, value, hasValue := strings.Cut(whole, "=")
+	if !hasValue {
+		flag = whole
 	}
 	for _, prefix := range forbiddenArgPrefixes {
 		if strings.HasPrefix(flag, prefix) {
@@ -183,6 +183,16 @@ func checkArg(a string) error {
 				"arg %q is not allowed for a supervised session — "+
 					"permission prompts are what you answer from your phone", a)
 		}
+	}
+	// A forbidden permission mode can also arrive as a plain value, either as
+	// its own arg after the flag or as --permission-mode=bypassPermissions.
+	// Without this, `kind: custom, bin: claude, args: [remote-control,
+	// --permission-mode, bypassPermissions]` walks straight around the
+	// rejection that ValidateSpawnConfig applies to the typed setting.
+	if forbiddenPermissionModes[whole] || (hasValue && forbiddenPermissionModes[value]) {
+		return fmt.Errorf(
+			"arg %q is not allowed for a supervised session — "+
+				"permission prompts are what you answer from your phone", a)
 	}
 	return nil
 }

@@ -300,3 +300,34 @@ func TestSettingsAKindCannotHonourAreRejected(t *testing.T) {
 		t.Error("capacity on a custom kind must be rejected, not silently ignored")
 	}
 }
+
+func TestCustomArgsCannotSmuggleAForbiddenPermissionMode(t *testing.T) {
+	// The prefix check alone only blocks --dangerously* and --yolo, so
+	// `bin: claude, args: [remote-control, --permission-mode, bypassPermissions]`
+	// would walk straight around the rejection applied to the typed setting.
+	for _, args := range [][]string{
+		{"remote-control", "--permission-mode", "bypassPermissions"},
+		{"remote-control", "--permission-mode=bypassPermissions"},
+		{"remote-control", "--permission-mode", "BYPASSPERMISSIONS"},
+	} {
+		c := customConfig()
+		c.Bin = "claude"
+		c.Args = args
+
+		if err := ValidateSpawnConfig(c); err == nil {
+			t.Errorf("args %v must be rejected — this is the invariant the docs promise", args)
+		}
+	}
+}
+
+func TestCustomArgsStillAllowLegitimatePermissionModes(t *testing.T) {
+	// Only the forbidden mode is blocked; a supervised session is expected to
+	// set a real one.
+	c := customConfig()
+	c.Bin = "claude"
+	c.Args = []string{"remote-control", "--permission-mode", "acceptEdits"}
+
+	if err := ValidateSpawnConfig(c); err != nil {
+		t.Errorf("ValidateSpawnConfig() = %v, want a normal permission mode accepted", err)
+	}
+}

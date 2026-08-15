@@ -397,6 +397,12 @@ var agentWorkspacesRelocateCmd = &cobra.Command{
 		if err := workspace.Save(path, registry); err != nil {
 			exitWithError("agent_registry_write", err, 1)
 		}
+		// Same reason `forget` drops it: the brief holds the old stack's repo
+		// paths and branches, and keeping it would have `corgi agent brief`
+		// describe a directory this id no longer points at.
+		if dir, dirErr := agentDir(); dirErr == nil {
+			_ = brief.Clear(dir, existing.ID)
+		}
 		utils.Infof("%s now points at %s\n", existing.ID, abs)
 	},
 }

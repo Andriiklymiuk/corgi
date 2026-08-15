@@ -399,7 +399,9 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 				fmt.Fprintf(os.Stderr, "🌐 ✗ tunnel: %s\n", ev.Err)
 			case ev.URL != "":
 				mcpPublicTunnelActive.Store(true)
-				go probeTunnelExposure(ctx, ev.URL)
+				// Probe the route the tools are actually served on, not the
+				// root — see probeTunnelExposure.
+				go probeTunnelExposure(ctx, mcpProbeTarget(ev.URL))
 				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
 				// Don't reprint the bearer token in a pasteable block on the
 				// public side — the local config (printed earlier) already has it.
@@ -416,11 +418,18 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 // probeTunnelExposure checks whether the published tunnel is behind an identity
 // proxy, and says so either way.
 //
+// The url must be the endpoint the tools are served on (`/mcp`), never the
+// tunnel root. Making a non-browser MCP client work behind Cloudflare Access
+// means giving `/mcp` a service-token or bypass policy while `/` keeps
+// redirecting to the login page — so probing the root would see that redirect,
+// call the whole tunnel private, and re-enable corgi_exec on a route anyone
+// with the URL can reach. The gate has to be measured where it applies.
+//
 // Runs in the background: nothing may wait on it, because the endpoint is
 // already serving by the time the URL is printed, and a gate that starts closed
 // and opens on evidence is the safe direction to be wrong in.
 func probeTunnelExposure(ctx context.Context, url string) {
-	result := tunnel.ProbeAccess(ctx, url)
+	result := exposureProbe(ctx, url)
 	if !result.Protected {
 		// Not a warning: this is the documented default. The block message
 		// already told them how to change it.
@@ -431,6 +440,16 @@ func probeTunnelExposure(ctx context.Context, url string) {
 	fmt.Fprintf(os.Stderr,
 		"🌐 exposure: private — %s (%s). corgi_exec/corgi_db_query stay enabled; no CORGI_MCP_ALLOW_DANGEROUS_TUNNEL needed.\n",
 		result.Provider, result.Detail)
+}
+
+// exposureProbe is the access check, swappable so a test can assert which URL
+// the gate is measured against without needing a trusted certificate.
+var exposureProbe = tunnel.ProbeAccess
+
+// mcpProbeTarget is the URL the exposure probe must measure: the route the
+// tools are served on, never the tunnel root.
+func mcpProbeTarget(tunnelURL string) string {
+	return strings.TrimSuffix(tunnelURL, "/") + "/mcp"
 }
 
 // mcpAddrPort extracts the numeric port from a listen addr like ":8765" or

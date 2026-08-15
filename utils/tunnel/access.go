@@ -62,6 +62,14 @@ const accessProbeTimeout = 10 * time.Second
 //
 // It follows no redirects, because the redirect itself is the evidence.
 func ProbeAccess(ctx context.Context, rawURL string) AccessResult {
+	return ProbeAccessWith(ctx, rawURL, &http.Client{})
+}
+
+// ProbeAccessWith is ProbeAccess against a caller-supplied client, so a test
+// can point it at a server whose certificate the default client would reject.
+// The redirect policy is set here rather than taken from the client: not
+// following the redirect is what makes the check work, not a caller's choice.
+func ProbeAccessWith(ctx context.Context, rawURL string, client *http.Client) AccessResult {
 	if !strings.HasPrefix(rawURL, "https://") {
 		// An identity proxy terminates TLS. Anything on plain HTTP is not
 		// behind one, whatever it answers.
@@ -75,14 +83,13 @@ func ProbeAccess(ctx context.Context, rawURL string) AccessResult {
 	if err != nil {
 		return AccessResult{Detail: err.Error()}
 	}
-	client := &http.Client{
-		// The interception is what is being measured, so following it would
-		// discard the answer and report on the login page instead.
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	probe := *client
+	// The interception is what is being measured, so following it would
+	// discard the answer and report on the login page instead.
+	probe.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
-	resp, err := client.Do(req)
+	resp, err := probe.Do(req)
 	if err != nil {
 		return AccessResult{Detail: fmt.Sprintf("probe failed: %v", err)}
 	}

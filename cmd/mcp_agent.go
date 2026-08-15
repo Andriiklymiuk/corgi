@@ -227,6 +227,11 @@ func mcpSessionBrief(workspace string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if briefs == nil {
+		// Never null: a client that iterates the field should not have to
+		// special-case "no restarts yet", which is the ordinary state.
+		briefs = []brief.Brief{}
+	}
 	return map[string]any{"briefs": briefs}, nil
 }
 
