@@ -50,7 +50,14 @@ func probeWorkspaceRepos(dir string) []brief.RepoState {
 	var out []brief.RepoState
 	if err == nil && corgi != nil {
 		for service, path := range utils.ServiceDirs(corgi, nil) {
-			byPrefix[utils.WorktreeDirPrefix(path)] = service
+			// Worktree directories are named from the repository ROOT, not the
+			// service path — those differ for `path: .`, for a service in a
+			// monorepo subdirectory, and wherever the project dir is a symlink.
+			// Hashing the service path instead would never match, so every
+			// worktree would quietly fall back to the repo's basename.
+			if root, ok := utils.RepoRootOf(path); ok {
+				byPrefix[utils.WorktreeDirPrefix(root)] = service
+			}
 			if state, ok := repoState(service, path, false); ok {
 				out = append(out, state)
 			}
@@ -160,15 +167,18 @@ func runAgentBrief(cmd *cobra.Command, args []string) {
 		if readErr != nil {
 			exitWithError("agent_brief", readErr, 1)
 		}
+		if asJSON {
+			// One id asked for, one object or null returned — never an array.
+			// docs/agents.md documents both shapes, and a command that switches
+			// between them makes every consumer branch on the shape first.
+			printJSON(b)
+			return
+		}
 		if b == nil {
-			if asJSON {
-				printJSON(nil)
-				return
-			}
 			utils.Infof("no brief for %s — it has not restarted since the daemon started\n", args[0])
 			return
 		}
-		printBriefs([]brief.Brief{*b}, asJSON)
+		printBriefs([]brief.Brief{*b}, false)
 		return
 	}
 
