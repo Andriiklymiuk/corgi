@@ -70,16 +70,45 @@ var mcpHandlerMu sync.Mutex
 // atomic to stay race-free.
 var mcpPublicTunnelActive atomic.Bool
 
+// mcpTunnelPrivate is set when the published tunnel URL was observed to be
+// behind an identity proxy, so an unauthenticated request never reaches corgi.
+//
+// It is only ever set from a probe that saw the interception happen — never
+// from configuration. A gate that relaxes because a config file claimed
+// protection is a gate that fails open on a typo.
+var mcpTunnelPrivate atomic.Bool
+
 // dangerousToolBlockedMsg is returned by corgi_exec / corgi_db_query when they
 // are reachable over a public tunnel without the explicit opt-in.
-const dangerousToolBlockedMsg = "corgi_exec/corgi_db_query are disabled over a public tunnel; set CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1 to allow"
+const dangerousToolBlockedMsg = "corgi_exec/corgi_db_query are disabled over a public tunnel; put the tunnel behind an identity proxy, or set CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1 to allow"
+
+// mcpExposure reports which tier the endpoint currently sits in.
+func mcpExposure() tunnel.Exposure {
+	if !mcpPublicTunnelActive.Load() {
+		return tunnel.ExposureLocal
+	}
+	if mcpTunnelPrivate.Load() {
+		return tunnel.ExposurePrivate
+	}
+	return tunnel.ExposurePublic
+}
 
 // dangerousTunnelToolsAllowed reports whether corgi_exec / corgi_db_query may
-// run. They are always allowed over stdio or a plain (non-tunneled) HTTP
-// endpoint; over a public tunnel they require an explicit opt-in so arbitrary
-// command + DB execution isn't exposed to anyone with the URL.
+// run.
+//
+// Always allowed over stdio or a plain (non-tunneled) HTTP endpoint. Over a
+// tunnel it depends on who can reach it: a tunnel behind an identity proxy is
+// not open to the internet, so the tools stay usable from a phone that has
+// signed in. A tunnel anyone holding the URL can reach still requires the
+// explicit opt-in, because that is arbitrary command and DB execution.
 func dangerousTunnelToolsAllowed(publicTunnel bool) bool {
-	return !publicTunnel || os.Getenv("CORGI_MCP_ALLOW_DANGEROUS_TUNNEL") == "1"
+	if !publicTunnel {
+		return true
+	}
+	if mcpTunnelPrivate.Load() {
+		return true
+	}
+	return os.Getenv("CORGI_MCP_ALLOW_DANGEROUS_TUNNEL") == "1"
 }
 
 func runMCP(cmd *cobra.Command, _ []string) {
@@ -370,6 +399,9 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 				fmt.Fprintf(os.Stderr, "🌐 ✗ tunnel: %s\n", ev.Err)
 			case ev.URL != "":
 				mcpPublicTunnelActive.Store(true)
+				// Probe the route the tools are actually served on, not the
+				// root — see probeTunnelExposure.
+				go probeTunnelExposure(ctx, mcpProbeTarget(ev.URL))
 				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
 				// Don't reprint the bearer token in a pasteable block on the
 				// public side — the local config (printed earlier) already has it.
@@ -381,6 +413,43 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 		}
 	}()
 	return done
+}
+
+// probeTunnelExposure checks whether the published tunnel is behind an identity
+// proxy, and says so either way.
+//
+// The url must be the endpoint the tools are served on (`/mcp`), never the
+// tunnel root. Making a non-browser MCP client work behind Cloudflare Access
+// means giving `/mcp` a service-token or bypass policy while `/` keeps
+// redirecting to the login page — so probing the root would see that redirect,
+// call the whole tunnel private, and re-enable corgi_exec on a route anyone
+// with the URL can reach. The gate has to be measured where it applies.
+//
+// Runs in the background: nothing may wait on it, because the endpoint is
+// already serving by the time the URL is printed, and a gate that starts closed
+// and opens on evidence is the safe direction to be wrong in.
+func probeTunnelExposure(ctx context.Context, url string) {
+	result := exposureProbe(ctx, url)
+	if !result.Protected {
+		// Not a warning: this is the documented default. The block message
+		// already told them how to change it.
+		fmt.Fprintf(os.Stderr, "🌐 exposure: public — %s\n", result.Detail)
+		return
+	}
+	mcpTunnelPrivate.Store(true)
+	fmt.Fprintf(os.Stderr,
+		"🌐 exposure: private — %s (%s). corgi_exec/corgi_db_query stay enabled; no CORGI_MCP_ALLOW_DANGEROUS_TUNNEL needed.\n",
+		result.Provider, result.Detail)
+}
+
+// exposureProbe is the access check, swappable so a test can assert which URL
+// the gate is measured against without needing a trusted certificate.
+var exposureProbe = tunnel.ProbeAccess
+
+// mcpProbeTarget is the URL the exposure probe must measure: the route the
+// tools are served on, never the tunnel root.
+func mcpProbeTarget(tunnelURL string) string {
+	return strings.TrimSuffix(tunnelURL, "/") + "/mcp"
 }
 
 // mcpAddrPort extracts the numeric port from a listen addr like ":8765" or

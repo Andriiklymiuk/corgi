@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
@@ -80,6 +81,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 
 	d := daemon.New(APP_VERSION, dir)
+	d.CaptureBrief = captureWorkspaceBrief
 	printStartupDiagnostics(configs)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -138,26 +140,40 @@ func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, for
 }
 
 func spawnConfigFrom(w workspace.Workspace, r config.Resolved, foreground bool) supervisor.SpawnConfig {
-	spawn := r.Spawn
-	if spawn == "" {
-		// Isolate each on-demand session, so two remote sessions in one
-		// workspace do not fight over a single checkout.
-		spawn = "worktree"
-	}
-	return supervisor.SpawnConfig{
+	cfg := supervisor.SpawnConfig{
 		WorkspaceID:       r.ID,
 		Dir:               w.AbsPath,
+		Kind:              r.Kind,
 		Bin:               r.Bin,
-		Spawn:             spawn,
+		Args:              r.Args,
+		ConfigDirEnv:      r.ConfigDirEnv,
+		CredentialEnv:     r.CredentialEnv,
+		Spawn:             r.Spawn,
 		Capacity:          r.Capacity,
 		PermissionMode:    r.PermissionMode,
 		ConfigDir:         r.ConfigDir,
 		InheritAPIKey:     r.InheritAPIKey,
 		InheritOAuthToken: r.InheritOAuthToken,
-		Name:              r.ID,
 		WakeLock:          supervisor.WakeLockMode(r.WakeLock),
 		MirrorOutput:      foreground,
 	}
+	kind, err := supervisor.KindFor(cfg)
+	if err != nil {
+		// An unknown kind is reported by ValidateSpawnConfig with the valid
+		// names; filling in defaults for it here would only mask that.
+		return cfg
+	}
+	if kind.BuildsArgvFromSettings {
+		// The session name shown in claude.ai/code. Meaningless to a kind handed
+		// a complete argv, where it would be a setting that never takes effect.
+		cfg.Name = r.ID
+	}
+	if cfg.Spawn == "" && kind.SupportsSpawn {
+		// Isolate each on-demand session, so two remote sessions in one
+		// workspace do not fight over a single checkout.
+		cfg.Spawn = "worktree"
+	}
+	return cfg
 }
 
 // dirHasComposeFile reports whether dir is a corgi stack.
@@ -186,7 +202,11 @@ func printStartupDiagnostics(configs []supervisor.SpawnConfig) {
 		if configDir == "" {
 			configDir = "<default>"
 		}
-		utils.Infof("agent: %-20s dir=%s configDir=%s spawn=%s\n", c.WorkspaceID, c.Dir, configDir, c.Spawn)
+		kind := c.Kind
+		if kind == "" {
+			kind = supervisor.DefaultKind
+		}
+		utils.Infof("agent: %-20s dir=%s kind=%s configDir=%s spawn=%s\n", c.WorkspaceID, c.Dir, kind, configDir, c.Spawn)
 		if stripped := supervisor.StrippedCredentials(c, env); len(stripped) > 0 {
 			utils.Infof("agent: %-20s stripped from child env: %v\n", c.WorkspaceID, stripped)
 		}
@@ -348,6 +368,11 @@ var agentWorkspacesForgetCmd = &cobra.Command{
 		if err := workspace.Save(path, registry); err != nil {
 			exitWithError("agent_registry_write", err, 1)
 		}
+		// Drop the handover note too. Reusing an id for a different stack later
+		// would otherwise surface branches belonging to something else.
+		if dir, dirErr := agentDir(); dirErr == nil {
+			_ = brief.Clear(dir, args[0])
+		}
 		utils.Infof("forgot %s\n", args[0])
 	},
 }
@@ -371,6 +396,12 @@ var agentWorkspacesRelocateCmd = &cobra.Command{
 		registry.Upsert(existing)
 		if err := workspace.Save(path, registry); err != nil {
 			exitWithError("agent_registry_write", err, 1)
+		}
+		// Same reason `forget` drops it: the brief holds the old stack's repo
+		// paths and branches, and keeping it would have `corgi agent brief`
+		// describe a directory this id no longer points at.
+		if dir, dirErr := agentDir(); dirErr == nil {
+			_ = brief.Clear(dir, existing.ID)
 		}
 		utils.Infof("%s now points at %s\n", existing.ID, abs)
 	},
@@ -424,6 +455,8 @@ func init() {
 	agentServeCmd.Flags().Bool("foreground", false,
 		"Run in this terminal and mirror the supervised process's output. Off by default: that output can contain env values and tokens, and in serve mode corgi's stderr is a log file.")
 
+	agentBriefCmd.Flags().Bool("json", false, "Machine-readable output")
+
 	agentWorkspacesCmd.AddCommand(agentWorkspacesListCmd, agentWorkspacesForgetCmd, agentWorkspacesRelocateCmd)
 	agentCmd.AddCommand(
 		agentServeCmd,
@@ -431,6 +464,7 @@ func init() {
 		agentStopCmd,
 		agentWorkspacesCmd,
 		agentResolveCmd,
+		agentBriefCmd,
 	)
 	rootCmd.AddCommand(agentCmd)
 }

@@ -50,7 +50,9 @@ func TestSanitizeBin(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"", "claude", false},
+		// Empty stays empty here; ResolveBin fills it from the kind, so the
+		// default lives in one place rather than two.
+		{"", "", false},
 		{"claude", "claude", false},
 		{"  claude  ", "claude", false},
 		{"claude-alt", "claude-alt", false},

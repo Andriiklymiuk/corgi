@@ -51,13 +51,24 @@ type UserConfig struct {
 
 // WorkspaceConfig is everything that grants capability. Trusted sources only.
 type WorkspaceConfig struct {
-	Autostart      *bool  `yaml:"autostart"`
-	Bin            string `yaml:"bin"`
-	Spawn          string `yaml:"spawn"`
-	Capacity       int    `yaml:"capacity"`
-	PermissionMode string `yaml:"permissionMode"`
-	ConfigDir      string `yaml:"configDir"`
-	WakeLock       string `yaml:"wakeLock"`
+	Autostart *bool `yaml:"autostart"`
+	// Kind selects which agent CLI to supervise. Empty keeps the default, so a
+	// config written before this existed behaves exactly as it did.
+	Kind string `yaml:"kind"`
+	Bin  string `yaml:"bin"`
+	// Args is the argv for kind: custom, after the binary name.
+	//
+	// Trusted config only, like everything else here — an argv is a choice of
+	// what code runs, so a committed repo file must never reach it.
+	Args []string `yaml:"args"`
+	// ConfigDirEnv and CredentialEnv describe a custom kind's environment.
+	ConfigDirEnv   string   `yaml:"configDirEnv"`
+	CredentialEnv  []string `yaml:"credentialEnv"`
+	Spawn          string   `yaml:"spawn"`
+	Capacity       int      `yaml:"capacity"`
+	PermissionMode string   `yaml:"permissionMode"`
+	ConfigDir      string   `yaml:"configDir"`
+	WakeLock       string   `yaml:"wakeLock"`
 	// InheritAPIKey lets this workspace keep an ambient ANTHROPIC_API_KEY.
 	// Off unless the machine's owner asks for it: remote control refuses to
 	// run with one set, and an inherited key bills the API instead of a
@@ -168,8 +179,23 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.Autostart != nil {
 		base.Autostart = over.Autostart
 	}
+	if over.Kind != "" {
+		base.Kind = over.Kind
+	}
 	if over.Bin != "" {
 		base.Bin = over.Bin
+	}
+	// Replaced wholesale rather than appended: an argv is one command, and
+	// concatenating a default's flags onto a workspace's own would produce a
+	// command line neither file asked for.
+	if len(over.Args) > 0 {
+		base.Args = over.Args
+	}
+	if over.ConfigDirEnv != "" {
+		base.ConfigDirEnv = over.ConfigDirEnv
+	}
+	if len(over.CredentialEnv) > 0 {
+		base.CredentialEnv = over.CredentialEnv
 	}
 	if over.Spawn != "" {
 		base.Spawn = over.Spawn
