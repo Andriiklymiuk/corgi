@@ -73,6 +73,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent doctor [--json]` | can this work here, and what to fix |
 | `corgi agent workspaces` | list, `forget`, `relocate` |
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |
+| `corgi agent brief [id]` | what the last session was working on before it restarted |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -85,6 +86,40 @@ reboot. corgi restarts it with capped backoff and **says so**:
 The notification matters. A relaunched Remote Control starts a **new** session,
 so the previous conversation's context is gone. Restarting silently would look
 like continuity and cost you an hour of confusion.
+
+### The handover brief
+
+corgi cannot restore the conversation. What it can keep is the half that
+survives on disk, captured in the gap between the old process exiting and the
+new one starting — the only moment that state is both final and current:
+
+```bash
+$ corgi agent brief acme-stack
+acme-stack
+  ended   2026-08-14 14:32 (network-timeout)
+  reason  remote control restarted — the previous session ended (network timeout)
+  state   was on feature/referral · 1 repo has uncommitted changes
+    api              feature/referral (worktree)
+    web              feature/referral · uncommitted changes (worktree)
+```
+
+The worktrees are the part worth having. A branch spread across four
+repositories is invisible from a fresh session's working directory, and nothing
+else would tell the new session it exists. The summary line is appended to the
+restart notification, so the lock screen says *where* as well as *that*.
+
+Uncommitted work counts untracked files, unlike the check that guards worktree
+removal. Creating files is the most common thing an agent does, and a note
+calling that "clean" would be worse than no note. `.gitignore` is respected, so
+build output does not inflate the count.
+
+A session that ends because you asked it to gets no brief — you do not need a
+handover note for something you just closed. Only the most recent is kept per
+workspace, and `corgi agent workspaces forget` drops it, so a reused id cannot
+surface another stack's branches.
+
+From a phone, the same thing is `corgi_session_brief`. Call it first when
+picking work back up.
 
 Not every exit is worth retrying:
 
@@ -111,6 +146,52 @@ to forever, because an always-awake laptop is a flat battery.
 **Honest limit:** on macOS, closing the lid on battery sleeps the machine no
 matter what `caffeinate` does. "Lid closed on the train" only works plugged in.
 If that is your workflow, supervise from a machine that stays on.
+
+## Supervising an agent other than Claude Code
+
+Everything the supervisor actually does — restart after the ways a session dies,
+hold a wake lock, scope credentials and config directory per workspace — is the
+same whichever agent CLI is running. Only the launch details differ, so those
+are a `kind`:
+
+```yaml
+workspaces:
+  acme-stack:
+    autostart: true
+    kind: custom
+    bin: some-agent            # a command name on PATH, never a path
+    args: [serve, --headless]  # the argv, in full
+    configDirEnv: SOME_AGENT_HOME
+    credentialEnv: [SOME_AGENT_API_KEY, SOME_AGENT_OAUTH_TOKEN]
+```
+
+| kind | what it launches |
+|---|---|
+| `claude` | `claude remote-control …`, built from `spawn`, `capacity`, `permissionMode`. The default, so an existing config is unchanged. |
+| `custom` | exactly the `args` you wrote, after `bin`. |
+
+**Why `custom` takes the whole argv rather than corgi guessing flags.** A
+supervised process runs unattended, and a flag corgi invented for a CLI whose
+interface it cannot verify would fail at 3am with a message nobody sees. Writing
+the command out means what runs is what you tested in a terminal. Built-in kinds
+exist for CLIs whose flags corgi can be sure of; adding one is a map entry in
+`utils/agent/supervisor/kind.go`.
+
+Three rules carry over unchanged, because they are what makes supervision safe
+rather than merely convenient:
+
+- **`args` is trusted config only.** An argv is a choice of what code runs, so
+  there is deliberately no field in the committed `.corgi/agent.yml` that
+  reaches it. A cloned repository cannot choose the command.
+- **Nothing may disarm the permission prompts.** `--dangerously-*` and `--yolo`
+  in `args` are rejected, the same rule that already rejects
+  `permissionMode: bypassPermissions`. Those prompts are what you answer from
+  your phone.
+- **A setting that cannot take effect is an error.** `spawn` and
+  `permissionMode` on a `custom` kind are rejected rather than dropped, and so
+  is a `configDir` with no `configDirEnv` to put it in — silently ignoring the
+  last one would leave the workspace on the default account, which looks exactly
+  like being on the right one.
 
 ## Running more than one Claude account
 
@@ -173,6 +254,7 @@ defaults:
 workspaces:
   acme-stack:
     autostart: true          # supervise this one; `corgi agent init` sets it
+    kind: claude             # which agent CLI; default, see below
     configDir: ~/.claude-work
     wakeLock: session
     permissionMode: default
@@ -195,11 +277,12 @@ session acting on injected instructions from a file it read.
 
 ## The MCP tools
 
-`corgi mcp` gains nine tools. A Remote Control session calls them from your
+`corgi mcp` gains ten tools. A Remote Control session calls them from your
 phone; they also work from any other MCP client.
 
 | tool | what it does |
 |---|---|
+| `corgi_session_brief` | what the previous session was working on before it restarted |
 | `corgi_workspaces` | every stack registered on this machine |
 | `corgi_workspace_resolve` | "the recipe app" → one stack, or candidates |
 | `corgi_worktrees_materialize` | a worktree per repo, all on one branch |
@@ -210,9 +293,9 @@ phone; they also work from any other MCP client.
 | `corgi_preview_freeze` | pin it so idle reaping leaves it alone |
 | `corgi_preview_stop` | tear it down |
 
-`corgi_worktrees_*` mutate, so they join the same public-tunnel gate that
-already covers `corgi_exec` and `corgi_db_query`: over a tunnel they need
-`CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1`.
+`corgi_worktrees_*` mutate, so they join the same tunnel gate that already
+covers `corgi_exec` and `corgi_db_query` — see [exposure
+tiers](#exposure-local-private-public) for when that gate is closed.
 
 ### Resolution never guesses
 
@@ -315,6 +398,50 @@ using for your stack:
 Try it by hand before relying on it. `corgi_diff` needs none of this and is the
 better answer to "what changed".
 
+## Exposure: local, private, public
+
+"Is there a tunnel" is the wrong question to gate on. A tunnel behind an
+identity proxy is not open to the internet; a quick tunnel is open to anyone who
+has the URL. Those deserve different answers, so `corgi mcp --http --tunnel`
+sorts the endpoint into a tier:
+
+| tier | what it means | `corgi_exec`, `corgi_db_query`, `corgi_worktrees_*` |
+|---|---|---|
+| `local` | loopback or LAN, no tunnel | allowed |
+| `private` | a tunnel an identity proxy stands in front of | allowed |
+| `public` | anyone holding the URL can reach it | blocked unless `CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1` |
+
+`private` is **only ever reached by observing it**. When the tunnel URL is
+published, corgi makes one unauthenticated request and looks at what comes back
+— a redirect to an Access login, a `cf-access-*` header, a challenge naming a
+realm. Nothing in any config file can assert protection, because a gate that
+relaxes on a claim is a gate that fails open on a typo.
+
+```
+🌐 ✓ public MCP endpoint: https://corgi.example/mcp
+🌐 exposure: private — cloudflare-access (unauthenticated request redirected to the Access login).
+   corgi_exec/corgi_db_query stay enabled; no CORGI_MCP_ALLOW_DANGEROUS_TUNNEL needed.
+```
+
+corgi's own bearer check answers 401 too, and is deliberately **not** counted:
+treating it as protection would let the endpoint declare itself private on the
+strength of the very token the gate exists to protect. Anything unrecognised —
+including a probe that could not connect — stays `public`. The gate starts
+closed and opens only on evidence.
+
+The practical result is that `CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1`, which is set
+once and then forgotten about forever, stops being the only way to use these
+tools from a phone. Put a named tunnel behind an access policy and the gate
+opens for the right reason.
+
+Two things this does **not** do. It does not check previews: `corgi_preview_*`
+opens a tunnel onto a dev server, and probing it would mean a network call
+inside an MCP handler, which must never block. A preview is public, `sensitive`
+workspaces refuse one, and idle reaping still tears it down. And it is a
+reachability check, not an authorization model — it tells you an unauthenticated
+request does not reach corgi, nothing about who is on the other side once it
+does.
+
 ## Pairing a phone
 
 A phone reaches corgi over the MCP HTTP endpoint, and should never be handed the
@@ -358,7 +485,11 @@ export CORGI_DATA_DIR="$(brew --prefix)/var/corgi"
 - `bin` must be a command name on PATH, never a path.
 - `bypassPermissions` rejected; `--dangerously-skip-permissions` never passed.
 - Ambient credentials stripped from supervised processes and reported.
-- The user config must be `0600` or corgi refuses to read it.
+- The user config must be `0600` or corgi refuses to read it; briefs are written
+  `0600` for the same reason — they name repository paths and branches.
+- A custom kind's `args` cannot carry `--dangerously-*` or `--yolo`.
+- Exposure is downgraded to `private` only on an observed interception, never on
+  a config claim, and corgi's own 401 does not count as one.
 - No secret material in the launchd plist or systemd unit — those are
   world-readable and land in backups.
 - Supervised output is not mirrored to the daemon's log unless you pass

@@ -38,7 +38,7 @@ func StartProcess(ctx context.Context, cfg SpawnConfig) (Process, error) {
 		return nil, err
 	}
 
-	bin, err := SanitizeBin(cfg.Bin)
+	bin, err := ResolveBin(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,12 @@ func StartProcess(ctx context.Context, cfg SpawnConfig) (Process, error) {
 		return nil, fmt.Errorf("%s not found on PATH: %w", bin, err)
 	}
 
-	cmd := exec.Command(resolved, BuildArgs(cfg)...)
+	args, err := BuildArgs(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.Command(resolved, args...)
 	cmd.Dir = cfg.Dir
 	cmd.Env = BuildEnv(cfg, os.Environ())
 	// Own process group so Stop can take down anything remote control spawned,

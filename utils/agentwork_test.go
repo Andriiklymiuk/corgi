@@ -76,3 +76,47 @@ func TestNormalizeCIConclusion(t *testing.T) {
 		}
 	}
 }
+
+func TestHasUncommittedWorkCountsUntrackedFiles(t *testing.T) {
+	// The difference from isTreeDirty, and the reason this exists: a session's
+	// newly created files are the work most easily lost, and `git diff` alone
+	// says nothing about them.
+	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
+
+	if HasUncommittedWork(repo) {
+		t.Fatal("a fresh repo must be reported clean")
+	}
+	if err := os.WriteFile(filepath.Join(repo, "new.txt"), []byte("wip\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if !HasUncommittedWork(repo) {
+		t.Error("an untracked file is uncommitted work a fresh session would not find")
+	}
+}
+
+func TestHasUncommittedWorkRespectsGitignore(t *testing.T) {
+	// Otherwise every stack with build output reports every repo as dirty, and
+	// the count in a handover note stops meaning anything.
+	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
+	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("build/\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	commitAll(t, repo, "ignore build")
+
+	if err := os.MkdirAll(filepath.Join(repo, "build"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "build", "out.js"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if HasUncommittedWork(repo) {
+		t.Error("ignored build output must not count as uncommitted work")
+	}
+}
+
+func TestHasUncommittedWorkOnANonRepositoryIsFalse(t *testing.T) {
+	if HasUncommittedWork(t.TempDir()) {
+		t.Error("a directory that is not a git repo has no uncommitted work")
+	}
+}
