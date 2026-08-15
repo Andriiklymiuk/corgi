@@ -199,18 +199,27 @@ func printBriefs(briefs []brief.Brief, asJSON bool) {
 		printJSON(briefs)
 		return
 	}
+	utils.Infof("%s", formatBriefs(briefs))
+}
+
+// formatBriefs renders briefs for a person.
+//
+// Kept pure and separate from printing so what a restart actually reports can
+// be asserted on directly. This is the text someone reads to decide where they
+// left off, so getting it wrong is not cosmetic.
+func formatBriefs(briefs []brief.Brief) string {
 	if len(briefs) == 0 {
-		utils.Infof("no briefs yet — nothing has restarted\n")
-		return
+		return "no briefs yet — nothing has restarted\n"
 	}
+	var out strings.Builder
 	for _, b := range briefs {
-		utils.Info(art.BlueColor, b.WorkspaceID, art.WhiteColor)
-		utils.Infof("  ended   %s (%s)\n", b.EndedAt.Local().Format("2006-01-02 15:04"), b.Cause)
+		fmt.Fprintf(&out, "%s%s%s\n", art.BlueColor, b.WorkspaceID, art.WhiteColor)
+		fmt.Fprintf(&out, "  ended   %s (%s)\n", b.EndedAt.Local().Format("2006-01-02 15:04"), b.Cause)
 		if b.Reason != "" {
-			utils.Infof("  reason  %s\n", b.Reason)
+			fmt.Fprintf(&out, "  reason  %s\n", b.Reason)
 		}
 		if summary := b.Summary(); summary != "" {
-			utils.Infof("  state   %s\n", summary)
+			fmt.Fprintf(&out, "  state   %s\n", summary)
 		}
 		for _, r := range b.Repos {
 			marker := ""
@@ -221,9 +230,10 @@ func printBriefs(briefs []brief.Brief, asJSON bool) {
 			if r.Dirty {
 				dirty = " · uncommitted changes"
 			}
-			utils.Infof("    %-16s %s%s%s\n", r.Service, orDash(r.Branch), dirty, marker)
+			fmt.Fprintf(&out, "    %-16s %s%s%s\n", r.Service, orDash(r.Branch), dirty, marker)
 		}
 	}
+	return out.String()
 }
 
 func orDash(s string) string {

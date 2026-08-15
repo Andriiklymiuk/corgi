@@ -6,9 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/brief"
+
+	"github.com/spf13/cobra"
 )
 
 // gitRepo makes a repository with one commit, on a named branch.
@@ -167,5 +170,164 @@ func TestCaptureWorkspaceBriefAlwaysReturnsABrief(t *testing.T) {
 	}
 	if !got.Empty() {
 		t.Error("a brief with no readable repos must report itself empty so the notification stays one line")
+	}
+}
+
+func TestFormatBriefsShowsWhereTheSessionLeftOff(t *testing.T) {
+	// This is the text someone reads to decide where they were, so what it
+	// contains is behaviour, not decoration.
+	ended := time.Date(2026, 8, 14, 14, 32, 0, 0, time.Local)
+	got := formatBriefs([]brief.Brief{{
+		WorkspaceID: "acme-stack",
+		EndedAt:     ended,
+		Cause:       "network-timeout",
+		Reason:      "remote control restarted",
+		Repos: []brief.RepoState{
+			{Service: "api", Branch: "feature/referral", Worktree: true},
+			{Service: "web", Branch: "feature/referral", Dirty: true, Worktree: true},
+		},
+	}})
+
+	for _, want := range []string{
+		"acme-stack",
+		"network-timeout",
+		"remote control restarted",
+		"2026-08-14 14:32",
+		"feature/referral",
+		"uncommitted changes",
+		"(worktree)",
+		"api",
+		"web",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestFormatBriefsOmitsWhatItDoesNotKnow(t *testing.T) {
+	// Empty lines labelled "reason" and "state" would suggest corgi looked and
+	// found nothing, rather than that there was nothing to look at.
+	got := formatBriefs([]brief.Brief{{
+		WorkspaceID: "acme",
+		EndedAt:     time.Now(),
+		Cause:       "crash",
+	}})
+
+	if strings.Contains(got, "reason") {
+		t.Errorf("a brief with no reason must not print the label:\n%s", got)
+	}
+	if strings.Contains(got, "state") {
+		t.Errorf("a brief with nothing to summarize must not print the label:\n%s", got)
+	}
+}
+
+func TestFormatBriefsMarksADetachedCheckout(t *testing.T) {
+	// An empty branch renders as a dash, never as a blank column that reads
+	// like the value was lost.
+	got := formatBriefs([]brief.Brief{{
+		WorkspaceID: "acme",
+		EndedAt:     time.Now(),
+		Repos:       []brief.RepoState{{Service: "api"}},
+	}})
+
+	if !strings.Contains(got, "-") {
+		t.Errorf("a repo with no branch should render a dash:\n%s", got)
+	}
+}
+
+func TestFormatBriefsSaysSoWhenThereAreNone(t *testing.T) {
+	got := formatBriefs(nil)
+
+	if !strings.Contains(got, "nothing has restarted") {
+		t.Errorf("empty output = %q, want it to explain the absence", got)
+	}
+}
+
+func TestAgentBriefJSONShapes(t *testing.T) {
+	// docs/agents.md promises an array for the list form and one object or null
+	// for a single id. A command that switches shapes makes every consumer
+	// branch on the shape before it can read the data.
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+
+	agentPath, err := agentDir()
+	if err != nil {
+		t.Fatalf("agentDir() error = %v", err)
+	}
+	if err := brief.Write(agentPath, brief.Capture(brief.Params{
+		WorkspaceID: "acme",
+		Cause:       "network-timeout",
+	}, []brief.RepoState{{Service: "api", Branch: "feature/referral"}})); err != nil {
+		t.Fatalf("brief.Write() error = %v", err)
+	}
+
+	if out := captureStdout(t, func() { runAgentBrief(briefCmdWithJSON(t), nil) }); !strings.HasPrefix(strings.TrimSpace(out), "[") {
+		t.Errorf("list form = %s, want a JSON array", out)
+	}
+	if out := captureStdout(t, func() { runAgentBrief(briefCmdWithJSON(t), []string{"acme"}) }); !strings.HasPrefix(strings.TrimSpace(out), "{") {
+		t.Errorf("single form = %s, want one JSON object", out)
+	}
+	if out := captureStdout(t, func() { runAgentBrief(briefCmdWithJSON(t), []string{"nonesuch"}) }); strings.TrimSpace(out) != "null" {
+		t.Errorf("missing brief = %s, want null", out)
+	}
+}
+
+// briefCmdWithJSON returns the brief command with --json set, so the handler
+// can be driven without going through the root command.
+func briefCmdWithJSON(t *testing.T) *cobra.Command {
+	t.Helper()
+	c := &cobra.Command{}
+	c.Flags().Bool("json", true, "")
+	return c
+}
+
+func TestProbeWorkspaceReposNamesServicesFromTheComposeFile(t *testing.T) {
+	// End to end over the bug this file's naming logic exists for: worktree
+	// directories are named from the git repository ROOT, so a map keyed on the
+	// service path silently never matches and every worktree gets labelled with
+	// the repository basename instead of its service name.
+	//
+	// The service therefore lives in a SUBDIRECTORY of its repository — a
+	// monorepo, which is exactly the layout where the two paths diverge. With
+	// the service path as the key this test reports "mono" instead of "api".
+	dir := t.TempDir()
+	repo := gitRepo(t, filepath.Join(dir, "mono"), "main")
+	servicePath := filepath.Join(repo, "services", "api")
+	if err := os.MkdirAll(servicePath, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	compose := "services:\n  api:\n    path: ./mono/services/api\n"
+	if err := os.WriteFile(filepath.Join(dir, "corgi-compose.yml"), []byte(compose), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	root, ok := utils.RepoRootOf(servicePath)
+	if !ok {
+		t.Fatalf("RepoRootOf(%s) reported no repository", servicePath)
+	}
+	if root == servicePath {
+		t.Fatal("the service path and its repository root must differ for this test to discriminate")
+	}
+	// Named from the repository root, the way corgi names it.
+	worktreeDir(t, dir, root, "feature/referral")
+
+	got := probeWorkspaceRepos(dir)
+
+	var worktrees int
+	for _, r := range got {
+		if r.Service != "api" {
+			t.Errorf("service = %q, want api — the compose file names it", r.Service)
+		}
+		if r.Worktree {
+			worktrees++
+			if r.Branch != "feature/referral" {
+				t.Errorf("worktree branch = %q, want feature/referral", r.Branch)
+			}
+		}
+	}
+	if worktrees != 1 {
+		t.Errorf("probed %+v, want exactly one worktree", got)
 	}
 }
