@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -358,5 +359,35 @@ func TestDaemonWithoutABriefProbeStillRuns(t *testing.T) {
 	}
 	if b, _ := brief.Read(d.Dir, "acme"); b != nil {
 		t.Error("a nil probe must write no brief at all")
+	}
+}
+
+func TestRunWaitsForTheStatusPublisherBeforeReturning(t *testing.T) {
+	// Run's contract is "nothing of mine is still up". The status publisher runs
+	// in its own goroutine, so without an explicit wait Run can return — and its
+	// deferred cleanup delete status.json — while the publisher is still
+	// mid-write, resurrecting the file and racing anything clearing the
+	// directory behind it. Under `go test -race` that surfaced in CI as a
+	// TempDir cleanup failure in whichever test happened to run next.
+	//
+	// The delay makes the ordering deterministic: without the wait Run returns
+	// long before the publisher is finished.
+	d := testDaemon(t)
+	var publisherFinished atomic.Bool
+	d.publishStopped = func() {
+		time.Sleep(50 * time.Millisecond)
+		publisherFinished.Store(true)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, []supervisor.SpawnConfig{cfg("acme", "/tmp")}) }()
+	waitFor(t, func() bool { return len(d.Status().Workspaces) == 1 })
+
+	cancel()
+	<-done
+
+	if !publisherFinished.Load() {
+		t.Error("Run returned while the status publisher was still going; its cleanup can now race the publisher's next write")
 	}
 }
