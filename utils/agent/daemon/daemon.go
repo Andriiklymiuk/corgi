@@ -69,6 +69,12 @@ type Daemon struct {
 	// enumerating a stack's repositories means parsing a compose file, which the
 	// daemon has no business knowing about. Nil disables briefs entirely.
 	CaptureBrief func(brief.Params) *brief.Brief
+	// publishStopped is called as the status publisher exits.
+	//
+	// A test seam. Whether Run waits for that goroutine is otherwise observable
+	// only as a race — the publisher writing into a directory Run has finished
+	// with — which a test can lose a hundred times before catching once.
+	publishStopped func()
 
 	mu      sync.Mutex
 	runners []*supervisor.Runner
@@ -117,6 +123,9 @@ func (d *Daemon) requestPublish() {
 // state change, with a slow tick as a safety net for anything that changes
 // without notifying (the wake lock, for instance).
 func (d *Daemon) publishStatus(ctx context.Context) {
+	if d.publishStopped != nil {
+		defer d.publishStopped()
+	}
 	ticker := time.NewTicker(statusPublishInterval)
 	defer ticker.Stop()
 	for {
@@ -177,9 +186,22 @@ func (d *Daemon) Run(ctx context.Context, configs []supervisor.SpawnConfig) erro
 	}
 	defer d.cleanup()
 
+	// The publisher is awaited, not just cancelled. Without the wait, Run could
+	// return — and its deferred cleanup could delete status.json — while the
+	// publisher was still mid-write, which both resurrects the file corgi just
+	// removed and races anything clearing the directory behind it. Registered
+	// after the cleanup defer so it runs first: stop publishing, wait, then
+	// remove.
 	publishCtx, stopPublishing := context.WithCancel(ctx)
-	defer stopPublishing()
-	go d.publishStatus(publishCtx)
+	publishDone := make(chan struct{})
+	go func() {
+		defer close(publishDone)
+		d.publishStatus(publishCtx)
+	}()
+	defer func() {
+		stopPublishing()
+		<-publishDone
+	}()
 
 	var wg sync.WaitGroup
 	for _, r := range d.Runners() {
