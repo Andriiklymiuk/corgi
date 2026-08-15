@@ -13,6 +13,7 @@
 package brief
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -220,23 +221,41 @@ func Clear(agentDir, workspaceID string) error {
 	return err
 }
 
-// sanitize keeps a workspace id from escaping the briefs directory. Ids come
-// from a registry corgi writes, but this is a filename built from a name, and
-// that pattern is worth closing wherever it appears.
+// sanitize turns a workspace id into a filename that is safe, collision-free,
+// and case-insensitive.
+//
+// Three things it has to get right, each of which serves the wrong workspace's
+// branches to someone if it does not:
+//
+//   - It must not escape the briefs directory. Ids come from a registry corgi
+//     writes, but this builds a filename from a name, and that pattern is worth
+//     closing wherever it appears.
+//   - Distinct ids must not collapse together. Replacing unsafe runes alone
+//     maps "acme/stack" and "acme-stack" onto one file, so a short hash of the
+//     original is appended whenever the mapping actually changed anything.
+//   - It must match the registry's own comparison, which is case-insensitive
+//     (workspace.Registry.Forget uses EqualFold). Without lowercasing here,
+//     `workspaces forget ACME` drops the row and leaves briefs/acme.json behind.
 func sanitize(id string) string {
+	lower := strings.ToLower(id)
 	replaced := strings.Map(func(r rune) rune {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
 			return r
-		case r == '-', r == '_', r == '.':
+		case r == '-', r == '_':
 			return r
 		default:
 			return '-'
 		}
-	}, id)
-	// A name of only dots would still resolve to a directory entry.
-	if strings.Trim(replaced, ".") == "" {
-		return "workspace"
+	}, lower)
+
+	if replaced == lower && replaced != "" {
+		return replaced
 	}
-	return replaced
+	// Something was rewritten, so the safe form is no longer unique on its own.
+	sum := sha256.Sum256([]byte(lower))
+	if replaced == "" {
+		return fmt.Sprintf("workspace-%x", sum[:4])
+	}
+	return fmt.Sprintf("%s-%x", replaced, sum[:4])
 }

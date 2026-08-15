@@ -309,3 +309,46 @@ func TestWriteAndReadAgreeOnASanitizedID(t *testing.T) {
 		t.Errorf("workspaceId = %q, want the original %q preserved in the payload", got.WorkspaceID, id)
 	}
 }
+
+func TestDistinctIDsDoNotShareAFile(t *testing.T) {
+	// Replacing unsafe runes alone maps both of these onto "acme-stack", so one
+	// workspace's brief would overwrite the other's and then be served for it.
+	dir := t.TempDir()
+	if err := Write(dir, Capture(Params{WorkspaceID: "acme/stack", Cause: "slash"}, sampleRepos())); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := Write(dir, Capture(Params{WorkspaceID: "acme-stack", Cause: "dash"}, sampleRepos())); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	slash, err := Read(dir, "acme/stack")
+	if err != nil || slash == nil {
+		t.Fatalf("Read(acme/stack) = %v, %v", slash, err)
+	}
+	if slash.Cause != "slash" {
+		t.Errorf("acme/stack got cause %q — another workspace's brief overwrote it", slash.Cause)
+	}
+	if Path(dir, "acme/stack") == Path(dir, "acme-stack") {
+		t.Error("two distinct ids resolved to the same file")
+	}
+}
+
+func TestIDsMatchCaseInsensitively(t *testing.T) {
+	// The registry compares ids with EqualFold, so `workspaces forget ACME`
+	// drops the row. If the brief keyed on case it would survive and resurface
+	// against whatever stack next took that id.
+	dir := t.TempDir()
+	if err := Write(dir, Capture(Params{WorkspaceID: "acme"}, sampleRepos())); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	if got, _ := Read(dir, "ACME"); got == nil {
+		t.Error("Read is case-sensitive but the registry is not")
+	}
+	if err := Clear(dir, "ACME"); err != nil {
+		t.Fatalf("Clear() error = %v", err)
+	}
+	if got, _ := Read(dir, "acme"); got != nil {
+		t.Error("Clear with different casing left the brief behind")
+	}
+}

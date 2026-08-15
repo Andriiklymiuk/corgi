@@ -285,7 +285,7 @@ func releaseBranchWorktrees(composeDir, branch string, force bool) (removed, ski
 		if head, herr := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); herr == nil && head != branch {
 			continue
 		}
-		if !force && hasUncommittedWork(dest) {
+		if !force && HasUncommittedWork(dest) {
 			skippedDirty = append(skippedDirty, dest)
 			continue
 		}
@@ -307,13 +307,15 @@ func releaseBranchWorktrees(composeDir, branch string, force bool) (removed, ski
 	return removed, skippedDirty, nil
 }
 
-// hasUncommittedWork reports whether a worktree holds anything not committed,
+// HasUncommittedWork reports whether a checkout holds anything not committed,
 // including untracked files.
 //
 // isTreeDirty deliberately ignores untracked files, which is right for asking
 // "has this checkout diverged" — but wrong here. An agent's work is usually a
-// set of brand-new files, and those are the ones it would hurt most to discard.
-func hasUncommittedWork(dir string) bool {
+// set of brand-new files, and those are the ones it would hurt most to discard,
+// which is equally true when releasing a worktree and when writing a handover
+// brief. .gitignore still applies, so build output does not count.
+func HasUncommittedWork(dir string) bool {
 	out, err := gitOut(dir, "status", "--porcelain")
 	return err == nil && strings.TrimSpace(out) != ""
 }
@@ -326,8 +328,19 @@ func hasUncommittedWork(dir string) bool {
 // services would resolve to the same destination and the second would silently
 // be pointed at the first repository's worktree.
 func worktreeDirName(repo, branch string) string {
+	return fmt.Sprintf("%s@%s", WorktreeDirPrefix(repo), branchDirSegment(branch))
+}
+
+// WorktreeDirPrefix is the part of a worktree directory name before the "@",
+// derived only from the repository path.
+//
+// Exported so a caller holding a compose file can map an existing worktree
+// directory back to the service that owns it. Parsing the name by hand does not
+// work: the prefix is "<basename>-<hash>", so splitting on "@" yields
+// "api-3f2a1b" rather than "api".
+func WorktreeDirPrefix(repo string) string {
 	sum := sha256.Sum256([]byte(repo))
-	return fmt.Sprintf("%s-%x@%s", filepath.Base(repo), sum[:3], branchDirSegment(branch))
+	return fmt.Sprintf("%s-%x", filepath.Base(repo), sum[:3])
 }
 
 // branchDirSegment flattens a branch name into one path segment.

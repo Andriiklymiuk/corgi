@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"andriiklymiuk/corgi/utils"
@@ -36,20 +37,36 @@ func probeWorkspaceRepos(dir string) []brief.RepoState {
 		return nil
 	}
 
+	// Parsing a compose file mutates process-wide state (root command flags,
+	// utils.CorgiComposePath*), which is why every MCP handler is serialized
+	// behind this same lock. Briefs are captured from one goroutine per
+	// workspace, so without it two workspaces restarting together can hand each
+	// other's services back.
+	mcpHandlerMu.Lock()
+	corgi, err := loadComposeAtDir(dir)
+	mcpHandlerMu.Unlock()
+
+	byPrefix := map[string]string{}
 	var out []brief.RepoState
-	if corgi, err := loadComposeAtDir(dir); err == nil && corgi != nil {
+	if err == nil && corgi != nil {
 		for service, path := range utils.ServiceDirs(corgi, nil) {
+			byPrefix[utils.WorktreeDirPrefix(path)] = service
 			if state, ok := repoState(service, path, false); ok {
 				out = append(out, state)
 			}
 		}
 	}
-	return append(out, probeWorktreeRepos(dir)...)
+	return append(out, probeWorktreeRepos(dir, byPrefix)...)
 }
 
 // probeWorktreeRepos scans the agent worktree directory rather than asking for
 // a branch, because the point is to report a branch nobody remembered.
-func probeWorktreeRepos(dir string) []brief.RepoState {
+//
+// byPrefix maps a worktree directory's prefix back to the service that owns it.
+// The prefix is "<repo-basename>-<hash>", so splitting the name on "@" would
+// label every service "api-3f2a1b"; when the compose file cannot be read the
+// hash is trimmed instead, which at least yields the repository's name.
+func probeWorktreeRepos(dir string, byPrefix map[string]string) []brief.RepoState {
 	base := utils.AgentWorktreeBase(dir)
 	entries, err := os.ReadDir(base)
 	if err != nil {
@@ -60,11 +77,13 @@ func probeWorktreeRepos(dir string) []brief.RepoState {
 		if !e.IsDir() {
 			continue
 		}
-		// Directories are named <service>@<branch-with-slashes-flattened>. The
-		// branch is read from git rather than parsed back out of the name.
-		service, _, _ := strings.Cut(e.Name(), "@")
+		prefix, _, ok := strings.Cut(e.Name(), "@")
+		if !ok {
+			continue // not a worktree this scheme created
+		}
+		service := byPrefix[prefix]
 		if service == "" {
-			service = e.Name()
+			service = trimWorktreeHash(prefix)
 		}
 		if state, ok := repoState(service, filepath.Join(base, e.Name()), true); ok {
 			out = append(out, state)
@@ -73,28 +92,32 @@ func probeWorktreeRepos(dir string) []brief.RepoState {
 	return out
 }
 
+// worktreeHashSuffix matches the "-<6 hex>" that WorktreeDirPrefix appends.
+var worktreeHashSuffix = regexp.MustCompile(`-[0-9a-f]{6}$`)
+
+func trimWorktreeHash(prefix string) string {
+	return worktreeHashSuffix.ReplaceAllString(prefix, "")
+}
+
 func repoState(service, path string, worktree bool) (brief.RepoState, bool) {
-	work := utils.ProbeAgentWork(path)
-	if work == nil {
+	// ProbeAgentWork would additionally shell out to gh/glab with no timeout.
+	// A restart caused by the network going away must not then block on GitHub
+	// once per repository.
+	st, ok := utils.ProbeRepoState(path)
+	if !ok {
 		return brief.RepoState{}, false
 	}
-	branch := work.Branch
-	if branch == "HEAD" {
-		branch = "" // detached; a name here would be a lie
-	}
 	return brief.RepoState{
-		Service: service,
-		Dir:     path,
-		Branch:  branch,
-		// Not work.Dirty: that one ignores untracked files, and a session's
-		// newly created files are the work most easily lost.
-		Dirty:    utils.HasUncommittedWork(path),
+		Service:  service,
+		Dir:      path,
+		Branch:   st.Branch,
+		Dirty:    st.Dirty,
 		Worktree: worktree,
 	}, true
 }
 
-// loadComposeAtDir parses the compose file in dir without disturbing the
-// caller's compose context.
+// loadComposeAtDir parses the compose file in dir. Callers must hold
+// mcpHandlerMu: the loader underneath mutates process-wide state.
 func loadComposeAtDir(dir string) (*utils.CorgiCompose, error) {
 	for _, name := range []string{"corgi-compose.yml", "corgi-compose.yaml"} {
 		path := filepath.Join(dir, name)
@@ -158,6 +181,11 @@ func runAgentBrief(cmd *cobra.Command, args []string) {
 
 func printBriefs(briefs []brief.Brief, asJSON bool) {
 	if asJSON {
+		// Never nil: docs/agents.md promises an array, and a `null` here makes
+		// every consumer that iterates the result special-case the empty case.
+		if briefs == nil {
+			briefs = []brief.Brief{}
+		}
 		printJSON(briefs)
 		return
 	}

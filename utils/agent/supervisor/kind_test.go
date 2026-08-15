@@ -258,3 +258,45 @@ func TestUnknownKindProducesNoEnvironmentAtAll(t *testing.T) {
 		t.Errorf("BuildEnv() = %v, want empty for an unresolvable kind", env)
 	}
 }
+
+func TestBuildEnvNeverReturnsNil(t *testing.T) {
+	// exec.Cmd treats a nil Env as "inherit the entire parent environment", so
+	// returning nil from the unresolvable-kind path would turn the fail-safe
+	// into total credential inheritance — the exact opposite of its purpose.
+	c := baseConfig()
+	c.Kind = "nonesuch"
+
+	env := BuildEnv(c, []string{"ANTHROPIC_API_KEY=sk-live", "PATH=/usr/bin"})
+
+	if env == nil {
+		t.Fatal("BuildEnv() = nil; a nil Env makes os/exec inherit everything")
+	}
+	if len(env) != 0 {
+		t.Errorf("BuildEnv() = %v, want empty", env)
+	}
+}
+
+func TestSettingsAKindCannotHonourAreRejected(t *testing.T) {
+	// The PR's own rule: a setting that cannot take effect is an error. A
+	// capacity that silently does nothing reads as a limit being applied.
+	tests := map[string]func(*SpawnConfig){
+		"args on a built-in kind":          func(c *SpawnConfig) { c.Kind = KindClaude; c.Args = []string{"--flag"} },
+		"configDirEnv on a built-in kind":  func(c *SpawnConfig) { c.Kind = KindClaude; c.ConfigDirEnv = "X_HOME" },
+		"credentialEnv on a built-in kind": func(c *SpawnConfig) { c.Kind = KindClaude; c.CredentialEnv = []string{"X"} },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := baseConfig()
+			mutate(&c)
+			if err := ValidateSpawnConfig(c); err == nil {
+				t.Error("must be rejected, not silently ignored")
+			}
+		})
+	}
+
+	c := customConfig()
+	c.Capacity = 4
+	if err := ValidateSpawnConfig(c); err == nil {
+		t.Error("capacity on a custom kind must be rejected, not silently ignored")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"andriiklymiuk/corgi/utils"
@@ -40,16 +41,30 @@ func gitRepo(t *testing.T, dir, branch string) string {
 	return dir
 }
 
+// worktreeDir creates a worktree checkout under dir using the real naming
+// scheme, so these tests exercise the names corgi actually produces rather than
+// a convenient invention.
+func worktreeDir(t *testing.T, dir, repoPath, branch string) string {
+	t.Helper()
+	name := utils.WorktreeDirPrefix(repoPath) + "@" + strings.ReplaceAll(branch, "/", "-")
+	return gitRepo(t, filepath.Join(utils.AgentWorktreeBase(dir), name), branch)
+}
+
 func TestProbeWorktreeReposReportsBranchesNobodyRemembers(t *testing.T) {
 	// A cross-repo branch is exactly what a restarted session cannot discover:
 	// from a fresh session's cwd, four worktrees on one branch look like
 	// nothing at all.
 	dir := t.TempDir()
-	base := utils.AgentWorktreeBase(dir)
-	gitRepo(t, filepath.Join(base, "api@feature-referral"), "feature/referral")
-	gitRepo(t, filepath.Join(base, "web@feature-referral"), "feature/referral")
+	apiRepo, webRepo := "/dev/acme/api", "/dev/acme/web"
+	worktreeDir(t, dir, apiRepo, "feature/referral")
+	worktreeDir(t, dir, webRepo, "feature/referral")
 
-	got := probeWorktreeRepos(dir)
+	byPrefix := map[string]string{
+		utils.WorktreeDirPrefix(apiRepo): "api",
+		utils.WorktreeDirPrefix(webRepo): "web",
+	}
+
+	got := probeWorktreeRepos(dir, byPrefix)
 
 	if len(got) != 2 {
 		t.Fatalf("probed %d worktrees, want 2: %+v", len(got), got)
@@ -62,8 +77,8 @@ func TestProbeWorktreeReposReportsBranchesNobodyRemembers(t *testing.T) {
 			t.Errorf("%s must be marked as a worktree, not a main checkout", r.Service)
 		}
 	}
-	// The service name comes from the directory prefix, so the note names the
-	// service rather than a flattened directory.
+	// The compose file maps the directory back to the service. Splitting the
+	// name on "@" would yield "api-3f2a1b", labelling every repo with a hash.
 	services := map[string]bool{got[0].Service: true, got[1].Service: true}
 	for _, want := range []string{"api", "web"} {
 		if !services[want] {
@@ -72,16 +87,32 @@ func TestProbeWorktreeReposReportsBranchesNobodyRemembers(t *testing.T) {
 	}
 }
 
+func TestProbeWorktreeReposFallsBackToTheRepoName(t *testing.T) {
+	// With no readable compose file there is no service map, and a name with
+	// the hash still attached would be worse than the repository's own name.
+	dir := t.TempDir()
+	worktreeDir(t, dir, "/dev/acme/api", "feature/referral")
+
+	got := probeWorktreeRepos(dir, map[string]string{})
+
+	if len(got) != 1 {
+		t.Fatalf("probed %d worktrees, want 1", len(got))
+	}
+	if got[0].Service != "api" {
+		t.Errorf("service = %q, want the hash trimmed back to api", got[0].Service)
+	}
+}
+
 func TestProbeWorktreeReposReportsUncommittedWork(t *testing.T) {
 	// Uncommitted work is the part that is genuinely lost if nobody mentions
 	// it, because the next session has no reason to look.
 	dir := t.TempDir()
-	repo := gitRepo(t, filepath.Join(utils.AgentWorktreeBase(dir), "api@feature-x"), "feature/x")
+	repo := worktreeDir(t, dir, "/dev/acme/api", "feature/x")
 	if err := os.WriteFile(filepath.Join(repo, "new.txt"), []byte("wip\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	got := probeWorktreeRepos(dir)
+	got := probeWorktreeRepos(dir, nil)
 
 	if len(got) != 1 {
 		t.Fatalf("probed %d worktrees, want 1", len(got))
@@ -101,7 +132,7 @@ func TestProbeWorktreeReposIgnoresNonRepositories(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	if got := probeWorktreeRepos(dir); len(got) != 0 {
+	if got := probeWorktreeRepos(dir, nil); len(got) != 0 {
 		t.Errorf("probed %+v, want nothing — only git checkouts belong in a brief", got)
 	}
 }
