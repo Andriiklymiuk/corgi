@@ -2,13 +2,16 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
@@ -272,5 +275,119 @@ func TestReadInfoRejectsARecycledPid(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "daemon.json")); !os.IsNotExist(statErr) {
 		t.Error("the stale record should be cleaned up")
+	}
+}
+
+// exitingStarter hands out processes that exit cleanly after a moment, which
+// the supervisor classifies as the documented network timeout and restarts.
+func exitingStarter() supervisor.Starter {
+	var n int
+	var mu sync.Mutex
+	return func(ctx context.Context, _ supervisor.SpawnConfig) (supervisor.Process, error) {
+		mu.Lock()
+		n++
+		p := &blockingProcess{pid: 2000 + n, stopped: make(chan struct{})}
+		mu.Unlock()
+		go func() {
+			select {
+			case <-time.After(10 * time.Millisecond):
+			case <-ctx.Done():
+			}
+			p.Stop()
+		}()
+		return p, nil
+	}
+}
+
+func TestDaemonWritesABriefWhenASessionIsReplaced(t *testing.T) {
+	// The whole point of the feature: a restarted session is a NEW session, and
+	// what the old one left on disk has to be recorded while it is still there.
+	d := testDaemon(t)
+	d.Start = exitingStarter()
+
+	d.CaptureBrief = func(p brief.Params) *brief.Brief {
+		b := brief.Capture(p, []brief.RepoState{
+			{Service: "api", Branch: "feature/referral", Dirty: true},
+		})
+		return &b
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, []supervisor.SpawnConfig{cfg("acme", t.TempDir())}) }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if b, _ := brief.Read(d.Dir, "acme"); b != nil {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	got, err := brief.Read(d.Dir, "acme")
+	if err != nil {
+		t.Fatalf("brief.Read() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("no brief written after a restart — the handover note is the feature")
+	}
+	if got.Cause == "" {
+		t.Error("brief must carry the exit cause, so it explains why this is a new session")
+	}
+	if len(got.Repos) != 1 || got.Repos[0].Branch != "feature/referral" {
+		t.Errorf("brief repos = %+v, want the probed state", got.Repos)
+	}
+	// Whether the summary reaches the notification is the supervisor's job and
+	// is asserted there, where a healthy run can be simulated without waiting
+	// out MinHealthyUptime.
+}
+
+func TestDaemonWithoutABriefProbeStillRuns(t *testing.T) {
+	// CaptureBrief is injected, and a nil one must disable the feature rather
+	// than take the daemon down on the first restart.
+	d := testDaemon(t)
+	d.Start = exitingStarter()
+	d.CaptureBrief = nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	if err := d.Run(ctx, []supervisor.SpawnConfig{cfg("acme", t.TempDir())}); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run() = %v", err)
+	}
+	if b, _ := brief.Read(d.Dir, "acme"); b != nil {
+		t.Error("a nil probe must write no brief at all")
+	}
+}
+
+func TestRunWaitsForTheStatusPublisherBeforeReturning(t *testing.T) {
+	// Run's contract is "nothing of mine is still up". The status publisher runs
+	// in its own goroutine, so without an explicit wait Run can return — and its
+	// deferred cleanup delete status.json — while the publisher is still
+	// mid-write, resurrecting the file and racing anything clearing the
+	// directory behind it. Under `go test -race` that surfaced in CI as a
+	// TempDir cleanup failure in whichever test happened to run next.
+	//
+	// The delay makes the ordering deterministic: without the wait Run returns
+	// long before the publisher is finished.
+	d := testDaemon(t)
+	var publisherFinished atomic.Bool
+	d.publishStopped = func() {
+		time.Sleep(50 * time.Millisecond)
+		publisherFinished.Store(true)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, []supervisor.SpawnConfig{cfg("acme", "/tmp")}) }()
+	waitFor(t, func() bool { return len(d.Status().Workspaces) == 1 })
+
+	cancel()
+	<-done
+
+	if !publisherFinished.Load() {
+		t.Error("Run returned while the status publisher was still going; its cleanup can now race the publisher's next write")
 	}
 }

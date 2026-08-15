@@ -49,6 +49,35 @@ func ProbeAgentWork(dir string) *AgentWork {
 	return aw
 }
 
+// RepoState is one checkout's local git state: no forge, no network.
+type RepoState struct {
+	Branch string
+	Dirty  bool
+}
+
+// ProbeRepoState reads a checkout's branch and whether it holds uncommitted
+// work. Returns false when dir is not a git repository.
+//
+// Separate from ProbeAgentWork, which additionally shells out to `gh` / `glab`
+// to find the branch's PR. Those calls hit the network with no timeout, which
+// is fine for a snapshot someone asked for and wrong anywhere on a restart
+// path — a session that died *because* the network went away must not then wait
+// on GitHub, once per repository, before it can come back.
+//
+// A detached HEAD reports an empty branch rather than the literal "HEAD", since
+// a name there would be a lie.
+func ProbeRepoState(dir string) (RepoState, bool) {
+	if dir == "" || !isGitRepo(dir) {
+		return RepoState{}, false
+	}
+	var st RepoState
+	if b, err := gitOut(dir, "rev-parse", "--abbrev-ref", "HEAD"); err == nil && b != "HEAD" {
+		st.Branch = b
+	}
+	st.Dirty = HasUncommittedWork(dir)
+	return st, true
+}
+
 // probePullRequest tries GitHub (gh) first, then GitLab (glab). Returns nil if
 // neither tool is installed or no PR/MR matches the branch.
 func probePullRequest(dir, branch string) *PullRequestState {

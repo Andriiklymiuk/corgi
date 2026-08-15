@@ -68,7 +68,10 @@ func TestBuildArgsNeverSkipsPermissions(t *testing.T) {
 	c.Capacity = 4
 	c.PermissionMode = "bypassPermissions"
 
-	args := BuildArgs(c)
+	args, err := BuildArgs(c)
+	if err != nil {
+		t.Fatalf("BuildArgs() error = %v", err)
+	}
 
 	for _, arg := range args {
 		if strings.Contains(arg, "dangerously-skip-permissions") {
@@ -87,7 +90,10 @@ func TestBuildArgs(t *testing.T) {
 	c.PermissionMode = "acceptEdits"
 	c.Name = "acme"
 
-	args := BuildArgs(c)
+	args, err := BuildArgs(c)
+	if err != nil {
+		t.Fatalf("BuildArgs() error = %v", err)
+	}
 
 	if len(args) == 0 || args[0] != "remote-control" {
 		t.Fatalf("argv must start with remote-control, got %v", args)

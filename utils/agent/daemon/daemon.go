@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
@@ -47,6 +48,7 @@ type Status struct {
 type WorkspaceDiagnostic struct {
 	WorkspaceID string   `json:"workspaceId"`
 	Dir         string   `json:"dir"`
+	Kind        string   `json:"kind,omitempty"`
 	Bin         string   `json:"bin"`
 	ConfigDir   string   `json:"configDir"`
 	Spawn       string   `json:"spawn"`
@@ -63,6 +65,16 @@ type Daemon struct {
 	Start supervisor.Starter
 	// Notify reports restarts. Defaults to corgi's desktop notification.
 	Notify func(title, body string)
+	// CaptureBrief probes what an ending session left on disk. Injected because
+	// enumerating a stack's repositories means parsing a compose file, which the
+	// daemon has no business knowing about. Nil disables briefs entirely.
+	CaptureBrief func(brief.Params) *brief.Brief
+	// publishStopped is called as the status publisher exits.
+	//
+	// A test seam. Whether Run waits for that goroutine is otherwise observable
+	// only as a race — the publisher writing into a directory Run has finished
+	// with — which a test can lose a hundred times before catching once.
+	publishStopped func()
 
 	mu      sync.Mutex
 	runners []*supervisor.Runner
@@ -111,6 +123,9 @@ func (d *Daemon) requestPublish() {
 // state change, with a slow tick as a safety net for anything that changes
 // without notifying (the wake lock, for instance).
 func (d *Daemon) publishStatus(ctx context.Context) {
+	if d.publishStopped != nil {
+		defer d.publishStopped()
+	}
 	ticker := time.NewTicker(statusPublishInterval)
 	defer ticker.Stop()
 	for {
@@ -171,9 +186,22 @@ func (d *Daemon) Run(ctx context.Context, configs []supervisor.SpawnConfig) erro
 	}
 	defer d.cleanup()
 
+	// The publisher is awaited, not just cancelled. Without the wait, Run could
+	// return — and its deferred cleanup could delete status.json — while the
+	// publisher was still mid-write, which both resurrects the file corgi just
+	// removed and races anything clearing the directory behind it. Registered
+	// after the cleanup defer so it runs first: stop publishing, wait, then
+	// remove.
 	publishCtx, stopPublishing := context.WithCancel(ctx)
-	defer stopPublishing()
-	go d.publishStatus(publishCtx)
+	publishDone := make(chan struct{})
+	go func() {
+		defer close(publishDone)
+		d.publishStatus(publishCtx)
+	}()
+	defer func() {
+		stopPublishing()
+		<-publishDone
+	}()
 
 	var wg sync.WaitGroup
 	for _, r := range d.Runners() {
@@ -214,8 +242,41 @@ func (d *Daemon) buildRunners(configs []supervisor.SpawnConfig) {
 		r := supervisor.NewRunner(cfg, d.Start, lock)
 		r.Notify = d.Notify
 		r.OnChange = d.requestPublish
+		r.OnSessionEnd = d.sessionEndHook(cfg, r)
 		d.runners = append(d.runners, r)
 		d.diags = append(d.diags, diagnose(cfg, env))
+	}
+}
+
+// sessionEndHook writes the handover brief for one workspace.
+//
+// A relaunched session is a NEW session with none of the previous one's
+// context. corgi cannot restore the conversation, but the branches and
+// uncommitted work it left on disk are still there, and saying so is the
+// difference between a restart costing an hour and costing nothing.
+func (d *Daemon) sessionEndHook(cfg supervisor.SpawnConfig, r *supervisor.Runner) func(supervisor.Decision) string {
+	if d.CaptureBrief == nil {
+		return nil
+	}
+	return func(dec supervisor.Decision) string {
+		b := d.CaptureBrief(brief.Params{
+			WorkspaceID: cfg.WorkspaceID,
+			Dir:         cfg.Dir,
+			Cause:       string(dec.Cause),
+			Reason:      dec.Reason,
+			Restarts:    r.State().Restarts,
+		})
+		if b == nil {
+			return ""
+		}
+		// Written even when Empty: the cause and reason always apply, and
+		// skipping the write would make `corgi agent brief <id>` report "it has
+		// not restarted" about a workspace that just did. Empty only decides
+		// whether there is a summary line worth adding to the notification.
+		//
+		// A failed write is not worth failing a restart over.
+		_ = brief.Write(d.Dir, *b)
+		return b.Summary()
 	}
 }
 
@@ -252,10 +313,15 @@ func (d *Daemon) Status() Status {
 // be used. An ambient ANTHROPIC_API_KEY is called out explicitly: remote
 // control refuses to run with one set, and it silently bills the API.
 func diagnose(cfg supervisor.SpawnConfig, env []string) WorkspaceDiagnostic {
-	bin, _ := supervisor.SanitizeBin(cfg.Bin)
+	bin, _ := supervisor.ResolveBin(cfg)
+	kind := cfg.Kind
+	if kind == "" {
+		kind = supervisor.DefaultKind
+	}
 	d := WorkspaceDiagnostic{
 		WorkspaceID: cfg.WorkspaceID,
 		Dir:         cfg.Dir,
+		Kind:        kind,
 		Bin:         bin,
 		ConfigDir:   cfg.ConfigDir,
 		Spawn:       cfg.Spawn,

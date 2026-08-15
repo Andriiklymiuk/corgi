@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -40,6 +41,18 @@ func registerAgentMCPTools(s *server.MCPServer) {
 				"Use this to answer \"is it up\" and \"why did my session die\"."),
 	), jsonHandler(func(mcp.CallToolRequest) (any, error) {
 		return mcpAgentStatus()
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_session_brief",
+		mcp.WithDescription(
+			"What the previous supervised session in this workspace was working on before it was restarted. "+
+				"Read-only. A restart produces a NEW session with none of the earlier conversation, so call this "+
+				"first when the user picks up where they left off: it reports the branch each repository is on, "+
+				"which hold uncommitted changes, and which cross-repo worktrees exist. "+
+				"Returns null when nothing has restarted, which is the ordinary case."),
+		mcp.WithString("workspace", mcp.Description("Workspace id; omit for every workspace that has one")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpSessionBrief(r.GetString("workspace", ""))
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_workspaces",
@@ -187,6 +200,39 @@ func mcpAgentStatus() (any, error) {
 		}, nil
 	}
 	return status, nil
+}
+
+func mcpSessionBrief(workspace string) (any, error) {
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(workspace) != "" {
+		b, readErr := brief.Read(dir, workspace)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if b == nil {
+			// Explicitly not an error: "nothing has restarted" is the good case,
+			// and an error here would read as a fault to whoever is holding the
+			// phone.
+			return map[string]any{
+				"brief": nil,
+				"note":  "no restart recorded for this workspace since the daemon started",
+			}, nil
+		}
+		return map[string]any{"brief": b, "summary": b.Summary()}, nil
+	}
+	briefs, err := brief.List(dir)
+	if err != nil {
+		return nil, err
+	}
+	if briefs == nil {
+		// Never null: a client that iterates the field should not have to
+		// special-case "no restarts yet", which is the ordinary state.
+		briefs = []brief.Brief{}
+	}
+	return map[string]any{"briefs": briefs}, nil
 }
 
 func mcpWorkspaces() (any, error) {

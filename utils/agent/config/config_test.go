@@ -242,3 +242,66 @@ func contains(haystack, needle string) bool {
 	}
 	return false
 }
+
+func TestKindAndArgsComeOnlyFromTrustedConfig(t *testing.T) {
+	// An argv is a choice of what code the daemon runs. The committed repo file
+	// travels with a clone and was written by whoever wrote the repository, so
+	// there is deliberately no field on RepoConfig that could reach it.
+	repo := &RepoConfig{Version: 1}
+	repo.Workspace.ID = "acme"
+
+	user := &UserConfig{Workspaces: map[string]WorkspaceConfig{
+		"acme": {Kind: "custom", Bin: "some-agent", Args: []string{"serve"}},
+	}}
+
+	got := Resolve("acme", repo, user)
+
+	if got.Kind != "custom" || got.Bin != "some-agent" {
+		t.Errorf("resolved = %+v, want the trusted kind and bin", got.WorkspaceConfig)
+	}
+	if len(got.Args) != 1 || got.Args[0] != "serve" {
+		t.Errorf("args = %v, want the trusted argv", got.Args)
+	}
+}
+
+func TestWorkspaceArgsReplaceDefaultsRatherThanAppend(t *testing.T) {
+	// Concatenating would produce a command line neither file asked for.
+	user := &UserConfig{
+		Defaults:   WorkspaceConfig{Kind: "custom", Args: []string{"default", "--flag"}},
+		Workspaces: map[string]WorkspaceConfig{"acme": {Args: []string{"specific"}}},
+	}
+
+	got := Resolve("acme", nil, user)
+
+	if len(got.Args) != 1 || got.Args[0] != "specific" {
+		t.Errorf("args = %v, want only the workspace's own", got.Args)
+	}
+	// The kind still falls through from defaults.
+	if got.Kind != "custom" {
+		t.Errorf("kind = %q, want it inherited from defaults", got.Kind)
+	}
+}
+
+func TestEmptyKindKeepsExistingConfigsWorking(t *testing.T) {
+	// Every config written before kinds existed has no kind: field. It must
+	// resolve to empty here and be defaulted downstream, not to some literal
+	// that a later rename could break.
+	user := &UserConfig{Workspaces: map[string]WorkspaceConfig{"acme": {Bin: "claude"}}}
+
+	if got := Resolve("acme", nil, user); got.Kind != "" {
+		t.Errorf("kind = %q, want empty for a config that never set one", got.Kind)
+	}
+}
+
+func TestCredentialEnvOverlays(t *testing.T) {
+	user := &UserConfig{
+		Defaults:   WorkspaceConfig{CredentialEnv: []string{"DEFAULT_KEY"}},
+		Workspaces: map[string]WorkspaceConfig{"acme": {CredentialEnv: []string{"ACME_KEY"}}},
+	}
+
+	got := Resolve("acme", nil, user)
+
+	if len(got.CredentialEnv) != 1 || got.CredentialEnv[0] != "ACME_KEY" {
+		t.Errorf("credentialEnv = %v, want the workspace's own list", got.CredentialEnv)
+	}
+}
