@@ -44,6 +44,14 @@ type Runner struct {
 	WakeLock *WakeLock
 	// Notify reports a restart or a shutdown to the user. Optional.
 	Notify func(title, body string)
+	// OnSessionEnd runs after a supervised process exits and before its
+	// replacement starts, while whatever the session left on disk is still
+	// there. It returns a line to append to the restart notification, or "" when
+	// there is nothing worth adding. Optional.
+	//
+	// This is the only moment the state is both final and current, which is why
+	// it is a hook here rather than something the daemon polls for.
+	OnSessionEnd func(Decision) string
 	// Sleep is the delay between restarts. Injected so tests do not wait.
 	Sleep func(ctx context.Context, d time.Duration)
 	// HealthyAfter is how long a run must last to count as healthy, resetting
@@ -154,7 +162,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		r.record(decision, 0, decision.Disable)
-		r.announce(decision)
+		r.announce(decision, r.captureSessionEnd(decision))
 
 		if !decision.Restart {
 			return stopReason(decision, startErr, ctx)
@@ -271,11 +279,27 @@ func (r *Runner) recordLocked(d Decision, pid int, disabled bool) {
 	}
 }
 
-func (r *Runner) announce(d Decision) {
+// captureSessionEnd records what the ending session left behind.
+//
+// Only for an end that actually replaces or stops the session: a requested stop
+// is the user closing it deliberately, and they do not need a handover note for
+// something they just did.
+func (r *Runner) captureSessionEnd(d Decision) string {
+	if r.OnSessionEnd == nil || !(d.Restart || d.Disable) {
+		return ""
+	}
+	return r.OnSessionEnd(d)
+}
+
+func (r *Runner) announce(d Decision, detail string) {
 	if !d.Notify || r.Notify == nil {
 		return
 	}
-	r.Notify("corgi agent · "+r.Config.WorkspaceID, d.Reason)
+	body := d.Reason
+	if detail != "" {
+		body += " · " + detail
+	}
+	r.Notify("corgi agent · "+r.Config.WorkspaceID, body)
 }
 
 // healthyAfter is how long a run must last before the failure streak resets.

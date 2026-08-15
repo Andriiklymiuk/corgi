@@ -5,23 +5,34 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 )
 
-// SpawnConfig is one workspace's remote-control launch settings, resolved from
-// .corgi/agent.yml.
+// SpawnConfig is one workspace's agent launch settings, resolved from the
+// trusted user config.
 type SpawnConfig struct {
 	WorkspaceID string
 	Dir         string
-	Bin         string // defaults to "claude"
-	Spawn       string // same-dir | worktree | session
-	Capacity    int
+	// Kind selects which agent CLI this workspace runs. Empty means
+	// DefaultKind, so a config written before kinds existed keeps working.
+	Kind string
+	// Bin overrides the kind's default command. Must be a bare command name.
+	Bin string
+	// Args is the full argv for KindCustom, after the binary name. Ignored by
+	// every built-in kind, which builds its own from the settings below.
+	Args []string
+	// ConfigDirEnv and CredentialEnv describe a custom kind's environment: the
+	// variable that scopes it to one account, and the ambient credentials to
+	// strip. Built-in kinds carry their own and reject these.
+	ConfigDirEnv  string
+	CredentialEnv []string
+	Spawn         string // same-dir | worktree | session
+	Capacity      int
 	// PermissionMode is passed to remote control for spawned sessions.
 	// bypassPermissions is rejected — see ValidateSpawnConfig.
 	PermissionMode string
-	// ConfigDir sets CLAUDE_CONFIG_DIR so this workspace runs under its own
-	// Claude account, memory, skills, and MCP servers.
+	// ConfigDir sets the kind's config-directory variable so this workspace runs
+	// under its own account, memory, skills, and MCP servers.
 	ConfigDir string
 	// InheritAPIKey opts this workspace in to an ambient ANTHROPIC_API_KEY.
 	// Off by default: remote control refuses to run with one set, and an
@@ -41,15 +52,6 @@ type SpawnConfig struct {
 	// stderr is a log file on disk. Only `--foreground`, where a person is
 	// watching the terminal, turns this on.
 	MirrorOutput bool
-}
-
-// credentialEnvVars are stripped from the child environment unless the
-// workspace explicitly opts in. Leaving one in place routes work to the wrong
-// account without any visible error.
-var credentialEnvVars = []string{
-	"ANTHROPIC_API_KEY",
-	"ANTHROPIC_AUTH_TOKEN",
-	"CLAUDE_CODE_OAUTH_TOKEN",
 }
 
 // forbiddenPermissionModes never reach a supervised process. A daemon running
@@ -88,6 +90,10 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	if !filepath.IsAbs(c.Dir) {
 		return fmt.Errorf("workspace %s: directory must be absolute, got %q", c.WorkspaceID, c.Dir)
 	}
+	kind, err := KindFor(c)
+	if err != nil {
+		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
+	}
 	if mode := normalize(c.PermissionMode); mode != "" {
 		if forbiddenPermissionModes[mode] {
 			return fmt.Errorf(
@@ -95,20 +101,50 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 					"permission prompts are what you answer from your phone",
 				c.WorkspaceID, c.PermissionMode)
 		}
+		if !kind.SupportsPermissionMode {
+			return fmt.Errorf(
+				"workspace %s: kind %q does not take permissionMode — put the flag in args: instead, "+
+					"so the setting is the one this CLI actually understands",
+				c.WorkspaceID, kind.Name)
+		}
 		if !validPermissionModes[mode] {
 			return fmt.Errorf("workspace %s: unknown permissionMode %q (want %s)",
 				c.WorkspaceID, c.PermissionMode, sortedKeys(validPermissionModes))
 		}
 	}
-	if s := strings.ToLower(strings.TrimSpace(c.Spawn)); s != "" && !validSpawnModes[s] {
-		return fmt.Errorf("workspace %s: unknown spawn mode %q (want %s)",
-			c.WorkspaceID, c.Spawn, sortedKeys(validSpawnModes))
+	if s := strings.ToLower(strings.TrimSpace(c.Spawn)); s != "" {
+		if !kind.SupportsSpawn {
+			return fmt.Errorf(
+				"workspace %s: kind %q does not take spawn — put the flag in args: instead",
+				c.WorkspaceID, kind.Name)
+		}
+		if !validSpawnModes[s] {
+			return fmt.Errorf("workspace %s: unknown spawn mode %q (want %s)",
+				c.WorkspaceID, c.Spawn, sortedKeys(validSpawnModes))
+		}
 	}
 	if c.Capacity < 0 {
 		return fmt.Errorf("workspace %s: capacity cannot be negative", c.WorkspaceID)
 	}
-	if _, err := SanitizeBin(c.Bin); err != nil {
+	if _, err := ResolveBin(c); err != nil {
 		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
+	}
+	// Build the argv now so a bad one fails at startup with a clear message,
+	// rather than at the first restart hours later.
+	if _, err := kind.Args(c); err != nil {
+		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
+	}
+	if kind.Name != KindCustom && (c.ConfigDirEnv != "" || len(c.CredentialEnv) > 0) {
+		return fmt.Errorf(
+			"workspace %s: configDirEnv and credentialEnv are only for kind %q — "+
+				"kind %q already knows its own",
+			c.WorkspaceID, KindCustom, kind.Name)
+	}
+	if c.ConfigDir != "" && kind.ConfigDirEnv == "" {
+		return fmt.Errorf(
+			"workspace %s: kind %q has no config-directory variable, so configDir would be ignored — "+
+				"set configDirEnv to the variable this CLI reads",
+			c.WorkspaceID, kind.Name)
 	}
 	if c.WakeLock != "" && !ValidWakeLockMode(c.WakeLock) {
 		return fmt.Errorf("workspace %s: unknown wakeLock %q (want always, off, session)",
@@ -117,13 +153,34 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	return nil
 }
 
+// ResolveBin returns the command to run for a workspace: its `bin:` if set,
+// otherwise the kind's default.
+func ResolveBin(c SpawnConfig) (string, error) {
+	bin, err := SanitizeBin(c.Bin)
+	if err != nil {
+		return "", err
+	}
+	if bin != "" {
+		return bin, nil
+	}
+	kind, err := KindFor(c)
+	if err != nil {
+		return "", err
+	}
+	if kind.DefaultBin == "" {
+		return "", fmt.Errorf("kind %q has no default command — set bin: to the command to run", kind.Name)
+	}
+	return kind.DefaultBin, nil
+}
+
 // SanitizeBin rejects a binary name that is a path, so no config file can
 // point the supervisor at an arbitrary executable. Only a bare command name
-// resolved through PATH is allowed.
+// resolved through PATH is allowed. An empty name is left empty for ResolveBin
+// to fill from the kind.
 func SanitizeBin(bin string) (string, error) {
 	bin = strings.TrimSpace(bin)
 	if bin == "" {
-		return "claude", nil
+		return "", nil
 	}
 	if strings.ContainsAny(bin, `/\`) {
 		return "", fmt.Errorf(
@@ -136,24 +193,15 @@ func SanitizeBin(bin string) (string, error) {
 	return bin, nil
 }
 
-// BuildArgs returns the argv for a workspace's remote-control process.
-// It never emits --dangerously-skip-permissions, whatever the caller's shell
-// aliases do.
-func BuildArgs(c SpawnConfig) []string {
-	args := []string{"remote-control"}
-	if s := strings.ToLower(strings.TrimSpace(c.Spawn)); s != "" {
-		args = append(args, "--spawn", s)
+// BuildArgs returns the argv for a workspace's agent process, after the binary
+// name. It never emits a flag that disarms permission prompts, whatever the
+// caller's shell aliases or config say.
+func BuildArgs(c SpawnConfig) ([]string, error) {
+	kind, err := KindFor(c)
+	if err != nil {
+		return nil, err
 	}
-	if c.Capacity > 0 {
-		args = append(args, "--capacity", strconv.Itoa(c.Capacity))
-	}
-	if mode := strings.TrimSpace(c.PermissionMode); mode != "" && !forbiddenPermissionModes[normalize(mode)] {
-		args = append(args, "--permission-mode", mode)
-	}
-	if name := strings.TrimSpace(c.Name); name != "" {
-		args = append(args, "--name", name)
-	}
-	return args
+	return kind.Args(c)
 }
 
 // BuildEnv constructs the child environment explicitly rather than handing over
@@ -166,32 +214,48 @@ func BuildArgs(c SpawnConfig) []string {
 //
 // parentEnv is the environment to derive from, in "KEY=value" form.
 func BuildEnv(c SpawnConfig, parentEnv []string) []string {
+	kind, err := KindFor(c)
+	if err != nil {
+		// Unreachable through the daemon, which validates first. Returning the
+		// parent unchanged would hand the child every ambient credential, so
+		// return nothing instead: a process with no environment fails loudly.
+		return nil
+	}
+	configVar := kind.ConfigDirEnv
+
 	keep := make([]string, 0, len(parentEnv))
 	for _, entry := range parentEnv {
 		key, _, ok := strings.Cut(entry, "=")
 		if !ok {
 			continue
 		}
-		if isStrippedCredential(key, c) {
+		if isStrippedCredential(kind, key, c) {
 			continue
 		}
-		if key == "CLAUDE_CONFIG_DIR" && c.ConfigDir != "" {
+		if configVar != "" && key == configVar && c.ConfigDir != "" {
 			continue // replaced below
 		}
 		keep = append(keep, entry)
 	}
-	if c.ConfigDir != "" {
-		keep = append(keep, "CLAUDE_CONFIG_DIR="+expandHome(c.ConfigDir))
+	if c.ConfigDir != "" && configVar != "" {
+		keep = append(keep, configVar+"="+expandHome(c.ConfigDir))
 	}
 	return keep
 }
 
-func isStrippedCredential(key string, c SpawnConfig) bool {
-	for _, name := range credentialEnvVars {
+// isStrippedCredential reports whether a variable is one of the kind's ambient
+// credentials and the workspace has not opted in to keeping it.
+//
+// The two opt-ins are split because they fail differently: an API key bills the
+// API instead of a subscription, while an OAuth token points at another
+// account. A name containing OAUTH is treated as the token case, which is the
+// convention every CLI here follows.
+func isStrippedCredential(kind Kind, key string, c SpawnConfig) bool {
+	for _, name := range kind.CredentialEnv {
 		if key != name {
 			continue
 		}
-		if name == "CLAUDE_CODE_OAUTH_TOKEN" {
+		if strings.Contains(strings.ToUpper(name), "OAUTH") {
 			return !c.InheritOAuthToken
 		}
 		return !c.InheritAPIKey
@@ -203,10 +267,14 @@ func isStrippedCredential(key string, c SpawnConfig) bool {
 // supervisor can say so in its startup diagnostic instead of leaving the user
 // to wonder which account a task ran under.
 func StrippedCredentials(c SpawnConfig, parentEnv []string) []string {
+	kind, err := KindFor(c)
+	if err != nil {
+		return nil
+	}
 	var stripped []string
 	for _, entry := range parentEnv {
 		key, _, ok := strings.Cut(entry, "=")
-		if ok && isStrippedCredential(key, c) {
+		if ok && isStrippedCredential(kind, key, c) {
 			stripped = append(stripped, key)
 		}
 	}

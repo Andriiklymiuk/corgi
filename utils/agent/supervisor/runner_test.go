@@ -376,3 +376,133 @@ func TestStopDuringBackoffDoesNotStartAgain(t *testing.T) {
 		t.Errorf("started %d processes, want 1 — Stop must not be followed by another start", got)
 	}
 }
+
+func TestSessionEndHookRunsBeforeTheReplacementStarts(t *testing.T) {
+	// The state a session leaves behind is only both final and current in the
+	// gap between the old process exiting and the new one starting.
+	start, _ := scriptedStarter(
+		&fakeProcess{pid: 1, code: 0, uptime: 20 * time.Millisecond},
+	)
+	r := testRunner(t, start)
+
+	var mu sync.Mutex
+	var causes []ExitCause
+	var notified []string
+	r.OnSessionEnd = func(d Decision) string {
+		mu.Lock()
+		causes = append(causes, d.Cause)
+		mu.Unlock()
+		return "was on feature/referral"
+	}
+	r.Notify = func(_, body string) {
+		mu.Lock()
+		notified = append(notified, body)
+		mu.Unlock()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notified) > 0 })
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(causes) == 0 || causes[0] != CauseNetworkTimeout {
+		t.Errorf("hook saw causes %v, want it called with the network timeout", causes)
+	}
+	// The summary has to reach the notification: that line is the only thing
+	// most people will ever read about the restart.
+	if !strings.Contains(notified[0], "was on feature/referral") {
+		t.Errorf("notification %q does not carry the handover summary", notified[0])
+	}
+}
+
+func TestSessionEndHookIsSkippedOnARequestedStop(t *testing.T) {
+	// Closing a session deliberately does not need a handover note about the
+	// thing you just closed.
+	start, _ := scriptedStarter(&fakeProcess{pid: 1, code: 0})
+	r := testRunner(t, start)
+
+	var mu sync.Mutex
+	called := 0
+	r.OnSessionEnd = func(Decision) string {
+		mu.Lock()
+		called++
+		mu.Unlock()
+		return "should not appear"
+	}
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+
+	waitFor(t, func() bool { return r.State().Running })
+	r.Stop()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if called != 0 {
+		t.Errorf("hook ran %d times on a requested stop, want 0", called)
+	}
+}
+
+func TestSessionEndHookRunsWhenAWorkspaceIsDisabled(t *testing.T) {
+	// A workspace disabled by an auth failure is the case where the note is
+	// worth most: nothing will restart to write one later.
+	start, _ := scriptedStarter(
+		&fakeProcess{pid: 1, code: 1, exitNow: true, output: "Remote Control requires a claude.ai subscription"},
+	)
+	r := testRunner(t, start)
+
+	var mu sync.Mutex
+	called := 0
+	r.OnSessionEnd = func(Decision) string {
+		mu.Lock()
+		called++
+		mu.Unlock()
+		return ""
+	}
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run() = %v, want nil after disabling", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if called != 1 {
+		t.Errorf("hook ran %d times, want 1 when the workspace is disabled", called)
+	}
+}
+
+func TestEmptySessionEndSummaryLeavesTheNotificationAlone(t *testing.T) {
+	start, _ := scriptedStarter(
+		&fakeProcess{pid: 1, code: 0, uptime: 20 * time.Millisecond},
+	)
+	r := testRunner(t, start)
+	r.OnSessionEnd = func(Decision) string { return "" }
+
+	var mu sync.Mutex
+	var notified []string
+	r.Notify = func(_, body string) {
+		mu.Lock()
+		notified = append(notified, body)
+		mu.Unlock()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notified) > 0 })
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.HasSuffix(notified[0], " · ") {
+		t.Errorf("notification %q has a dangling separator with nothing after it", notified[0])
+	}
+}

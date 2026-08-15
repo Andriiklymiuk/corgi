@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
@@ -47,6 +48,7 @@ type Status struct {
 type WorkspaceDiagnostic struct {
 	WorkspaceID string   `json:"workspaceId"`
 	Dir         string   `json:"dir"`
+	Kind        string   `json:"kind,omitempty"`
 	Bin         string   `json:"bin"`
 	ConfigDir   string   `json:"configDir"`
 	Spawn       string   `json:"spawn"`
@@ -63,6 +65,10 @@ type Daemon struct {
 	Start supervisor.Starter
 	// Notify reports restarts. Defaults to corgi's desktop notification.
 	Notify func(title, body string)
+	// CaptureBrief probes what an ending session left on disk. Injected because
+	// enumerating a stack's repositories means parsing a compose file, which the
+	// daemon has no business knowing about. Nil disables briefs entirely.
+	CaptureBrief func(brief.Params) *brief.Brief
 
 	mu      sync.Mutex
 	runners []*supervisor.Runner
@@ -214,8 +220,39 @@ func (d *Daemon) buildRunners(configs []supervisor.SpawnConfig) {
 		r := supervisor.NewRunner(cfg, d.Start, lock)
 		r.Notify = d.Notify
 		r.OnChange = d.requestPublish
+		r.OnSessionEnd = d.sessionEndHook(cfg, r)
 		d.runners = append(d.runners, r)
 		d.diags = append(d.diags, diagnose(cfg, env))
+	}
+}
+
+// sessionEndHook writes the handover brief for one workspace.
+//
+// A relaunched session is a NEW session with none of the previous one's
+// context. corgi cannot restore the conversation, but the branches and
+// uncommitted work it left on disk are still there, and saying so is the
+// difference between a restart costing an hour and costing nothing.
+func (d *Daemon) sessionEndHook(cfg supervisor.SpawnConfig, r *supervisor.Runner) func(supervisor.Decision) string {
+	if d.CaptureBrief == nil {
+		return nil
+	}
+	return func(dec supervisor.Decision) string {
+		b := d.CaptureBrief(brief.Params{
+			WorkspaceID: cfg.WorkspaceID,
+			Dir:         cfg.Dir,
+			Cause:       string(dec.Cause),
+			Reason:      dec.Reason,
+			Restarts:    r.State().Restarts,
+		})
+		if b == nil || b.Empty() {
+			return ""
+		}
+		if err := brief.Write(d.Dir, *b); err != nil {
+			// Losing the note is not worth failing a restart over, and the
+			// summary is still useful in the notification.
+			return b.Summary()
+		}
+		return b.Summary()
 	}
 }
 
@@ -252,10 +289,15 @@ func (d *Daemon) Status() Status {
 // be used. An ambient ANTHROPIC_API_KEY is called out explicitly: remote
 // control refuses to run with one set, and it silently bills the API.
 func diagnose(cfg supervisor.SpawnConfig, env []string) WorkspaceDiagnostic {
-	bin, _ := supervisor.SanitizeBin(cfg.Bin)
+	bin, _ := supervisor.ResolveBin(cfg)
+	kind := cfg.Kind
+	if kind == "" {
+		kind = supervisor.DefaultKind
+	}
 	d := WorkspaceDiagnostic{
 		WorkspaceID: cfg.WorkspaceID,
 		Dir:         cfg.Dir,
+		Kind:        kind,
 		Bin:         bin,
 		ConfigDir:   cfg.ConfigDir,
 		Spawn:       cfg.Spawn,

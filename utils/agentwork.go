@@ -49,6 +49,19 @@ func ProbeAgentWork(dir string) *AgentWork {
 	return aw
 }
 
+// HasUncommittedWork reports whether a checkout holds anything a fresh session
+// would not find: modified tracked files, or new untracked ones.
+//
+// Deliberately wider than isTreeDirty, which excludes untracked files because
+// it guards worktree removal — there, build output must not block a cleanup.
+// For a handover note the opposite is true: creating files is the most common
+// thing an agent does, and a note calling that "clean" would be worse than no
+// note. .gitignore is still respected, so ignored output does not count.
+func HasUncommittedWork(dir string) bool {
+	out, err := gitOut(dir, "status", "--porcelain")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
 // probePullRequest tries GitHub (gh) first, then GitLab (glab). Returns nil if
 // neither tool is installed or no PR/MR matches the branch.
 func probePullRequest(dir, branch string) *PullRequestState {
