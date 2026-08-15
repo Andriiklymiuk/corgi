@@ -154,17 +154,24 @@ func spawnConfigFrom(w workspace.Workspace, r config.Resolved, foreground bool) 
 		ConfigDir:         r.ConfigDir,
 		InheritAPIKey:     r.InheritAPIKey,
 		InheritOAuthToken: r.InheritOAuthToken,
-		Name:              r.ID,
 		WakeLock:          supervisor.WakeLockMode(r.WakeLock),
 		MirrorOutput:      foreground,
 	}
-	if cfg.Spawn == "" {
+	kind, err := supervisor.KindFor(cfg)
+	if err != nil {
+		// An unknown kind is reported by ValidateSpawnConfig with the valid
+		// names; filling in defaults for it here would only mask that.
+		return cfg
+	}
+	if kind.BuildsArgvFromSettings {
+		// The session name shown in claude.ai/code. Meaningless to a kind handed
+		// a complete argv, where it would be a setting that never takes effect.
+		cfg.Name = r.ID
+	}
+	if cfg.Spawn == "" && kind.SupportsSpawn {
 		// Isolate each on-demand session, so two remote sessions in one
-		// workspace do not fight over a single checkout. Only for a kind that
-		// has the concept — for any other, setting it is a validation error.
-		if kind, err := supervisor.KindFor(cfg); err == nil && kind.SupportsSpawn {
-			cfg.Spawn = "worktree"
-		}
+		// workspace do not fight over a single checkout.
+		cfg.Spawn = "worktree"
 	}
 	return cfg
 }

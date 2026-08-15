@@ -49,17 +49,33 @@ func ProbeAgentWork(dir string) *AgentWork {
 	return aw
 }
 
-// HasUncommittedWork reports whether a checkout holds anything a fresh session
-// would not find: modified tracked files, or new untracked ones.
+// RepoState is one checkout's local git state: no forge, no network.
+type RepoState struct {
+	Branch string
+	Dirty  bool
+}
+
+// ProbeRepoState reads a checkout's branch and whether it holds uncommitted
+// work. Returns false when dir is not a git repository.
 //
-// Deliberately wider than isTreeDirty, which excludes untracked files because
-// it guards worktree removal — there, build output must not block a cleanup.
-// For a handover note the opposite is true: creating files is the most common
-// thing an agent does, and a note calling that "clean" would be worse than no
-// note. .gitignore is still respected, so ignored output does not count.
-func HasUncommittedWork(dir string) bool {
-	out, err := gitOut(dir, "status", "--porcelain")
-	return err == nil && strings.TrimSpace(out) != ""
+// Separate from ProbeAgentWork, which additionally shells out to `gh` / `glab`
+// to find the branch's PR. Those calls hit the network with no timeout, which
+// is fine for a snapshot someone asked for and wrong anywhere on a restart
+// path — a session that died *because* the network went away must not then wait
+// on GitHub, once per repository, before it can come back.
+//
+// A detached HEAD reports an empty branch rather than the literal "HEAD", since
+// a name there would be a lie.
+func ProbeRepoState(dir string) (RepoState, bool) {
+	if dir == "" || !isGitRepo(dir) {
+		return RepoState{}, false
+	}
+	var st RepoState
+	if b, err := gitOut(dir, "rev-parse", "--abbrev-ref", "HEAD"); err == nil && b != "HEAD" {
+		st.Branch = b
+	}
+	st.Dirty = HasUncommittedWork(dir)
+	return st, true
 }
 
 // probePullRequest tries GitHub (gh) first, then GitLab (glab). Returns nil if

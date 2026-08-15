@@ -244,14 +244,16 @@ func (d *Daemon) sessionEndHook(cfg supervisor.SpawnConfig, r *supervisor.Runner
 			Reason:      dec.Reason,
 			Restarts:    r.State().Restarts,
 		})
-		if b == nil || b.Empty() {
+		if b == nil {
 			return ""
 		}
-		if err := brief.Write(d.Dir, *b); err != nil {
-			// Losing the note is not worth failing a restart over, and the
-			// summary is still useful in the notification.
-			return b.Summary()
-		}
+		// Written even when Empty: the cause and reason always apply, and
+		// skipping the write would make `corgi agent brief <id>` report "it has
+		// not restarted" about a workspace that just did. Empty only decides
+		// whether there is a summary line worth adding to the notification.
+		//
+		// A failed write is not worth failing a restart over.
+		_ = brief.Write(d.Dir, *b)
 		return b.Summary()
 	}
 }

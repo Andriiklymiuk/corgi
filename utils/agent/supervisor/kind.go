@@ -39,6 +39,14 @@ type Kind struct {
 	// silent no-op.
 	SupportsSpawn          bool
 	SupportsPermissionMode bool
+	// BuildsArgvFromSettings is true for a kind that assembles its own command
+	// line out of the typed settings (spawn, capacity, permissionMode, name),
+	// and false for one handed a complete argv.
+	//
+	// It decides which half of the config is meaningful, so the other half can
+	// be rejected rather than silently dropped: a `capacity: 4` that quietly
+	// does nothing reads as a configured limit that is not being applied.
+	BuildsArgvFromSettings bool
 }
 
 // Kind names. KindCustom launches an argv the machine's owner wrote out in
@@ -66,6 +74,7 @@ var kinds = map[string]Kind{
 		Args:                   claudeArgs,
 		SupportsSpawn:          true,
 		SupportsPermissionMode: true,
+		BuildsArgvFromSettings: true,
 	},
 	KindCustom: {
 		Name: KindCustom,
@@ -79,6 +88,7 @@ var kinds = map[string]Kind{
 		// invent them. Put them in `args:` instead.
 		SupportsSpawn:          false,
 		SupportsPermissionMode: false,
+		BuildsArgvFromSettings: false,
 	},
 }
 

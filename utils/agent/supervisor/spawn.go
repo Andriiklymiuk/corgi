@@ -134,11 +134,26 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	if _, err := kind.Args(c); err != nil {
 		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
 	}
-	if kind.Name != KindCustom && (c.ConfigDirEnv != "" || len(c.CredentialEnv) > 0) {
+	// Same rule as spawn and permissionMode above: a setting that cannot take
+	// effect is an error rather than a silent no-op. A `capacity: 4` that
+	// quietly does nothing reads as a limit that is being applied.
+	if kind.BuildsArgvFromSettings {
+		if c.ConfigDirEnv != "" || len(c.CredentialEnv) > 0 {
+			return fmt.Errorf(
+				"workspace %s: configDirEnv and credentialEnv are only for kind %q — "+
+					"kind %q already knows its own",
+				c.WorkspaceID, KindCustom, kind.Name)
+		}
+		if len(c.Args) > 0 {
+			return fmt.Errorf(
+				"workspace %s: args is only for kind %q — kind %q builds its own argv from "+
+					"spawn, capacity and permissionMode",
+				c.WorkspaceID, KindCustom, kind.Name)
+		}
+	} else if c.Capacity > 0 {
 		return fmt.Errorf(
-			"workspace %s: configDirEnv and credentialEnv are only for kind %q — "+
-				"kind %q already knows its own",
-			c.WorkspaceID, KindCustom, kind.Name)
+			"workspace %s: kind %q does not take capacity — put the flag in args: instead",
+			c.WorkspaceID, kind.Name)
 	}
 	if c.ConfigDir != "" && kind.ConfigDirEnv == "" {
 		return fmt.Errorf(
@@ -218,8 +233,13 @@ func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 	if err != nil {
 		// Unreachable through the daemon, which validates first. Returning the
 		// parent unchanged would hand the child every ambient credential, so
-		// return nothing instead: a process with no environment fails loudly.
-		return nil
+		// return an empty environment instead: a process with none fails loudly.
+		//
+		// Non-nil deliberately. exec.Cmd treats a nil Env as "inherit the whole
+		// parent environment", which is the exact opposite of what this line is
+		// for, so returning nil here would turn the safe fallback into total
+		// credential inheritance.
+		return []string{}
 	}
 	configVar := kind.ConfigDirEnv
 
