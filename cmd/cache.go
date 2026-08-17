@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"andriiklymiuk/corgi/utils"
@@ -29,10 +30,17 @@ corgi_services/.cache is always included. It holds the markers that let corgi
 skip an unchanged step, and restoring it without the dependency directories
 would make corgi skip an install whose output is missing.
 
+GitHub Actions can read this plan at runtime through the corgi action's outputs.
+GitLab cannot — its cache config is static YAML — so --gitlab renders a job
+template to commit, and --check fails when that file no longer matches the
+compose file.
+
 Examples:
   corgi cache paths
   corgi cache paths --json
-  corgi cache paths --key`,
+  corgi cache paths --key
+  corgi cache paths --gitlab --out .gitlab/corgi-cache.yml
+  corgi cache paths --gitlab --check .gitlab/corgi-cache.yml`,
 	Run: runCachePaths,
 }
 
@@ -40,6 +48,10 @@ func init() {
 	rootCmd.AddCommand(cacheCmd)
 	cacheCmd.AddCommand(cachePathsCmd)
 	cachePathsCmd.Flags().Bool("key", false, "Print only the cache key")
+	cachePathsCmd.Flags().Bool("gitlab", false, "Render a GitLab CI cache job template instead of a path list")
+	cachePathsCmd.Flags().String("out", "", "With --gitlab: write to this file instead of stdout, creating its directory")
+	cachePathsCmd.Flags().String("check", "", "With --gitlab: exit non-zero when this file differs from what would be generated")
+	cachePathsCmd.Flags().String("path-prefix", "", "With --gitlab: prefix every path, for a pipeline that clones the workspace into a subdirectory")
 }
 
 func runCachePaths(cmd *cobra.Command, _ []string) {
@@ -49,15 +61,15 @@ func runCachePaths(cmd *cobra.Command, _ []string) {
 
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(1)
+		cachePathsFail(utils.ErrConfig, err)
 	}
 
 	plan := utils.CachePathsFor(corgi)
+
+	if gitlab, _ := cmd.Flags().GetBool("gitlab"); gitlab {
+		runGitLabCachePaths(cmd, plan)
+		return
+	}
 
 	if keyOnly, _ := cmd.Flags().GetBool("key"); keyOnly {
 		fmt.Println(plan.Key)
@@ -70,4 +82,66 @@ func runCachePaths(cmd *cobra.Command, _ []string) {
 	// Newline-separated, which is the format GitHub's cache action expects for
 	// a multi-line path input.
 	fmt.Println(strings.Join(plan.Paths, "\n"))
+}
+
+func runGitLabCachePaths(cmd *cobra.Command, plan utils.CachePlan) {
+	prefix, _ := cmd.Flags().GetString("path-prefix")
+	opts := utils.GitLabCacheOptions{PathPrefix: prefix}
+
+	rendered := utils.GitLabCacheYAML(plan, opts)
+
+	if checkPath, _ := cmd.Flags().GetString("check"); checkPath != "" {
+		if err := checkGitLabCacheFile(checkPath, rendered); err != nil {
+			cachePathsFail(utils.ErrConfig, err)
+		}
+		utils.Infof("%s matches the compose file\n", checkPath)
+		return
+	}
+
+	if outPath, _ := cmd.Flags().GetString("out"); outPath != "" {
+		if err := writeGitLabCacheFile(outPath, rendered); err != nil {
+			cachePathsFail(utils.ErrConfig, err)
+		}
+		utils.Infof("wrote %s\n", outPath)
+		return
+	}
+
+	fmt.Print(rendered)
+}
+
+// checkGitLabCacheFile is the drift guard. A generated file that is committed
+// is only trustworthy while something fails when it stops matching its source.
+func checkGitLabCacheFile(path, rendered string) error {
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf(
+				"%s does not exist. Generate it with: corgi cache paths --gitlab --out %s", path, path)
+		}
+		return err
+	}
+	if string(existing) == rendered {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s no longer matches corgi-compose.yml — the cache would restore the wrong paths.\n"+
+			"Regenerate and commit it: corgi cache paths --gitlab --out %s", path, path)
+}
+
+func writeGitLabCacheFile(path, rendered string) error {
+	if dir := filepath.Dir(path); dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, []byte(rendered), 0o644)
+}
+
+func cachePathsFail(code string, err error) {
+	if utils.JSONOutput {
+		utils.JSONError(code, err.Error())
+	} else {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	os.Exit(1)
 }

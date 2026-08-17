@@ -103,7 +103,8 @@ you pay every install every time — do not read early runs as the steady state.
 ## Non-negotiables
 
 - **Never run the job inside a container** (`jobs.<id>.container:` on GitHub,
-  `image:` with dind on GitLab). The database containers publish to `localhost`,
+  `image:` with dind on GitLab — the shipped `.corgi-setup` fails fast on this,
+  but the runner still has to be replaced). The database containers publish to `localhost`,
   which is exactly what every generated connection string assumes; a containerised
   job no longer shares that. Run steps on the VM/shell runner.
 - **Assert a corgi version floor**, not the presence of individual flags:
@@ -131,6 +132,19 @@ so it cannot drift as services come and go. `--key` prints the matching cache ke
 so one lockfile change doesn't evict every other language's packages. On GitHub
 the `Andriiklymiuk/corgi@v1` action exposes all of this as step outputs
 (`cache-paths`, `cache-key`, `cache-groups`) ready to feed `actions/cache`.
+
+GitLab cannot read the plan mid-run — its cache config is static YAML — so
+generate it, commit it, and guard it:
+
+```bash
+corgi cache paths --gitlab --out .gitlab/corgi-cache.yml
+corgi cache paths --gitlab --check .gitlab/corgi-cache.yml   # a job in the pipeline
+```
+
+The generator handles what GitLab will not: home caches are redirected into the
+project (`cache:paths` cannot leave it), the entries are capped at four, and the
+keys are branch-scoped rather than hashed from lockfiles that corgi only clones
+mid-job. Details in `references/gitlab-ci.md`.
 
 Both halves or neither:
 
@@ -175,7 +189,10 @@ corgi already detects `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`,
 ## Writing the pipeline
 
 Generate into the workspace repo, then a thin caller per service repo. Templates:
-`references/github-actions.md`, `references/gitlab-ci.md`. Both are starting
+`references/github-actions.md`, `references/gitlab-ci.md`. On GitHub the install
+and cache plan come from the `Andriiklymiuk/corgi@v1` action; on GitLab from
+`include: remote: .../gitlab/corgi.yml`, which provides `.corgi-setup` and
+`.corgi-stack-e2e` — extend those rather than rewriting the steps. Both are starting
 points — adapt them to the workspace's real service list, secrets source, and e2e
 runner rather than pasting verbatim.
 

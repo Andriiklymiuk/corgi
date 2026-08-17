@@ -1,0 +1,147 @@
+# corgi for GitLab CI — the counterpart of the Andriiklymiuk/corgi GitHub Action.
+#
+# Include it from the repo that holds corgi-compose.yml, and let each service
+# repo call that pipeline so one branch name boots the whole stack:
+#
+#   include:
+#     - remote: https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/gitlab/corgi.yml
+#       inputs:
+#         corgi_version: "1.20.17"
+#         runner_tags: [my-vm-runner]
+#     - local: .gitlab/corgi-cache.yml       # corgi cache paths --gitlab --out ...
+#
+#   stack-e2e:
+#     extends: [.corgi-stack-e2e, .corgi-cache]
+#
+# Pin the remote to a tag rather than main once it works: an include is fetched
+# fresh on every pipeline, so main would change under you.
+
+spec:
+  inputs:
+    corgi_version:
+      description: corgi version to install, without the leading v. Empty installs the latest release.
+      type: string
+      default: ""
+    working_directory:
+      description: Directory holding corgi-compose.yml, relative to the project root.
+      type: string
+      default: "."
+    branch:
+      description: Branch name to look for in every service repo. Every repo carrying it joins the run.
+      type: string
+      default: "$CI_COMMIT_REF_NAME"
+    stage:
+      description: Stage the generated jobs belong to.
+      type: string
+      default: test
+    runner_tags:
+      description: >-
+        Tags selecting the runner. Must resolve to a shell or VM-backed runner,
+        not a plain docker executor — see allow_container.
+      type: array
+      default: []
+    wait_timeout:
+      description: How long corgi run waits for every service to become healthy.
+      type: string
+      default: 20m
+    job_timeout:
+      description: Ceiling for the whole job, which also bounds beforeStart.
+      type: string
+      default: 45m
+    artifacts_dir:
+      description: Where the e2e block's artifacts and the service logs are collected.
+      type: string
+      default: ci-artifacts
+    allow_container:
+      description: >-
+        Skip the docker-executor guard. Only set this true when the runner shares
+        a network namespace with the database containers it starts.
+      type: boolean
+      default: false
+
+---
+# Installs corgi and refuses to continue on a runner that cannot work.
+.corgi-setup:
+  stage: $[[ inputs.stage ]]
+  tags: $[[ inputs.runner_tags ]]
+  variables:
+    CORGI_VERSION: "$[[ inputs.corgi_version ]]"
+    CORGI_ALLOW_CONTAINER: "$[[ inputs.allow_container ]]"
+    # Pinned inside the project so the install never falls back to ~/.local/bin,
+    # whose PATH entry the installer writes to a shell rc file that a CI shell
+    # never reads.
+    CORGI_INSTALL_DIR: "$CI_PROJECT_DIR/.corgi-bin"
+    CORGI_NO_MODIFY_PATH: "1"
+  before_script:
+    - |
+      set -eu
+      # The single most expensive GitLab-specific failure. corgi's databases run
+      # as containers that publish to localhost, and every generated connection
+      # string assumes the services share that localhost. A docker-executor job
+      # sits in its own network namespace, so the stack boots and then every
+      # service fails to reach its database — which reads as "postgres is down",
+      # not as "wrong executor", and costs an afternoon.
+      if [ "$CORGI_ALLOW_CONTAINER" != "true" ] && { [ -f /.dockerenv ] || grep -qE '(docker|containerd)' /proc/1/cgroup 2>/dev/null; }; then
+        echo "corgi: this job is running inside a container." >&2
+        echo "corgi: the db containers would publish to a localhost this job cannot see." >&2
+        echo "corgi: use a shell or docker+machine runner via runner_tags, or set allow_container: true if you know the runner shares the namespace." >&2
+        exit 1
+      fi
+    - |
+      set -eu
+      # install.sh verifies the release archive against the published
+      # checksums.txt before installing, so a tampered download fails here
+      # rather than executing.
+      curl -fsSL --proto '=https' --tlsv1.2 \
+        https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh
+      export PATH="$CORGI_INSTALL_DIR:$PATH"
+      corgi version
+
+# The full cross-repo run. Extend it together with the generated .corgi-cache:
+#   stack-e2e:
+#     extends: [.corgi-stack-e2e, .corgi-cache]
+.corgi-stack-e2e:
+  extends: .corgi-setup
+  timeout: $[[ inputs.job_timeout ]]
+  # GitLab's equivalent of a GitHub concurrency group, with the project's
+  # auto-cancel-redundant-pipelines setting.
+  interruptible: true
+  variables:
+    # The caller is shallow-cloned; corgi init handles the service repos.
+    GIT_DEPTH: "1"
+    CORGI_BRANCH: "$[[ inputs.branch ]]"
+    CORGI_WORKDIR: "$[[ inputs.working_directory ]]"
+    CORGI_ARTIFACTS: "$[[ inputs.artifacts_dir ]]"
+  script:
+    - export PATH="$CORGI_INSTALL_DIR:$PATH"
+    - cd "$CORGI_WORKDIR"
+    # CI_JOB_TOKEN can clone sibling projects once each grants this one under
+    # Settings > CI/CD > Job token permissions. A group access token works too.
+    - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "https://${CI_SERVER_HOST}/"
+    - corgi init --depth 1 --feature "$CORGI_BRANCH"
+    - corgi run --feature "$CORGI_BRANCH" --detach --wait --wait-timeout $[[ inputs.wait_timeout ]] --follow
+    # corgi prints "aborting beforeStart for <service>" and keeps going, so a
+    # dead service otherwise reads as a slow boot with the cause thousands of
+    # lines earlier.
+    - |
+      if grep -rh "aborting beforeStart" corgi_services/.logs/ 2>/dev/null; then
+        echo "corgi: a beforeStart step failed, so at least one service never started" >&2
+        exit 1
+      fi
+    - corgi status --json
+    - corgi test --e2e --artifacts-dir "$CI_PROJECT_DIR/$CORGI_ARTIFACTS/e2e"
+  after_script:
+    # The logs matter most when the job failed, so this must not be part of
+    # script. Each command tolerates failure: after_script aborts on the first
+    # non-zero exit, and a torn-down stack fails these routinely.
+    # after_script runs in a fresh shell, so neither the PATH export nor the cd
+    # from the script phase survives.
+    - export PATH="$CI_PROJECT_DIR/.corgi-bin:$PATH"
+    - cd "$[[ inputs.working_directory ]]" || true
+    - corgi logs --dump "$CI_PROJECT_DIR/$[[ inputs.artifacts_dir ]]/logs" || true
+    - corgi stop || true
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - $[[ inputs.artifacts_dir ]]/
