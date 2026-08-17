@@ -17,20 +17,31 @@ type CacheHint struct {
 }
 
 // installVerbs are the commands that produce a dependency directory, keyed by
-// the ecosystem group the lockfile belongs to. A step matches when its command
-// mentions one of its ecosystem's verbs, so `make setup` is not guessed at.
+// the lockfile they install from. Keyed by lockfile rather than by ecosystem
+// because a repo often carries a stale one from a previous package manager: a
+// node-wide verb list would let `yarn install` be keyed on a leftover bun.lock,
+// so the cache would never bust when yarn.lock changed.
+//
+// "bundle exec ..." is deliberately absent: it runs tasks such as db:migrate,
+// and keying one on Gemfile.lock would skip a migration whenever the gems
+// happened not to change.
 var installVerbs = map[string][]string{
-	"node":   {"npm ci", "npm install", "yarn install", "yarn --", "pnpm install", "pnpm i ", "bun install"},
-	"python": {"pip install", "poetry install", "uv sync", "uv pip install", "pipenv install"},
-	"go":     {"go mod download", "go mod tidy"},
-	"rust":   {"cargo build", "cargo fetch"},
-	// "bundle exec ..." is deliberately absent: it runs tasks such as
-	// db:migrate, and keying one on Gemfile.lock would skip a migration
-	// whenever the gems happened not to change.
-	"ruby":   {"bundle install"},
-	"php":    {"composer install"},
-	"elixir": {"mix deps.get"},
-	"dart":   {"pub get"},
+	"package-lock.json": {"npm ci", "npm install"},
+	"yarn.lock":         {"yarn install", "yarn --"},
+	"pnpm-lock.yaml":    {"pnpm install", "pnpm i "},
+	"bun.lock":          {"bun install"},
+	"bun.lockb":         {"bun install"},
+	"uv.lock":           {"uv sync", "uv pip install"},
+	"poetry.lock":       {"poetry install"},
+	"Pipfile.lock":      {"pipenv install"},
+	"requirements.txt":  {"pip install"},
+	"go.sum":            {"go mod download", "go mod tidy"},
+	"Cargo.lock":        {"cargo build", "cargo fetch"},
+	"Gemfile.lock":      {"bundle install"},
+	"Gemfile":           {"bundle install"},
+	"composer.lock":     {"composer install"},
+	"mix.lock":          {"mix deps.get"},
+	"pubspec.lock":      {"pub get"},
 }
 
 // CacheOptInHints finds install steps that corgi could skip on an unchanged
@@ -61,8 +72,10 @@ func CacheOptInHints(corgi *CorgiCompose) []CacheHint {
 // the command is not an install corgi knows how to key.
 func lockfileForStep(service Service, run string) string {
 	lower := strings.ToLower(run)
+	// ecosystems is ordered most specific first, so a repo holding both a
+	// pnpm and an npm lockfile is read as pnpm.
 	for _, eco := range ecosystems {
-		verbs, known := installVerbs[eco.group]
+		verbs, known := installVerbs[eco.lockfile]
 		if !known {
 			continue
 		}

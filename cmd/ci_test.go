@@ -147,3 +147,23 @@ func assertParsesAsYAML(t *testing.T, path string) {
 		t.Fatalf("%s does not parse: %v", path, err)
 	}
 }
+
+// Refusing halfway would leave .gitlab-ci.yml behind without the cache plan it
+// includes, which is a broken pipeline rather than a refused one.
+func TestCIInitWritesNothingWhenOneFileExists(t *testing.T) {
+	dir := withComposeDir(t)
+	if err := writeGeneratedFile(filepath.Join(dir, ".gitlab", "corgi-cache.yml"), "old\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := writeCIFiles("gitlab", &utils.CorgiCompose{}, false); err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gitlab-ci.yml")); err == nil {
+		t.Error(".gitlab-ci.yml must not be written when the run is refused")
+	}
+	existing, err := os.ReadFile(filepath.Join(dir, ".gitlab", "corgi-cache.yml"))
+	if err != nil || string(existing) != "old\n" {
+		t.Errorf("the existing file must be untouched, got %q / %v", existing, err)
+	}
+}

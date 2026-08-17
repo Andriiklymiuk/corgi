@@ -27,7 +27,9 @@ func DiskHeadroom(corgi *CorgiCompose, path string) (need uint64, free uint64, o
 
 	free, known = FreeDiskBytes(path)
 	if !known {
-		return need, 0, diskUnknownIsFine, false
+		// A platform that cannot answer must not fail the run over a number
+		// corgi does not have.
+		return need, 0, true, false
 	}
 	return need, free, free >= need, true
 }

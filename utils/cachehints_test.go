@@ -127,3 +127,29 @@ func TestCacheOptInHintsNeverSuggestsCachingATask(t *testing.T) {
 		}
 	}
 }
+
+// A repo that moved from bun to yarn often still carries the old lockfile.
+// Keying `yarn install` on it would mean the cache never busts when yarn.lock
+// changes — a stale node_modules restored on every run.
+func TestCacheOptInHintsPicksTheLockfileTheCommandActuallyUses(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"bun.lock", "yarn.lock"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svc := Service{
+		ServiceName:  "web",
+		Path:         "./web",
+		AbsolutePath: dir,
+		BeforeStart:  BeforeStartSteps{{Run: "yarn install"}},
+	}
+
+	hints := CacheOptInHints(&CorgiCompose{Services: []Service{svc}})
+	if len(hints) != 1 {
+		t.Fatalf("expected one hint, got %+v", hints)
+	}
+	if hints[0].Lockfile != "yarn.lock" {
+		t.Errorf("yarn install must be keyed on yarn.lock, got %q", hints[0].Lockfile)
+	}
+}

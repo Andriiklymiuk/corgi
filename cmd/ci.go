@@ -125,20 +125,30 @@ func writeCIFiles(provider string, corgi *utils.CorgiCompose, force bool) ([]str
 			utils.GitLabCacheYAML(utils.CachePathsFor(corgi), utils.GitLabCacheOptions{})
 	}
 
-	var written []string
+	names := make([]string, 0, len(files))
 	for name := range files {
-		path := filepath.Join(utils.CorgiComposePathDir, name)
-		if !force {
-			if _, err := os.Stat(path); err == nil {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// Check every file before writing any: refusing halfway would leave a
+	// pipeline without the cache plan it includes, which is worse than
+	// refusing outright.
+	if !force {
+		for _, name := range names {
+			if _, err := os.Stat(filepath.Join(utils.CorgiComposePathDir, name)); err == nil {
 				return nil, fmt.Errorf("%s already exists — pass --force to overwrite it", name)
 			}
 		}
-		if err := writeGeneratedFile(path, files[name]); err != nil {
+	}
+
+	var written []string
+	for _, name := range names {
+		if err := writeGeneratedFile(filepath.Join(utils.CorgiComposePathDir, name), files[name]); err != nil {
 			return nil, err
 		}
 		written = append(written, name)
 	}
-	sort.Strings(written)
 	return written, nil
 }
 
