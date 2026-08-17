@@ -46,6 +46,14 @@ e2e:
 anything itself, so start the stack first (`corgi run -d --wait`). Same entry
 point locally and in CI; the CI pipeline recipe is the `ci` skill's job.
 
+> **`artifacts:` parses but is not collected.** The field exists on the struct
+> and nothing reads it, so declaring it does nothing — and, being silent, it
+> reads as if screenshots/videos are being gathered when they are not. Collect
+> them in the CI job instead (an upload step pointed at the real output path),
+> and remember the suite's paths are relative to `workdir`, so a `run` that
+> writes `artifacts/x.png` from `workdir: ./e2e` puts it at `e2e/artifacts/`,
+> not `e2e/<flows-dir>/artifacts/`.
+
 ## `envTiers.<name>` (optional)
 
 Named bundle of run settings selected by `corgi run --tier <name>` (also `corgi env --tier`).
