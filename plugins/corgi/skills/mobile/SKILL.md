@@ -37,9 +37,7 @@ before "works".
 4. **READ it.** Never assert "renders fine" on a frame you didn't open. Design
    reference at hand (Figma export, ticket mockup / bug screenshot) → Read it NEXT
    to the capture and compare spacing / colour / type / icons — "renders" ≠
-   "matches design". A change that HAS a design behind it wants the full
-   pull-design → capture-same-states → labelled side-by-side → deviation-table pass:
-   **[`design-parity`](../design-parity/SKILL.md)**.
+   "matches design".
 5. **Geometry bug? MEASURE, don't eyeball.** A wrong shape (circle gone square,
    clipped / oval disc, mis-aligned pill, off-centre number) is INVISIBLE at
    full-frame scale — confirm it by the node's real box, not by squinting:
@@ -65,23 +63,6 @@ before "works".
    the setting directly and surface the computed value as a *suggestion*, not an override.
 
 ## Gotchas (each bit a real session)
-- **A feature behind a flag, or with no seeded data, can't be driven — force it locally,
-  then revert.** Waiting for the flag/data means the UI ships unverified. Add ONE obvious
-  constant that turns the feature on and fakes the missing values (dates, counters, a
-  "delivered" state), shoot every state by flipping it, then **revert and grep for it before
-  committing** — a preview constant left on ships the unreleased feature to everyone. Check
-  what the test environment actually holds first; often it has none of the feature's records
-  and you already know you're on this path. Seeding real data through the admin/API beats it
-  whenever that's available.
-- **Manual-layout text clips in two classic ways.** A fit-to-content sizing call collapses a
-  multi-line label to ONE line (the tail truncates) — measure with a **width-constrained**
-  fit and set the height from that. And a padded/inset label often does NOT count its insets
-  in the measured size, so a chip cuts its own text ("5 da…") — add the padding by hand.
-  Both look fine in code review and only show in a screenshot you read.
-- **A nil value formatted into a sentence prints the gap** — "From the ", "publish X from
-  to get…", a double space. Hide the whole line/clause when the value is missing (a separate
-  string variant for it), instead of interpolating an empty placeholder. Real data usually
-  has the value, so this only ever surfaces on the edge case your users hit.
 - **Maestro WEB mode must run `--headless` locally.** Headed launches the *system* Chrome,
   so if the developer already has Chrome open, Chrome's single-instance handoff leaves the
   driver attached to a blank `data:,` tab it cannot measure — the run dies before it ever
@@ -347,14 +328,6 @@ on-device render gate it leans on. In short:
   `headerSearchBarOptions` placement; set `placement: "stacked"`. (Large title blank in your
   setup? draw it in-content.) Re-test any stale "native X doesn't work here" on-device —
   header/search options hot-reload, so it's cheap.
-- Design in the ticket but no side-by-side you opened → "matches design" is a guess; run the
-  `design-parity` pass (pull frames, capture the same states, composite, read).
-- A flagged / unseeded feature parked as "verify later" → force it on locally with a marked
-  constant, shoot it, revert; unverified UI is how a layout bug reaches users.
-- A mock/preview constant still in the diff at commit → strip it and grep; it ships the
-  feature to everyone.
-- Label text ending in "…", or a sentence with a double space / dangling preposition → not a
-  font issue: single-line sizing, uncounted padding, or a nil value formatted into the string.
 - Concluded a layout / shape change is fine from ONE platform → iOS and Android clip, centre
   and size differently; spot-check shape-sensitive UI on the iOS sim too before ship.
 - Hand-building a custom cell / shape with inline, per-render sizes → mirror the screen's
@@ -380,9 +353,6 @@ on-device render gate it leans on. In short:
   directly and demote the computed value to a suggestion.
 
 ## See also
-- **[`design-parity`](../design-parity/SKILL.md)** — when the change has a design behind it:
-  pulling the frames to the repo, making a flagged/unseeded feature reachable, labelled
-  side-by-sides, and the deviation table (fixed vs deliberate) the MR needs.
 - **`ship` skill** — driving a local-build → App Store / Play submit (LANG/shell rules,
   no-double-bump, background+poll, ground-truth verify, `stopShip`). It gates on THIS
   skill's device render before submitting.
