@@ -290,6 +290,20 @@ corgi detects CI on its own (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) a
   if: always()
 ```
 
+On GitLab the same job is an include, since GitLab has no equivalent of an action:
+
+```yaml
+include:
+  - remote: https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/gitlab/corgi.yml
+    inputs: { corgi_version: "1.20.17", runner_tags: [my-vm-runner] }
+  - local: .gitlab/corgi-cache.yml                 # corgi cache paths --gitlab --out .gitlab/corgi-cache.yml
+
+stack-e2e:
+  extends: [.corgi-stack-e2e, .corgi-cache]
+```
+
+It installs corgi the same verified way, refuses to run inside a container (where the db containers would publish to a localhost the job cannot see), and drives the same boot → gate → e2e → artifacts sequence. GitLab's cache config is static YAML, so the cache plan is generated and committed rather than read at runtime, with `corgi cache paths --gitlab --check` failing the pipeline once it drifts from the compose file.
+
 `--feature "$BRANCH"` is the cross-repo hinge: every service repo that has the PR's branch joins the run from a worktree, the rest stay on their default checkout — so each PR is tested against the exact combination it will ship into. `--wait` blocks until every service is actually healthy (no `sleep 60` guesswork) and `--wait-timeout` fails the job instead of hanging the runner. Tools only a human needs can be marked `skipInCi: true`. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
 
 ### One e2e suite for the whole stack

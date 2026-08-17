@@ -517,6 +517,12 @@ change, matching existing patterns.
   `prisma migrate dev` / `drizzle-kit generate` / `knex migrate:make` / `alembic
   revision --autogenerate`). Commit the generated migration **and** the regenerated
   client. `corgi stop` when done.
+- **Ticket links a design (Figma / mockup) → the story is done at a READ side-by-side**,
+  not at green tests. Pull the frames into `docs/design/<ticket>/`, capture the same states
+  from the app, compose labelled design-vs-app images, and put the deviation table (fixed vs
+  deliberate divergence) in the PR/MR. A feature still behind a flag or without seeded data
+  is forced on with a temporary, clearly-marked local switch — reverted before commit. Full
+  loop: the `design-parity` skill.
 - **Expo / React Native service → verify on a simulator, not just jest**
   (`references/expo-verification.md`). Detect: `package.json` depends on `expo`
   (or `react-native` + `ios/`/`android/`). Jest-green is not done: Metro

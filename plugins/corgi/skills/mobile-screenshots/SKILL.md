@@ -209,6 +209,9 @@ diff per locale beats hand-editing a dozen `.txt` files; keep keys at parity acr
   flow files, `--device <udid>`, `sips` crops) + the build/ship gotchas (non-login-shell
   pod builds, Metro `--clear` redbox, magenta SceneKit, stale Android autolinking). This
   skill is the matrix + store layer on top of it.
+- **[`design-parity`](../design-parity/SKILL.md)** — the other reason to capture: proving a
+  screen matches its design (frames pulled to the repo, labelled side-by-sides, deviation
+  table). Store screenshots sell the app; design parity proves it was built as drawn.
 - **app-store-screenshots** skill (external — `ParthJadhav/app-store-screenshots`, the one
   we used) — the Next.js framing editor + Export-bundle that does stages 2–3 (device frame,
   localized headline, background, and rendering every store size). Drive its export headless

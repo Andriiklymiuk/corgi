@@ -215,10 +215,11 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 
 	requiredOK := RunRequired(corgi.Required)
 	dockerOK := runDockerCheck(corgi)
+	ciOK := printCIChecks(corgi)
 	portsOK := runPortChecks(corgi)
 
 	fmt.Println()
-	if requiredOK && dockerOK && portsOK {
+	if requiredOK && dockerOK && ciOK && portsOK {
 		fmt.Println(art.GreenColor, "🎉 Doctor: all checks passed", art.WhiteColor)
 		return
 	}
@@ -288,6 +289,8 @@ func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 		res.Checks = append(res.Checks, c)
 	}
 
+	res.Checks = append(res.Checks, ciChecks(corgi)...)
+
 	for _, p := range collectDeclaredPorts(corgi) {
 		busy := utils.IsPortListening(p.Port)
 		c := doctorCheck{Name: fmt.Sprintf("port:%d", p.Port), OK: !busy}
@@ -303,6 +306,53 @@ func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 
 	res.computeOK()
 	return res
+}
+
+// ciChecks catch what is always a bug on a runner but a normal half-configured
+// state on a laptop, so they only report in CI. Both would otherwise surface
+// twenty minutes into a boot, naming a service that is not the cause.
+func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
+	if !utils.CIMode {
+		return nil
+	}
+	var checks []doctorCheck
+
+	if len(corgi.DatabaseServices) > 0 {
+		inContainer := utils.InContainer()
+		c := doctorCheck{Name: "ci:host", OK: !inContainer}
+		if inContainer {
+			c.Detail = "this job runs inside a container, so the database containers publish " +
+				"to a localhost the services cannot reach — use a shell or VM-backed runner"
+		}
+		checks = append(checks, c)
+	}
+
+	for _, m := range utils.MissingEnvSources(corgi) {
+		detail := fmt.Sprintf("declares copyEnvFromFilePath %s, which is not on this runner", m.Declared)
+		if m.Fallback != "" {
+			detail += fmt.Sprintf(" — corgi would silently fall back to %s", m.Fallback)
+		}
+		checks = append(checks, doctorCheck{Name: "ci:env:" + m.Service, OK: false, Detail: detail})
+	}
+	return checks
+}
+
+func printCIChecks(corgi *utils.CorgiCompose) bool {
+	checks := ciChecks(corgi)
+	if len(checks) == 0 {
+		return true
+	}
+	ok := true
+	fmt.Println()
+	for _, c := range checks {
+		if c.OK {
+			fmt.Println(art.GreenColor, "✅", c.Name, art.WhiteColor)
+			continue
+		}
+		ok = false
+		fmt.Println(art.RedColor, "❌", c.Name+":", c.Detail, art.WhiteColor)
+	}
+	return ok
 }
 
 func checkRequiredIsFoundQuiet(required utils.Required) (bool, string) {
