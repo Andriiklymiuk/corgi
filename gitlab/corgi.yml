@@ -81,7 +81,7 @@ spec:
       # sits in its own network namespace, so the stack boots and then every
       # service fails to reach its database — which reads as "postgres is down",
       # not as "wrong executor", and costs an afternoon.
-      if [ "$CORGI_ALLOW_CONTAINER" != "true" ] && { [ -f /.dockerenv ] || grep -qE '(docker|containerd)' /proc/1/cgroup 2>/dev/null; }; then
+      if [ "$CORGI_ALLOW_CONTAINER" != "true" ] && { [ -f /.dockerenv ] || grep -qE '(docker|containerd|kubepods)' /proc/1/cgroup 2>/dev/null; }; then
         echo "corgi: this job is running inside a container." >&2
         echo "corgi: the db containers would publish to a localhost this job cannot see." >&2
         echo "corgi: use a shell or docker+machine runner via runner_tags, or set allow_container: true if you know the runner shares the namespace." >&2

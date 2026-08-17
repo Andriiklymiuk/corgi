@@ -189,3 +189,21 @@ func TestGitLabCacheDedupesPathsWhenGroupsMerge(t *testing.T) {
 		t.Errorf("expected the shared path once, got %d:\n%s", got, out)
 	}
 }
+
+// GEM_HOME is an install prefix, not a cache. Redirecting it would move where
+// gems land and can break a later bundle exec, so ruby's home entry is skipped
+// and only the in-project vendor/bundle is cached.
+func TestGitLabCacheDoesNotRedirectRubyInstalls(t *testing.T) {
+	out := gitlabYAMLFor(t, []Service{{
+		ServiceName: "core",
+		Path:        "./core",
+		BeforeStart: BeforeStartSteps{{Run: "bundle install", CacheKey: []string{"Gemfile.lock"}}},
+	}}, GitLabCacheOptions{})
+
+	if strings.Contains(out, "GEM_HOME") {
+		t.Errorf("GEM_HOME must not be redirected:\n%s", out)
+	}
+	if !strings.Contains(out, "core/vendor/bundle") {
+		t.Errorf("the in-project gem path must still be cached:\n%s", out)
+	}
+}

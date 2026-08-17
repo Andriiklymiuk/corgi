@@ -34,6 +34,10 @@ type gitlabHomeCache struct {
 	dir string
 }
 
+// Only true caches belong here. GEM_HOME, for one, is where gems install
+// rather than where they are cached, so redirecting it would move the install
+// and can break a later bundle exec — ruby's in-project vendor/bundle is the
+// part worth caching anyway.
 var gitlabHomeCaches = map[string]gitlabHomeCache{
 	"~/.npm":                    {"npm_config_cache", "npm"},
 	"~/.bun/install/cache":      {"BUN_INSTALL_CACHE_DIR", "bun"},
@@ -46,7 +50,6 @@ var gitlabHomeCaches = map[string]gitlabHomeCache{
 	"~/go/pkg/mod":              {"GOMODCACHE", "go-mod"},
 	"~/.cargo/registry":         {"CARGO_HOME", "cargo"},
 	"~/.cargo/git":              {"CARGO_HOME", "cargo"},
-	"~/.gem":                    {"GEM_HOME", "gem"},
 	"~/.composer/cache":         {"COMPOSER_CACHE_DIR", "composer"},
 	"~/.hex":                    {"HEX_HOME", "hex"},
 	"~/.pub-cache":              {"PUB_CACHE", "pub"},
