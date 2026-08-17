@@ -552,3 +552,113 @@ func TestRunDoctorFix_HumanOutput(t *testing.T) {
 	// non-JSON human branch (no fixes needed -> no exit)
 	_ = captureStdout(t, func() { runDoctorFix(c, corgi) })
 }
+
+// The CI-only checks must stay invisible on a laptop: a half-configured env
+// file is a normal state mid-setup, and a devcontainer is a legitimate place
+// to run corgi locally.
+func TestCIChecksAreSilentOutsideCI(t *testing.T) {
+	orig := utils.CIMode
+	utils.CIMode = false
+	t.Cleanup(func() { utils.CIMode = orig })
+
+	checks := ciChecks(&utils.CorgiCompose{
+		Services: []utils.Service{{ServiceName: "api", Path: "./api", CopyEnvFromFilePath: "env/api.env"}},
+	})
+	if len(checks) != 0 {
+		t.Errorf("expected no CI checks off a runner, got %+v", checks)
+	}
+}
+
+// In CI the gitignored env file is simply absent, and corgi falling back to a
+// committed example is what makes the failure land far from its cause.
+func TestCIChecksReportAMissingEnvSource(t *testing.T) {
+	orig := utils.CIMode
+	utils.CIMode = true
+	t.Cleanup(func() { utils.CIMode = orig })
+
+	dir := t.TempDir()
+	origDir := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = dir
+	t.Cleanup(func() { utils.CorgiComposePathDir = origDir })
+
+	checks := ciChecks(&utils.CorgiCompose{
+		Services: []utils.Service{{ServiceName: "api", Path: "./api", CopyEnvFromFilePath: "env/api.env"}},
+	})
+	if len(checks) != 1 {
+		t.Fatalf("expected the env check, got %+v", checks)
+	}
+	if checks[0].Name != "ci:env:api" || checks[0].OK {
+		t.Errorf("unexpected check: %+v", checks[0])
+	}
+}
+
+// Without db_services there are no containers publishing to localhost, so the
+// host check has nothing to say.
+func TestCIChecksSkipTheHostCheckWithoutDatabases(t *testing.T) {
+	orig := utils.CIMode
+	utils.CIMode = true
+	t.Cleanup(func() { utils.CIMode = orig })
+
+	for _, c := range ciChecks(&utils.CorgiCompose{}) {
+		if c.Name == "ci:host" {
+			t.Errorf("did not expect a host check without db_services: %+v", c)
+		}
+	}
+}
+
+// db_services mean containers publishing to localhost, so the host check has
+// something to say and must appear.
+func TestCIChecksIncludeTheHostCheckWithDatabases(t *testing.T) {
+	orig := utils.CIMode
+	utils.CIMode = true
+	t.Cleanup(func() { utils.CIMode = orig })
+
+	checks := ciChecks(&utils.CorgiCompose{
+		DatabaseServices: []utils.DatabaseService{{ServiceName: "api-db"}},
+	})
+	found := false
+	for _, c := range checks {
+		if c.Name == "ci:host" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a ci:host check, got %+v", checks)
+	}
+}
+
+func TestPrintCIChecksIsQuietWithNothingToSay(t *testing.T) {
+	orig := utils.CIMode
+	utils.CIMode = false
+	t.Cleanup(func() { utils.CIMode = orig })
+
+	out := captureStdout(t, func() {
+		if !printCIChecks(&utils.CorgiCompose{}) {
+			t.Error("no checks must read as passing")
+		}
+	})
+	if out != "" {
+		t.Errorf("expected no output, got %q", out)
+	}
+}
+
+func TestPrintCIChecksReportsAFailure(t *testing.T) {
+	orig := utils.CIMode
+	utils.CIMode = true
+	t.Cleanup(func() { utils.CIMode = orig })
+	origDir := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { utils.CorgiComposePathDir = origDir })
+
+	compose := &utils.CorgiCompose{
+		Services: []utils.Service{{ServiceName: "api", Path: "./api", CopyEnvFromFilePath: "env/api.env"}},
+	}
+	var ok bool
+	out := captureStdout(t, func() { ok = printCIChecks(compose) })
+	if ok {
+		t.Error("a missing env source must fail the doctor run")
+	}
+	if !contains(out, "ci:env:api") {
+		t.Errorf("expected the failing check named:\n%s", out)
+	}
+}
