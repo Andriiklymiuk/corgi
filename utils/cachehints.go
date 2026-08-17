@@ -16,15 +16,9 @@ type CacheHint struct {
 	Lockfile string `json:"lockfile"`
 }
 
-// installVerbs are the commands that produce a dependency directory, keyed by
-// the lockfile they install from. Keyed by lockfile rather than by ecosystem
-// because a repo often carries a stale one from a previous package manager: a
-// node-wide verb list would let `yarn install` be keyed on a leftover bun.lock,
-// so the cache would never bust when yarn.lock changed.
-//
-// "bundle exec ..." is deliberately absent: it runs tasks such as db:migrate,
-// and keying one on Gemfile.lock would skip a migration whenever the gems
-// happened not to change.
+// Keyed by lockfile, not ecosystem: a repo carrying a stale bun.lock would
+// otherwise have `yarn install` keyed on it. "bundle exec" is absent on
+// purpose — keying db:migrate on Gemfile.lock would skip the migration.
 var installVerbs = map[string][]string{
 	"package-lock.json": {"npm ci", "npm install"},
 	"yarn.lock":         {"yarn install", "yarn --"},
@@ -44,11 +38,8 @@ var installVerbs = map[string][]string{
 	"pubspec.lock":      {"pub get"},
 }
 
-// CacheOptInHints finds install steps that corgi could skip on an unchanged
-// lockfile but cannot, because the step declares no cacheKey.
-//
-// Without this the cost is invisible: `corgi cache paths` returns only the step
-// markers and every CI run reinstalls everything, with nothing saying why.
+// CacheOptInHints finds install steps that could skip on an unchanged lockfile
+// but declare no cacheKey. Without it that cost is invisible.
 func CacheOptInHints(corgi *CorgiCompose) []CacheHint {
 	var hints []CacheHint
 	for _, service := range sortedServices(corgi) {
@@ -68,12 +59,10 @@ func CacheOptInHints(corgi *CorgiCompose) []CacheHint {
 	return hints
 }
 
-// lockfileForStep returns the lockfile this command installs from, or "" when
-// the command is not an install corgi knows how to key.
+// lockfileForStep returns the lockfile this command installs from, or "".
 func lockfileForStep(service Service, run string) string {
 	lower := strings.ToLower(run)
-	// ecosystems is ordered most specific first, so a repo holding both a
-	// pnpm and an npm lockfile is read as pnpm.
+	// Most specific first, so pnpm wins over a stray package-lock.json.
 	for _, eco := range ecosystems {
 		verbs, known := installVerbs[eco.lockfile]
 		if !known {
@@ -82,8 +71,7 @@ func lockfileForStep(service Service, run string) string {
 		if !mentionsAny(lower, verbs) {
 			continue
 		}
-		// The lockfile has to be there: suggesting a cacheKey for a file that
-		// does not exist would make every run miss instead of skip.
+		// A cacheKey on a missing file makes every run miss instead of skip.
 		if _, err := os.Stat(filepath.Join(service.AbsolutePath, eco.lockfile)); err == nil {
 			return eco.lockfile
 		}
@@ -100,8 +88,7 @@ func mentionsAny(haystack string, needles []string) bool {
 	return false
 }
 
-// CacheHintLines renders the hints as the yml the user would paste, one block
-// per step, sorted so the output is stable.
+// CacheHintLines renders the hints as pasteable yml, sorted for stability.
 func CacheHintLines(hints []CacheHint) []string {
 	lines := make([]string, 0, len(hints))
 	for _, h := range hints {

@@ -208,21 +208,7 @@ func ExistingBranchWorktrees(corgi *CorgiCompose, composeDir, branch string) (*W
 		if !ok {
 			continue
 		}
-		// The main checkout counts when it is already on the branch: that is
-		// what materialize returns in that case, so requiring a directory under
-		// the worktree base would report "nothing here" for a repo that is
-		// correctly checked out, and re-running materialize could never fix it.
-		dir := ""
-		if head, err := gitOut(root, gitRevParse, gitAbbrevRef, "HEAD"); err == nil && head == branch {
-			dir = root
-		} else {
-			dest := filepath.Join(base, worktreeDirName(root, branch))
-			if info, statErr := os.Stat(dest); statErr == nil && info.IsDir() {
-				if h, herr := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); herr == nil && h == branch {
-					dir = dest
-				}
-			}
-		}
+		dir := existingWorktreeDir(root, base, branch)
 		if dir == "" {
 			continue
 		}
@@ -289,22 +275,46 @@ func releaseBranchWorktrees(composeDir, branch string, force bool) (removed, ski
 			skippedDirty = append(skippedDirty, dest)
 			continue
 		}
-		common, cerr := gitOut(dest, gitRevParse, "--path-format=absolute", "--git-common-dir")
-		if cerr == nil && common != "" {
-			repo := filepath.Dir(common)
-			if gitRun(repo, "worktree", "remove", "--force", dest) == nil {
-				_ = gitRun(repo, "worktree", "prune")
-				removed = append(removed, dest)
-				continue
-			}
-		}
-		if os.RemoveAll(dest) == nil {
+		if removeWorktree(dest) {
 			removed = append(removed, dest)
 		}
 	}
 	sort.Strings(removed)
 	sort.Strings(skippedDirty)
 	return removed, skippedDirty, nil
+}
+
+// existingWorktreeDir resolves where this repo's copy of the branch lives.
+// The main checkout counts when already on the branch — that is what
+// materialize returns, and requiring the worktree base would report "nothing
+// here" for a correctly checked-out repo.
+func existingWorktreeDir(root, base, branch string) string {
+	if head, err := gitOut(root, gitRevParse, gitAbbrevRef, "HEAD"); err == nil && head == branch {
+		return root
+	}
+	dest := filepath.Join(base, worktreeDirName(root, branch))
+	info, statErr := os.Stat(dest)
+	if statErr != nil || !info.IsDir() {
+		return ""
+	}
+	if h, herr := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); herr == nil && h == branch {
+		return dest
+	}
+	return ""
+}
+
+// removeWorktree unregisters it from the repo, falling back to deleting the
+// directory when git will not.
+func removeWorktree(dest string) bool {
+	common, cerr := gitOut(dest, gitRevParse, "--path-format=absolute", "--git-common-dir")
+	if cerr == nil && common != "" {
+		repo := filepath.Dir(common)
+		if gitRun(repo, "worktree", "remove", "--force", dest) == nil {
+			_ = gitRun(repo, "worktree", "prune")
+			return true
+		}
+	}
+	return os.RemoveAll(dest) == nil
 }
 
 // HasUncommittedWork reports whether a checkout holds anything not committed,

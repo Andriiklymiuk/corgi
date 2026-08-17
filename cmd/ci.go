@@ -82,9 +82,8 @@ func runCIInit(cmd *cobra.Command, _ []string) {
 	utils.Info(ciNextSteps(provider, corgi))
 }
 
-// resolveCIProvider prefers the flag, then the origin remote. Guessing wrong
-// would write a pipeline for the wrong forge, so an unknown remote is an error
-// rather than a default.
+// resolveCIProvider prefers the flag, then the origin remote. An unknown
+// remote is an error: the wrong forge's pipeline is silently useless.
 func resolveCIProvider(cmd *cobra.Command) (string, error) {
 	flag, _ := cmd.Flags().GetString("provider")
 	switch strings.ToLower(strings.TrimSpace(flag)) {
@@ -131,9 +130,8 @@ func writeCIFiles(provider string, corgi *utils.CorgiCompose, force bool) ([]str
 	}
 	sort.Strings(names)
 
-	// Check every file before writing any: refusing halfway would leave a
-	// pipeline without the cache plan it includes, which is worse than
-	// refusing outright.
+	// Check all before writing any: refusing halfway leaves a pipeline
+	// without the cache plan it includes.
 	if !force {
 		for _, name := range names {
 			if _, err := os.Stat(filepath.Join(utils.CorgiComposePathDir, name)); err == nil {
@@ -216,8 +214,8 @@ jobs:
       - uses: Andriiklymiuk/corgi@v` + APP_VERSION + `
         id: corgi
 
-      # Four slots because a workflow expression cannot loop. The action warns
-      # by itself when an ecosystem does not fit.
+      # Four slots because a workflow expression cannot loop; the action
+      # warns by itself when an ecosystem does not fit.
       - uses: actions/cache@v4
         if: steps.corgi.outputs.cache-1-key != ''
         with:
@@ -241,8 +239,7 @@ jobs:
 
       - run: corgi init --depth 1 --feature "$BRANCH"
 
-      # Fails in seconds on a missing env file, a busy port or a missing tool,
-      # rather than at the readiness timeout naming the wrong service.
+      # Fails in seconds on a missing env file, busy port or missing tool.
       - run: corgi doctor
 
       - run: corgi run --feature "$BRANCH" --detach --wait --wait-timeout 25m --follow

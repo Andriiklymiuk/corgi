@@ -2,6 +2,5 @@
 
 package utils
 
-// FreeDiskBytes has no portable implementation here yet, so the headroom check
-// reports "unknown" rather than a wrong number.
+// FreeDiskBytes is unimplemented here, so the check reports unknown.
 func FreeDiskBytes(_ string) (uint64, bool) { return 0, false }

@@ -85,9 +85,8 @@ func runCachePaths(cmd *cobra.Command, _ []string) {
 	warnCachingIsOff(plan)
 }
 
-// warnCachingIsOff says so when nothing opts in. The plan is still valid — it
-// just saves nothing, and an empty one reads exactly like a workspace that has
-// nothing to cache. Goes to stderr so a command substitution stays clean.
+// warnCachingIsOff distinguishes "nothing opts in" from "nothing to cache".
+// stderr, so a command substitution stays clean.
 func warnCachingIsOff(plan utils.CachePlan) {
 	if len(plan.Groups) > 0 || len(plan.Hints) == 0 {
 		return
@@ -124,8 +123,8 @@ func runGitLabCachePaths(cmd *cobra.Command, plan utils.CachePlan) {
 	fmt.Print(rendered)
 }
 
-// checkGitLabCacheFile is the drift guard. A generated file that is committed
-// is only trustworthy while something fails when it stops matching its source.
+// checkGitLabCacheFile is the drift guard: a committed generated file is only
+// trustworthy while something fails when it stops matching its source.
 func checkGitLabCacheFile(path, rendered string) error {
 	existing, err := os.ReadFile(path)
 	if err != nil {
@@ -143,8 +142,7 @@ func checkGitLabCacheFile(path, rendered string) error {
 			"Regenerate and commit it: corgi cache paths --gitlab --out %s", path, path)
 }
 
-// writeGeneratedFile writes a generated file, creating its directory. Shared
-// with `corgi ci init`, which writes workflow files the same way.
+// writeGeneratedFile writes a generated file, creating its directory.
 func writeGeneratedFile(path, rendered string) error {
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

@@ -193,6 +193,9 @@ func (d *Daemon) Run(ctx context.Context, configs []supervisor.SpawnConfig) erro
 	// after the cleanup defer so it runs first: stop publishing, wait, then
 	// remove.
 	publishCtx, stopPublishing := context.WithCancel(ctx)
+	// Paired with the context so a later early return cannot skip it; the
+	// ordered stop-then-wait below still does the real work.
+	defer stopPublishing()
 	publishDone := make(chan struct{})
 	go func() {
 		defer close(publishDone)

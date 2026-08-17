@@ -308,9 +308,8 @@ func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 	return res
 }
 
-// ciChecks catch what is always a bug on a runner but a normal half-configured
-// state on a laptop, so they only report in CI. Both would otherwise surface
-// twenty minutes into a boot, naming a service that is not the cause.
+// ciChecks catch what is always a bug on a runner but normal mid-setup on a
+// laptop, so they only report in CI.
 func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 	if !utils.CIMode {
 		return nil
@@ -341,9 +340,7 @@ func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 	return checks
 }
 
-// diskHeadroomCheck reports only when the platform can answer. Running out of
-// disk mid-boot surfaces as a random service failing to build, never as a disk
-// message, so it is worth the two seconds here.
+// diskHeadroomCheck stays silent when the platform cannot answer.
 func diskHeadroomCheck(corgi *utils.CorgiCompose) (doctorCheck, bool) {
 	need, free, ok, known := utils.DiskHeadroom(corgi, utils.CorgiComposePathDir)
 	if !known {

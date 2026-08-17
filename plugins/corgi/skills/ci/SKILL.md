@@ -1,6 +1,6 @@
 ---
 name: ci
-description: Use when the user wants the whole corgi stack running inside CI, or end-to-end tests that span several repos — "run the stack in CI", "e2e across repos", "test the api + web branches together", "full-stack e2e on the PR", "GitHub Actions/GitLab CI for the whole stack", "why does each repo's CI pass but the combination break", "cross-repo integration test". Generates the pipeline (GitHub Actions or GitLab CI), wires per-repo PRs into one full-stack run via a shared branch name, gates on health, and always uploads logs + screenshots. NOT for authoring corgi-compose.yml (corgi skill), starting a stack locally (run skill), diagnosing an already-broken stack (debug skill), or reviewing PRs (review skill).
+description: Use when the user wants the whole corgi stack running inside CI, or end-to-end tests that span several repos — "set up CI for this workspace", "add CI", "init the pipeline", "wire this up to GitHub Actions/GitLab CI", "run the stack in CI", "e2e across repos", "test the api + web branches together", "full-stack e2e on the PR", "why does each repo's CI pass but the combination break", "cross-repo integration test". Asking in chat is the whole interface: this scaffolds with `corgi ci init` and then does the workspace-specific wiring the generated file cannot know. Generates the pipeline (GitHub Actions or GitLab CI), wires per-repo PRs into one full-stack run via a shared branch name, gates on health, and always uploads logs + screenshots. NOT for authoring corgi-compose.yml (corgi skill), starting a stack locally (run skill), diagnosing an already-broken stack (debug skill), or reviewing PRs (review skill).
 ---
 
 # Corgi in CI
@@ -9,6 +9,30 @@ Each repo's own pipeline proves that repo. A change spanning repos — a schema
 field, a new event, a template the frontend reads — leaves every pipeline green
 while the combination is broken. This skill builds the job that boots the whole
 stack from the branches under review and drives real e2e against it.
+
+## Setting it up from chat
+
+"Set up CI for this workspace" is the whole request. Do this, in order:
+
+1. **`corgi ci init`** — scaffolds the pipeline for the forge in the git remote
+   (`--provider github|gitlab` to force it, `--force` to replace an existing
+   file). GitHub gets `.github/workflows/stack-e2e.yml`; GitLab gets
+   `.gitlab-ci.yml` plus the generated `.gitlab/corgi-cache.yml`. It prints what
+   the workspace still owes.
+2. **Then do the wiring it cannot know**, which is the rest of this skill:
+   - where the secrets come from (`copyEnvFromFilePath` — see below, it is the
+     usual reason a first run never boots)
+   - which repos take part, and the branch-name convention
+   - `cacheKey:` on each install step — run `corgi cache paths`, it names the
+     steps that could opt in and the lockfile for each
+   - an `e2e:` block if the compose has none, or drop the `corgi test --e2e` step
+   - GitLab only: a shell or VM-backed runner tag, and job-token permissions
+     between the projects
+3. **Show the generated files and the edits before committing**, and say what a
+   run will cost (wall clock, and that every participating PR triggers it).
+
+If the workspace predates `corgi ci init` (< 1.20.32), write the files by hand
+from `references/github-actions.md` / `references/gitlab-ci.md` instead.
 
 ## Before writing anything
 
