@@ -69,6 +69,13 @@ single-module bundles took two minutes and the stack never converged. The probin
 patient request, before the tests run — the server holds the connection until it
 is ready, so retrying only queues more work.
 
+**Run `corgi doctor` between `corgi init` and `corgi run`.** In CI it adds two
+checks it stays silent about locally: the job running inside a container, and
+any `copyEnvFromFilePath` the runner does not have — the latter otherwise boots
+the service against a committed `.env-example` whose placeholder values fail at
+the first request, thousands of lines from the cause. Both cost twenty minutes
+each time they are found the hard way.
+
 **corgi does not fail when a `beforeStart` fails.** It prints `aborting
 beforeStart for <service>` and carries on, so a dead service reads as a slow boot
 until the readiness timeout, with the cause thousands of lines earlier. Grep for

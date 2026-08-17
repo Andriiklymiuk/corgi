@@ -151,3 +151,41 @@ func stripComments(s string) string {
 	}
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
+
+// A home directory corgi knows but the GitLab table does not must be dropped,
+// not emitted: GitLab rejects any cache path outside the project.
+func TestGitLabCacheDropsAnUnmappedHomePath(t *testing.T) {
+	plan := CachePlan{
+		Paths: []string{"api/node_modules", "~/.some-new-tool"},
+		Key:   "corgi-deps-x",
+		Groups: []CacheGroup{
+			{ID: "node", Paths: []string{"api/node_modules", "~/.some-new-tool"}},
+			{ID: "markers", Paths: []string{"corgi_services/.cache"}},
+		},
+	}
+	out := GitLabCacheYAML(plan, GitLabCacheOptions{})
+	if strings.Contains(out, ".some-new-tool") {
+		t.Errorf("an unmapped home path must be dropped:\n%s", out)
+	}
+	if !strings.Contains(out, "api/node_modules") {
+		t.Errorf("the in-project path must survive:\n%s", out)
+	}
+}
+
+// Merging the tail can bring the same shared directory in twice; a duplicated
+// cache path is a config GitLab has to be handed only once.
+func TestGitLabCacheDedupesPathsWhenGroupsMerge(t *testing.T) {
+	shared := "packages/node_modules"
+	groups := []CacheGroup{
+		{ID: "node", Paths: []string{"api/node_modules"}},
+		{ID: "python", Paths: []string{"py/.venv"}},
+		{ID: "ruby", Paths: []string{shared}},
+		{ID: "rust", Paths: []string{shared}},
+		{ID: "markers", Paths: []string{"corgi_services/.cache"}},
+	}
+	out := GitLabCacheYAML(CachePlan{Paths: []string{shared}, Groups: groups}, GitLabCacheOptions{})
+
+	if got := strings.Count(out, "- "+shared+"\n"); got != 1 {
+		t.Errorf("expected the shared path once, got %d:\n%s", got, out)
+	}
+}

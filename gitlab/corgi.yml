@@ -119,6 +119,10 @@ spec:
     # Settings > CI/CD > Job token permissions. A group access token works too.
     - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "https://${CI_SERVER_HOST}/"
     - corgi init --depth 1 --feature "$CORGI_BRANCH"
+    # Fails in seconds on what would otherwise surface twenty minutes into the
+    # boot naming the wrong service: a gitignored env file the runner does not
+    # have, a containerised job, a missing required tool, a busy port.
+    - corgi doctor
     - corgi run --feature "$CORGI_BRANCH" --detach --wait --wait-timeout $[[ inputs.wait_timeout ]] --follow
     # corgi prints "aborting beforeStart for <service>" and keeps going, so a
     # dead service otherwise reads as a slow boot with the cause thousands of

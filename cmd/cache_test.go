@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"andriiklymiuk/corgi/utils"
 )
 
 // The generated file is only trustworthy while something fails when it stops
@@ -73,5 +75,99 @@ func TestGitLabCacheWriteThenCheckRoundTrips(t *testing.T) {
 	}
 	if err := checkGitLabCacheFile(path, rendered); err != nil {
 		t.Errorf("write then check must round-trip, got: %v", err)
+	}
+}
+
+// resetCachePathsFlags undoes the flag state a previous run left on the shared
+// cobra command, so one subtest cannot leak --out into the next.
+func resetCachePathsFlags(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		for _, name := range []string{"gitlab", "key"} {
+			_ = cachePathsCmd.Flags().Set(name, "false")
+		}
+		for _, name := range []string{"out", "check", "path-prefix"} {
+			_ = cachePathsCmd.Flags().Set(name, "")
+		}
+		// --json is a persistent flag on the shared rootCmd, so leaving it set
+		// makes every later runRoot in this package emit JSON.
+		_ = rootCmd.PersistentFlags().Set("json", "false")
+		utils.PayloadOnStdout = false
+		utils.JSONOutput = false
+	})
+}
+
+func TestCachePathsPrintsThePlan(t *testing.T) {
+	chdirToCompose(t)
+	resetCachePathsFlags(t)
+
+	out := captureStdout(t, func() { runRoot(t, "cache", "paths") })
+	if !strings.Contains(out, filepath.Join("corgi_services", ".cache")) {
+		t.Errorf("expected the step markers in the path list:\n%s", out)
+	}
+}
+
+func TestCachePathsKeyOnly(t *testing.T) {
+	chdirToCompose(t)
+	resetCachePathsFlags(t)
+
+	out := captureStdout(t, func() { runRoot(t, "cache", "paths", "--key") })
+	if !strings.HasPrefix(strings.TrimSpace(out), "corgi-deps-") {
+		t.Errorf("expected only the key:\n%s", out)
+	}
+}
+
+func TestCachePathsJSON(t *testing.T) {
+	chdirToCompose(t)
+	resetCachePathsFlags(t)
+
+	out := captureStdout(t, func() { runRoot(t, "cache", "paths", "--json") })
+	if !strings.Contains(out, `"paths"`) || !strings.Contains(out, `"key"`) {
+		t.Errorf("expected the plan as JSON:\n%s", out)
+	}
+}
+
+func TestCachePathsGitLabToStdout(t *testing.T) {
+	chdirToCompose(t)
+	resetCachePathsFlags(t)
+
+	out := captureStdout(t, func() { runRoot(t, "cache", "paths", "--gitlab") })
+	if !strings.Contains(out, ".corgi-cache:") {
+		t.Errorf("expected the GitLab job template:\n%s", out)
+	}
+	// The "using compose file" line belongs on stderr, or a redirect into the
+	// committed file would capture it as YAML.
+	if strings.Contains(out, "Using corgi-compose file") {
+		t.Errorf("the compose banner leaked into stdout:\n%s", out)
+	}
+}
+
+// The two flags a repo actually runs: one writes the file, the other is the
+// pipeline's guard against it going stale.
+func TestCachePathsGitLabOutThenCheck(t *testing.T) {
+	dir := chdirToCompose(t)
+	resetCachePathsFlags(t)
+	out := filepath.Join(dir, ".gitlab", "corgi-cache.yml")
+
+	runRoot(t, "cache", "paths", "--gitlab", "--out", out)
+	written, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(written), ".corgi-cache:") {
+		t.Fatalf("unexpected content:\n%s", written)
+	}
+	runRoot(t, "cache", "paths", "--gitlab", "--check", out)
+}
+
+func TestCachePathsGitLabPathPrefix(t *testing.T) {
+	chdirToCompose(t)
+	resetCachePathsFlags(t)
+
+	out := captureStdout(t, func() {
+		runRoot(t, "cache", "paths", "--gitlab", "--path-prefix", "workspace")
+	})
+	if !strings.Contains(out, "workspace/corgi_services/.cache") {
+		t.Errorf("expected every path under the prefix:\n%s", out)
 	}
 }

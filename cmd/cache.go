@@ -61,7 +61,7 @@ func runCachePaths(cmd *cobra.Command, _ []string) {
 
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
-		cachePathsFail(utils.ErrConfig, err)
+		exitWithError(utils.ErrConfig, err, 1)
 	}
 
 	plan := utils.CachePathsFor(corgi)
@@ -92,7 +92,7 @@ func runGitLabCachePaths(cmd *cobra.Command, plan utils.CachePlan) {
 
 	if checkPath, _ := cmd.Flags().GetString("check"); checkPath != "" {
 		if err := checkGitLabCacheFile(checkPath, rendered); err != nil {
-			cachePathsFail(utils.ErrConfig, err)
+			exitWithError(utils.ErrConfig, err, 1)
 		}
 		utils.Infof("%s matches the compose file\n", checkPath)
 		return
@@ -100,7 +100,7 @@ func runGitLabCachePaths(cmd *cobra.Command, plan utils.CachePlan) {
 
 	if outPath, _ := cmd.Flags().GetString("out"); outPath != "" {
 		if err := writeGitLabCacheFile(outPath, rendered); err != nil {
-			cachePathsFail(utils.ErrConfig, err)
+			exitWithError(utils.ErrConfig, err, 1)
 		}
 		utils.Infof("wrote %s\n", outPath)
 		return
@@ -135,13 +135,4 @@ func writeGitLabCacheFile(path, rendered string) error {
 		}
 	}
 	return os.WriteFile(path, []byte(rendered), 0o644)
-}
-
-func cachePathsFail(code string, err error) {
-	if utils.JSONOutput {
-		utils.JSONError(code, err.Error())
-	} else {
-		fmt.Fprintln(os.Stderr, err)
-	}
-	os.Exit(1)
 }
