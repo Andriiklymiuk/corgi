@@ -584,11 +584,17 @@ func TestCIChecksReportAMissingEnvSource(t *testing.T) {
 	checks := ciChecks(&utils.CorgiCompose{
 		Services: []utils.Service{{ServiceName: "api", Path: "./api", CopyEnvFromFilePath: "env/api.env"}},
 	})
-	if len(checks) != 1 {
+	var env *doctorCheck
+	for i := range checks {
+		if checks[i].Name == "ci:env:api" {
+			env = &checks[i]
+		}
+	}
+	if env == nil {
 		t.Fatalf("expected the env check, got %+v", checks)
 	}
-	if checks[0].Name != "ci:env:api" || checks[0].OK {
-		t.Errorf("unexpected check: %+v", checks[0])
+	if env.OK {
+		t.Errorf("a missing env source must fail: %+v", *env)
 	}
 }
 

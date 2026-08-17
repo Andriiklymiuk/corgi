@@ -1,6 +1,6 @@
 ---
 name: ci
-description: Use when the user wants the whole corgi stack running inside CI, or end-to-end tests that span several repos — "run the stack in CI", "e2e across repos", "test the api + web branches together", "full-stack e2e on the PR", "GitHub Actions/GitLab CI for the whole stack", "why does each repo's CI pass but the combination break", "cross-repo integration test". Generates the pipeline (GitHub Actions or GitLab CI), wires per-repo PRs into one full-stack run via a shared branch name, gates on health, and always uploads logs + screenshots. NOT for authoring corgi-compose.yml (corgi skill), starting a stack locally (run skill), diagnosing an already-broken stack (debug skill), or reviewing PRs (review skill).
+description: Use when the user wants the whole corgi stack running inside CI, or end-to-end tests that span several repos — "set up CI for this workspace", "add CI", "init the pipeline", "wire this up to GitHub Actions/GitLab CI", "run the stack in CI", "e2e across repos", "test the api + web branches together", "full-stack e2e on the PR", "why does each repo's CI pass but the combination break", "cross-repo integration test". Asking in chat is the whole interface: this scaffolds with `corgi ci init` and then does the workspace-specific wiring the generated file cannot know. Generates the pipeline (GitHub Actions or GitLab CI), wires per-repo PRs into one full-stack run via a shared branch name, gates on health, and always uploads logs + screenshots. NOT for authoring corgi-compose.yml (corgi skill), starting a stack locally (run skill), diagnosing an already-broken stack (debug skill), or reviewing PRs (review skill).
 ---
 
 # Corgi in CI
@@ -9,6 +9,30 @@ Each repo's own pipeline proves that repo. A change spanning repos — a schema
 field, a new event, a template the frontend reads — leaves every pipeline green
 while the combination is broken. This skill builds the job that boots the whole
 stack from the branches under review and drives real e2e against it.
+
+## Setting it up from chat
+
+"Set up CI for this workspace" is the whole request. Do this, in order:
+
+1. **`corgi ci init`** — scaffolds the pipeline for the forge in the git remote
+   (`--provider github|gitlab` to force it, `--force` to replace an existing
+   file). GitHub gets `.github/workflows/stack-e2e.yml`; GitLab gets
+   `.gitlab-ci.yml` plus the generated `.gitlab/corgi-cache.yml`. It prints what
+   the workspace still owes.
+2. **Then do the wiring it cannot know**, which is the rest of this skill:
+   - where the secrets come from (`copyEnvFromFilePath` — see below, it is the
+     usual reason a first run never boots)
+   - which repos take part, and the branch-name convention
+   - `cacheKey:` on each install step — run `corgi cache paths`, it names the
+     steps that could opt in and the lockfile for each
+   - an `e2e:` block if the compose has none, or drop the `corgi test --e2e` step
+   - GitLab only: a shell or VM-backed runner tag, and job-token permissions
+     between the projects
+3. **Show the generated files and the edits before committing**, and say what a
+   run will cost (wall clock, and that every participating PR triggers it).
+
+If the workspace predates `corgi ci init` (< 1.20.32), write the files by hand
+from `references/github-actions.md` / `references/gitlab-ci.md` instead.
 
 ## Before writing anything
 
@@ -76,14 +100,13 @@ the service against a committed `.env-example` whose placeholder values fail at
 the first request, thousands of lines from the cause. Both cost twenty minutes
 each time they are found the hard way.
 
-**corgi does not fail when a `beforeStart` fails.** It prints `aborting
-beforeStart for <service>` and carries on, so a dead service reads as a slow boot
-until the readiness timeout, with the cause thousands of lines earlier. Grep for
-it and fail loudly:
-
-```bash
-grep -rh "aborting beforeStart" corgi_services/.logs/ && exit 1
-```
+**A failed `beforeStart` fails the run — do not grep the logs for it.** corgi
+still lets the rest of the stack come up, but `corgi run --wait` returns the
+failure immediately instead of waiting out the readiness timeout, and a run
+without `--wait` now exits non-zero. Older pipelines carry a
+`grep -rh "aborting beforeStart" corgi_services/.logs/ && exit 1` step from
+when that was not true; it can never fire after `--wait` and should be deleted.
+Requires corgi ≥ 1.20.10 for the `--wait` half, ≥ 1.20.32 for the exit status.
 
 **A compose that works on macOS can die on Linux.** `/bin/sh` is bash-like on
 macOS and dash on Linux (fixed in corgi 1.20.9, which prefers bash — but a repo
@@ -123,7 +146,10 @@ you pay every install every time — do not read early runs as the steady state.
   wait — `beforeStart` (installs, migrations, builds) runs before that timer
   starts and is unbounded. Put a `timeout-minutes` on the step too, or a slow
   boot quietly eats the whole job.
-- **Free disk before booting** on hosted runners. A full stack is several GB of
+- **`corgi doctor` checks disk headroom in CI** — it compares free space with a
+  rough estimate from the database and service counts, because running out
+  mid-boot surfaces as a random service failing to build, never as a disk
+  message. Free disk before booting on hosted runners. A full stack is several GB of
   images plus every service's dependencies; hosted runners are provisioned tighter
   than that, and the failure mode when it runs out is unrecognisable as a disk
   problem.
@@ -138,7 +164,17 @@ so it cannot drift as services come and go. `--key` prints the matching cache ke
 `--json` splits the plan per ecosystem (`groups: [{id, key, paths, pathsText}]`)
 so one lockfile change doesn't evict every other language's packages. On GitHub
 the `Andriiklymiuk/corgi@v1` action exposes all of this as step outputs
-(`cache-paths`, `cache-key`, `cache-groups`) ready to feed `actions/cache`.
+(`cache-paths`, `cache-key`, `cache-groups`) ready to feed `actions/cache`, plus
+four fixed slots (`cache-1-key`/`cache-1-paths` … `cache-4-*`) so a workflow
+writes four plain cache steps instead of `fromJSON(...)[i]` indexing. Neither a
+workflow expression nor a composite action can loop, so the copies stay — but
+the action warns by itself when an ecosystem does not fit, which used to be a
+hand-written step.
+
+**`corgi cache paths` now says when caching is off.** A workspace where no
+service declares a `cacheKey` gets a list of the install steps that could opt
+in, on stderr, naming the lockfile for each. Silence used to be the only signal
+that every CI run was reinstalling everything.
 
 GitLab cannot read the plan mid-run — its cache config is static YAML — so
 generate it, commit it, and guard it:
@@ -194,6 +230,14 @@ corgi already detects `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`,
 `BITBUCKET_BUILD_NUMBER`, `CODEBUILD_BUILD_ID` — no `--ci` flag needed.
 
 ## Writing the pipeline
+
+**`corgi ci init` writes the starting point.** It picks the forge from the git
+remote (`--provider github|gitlab` to force it), writes
+`.github/workflows/stack-e2e.yml` or `.gitlab-ci.yml` +
+`.gitlab/corgi-cache.yml`, refuses to clobber an existing file without
+`--force`, and prints what the workspace still has to supply — runner tags,
+the clone token, the env files, and an `e2e:` block when the compose has none.
+Start there, then adapt; the references below are what it generates.
 
 Generate into the workspace repo, then a thin caller per service repo. Templates:
 `references/github-actions.md`, `references/gitlab-ci.md`. On GitHub the install

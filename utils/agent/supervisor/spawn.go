@@ -81,47 +81,18 @@ var validSpawnModes = map[string]bool{
 // ValidateSpawnConfig rejects a configuration before anything is launched, so a
 // bad setting fails at startup with a clear message instead of on first use.
 func ValidateSpawnConfig(c SpawnConfig) error {
-	if c.WorkspaceID == "" {
-		return fmt.Errorf("workspace id is required")
-	}
-	if c.Dir == "" {
-		return fmt.Errorf("workspace %s: directory is required", c.WorkspaceID)
-	}
-	if !filepath.IsAbs(c.Dir) {
-		return fmt.Errorf("workspace %s: directory must be absolute, got %q", c.WorkspaceID, c.Dir)
+	if err := validateSpawnIdentity(c); err != nil {
+		return err
 	}
 	kind, err := KindFor(c)
 	if err != nil {
 		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
 	}
-	if mode := normalize(c.PermissionMode); mode != "" {
-		if forbiddenPermissionModes[mode] {
-			return fmt.Errorf(
-				"workspace %s: permissionMode %q is not allowed for a supervised session — "+
-					"permission prompts are what you answer from your phone",
-				c.WorkspaceID, c.PermissionMode)
-		}
-		if !kind.SupportsPermissionMode {
-			return fmt.Errorf(
-				"workspace %s: kind %q does not take permissionMode — put the flag in args: instead, "+
-					"so the setting is the one this CLI actually understands",
-				c.WorkspaceID, kind.Name)
-		}
-		if !validPermissionModes[mode] {
-			return fmt.Errorf("workspace %s: unknown permissionMode %q (want %s)",
-				c.WorkspaceID, c.PermissionMode, sortedKeys(validPermissionModes))
-		}
+	if err := validatePermissionMode(c, kind); err != nil {
+		return err
 	}
-	if s := strings.ToLower(strings.TrimSpace(c.Spawn)); s != "" {
-		if !kind.SupportsSpawn {
-			return fmt.Errorf(
-				"workspace %s: kind %q does not take spawn — put the flag in args: instead",
-				c.WorkspaceID, kind.Name)
-		}
-		if !validSpawnModes[s] {
-			return fmt.Errorf("workspace %s: unknown spawn mode %q (want %s)",
-				c.WorkspaceID, c.Spawn, sortedKeys(validSpawnModes))
-		}
+	if err := validateSpawnMode(c, kind); err != nil {
+		return err
 	}
 	if c.Capacity < 0 {
 		return fmt.Errorf("workspace %s: capacity cannot be negative", c.WorkspaceID)
@@ -134,26 +105,8 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	if _, err := kind.Args(c); err != nil {
 		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
 	}
-	// Same rule as spawn and permissionMode above: a setting that cannot take
-	// effect is an error rather than a silent no-op. A `capacity: 4` that
-	// quietly does nothing reads as a limit that is being applied.
-	if kind.BuildsArgvFromSettings {
-		if c.ConfigDirEnv != "" || len(c.CredentialEnv) > 0 {
-			return fmt.Errorf(
-				"workspace %s: configDirEnv and credentialEnv are only for kind %q — "+
-					"kind %q already knows its own",
-				c.WorkspaceID, KindCustom, kind.Name)
-		}
-		if len(c.Args) > 0 {
-			return fmt.Errorf(
-				"workspace %s: args is only for kind %q — kind %q builds its own argv from "+
-					"spawn, capacity and permissionMode",
-				c.WorkspaceID, KindCustom, kind.Name)
-		}
-	} else if c.Capacity > 0 {
-		return fmt.Errorf(
-			"workspace %s: kind %q does not take capacity — put the flag in args: instead",
-			c.WorkspaceID, kind.Name)
+	if err := validateKindOwnedSettings(c, kind); err != nil {
+		return err
 	}
 	if c.ConfigDir != "" && kind.ConfigDirEnv == "" {
 		return fmt.Errorf(
@@ -164,6 +117,86 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	if c.WakeLock != "" && !ValidWakeLockMode(c.WakeLock) {
 		return fmt.Errorf("workspace %s: unknown wakeLock %q (want always, off, session)",
 			c.WorkspaceID, c.WakeLock)
+	}
+	return nil
+}
+
+func validateSpawnIdentity(c SpawnConfig) error {
+	if c.WorkspaceID == "" {
+		return fmt.Errorf("workspace id is required")
+	}
+	if c.Dir == "" {
+		return fmt.Errorf("workspace %s: directory is required", c.WorkspaceID)
+	}
+	if !filepath.IsAbs(c.Dir) {
+		return fmt.Errorf("workspace %s: directory must be absolute, got %q", c.WorkspaceID, c.Dir)
+	}
+	return nil
+}
+
+func validatePermissionMode(c SpawnConfig, kind Kind) error {
+	mode := normalize(c.PermissionMode)
+	if mode == "" {
+		return nil
+	}
+	if forbiddenPermissionModes[mode] {
+		return fmt.Errorf(
+			"workspace %s: permissionMode %q is not allowed for a supervised session — "+
+				"permission prompts are what you answer from your phone",
+			c.WorkspaceID, c.PermissionMode)
+	}
+	if !kind.SupportsPermissionMode {
+		return fmt.Errorf(
+			"workspace %s: kind %q does not take permissionMode — put the flag in args: instead, "+
+				"so the setting is the one this CLI actually understands",
+			c.WorkspaceID, kind.Name)
+	}
+	if !validPermissionModes[mode] {
+		return fmt.Errorf("workspace %s: unknown permissionMode %q (want %s)",
+			c.WorkspaceID, c.PermissionMode, sortedKeys(validPermissionModes))
+	}
+	return nil
+}
+
+func validateSpawnMode(c SpawnConfig, kind Kind) error {
+	s := strings.ToLower(strings.TrimSpace(c.Spawn))
+	if s == "" {
+		return nil
+	}
+	if !kind.SupportsSpawn {
+		return fmt.Errorf(
+			"workspace %s: kind %q does not take spawn — put the flag in args: instead",
+			c.WorkspaceID, kind.Name)
+	}
+	if !validSpawnModes[s] {
+		return fmt.Errorf("workspace %s: unknown spawn mode %q (want %s)",
+			c.WorkspaceID, c.Spawn, sortedKeys(validSpawnModes))
+	}
+	return nil
+}
+
+// validateKindOwnedSettings rejects settings a kind builds itself: a
+// `capacity: 4` that quietly does nothing reads as a limit being applied.
+func validateKindOwnedSettings(c SpawnConfig, kind Kind) error {
+	if !kind.BuildsArgvFromSettings {
+		if c.Capacity > 0 {
+			return fmt.Errorf(
+				"workspace %s: kind %q does not take capacity — put the flag in args: instead",
+				c.WorkspaceID, kind.Name)
+		}
+		return nil
+	}
+	if c.ConfigDirEnv != "" || len(c.CredentialEnv) > 0 {
+		return fmt.Errorf(
+			"workspace %s: configDirEnv and credentialEnv are only for kind %q — "+
+				"kind %q already knows its own",
+			c.WorkspaceID, KindCustom, kind.Name)
+	}
+	if len(c.Args) > 0 {
+		return fmt.Errorf(
+			"workspace %s: args is only for kind %q — kind %q builds its own argv from "+
+				"spawn, capacity and permissionMode",
+			c.WorkspaceID, KindCustom, kind.Name)
 	}
 	return nil
 }

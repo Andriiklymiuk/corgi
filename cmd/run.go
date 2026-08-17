@@ -601,6 +601,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	if detach {
 		runDetached(cmd, corgi)
+		reportBeforeStartFailures()
 		return
 	}
 
@@ -616,6 +617,22 @@ func runRun(cmd *cobra.Command, _ []string) {
 		utils.PrintJSON(buildRunSummary(corgi))
 	}
 	startAllServices(corgi, cmd)
+	reportBeforeStartFailures()
+}
+
+// reportBeforeStartFailures makes a run whose setup failed exit non-zero. The
+// rest of the stack still comes up; only the status changes. --wait already
+// fails earlier, so this covers the paths that do not wait.
+func reportBeforeStartFailures() {
+	// The watcher and `corgi restart` re-enter run in the same process.
+	if runReloading.Load() {
+		return
+	}
+	err := utils.BeforeStartFailureError()
+	if err == nil {
+		return
+	}
+	exitWithErrorPrefix(utils.ErrExecFailed, "❌", err, 1)
 }
 
 func loadRunCompose(cmd *cobra.Command) *utils.CorgiCompose {

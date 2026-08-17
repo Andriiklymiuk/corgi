@@ -40,6 +40,40 @@ outputs:
       packages. pathsText is newline-joined because an Actions expression
       cannot build that string itself.
     value: ${{ steps.setup.outputs.cache-groups }}
+  cache-1-key:
+    description: >-
+      Group 1's key, empty when there is no such group. A composite action
+      cannot loop actions/cache, so the groups are also published as four fixed
+      slots: a workflow writes four identical cache steps reading
+      cache-N-key/cache-N-paths, with no fromJSON indexing and no
+      "did I add enough slots" step of its own.
+    value: ${{ steps.setup.outputs.cache-1-key }}
+  cache-1-paths:
+    description: Group 1's newline-separated paths, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-1-paths }}
+  cache-2-key:
+    description: Group 2's key, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-2-key }}
+  cache-2-paths:
+    description: Group 2's newline-separated paths, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-2-paths }}
+  cache-3-key:
+    description: Group 3's key, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-3-key }}
+  cache-3-paths:
+    description: Group 3's newline-separated paths, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-3-paths }}
+  cache-4-key:
+    description: Group 4's key, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-4-key }}
+  cache-4-paths:
+    description: Group 4's newline-separated paths, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-4-paths }}
+  cache-overflow:
+    description: >-
+      How many ecosystems did not fit the four slots. The action already warns
+      when this is non-zero, so a workflow does not need a step to check.
+    value: ${{ steps.setup.outputs.cache-overflow }}
 
 runs:
   using: composite
@@ -111,7 +145,35 @@ runs:
             echo "CORGI_ACTION_EOF"
           } >> "$GITHUB_OUTPUT"
           echo "cache-key=$(corgi cache paths --key)" >> "$GITHUB_OUTPUT"
-          echo "cache-groups=$(corgi cache paths --json | jq -c '.groups // []')" >> "$GITHUB_OUTPUT"
+          groups="$(corgi cache paths --json | jq -c '.groups // []')"
+          echo "cache-groups=$groups" >> "$GITHUB_OUTPUT"
+
+          # Four fixed slots as well as the JSON. An Actions expression cannot
+          # loop, and neither can a composite action, so every workflow used to
+          # copy the same cache step four times with fromJSON(...)[i] indexing
+          # plus a hand-written "ran out of slots" warning. The slots keep the
+          # copies but make each one plain, and the warning moves in here.
+          total="$(jq 'length' <<<"$groups")"
+          for i in 1 2 3 4; do
+            key="$(jq -r --argjson i "$i" '.[$i-1].key // ""' <<<"$groups")"
+            echo "cache-$i-key=$key" >> "$GITHUB_OUTPUT"
+            {
+              echo "cache-$i-paths<<CORGI_ACTION_EOF"
+              jq -r --argjson i "$i" '.[$i-1].pathsText // ""' <<<"$groups"
+              echo "CORGI_ACTION_EOF"
+            } >> "$GITHUB_OUTPUT"
+          done
+
+          overflow=$(( total > 4 ? total - 4 : 0 ))
+          echo "cache-overflow=$overflow" >> "$GITHUB_OUTPUT"
+          if [ "$overflow" -gt 0 ]; then
+            echo "::warning::corgi found $total cache groups but the action publishes four slots; $overflow ecosystem(s) will not be cached. Use the cache-groups JSON if you need all of them."
+          fi
         else
           echo "::notice::no corgi-compose.yml in ${{ inputs.working-directory }} yet, so no cache outputs"
+          for i in 1 2 3 4; do
+            echo "cache-$i-key=" >> "$GITHUB_OUTPUT"
+            echo "cache-$i-paths=" >> "$GITHUB_OUTPUT"
+          done
+          echo "cache-overflow=0" >> "$GITHUB_OUTPUT"
         fi

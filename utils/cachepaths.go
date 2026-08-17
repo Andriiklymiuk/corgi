@@ -19,6 +19,10 @@ type CachePlan struct {
 	// Groups splits the same plan per ecosystem, so a change to one language's
 	// lockfile does not evict every other language's packages.
 	Groups []CacheGroup `json:"groups"`
+	// Hints are install steps that could opt into caching but have not. An
+	// empty plan is otherwise indistinguishable from a workspace with nothing
+	// worth caching.
+	Hints []CacheHint `json:"hints,omitempty"`
 }
 
 // CacheGroup is one independently keyed slice of the plan.
@@ -89,7 +93,12 @@ func CachePathsFor(corgi *CorgiCompose) CachePlan {
 		})
 	}
 
-	return CachePlan{Paths: sortedPathSet(acc.paths), Key: aggregate, Groups: groups}
+	return CachePlan{
+		Paths:  sortedPathSet(acc.paths),
+		Key:    aggregate,
+		Groups: groups,
+		Hints:  CacheOptInHints(corgi),
+	}
 }
 
 type cacheAccumulator struct {

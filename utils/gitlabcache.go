@@ -93,9 +93,15 @@ func GitLabCacheYAML(plan CachePlan, opts GitLabCacheOptions) string {
 		b.WriteString("# No service declares a beforeStart cacheKey, so only corgi's step markers\n")
 		b.WriteString("# are cached and every install runs from scratch. Add a cacheKey to each\n")
 		b.WriteString("# install step and regenerate to get real caching:\n")
-		b.WriteString("#   beforeStart:\n")
-		b.WriteString("#     - run: npm ci\n")
-		b.WriteString("#       cacheKey: [package-lock.json]\n")
+		if len(plan.Hints) > 0 {
+			for _, line := range CacheHintLines(plan.Hints) {
+				b.WriteString("#   " + line + "\n")
+			}
+		} else {
+			b.WriteString("#   beforeStart:\n")
+			b.WriteString("#     - run: npm ci\n")
+			b.WriteString("#       cacheKey: [package-lock.json]\n")
+		}
 	}
 
 	b.WriteString("\n" + gitlabCacheTemplate + ":\n")

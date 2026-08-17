@@ -51,9 +51,9 @@ func TestCheckGitLabCacheFileExplainsAMissingFile(t *testing.T) {
 }
 
 // --out is what a repo runs once; it has to create .gitlab/ on the way.
-func TestWriteGitLabCacheFileCreatesTheDirectory(t *testing.T) {
+func TestWriteGeneratedFileCreatesTheDirectory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".gitlab", "corgi-cache.yml")
-	if err := writeGitLabCacheFile(path, "content\n"); err != nil {
+	if err := writeGeneratedFile(path, "content\n"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
@@ -70,7 +70,7 @@ func TestWriteGitLabCacheFileCreatesTheDirectory(t *testing.T) {
 func TestGitLabCacheWriteThenCheckRoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".gitlab", "corgi-cache.yml")
 	rendered := "# generated\n.corgi-cache:\n  cache: []\n"
-	if err := writeGitLabCacheFile(path, rendered); err != nil {
+	if err := writeGeneratedFile(path, rendered); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkGitLabCacheFile(path, rendered); err != nil {

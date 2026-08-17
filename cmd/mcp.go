@@ -259,6 +259,52 @@ func serveMCPStdio(s *server.MCPServer) {
 	}
 }
 
+// resolveDeviceStore returns the store to authenticate against, or "" when
+// pairing is not in play — it is otherwise always a valid path, which would
+// defeat bearerAuth's no-auth escape.
+func resolveDeviceStore(opts mcpHTTPOpts) string {
+	if opts.insecure {
+		return ""
+	}
+	dir, err := agentDir()
+	if err != nil {
+		return ""
+	}
+	path := pairing.StorePath(dir)
+	switch pairing.InspectStore(path) {
+	case pairing.StoreHasDevices:
+		return path
+	case pairing.StoreUnreadable:
+		// Refuse rather than serve: silently continuing would drop back to
+		// whatever auth remains, and with no --token that is none at all — an
+		// unreadable file would reopen corgi_exec to anyone.
+		fmt.Fprintf(os.Stderr,
+			"corgi mcp: cannot read the paired-device store at %s.\n"+
+				"Fix its permissions (chmod 600) or remove it to start over; refusing to serve in the meantime.\n", path)
+		os.Exit(1)
+	case pairing.StoreEmpty:
+		if opts.pair {
+			return path
+		}
+	}
+	return ""
+}
+
+// announceMCPAuth says what a client will need to connect.
+func announceMCPAuth(token, deviceStore string) {
+	switch {
+	case token == "" && deviceStore != "":
+		// Paired devices make this endpoint authenticated even with no server
+		// token, which also means any existing tokenless client stops working.
+		fmt.Fprintln(os.Stderr, "corgi mcp --http requires a paired device token (see `corgi mcp devices`).")
+		fmt.Fprintln(os.Stderr, "Tokenless clients will be rejected; pass --token to keep one working, or --insecure for no auth.")
+	case token == "":
+		fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
+	default:
+		fmt.Fprintf(os.Stderr, "corgi mcp bearer token: %s\n", token)
+	}
+}
+
 func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	httpSrv := server.NewStreamableHTTPServer(s)
 
@@ -266,28 +312,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	// otherwise always a valid path, which would defeat bearerAuth's no-auth
 	// escape and make `corgi mcp --http` (and --insecure) reject every request
 	// with no credential in existence to fix it.
-	deviceStore := ""
-	if !opts.insecure {
-		if dir, err := agentDir(); err == nil {
-			path := pairing.StorePath(dir)
-			switch pairing.InspectStore(path) {
-			case pairing.StoreHasDevices:
-				deviceStore = path
-			case pairing.StoreUnreadable:
-				// Refuse rather than serve: silently continuing would drop back
-				// to whatever auth remains, and with no --token that is none at
-				// all — an unreadable file would reopen corgi_exec to anyone.
-				fmt.Fprintf(os.Stderr,
-					"corgi mcp: cannot read the paired-device store at %s.\n"+
-						"Fix its permissions (chmod 600) or remove it to start over; refusing to serve in the meantime.\n", path)
-				os.Exit(1)
-			case pairing.StoreEmpty:
-				if opts.pair {
-					deviceStore = path
-				}
-			}
-		}
-	}
+	deviceStore := resolveDeviceStore(opts)
 
 	// Only /mcp is behind the bearer check; other paths 404.
 	mux := http.NewServeMux()
@@ -318,17 +343,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	srv := &http.Server{Addr: addr, Handler: mux}
 
-	switch {
-	case token == "" && deviceStore != "":
-		// Paired devices make this endpoint authenticated even with no server
-		// token, which also means any existing tokenless client stops working.
-		fmt.Fprintln(os.Stderr, "corgi mcp --http requires a paired device token (see `corgi mcp devices`).")
-		fmt.Fprintln(os.Stderr, "Tokenless clients will be rejected; pass --token to keep one working, or --insecure for no auth.")
-	case token == "":
-		fmt.Fprintln(os.Stderr, "⚠️  corgi mcp --http has no auth; bind to localhost or put it behind an authenticated proxy.")
-	default:
-		fmt.Fprintf(os.Stderr, "corgi mcp bearer token: %s\n", token)
-	}
+	announceMCPAuth(token, deviceStore)
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
 	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token)
 	if pairSession != nil {
