@@ -308,9 +308,8 @@ func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 	return res
 }
 
-// ciChecks catch what is always a bug on a runner but a normal half-configured
-// state on a laptop, so they only report in CI. Both would otherwise surface
-// twenty minutes into a boot, naming a service that is not the cause.
+// ciChecks catch what is always a bug on a runner but normal mid-setup on a
+// laptop, so they only report in CI.
 func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 	if !utils.CIMode {
 		return nil
@@ -327,6 +326,10 @@ func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 		checks = append(checks, c)
 	}
 
+	if c, report := diskHeadroomCheck(corgi); report {
+		checks = append(checks, c)
+	}
+
 	for _, m := range utils.MissingEnvSources(corgi) {
 		detail := fmt.Sprintf("declares copyEnvFromFilePath %s, which is not on this runner", m.Declared)
 		if m.Fallback != "" {
@@ -335,6 +338,23 @@ func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 		checks = append(checks, doctorCheck{Name: "ci:env:" + m.Service, OK: false, Detail: detail})
 	}
 	return checks
+}
+
+// diskHeadroomCheck stays silent when the platform cannot answer.
+func diskHeadroomCheck(corgi *utils.CorgiCompose) (doctorCheck, bool) {
+	need, free, ok, known := utils.DiskHeadroom(corgi, utils.CorgiComposePathDir)
+	if !known {
+		return doctorCheck{}, false
+	}
+	c := doctorCheck{Name: "ci:disk", OK: ok}
+	if !ok {
+		c.Detail = fmt.Sprintf(
+			"%s free, and this stack needs roughly %s (%d databases, %d services) — "+
+				"free space before booting, or the failure will look like a broken build",
+			utils.FormatGigabytes(free), utils.FormatGigabytes(need),
+			len(corgi.DatabaseServices), len(corgi.Services))
+	}
+	return c, true
 }
 
 func printCIChecks(corgi *utils.CorgiCompose) bool {

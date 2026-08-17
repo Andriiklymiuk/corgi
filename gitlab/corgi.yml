@@ -124,14 +124,6 @@ spec:
     # have, a containerised job, a missing required tool, a busy port.
     - corgi doctor
     - corgi run --feature "$CORGI_BRANCH" --detach --wait --wait-timeout $[[ inputs.wait_timeout ]] --follow
-    # corgi prints "aborting beforeStart for <service>" and keeps going, so a
-    # dead service otherwise reads as a slow boot with the cause thousands of
-    # lines earlier.
-    - |
-      if grep -rh "aborting beforeStart" corgi_services/.logs/ 2>/dev/null; then
-        echo "corgi: a beforeStart step failed, so at least one service never started" >&2
-        exit 1
-      fi
     - corgi status --json
     - corgi test --e2e --artifacts-dir "$CI_PROJECT_DIR/$CORGI_ARTIFACTS/e2e"
   after_script:

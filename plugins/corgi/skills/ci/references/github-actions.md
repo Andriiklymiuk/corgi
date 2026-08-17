@@ -20,7 +20,7 @@ on:
       corgi-version:
         required: false
         type: string
-        default: "1.20.17"   # ≥1.20.13 for test --e2e / cache paths; ≥1.20.17 for cache-groups
+        default: "1.20.32"   # ≥1.20.13 test --e2e; ≥1.20.31 gitlab template; ≥1.20.32 cache slots + ci init
     secrets:
       REPO_TOKEN:
         required: true
@@ -56,7 +56,7 @@ jobs:
 
       # The plan covers each service's dependency dir + corgi_services/.cache
       # (the beforeStart skip markers). On a polyglot stack, prefer one
-      # actions/cache step per entry of steps.corgi.outputs.cache-groups so one
+      # actions/cache step per slot (cache-1-key/paths … cache-4-key/paths) so one
       # lockfile change doesn't evict every other language's packages.
       - name: Restore dependency caches
         uses: actions/cache@v4

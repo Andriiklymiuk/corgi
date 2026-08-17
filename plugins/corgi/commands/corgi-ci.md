@@ -4,6 +4,11 @@ description: Build (or fix) a CI job that boots the whole corgi stack and runs c
 
 Run the corgi **ci** flow for the request in `$ARGUMENTS`.
 
+Empty or "set it up" → scaffold with `corgi ci init`, then do the wiring the
+generated file cannot know (secrets, participating repos, `cacheKey:` on the
+install steps, an `e2e:` block, and on GitLab the runner tag + job-token
+permissions). Show the files before committing.
+
 - `$ARGUMENTS` = plain-words description (which CI provider, which repos take part,
   blocking gate or report-only, an existing job that misbehaves). Empty → generate
   a full-stack e2e pipeline for this workspace.
