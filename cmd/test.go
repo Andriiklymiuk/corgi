@@ -52,6 +52,12 @@ func init() {
 each service's own test script. A suite that drives several services at once
 belongs to the stack rather than to any one of them.`,
 	)
+	testCmd.Flags().String(
+		"artifacts-dir",
+		"",
+		`Directory to copy the e2e block's `+"`artifacts:`"+` paths into after the run,
+pass or fail. Defaults to `+defaultE2EArtifactsDir+` next to the compose file.`,
+	)
 	registerServiceWorkdirFlags(testCmd.Flags())
 }
 

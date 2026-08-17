@@ -46,13 +46,21 @@ e2e:
 anything itself, so start the stack first (`corgi run -d --wait`). Same entry
 point locally and in CI; the CI pipeline recipe is the `ci` skill's job.
 
-> **`artifacts:` parses but is not collected.** The field exists on the struct
-> and nothing reads it, so declaring it does nothing — and, being silent, it
-> reads as if screenshots/videos are being gathered when they are not. Collect
-> them in the CI job instead (an upload step pointed at the real output path),
-> and remember the suite's paths are relative to `workdir`, so a `run` that
-> writes `artifacts/x.png` from `workdir: ./e2e` puts it at `e2e/artifacts/`,
-> not `e2e/<flows-dir>/artifacts/`.
+```yaml
+e2e:
+  workdir: ./e2e
+  run: maestro test flows/
+  artifacts:                # optional, paths RELATIVE TO workdir
+    - artifacts             # -> e2e/artifacts
+```
+
+`artifacts:` are copied after the run — **pass or fail**, since a red suite is
+exactly when its screenshots are worth having — into `corgi_artifacts/e2e/` next
+to the compose file, or `--artifacts-dir <dir>` to point somewhere else (a CI job
+uploads that directory). A declared path that does not resolve warns and is
+skipped rather than failing the run. Paths are relative to `workdir`, so a suite
+run from `workdir: ./e2e` that writes `artifacts/x.png` declares `artifacts`,
+not `flows/artifacts`.
 
 ## `envTiers.<name>` (optional)
 
