@@ -45,7 +45,7 @@ corgi-cache-drift:
 ```
 
 `.corgi-stack-e2e` already does: `corgi init --depth 1 --feature`, `corgi run
---detach --wait --follow`, the `aborting beforeStart` grep, `corgi status
+--detach --wait --follow` (which fails on its own if a beforeStart did), `corgi status
 --json`, `corgi test --e2e --artifacts-dir`, and an always-executed `corgi logs
 --dump` + artifact upload. Do not re-write those steps; override an input.
 

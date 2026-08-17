@@ -601,6 +601,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	if detach {
 		runDetached(cmd, corgi)
+		reportBeforeStartFailures()
 		return
 	}
 
@@ -616,6 +617,27 @@ func runRun(cmd *cobra.Command, _ []string) {
 		utils.PrintJSON(buildRunSummary(corgi))
 	}
 	startAllServices(corgi, cmd)
+	reportBeforeStartFailures()
+}
+
+// reportBeforeStartFailures makes a run whose setup failed exit non-zero.
+//
+// corgi deliberately keeps going when one service's beforeStart fails, so the
+// rest of the stack still comes up — that stays. What changes is the exit
+// status: a scripted `corgi run` used to report success while a service was
+// silently missing. --wait already fails earlier and more precisely, so this
+// only covers the paths that do not wait.
+func reportBeforeStartFailures() {
+	// The compose watcher and `corgi restart` re-enter run in the same process;
+	// exiting there would kill a session the user is still using.
+	if runReloading.Load() {
+		return
+	}
+	err := utils.BeforeStartFailureError()
+	if err == nil {
+		return
+	}
+	exitWithErrorPrefix(utils.ErrExecFailed, "❌", err, 1)
 }
 
 func loadRunCompose(cmd *cobra.Command) *utils.CorgiCompose {

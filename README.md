@@ -290,6 +290,8 @@ corgi detects CI on its own (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and friends) a
   if: always()
 ```
 
+`corgi ci init` writes the starting point for either forge — it reads the git remote, drops the workflow (or `.gitlab-ci.yml` plus the generated cache plan) in place, and prints what your workspace still has to supply.
+
 On GitLab the same job is an include, since GitLab has no equivalent of an action:
 
 ```yaml
