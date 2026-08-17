@@ -25,8 +25,8 @@ func TestGitLabCacheNeverEmitsHomePaths(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{
 		nodeService("api", "package-lock.json"),
 		{
-			ServiceName: "ela",
-			Path:        "./ela",
+			ServiceName: "worker",
+			Path:        "./worker",
 			BeforeStart: BeforeStartSteps{{Run: "uv sync", CacheKey: []string{"uv.lock"}}},
 		},
 	}, GitLabCacheOptions{})
@@ -195,15 +195,15 @@ func TestGitLabCacheDedupesPathsWhenGroupsMerge(t *testing.T) {
 // and only the in-project vendor/bundle is cached.
 func TestGitLabCacheDoesNotRedirectRubyInstalls(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{{
-		ServiceName: "core",
-		Path:        "./core",
+		ServiceName: "billing",
+		Path:        "./billing",
 		BeforeStart: BeforeStartSteps{{Run: "bundle install", CacheKey: []string{"Gemfile.lock"}}},
 	}}, GitLabCacheOptions{})
 
 	if strings.Contains(out, "GEM_HOME") {
 		t.Errorf("GEM_HOME must not be redirected:\n%s", out)
 	}
-	if !strings.Contains(out, "core/vendor/bundle") {
+	if !strings.Contains(out, "billing/vendor/bundle") {
 		t.Errorf("the in-project gem path must still be cached:\n%s", out)
 	}
 }
