@@ -63,6 +63,16 @@ before "works".
    the setting directly and surface the computed value as a *suggestion*, not an override.
 
 ## Gotchas (each bit a real session)
+- **Maestro WEB mode must run `--headless` locally.** Headed launches the *system* Chrome,
+  so if the developer already has Chrome open, Chrome's single-instance handoff leaves the
+  driver attached to a blank `data:,` tab it cannot measure — the run dies before it ever
+  navigates, with `NullPointerException: null cannot be cast to non-null type kotlin.Int at
+  maestro.drivers.CdpWebDriver.deviceInfo`. The blank tab looks like a hung app or a stale
+  driver; it is neither, and killing Maestro / hunting stray processes finds nothing. CI is
+  immune because it already passes `--headless`, which starts its own browser instance —
+  which is also why this only ever reproduces on a laptop. Run
+  `maestro test --headless --screen-size <W>x<H> flows/<flow>.yaml`; never close the
+  developer's browser to work around it.
 - **Maestro `inputText` ASCII-only** — no Cyrillic / non-Latin. Use ASCII query, or text
   via `adb`. Prove cross-locale: type a Latin word matching only via another locale's
   string.
@@ -298,6 +308,8 @@ on-device render gate it leans on. In short:
   with a misleading error; free GBs first.
 - Maestro flow tapping from "home" after `launchApp` → it resumes the last screen;
   deep-link or clearState to a known start.
+- Maestro web run stuck on a blank `data:,` tab (`CdpWebDriver.deviceInfo` NPE) → headed
+  mode handed off to the already-running system Chrome; rerun with `--headless`.
 - Native dep off the SDK's pinned versions (a `~` resolved it up) → `DYLD Symbol missing`
   launch crash that builds + ships clean. Run the SDK version-alignment check; pin exact.
 - "Uploaded = done" with nobody opening the build → a launch-time version/ABI-skew crash
