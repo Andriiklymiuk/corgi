@@ -143,7 +143,7 @@ func TestEnsureServiceWorktreeReuseDirtyClean(t *testing.T) {
 		t.Fatal("modified tracked file should be dirty")
 	}
 
-	if err := CleanCorgiWorktrees(); err != nil {
+	if _, err := CleanCorgiWorktrees(false); err != nil {
 		t.Fatalf("clean: %v", err)
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
@@ -227,7 +227,7 @@ func TestApplyFeatureBranchOnlyWhereBranchExists(t *testing.T) {
 	if corgi.Services[1].CacheScope != "" {
 		t.Error("untouched service must keep an empty cache scope")
 	}
-	t.Cleanup(func() { _ = CleanCorgiWorktrees() })
+	t.Cleanup(func() { _, _ = CleanCorgiWorktrees(false) })
 }
 
 func TestApplyFeatureBranchSkipsPinnedAndEmpty(t *testing.T) {
@@ -290,7 +290,7 @@ func TestEnsureFeatureWorktreeFromRemoteOnlyBranch(t *testing.T) {
 	if cur, _ := gitOut(dest, "rev-parse", "--abbrev-ref", "HEAD"); cur != "feature/x" {
 		t.Fatalf("worktree HEAD = %q, want feature/x", cur)
 	}
-	t.Cleanup(func() { _ = CleanCorgiWorktrees() })
+	t.Cleanup(func() { _, _ = CleanCorgiWorktrees(false) })
 }
 
 func TestEnsureFeatureWorktreeUnknownBranchIsNoop(t *testing.T) {
@@ -360,7 +360,7 @@ func TestMaterializeServiceWorktreesFeatureFlag(t *testing.T) {
 	if corgi.Services[0].AbsolutePath != worktreeDest("api", "feature/x") {
 		t.Errorf("--feature did not relocate the service, got %s", corgi.Services[0].AbsolutePath)
 	}
-	t.Cleanup(func() { _ = CleanCorgiWorktrees() })
+	t.Cleanup(func() { _, _ = CleanCorgiWorktrees(false) })
 }
 
 func TestMaterializeServiceWorktreesFeatureAbsentFlag(t *testing.T) {
@@ -406,7 +406,7 @@ func TestApplyServiceWorkdirsWithFeatureExplicitWins(t *testing.T) {
 	if empty.Services[0].AbsolutePath != repo {
 		t.Error("no inputs must be a no-op")
 	}
-	t.Cleanup(func() { _ = CleanCorgiWorktrees() })
+	t.Cleanup(func() { _, _ = CleanCorgiWorktrees(false) })
 }
 
 func TestAddWorktreeUnknownBranchErrors(t *testing.T) {
@@ -519,7 +519,7 @@ func TestApplyFeatureBranchSharesOneWorktreePerRepo(t *testing.T) {
 	if corgi.Services[0].AbsolutePath == repo {
 		t.Error("expected a worktree, not the main checkout")
 	}
-	t.Cleanup(func() { _ = CleanCorgiWorktrees() })
+	t.Cleanup(func() { _, _ = CleanCorgiWorktrees(false) })
 }
 
 func TestIsRepoRootThroughSymlink(t *testing.T) {
@@ -591,7 +591,7 @@ func TestApplyFeatureBranchHonoursServiceSelection(t *testing.T) {
 	if corgi.Services[1].AbsolutePath != other {
 		t.Errorf("an unselected service must not get a worktree, got %s", corgi.Services[1].AbsolutePath)
 	}
-	t.Cleanup(func() { _ = CleanCorgiWorktrees() })
+	t.Cleanup(func() { _, _ = CleanCorgiWorktrees(false) })
 }
 
 func TestSelectedServices(t *testing.T) {
@@ -640,7 +640,7 @@ func TestEnsureServiceWorktreeReusesDifferentlyNamedWorktree(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(second, "f.txt")); err != nil {
 		t.Errorf("the reused path must be a usable checkout: %v", err)
 	}
-	t.Cleanup(func() { _ = CleanCorgiWorktrees() })
+	t.Cleanup(func() { _, _ = CleanCorgiWorktrees(false) })
 }
 
 func TestWorktreeForBranchAbsent(t *testing.T) {
@@ -710,5 +710,64 @@ func TestCheckoutFeatureBranchFromRemoteOnly(t *testing.T) {
 	}
 	if cur, _ := gitOut(clone, "rev-parse", "--abbrev-ref", "HEAD"); cur != "feature/x" {
 		t.Errorf("HEAD = %q, want feature/x", cur)
+	}
+}
+
+func TestCleanCorgiWorktreesKeepsDirtyWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	repo := filepath.Join(root, "api")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(repo, "f.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-m", "init")
+	git(t, repo, "branch", "feature/x")
+
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = root
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	dest := worktreeDest("api", "feature/x")
+	if _, err := EnsureServiceWorktree(repo, "feature/x", dest); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if WorktreeIsDirty(dest) {
+		t.Fatal("fresh worktree reported dirty")
+	}
+
+	if err := os.WriteFile(filepath.Join(dest, "wip.txt"), []byte("unsaved\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !WorktreeIsDirty(dest) {
+		t.Fatal("untracked file should count as dirty")
+	}
+
+	skipped, err := CleanCorgiWorktrees(false)
+	if err != nil {
+		t.Fatalf("clean: %v", err)
+	}
+	if len(skipped) != 1 || skipped[0] != dest {
+		t.Fatalf("expected %s to be skipped, got %v", dest, skipped)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "wip.txt")); err != nil {
+		t.Fatalf("uncommitted work was destroyed: %v", err)
+	}
+
+	skipped, err = CleanCorgiWorktrees(true)
+	if err != nil {
+		t.Fatalf("force clean: %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("force must skip nothing, got %v", skipped)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatal("force clean left the worktree behind")
 	}
 }

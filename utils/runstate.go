@@ -34,6 +34,16 @@ func RunStatePath(composeDir string) string {
 	return filepath.Join(composeDir, "corgi_services", ".state.json")
 }
 
+func RunStateLastPath(composeDir string) string {
+	return filepath.Join(composeDir, "corgi_services", ".state.last.json")
+}
+
+func EnsureRunStateGitignored(composeDir string) {
+	dir := filepath.Join(composeDir, "corgi_services")
+	EnsureCorgiServicesIgnore(dir, ".state.json")
+	EnsureCorgiServicesIgnore(dir, ".state.last.json")
+}
+
 // LockRunState takes an advisory lock so concurrent state mutations (restart,
 // stop --service) don't clobber each other. Returns an unlock func. A lock held
 // longer than the timeout is assumed stale and reclaimed.
@@ -66,6 +76,7 @@ func WriteRunState(path string, s RunState) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	EnsureRunStateGitignored(filepath.Dir(filepath.Dir(path)))
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

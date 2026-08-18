@@ -129,7 +129,7 @@ risky transitive bump isn't invisible.
 ## Phase 1.5 — Tracker enrichment (intent)
 
 Scan the **input**, **each PR/MR body**, AND the **branch name**
-(`headRefName`/`source_branch` — e.g. `feature/HUM-1063/...` carries `HUM-1063`)
+(`headRefName`/`source_branch` — e.g. `feature/ABC-123/...` carries `ABC-123`)
 for ticket references: `linear.app/…`, `atlassian.net/…`, or a bare `ABC-123` key.
 **Dedupe keys across
 the whole set first** — a shared ticket (the common api+web case) is fetched

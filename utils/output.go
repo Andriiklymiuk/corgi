@@ -27,6 +27,28 @@ func OverrideWriter() io.Writer {
 	return nil
 }
 
+var consoleMirror atomic.Pointer[io.Writer]
+
+func SetConsoleMirror(w io.Writer) { consoleMirror.Store(&w) }
+
+func ClearConsoleMirror() { consoleMirror.Store(nil) }
+
+func MirrorWriter() io.Writer {
+	if p := consoleMirror.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+func withMirror(base io.Writer) io.Writer {
+	if m := MirrorWriter(); m != nil {
+		return io.MultiWriter(base, m)
+	}
+	return base
+}
+
+func WithMirror(base io.Writer) io.Writer { return withMirror(base) }
+
 // infoWriter is where human-facing log lines go: the console override when set,
 // else stderr in JSON mode so the JSON payload on stdout stays clean, else
 // stdout.
@@ -38,12 +60,12 @@ var PayloadOnStdout bool
 
 func infoWriter() io.Writer {
 	if w := OverrideWriter(); w != nil {
-		return w
+		return withMirror(w)
 	}
 	if JSONOutput || PayloadOnStdout {
-		return os.Stderr
+		return withMirror(os.Stderr)
 	}
-	return os.Stdout
+	return withMirror(os.Stdout)
 }
 
 // Info prints a human-facing informational line (Println semantics).
@@ -61,10 +83,10 @@ func Infof(format string, a ...any) {
 // payload), else stdout.
 func ConsoleOut() io.Writer {
 	if w := OverrideWriter(); w != nil {
-		return w
+		return withMirror(w)
 	}
 	if JSONOutput {
-		return os.Stderr
+		return withMirror(os.Stderr)
 	}
-	return os.Stdout
+	return withMirror(os.Stdout)
 }

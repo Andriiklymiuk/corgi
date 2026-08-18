@@ -230,11 +230,11 @@ func findStateEntry(entries []utils.RunStateEntry, name string) (utils.RunStateE
 	return utils.RunStateEntry{}, false
 }
 
-// removeStateLocked deletes the run-state file under the advisory lock so it
-// can't clobber a concurrent restart's read-modify-write.
 func removeStateLocked(statePath string) {
 	unlock, _ := utils.LockRunState(utils.CorgiComposePathDir)
-	_ = os.Remove(statePath)
+	if err := os.Rename(statePath, utils.RunStateLastPath(utils.CorgiComposePathDir)); err != nil {
+		_ = os.Remove(statePath)
+	}
 	if unlock != nil {
 		unlock()
 	}
