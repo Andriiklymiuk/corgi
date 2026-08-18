@@ -768,6 +768,35 @@ https://github.com/<org>/web/pull/<n>
 [ABC-125] api: BLOCKED — which auth scope gates the endpoint?
 ```
 
+### Then clean up the worktrees
+
+Phase 3's worktrees under `/tmp/corgi-wt/` are **yours**, not corgi's — `corgi worktree
+prune` only manages `corgi_services/.worktrees/` (the `--service-branch` ones) and will
+not touch them. Nothing else removes them either, so they accumulate one per story per
+repo, each carrying a `node_modules` symlink and a checked-out branch.
+
+Clean them **after the report**, once every branch is pushed — the branch lives on the
+remote, so removing its worktree loses nothing:
+
+```bash
+git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>-<service>   # no --force
+git -C <dir> worktree prune                                    # drop the admin entry
+```
+
+Rules:
+
+- **Never `--force` here.** Plain `remove` refuses a worktree with uncommitted or
+  untracked changes; that refusal is the signal something was not committed. Report the
+  path and leave it — do not discard work to tidy up.
+- **Only worktrees this run created.** A `/tmp/corgi-wt/` dir from an earlier session may
+  still be someone's working state.
+- **Blocked story → keep its worktree.** Nothing was pushed; removing it destroys the
+  only copy.
+- Removing the worktree deletes the `node_modules` **symlink**, never the main
+  checkout's real directory.
+- Leftovers are cheap to spot later: `git -C <dir> worktree list` shows every one still
+  registered, and a stale entry whose dir is gone clears with `worktree prune`.
+
 ---
 
 ## Scenarios & scaling

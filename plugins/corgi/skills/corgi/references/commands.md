@@ -50,7 +50,7 @@ Notable flags:
 - `--gate-deps` — gate startup on dependency readiness for every `depends_on` edge (default: only edges with `condition: ready|started` are gated; otherwise parallel start).
 - `--ready-timeout <dur>` — max wait for a db/dependency to become ready (default `15s`, non-fatal on timeout).
 - `--service-dir <name=path>` — run the named service from `path` instead of its compose `path:` (repeatable). Points run at an external checkout — e.g. a git worktree — so its env generation, `beforeStart`/`afterStart` and process all happen there; the rest of the stack is untouched. The dir must exist (unknown name or missing dir is a hard error). Opt-in; no flag = unchanged behaviour. Lets the `stories` skill run a worktree'd producer without committing it to the main checkout.
-- `--service-branch <name=branch>` — run the named service on a git branch via a **reused** worktree under `corgi_services/.worktrees/<svc>-<branch>` (repeatable). corgi prunes stale entries then reuses the worktree if healthy, or creates it (`git worktree add`) when missing — keeping installed deps and any uncommitted work across runs. **Non-destructive**: the service's main checkout is never touched. The rest of `--service-dir`'s behaviour applies (env/beforeStart/process from the worktree). Clean up with `corgi worktree prune`. The branch must exist (local or remote).
+- `--service-branch <name=branch>` — run the named service on a git branch via a **reused** worktree under `corgi_services/.worktrees/<svc>-<branch>` (repeatable). corgi prunes stale entries then reuses the worktree if healthy, or creates it (`git worktree add`) when missing — keeping installed deps and any uncommitted work across runs. **Non-destructive**: the service's main checkout is never touched. The rest of `--service-dir`'s behaviour applies (env/beforeStart/process from the worktree). Clean up with `corgi worktree prune` (keeps any worktree with uncommitted work; `--force` to drop those too). The branch must exist (local or remote).
 - `--service-checkout <name=branch>` — run the named service on a branch by checking it out **in place** in its compose `path:` (repeatable). **Refuses on a dirty tree** (commit/stash first, or use `--service-branch`). Leaves the repo on that branch afterwards. Use when you want the actual checkout switched, not an isolated worktree.
 
 A service may appear in only one of `--service-dir`/`--service-branch`/`--service-checkout`. All three funnel into the same working-dir override, so env, deps, `beforeStart`/`afterStart`, the process, and `corgi test`/`corgi exec` all operate there.
@@ -67,7 +67,7 @@ A service may appear in only one of `--service-dir`/`--service-branch`/`--servic
   # admin, worker, db_services → compose path:
   ```
 - **Compare two branches** of one service side by side: run on branch A in one terminal, point a second stack at branch B (different ports) — each isolated in its own worktree.
-- Worktrees accumulate one-per-branch under `corgi_services/.worktrees/`; `corgi worktree prune` clears them. Re-running the same branch reuses the dir (fast, keeps `node_modules`).
+- Worktrees accumulate one-per-branch under `corgi_services/.worktrees/`; `corgi worktree prune` clears them, keeping any with uncommitted work unless you pass `--force`. Re-running the same branch reuses the dir (fast, keeps `node_modules`).
 
 `depends_on_db`/`depends_on_services` entries take an optional `condition: ready` (wait for readiness probe) or `condition: started` (wait until launched). Empty = no gating unless `--gate-deps`.
 
@@ -334,7 +334,8 @@ Confirm with the user before running `clean -i services`, `clean -i snapshots`, 
 Manage the worktrees corgi creates for `run/exec/test --service-branch` (under `corgi_services/.worktrees/`).
 
 - `corgi worktree list` — print each corgi-created worktree path.
-- `corgi worktree prune` (alias `clean`) — `git worktree remove` them all and prune the source repos' admin entries. Safe to run anytime; recreated on next `--service-branch`.
+- `corgi worktree prune` (alias `clean`) — `git worktree remove` each one and prune the source repos' admin entries. A worktree with **uncommitted or untracked changes is kept and named**, not removed; `--force` drops those too (discards the work). Safe to run anytime; recreated on next `--service-branch`. Prints `[n/total]` per worktree — deleting a big `node_modules` takes a while and the line is how you tell work from a hang.
+- Only covers `corgi_services/.worktrees/`. Worktrees you made yourself elsewhere (e.g. the `stories` skill's `/tmp/corgi-wt/`) are untouched — remove those with `git worktree remove` in the source repo.
 
 ### `corgi pull`
 
