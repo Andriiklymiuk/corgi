@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -118,5 +120,49 @@ func TestEmitStopSummary_JSON(t *testing.T) {
 	})
 	if !strings.Contains(out, `"api"`) || !strings.Contains(out, "stopped") {
 		t.Errorf("expected JSON summary with api, got %q", out)
+	}
+}
+
+func TestRemoveStateLockedKeepsLastRunState(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "corgi_services"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = root
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+
+	statePath := utils.RunStatePath(root)
+	exit := 0
+	want := utils.RunState{
+		ComposePath: "corgi-compose.yml",
+		Services: []utils.RunStateEntry{{
+			Name:     "api",
+			Command:  "npm run dev",
+			Port:     3000,
+			LogFile:  "/tmp/api.log",
+			Status:   "crashed",
+			ExitCode: &exit,
+		}},
+	}
+	if err := utils.WriteRunState(statePath, want); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	removeStateLocked(statePath)
+
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatal("live state file must be gone so nothing reads the stack as running")
+	}
+	lastPath := utils.RunStateLastPath(root)
+	got, err := utils.ReadRunState(lastPath)
+	if err != nil {
+		t.Fatalf("last run state not kept: %v", err)
+	}
+	if len(got.Services) != 1 || got.Services[0].Command != "npm run dev" {
+		t.Fatalf("kept state lost the spawn command: %+v", got.Services)
+	}
+	if got.Services[0].LogFile != "/tmp/api.log" {
+		t.Fatalf("kept state lost the log index: %+v", got.Services)
 	}
 }

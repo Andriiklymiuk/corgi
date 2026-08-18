@@ -15,6 +15,7 @@ import (
 
 const (
 	logsDirName    = ".logs"
+	SessionLogDir  = "_corgi"
 	maxLogFileSize = 50 * 1024 * 1024 // 50 MB
 	defaultKeepN   = 10
 	logTimeFormat  = "2006-01-02T15:04:05.000Z07:00"
@@ -49,6 +50,7 @@ type logWriter struct {
 	rotations   int    // count of .partN siblings opened so far
 	pending     []byte // bytes received without a trailing newline yet
 	pendingTime time.Time
+	redact      bool
 }
 
 // Path returns the underlying file path. Used by tests and rename-on-close.
@@ -158,20 +160,22 @@ func (lw *logWriter) bufferPartialLine(chunk []byte) {
 
 func (lw *logWriter) emitLine(line []byte) error {
 	ts := lw.pendingTime
-	if len(lw.pending) == 0 {
+	full := line
+	if len(lw.pending) > 0 {
+		full = append(append(make([]byte, 0, len(lw.pending)+len(line)), lw.pending...), line...)
+		lw.pending = lw.pending[:0]
+		lw.pendingTime = time.Time{}
+	} else {
 		ts = time.Now().UTC()
+	}
+	full = normalizeWindowsLineEnding(full)
+	if lw.redact {
+		full = RedactBytes(full)
 	}
 	if err := lw.writeAndCount(ts.Format(logTimeFormat) + " "); err != nil {
 		return err
 	}
-	if len(lw.pending) > 0 {
-		if err := lw.writeBytesAndCount(normalizeWindowsLineEnding(lw.pending)); err != nil {
-			return err
-		}
-		lw.pending = lw.pending[:0]
-		lw.pendingTime = time.Time{}
-	}
-	return lw.writeBytesAndCount(normalizeWindowsLineEnding(line))
+	return lw.writeBytesAndCount(full)
 }
 
 func (lw *logWriter) writeAndCount(s string) error {
@@ -210,8 +214,12 @@ func (lw *logWriter) flushPendingLocked() {
 		ts = time.Now().UTC()
 	}
 	stamp := ts.Format(logTimeFormat) + " "
+	out := lw.pending
+	if lw.redact {
+		out = RedactBytes(out)
+	}
 	_, _ = lw.f.WriteString(stamp)
-	_, _ = lw.f.Write(lw.pending)
+	_, _ = lw.f.Write(out)
 	_, _ = lw.f.Write([]byte{'\n'})
 	lw.pending = lw.pending[:0]
 	lw.pendingTime = time.Time{}
@@ -271,6 +279,17 @@ func OpenLogWriter(corgiServicesPath, serviceName string) (io.WriteCloser, error
 		return nil, fmt.Errorf("logs: create %s: %w", path, err)
 	}
 	return &logWriter{f: f, path: path}, nil
+}
+
+func OpenSessionLogWriter(corgiServicesPath string) (io.WriteCloser, error) {
+	w, err := OpenLogWriter(corgiServicesPath, SessionLogDir)
+	if err != nil {
+		return nil, err
+	}
+	if lw, ok := w.(*logWriter); ok {
+		lw.redact = true
+	}
+	return w, nil
 }
 
 // PruneLogs deletes the oldest log files for serviceName, keeping at most
@@ -342,11 +361,23 @@ func ListLoggedServices(corgiServicesPath string) ([]string, error) {
 	}
 	var names []string
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() && e.Name() != SessionLogDir {
 			names = append(names, e.Name())
 		}
 	}
 	sort.Strings(names)
+	return names, nil
+}
+
+func ListLoggedStreams(corgiServicesPath string) ([]string, error) {
+	names, err := ListLoggedServices(corgiServicesPath)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(corgiServicesPath, logsDirName, SessionLogDir)
+	if info, statErr := os.Stat(dir); statErr == nil && info.IsDir() {
+		names = append(names, SessionLogDir)
+	}
 	return names, nil
 }
 
@@ -401,4 +432,53 @@ func sanitizeName(name string) string {
 		return "_"
 	}
 	return mapped
+}
+
+var (
+	sessionLogMu sync.Mutex
+	sessionLog   io.WriteCloser
+)
+
+func CorgiServicesDir() string {
+	return filepath.Join(CorgiComposePathDir, "corgi_services")
+}
+
+func StartSessionLog() {
+	sessionLogMu.Lock()
+	defer sessionLogMu.Unlock()
+	if sessionLog != nil {
+		return
+	}
+	base := CorgiServicesDir()
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return
+	}
+	w, err := OpenSessionLogWriter(base)
+	if err != nil || w == nil {
+		return
+	}
+	EnsureLogsGitignore(base)
+	sessionLog = w
+	SetConsoleMirror(w)
+	PruneLogs(base, SessionLogDir, 0)
+}
+
+func CloseSessionLog() {
+	sessionLogMu.Lock()
+	defer sessionLogMu.Unlock()
+	if sessionLog == nil {
+		return
+	}
+	ClearConsoleMirror()
+	path := ""
+	if lw, ok := sessionLog.(*logWriter); ok {
+		path = lw.Path()
+	}
+	_ = sessionLog.Close()
+	sessionLog = nil
+	if path != "" {
+		if info, err := os.Stat(path); err == nil && info.Size() == 0 {
+			_ = os.Remove(path)
+		}
+	}
 }

@@ -621,19 +621,31 @@ func ApplyServiceWorkdirsWithFeature(corgi *CorgiCompose, dirPairs, branchPairs,
 	return ApplyFeatureBranch(corgi, feature, pinnedServices(dirPairs, branchPairs, checkoutPairs), nil)
 }
 
-// CleanCorgiWorktrees removes every corgi-created worktree (git worktree remove,
+func WorktreeIsDirty(dest string) bool {
+	out, err := gitOut(dest, "status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return true
+	}
+	return strings.TrimSpace(out) != ""
+}
+
 // falling back to rm) and prunes the admin entries in each source repo.
-func CleanCorgiWorktrees() error {
+func CleanCorgiWorktrees(force bool) ([]string, error) {
 	base := filepath.Join(CorgiComposePathDir, "corgi_services", ".worktrees")
 	entries, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
+	var skipped []string
 	for _, e := range entries {
 		dest := filepath.Join(base, e.Name())
+		if !force && WorktreeIsDirty(dest) {
+			skipped = append(skipped, dest)
+			continue
+		}
 		common, cerr := gitOut(dest, gitRevParse, "--path-format=absolute", "--git-common-dir")
 		if cerr == nil && common != "" {
 			repo := filepath.Dir(common)
@@ -644,5 +656,8 @@ func CleanCorgiWorktrees() error {
 		}
 		_ = os.RemoveAll(dest)
 	}
-	return os.RemoveAll(base)
+	if len(skipped) > 0 {
+		return skipped, nil
+	}
+	return nil, os.RemoveAll(base)
 }
