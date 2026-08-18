@@ -36,20 +36,29 @@ var worktreeListCmd = &cobra.Command{
 	},
 }
 
+var worktreePruneForce bool
+
 var worktreePruneCmd = &cobra.Command{
 	Use:     "prune",
 	Aliases: []string{"clean"},
-	Short:   "Remove all corgi-created service worktrees",
+	Short:   "Remove corgi-created service worktrees (keeps ones with uncommitted work)",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if _, err := utils.GetCorgiServices(cmd); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		if err := utils.CleanCorgiWorktrees(); err != nil {
+		skipped, err := utils.CleanCorgiWorktrees(worktreePruneForce)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "couldn't prune worktrees:", err)
 			os.Exit(1)
 		}
 		fmt.Println("🗑️ pruned corgi worktrees")
+		if len(skipped) > 0 {
+			fmt.Printf("kept %d with uncommitted changes (--force to drop):\n", len(skipped))
+			for _, d := range skipped {
+				fmt.Println(" ", d)
+			}
+		}
 	},
 }
 
@@ -57,4 +66,5 @@ func init() {
 	rootCmd.AddCommand(worktreeCmd)
 	worktreeCmd.AddCommand(worktreeListCmd)
 	worktreeCmd.AddCommand(worktreePruneCmd)
+	worktreePruneCmd.Flags().BoolVar(&worktreePruneForce, "force", false, "Also remove worktrees with uncommitted or untracked changes (discards that work)")
 }

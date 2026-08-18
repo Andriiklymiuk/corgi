@@ -20,9 +20,10 @@ func exitWithErrorPrefix(jsonCode, stderrPrefix string, err error, exitCode int)
 	if utils.JSONOutput {
 		utils.JSONError(jsonCode, err.Error())
 	} else if stderrPrefix != "" {
-		fmt.Fprintln(os.Stderr, stderrPrefix, err)
+		fmt.Fprintln(utils.WithMirror(os.Stderr), stderrPrefix, err)
 	} else {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(utils.WithMirror(os.Stderr), err)
 	}
+	utils.CloseSessionLog()
 	osExit(exitCode)
 }

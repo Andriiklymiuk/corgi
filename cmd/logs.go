@@ -22,6 +22,7 @@ var logsPruneFlag bool
 var logsAllFlag bool
 var logsIdleFlag time.Duration
 var logsDumpFlag string
+var logsSessionFlag bool
 
 var logsCmd = &cobra.Command{
 	Use:     "logs",
@@ -36,6 +37,7 @@ Examples:
   corgi logs                      # interactive picker
   corgi logs --service api        # jump straight to run picker for "api"
   corgi logs --all                # merge the newest run of every service into one stream
+  corgi logs --session            # corgi's own output for the last run
   corgi logs --idle 0             # tail forever (until Ctrl-C)
   corgi logs --prune              # delete all .logs/ directories`,
 	Run: runLogs,
@@ -48,6 +50,7 @@ func init() {
 	logsCmd.Flags().BoolVar(&logsAllFlag, "all", false, "Merge the newest run of every service into one timestamp-sorted stream")
 	logsCmd.Flags().DurationVar(&logsIdleFlag, "idle", 30*time.Second, "Exit after this much dead-air on the file (set 0 to tail forever)")
 	logsCmd.Flags().StringVar(&logsDumpFlag, "dump", "", "Copy the newest run of every service into this directory and exit (for CI artifacts)")
+	logsCmd.Flags().BoolVar(&logsSessionFlag, "session", false, "Show corgi's own run output (validation errors, port conflicts, resolved branches) instead of a service's")
 }
 
 func logJSONLine(service, ts, level, line string) string {
@@ -100,6 +103,9 @@ func runLogs(cmd *cobra.Command, _ []string) {
 	}
 
 	serviceName := logsServiceFlag
+	if logsSessionFlag {
+		serviceName = utils.SessionLogDir
+	}
 	if serviceName == "" {
 		var err error
 		serviceName, err = chooseLogService(base)
@@ -147,7 +153,7 @@ func pruneAllLogs(base string) {
 
 // dumpNewestLogs copies each service's newest run into dir as <service>.log.
 func dumpNewestLogs(base, dir string) error {
-	services, err := utils.ListLoggedServices(base)
+	services, err := utils.ListLoggedStreams(base)
 	if err != nil || len(services) == 0 {
 		return fmt.Errorf("no log directories found under %s/.logs/", base)
 	}
@@ -445,7 +451,7 @@ func (h *mergeHeap) Pop() interface{} {
 // timestamp-sorted stream. K-way merge → memory is O(num services), not
 // O(total log bytes), so big projects don't OOM the CLI.
 func followAllLogs(base string) error {
-	services, err := utils.ListLoggedServices(base)
+	services, err := utils.ListLoggedStreams(base)
 	if err != nil || len(services) == 0 {
 		return fmt.Errorf("no log directories found under %s/.logs/\nRun the stack first: corgi run (capture is on unless --logs=false)", base)
 	}
@@ -495,7 +501,7 @@ func keepFollowing(idleSince *time.Time) bool {
 // adoptNewServices picks up services that started logging after the follow
 // began — a slow one has no log file when the first pass runs.
 func adoptNewServices(base string, streams map[string]*mergeStream) {
-	services, err := utils.ListLoggedServices(base)
+	services, err := utils.ListLoggedStreams(base)
 	if err != nil {
 		return
 	}

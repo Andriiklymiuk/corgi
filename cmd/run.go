@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -533,6 +532,7 @@ func confirmTier(cmd *cobra.Command, corgi *utils.CorgiCompose) error {
 
 func runRun(cmd *cobra.Command, _ []string) {
 	applyRunFlags(cmd)
+	defer utils.CloseSessionLog()
 
 	if err := resolveHostFlag(cmd); err != nil {
 		fmt.Println(art.RedColor, "host flag:", err, art.WhiteColor)
@@ -648,6 +648,8 @@ func loadRunCompose(cmd *cobra.Command) *utils.CorgiCompose {
 		}
 		os.Exit(1)
 	}
+
+	utils.StartSessionLog()
 
 	if !utils.AbortOnValidationErrors(corgi) {
 		if runReloading.Load() {
@@ -1682,7 +1684,7 @@ func handleComposeEvent(watcher *fsnotify.Watcher, cmd *cobra.Command, event fsn
 // reload does not leak file descriptors.
 func setupLogWriters(corgi *utils.CorgiCompose) {
 	utils.CloseAllLogWriters()
-	base := filepath.Join(utils.CorgiComposePathDir, "corgi_services")
+	base := utils.CorgiServicesDir()
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		utils.Infof("⚠ logs: could not create %s: %v\n", base, err)
 		return

@@ -15,7 +15,7 @@ func PrintJSONTo(w io.Writer, v any) {
 	_ = enc.Encode(v)
 }
 
-func PrintJSON(v any) { PrintJSONTo(os.Stdout, v) }
+func PrintJSON(v any) { PrintJSONTo(withMirror(os.Stdout), v) }
 
 type jsonErr struct {
 	Error struct {
@@ -31,4 +31,4 @@ func WriteJSONError(w io.Writer, code, message string) {
 	PrintJSONTo(w, e)
 }
 
-func JSONError(code, message string) { WriteJSONError(os.Stdout, code, message) }
+func JSONError(code, message string) { WriteJSONError(withMirror(os.Stdout), code, message) }

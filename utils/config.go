@@ -841,7 +841,12 @@ func CleanFromScratch(cmd *cobra.Command, corgi CorgiCompose) {
 
 func CleanCorgiServicesFolder() {
 	// git worktree remove before rm so source repos don't keep dangling entries.
-	_ = CleanCorgiWorktrees()
+	if skipped, _ := CleanCorgiWorktrees(false); len(skipped) > 0 {
+		Infof("kept %d worktree(s) with uncommitted changes (corgi worktree prune --force to drop):\n", len(skipped))
+		for _, d := range skipped {
+			Infof("  %s\n", d)
+		}
+	}
 	root := "./corgi_services"
 	entries, err := os.ReadDir(root)
 	if err != nil {
