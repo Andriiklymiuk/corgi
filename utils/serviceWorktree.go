@@ -621,14 +621,6 @@ func ApplyServiceWorkdirsWithFeature(corgi *CorgiCompose, dirPairs, branchPairs,
 	return ApplyFeatureBranch(corgi, feature, pinnedServices(dirPairs, branchPairs, checkoutPairs), nil)
 }
 
-func WorktreeIsDirty(dest string) bool {
-	out, err := gitOut(dest, "status", "--porcelain", "--untracked-files=all")
-	if err != nil {
-		return true
-	}
-	return strings.TrimSpace(out) != ""
-}
-
 // falling back to rm) and prunes the admin entries in each source repo.
 func CleanCorgiWorktrees(force bool) ([]string, error) {
 	base := filepath.Join(CorgiComposePathDir, "corgi_services", ".worktrees")
@@ -640,12 +632,14 @@ func CleanCorgiWorktrees(force bool) ([]string, error) {
 		return nil, err
 	}
 	var skipped []string
-	for _, e := range entries {
+	for i, e := range entries {
 		dest := filepath.Join(base, e.Name())
-		if !force && WorktreeIsDirty(dest) {
+		if !force && HasUncommittedWork(dest) {
 			skipped = append(skipped, dest)
+			Infof("[%d/%d] kept %s (uncommitted changes)\n", i+1, len(entries), e.Name())
 			continue
 		}
+		Infof("[%d/%d] removing %s\n", i+1, len(entries), e.Name())
 		common, cerr := gitOut(dest, gitRevParse, "--path-format=absolute", "--git-common-dir")
 		if cerr == nil && common != "" {
 			repo := filepath.Dir(common)

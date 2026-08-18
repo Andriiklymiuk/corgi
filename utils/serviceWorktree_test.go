@@ -738,14 +738,14 @@ func TestCleanCorgiWorktreesKeepsDirtyWorktree(t *testing.T) {
 	if _, err := EnsureServiceWorktree(repo, "feature/x", dest); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if WorktreeIsDirty(dest) {
+	if HasUncommittedWork(dest) {
 		t.Fatal("fresh worktree reported dirty")
 	}
 
 	if err := os.WriteFile(filepath.Join(dest, "wip.txt"), []byte("unsaved\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if !WorktreeIsDirty(dest) {
+	if !HasUncommittedWork(dest) {
 		t.Fatal("untracked file should count as dirty")
 	}
 
