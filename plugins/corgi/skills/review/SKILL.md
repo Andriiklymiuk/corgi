@@ -483,7 +483,10 @@ LLM-generated title:**
 
 1. **Clean PR (no findings)** — post one short "Reviewed — no blocking issues"
    summary (+ a line of what was checked / any praise). No inline. Don't go
-   silent; don't spam.
+   silent; don't spam. If the user authorized approving (Mode A guardrail
+   exception), the approval **is** the clean signal: empty or one-line body,
+   no "what I verified" essay — a wall of green text reads as noise, and it's
+   the correction you'll be asked to unwind via the review-edit API.
 2. **Nits only, no blockers** — inline the nits; summary headline "No blockers,
    N nits" so it doesn't read as alarming.
 3. **Head moved during the gate** — re-fetch metadata (head SHA) right before
@@ -643,7 +646,12 @@ That report shape belongs in the terminal output (P6), never in the comment.
 
 **Mode A (give review):**
 - **Comments only.** Never set a formal approve / request-changes state, never merge,
-  never push, never modify the branch.
+  never push, never modify the branch. **Sole exception — the user explicitly says to
+  approve** ("approve if good", "approve these"). Then: clean PR → plain approval,
+  empty or one-line body; PR with findings → post the findings (summary + inline),
+  approving alongside only when none are blocking. Never pair an approval with a
+  verification write-up — the per-PR "what I checked" report belongs in the terminal
+  (P6), not the approve body.
 - **Read-only on the repo.** Never check out / write the PR branch; review from the
   fetched diff only. (Exception: a PR that is **your own** routes to the Fix path — Phase 4
   / Mode B — which does write its branch.)
