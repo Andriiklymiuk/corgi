@@ -108,6 +108,10 @@ per-story review, draft PR, grouped report.
 - **Minimal code comments.** Don't narrate the change in code comments — it reads from
   the diff and the PR/commit. Add one only for a genuinely non-obvious invariant that
   would otherwise be lost, and only where the file already comments. No "// added X" notes.
+- **Read the repo's own agent docs before running anything in it.** A service's
+  CLAUDE.md/AGENTS.md may forbid specific commands (a dev server that breaks the build,
+  a script that mutates state). A triage produced by a forbidden command is noise —
+  rerun it the documented way before believing it.
 - **Don't spam the ticket.** One comment per story (spec, with its QA section folded in),
   updated in place on re-runs — never a pile of new comments.
 
@@ -317,6 +321,9 @@ file; the `## Spec` comment is the spec — _Express lane_):
   non-testable stories.
 - **Blocked → do NOT post.** Spec local only; mark `Status: BLOCKED` + **Decision
   needed**; surface the choice. Hold it; rest of batch proceeds.
+- **Env-gated dependency = blocked, not guessed.** A registry behind VPN/auth, a
+  build that needs credentials only a human holds — mark the story blocked naming
+  exactly what's missing; never fake the verification or report it as run.
 
 `superpowers:brainstorming` / `superpowers:systematic-debugging` (if installed) to
 resolve ambiguity before blocking.
