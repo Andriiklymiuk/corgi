@@ -210,7 +210,9 @@ on:
   #   - cron: "0 6 * * *"
 
 concurrency:
-  group: stack-e2e-${{ github.repository }}-${{ inputs.branch || github.head_ref }}
+  # Same fallback chain as BRANCH below, or every dispatch/schedule run lands
+  # in one empty-suffix group and cancels the others.
+  group: stack-e2e-${{ github.repository }}-${{ inputs.branch || github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -272,8 +274,11 @@ jobs:
 
       - run: corgi test --e2e
 
+      # mkdir keeps the upload below meaningful: without it, a run that dies
+      # before the dump leaves no directory and the upload's error points at
+      # artifacts instead of the real cause.
       - if: always()
-        run: corgi logs --dump ./ci-artifacts/logs || true
+        run: mkdir -p ci-artifacts && { corgi logs --dump ./ci-artifacts/logs || true; }
 
       - uses: actions/upload-artifact@v4
         if: always()

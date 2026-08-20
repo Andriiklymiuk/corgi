@@ -64,6 +64,13 @@ func resolveEnvSourceFile(composeDir string, service Service, copyEnvFilePath, t
 			return tierFile
 		}
 	}
+	return exampleEnvFile(service)
+}
+
+// exampleEnvFile is the one place that knows which filenames count as a
+// service's committed env example; resolution and `corgi env check` must
+// agree on it.
+func exampleEnvFile(service Service) string {
 	for _, name := range []string{".env-example", ".env.example"} {
 		candidate := filepath.Join(service.AbsolutePath, name)
 		if fileExists(candidate) {

@@ -45,97 +45,106 @@ func EnvCheckAll(corgi *CorgiCompose, fileOverride string) ([]EnvCheckRow, error
 
 	rows := make([]EnvCheckRow, 0, len(corgi.Services))
 	for _, svc := range sortedServices(corgi) {
-		rows = append(rows, envCheckService(svc, all[svc.ServiceName], fileOverride))
+		row, err := envCheckService(svc, all[svc.ServiceName], fileOverride)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
 	}
 	return rows, nil
 }
 
-func envCheckService(svc Service, resolved []EnvVar, fileOverride string) EnvCheckRow {
+func envCheckService(svc Service, resolved []EnvVar, fileOverride string) (EnvCheckRow, error) {
 	row := EnvCheckRow{Service: svc.ServiceName}
 	if svc.IgnoreEnv {
 		row.Skipped = "ignore_env is set"
-		return row
+		return row, nil
 	}
 
 	example := exampleEnvFile(svc)
 	if example == "" {
 		row.Skipped = "no .env-example / .env.example in the service repo"
-		return row
+		return row, nil
 	}
 	row.Example = displayPath(example)
+
+	exampleKeys, err := envFileKeys(example)
+	if err != nil {
+		return row, err
+	}
+	generated := map[string]bool{}
+	for _, e := range resolved {
+		if e.IsGenerated() {
+			generated[e.Key] = true
+		}
+	}
+	missingFrom := func(provided map[string]bool) []string {
+		var missing []string
+		for key := range exampleKeys {
+			if !provided[key] && !generated[key] {
+				missing = append(missing, key)
+			}
+		}
+		sort.Strings(missing)
+		return missing
+	}
+	// An absent source is only a finding when the example declares keys corgi
+	// does not generate — an example of purely generated keys needs no file.
+	absentSource := func(display string) EnvCheckRow {
+		if missing := missingFrom(nil); len(missing) > 0 {
+			row.Source = display
+			row.Missing = missing
+			row.SourceAbsent = true
+		}
+		return row
+	}
 
 	var source string
 	if fileOverride != "" {
 		candidate := filepath.Join(svc.AbsolutePath, fileOverride)
 		if !fileExists(candidate) {
-			row.Source = displayPath(candidate)
-			row.SourceAbsent = true
-			return row
+			return absentSource(displayPath(candidate)), nil
 		}
 		source = candidate
 	} else {
-		rel := resolveCopyEnvPath(svc, "")
-		if rel == "" {
-			row.Skipped = "no copyEnvFromFilePath — env comes from the example file itself"
-			return row
+		// The same resolution corgi run uses, so check and run can never
+		// disagree about which file a service's env comes from.
+		resolvedSrc := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir)
+		if resolvedSrc == "" || sameFile(resolvedSrc, example) {
+			// Resolution fell through to the example (or nothing): diffing
+			// the example against itself proves nothing.
+			if svc.CopyEnvFromFilePath == "" {
+				row.Skipped = "no copyEnvFromFilePath — env comes from the example file itself"
+				return row, nil
+			}
+			return absentSource(svc.CopyEnvFromFilePath), nil
 		}
-		if ActiveTierName != "" {
-			rel = strings.ReplaceAll(rel, "${tier}", ActiveTierName)
-		}
-		candidate := filepath.Join(CorgiComposePathDir, rel)
-		if !fileExists(candidate) {
-			row.Source = rel
-			row.SourceAbsent = true
-			return row
-		}
-		source = candidate
-	}
-	if sameFile(source, example) {
-		// Diffing the example against itself proves nothing.
-		row.Skipped = "env source is the example file itself — nothing to diff"
-		return row
+		source = resolvedSrc
 	}
 	row.Source = displayPath(source)
 
-	provided := envFileKeys(source)
-	generated := map[string]bool{}
-	for _, e := range resolved {
-		// file:* entries come from the copied env file; everything else
-		// (db:, service:, self:port, literal) corgi generates at run time.
-		if !strings.HasPrefix(e.Source, "file:") {
-			generated[e.Key] = true
-		}
+	provided, err := envFileKeys(source)
+	if err != nil {
+		return row, err
 	}
-
-	for key := range envFileKeys(example) {
-		if !provided[key] && !generated[key] {
-			row.Missing = append(row.Missing, key)
-		}
-	}
-	sort.Strings(row.Missing)
-	return row
+	row.Missing = missingFrom(provided)
+	return row, nil
 }
 
-func exampleEnvFile(svc Service) string {
-	for _, name := range []string{".env-example", ".env.example"} {
-		candidate := filepath.Join(svc.AbsolutePath, name)
-		if fileExists(candidate) {
-			return candidate
-		}
-	}
-	return ""
-}
-
-func envFileKeys(path string) map[string]bool {
+// envFileKeys errors instead of returning an empty set: an unreadable file
+// silently treated as "declares nothing" would pass exactly the check it
+// should fail.
+func envFileKeys(path string) (map[string]bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return map[string]bool{}
+		return nil, fmt.Errorf("env check: %w", err)
 	}
 	keys := map[string]bool{}
 	for _, e := range parseChunkInOrder(string(data), "") {
-		keys[e.Key] = true
+		// Shell-sourceable files write `export KEY=value`; the key is KEY.
+		keys[strings.TrimPrefix(e.Key, "export ")] = true
 	}
-	return keys
+	return keys, nil
 }
 
 func sameFile(a, b string) bool {
@@ -160,36 +169,58 @@ func displayPath(path string) string {
 	return rel
 }
 
+// EnvCheckStats counts the rows that were actually checked and whether any
+// finding exists. Zero checked rows count as a finding — a vacuous pass
+// would read as coverage.
+func EnvCheckStats(rows []EnvCheckRow) (checked int, findings bool) {
+	for _, row := range rows {
+		if row.Skipped != "" {
+			continue
+		}
+		checked++
+		if !row.OK() {
+			findings = true
+		}
+	}
+	if checked == 0 {
+		findings = true
+	}
+	return checked, findings
+}
+
+// EnvCheckNothingChecked is the shared explanation for a vacuous run, used by
+// both the human summary and the JSON reason field.
+const EnvCheckNothingChecked = "nothing was checked — no service pairs an env source with a committed .env-example / .env.example"
+
 // EnvCheckSummary renders the human view and says whether findings exist.
 func EnvCheckSummary(rows []EnvCheckRow) (string, bool) {
 	var b strings.Builder
-	checked, findings := 0, false
 	for _, row := range rows {
 		switch {
 		case row.Skipped != "":
 			fmt.Fprintf(&b, "⏭️  %s: %s\n", row.Service, row.Skipped)
 		case row.SourceAbsent:
-			findings = true
-			checked++
-			fmt.Fprintf(&b, "❌ %s: env source %s does not exist — a run would fall back to %s's placeholder values\n",
+			fmt.Fprintf(&b, "❌ %s: env source %s does not exist, and %s declares keys corgi does not generate:\n",
 				row.Service, row.Source, row.Example)
+			for _, key := range row.Missing {
+				fmt.Fprintf(&b, "     %s\n", key)
+			}
 		case len(row.Missing) > 0:
-			findings = true
-			checked++
 			fmt.Fprintf(&b, "❌ %s: %s is missing keys that %s declares and corgi does not generate:\n",
 				row.Service, row.Source, row.Example)
 			for _, key := range row.Missing {
 				fmt.Fprintf(&b, "     %s\n", key)
 			}
+		case row.Source == "":
+			fmt.Fprintf(&b, "✅ %s: %s declares only keys corgi generates — no env file needed\n",
+				row.Service, row.Example)
 		default:
-			checked++
 			fmt.Fprintf(&b, "✅ %s: %s covers %s\n", row.Service, row.Source, row.Example)
 		}
 	}
+	checked, findings := EnvCheckStats(rows)
 	if checked == 0 {
-		// A vacuous pass would read as coverage; refuse it.
-		findings = true
-		b.WriteString("nothing was checked — no service pairs an env source with a committed .env-example / .env.example\n")
+		b.WriteString(EnvCheckNothingChecked + "\n")
 	}
 	return b.String(), findings
 }

@@ -165,6 +165,96 @@ func TestEnvCheck_FileOverride(t *testing.T) {
 	}
 }
 
+func TestEnvCheck_TierDirFallbackIsChecked(t *testing.T) {
+	corgi := envCheckFixture(t,
+		"KEY=1\nTIER_ONLY=1\n",
+		"",
+		Service{ServiceName: "api"},
+	)
+	oldName, oldDir := ActiveTierName, ActiveTierDir
+	ActiveTierName, ActiveTierDir = "staging", "env/staging"
+	t.Cleanup(func() { ActiveTierName, ActiveTierDir = oldName, oldDir })
+
+	tierDir := filepath.Join(CorgiComposePathDir, "env/staging")
+	if err := os.MkdirAll(tierDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tierDir, "api.env"), []byte("KEY=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := EnvCheckAll(corgi, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The run resolves env from the tier file, so the check must diff it —
+	// not skip the service for lacking copyEnvFromFilePath.
+	if rows[0].Skipped != "" {
+		t.Fatalf("tier-dir source must be checked, got skip: %+v", rows[0])
+	}
+	if len(rows[0].Missing) != 1 || rows[0].Missing[0] != "TIER_ONLY" {
+		t.Fatalf("missing = %v, want [TIER_ONLY]", rows[0].Missing)
+	}
+}
+
+func TestEnvCheck_AbsentSourceIsFineWhenExampleIsAllGenerated(t *testing.T) {
+	corgi := envCheckFixture(t,
+		"PORT=3000\n", // corgi generates PORT from port:
+		"",            // declared env file never written
+		Service{ServiceName: "api", Port: 3000, CopyEnvFromFilePath: "api.env"},
+	)
+	rows, err := EnvCheckAll(corgi, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].SourceAbsent || !rows[0].OK() {
+		t.Fatalf("example of purely generated keys needs no env file, got %+v", rows[0])
+	}
+}
+
+func TestEnvCheck_ExportPrefixIsNormalized(t *testing.T) {
+	corgi := envCheckFixture(t,
+		"export SECRET_KEY=change-me\n",
+		"export SECRET_KEY=real\n",
+		Service{ServiceName: "api", CopyEnvFromFilePath: "api.env"},
+	)
+	rows, err := EnvCheckAll(corgi, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows[0].Missing) != 0 {
+		t.Fatalf("export-style keys must match, got missing %v", rows[0].Missing)
+	}
+}
+
+func TestEnvCheck_UnreadableFileErrorsInsteadOfPassing(t *testing.T) {
+	corgi := envCheckFixture(t,
+		"KEY=1\n",
+		"KEY=1\n",
+		Service{ServiceName: "api", CopyEnvFromFilePath: "api.env"},
+	)
+	example := filepath.Join(corgi.Services[0].AbsolutePath, ".env.example")
+	if err := os.Chmod(example, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(example, 0o644) })
+
+	if _, err := EnvCheckAll(corgi, ""); err == nil {
+		t.Fatal("unreadable example must error, not pass as declaring nothing")
+	}
+}
+
+func TestEnvVarIsGeneratedFailsClosedOnUnknownLabels(t *testing.T) {
+	for source, want := range map[string]bool{
+		"db:pg": true, "service:api": true, "self:port": true, "literal": true,
+		"file:api.env": false, "shell:override": false, "": false,
+	} {
+		if got := (EnvVar{Source: source}).IsGenerated(); got != want {
+			t.Errorf("IsGenerated(%q) = %v, want %v", source, got, want)
+		}
+	}
+}
+
 func TestEnvCheckSummary_RefusesVacuousPass(t *testing.T) {
 	summary, findings := EnvCheckSummary([]EnvCheckRow{
 		{Service: "api", Skipped: "no example"},
@@ -183,5 +273,27 @@ func TestEnvCheckSummary_CleanPass(t *testing.T) {
 	})
 	if findings {
 		t.Fatalf("clean row reported as finding:\n%s", summary)
+	}
+}
+
+func TestEnvCheckSummary_RendersEveryVerdict(t *testing.T) {
+	summary, findings := EnvCheckSummary([]EnvCheckRow{
+		{Service: "a", Example: "e", Source: "s", SourceAbsent: true, Missing: []string{"KEY"}},
+		{Service: "b", Example: "e", Source: "s", Missing: []string{"OTHER"}},
+		{Service: "c", Example: "e"}, // absent file, all keys generated
+		{Service: "d", Skipped: "no example"},
+	})
+	if !findings {
+		t.Fatal("rows with findings must report findings")
+	}
+	for _, want := range []string{
+		"does not exist", "KEY",
+		"is missing keys", "OTHER",
+		"no env file needed",
+		"no example",
+	} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("summary missing %q:\n%s", want, summary)
+		}
 	}
 }

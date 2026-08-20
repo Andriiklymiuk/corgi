@@ -24,6 +24,12 @@ func exitWithErrorPrefix(jsonCode, stderrPrefix string, err error, exitCode int)
 	} else {
 		fmt.Fprintln(utils.WithMirror(os.Stderr), err)
 	}
+	exitProcess(exitCode)
+}
+
+// exitProcess is the one exit sequence: close the session log, then exit.
+// Commands ending without an error message use it directly.
+func exitProcess(code int) {
 	utils.CloseSessionLog()
-	osExit(exitCode)
+	osExit(code)
 }
