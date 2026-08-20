@@ -172,6 +172,8 @@ func TestRunEnvCheckNoComposeErrors(t *testing.T) {
 
 	_, c := newTestComposeCommand()
 	c.Flags().String("file", "", "")
+	origPayload := utils.PayloadOnStdout
+	t.Cleanup(func() { utils.PayloadOnStdout = origPayload })
 	err := runEnvCheck(c, nil)
 	if err == nil || !strings.Contains(err.Error(), utils.ErrComposeNotFound) {
 		t.Fatalf("want %s error, got %v", utils.ErrComposeNotFound, err)
