@@ -297,3 +297,18 @@ func TestEnvCheckSummary_RendersEveryVerdict(t *testing.T) {
 		}
 	}
 }
+
+func TestEnvCheck_IgnoreEnvSkips(t *testing.T) {
+	corgi := envCheckFixture(t,
+		"KEY=1\n",
+		"",
+		Service{ServiceName: "api", IgnoreEnv: true, CopyEnvFromFilePath: "api.env"},
+	)
+	rows, err := EnvCheckAll(corgi, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].Skipped != "ignore_env is set" {
+		t.Fatalf("want ignore_env skip, got %+v", rows[0])
+	}
+}
