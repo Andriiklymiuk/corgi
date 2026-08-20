@@ -51,24 +51,40 @@ outputs:
   cache-1-paths:
     description: Group 1's newline-separated paths, empty when there is no such group.
     value: ${{ steps.setup.outputs.cache-1-paths }}
+  cache-1-restore-keys:
+    description: >-
+      Group 1's restore-keys prefix (corgi-deps-<ecosystem>-), so a lockfile
+      change restores the previous packages instead of starting empty. Empty
+      when there is no such group, and for the markers group, which is
+      exact-key only.
+    value: ${{ steps.setup.outputs.cache-1-restore-keys }}
   cache-2-key:
     description: Group 2's key, empty when there is no such group.
     value: ${{ steps.setup.outputs.cache-2-key }}
   cache-2-paths:
     description: Group 2's newline-separated paths, empty when there is no such group.
     value: ${{ steps.setup.outputs.cache-2-paths }}
+  cache-2-restore-keys:
+    description: Group 2's restore-keys prefix, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-2-restore-keys }}
   cache-3-key:
     description: Group 3's key, empty when there is no such group.
     value: ${{ steps.setup.outputs.cache-3-key }}
   cache-3-paths:
     description: Group 3's newline-separated paths, empty when there is no such group.
     value: ${{ steps.setup.outputs.cache-3-paths }}
+  cache-3-restore-keys:
+    description: Group 3's restore-keys prefix, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-3-restore-keys }}
   cache-4-key:
     description: Group 4's key, empty when there is no such group.
     value: ${{ steps.setup.outputs.cache-4-key }}
   cache-4-paths:
     description: Group 4's newline-separated paths, empty when there is no such group.
     value: ${{ steps.setup.outputs.cache-4-paths }}
+  cache-4-restore-keys:
+    description: Group 4's restore-keys prefix, empty when there is no such group.
+    value: ${{ steps.setup.outputs.cache-4-restore-keys }}
   cache-overflow:
     description: >-
       How many ecosystems did not fit the four slots. The action already warns
@@ -157,6 +173,9 @@ runs:
           for i in 1 2 3 4; do
             key="$(jq -r --argjson i "$i" '.[$i-1].key // ""' <<<"$groups")"
             echo "cache-$i-key=$key" >> "$GITHUB_OUTPUT"
+            # `// ""` keeps this working against a corgi predating restorePrefix.
+            restore="$(jq -r --argjson i "$i" '.[$i-1].restorePrefix // ""' <<<"$groups")"
+            echo "cache-$i-restore-keys=$restore" >> "$GITHUB_OUTPUT"
             {
               echo "cache-$i-paths<<CORGI_ACTION_EOF"
               jq -r --argjson i "$i" '.[$i-1].pathsText // ""' <<<"$groups"
@@ -174,6 +193,7 @@ runs:
           for i in 1 2 3 4; do
             echo "cache-$i-key=" >> "$GITHUB_OUTPUT"
             echo "cache-$i-paths=" >> "$GITHUB_OUTPUT"
+            echo "cache-$i-restore-keys=" >> "$GITHUB_OUTPUT"
           done
           echo "cache-overflow=0" >> "$GITHUB_OUTPUT"
         fi
