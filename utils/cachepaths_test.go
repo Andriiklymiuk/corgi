@@ -167,6 +167,32 @@ func TestCacheGroupsAreIndependentPerEcosystem(t *testing.T) {
 	}
 }
 
+// restore-keys lets a changed lockfile start from the previous packages; the
+// markers stay exact-match because corgi re-hashes them anyway.
+func TestCacheGroupRestorePrefix(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(`{"v":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := []Service{{
+		ServiceName: "web", Path: "./web", AbsolutePath: dir,
+		BeforeStart: BeforeStartSteps{{Run: "npm ci", CacheKey: []string{"package-lock.json"}}},
+	}}
+
+	plan := planFor(t, svc)
+	for _, g := range plan.Groups {
+		if g.ID == "markers" {
+			if g.RestorePrefix != "" {
+				t.Errorf("markers group must have no restore prefix, got %q", g.RestorePrefix)
+			}
+			continue
+		}
+		if g.RestorePrefix == "" || !strings.HasPrefix(g.Key, g.RestorePrefix) {
+			t.Errorf("group %s: key %q must start with its restore prefix %q", g.ID, g.Key, g.RestorePrefix)
+		}
+	}
+}
+
 // A restored step marker next to a dependency directory that did not come back
 // would make corgi skip an install whose output is missing.
 func TestCacheMarkersAreKeyedOnEveryLockfile(t *testing.T) {

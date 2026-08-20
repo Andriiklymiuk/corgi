@@ -83,6 +83,11 @@ stack-e2e:
   GitLab's equivalent of GitHub's `concurrency` group.
 - `GIT_DEPTH: "1"` shallow-clones the *caller*; `corgi init --depth 1` handles
   the service repos.
+- **Sharding e2e by feature-domain folder** (`parallel: matrix:` over a folder
+  list) keeps wall clock flat as the suite grows — but a `needs:` gate on that
+  job must then name every matrix permutation by hand, and a newly added shard
+  silently falls out of the gate. Gate on the stage where possible, and add a
+  lint job that fails when the domain folders and the matrix list drift apart.
 
 ## Caching
 

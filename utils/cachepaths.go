@@ -34,6 +34,12 @@ type CacheGroup struct {
 	// build a newline-separated string, and that is the only separator
 	// actions/cache accepts, so the join has to happen here.
 	PathsText string `json:"pathsText"`
+	// RestorePrefix feeds actions/cache's restore-keys: it matches any earlier
+	// key of the same ecosystem, so a lockfile change starts from the previous
+	// packages instead of empty. Empty for the markers group — corgi re-hashes
+	// every cacheKey before trusting a marker, so restoring stale ones buys
+	// nothing.
+	RestorePrefix string `json:"restorePrefix,omitempty"`
 }
 
 // ecosystem maps a lockfile to the directories a build of it produces: one
@@ -148,10 +154,11 @@ func (acc *cacheAccumulator) cacheGroups() []CacheGroup {
 	for _, id := range sortedGroupIDs(acc.groupPaths) {
 		p := sortedPathSet(acc.groupPaths[id])
 		groups = append(groups, CacheGroup{
-			ID:        id,
-			Paths:     p,
-			Key:       fmt.Sprintf("corgi-deps-%s-%s", id, hex.EncodeToString(acc.groupHash[id].Sum(nil))[:16]),
-			PathsText: strings.Join(p, "\n"),
+			ID:            id,
+			Paths:         p,
+			Key:           fmt.Sprintf("corgi-deps-%s-%s", id, hex.EncodeToString(acc.groupHash[id].Sum(nil))[:16]),
+			PathsText:     strings.Join(p, "\n"),
+			RestorePrefix: fmt.Sprintf("corgi-deps-%s-", id),
 		})
 	}
 	return groups

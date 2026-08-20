@@ -42,6 +42,7 @@ from `references/github-actions.md` / `references/gitlab-ci.md` instead.
    Also check `corgi test --help | grep e2e` and `corgi cache --help` — recent corgi
    adds `corgi test --e2e` (runs the compose's `e2e:` block against the live stack)
    and `corgi cache paths` (derives the CI cache plan from the compose file).
+   `corgi env check --help` working means the env-drift gate below is available too.
 2. **Read `corgi-compose.yml`.** Count `db_services` (each is containers + disk) and
    services. Note every `required:` tool and which are human-only. Check for a
    top-level `e2e:` block — if there is one, the e2e step is `corgi test --e2e`,
@@ -50,6 +51,14 @@ from `references/github-actions.md` / `references/gitlab-ci.md` instead.
 3. **Find where secrets come from.** `copyEnvFromFilePath:` points at files that are
    almost always gitignored. CI has none of them. This is the single most common
    reason a first attempt never boots — settle it before writing YAML.
+   A CI env file usually needs no real secrets at all: placeholders plus the
+   third-party feature flags off (an empty key is often the off switch), and a
+   local sink for anything like mail — which lets each repo commit its CI env
+   file instead of holding it in the forge's secret store. `corgi env check`
+   makes completeness a failing step, not a first-request surprise: it diffs
+   each service's env file against the `.env-example` its repo commits,
+   excluding every key corgi generates; `--file .env.ci` validates a committed
+   CI env file before anything copies it into place.
 4. **Ask which repos participate** if the workspace has more than a handful, and
    whether the job blocks merge or only reports.
 
@@ -130,6 +139,20 @@ until the step times out.
 **The dependency cache only saves on a successful job.** Until one run goes green
 you pay every install every time — do not read early runs as the steady state.
 
+**When every service goes silent at once, it is memory, not the tests.** A full
+stack of containers next to several dev servers can exceed a hosted runner's few
+GB, and the failure reads as the runner losing contact or a container `Killed` —
+never as an OOM message. Print free memory before the boot, cap any test
+runner's worker count (a per-CPU default can OOM a shared runner by itself),
+and move to a larger runner before chasing ghost failures.
+
+**A headless browser-driving runner can silently drop its screenshots.** One
+suite's in-flow screenshot command is a documented no-op under its headless
+mode — proven only by counting zero images after a red run. Verify one artifact
+actually lands before trusting the pipeline's evidence; collect the runner's
+own debug directory as a fallback, or run headed under a virtual display
+(xvfb) when the screenshots are the point.
+
 ## Non-negotiables
 
 - **Never run the job inside a container** (`jobs.<id>.container:` on GitHub,
@@ -165,8 +188,14 @@ so it cannot drift as services come and go. `--key` prints the matching cache ke
 so one lockfile change doesn't evict every other language's packages. On GitHub
 the `Andriiklymiuk/corgi@v1` action exposes all of this as step outputs
 (`cache-paths`, `cache-key`, `cache-groups`) ready to feed `actions/cache`, plus
-four fixed slots (`cache-1-key`/`cache-1-paths` … `cache-4-*`) so a workflow
-writes four plain cache steps instead of `fromJSON(...)[i]` indexing. Neither a
+four fixed slots (`cache-1-key`/`cache-1-paths`/`cache-1-restore-keys` …
+`cache-4-*`) so a workflow writes four plain cache steps instead of
+`fromJSON(...)[i]` indexing. The `restore-keys` slot is the group's
+`corgi-deps-<ecosystem>-` prefix, so a lockfile change restores the previous
+packages instead of starting empty; the markers slot stays exact-match on
+purpose. GitHub also scopes caches per ref — a fresh PR restores only what its
+base branch saved, so a scheduled default-branch run is what keeps new PRs
+warm. Neither a
 workflow expression nor a composite action can loop, so the copies stay — but
 the action warns by itself when an ecosystem does not fit, which used to be a
 hand-written step.
@@ -263,6 +292,15 @@ Worth telling the user up front, because it decides how much the job is worth:
   answer.
 - **Anything costing money or rate-limited per call** (third-party model APIs)
   should be flag-disabled or stubbed, not called for real on every PR.
+
+Two suites, one entry point: the merge gate runs against the stack built from
+the branches under review; a scheduled run points the *same* suite — same
+command, same env names, only the base URL differs — at the deployed
+environment. Keep one runner script for local and CI so they cannot drift, and
+make it print every scenario as pass/fail/skip: a quarantined test hidden
+inside a green pass count is coverage you no longer have. A deployed
+environment can lag the default branch — before debugging a red scheduled run,
+check the change under test has actually shipped there.
 
 ## Verify before claiming it works
 

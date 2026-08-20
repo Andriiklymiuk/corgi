@@ -56,8 +56,11 @@ jobs:
 
       # The plan covers each service's dependency dir + corgi_services/.cache
       # (the beforeStart skip markers). On a polyglot stack, prefer one
-      # actions/cache step per slot (cache-1-key/paths … cache-4-key/paths) so one
-      # lockfile change doesn't evict every other language's packages.
+      # actions/cache step per slot (cache-1-key/paths/restore-keys …
+      # cache-4-*) so one lockfile change doesn't evict every other language's
+      # packages — the restore-keys slot (corgi ≥ 1.20.36) is the group's
+      # corgi-deps-<ecosystem>- prefix, so a changed lockfile starts from the
+      # previous packages instead of empty.
       - name: Restore dependency caches
         uses: actions/cache@v4
         with:
@@ -154,3 +157,15 @@ jobs:
   commit-status API.
 - `concurrency` on the caller cancels superseded runs; without it every push to a
   PR starts another full stack.
+- A `workflow_dispatch` branch input must default to `""`, never to a branch
+  name: a non-empty default beats every `||` fallback, so a manual run silently
+  boots the default branch while claiming to test yours.
+- Add a daily `schedule:` run on the default branch. GitHub scopes caches per
+  ref, so a fresh PR restores from its base branch — the scheduled run is what
+  keeps that base warm (and doubles as a drift alarm for the suite itself).
+- `if-no-files-found: error` on the artifact upload. With the default `warn`, a
+  wrong path uploads an empty artifact on every run and nobody notices until
+  the red run whose evidence is missing.
+- `package-manager-cache: false` on `actions/setup-node` (and its analogues):
+  corgi already says what to cache, and two cachers over the same directories
+  race each other's restores.

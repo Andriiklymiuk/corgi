@@ -388,7 +388,7 @@ corgi is meant to be driven by AI agents and CI, not just typed by hand — a sm
 
 - **It never blocks on a prompt.** corgi notices it's running in an agent or pipeline and either skips the question or fails with a clear error instead of hanging. That same non-interactive contract is exactly what a CI job needs.
 - **It speaks machine.** Clean JSON with `--json`, predictable exit codes (`0` ok, `1` failed, `2` bad usage), and a documented [error-code list](docs/agents.md) — so a tool can read what happened and react, instead of parsing log noise.
-- **Quiet, scriptable entry points.** `corgi env <service>` shows the exact env a service will get and where each value came from; `corgi exec` and `corgi test` run commands and tests in that same env; `corgi run --dry-run --json` previews a whole run without touching anything.
+- **Quiet, scriptable entry points.** `corgi env <service>` shows the exact env a service will get and where each value came from; `corgi env check` fails when a service's env file misses keys its `.env-example` declares (keys corgi generates are excluded, `--file .env.ci` checks a committed CI env file); `corgi exec` and `corgi test` run commands and tests in that same env; `corgi run --dry-run --json` previews a whole run without touching anything.
 - **One-glance state.** `corgi mission-control` (alias `mc`) shows the live stack plus each service's git/PR/CI state — `--json` for a single snapshot, `--watch` to follow along.
 - **Workspace memory.** `corgi memory` is an opt-in, committed `.corgi/memory/` store of stack decisions and recurring fixes (with a `corgi memory lint` secret-scan) that the skills read before acting — so lessons survive between sessions.
 

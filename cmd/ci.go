@@ -195,9 +195,24 @@ on:
         required: true
         type: string
   pull_request:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to boot the stack from
+        required: false
+        # Keep the default empty: a non-empty one silently beats the
+        # || fallbacks below, booting main while claiming to test a branch.
+        default: ""
+        type: string
+  # A daily default-branch run keeps the dependency caches warm: GitHub
+  # scopes caches per ref, so a fresh PR restores from the base branch.
+  # schedule:
+  #   - cron: "0 6 * * *"
 
 concurrency:
-  group: stack-e2e-${{ github.repository }}-${{ inputs.branch || github.head_ref }}
+  # Same fallback chain as BRANCH below, or every dispatch/schedule run lands
+  # in one empty-suffix group and cancels the others.
+  group: stack-e2e-${{ github.repository }}-${{ inputs.branch || github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -207,7 +222,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      BRANCH: ${{ inputs.branch || github.head_ref || 'main' }}
+      # head_ref covers PRs; ref_name covers dispatch/schedule runs.
+      BRANCH: ${{ inputs.branch || github.head_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v5
 
@@ -221,26 +237,35 @@ jobs:
         with:
           path: ${{ steps.corgi.outputs.cache-1-paths }}
           key: ${{ steps.corgi.outputs.cache-1-key }}
+          restore-keys: ${{ steps.corgi.outputs.cache-1-restore-keys }}
       - uses: actions/cache@v4
         if: steps.corgi.outputs.cache-2-key != ''
         with:
           path: ${{ steps.corgi.outputs.cache-2-paths }}
           key: ${{ steps.corgi.outputs.cache-2-key }}
+          restore-keys: ${{ steps.corgi.outputs.cache-2-restore-keys }}
       - uses: actions/cache@v4
         if: steps.corgi.outputs.cache-3-key != ''
         with:
           path: ${{ steps.corgi.outputs.cache-3-paths }}
           key: ${{ steps.corgi.outputs.cache-3-key }}
+          restore-keys: ${{ steps.corgi.outputs.cache-3-restore-keys }}
       - uses: actions/cache@v4
         if: steps.corgi.outputs.cache-4-key != ''
         with:
           path: ${{ steps.corgi.outputs.cache-4-paths }}
           key: ${{ steps.corgi.outputs.cache-4-key }}
+          restore-keys: ${{ steps.corgi.outputs.cache-4-restore-keys }}
 
       - run: corgi init --depth 1 --feature "$BRANCH"
 
       # Fails in seconds on a missing env file, busy port or missing tool.
       - run: corgi doctor
+
+      # Optional: fail here, not at the first request, when a service's env
+      # file misses keys its .env-example declares (corgi-generated keys are
+      # excluded automatically).
+      # - run: corgi env check
 
       - run: corgi run --feature "$BRANCH" --detach --wait --wait-timeout 25m --follow
         timeout-minutes: 30
@@ -249,8 +274,11 @@ jobs:
 
       - run: corgi test --e2e
 
+      # mkdir keeps the upload below meaningful: without it, a run that dies
+      # before the dump leaves no directory and the upload's error points at
+      # artifacts instead of the real cause.
       - if: always()
-        run: corgi logs --dump ./ci-artifacts/logs || true
+        run: mkdir -p ci-artifacts && { corgi logs --dump ./ci-artifacts/logs || true; }
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -258,6 +286,9 @@ jobs:
           name: stack-e2e-${{ github.run_id }}
           path: ci-artifacts/
           retention-days: 7
+          # error, not warn: a wrong path otherwise uploads an empty
+          # artifact on every run and nobody notices until a red one.
+          if-no-files-found: error
 
       - if: always()
         run: corgi stop || true

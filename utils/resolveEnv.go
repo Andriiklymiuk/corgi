@@ -15,6 +15,19 @@ type EnvVar struct {
 	Source string `json:"source"` // db:<name> | service:<name> | self:port | literal | file:<path>
 }
 
+// IsGenerated reports whether corgi itself produces this variable at run time,
+// as opposed to reading it from a copied env file. A whitelist on purpose: a
+// future source label lands as not-generated until classified here, so
+// `corgi env check` fails closed instead of silently passing missing keys.
+func (e EnvVar) IsGenerated() bool {
+	for _, prefix := range []string{"db:", "service:", "self:", "literal"} {
+		if strings.HasPrefix(e.Source, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // parseChunkInOrder splits a corgi env chunk into ordered KEY=VALUE pairs,
 // tagging each with source. Blank/comment lines are skipped.
 func parseChunkInOrder(chunk, source string) []EnvVar {

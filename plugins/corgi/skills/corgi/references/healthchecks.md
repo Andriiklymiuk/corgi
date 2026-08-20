@@ -70,6 +70,7 @@ Output is colored text — results to stdout, load/config errors to stderr (no J
 
 ## When to add healthCheck
 
+- **A `sleep` in `beforeStart`/`start` is a readiness gap wearing a costume.** Replace it with the real primitive: `healthCheck:` (or a `warmup:` block for a server that builds on first request), `corgi db --upAll --wait` for databases, `corgi run --wait` in scripts. A sleep tuned on one machine fails on a slower one and wastes time on a faster one.
 - **Add it for services** where "port open" isn't enough — e.g. a Rails server binds the port long before migrations finish.
 - **Skip it for databases** unless you have a specific readiness endpoint. TCP probing is usually sufficient for postgres/mysql/redis/etc.
 - **Always set it on localstack** if you've overridden the default port or disabled the health service, to avoid probing a non-existent endpoint.
