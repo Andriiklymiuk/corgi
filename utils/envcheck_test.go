@@ -312,3 +312,26 @@ func TestEnvCheck_IgnoreEnvSkips(t *testing.T) {
 		t.Fatalf("want ignore_env skip, got %+v", rows[0])
 	}
 }
+
+func TestSameFileMissingPaths(t *testing.T) {
+	existing := filepath.Join(t.TempDir(), "a")
+	if err := os.WriteFile(existing, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if sameFile("/nonexistent/a", existing) {
+		t.Fatal("missing first path must not match")
+	}
+	if sameFile(existing, "/nonexistent/b") {
+		t.Fatal("missing second path must not match")
+	}
+}
+
+func TestDisplayPathOutsideComposeDirStaysAbsolute(t *testing.T) {
+	old := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = old })
+	outside := "/somewhere/else/file.env"
+	if got := displayPath(outside); got != outside {
+		t.Fatalf("path outside compose dir must stay as-is, got %q", got)
+	}
+}
