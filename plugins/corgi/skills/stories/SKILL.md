@@ -712,9 +712,9 @@ between stories.
 
 - **Single-repo** → one line `[<issue-key>] <Service>: <subject>`, link directly
   below.
-- **Multi-repo** → a **header `[<issue-key>] <story description>`**, then each repo
-  on its own `<Service>: <subject>` line with the link below — no key repeated, no
-  blank line between repos.
+- **Multi-repo** → a **header `[<issue-key>] <story description>`**, then **one line
+  per repo: `<Service>: <link>`** — label and link on the SAME line. Subject lives in
+  the header; never repeat it per repo. No key repeated, no blank line between repos.
 - **No-ticket** → swap `[<issue-key>]` for a short `[<slug>]` tag so the lines still
   group.
 - **Run line** → after the link(s), one **copy-paste** `corgi run` spinning up every
@@ -765,10 +765,8 @@ https://github.com/<org>/<repo>/pull/<n>
 ▶ corgi run --service-branch web=feature/ABC-123/remove-address-step --with-deps
 
 [ABC-200] Add phone field to user
-api: Add phone field to user
-https://github.com/<org>/api/pull/<n>
-web: Add phone field to user
-https://github.com/<org>/web/pull/<n>
+api: https://github.com/<org>/api/pull/<n>
+web: https://github.com/<org>/web/pull/<n>
 ↳ review it: /corgi-review https://github.com/<org>/api/pull/<n> https://github.com/<org>/web/pull/<n>
 ▶ corgi run --with-deps --service-branch api=feature/ABC-200/user-phone --service-branch web=feature/ABC-200/user-phone
 
