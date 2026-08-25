@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -47,6 +49,11 @@ type UserConfig struct {
 	Version    int                        `yaml:"version"`
 	Workspaces map[string]WorkspaceConfig `yaml:"workspaces"`
 	Defaults   WorkspaceConfig            `yaml:"defaults"`
+	// Profiles are named setting bundles pickable at session-start time —
+	// "work", "personal" — for running one workspace under different Claude
+	// accounts. Trusted like everything else here: a remote caller sends only
+	// a profile NAME; what it selects is defined in this file.
+	Profiles map[string]WorkspaceConfig `yaml:"profiles"`
 }
 
 // WorkspaceConfig is everything that grants capability. Trusted sources only.
@@ -217,6 +224,29 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	base.InheritAPIKey = base.InheritAPIKey || over.InheritAPIKey
 	base.InheritOAuthToken = base.InheritOAuthToken || over.InheritOAuthToken
 	return base
+}
+
+// ApplyProfile overlays a named profile onto already-resolved settings. The
+// name may come from an untrusted caller (a phone); everything it selects is
+// defined in the trusted file, so remote picks from the menu, never cooks.
+func ApplyProfile(r Resolved, user *UserConfig, name string) (Resolved, error) {
+	if name == "" {
+		return r, nil
+	}
+	if user == nil || len(user.Profiles) == 0 {
+		return r, fmt.Errorf("no profiles defined — add a profiles: section to the agent config")
+	}
+	p, ok := user.Profiles[name]
+	if !ok {
+		names := make([]string, 0, len(user.Profiles))
+		for n := range user.Profiles {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		return r, fmt.Errorf("unknown profile %q (defined: %s)", name, strings.Join(names, ", "))
+	}
+	r.WorkspaceConfig = overlay(r.WorkspaceConfig, p)
+	return r, nil
 }
 
 // AutostartEnabled reports whether the workspace should be supervised.

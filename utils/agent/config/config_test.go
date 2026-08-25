@@ -305,3 +305,38 @@ func TestCredentialEnvOverlays(t *testing.T) {
 		t.Errorf("credentialEnv = %v, want the workspace's own list", got.CredentialEnv)
 	}
 }
+
+func TestApplyProfileOverlaysTrustedSettings(t *testing.T) {
+	user := &UserConfig{
+		Profiles: map[string]WorkspaceConfig{
+			"work": {ConfigDir: "~/claude-configs/work", Bin: "claude-work"},
+		},
+	}
+	base := Resolve("acme", nil, user)
+	got, err := ApplyProfile(base, user, "work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ConfigDir != "~/claude-configs/work" || got.Bin != "claude-work" {
+		t.Fatalf("profile not applied: %+v", got.WorkspaceConfig)
+	}
+}
+
+func TestApplyProfileUnknownNameListsTheMenu(t *testing.T) {
+	user := &UserConfig{Profiles: map[string]WorkspaceConfig{"work": {}, "personal": {}}}
+	_, err := ApplyProfile(Resolve("acme", nil, user), user, "gaming")
+	if err == nil {
+		t.Fatal("unknown profile must error")
+	}
+	if !contains(err.Error(), "personal") || !contains(err.Error(), "work") {
+		t.Errorf("error should list defined profiles, got %q", err)
+	}
+}
+
+func TestApplyProfileEmptyNameIsANoOp(t *testing.T) {
+	base := Resolve("acme", nil, nil)
+	got, err := ApplyProfile(base, nil, "")
+	if err != nil || got.ID != "acme" {
+		t.Fatalf("empty profile must pass through, got %+v, %v", got, err)
+	}
+}
