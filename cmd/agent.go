@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/brief"
+	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
@@ -304,6 +306,16 @@ func printWorkspaceState(w supervisor.RunState) {
 	if w.LastReason != "" {
 		fmt.Printf("  %-20s %s\n", "", w.LastReason)
 	}
+	if w.Origin == supervisor.OriginRemote {
+		label := "started remotely"
+		if w.Profile != "" {
+			label += " · profile " + w.Profile
+		}
+		fmt.Printf("  %-20s %s\n", "", label)
+	}
+	if w.SessionURL != "" {
+		fmt.Printf("  %-20s %s\n", "", w.SessionURL)
+	}
 }
 
 // workspaceState collapses the flags into the one word worth reading first.
@@ -447,6 +459,79 @@ var agentWorkspacesRelocateCmd = &cobra.Command{
 	},
 }
 
+// ---------------------------------------------------------------- session
+
+var agentSessionCmd = &cobra.Command{
+	Use:   "session",
+	Short: "Start or stop a supervised session in a workspace, on demand",
+}
+
+var agentSessionStartCmd = &cobra.Command{
+	Use:   "start <workspace>",
+	Short: "Ask the running daemon to start a session in a workspace",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		profile, _ := cmd.Flags().GetString("profile")
+		enqueueSessionCommand(command.ActionStart, args, profile)
+	},
+}
+
+var agentSessionStopCmd = &cobra.Command{
+	Use:   "stop <workspace>",
+	Short: "Ask the running daemon to stop a workspace's session",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		enqueueSessionCommand(command.ActionStop, args, "")
+	},
+}
+
+// enqueueSessionCommand resolves the workspace, writes the spool command and
+// nudges the daemon — the same path the MCP tools use, so the two surfaces
+// cannot drift.
+func enqueueSessionCommand(action string, args []string, profile string) {
+	registry, _ := mustLoadRegistry()
+	registry.Reconcile(dirHasComposeFile)
+	res := workspace.Resolve(registry, strings.Join(args, " "))
+	if !res.Resolved() {
+		if utils.JSONOutput {
+			utils.PrintJSON(res)
+		} else {
+			fmt.Println(res.Reason)
+			for _, c := range res.Candidates {
+				fmt.Printf("  %-20s %s\n", c.Workspace.ID, c.Workspace.AbsPath)
+			}
+		}
+		os.Exit(2)
+	}
+
+	dir, err := agentDir()
+	if err != nil {
+		exitWithError("agent_data_dir", err, 1)
+	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil {
+		exitWithError("agent_session", err, 1)
+	}
+	if info == nil {
+		exitWithError("agent_not_running",
+			errors.New("corgi agent is not running — start it with `corgi agent serve`, or `corgi agent install` to start at login"), 1)
+	}
+
+	c, err := command.Write(dir, command.Command{
+		Action: action, WorkspaceID: res.Workspace.ID, Profile: profile, Source: "cli",
+	})
+	if err != nil {
+		exitWithError("agent_session", err, 1)
+	}
+	daemon.Nudge(info)
+
+	if utils.JSONOutput {
+		utils.PrintJSON(map[string]any{"queued": action, "workspaceId": res.Workspace.ID, "commandId": c.ID})
+		return
+	}
+	utils.Infof("%s queued for %s — watch `corgi agent status` for the session URL\n", action, res.Workspace.ID)
+}
+
 var agentResolveCmd = &cobra.Command{
 	Use:   "resolve <name>",
 	Short: "Show which workspace a name resolves to, without starting anything",
@@ -497,11 +582,15 @@ func init() {
 
 	agentBriefCmd.Flags().Bool("json", false, "Machine-readable output")
 
+	agentSessionStartCmd.Flags().String("profile", "", "Profile from the agent config's profiles: section (e.g. work)")
+	agentSessionCmd.AddCommand(agentSessionStartCmd, agentSessionStopCmd)
+
 	agentWorkspacesCmd.AddCommand(agentWorkspacesListCmd, agentWorkspacesForgetCmd, agentWorkspacesRelocateCmd)
 	agentCmd.AddCommand(
 		agentServeCmd,
 		agentStatusCmd,
 		agentStopCmd,
+		agentSessionCmd,
 		agentWorkspacesCmd,
 		agentResolveCmd,
 		agentBriefCmd,
