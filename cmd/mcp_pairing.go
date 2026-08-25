@@ -131,6 +131,8 @@ const pairPageHTML = `<!doctype html>
   pre{background:#1a1d23;border:1px solid #333;border-radius:.5rem;padding:.8rem;
       overflow-x:auto;font-size:.78rem;line-height:1.4;white-space:pre;margin:.6rem 0}
   #copy{margin-bottom:.4rem}
+  a.open{display:inline-block;background:#7ee787;color:#0f1115;text-decoration:none;
+      padding:.7rem 1.1rem;border-radius:.6rem;font-weight:600}
 </style>
 <main>
   <h1>🐕 Pair with corgi</h1>
@@ -154,18 +156,22 @@ const pairPageHTML = `<!doctype html>
         body: JSON.stringify({code, device})});
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
+      try { localStorage.setItem('corgi_token', j.token); } catch (_) {}
       const mcpUrl = location.origin + '/mcp';
       const connector = JSON.stringify({mcpServers:{corgi:{url:mcpUrl,
         headers:{Authorization:'Bearer ' + j.token}}}}, null, 2);
       out.innerHTML =
         '<span class="ok">✓ Paired as <b>' + esc(device) + '</b> with <b>' +
           esc(j.daemon||'this machine') + '</b></span>' +
-        '<p>Add corgi to your Claude app as a custom connector — tap to copy, paste once:</p>' +
+        '<p>Open the launcher to see your repos and start a session — one tap, ' +
+          'no setup. Save it to your home screen to come back:</p>' +
+        '<a class="open" href="/app">Open launcher →</a>' +
+        '<p style="margin-top:1.4rem">Prefer the Claude app instead? Add corgi as a ' +
+          'custom connector (on claude.ai) — tap to copy:</p>' +
         '<pre id="cfg">' + esc(connector) + '</pre>' +
         '<button id="copy">Copy connector config</button>' +
-        '<p>Then just say: <b>“start a session in &lt;your repo&gt;”</b> — Claude hands ' +
-          'you a link that opens the conversation in that repo. This token is shown ' +
-          'once; the config above is the only copy.</p>';
+        '<p>This token is shown once; the launcher remembers it on this browser, ' +
+          'and the config above is the only other copy.</p>';
       btn.remove();
       document.getElementById('copy').onclick = async (e) => {
         try { await navigator.clipboard.writeText(connector); e.target.textContent = '✓ Copied'; }

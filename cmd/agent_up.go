@@ -345,7 +345,10 @@ func printAgentUp(res agentUpResult) {
 		fmt.Printf("  %s\n", res.Hint)
 	}
 	fmt.Println()
-	fmt.Println("  start a session from anywhere: corgi_session_start {\"workspace\":\"" + orDefault(res.Workspace, "<name>") + "\"}")
+	if res.PublicURL != "" {
+		fmt.Printf("  after scanning, the phone opens the launcher — tap a repo to start:\n    %s/app\n", res.PublicURL)
+	}
+	fmt.Println("  or from any MCP client: corgi_session_start {\"workspace\":\"" + orDefault(res.Workspace, "<name>") + "\"}")
 }
 
 // printTerminalQR renders a scannable QR in the terminal, indented to match

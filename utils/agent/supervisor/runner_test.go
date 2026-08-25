@@ -93,6 +93,10 @@ func TestRunnerRestartsAfterNetworkTimeout(t *testing.T) {
 	go func() { defer close(done); _ = r.Run(ctx) }()
 
 	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notified) > 0 })
+	// The notification fires when the restart is DECIDED, a hair before the
+	// replacement process starts. Wait for it to actually be running, or cancel
+	// can land in the gap and the second Start never happens (a flake).
+	waitFor(t, func() bool { return r.State().Running })
 	cancel()
 	<-done
 

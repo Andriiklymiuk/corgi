@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 
 	"andriiklymiuk/corgi/utils"
@@ -24,12 +23,6 @@ import (
 )
 
 var agentCmd = &cobra.Command{
-	// Cobra runs only the nearest PersistentPreRun, so this replicates the
-	// root's applyGlobalFlags before doing the one-time agent-data migration.
-	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
-		applyGlobalFlags(cmd)
-		migrateAgentDataDir()
-	},
 	Use:   "agent",
 	Short: "Keep Claude Code Remote Control running for your corgi workspaces",
 	Long: `Agent mode makes this machine an always-on, multi-repo Remote Control host.
@@ -50,93 +43,16 @@ Getting started:
 
 // agentDir is where agent mode keeps daemon.json, status.json and the registry.
 //
-// It uses the per-user data directory, never the Homebrew prefix: a registry of
-// paths and per-device tokens is user data, and a brew reinstall must not wipe
-// it. Early builds wrote under the legacy brew location; a one-time move brings
-// that data across.
+// It uses the per-user data directory (NativeDataDir), never the Homebrew
+// prefix: a registry of paths and per-device tokens is user data, and a brew
+// reinstall must not wipe it. Agent mode is new, so there is no legacy data to
+// carry across.
 func agentDir() (string, error) {
 	base, err := utils.NativeDataDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(base, "agent"), nil
-}
-
-var agentMigrateOnce sync.Once
-
-// migrateAgentDataDir runs the legacy move for the resolved agent dir. Called
-// from the agent and mcp command entry points, never from agentDir(), so a test
-// that merely resolves the path never touches a real directory.
-func migrateAgentDataDir() {
-	dir, err := agentDir()
-	if err != nil {
-		return
-	}
-	migrateLegacyAgentDir(dir)
-}
-
-// migrateLegacyAgentDir moves agent data out of the legacy Homebrew var/
-// location into the per-user data dir, once per process. Agent mode is new, so
-// this only affects early builds. A rename suffices on one volume; a recursive
-// copy is the cross-volume fallback, so nothing is lost.
-func migrateLegacyAgentDir(newDir string) {
-	agentMigrateOnce.Do(func() {
-		legacyBase, err := utils.CorgiDataDir()
-		if err != nil {
-			return
-		}
-		legacy := filepath.Join(legacyBase, "agent")
-		if legacy == newDir {
-			return // CORGI_DATA_DIR override or no brew legacy: nothing to move
-		}
-		if _, err := os.Stat(newDir); err == nil {
-			return // already migrated, or a fresh install
-		}
-		if info, err := os.Stat(legacy); err != nil || !info.IsDir() {
-			return // no legacy data
-		}
-		if err := os.MkdirAll(filepath.Dir(newDir), 0o700); err != nil {
-			return
-		}
-		if err := os.Rename(legacy, newDir); err == nil {
-			utils.Infof("corgi: moved agent data from %s to %s\n", legacy, newDir)
-			return
-		}
-		// Cross-device or other rename failure: copy, then remove the original.
-		if err := copyTreePreservingModes(legacy, newDir); err != nil {
-			utils.Infof("corgi: could not move agent data from %s: %v\n", legacy, err)
-			return
-		}
-		_ = os.RemoveAll(legacy)
-		utils.Infof("corgi: moved agent data from %s to %s\n", legacy, newDir)
-	})
-}
-
-// copyTreePreservingModes recursively copies src to dst, preserving file modes
-// exactly — the agent config and device store are 0600 and must stay so.
-func copyTreePreservingModes(src, dst string) error {
-	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return os.MkdirAll(target, info.Mode().Perm())
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, info.Mode().Perm())
-	})
 }
 
 func agentUserConfigPath(dir string) string { return filepath.Join(dir, "config.yml") }

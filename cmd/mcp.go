@@ -116,10 +116,6 @@ func runMCP(cmd *cobra.Command, _ []string) {
 	utils.NonInteractive = true
 	utils.JSONOutput = true
 
-	// The MCP tools read agent data; bring any legacy brew-located data across
-	// before they do.
-	migrateAgentDataDir()
-
 	s := server.NewMCPServer("corgi", APP_VERSION)
 	registerMCPTools(s)
 	registerMCPResources(s)
@@ -321,6 +317,17 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	// Only /mcp is behind the bearer check; other paths 404.
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", bearerAuth(token, httpSrv, deviceStore))
+
+	// The launcher: corgi's own phone UI. /app is a static page (no secret); its
+	// data endpoints sit behind the same bearer/device-token auth as /mcp and do
+	// the same thing the session tools do. Mounted only when there is some auth
+	// to gate them — otherwise /launch/start would be an unauthenticated way to
+	// spawn sessions.
+	if token != "" || deviceStore != "" {
+		mux.HandleFunc("/app", launcherPageHandler)
+		mux.Handle("/launch/workspaces", bearerAuth(token, http.HandlerFunc(launchWorkspacesHandler), deviceStore))
+		mux.Handle("/launch/start", bearerAuth(token, http.HandlerFunc(launchStartHandler), deviceStore))
+	}
 
 	// /pair is deliberately NOT behind the bearer check: its whole purpose is
 	// to serve a client that has no token yet. It is guarded by the pairing
