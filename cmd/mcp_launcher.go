@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
 // The launcher is corgi's own phone UI: after pairing, the same browser page
@@ -31,6 +32,7 @@ type launchWorkspace struct {
 	Status     string   `json:"status"`
 	Running    bool     `json:"running"`
 	SessionURL string   `json:"sessionUrl,omitempty"`
+	Note       string   `json:"note,omitempty"`
 }
 
 func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
@@ -46,12 +48,37 @@ func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	registry.Reconcile(dirHasComposeFile)
 
-	running := map[string]wsRunState{}
+	var status *daemon.Status
 	if dir, derr := agentDir(); derr == nil {
-		if st, _ := daemon.ReadStatus(dir); st != nil {
-			for _, ws := range st.Workspaces {
-				running[ws.WorkspaceID] = wsRunState{running: ws.Running, url: ws.SessionURL}
+		status, _ = daemon.ReadStatus(dir)
+	}
+	out := buildLaunchWorkspaces(registry, status)
+	writeLaunchJSON(w, map[string]any{"workspaces": out})
+}
+
+type wsRunState struct {
+	running bool
+	url     string
+	note    string
+}
+
+// buildLaunchWorkspaces joins the registry with the daemon's live status into
+// the launcher rows. A start the daemon refused (sensitive, unknown profile,
+// unreachable, bad bin) leaves a diagnostic warning, not a run state — merging
+// it in is what stops the phone showing "Starting…" then silently giving up.
+func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) []launchWorkspace {
+	running := map[string]wsRunState{}
+	if status != nil {
+		for _, ws := range status.Workspaces {
+			running[ws.WorkspaceID] = wsRunState{running: ws.Running, url: ws.SessionURL, note: ws.LastReason}
+		}
+		for _, d := range status.Diagnostics {
+			if d.Warning == "" {
+				continue
 			}
+			s := running[d.WorkspaceID]
+			s.note = d.Warning
+			running[d.WorkspaceID] = s
 		}
 	}
 
@@ -60,16 +87,11 @@ func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 		s := running[ws.ID]
 		out = append(out, launchWorkspace{
 			ID: ws.ID, Aliases: ws.Aliases, Path: ws.AbsPath,
-			Status: string(ws.Status), Running: s.running, SessionURL: s.url,
+			Status: string(ws.Status), Running: s.running, SessionURL: s.url, Note: s.note,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	writeLaunchJSON(w, map[string]any{"workspaces": out})
-}
-
-type wsRunState struct {
-	running bool
-	url     string
+	return out
 }
 
 func launchStartHandler(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +160,7 @@ const launcherPageHTML = `<!doctype html>
       display:flex;align-items:center;justify-content:space-between;gap:.6rem}
   .ws .name{font-weight:600}
   .ws .path{color:#8a90a6;font-size:.72rem;word-break:break-all;margin-top:.15rem}
+  .ws .wnote{color:#ff7b72;font-size:.72rem;margin-top:.3rem;line-height:1.4}
   .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a3f4b;flex:0 0 auto}
   .dot.on{background:#7ee787}
   button{border:0;border-radius:.55rem;padding:.5rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;
@@ -195,8 +218,11 @@ const launcherPageHTML = `<!doctype html>
       const row = document.createElement('div');
       row.className = 'ws';
       const left = document.createElement('div');
+      // A note is shown only when the workspace is NOT running (a live session's
+      // stale lastReason is not a problem to flag).
+      const note = (!ws.running && ws.note) ? '<div class="wnote">' + esc(ws.note) + '</div>' : '';
       left.innerHTML = '<div class="name"><span class="dot' + (ws.running ? ' on' : '') + '"></span> ' +
-        esc(ws.id) + '</div><div class="path">' + esc(ws.path) + '</div>';
+        esc(ws.id) + '</div><div class="path">' + esc(ws.path) + '</div>' + note;
       const right = document.createElement('div');
       if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
         const a = document.createElement('a');
@@ -205,7 +231,7 @@ const launcherPageHTML = `<!doctype html>
         right.appendChild(a);
       } else {
         const b = document.createElement('button');
-        b.textContent = ws.running ? 'Starting…' : 'Start';
+        b.textContent = ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
         b.disabled = ws.running;
         b.onclick = () => startSession(ws.id, b);
         right.appendChild(b);
@@ -237,7 +263,9 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/workspaces', { headers: auth });
       const j = await r.json();
       const ws = (j.workspaces || []).find(w => w.id === id);
-      if (ws && ws.sessionUrl) { render(j.workspaces); return; }
+      // Got the link, or the daemon reported why it won't start — either way, stop
+      // polling and re-render so the reason (or the Open button) shows.
+      if (ws && (ws.sessionUrl || (!ws.running && ws.note))) { render(j.workspaces); return; }
     } catch {}
     setTimeout(() => poll(id, n + 1), 1000);
   }

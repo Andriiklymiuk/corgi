@@ -6,6 +6,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/supervisor"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
 func TestLaunchWorkspacesReturnsTheRegistry(t *testing.T) {
@@ -91,5 +95,53 @@ func TestLauncherPageIsSelfContainedAndUsesTheStoredToken(t *testing.T) {
 	}
 	if strings.Contains(body, "src=\"http") || strings.Contains(body, "href=\"http") {
 		t.Error("the launcher must be self-contained — no external assets")
+	}
+	// Lock the session-link hardening in place so it can't be silently removed.
+	if !strings.Contains(body, "safeClaudeUrl(") {
+		t.Error("the session link must be gated by safeClaudeUrl — a scanned URL must be validated before it is clickable")
+	}
+	if !strings.Contains(body, "noopener") {
+		t.Error("the session link must open with rel=noopener")
+	}
+}
+
+func TestBuildLaunchWorkspacesSurfacesADiagnostic(t *testing.T) {
+	reg := &workspace.Registry{}
+	reg.Upsert(workspace.Workspace{ID: "acme", AbsPath: "/dev/acme", Status: workspace.StatusOK})
+	st := &daemon.Status{
+		Diagnostics: []daemon.WorkspaceDiagnostic{
+			{WorkspaceID: "acme", Warning: "workspace acme is marked sensitive — remote session start is refused"},
+		},
+	}
+	out := buildLaunchWorkspaces(reg, st)
+	if len(out) != 1 {
+		t.Fatalf("rows = %d", len(out))
+	}
+	if !strings.Contains(out[0].Note, "sensitive") {
+		t.Errorf("note = %q; a refused start's reason must reach the launcher, not vanish", out[0].Note)
+	}
+	if out[0].Running {
+		t.Error("a refused workspace is not running")
+	}
+}
+
+func TestBuildLaunchWorkspacesRunningWithURL(t *testing.T) {
+	reg := &workspace.Registry{}
+	reg.Upsert(workspace.Workspace{ID: "acme", AbsPath: "/dev/acme", Status: workspace.StatusOK})
+	st := &daemon.Status{
+		Workspaces: []supervisor.RunState{{WorkspaceID: "acme", Running: true, SessionURL: "https://claude.ai/code/x"}},
+	}
+	out := buildLaunchWorkspaces(reg, st)
+	if !out[0].Running || out[0].SessionURL == "" {
+		t.Errorf("a running workspace must carry its state + url, got %+v", out[0])
+	}
+}
+
+func TestBuildLaunchWorkspacesNilStatus(t *testing.T) {
+	reg := &workspace.Registry{}
+	reg.Upsert(workspace.Workspace{ID: "acme", AbsPath: "/dev/acme", Status: workspace.StatusOK})
+	out := buildLaunchWorkspaces(reg, nil)
+	if len(out) != 1 || out[0].Running || out[0].Note != "" {
+		t.Errorf("with no daemon, a workspace is just listed idle, got %+v", out[0])
 	}
 }

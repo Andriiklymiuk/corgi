@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	"andriiklymiuk/corgi/utils"
@@ -23,6 +24,13 @@ import (
 )
 
 var agentCmd = &cobra.Command{
+	// Cobra runs only the nearest PersistentPreRun, so replicate the root's
+	// global-flag handling, then warn once if agent data was left at the old
+	// location by the data-dir move.
+	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		applyGlobalFlags(cmd)
+		warnStrandedAgentData()
+	},
 	Use:   "agent",
 	Short: "Keep Claude Code Remote Control running for your corgi workspaces",
 	Long: `Agent mode makes this machine an always-on, multi-repo Remote Control host.
@@ -53,6 +61,39 @@ func agentDir() (string, error) {
 		return "", err
 	}
 	return filepath.Join(base, "agent"), nil
+}
+
+var legacyAgentWarnOnce sync.Once
+
+// warnStrandedAgentData says once, if agent data exists at the old Homebrew-var
+// location but not the new per-user one, that the location changed and the old
+// setup is not carried over. Called from command entry points (never agentDir,
+// so path resolution stays side-effect-free); a plain notice, never a move —
+// agent mode is unreleased, so there is nothing to migrate for real users.
+func warnStrandedAgentData() {
+	legacyAgentWarnOnce.Do(func() {
+		newDir, err := agentDir()
+		if err != nil {
+			return
+		}
+		if _, err := os.Stat(newDir); err == nil {
+			return // already using the new location
+		}
+		legacyBase, err := utils.CorgiDataDir()
+		if err != nil {
+			return
+		}
+		legacy := filepath.Join(legacyBase, "agent")
+		if legacy == newDir {
+			return // no separate legacy location (CORGI_DATA_DIR override, etc.)
+		}
+		if info, statErr := os.Stat(legacy); statErr != nil || !info.IsDir() {
+			return // nothing stranded
+		}
+		utils.Infof("corgi: agent data now lives at %s (was %s).\n"+
+			"The old setup is not carried over — re-run `corgi agent init` and re-pair your devices.\n",
+			newDir, legacy)
+	})
 }
 
 func agentUserConfigPath(dir string) string { return filepath.Join(dir, "config.yml") }

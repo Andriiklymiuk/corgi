@@ -116,6 +116,8 @@ func runMCP(cmd *cobra.Command, _ []string) {
 	utils.NonInteractive = true
 	utils.JSONOutput = true
 
+	warnStrandedAgentData()
+
 	s := server.NewMCPServer("corgi", APP_VERSION)
 	registerMCPTools(s)
 	registerMCPResources(s)
