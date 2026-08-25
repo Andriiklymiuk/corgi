@@ -467,12 +467,12 @@ func (d *Daemon) stopRemoteWorkspace(c command.Command) {
 		// runner just means "not running" — not a failure to flash at the owner.
 		return
 	}
-	// Stop off the drain goroutine: it blocks up to stopGrace (5s) waiting for
-	// the process to exit, and a batch of stops would otherwise stall the loop
-	// long enough to age queued commands past their TTL and drop them. Stop is
-	// idempotent, and Supervising() already reads false the instant it is
-	// called, so a follow-up command sees the right state immediately.
-	go r.Stop()
+	// StopAsync sets the stop flag synchronously — so a start later in this same
+	// drain batch sees Supervising()==false and is not deduplicated against a
+	// runner on its way out — then backgrounds the blocking teardown (up to
+	// stopGrace) so a batch of stops cannot stall the loop and age queued
+	// commands past their TTL.
+	r.StopAsync()
 	d.announceRemote(c, "session stopped remotely")
 	d.requestPublish()
 }

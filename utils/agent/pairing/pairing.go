@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // ErrBadRequest marks failures caused by the caller's own input — a wrong or
@@ -336,6 +337,15 @@ func Pair(storePath string, session *Session, code, deviceName string) (string, 
 	}
 	if len(deviceName) > 64 {
 		return "", fmt.Errorf("%w: device name is too long", ErrBadRequest)
+	}
+	// The name is stored and later printed by `corgi mcp devices list`. A
+	// control character (ANSI escape, newline) in it would rewrite that
+	// terminal output, so reject anything unprintable rather than sanitize on
+	// display in every reader.
+	for _, r := range deviceName {
+		if r == '\t' || !unicode.IsGraphic(r) {
+			return "", fmt.Errorf("%w: device name must be printable text", ErrBadRequest)
+		}
 	}
 	if err := session.Redeem(code); err != nil {
 		return "", err

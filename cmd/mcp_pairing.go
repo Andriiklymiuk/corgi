@@ -41,6 +41,13 @@ const maxPairBodyBytes = 4 << 10
 // scan-to-pair page, POST performs the pairing.
 func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The POST response carries a device token and the GET page carries the
+		// copy-paste connector: keep both out of any intermediary cache, and
+		// stop content sniffing. Defense in depth — the default cloudflared
+		// tunnel caches neither, but a corporate proxy on the client path might.
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
 		if r.Method == http.MethodGet {
 			// The page holds no secret: the code travels only in the URL
 			// fragment (which never reaches the server) and is typed back by

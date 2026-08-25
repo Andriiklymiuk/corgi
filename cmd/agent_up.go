@@ -7,7 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -59,6 +61,16 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_data_dir", err, 1)
 	}
 
+	// One `agent up` at a time. Two racing invocations both pass the listening
+	// check, both truncate mcp.log, and one ends up an orphaned server logging
+	// to an unlinked file while both report failure. The lock makes the loser
+	// wait its turn instead.
+	release, err := acquireUpLock(dir)
+	if err != nil {
+		exitWithError("agent_up_locked", err, 1)
+	}
+	defer release()
+
 	var res agentUpResult
 	res.MCPAddr = addr
 
@@ -72,12 +84,14 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 
 	res.LogPath = filepath.Join(dir, "mcp.log")
 	if mcpListening(addr) {
-		// A second pairing window needs a fresh `corgi mcp` start; saying so
-		// beats silently reusing an endpoint that cannot pair anyone new.
-		res.Hint = "MCP already listening — to pair another device, stop it and rerun `corgi agent up`"
-		if url := readMCPRecord(dir); url != "" {
-			res.PublicURL = url
-		}
+		// Something already holds the port. It cannot be probed for identity
+		// here, and a pairing window is single-use anyway, so do not claim it is
+		// corgi or reprint a possibly-stale URL as current — point at the log
+		// and tell the user how to get a fresh window.
+		res.Hint = fmt.Sprintf(
+			"%s is already in use. If it is your corgi MCP server, its output is in %s; "+
+				"to pair a new device, stop it and rerun `corgi agent up` (or pass --http with a free port).",
+			addr, res.LogPath)
 		printAgentUp(res)
 		return
 	}
@@ -98,7 +112,6 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		// logs, only the pair page's own JS.
 		res.PairURL = res.PublicURL + "/pair#" + res.PairCode
 	}
-	writeMCPRecord(dir, res.PublicURL)
 
 	printAgentUp(res)
 }
@@ -188,6 +201,50 @@ func spawnDetached(dir, logName string, args ...string) error {
 	return c.Start()
 }
 
+// acquireUpLock takes an exclusive, pid-stamped lock so only one `agent up`
+// runs at a time. A lock left by a crashed run whose pid is gone is reclaimed
+// rather than blocking forever.
+func acquireUpLock(dir string) (func(), error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, "agent-up.lock")
+	for attempt := 0; attempt < 2; attempt++ {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
+			_ = f.Close()
+			return func() { _ = os.Remove(path) }, nil
+		}
+		if !os.IsExist(err) {
+			return nil, err
+		}
+		if upLockIsStale(path) {
+			_ = os.Remove(path)
+			continue
+		}
+		return nil, fmt.Errorf("another `corgi agent up` is already running — wait for it, or remove %s if it crashed", path)
+	}
+	return nil, fmt.Errorf("could not take the agent-up lock at %s", path)
+}
+
+// upLockIsStale reports whether the lock's owning process is gone.
+func upLockIsStale(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return true
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return true
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return true
+	}
+	return proc.Signal(syscall.Signal(0)) != nil
+}
+
 func mcpListening(addr string) bool {
 	conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
 	if err != nil {
@@ -204,8 +261,11 @@ type mcpLogInfo struct {
 
 var (
 	mcpPublicURLPattern = regexp.MustCompile(`public MCP endpoint: (\S+)/mcp`)
-	mcpPairCodePattern  = regexp.MustCompile(`pairing code: (\S+)`)
-	mcpFatalPattern     = regexp.MustCompile(`(?m)^(mcp server error:|corgi mcp --pair cannot|could not start pairing:|tunnel: )`)
+	// Anchored to the newline so a code read mid-write ("pairing code: WOR"
+	// before "D-123\n" lands) is not captured truncated and QR-encoded wrong.
+	// The URL pattern needs no such guard: its /mcp suffix is the terminator.
+	mcpPairCodePattern = regexp.MustCompile(`pairing code: (\S+)\n`)
+	mcpFatalPattern    = regexp.MustCompile(`(?m)^(mcp server error:|corgi mcp --pair cannot|could not start pairing:|tunnel: )`)
 )
 
 // parseMCPLog extracts what the summary needs from `corgi mcp`'s own output.
@@ -246,23 +306,6 @@ func awaitMCPLog(path string, timeout time.Duration) (mcpLogInfo, error) {
 		return last, nil
 	}
 	return last, fmt.Errorf("no pairing code within %s", timeout)
-}
-
-func mcpRecordPath(dir string) string { return filepath.Join(dir, "mcp-url.txt") }
-
-func writeMCPRecord(dir, url string) {
-	if url == "" {
-		return
-	}
-	_ = os.WriteFile(mcpRecordPath(dir), []byte(url+"\n"), 0o600)
-}
-
-func readMCPRecord(dir string) string {
-	data, err := os.ReadFile(mcpRecordPath(dir))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
 }
 
 func printAgentUp(res agentUpResult) {

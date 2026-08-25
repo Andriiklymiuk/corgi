@@ -654,3 +654,33 @@ func TestDynamicDaemonDrainsOnTheTickWithoutANudge(t *testing.T) {
 	cancel()
 	<-done
 }
+
+func TestDynamicDaemonRestartBatchDoesNotDropTheStart(t *testing.T) {
+	// The phone "restart my session" gesture is a stop immediately followed by a
+	// start, both draining in one batch. The start must not be deduplicated
+	// against the runner the stop is tearing down, or the session would stop and
+	// never come back.
+	d := dynDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
+	d.Nudge()
+	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
+
+	now := time.Now().UTC()
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStop, WorkspaceID: "acme", RequestedAt: now})
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme", RequestedAt: now.Add(time.Millisecond)})
+	d.Nudge()
+
+	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
+	// And it stays running — the stop's backgrounded teardown must not later
+	// knock out the fresh runner.
+	time.Sleep(80 * time.Millisecond)
+	if s := d.Status(); len(s.Workspaces) != 1 || !s.Workspaces[0].Running {
+		t.Fatalf("after a stop+start batch the workspace must be running, got %+v", s.Workspaces)
+	}
+	cancel()
+	<-done
+}

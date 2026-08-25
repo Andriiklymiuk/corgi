@@ -118,11 +118,34 @@ func (r *Runner) State() RunState {
 	return s
 }
 
-// Stop asks the supervised process to exit and keeps it stopped.
+// Stop asks the supervised process to exit and keeps it stopped, blocking until
+// the process teardown is initiated.
 //
 // The flag matters: without it the loop sees an ordinary exit, classifies it as
 // a crash or a network timeout, and starts the process straight back up.
 func (r *Runner) Stop() {
+	proc := r.beginStop()
+	if proc != nil {
+		proc.Stop()
+	}
+}
+
+// StopAsync marks the runner stopped SYNCHRONOUSLY — so Supervising() reads
+// false the instant it returns and a follow-up start in the same command batch
+// is not deduplicated against a runner already on its way out — then runs the
+// blocking process teardown (up to stopGrace) on its own goroutine. The command
+// loop uses this so a stop cannot stall it.
+func (r *Runner) StopAsync() {
+	proc := r.beginStop()
+	if proc != nil {
+		go proc.Stop()
+	}
+}
+
+// beginStop sets the stop flag and wakes any backoff sleep, returning the live
+// process (or nil) for the caller to terminate. The flag is set under the lock
+// before returning, which is the synchronous guarantee StopAsync relies on.
+func (r *Runner) beginStop() Process {
 	r.mu.Lock()
 	r.stopping = true
 	proc := r.proc
@@ -136,9 +159,7 @@ func (r *Runner) Stop() {
 			close(r.stopped)
 		}
 	})
-	if proc != nil {
-		proc.Stop()
-	}
+	return proc
 }
 
 // stopRequested reports whether Stop has been called.

@@ -77,3 +77,49 @@ func TestRegisterCwdWorkspaceDoesNotHijackABasenameCollision(t *testing.T) {
 		t.Errorf("the new workspace %q must point at cwd %q, got %q", id, collide, mine.AbsPath)
 	}
 }
+
+func TestParseMCPLogIgnoresATruncatedCode(t *testing.T) {
+	// mcp.log read mid-write: URL is complete, code line has no newline yet.
+	partial := "🌐 ✓ public MCP endpoint: https://abc.trycloudflare.com/mcp\n  pairing code: WOR"
+	if _, done := parseMCPLog(partial); done {
+		t.Error("a code with no line terminator must not be treated as complete — it could be mid-write")
+	}
+	full := partial + "D-123\n"
+	got, done := parseMCPLog(full)
+	if !done || got.pairCode != "WORD-123" {
+		t.Errorf("once the line completes, the whole code must be captured, got %q done=%v", got.pairCode, done)
+	}
+}
+
+func TestUpLockBlocksASecondHolderAndReleases(t *testing.T) {
+	dir := t.TempDir()
+	release, err := acquireUpLock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err2 := acquireUpLock(dir); err2 == nil {
+		t.Error("a second agent up must be refused while the first holds the lock")
+	}
+	release()
+	release2, err := acquireUpLock(dir)
+	if err != nil {
+		t.Fatalf("the lock must be retakeable after release, got %v", err)
+	}
+	release2()
+}
+
+func TestUpLockReclaimsAStaleLock(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A lock file with a pid that cannot be parsed is stale by definition.
+	if err := os.WriteFile(filepath.Join(dir, "agent-up.lock"), []byte("not-a-pid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	release, err := acquireUpLock(dir)
+	if err != nil {
+		t.Fatalf("a stale lock must be reclaimed, got %v", err)
+	}
+	release()
+}

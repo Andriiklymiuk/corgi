@@ -423,3 +423,16 @@ func TestCallerFacingErrorsAreTagged(t *testing.T) {
 		t.Errorf("an expired code should be caller-facing, got %v", err)
 	}
 }
+
+func TestPairRejectsAControlCharacterInTheDeviceName(t *testing.T) {
+	path := storeIn(t)
+	now := time.Now()
+	session, code := sessionAt(t, &now)
+	_, err := Pair(path, session, code, "phone\x1b[31mred")
+	if err == nil {
+		t.Fatal("a device name with an escape sequence must be rejected, or it rewrites `devices list` output")
+	}
+	if !errors.Is(err, ErrBadRequest) {
+		t.Errorf("must be a caller-input error, got %v", err)
+	}
+}
