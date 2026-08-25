@@ -82,6 +82,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 
 	d := daemon.New(APP_VERSION, dir)
 	d.CaptureBrief = captureWorkspaceBrief
+	d.ResolveWorkspace = remoteResolver(dir)
 	printStartupDiagnostics(configs)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -110,10 +111,49 @@ func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, er
 	var out []supervisor.SpawnConfig
 	for _, w := range registry.Sorted() {
 		if cfg, ok := spawnConfigForWorkspace(w, user, foreground); ok {
+			cfg.Origin = supervisor.OriginAutostart
 			out = append(out, cfg)
 		}
 	}
 	return out, nil
+}
+
+// remoteResolver builds launch settings for one workspace on demand,
+// reloading registry and config so a remote start sees the current files,
+// not the ones from daemon startup. No autostart check: a remote start IS
+// the explicit act autostart substitutes for.
+func remoteResolver(dir string) func(id, profile string) (supervisor.SpawnConfig, error) {
+	return func(id, profile string) (supervisor.SpawnConfig, error) {
+		registry, err := workspace.Load(agentRegistryPath(dir))
+		if err != nil {
+			return supervisor.SpawnConfig{}, err
+		}
+		registry.Reconcile(dirHasComposeFile)
+		w, ok := registry.Find(id)
+		if !ok {
+			return supervisor.SpawnConfig{}, fmt.Errorf("no workspace called %q in the registry — run `corgi agent scan` on the laptop", id)
+		}
+		if w.Status != workspace.StatusOK {
+			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is %s — fix the path with `corgi agent workspaces relocate`", w.ID, w.Status)
+		}
+		user, err := config.LoadUser(agentUserConfigPath(dir))
+		if err != nil {
+			return supervisor.SpawnConfig{}, err
+		}
+		repo, err := config.LoadRepo(w.AbsPath)
+		if err != nil {
+			return supervisor.SpawnConfig{}, err
+		}
+		resolved := config.Resolve(w.ID, repo, user)
+		resolved, err = config.ApplyProfile(resolved, user, profile)
+		if err != nil {
+			return supervisor.SpawnConfig{}, err
+		}
+		cfg := spawnConfigFrom(w, resolved, false)
+		cfg.Origin = supervisor.OriginRemote
+		cfg.Profile = profile
+		return cfg, nil
+	}
 }
 
 // spawnConfigForWorkspace decides whether one registered workspace should be
