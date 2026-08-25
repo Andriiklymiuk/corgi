@@ -83,3 +83,41 @@ func TestRemoteResolverRejectsAnUnknownWorkspace(t *testing.T) {
 		t.Errorf("an unknown workspace must error by name, got %v", err)
 	}
 }
+
+func TestRemoteResolverAppliesAProfileEndToEnd(t *testing.T) {
+	agentDir := t.TempDir()
+	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n")
+	registerStack(t, agentDir, "acme", stack)
+	if err := os.WriteFile(agentUserConfigPath(agentDir),
+		[]byte("version: 1\nprofiles:\n  work:\n    configDir: ~/claude-configs/work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := remoteResolver(agentDir, false)("acme", "work")
+
+	if err != nil {
+		t.Fatalf("profile start must resolve, got %v", err)
+	}
+	if cfg.ConfigDir != "~/claude-configs/work" {
+		t.Errorf("configDir = %q, want the profile's — the account did not take effect", cfg.ConfigDir)
+	}
+	if cfg.Profile != "work" {
+		t.Errorf("profile = %q, want work", cfg.Profile)
+	}
+}
+
+func TestRemoteResolverRejectsAnUnknownProfile(t *testing.T) {
+	agentDir := t.TempDir()
+	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n")
+	registerStack(t, agentDir, "acme", stack)
+	if err := os.WriteFile(agentUserConfigPath(agentDir),
+		[]byte("version: 1\nprofiles:\n  work: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := remoteResolver(agentDir, false)("acme", "gaming")
+
+	if err == nil || !strings.Contains(err.Error(), "work") {
+		t.Errorf("an unknown profile must error and list the defined ones, got %v", err)
+	}
+}

@@ -389,3 +389,30 @@ func TestURLScannerBoundsItsBuffer(t *testing.T) {
 		t.Fatalf("buffer grew to %d; a long-running session must not leak", n)
 	}
 }
+
+func TestStartProcessReportsTheSessionURLFromOutput(t *testing.T) {
+	fakeClaude(t, `echo "Remote control ready: https://claude.ai/code/session-xyz"; sleep 2`)
+	cfg := execConfig(t)
+	got := make(chan string, 1)
+	cfg.OnSessionURL = func(u string) {
+		select {
+		case got <- u:
+		default:
+		}
+	}
+
+	proc, err := StartProcess(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proc.Stop()
+
+	select {
+	case u := <-got:
+		if u != "https://claude.ai/code/session-xyz" {
+			t.Errorf("reported URL = %q", u)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the session URL was never reported — the scanner is not wired into StartProcess's output")
+	}
+}

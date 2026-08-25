@@ -232,6 +232,14 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 	startedAt := time.Now()
 	r.markRunning(proc, startedAt)
 
+	// Stop may have run between Start and markRunning, when r.proc was still nil
+	// and there was nothing for it to signal. It set stopping, so Supervising()
+	// is already false; without this the process would run unreachably until it
+	// exited on its own, and a later start would spawn a second one beside it.
+	if r.stopRequested() {
+		proc.Stop()
+	}
+
 	if r.Config.WakeLockMode() == WakeLockSession {
 		// A failure here is not fatal: the session is more useful awake-only
 		// than not running at all. Surfaced through status instead.

@@ -330,16 +330,15 @@ func mcpSessionStart(query, profile string) (any, error) {
 	if info == nil {
 		return nil, fmt.Errorf("the corgi agent daemon is not running — run `corgi agent serve` on the laptop, or `corgi agent install` to start at login")
 	}
-	if st, _ := daemon.ReadStatus(dir); st != nil {
-		for _, ws := range st.Workspaces {
-			if ws.WorkspaceID == w.ID && ws.Running {
-				return map[string]any{
-					"workspaceId": w.ID, "state": "running",
-					"sessionUrl": ws.SessionURL, "note": "already running",
-				}, nil
-			}
-		}
+	if !info.Commands {
+		return nil, fmt.Errorf("the running corgi agent predates remote session start — restart it (`corgi agent stop` then `corgi agent serve`) on the laptop")
 	}
+	// No status short-circuit: reading status.json here to answer "already
+	// running" races a stop that has been requested but not yet taken effect,
+	// which would report a dying session as running and enqueue nothing. The
+	// daemon's Supervising() check is the authoritative idempotency guard, and
+	// it orders a queued stop before this start by requestedAt, so enqueuing
+	// unconditionally is both correct and simplest.
 	c, err := command.Write(dir, command.Command{
 		Action: command.ActionStart, WorkspaceID: w.ID, Profile: profile, Source: "mcp",
 	})
@@ -373,6 +372,9 @@ func mcpSessionStop(query string) (any, error) {
 	}
 	if info == nil {
 		return nil, fmt.Errorf("the corgi agent daemon is not running — nothing to stop")
+	}
+	if !info.Commands {
+		return nil, fmt.Errorf("the running corgi agent predates remote session start — restart it on the laptop")
 	}
 	c, err := command.Write(dir, command.Command{
 		Action: command.ActionStop, WorkspaceID: w.ID, Source: "mcp",

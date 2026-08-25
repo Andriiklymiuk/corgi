@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -523,4 +524,133 @@ func TestDynamicDaemonAllowsAnEmptyStartupSet(t *testing.T) {
 	if err := d.Run(ctx, nil); err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("a command-capable daemon must stay up with zero autostart workspaces, got %v", err)
 	}
+}
+
+func TestDaemonSurvivesASIGUSR1Nudge(t *testing.T) {
+	// SIGUSR1's default disposition is to terminate the process. The daemon must
+	// install its handler before it becomes nudge-able and keep it for its whole
+	// lifetime, so a nudge is caught, never fatal — on the fixed path too.
+	d := testDaemon(t) // no ResolveWorkspace: the fixed lifecycle
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, []supervisor.SpawnConfig{cfg("acme", "/tmp")}) }()
+	waitFor(t, func() bool { return len(d.Status().Workspaces) == 1 })
+
+	if err := syscall.Kill(os.Getpid(), syscall.SIGUSR1); err != nil {
+		t.Skipf("cannot raise SIGUSR1 on this platform: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	select {
+	case <-done:
+		t.Fatal("the daemon exited on SIGUSR1 — the handler was not installed")
+	default:
+	}
+	if len(d.Status().Workspaces) != 1 {
+		t.Error("the daemon should still be supervising after a nudge")
+	}
+	cancel()
+	<-done
+}
+
+func TestInfoCarriesCommandSupport(t *testing.T) {
+	d := New("test", t.TempDir())
+	d.ResolveWorkspace = func(string, string) (supervisor.SpawnConfig, error) {
+		return supervisor.SpawnConfig{}, nil
+	}
+	if err := d.writeInfoIDs(nil); err != nil {
+		t.Fatal(err)
+	}
+	info, err := ReadInfo(d.Dir)
+	if err != nil || info == nil {
+		t.Fatalf("ReadInfo = %+v, %v", info, err)
+	}
+	if !info.Commands {
+		t.Error("a command-capable daemon must advertise Commands so a nudge is safe to send")
+	}
+}
+
+func TestDynamicDaemonStopOfANeverStartedWorkspaceIsACleanNoOp(t *testing.T) {
+	d := dynDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStop, WorkspaceID: "acme"})
+	d.Nudge()
+	time.Sleep(60 * time.Millisecond)
+
+	s := d.Status()
+	if len(s.Workspaces) != 0 {
+		t.Error("stopping a never-started workspace must not create a runner")
+	}
+	for _, diag := range s.Diagnostics {
+		if strings.Contains(diag.Warning, "failed") {
+			t.Errorf("a no-op stop must not flash a failure: %q", diag.Warning)
+		}
+	}
+	cancel()
+	<-done
+}
+
+func TestDynamicDaemonNotifiesOnRemoteStop(t *testing.T) {
+	d := dynDaemon(t)
+	var mu sync.Mutex
+	var bodies []string
+	d.Notify = func(_, body string) { mu.Lock(); bodies = append(bodies, body); mu.Unlock() }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
+	d.Nudge()
+	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStop, WorkspaceID: "acme"})
+	d.Nudge()
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, b := range bodies {
+			if strings.Contains(b, "stopped") {
+				return true
+			}
+		}
+		return false
+	})
+	cancel()
+	<-done
+}
+
+func TestDynamicDaemonDropsAStaleCommandWithoutStarting(t *testing.T) {
+	d := dynDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	_, _ = command.Write(d.Dir, command.Command{
+		Action: command.ActionStart, WorkspaceID: "acme",
+		RequestedAt: time.Now().Add(-2 * command.TTL),
+	})
+	d.Nudge()
+	time.Sleep(80 * time.Millisecond)
+
+	if n := len(d.Status().Workspaces); n != 0 {
+		t.Errorf("a command older than the TTL must never start a session, got %d", n)
+	}
+	cancel()
+	<-done
+}
+
+func TestDynamicDaemonDrainsOnTheTickWithoutANudge(t *testing.T) {
+	d := dynDaemon(t) // CommandTick is 10ms
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	// No Nudge — only the tick can pick this up.
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
+	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
+	cancel()
+	<-done
 }

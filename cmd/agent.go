@@ -522,6 +522,10 @@ func enqueueSessionCommand(action string, args []string, profile string) {
 		exitWithError("agent_not_running",
 			errors.New("corgi agent is not running — start it with `corgi agent serve`, or `corgi agent install` to start at login"), 1)
 	}
+	if !info.Commands {
+		exitWithError("agent_no_command_support",
+			errors.New("the running corgi agent predates remote session start — restart it: `corgi agent stop` then `corgi agent serve`"), 1)
+	}
 
 	c, err := command.Write(dir, command.Command{
 		Action: action, WorkspaceID: res.Workspace.ID, Profile: profile, Source: "cli",

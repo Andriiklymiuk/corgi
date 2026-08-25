@@ -113,8 +113,17 @@ func registerCwdWorkspace() (string, bool) {
 	}
 	id := filepath.Base(cwd)
 	registry, path := mustLoadRegistry()
-	if existing, ok := registry.Find(id); ok && existing.AbsPath == cwd {
-		return id, false
+	if existing, ok := registry.Find(id); ok {
+		if existing.AbsPath == cwd {
+			return id, false
+		}
+		// The basename is already taken by a DIFFERENT directory. Repointing it
+		// would hijack that workspace; disambiguate with the parent instead so
+		// two repos both called "api" can coexist.
+		id = filepath.Base(filepath.Dir(cwd)) + "-" + id
+		if existing2, ok := registry.Find(id); ok && existing2.AbsPath == cwd {
+			return id, false
+		}
 	}
 	existing, _ := registry.Find(id)
 	existing.ID = id

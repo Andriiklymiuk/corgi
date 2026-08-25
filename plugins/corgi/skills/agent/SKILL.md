@@ -211,8 +211,10 @@ device, and gets a per-device token. Then verify end-to-end with
 session URL.
 
 The old longhand still works when you want the pieces separately:
-`corgi agent scan ~/dev` → `corgi agent serve` → `corgi mcp --http :8765
---tunnel --pair`.
+`corgi agent scan ~/dev` → `corgi agent serve &` → `corgi mcp --http :8765
+--tunnel --pair`. Note `corgi agent serve` **blocks** the terminal (background
+it with `&`, or use `corgi agent install` to run it at login); `corgi agent up`
+backgrounds it for you.
 
 ### What travels through the corgi tunnel — and what does not
 
@@ -255,7 +257,9 @@ profiles:
 | symptom | what to say / do |
 |---|---|
 | tool errors "daemon is not running" | `corgi agent serve` on the laptop (or `corgi agent install`). |
+| tool errors "predates remote session start" | The daemon is an older corgi. Restart it: `corgi agent stop` then `corgi agent serve` (or `corgi agent up`). |
 | workspace `unreachable` | Drive not mounted or folder moved — `corgi agent workspaces relocate`. |
+| workspace marked sensitive | Remote start is refused by design. Start it on the laptop, or unset `sensitive` in `.corgi/agent.yml`. |
 | queued but nothing started | Commands expire after 60s. Check `corgi agent status` diagnostics — a rejected start says why there. |
 | running but no `sessionUrl` | The session is fine; the URL was not spotted in output. Find it in claude.ai/code. |
 

@@ -547,3 +547,32 @@ func TestSupervisingReportsStopAndDisable(t *testing.T) {
 		t.Error("a stopped runner must not report itself supervising — a restart needs a fresh runner")
 	}
 }
+
+func TestStopBetweenStartAndMarkRunningDoesNotOrphanTheProcess(t *testing.T) {
+	// The command loop can call Stop in the instant after Start returns a live
+	// process but before markRunning records it — when r.proc is still nil and
+	// Stop has nothing to signal. Without the re-check the process would run
+	// unreachable until it exited on its own.
+	proc := &fakeProcess{pid: 7, stopped: make(chan struct{})}
+	var r *Runner
+	start := func(context.Context, SpawnConfig) (Process, error) {
+		r.Stop() // Stop wins the race: proc not yet recorded, nothing to signal
+		return proc, nil
+	}
+	r = NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockOff}, start, NewWakeLock(WakeLockOff))
+	r.Sleep = func(context.Context, time.Duration) {}
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run never returned — the just-started process was orphaned in Wait()")
+	}
+	select {
+	case <-proc.stopped:
+	default:
+		t.Error("the raced-past process must be stopped, not left running")
+	}
+}

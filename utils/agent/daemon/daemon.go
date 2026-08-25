@@ -30,6 +30,10 @@ type Info struct {
 	Executable string    `json:"executable,omitempty"`
 	StartedAt  time.Time `json:"startedAt"`
 	Workspaces []string  `json:"workspaces"`
+	// Commands is true when this daemon drains the command spool and handles a
+	// SIGUSR1 nudge. A daemon from before this feature omits it, and Nudge must
+	// then NOT signal it — SIGUSR1's default disposition would kill it.
+	Commands bool `json:"commands,omitempty"`
 }
 
 // Status is the whole daemon's state, as `corgi agent status --json` prints.
@@ -121,8 +125,13 @@ func (d *Daemon) Nudge() {
 
 // Nudge pokes a running daemon in another process so it drains the spool now
 // rather than on the next tick. Best-effort: the tick still wins without it.
+//
+// It signals ONLY a daemon that advertised command support. A daemon from
+// before this feature has no handler for SIGUSR1, whose default disposition is
+// to terminate — so nudging one would kill it. Such a daemon cannot drain the
+// spool anyway; the caller should tell the user to restart it.
 func Nudge(info *Info) {
-	if info == nil || info.PID <= 0 {
+	if info == nil || info.PID <= 0 || !info.Commands {
 		return
 	}
 	_ = nudgeProcess(info.PID)
@@ -204,6 +213,16 @@ func ReadStatus(dir string) (*Status, error) {
 // and stop workspaces at runtime; without it, the fixed-set lifecycle below is
 // unchanged.
 func (d *Daemon) Run(ctx context.Context, configs []supervisor.SpawnConfig) error {
+	// Catch SIGUSR1 for the daemon's ENTIRE lifetime, before writeInfo makes
+	// this pid discoverable to a nudge and until after cleanup. Go's default
+	// disposition for SIGUSR1 is to terminate the process, so a nudge landing
+	// in the window before the handler was installed — a phone start racing a
+	// launchd restart, exactly what this feature invites — would kill the
+	// daemon outright. Installed on the fixed path too, where nothing reads the
+	// channel, purely so the signal is never fatal.
+	stopSignals := notifyNudge(d.nudge)
+	defer stopSignals()
+
 	if d.ResolveWorkspace != nil {
 		return d.runDynamic(ctx, configs)
 	}
@@ -247,9 +266,6 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	if len(configs) == 0 {
 		utils.Info("agent: no autostart workspaces — waiting for remote session starts")
 	}
-
-	stopSignals := notifyNudge(d.nudge)
-	defer stopSignals()
 
 	tick := d.CommandTick
 	if tick == 0 {
@@ -401,14 +417,14 @@ func (d *Daemon) drainCommands(ctx context.Context, launch func(*supervisor.Runn
 		}
 		switch c.Action {
 		case command.ActionStart:
-			d.startWorkspace(c, launch)
+			d.startWorkspace(ctx, c, launch)
 		case command.ActionStop:
 			d.stopRemoteWorkspace(c)
 		}
 	}
 }
 
-func (d *Daemon) startWorkspace(c command.Command, launch func(*supervisor.Runner)) {
+func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {
 	if r := d.findRunner(c.WorkspaceID); r != nil && r.Supervising() {
 		d.requestPublish() // already supervised — the fresh status is the answer
 		return
@@ -425,6 +441,12 @@ func (d *Daemon) startWorkspace(c command.Command, launch func(*supervisor.Runne
 		d.commandFailed(c, err)
 		return
 	}
+	if ctx.Err() != nil {
+		// The daemon is shutting down. Resolving took long enough for cancel to
+		// land; launching now would fire a "started" notification for a session
+		// that returns instantly and does not survive the restart.
+		return
+	}
 	lock := supervisor.NewWakeLock(cfg.WakeLockMode())
 	r := supervisor.NewRunner(cfg, d.Start, lock)
 	r.Notify = d.Notify
@@ -439,14 +461,18 @@ func (d *Daemon) startWorkspace(c command.Command, launch func(*supervisor.Runne
 
 func (d *Daemon) stopRemoteWorkspace(c command.Command) {
 	r := d.findRunner(c.WorkspaceID)
-	if r == nil {
-		d.commandFailed(c, fmt.Errorf("workspace %q is not supervised by this daemon", c.WorkspaceID))
+	if r == nil || !r.Supervising() {
+		// A clean no-op, as the tool advertises. The id was resolved against the
+		// registry before it reached the spool, so a missing or already-stopped
+		// runner just means "not running" — not a failure to flash at the owner.
 		return
 	}
-	if !r.Supervising() {
-		return // already stopped: a clean no-op
-	}
-	r.Stop()
+	// Stop off the drain goroutine: it blocks up to stopGrace (5s) waiting for
+	// the process to exit, and a batch of stops would otherwise stall the loop
+	// long enough to age queued commands past their TTL and drop them. Stop is
+	// idempotent, and Supervising() already reads false the instant it is
+	// called, so a follow-up command sees the right state immediately.
+	go r.Stop()
 	d.announceRemote(c, "session stopped remotely")
 	d.requestPublish()
 }
@@ -602,6 +628,7 @@ func (d *Daemon) writeInfoIDs(ids []string) error {
 	return writeJSONAtomic(d.InfoPath(), Info{
 		PID: os.Getpid(), Version: d.Version, Executable: exe,
 		StartedAt: d.startedAt, Workspaces: ids,
+		Commands: d.ResolveWorkspace != nil,
 	})
 }
 
