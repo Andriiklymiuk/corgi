@@ -55,8 +55,9 @@ func init() {
 }
 
 const (
-	errFmt   = "%s: %v"
-	mimeJSON = "application/json"
+	errFmt            = "%s: %v"
+	mimeJSON          = "application/json"
+	headerContentType = "Content-Type"
 )
 
 // mcpHandlerMu serializes all MCP tool/resource work. mcp-go can invoke handlers

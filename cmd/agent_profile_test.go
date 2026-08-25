@@ -119,3 +119,13 @@ func TestAddProfileRejectsABadPermissionMode(t *testing.T) {
 		t.Errorf("a valid permissionMode must be accepted, got %v", err)
 	}
 }
+
+func TestSortedProfileNames(t *testing.T) {
+	got := sortedProfileNames(map[string]config.WorkspaceConfig{"zed": {}, "alpha": {}, "mid": {}})
+	if len(got) != 3 || got[0] != "alpha" || got[2] != "zed" {
+		t.Errorf("sortedProfileNames = %v, want sorted", got)
+	}
+	if len(sortedProfileNames(nil)) != 0 {
+		t.Error("nil profiles must sort to empty")
+	}
+}

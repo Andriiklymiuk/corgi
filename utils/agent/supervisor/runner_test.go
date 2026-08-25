@@ -629,3 +629,35 @@ func TestIdleWakeLockMonitorStopsWithTheProcess(t *testing.T) {
 		t.Error("no monitor may survive the process to re-acquire the lock")
 	}
 }
+
+func TestStopAsyncStopsWithoutBlocking(t *testing.T) {
+	proc := &fakeProcess{pid: 9, stopped: make(chan struct{})}
+	start := func(context.Context, SpawnConfig) (Process, error) { return proc, nil }
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockOff}, start, NewWakeLock(WakeLockOff))
+	r.Sleep = func(context.Context, time.Duration) {}
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+	waitFor(t, func() bool { return r.State().Running })
+
+	r.StopAsync() // must return immediately; teardown happens in the background
+	if r.Supervising() {
+		t.Error("StopAsync must mark the runner stopped synchronously")
+	}
+	<-done
+	select {
+	case <-proc.stopped:
+	default:
+		t.Error("the process must be stopped after the async teardown")
+	}
+}
+
+func TestIdleAfterDefaultAndOverride(t *testing.T) {
+	r := &Runner{}
+	if r.idleAfter() != WakeLockIdleTimeout {
+		t.Errorf("idleAfter() = %v, want the default %v", r.idleAfter(), WakeLockIdleTimeout)
+	}
+	r.IdleAfter = 42 * time.Second
+	if r.idleAfter() != 42*time.Second {
+		t.Errorf("idleAfter() = %v, want the override", r.idleAfter())
+	}
+}

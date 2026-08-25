@@ -124,7 +124,7 @@ func launchStartHandler(w http.ResponseWriter, r *http.Request) {
 
 func launcherPageHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set(headerContentType, "text/html; charset=utf-8")
 	_, _ = fmt.Fprint(w, launcherPageHTML)
 }
 
@@ -134,12 +134,12 @@ func setLaunchHeaders(w http.ResponseWriter) {
 }
 
 func writeLaunchJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", mimeJSON)
+	w.Header().Set(headerContentType, mimeJSON)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeLaunchError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", mimeJSON)
+	w.Header().Set(headerContentType, mimeJSON)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
