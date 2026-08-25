@@ -506,3 +506,44 @@ func TestEmptySessionEndSummaryLeavesTheNotificationAlone(t *testing.T) {
 		t.Errorf("notification %q has a dangling separator with nothing after it", notified[0])
 	}
 }
+
+func TestRunnerReportsSessionURLWhileRunningAndClearsItOnExit(t *testing.T) {
+	proc := &fakeProcess{pid: 42, stopped: make(chan struct{})}
+	start := func(_ context.Context, cfg SpawnConfig) (Process, error) {
+		cfg.OnSessionURL("https://claude.ai/code/session-123")
+		return proc, nil
+	}
+	cfg := SpawnConfig{WorkspaceID: "acme", Dir: "/tmp/acme", Origin: OriginRemote, Profile: "work", WakeLock: WakeLockOff}
+	r := NewRunner(cfg, start, NewWakeLock(WakeLockOff))
+	r.Sleep = func(context.Context, time.Duration) {}
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+
+	waitFor(t, func() bool {
+		s := r.State()
+		return s.Running && s.SessionURL == "https://claude.ai/code/session-123"
+	})
+	s := r.State()
+	if s.Origin != OriginRemote || s.Profile != "work" {
+		t.Errorf("origin/profile = %q/%q, want remote/work", s.Origin, s.Profile)
+	}
+
+	r.Stop()
+	<-done
+	if got := r.State().SessionURL; got != "" {
+		t.Errorf("sessionUrl = %q after exit; a new session gets a new URL, so it must clear", got)
+	}
+}
+
+func TestSupervisingReportsStopAndDisable(t *testing.T) {
+	start, _ := scriptedStarter()
+	r := testRunner(t, start)
+	if !r.Supervising() {
+		t.Fatal("a fresh runner must report itself supervising")
+	}
+	r.Stop()
+	if r.Supervising() {
+		t.Error("a stopped runner must not report itself supervising — a restart needs a fresh runner")
+	}
+}

@@ -52,7 +52,23 @@ type SpawnConfig struct {
 	// stderr is a log file on disk. Only `--foreground`, where a person is
 	// watching the terminal, turns this on.
 	MirrorOutput bool
+	// Origin says who asked for this workspace to run: OriginAutostart from
+	// the daemon's startup set, OriginRemote from a spool command.
+	Origin string
+	// Profile is the trusted-config profile overlaid onto this workspace's
+	// settings, when one was requested.
+	Profile string
+	// OnSessionURL is runtime wiring, not configuration: the runner installs
+	// it so the exec layer can report the claude.ai session URL it spots in
+	// the process output. Best-effort — may never fire.
+	OnSessionURL func(url string)
 }
+
+// Origin values for SpawnConfig.Origin / RunState.Origin.
+const (
+	OriginAutostart = "autostart"
+	OriginRemote    = "remote"
+)
 
 // forbiddenPermissionModes never reach a supervised process. A daemon running
 // unattended must not be able to skip permission prompts — those prompts are

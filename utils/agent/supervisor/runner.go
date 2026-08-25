@@ -35,6 +35,9 @@ type RunState struct {
 	LastCause   ExitCause `json:"lastCause,omitempty"`
 	LastReason  string    `json:"lastReason,omitempty"`
 	WakeLock    bool      `json:"wakeLock"`
+	Origin      string    `json:"origin,omitempty"`
+	Profile     string    `json:"profile,omitempty"`
+	SessionURL  string    `json:"sessionUrl,omitempty"`
 }
 
 // Runner supervises one workspace's remote-control process.
@@ -73,14 +76,37 @@ type Runner struct {
 
 // NewRunner returns a Runner with the real sleep behaviour.
 func NewRunner(cfg SpawnConfig, start Starter, lock *WakeLock) *Runner {
-	return &Runner{
+	r := &Runner{
 		Config:   cfg,
 		Start:    start,
 		WakeLock: lock,
 		Sleep:    sleepWithContext,
-		state:    RunState{WorkspaceID: cfg.WorkspaceID},
+		state:    RunState{WorkspaceID: cfg.WorkspaceID, Origin: cfg.Origin, Profile: cfg.Profile},
 		stopped:  make(chan struct{}),
 	}
+	r.Config.OnSessionURL = r.setSessionURL
+	return r
+}
+
+// setSessionURL records the URL the exec layer spotted in the output.
+func (r *Runner) setSessionURL(url string) {
+	r.mu.Lock()
+	if r.state.SessionURL == url {
+		r.mu.Unlock()
+		return
+	}
+	r.state.SessionURL = url
+	r.mu.Unlock()
+	r.notifyChange()
+}
+
+// Supervising reports whether this runner still keeps its process up: false
+// once Stop was called or the workspace disabled itself, at which point a new
+// start needs a fresh runner.
+func (r *Runner) Supervising() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return !r.stopping && !r.state.Disabled
 }
 
 // State returns a snapshot for status output.
@@ -268,6 +294,7 @@ func (r *Runner) recordLocked(d Decision, pid int, disabled bool) {
 	defer r.mu.Unlock()
 	r.proc = nil
 	r.state.Running = false
+	r.state.SessionURL = ""
 	r.state.PID = pid
 	r.state.LastCause = d.Cause
 	r.state.LastReason = d.Reason
