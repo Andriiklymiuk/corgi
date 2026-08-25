@@ -672,7 +672,9 @@ func processAlive(pid int) bool {
 func itoa(n int) string { return fmt.Sprint(n) }
 
 func writeJSONAtomic(path string, v any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// 0700/0600: status.json now carries each session's claude.ai URL, and
+	// daemon.json the daemon's pid and paths — owner-only, like the spool.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(v, "", "  ")
@@ -680,7 +682,7 @@ func writeJSONAtomic(path string, v any) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

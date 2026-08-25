@@ -74,11 +74,19 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpWorkspaceResolve(r.GetString("query", ""))
 	}))
 
-	// corgi_session_start/_stop are deliberately NOT behind the dangerous-
-	// tunnel gate: the workspace must already be registered locally, a profile
-	// must be defined in the trusted local config, and a started session's
-	// conversation is reachable only through the owner's claude.ai account.
-	// Blast radius is comparable to corgi_up/corgi_down, likewise ungated.
+	// corgi_session_start/_stop are NOT behind the dangerous-tunnel gate, for
+	// the same reason corgi_up/corgi_down are not: they are the point of a
+	// phone-driven endpoint. What bounds them instead:
+	//   - the endpoint is per-device-token authenticated (pairing), and a lost
+	//     device is revoked, not tolerated — treat its token as the machine key;
+	//   - starts are registry-scoped: a caller picks an existing workspace, it
+	//     cannot define what runs or where;
+	//   - a workspace marked `sensitive` refuses remote start (remoteResolver);
+	//   - the started session's conversation still needs the owner's claude.ai
+	//     account — the sessionUrl reaches paired devices, so status.json is
+	//     0600 and the URL is not otherwise logged.
+	// A stolen token can still stop the owner's sessions (a nuisance, not a
+	// breach); revocation is the answer, as with every tool the token reaches.
 	s.AddTool(mcp.NewTool("corgi_session_start",
 		mcp.WithDescription(
 			"Start a supervised Claude Code Remote Control session in a registered workspace, by name. "+

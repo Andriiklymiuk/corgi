@@ -147,6 +147,12 @@ func remoteResolver(dir string, foreground bool) func(id, profile string) (super
 			return supervisor.SpawnConfig{}, err
 		}
 		resolved := config.Resolve(w.ID, repo, user)
+		if resolved.Sensitive {
+			// A workspace the repo marked sensitive has opted out of being
+			// driven remotely. Same refusal the preview tunnels give it, so the
+			// flag means one thing everywhere.
+			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is marked sensitive — remote session start is refused (start it on the laptop, or unset sensitive in .corgi/agent.yml)", w.ID)
+		}
 		resolved, err = config.ApplyProfile(resolved, user, profile)
 		if err != nil {
 			return supervisor.SpawnConfig{}, err

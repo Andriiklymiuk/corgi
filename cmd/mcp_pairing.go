@@ -37,9 +37,25 @@ type pairResponse struct {
 // anything larger is a mistake or an attempt to make the server allocate.
 const maxPairBodyBytes = 4 << 10
 
-// pairingHandler serves POST /pair while a pairing window is open.
+// pairingHandler serves /pair while a pairing window is open: GET renders the
+// scan-to-pair page, POST performs the pairing.
 func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// The page holds no secret: the code travels only in the URL
+			// fragment (which never reaches the server) and is typed back by
+			// the page's own JS. Rendering it while closed would only invite a
+			// form that cannot succeed.
+			if !session.Open() {
+				w.Header().Set("Content-Type", mimeJSON)
+				writePairError(w, http.StatusForbidden, "pairing is not open — run `corgi agent up` on the machine")
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = fmt.Fprint(w, pairPageHTML)
+			return
+		}
+
 		w.Header().Set("Content-Type", mimeJSON)
 
 		if r.Method != http.MethodPost {
@@ -84,6 +100,61 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 		})
 	})
 }
+
+// pairPageHTML is the scan-to-pair page: the QR printed by `corgi agent up`
+// points here with the code in the URL fragment. Self-contained, no external
+// assets, nothing server-rendered — the fragment stays in the browser.
+const pairPageHTML = `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pair with corgi</title>
+<style>
+  body{font-family:-apple-system,system-ui,sans-serif;background:#0f1115;color:#e8e8e8;
+       display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
+  main{max-width:22rem;width:100%;padding:2rem}
+  h1{font-size:1.3rem;margin:0 0 .3rem}
+  p{color:#9aa0a6;font-size:.9rem;margin:.2rem 0 1.2rem}
+  input,button{width:100%;box-sizing:border-box;font-size:1rem;padding:.7rem .8rem;border-radius:.6rem}
+  input{border:1px solid #333;background:#1a1d23;color:#e8e8e8;margin-bottom:.8rem}
+  button{border:0;background:#e8e8e8;color:#0f1115;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5}
+  #out{margin-top:1rem;font-size:.85rem;word-break:break-all}
+  .ok{color:#7ee787}.err{color:#ff7b72}
+  code{background:#1a1d23;padding:.15rem .35rem;border-radius:.3rem}
+</style>
+<main>
+  <h1>🐕 Pair with corgi</h1>
+  <p>Name this device, tap pair. The code came along in the QR you scanned.</p>
+  <input id="device" placeholder="my-phone" autocomplete="off" autocapitalize="none">
+  <button id="go">Pair</button>
+  <div id="out"></div>
+</main>
+<script>
+  const code = location.hash.slice(1);
+  const out = document.getElementById('out');
+  const btn = document.getElementById('go');
+  if (!code) { out.innerHTML = '<span class="err">No code in the link — rescan the QR from the terminal.</span>'; btn.disabled = true; }
+  btn.onclick = async () => {
+    const device = document.getElementById('device').value.trim() || 'my-phone';
+    btn.disabled = true; btn.textContent = 'Pairing…';
+    try {
+      const r = await fetch('/pair', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({code, device})});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      out.innerHTML = '<span class="ok">✓ Paired as <b>' + device +
+        '</b> with <b>' + (j.daemon||'this machine') + '</b></span>' +
+        '<p>Your device token — store it somewhere safe (a password manager); it will not be shown again:</p>' +
+        '<code>' + j.token + '</code>' +
+        '<p>Use it as the Bearer token wherever this device talks to corgi.</p>';
+      btn.remove();
+    } catch (e) {
+      out.innerHTML = '<span class="err">✗ ' + e.message + '</span>';
+      btn.disabled = false; btn.textContent = 'Pair';
+    }
+  };
+</script>
+`
 
 func writePairError(w http.ResponseWriter, status int, msg string) {
 	w.WriteHeader(status)
