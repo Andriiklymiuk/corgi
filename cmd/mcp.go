@@ -116,6 +116,10 @@ func runMCP(cmd *cobra.Command, _ []string) {
 	utils.NonInteractive = true
 	utils.JSONOutput = true
 
+	// The MCP tools read agent data; bring any legacy brew-located data across
+	// before they do.
+	migrateAgentDataDir()
+
 	s := server.NewMCPServer("corgi", APP_VERSION)
 	registerMCPTools(s)
 	registerMCPResources(s)

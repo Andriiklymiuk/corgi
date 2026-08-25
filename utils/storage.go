@@ -64,21 +64,13 @@ func getDataPath() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("CORGI_DATA_DIR")); dir != "" {
 		return dir, nil
 	}
-	switch runtime.GOOS {
-	case "darwin":
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		// Keep using the historical brew location when it already holds data,
-		// so nobody loses their saved paths — but decide by looking at the
-		// filesystem, never by running `brew`. corgi runs unattended under
-		// launchd, whose PATH does not include brew: shelling out would give
-		// the daemon and the shell two different data directories, and the
-		// daemon would then read an empty registry.
-		//
-		// HOMEBREW_PREFIX covers a custom prefix, since `brew shellenv` exports
-		// it; CORGI_DATA_DIR is the explicit escape hatch when neither applies.
+	// On darwin, keep using the historical brew location when it already holds
+	// data, so nobody loses their saved paths — but decide by looking at the
+	// filesystem, never by running `brew`. corgi runs unattended under launchd,
+	// whose PATH does not include brew: shelling out would give the daemon and
+	// the shell two different data directories, and the daemon would then read
+	// an empty registry. HOMEBREW_PREFIX covers a custom prefix.
+	if runtime.GOOS == "darwin" {
 		for _, prefix := range []string{os.Getenv("HOMEBREW_PREFIX"), "/opt/homebrew", "/usr/local"} {
 			if prefix == "" {
 				continue
@@ -87,6 +79,25 @@ func getDataPath() (string, error) {
 			if info, statErr := os.Stat(legacy); statErr == nil && info.IsDir() {
 				return legacy, nil
 			}
+		}
+	}
+	return NativeDataDir()
+}
+
+// NativeDataDir is the OS-conventional per-user data directory, never the
+// Homebrew prefix. CorgiDataDir uses it as its fallback and keeps the legacy
+// brew location for back-compat; callers that want the proper per-user location
+// regardless of a legacy brew install (agent mode) use it directly. The
+// CORGI_DATA_DIR override still wins over it.
+func NativeDataDir() (string, error) {
+	if dir := strings.TrimSpace(os.Getenv("CORGI_DATA_DIR")); dir != "" {
+		return dir, nil
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
 		}
 		return darwinFallbackDataDir(homeDir), nil
 	case "linux":
