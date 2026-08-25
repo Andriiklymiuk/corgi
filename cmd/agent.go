@@ -84,7 +84,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 
 	d := daemon.New(APP_VERSION, dir)
 	d.CaptureBrief = captureWorkspaceBrief
-	d.ResolveWorkspace = remoteResolver(dir)
+	d.ResolveWorkspace = remoteResolver(dir, foreground)
 	printStartupDiagnostics(configs)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -124,7 +124,7 @@ func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, er
 // reloading registry and config so a remote start sees the current files,
 // not the ones from daemon startup. No autostart check: a remote start IS
 // the explicit act autostart substitutes for.
-func remoteResolver(dir string) func(id, profile string) (supervisor.SpawnConfig, error) {
+func remoteResolver(dir string, foreground bool) func(id, profile string) (supervisor.SpawnConfig, error) {
 	return func(id, profile string) (supervisor.SpawnConfig, error) {
 		registry, err := workspace.Load(agentRegistryPath(dir))
 		if err != nil {
@@ -151,7 +151,7 @@ func remoteResolver(dir string) func(id, profile string) (supervisor.SpawnConfig
 		if err != nil {
 			return supervisor.SpawnConfig{}, err
 		}
-		cfg := spawnConfigFrom(w, resolved, false)
+		cfg := spawnConfigFrom(w, resolved, foreground)
 		cfg.Origin = supervisor.OriginRemote
 		cfg.Profile = profile
 		return cfg, nil

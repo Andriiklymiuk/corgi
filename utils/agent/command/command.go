@@ -59,7 +59,9 @@ func Write(agentDir string, c Command) (Command, error) {
 		c.RequestedAt = time.Now().UTC()
 	}
 	dir := Dir(agentDir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// 0700/0600: a spool entry starts an agent process, so only the owner may
+	// write one.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return c, err
 	}
 	data, err := json.MarshalIndent(c, "", "  ")
@@ -68,7 +70,7 @@ func Write(agentDir string, c Command) (Command, error) {
 	}
 	path := filepath.Join(dir, c.ID+".json")
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return c, err
 	}
 	return c, os.Rename(tmp, path)
