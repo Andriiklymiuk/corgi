@@ -22,3 +22,8 @@ func processAliveOS(pid int) bool {
 	_ = proc.Release()
 	return true
 }
+
+// Windows has no SIGUSR1; the command tick alone drains the spool (≤5s later).
+func nudgeProcess(int) error { return nil }
+
+func notifyNudge(chan<- struct{}) func() { return func() {} }

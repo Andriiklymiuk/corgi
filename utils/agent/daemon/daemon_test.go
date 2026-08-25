@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/brief"
+	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
@@ -389,5 +390,137 @@ func TestRunWaitsForTheStatusPublisherBeforeReturning(t *testing.T) {
 
 	if !publisherFinished.Load() {
 		t.Error("Run returned while the status publisher was still going; its cleanup can now race the publisher's next write")
+	}
+}
+
+func dynDaemon(t *testing.T) *Daemon {
+	t.Helper()
+	d := testDaemon(t)
+	d.CommandTick = 10 * time.Millisecond
+	d.ResolveWorkspace = func(id, profile string) (supervisor.SpawnConfig, error) {
+		if id == "ghost" {
+			return supervisor.SpawnConfig{}, errors.New("no workspace called \"ghost\" in the registry")
+		}
+		c := cfg(id, "/tmp")
+		c.Origin = supervisor.OriginRemote
+		c.Profile = profile
+		return c, nil
+	}
+	return d
+}
+
+func TestDynamicDaemonStartsAWorkspaceFromASpoolCommand(t *testing.T) {
+	d := dynDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	if _, err := command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme", Profile: "work"}); err != nil {
+		t.Fatal(err)
+	}
+	d.Nudge()
+
+	waitFor(t, func() bool {
+		s := d.Status()
+		return len(s.Workspaces) == 1 && s.Workspaces[0].Running
+	})
+	w := d.Status().Workspaces[0]
+	if w.Origin != supervisor.OriginRemote || w.Profile != "work" {
+		t.Errorf("origin/profile = %q/%q", w.Origin, w.Profile)
+	}
+	cancel()
+	<-done
+}
+
+func TestDynamicDaemonStartIsIdempotent(t *testing.T) {
+	d := dynDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	for i := 0; i < 3; i++ {
+		_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
+	}
+	d.Nudge()
+	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
+	time.Sleep(50 * time.Millisecond)
+	if n := len(d.Status().Workspaces); n != 1 {
+		t.Fatalf("duplicate starts made %d runners", n)
+	}
+	cancel()
+	<-done
+}
+
+func TestDynamicDaemonStopsAndRestartsAWorkspace(t *testing.T) {
+	d := dynDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
+	d.Nudge()
+	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStop, WorkspaceID: "acme"})
+	d.Nudge()
+	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && !s.Workspaces[0].Running })
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
+	d.Nudge()
+	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
+
+	cancel()
+	<-done
+}
+
+func TestDynamicDaemonReportsAFailedResolveInDiagnostics(t *testing.T) {
+	d := dynDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "ghost"})
+	d.Nudge()
+	waitFor(t, func() bool {
+		for _, diag := range d.Status().Diagnostics {
+			if diag.WorkspaceID == "ghost" && strings.Contains(diag.Warning, "ghost") {
+				return true
+			}
+		}
+		return false
+	})
+	if len(d.Status().Workspaces) != 0 {
+		t.Error("a failed resolve must not create a runner")
+	}
+	cancel()
+	<-done
+}
+
+func TestDynamicDaemonNotifiesOnRemoteStart(t *testing.T) {
+	d := dynDaemon(t)
+	var mu sync.Mutex
+	var titles []string
+	d.Notify = func(title, _ string) { mu.Lock(); titles = append(titles, title); mu.Unlock() }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme", Source: "mcp"})
+	d.Nudge()
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(titles) > 0 && strings.Contains(titles[0], "acme")
+	})
+	cancel()
+	<-done
+}
+
+func TestDynamicDaemonAllowsAnEmptyStartupSet(t *testing.T) {
+	d := dynDaemon(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := d.Run(ctx, nil); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("a command-capable daemon must stay up with zero autostart workspaces, got %v", err)
 	}
 }
