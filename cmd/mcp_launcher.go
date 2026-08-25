@@ -154,6 +154,12 @@ const launcherPageHTML = `<!doctype html>
 <script>
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // The session URL is scanned from process output; only ever click through to
+  // a real https claude.ai link, never a non-https or off-domain target.
+  const safeClaudeUrl = u => {
+    try { const p = new URL(u); return p.protocol === 'https:' && (p.hostname === 'claude.ai' || p.hostname.endsWith('.claude.ai')); }
+    catch { return false; }
+  };
   const token = (() => { try { return localStorage.getItem('corgi_token') || ''; } catch { return ''; } })();
   const list = document.getElementById('list');
   const auth = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
@@ -192,9 +198,10 @@ const launcherPageHTML = `<!doctype html>
       left.innerHTML = '<div class="name"><span class="dot' + (ws.running ? ' on' : '') + '"></span> ' +
         esc(ws.id) + '</div><div class="path">' + esc(ws.path) + '</div>';
       const right = document.createElement('div');
-      if (ws.sessionUrl) {
+      if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
         const a = document.createElement('a');
-        a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open session'; a.target = '_blank';
+        a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open session';
+        a.target = '_blank'; a.rel = 'noopener noreferrer';
         right.appendChild(a);
       } else {
         const b = document.createElement('button');

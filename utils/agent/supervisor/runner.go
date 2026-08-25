@@ -329,10 +329,14 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 		_ = r.WakeLock.Acquire(proc.Pid())
 	case WakeLockIdle:
 		// Start awake — a session just launched is working — then let the
-		// monitor drop the lock once it goes quiet.
-		r.recordActivity()
-		_ = r.WakeLock.Acquire(proc.Pid())
-		stopIdle = r.startIdleMonitor(ctx, proc.Pid())
+		// monitor drop the lock once it goes quiet. Skip the monitor where wake
+		// locks do nothing (Windows), so it is not a goroutine spinning on a
+		// no-op Acquire every tick.
+		if Supported() {
+			r.recordActivity()
+			_ = r.WakeLock.Acquire(proc.Pid())
+			stopIdle = r.startIdleMonitor(ctx, proc.Pid())
+		}
 	}
 
 	code, output := proc.Wait()

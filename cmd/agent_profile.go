@@ -116,6 +116,10 @@ func addProfile(dir, name string, wc config.WorkspaceConfig) error {
 	if _, err := supervisor.SanitizeBin(wc.Bin); err != nil {
 		return err
 	}
+	if !supervisor.ValidPermissionMode(wc.PermissionMode) {
+		return fmt.Errorf("unknown or disallowed permissionMode %q (want one of: %s)",
+			wc.PermissionMode, supervisor.PermissionModeHint())
+	}
 	path := agentUserConfigPath(dir)
 	user, err := config.LoadUser(path)
 	if err != nil {

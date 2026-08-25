@@ -154,6 +154,21 @@ func validateSpawnIdentity(c SpawnConfig) error {
 	return nil
 }
 
+// ValidPermissionMode reports whether mode is one a supervised session accepts.
+// Empty is valid (the CLI's default). Exposed so a bad value can be rejected
+// where it is written — e.g. `corgi agent profile add --permission-mode` — not
+// only when a session is launched hours later.
+func ValidPermissionMode(mode string) bool {
+	m := normalize(mode)
+	if m == "" {
+		return true
+	}
+	return !forbiddenPermissionModes[m] && validPermissionModes[m]
+}
+
+// PermissionModeHint lists the accepted modes for an error message.
+func PermissionModeHint() string { return sortedKeys(validPermissionModes) }
+
 func validatePermissionMode(c SpawnConfig, kind Kind) error {
 	mode := normalize(c.PermissionMode)
 	if mode == "" {

@@ -101,3 +101,21 @@ func TestAddedProfileIsSelectableByTheResolver(t *testing.T) {
 		t.Errorf("configDir = %q, want the profile's", cfg.ConfigDir)
 	}
 }
+
+func TestAddProfileRejectsABadPermissionMode(t *testing.T) {
+	if err := addProfile(t.TempDir(), "work", config.WorkspaceConfig{
+		ConfigDir: "~/.claude-work", PermissionMode: "yolo",
+	}); err == nil {
+		t.Error("an unknown permissionMode must be rejected at add time, not deferred to session start")
+	}
+	if err := addProfile(t.TempDir(), "work", config.WorkspaceConfig{
+		ConfigDir: "~/.claude-work", PermissionMode: "bypassPermissions",
+	}); err == nil {
+		t.Error("a forbidden permissionMode must be rejected")
+	}
+	if err := addProfile(t.TempDir(), "ok", config.WorkspaceConfig{
+		ConfigDir: "~/.claude-work", PermissionMode: "acceptEdits",
+	}); err != nil {
+		t.Errorf("a valid permissionMode must be accepted, got %v", err)
+	}
+}

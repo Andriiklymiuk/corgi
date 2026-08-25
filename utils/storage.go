@@ -80,6 +80,14 @@ func getDataPath() (string, error) {
 				return legacy, nil
 			}
 		}
+		// The exec-path registry genuinely fell back to the native dir; on a
+		// custom-prefix brew install that is why `corgi list` looks empty, so
+		// say so once. Only here — the agent dir's native use is deliberate.
+		native, err := NativeDataDir()
+		if err == nil {
+			warnDataDirFallback(native)
+		}
+		return native, err
 	}
 	return NativeDataDir()
 }
@@ -124,13 +132,19 @@ func NativeDataDir() (string, error) {
 }
 
 // darwinFallbackDataDir is where corgi keeps state when no Homebrew var/corgi
-// directory was found.
-//
-// A custom Homebrew prefix without HOMEBREW_PREFIX exported lands here, and the
-// user's saved paths appear to vanish from `corgi list`. Say so once rather
-// than leaving them to discover an empty registry, and name the fix.
+// directory was found. Pure: the fallback warning is emitted only by
+// getDataPath, which is the exec-path registry that can genuinely go missing —
+// NOT by NativeDataDir, which the agent dir uses deliberately and where nothing
+// fell back.
 func darwinFallbackDataDir(homeDir string) string {
-	dir := filepath.Join(homeDir, "Library", "Application Support", "corgi")
+	return filepath.Join(homeDir, "Library", "Application Support", "corgi")
+}
+
+// warnDataDirFallback says, once, that the exec-path registry fell back to the
+// native location — which on a machine with a custom Homebrew prefix is why
+// `corgi list` looks empty. It is NOT called for the agent data dir, whose use
+// of the native location is intentional, so no false alarm fires there.
+func warnDataDirFallback(dir string) {
 	warnAboutDataDirFallbackOnce.Do(func() {
 		if _, err := os.Stat(filepath.Join(dir, storageFileName)); err == nil {
 			return // already the established location; nothing surprising
@@ -143,7 +157,6 @@ func darwinFallbackDataDir(homeDir string) string {
 				"If your saved paths look missing, your Homebrew prefix is elsewhere — set:\n"+
 				"  export CORGI_DATA_DIR=\"$(brew --prefix)/var/corgi\"\n", dir)
 	})
-	return dir
 }
 
 var warnAboutDataDirFallbackOnce sync.Once
