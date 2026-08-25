@@ -194,18 +194,42 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
 
 ### Setting it up from a session on the laptop
 
-The whole path is scriptable; no manual steps beyond scanning one QR:
+**One command, from inside the stack directory:**
 
 ```bash
-corgi agent scan ~/dev            # register stacks (enables nothing)
-corgi agent serve                 # or `corgi agent install` for start-at-login
-corgi agent status --json         # verify: running true
-corgi mcp --http 127.0.0.1:8765 --tunnel --pair   # endpoint + pairing QR
+corgi agent up
 ```
 
-The user scans the QR from their device; then verify end-to-end with
+It registers the current stack, starts the daemon (if down), opens the MCP
+endpoint with a public tunnel, and prints a **scannable QR** for pairing — all
+detached, so you can run it and keep working. No port to remember. `--json`
+emits the URL and pairing code for a caller that wants them structured.
+
+The user scans the QR (or opens the printed URL) on their phone, names the
+device, and gets a per-device token. Then verify end-to-end with
 `corgi agent session start <workspace>` and watch `corgi agent status` for the
-URL.
+session URL.
+
+The old longhand still works when you want the pieces separately:
+`corgi agent scan ~/dev` → `corgi agent serve` → `corgi mcp --http :8765
+--tunnel --pair`.
+
+### What travels through the corgi tunnel — and what does not
+
+The corgi tunnel is a **control plane only**: it carries `corgi_session_start`,
+status, diff, logs. It does **not** carry the conversation. The back-and-forth
+with Claude runs in the **Claude app / Remote Control**, which talks to
+claude.ai directly — the `sessionUrl` you open joins that, not anything corgi
+proxies. So: corgi starts the session and hands you the URL; the Claude app is
+where you actually talk. Two apps, by design.
+
+### Which client calls corgi_session_start
+
+`corgi_session_start` is an MCP tool, so any MCP client works. Today that is
+the **Claude app as a custom connector**: add the tunnel URL + device token,
+then say "start a session in the recipe app" and it calls the tool for you. A
+dedicated companion app is a separate project (it must **not** live in the
+corgi repo).
 
 ### Profiles — which Claude account runs
 
