@@ -118,9 +118,12 @@ const pairPageHTML = `<!doctype html>
   input{border:1px solid #333;background:#1a1d23;color:#e8e8e8;margin-bottom:.8rem}
   button{border:0;background:#e8e8e8;color:#0f1115;font-weight:600;cursor:pointer}
   button:disabled{opacity:.5}
-  #out{margin-top:1rem;font-size:.85rem;word-break:break-all}
-  .ok{color:#7ee787}.err{color:#ff7b72}
+  #out{margin-top:1rem;font-size:.85rem}
+  .ok{color:#7ee787}.err{color:#ff7b72;word-break:break-word}
   code{background:#1a1d23;padding:.15rem .35rem;border-radius:.3rem}
+  pre{background:#1a1d23;border:1px solid #333;border-radius:.5rem;padding:.8rem;
+      overflow-x:auto;font-size:.78rem;line-height:1.4;white-space:pre;margin:.6rem 0}
+  #copy{margin-bottom:.4rem}
 </style>
 <main>
   <h1>🐕 Pair with corgi</h1>
@@ -133,6 +136,8 @@ const pairPageHTML = `<!doctype html>
   const code = location.hash.slice(1);
   const out = document.getElementById('out');
   const btn = document.getElementById('go');
+  const esc = s => String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   if (!code) { out.innerHTML = '<span class="err">No code in the link — rescan the QR from the terminal.</span>'; btn.disabled = true; }
   btn.onclick = async () => {
     const device = document.getElementById('device').value.trim() || 'my-phone';
@@ -142,14 +147,26 @@ const pairPageHTML = `<!doctype html>
         body: JSON.stringify({code, device})});
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      out.innerHTML = '<span class="ok">✓ Paired as <b>' + device +
-        '</b> with <b>' + (j.daemon||'this machine') + '</b></span>' +
-        '<p>Your device token — store it somewhere safe (a password manager); it will not be shown again:</p>' +
-        '<code>' + j.token + '</code>' +
-        '<p>Use it as the Bearer token wherever this device talks to corgi.</p>';
+      const mcpUrl = location.origin + '/mcp';
+      const connector = JSON.stringify({mcpServers:{corgi:{url:mcpUrl,
+        headers:{Authorization:'Bearer ' + j.token}}}}, null, 2);
+      out.innerHTML =
+        '<span class="ok">✓ Paired as <b>' + esc(device) + '</b> with <b>' +
+          esc(j.daemon||'this machine') + '</b></span>' +
+        '<p>Add corgi to your Claude app as a custom connector — tap to copy, paste once:</p>' +
+        '<pre id="cfg">' + esc(connector) + '</pre>' +
+        '<button id="copy">Copy connector config</button>' +
+        '<p>Then just say: <b>“start a session in &lt;your repo&gt;”</b> — Claude hands ' +
+          'you a link that opens the conversation in that repo. This token is shown ' +
+          'once; the config above is the only copy.</p>';
       btn.remove();
+      document.getElementById('copy').onclick = async (e) => {
+        try { await navigator.clipboard.writeText(connector); e.target.textContent = '✓ Copied'; }
+        catch { const r = document.createRange(); r.selectNode(document.getElementById('cfg'));
+          getSelection().removeAllRanges(); getSelection().addRange(r); e.target.textContent = 'Selected — long-press to copy'; }
+      };
     } catch (e) {
-      out.innerHTML = '<span class="err">✗ ' + e.message + '</span>';
+      out.innerHTML = '<span class="err">✗ ' + esc(e.message) + '</span>';
       btn.disabled = false; btn.textContent = 'Pair';
     }
   };
