@@ -206,9 +206,18 @@ detached, so you can run it and keep working. No port to remember. `--json`
 emits the URL and pairing code for a caller that wants them structured.
 
 The user scans the QR (or opens the printed URL) on their phone, names the
-device, and gets a per-device token. Then verify end-to-end with
-`corgi agent session start <workspace>` and watch `corgi agent status` for the
-session URL.
+device, and gets a per-device token. After pairing, the same page offers **Open
+launcher** (`/app`): corgi's own phone UI that lists the machine's workspaces
+and starts a session in one tap, then hands back the claude.ai link — no
+claude.ai connector needed. The launcher remembers the device token on that
+browser, so a saved home-screen shortcut is a one-tap daily entry (use a **named
+tunnel** so the URL is stable). Verify end-to-end with `corgi agent session
+start <workspace>` or by tapping a repo in the launcher, and watch the session
+URL appear.
+
+The Claude-app custom connector still works as a second option (add corgi's
+`/mcp` URL + Bearer token on claude.ai — note the request-header path is beta
+and rolling out); the launcher is the setup-free path.
 
 The old longhand still works when you want the pieces separately:
 `corgi agent scan ~/dev` → `corgi agent serve &` → `corgi mcp --http :8765
