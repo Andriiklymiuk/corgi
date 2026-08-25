@@ -252,6 +252,21 @@ profiles:
   exec it. Prefer `configDir:` with the default `claude`; if a different
   command is truly needed, make it a real script on PATH and set `bin:`.
 
+### Letting the laptop sleep between turns
+
+By default the daemon holds a wake lock for the whole session, so the Mac stays
+awake even while the session is just waiting for the user. To let it sleep while
+idle and wake back up when work resumes, set `wakeLock: idle` in the user
+config (per workspace or under `defaults:`):
+
+```yaml
+defaults:
+  wakeLock: idle    # session|always|off|idle — idle sleeps after ~5 min quiet
+```
+
+`off` never blocks sleep (a long build can be cut); `idle` keeps working
+sessions awake but sleeps between turns.
+
 ### If a remote start does not appear
 
 | symptom | what to say / do |

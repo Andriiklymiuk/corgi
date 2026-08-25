@@ -62,6 +62,10 @@ type SpawnConfig struct {
 	// it so the exec layer can report the claude.ai session URL it spots in
 	// the process output. Best-effort — may never fire.
 	OnSessionURL func(url string)
+	// OnActivity is runtime wiring too: the exec layer calls it on every chunk
+	// of process output, which the idle wake lock uses as a "still working"
+	// signal. Must be cheap — it is on the output path.
+	OnActivity func()
 }
 
 // Origin values for SpawnConfig.Origin / RunState.Origin.
@@ -131,7 +135,7 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 			c.WorkspaceID, kind.Name)
 	}
 	if c.WakeLock != "" && !ValidWakeLockMode(c.WakeLock) {
-		return fmt.Errorf("workspace %s: unknown wakeLock %q (want always, off, session)",
+		return fmt.Errorf("workspace %s: unknown wakeLock %q (want always, off, session, idle)",
 			c.WorkspaceID, c.WakeLock)
 	}
 	return nil

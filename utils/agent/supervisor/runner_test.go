@@ -576,3 +576,52 @@ func TestStopBetweenStartAndMarkRunningDoesNotOrphanTheProcess(t *testing.T) {
 		t.Error("the raced-past process must be stopped, not left running")
 	}
 }
+
+func TestIdleWakeLockReleasesWhenQuietAndReacquiresOnActivity(t *testing.T) {
+	lock, _ := fakeLock(t, WakeLockIdle)
+	proc := &fakeProcess{pid: 5, stopped: make(chan struct{})}
+	start := func(context.Context, SpawnConfig) (Process, error) { return proc, nil }
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockIdle}, start, lock)
+	r.Sleep = func(context.Context, time.Duration) {}
+	r.IdleAfter = 40 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+
+	// A fresh session is working: the lock is taken.
+	waitFor(t, func() bool { return lock.Held() })
+	// It goes quiet with no further output — the machine may sleep.
+	waitFor(t, func() bool { return !lock.Held() })
+	// Work resumes (output arrives) — awake again.
+	r.recordActivity()
+	waitFor(t, func() bool { return lock.Held() })
+
+	r.Stop()
+	<-done
+	if lock.Held() {
+		t.Error("the lock must be released once the session ends, whatever the idle state was")
+	}
+}
+
+func TestIdleWakeLockMonitorStopsWithTheProcess(t *testing.T) {
+	// After the session exits, nothing may keep toggling the lock.
+	lock, _ := fakeLock(t, WakeLockIdle)
+	proc := &fakeProcess{pid: 6, stopped: make(chan struct{})}
+	start := func(context.Context, SpawnConfig) (Process, error) { return proc, nil }
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockIdle}, start, lock)
+	r.Sleep = func(context.Context, time.Duration) {}
+	r.IdleAfter = 30 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+	waitFor(t, func() bool { return lock.Held() })
+
+	r.Stop()
+	<-done
+	// Even if we simulate late output, the monitor is gone and must not re-grab.
+	r.recordActivity()
+	time.Sleep(60 * time.Millisecond)
+	if lock.Held() {
+		t.Error("no monitor may survive the process to re-acquire the lock")
+	}
+}

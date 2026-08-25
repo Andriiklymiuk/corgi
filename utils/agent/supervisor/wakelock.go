@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // WakeLockMode controls when the machine is kept awake.
@@ -20,12 +21,22 @@ const (
 	WakeLockAlways WakeLockMode = "always"
 	// WakeLockOff never takes a lock — correct on a desktop or a mini.
 	WakeLockOff WakeLockMode = "off"
+	// WakeLockIdle holds the lock while the session is doing something and
+	// releases it once the session has been quiet — waiting on the person — for
+	// WakeLockIdleTimeout, so the laptop can sleep between turns and wakes back
+	// to full speed when work resumes.
+	WakeLockIdle WakeLockMode = "idle"
 )
+
+// WakeLockIdleTimeout is how long a session must produce no output before the
+// idle mode lets the machine sleep. Long enough that a slow build or a thinking
+// pause does not drop the lock mid-task.
+const WakeLockIdleTimeout = 5 * time.Minute
 
 // ValidWakeLockMode reports whether m is a mode the supervisor understands.
 func ValidWakeLockMode(m WakeLockMode) bool {
 	switch m {
-	case WakeLockSession, WakeLockAlways, WakeLockOff:
+	case WakeLockSession, WakeLockAlways, WakeLockOff, WakeLockIdle:
 		return true
 	}
 	return false

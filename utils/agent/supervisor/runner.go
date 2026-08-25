@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -63,6 +64,13 @@ type Runner struct {
 	// OnChange fires after the run state changes, so a watcher can republish
 	// without polling. Called without the lock held.
 	OnChange func()
+	// IdleAfter overrides how long the session must be quiet before the idle
+	// wake lock lets the machine sleep. Zero means WakeLockIdleTimeout.
+	IdleAfter time.Duration
+
+	// lastActivity is the unix-nano time of the last output chunk, read by the
+	// idle monitor. Atomic because it is written from the output goroutine.
+	lastActivity atomic.Int64
 
 	mu       sync.Mutex
 	state    RunState
@@ -85,7 +93,59 @@ func NewRunner(cfg SpawnConfig, start Starter, lock *WakeLock) *Runner {
 		stopped:  make(chan struct{}),
 	}
 	r.Config.OnSessionURL = r.setSessionURL
+	r.Config.OnActivity = r.recordActivity
 	return r
+}
+
+// recordActivity stamps the last-output time for the idle wake lock. On the
+// output path, so it does nothing but an atomic store.
+func (r *Runner) recordActivity() {
+	r.lastActivity.Store(time.Now().UnixNano())
+}
+
+func (r *Runner) idleAfter() time.Duration {
+	if r.IdleAfter > 0 {
+		return r.IdleAfter
+	}
+	return WakeLockIdleTimeout
+}
+
+// startIdleMonitor holds the wake lock while the session is producing output and
+// releases it once it has been quiet for idleAfter, re-acquiring when work
+// resumes. The returned stop function ends the monitor and waits for it, so the
+// caller can then release the lock with no goroutine still toggling it.
+func (r *Runner) startIdleMonitor(ctx context.Context, pid int) func() {
+	idleAfter := r.idleAfter()
+	tick := idleAfter / 4
+	if tick < 20*time.Millisecond {
+		tick = 20 * time.Millisecond
+	}
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		t := time.NewTicker(tick)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				last := r.lastActivity.Load()
+				if last != 0 && time.Since(time.Unix(0, last)) >= idleAfter {
+					r.WakeLock.Release()
+				} else {
+					_ = r.WakeLock.Acquire(pid)
+				}
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-finished
+	}
 }
 
 // setSessionURL records the URL the exec layer spotted in the output.
@@ -261,14 +321,27 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 		proc.Stop()
 	}
 
-	if r.Config.WakeLockMode() == WakeLockSession {
+	var stopIdle func()
+	switch r.Config.WakeLockMode() {
+	case WakeLockSession:
 		// A failure here is not fatal: the session is more useful awake-only
 		// than not running at all. Surfaced through status instead.
 		_ = r.WakeLock.Acquire(proc.Pid())
+	case WakeLockIdle:
+		// Start awake — a session just launched is working — then let the
+		// monitor drop the lock once it goes quiet.
+		r.recordActivity()
+		_ = r.WakeLock.Acquire(proc.Pid())
+		stopIdle = r.startIdleMonitor(ctx, proc.Pid())
 	}
 
 	code, output := proc.Wait()
 	uptime := time.Since(startedAt)
+	// Stop the monitor before releasing, so nothing re-acquires the lock behind
+	// the release.
+	if stopIdle != nil {
+		stopIdle()
+	}
 	if !alwaysAwake {
 		r.WakeLock.Release()
 	}

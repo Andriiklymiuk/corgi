@@ -64,9 +64,16 @@ func StartProcess(ctx context.Context, cfg SpawnConfig) (Process, error) {
 	// The tail is held in memory for exit classification only, and is never
 	// persisted: a session's output can contain env values and tokens.
 	tail := newRingBuffer(outputTailBytes)
-	var sink io.Writer = tail
+	writers := []io.Writer{tail}
 	if cfg.OnSessionURL != nil {
-		sink = io.MultiWriter(tail, newURLScanner(cfg.OnSessionURL))
+		writers = append(writers, newURLScanner(cfg.OnSessionURL))
+	}
+	if cfg.OnActivity != nil {
+		writers = append(writers, activityWriter{cfg.OnActivity})
+	}
+	var sink io.Writer = tail
+	if len(writers) > 1 {
+		sink = io.MultiWriter(writers...)
 	}
 	if cfg.MirrorOutput {
 		// Only with --foreground, where a person is watching rather than a log
@@ -177,6 +184,17 @@ func (u *urlScanner) Write(p []byte) (int, error) {
 	u.mu.Unlock()
 	if hit != "" {
 		u.report(hit)
+	}
+	return len(p), nil
+}
+
+// activityWriter reports that output happened, for the idle wake lock. It keeps
+// no bytes — it is a signal, not a sink — so the callback must stay cheap.
+type activityWriter struct{ report func() }
+
+func (a activityWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		a.report()
 	}
 	return len(p), nil
 }
