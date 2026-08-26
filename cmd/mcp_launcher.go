@@ -297,7 +297,7 @@ const launcherPageHTML = `<!doctype html>
     <pre id="cfg"></pre>
     <button id="copycfg">Copy connector config</button>
     <p id="copymsg" class="msg"></p>
-    <p>Each workspace above has an <b>open in</b> switch — <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here in this browser (use it for a workspace on a different Claude account than the app is signed into). Remembered per workspace, on this browser only.</p>
+    <p>Each workspace above has an <b>open in</b> switch — <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here in this browser; <b>chrome</b> forces Chrome via its URL scheme (needs Chrome installed) — right for a workspace on a different Claude account than the app is signed into. Remembered per workspace, on this browser only.</p>
   </details>
   <p class="msg" style="text-align:center;margin-top:1.4rem">
     <a id="allsessions" target="_blank" rel="noopener" style="color:#7ee787;text-decoration:none">See all your sessions on claude.ai ↗</a>
@@ -421,7 +421,10 @@ const launcherPageHTML = `<!doctype html>
           el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
           el.title = 'Open on claude.ai (works for connected sessions)';
           // Honor the workspace's open-in choice: browser mode stays in the browser.
-          if (openMode(id) === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
+          // Honor the workspace's open-in choice, same as the main button.
+          const m = openMode(id);
+          if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
+          if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
         }
         el.innerHTML = '<span>' + esc(sess.name || sess.sessionId || 'session') + '</span>' +
           '<span class="when">' + esc(sess.kind || '') + ' · ' + esc(fmtWhen(sess.startedAt)) + '</span>';
@@ -439,14 +442,25 @@ const launcherPageHTML = `<!doctype html>
     return new Date(ms).toLocaleDateString();
   }
 
+  // Only ever derived from a URL that already passed safeClaudeUrl, so the
+  // scheme swap cannot smuggle an arbitrary scheme. googlechromes:// is iOS
+  // Chrome's https handler — it forces Chrome even when this page runs in
+  // Safari or the Claude app's webview.
+  const chromeUrl = u => u.replace(/^https:\/\//, 'googlechromes://');
+
   // app mode uses a real anchor tap so iOS deep-links into the Claude app;
-  // browser mode opens via JS, which keeps the session in this browser (right
-  // for a workspace signed into a different Claude account than the app).
+  // browser mode opens via JS, which keeps the session in this browser; chrome
+  // mode forces Chrome via its URL scheme (right for a workspace signed into a
+  // different Claude account than the app — e.g. work vs personal).
   function openControl(ws) {
-    if (openMode(ws.id) === 'browser') {
+    const mode = openMode(ws.id);
+    if (mode === 'browser' || mode === 'chrome') {
       const b = document.createElement('button');
       b.className = 'open'; b.textContent = 'Open session';
-      b.onclick = () => window.open(ws.sessionUrl, '_blank', 'noopener');
+      b.onclick = () => {
+        if (mode === 'chrome') { location.href = chromeUrl(ws.sessionUrl); }
+        else { window.open(ws.sessionUrl, '_blank', 'noopener'); }
+      };
       return b;
     }
     const a = document.createElement('a');
@@ -460,7 +474,7 @@ const launcherPageHTML = `<!doctype html>
     const wrap = document.createElement('div');
     wrap.className = 'modes';
     wrap.appendChild(document.createTextNode('open in:'));
-    for (const m of ['app', 'browser']) {
+    for (const m of ['app', 'browser', 'chrome']) {
       const b = document.createElement('button');
       b.className = 'm' + (cur === m ? ' sel' : '');
       b.textContent = m;
