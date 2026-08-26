@@ -330,6 +330,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.HandleFunc("/app", launcherPageHandler)
 		mux.Handle("/launch/workspaces", bearerAuth(token, http.HandlerFunc(launchWorkspacesHandler), deviceStore))
 		mux.Handle("/launch/start", bearerAuth(token, http.HandlerFunc(launchStartHandler), deviceStore))
+		mux.Handle("/launch/sessions", bearerAuth(token, http.HandlerFunc(launchSessionsHandler), deviceStore))
 	}
 
 	// /pair is deliberately NOT behind the bearer check: its whole purpose is

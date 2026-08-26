@@ -1,12 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
@@ -122,6 +128,99 @@ func launchStartHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, result)
 }
 
+// claudeSession is one entry from `claude agents --json`.
+type claudeSession struct {
+	Name      string `json:"name"`
+	SessionID string `json:"sessionId"`
+	CWD       string `json:"cwd"`
+	Kind      string `json:"kind"`
+	StartedAt int64  `json:"startedAt"`
+	PID       int    `json:"pid"`
+}
+
+// launchSessionsHandler lists the Claude sessions for one workspace. corgi holds
+// no Claude credentials of its own: it shells out to `claude agents --json`,
+// which reads the local session state the CLI already keeps, scoped to the
+// workspace directory and run under that workspace's own account.
+func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodGet {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	id := strings.TrimSpace(r.URL.Query().Get("workspace"))
+	if id == "" {
+		writeLaunchError(w, http.StatusBadRequest, "a workspace is required")
+		return
+	}
+	absPath, configDir, ok := workspaceSessionTarget(id)
+	if !ok {
+		writeLaunchError(w, http.StatusNotFound, "unknown workspace")
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"sessions": listClaudeSessions(absPath, configDir)})
+}
+
+// workspaceSessionTarget resolves a workspace id to its directory and the Claude
+// config dir (account) its sessions live under. The id is the trusted registry
+// key, and the directory comes from the registry — never from the caller — so a
+// device token cannot point the shell-out at an arbitrary path.
+func workspaceSessionTarget(id string) (absPath, configDir string, ok bool) {
+	registry, _, err := agentRegistry()
+	if err != nil {
+		return "", "", false
+	}
+	ws, found := registry.Find(id)
+	if !found || ws.AbsPath == "" {
+		return "", "", false
+	}
+	dir, err := agentDir()
+	if err != nil {
+		return ws.AbsPath, "", true
+	}
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil {
+		return ws.AbsPath, "", true
+	}
+	repo, _ := config.LoadRepo(ws.AbsPath)
+	return ws.AbsPath, config.Resolve(id, repo, user).ConfigDir, true
+}
+
+// listClaudeSessions returns the Claude sessions under absPath. Best-effort: a
+// missing claude binary, a timeout, or no sessions all resolve to an empty list,
+// so the launcher shows "no sessions" rather than a 500.
+func listClaudeSessions(absPath, configDir string) []claudeSession {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	// Fixed argv (no shell); absPath is the trusted registry path.
+	cmd := exec.CommandContext(ctx, "claude", "agents", "--json", "--cwd", absPath)
+	cmd.Env = os.Environ()
+	if d := expandTilde(configDir); d != "" {
+		cmd.Env = append(cmd.Env, "CLAUDE_CONFIG_DIR="+d)
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return []claudeSession{}
+	}
+	var sessions []claudeSession
+	if json.Unmarshal(out, &sessions) != nil {
+		return []claudeSession{}
+	}
+	return sessions
+}
+
+func expandTilde(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			if p == "~" {
+				return home
+			}
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
+}
+
 func launcherPageHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	w.Header().Set(headerContentType, "text/html; charset=utf-8")
@@ -157,8 +256,14 @@ const launcherPageHTML = `<!doctype html>
   header small{display:block;color:#9aa0a6;font-size:.8rem;font-weight:400;margin-top:.2rem}
   main{padding:0 1.2rem 2rem;max-width:34rem;margin:0 auto}
   .ws{background:#1a1d23;border:1px solid #2a2e37;border-radius:.7rem;padding:.9rem 1rem;margin:.6rem 0;
-      display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+      display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
   .ws .name{font-weight:600}
+  .sbtn{background:none;border:0;color:#8a90a6;font-size:.72rem;font-weight:600;cursor:pointer;
+      padding:.2rem 0;margin-top:.25rem}
+  .sessions{flex-basis:100%;margin-top:.5rem;border-top:1px solid #2a2e37;padding-top:.5rem}
+  .sessions .s{display:flex;justify-content:space-between;gap:.6rem;font-size:.76rem;color:#c8cdd6;padding:.22rem 0}
+  .sessions .s .when{color:#8a90a6;font-size:.7rem;flex:0 0 auto}
+  .sessions .none{color:#8a90a6;font-size:.74rem}
   .ws .path{color:#8a90a6;font-size:.72rem;word-break:break-all;margin-top:.15rem}
   .ws .wnote{color:#ff7b72;font-size:.72rem;margin-top:.3rem;line-height:1.4}
   .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a3f4b;flex:0 0 auto}
@@ -269,6 +374,12 @@ const launcherPageHTML = `<!doctype html>
       const note = (!ws.running && ws.note) ? '<div class="wnote">' + esc(ws.note) + '</div>' : '';
       left.innerHTML = '<div class="name"><span class="dot' + (ws.running ? ' on' : '') + '"></span> ' +
         esc(ws.id) + '</div><div class="path">' + esc(ws.path) + '</div>' + note;
+      const sbtn = document.createElement('button');
+      sbtn.className = 'sbtn'; sbtn.textContent = 'sessions ⌄';
+      const sessionsBox = document.createElement('div');
+      sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
+      sbtn.onclick = () => toggleSessions(ws.id, sbtn, sessionsBox);
+      left.appendChild(sbtn);
       const right = document.createElement('div');
       right.className = 'right';
       if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
@@ -281,9 +392,40 @@ const launcherPageHTML = `<!doctype html>
         b.onclick = () => startSession(ws.id, b);
         right.appendChild(b);
       }
-      row.appendChild(left); row.appendChild(right);
+      row.appendChild(left); row.appendChild(right); row.appendChild(sessionsBox);
       list.appendChild(row);
     }
+  }
+
+  async function toggleSessions(id, btn, box) {
+    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = 'sessions ⌄'; return; }
+    box.style.display = ''; btn.textContent = 'sessions ⌃';
+    box.innerHTML = '<div class="none">Loading…</div>';
+    try {
+      const r = await fetch('/launch/sessions?workspace=' + encodeURIComponent(id), { headers: auth });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      const s = j.sessions || [];
+      if (!s.length) { box.innerHTML = '<div class="none">No active sessions. corgi lists these from the claude CLI — none are running for this workspace.</div>'; return; }
+      box.innerHTML = '';
+      for (const sess of s) {
+        const el = document.createElement('div');
+        el.className = 's';
+        el.innerHTML = '<span>' + esc(sess.name || sess.sessionId || 'session') +
+          ' <span class="when">· ' + esc(sess.kind || '') + '</span></span>' +
+          '<span class="when">' + esc(fmtWhen(sess.startedAt)) + '</span>';
+        box.appendChild(el);
+      }
+    } catch (e) { box.innerHTML = '<div class="none">✗ ' + esc(e.message) + '</div>'; }
+  }
+
+  function fmtWhen(ms) {
+    if (!ms) return '';
+    const diff = (Date.now() - ms) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return new Date(ms).toLocaleDateString();
   }
 
   // app mode uses a real anchor tap so iOS deep-links into the Claude app;
