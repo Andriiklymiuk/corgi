@@ -1,6 +1,6 @@
 ---
 name: agent
-description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — "work on the recipe app", "which stacks do I have", "start a branch across the api and mobile repos", "show me the diff", "keep corgi running when I'm away", "why did my remote session die", "set up agent mode", "run it under my work account". Covers resolving a stack by name, materializing one branch across every repository in it, reading a cross-repo diff, and supervising `claude remote-control` so it survives reboots and the ten-minute network timeout. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
+description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — "work on the recipe app", "which stacks do I have", "start a branch across the api and mobile repos", "show me the diff", "keep corgi running when I'm away", "why did my remote session die", "set up agent mode", "run it under my work account", "start a session in that repo from my phone", "set up remote session start". Covers resolving a stack by name, materializing one branch across every repository in it, reading a cross-repo diff, supervising `claude remote-control` so it survives reboots and the ten-minute network timeout, and starting/stopping a session in any registered workspace on demand (corgi_session_start, profiles, session URLs). NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
 ---
 
 # Corgi agent mode
@@ -167,6 +167,125 @@ user has work and personal logins, check it.
 | network timeout | Remote Control exits after ~10 min awake with no network. corgi restarted it. **The previous conversation's context is gone** — the new session starts clean. |
 | auth failure | corgi deliberately did not retry; retrying cannot produce credentials. Run `corgi agent doctor`. |
 | exited immediately, repeatedly | corgi stopped after 5 attempts and disabled the workspace. Something is wrong with the setup, not the network. |
+
+## Starting a session on demand (remote session start)
+
+The daemon normally supervises only `autostart` workspaces. `corgi_session_start`
+starts a session in **any** registered workspace, from a phone or any paired MCP
+client — the fix for "I forgot to enable that repo before leaving the laptop".
+
+```
+corgi_session_start { "workspace": "the recipe app", "profile": "work" }
+```
+
+- Returns immediately with `state: "starting"`. **Poll `corgi_agent_status`**
+  until the workspace reports `running` — its `sessionUrl` is the magic moment:
+  hand it to the user, one tap opens the conversation in that repo.
+- Idempotent: an already-running workspace answers `state: "running"` with its
+  URL. Ambiguous names return candidates — ask, as always.
+- `sessionUrl` is best-effort. If it never appears, the session still runs;
+  tell the user to find it in claude.ai/code by the workspace's name.
+- `corgi_session_stop { "workspace": "..." }` ends it. Stopping a non-running
+  workspace is a clean no-op.
+- CLI parity for local testing: `corgi agent session start <name> --profile work`,
+  `corgi agent session stop <name>`.
+- Every remote start and stop raises a desktop notification on the laptop, by
+  design — the machine's owner always sees what began running.
+
+### Setting it up from a session on the laptop
+
+**One command, from inside the stack directory:**
+
+```bash
+corgi agent up
+```
+
+It registers the current stack, starts the daemon (if down), opens the MCP
+endpoint with a public tunnel, and prints a **scannable QR** for pairing — all
+detached, so you can run it and keep working. No port to remember. `--json`
+emits the URL and pairing code for a caller that wants them structured.
+
+The user scans the QR (or opens the printed URL) on their phone, names the
+device, and gets a per-device token. After pairing, the same page offers **Open
+launcher** (`/app`): corgi's own phone UI that lists the machine's workspaces
+and starts a session in one tap, then hands back the claude.ai link — no
+claude.ai connector needed. The launcher remembers the device token on that
+browser, so a saved home-screen shortcut is a one-tap daily entry (use a **named
+tunnel** so the URL is stable). Verify end-to-end with `corgi agent session
+start <workspace>` or by tapping a repo in the launcher, and watch the session
+URL appear.
+
+The Claude-app custom connector still works as a second option (add corgi's
+`/mcp` URL + Bearer token on claude.ai — note the request-header path is beta
+and rolling out); the launcher is the setup-free path.
+
+The old longhand still works when you want the pieces separately:
+`corgi agent scan ~/dev` → `corgi agent serve &` → `corgi mcp --http :8765
+--tunnel --pair`. Note `corgi agent serve` **blocks** the terminal (background
+it with `&`, or use `corgi agent install` to run it at login); `corgi agent up`
+backgrounds it for you.
+
+### What travels through the corgi tunnel — and what does not
+
+The corgi tunnel is a **control plane only**: it carries `corgi_session_start`,
+status, diff, logs. It does **not** carry the conversation. The back-and-forth
+with Claude runs in the **Claude app / Remote Control**, which talks to
+claude.ai directly — the `sessionUrl` you open joins that, not anything corgi
+proxies. So: corgi starts the session and hands you the URL; the Claude app is
+where you actually talk. Two apps, by design.
+
+### Which client calls corgi_session_start
+
+`corgi_session_start` is an MCP tool, so any MCP client works. Today that is
+the **Claude app as a custom connector**: add the tunnel URL + device token,
+then say "start a session in the recipe app" and it calls the tool for you. A
+dedicated companion app is a separate project (it must **not** live in the
+corgi repo).
+
+### Profiles — which Claude account runs
+
+`profiles:` in the **user-level** agent config (`<data>/agent/config.yml`) are
+named setting bundles picked at start time:
+
+```yaml
+profiles:
+  work:
+    configDir: ~/claude-configs/work
+  personal:
+    configDir: ~/claude-configs/personal
+```
+
+- A remote caller sends only a profile **name**; what it selects is defined in
+  the trusted local file. Unknown names error with the list of defined ones.
+- A shell alias like `claude-work` is **not** a binary — the supervisor cannot
+  exec it. Prefer `configDir:` with the default `claude`; if a different
+  command is truly needed, make it a real script on PATH and set `bin:`.
+
+### Letting the laptop sleep between turns
+
+By default the daemon holds a wake lock for the whole session, so the Mac stays
+awake even while the session is just waiting for the user. To let it sleep while
+idle and wake back up when work resumes, set `wakeLock: idle` in the user
+config (per workspace or under `defaults:`):
+
+```yaml
+defaults:
+  wakeLock: idle    # session|always|off|idle — idle sleeps after ~5 min quiet
+```
+
+`off` never blocks sleep (a long build can be cut); `idle` keeps working
+sessions awake but sleeps between turns.
+
+### If a remote start does not appear
+
+| symptom | what to say / do |
+|---|---|
+| tool errors "daemon is not running" | `corgi agent serve` on the laptop (or `corgi agent install`). |
+| tool errors "predates remote session start" | The daemon is an older corgi. Restart it: `corgi agent stop` then `corgi agent serve` (or `corgi agent up`). |
+| workspace `unreachable` | Drive not mounted or folder moved — `corgi agent workspaces relocate`. |
+| workspace marked sensitive | Remote start is refused by design. Start it on the laptop, or unset `sensitive` in `.corgi/agent.yml`. |
+| queued but nothing started | Commands expire after 60s. Check `corgi agent status` diagnostics — a rejected start says why there. |
+| running but no `sessionUrl` | The session is fine; the URL was not spotted in output. Find it in claude.ai/code. |
 
 ## Things not to do
 

@@ -190,3 +190,33 @@ func TestBuildEnvIgnoresMalformedEntries(t *testing.T) {
 		t.Error("malformed entries should be dropped rather than passed through")
 	}
 }
+
+func TestValidPermissionMode(t *testing.T) {
+	for _, m := range []string{"", "default", "acceptEdits", "plan", "auto", "dontask", "  Default  "} {
+		if !ValidPermissionMode(m) {
+			t.Errorf("%q should be valid", m)
+		}
+	}
+	for _, m := range []string{"bypassPermissions", "yolo", "nope"} {
+		if ValidPermissionMode(m) {
+			t.Errorf("%q must be rejected", m)
+		}
+	}
+	if PermissionModeHint() == "" {
+		t.Error("the hint must list the accepted modes")
+	}
+}
+
+func TestActivityWriterReportsEachWrite(t *testing.T) {
+	n := 0
+	a := activityWriter{report: func() { n++ }}
+	if _, err := a.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Write([]byte("more")); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("report called %d times, want one per write", n)
+	}
+}

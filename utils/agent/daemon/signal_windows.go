@@ -22,3 +22,14 @@ func processAliveOS(pid int) bool {
 	_ = proc.Release()
 	return true
 }
+
+// Windows has no SIGUSR1; the command tick alone drains the spool (≤5s later).
+func nudgeProcess(int) error { return nil }
+
+// notifyNudge has nothing to subscribe to on Windows (no SIGUSR1), so it
+// installs no handler and returns a stop function with nothing to undo.
+func notifyNudge(chan<- struct{}) func() {
+	return func() {
+		// No signal handler was installed, so there is nothing to tear down.
+	}
+}

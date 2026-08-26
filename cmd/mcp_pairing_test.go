@@ -97,11 +97,48 @@ func TestPairEndpointClosesAfterRepeatedGuesses(t *testing.T) {
 	}
 }
 
-func TestPairEndpointRejectsNonPost(t *testing.T) {
+func TestPairEndpointServesThePairPageOnGet(t *testing.T) {
 	session, _, store := pairingFixture(t)
 	h := pairingHandler(session, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/pair", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("content type = %q, want text/html", ct)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "device") || !strings.Contains(body, "location.hash") {
+		t.Error("the pair page must ask for a device name and read the code from the URL fragment")
+	}
+	if strings.Contains(body, session.Code()) {
+		t.Error("the pairing code must never be server-rendered into the page — it arrives only via the QR fragment")
+	}
+}
+
+func TestPairEndpointGetWhenClosedSaysSoWithoutDetails(t *testing.T) {
+	session, _, store := pairingFixture(t)
+	session.Close()
+	h := pairingHandler(session, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/pair", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", rec.Code)
+	}
+}
+
+func TestPairEndpointRejectsOtherMethods(t *testing.T) {
+	session, _, store := pairingFixture(t)
+	h := pairingHandler(session, store)
+
+	req := httptest.NewRequest(http.MethodPut, "/pair", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 

@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
+	"sync"
 	"syscall"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/brief"
+	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
@@ -21,6 +24,13 @@ import (
 )
 
 var agentCmd = &cobra.Command{
+	// Cobra runs only the nearest PersistentPreRun, so replicate the root's
+	// global-flag handling, then warn once if agent data was left at the old
+	// location by the data-dir move.
+	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		applyGlobalFlags(cmd)
+		warnStrandedAgentData()
+	},
 	Use:   "agent",
 	Short: "Keep Claude Code Remote Control running for your corgi workspaces",
 	Long: `Agent mode makes this machine an always-on, multi-repo Remote Control host.
@@ -40,12 +50,50 @@ Getting started:
 }
 
 // agentDir is where agent mode keeps daemon.json, status.json and the registry.
+//
+// It uses the per-user data directory (NativeDataDir), never the Homebrew
+// prefix: a registry of paths and per-device tokens is user data, and a brew
+// reinstall must not wipe it. Agent mode is new, so there is no legacy data to
+// carry across.
 func agentDir() (string, error) {
-	base, err := utils.CorgiDataDir()
+	base, err := utils.NativeDataDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(base, "agent"), nil
+}
+
+var legacyAgentWarnOnce sync.Once
+
+// warnStrandedAgentData says once, if agent data exists at the old Homebrew-var
+// location but not the new per-user one, that the location changed and the old
+// setup is not carried over. Called from command entry points (never agentDir,
+// so path resolution stays side-effect-free); a plain notice, never a move —
+// agent mode is unreleased, so there is nothing to migrate for real users.
+func warnStrandedAgentData() {
+	legacyAgentWarnOnce.Do(func() {
+		newDir, err := agentDir()
+		if err != nil {
+			return
+		}
+		if _, err := os.Stat(newDir); err == nil {
+			return // already using the new location
+		}
+		legacyBase, err := utils.CorgiDataDir()
+		if err != nil {
+			return
+		}
+		legacy := filepath.Join(legacyBase, "agent")
+		if legacy == newDir {
+			return // no separate legacy location (CORGI_DATA_DIR override, etc.)
+		}
+		if info, statErr := os.Stat(legacy); statErr != nil || !info.IsDir() {
+			return // nothing stranded
+		}
+		utils.Infof("corgi: agent data now lives at %s (was %s).\n"+
+			"The old setup is not carried over — re-run `corgi agent init` and re-pair your devices.\n",
+			newDir, legacy)
+	})
 }
 
 func agentUserConfigPath(dir string) string { return filepath.Join(dir, "config.yml") }
@@ -82,6 +130,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 
 	d := daemon.New(APP_VERSION, dir)
 	d.CaptureBrief = captureWorkspaceBrief
+	d.ResolveWorkspace = remoteResolver(dir, foreground)
 	printStartupDiagnostics(configs)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -110,10 +159,55 @@ func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, er
 	var out []supervisor.SpawnConfig
 	for _, w := range registry.Sorted() {
 		if cfg, ok := spawnConfigForWorkspace(w, user, foreground); ok {
+			cfg.Origin = supervisor.OriginAutostart
 			out = append(out, cfg)
 		}
 	}
 	return out, nil
+}
+
+// remoteResolver builds launch settings for one workspace on demand,
+// reloading registry and config so a remote start sees the current files,
+// not the ones from daemon startup. No autostart check: a remote start IS
+// the explicit act autostart substitutes for.
+func remoteResolver(dir string, foreground bool) func(id, profile string) (supervisor.SpawnConfig, error) {
+	return func(id, profile string) (supervisor.SpawnConfig, error) {
+		registry, err := workspace.Load(agentRegistryPath(dir))
+		if err != nil {
+			return supervisor.SpawnConfig{}, err
+		}
+		registry.Reconcile(dirHasComposeFile)
+		w, ok := registry.Find(id)
+		if !ok {
+			return supervisor.SpawnConfig{}, fmt.Errorf("no workspace called %q in the registry — run `corgi agent scan` on the laptop", id)
+		}
+		if w.Status != workspace.StatusOK {
+			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is %s — fix the path with `corgi agent workspaces relocate`", w.ID, w.Status)
+		}
+		user, err := config.LoadUser(agentUserConfigPath(dir))
+		if err != nil {
+			return supervisor.SpawnConfig{}, err
+		}
+		repo, err := config.LoadRepo(w.AbsPath)
+		if err != nil {
+			return supervisor.SpawnConfig{}, err
+		}
+		resolved := config.Resolve(w.ID, repo, user)
+		if resolved.Sensitive {
+			// A workspace the repo marked sensitive has opted out of being
+			// driven remotely. Same refusal the preview tunnels give it, so the
+			// flag means one thing everywhere.
+			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is marked sensitive — remote session start is refused (start it on the laptop, or unset sensitive in .corgi/agent.yml)", w.ID)
+		}
+		resolved, err = config.ApplyProfile(resolved, user, profile)
+		if err != nil {
+			return supervisor.SpawnConfig{}, err
+		}
+		cfg := spawnConfigFrom(w, resolved, foreground)
+		cfg.Origin = supervisor.OriginRemote
+		cfg.Profile = profile
+		return cfg, nil
+	}
 }
 
 // spawnConfigForWorkspace decides whether one registered workspace should be
@@ -264,6 +358,16 @@ func printWorkspaceState(w supervisor.RunState) {
 	if w.LastReason != "" {
 		fmt.Printf("  %-20s %s\n", "", w.LastReason)
 	}
+	if w.Origin == supervisor.OriginRemote {
+		label := "started remotely"
+		if w.Profile != "" {
+			label += " · profile " + w.Profile
+		}
+		fmt.Printf("  %-20s %s\n", "", label)
+	}
+	if w.SessionURL != "" {
+		fmt.Printf("  %-20s %s\n", "", w.SessionURL)
+	}
 }
 
 // workspaceState collapses the flags into the one word worth reading first.
@@ -407,6 +511,83 @@ var agentWorkspacesRelocateCmd = &cobra.Command{
 	},
 }
 
+// ---------------------------------------------------------------- session
+
+var agentSessionCmd = &cobra.Command{
+	Use:   "session",
+	Short: "Start or stop a supervised session in a workspace, on demand",
+}
+
+var agentSessionStartCmd = &cobra.Command{
+	Use:   "start <workspace>",
+	Short: "Ask the running daemon to start a session in a workspace",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		profile, _ := cmd.Flags().GetString("profile")
+		enqueueSessionCommand(command.ActionStart, args, profile)
+	},
+}
+
+var agentSessionStopCmd = &cobra.Command{
+	Use:   "stop <workspace>",
+	Short: "Ask the running daemon to stop a workspace's session",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		enqueueSessionCommand(command.ActionStop, args, "")
+	},
+}
+
+// enqueueSessionCommand resolves the workspace, writes the spool command and
+// nudges the daemon — the same path the MCP tools use, so the two surfaces
+// cannot drift.
+func enqueueSessionCommand(action string, args []string, profile string) {
+	registry, _ := mustLoadRegistry()
+	registry.Reconcile(dirHasComposeFile)
+	res := workspace.Resolve(registry, strings.Join(args, " "))
+	if !res.Resolved() {
+		if utils.JSONOutput {
+			utils.PrintJSON(res)
+		} else {
+			fmt.Println(res.Reason)
+			for _, c := range res.Candidates {
+				fmt.Printf("  %-20s %s\n", c.Workspace.ID, c.Workspace.AbsPath)
+			}
+		}
+		os.Exit(2)
+	}
+
+	dir, err := agentDir()
+	if err != nil {
+		exitWithError("agent_data_dir", err, 1)
+	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil {
+		exitWithError("agent_session", err, 1)
+	}
+	if info == nil {
+		exitWithError("agent_not_running",
+			errors.New("corgi agent is not running — start it with `corgi agent serve`, or `corgi agent install` to start at login"), 1)
+	}
+	if !info.Commands {
+		exitWithError("agent_no_command_support",
+			errors.New("the running corgi agent predates remote session start — restart it: `corgi agent stop` then `corgi agent serve`"), 1)
+	}
+
+	c, err := command.Write(dir, command.Command{
+		Action: action, WorkspaceID: res.Workspace.ID, Profile: profile, Source: "cli",
+	})
+	if err != nil {
+		exitWithError("agent_session", err, 1)
+	}
+	daemon.Nudge(info)
+
+	if utils.JSONOutput {
+		utils.PrintJSON(map[string]any{"queued": action, "workspaceId": res.Workspace.ID, "commandId": c.ID})
+		return
+	}
+	utils.Infof("%s queued for %s — watch `corgi agent status` for the session URL\n", action, res.Workspace.ID)
+}
+
 var agentResolveCmd = &cobra.Command{
 	Use:   "resolve <name>",
 	Short: "Show which workspace a name resolves to, without starting anything",
@@ -457,11 +638,15 @@ func init() {
 
 	agentBriefCmd.Flags().Bool("json", false, "Machine-readable output")
 
+	agentSessionStartCmd.Flags().String("profile", "", "Profile from the agent config's profiles: section (e.g. work)")
+	agentSessionCmd.AddCommand(agentSessionStartCmd, agentSessionStopCmd)
+
 	agentWorkspacesCmd.AddCommand(agentWorkspacesListCmd, agentWorkspacesForgetCmd, agentWorkspacesRelocateCmd)
 	agentCmd.AddCommand(
 		agentServeCmd,
 		agentStatusCmd,
 		agentStopCmd,
+		agentSessionCmd,
 		agentWorkspacesCmd,
 		agentResolveCmd,
 		agentBriefCmd,

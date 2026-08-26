@@ -101,13 +101,16 @@ func runAgentInstall(_ *cobra.Command, _ []string) {
 // serviceEnv is the environment the supervised daemon needs to resolve the same
 // state the installing shell did.
 //
-// PATH alone is not enough: getDataPath keys on CORGI_DATA_DIR, HOMEBREW_PREFIX
-// and XDG_DATA_HOME, so a custom Homebrew prefix or a shell-set XDG_DATA_HOME
-// would leave the daemon reading a different, empty registry than the shell
-// that ran `corgi agent init` — the same skew capturing PATH exists to prevent.
+// PATH alone is not enough: the agent dir resolves through NativeDataDir, which
+// keys on CORGI_DATA_DIR, HOME and XDG_DATA_HOME. Capturing them keeps the
+// daemon reading the same agent dir as the shell that ran `corgi agent init` —
+// the same skew capturing PATH exists to prevent. HOMEBREW_PREFIX is kept for
+// the legacy exec-path registry (CorgiDataDir), which the daemon can still touch.
 func serviceEnv() map[string]string {
 	env := map[string]string{"PATH": servicePATH()}
-	for _, key := range []string{"CORGI_DATA_DIR", "HOMEBREW_PREFIX", "XDG_DATA_HOME"} {
+	// HOME is normally injected by launchd/systemd, but the daemon's data-dir
+	// resolution now depends on it, so pin it rather than rely on the launcher.
+	for _, key := range []string{"CORGI_DATA_DIR", "HOME", "XDG_DATA_HOME", "HOMEBREW_PREFIX"} {
 		if v := os.Getenv(key); v != "" {
 			env[key] = v
 		}

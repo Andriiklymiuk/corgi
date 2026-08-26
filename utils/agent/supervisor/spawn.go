@@ -52,7 +52,27 @@ type SpawnConfig struct {
 	// stderr is a log file on disk. Only `--foreground`, where a person is
 	// watching the terminal, turns this on.
 	MirrorOutput bool
+	// Origin says who asked for this workspace to run: OriginAutostart from
+	// the daemon's startup set, OriginRemote from a spool command.
+	Origin string
+	// Profile is the trusted-config profile overlaid onto this workspace's
+	// settings, when one was requested.
+	Profile string
+	// OnSessionURL is runtime wiring, not configuration: the runner installs
+	// it so the exec layer can report the claude.ai session URL it spots in
+	// the process output. Best-effort — may never fire.
+	OnSessionURL func(url string)
+	// OnActivity is runtime wiring too: the exec layer calls it on every chunk
+	// of process output, which the idle wake lock uses as a "still working"
+	// signal. Must be cheap — it is on the output path.
+	OnActivity func()
 }
+
+// Origin values for SpawnConfig.Origin / RunState.Origin.
+const (
+	OriginAutostart = "autostart"
+	OriginRemote    = "remote"
+)
 
 // forbiddenPermissionModes never reach a supervised process. A daemon running
 // unattended must not be able to skip permission prompts — those prompts are
@@ -115,7 +135,7 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 			c.WorkspaceID, kind.Name)
 	}
 	if c.WakeLock != "" && !ValidWakeLockMode(c.WakeLock) {
-		return fmt.Errorf("workspace %s: unknown wakeLock %q (want always, off, session)",
+		return fmt.Errorf("workspace %s: unknown wakeLock %q (want always, off, session, idle)",
 			c.WorkspaceID, c.WakeLock)
 	}
 	return nil
@@ -133,6 +153,21 @@ func validateSpawnIdentity(c SpawnConfig) error {
 	}
 	return nil
 }
+
+// ValidPermissionMode reports whether mode is one a supervised session accepts.
+// Empty is valid (the CLI's default). Exposed so a bad value can be rejected
+// where it is written — e.g. `corgi agent profile add --permission-mode` — not
+// only when a session is launched hours later.
+func ValidPermissionMode(mode string) bool {
+	m := normalize(mode)
+	if m == "" {
+		return true
+	}
+	return !forbiddenPermissionModes[m] && validPermissionModes[m]
+}
+
+// PermissionModeHint lists the accepted modes for an error message.
+func PermissionModeHint() string { return sortedKeys(validPermissionModes) }
 
 func validatePermissionMode(c SpawnConfig, kind Kind) error {
 	mode := normalize(c.PermissionMode)

@@ -16,6 +16,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/brief"
+	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
@@ -29,6 +30,10 @@ type Info struct {
 	Executable string    `json:"executable,omitempty"`
 	StartedAt  time.Time `json:"startedAt"`
 	Workspaces []string  `json:"workspaces"`
+	// Commands is true when this daemon drains the command spool and handles a
+	// SIGUSR1 nudge. A daemon from before this feature omits it, and Nudge must
+	// then NOT signal it — SIGUSR1's default disposition would kill it.
+	Commands bool `json:"commands,omitempty"`
 }
 
 // Status is the whole daemon's state, as `corgi agent status --json` prints.
@@ -69,6 +74,14 @@ type Daemon struct {
 	// enumerating a stack's repositories means parsing a compose file, which the
 	// daemon has no business knowing about. Nil disables briefs entirely.
 	CaptureBrief func(brief.Params) *brief.Brief
+	// ResolveWorkspace builds launch settings for one workspace on demand —
+	// remote session start. Injected by cmd, which knows the registry and
+	// config files; nil disables commands and keeps the fixed-set lifecycle
+	// exactly as it was.
+	ResolveWorkspace func(workspaceID, profile string) (supervisor.SpawnConfig, error)
+	// CommandTick is the spool poll interval; the SIGUSR1 nudge only shortens
+	// the wait. Zero means statusPublishInterval. Test seam.
+	CommandTick time.Duration
 	// publishStopped is called as the status publisher exits.
 	//
 	// A test seam. Whether Run waits for that goroutine is otherwise observable
@@ -76,9 +89,13 @@ type Daemon struct {
 	// with — which a test can lose a hundred times before catching once.
 	publishStopped func()
 
-	mu      sync.Mutex
-	runners []*supervisor.Runner
-	diags   []WorkspaceDiagnostic
+	mu        sync.Mutex
+	runners   []*supervisor.Runner
+	diags     []WorkspaceDiagnostic
+	startedAt time.Time
+
+	// nudge wakes the command loop; the cross-process doorbell is SIGUSR1.
+	nudge chan struct{}
 
 	// publishSignal is nudged whenever a supervisor's state changes, so
 	// `corgi agent status` in another process is not up to five seconds stale.
@@ -93,7 +110,31 @@ func New(version, dir string) *Daemon {
 		Start:         supervisor.StartProcess,
 		Notify:        utils.Notify,
 		publishSignal: make(chan struct{}, 1),
+		nudge:         make(chan struct{}, 1),
 	}
+}
+
+// Nudge wakes the command loop in this process. The cross-process variant is
+// the package-level Nudge.
+func (d *Daemon) Nudge() {
+	select {
+	case d.nudge <- struct{}{}:
+	default:
+	}
+}
+
+// Nudge pokes a running daemon in another process so it drains the spool now
+// rather than on the next tick. Best-effort: the tick still wins without it.
+//
+// It signals ONLY a daemon that advertised command support. A daemon from
+// before this feature has no handler for SIGUSR1, whose default disposition is
+// to terminate — so nudging one would kill it. Such a daemon cannot drain the
+// spool anyway; the caller should tell the user to restart it.
+func Nudge(info *Info) {
+	if info == nil || info.PID <= 0 || !info.Commands {
+		return
+	}
+	_ = nudgeProcess(info.PID)
 }
 
 // InfoPath is where the daemon record lives.
@@ -167,7 +208,87 @@ func ReadStatus(dir string) (*Status, error) {
 // Each workspace gets its own goroutine; one workspace disabling itself does
 // not take the others down. Run returns only when every supervisor has
 // finished, so a caller can rely on it meaning "nothing of mine is still up".
+//
+// With ResolveWorkspace set, Run also drains the command spool and can start
+// and stop workspaces at runtime; without it, the fixed-set lifecycle below is
+// unchanged.
 func (d *Daemon) Run(ctx context.Context, configs []supervisor.SpawnConfig) error {
+	// Catch SIGUSR1 for the daemon's ENTIRE lifetime, before writeInfo makes
+	// this pid discoverable to a nudge and until after cleanup. Go's default
+	// disposition for SIGUSR1 is to terminate the process, so a nudge landing
+	// in the window before the handler was installed — a phone start racing a
+	// launchd restart, exactly what this feature invites — would kill the
+	// daemon outright. Installed on the fixed path too, where nothing reads the
+	// channel, purely so the signal is never fatal.
+	stopSignals := notifyNudge(d.nudge)
+	defer stopSignals()
+
+	if d.ResolveWorkspace != nil {
+		return d.runDynamic(ctx, configs)
+	}
+	return d.runFixed(ctx, configs)
+}
+
+// runDynamic is the command-capable lifecycle: the startup set may be empty,
+// and spool commands add or stop runners while it holds the process open.
+func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfig) error {
+	for _, cfg := range configs {
+		if err := supervisor.ValidateSpawnConfig(cfg); err != nil {
+			return err
+		}
+	}
+	d.startedAt = time.Now().UTC()
+	d.buildRunners(configs)
+	if err := d.writeInfoIDs(d.runnerIDs()); err != nil {
+		return err
+	}
+	defer d.cleanup()
+
+	publishCtx, stopPublishing := context.WithCancel(ctx)
+	defer stopPublishing()
+	publishDone := make(chan struct{})
+	go func() { defer close(publishDone); d.publishStatus(publishCtx) }()
+	defer func() { stopPublishing(); <-publishDone }()
+
+	var wg sync.WaitGroup
+	launch := func(r *supervisor.Runner) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := r.Run(ctx); err != nil && ctx.Err() == nil {
+				utils.Infof("agent: %s stopped: %v\n", r.Config.WorkspaceID, err)
+			}
+		}()
+	}
+	for _, r := range d.Runners() {
+		launch(r)
+	}
+	if len(configs) == 0 {
+		utils.Info("agent: no autostart workspaces — waiting for remote session starts")
+	}
+
+	tick := d.CommandTick
+	if tick == 0 {
+		tick = statusPublishInterval
+	}
+	ticker := time.NewTicker(tick)
+	defer ticker.Stop()
+
+	for ctx.Err() == nil {
+		d.drainCommands(ctx, launch)
+		select {
+		case <-ctx.Done():
+		case <-d.nudge:
+		case <-ticker.C:
+		}
+	}
+	wg.Wait()
+	return ctx.Err()
+}
+
+// runFixed is the pre-command lifecycle, kept byte-for-byte for callers that
+// never injected ResolveWorkspace.
+func (d *Daemon) runFixed(ctx context.Context, configs []supervisor.SpawnConfig) error {
 	if len(configs) == 0 {
 		return fmt.Errorf("no workspaces configured for agent mode — run `corgi agent init` in a stack, or `corgi agent scan <dir>`")
 	}
@@ -283,6 +404,157 @@ func (d *Daemon) sessionEndHook(cfg supervisor.SpawnConfig, r *supervisor.Runner
 	}
 }
 
+// drainCommands executes every pending spool command.
+func (d *Daemon) drainCommands(ctx context.Context, launch func(*supervisor.Runner)) {
+	cmds, err := command.Drain(d.Dir, time.Now(), command.TTL)
+	if err != nil {
+		utils.Infof("agent: reading commands: %v\n", err)
+		return
+	}
+	for _, c := range cmds {
+		if ctx.Err() != nil {
+			return
+		}
+		switch c.Action {
+		case command.ActionStart:
+			d.startWorkspace(ctx, c, launch)
+		case command.ActionStop:
+			d.stopRemoteWorkspace(c)
+		}
+	}
+}
+
+func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {
+	if r := d.findRunner(c.WorkspaceID); r != nil && r.Supervising() {
+		d.requestPublish() // already supervised — the fresh status is the answer
+		return
+	}
+	cfg, err := d.ResolveWorkspace(c.WorkspaceID, c.Profile)
+	if err != nil {
+		d.commandFailed(c, err)
+		return
+	}
+	if cfg.Origin == "" {
+		cfg.Origin = supervisor.OriginRemote
+	}
+	if err := supervisor.ValidateSpawnConfig(cfg); err != nil {
+		d.commandFailed(c, err)
+		return
+	}
+	if ctx.Err() != nil {
+		// The daemon is shutting down. Resolving took long enough for cancel to
+		// land; launching now would fire a "started" notification for a session
+		// that returns instantly and does not survive the restart.
+		return
+	}
+	lock := supervisor.NewWakeLock(cfg.WakeLockMode())
+	r := supervisor.NewRunner(cfg, d.Start, lock)
+	r.Notify = d.Notify
+	r.OnChange = d.requestPublish
+	r.OnSessionEnd = d.sessionEndHook(cfg, r)
+	d.replaceRunner(r, diagnose(cfg, os.Environ()))
+	launch(r)
+	d.announceRemote(c, "session started remotely")
+	d.requestPublish()
+	_ = d.writeInfoIDs(d.runnerIDs())
+}
+
+func (d *Daemon) stopRemoteWorkspace(c command.Command) {
+	r := d.findRunner(c.WorkspaceID)
+	if r == nil || !r.Supervising() {
+		// A clean no-op, as the tool advertises. The id was resolved against the
+		// registry before it reached the spool, so a missing or already-stopped
+		// runner just means "not running" — not a failure to flash at the owner.
+		return
+	}
+	// StopAsync sets the stop flag synchronously — so a start later in this same
+	// drain batch sees Supervising()==false and is not deduplicated against a
+	// runner on its way out — then backgrounds the blocking teardown (up to
+	// stopGrace) so a batch of stops cannot stall the loop and age queued
+	// commands past their TTL.
+	r.StopAsync()
+	d.announceRemote(c, "session stopped remotely")
+	d.requestPublish()
+}
+
+// commandFailed surfaces a rejected command where a phone will see it: the
+// diagnostics in status.json, plus a desktop notification.
+func (d *Daemon) commandFailed(c command.Command, err error) {
+	utils.Infof("agent: %s %s: %v\n", c.Action, c.WorkspaceID, err)
+	d.setDiag(WorkspaceDiagnostic{WorkspaceID: c.WorkspaceID, Warning: fmt.Sprintf("remote %s failed: %v", c.Action, err)})
+	if d.Notify != nil {
+		d.Notify("corgi agent · "+c.WorkspaceID, fmt.Sprintf("remote %s failed: %v", c.Action, err))
+	}
+	d.requestPublish()
+}
+
+func (d *Daemon) announceRemote(c command.Command, what string) {
+	if d.Notify == nil {
+		return
+	}
+	body := what
+	if c.Profile != "" {
+		body += " · profile " + c.Profile
+	}
+	if c.Source != "" {
+		body += " · via " + c.Source
+	}
+	d.Notify("corgi agent · "+c.WorkspaceID, body)
+}
+
+func (d *Daemon) findRunner(id string) *supervisor.Runner {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, r := range d.runners {
+		if r.Config.WorkspaceID == id {
+			return r
+		}
+	}
+	return nil
+}
+
+// replaceRunner swaps the entry for its workspace (or appends), keeping one
+// runner and one diagnostic per workspace id.
+func (d *Daemon) replaceRunner(r *supervisor.Runner, diag WorkspaceDiagnostic) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for i, old := range d.runners {
+		if old.Config.WorkspaceID == r.Config.WorkspaceID {
+			d.runners[i] = r
+			d.setDiagLocked(diag)
+			return
+		}
+	}
+	d.runners = append(d.runners, r)
+	d.setDiagLocked(diag)
+}
+
+func (d *Daemon) setDiag(diag WorkspaceDiagnostic) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.setDiagLocked(diag)
+}
+
+func (d *Daemon) setDiagLocked(diag WorkspaceDiagnostic) {
+	for i, old := range d.diags {
+		if old.WorkspaceID == diag.WorkspaceID {
+			d.diags[i] = diag
+			return
+		}
+	}
+	d.diags = append(d.diags, diag)
+}
+
+func (d *Daemon) runnerIDs() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	ids := make([]string, 0, len(d.runners))
+	for _, r := range d.runners {
+		ids = append(ids, r.Config.WorkspaceID)
+	}
+	return ids
+}
+
 // Runners returns the live supervisors.
 func (d *Daemon) Runners() []*supervisor.Runner {
 	d.mu.Lock()
@@ -341,12 +613,23 @@ func diagnose(cfg supervisor.SpawnConfig, env []string) WorkspaceDiagnostic {
 
 // writeInfo records the daemon so other corgi processes can find it.
 func (d *Daemon) writeInfo(configs []supervisor.SpawnConfig) error {
-	exe, _ := os.Executable()
-	info := Info{PID: os.Getpid(), Version: d.Version, Executable: exe, StartedAt: time.Now().UTC()}
+	ids := make([]string, 0, len(configs))
 	for _, c := range configs {
-		info.Workspaces = append(info.Workspaces, c.WorkspaceID)
+		ids = append(ids, c.WorkspaceID)
 	}
-	return writeJSONAtomic(d.InfoPath(), info)
+	return d.writeInfoIDs(ids)
+}
+
+func (d *Daemon) writeInfoIDs(ids []string) error {
+	exe, _ := os.Executable()
+	if d.startedAt.IsZero() {
+		d.startedAt = time.Now().UTC()
+	}
+	return writeJSONAtomic(d.InfoPath(), Info{
+		PID: os.Getpid(), Version: d.Version, Executable: exe,
+		StartedAt: d.startedAt, Workspaces: ids,
+		Commands: d.ResolveWorkspace != nil,
+	})
 }
 
 // cleanup removes the daemon's published files so a stopped daemon never
@@ -416,7 +699,9 @@ func processAlive(pid int) bool {
 func itoa(n int) string { return fmt.Sprint(n) }
 
 func writeJSONAtomic(path string, v any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// 0700/0600: status.json now carries each session's claude.ai URL, and
+	// daemon.json the daemon's pid and paths — owner-only, like the spool.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(v, "", "  ")
@@ -424,7 +709,7 @@ func writeJSONAtomic(path string, v any) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

@@ -192,3 +192,12 @@ func TestServiceEnvOmitsUnsetKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestServiceEnvCapturesHomeForTheDataDir(t *testing.T) {
+	t.Setenv("HOME", "/home/tester")
+	t.Setenv("CORGI_DATA_DIR", "")
+	env := serviceEnv()
+	if env["HOME"] != "/home/tester" {
+		t.Errorf("HOME = %q; the daemon's agent dir now resolves from HOME, so it must be captured", env["HOME"])
+	}
+}

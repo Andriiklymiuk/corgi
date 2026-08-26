@@ -187,3 +187,32 @@ func TestWakeLockAlwaysSurvivesBetweenRestarts(t *testing.T) {
 		t.Error("Run must still release the lock when it returns")
 	}
 }
+
+func TestWakeLockCommandPerPlatform(t *testing.T) {
+	argv := WakeLockCommand(1234)
+	switch runtime.GOOS {
+	case "darwin":
+		if len(argv) == 0 || argv[0] != "caffeinate" {
+			t.Errorf("darwin argv = %v, want caffeinate ...", argv)
+		}
+	case "linux":
+		if len(argv) == 0 || argv[0] != "systemd-inhibit" {
+			t.Errorf("linux argv = %v, want systemd-inhibit ...", argv)
+		}
+	default:
+		if argv != nil {
+			t.Errorf("unsupported platform must return nil argv, got %v", argv)
+		}
+	}
+}
+
+func TestValidWakeLockModeAcceptsIdle(t *testing.T) {
+	for _, m := range []WakeLockMode{WakeLockSession, WakeLockAlways, WakeLockOff, WakeLockIdle} {
+		if !ValidWakeLockMode(m) {
+			t.Errorf("%q must be valid", m)
+		}
+	}
+	if ValidWakeLockMode("nonsense") {
+		t.Error("an unknown mode must be rejected")
+	}
+}
