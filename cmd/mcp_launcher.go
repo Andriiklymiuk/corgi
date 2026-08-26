@@ -408,12 +408,21 @@ const launcherPageHTML = `<!doctype html>
       const s = j.sessions || [];
       if (!s.length) { box.innerHTML = '<div class="none">No active sessions. corgi lists these from the claude CLI — none are running for this workspace.</div>'; return; }
       box.innerHTML = '';
-      // These are the local Claude sessions the claude CLI reports for this
-      // workspace (kind + age). They carry no claude.ai web URL, so they are shown
-      // as status, not links — the openable one is the green "Open session" above.
+      // Sessions the claude CLI reports for this workspace. Each links via the
+      // documented claude.ai/code/<session-id> scheme; a session that was never
+      // connected to claude.ai (pure local terminal) may 404 there, so the link
+      // is best-effort — remote-control sessions, the common case here, open.
       for (const sess of s) {
-        const el = document.createElement('div');
+        const url = sess.sessionId ? 'https://claude.ai/code/' + encodeURIComponent(sess.sessionId) : '';
+        const clickable = url && safeClaudeUrl(url);
+        const el = document.createElement(clickable ? 'a' : 'div');
         el.className = 's';
+        if (clickable) {
+          el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
+          el.title = 'Open on claude.ai (works for connected sessions)';
+          // Honor the workspace's open-in choice: browser mode stays in the browser.
+          if (openMode(id) === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
+        }
         el.innerHTML = '<span>' + esc(sess.name || sess.sessionId || 'session') + '</span>' +
           '<span class="when">' + esc(sess.kind || '') + ' · ' + esc(fmtWhen(sess.startedAt)) + '</span>';
         box.appendChild(el);
