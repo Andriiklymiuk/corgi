@@ -40,8 +40,9 @@ again would be worse.
 
 ## Quick start
 
-One command does the whole phone-startable setup — register this stack, start
-the daemon + MCP + tunnel + pairing, and print a QR (and the pairing code):
+One command does the whole phone-startable setup — register this workspace (a
+corgi stack **or any git repository** — no compose file needed), start the
+daemon + MCP + tunnel + pairing, and print a QR (and the pairing code):
 
 ```bash
 cd ~/dev/your-stack
