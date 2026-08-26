@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 )
 
@@ -143,4 +144,38 @@ func TestLoadProfilesErrorsOnAGroupReadableConfig(t *testing.T) {
 	if _, err := loadProfiles(dir); err == nil {
 		t.Error("a group-readable config must be an error, not silently empty")
 	}
+}
+
+func TestProfileCommandRunHandlers(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	agentD := mustAgentDir() // where the handlers actually write
+	utils.JSONOutput = false
+
+	// add
+	if err := agentProfileAddCmd.Flags().Set("config-dir", "~/.claude-work"); err != nil {
+		t.Fatal(err)
+	}
+	agentProfileAddCmd.Run(agentProfileAddCmd, []string{"work"})
+	profiles, err := loadProfiles(agentD)
+	if err != nil || profiles["work"].ConfigDir != "~/.claude-work" {
+		t.Fatalf("add handler did not persist the profile: %+v, %v", profiles, err)
+	}
+
+	// list (human + json)
+	agentProfileListCmd.Run(agentProfileListCmd, nil)
+	utils.JSONOutput = true
+	agentProfileListCmd.Run(agentProfileListCmd, nil)
+	utils.JSONOutput = false
+
+	// rm an existing profile
+	agentProfileRemoveCmd.Run(agentProfileRemoveCmd, []string{"work"})
+	if p, _ := loadProfiles(agentD); len(p) != 0 {
+		t.Errorf("rm handler left %d profiles", len(p))
+	}
+}
+
+func TestProfileListHandlerWithNoProfiles(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	utils.JSONOutput = false
+	agentProfileListCmd.Run(agentProfileListCmd, nil) // the "none defined" branch
 }
