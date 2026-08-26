@@ -230,3 +230,26 @@ func TestMustAgentDirReturnsTheAgentDir(t *testing.T) {
 		t.Errorf("mustAgentDir() = %q, want %q", got, want)
 	}
 }
+
+func TestReadAgentPidFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, mcpPidName)
+
+	if _, ok := readAgentPidFile(path); ok {
+		t.Error("a missing pid file must report not-ok, so `agent down` has nothing to stop")
+	}
+	if err := os.WriteFile(path, []byte("4321\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if pid, ok := readAgentPidFile(path); !ok || pid != 4321 {
+		t.Errorf("readAgentPidFile = %d, %v; want 4321, true", pid, ok)
+	}
+	for _, bad := range []string{"garbage\n", "-1\n", ""} {
+		if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := readAgentPidFile(path); ok {
+			t.Errorf("a malformed pid %q must report not-ok", bad)
+		}
+	}
+}

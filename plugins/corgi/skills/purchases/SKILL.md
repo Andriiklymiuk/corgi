@@ -1,6 +1,6 @@
 ---
 name: purchases
-description: Use when managing In-App Purchases / store metadata / RevenueCat for an Expo / React Native app — "set up the IAPs", "push the IAP review notes", "update store metadata for purchases", "the App Review notes for each pack", "configure RevenueCat products", "add a premium pack / deck / unlock", "manage non-consumables", "sync product ids across stores". Covers the product-id source-of-truth, a version-controlled local source for per-IAP App Review notes (примечание) generated from the catalog with a drift-guard test, and pushing IAP `reviewNote` via the App Store Connect API — because fastlane `deliver` does NOT manage IAP metadata. NOT for the binary submit (ship skill) or device verification (mobile skill).
+description: Use when managing In-App Purchases / store metadata / RevenueCat for an Expo / React Native app — "set up the IAPs", "push the IAP review notes", "update store metadata for purchases", "the App Review notes for each pack", "configure RevenueCat products", "add a premium pack / deck / unlock", "manage non-consumables", "sync product ids across stores". NOT for the binary submit (ship skill) or device verification (mobile skill).
 ---
 
 # Manage IAPs + store purchase metadata

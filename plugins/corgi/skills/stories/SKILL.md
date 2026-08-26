@@ -12,8 +12,8 @@ hard-code.
 
 ## Speed model
 
-Lighter than a full multi-agent pipeline. **One blocking gate** on the
-adjustment/bug fast path; complex stories add superpowers checkpoints.
+**One blocking gate** on the adjustment/bug fast path; complex stories add
+superpowers checkpoints.
 
 - **Gate (blocking): spec sign-off** (Phase 2). Confirm intent before any branch.
   Cheap, guards the whole batch. Never skip — a clear up-front directive collapses

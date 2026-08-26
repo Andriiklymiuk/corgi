@@ -94,8 +94,9 @@ Absent → skip.
   trace = real failure.
 - **Slow first boot vs hung** — a first run that clones repos / seeds a DB / pulls
   images legitimately takes minutes. Tell apart ONLY by whether the log keeps
-  advancing: `corgi status --watch` (or a 2nd `corgi status --json` after ~30s,
-  compare the healthy count). Cross-ref `../corgi/references/debugging.md`.
+  advancing: a 2nd `corgi status --json` after ~30s, compare the healthy count
+  (never `corgi status --watch` — it blocks until Ctrl+C and hangs an agent).
+  Cross-ref `../corgi/references/debugging.md`.
 
 ## Step 1 — `corgi doctor` when something won't start
 

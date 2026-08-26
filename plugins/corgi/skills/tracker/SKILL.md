@@ -43,7 +43,7 @@ tool name.**
   (`atlassian.net`/project key) → `mcp__atlassian__*`. Both + bare key → ask. Neither
   connected → name what to connect, offer a git-only digest.
 
-## Phase 1 — Correlate ticket ↔ code (the superpower)
+## Phase 1 — Correlate ticket ↔ code
 
 Per in-scope ticket (skip only if no compose): find its PRs — prefer the tracker's
 own git links (Linear attachments / Jira dev-panel), else list PRs whose head branch

@@ -1,6 +1,6 @@
 ---
 name: suggest-proactive
-description: Use when the user wants corgi to PROACTIVELY surface improvements on a schedule instead of on demand — "suggest things automatically", "run suggest every week", "open a ticket for the best idea on a cadence", "be a proactive engineer / push me work", or when a scheduled job invokes /corgi-suggest-proactive. Runs the suggest ranking, dedupes the top idea against open tickets + recently-dismissed ones, and either proposes it (default) or, only if auto-file-drafts is opted in, files exactly ONE draft tracker ticket — rate-limited, never spammy, draft-only, never assigned or built. NOT for on-demand idea generation (use the suggest skill) or implementing anything (use the stories skill).
+description: Use when the user wants corgi to PROACTIVELY surface improvements on a schedule instead of on demand — "suggest things automatically", "run suggest every week", "open a ticket for the best idea on a cadence", "be a proactive engineer / push me work", or when a scheduled job invokes /corgi-suggest-proactive. NOT for on-demand idea generation (use the suggest skill) or implementing anything (use the stories skill).
 ---
 
 # Corgi proactive suggest
