@@ -48,6 +48,15 @@ func probeWorkspaceRepos(dir string) []brief.RepoState {
 
 	byPrefix := map[string]string{}
 	var out []brief.RepoState
+	if err != nil || corgi == nil {
+		// A git-only workspace (no compose) still has exactly one repo worth
+		// briefing: the workspace directory itself. Without this, the handover
+		// brief for the restarted session carries no branch or dirty state at
+		// all — for the very workspaces that are nothing but a repo.
+		if state, ok := repoState(filepath.Base(dir), dir, false); ok {
+			out = append(out, state)
+		}
+	}
 	if err == nil && corgi != nil {
 		for service, path := range utils.ServiceDirs(corgi, nil) {
 			// Worktree directories are named from the repository ROOT, not the

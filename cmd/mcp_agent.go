@@ -276,7 +276,7 @@ func mcpWorkspaces() (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	registry.Reconcile(dirHasComposeFile)
+	registry.Reconcile(dirIsWorkspace)
 	_ = workspace.Save(path, registry)
 	return map[string]any{"workspaces": registry.Sorted()}, nil
 }
@@ -289,7 +289,7 @@ func mcpWorkspaceResolve(query string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	registry.Reconcile(dirHasComposeFile)
+	registry.Reconcile(dirIsWorkspace)
 	return workspace.Resolve(registry, query), nil
 }
 
@@ -303,7 +303,7 @@ func resolveForSession(query string) (*workspace.Workspace, any, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	registry.Reconcile(dirHasComposeFile)
+	registry.Reconcile(dirIsWorkspace)
 	res := workspace.Resolve(registry, query)
 	if !res.Resolved() {
 		return nil, res, nil
