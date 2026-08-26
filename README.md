@@ -28,7 +28,7 @@ Prefer watching? Here's the [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=
 
 **Install:** `brew install andriiklymiuk/homebrew-tools/corgi` — or [other ways](docs/install.md).
 
-> 🪄 **New — code from your couch.** Your laptop has the repos, the logins, the running stack — your phone just needs a remote for it. One command, scan a QR, and every repo on your machine is a tap away from a Claude Code session. [See how ↓](#start-a-coding-session-from-your-phone-)
+> 🪄 **New — code from your couch.** Scan a QR once, and every repo on your machine is a tap away from a Claude Code session on your phone. [See how ↓](#start-a-coding-session-from-your-phone-)
 
 ## Why corgi
 
@@ -38,7 +38,7 @@ corgi puts all of that in **one committed file**. `corgi run` is the whole thing
 
 ## Hand the whole workspace to an agent
 
-Most setups hand an agent a single repo and wish it luck. corgi hands it your whole world: every repo, the databases with real data, the env wiring between services — plus real `corgi` commands to drive it all. So the agent can read your tracker, build a feature that touches three services, boot the stack to check its own work, and leave you a draft PR per repo to review over coffee.
+Most setups hand an agent a single repo and wish it luck. corgi hands it the whole workspace: every repo, the databases with real data, the env wiring between services — plus `corgi` itself to drive it all. So the agent can read your tracker, build a feature that touches three services, boot the stack to check its own work, and leave you a draft PR per repo.
 
 [Install corgi](#install), then add the [Claude Code](https://claude.com/claude-code) plugin (other agents: `npx skills add Andriiklymiuk/corgi`):
 
@@ -82,9 +82,9 @@ $ corgi agent up
                  └─ client-app  [open in: chrome]  ──► Chrome (its own account)
 ```
 
-Scan once and your phone is paired — its own token, revocable without touching your other devices. Each workspace remembers where it opens: your own projects deep-link into the Claude app; a work repo on a different Claude account opens in Chrome, where that login rules. Save the launcher to your home screen and it's a one-tap daily thing.
+Scan once and your phone is paired — its own token, revocable without touching your other devices. Each workspace remembers where it opens: your own projects deep-link into the Claude app; a work repo on a different Claude account opens in Chrome, signed into that account. Save the launcher to your home screen and it's one tap from then on.
 
-And it stays up. corgi restarts the session through network drops and crashes (Remote Control alone gives up after ~10 minutes offline), `corgi agent install` brings it back after reboots, `--tunnel-name` pins the URL forever, and `corgi agent down` shuts the whole thing off when you want it gone. Nothing runs unless you opt in. macOS & Linux. With the plugin, just say `/corgi-remote` and it walks you through all of it. Full guide: [docs/agent.md](docs/agent.md).
+And it stays up. corgi restarts the session through network drops and crashes (Remote Control alone gives up after ~10 minutes offline), `corgi agent install` brings it back after reboots, `--tunnel-name` pins the URL, and `corgi agent down` shuts it all off. Nothing runs unless you opt in. macOS & Linux. With the plugin, `/corgi-remote` walks you through it. Full guide: [docs/agent.md](docs/agent.md).
 
 **Why agents like it:** it never blocks on a prompt, speaks clean JSON (`--json`), returns clear exit codes (`0` ok, `1` failed, `2` bad usage), and ships an **MCP server** so an agent drives the stack through real tools, not guessed shell commands:
 
@@ -153,11 +153,11 @@ services:
 - **Your phone** — any repo on your machine, one tap from a Claude Code session. [The couch feature](#start-a-coding-session-from-your-phone-).
 - **CI** — the same file boots a CI runner and runs cross-repo e2e. [More](#run-the-whole-stack-in-ci).
 
-Real project (private repos, prerequisites, secrets, staging tiers)? The honest setup guide: [Getting it running on a real project](docs/getting-started.md).
+Real project — private repos, prerequisites, secrets, staging tiers? See [Getting it running on a real project](docs/getting-started.md).
 
 ## Working across many repos
 
-This is the part `docker-compose` leaves to you.
+Your repos are part of the stack, not something you manage on the side.
 
 - **Auto-clone** — `cloneFrom:` clones a service when its folder is missing; just a `path:` (a monorepo subfolder, or a repo you keep yourself) runs in place. Mix both.
 - **`corgi pull`** pulls every repo at once. **`corgi fork`** forks them to your account.
