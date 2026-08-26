@@ -82,6 +82,14 @@ type WorkspaceConfig struct {
 	// subscription.
 	InheritAPIKey     bool `yaml:"inheritApiKey"`
 	InheritOAuthToken bool `yaml:"inheritOauthToken"`
+	// DangerouslySkipPermissions runs this workspace's session with permission
+	// prompts turned off (emitted as --permission-mode bypassPermissions). It
+	// removes the gate a person answers from their phone — the main defence
+	// against a session acting on instructions injected into a file it read.
+	// Trusted config only, and by construction: RepoConfig has no such field, so
+	// a cloned repository can never turn it on. Off unless the machine's owner
+	// sets it, per-workspace or in a profile.
+	DangerouslySkipPermissions bool `yaml:"dangerouslySkipPermissions"`
 }
 
 // LoadRepo reads `.corgi/agent.yml` from a workspace directory. A missing file
@@ -131,6 +139,15 @@ func LoadUser(path string) (*UserConfig, error) {
 	var c UserConfig
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	// Bypass must be a deliberate per-workspace (or per-profile) choice. Under
+	// defaults: it would skip prompts for every workspace — including ones a
+	// later `agent scan` adds — and the OR overlay means no workspace could turn
+	// it back off. Too dangerous to allow as a blanket default.
+	if c.Defaults.DangerouslySkipPermissions {
+		return nil, fmt.Errorf(
+			"%s: dangerouslySkipPermissions cannot be set under defaults: — set it per-workspace or per-profile, so each bypass is a deliberate opt-in with an opt-out",
+			path)
 	}
 	if c.Workspaces == nil {
 		c.Workspaces = map[string]WorkspaceConfig{}
@@ -223,6 +240,7 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	// per-workspace entry cannot silently turn off a default the user set.
 	base.InheritAPIKey = base.InheritAPIKey || over.InheritAPIKey
 	base.InheritOAuthToken = base.InheritOAuthToken || over.InheritOAuthToken
+	base.DangerouslySkipPermissions = base.DangerouslySkipPermissions || over.DangerouslySkipPermissions
 	return base
 }
 

@@ -1,6 +1,6 @@
 ---
 name: mobile
-description: Use when verifying a mobile (Expo / React Native) change on a real device — "test on the emulator", "run it on the simulator", "screenshot the app", "drive it with Maestro", "does this screen render", "check it on Android/iOS", "tap through the app", "is the animation right" — or when a local iOS/Android build + TestFlight/Play ship needs driving. Covers the device-driving loop (deep links, Maestro flows, screenshots, sips crops) AND the gotchas that actually bite — Maestro ASCII-only input, non-login-shell pod builds, Metro `--clear` redbox desync, native-needs-rebuild, SceneKit magenta-at-runtime, square particles, apple-targets widget/App-Clip extension creds + App Group capability, stale Android autolinking package, low-disk local-build ENOSPC, native dep/ABI skew → dyld symbol-missing launch crash, Maestro `launchApp` resuming the last screen. NOT for writing the app code (normal edits) or authoring corgi-compose (corgi skill).
+description: Use when verifying a mobile (Expo / React Native) change on a real device — "test on the emulator", "run it on the simulator", "screenshot the app", "drive it with Maestro", "does this screen render", "check it on Android/iOS", "tap through the app", "is the animation right" — or when a local iOS/Android build + TestFlight/Play ship needs driving. NOT for writing the app code (normal edits) or authoring corgi-compose (corgi skill).
 ---
 
 # Verify mobile change on device

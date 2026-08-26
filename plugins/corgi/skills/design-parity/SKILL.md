@@ -1,6 +1,6 @@
 ---
 name: design-parity
-description: Use when a change has a design behind it and someone must prove the build matches — "compare it with the design", "does this match Figma", "check it against the mockup", "download the designs", "side-by-side with the design", "design review of this screen", "did we build what was designed", "pixel check", "the designer says it's off". Covers pulling design frames to disk, making an unreleased feature reachable so it can be shot at all, capturing app screens, composing labelled side-by-sides, and reporting deviations (fixed vs deliberate). NOT the device-driving loop itself (the `mobile` skill) or store marketing screenshots (`mobile-screenshots`).
+description: Use when a change has a design behind it and someone must prove the build matches — "compare it with the design", "does this match Figma", "check it against the mockup", "download the designs", "side-by-side with the design", "design review of this screen", "did we build what was designed", "pixel check", "the designer says it's off". NOT the device-driving loop itself (the `mobile` skill) or store marketing screenshots (`mobile-screenshots`).
 ---
 
 # Prove the build matches the design

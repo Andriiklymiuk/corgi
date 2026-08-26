@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -143,5 +145,34 @@ func TestBuildLaunchWorkspacesNilStatus(t *testing.T) {
 	out := buildLaunchWorkspaces(reg, nil)
 	if len(out) != 1 || out[0].Running || out[0].Note != "" {
 		t.Errorf("with no daemon, a workspace is just listed idle, got %+v", out[0])
+	}
+}
+
+func TestLaunchSessionsHandlerRequiresAWorkspace(t *testing.T) {
+	rec := httptest.NewRecorder()
+	launchSessionsHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/sessions", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("a sessions request with no workspace must be 400, got %d", rec.Code)
+	}
+}
+
+func TestLaunchSessionsHandlerRejectsNonGET(t *testing.T) {
+	rec := httptest.NewRecorder()
+	launchSessionsHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/sessions?workspace=x", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST to sessions must be 405, got %d", rec.Code)
+	}
+}
+
+func TestExpandTilde(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	if got := expandTilde("~/.claude-x"); got != filepath.Join(home, ".claude-x") {
+		t.Errorf("expandTilde(~/.claude-x) = %q", got)
+	}
+	if got := expandTilde("/abs/path"); got != "/abs/path" {
+		t.Errorf("an absolute path must pass through, got %q", got)
+	}
+	if got := expandTilde(""); got != "" {
+		t.Errorf("empty must stay empty, got %q", got)
 	}
 }

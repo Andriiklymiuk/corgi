@@ -5,7 +5,7 @@ description: Use when the user wants a code review of one or more EXISTING pull/
 
 # Corgi review
 
-Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR — all behind a preview gate before anything goes public. It is the direct counterpart to the `stories` skill: stories **creates** draft PRs/MRs from issues or feature text; review **consumes** existing ones. It reuses stories' workspace model (services, dirs, and forges resolved from `corgi-compose.yml`) and stories' token-efficiency model (cluster by service+area, investigate once, orchestrator-as-cache, reuse ledger).
+Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR — all behind a preview gate before anything goes public. Services, dirs, and forges resolve from `corgi-compose.yml`.
 
 ## Two modes — route from the verb
 

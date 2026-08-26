@@ -136,8 +136,14 @@ func claudeArgs(c SpawnConfig) ([]string, error) {
 	if c.Capacity > 0 {
 		args = append(args, "--capacity", strconv.Itoa(c.Capacity))
 	}
-	if mode := strings.TrimSpace(c.PermissionMode); mode != "" && !forbiddenPermissionModes[normalize(mode)] {
-		args = append(args, "--permission-mode", mode)
+	switch {
+	case c.SkipPermissions:
+		// The one sanctioned bypass: emitted only for a workspace whose trusted
+		// config set dangerouslySkipPermissions. bypassPermissions is a real
+		// remote-control mode that corgi otherwise refuses.
+		args = append(args, "--permission-mode", "bypassPermissions")
+	case strings.TrimSpace(c.PermissionMode) != "" && !forbiddenPermissionModes[normalize(c.PermissionMode)]:
+		args = append(args, "--permission-mode", strings.TrimSpace(c.PermissionMode))
 	}
 	if name := strings.TrimSpace(c.Name); name != "" {
 		args = append(args, "--name", name)
