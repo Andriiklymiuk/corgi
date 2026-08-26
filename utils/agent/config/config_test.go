@@ -183,6 +183,27 @@ func TestResolveCannotSilentlyDisableACredentialDefault(t *testing.T) {
 	}
 }
 
+func TestDangerouslySkipPermissionsIsATrustedCapabilityFlag(t *testing.T) {
+	// OR-ed like the other capability booleans: an omitted per-workspace value
+	// must not silently disable a default.
+	user := &UserConfig{
+		Defaults:   WorkspaceConfig{DangerouslySkipPermissions: true},
+		Workspaces: map[string]WorkspaceConfig{"acme": {}},
+	}
+	if got := Resolve("acme", nil, user); !got.DangerouslySkipPermissions {
+		t.Error("an omitted bool must not override an explicit default")
+	}
+
+	// The security invariant: a committed repo file can never turn it on.
+	// RepoConfig has no such field, so even a repo that declares it resolves to
+	// off without a trusted entry — cloning a repo cannot skip your prompts.
+	dir := writeRepoConfig(t, "version: 1\nworkspace:\n  id: acme\ndangerouslySkipPermissions: true\n")
+	repo, _ := LoadRepo(dir)
+	if got := Resolve("acme", repo, &UserConfig{}); got.DangerouslySkipPermissions {
+		t.Error("a cloned repository must not be able to skip permission prompts")
+	}
+}
+
 // The id is the lookup key into trusted per-workspace settings, so a cloned
 // repository must not be able to choose it. Declaring someone else's workspace
 // id would otherwise inherit their configDir, bin, and permission mode.

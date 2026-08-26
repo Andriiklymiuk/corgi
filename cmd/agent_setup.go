@@ -52,6 +52,7 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	aliases, _ := cmd.Flags().GetStringSlice("alias")
 	configDir, _ := cmd.Flags().GetString("config-dir")
 	sensitive, _ := cmd.Flags().GetBool("sensitive")
+	skipPerms, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
 
 	if err := writeRepoAgentConfig(cwd, id, aliases, sensitive); err != nil {
 		exitWithError("agent_write_repo_config", err, 1)
@@ -75,12 +76,15 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 
 	// init is the deliberate opt-in, so it is what turns supervision on.
 	// `corgi agent scan` registers without arming anything.
-	if err := enableWorkspace(id, configDir); err != nil {
+	if err := enableWorkspace(id, configDir, skipPerms); err != nil {
 		exitWithError("agent_write_user_config", err, 1)
 	}
 
 	utils.Infof("registered %s (%s) and enabled it\n", id, cwd)
 	utils.Info("wrote .corgi/agent.yml — safe to commit, it holds identity only")
+	if skipPerms {
+		utils.Info("⚠ permissions: SKIPPED for this workspace — its remote sessions run without the prompts you answer from your phone. Undo with `corgi agent workspaces` or by editing the user config.")
+	}
 	if configDir == "" {
 		utils.Info("no config dir set: this workspace uses your default Claude account.")
 		utils.Info("If you keep work and personal logins separate, set one:")
@@ -168,7 +172,7 @@ func writeRepoAgentConfig(dir, id string, aliases []string, sensitive bool) erro
 
 // enableWorkspace turns on supervision for a workspace, and records its Claude
 // config directory, in the trusted user-level file.
-func enableWorkspace(id, configDir string) error {
+func enableWorkspace(id, configDir string, skipPerms bool) error {
 	dir, err := agentDir()
 	if err != nil {
 		return err
@@ -183,6 +187,12 @@ func enableWorkspace(id, configDir string) error {
 	entry.Autostart = &on
 	if configDir != "" {
 		entry.ConfigDir = configDir
+	}
+	// Never silently clears an already-set opt-in: a re-init without the flag
+	// leaves a previously-granted bypass alone, matching how the config overlay
+	// OR-s capability booleans rather than overwriting them.
+	if skipPerms {
+		entry.DangerouslySkipPermissions = true
 	}
 	user.Workspaces[id] = entry
 
@@ -478,6 +488,8 @@ func init() {
 	agentInitCmd.Flags().StringSlice("alias", nil, "Extra names this workspace answers to, e.g. --alias 'recipe app'")
 	agentInitCmd.Flags().String("config-dir", "", "CLAUDE_CONFIG_DIR for this workspace, so it runs under a specific Claude account")
 	agentInitCmd.Flags().Bool("sensitive", false, "Never open a public tunnel for this workspace")
+	agentInitCmd.Flags().Bool("dangerously-skip-permissions", false,
+		"Run this workspace's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone — off by default.")
 
 	agentScanCmd.Flags().Bool("dry-run", false, "Show what would be registered without changing anything")
 

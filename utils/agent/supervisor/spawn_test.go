@@ -83,6 +83,34 @@ func TestBuildArgsNeverSkipsPermissions(t *testing.T) {
 	}
 }
 
+func TestSkipPermissionsIsTheSanctionedBypass(t *testing.T) {
+	c := baseConfig()
+	c.SkipPermissions = true
+
+	if err := ValidateSpawnConfig(c); err != nil {
+		t.Fatalf("dangerouslySkipPermissions is the one allowed bypass and must validate: %v", err)
+	}
+	args, err := BuildArgs(c)
+	if err != nil {
+		t.Fatalf("BuildArgs() error = %v", err)
+	}
+	// It rides on --permission-mode bypassPermissions, the mode remote control
+	// understands — not the plain-claude --dangerously-skip-permissions flag.
+	i := slices.Index(args, "--permission-mode")
+	if i < 0 || i+1 >= len(args) || args[i+1] != "bypassPermissions" {
+		t.Fatalf("SkipPermissions must emit --permission-mode bypassPermissions, got %v", args)
+	}
+}
+
+func TestSkipPermissionsRejectsAConflictingMode(t *testing.T) {
+	c := baseConfig()
+	c.SkipPermissions = true
+	c.PermissionMode = "acceptEdits"
+	if err := ValidateSpawnConfig(c); err == nil {
+		t.Fatal("both dangerouslySkipPermissions and a different permissionMode is ambiguous and must be rejected")
+	}
+}
+
 func TestBuildArgs(t *testing.T) {
 	c := baseConfig()
 	c.Spawn = "worktree"

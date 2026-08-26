@@ -7,7 +7,7 @@ description: Author and explain corgi-compose.yml files and the corgi CLI. Use w
 
 Corgi (https://github.com/Andriiklymiuk/corgi) runs multi-service projects from a single `corgi-compose.yml`. It handles: cloning service repos, starting databases in Docker, seeding from dumps, generating `.env` files with cross-service URLs, and running all services concurrently.
 
-When this skill activates, you are the expert on corgi. Do not fall back to generic docker-compose / npm advice if a `corgi-compose.yml` is present — corgi is the authoritative entry point for that project.
+Don't fall back to generic docker-compose / npm advice if a `corgi-compose.yml` is present — corgi is the authoritative entry point for that project.
 
 ## Critical: `corgi run` is long-running
 
@@ -89,12 +89,12 @@ corgi config               # show current user settings (~/.corgi/config.yml)
 corgi notifications on|off|test            # toggle/test desktop crash notifications
 corgi status               # health check (one-shot)
 corgi status --ready       # block until all healthy / timeout (CI-friendly)
-corgi status --watch       # live monitor, transitions only
+corgi status --watch       # BLOCKS until Ctrl+C — interactive only; agents use --ready --timeout
 corgi tunnel               # public HTTPS tunnels (long-running) — default cloudflared
 corgi db shell [name]                       # interactive DB shell inside running container (psql/redis-cli/mongosh/…)
 corgi db shell [name] -e "SELECT 1"         # one-shot query, exit; CI-friendly
 corgi db snapshot [name] [svc]              # fast physical Postgres snapshot (built indexes+matviews); postgres family only
-corgi db restore  [name] [svc]              # restore pgdata from a snapshot → up on built data, zero recompute
+corgi db restore  [name|path] [svc]         # restore pgdata from a snapshot → up on built data, zero recompute
 corgi init                 # scaffold db_services/ + cloned repos
 corgi create               # interactive yml editor
 corgi clean -i db          # stop+remove db containers (also: services, corgi_services, all)

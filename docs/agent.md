@@ -40,6 +40,20 @@ again would be worse.
 
 ## Quick start
 
+One command does the whole phone-startable setup — register this stack, start
+the daemon + MCP + tunnel + pairing, and print a QR (and the pairing code):
+
+```bash
+cd ~/dev/your-stack
+corgi agent up                   # register + daemon + tunnel + pairing, prints a QR
+```
+
+Everything `agent up` starts is **detached**, so it survives crashes and the
+Remote Control network timeout — but not a reboot. Add `corgi agent install`
+once to start the daemon at login so it comes back after a restart.
+
+Or do it step by step:
+
 ```bash
 cd ~/dev/your-stack
 corgi agent init                 # register AND enable this stack
@@ -65,6 +79,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 
 | command | what it does |
 |---|---|
+| `corgi agent up` | one shot: register + daemon + tunnel + pairing, prints a QR |
 | `corgi agent init` | register this stack, write `.corgi/agent.yml` |
 | `corgi agent scan <dir>` | find stacks under a directory and register them (does not enable) |
 | `corgi agent serve` | supervise Remote Control for every enabled workspace |
@@ -183,10 +198,12 @@ rather than merely convenient:
 - **`args` is trusted config only.** An argv is a choice of what code runs, so
   there is deliberately no field in the committed `.corgi/agent.yml` that
   reaches it. A cloned repository cannot choose the command.
-- **Nothing may disarm the permission prompts.** `--dangerously-*` and `--yolo`
-  in `args` are rejected, the same rule that already rejects
-  `permissionMode: bypassPermissions`. Those prompts are what you answer from
-  your phone.
+- **Untrusted config may never disarm the permission prompts.** `--dangerously-*`
+  and `--yolo` smuggled through `args`, and a `permissionMode: bypassPermissions`
+  string, are rejected. The one way to skip prompts is the explicit
+  `dangerouslySkipPermissions` boolean in your trusted user config (see [Running
+  more than one Claude account](#running-more-than-one-claude-account)) — never
+  a committed repo file.
 - **A setting that cannot take effect is an error.** `spawn` and
   `permissionMode` on a `custom` kind are rejected rather than dropped, and so
   is a `configDir` with no `configDirEnv` to put it in — silently ignoring the
@@ -270,10 +287,32 @@ can mark itself `sensitive`, which only removes capability. It cannot choose
 which binary runs, which account is used, or which permission mode applies —
 otherwise cloning a repository would be a way to run code on your machine.
 
-`permissionMode: bypassPermissions` is rejected outright, and corgi never
-passes `--dangerously-skip-permissions` whatever your aliases do. Those prompts
-are what you answer from your phone, and they are the main defence against a
-session acting on injected instructions from a file it read.
+Those prompts are what you answer from your phone, and they are the main defence
+against a session acting on injected instructions from a file it read. So corgi
+does not skip them **unless you deliberately ask it to, per workspace, in your
+trusted config**:
+
+```bash
+corgi agent init --dangerously-skip-permissions          # this workspace
+corgi agent profile add skp --config-dir ~/.claude-x \
+  --dangerously-skip-permissions                         # or a reusable profile
+```
+
+That sets `dangerouslySkipPermissions: true`, and corgi then passes
+`--permission-mode bypassPermissions` for that workspace. Two guarantees hold
+even so:
+
+- **A committed repo file can never turn it on.** The field lives only in the
+  trusted user config; `.corgi/agent.yml` has no such field, so cloning a
+  repository cannot make your machine skip prompts. A stray
+  `permissionMode: bypassPermissions` string, or a `--dangerously` flag smuggled
+  through `args:`, is still rejected — the boolean above is the one sanctioned
+  route.
+- **It is never silent.** `corgi agent up`/`serve` print
+  `⚠ permissions: SKIPPED` for any workspace running this way, and
+  `corgi agent profile list` marks the profile.
+
+Leave it off (the default) for anything you would not let run unattended.
 
 ## The MCP tools
 
@@ -489,7 +528,9 @@ export CORGI_DATA_DIR="$(brew --prefix)/var/corgi"
 
 - Config split by trust; a cloned repo cannot grant itself capability.
 - `bin` must be a command name on PATH, never a path.
-- `bypassPermissions` rejected; `--dangerously-skip-permissions` never passed.
+- Permission prompts are only skipped when your trusted config explicitly sets
+  `dangerouslySkipPermissions` — never from a committed repo file, a
+  `permissionMode` string, or a smuggled `--dangerously` arg; and never silently.
 - Ambient credentials stripped from supervised processes and reported.
 - The user config must be `0600` or corgi refuses to read it; briefs are written
   `0600` for the same reason — they name repository paths and branches.

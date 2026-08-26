@@ -166,14 +166,38 @@ const launcherPageHTML = `<!doctype html>
   button{border:0;border-radius:.55rem;padding:.5rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;
       background:#e8e8e8;color:#0f1115}
   button:disabled{opacity:.5}
-  a.open{display:inline-block;background:#7ee787;color:#0f1115;text-decoration:none;
-      padding:.5rem .9rem;border-radius:.55rem;font-weight:600;font-size:.85rem}
+  a.open,button.open{display:inline-block;background:#7ee787;color:#0f1115;text-decoration:none;border:0;
+      padding:.5rem .9rem;border-radius:.55rem;font-weight:600;font-size:.85rem;cursor:pointer}
+  .right{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem}
+  .modes{display:flex;gap:.3rem;font-size:.68rem;color:#8a90a6;align-items:center}
+  .modes span{margin-right:.1rem}
+  .modes .m{background:#12151b;border:1px solid #2a2e37;color:#9aa0a6;border-radius:.4rem;
+      padding:.12rem .4rem;font-size:.68rem;font-weight:600}
+  .modes .m.sel{background:#2a2e37;color:#e8e8e8;border-color:#3a3f4b}
   .msg{color:#9aa0a6;font-size:.9rem;margin:1rem 0}
   .err{color:#ff7b72}
   code{background:#1a1d23;padding:.1rem .3rem;border-radius:.3rem}
+  details.settings{margin:1.6rem 0 0;border-top:1px solid #2a2e37;padding-top:1rem}
+  details.settings summary{color:#9aa0a6;font-size:.85rem;cursor:pointer}
+  details.settings p{color:#8a90a6;font-size:.78rem;line-height:1.5}
+  pre{background:#1a1d23;border:1px solid #2a2e37;border-radius:.5rem;padding:.7rem;
+      overflow-x:auto;font-size:.72rem;line-height:1.4;white-space:pre;color:#c8cdd6}
 </style>
 <header>🐕 corgi<small id="host">your machine</small></header>
-<main><div id="list" class="msg">Loading…</div></main>
+<main>
+  <div id="list" class="msg">Loading…</div>
+  <details class="settings" id="settings" hidden>
+    <summary>⚙ Settings</summary>
+    <p><b>Claude app connector.</b> Prefer the Claude app? Add corgi as a custom connector on claude.ai (Settings → Connectors → Add custom), so the app can control this machine too. Tap to copy:</p>
+    <pre id="cfg"></pre>
+    <button id="copycfg">Copy connector config</button>
+    <p id="copymsg" class="msg"></p>
+    <p>Each workspace above has an <b>open in</b> switch — <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here in this browser (use it for a workspace on a different Claude account than the app is signed into). Remembered per workspace, on this browser only.</p>
+  </details>
+  <p class="msg" style="text-align:center;margin-top:1.4rem">
+    <a id="allsessions" target="_blank" rel="noopener" style="color:#7ee787;text-decoration:none">See all your sessions on claude.ai ↗</a>
+  </p>
+</main>
 <script>
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -186,13 +210,34 @@ const launcherPageHTML = `<!doctype html>
   const token = (() => { try { return localStorage.getItem('corgi_token') || ''; } catch { return ''; } })();
   const list = document.getElementById('list');
   const auth = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+  // Set in JS (not a static href) so the page source carries no external link;
+  // this is a user navigation to the Claude session list, not a loaded asset.
+  try { document.getElementById('allsessions').href = 'https://claude.ai/code'; } catch {}
+
+  let lastWorkspaces = [];
+  const openMode = id => { try { return localStorage.getItem('corgi_open_' + id) || 'app'; } catch { return 'app'; } };
+  const setOpenMode = (id, m) => { try { localStorage.setItem('corgi_open_' + id, m); } catch {} };
 
   if (!token) {
     list.className = 'msg';
     list.innerHTML = 'Not paired on this browser yet. On your laptop run ' +
       '<code>corgi agent up</code> and scan the QR to pair, then come back here.';
   } else {
+    initSettings();
     load();
+  }
+
+  function initSettings() {
+    const s = document.getElementById('settings');
+    const connector = JSON.stringify({ mcpServers: { corgi: {
+      url: location.origin + '/mcp', headers: { Authorization: 'Bearer ' + token } } } }, null, 2);
+    document.getElementById('cfg').textContent = connector;
+    s.hidden = false;
+    document.getElementById('copycfg').onclick = async (e) => {
+      const msg = document.getElementById('copymsg');
+      try { await navigator.clipboard.writeText(connector); msg.textContent = '✓ Copied'; }
+      catch { msg.textContent = 'Long-press the box above to copy.'; }
+    };
   }
 
   async function load() {
@@ -207,6 +252,7 @@ const launcherPageHTML = `<!doctype html>
   }
 
   function render(workspaces) {
+    lastWorkspaces = workspaces;
     if (!workspaces.length) {
       list.className = 'msg';
       list.innerHTML = 'No workspaces registered. On the laptop: <code>corgi agent scan ~/dev</code>.';
@@ -224,11 +270,10 @@ const launcherPageHTML = `<!doctype html>
       left.innerHTML = '<div class="name"><span class="dot' + (ws.running ? ' on' : '') + '"></span> ' +
         esc(ws.id) + '</div><div class="path">' + esc(ws.path) + '</div>' + note;
       const right = document.createElement('div');
+      right.className = 'right';
       if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
-        const a = document.createElement('a');
-        a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open session';
-        a.target = '_blank'; a.rel = 'noopener noreferrer';
-        right.appendChild(a);
+        right.appendChild(openControl(ws));
+        right.appendChild(modeSwitch(ws.id));
       } else {
         const b = document.createElement('button');
         b.textContent = ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
@@ -239,6 +284,37 @@ const launcherPageHTML = `<!doctype html>
       row.appendChild(left); row.appendChild(right);
       list.appendChild(row);
     }
+  }
+
+  // app mode uses a real anchor tap so iOS deep-links into the Claude app;
+  // browser mode opens via JS, which keeps the session in this browser (right
+  // for a workspace signed into a different Claude account than the app).
+  function openControl(ws) {
+    if (openMode(ws.id) === 'browser') {
+      const b = document.createElement('button');
+      b.className = 'open'; b.textContent = 'Open session';
+      b.onclick = () => window.open(ws.sessionUrl, '_blank', 'noopener');
+      return b;
+    }
+    const a = document.createElement('a');
+    a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open session';
+    a.target = '_blank'; a.rel = 'noopener noreferrer';
+    return a;
+  }
+
+  function modeSwitch(id) {
+    const cur = openMode(id);
+    const wrap = document.createElement('div');
+    wrap.className = 'modes';
+    wrap.appendChild(document.createTextNode('open in:'));
+    for (const m of ['app', 'browser']) {
+      const b = document.createElement('button');
+      b.className = 'm' + (cur === m ? ' sel' : '');
+      b.textContent = m;
+      b.onclick = () => { setOpenMode(id, m); render(lastWorkspaces); };
+      wrap.appendChild(b);
+    }
+    return wrap;
   }
 
   async function startSession(id, btn) {

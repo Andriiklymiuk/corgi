@@ -42,9 +42,11 @@ var agentProfileAddCmd = &cobra.Command{
 		configDir, _ := cmd.Flags().GetString("config-dir")
 		bin, _ := cmd.Flags().GetString("bin")
 		permissionMode, _ := cmd.Flags().GetString("permission-mode")
+		skipPerms, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
 		dir := mustAgentDir()
 		if err := addProfile(dir, args[0], config.WorkspaceConfig{
 			ConfigDir: configDir, Bin: bin, PermissionMode: permissionMode,
+			DangerouslySkipPermissions: skipPerms,
 		}); err != nil {
 			exitWithError("agent_profile_add", err, 1)
 		}
@@ -81,6 +83,9 @@ var agentProfileListCmd = &cobra.Command{
 			if p.PermissionMode != "" {
 				fmt.Printf(" permissionMode=%s", p.PermissionMode)
 			}
+			if p.DangerouslySkipPermissions {
+				fmt.Print(" ⚠ permissions=SKIPPED")
+			}
 			fmt.Println()
 		}
 	},
@@ -110,8 +115,8 @@ func addProfile(dir, name string, wc config.WorkspaceConfig) error {
 	if name == "" {
 		return fmt.Errorf("a profile name is required")
 	}
-	if wc.ConfigDir == "" && wc.Bin == "" {
-		return fmt.Errorf("a profile must set at least --config-dir or --bin, or it does nothing")
+	if wc.ConfigDir == "" && wc.Bin == "" && !wc.DangerouslySkipPermissions {
+		return fmt.Errorf("a profile must set at least --config-dir, --bin, or --dangerously-skip-permissions, or it does nothing")
 	}
 	if _, err := supervisor.SanitizeBin(wc.Bin); err != nil {
 		return err
@@ -189,6 +194,8 @@ func init() {
 	agentProfileAddCmd.Flags().String("config-dir", "", "Claude config directory for this profile (e.g. ~/.claude-work) — the account it runs under")
 	agentProfileAddCmd.Flags().String("bin", "", "Command to run instead of the default `claude` (a real program on PATH, not a shell alias)")
 	agentProfileAddCmd.Flags().String("permission-mode", "", "Permission mode passed to remote control (default|acceptEdits|plan|auto|dontask)")
+	agentProfileAddCmd.Flags().Bool("dangerously-skip-permissions", false,
+		"Run this profile's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone — trusted local config only, off by default.")
 	agentProfileCmd.AddCommand(agentProfileAddCmd, agentProfileListCmd, agentProfileRemoveCmd)
 	agentCmd.AddCommand(agentProfileCmd)
 }
