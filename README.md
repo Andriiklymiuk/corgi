@@ -185,27 +185,9 @@ It detects CI on its own and goes non-interactive. With the official action the 
 
 `--feature` tests each PR against the exact combination it will ship into; `--wait` blocks until every service is healthy (no `sleep 60`). Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
 
-## How it compares
-
-| | docker-compose | Tilt / Skaffold | Turborepo / Nx | process-compose | corgi |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Databases in containers | ✓ | ✓ (k8s) | — | — | ✓ |
-| Services as host processes (debugger, hot-reload) | — | — | ✓ | ✓ | ✓ |
-| Works across many repos | — | — | — | — | ✓ |
-| Clones & pulls the repos for you | — | — | — | — | ✓ |
-| Seeds databases with real data | — | — | — | — | ✓ |
-| Wires env between services | — | — | — | — | ✓ |
-| Checks & installs required tools | — | — | — | — | ✓ |
-| Cross-repo e2e in CI (`--feature`) | — | — | — | — | ✓ |
-| Built for AI agents (JSON, MCP, skills) | — | — | — | — | ✓ |
-
-- **vs `docker-compose`** — Compose runs containers, and stops there. corgi runs the loop around them: repos, seeded databases, env wiring, tool checks — and runs your services as ordinary host processes. Already have a Compose file? Keep it; the two coexist.
-- **vs your own `dev.sh` / Makefile** — that script, until its author leaves and a new laptop breaks it. corgi is the declarative version — same on macOS/Linux/Windows, every service booting concurrently — plus `doctor`, logs, tunnels, worktrees, and CI for free.
-
-**What corgi isn't:** a deploy tool. It runs and tests your stack — on your laptop and in CI — but shipping to staging/prod stays with your CI/CD.
-
 ## Security & scope
 
+- **What corgi isn't:** a deploy tool. It runs and tests your stack — on your laptop and in CI — but shipping to staging/prod stays with your CI/CD. Already on `docker-compose`? Keep it; corgi runs the loop around your containers and the two coexist.
 - A `corgi-compose.yml` runs its `start` commands on your machine, so only run files you trust — especially `corgi run -t <url>`, which runs a remote one.
 - `corgi doctor --fix` starts Docker for you, but **installing a tool or killing a port-holder always asks first** (or `--yes` in CI).
 - `corgi mcp` is local stdio by default. `--http` is **unauthenticated** — only expose it with `--tunnel`, which adds a bearer token. Treat that URL + token like a credential.
