@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -248,6 +249,7 @@ func spawnConfigFrom(w workspace.Workspace, r config.Resolved, foreground bool) 
 		ConfigDir:         r.ConfigDir,
 		InheritAPIKey:     r.InheritAPIKey,
 		InheritOAuthToken: r.InheritOAuthToken,
+		SkipPermissions:   r.DangerouslySkipPermissions,
 		WakeLock:          supervisor.WakeLockMode(r.WakeLock),
 		MirrorOutput:      foreground,
 	}
@@ -306,6 +308,9 @@ func printStartupDiagnostics(configs []supervisor.SpawnConfig) {
 		}
 		if c.InheritAPIKey {
 			utils.Infof("agent: %-20s WARNING inheriting ANTHROPIC_API_KEY — remote control refuses to start with one set\n", c.WorkspaceID)
+		}
+		if c.SkipPermissions {
+			utils.Infof("agent: %-20s ⚠ permissions: SKIPPED — this session runs without the prompts you answer from your phone\n", c.WorkspaceID)
 		}
 	}
 }
@@ -422,6 +427,70 @@ func runAgentStop(_ *cobra.Command, _ []string) {
 		exitWithError("agent_stop", fmt.Errorf("could not stop pid %d: %w", info.PID, err), 1)
 	}
 	utils.Infof("stopping corgi agent (pid %d)\n", info.PID)
+}
+
+// ---------------------------------------------------------------- down
+
+var agentDownCmd = &cobra.Command{
+	Use:   "down",
+	Short: "Stop everything `corgi agent up` started — the daemon and the detached MCP + tunnel",
+	Long: `The mirror of ` + "`corgi agent up`" + `. Stops the agent daemon and the detached
+MCP server that serves the launcher and pairing over the tunnel, so the public
+URL goes down too. (` + "`corgi agent stop`" + ` stops only the daemon.)`,
+	Run: runAgentDown,
+}
+
+func runAgentDown(_ *cobra.Command, _ []string) {
+	dir, err := agentDir()
+	if err != nil {
+		exitWithError("agent_data_dir", err, 1)
+	}
+	stopped := false
+
+	if info, rerr := daemon.ReadInfo(dir); rerr == nil && info != nil {
+		if proc, ferr := os.FindProcess(info.PID); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
+			utils.Infof("stopped agent daemon (pid %d)\n", info.PID)
+			stopped = true
+		}
+	}
+
+	// The detached MCP + tunnel that `agent up` recorded. Stopping it is what
+	// takes the public URL down; `agent stop` alone leaves it serving.
+	//
+	// PidAlive guards against a recycled pid: mcp.pid can outlive its process (an
+	// MCP crash, a reboot, an `agent stop` all leave it on disk), and the OS may
+	// hand that number to an unrelated process. PidAlive confirms the pid is still
+	// its own process-group leader — which the detached MCP is and a recycled pid
+	// almost never is — so a stale file cannot make `down` kill your editor.
+	pidPath := filepath.Join(dir, mcpPidName)
+	if pid, ok := readAgentPidFile(pidPath); ok {
+		if utils.PidAlive(pid, "") {
+			if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
+				utils.Infof("stopped MCP + tunnel (pid %d)\n", pid)
+				stopped = true
+			}
+		}
+		_ = os.Remove(pidPath)
+	}
+	_ = os.Remove(filepath.Join(dir, "agent-up.lock"))
+
+	if !stopped {
+		utils.Info("corgi agent is not running")
+	}
+}
+
+// readAgentPidFile reads a pid written by spawnDetached. A missing or malformed
+// file just means there is nothing to stop.
+func readAgentPidFile(path string) (int, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
 }
 
 // ---------------------------------------------------------------- workspaces
@@ -646,6 +715,7 @@ func init() {
 		agentServeCmd,
 		agentStatusCmd,
 		agentStopCmd,
+		agentDownCmd,
 		agentSessionCmd,
 		agentWorkspacesCmd,
 		agentResolveCmd,

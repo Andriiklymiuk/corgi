@@ -18,10 +18,11 @@ import (
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Create db service",
-	Long: `
-This is used to create db service from template.	
-	`,
+	Short: "Set up a stack from corgi-compose.yml (clone repos, create db services + env)",
+	Long: `Prepares everything corgi-compose.yml describes, without starting it: clones each
+service repo (--depth for a shallow clone, --feature to check out a branch where a
+repo has it), creates the database service files and .env files, runs the required:
+installs, and adds corgi's generated paths to .gitignore. Then 'corgi run' starts it.`,
 	Run:     runInit,
 	Aliases: []string{"initialize", "clone"},
 }
