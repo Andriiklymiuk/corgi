@@ -24,6 +24,9 @@ import (
 // so nobody has to remember a port.
 const defaultMCPAddr = "127.0.0.1:8765"
 
+// mcpLogName is the detached MCP server's log file, under the agent data dir.
+const mcpLogName = "mcp.log"
+
 var agentUpCmd = &cobra.Command{
 	Use:   "up",
 	Short: "One command from a stack directory to phone-startable: register, daemon, tunnel, pairing",
@@ -82,7 +85,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	}
 	res.DaemonPID = info.PID
 
-	res.LogPath = filepath.Join(dir, "mcp.log")
+	res.LogPath = filepath.Join(dir, mcpLogName)
 	if mcpListening(addr) {
 		// Something already holds the port. It cannot be probed for identity
 		// here, and a pairing window is single-use anyway, so do not claim it is
@@ -177,8 +180,8 @@ func spawnDetachedMCP(dir, addr, provider string) error {
 	}
 	// Truncate the old log first: awaitMCPLog must not read a previous run's
 	// URL or pairing code as this one's.
-	_ = os.Remove(filepath.Join(dir, "mcp.log"))
-	return spawnDetached(dir, "mcp.log", args...)
+	_ = os.Remove(filepath.Join(dir, mcpLogName))
+	return spawnDetached(dir, mcpLogName, args...)
 }
 
 // spawnDetached starts corgi itself with args, output to <dir>/<logName>, in

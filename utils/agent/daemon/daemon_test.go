@@ -684,3 +684,14 @@ func TestDynamicDaemonRestartBatchDoesNotDropTheStart(t *testing.T) {
 	cancel()
 	<-done
 }
+
+func TestPackageNudgeIsSafeWithoutCommandSupport(t *testing.T) {
+	// nil, non-positive pid, and a daemon that does not advertise command
+	// support must all be no-ops — never signal a process that has no handler.
+	Nudge(nil)
+	Nudge(&Info{PID: 0, Commands: true})
+	Nudge(&Info{PID: os.Getpid(), Commands: false})
+	// A command-capable record for our own pid delivers a (harmless) SIGUSR1;
+	// the test process has the daemon's handler installed only inside Run, so we
+	// do not send to self here — the no-op branches are the contract under test.
+}

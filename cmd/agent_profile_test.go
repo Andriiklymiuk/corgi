@@ -129,3 +129,18 @@ func TestSortedProfileNames(t *testing.T) {
 		t.Error("nil profiles must sort to empty")
 	}
 }
+
+func TestLoadProfilesErrorsOnAGroupReadableConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A world/group-readable config names credential dirs; LoadUser refuses it,
+	// and loadProfiles must surface that rather than silently returning nothing.
+	if err := os.WriteFile(agentUserConfigPath(dir), []byte("version: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadProfiles(dir); err == nil {
+		t.Error("a group-readable config must be an error, not silently empty")
+	}
+}

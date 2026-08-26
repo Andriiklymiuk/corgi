@@ -661,3 +661,18 @@ func TestIdleAfterDefaultAndOverride(t *testing.T) {
 		t.Errorf("idleAfter() = %v, want the override", r.idleAfter())
 	}
 }
+
+func TestSetSessionURLIgnoresARepeat(t *testing.T) {
+	changes := 0
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp"}, nil, NewWakeLock(WakeLockOff))
+	r.OnChange = func() { changes++ }
+	r.setSessionURL("https://claude.ai/code/x")
+	r.setSessionURL("https://claude.ai/code/x") // same value: no change, no notify
+	r.setSessionURL("https://claude.ai/code/y")
+	if changes != 2 {
+		t.Errorf("OnChange fired %d times, want 2 — a repeated URL must not notify again", changes)
+	}
+	if r.State().SessionURL != "https://claude.ai/code/y" {
+		t.Errorf("sessionURL = %q", r.State().SessionURL)
+	}
+}

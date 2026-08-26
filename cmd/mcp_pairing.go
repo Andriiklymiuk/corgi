@@ -54,16 +54,16 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 			// the page's own JS. Rendering it while closed would only invite a
 			// form that cannot succeed.
 			if !session.Open() {
-				w.Header().Set("Content-Type", mimeJSON)
+				w.Header().Set(headerContentType, mimeJSON)
 				writePairError(w, http.StatusForbidden, "pairing is not open — run `corgi agent up` on the machine")
 				return
 			}
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set(headerContentType, "text/html; charset=utf-8")
 			_, _ = fmt.Fprint(w, pairPageHTML)
 			return
 		}
 
-		w.Header().Set("Content-Type", mimeJSON)
+		w.Header().Set(headerContentType, mimeJSON)
 
 		if r.Method != http.MethodPost {
 			writePairError(w, http.StatusMethodNotAllowed, "POST a {code, device} body to pair")
