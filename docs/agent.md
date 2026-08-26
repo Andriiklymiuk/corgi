@@ -327,7 +327,7 @@ trusted config**:
 
 ```bash
 corgi agent init --dangerously-skip-permissions          # this workspace
-corgi agent profile add skp --config-dir ~/.claude-x \
+corgi agent profile add work --config-dir ~/.claude-x \
   --dangerously-skip-permissions                         # or a reusable profile
 ```
 
