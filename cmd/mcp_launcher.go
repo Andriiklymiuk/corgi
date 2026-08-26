@@ -408,12 +408,14 @@ const launcherPageHTML = `<!doctype html>
       const s = j.sessions || [];
       if (!s.length) { box.innerHTML = '<div class="none">No active sessions. corgi lists these from the claude CLI — none are running for this workspace.</div>'; return; }
       box.innerHTML = '';
+      // These are the local Claude sessions the claude CLI reports for this
+      // workspace (kind + age). They carry no claude.ai web URL, so they are shown
+      // as status, not links — the openable one is the green "Open session" above.
       for (const sess of s) {
         const el = document.createElement('div');
         el.className = 's';
-        el.innerHTML = '<span>' + esc(sess.name || sess.sessionId || 'session') +
-          ' <span class="when">· ' + esc(sess.kind || '') + '</span></span>' +
-          '<span class="when">' + esc(fmtWhen(sess.startedAt)) + '</span>';
+        el.innerHTML = '<span>' + esc(sess.name || sess.sessionId || 'session') + '</span>' +
+          '<span class="when">' + esc(sess.kind || '') + ' · ' + esc(fmtWhen(sess.startedAt)) + '</span>';
         box.appendChild(el);
       }
     } catch (e) { box.innerHTML = '<div class="none">✗ ' + esc(e.message) + '</div>'; }

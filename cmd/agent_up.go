@@ -62,6 +62,7 @@ type agentUpResult struct {
 func runAgentUp(cmd *cobra.Command, _ []string) {
 	addr, _ := cmd.Flags().GetString("http")
 	provider, _ := cmd.Flags().GetString("provider")
+	tunnelName, _ := cmd.Flags().GetString("tunnel-name")
 
 	dir, err := agentDir()
 	if err != nil {
@@ -103,7 +104,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	if err := spawnDetachedMCP(dir, addr, provider); err != nil {
+	if err := spawnDetachedMCP(dir, addr, provider, tunnelName); err != nil {
 		exitWithError("agent_up_mcp", err, 1)
 	}
 	res.MCPStarted = true
@@ -177,10 +178,15 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 	return nil, fmt.Errorf("daemon did not come up — see %s", filepath.Join(dir, "serve.log"))
 }
 
-func spawnDetachedMCP(dir, addr, provider string) error {
+func spawnDetachedMCP(dir, addr, provider, tunnelName string) error {
 	args := []string{"mcp", "--http", addr, "--tunnel", "--pair"}
 	if provider != "" {
 		args = append(args, "--tunnel-provider", provider)
+	}
+	// A named tunnel gives a stable public URL, so the launcher can be
+	// bookmarked / saved to a home screen and survive a restart of `agent up`.
+	if tunnelName != "" {
+		args = append(args, "--tunnel-name", tunnelName)
 	}
 	// Truncate the old log first: awaitMCPLog must not read a previous run's
 	// URL or pairing code as this one's.
@@ -392,5 +398,6 @@ func orDefault(s, def string) string {
 func init() {
 	agentUpCmd.Flags().String("http", defaultMCPAddr, "Local MCP address")
 	agentUpCmd.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
+	agentUpCmd.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — gives a stable public URL you can bookmark (needs a one-time `cloudflared tunnel create`; see docs/tunnel.md)")
 	agentCmd.AddCommand(agentUpCmd)
 }

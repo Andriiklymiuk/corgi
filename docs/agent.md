@@ -61,6 +61,33 @@ corgi agent install              # start at login (launchd / systemd)
 corgi agent status               # what is running, and under which account
 ```
 
+### A launcher URL that never changes
+
+The default is a Cloudflare **quick tunnel**: free, no signup — and a **new random
+URL every restart**, so the phone bookmark goes stale whenever `agent up` reruns.
+For a permanent URL, use a **named tunnel**:
+
+```bash
+# one-time (free Cloudflare account + a domain on it):
+cloudflared tunnel login
+cloudflared tunnel create corgi-agent
+cloudflared tunnel route dns corgi-agent corgi.yourdomain.com
+
+# then always:
+corgi agent up --tunnel-name corgi-agent
+```
+
+The launcher now lives at the same hostname forever — save it to the phone's home
+screen once. Provider notes (ngrok's free static `*.ngrok-free.dev` domain,
+localtunnel's best-effort `--subdomain`) and per-service stable tunnels:
+[docs/tunnel.md](tunnel.md#stable-urls-named-mode).
+
+One more knob worth knowing: a workspace's Claude **default model** is not corgi's
+to pick — `claude remote-control` takes no model flag; you choose it per message in
+the Claude app. But the `model` setting in that workspace's config dir
+(`<configDir>/settings.json`) sets the default a new session starts with, and it
+rides along with `--config-dir` / profiles automatically.
+
 `corgi agent scan <dir>` registers stacks it finds but **does not enable them**.
 Supervision is opt-in per workspace: scanning a projects folder should not
 quietly spawn a Claude session for every stack in it. Run `corgi agent init` in
