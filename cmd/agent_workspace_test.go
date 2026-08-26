@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
 func TestDirIsWorkspace(t *testing.T) {
@@ -53,8 +54,9 @@ func TestCorgiListenerPIDsIsSafeOnBadInput(t *testing.T) {
 }
 
 func TestReclaimCorgiMCPWithNothingListening(t *testing.T) {
-	if reclaimCorgiMCP("127.0.0.1:1") {
-		t.Error("nothing corgi-owned on the port — reclaim must report not-reclaimed")
+	found, freed := reclaimCorgiMCP("127.0.0.1:1")
+	if found || freed {
+		t.Error("nothing corgi-owned on the port — reclaim must report neither found nor freed")
 	}
 }
 
@@ -112,6 +114,72 @@ func TestAddProfileRejectsSkipPlusPermissionMode(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("a profile with both a permission mode and the bypass is ambiguous and must be rejected at add time")
+	}
+}
+
+func TestResolveForSessionReachesAGitOnlyWorkspace(t *testing.T) {
+	// The regression this guards: mcp_agent.go's Reconcile calls kept the old
+	// compose-only predicate, so the phone's own tools flagged a freshly
+	// registered git-only repo as unreachable — and saved that to disk.
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	registerStack(t, mustAgentDir(), "myrepo", repo)
+
+	w, ambiguous, err := resolveForSession("myrepo")
+	if err != nil || ambiguous != nil || w == nil {
+		t.Fatalf("a git-only workspace must resolve for session start: w=%v amb=%v err=%v", w, ambiguous, err)
+	}
+	if w.AbsPath != repo {
+		t.Errorf("resolved path = %q, want %q", w.AbsPath, repo)
+	}
+}
+
+func TestRegisterCwdWorkspaceInAGitOnlyRepo(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(repo)
+
+	id, registered := registerCwdWorkspace()
+	if !registered || id == "" {
+		t.Fatalf("a git repo without a compose file must register: id=%q registered=%v", id, registered)
+	}
+	reg, _ := mustLoadRegistry()
+	w, ok := reg.Find(id)
+	if !ok {
+		t.Fatal("registered workspace missing from the registry")
+	}
+	if w.ComposeFile != "" {
+		t.Errorf("a git-only workspace must record no compose file, got %q", w.ComposeFile)
+	}
+}
+
+func TestRegisterCwdWorkspaceRefusesADoubleCollision(t *testing.T) {
+	// Both the basename and the parent-basename ids belong to other dirs:
+	// registering must refuse, never repoint an id that keys trusted settings.
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	parent := t.TempDir()
+	repo := filepath.Join(parent, "api")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agentD := mustAgentDir()
+	registerStack(t, agentD, "api", "/somewhere/else/api")
+	// occupy the disambiguated name too
+	reg, _ := mustLoadRegistry()
+	reg.Upsert(workspace.Workspace{ID: filepath.Base(parent) + "-api", AbsPath: "/a/third/place", Status: workspace.StatusOK})
+	if err := workspace.Save(agentRegistryPath(agentD), reg); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(repo)
+	if id, registered := registerCwdWorkspace(); registered || id != "" {
+		t.Fatalf("a double id collision must refuse, got id=%q registered=%v", id, registered)
 	}
 }
 

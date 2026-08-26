@@ -44,6 +44,11 @@ One command does the whole phone-startable setup — register this workspace (a
 corgi stack **or any git repository** — no compose file needed), start the
 daemon + MCP + tunnel + pairing, and print a QR (and the pairing code):
 
+> A registered workspace is phone-startable, so register directories you mean to
+> work in. In particular, if your `$HOME` is itself a git repo (dotfiles), running
+> `agent up` there registers your entire home directory — probably not what you
+> want.
+
 ```bash
 cd ~/dev/your-stack
 corgi agent up                   # register + daemon + tunnel + pairing, prints a QR

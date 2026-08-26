@@ -32,6 +32,10 @@ const mcpLogName = "mcp.log"
 // stop the tunnel + pairing server that `agent up` started, not just the daemon.
 const mcpPidName = "mcp.pid"
 
+// mcpAddrName records the address that MCP listens on, so `agent down`'s
+// no-pid-file fallback can look at the right port even after --http.
+const mcpAddrName = "mcp.addr"
+
 var agentUpCmd = &cobra.Command{
 	Use:   "up",
 	Short: "One command from a stack directory to phone-startable: register, daemon, tunnel, pairing",
@@ -64,6 +68,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	addr, _ := cmd.Flags().GetString("http")
 	provider, _ := cmd.Flags().GetString("provider")
 	tunnelName, _ := cmd.Flags().GetString("tunnel-name")
+	fresh, _ := cmd.Flags().GetBool("fresh")
 
 	dir, err := agentDir()
 	if err != nil {
@@ -93,20 +98,42 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 
 	res.LogPath = filepath.Join(dir, mcpLogName)
 	if mcpListening(addr) {
-		// Something already holds the port — usually a corgi MCP from an earlier
-		// `agent up` whose pairing window is long used up. When the listener is
-		// identifiably corgi, stop it and fall through to a fresh spawn (fresh
-		// tunnel, fresh pairing window) instead of refusing forever.
-		if !reclaimCorgiMCP(addr) {
-			res.Hint = fmt.Sprintf(
-				"%s is already in use by something that is not corgi's MCP server. "+
-					"Free the port (or pass --http with a free one) and rerun `corgi agent up`. "+
-					"corgi's own server logs to %s and is stopped by `corgi agent down`.",
-				addr, res.LogPath)
+		// Something already holds the port. Re-running `up` must be a safe,
+		// idempotent ensure step — a phone may be mid-session on the running
+		// server, so it is only ever replaced when --fresh says so.
+		if !fresh {
+			if pid, ok := readAgentPidFile(filepath.Join(dir, mcpPidName)); ok && utils.PidAlive(pid, "") {
+				// Ours and healthy: report it as up, with the URL its log recorded.
+				if data, rerr := os.ReadFile(res.LogPath); rerr == nil {
+					if parsed, _ := parseMCPLog(string(data)); parsed.publicURL != "" {
+						res.PublicURL = parsed.publicURL
+					}
+				}
+				res.Hint = "MCP + tunnel already running. To pair a NEW device (fresh pairing window + tunnel), rerun with --fresh."
+			} else {
+				res.Hint = fmt.Sprintf(
+					"%s is held by a server corgi did not record starting. If it is a leftover corgi MCP, "+
+						"rerun `corgi agent up --fresh` to replace it (or `corgi agent down` to stop it); "+
+						"anything else, free the port or pass --http with a free one. Log: %s",
+					addr, res.LogPath)
+			}
 			printAgentUp(res)
 			return
 		}
-		_ = os.Remove(filepath.Join(dir, mcpPidName))
+		found, freed := reclaimCorgiMCP(addr)
+		switch {
+		case freed:
+			_ = os.Remove(filepath.Join(dir, mcpPidName))
+		case found:
+			exitWithError("agent_up_mcp", fmt.Errorf(
+				"a corgi MCP on %s did not release the port within 5s — stop it manually (`corgi agent down`, or kill the pid lsof names) and rerun", addr), 1)
+		default:
+			res.Hint = fmt.Sprintf(
+				"%s is already in use by something that is not corgi's MCP server. "+
+					"Free the port (or pass --http with a free one) and rerun `corgi agent up`.", addr)
+			printAgentUp(res)
+			return
+		}
 	}
 
 	if err := spawnDetachedMCP(dir, addr, provider, tunnelName); err != nil {
@@ -148,14 +175,22 @@ func registerCwdWorkspace() (string, bool) {
 		// would hijack that workspace; disambiguate with the parent instead so
 		// two repos both called "api" can coexist.
 		id = filepath.Base(filepath.Dir(cwd)) + "-" + id
-		if existing2, ok := registry.Find(id); ok && existing2.AbsPath == cwd {
-			return id, false
+		if existing2, ok := registry.Find(id); ok {
+			if existing2.AbsPath == cwd {
+				return id, false
+			}
+			// Both levels collide with other directories. Refusing beats
+			// repointing: the id keys trusted settings (account, permissions),
+			// which must never silently transfer to a new directory.
+			utils.Infof("workspace names %q and %q are both taken by other directories — register with `corgi agent init --id <name>`\n",
+				filepath.Base(cwd), id)
+			return "", false
 		}
 	}
 	existing, _ := registry.Find(id)
 	existing.ID = id
 	existing.AbsPath = cwd
-	existing.ComposeFile = composeFileName(cwd)
+	existing.ComposeFile = registeredComposeFile(cwd)
 	existing.Status = workspace.StatusOK
 	existing.Services, existing.Repos = describeStack(cwd)
 	registry.Upsert(existing)
@@ -204,6 +239,7 @@ func spawnDetachedMCP(dir, addr, provider, tunnelName string) error {
 	// Best-effort: a missing pid file only means `agent down` cannot stop this
 	// MCP for you, not that anything is wrong with the running server.
 	_ = os.WriteFile(filepath.Join(dir, mcpPidName), []byte(strconv.Itoa(pid)+"\n"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, mcpAddrName), []byte(addr+"\n"), 0o600)
 	return nil
 }
 
@@ -294,6 +330,15 @@ func corgiListenerPIDs(addr string) []int {
 	if err != nil {
 		return nil
 	}
+	// Exact-name match, not Contains: a neighbour binary that merely embeds the
+	// word (corgit, my-corgi-tool) must never be killed. macOS ps prints the
+	// full path, Linux the bare (possibly truncated) name — Base handles both,
+	// and corgi's own name fits untruncated. A differently-named dev build of
+	// corgi is matched via this process's own executable name.
+	wanted := map[string]bool{"corgi": true}
+	if exe, err := os.Executable(); err == nil {
+		wanted[filepath.Base(exe)] = true
+	}
 	var pids []int
 	for _, field := range strings.Fields(string(out)) {
 		pid, err := strconv.Atoi(field)
@@ -304,19 +349,21 @@ func corgiListenerPIDs(addr string) []int {
 		if err != nil {
 			continue
 		}
-		if strings.Contains(filepath.Base(strings.TrimSpace(string(comm))), "corgi") {
+		if wanted[filepath.Base(strings.TrimSpace(string(comm)))] {
 			pids = append(pids, pid)
 		}
 	}
 	return pids
 }
 
-// reclaimCorgiMCP stops a corgi MCP already holding addr and waits for the port
-// to free. Reports whether the port is now available.
-func reclaimCorgiMCP(addr string) bool {
+// reclaimCorgiMCP stops the corgi MCP(s) holding addr and waits for the port to
+// free. found says a corgi listener was there at all; freed says the port is
+// now available — the split keeps the caller's message honest (a corgi server
+// that ignored SIGTERM is not "something that is not corgi").
+func reclaimCorgiMCP(addr string) (found, freed bool) {
 	pids := corgiListenerPIDs(addr)
 	if len(pids) == 0 {
-		return false
+		return false, false
 	}
 	for _, pid := range pids {
 		if proc, err := os.FindProcess(pid); err == nil {
@@ -326,11 +373,11 @@ func reclaimCorgiMCP(addr string) bool {
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if !mcpListening(addr) {
-			return true
+			return true, true
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return !mcpListening(addr)
+	return true, !mcpListening(addr)
 }
 
 func mcpListening(addr string) bool {
@@ -493,25 +540,37 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 	// its own process-group leader — which the detached MCP is and a recycled pid
 	// almost never is — so a stale file cannot make `down` kill your editor.
 	pidPath := filepath.Join(dir, mcpPidName)
+	mcpStopped := false
 	if pid, ok := readAgentPidFile(pidPath); ok {
 		if utils.PidAlive(pid, "") {
 			if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
 				utils.Infof("stopped MCP + tunnel (pid %d)\n", pid)
-				stopped = true
+				stopped, mcpStopped = true, true
 			}
 		}
 		_ = os.Remove(pidPath)
 	}
-	// Fallback for an MCP with no pid file (started by an older corgi, or the
-	// file was lost): a corgi process still listening on the default MCP port
-	// is ours to stop — leaving it is exactly the stuck loop where every
-	// `agent up` refuses the busy port and pairing never reopens.
-	for _, pid := range corgiListenerPIDs(defaultMCPAddr) {
-		if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
-			utils.Infof("stopped MCP + tunnel on %s (pid %d)\n", defaultMCPAddr, pid)
-			stopped = true
+	// Fallback ONLY when the pid file stopped nothing — an MCP from an older
+	// corgi, or a lost file: a corgi process still listening on the recorded
+	// (or default) MCP port is ours to stop. Leaving it is exactly the stuck
+	// loop where every `agent up` refuses the busy port and pairing never
+	// reopens. Guarded so a just-SIGTERMed server still draining its listener
+	// is not signalled twice and reported as two servers.
+	if !mcpStopped {
+		fallbackAddr := defaultMCPAddr
+		if data, rerr := os.ReadFile(filepath.Join(dir, mcpAddrName)); rerr == nil {
+			if a := strings.TrimSpace(string(data)); a != "" {
+				fallbackAddr = a
+			}
+		}
+		for _, pid := range corgiListenerPIDs(fallbackAddr) {
+			if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
+				utils.Infof("stopped MCP + tunnel on %s (pid %d)\n", fallbackAddr, pid)
+				stopped = true
+			}
 		}
 	}
+	_ = os.Remove(filepath.Join(dir, mcpAddrName))
 	_ = os.Remove(filepath.Join(dir, "agent-up.lock"))
 
 	if !stopped {
@@ -537,5 +596,6 @@ func init() {
 	agentUpCmd.Flags().String("http", defaultMCPAddr, "Local MCP address")
 	agentUpCmd.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
 	agentUpCmd.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — gives a stable public URL you can bookmark (needs a one-time `cloudflared tunnel create`; see docs/tunnel.md)")
+	agentUpCmd.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
 	agentCmd.AddCommand(agentUpCmd)
 }

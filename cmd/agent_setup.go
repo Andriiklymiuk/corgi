@@ -54,15 +54,27 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	sensitive, _ := cmd.Flags().GetBool("sensitive")
 	skipPerms, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
 
+	registry, path := mustLoadRegistry()
+	// Refuse to repoint an id that belongs to a different directory. The id is
+	// the key into the trusted per-workspace settings (configDir, a granted
+	// permission bypass), so silently taking over "api" from another repo also
+	// named api would transfer that capability to the new directory. Sticky
+	// settings make this worse, and repo basenames collide constantly.
+	if prior, ok := registry.Find(id); ok && prior.AbsPath != "" && prior.AbsPath != cwd {
+		exitWithError("agent_id_taken", fmt.Errorf(
+			"workspace id %q already belongs to %s — its settings (account, permissions) must not transfer here. "+
+				"Pass --id <something-else> to register this directory under its own name",
+			id, prior.AbsPath), 2)
+	}
+
 	if err := writeRepoAgentConfig(cwd, id, aliases, sensitive); err != nil {
 		exitWithError("agent_write_repo_config", err, 1)
 	}
 
-	registry, path := mustLoadRegistry()
 	existing, _ := registry.Find(id)
 	existing.ID = id
 	existing.AbsPath = cwd
-	existing.ComposeFile = composeFileName(cwd)
+	existing.ComposeFile = registeredComposeFile(cwd)
 	existing.Aliases = aliases
 	existing.Status = workspace.StatusOK
 	// Cache the service names so "fix the api" can resolve to the stack that
@@ -145,6 +157,16 @@ func composeFileName(dir string) string {
 		}
 	}
 	return "corgi-compose.yml"
+}
+
+// registeredComposeFile is what the registry records: the real compose file, or
+// empty for a git-only workspace — never the default-name fallback, which would
+// tell `corgi agent workspaces --json` readers a file exists that does not.
+func registeredComposeFile(dir string) string {
+	if dirHasComposeFile(dir) {
+		return composeFileName(dir)
+	}
+	return ""
 }
 
 func writeRepoAgentConfig(dir, id string, aliases []string, sensitive bool) error {
