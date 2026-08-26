@@ -90,15 +90,15 @@ func TestAddedProfileIsSelectableByTheResolver(t *testing.T) {
 	dir := t.TempDir()
 	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n")
 	registerStack(t, dir, "acme", stack)
-	if err := addProfile(dir, "skp", config.WorkspaceConfig{ConfigDir: "~/.claude-skp"}); err != nil {
+	if err := addProfile(dir, "work", config.WorkspaceConfig{ConfigDir: "~/.claude-work"}); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := remoteResolver(dir, false)("acme", "skp")
+	cfg, err := remoteResolver(dir, false)("acme", "work")
 	if err != nil {
 		t.Fatalf("a profile added by the command must resolve at start, got %v", err)
 	}
-	if cfg.ConfigDir != "~/.claude-skp" {
+	if cfg.ConfigDir != "~/.claude-work" {
 		t.Errorf("configDir = %q, want the profile's", cfg.ConfigDir)
 	}
 }
