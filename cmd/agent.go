@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -32,8 +31,9 @@ var agentCmd = &cobra.Command{
 		applyGlobalFlags(cmd)
 		warnStrandedAgentData()
 	},
-	Use:   "agent",
-	Short: "Keep Claude Code Remote Control running for your corgi workspaces",
+	Use:     "agent",
+	Aliases: []string{"agents"},
+	Short:   "Keep Claude Code Remote Control running for your corgi workspaces",
 	Long: `Agent mode makes this machine an always-on, multi-repo Remote Control host.
 
 Remote Control already gives you a phone-driven Claude Code session on your own
@@ -155,7 +155,7 @@ func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, er
 		return nil, err
 	}
 
-	registry.Reconcile(dirHasComposeFile)
+	registry.Reconcile(dirIsWorkspace)
 
 	var out []supervisor.SpawnConfig
 	for _, w := range registry.Sorted() {
@@ -177,7 +177,7 @@ func remoteResolver(dir string, foreground bool) func(id, profile string) (super
 		if err != nil {
 			return supervisor.SpawnConfig{}, err
 		}
-		registry.Reconcile(dirHasComposeFile)
+		registry.Reconcile(dirIsWorkspace)
 		w, ok := registry.Find(id)
 		if !ok {
 			return supervisor.SpawnConfig{}, fmt.Errorf("no workspace called %q in the registry — run `corgi agent scan` on the laptop", id)
@@ -287,6 +287,23 @@ func dirHasComposeFile(dir string) bool {
 		}
 	}
 	return false
+}
+
+// dirIsWorkspace reports whether dir can be registered for agent mode: a corgi
+// stack, or any git repository. Remote Control is useful on a plain repo too —
+// requiring a compose file locked whole projects out of `agent init`/`up` for
+// no reason. Still not "any folder": the git requirement keeps the old dead-guard
+// bug (registering an arbitrary directory) from coming back.
+func dirIsWorkspace(dir string) bool {
+	if dirHasComposeFile(dir) {
+		return true
+	}
+	if dir == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, ".git"))
+	// A .git FILE (not dir) is a worktree/submodule pointer — also a repo.
+	return err == nil && (info.IsDir() || info.Mode().IsRegular())
 }
 
 // printStartupDiagnostics is the one line per workspace that prevents the most
@@ -429,70 +446,6 @@ func runAgentStop(_ *cobra.Command, _ []string) {
 	utils.Infof("stopping corgi agent (pid %d)\n", info.PID)
 }
 
-// ---------------------------------------------------------------- down
-
-var agentDownCmd = &cobra.Command{
-	Use:   "down",
-	Short: "Stop everything `corgi agent up` started — the daemon and the detached MCP + tunnel",
-	Long: `The mirror of ` + "`corgi agent up`" + `. Stops the agent daemon and the detached
-MCP server that serves the launcher and pairing over the tunnel, so the public
-URL goes down too. (` + "`corgi agent stop`" + ` stops only the daemon.)`,
-	Run: runAgentDown,
-}
-
-func runAgentDown(_ *cobra.Command, _ []string) {
-	dir, err := agentDir()
-	if err != nil {
-		exitWithError("agent_data_dir", err, 1)
-	}
-	stopped := false
-
-	if info, rerr := daemon.ReadInfo(dir); rerr == nil && info != nil {
-		if proc, ferr := os.FindProcess(info.PID); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
-			utils.Infof("stopped agent daemon (pid %d)\n", info.PID)
-			stopped = true
-		}
-	}
-
-	// The detached MCP + tunnel that `agent up` recorded. Stopping it is what
-	// takes the public URL down; `agent stop` alone leaves it serving.
-	//
-	// PidAlive guards against a recycled pid: mcp.pid can outlive its process (an
-	// MCP crash, a reboot, an `agent stop` all leave it on disk), and the OS may
-	// hand that number to an unrelated process. PidAlive confirms the pid is still
-	// its own process-group leader — which the detached MCP is and a recycled pid
-	// almost never is — so a stale file cannot make `down` kill your editor.
-	pidPath := filepath.Join(dir, mcpPidName)
-	if pid, ok := readAgentPidFile(pidPath); ok {
-		if utils.PidAlive(pid, "") {
-			if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
-				utils.Infof("stopped MCP + tunnel (pid %d)\n", pid)
-				stopped = true
-			}
-		}
-		_ = os.Remove(pidPath)
-	}
-	_ = os.Remove(filepath.Join(dir, "agent-up.lock"))
-
-	if !stopped {
-		utils.Info("corgi agent is not running")
-	}
-}
-
-// readAgentPidFile reads a pid written by spawnDetached. A missing or malformed
-// file just means there is nothing to stop.
-func readAgentPidFile(path string) (int, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, false
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil || pid <= 0 {
-		return 0, false
-	}
-	return pid, true
-}
-
 // ---------------------------------------------------------------- workspaces
 
 var agentWorkspacesCmd = &cobra.Command{
@@ -510,7 +463,7 @@ var agentWorkspacesListCmd = &cobra.Command{
 
 func runAgentWorkspacesList(_ *cobra.Command, _ []string) {
 	registry, path := mustLoadRegistry()
-	registry.Reconcile(dirHasComposeFile)
+	registry.Reconcile(dirIsWorkspace)
 	_ = workspace.Save(path, registry)
 
 	if utils.JSONOutput {
@@ -611,7 +564,7 @@ var agentSessionStopCmd = &cobra.Command{
 // cannot drift.
 func enqueueSessionCommand(action string, args []string, profile string) {
 	registry, _ := mustLoadRegistry()
-	registry.Reconcile(dirHasComposeFile)
+	registry.Reconcile(dirIsWorkspace)
 	res := workspace.Resolve(registry, strings.Join(args, " "))
 	if !res.Resolved() {
 		if utils.JSONOutput {

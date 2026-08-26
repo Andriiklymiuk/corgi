@@ -200,10 +200,16 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
 corgi agent up
 ```
 
-It registers the current stack, starts the daemon (if down), opens the MCP
-endpoint with a public tunnel, and prints a **scannable QR** for pairing — all
-detached, so you can run it and keep working. No port to remember. `--json`
-emits the URL and pairing code for a caller that wants them structured.
+It registers the current workspace — a corgi stack **or any git repository**
+(no compose file needed) — starts the daemon (if down), opens the MCP endpoint
+with a public tunnel, and prints a **scannable QR** for pairing — all detached,
+so you can run it and keep working. No port to remember. `--json` emits the URL
+and pairing code for a caller that wants them structured. A busy MCP port
+self-heals: when the holder is identifiably corgi's own server, `up` stops it
+and opens a fresh tunnel + pairing window instead of refusing. For a launcher
+URL that survives restarts, pass `--tunnel-name <name>` (cloudflared named
+tunnel — see docs/tunnel.md). The mirror is `corgi agent down`: stops the
+daemon AND the detached MCP + tunnel (`agent stop` stops only the daemon).
 
 The user scans the QR (or opens the printed URL) on their phone, names the
 device, and gets a per-device token. After pairing, the same page offers **Open
@@ -286,14 +292,17 @@ sessions awake but sleeps between turns.
 | workspace marked sensitive | Remote start is refused by design. Start it on the laptop, or unset `sensitive` in `.corgi/agent.yml`. |
 | queued but nothing started | Commands expire after 60s. Check `corgi agent status` diagnostics — a rejected start says why there. |
 | running but no `sessionUrl` | The session is fine; the URL was not spotted in output. Find it in claude.ai/code. |
+| `up` says the port is in use, pairing "not open" on the old URL | A leftover MCP holds the port. Newer corgi reclaims it on `up` automatically; otherwise `corgi agent down` then `corgi agent up` for a fresh tunnel + pairing window. |
 
 ## Things not to do
 
-- **Do not weaken permissions.** `permissionMode: bypassPermissions` is refused,
-  and `--dangerously-skip-permissions` is never passed. Those prompts are what
-  the user answers from their phone, and they are the defence against a session
-  acting on instructions injected through a file it read. If a permission prompt
-  is in the way, ask — do not route around it.
+- **Do not weaken permissions on your own.** A `permissionMode: bypassPermissions`
+  string and a smuggled `--dangerously` arg are refused. The one sanctioned route
+  is the user explicitly setting `--dangerously-skip-permissions` on `agent init`
+  or a profile — their deliberate, trusted-config choice, never yours to make.
+  Those prompts are what the user answers from their phone, the defence against a
+  session acting on instructions injected through a file it read. If a permission
+  prompt is in the way, ask — do not route around it.
 - **Do not put capability settings in `.corgi/agent.yml`.** That file is
   committed and travels with a clone. `bin`, `configDir`, `permissionMode`, and
   credential inheritance belong in the user-level config only. corgi ignores

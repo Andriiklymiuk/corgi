@@ -52,7 +52,7 @@ func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, "could not read the workspace registry")
 		return
 	}
-	registry.Reconcile(dirHasComposeFile)
+	registry.Reconcile(dirIsWorkspace)
 
 	var status *daemon.Status
 	if dir, derr := agentDir(); derr == nil {

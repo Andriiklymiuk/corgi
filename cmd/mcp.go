@@ -382,15 +382,20 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		_ = srv.Close()
 	}()
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		fmt.Fprintln(os.Stderr, "mcp server error:", err)
-		cancel() // kill the tunnel subprocess (exec.CommandContext) before exit
-		if tunnelDone != nil {
-			select {
-			case <-tunnelDone:
-			case <-time.After(2 * time.Second):
-			}
+	err := srv.ListenAndServe()
+	// Join the tunnel runner on BOTH exits. On the graceful path (SIGTERM →
+	// srv.Close → ErrServerClosed) returning without the join races process
+	// exit against CommandContext's kill goroutine — losing that race orphans
+	// cloudflared: a live public URL routing to a dead port.
+	cancel() // kill the tunnel subprocess (exec.CommandContext)
+	if tunnelDone != nil {
+		select {
+		case <-tunnelDone:
+		case <-time.After(2 * time.Second):
 		}
+	}
+	if err != nil && err != http.ErrServerClosed {
+		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		os.Exit(1)
 	}
 }
