@@ -140,6 +140,15 @@ func LoadUser(path string) (*UserConfig, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	// Bypass must be a deliberate per-workspace (or per-profile) choice. Under
+	// defaults: it would skip prompts for every workspace — including ones a
+	// later `agent scan` adds — and the OR overlay means no workspace could turn
+	// it back off. Too dangerous to allow as a blanket default.
+	if c.Defaults.DangerouslySkipPermissions {
+		return nil, fmt.Errorf(
+			"%s: dangerouslySkipPermissions cannot be set under defaults: — set it per-workspace or per-profile, so each bypass is a deliberate opt-in with an opt-out",
+			path)
+	}
 	if c.Workspaces == nil {
 		c.Workspaces = map[string]WorkspaceConfig{}
 	}

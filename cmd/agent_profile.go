@@ -125,6 +125,9 @@ func addProfile(dir, name string, wc config.WorkspaceConfig) error {
 		return fmt.Errorf("unknown or disallowed permissionMode %q (want one of: %s)",
 			wc.PermissionMode, supervisor.PermissionModeHint())
 	}
+	if wc.DangerouslySkipPermissions && wc.PermissionMode != "" {
+		return fmt.Errorf("set either --permission-mode or --dangerously-skip-permissions, not both")
+	}
 	path := agentUserConfigPath(dir)
 	user, err := config.LoadUser(path)
 	if err != nil {

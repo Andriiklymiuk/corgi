@@ -204,6 +204,20 @@ func TestDangerouslySkipPermissionsIsATrustedCapabilityFlag(t *testing.T) {
 	}
 }
 
+func TestLoadUserRejectsBlanketDefaultBypass(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.yml")
+	body := "version: 1\ndefaults:\n  dangerouslySkipPermissions: true\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A default-level bypass would skip prompts for every workspace with no
+	// per-workspace opt-out, so it must fail to load rather than apply silently.
+	if _, err := LoadUser(path); err == nil {
+		t.Error("dangerouslySkipPermissions under defaults: must be rejected")
+	}
+}
+
 // The id is the lookup key into trusted per-workspace settings, so a cloned
 // repository must not be able to choose it. Declaring someone else's workspace
 // id would otherwise inherit their configDir, bin, and permission mode.

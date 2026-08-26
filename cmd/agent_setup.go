@@ -83,7 +83,8 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	utils.Infof("registered %s (%s) and enabled it\n", id, cwd)
 	utils.Info("wrote .corgi/agent.yml — safe to commit, it holds identity only")
 	if skipPerms {
-		utils.Info("⚠ permissions: SKIPPED for this workspace — its remote sessions run without the prompts you answer from your phone. Undo with `corgi agent workspaces` or by editing the user config.")
+		utils.Info("⚠ permissions: SKIPPED for this workspace — its remote sessions run without the prompts you answer from your phone.")
+		utils.Infof("  to undo: remove `dangerouslySkipPermissions: true` for %s from %s\n", id, agentUserConfigPath(mustAgentDir()))
 	}
 	if configDir == "" {
 		utils.Info("no config dir set: this workspace uses your default Claude account.")

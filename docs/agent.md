@@ -312,6 +312,12 @@ even so:
   `⚠ permissions: SKIPPED` for any workspace running this way, and
   `corgi agent profile list` marks the profile.
 
+One caveat on the profile form: profiles are global, so a bypass **profile** can
+be applied to any non-sensitive workspace from the phone, not only the one you
+built it for. Prefer `agent init --dangerously-skip-permissions` to pin the bypass
+to a single workspace; reach for a bypass profile only when you deliberately want
+it reusable across several.
+
 Leave it off (the default) for anything you would not let run unattended.
 
 ## The MCP tools

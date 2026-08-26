@@ -456,11 +456,19 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 
 	// The detached MCP + tunnel that `agent up` recorded. Stopping it is what
 	// takes the public URL down; `agent stop` alone leaves it serving.
+	//
+	// PidAlive guards against a recycled pid: mcp.pid can outlive its process (an
+	// MCP crash, a reboot, an `agent stop` all leave it on disk), and the OS may
+	// hand that number to an unrelated process. PidAlive confirms the pid is still
+	// its own process-group leader — which the detached MCP is and a recycled pid
+	// almost never is — so a stale file cannot make `down` kill your editor.
 	pidPath := filepath.Join(dir, mcpPidName)
 	if pid, ok := readAgentPidFile(pidPath); ok {
-		if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
-			utils.Infof("stopped MCP + tunnel (pid %d)\n", pid)
-			stopped = true
+		if utils.PidAlive(pid, "") {
+			if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
+				utils.Infof("stopped MCP + tunnel (pid %d)\n", pid)
+				stopped = true
+			}
 		}
 		_ = os.Remove(pidPath)
 	}
