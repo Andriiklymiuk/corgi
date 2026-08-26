@@ -215,7 +215,11 @@ The user scans the QR (or opens the printed URL) on their phone, names the
 device, and gets a per-device token. After pairing, the same page offers **Open
 launcher** (`/app`): corgi's own phone UI that lists the machine's workspaces
 and starts a session in one tap, then hands back the claude.ai link — no
-claude.ai connector needed. The launcher remembers the device token on that
+claude.ai connector needed. Each workspace row has an **open in: app | browser
+| chrome** switch (set on the phone, remembered per device) — point a workspace
+on a different Claude account at the browser/Chrome, where its own claude.ai
+login handles the session, while the default account keeps deep-linking into
+the Claude app. The launcher remembers the device token on that
 browser, so a saved home-screen shortcut is a one-tap daily entry (use a **named
 tunnel** so the URL is stable). Verify end-to-end with `corgi agent session
 start <workspace>` or by tapping a repo in the launcher, and watch the session

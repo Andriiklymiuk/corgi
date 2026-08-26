@@ -28,6 +28,8 @@ Prefer watching? Here's the [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=
 
 **Install:** `brew install andriiklymiuk/homebrew-tools/corgi` — or [other ways](docs/install.md).
 
+> 🪄 **New — code from your couch:** one command turns any repo on your machine phone-startable. Scan a QR, tap a workspace, and a Claude Code session opens on your phone. [See how ↓](#start-a-coding-session-from-your-phone-)
+
 ## Why corgi
 
 Standing up a multi-repo project by hand is the same slog every time: clone four repos, install Postgres and Redis, seed the databases, copy `.env` files and point every service at the others, pick ports that don't clash, then start it all in the right order across a row of terminal tabs. A day gone — and it breaks again on the next laptop.
@@ -59,14 +61,24 @@ It never ships on its own — it only ever opens **draft** PRs, behind your go-a
 
 ### Start a coding session from your phone 🪄
 
-Away from the laptop? Open corgi's launcher on your phone, tap a workspace, and a **Claude Code [Remote Control](https://code.claude.com/docs/en/remote-control) session starts on your machine** — in that workspace, under the right account. One command sets it up:
+Away from the laptop? Open corgi's launcher on your phone, tap a workspace, and a **Claude Code [Remote Control](https://code.claude.com/docs/en/remote-control) session starts on your machine** — in that workspace, under the right account. One command sets it up, in a corgi stack **or any git repo**:
 
-```bash
-cd ~/dev/your-stack
-corgi agent up      # register this workspace, start the daemon + tunnel, print a QR to pair
+```text
+$ corgi agent up
+                                        ▄▄▄▄▄▄▄ ▄  ▄▄ ▄▄▄▄▄▄▄
+  ✓ workspace registered                █ ▄▄▄ █ ▀█▄▀ █ ▄▄▄ █
+  ✓ agent daemon running                █ ███ █ ▄ █▀ █ ███ █
+  ✓ tunnel  https://…trycloudflare.com  █▄▄▄▄▄█ █ ▀▄ █▄▄▄▄▄█
+  ✓ pairing open · scan to pair  ──►    ▄▄▄▄  ▄ ▀▄█ ▄▄▄ ▄▄▄▄
 ```
 
-Scan the QR to pair (per-device token, revocable), then tap any workspace to start. corgi keeps the session alive across network drops and crashes; run `corgi agent install` to start it at login so it survives reboots too. Opt-in, macOS & Linux. Full guide: [docs/agent.md](docs/agent.md).
+```text
+📱 scan QR ──► launcher (one URL, all workspaces)
+                 ├─ dev-stack   [open in: app]     ──► Claude app
+                 └─ client-app  [open in: chrome]  ──► Chrome (its own account)
+```
+
+Pairing gives your phone its own revocable token. Each workspace remembers where it opens — the Claude app, or the browser/Chrome for one on a different Claude account. corgi keeps the session alive across network drops and crashes; `corgi agent install` makes it survive reboots, `--tunnel-name` makes the URL permanent, `corgi agent down` tears it all down. Opt-in, macOS & Linux. With the plugin, `/corgi-remote` walks you through it. Full guide: [docs/agent.md](docs/agent.md).
 
 **Why agents like it:** it never blocks on a prompt, speaks clean JSON (`--json`), returns clear exit codes (`0` ok, `1` failed, `2` bad usage), and ships an **MCP server** so an agent drives the stack through real tools, not guessed shell commands:
 
