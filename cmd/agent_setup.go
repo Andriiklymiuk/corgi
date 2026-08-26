@@ -40,9 +40,9 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_cwd", err, 1)
 	}
-	if !dirHasComposeFile(cwd) {
-		exitWithError("agent_no_compose",
-			fmt.Errorf("no corgi-compose.yml here — run this in a stack, or `corgi agent scan <dir>` to find them"), 2)
+	if !dirIsWorkspace(cwd) {
+		exitWithError("agent_no_workspace",
+			fmt.Errorf("nothing to register here — run this in a corgi stack or a git repository (or `corgi agent scan <dir>` to find stacks)"), 2)
 	}
 
 	id, _ := cmd.Flags().GetString("id")
@@ -445,7 +445,7 @@ func checkUserConfigPermissions(path string) agentCheck {
 
 func checkRegisteredWorkspaces() agentCheck {
 	registry, _ := mustLoadRegistry()
-	registry.Reconcile(dirHasComposeFile)
+	registry.Reconcile(dirIsWorkspace)
 
 	var ok, unreachable int
 	for _, w := range registry.Workspaces {

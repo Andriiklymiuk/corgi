@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -92,16 +93,20 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 
 	res.LogPath = filepath.Join(dir, mcpLogName)
 	if mcpListening(addr) {
-		// Something already holds the port. It cannot be probed for identity
-		// here, and a pairing window is single-use anyway, so do not claim it is
-		// corgi or reprint a possibly-stale URL as current — point at the log
-		// and tell the user how to get a fresh window.
-		res.Hint = fmt.Sprintf(
-			"%s is already in use. If it is your corgi MCP server, its output is in %s; "+
-				"to pair a new device, stop it and rerun `corgi agent up` (or pass --http with a free port).",
-			addr, res.LogPath)
-		printAgentUp(res)
-		return
+		// Something already holds the port — usually a corgi MCP from an earlier
+		// `agent up` whose pairing window is long used up. When the listener is
+		// identifiably corgi, stop it and fall through to a fresh spawn (fresh
+		// tunnel, fresh pairing window) instead of refusing forever.
+		if !reclaimCorgiMCP(addr) {
+			res.Hint = fmt.Sprintf(
+				"%s is already in use by something that is not corgi's MCP server. "+
+					"Free the port (or pass --http with a free one) and rerun `corgi agent up`. "+
+					"corgi's own server logs to %s and is stopped by `corgi agent down`.",
+				addr, res.LogPath)
+			printAgentUp(res)
+			return
+		}
+		_ = os.Remove(filepath.Join(dir, mcpPidName))
 	}
 
 	if err := spawnDetachedMCP(dir, addr, provider, tunnelName); err != nil {
@@ -124,12 +129,13 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	printAgentUp(res)
 }
 
-// registerCwdWorkspace puts the current stack in the registry, like one step of
-// `corgi agent scan`. Registration only — autostart stays opt-in, and remote
-// start is the point of this command anyway.
+// registerCwdWorkspace puts the current workspace — a corgi stack or a plain
+// git repository — in the registry, like one step of `corgi agent scan`.
+// Registration only — autostart stays opt-in, and remote start is the point of
+// this command anyway.
 func registerCwdWorkspace() (string, bool) {
 	cwd, err := os.Getwd()
-	if err != nil || !dirHasComposeFile(cwd) {
+	if err != nil || !dirIsWorkspace(cwd) {
 		return "", false
 	}
 	id := filepath.Base(cwd)
@@ -269,6 +275,64 @@ func upLockIsStale(path string) bool {
 	return proc.Signal(syscall.Signal(0)) != nil
 }
 
+// corgiListenerPIDs returns the pids of corgi processes listening on addr's
+// port. This is the recovery path for an MCP left over by an older `agent up`
+// (started before mcp.pid existed, or whose pid file was lost): without it the
+// port stays held, every `up` refuses, and pairing can never reopen. Only pids
+// whose command name contains "corgi" are returned — an unidentified listener
+// is never touched. Unix-only (lsof); on Windows or without lsof it returns
+// nothing and callers fall back to the manual hint.
+func corgiListenerPIDs(addr string) []int {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil
+	}
+	out, err := exec.Command("lsof", "-ti", "tcp:"+port, "-sTCP:LISTEN").Output()
+	if err != nil {
+		return nil
+	}
+	var pids []int
+	for _, field := range strings.Fields(string(out)) {
+		pid, err := strconv.Atoi(field)
+		if err != nil || pid <= 0 || pid == os.Getpid() {
+			continue
+		}
+		comm, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output()
+		if err != nil {
+			continue
+		}
+		if strings.Contains(filepath.Base(strings.TrimSpace(string(comm))), "corgi") {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
+}
+
+// reclaimCorgiMCP stops a corgi MCP already holding addr and waits for the port
+// to free. Reports whether the port is now available.
+func reclaimCorgiMCP(addr string) bool {
+	pids := corgiListenerPIDs(addr)
+	if len(pids) == 0 {
+		return false
+	}
+	for _, pid := range pids {
+		if proc, err := os.FindProcess(pid); err == nil {
+			_ = proc.Signal(syscall.SIGTERM)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if !mcpListening(addr) {
+			return true
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return !mcpListening(addr)
+}
+
 func mcpListening(addr string) bool {
 	conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
 	if err != nil {
@@ -393,6 +457,80 @@ func orDefault(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// ---------------------------------------------------------------- down
+
+var agentDownCmd = &cobra.Command{
+	Use:   "down",
+	Short: "Stop everything `corgi agent up` started — the daemon and the detached MCP + tunnel",
+	Long: `The mirror of ` + "`corgi agent up`" + `. Stops the agent daemon and the detached
+MCP server that serves the launcher and pairing over the tunnel, so the public
+URL goes down too. (` + "`corgi agent stop`" + ` stops only the daemon.)`,
+	Run: runAgentDown,
+}
+
+func runAgentDown(_ *cobra.Command, _ []string) {
+	dir, err := agentDir()
+	if err != nil {
+		exitWithError("agent_data_dir", err, 1)
+	}
+	stopped := false
+
+	if info, rerr := daemon.ReadInfo(dir); rerr == nil && info != nil {
+		if proc, ferr := os.FindProcess(info.PID); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
+			utils.Infof("stopped agent daemon (pid %d)\n", info.PID)
+			stopped = true
+		}
+	}
+
+	// The detached MCP + tunnel that `agent up` recorded. Stopping it is what
+	// takes the public URL down; `agent stop` alone leaves it serving.
+	//
+	// PidAlive guards against a recycled pid: mcp.pid can outlive its process (an
+	// MCP crash, a reboot, an `agent stop` all leave it on disk), and the OS may
+	// hand that number to an unrelated process. PidAlive confirms the pid is still
+	// its own process-group leader — which the detached MCP is and a recycled pid
+	// almost never is — so a stale file cannot make `down` kill your editor.
+	pidPath := filepath.Join(dir, mcpPidName)
+	if pid, ok := readAgentPidFile(pidPath); ok {
+		if utils.PidAlive(pid, "") {
+			if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
+				utils.Infof("stopped MCP + tunnel (pid %d)\n", pid)
+				stopped = true
+			}
+		}
+		_ = os.Remove(pidPath)
+	}
+	// Fallback for an MCP with no pid file (started by an older corgi, or the
+	// file was lost): a corgi process still listening on the default MCP port
+	// is ours to stop — leaving it is exactly the stuck loop where every
+	// `agent up` refuses the busy port and pairing never reopens.
+	for _, pid := range corgiListenerPIDs(defaultMCPAddr) {
+		if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
+			utils.Infof("stopped MCP + tunnel on %s (pid %d)\n", defaultMCPAddr, pid)
+			stopped = true
+		}
+	}
+	_ = os.Remove(filepath.Join(dir, "agent-up.lock"))
+
+	if !stopped {
+		utils.Info("corgi agent is not running")
+	}
+}
+
+// readAgentPidFile reads a pid written by spawnDetached. A missing or malformed
+// file just means there is nothing to stop.
+func readAgentPidFile(path string) (int, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
 }
 
 func init() {
