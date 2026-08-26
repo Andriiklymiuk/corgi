@@ -37,10 +37,33 @@ type pairResponse struct {
 // anything larger is a mistake or an attempt to make the server allocate.
 const maxPairBodyBytes = 4 << 10
 
-// pairingHandler serves POST /pair while a pairing window is open.
+// pairingHandler serves /pair while a pairing window is open: GET renders the
+// scan-to-pair page, POST performs the pairing.
 func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", mimeJSON)
+		// The POST response carries a device token and the GET page carries the
+		// copy-paste connector: keep both out of any intermediary cache, and
+		// stop content sniffing. Defense in depth — the default cloudflared
+		// tunnel caches neither, but a corporate proxy on the client path might.
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
+		if r.Method == http.MethodGet {
+			// The page holds no secret: the code travels only in the URL
+			// fragment (which never reaches the server) and is typed back by
+			// the page's own JS. Rendering it while closed would only invite a
+			// form that cannot succeed.
+			if !session.Open() {
+				w.Header().Set(headerContentType, mimeJSON)
+				writePairError(w, http.StatusForbidden, "pairing is not open — run `corgi agent up` on the machine")
+				return
+			}
+			w.Header().Set(headerContentType, "text/html; charset=utf-8")
+			_, _ = fmt.Fprint(w, pairPageHTML)
+			return
+		}
+
+		w.Header().Set(headerContentType, mimeJSON)
 
 		if r.Method != http.MethodPost {
 			writePairError(w, http.StatusMethodNotAllowed, "POST a {code, device} body to pair")
@@ -84,6 +107,84 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 		})
 	})
 }
+
+// pairPageHTML is the scan-to-pair page: the QR printed by `corgi agent up`
+// points here with the code in the URL fragment. Self-contained, no external
+// assets, nothing server-rendered — the fragment stays in the browser.
+const pairPageHTML = `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pair with corgi</title>
+<style>
+  body{font-family:-apple-system,system-ui,sans-serif;background:#0f1115;color:#e8e8e8;
+       display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
+  main{max-width:22rem;width:100%;padding:2rem}
+  h1{font-size:1.3rem;margin:0 0 .3rem}
+  p{color:#9aa0a6;font-size:.9rem;margin:.2rem 0 1.2rem}
+  input,button{width:100%;box-sizing:border-box;font-size:1rem;padding:.7rem .8rem;border-radius:.6rem}
+  input{border:1px solid #333;background:#1a1d23;color:#e8e8e8;margin-bottom:.8rem}
+  button{border:0;background:#e8e8e8;color:#0f1115;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5}
+  #out{margin-top:1rem;font-size:.85rem}
+  .ok{color:#7ee787}.err{color:#ff7b72;word-break:break-word}
+  code{background:#1a1d23;padding:.15rem .35rem;border-radius:.3rem}
+  pre{background:#1a1d23;border:1px solid #333;border-radius:.5rem;padding:.8rem;
+      overflow-x:auto;font-size:.78rem;line-height:1.4;white-space:pre;margin:.6rem 0}
+  #copy{margin-bottom:.4rem}
+  a.open{display:inline-block;background:#7ee787;color:#0f1115;text-decoration:none;
+      padding:.7rem 1.1rem;border-radius:.6rem;font-weight:600}
+</style>
+<main>
+  <h1>🐕 Pair with corgi</h1>
+  <p>Name this device, tap pair. The code came along in the QR you scanned.</p>
+  <input id="device" placeholder="my-phone" autocomplete="off" autocapitalize="none">
+  <button id="go">Pair</button>
+  <div id="out"></div>
+</main>
+<script>
+  const code = location.hash.slice(1);
+  const out = document.getElementById('out');
+  const btn = document.getElementById('go');
+  const esc = s => String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  if (!code) { out.innerHTML = '<span class="err">No code in the link — rescan the QR from the terminal.</span>'; btn.disabled = true; }
+  btn.onclick = async () => {
+    const device = document.getElementById('device').value.trim() || 'my-phone';
+    btn.disabled = true; btn.textContent = 'Pairing…';
+    try {
+      const r = await fetch('/pair', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({code, device})});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      try { localStorage.setItem('corgi_token', j.token); } catch (_) {}
+      const mcpUrl = location.origin + '/mcp';
+      const connector = JSON.stringify({mcpServers:{corgi:{url:mcpUrl,
+        headers:{Authorization:'Bearer ' + j.token}}}}, null, 2);
+      out.innerHTML =
+        '<span class="ok">✓ Paired as <b>' + esc(device) + '</b> with <b>' +
+          esc(j.daemon||'this machine') + '</b></span>' +
+        '<p>Open the launcher to see your repos and start a session — one tap, ' +
+          'no setup. Save it to your home screen to come back:</p>' +
+        '<a class="open" href="/app">Open launcher →</a>' +
+        '<p style="margin-top:1.4rem">Prefer the Claude app instead? Add corgi as a ' +
+          'custom connector (on claude.ai) — tap to copy:</p>' +
+        '<pre id="cfg">' + esc(connector) + '</pre>' +
+        '<button id="copy">Copy connector config</button>' +
+        '<p>This token is shown once; the launcher remembers it on this browser, ' +
+          'and the config above is the only other copy.</p>';
+      btn.remove();
+      document.getElementById('copy').onclick = async (e) => {
+        try { await navigator.clipboard.writeText(connector); e.target.textContent = '✓ Copied'; }
+        catch { const r = document.createRange(); r.selectNode(document.getElementById('cfg'));
+          getSelection().removeAllRanges(); getSelection().addRange(r); e.target.textContent = 'Selected — long-press to copy'; }
+      };
+    } catch (e) {
+      out.innerHTML = '<span class="err">✗ ' + esc(e.message) + '</span>';
+      btn.disabled = false; btn.textContent = 'Pair';
+    }
+  };
+</script>
+`
 
 func writePairError(w http.ResponseWriter, status int, msg string) {
 	w.WriteHeader(status)

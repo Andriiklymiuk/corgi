@@ -186,15 +186,7 @@ func enableWorkspace(id, configDir string) error {
 	}
 	user.Workspaces[id] = entry
 
-	body, err := yaml.Marshal(user)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	// 0600: this file names the directories holding Claude credentials.
-	return os.WriteFile(path, body, 0o600)
+	return writeUserConfig(path, user)
 }
 
 // ---------------------------------------------------------------- scan

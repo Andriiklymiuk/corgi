@@ -1,0 +1,232 @@
+package cmd
+
+import (
+	"net"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"andriiklymiuk/corgi/utils"
+
+	"andriiklymiuk/corgi/utils/agent/workspace"
+)
+
+func TestParseMCPLogNeedsBothURLAndCode(t *testing.T) {
+	if _, done := parseMCPLog("corgi mcp serving Streamable HTTP on 127.0.0.1:8765/mcp\n"); done {
+		t.Error("a log with no tunnel URL or code is not done")
+	}
+
+	full := "🌐 ✓ public MCP endpoint: https://abc.trycloudflare.com/mcp\n  pairing code: WORD-123\n"
+	got, done := parseMCPLog(full)
+	if !done {
+		t.Fatal("a log with both the URL and the code is done")
+	}
+	if got.publicURL != "https://abc.trycloudflare.com" {
+		t.Errorf("publicURL = %q", got.publicURL)
+	}
+	if got.pairCode != "WORD-123" {
+		t.Errorf("pairCode = %q", got.pairCode)
+	}
+}
+
+func TestParseMCPLogFatalRecognition(t *testing.T) {
+	if _, done := parseMCPLog("some ordinary progress line\n"); done {
+		t.Error("ordinary output must not read as complete")
+	}
+	if !mcpFatalPattern.MatchString("mcp server error: bind: address already in use\n") {
+		t.Error("a real fatal line must be recognised")
+	}
+	if mcpFatalPattern.MatchString("🌐 ✓ public MCP endpoint: https://x/mcp\n") {
+		t.Error("the success line must not be treated as fatal")
+	}
+}
+
+func TestRegisterCwdWorkspaceDoesNotHijackABasenameCollision(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", data)
+	agentD, err := agentDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// An existing "api" workspace, pointing somewhere else entirely.
+	elsewhere := stackWithAgentConfig(t, "")
+	registerStack(t, agentD, "api", elsewhere)
+
+	// A different directory that also happens to be called "api".
+	parent := t.TempDir()
+	collide := filepath.Join(parent, "api")
+	if err := os.MkdirAll(filepath.Join(collide, ".corgi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(collide, "corgi-compose.yml"),
+		[]byte("name: s\nservices:\n  api:\n    path: .\n    manualRun: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(collide)
+
+	id, registered := registerCwdWorkspace()
+
+	if !registered || id == "api" {
+		t.Fatalf("must register under a fresh id, not hijack 'api'; got id=%q registered=%v", id, registered)
+	}
+	reg, _ := workspace.Load(agentRegistryPath(agentD))
+	orig, _ := reg.Find("api")
+	if orig.AbsPath != elsewhere {
+		t.Errorf("the existing 'api' workspace was repointed to %q — hijacked", orig.AbsPath)
+	}
+	mine, ok := reg.Find(id)
+	if !ok || mine.AbsPath != collide {
+		t.Errorf("the new workspace %q must point at cwd %q, got %q", id, collide, mine.AbsPath)
+	}
+}
+
+func TestParseMCPLogIgnoresATruncatedCode(t *testing.T) {
+	// mcp.log read mid-write: URL is complete, code line has no newline yet.
+	partial := "🌐 ✓ public MCP endpoint: https://abc.trycloudflare.com/mcp\n  pairing code: WOR"
+	if _, done := parseMCPLog(partial); done {
+		t.Error("a code with no line terminator must not be treated as complete — it could be mid-write")
+	}
+	full := partial + "D-123\n"
+	got, done := parseMCPLog(full)
+	if !done || got.pairCode != "WORD-123" {
+		t.Errorf("once the line completes, the whole code must be captured, got %q done=%v", got.pairCode, done)
+	}
+}
+
+func TestUpLockBlocksASecondHolderAndReleases(t *testing.T) {
+	dir := t.TempDir()
+	release, err := acquireUpLock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err2 := acquireUpLock(dir); err2 == nil {
+		t.Error("a second agent up must be refused while the first holds the lock")
+	}
+	release()
+	release2, err := acquireUpLock(dir)
+	if err != nil {
+		t.Fatalf("the lock must be retakeable after release, got %v", err)
+	}
+	release2()
+}
+
+func TestUpLockReclaimsAStaleLock(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A lock file with a pid that cannot be parsed is stale by definition.
+	if err := os.WriteFile(filepath.Join(dir, "agent-up.lock"), []byte("not-a-pid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	release, err := acquireUpLock(dir)
+	if err != nil {
+		t.Fatalf("a stale lock must be reclaimed, got %v", err)
+	}
+	release()
+}
+
+func TestOrDefault(t *testing.T) {
+	if orDefault("", "fallback") != "fallback" {
+		t.Error("empty must yield the fallback")
+	}
+	if orDefault("x", "fallback") != "x" {
+		t.Error("a value must pass through")
+	}
+}
+
+func TestMcpListeningDetectsAListener(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().String()
+	if !mcpListening(addr) {
+		t.Errorf("a live listener at %s must read as listening", addr)
+	}
+}
+
+func TestMcpListeningFalseOnAFreePort(t *testing.T) {
+	// Bind then close to get a port nothing listens on.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+	if mcpListening(addr) {
+		t.Errorf("a closed port %s must not read as listening", addr)
+	}
+}
+
+func TestAwaitMCPLogReadsURLAndCode(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "mcp.log")
+	if err := os.WriteFile(f, []byte("🌐 ✓ public MCP endpoint: https://abc.trycloudflare.com/mcp\n  pairing code: WORD-9\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := awaitMCPLog(f, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.publicURL != "https://abc.trycloudflare.com" || got.pairCode != "WORD-9" {
+		t.Fatalf("parsed = %+v", got)
+	}
+}
+
+func TestAwaitMCPLogReturnsErrorOnAFatalLine(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "mcp.log")
+	if err := os.WriteFile(f, []byte("mcp server error: bind: address already in use\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := awaitMCPLog(f, 2*time.Second); err == nil {
+		t.Error("a fatal line must make awaitMCPLog fail fast, not wait out the timeout")
+	}
+}
+
+func TestAwaitMCPLogTimesOutWithNoCode(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "mcp.log")
+	_ = os.WriteFile(f, []byte("some progress\n"), 0o600)
+	if _, err := awaitMCPLog(f, 150*time.Millisecond); err == nil {
+		t.Error("no pairing code within the timeout must be an error")
+	}
+}
+
+func TestPrintTerminalQRDoesNotPanic(t *testing.T) {
+	// Best-effort renderer; must never crash the command.
+	printTerminalQR("https://example.com/pair#CODE")
+}
+
+func TestPrintAgentUpJSON(t *testing.T) {
+	utils.JSONOutput = true
+	defer func() { utils.JSONOutput = false }()
+	// Just exercise the JSON branch; it must not panic and must serialize.
+	printAgentUp(agentUpResult{Workspace: "acme", Registered: true, DaemonPID: 1, PublicURL: "https://x", PairCode: "C"})
+}
+
+func TestPrintAgentUpHumanPaths(t *testing.T) {
+	utils.JSONOutput = false
+	// Exercise the human-readable branches: public URL + pair QR, and the
+	// no-tunnel + hint fallback. Must not panic.
+	printAgentUp(agentUpResult{
+		Workspace: "acme", Registered: true, DaemonPID: 7,
+		PublicURL: "https://x.trycloudflare.com", PairCode: "C1",
+		PairURL: "https://x.trycloudflare.com/pair#C1",
+	})
+	printAgentUp(agentUpResult{
+		Workspace: "acme", Registered: false, DaemonPID: 7,
+		MCPAddr: "127.0.0.1:8765", LogPath: "/tmp/mcp.log",
+		Hint: "already in use", PairCode: "C2",
+	})
+}
+
+func TestMustAgentDirReturnsTheAgentDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	want, _ := agentDir()
+	if got := mustAgentDir(); got != want {
+		t.Errorf("mustAgentDir() = %q, want %q", got, want)
+	}
+}

@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,11 +64,21 @@ func StartProcess(ctx context.Context, cfg SpawnConfig) (Process, error) {
 	// The tail is held in memory for exit classification only, and is never
 	// persisted: a session's output can contain env values and tokens.
 	tail := newRingBuffer(outputTailBytes)
+	writers := []io.Writer{tail}
+	if cfg.OnSessionURL != nil {
+		writers = append(writers, newURLScanner(cfg.OnSessionURL))
+	}
+	if cfg.OnActivity != nil {
+		writers = append(writers, activityWriter{cfg.OnActivity})
+	}
 	var sink io.Writer = tail
+	if len(writers) > 1 {
+		sink = io.MultiWriter(writers...)
+	}
 	if cfg.MirrorOutput {
 		// Only with --foreground, where a person is watching rather than a log
 		// file collecting. stderr, so --json stdout stays pure JSON.
-		sink = io.MultiWriter(tail, os.Stderr)
+		sink = io.MultiWriter(sink, os.Stderr)
 	}
 	cmd.Stdout = sink
 	cmd.Stderr = sink
@@ -132,6 +144,59 @@ func (p *execProcess) Stop() {
 		// gets its own process group.
 		_ = utils.KillProcessGroup(pid)
 	})
+}
+
+// sessionURLPattern matches the claude.ai link remote control prints when a
+// session opens. Best-effort: if the format drifts, the URL is simply absent
+// and everything else still works.
+var sessionURLPattern = regexp.MustCompile(`https://claude\.ai/\S+`)
+
+// maxPartialLine bounds the scanner's memory; a URL will not span more.
+const maxPartialLine = 16 << 10
+
+// urlScanner watches process output and reports the first complete claude.ai
+// URL. A match touching the end of the buffer is held back — the next write
+// could extend it.
+type urlScanner struct {
+	mu      sync.Mutex
+	partial []byte
+	report  func(string)
+	done    bool
+}
+
+func newURLScanner(report func(string)) *urlScanner { return &urlScanner{report: report} }
+
+func (u *urlScanner) Write(p []byte) (int, error) {
+	u.mu.Lock()
+	if u.done {
+		u.mu.Unlock()
+		return len(p), nil
+	}
+	u.partial = append(u.partial, p...)
+	var hit string
+	if m := sessionURLPattern.FindIndex(u.partial); m != nil && m[1] < len(u.partial) {
+		hit = strings.TrimRight(string(u.partial[m[0]:m[1]]), `.,;:)]}'"`)
+		u.done = true
+		u.partial = nil
+	} else if len(u.partial) > maxPartialLine {
+		u.partial = u.partial[len(u.partial)-maxPartialLine:]
+	}
+	u.mu.Unlock()
+	if hit != "" {
+		u.report(hit)
+	}
+	return len(p), nil
+}
+
+// activityWriter reports that output happened, for the idle wake lock. It keeps
+// no bytes — it is a signal, not a sink — so the callback must stay cheap.
+type activityWriter struct{ report func() }
+
+func (a activityWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		a.report()
+	}
+	return len(p), nil
 }
 
 // ringBuffer keeps the last n bytes written to it.

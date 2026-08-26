@@ -8,6 +8,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/brief"
+	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -71,6 +72,41 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithString("query", mcp.Required(), mcp.Description("What the user called it")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWorkspaceResolve(r.GetString("query", ""))
+	}))
+
+	// corgi_session_start/_stop are NOT behind the dangerous-tunnel gate, for
+	// the same reason corgi_up/corgi_down are not: they are the point of a
+	// phone-driven endpoint. What bounds them instead:
+	//   - the endpoint is per-device-token authenticated (pairing), and a lost
+	//     device is revoked, not tolerated — treat its token as the machine key;
+	//   - starts are registry-scoped: a caller picks an existing workspace, it
+	//     cannot define what runs or where;
+	//   - a workspace marked `sensitive` refuses remote start (remoteResolver);
+	//   - the started session's conversation still needs the owner's claude.ai
+	//     account — the sessionUrl reaches paired devices, so status.json is
+	//     0600 and the URL is not otherwise logged.
+	// A stolen token can still stop the owner's sessions (a nuisance, not a
+	// breach); revocation is the answer, as with every tool the token reaches.
+	s.AddTool(mcp.NewTool("corgi_session_start",
+		mcp.WithDescription(
+			"Start a supervised Claude Code Remote Control session in a registered workspace, by name. "+
+				"Returns immediately with state \"starting\" — poll corgi_agent_status until the workspace reports "+
+				"running and (best-effort) a sessionUrl; opening that URL joins the conversation. Idempotent: an "+
+				"already-running workspace returns state \"running\" with its URL. The optional profile picks a "+
+				"named entry from the trusted agent config (a different Claude account, e.g. \"work\")."),
+		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
+		mcp.WithString("profile", mcp.Description("Profile name from the agent config's profiles: section")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpSessionStart(r.GetString("workspace", ""), r.GetString("profile", ""))
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_session_stop",
+		mcp.WithDescription(
+			"Stop the supervised session in a workspace. Returns immediately with state \"stopping\"; "+
+				"poll corgi_agent_status to confirm. Stopping a workspace that is not running is a clean no-op."),
+		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpSessionStop(r.GetString("workspace", ""))
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_worktrees_materialize",
@@ -255,6 +291,102 @@ func mcpWorkspaceResolve(query string) (any, error) {
 	}
 	registry.Reconcile(dirHasComposeFile)
 	return workspace.Resolve(registry, query), nil
+}
+
+// resolveForSession maps a human name to one workspace, or returns the
+// candidate list shaped exactly like corgi_workspace_resolve.
+func resolveForSession(query string) (*workspace.Workspace, any, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, nil, fmt.Errorf("%s: workspace is required", utils.ErrUsage)
+	}
+	registry, _, err := agentRegistry()
+	if err != nil {
+		return nil, nil, err
+	}
+	registry.Reconcile(dirHasComposeFile)
+	res := workspace.Resolve(registry, query)
+	if !res.Resolved() {
+		return nil, res, nil
+	}
+	return res.Workspace, nil, nil
+}
+
+func mcpSessionStart(query, profile string) (any, error) {
+	w, ambiguous, err := resolveForSession(query)
+	if err != nil {
+		return nil, err
+	}
+	if ambiguous != nil {
+		return ambiguous, nil
+	}
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, fmt.Errorf("the corgi agent daemon is not running — run `corgi agent serve` on the laptop, or `corgi agent install` to start at login")
+	}
+	if !info.Commands {
+		return nil, fmt.Errorf("the running corgi agent predates remote session start — restart it (`corgi agent stop` then `corgi agent serve`) on the laptop")
+	}
+	// No status short-circuit: reading status.json here to answer "already
+	// running" races a stop that has been requested but not yet taken effect,
+	// which would report a dying session as running and enqueue nothing. The
+	// daemon's Supervising() check is the authoritative idempotency guard, and
+	// it orders a queued stop before this start by requestedAt, so enqueuing
+	// unconditionally is both correct and simplest.
+	c, err := command.Write(dir, command.Command{
+		Action: command.ActionStart, WorkspaceID: w.ID, Profile: profile, Source: "mcp",
+	})
+	if err != nil {
+		return nil, err
+	}
+	daemon.Nudge(info)
+	return map[string]any{
+		"workspaceId": w.ID,
+		"state":       "starting",
+		"commandId":   c.ID,
+		"hint":        "poll corgi_agent_status until this workspace is running; its sessionUrl opens the conversation",
+	}, nil
+}
+
+func mcpSessionStop(query string) (any, error) {
+	w, ambiguous, err := resolveForSession(query)
+	if err != nil {
+		return nil, err
+	}
+	if ambiguous != nil {
+		return ambiguous, nil
+	}
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil {
+		return nil, fmt.Errorf("the corgi agent daemon is not running — nothing to stop")
+	}
+	if !info.Commands {
+		return nil, fmt.Errorf("the running corgi agent predates remote session start — restart it on the laptop")
+	}
+	c, err := command.Write(dir, command.Command{
+		Action: command.ActionStop, WorkspaceID: w.ID, Source: "mcp",
+	})
+	if err != nil {
+		return nil, err
+	}
+	daemon.Nudge(info)
+	return map[string]any{
+		"workspaceId": w.ID, "state": "stopping", "commandId": c.ID,
+		"hint": "poll corgi_agent_status to confirm it stopped",
+	}, nil
 }
 
 func mcpWorktreesMaterialize(composePath, branch string, services []string) (any, error) {

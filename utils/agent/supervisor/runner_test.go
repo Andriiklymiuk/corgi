@@ -93,6 +93,10 @@ func TestRunnerRestartsAfterNetworkTimeout(t *testing.T) {
 	go func() { defer close(done); _ = r.Run(ctx) }()
 
 	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notified) > 0 })
+	// The notification fires when the restart is DECIDED, a hair before the
+	// replacement process starts. Wait for it to actually be running, or cancel
+	// can land in the gap and the second Start never happens (a flake).
+	waitFor(t, func() bool { return r.State().Running })
 	cancel()
 	<-done
 
@@ -504,5 +508,171 @@ func TestEmptySessionEndSummaryLeavesTheNotificationAlone(t *testing.T) {
 	defer mu.Unlock()
 	if strings.HasSuffix(notified[0], " · ") {
 		t.Errorf("notification %q has a dangling separator with nothing after it", notified[0])
+	}
+}
+
+func TestRunnerReportsSessionURLWhileRunningAndClearsItOnExit(t *testing.T) {
+	proc := &fakeProcess{pid: 42, stopped: make(chan struct{})}
+	start := func(_ context.Context, cfg SpawnConfig) (Process, error) {
+		cfg.OnSessionURL("https://claude.ai/code/session-123")
+		return proc, nil
+	}
+	cfg := SpawnConfig{WorkspaceID: "acme", Dir: "/tmp/acme", Origin: OriginRemote, Profile: "work", WakeLock: WakeLockOff}
+	r := NewRunner(cfg, start, NewWakeLock(WakeLockOff))
+	r.Sleep = func(context.Context, time.Duration) {}
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+
+	waitFor(t, func() bool {
+		s := r.State()
+		return s.Running && s.SessionURL == "https://claude.ai/code/session-123"
+	})
+	s := r.State()
+	if s.Origin != OriginRemote || s.Profile != "work" {
+		t.Errorf("origin/profile = %q/%q, want remote/work", s.Origin, s.Profile)
+	}
+
+	r.Stop()
+	<-done
+	if got := r.State().SessionURL; got != "" {
+		t.Errorf("sessionUrl = %q after exit; a new session gets a new URL, so it must clear", got)
+	}
+}
+
+func TestSupervisingReportsStopAndDisable(t *testing.T) {
+	start, _ := scriptedStarter()
+	r := testRunner(t, start)
+	if !r.Supervising() {
+		t.Fatal("a fresh runner must report itself supervising")
+	}
+	r.Stop()
+	if r.Supervising() {
+		t.Error("a stopped runner must not report itself supervising — a restart needs a fresh runner")
+	}
+}
+
+func TestStopBetweenStartAndMarkRunningDoesNotOrphanTheProcess(t *testing.T) {
+	// The command loop can call Stop in the instant after Start returns a live
+	// process but before markRunning records it — when r.proc is still nil and
+	// Stop has nothing to signal. Without the re-check the process would run
+	// unreachable until it exited on its own.
+	proc := &fakeProcess{pid: 7, stopped: make(chan struct{})}
+	var r *Runner
+	start := func(context.Context, SpawnConfig) (Process, error) {
+		r.Stop() // Stop wins the race: proc not yet recorded, nothing to signal
+		return proc, nil
+	}
+	r = NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockOff}, start, NewWakeLock(WakeLockOff))
+	r.Sleep = func(context.Context, time.Duration) {}
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run never returned — the just-started process was orphaned in Wait()")
+	}
+	select {
+	case <-proc.stopped:
+	default:
+		t.Error("the raced-past process must be stopped, not left running")
+	}
+}
+
+func TestIdleWakeLockReleasesWhenQuietAndReacquiresOnActivity(t *testing.T) {
+	lock, _ := fakeLock(t, WakeLockIdle)
+	proc := &fakeProcess{pid: 5, stopped: make(chan struct{})}
+	start := func(context.Context, SpawnConfig) (Process, error) { return proc, nil }
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockIdle}, start, lock)
+	r.Sleep = func(context.Context, time.Duration) {}
+	r.IdleAfter = 40 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+
+	// A fresh session is working: the lock is taken.
+	waitFor(t, func() bool { return lock.Held() })
+	// It goes quiet with no further output — the machine may sleep.
+	waitFor(t, func() bool { return !lock.Held() })
+	// Work resumes (output arrives) — awake again.
+	r.recordActivity()
+	waitFor(t, func() bool { return lock.Held() })
+
+	r.Stop()
+	<-done
+	if lock.Held() {
+		t.Error("the lock must be released once the session ends, whatever the idle state was")
+	}
+}
+
+func TestIdleWakeLockMonitorStopsWithTheProcess(t *testing.T) {
+	// After the session exits, nothing may keep toggling the lock.
+	lock, _ := fakeLock(t, WakeLockIdle)
+	proc := &fakeProcess{pid: 6, stopped: make(chan struct{})}
+	start := func(context.Context, SpawnConfig) (Process, error) { return proc, nil }
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockIdle}, start, lock)
+	r.Sleep = func(context.Context, time.Duration) {}
+	r.IdleAfter = 30 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+	waitFor(t, func() bool { return lock.Held() })
+
+	r.Stop()
+	<-done
+	// Even if we simulate late output, the monitor is gone and must not re-grab.
+	r.recordActivity()
+	time.Sleep(60 * time.Millisecond)
+	if lock.Held() {
+		t.Error("no monitor may survive the process to re-acquire the lock")
+	}
+}
+
+func TestStopAsyncStopsWithoutBlocking(t *testing.T) {
+	proc := &fakeProcess{pid: 9, stopped: make(chan struct{})}
+	start := func(context.Context, SpawnConfig) (Process, error) { return proc, nil }
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockOff}, start, NewWakeLock(WakeLockOff))
+	r.Sleep = func(context.Context, time.Duration) {}
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(context.Background()) }()
+	waitFor(t, func() bool { return r.State().Running })
+
+	r.StopAsync() // must return immediately; teardown happens in the background
+	if r.Supervising() {
+		t.Error("StopAsync must mark the runner stopped synchronously")
+	}
+	<-done
+	select {
+	case <-proc.stopped:
+	default:
+		t.Error("the process must be stopped after the async teardown")
+	}
+}
+
+func TestIdleAfterDefaultAndOverride(t *testing.T) {
+	r := &Runner{}
+	if r.idleAfter() != WakeLockIdleTimeout {
+		t.Errorf("idleAfter() = %v, want the default %v", r.idleAfter(), WakeLockIdleTimeout)
+	}
+	r.IdleAfter = 42 * time.Second
+	if r.idleAfter() != 42*time.Second {
+		t.Errorf("idleAfter() = %v, want the override", r.idleAfter())
+	}
+}
+
+func TestSetSessionURLIgnoresARepeat(t *testing.T) {
+	changes := 0
+	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp"}, nil, NewWakeLock(WakeLockOff))
+	r.OnChange = func() { changes++ }
+	r.setSessionURL("https://claude.ai/code/x")
+	r.setSessionURL("https://claude.ai/code/x") // same value: no change, no notify
+	r.setSessionURL("https://claude.ai/code/y")
+	if changes != 2 {
+		t.Errorf("OnChange fired %d times, want 2 — a repeated URL must not notify again", changes)
+	}
+	if r.State().SessionURL != "https://claude.ai/code/y" {
+		t.Errorf("sessionURL = %q", r.State().SessionURL)
 	}
 }

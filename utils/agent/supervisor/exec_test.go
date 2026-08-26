@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -347,4 +348,71 @@ func captureStderr(t *testing.T, fn func()) string {
 	fn()
 	w.Close()
 	return <-out
+}
+
+func TestURLScannerFindsAURLSplitAcrossWrites(t *testing.T) {
+	var got []string
+	u := newURLScanner(func(url string) { got = append(got, url) })
+	_, _ = u.Write([]byte("Session ready: https://claude.ai/code/ses"))
+	if len(got) != 0 {
+		t.Fatal("must not report a URL that may still be growing")
+	}
+	_, _ = u.Write([]byte("sion-42\nmore output\n"))
+	if len(got) != 1 || got[0] != "https://claude.ai/code/session-42" {
+		t.Fatalf("got %v", got)
+	}
+	_, _ = u.Write([]byte("https://claude.ai/other \n"))
+	if len(got) != 1 {
+		t.Error("scanner must report only the first URL")
+	}
+}
+
+func TestURLScannerTrimsTrailingPunctuation(t *testing.T) {
+	var got string
+	u := newURLScanner(func(url string) { got = url })
+	_, _ = u.Write([]byte("open (https://claude.ai/code/s1).\n"))
+	if got != "https://claude.ai/code/s1" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestURLScannerBoundsItsBuffer(t *testing.T) {
+	u := newURLScanner(func(string) {})
+	junk := bytes.Repeat([]byte("x"), 4<<10)
+	for i := 0; i < 100; i++ {
+		_, _ = u.Write(junk)
+	}
+	u.mu.Lock()
+	n := len(u.partial)
+	u.mu.Unlock()
+	if n > maxPartialLine {
+		t.Fatalf("buffer grew to %d; a long-running session must not leak", n)
+	}
+}
+
+func TestStartProcessReportsTheSessionURLFromOutput(t *testing.T) {
+	fakeClaude(t, `echo "Remote control ready: https://claude.ai/code/session-xyz"; sleep 2`)
+	cfg := execConfig(t)
+	got := make(chan string, 1)
+	cfg.OnSessionURL = func(u string) {
+		select {
+		case got <- u:
+		default:
+		}
+	}
+
+	proc, err := StartProcess(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proc.Stop()
+
+	select {
+	case u := <-got:
+		if u != "https://claude.ai/code/session-xyz" {
+			t.Errorf("reported URL = %q", u)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the session URL was never reported — the scanner is not wired into StartProcess's output")
+	}
 }

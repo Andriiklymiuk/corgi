@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -35,6 +36,9 @@ type RunState struct {
 	LastCause   ExitCause `json:"lastCause,omitempty"`
 	LastReason  string    `json:"lastReason,omitempty"`
 	WakeLock    bool      `json:"wakeLock"`
+	Origin      string    `json:"origin,omitempty"`
+	Profile     string    `json:"profile,omitempty"`
+	SessionURL  string    `json:"sessionUrl,omitempty"`
 }
 
 // Runner supervises one workspace's remote-control process.
@@ -60,6 +64,13 @@ type Runner struct {
 	// OnChange fires after the run state changes, so a watcher can republish
 	// without polling. Called without the lock held.
 	OnChange func()
+	// IdleAfter overrides how long the session must be quiet before the idle
+	// wake lock lets the machine sleep. Zero means WakeLockIdleTimeout.
+	IdleAfter time.Duration
+
+	// lastActivity is the unix-nano time of the last output chunk, read by the
+	// idle monitor. Atomic because it is written from the output goroutine.
+	lastActivity atomic.Int64
 
 	mu       sync.Mutex
 	state    RunState
@@ -73,14 +84,89 @@ type Runner struct {
 
 // NewRunner returns a Runner with the real sleep behaviour.
 func NewRunner(cfg SpawnConfig, start Starter, lock *WakeLock) *Runner {
-	return &Runner{
+	r := &Runner{
 		Config:   cfg,
 		Start:    start,
 		WakeLock: lock,
 		Sleep:    sleepWithContext,
-		state:    RunState{WorkspaceID: cfg.WorkspaceID},
+		state:    RunState{WorkspaceID: cfg.WorkspaceID, Origin: cfg.Origin, Profile: cfg.Profile},
 		stopped:  make(chan struct{}),
 	}
+	r.Config.OnSessionURL = r.setSessionURL
+	r.Config.OnActivity = r.recordActivity
+	return r
+}
+
+// recordActivity stamps the last-output time for the idle wake lock. On the
+// output path, so it does nothing but an atomic store.
+func (r *Runner) recordActivity() {
+	r.lastActivity.Store(time.Now().UnixNano())
+}
+
+func (r *Runner) idleAfter() time.Duration {
+	if r.IdleAfter > 0 {
+		return r.IdleAfter
+	}
+	return WakeLockIdleTimeout
+}
+
+// startIdleMonitor holds the wake lock while the session is producing output and
+// releases it once it has been quiet for idleAfter, re-acquiring when work
+// resumes. The returned stop function ends the monitor and waits for it, so the
+// caller can then release the lock with no goroutine still toggling it.
+func (r *Runner) startIdleMonitor(ctx context.Context, pid int) func() {
+	idleAfter := r.idleAfter()
+	tick := idleAfter / 4
+	if tick < 20*time.Millisecond {
+		tick = 20 * time.Millisecond
+	}
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		t := time.NewTicker(tick)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				last := r.lastActivity.Load()
+				if last != 0 && time.Since(time.Unix(0, last)) >= idleAfter {
+					r.WakeLock.Release()
+				} else {
+					_ = r.WakeLock.Acquire(pid)
+				}
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-finished
+	}
+}
+
+// setSessionURL records the URL the exec layer spotted in the output.
+func (r *Runner) setSessionURL(url string) {
+	r.mu.Lock()
+	if r.state.SessionURL == url {
+		r.mu.Unlock()
+		return
+	}
+	r.state.SessionURL = url
+	r.mu.Unlock()
+	r.notifyChange()
+}
+
+// Supervising reports whether this runner still keeps its process up: false
+// once Stop was called or the workspace disabled itself, at which point a new
+// start needs a fresh runner.
+func (r *Runner) Supervising() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return !r.stopping && !r.state.Disabled
 }
 
 // State returns a snapshot for status output.
@@ -92,11 +178,34 @@ func (r *Runner) State() RunState {
 	return s
 }
 
-// Stop asks the supervised process to exit and keeps it stopped.
+// Stop asks the supervised process to exit and keeps it stopped, blocking until
+// the process teardown is initiated.
 //
 // The flag matters: without it the loop sees an ordinary exit, classifies it as
 // a crash or a network timeout, and starts the process straight back up.
 func (r *Runner) Stop() {
+	proc := r.beginStop()
+	if proc != nil {
+		proc.Stop()
+	}
+}
+
+// StopAsync marks the runner stopped SYNCHRONOUSLY — so Supervising() reads
+// false the instant it returns and a follow-up start in the same command batch
+// is not deduplicated against a runner already on its way out — then runs the
+// blocking process teardown (up to stopGrace) on its own goroutine. The command
+// loop uses this so a stop cannot stall it.
+func (r *Runner) StopAsync() {
+	proc := r.beginStop()
+	if proc != nil {
+		go proc.Stop()
+	}
+}
+
+// beginStop sets the stop flag and wakes any backoff sleep, returning the live
+// process (or nil) for the caller to terminate. The flag is set under the lock
+// before returning, which is the synchronous guarantee StopAsync relies on.
+func (r *Runner) beginStop() Process {
 	r.mu.Lock()
 	r.stopping = true
 	proc := r.proc
@@ -110,9 +219,7 @@ func (r *Runner) Stop() {
 			close(r.stopped)
 		}
 	})
-	if proc != nil {
-		proc.Stop()
-	}
+	return proc
 }
 
 // stopRequested reports whether Stop has been called.
@@ -206,14 +313,39 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 	startedAt := time.Now()
 	r.markRunning(proc, startedAt)
 
-	if r.Config.WakeLockMode() == WakeLockSession {
+	// Stop may have run between Start and markRunning, when r.proc was still nil
+	// and there was nothing for it to signal. It set stopping, so Supervising()
+	// is already false; without this the process would run unreachably until it
+	// exited on its own, and a later start would spawn a second one beside it.
+	if r.stopRequested() {
+		proc.Stop()
+	}
+
+	var stopIdle func()
+	switch r.Config.WakeLockMode() {
+	case WakeLockSession:
 		// A failure here is not fatal: the session is more useful awake-only
 		// than not running at all. Surfaced through status instead.
 		_ = r.WakeLock.Acquire(proc.Pid())
+	case WakeLockIdle:
+		// Start awake — a session just launched is working — then let the
+		// monitor drop the lock once it goes quiet. Skip the monitor where wake
+		// locks do nothing (Windows), so it is not a goroutine spinning on a
+		// no-op Acquire every tick.
+		if Supported() {
+			r.recordActivity()
+			_ = r.WakeLock.Acquire(proc.Pid())
+			stopIdle = r.startIdleMonitor(ctx, proc.Pid())
+		}
 	}
 
 	code, output := proc.Wait()
 	uptime := time.Since(startedAt)
+	// Stop the monitor before releasing, so nothing re-acquires the lock behind
+	// the release.
+	if stopIdle != nil {
+		stopIdle()
+	}
 	if !alwaysAwake {
 		r.WakeLock.Release()
 	}
@@ -268,6 +400,7 @@ func (r *Runner) recordLocked(d Decision, pid int, disabled bool) {
 	defer r.mu.Unlock()
 	r.proc = nil
 	r.state.Running = false
+	r.state.SessionURL = ""
 	r.state.PID = pid
 	r.state.LastCause = d.Cause
 	r.state.LastReason = d.Reason
