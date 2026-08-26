@@ -1,6 +1,6 @@
 ---
 name: suggest
-description: Use when the user wants feature or improvement ideas for a corgi workspace — "suggest features", "what should we build next", "ideas to improve X", "how do we make this faster/safer/cheaper", "what's missing", "any new business cases". Scans the stack + its business domain + existing features and proposes RANKED, evidence-backed suggestions across two lenses — product/business (new features, new business cases, UX) and engineering (performance, reliability, security, cost, tech-debt, even a language rewrite when the ROI is high) — each tied to a measurable outcome. Specs the chosen one and offers to create a tracker story (asks where). NOT for implementing it (use the stories skill) or authoring corgi-compose.yml (use the corgi skill).
+description: Use when the user wants feature or improvement ideas for a corgi workspace — "suggest features", "what should we build next", "ideas to improve X", "how do we make this faster/safer/cheaper", "what's missing", "any new business cases". NOT for implementing it (use the stories skill) or authoring corgi-compose.yml (use the corgi skill).
 ---
 
 # Corgi suggest

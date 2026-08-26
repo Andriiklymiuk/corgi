@@ -27,6 +27,10 @@ const defaultMCPAddr = "127.0.0.1:8765"
 // mcpLogName is the detached MCP server's log file, under the agent data dir.
 const mcpLogName = "mcp.log"
 
+// mcpPidName records the detached MCP server's pid so `corgi agent down` can
+// stop the tunnel + pairing server that `agent up` started, not just the daemon.
+const mcpPidName = "mcp.pid"
+
 var agentUpCmd = &cobra.Command{
 	Use:   "up",
 	Short: "One command from a stack directory to phone-startable: register, daemon, tunnel, pairing",
@@ -58,6 +62,7 @@ type agentUpResult struct {
 func runAgentUp(cmd *cobra.Command, _ []string) {
 	addr, _ := cmd.Flags().GetString("http")
 	provider, _ := cmd.Flags().GetString("provider")
+	tunnelName, _ := cmd.Flags().GetString("tunnel-name")
 
 	dir, err := agentDir()
 	if err != nil {
@@ -99,7 +104,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	if err := spawnDetachedMCP(dir, addr, provider); err != nil {
+	if err := spawnDetachedMCP(dir, addr, provider, tunnelName); err != nil {
 		exitWithError("agent_up_mcp", err, 1)
 	}
 	res.MCPStarted = true
@@ -160,7 +165,7 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 	if info, err := daemon.ReadInfo(dir); err == nil && info != nil {
 		return info, nil
 	}
-	if err := spawnDetached(dir, "serve.log", "agent", "serve"); err != nil {
+	if _, err := spawnDetached(dir, "serve.log", "agent", "serve"); err != nil {
 		return nil, err
 	}
 	deadline := time.Now().Add(10 * time.Second)
@@ -173,27 +178,40 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 	return nil, fmt.Errorf("daemon did not come up — see %s", filepath.Join(dir, "serve.log"))
 }
 
-func spawnDetachedMCP(dir, addr, provider string) error {
+func spawnDetachedMCP(dir, addr, provider, tunnelName string) error {
 	args := []string{"mcp", "--http", addr, "--tunnel", "--pair"}
 	if provider != "" {
 		args = append(args, "--tunnel-provider", provider)
 	}
+	// A named tunnel gives a stable public URL, so the launcher can be
+	// bookmarked / saved to a home screen and survive a restart of `agent up`.
+	if tunnelName != "" {
+		args = append(args, "--tunnel-name", tunnelName)
+	}
 	// Truncate the old log first: awaitMCPLog must not read a previous run's
 	// URL or pairing code as this one's.
 	_ = os.Remove(filepath.Join(dir, mcpLogName))
-	return spawnDetached(dir, mcpLogName, args...)
-}
-
-// spawnDetached starts corgi itself with args, output to <dir>/<logName>, in
-// its own process group so it outlives this command and later Ctrl+Cs.
-func spawnDetached(dir, logName string, args ...string) error {
-	exe, err := os.Executable()
+	pid, err := spawnDetached(dir, mcpLogName, args...)
 	if err != nil {
 		return err
 	}
+	// Best-effort: a missing pid file only means `agent down` cannot stop this
+	// MCP for you, not that anything is wrong with the running server.
+	_ = os.WriteFile(filepath.Join(dir, mcpPidName), []byte(strconv.Itoa(pid)+"\n"), 0o600)
+	return nil
+}
+
+// spawnDetached starts corgi itself with args, output to <dir>/<logName>, in
+// its own process group so it outlives this command and later Ctrl+Cs. Returns
+// the child pid so the caller can record it for a later stop.
+func spawnDetached(dir, logName string, args ...string) (int, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, err
+	}
 	logFile, err := os.OpenFile(filepath.Join(dir, logName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer logFile.Close()
 	c := exec.Command(exe, args...)
@@ -201,7 +219,10 @@ func spawnDetached(dir, logName string, args ...string) error {
 	c.Stderr = logFile
 	c.Stdin = nil
 	utils.SetProcessGroup(c)
-	return c.Start()
+	if err := c.Start(); err != nil {
+		return 0, err
+	}
+	return c.Process.Pid, nil
 }
 
 // acquireUpLock takes an exclusive, pid-stamped lock so only one `agent up`
@@ -377,5 +398,6 @@ func orDefault(s, def string) string {
 func init() {
 	agentUpCmd.Flags().String("http", defaultMCPAddr, "Local MCP address")
 	agentUpCmd.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
+	agentUpCmd.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — gives a stable public URL you can bookmark (needs a one-time `cloudflared tunnel create`; see docs/tunnel.md)")
 	agentCmd.AddCommand(agentUpCmd)
 }

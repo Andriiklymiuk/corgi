@@ -7,8 +7,6 @@ description: The workspace memory convention for a corgi stack — a committed, 
 
 A corgi workspace remembers things not in git or code: **why** a driver/port/template was chosen, how a past **incident** was fixed, **domain** facts, recurring **fixes**. Store is `.corgi/memory/` — committed, shared by the team via the repo, keyed to the `corgi-compose.yml` stack. This skill is the convention; `suggest`/`debug`/`stories`/`review` reference it.
 
-Workspace-scoped analog of the host harness's per-project memory — that one is private/single-machine; this one is committed/shared/stack-scoped.
-
 ## Guardrails (non-negotiable)
 
 - **Opt-in.** No `.corgi/memory/` → reads skip silently (no memory is not an error); writes **offer** to create the store, never force it.

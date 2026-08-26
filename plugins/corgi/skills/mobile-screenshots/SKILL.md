@@ -1,6 +1,6 @@
 ---
 name: mobile-screenshots
-description: Use when generating store screenshots for an Expo / React Native app — "make App Store screenshots", "Play Market screenshots", "store screenshots for all languages", "framed marketing screenshots", "screenshots in the right store sizes", "feature graphic", "upload screenshots to the stores", "send screenshots to App Store / Play automatically", "device-frame the screenshots with headlines". Covers the capture matrix (iPhone / iPad / Android phone+tablet × locales), framing via the external app-store-screenshots editor skill, exporting at exact store sizes, and uploading with fastlane deliver/supply. NOT a single-screen verify (that's the `mobile` skill) or authoring corgi-compose (the `corgi` skill).
+description: Use when generating store screenshots for an Expo / React Native app — "make App Store screenshots", "Play Market screenshots", "store screenshots for all languages", "framed marketing screenshots", "screenshots in the right store sizes", "feature graphic", "upload screenshots to the stores", "send screenshots to App Store / Play automatically", "device-frame the screenshots with headlines". NOT a single-screen verify (that's the `mobile` skill) or authoring corgi-compose (the `corgi` skill).
 ---
 
 # Store screenshots, end to end

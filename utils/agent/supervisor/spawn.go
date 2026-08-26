@@ -40,6 +40,13 @@ type SpawnConfig struct {
 	InheritAPIKey bool
 	// InheritOAuthToken does the same for CLAUDE_CODE_OAUTH_TOKEN.
 	InheritOAuthToken bool
+	// SkipPermissions runs the session with permission prompts disarmed,
+	// emitted as --permission-mode bypassPermissions. This is the one sanctioned
+	// route around the bypass block, so ValidateSpawnConfig allows it — unlike a
+	// forbidden permissionMode string or a smuggled --dangerously arg. It comes
+	// only from trusted config, and the supervisor warns when it is on, because
+	// it removes the gate a person answers from their phone.
+	SkipPermissions bool
 	// Name is the remote-control session name shown in claude.ai/code.
 	Name string
 	// WakeLock controls whether the machine is kept awake while this
@@ -170,6 +177,21 @@ func ValidPermissionMode(mode string) bool {
 func PermissionModeHint() string { return sortedKeys(validPermissionModes) }
 
 func validatePermissionMode(c SpawnConfig, kind Kind) error {
+	if c.SkipPermissions {
+		// The sanctioned bypass. Still has to be a kind that understands a
+		// permission mode, and must not also carry a different one.
+		if !kind.SupportsPermissionMode {
+			return fmt.Errorf(
+				"workspace %s: kind %q takes no permission mode, so dangerouslySkipPermissions has nothing to disarm — put the flag in args: instead",
+				c.WorkspaceID, kind.Name)
+		}
+		if m := normalize(c.PermissionMode); m != "" && m != "bypasspermissions" {
+			return fmt.Errorf(
+				"workspace %s: set either permissionMode or dangerouslySkipPermissions, not both",
+				c.WorkspaceID)
+		}
+		return nil
+	}
 	mode := normalize(c.PermissionMode)
 	if mode == "" {
 		return nil

@@ -90,8 +90,8 @@ manifest instead.
 
 ## The failures that actually happen
 
-Every one of these was found the expensive way — a 20-30 minute cycle each, some
-several. Check them before writing a line, not after a red run.
+Each of these costs a full 20-30 minute CI cycle to hit. Check them before
+writing a line, not after a red run.
 
 **A health check that is polled must never do work.** This is the big one. An
 Expo dev server builds a bundle per request and Vite pre-bundles dependencies on
@@ -106,8 +106,7 @@ is ready, so retrying only queues more work.
 checks it stays silent about locally: the job running inside a container, and
 any `copyEnvFromFilePath` the runner does not have — the latter otherwise boots
 the service against a committed `.env-example` whose placeholder values fail at
-the first request, thousands of lines from the cause. Both cost twenty minutes
-each time they are found the hard way.
+the first request, thousands of lines from the cause.
 
 **A failed `beforeStart` fails the run — do not grep the logs for it.** corgi
 still lets the rest of the stack come up, but `corgi run --wait` returns the
