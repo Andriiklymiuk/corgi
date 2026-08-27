@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"andriiklymiuk/corgi/utils/agent/config"
@@ -180,6 +181,51 @@ func TestRegisterCwdWorkspaceRefusesADoubleCollision(t *testing.T) {
 	t.Chdir(repo)
 	if id, registered := registerCwdWorkspace(); registered || id != "" {
 		t.Fatalf("a double id collision must refuse, got id=%q registered=%v", id, registered)
+	}
+}
+
+func TestMungeClaudeProjectDir(t *testing.T) {
+	if got := mungeClaudeProjectDir("/Users/x/Documents/hobby.Projects/idid"); got != "-Users-x-Documents-hobby-Projects-idid" {
+		t.Errorf("munge = %q", got)
+	}
+}
+
+func TestBridgeSessionLinks(t *testing.T) {
+	cfgDir := t.TempDir()
+	repo := "/Users/x/dev/app"
+	pdir := filepath.Join(cfgDir, "projects", mungeClaudeProjectDir(repo))
+	if err := os.MkdirAll(pdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(body string) {
+		if err := os.WriteFile(filepath.Join(pdir, "bridge-pointer.json"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A live bridge (this test's own pid) yields the canonical web link —
+	// including bridges corgi did not start.
+	write(`{"sessionId":"session_01ABC","environmentId":"env_01X","source":"standalone","pid":` + strconv.Itoa(os.Getpid()) + `}`)
+	links := bridgeSessionLinks(repo, cfgDir)
+	if len(links) != 1 || links[0] != "https://claude.ai/code/session_01ABC" {
+		t.Fatalf("live bridge must link, got %v", links)
+	}
+
+	// A dead bridge's pointer is stale — no link beats a dead link.
+	write(`{"sessionId":"session_01ABC","pid":99999999}`)
+	if links := bridgeSessionLinks(repo, cfgDir); len(links) != 0 {
+		t.Errorf("a dead bridge must yield nothing, got %v", links)
+	}
+
+	// A UUID (or anything not session_…) must never become a link — that id
+	// namespace 404s on claude.ai, the exact bug this replaced.
+	write(`{"sessionId":"3b828c86-0d7a-4927","pid":` + strconv.Itoa(os.Getpid()) + `}`)
+	if links := bridgeSessionLinks(repo, cfgDir); len(links) != 0 {
+		t.Errorf("a non-session_ id must yield nothing, got %v", links)
+	}
+
+	if links := bridgeSessionLinks("/no/such/dir", cfgDir); len(links) != 0 {
+		t.Errorf("no pointer file must yield nothing, got %v", links)
 	}
 }
 

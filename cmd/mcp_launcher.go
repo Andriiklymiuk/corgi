@@ -8,8 +8,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/config"
@@ -164,7 +166,10 @@ func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusNotFound, "unknown workspace")
 		return
 	}
-	writeLaunchJSON(w, map[string]any{"sessions": listClaudeSessions(absPath, configDir)})
+	writeLaunchJSON(w, map[string]any{
+		"sessions": listClaudeSessions(absPath, configDir),
+		"links":    bridgeSessionLinks(absPath, configDir),
+	})
 }
 
 // workspaceSessionTarget resolves a workspace id to its directory and the Claude
@@ -190,6 +195,61 @@ func workspaceSessionTarget(id string) (absPath, configDir string, ok bool) {
 	}
 	repo, _ := config.LoadRepo(ws.AbsPath)
 	return ws.AbsPath, config.Resolve(id, repo, user).ConfigDir, true
+}
+
+// bridgeSessionLinks reads the claude.ai session URL a remote-control bridge
+// recorded for absPath under the account's config dir. This covers sessions
+// corgi did NOT start: any `claude remote-control` (or /remote-control in a
+// chat) writes projects/<munged-dir>/bridge-pointer.json with the real
+// session_… web id — the id namespace claude.ai actually resolves. Best-effort:
+// missing or stale (dead pid) pointers yield nothing.
+func bridgeSessionLinks(absPath, configDir string) []string {
+	base := expandTilde(configDir)
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil
+		}
+		base = filepath.Join(home, ".claude")
+	}
+	data, err := os.ReadFile(filepath.Join(base, "projects", mungeClaudeProjectDir(absPath), "bridge-pointer.json"))
+	if err != nil {
+		return nil
+	}
+	var bp struct {
+		SessionID string `json:"sessionId"`
+		PID       int    `json:"pid"`
+	}
+	if json.Unmarshal(data, &bp) != nil || !strings.HasPrefix(bp.SessionID, "session_") {
+		return nil
+	}
+	if bp.PID > 0 && !pidExists(bp.PID) {
+		return nil // the bridge is gone; its pointer is stale
+	}
+	return []string{"https://claude.ai/code/" + bp.SessionID}
+}
+
+// mungeClaudeProjectDir maps a directory to Claude's per-project state folder
+// name (its convention: every / and . becomes -).
+func mungeClaudeProjectDir(dir string) string {
+	return strings.NewReplacer("/", "-", ".", "-", "\\", "-", ":", "-").Replace(dir)
+}
+
+// pidExists is a plain liveness probe. Not PidAlive: a hand-started bridge runs
+// under a shell and is no process-group leader, which PidAlive requires.
+func pidExists(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		_ = proc.Release()
+		return true
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
 }
 
 // listClaudeSessions returns the Claude sessions under absPath. Best-effort: a
@@ -410,8 +470,7 @@ const launcherPageHTML = `<!doctype html>
     // Openable links come ONLY from the per-session URLs remote control printed
     // (captured by the daemon). Ids from the claude CLI are local UUIDs the
     // site does not resolve; those rows render below as plain status, no link.
-    const links = (ws.sessionLinks || []).filter(safeClaudeUrl);
-    for (const url of links.slice().reverse()) {
+    const renderLink = (url) => {
       const el = document.createElement('a');
       el.className = 's';
       el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
@@ -420,7 +479,12 @@ const launcherPageHTML = `<!doctype html>
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
       el.innerHTML = '<span>' + esc(url.split('/').pop().slice(0, 18)) + '\u2026</span><span class="when">open \u2197</span>';
       box.appendChild(el);
-    }
+    };
+    // Captured from corgi-supervised output; the fetch below adds bridge
+    // pointers from disk, which cover hand-started remote-control sessions.
+    const shown = new Set();
+    const links = (ws.sessionLinks || []).filter(safeClaudeUrl);
+    for (const url of links.slice().reverse()) { shown.add(url); renderLink(url); }
     const info = document.createElement('div');
     info.className = 'none'; info.textContent = 'Loading\u2026';
     box.appendChild(info);
@@ -428,8 +492,11 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/sessions?workspace=' + encodeURIComponent(ws.id), { headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
+      for (const url of (j.links || []).filter(safeClaudeUrl)) {
+        if (!shown.has(url)) { shown.add(url); renderLink(url); }
+      }
       const s = j.sessions || [];
-      if (!s.length && !links.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
+      if (!s.length && !shown.size) { info.textContent = 'No sessions yet for this workspace.'; return; }
       info.remove();
       for (const sess of s) {
         const el = document.createElement('div');
