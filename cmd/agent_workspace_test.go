@@ -183,6 +183,34 @@ func TestRegisterCwdWorkspaceRefusesADoubleCollision(t *testing.T) {
 	}
 }
 
+func TestClaudeTrustsDir(t *testing.T) {
+	cfgDir := t.TempDir()
+	body := `{"projects": {"/trusted": {"hasTrustDialogAccepted": true}, "/declined": {"hasTrustDialogAccepted": false}}}`
+	if err := os.WriteFile(filepath.Join(cfgDir, ".claude.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if !claudeTrustsDir(cfgDir, "/trusted") {
+		t.Error("an accepted trust dialog must report trusted")
+	}
+	if claudeTrustsDir(cfgDir, "/declined") {
+		t.Error("a declined dialog must report untrusted")
+	}
+	if claudeTrustsDir(cfgDir, "/never-opened") {
+		t.Error("a dir Claude never opened must report untrusted — that is the warning's whole point")
+	}
+	// Claude never ran under this account at all → nothing is trusted.
+	if claudeTrustsDir(t.TempDir(), "/anything") {
+		t.Error("a missing .claude.json means Claude never ran under the account — untrusted")
+	}
+	// An unparseable config must NOT warn: a format change is not the user's problem.
+	broken := t.TempDir()
+	_ = os.WriteFile(filepath.Join(broken, ".claude.json"), []byte("not json"), 0o600)
+	if !claudeTrustsDir(broken, "/anything") {
+		t.Error("an unparseable config must assume trusted, never false-warn")
+	}
+}
+
 func TestEnableWorkspaceSkipPermissionsIsSticky(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	agentD := mustAgentDir()

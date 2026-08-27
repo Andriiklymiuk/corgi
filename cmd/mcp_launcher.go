@@ -38,7 +38,11 @@ type launchWorkspace struct {
 	Status     string   `json:"status"`
 	Running    bool     `json:"running"`
 	SessionURL string   `json:"sessionUrl,omitempty"`
-	Note       string   `json:"note,omitempty"`
+	// SessionLinks are per-session claude.ai URLs captured from remote
+	// control's own output — the only links the site resolves (the ids the
+	// claude CLI lists locally are UUIDs the web does not know).
+	SessionLinks []string `json:"sessionLinks,omitempty"`
+	Note         string   `json:"note,omitempty"`
 }
 
 func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
@@ -63,9 +67,10 @@ func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type wsRunState struct {
-	running bool
-	url     string
-	note    string
+	running  bool
+	url      string
+	note     string
+	sessions []string
 }
 
 // buildLaunchWorkspaces joins the registry with the daemon's live status into
@@ -76,7 +81,7 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 	running := map[string]wsRunState{}
 	if status != nil {
 		for _, ws := range status.Workspaces {
-			running[ws.WorkspaceID] = wsRunState{running: ws.Running, url: ws.SessionURL, note: ws.LastReason}
+			running[ws.WorkspaceID] = wsRunState{running: ws.Running, url: ws.SessionURL, note: ws.LastReason, sessions: ws.Sessions}
 		}
 		for _, d := range status.Diagnostics {
 			if d.Warning == "" {
@@ -93,7 +98,8 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 		s := running[ws.ID]
 		out = append(out, launchWorkspace{
 			ID: ws.ID, Aliases: ws.Aliases, Path: ws.AbsPath,
-			Status: string(ws.Status), Running: s.running, SessionURL: s.url, Note: s.note,
+			Status: string(ws.Status), Running: s.running, SessionURL: s.url,
+			SessionLinks: s.sessions, Note: s.note,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -378,7 +384,7 @@ const launcherPageHTML = `<!doctype html>
       sbtn.className = 'sbtn'; sbtn.textContent = 'sessions ⌄';
       const sessionsBox = document.createElement('div');
       sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
-      sbtn.onclick = () => toggleSessions(ws.id, sbtn, sessionsBox);
+      sbtn.onclick = () => toggleSessions(ws, sbtn, sessionsBox);
       left.appendChild(sbtn);
       const right = document.createElement('div');
       right.className = 'right';
@@ -397,40 +403,42 @@ const launcherPageHTML = `<!doctype html>
     }
   }
 
-  async function toggleSessions(id, btn, box) {
-    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = 'sessions ⌄'; return; }
-    box.style.display = ''; btn.textContent = 'sessions ⌃';
-    box.innerHTML = '<div class="none">Loading…</div>';
+  async function toggleSessions(ws, btn, box) {
+    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = 'sessions \u2304'; return; }
+    box.style.display = ''; btn.textContent = 'sessions \u2303';
+    box.innerHTML = '';
+    // Openable links come ONLY from the per-session URLs remote control printed
+    // (captured by the daemon). Ids from the claude CLI are local UUIDs the
+    // site does not resolve; those rows render below as plain status, no link.
+    const links = (ws.sessionLinks || []).filter(safeClaudeUrl);
+    for (const url of links.slice().reverse()) {
+      const el = document.createElement('a');
+      el.className = 's';
+      el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
+      const m = openMode(ws.id);
+      if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
+      if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
+      el.innerHTML = '<span>' + esc(url.split('/').pop().slice(0, 18)) + '\u2026</span><span class="when">open \u2197</span>';
+      box.appendChild(el);
+    }
+    const info = document.createElement('div');
+    info.className = 'none'; info.textContent = 'Loading\u2026';
+    box.appendChild(info);
     try {
-      const r = await fetch('/launch/sessions?workspace=' + encodeURIComponent(id), { headers: auth });
+      const r = await fetch('/launch/sessions?workspace=' + encodeURIComponent(ws.id), { headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
       const s = j.sessions || [];
-      if (!s.length) { box.innerHTML = '<div class="none">No active sessions. corgi lists these from the claude CLI — none are running for this workspace.</div>'; return; }
-      box.innerHTML = '';
-      // Sessions the claude CLI reports for this workspace. Each links via the
-      // documented claude.ai/code/<session-id> scheme; a session that was never
-      // connected to claude.ai (pure local terminal) may 404 there, so the link
-      // is best-effort — remote-control sessions, the common case here, open.
+      if (!s.length && !links.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
+      info.remove();
       for (const sess of s) {
-        const url = sess.sessionId ? 'https://claude.ai/code/' + encodeURIComponent(sess.sessionId) : '';
-        const clickable = url && safeClaudeUrl(url);
-        const el = document.createElement(clickable ? 'a' : 'div');
+        const el = document.createElement('div');
         el.className = 's';
-        if (clickable) {
-          el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
-          el.title = 'Open on claude.ai (works for connected sessions)';
-          // Honor the workspace's open-in choice: browser mode stays in the browser.
-          // Honor the workspace's open-in choice, same as the main button.
-          const m = openMode(id);
-          if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
-          if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
-        }
-        el.innerHTML = '<span>' + esc(sess.name || sess.sessionId || 'session') + '</span>' +
-          '<span class="when">' + esc(sess.kind || '') + ' · ' + esc(fmtWhen(sess.startedAt)) + '</span>';
+        el.innerHTML = '<span>' + esc(sess.name || 'session') + '</span>' +
+          '<span class="when">' + esc(sess.kind || '') + ' \u00b7 ' + esc(fmtWhen(sess.startedAt)) + '</span>';
         box.appendChild(el);
       }
-    } catch (e) { box.innerHTML = '<div class="none">✗ ' + esc(e.message) + '</div>'; }
+    } catch (e) { info.textContent = '\u2717 ' + e.message; }
   }
 
   function fmtWhen(ms) {
