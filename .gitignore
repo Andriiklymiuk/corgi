@@ -40,3 +40,5 @@ docs/superpowers/
 corgi_vscode_extension/
 corgi-docs/
 corgi_examples/
+
+.corgi/
