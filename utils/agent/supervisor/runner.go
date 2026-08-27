@@ -48,6 +48,16 @@ type RunState struct {
 // not grow status.json without limit. Oldest entries fall off first.
 const maxTrackedSessions = 20
 
+// RunEvent carries classification and links only — never process output,
+// which can hold env values and tokens and must not leave this process.
+type RunEvent struct {
+	Kind   string
+	PID    int
+	Cause  string
+	Reason string
+	URL    string
+}
+
 // Runner supervises one workspace's remote-control process.
 type Runner struct {
 	Config   SpawnConfig
@@ -71,6 +81,7 @@ type Runner struct {
 	// OnChange fires after the run state changes, so a watcher can republish
 	// without polling. Called without the lock held.
 	OnChange func()
+	OnEvent  func(RunEvent)
 	// IdleAfter overrides how long the session must be quiet before the idle
 	// wake lock lets the machine sleep. Zero means WakeLockIdleTimeout.
 	IdleAfter time.Duration
@@ -122,7 +133,14 @@ func (r *Runner) addSessionLink(id string) {
 		r.state.Sessions = r.state.Sessions[len(r.state.Sessions)-maxTrackedSessions:]
 	}
 	r.mu.Unlock()
+	r.emit(RunEvent{Kind: "session", URL: url})
 	r.notifyChange()
+}
+
+func (r *Runner) emit(e RunEvent) {
+	if r.OnEvent != nil {
+		r.OnEvent(e)
+	}
 }
 
 // recordActivity stamps the last-output time for the idle wake lock. On the
@@ -407,6 +425,7 @@ func (r *Runner) markRunning(proc Process, startedAt time.Time) {
 	r.state.PID = proc.Pid()
 	r.state.StartedAt = startedAt
 	r.mu.Unlock()
+	r.emit(RunEvent{Kind: "started", PID: proc.Pid()})
 	r.notifyChange()
 }
 
@@ -420,6 +439,11 @@ func (r *Runner) notifyChange() {
 
 func (r *Runner) record(d Decision, pid int, disabled bool) {
 	r.recordLocked(d, pid, disabled)
+	kind := "exited"
+	if disabled {
+		kind = "disabled"
+	}
+	r.emit(RunEvent{Kind: kind, Cause: string(d.Cause), Reason: d.Reason})
 	r.notifyChange()
 }
 

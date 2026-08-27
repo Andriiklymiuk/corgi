@@ -133,6 +133,14 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d := daemon.New(APP_VERSION, dir)
 	d.CaptureBrief = captureWorkspaceBrief
 	d.ResolveWorkspace = remoteResolver(dir, foreground)
+	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.NotifyUrl != "" {
+		hook := webhookNotifier(user.NotifyUrl, nil)
+		if hook == nil {
+			utils.Infof("⚠ notifyUrl %q is not a usable http(s) URL — webhook notifications are off\n", user.NotifyUrl)
+		} else if n := combinedNotifier(d.Notify, hook); n != nil {
+			d.Notify = n
+		}
+	}
 	printStartupDiagnostics(configs)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

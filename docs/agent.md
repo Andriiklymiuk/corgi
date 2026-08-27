@@ -122,6 +122,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent workspaces` | list, `forget`, `relocate` |
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |
 | `corgi agent brief [id]` | what the last session was working on before it restarted |
+| `corgi agent logs <workspace>` | the session timeline: starts, exits and why, links |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -134,6 +135,37 @@ reboot. corgi restarts it with capped backoff and **says so**:
 The notification matters. A relaunched Remote Control starts a **new** session,
 so the previous conversation's context is gone. Restarting silently would look
 like continuity and cost you an hour of confusion.
+
+### Notifications on your phone
+
+By default notifications are desktop only. Add a `notifyUrl` to the trusted
+agent config and every one is also POSTed there — title in the `Title` header,
+body as plain text, which is exactly what [ntfy.sh](https://ntfy.sh) topics
+expect:
+
+```yaml
+# <agent data dir>/config.yml
+notifyUrl: https://ntfy.sh/your-private-topic
+```
+
+Subscribe to the topic in the ntfy app and session failures reach your phone
+even when the launcher page is closed. Trusted config only: the URL receives
+restart reasons, so a committed repo file can never set it.
+
+### The timeline
+
+Every start, exit (with its classified cause), disable, and captured session
+link is appended to a small per-workspace timeline — never session output,
+which can hold secrets and is not persisted:
+
+```bash
+corgi agent logs api            # newest first: started, exited · why, links
+corgi agent logs api --json     # same, for scripts and agents
+```
+
+The launcher's per-workspace session list is fed from the same timeline, so
+past sessions survive daemon restarts, and the `corgi_session_events` MCP tool
+exposes it to a connected Claude.
 
 ### The handover brief
 
@@ -355,12 +387,13 @@ Leave it off (the default) for anything you would not let run unattended.
 
 ## The MCP tools
 
-`corgi mcp` gains ten tools. A Remote Control session calls them from your
+`corgi mcp` gains eleven tools. A Remote Control session calls them from your
 phone; they also work from any other MCP client.
 
 | tool | what it does |
 |---|---|
 | `corgi_session_brief` | what the previous session was working on before it restarted |
+| `corgi_session_events` | the workspace timeline: starts, exits and why, session links |
 | `corgi_workspaces` | every stack registered on this machine |
 | `corgi_workspace_resolve` | "the recipe app" → one stack, or candidates |
 | `corgi_worktrees_materialize` | a worktree per repo, all on one branch |
