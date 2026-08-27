@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/brief"
@@ -444,6 +445,30 @@ func runAgentStop(_ *cobra.Command, _ []string) {
 		exitWithError("agent_stop", fmt.Errorf("could not stop pid %d: %w", info.PID, err), 1)
 	}
 	utils.Infof("stopping corgi agent (pid %d)\n", info.PID)
+
+	// Block until the daemon is actually gone. Returning on signal-sent made
+	// `corgi agent stop && corgi agent up` a race: up's ensureDaemon read the
+	// dying daemon as "running (same pid)", skipped starting a fresh one, and
+	// the machine ended up with no daemon at all.
+	if waitForDaemonExit(dir, 10*time.Second) {
+		utils.Info("stopped")
+	} else {
+		utils.Infof("still shutting down after 10s — check `corgi agent status` (pid %d)\n", info.PID)
+	}
+}
+
+// waitForDaemonExit polls until the daemon's record is gone (ReadInfo validates
+// liveness and clears a stale file itself) or the timeout passes.
+func waitForDaemonExit(dir string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if info, err := daemon.ReadInfo(dir); err != nil || info == nil {
+			return true
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	info, err := daemon.ReadInfo(dir)
+	return err != nil || info == nil
 }
 
 // ---------------------------------------------------------------- workspaces
