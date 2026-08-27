@@ -534,6 +534,9 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 
 	if info, rerr := daemon.ReadInfo(dir); rerr == nil && info != nil {
 		if proc, ferr := os.FindProcess(info.PID); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
+			// Wait for the exit, or `down && up` races: up reads the dying
+			// daemon as running and starts nothing.
+			_ = waitForDaemonExit(dir, 10*time.Second)
 			utils.Infof("stopped agent daemon (pid %d)\n", info.PID)
 			stopped = true
 		}
