@@ -123,6 +123,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |
 | `corgi agent brief [id]` | what the last session was working on before it restarted |
 | `corgi agent logs <workspace>` | the session timeline: starts, exits and why, links |
+| `corgi agent restart` | `down` + `up --fresh` in one — run it after `corgi upgrade` |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them

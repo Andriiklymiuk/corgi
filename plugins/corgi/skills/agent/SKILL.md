@@ -215,6 +215,8 @@ and opens a fresh tunnel + pairing window instead of refusing. For a launcher
 URL that survives restarts, pass `--tunnel-name <name>` (cloudflared named
 tunnel — see docs/tunnel.md). The mirror is `corgi agent down`: stops the
 daemon AND the detached MCP + tunnel (`agent stop` stops only the daemon).
+`corgi agent restart` is `down` + `up --fresh` in one — recommend it after a
+corgi upgrade so the daemon and launcher run the new binary.
 
 The user scans the QR (or opens the printed URL) on their phone, names the
 device, and gets a per-device token. After pairing, the same page offers **Open
