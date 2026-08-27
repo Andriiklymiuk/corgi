@@ -314,47 +314,76 @@ func writeLaunchError(w http.ResponseWriter, status int, msg string) {
 // /launch/* endpoints. Every dynamic value is escaped before it reaches the DOM.
 const launcherPageHTML = `<!doctype html>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0d12">
 <title>corgi</title>
 <style>
-  body{font-family:-apple-system,system-ui,sans-serif;background:#0f1115;color:#e8e8e8;margin:0}
-  header{padding:1.4rem 1.2rem .6rem;font-size:1.3rem;font-weight:600}
-  header small{display:block;color:#9aa0a6;font-size:.8rem;font-weight:400;margin-top:.2rem}
-  main{padding:0 1.2rem 2rem;max-width:34rem;margin:0 auto}
-  .ws{background:#1a1d23;border:1px solid #2a2e37;border-radius:.7rem;padding:.9rem 1rem;margin:.6rem 0;
-      display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
-  .ws .name{font-weight:600}
-  .sbtn{background:none;border:0;color:#8a90a6;font-size:.72rem;font-weight:600;cursor:pointer;
-      padding:.2rem 0;margin-top:.25rem}
-  .sessions{flex-basis:100%;margin-top:.5rem;border-top:1px solid #2a2e37;padding-top:.5rem}
-  .sessions .s{display:flex;justify-content:space-between;gap:.6rem;font-size:.76rem;color:#c8cdd6;padding:.22rem 0}
-  .sessions .s .when{color:#8a90a6;font-size:.7rem;flex:0 0 auto}
-  .sessions .none{color:#8a90a6;font-size:.74rem}
-  .ws .path{color:#8a90a6;font-size:.72rem;word-break:break-all;margin-top:.15rem}
-  .ws .wnote{color:#ff7b72;font-size:.72rem;margin-top:.3rem;line-height:1.4}
-  .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a3f4b;flex:0 0 auto}
-  .dot.on{background:#7ee787}
-  button{border:0;border-radius:.55rem;padding:.5rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;
-      background:#e8e8e8;color:#0f1115}
+  :root{--bg:#0b0d12;--card:#161a23;--card2:#11151d;--line:#262c3a;--text:#e9ecf1;
+      --dim:#8b93a7;--dim2:#6b7285;--green:#7ee787;--amber:#ffa657;--red:#ff7b72}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
+      padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased}
+  header{padding:calc(1.2rem + env(safe-area-inset-top)) 1.2rem .3rem;max-width:34rem;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:.7rem}
+  .logo{width:2.6rem;height:2.6rem;border-radius:.9rem;background:linear-gradient(135deg,#1e2634,#131824);
+      border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.35rem;flex:0 0 auto}
+  h1{font-size:1.25rem;margin:0;letter-spacing:.01em}
+  header small{display:block;color:var(--dim);font-size:.78rem;font-weight:400;margin-top:.1rem}
+  main{padding:.4rem 1.2rem 2.2rem;max-width:34rem;margin:0 auto}
+  .ws{background:var(--card);border:1px solid var(--line);border-radius:1rem;padding:1rem 1.05rem;margin:.7rem 0;
+      display:flex;align-items:center;justify-content:space-between;gap:.7rem;flex-wrap:wrap;
+      box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .ws .name{font-weight:650;display:flex;align-items:center;gap:.5rem;font-size:.98rem}
+  .ws .path{color:var(--dim2);font-size:.7rem;word-break:break-all;margin-top:.2rem;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.35rem;line-height:1.45}
+  .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
+  .dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(126,231,135,.14),0 0 8px rgba(126,231,135,.45)}
+  .sbtn{background:none;border:0;color:var(--dim);font-size:.72rem;font-weight:650;cursor:pointer;
+      padding:.25rem 0 0;margin-top:.3rem}
+  .sessions{flex-basis:100%;margin-top:.6rem;border-top:1px solid var(--line);padding-top:.55rem}
+  .sessions .s{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.76rem;
+      color:#c9cfda;padding:.34rem .1rem;text-decoration:none}
+  a.s span:first-child{color:var(--green)}
+  .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto}
+  .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
+  .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
+      border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px}
+  button{border:0;border-radius:.65rem;padding:.55rem 1rem;font-size:.85rem;font-weight:650;cursor:pointer;
+      background:#232a39;color:var(--text);transition:transform .05s}
+  button:active{transform:scale(.97)}
   button:disabled{opacity:.5}
-  a.open,button.open{display:inline-block;background:#7ee787;color:#0f1115;text-decoration:none;border:0;
-      padding:.5rem .9rem;border-radius:.55rem;font-weight:600;font-size:.85rem;cursor:pointer}
-  .right{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem}
-  .modes{display:flex;gap:.3rem;font-size:.68rem;color:#8a90a6;align-items:center}
-  .modes span{margin-right:.1rem}
-  .modes .m{background:#12151b;border:1px solid #2a2e37;color:#9aa0a6;border-radius:.4rem;
-      padding:.12rem .4rem;font-size:.68rem;font-weight:600}
-  .modes .m.sel{background:#2a2e37;color:#e8e8e8;border-color:#3a3f4b}
-  .msg{color:#9aa0a6;font-size:.9rem;margin:1rem 0}
-  .err{color:#ff7b72}
-  code{background:#1a1d23;padding:.1rem .3rem;border-radius:.3rem}
-  details.settings{margin:1.6rem 0 0;border-top:1px solid #2a2e37;padding-top:1rem}
-  details.settings summary{color:#9aa0a6;font-size:.85rem;cursor:pointer}
-  details.settings p{color:#8a90a6;font-size:.78rem;line-height:1.5}
-  pre{background:#1a1d23;border:1px solid #2a2e37;border-radius:.5rem;padding:.7rem;
-      overflow-x:auto;font-size:.72rem;line-height:1.4;white-space:pre;color:#c8cdd6}
+  a.open,button.open{display:inline-block;background:var(--green);color:#08110a;text-decoration:none;border:0;
+      padding:.55rem 1rem;border-radius:.65rem;font-weight:700;font-size:.85rem;cursor:pointer}
+  .right{display:flex;flex-direction:column;align-items:flex-end;gap:.45rem}
+  .modes{display:flex;font-size:.68rem;color:var(--dim);align-items:center;background:var(--card2);
+      border:1px solid var(--line);border-radius:.55rem;padding:.14rem}
+  .modes span{padding:0 .3rem 0 .45rem;font-size:.64rem}
+  .modes .m{background:none;border:1px solid transparent;color:var(--dim);border-radius:.42rem;
+      padding:.2rem .5rem;font-size:.68rem;font-weight:650}
+  .modes .m.sel{background:#2b3345;color:var(--text)}
+  .msg{color:var(--dim);font-size:.9rem;margin:1rem 0;line-height:1.5}
+  .err{color:var(--red)}
+  code{background:var(--card);border:1px solid var(--line);padding:.1rem .35rem;border-radius:.35rem;font-size:.85em}
+  details.settings{margin:1.8rem 0 0;background:var(--card2);border:1px solid var(--line);
+      border-radius:1rem;padding:.4rem 1rem}
+  details.settings summary{color:var(--dim);font-size:.85rem;cursor:pointer;padding:.5rem 0;list-style:none}
+  details.settings summary::-webkit-details-marker{display:none}
+  details.settings p{color:var(--dim);font-size:.76rem;line-height:1.55}
+  label.toggle{display:flex;align-items:center;gap:.5rem;color:var(--dim);font-size:.78rem;
+      padding:.3rem 0 .7rem;cursor:pointer}
+  label.toggle input{accent-color:var(--green);width:1rem;height:1rem;margin:0}
+  pre{background:var(--bg);border:1px solid var(--line);border-radius:.6rem;padding:.7rem;
+      overflow-x:auto;font-size:.7rem;line-height:1.45;white-space:pre;color:#c9cfda}
+  .foot{text-align:center;margin-top:1.6rem;font-size:.85rem}
+  .foot a{color:var(--green);text-decoration:none}
 </style>
-<header>🐕 corgi<small id="host">your machine</small></header>
+<header>
+  <div class="brand"><span class="logo">🐕</span>
+    <div><h1>corgi</h1><small id="host">your machine</small></div>
+  </div>
+</header>
 <main>
   <div id="list" class="msg">Loading…</div>
   <details class="settings" id="settings" hidden>
@@ -364,9 +393,11 @@ const launcherPageHTML = `<!doctype html>
     <button id="copycfg">Copy connector config</button>
     <p id="copymsg" class="msg"></p>
     <p>Each workspace above has an <b>open in</b> switch — <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here in this browser; <b>chrome</b> forces Chrome via its URL scheme (needs Chrome installed) — right for a workspace on a different Claude account than the app is signed into. Remembered per workspace, on this browser only.</p>
+    <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
+    <p>A <b>bridge</b> is a remote-control session someone started on the laptop itself. Its claude.ai page shows only what you send from it — until then it looks empty. The full transcript stays on the laptop.</p>
   </details>
-  <p class="msg" style="text-align:center;margin-top:1.4rem">
-    <a id="allsessions" target="_blank" rel="noopener" style="color:#7ee787;text-decoration:none">See all your sessions on claude.ai ↗</a>
+  <p class="foot">
+    <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
   </p>
 </main>
 <script>
@@ -388,6 +419,8 @@ const launcherPageHTML = `<!doctype html>
   let lastWorkspaces = [];
   const openMode = id => { try { return localStorage.getItem('corgi_open_' + id) || 'app'; } catch { return 'app'; } };
   const setOpenMode = (id, m) => { try { localStorage.setItem('corgi_open_' + id, m); } catch {} };
+  const showBridges = () => { try { return localStorage.getItem('corgi_show_bridges') !== '0'; } catch { return true; } };
+  const setShowBridges = on => { try { localStorage.setItem('corgi_show_bridges', on ? '1' : '0'); } catch {} };
 
   if (!token) {
     list.className = 'msg';
@@ -409,6 +442,9 @@ const launcherPageHTML = `<!doctype html>
       try { await navigator.clipboard.writeText(connector); msg.textContent = '✓ Copied'; }
       catch { msg.textContent = 'Long-press the box above to copy.'; }
     };
+    const bridges = document.getElementById('showbridges');
+    bridges.checked = showBridges();
+    bridges.onchange = () => setShowBridges(bridges.checked);
   }
 
   async function load() {
@@ -470,21 +506,27 @@ const launcherPageHTML = `<!doctype html>
     // Openable links come ONLY from the per-session URLs remote control printed
     // (captured by the daemon). Ids from the claude CLI are local UUIDs the
     // site does not resolve; those rows render below as plain status, no link.
-    const renderLink = (url) => {
+    const renderLink = (url, isBridge) => {
       const el = document.createElement('a');
       el.className = 's';
       el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
       const m = openMode(ws.id);
       if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
-      el.innerHTML = '<span>' + esc(url.split('/').pop().slice(0, 18)) + '\u2026</span><span class="when">open \u2197</span>';
+      const tag = isBridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
+      el.innerHTML = '<span>' + esc(url.split('/').pop().slice(0, 18)) + '\u2026' + tag + '</span><span class="when">open \u2197</span>';
+      box.appendChild(el);
+    };
+    const note = (text) => {
+      const el = document.createElement('div');
+      el.className = 'hint'; el.textContent = text;
       box.appendChild(el);
     };
     // Captured from corgi-supervised output; the fetch below adds bridge
     // pointers from disk, which cover hand-started remote-control sessions.
     const shown = new Set();
     const links = (ws.sessionLinks || []).filter(safeClaudeUrl);
-    for (const url of links.slice().reverse()) { shown.add(url); renderLink(url); }
+    for (const url of links.slice().reverse()) { shown.add(url); renderLink(url, false); }
     const info = document.createElement('div');
     info.className = 'none'; info.textContent = 'Loading\u2026';
     box.appendChild(info);
@@ -492,11 +534,15 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/sessions?workspace=' + encodeURIComponent(ws.id), { headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      for (const url of (j.links || []).filter(safeClaudeUrl)) {
-        if (!shown.has(url)) { shown.add(url); renderLink(url); }
+      const bridges = (j.links || []).filter(safeClaudeUrl).filter(u => !shown.has(u));
+      if (showBridges()) {
+        for (const url of bridges) { shown.add(url); renderLink(url, true); }
+        if (bridges.length) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
+      } else if (bridges.length) {
+        note(bridges.length + ' bridge session' + (bridges.length > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
       }
       const s = j.sessions || [];
-      if (!s.length && !shown.size) { info.textContent = 'No sessions yet for this workspace.'; return; }
+      if (!s.length && !shown.size && !bridges.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
       info.remove();
       for (const sess of s) {
         const el = document.createElement('div');
@@ -548,7 +594,9 @@ const launcherPageHTML = `<!doctype html>
     const cur = openMode(id);
     const wrap = document.createElement('div');
     wrap.className = 'modes';
-    wrap.appendChild(document.createTextNode('open in:'));
+    const lbl = document.createElement('span');
+    lbl.textContent = 'open in';
+    wrap.appendChild(lbl);
     for (const m of ['app', 'browser', 'chrome']) {
       const b = document.createElement('button');
       b.className = 'm' + (cur === m ? ' sel' : '');
