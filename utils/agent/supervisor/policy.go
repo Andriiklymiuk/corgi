@@ -59,6 +59,11 @@ var authFailureMarkers = []string{
 	"oauth token has expired",
 }
 
+// trustFailureMarker is what remote control prints for a directory whose Claude
+// workspace-trust dialog was never accepted. Retrying cannot accept a dialog,
+// so this disables the workspace with instructions instead of looping.
+const trustFailureMarker = "workspace not trusted"
+
 // Exit is one observed termination of a supervised process.
 type Exit struct {
 	Code      int
@@ -143,19 +148,32 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 		}
 
 	case CauseStartupFailure:
+		// A missing workspace-trust acceptance never fixes itself by retrying —
+		// only a human running `claude` in the folder can accept the dialog. Say
+		// exactly that instead of a generic retry line the user has to debug.
+		if strings.Contains(strings.ToLower(e.Output), trustFailureMarker) {
+			return Decision{
+				Cause:   cause,
+				Disable: true,
+				Notify:  true,
+				Reason:  "Claude has not trusted this folder yet — run `claude` in the workspace once, accept the trust dialog, then retry",
+			}
+		}
 		if consecutiveStartupFailures+1 >= MaxStartupFailures {
 			return Decision{
 				Cause:   cause,
 				Disable: true,
 				Notify:  true,
-				Reason:  "remote control exited immediately " + strconv.Itoa(consecutiveStartupFailures+1) + " times — run `corgi agent doctor`",
+				Reason: withLastOutputLine(
+					"remote control exited immediately "+strconv.Itoa(consecutiveStartupFailures+1)+" times — run `corgi agent doctor`",
+					e.Output),
 			}
 		}
 		return Decision{
 			Cause:   cause,
 			Restart: true,
 			Delay:   backoffFor(attempt),
-			Reason:  "remote control exited during startup, retrying",
+			Reason:  withLastOutputLine("remote control exited during startup, retrying", e.Output),
 		}
 
 	case CauseNetworkTimeout:
@@ -176,6 +194,36 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 			Reason:  "remote control restarted after an unexpected exit",
 		}
 	}
+}
+
+// withLastOutputLine appends the child's last non-empty output line to a
+// reason, so "exited during startup" carries the actual error ("Workspace not
+// trusted…", a stack trace's final line) instead of making the user reproduce
+// the failure by hand to see it. No output → the reason stands alone.
+func withLastOutputLine(reason, output string) string {
+	line := lastOutputLine(output)
+	if line == "" {
+		return reason
+	}
+	return reason + " — last output: " + line
+}
+
+// maxReasonLineLen caps the quoted output line; reasons render on a phone card.
+const maxReasonLineLen = 160
+
+func lastOutputLine(output string) string {
+	lines := strings.Split(output, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if len(line) > maxReasonLineLen {
+			line = line[:maxReasonLineLen] + "…"
+		}
+		return line
+	}
+	return ""
 }
 
 // backoffFor returns the delay for a restart attempt, holding at the last

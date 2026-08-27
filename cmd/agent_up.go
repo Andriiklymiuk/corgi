@@ -89,6 +89,14 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	res.MCPAddr = addr
 
 	res.Workspace, res.Registered = registerCwdWorkspace()
+	if res.Workspace != "" {
+		// Same trust pre-check init does: an untrusted folder produces a phone
+		// card that can only ever fail, so say it now, while the fix is one
+		// `claude` run away in the terminal the user is already in.
+		if absPath, cfgDir, ok := workspaceSessionTarget(res.Workspace); ok {
+			warnIfUntrusted(cfgDir, absPath)
+		}
+	}
 
 	info, err := ensureDaemon(dir)
 	if err != nil {
