@@ -436,6 +436,29 @@ func collectAgentChecks() []agentCheck {
 		return append(checks, agentCheck{Name: "data directory", Detail: err.Error()})
 	}
 	checks = append(checks, checkUserConfigPermissions(agentUserConfigPath(dir)), checkRegisteredWorkspaces(), checkDaemonRunning(dir))
+	checks = append(checks, checkWorkspaceTrust()...)
+	return checks
+}
+
+func checkWorkspaceTrust() []agentCheck {
+	registry, _, err := agentRegistry()
+	if err != nil {
+		return nil
+	}
+	var checks []agentCheck
+	for _, ws := range registry.Sorted() {
+		absPath, configDir, ok := workspaceSessionTarget(ws.ID)
+		if !ok || absPath == "" {
+			continue
+		}
+		c := agentCheck{Name: "trust · " + ws.ID, OK: true, Detail: "Claude trusts " + absPath + trustAccountSuffix(configDir)}
+		if !claudeTrustsDir(configDir, absPath) {
+			c.OK = false
+			c.Detail = "Claude has not trusted " + absPath + trustAccountSuffix(configDir) + " — remote sessions will refuse to start"
+			c.Fix = "run `claude` in that directory once and accept the trust prompt"
+		}
+		checks = append(checks, c)
+	}
 	return checks
 }
 

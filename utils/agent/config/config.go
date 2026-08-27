@@ -49,6 +49,8 @@ type UserConfig struct {
 	Version    int                        `yaml:"version"`
 	Workspaces map[string]WorkspaceConfig `yaml:"workspaces"`
 	Defaults   WorkspaceConfig            `yaml:"defaults"`
+	// NotifyUrl gets a POST per daemon notification; trusted config only.
+	NotifyUrl string `yaml:"notifyUrl"`
 	// Profiles are named setting bundles pickable at session-start time —
 	// "work", "personal" — for running one workspace under different Claude
 	// accounts. Trusted like everything else here: a remote caller sends only

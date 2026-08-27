@@ -11,6 +11,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -107,6 +108,17 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpSessionStop(r.GetString("workspace", ""))
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_session_events",
+		mcp.WithDescription(
+			"A workspace's session timeline, newest first: starts, exits with their classified cause and reason, "+
+				"disables, and captured claude.ai session links. Use it to answer why a session died or restarted. "+
+				"It never contains session output."),
+		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
+		mcp.WithNumber("limit", mcp.Description("Max events to return, newest first (default 30, 0 = all kept)")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpSessionEvents(r.GetString("workspace", ""), r.GetInt("limit", 30))
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_worktrees_materialize",
@@ -386,6 +398,24 @@ func mcpSessionStop(query string) (any, error) {
 	return map[string]any{
 		"workspaceId": w.ID, "state": "stopping", "commandId": c.ID,
 		"hint": "poll corgi_agent_status to confirm it stopped",
+	}, nil
+}
+
+func mcpSessionEvents(query string, limit int) (any, error) {
+	w, ambiguous, err := resolveForSession(query)
+	if err != nil {
+		return nil, err
+	}
+	if ambiguous != nil {
+		return ambiguous, nil
+	}
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"workspaceId": w.ID,
+		"events":      events.NewLog(dir).Read(w.ID, limit),
 	}, nil
 }
 

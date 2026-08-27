@@ -21,8 +21,16 @@ What is left is the half Remote Control has no concept of:
 | is the agent daemon up, under which account | no | **yes** |
 | which stacks exist, on which machine | no | **yes** |
 | stack health, ports, start/stop, logs | no | **yes** |
+| start/stop a session in any registered workspace | no | **yes** |
+| per-workspace session timeline across restarts | no | **yes** |
+| session failure push (via `notifyUrl`) | no | **yes** |
 | **cross-repo diff** | no | **yes** |
 | live preview: URL, state, freeze, TTL | no | **yes** |
+
+The session rows are machine-scoped, which is why they belong here: claude.ai
+lists sessions per *account*, corgi's timeline lists them per *workspace on a
+machine*, with the daemon's exit reasons attached. The launcher page (`/app`)
+already ships that view in a browser; the app is its multi-machine version.
 
 Two apps side by side: Claude for the conversation, corgi-remote for the
 machine. That division is what keeps this small enough to finish.
@@ -46,9 +54,15 @@ corgi already speaks a protocol the app can use. Do not invent a second one.
         ├─► corgi_status / _ps        service health, ports
         ├─► corgi_up / _down          start and stop the stack
         ├─► corgi_logs                tail a service
+        ├─► corgi_session_start/_stop start a session anywhere, end it
+        ├─► corgi_session_events      the timeline: starts, exits and why, links
         ├─► corgi_diff                cross-repo change  ← the payoff screen
         └─► corgi_preview_*           URL, state, freeze, teardown
 ```
+
+The `/launch/*` REST endpoints behind the same bearer token mirror the session
+tools for the launcher page. The app uses the MCP tools — one protocol, typed
+once — and leaves `/launch/*` to the browser.
 
 Three consequences worth stating:
 
@@ -96,10 +110,53 @@ endpoint reachable — working insecurely is worse than not working.
 Try LAN first, fall back to the tunnel. **Show connection state honestly** —
 *"last seen 4m ago"* beats a green dot that lies.
 
+## Multiple machines
+
+The app's core model is a list of machines, each paired independently:
+
+```
+machine = { name, lanUrl?, tunnelUrl, deviceToken }   ← token in secure store
+```
+
+- Pairing is per machine (each runs its own `corgi mcp`); adding a laptop is
+  scanning one more QR. Revocation stays per machine + per device.
+- The home screen aggregates: every workspace from every reachable machine,
+  grouped by machine, with per-machine connection state. A machine that is
+  asleep renders as *"last seen …"*, its workspaces greyed but listed — the
+  registry outlives the connection.
+- No cross-machine server, no sync: the phone is the only place the list
+  exists, which is exactly the trust model of a remote control.
+- Same workspace name on two machines is fine — everything is keyed
+  (machine, workspace), never workspace alone.
+
+## Notifications
+
+corgi's daemon can now POST every notification (restarts, failures, remote
+starts) to a `notifyUrl` — title in the `Title` header, plain-text body, the
+[ntfy](https://ntfy.sh) contract. That gives three tiers, in build order:
+
+1. **None (v1):** the app polls while open. Remote Control keeps pushing the
+   conversation-side notifications that matter most.
+2. **ntfy app (zero code):** the user sets `notifyUrl` to a private topic and
+   subscribes in the ntfy app. Documented in agent.md; nothing for
+   corgi-remote to build.
+3. **In-app (later, still no server):** the app subscribes to the same topics
+   itself over ntfy's SSE/WebSocket API, one subscription per machine, so
+   machine alerts land in the same app that can act on them. Self-hosted ntfy
+   works unchanged for people who do not want a third party in the path.
+
+Native APNs/FCM push stays a non-goal: it is the tier that needs server
+infrastructure, credentials, and a token lifecycle, for latency ntfy already
+delivers.
+
 ## Screens
 
-Six. Anything beyond these is scope creep.
+Seven. Anything beyond these is scope creep.
 
+0. **Sessions** — per workspace: Start (with profile picker), Stop, and the
+   timeline from `corgi_session_events` — each captured link opens the
+   conversation in the Claude app, each exit shows its reason. This is the
+   launcher page as a native screen, across machines.
 1. **Daemons** — one card per paired daemon, from `corgi_agent_status`. Surface
    the **Claude account per workspace**: this is the one place the app can catch
    agent mode's silent wrong-account failure, and it costs one line. Show
@@ -127,18 +184,20 @@ Expo + TypeScript, `expo-router`, TanStack Query, `@modelcontextprotocol/sdk`,
 Deliberately absent: Redux, GraphQL, code generation, an offline write queue, a
 design system. This app polls JSON and renders it.
 
-**Polling, not push.** There is no push channel, and building one means a server
-component, APNs/FCM credentials, and a token lifecycle. Remote Control already
-pushes the notifications that matter. Poll every few seconds on a screen that
-needs it, back off when idle, stop on background.
+**Polling for state, ntfy for push.** Poll every few seconds on a screen that
+needs it, back off when idle, stop on background. Alerts arrive through the
+notifyUrl tiers above — never through a bespoke push server.
 
 ## Build order
 
-**D1 — pair and see.** Pairing, daemon list, honest connection state.
+**D1 — pair and see.** Pairing (multi-machine from day one), daemon list,
+honest connection state.
 **D2 — diff.** *This milestone decides whether the app is worth continuing.*
-**D3 — workspaces and control.** Health, ports, start/stop.
-**D4 — preview and logs.**
-**D5 — background/foreground, error states, provisioning.**
+**D3 — sessions.** Start/stop + timeline; the launcher page stops being needed.
+**D4 — workspaces and control.** Health, ports, start/stop.
+**D5 — preview and logs.**
+**D6 — in-app ntfy subscriptions, background/foreground, error states,
+provisioning.**
 
 **Decide iOS provisioning before D1.** A free Apple account rebuilds every seven
 days, which turns a personal tool into a weekly chore and is how projects like

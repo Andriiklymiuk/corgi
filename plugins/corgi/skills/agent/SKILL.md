@@ -160,7 +160,10 @@ user has work and personal logins, check it.
 
 ### If a session died
 
-`corgi agent status` shows `lastReason`. The common ones:
+`corgi agent status` shows `lastReason`, and `corgi agent logs <workspace>`
+(or the `corgi_session_events` tool) shows the whole timeline — every start,
+exit with its classified cause, and captured session link, newest first. Use
+the timeline when the current reason is not enough. The common reasons:
 
 | reason | what to say |
 |---|---|
@@ -191,6 +194,8 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
   `corgi agent session stop <name>`.
 - Every remote start and stop raises a desktop notification on the laptop, by
   design — the machine's owner always sees what began running.
+- Phone push for those notifications: set `notifyUrl` in the trusted agent
+  config (an ntfy.sh topic works out of the box). See docs/agent.md.
 
 ### Setting it up from a session on the laptop
 
