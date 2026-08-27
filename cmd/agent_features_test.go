@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/events"
 )
 
@@ -140,6 +142,117 @@ func TestCheckWorkspaceTrust(t *testing.T) {
 	}
 }
 
+func TestRunAgentLogsHumanAndJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	stack := stackWithAgentConfig(t, "")
+	registerStack(t, agentD, "acme", stack)
+
+	log := events.NewLog(agentD)
+	log.Append("acme", events.Event{Kind: "started", PID: 9})
+	log.Append("acme", events.Event{Kind: "exited", Cause: "crash", Reason: "boom"})
+
+	cmd := agentLogsCmd
+	orig := utils.JSONOutput
+	defer func() { utils.JSONOutput = orig }()
+
+	utils.JSONOutput = false
+	out := captureStdout(t, func() { runAgentLogs(cmd, []string{"acme"}) })
+	if !strings.Contains(out, "exited · crash — boom") || !strings.Contains(out, "started (pid 9)") {
+		t.Errorf("human timeline missing entries:\n%s", out)
+	}
+
+	utils.JSONOutput = true
+	out = captureStdout(t, func() { runAgentLogs(cmd, []string{"acme"}) })
+	if !strings.Contains(out, `"workspaceId"`) || !strings.Contains(out, `"crash"`) {
+		t.Errorf("json output missing fields:\n%s", out)
+	}
+	utils.JSONOutput = false
+
+	out = captureStdout(t, func() { runAgentLogs(cmd, []string{"acme"}) })
+	if out == "" {
+		t.Error("expected output for the human path")
+	}
+}
+
+func TestRunAgentLogsEmptyTimeline(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	registerStack(t, agentD, "acme", stackWithAgentConfig(t, ""))
+
+	orig := utils.JSONOutput
+	utils.JSONOutput = false
+	defer func() { utils.JSONOutput = orig }()
+	captureStdout(t, func() { runAgentLogs(agentLogsCmd, []string{"acme"}) })
+}
+
+func TestWebhookNotifierUnreachableTargetIsSilent(t *testing.T) {
+	notify := webhookNotifier("http://127.0.0.1:1/topic", nil)
+	if notify == nil {
+		t.Fatal("a well-formed URL must produce a notifier")
+	}
+	notify("title", "body")
+	time.Sleep(100 * time.Millisecond)
+}
+
+func TestLaunchStopHandlerBadBodyAndUnknownWorkspace(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+
+	rec := httptest.NewRecorder()
+	launchStopHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/stop", strings.NewReader("{not json")))
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("bad body must be 400, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	launchStopHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/stop", strings.NewReader(`{"workspace":"ghost"}`)))
+	if rec.Code != http.StatusOK {
+		t.Errorf("an unresolved workspace answers 200 with candidates, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), `"state"`) {
+		t.Errorf("an unresolved workspace must not report a stop state: %s", rec.Body.String())
+	}
+}
+
+func TestMcpSessionEventsReturnsTimeline(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	registerStack(t, agentD, "acme", stackWithAgentConfig(t, ""))
+	events.NewLog(agentD).Append("acme", events.Event{Kind: "started", PID: 3})
+
+	got, err := mcpSessionEvents("acme", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, ok := got.(map[string]any)
+	if !ok || m["workspaceId"] != "acme" {
+		t.Fatalf("result = %+v", got)
+	}
+	if evs, ok := m["events"].([]events.Event); !ok || len(evs) != 1 || evs[0].Kind != "started" {
+		t.Errorf("events = %+v", m["events"])
+	}
+
+	if amb, err := mcpSessionEvents("ghost", 10); err != nil || amb == nil {
+		t.Errorf("an unresolved name answers with candidates, not an error: %v %v", amb, err)
+	}
+}
+
+func TestSessionHistoryCapsAtTwenty(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	log := events.NewLog(agentD)
+	for i := 0; i < 25; i++ {
+		log.Append("acme", events.Event{Kind: "session", URL: fmt.Sprintf("https://claude.ai/code/session_%02d", i)})
+	}
+	if got := sessionHistory("acme"); len(got) != 20 {
+		t.Errorf("history = %d entries, cap is 20", len(got))
+	}
+}
+
 func TestDescribeEvent(t *testing.T) {
 	cases := map[string]events.Event{
 		"started (pid 7)":                  {Kind: "started", PID: 7},
@@ -147,6 +260,7 @@ func TestDescribeEvent(t *testing.T) {
 		"disabled — auth broke":            {Kind: "disabled", Reason: "auth broke"},
 		"exited · crash — boom":            {Kind: "exited", Cause: "crash", Reason: "boom"},
 		"exited":                           {Kind: "exited"},
+		"weird":                            {Kind: "weird"},
 	}
 	for want, e := range cases {
 		if got := describeEvent(e); got != want {

@@ -75,6 +75,63 @@ func TestWorkspaceIDCannotEscapeTheDir(t *testing.T) {
 	}
 }
 
+func TestAppendEmptyWorkspaceIsIgnored(t *testing.T) {
+	dir := t.TempDir()
+	l := NewLog(dir)
+	l.Append("", Event{Kind: "started"})
+	if entries, err := os.ReadDir(dir); err == nil && len(entries) != 0 {
+		t.Errorf("an empty id must write nothing, found %v", entries)
+	}
+}
+
+func TestAppendSurvivesUnwritableDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "events"), []byte("a file, not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l := NewLog(dir)
+	l.Append("acme", Event{Kind: "started"})
+	if got := l.Read("acme", 0); len(got) != 0 {
+		t.Errorf("append must be a no-op when the dir cannot exist, got %v", got)
+	}
+}
+
+func TestAppendSurvivesUnopenableFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "events", "acme.jsonl"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	l := NewLog(dir)
+	l.Append("acme", Event{Kind: "started"})
+	if got := l.Read("acme", 0); len(got) != 0 {
+		t.Errorf("append must be a no-op when the file cannot open, got %v", got)
+	}
+}
+
+func TestReadSkipsMalformedLines(t *testing.T) {
+	dir := t.TempDir()
+	l := NewLog(dir)
+	l.Append("acme", Event{Kind: "started"})
+	path := filepath.Join(dir, "events", "acme.jsonl")
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("{torn write\n"); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	l.Append("acme", Event{Kind: "exited"})
+
+	got := l.Read("acme", 0)
+	if len(got) != 2 {
+		t.Fatalf("events = %+v, want the 2 valid entries", got)
+	}
+	if got[0].Kind != "exited" || got[1].Kind != "started" {
+		t.Errorf("order = %v, %v", got[0].Kind, got[1].Kind)
+	}
+}
+
 func TestNilLogIsSafe(t *testing.T) {
 	var l *Log
 	l.Append("acme", Event{Kind: "started"})
