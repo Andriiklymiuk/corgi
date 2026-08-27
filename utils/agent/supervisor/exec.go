@@ -68,6 +68,9 @@ func StartProcess(ctx context.Context, cfg SpawnConfig) (Process, error) {
 	if cfg.OnSessionURL != nil {
 		writers = append(writers, newURLScanner(cfg.OnSessionURL))
 	}
+	if cfg.OnSessionLink != nil {
+		writers = append(writers, newSessionLinkScanner(cfg.OnSessionLink))
+	}
 	if cfg.OnActivity != nil {
 		writers = append(writers, activityWriter{cfg.OnActivity})
 	}
@@ -184,6 +187,56 @@ func (u *urlScanner) Write(p []byte) (int, error) {
 	u.mu.Unlock()
 	if hit != "" {
 		u.report(hit)
+	}
+	return len(p), nil
+}
+
+// sessionLinkPattern matches the per-session claude.ai links remote control
+// prints as sessions spawn (…/code/session_<id>?from=cli, wrapped in OSC-8
+// hyperlink escapes). Only the id is captured — the query string and escape
+// bytes terminate the character class — and callers rebuild the canonical URL
+// from it. This is the ONLY reliable source for a session's web link: the ids
+// `claude agents --json` prints are local UUIDs the site does not resolve.
+var sessionLinkPattern = regexp.MustCompile(`https://claude\.ai/code/(session_[A-Za-z0-9]+)`)
+
+// sessionLinkScanner reports every DISTINCT per-session id seen in the process
+// output, unlike urlScanner which reports one URL and stops. A match touching
+// the end of the buffer is held back — the next write could extend the id.
+type sessionLinkScanner struct {
+	mu      sync.Mutex
+	partial []byte
+	seen    map[string]bool
+	report  func(id string)
+}
+
+func newSessionLinkScanner(report func(string)) *sessionLinkScanner {
+	return &sessionLinkScanner{seen: map[string]bool{}, report: report}
+}
+
+func (s *sessionLinkScanner) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	s.partial = append(s.partial, p...)
+	var hits []string
+	cut := 0
+	for _, m := range sessionLinkPattern.FindAllSubmatchIndex(s.partial, -1) {
+		if m[1] >= len(s.partial) {
+			break // may extend on the next write; keep for then
+		}
+		if id := string(s.partial[m[2]:m[3]]); !s.seen[id] {
+			s.seen[id] = true
+			hits = append(hits, id)
+		}
+		cut = m[1]
+	}
+	if cut > 0 {
+		s.partial = s.partial[cut:]
+	}
+	if len(s.partial) > maxPartialLine {
+		s.partial = s.partial[len(s.partial)-maxPartialLine:]
+	}
+	s.mu.Unlock()
+	for _, id := range hits {
+		s.report(id)
 	}
 	return len(p), nil
 }

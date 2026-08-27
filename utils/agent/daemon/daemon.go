@@ -426,8 +426,17 @@ func (d *Daemon) drainCommands(ctx context.Context, launch func(*supervisor.Runn
 
 func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {
 	if r := d.findRunner(c.WorkspaceID); r != nil && r.Supervising() {
-		d.requestPublish() // already supervised — the fresh status is the answer
-		return
+		if r.State().Running {
+			d.requestPublish() // already up — the fresh status is the answer
+			return
+		}
+		// Supervising but not running: the runner is waiting out a restart
+		// backoff after a failure. A remote start here is the user tapping
+		// Retry — after fixing the cause (accepting the trust dialog, logging
+		// in), they should not wait out a five-minute backoff, and silently
+		// answering "already supervised" made the button look broken. Replace
+		// the runner and try right now, with a fresh failure streak.
+		r.StopAsync()
 	}
 	cfg, err := d.ResolveWorkspace(c.WorkspaceID, c.Profile)
 	if err != nil {

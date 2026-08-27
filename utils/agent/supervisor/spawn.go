@@ -69,6 +69,10 @@ type SpawnConfig struct {
 	// it so the exec layer can report the claude.ai session URL it spots in
 	// the process output. Best-effort — may never fire.
 	OnSessionURL func(url string)
+	// OnSessionLink is runtime wiring too: called once per distinct
+	// per-session id (session_…) remote control prints as sessions spawn —
+	// the only source of a session's real web link.
+	OnSessionLink func(id string)
 	// OnActivity is runtime wiring too: the exec layer calls it on every chunk
 	// of process output, which the idle wake lock uses as a "still working"
 	// signal. Must be cheap — it is on the output path.

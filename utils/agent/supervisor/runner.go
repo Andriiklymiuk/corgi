@@ -39,7 +39,14 @@ type RunState struct {
 	Origin      string    `json:"origin,omitempty"`
 	Profile     string    `json:"profile,omitempty"`
 	SessionURL  string    `json:"sessionUrl,omitempty"`
+	// Sessions are the canonical per-session claude.ai URLs spotted in the
+	// process output, oldest first — the only ids the site actually resolves.
+	Sessions []string `json:"sessions,omitempty"`
 }
+
+// maxTrackedSessions bounds RunState.Sessions; a runner alive for weeks must
+// not grow status.json without limit. Oldest entries fall off first.
+const maxTrackedSessions = 20
 
 // Runner supervises one workspace's remote-control process.
 type Runner struct {
@@ -93,8 +100,29 @@ func NewRunner(cfg SpawnConfig, start Starter, lock *WakeLock) *Runner {
 		stopped:  make(chan struct{}),
 	}
 	r.Config.OnSessionURL = r.setSessionURL
+	r.Config.OnSessionLink = r.addSessionLink
 	r.Config.OnActivity = r.recordActivity
 	return r
+}
+
+// addSessionLink records one per-session web URL spotted in the output. The
+// scanner already dedups within a process run; the check here dedups across
+// restarts, where a re-attached session prints its link again.
+func (r *Runner) addSessionLink(id string) {
+	url := "https://claude.ai/code/" + id
+	r.mu.Lock()
+	for _, s := range r.state.Sessions {
+		if s == url {
+			r.mu.Unlock()
+			return
+		}
+	}
+	r.state.Sessions = append(r.state.Sessions, url)
+	if len(r.state.Sessions) > maxTrackedSessions {
+		r.state.Sessions = r.state.Sessions[len(r.state.Sessions)-maxTrackedSessions:]
+	}
+	r.mu.Unlock()
+	r.notifyChange()
 }
 
 // recordActivity stamps the last-output time for the idle wake lock. On the

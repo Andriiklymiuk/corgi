@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -128,6 +129,34 @@ func TestDecideStopsAfterRepeatedStartupFailures(t *testing.T) {
 	}
 	if !d.Disable {
 		t.Error("a persistent startup failure must disable the workspace")
+	}
+}
+
+func TestDecideTrustFailureDisablesWithInstructions(t *testing.T) {
+	d := Decide(Exit{Code: 1, Uptime: time.Second,
+		Output: "Error: Workspace not trusted. Please run `claude` in /x first"}, 0, 0)
+
+	if d.Restart {
+		t.Error("retrying cannot accept a trust dialog — must not loop")
+	}
+	if !d.Disable || !d.Notify {
+		t.Error("a trust failure must disable and notify")
+	}
+	if !strings.Contains(d.Reason, "trust dialog") {
+		t.Errorf("the reason must say how to fix it, got %q", d.Reason)
+	}
+}
+
+func TestDecideStartupFailureCarriesTheChildsLastLine(t *testing.T) {
+	d := Decide(Exit{Code: 1, Uptime: time.Second,
+		Output: "some noise\nError: config file corrupt\n\n"}, 0, 0)
+
+	if !strings.Contains(d.Reason, "Error: config file corrupt") {
+		t.Errorf("the reason must quote the child's last output line so nobody reproduces the failure by hand to see it, got %q", d.Reason)
+	}
+	// No output at all → the generic reason stands alone, no dangling suffix.
+	if d := Decide(Exit{Code: 1, Uptime: time.Second}, 0, 0); strings.Contains(d.Reason, "last output") {
+		t.Errorf("no output must mean no quote suffix, got %q", d.Reason)
 	}
 }
 

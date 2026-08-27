@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -103,6 +104,7 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 		utils.Info("If you keep work and personal logins separate, set one:")
 		utils.Infof("  corgi agent init --config-dir ~/.claude-work\n")
 	}
+	warnIfUntrusted(configDir, cwd)
 	utils.Info("next: `corgi agent install` to start at login, then `corgi agent status`")
 }
 
@@ -157,6 +159,54 @@ func composeFileName(dir string) string {
 		}
 	}
 	return "corgi-compose.yml"
+}
+
+// claudeTrustsDir reports whether Claude's own config records an accepted
+// workspace-trust dialog for dir under the given account. remote-control
+// refuses an untrusted directory, and only a human running `claude` there can
+// accept the dialog — so init/up warn up front instead of letting the phone
+// discover a card that can never start. Best-effort: an unparseable config
+// reports trusted, so a format change never produces false warnings; a missing
+// file means Claude never ran under that account, which IS untrusted.
+func claudeTrustsDir(configDir, dir string) bool {
+	base := expandTilde(configDir)
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return true
+		}
+		base = home
+	}
+	data, err := os.ReadFile(filepath.Join(base, ".claude.json"))
+	if err != nil {
+		return false
+	}
+	var cfg struct {
+		Projects map[string]struct {
+			HasTrustDialogAccepted bool `json:"hasTrustDialogAccepted"`
+		} `json:"projects"`
+	}
+	if json.Unmarshal(data, &cfg) != nil || cfg.Projects == nil {
+		return true
+	}
+	return cfg.Projects[dir].HasTrustDialogAccepted
+}
+
+// warnIfUntrusted prints the one-time-fix instruction when Claude has not
+// trusted dir under the workspace's account.
+func warnIfUntrusted(configDir, dir string) {
+	if claudeTrustsDir(configDir, dir) {
+		return
+	}
+	utils.Infof("⚠ Claude has not trusted %s yet%s — run `claude` there once and accept the trust dialog, or the remote session will fail to start.\n",
+		dir, trustAccountSuffix(configDir))
+}
+
+func trustAccountSuffix(configDir string) string {
+	if configDir == "" {
+		return ""
+	}
+	return " under " + configDir
 }
 
 // registeredComposeFile is what the registry records: the real compose file, or
