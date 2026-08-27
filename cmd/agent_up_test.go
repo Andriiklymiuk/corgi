@@ -10,6 +10,8 @@ import (
 	"andriiklymiuk/corgi/utils"
 
 	"andriiklymiuk/corgi/utils/agent/workspace"
+
+	"github.com/spf13/cobra"
 )
 
 func TestParseMCPLogNeedsBothURLAndCode(t *testing.T) {
@@ -251,5 +253,27 @@ func TestReadAgentPidFile(t *testing.T) {
 		if _, ok := readAgentPidFile(path); ok {
 			t.Errorf("a malformed pid %q must report not-ok", bad)
 		}
+	}
+}
+
+func TestRunAgentRestartRunsDownThenFreshUp(t *testing.T) {
+	origDown, origUp := restartDown, restartUp
+	defer func() { restartDown, restartUp = origDown, origUp }()
+
+	var order []string
+	freshWhenUpRan := false
+	restartDown = func(*cobra.Command, []string) { order = append(order, "down") }
+	restartUp = func(cmd *cobra.Command, _ []string) {
+		order = append(order, "up")
+		freshWhenUpRan, _ = cmd.Flags().GetBool("fresh")
+	}
+
+	runAgentRestart(agentRestartCmd, nil)
+
+	if len(order) != 2 || order[0] != "down" || order[1] != "up" {
+		t.Fatalf("order = %v, want down then up", order)
+	}
+	if !freshWhenUpRan {
+		t.Error("restart must force --fresh before up runs")
 	}
 }

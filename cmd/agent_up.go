@@ -589,6 +589,28 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 	}
 }
 
+// ---------------------------------------------------------------- restart
+
+var agentRestartCmd = &cobra.Command{
+	Use:   "restart",
+	Short: "corgi agent down && corgi agent up --fresh, in one command",
+	Long: `Stops everything ` + "`corgi agent up`" + ` started, then brings it back up with
+--fresh: a new tunnel and a new single-use pairing window. The one command to
+run after upgrading corgi so the daemon and launcher are the new binary.`,
+	Run: runAgentRestart,
+}
+
+var (
+	restartDown = runAgentDown
+	restartUp   = runAgentUp
+)
+
+func runAgentRestart(cmd *cobra.Command, args []string) {
+	restartDown(cmd, args)
+	_ = cmd.Flags().Set("fresh", "true")
+	restartUp(cmd, args)
+}
+
 // readAgentPidFile reads a pid written by spawnDetached. A missing or malformed
 // file just means there is nothing to stop.
 func readAgentPidFile(path string) (int, bool) {
@@ -603,10 +625,15 @@ func readAgentPidFile(path string) (int, bool) {
 	return pid, true
 }
 
+func addAgentUpFlags(c *cobra.Command) {
+	c.Flags().String("http", defaultMCPAddr, "Local MCP address")
+	c.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
+	c.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — gives a stable public URL you can bookmark (needs a one-time `cloudflared tunnel create`; see docs/tunnel.md)")
+	c.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
+}
+
 func init() {
-	agentUpCmd.Flags().String("http", defaultMCPAddr, "Local MCP address")
-	agentUpCmd.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
-	agentUpCmd.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — gives a stable public URL you can bookmark (needs a one-time `cloudflared tunnel create`; see docs/tunnel.md)")
-	agentUpCmd.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
-	agentCmd.AddCommand(agentUpCmd)
+	addAgentUpFlags(agentUpCmd)
+	addAgentUpFlags(agentRestartCmd)
+	agentCmd.AddCommand(agentUpCmd, agentRestartCmd)
 }
