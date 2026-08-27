@@ -17,6 +17,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/command"
+	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
@@ -70,6 +71,7 @@ type Daemon struct {
 	Start supervisor.Starter
 	// Notify reports restarts. Defaults to corgi's desktop notification.
 	Notify func(title, body string)
+	Events *events.Log
 	// CaptureBrief probes what an ending session left on disk. Injected because
 	// enumerating a stack's repositories means parsing a compose file, which the
 	// daemon has no business knowing about. Nil disables briefs entirely.
@@ -109,8 +111,17 @@ func New(version, dir string) *Daemon {
 		Dir:           dir,
 		Start:         supervisor.StartProcess,
 		Notify:        utils.Notify,
+		Events:        events.NewLog(dir),
 		publishSignal: make(chan struct{}, 1),
 		nudge:         make(chan struct{}, 1),
+	}
+}
+
+func (d *Daemon) recordEvent(workspaceID string) func(supervisor.RunEvent) {
+	return func(e supervisor.RunEvent) {
+		d.Events.Append(workspaceID, events.Event{
+			Kind: e.Kind, PID: e.PID, Cause: e.Cause, Reason: e.Reason, URL: e.URL,
+		})
 	}
 }
 
@@ -367,6 +378,7 @@ func (d *Daemon) buildRunners(configs []supervisor.SpawnConfig) {
 		r.Notify = d.Notify
 		r.OnChange = d.requestPublish
 		r.OnSessionEnd = d.sessionEndHook(cfg, r)
+		r.OnEvent = d.recordEvent(cfg.WorkspaceID)
 		d.runners = append(d.runners, r)
 		d.diags = append(d.diags, diagnose(cfg, env))
 	}
@@ -461,6 +473,7 @@ func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch f
 	r.Notify = d.Notify
 	r.OnChange = d.requestPublish
 	r.OnSessionEnd = d.sessionEndHook(cfg, r)
+	r.OnEvent = d.recordEvent(cfg.WorkspaceID)
 	d.replaceRunner(r, diagnose(cfg, os.Environ()))
 	launch(r)
 	d.announceRemote(c, "session started remotely")

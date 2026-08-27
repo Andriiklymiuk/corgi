@@ -16,6 +16,7 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
@@ -136,6 +137,31 @@ func launchStartHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, result)
 }
 
+func launchStopHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {workspace} to stop")
+		return
+	}
+	var req struct {
+		Workspace string `json:"workspace"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the stop request")
+		return
+	}
+	if strings.TrimSpace(req.Workspace) == "" {
+		writeLaunchError(w, http.StatusBadRequest, "a workspace is required")
+		return
+	}
+	result, err := mcpSessionStop(req.Workspace)
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeLaunchJSON(w, result)
+}
+
 // claudeSession is one entry from `claude agents --json`.
 type claudeSession struct {
 	Name      string `json:"name"`
@@ -169,7 +195,33 @@ func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{
 		"sessions": listClaudeSessions(absPath, configDir),
 		"links":    bridgeSessionLinks(absPath, configDir),
+		"history":  sessionHistory(id),
 	})
+}
+
+type launchHistoryEntry struct {
+	URL string `json:"url"`
+	At  int64  `json:"at"`
+}
+
+func sessionHistory(workspaceID string) []launchHistoryEntry {
+	dir, err := agentDir()
+	if err != nil {
+		return []launchHistoryEntry{}
+	}
+	seen := map[string]bool{}
+	out := []launchHistoryEntry{}
+	for _, e := range events.NewLog(dir).Read(workspaceID, 0) {
+		if e.Kind != "session" || e.URL == "" || seen[e.URL] {
+			continue
+		}
+		seen[e.URL] = true
+		out = append(out, launchHistoryEntry{URL: e.URL, At: e.At.UnixMilli()})
+		if len(out) >= 20 {
+			break
+		}
+	}
+	return out
 }
 
 // workspaceSessionTarget resolves a workspace id to its directory and the Claude
@@ -357,6 +409,8 @@ const launcherPageHTML = `<!doctype html>
   a.open,button.open{display:inline-block;background:var(--green);color:#08110a;text-decoration:none;border:0;
       padding:.55rem 1rem;border-radius:.65rem;font-weight:700;font-size:.85rem;cursor:pointer}
   .right{display:flex;flex-direction:column;align-items:flex-end;gap:.45rem}
+  button.stopb{background:none;border:1px solid rgba(255,123,114,.45);color:var(--red);
+      padding:.3rem .7rem;font-size:.72rem;border-radius:.5rem}
   .modes{display:flex;font-size:.68rem;color:var(--dim);align-items:center;background:var(--card2);
       border:1px solid var(--line);border-radius:.55rem;padding:.14rem}
   .modes span{padding:0 .3rem 0 .45rem;font-size:.64rem}
@@ -395,6 +449,7 @@ const launcherPageHTML = `<!doctype html>
     <p>Each workspace above has an <b>open in</b> switch — <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here in this browser; <b>chrome</b> forces Chrome via its URL scheme (needs Chrome installed) — right for a workspace on a different Claude account than the app is signed into. Remembered per workspace, on this browser only.</p>
     <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
     <p>A <b>bridge</b> is a remote-control session someone started on the laptop itself. Its claude.ai page shows only what you send from it — until then it looks empty. The full transcript stays on the laptop.</p>
+    <p><b>Push notifications.</b> Set <code>notifyUrl</code> in the agent config on the laptop (for example an ntfy.sh topic you subscribe to in the ntfy app) and every session restart or failure reaches your phone. See <code>corgi agent doctor</code> and the agent docs.</p>
   </details>
   <p class="foot">
     <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
@@ -494,6 +549,7 @@ const launcherPageHTML = `<!doctype html>
         b.onclick = () => startSession(ws.id, b);
         right.appendChild(b);
       }
+      if (ws.running) right.appendChild(stopControl(ws.id));
       row.appendChild(left); row.appendChild(right); row.appendChild(sessionsBox);
       list.appendChild(row);
     }
@@ -506,7 +562,7 @@ const launcherPageHTML = `<!doctype html>
     // Openable links come ONLY from the per-session URLs remote control printed
     // (captured by the daemon). Ids from the claude CLI are local UUIDs the
     // site does not resolve; those rows render below as plain status, no link.
-    const renderLink = (url, isBridge) => {
+    const renderLink = (url, isBridge, when) => {
       const el = document.createElement('a');
       el.className = 's';
       el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
@@ -514,7 +570,8 @@ const launcherPageHTML = `<!doctype html>
       if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
       const tag = isBridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
-      el.innerHTML = '<span>' + esc(url.split('/').pop().slice(0, 18)) + '\u2026' + tag + '</span><span class="when">open \u2197</span>';
+      el.innerHTML = '<span>' + esc(url.split('/').pop().slice(0, 18)) + '\u2026' + tag + '</span><span class="when">' +
+        esc(when || '') + 'open \u2197</span>';
       box.appendChild(el);
     };
     const note = (text) => {
@@ -541,6 +598,8 @@ const launcherPageHTML = `<!doctype html>
       } else if (bridges.length) {
         note(bridges.length + ' bridge session' + (bridges.length > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
       }
+      const past = (j.history || []).filter(h => h && safeClaudeUrl(h.url) && !shown.has(h.url));
+      for (const h of past) { shown.add(h.url); renderLink(h.url, false, fmtWhen(h.at) + ' \u00b7 '); }
       const s = j.sessions || [];
       if (!s.length && !shown.size && !bridges.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
       info.remove();
@@ -605,6 +664,27 @@ const launcherPageHTML = `<!doctype html>
       wrap.appendChild(b);
     }
     return wrap;
+  }
+
+  function stopControl(id) {
+    const b = document.createElement('button');
+    b.className = 'stopb'; b.textContent = 'Stop';
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Stopping…';
+      try {
+        const r = await fetch('/launch/stop', { method: 'POST', headers: auth,
+          body: JSON.stringify({ workspace: id }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || r.status);
+        setTimeout(load, 1200);
+      } catch (e) {
+        b.disabled = false; b.textContent = 'Stop';
+        const err = document.createElement('div');
+        err.className = 'msg err'; err.textContent = '✗ ' + e.message;
+        b.parentElement.appendChild(err);
+      }
+    };
+    return b;
   }
 
   async function startSession(id, btn) {
