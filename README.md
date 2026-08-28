@@ -21,16 +21,16 @@ Most projects are more than one repo. Write them all down once in a `corgi-compo
    (committed, shared)    │
                           ├─ your CI   corgi test --e2e      every repo's branch, one suite
                           │
-                          └─ your phone  scan a QR           Claude Code session on this laptop
+                          └─ your phone  scan a QR           send work to this laptop from anywhere
 ```
 
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
-**Install:** `brew install andriiklymiuk/homebrew-tools/corgi` — or [other ways](docs/install.md).
+**Install:** `brew install andriiklymiuk/homebrew-tools/corgi` ([other ways](docs/install.md)).
 
 ## Why corgi
 
-**Setting the project up costs a day.** Clone four repos, install Postgres and Redis, seed them, copy `.env` files around and point each service at the others, find ports that are free, then start everything in the right order across five terminal tabs. Next laptop, same day again. corgi keeps all of that in one file you commit, so setup is `corgi run`.
+**Setup takes a day.** Clone four repos, install Postgres and Redis, seed them, copy `.env` files around and point each service at the others, find ports that are free, then start everything in the right order across five terminal tabs. Next laptop, same day again. corgi keeps all of that in one file you commit, so setup is `corgi run`.
 
 **You keep using it after setup.** `corgi db -u` when you only need the databases up. `corgi run --service-branch api=feature/login` to try a teammate's branch. `corgi tunnel` when a webhook needs a public URL. `corgi status -w` when something looks wrong. If you already use `docker-compose`, keep it. corgi handles the repos, seed data, env files and tool checks around your containers.
 
@@ -150,11 +150,25 @@ Setup, in a corgi stack **or any git repo**:
 
 ```text
 $ corgi agent up
-                                        ▄▄▄▄▄▄▄ ▄  ▄▄ ▄▄▄▄▄▄▄
-  ✓ workspace registered                █ ▄▄▄ █ ▀█▄▀ █ ▄▄▄ █
-  ✓ agent daemon running                █ ███ █ ▄ █▀ █ ███ █
-  ✓ tunnel  https://…trycloudflare.com  █▄▄▄▄▄█ █ ▀▄ █▄▄▄▄▄█
-  ✓ pairing open · scan to pair  ──►    ▄▄▄▄  ▄ ▀▄█ ▄▄▄ ▄▄▄▄
+
+  ✓ workspace registered
+  ✓ agent daemon running
+  ✓ tunnel  https://…trycloudflare.com
+  ✓ pairing open · scan with your phone to pair
+
+  █▀▀▀▀▀█  ▀ ▀▄▄ ▀  █▀▀▀▀▀█
+  █ ███ █  ▀ ▄▄ ▀▄  █ ███ █
+  █ ▀▀▀ █  ▄▄█▄▄▄ ▀ █ ▀▀▀ █
+  ▀▀▀▀▀▀▀ ▀ ▀▄█▄█▄▀ ▀▀▀▀▀▀▀
+   ▄▄▄▄▄▀  ▄█ ▀▄██▄▄ ▄▄  ▄ 
+   ▀▄ ██▀▀ ▄██▀ █████ ▄▄   
+  ▄█▄ ▀ ▀▄▄▄ ▀ ▄ ▀▄▀██▀▄ █▀
+   ▄▀▄▄▀▀▀▄ █▀█▄▀███    ▀ █
+   ▀▀   ▀  ▄▀ ▄▄█ █▀▀▀█▀ █▀
+  █▀▀▀▀▀█    ▄ ▀▄ █ ▀ █▀█▄ 
+  █ ███ █  ██▀ █ ▀█▀▀█▀▄▀▄▀
+  █ ▀▀▀ █  ▄██ ▄▄█▀▀▀ ▀█▄▀ 
+  ▀▀▀▀▀▀▀  ▀ ▀▀▀ ▀▀ ▀  ▀ ▀ 
 ```
 
 ```text
