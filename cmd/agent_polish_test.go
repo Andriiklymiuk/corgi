@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -215,7 +216,8 @@ func TestSetupCloudflaredTunnelPlan(t *testing.T) {
 		}
 		return "", nil
 	}
-	if err := setupCloudflaredTunnel(run, "corgi-agent", "corgi.example.com", true); err != nil {
+	installed := func(string) error { return nil }
+	if err := setupCloudflaredTunnel(run, installed, "corgi-agent", "corgi.example.com", true); err != nil {
 		t.Fatal(err)
 	}
 	joined := ""
@@ -227,6 +229,18 @@ func TestSetupCloudflaredTunnelPlan(t *testing.T) {
 	}
 	if !strings.Contains(joined, "route dns corgi-agent corgi.example.com") {
 		t.Errorf("the DNS route must be planned:\n%s", joined)
+	}
+}
+
+func TestSetupTunnelRequiresTheBinary(t *testing.T) {
+	missing := func(name string) error { return fmt.Errorf("%s not found", name) }
+	run := func(string, ...string) (string, error) { return "", nil }
+	if err := setupCloudflaredTunnel(run, missing, "corgi-agent", "h", true); err == nil ||
+		!strings.Contains(err.Error(), "not installed") {
+		t.Errorf("a missing cloudflared must say so, got %v", err)
+	}
+	if err := setupNgrokTunnel(run, missing, "h"); err == nil || !strings.Contains(err.Error(), "not installed") {
+		t.Errorf("a missing ngrok must say so, got %v", err)
 	}
 }
 

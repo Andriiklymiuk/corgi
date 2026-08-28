@@ -35,6 +35,15 @@ static domain itself is a dashboard step with no CLI equivalent.`,
 // touching cloudflared.
 type tunnelRunner func(name string, args ...string) (string, error)
 
+// binaryLookup reports whether a command exists. Injected so the setup plan can
+// be tested on a machine (or a CI runner) without cloudflared installed.
+type binaryLookup func(string) error
+
+func lookPath(name string) error {
+	_, err := exec.LookPath(name)
+	return err
+}
+
 func execRunner(name string, args ...string) (string, error) {
 	out, err := exec.Command(name, args...).CombinedOutput()
 	return string(out), err
@@ -68,11 +77,11 @@ func runAgentTunnelSetup(cmd *cobra.Command, args []string) {
 
 	switch provider {
 	case "cloudflared":
-		if err := setupCloudflaredTunnel(run, name, host, dryRun); err != nil {
+		if err := setupCloudflaredTunnel(run, lookPath, name, host, dryRun); err != nil {
 			exitWithError("agent_tunnel_setup", err, 1)
 		}
 	case "ngrok":
-		if err := setupNgrokTunnel(run, host); err != nil {
+		if err := setupNgrokTunnel(run, lookPath, host); err != nil {
 			exitWithError("agent_tunnel_setup", err, 1)
 		}
 	default:
@@ -100,8 +109,8 @@ func tunnelNameFor(provider, name string) string {
 	return name
 }
 
-func setupCloudflaredTunnel(run tunnelRunner, name, host string, dryRun bool) error {
-	if _, err := exec.LookPath("cloudflared"); err != nil {
+func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host string, dryRun bool) error {
+	if err := have("cloudflared"); err != nil {
 		return fmt.Errorf("cloudflared is not installed — `brew install cloudflared` (or see developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads)")
 	}
 
@@ -135,8 +144,8 @@ func setupCloudflaredTunnel(run tunnelRunner, name, host string, dryRun bool) er
 	return nil
 }
 
-func setupNgrokTunnel(run tunnelRunner, host string) error {
-	if _, err := exec.LookPath("ngrok"); err != nil {
+func setupNgrokTunnel(run tunnelRunner, have binaryLookup, host string) error {
+	if err := have("ngrok"); err != nil {
 		return fmt.Errorf("ngrok is not installed — `brew install ngrok`")
 	}
 	if _, err := run("ngrok", "config", "check"); err != nil {
