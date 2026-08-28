@@ -199,7 +199,7 @@ Check these before suspecting corgi — all three have been real:
 | symptom | cause | say |
 |---|---|---|
 | requests stall ~15s, Safari says "server stopped responding" | the Mac sleeps on battery; the wake lock is AC-only | plug in, or `sudo pmset -b sleep 0` |
-| works on Wi-Fi, dead on cellular | free shared tunnel domain refused by carrier/filtering DNS | `corgi agent tunnel setup <host you own>` |
+| works on Wi-Fi, dead on cellular | the tunnel domain is refused by that carrier's DNS — seen with `*.trycloudflare.com` and `*.loca.lt` | try `--provider ngrok` with their `*.ngrok-free.dev` dev domain (free, and has resolved where those two did not); a host they own if it is refused too |
 | any tunnel flakiness, phone at home | no need for a tunnel | `corgi agent up --http 0.0.0.0:8765`, then `http://<lan-ip>:8765/app` |
 
 `corgi agent status` and `doctor` report the sleep risk directly; relay it
@@ -218,7 +218,10 @@ fast and public failing is the tunnel — switch provider or move to the Wi-Fi
 path. Both fast means the machine is healthy and the phone's network is the
 problem; say so instead of restarting things. That second request shares this
 machine's DNS and route, so a `200` does not prove a phone on cellular can
-resolve the name — confirm from an off-network vantage before concluding it.
+resolve the name — have them confirm on the phone with Wi-Fi off. Never stand a
+public web proxy in for the phone: ngrok and Cloudflare throttle them, so its
+`522` is about the proxy and reading it as a corgi fault sends the whole
+diagnosis the wrong way.
 
 ### If a session died
 

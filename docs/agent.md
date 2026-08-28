@@ -252,11 +252,20 @@ like corgi being down:
   power, so a laptop with `sleep 1` sleeps anyway and every request stalls.
   `corgi agent status`, `doctor` and `up` now say so, with the fix: plug in, or
   `sudo pmset -b sleep 0`.
-- **A free shared tunnel domain.** `*.trycloudflare.com`, `*.loca.lt` and
-  ngrok's free domains sit on enough blocklists that some carriers and
-  filtering resolvers refuse them — the same link then works on Wi-Fi and does
-  nothing on cellular. A hostname you own is on no list:
-  `corgi agent tunnel setup corgi.yourdomain.com`.
+- **A blocked tunnel domain.** `*.trycloudflare.com` and `*.loca.lt` sit on
+  enough blocklists that some carriers and filtering resolvers refuse them —
+  the same link then works on Wi-Fi and does nothing on cellular. Which domains
+  a given carrier refuses varies, so this is worth testing rather than
+  assuming: one carrier that dropped both of those resolved ngrok's
+  `*.ngrok-free.dev` fine. Try the ngrok dev domain first, since it costs
+  nothing:
+
+  ```bash
+  corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
+  ```
+
+  A hostname you own is on no list at all, and is the answer if the free ones
+  are refused too: `corgi agent tunnel setup corgi.yourdomain.com`.
 - **Nothing at all, if the phone is on your Wi-Fi.** Serve on the local network
   and skip tunnels entirely:
 
@@ -280,9 +289,11 @@ A slow or failing loopback request means corgi itself — `corgi agent status`,
 then `corgi agent restart`. A fast loopback and a failing public one means the
 tunnel is not delivering; switch provider, or use the Wi-Fi path above. Both
 fast means the machine's side is healthy and the phone's network is the
-problem, so test the public URL again from something that is not on this
-network — the machine shares its own DNS and route with that second request,
-so a `200` there does not prove a phone on cellular can resolve the name.
+problem. Confirm that on the phone itself, with Wi-Fi turned off — the machine
+shares its own DNS and route with that second request, so a `200` there does not
+prove a phone on cellular can resolve the name. Do not substitute a public web
+proxy for the phone: ngrok and Cloudflare throttle them, and the `522` you get
+back says nothing about your tunnel.
 
 ### When a session needs you
 
