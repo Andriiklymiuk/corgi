@@ -502,6 +502,9 @@ func checkWakeLockSupport() agentCheck {
 			Fix:    "install " + argv[0] + ", or set wakeLock: off",
 		}
 	}
+	if risk := supervisor.CheckSleepRisk(); risk.AtRisk() {
+		return agentCheck{Name: checkWakeLock, Detail: risk.Reason, Fix: risk.Fix}
+	}
 	detail := argv[0]
 	if runtime.GOOS == "darwin" {
 		detail += " — note: " + supervisor.ClamshellWarning

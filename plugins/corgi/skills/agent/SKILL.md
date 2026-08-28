@@ -173,6 +173,19 @@ doctor. Two things worth telling a user unprompted:
   transcripts (`corgi agent status` prints the same). Cache reads are included,
   so the numbers are large by design — do not report them as an anomaly.
 
+### If the phone cannot open the launcher
+
+Check these before suspecting corgi — all three have been real:
+
+| symptom | cause | say |
+|---|---|---|
+| requests stall ~15s, Safari says "server stopped responding" | the Mac sleeps on battery; the wake lock is AC-only | plug in, or `sudo pmset -b sleep 0` |
+| works on Wi-Fi, dead on cellular | free shared tunnel domain refused by carrier/filtering DNS | `corgi agent tunnel setup <host you own>` |
+| any tunnel flakiness, phone at home | no need for a tunnel | `corgi agent up --http 0.0.0.0:8765`, then `http://<lan-ip>:8765/app` |
+
+`corgi agent status` and `doctor` report the sleep risk directly; relay it
+rather than re-deriving.
+
 ### If a session died
 
 `corgi agent status` shows `lastReason`, and `corgi agent logs <workspace>`

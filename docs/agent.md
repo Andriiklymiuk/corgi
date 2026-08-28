@@ -225,6 +225,31 @@ button. It is stored in that browser only and changes nothing on the machine —
 it exists for the moment someone else is looking at your screen. To actually
 stop supervising a workspace, set `autostart: false` for it instead.
 
+### If the phone cannot reach it
+
+The tunnel is the fragile part, and three things break it in ways that look
+like corgi being down:
+
+- **The Mac sleeps.** On battery, macOS honours the wake lock's `-s` only on AC
+  power, so a laptop with `sleep 1` sleeps anyway and every request stalls.
+  `corgi agent status`, `doctor` and `up` now say so, with the fix: plug in, or
+  `sudo pmset -b sleep 0`.
+- **A free shared tunnel domain.** `*.trycloudflare.com`, `*.loca.lt` and
+  ngrok's free domains sit on enough blocklists that some carriers and
+  filtering resolvers refuse them — the same link then works on Wi-Fi and does
+  nothing on cellular. A hostname you own is on no list:
+  `corgi agent tunnel setup corgi.yourdomain.com`.
+- **Nothing at all, if the phone is on your Wi-Fi.** Serve on the local network
+  and skip tunnels entirely:
+
+```bash
+corgi agent up --http 0.0.0.0:8765     # prints http://<lan-ip>:8765/app too
+```
+
+That path has no DNS, no provider and no public exposure — it is the one to
+reach for first when you are at home, and the fallback when a tunnel misbehaves.
+Back to loopback with `corgi agent restart --http 127.0.0.1:8765`.
+
 ### When a session needs you
 
 A session waiting on a permission prompt is invisible from the phone. Opt in
@@ -641,7 +666,7 @@ server's own bearer token — that token reaches `corgi_exec` and `corgi_db_quer
 corgi mcp --http 127.0.0.1:8765 --pair
 ```
 
-prints a single-use code, valid two minutes, which a client exchanges once for
+prints a single-use code, valid ten minutes, which a client exchanges once for
 its own revocable token. `corgi mcp devices revoke <name>` kills exactly one
 device without disturbing the others — which is the whole reason not to share
 one token. Full detail: [docs/mcp.md](mcp.md).
