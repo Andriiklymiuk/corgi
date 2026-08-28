@@ -45,7 +45,7 @@ func TestRemoteResolverRefusesASensitiveWorkspace(t *testing.T) {
 	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n  sensitive: true\n")
 	registerStack(t, agentDir, "acme", stack)
 
-	_, err := remoteResolver(agentDir, false)("acme", "")
+	_, err := remoteResolver(agentDir, false)("acme", "", "")
 
 	if err == nil {
 		t.Fatal("a sensitive workspace must refuse remote session start")
@@ -60,7 +60,7 @@ func TestRemoteResolverStartsANonSensitiveWorkspace(t *testing.T) {
 	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n")
 	registerStack(t, agentDir, "acme", stack)
 
-	cfg, err := remoteResolver(agentDir, false)("acme", "")
+	cfg, err := remoteResolver(agentDir, false)("acme", "", "")
 
 	if err != nil {
 		t.Fatalf("a normal workspace must resolve, got %v", err)
@@ -77,7 +77,7 @@ func TestRemoteResolverRejectsAnUnknownWorkspace(t *testing.T) {
 	agentDir := t.TempDir()
 	registerStack(t, agentDir, "acme", stackWithAgentConfig(t, ""))
 
-	_, err := remoteResolver(agentDir, false)("ghost", "")
+	_, err := remoteResolver(agentDir, false)("ghost", "", "")
 
 	if err == nil || !strings.Contains(err.Error(), "ghost") {
 		t.Errorf("an unknown workspace must error by name, got %v", err)
@@ -93,7 +93,7 @@ func TestRemoteResolverAppliesAProfileEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := remoteResolver(agentDir, false)("acme", "work")
+	cfg, err := remoteResolver(agentDir, false)("acme", "work", "")
 
 	if err != nil {
 		t.Fatalf("profile start must resolve, got %v", err)
@@ -115,7 +115,7 @@ func TestRemoteResolverRejectsAnUnknownProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := remoteResolver(agentDir, false)("acme", "gaming")
+	_, err := remoteResolver(agentDir, false)("acme", "gaming", "")
 
 	if err == nil || !strings.Contains(err.Error(), "work") {
 		t.Errorf("an unknown profile must error and list the defined ones, got %v", err)

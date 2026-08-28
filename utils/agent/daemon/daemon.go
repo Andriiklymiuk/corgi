@@ -80,7 +80,7 @@ type Daemon struct {
 	// remote session start. Injected by cmd, which knows the registry and
 	// config files; nil disables commands and keeps the fixed-set lifecycle
 	// exactly as it was.
-	ResolveWorkspace func(workspaceID, profile string) (supervisor.SpawnConfig, error)
+	ResolveWorkspace func(workspaceID, profile, name string) (supervisor.SpawnConfig, error)
 	// CommandTick is the spool poll interval; the SIGUSR1 nudge only shortens
 	// the wait. Zero means statusPublishInterval. Test seam.
 	CommandTick time.Duration
@@ -432,8 +432,25 @@ func (d *Daemon) drainCommands(ctx context.Context, launch func(*supervisor.Runn
 			d.startWorkspace(ctx, c, launch)
 		case command.ActionStop:
 			d.stopRemoteWorkspace(c)
+		case command.ActionAttention:
+			d.reportAttention(c)
 		}
 	}
+}
+
+// reportAttention turns a hook's "this session wants a person" into a timeline
+// entry and a notification. It never touches a runner: the session in question
+// is usually one corgi does not supervise (a terminal or an editor).
+func (d *Daemon) reportAttention(c command.Command) {
+	detail := strings.TrimSpace(c.Detail)
+	if detail == "" {
+		detail = "a session is waiting for you"
+	}
+	d.Events.Append(c.WorkspaceID, events.Event{Kind: "attention", Reason: detail})
+	if d.Notify != nil {
+		d.Notify("corgi agent · "+c.WorkspaceID, detail)
+	}
+	d.requestPublish()
 }
 
 func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {
@@ -450,7 +467,7 @@ func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch f
 		// the runner and try right now, with a fresh failure streak.
 		r.StopAsync()
 	}
-	cfg, err := d.ResolveWorkspace(c.WorkspaceID, c.Profile)
+	cfg, err := d.ResolveWorkspace(c.WorkspaceID, c.Profile, c.Name)
 	if err != nil {
 		d.commandFailed(c, err)
 		return

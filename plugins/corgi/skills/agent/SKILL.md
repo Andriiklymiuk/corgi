@@ -158,6 +158,21 @@ corgi agent init --config-dir ~/.claude-work
 `corgi agent status` prints the account each workspace will actually use. If the
 user has work and personal logins, check it.
 
+### The launcher page
+
+Everything the phone can do without the Claude app: start and stop a session,
+pick a profile and name it, read the timeline, revoke a paired device, run
+doctor. Two things worth telling a user unprompted:
+
+- Cards carry a **hide** chip. Hidden cards collapse into one button, on that
+  browser only — nothing on the machine changes. It is for showing the screen
+  to someone, not for disabling a workspace (`autostart: false` does that).
+- The header names the machine, the corgi version and whether the daemon is
+  up. If it says an update is available, `corgi upd && corgi agent restart`.
+- Cards show tokens today / this week, summed from Claude Code's own
+  transcripts (`corgi agent status` prints the same). Cache reads are included,
+  so the numbers are large by design — do not report them as an anomaly.
+
 ### If a session died
 
 `corgi agent status` shows `lastReason`, and `corgi agent logs <workspace>`
@@ -195,7 +210,14 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
 - Every remote start and stop raises a desktop notification on the laptop, by
   design — the machine's owner always sees what began running.
 - Phone push for those notifications: set `notifyUrl` in the trusted agent
-  config (an ntfy.sh topic works out of the box). See docs/agent.md.
+  config (an ntfy.sh topic works out of the box). See docs/agent.md. The push
+  carries a tap target back to the launcher.
+- `corgi agent hooks enable` in a workspace also notifies when any Claude
+  session there is waiting on a permission prompt or has finished its turn.
+  It writes into `.claude/settings.local.json`, never the committed file.
+- `corgi_pr_open { branch, title }` opens one pull request per repository that
+  has commits on the branch and cross-links them — the step after
+  `corgi_worktrees_materialize` and `corgi_diff`.
 
 ### Setting it up from a session on the laptop
 

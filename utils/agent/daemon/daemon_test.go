@@ -398,7 +398,7 @@ func dynDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := testDaemon(t)
 	d.CommandTick = 10 * time.Millisecond
-	d.ResolveWorkspace = func(id, profile string) (supervisor.SpawnConfig, error) {
+	d.ResolveWorkspace = func(id, profile, name string) (supervisor.SpawnConfig, error) {
 		if id == "ghost" {
 			return supervisor.SpawnConfig{}, errors.New("no workspace called \"ghost\" in the registry")
 		}
@@ -555,7 +555,7 @@ func TestDaemonSurvivesASIGUSR1Nudge(t *testing.T) {
 
 func TestInfoCarriesCommandSupport(t *testing.T) {
 	d := New("test", t.TempDir())
-	d.ResolveWorkspace = func(string, string) (supervisor.SpawnConfig, error) {
+	d.ResolveWorkspace = func(string, string, string) (supervisor.SpawnConfig, error) {
 		return supervisor.SpawnConfig{}, nil
 	}
 	if err := d.writeInfoIDs(nil); err != nil {
@@ -694,4 +694,72 @@ func TestPackageNudgeIsSafeWithoutCommandSupport(t *testing.T) {
 	// A command-capable record for our own pid delivers a (harmless) SIGUSR1;
 	// the test process has the daemon's handler installed only inside Run, so we
 	// do not send to self here — the no-op branches are the contract under test.
+}
+
+func TestAttentionCommandNotifiesAndRecords(t *testing.T) {
+	d := dynDaemon(t)
+	var mu sync.Mutex
+	var bodies []string
+	d.Notify = func(_, body string) {
+		mu.Lock()
+		bodies = append(bodies, body)
+		mu.Unlock()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	if _, err := command.Write(d.Dir, command.Command{
+		Action: command.ActionAttention, WorkspaceID: "acme",
+		Detail: "Claude needs your permission to run rm", Source: "hook",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.Nudge()
+
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(bodies) > 0
+	})
+	mu.Lock()
+	got := bodies[0]
+	mu.Unlock()
+	if got != "Claude needs your permission to run rm" {
+		t.Errorf("notification body = %q", got)
+	}
+
+	waitFor(t, func() bool {
+		evs := d.Events.Read("acme", 1)
+		return len(evs) == 1 && evs[0].Kind == "attention"
+	})
+
+	// A hook that sent no message still has to say something useful.
+	if _, err := command.Write(d.Dir, command.Command{
+		Action: command.ActionAttention, WorkspaceID: "acme", Source: "hook",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.Nudge()
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(bodies) > 1
+	})
+	mu.Lock()
+	second := bodies[1]
+	mu.Unlock()
+	if second != "a session is waiting for you" {
+		t.Errorf("empty detail must fall back, got %q", second)
+	}
+
+	cancel()
+	<-done
+
+	// Attention never touches a runner: the session is usually one corgi does
+	// not supervise.
+	if len(d.Status().Workspaces) != 0 {
+		t.Errorf("attention must not start a runner, got %+v", d.Status().Workspaces)
+	}
 }

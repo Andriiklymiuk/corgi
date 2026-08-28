@@ -106,10 +106,15 @@ The first time the phone opens the page, ngrok's free tier shows its own
 "you are about to visit" interstitial once; tap through. The launcher's own
 requests carry the header that skips it, so pairing and the buttons work.
 
-The launcher now lives at the same hostname forever — save it to the phone's home
-screen once. Provider notes (ngrok's free static `*.ngrok-free.dev` domain,
-localtunnel's best-effort `--subdomain`) and per-service stable tunnels:
-[docs/tunnel.md](tunnel.md#stable-urls-named-mode).
+Either way the launcher lives at the same hostname forever — save it to the
+phone's home screen once. One command does the whole setup and remembers it:
+
+```bash
+corgi agent tunnel setup corgi.yourdomain.com                  # cloudflared
+corgi agent tunnel setup <yours>.ngrok-free.app --provider ngrok
+```
+
+Per-service stable tunnels: [docs/tunnel.md](tunnel.md#stable-urls-named-mode).
 
 One more knob worth knowing: a workspace's Claude **default model** is not corgi's
 to pick — `claude remote-control` takes no model flag; you choose it per message in
@@ -147,6 +152,8 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent brief [id]` | what the last session was working on before it restarted |
 | `corgi agent logs <workspace>` | the session timeline: starts, exits and why, links |
 | `corgi agent restart` | `down` + `up --fresh` in one — run it after `corgi upgrade` |
+| `corgi agent tunnel setup <host>` | one-time permanent-URL setup, remembered for later runs |
+| `corgi agent hooks enable` / `disable` | notify when a session in this workspace needs you |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -196,6 +203,42 @@ terminal, VS Code, supervised — read from the per-process records under
 `<configDir>/sessions/`. A process that registered a web id links straight to
 its conversation on claude.ai; one that has not is marked *local only*, and
 typing `/remote-control` inside it is what gives it a link.
+
+### What it has been costing
+
+Claude Code records token counts in its own transcripts, so corgi can add them
+up per workspace — nothing is sent anywhere, and only the numbers are read:
+
+```
+$ corgi agent status
+  corgi                running   restarts=0 wakeLock=true
+                       tokens 147.3M today · 1.0B this week
+```
+
+The launcher shows the same two numbers on each card. Cache reads are included,
+which is why the totals are large — that is the real traffic against the window.
+
+### Hiding a workspace on the phone
+
+Each card has a **hide** chip. Hidden cards collapse into one `N hidden — show`
+button. It is stored in that browser only and changes nothing on the machine —
+it exists for the moment someone else is looking at your screen. To actually
+stop supervising a workspace, set `autostart: false` for it instead.
+
+### When a session needs you
+
+A session waiting on a permission prompt is invisible from the phone. Opt in
+per workspace and corgi tells you:
+
+```bash
+cd ~/dev/your-stack
+corgi agent hooks enable        # writes two hooks into .claude/settings.local.json
+```
+
+They call `corgi agent hook`, which reports to the daemon, which sends the same
+notification as a restart — including the phone push when `notifyUrl` is set.
+It covers every Claude session in that directory, supervised or not.
+`corgi agent hooks disable` removes them and leaves your other hooks alone.
 
 ### The handover brief
 

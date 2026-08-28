@@ -30,36 +30,33 @@ Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
 ## Why corgi
 
-Say the ticket is a referral program: new endpoint in `api`, new page in `web`, new screen in
-`mobile`, one migration. All of it has to run together before you can tell if it works.
+One committed `corgi-compose.yml` describes the project. After that, the things you actually do in
+a day are one command each:
 
-```text
-  without corgi                          with corgi
-  ─────────────────────────────────────  ────────────────────────────────────
-  clone the repos                        corgi run --feature ABC-123
-  install postgres, seed it by hand
-  chase three .env files                  ├─ every repo that has the branch
-  find ports nobody else took             ├─ postgres up, seeded
-  four terminals, in the right order      ├─ .env written, services cross-wired
-  mobile still can't reach the api        └─ api + web + mobile, healthy
-  ─────────────────────────────────────  ────────────────────────────────────
-  half a day, per person, per laptop     one command, then you write code
-```
+| what you want | what you type |
+| --- | --- |
+| the whole stack up: repos cloned, databases seeded, env wired | `corgi run` |
+| a feature that spans `api`, `web` and `mobile` | `corgi run --feature ABC-123` |
+| a teammate's branch, in one service only | `corgi run --service-branch api=fix/login` |
+| just the databases, to write a migration against | `corgi db -u` |
+| the bug reproduced on yesterday's data | `corgi db restore nightly` |
+| a public HTTPS URL for a webhook or a device | `corgi tunnel` |
+| the same stack in CI, on the branches under review | `corgi run --feature $BRANCH --detach --wait` |
+| an agent to take the ticket across every repo | `/corgi:stories ABC-123` |
+| your laptop still working while you're out | `corgi agent up`, then scan the QR |
+| the next project tomorrow | the same commands, in its folder |
 
-What you get:
+The part that changes how you work is the second row. A feature that touches three repos normally
+means three checkouts, three terminals and a lot of hoping. `--feature ABC-123` runs every repo
+that has that branch and leaves the rest on `main`, so the mobile app calls the real endpoint,
+which reads the real seeded database, on your laptop. You see the whole feature work before you
+open a PR.
 
-- **The feature runs before the PR.** The mobile app calls the real endpoint, which reads the
-  seeded database, on your laptop.
-- **Any mix of branches.** `--feature ABC-123` runs every repo that has that branch and leaves the
-  rest on `main`. `--service-branch api=fix/login` swaps one service.
-- **The same with a single repo.** One service still gets a seeded database and a written `.env`.
-  Add more later and everyone gets them with a `git pull`.
-- **Commands for the rest of the day.** `corgi db -u` for databases only, `corgi tunnel` for a
-  public webhook URL, `corgi status -w` when a service looks wrong.
-- **Every project works the same way.** Each one keeps its own `corgi-compose.yml`, but the
-  commands never change, so switching projects doesn't mean learning someone's bespoke `make dev`.
-- **The same workspace for your [agent](#let-an-agent-take-a-whole-ticket), your
-  [CI](#run-the-whole-stack-in-ci) and your [phone](#code-from-your-phone).**
+The rest of the list is why it stays installed: databases you can seed, snapshot and restore, env
+files written for you, health you can watch, logs kept after the process dies, and the same five
+commands on every project instead of a bespoke `make dev` per repo. Your
+[agent](#let-an-agent-take-a-whole-ticket), your [CI](#run-the-whole-stack-in-ci) and your
+[phone](#code-from-your-phone) drive that same file.
 
 If you already use `docker-compose`, keep it. corgi runs the repos, seed data, env files and tool
 checks around your containers.
@@ -207,28 +204,25 @@ One scan pairs the phone. It gets its own token, which you can revoke without to
 
 The session survives network drops and crashes, which Remote Control on its own does not (it gives up after about 10 minutes offline). `corgi agent install` brings the session back after a reboot, `--tunnel-name` keeps the URL stable, and `corgi agent down` turns it all off. None of it runs unless you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through setup. Full guide: [docs/agent.md](docs/agent.md).
 
-## What you'll use day to day
+## The rest of the commands
+
+Beyond the ones above, these are the ones that come up in a normal week:
 
 | command | what you get |
 | --- | --- |
-| `corgi run` | every database and service up, env wired between them, logs saved |
-| `corgi run --feature ABC-123` | each repo that has the branch runs from a worktree, the rest stay on `main` |
-| `corgi run --service-branch api=fix/login` | one service on another branch, without editing the file |
-| `corgi run --tier staging` | local services against your staging env tier |
-| `corgi db -u` | databases only, seeded, nothing else started |
+| `corgi run --tier staging` | local services pointed at your staging env tier |
 | `corgi db shell` | a native `psql`/`mysql` shell with the password already filled in |
-| `corgi db snapshot` / `corgi db restore` | freeze a good database state, come back to it in seconds |
+| `corgi db snapshot` | freeze the current database state so you can come back to it |
 | `corgi exec api -- go test ./...` | a one-off command in that service's directory and env |
-| `corgi logs --service api` | per-service logs, kept after the process is gone |
+| `corgi logs --service api` | logs kept after the process is gone |
 | `corgi status -w` · `corgi ps` | health and run state while you work |
 | `corgi mc` | one pane: each service's run state with its branch, PR and CI |
 | `corgi open web` | opens the localhost URLs in the browser |
-| `corgi tunnel` | public HTTPS for a webhook, a partner, or your phone |
 | `corgi doctor --fix` | missing tools, busy ports, Docker not running |
 | `corgi memory list` | decisions and incidents the team commits next to the code |
 
-38 database drivers ([list](docs/databases.md)), and every command above behaves the same whether
-the project has one service or twelve.
+38 database drivers ([list](docs/databases.md)), and all of this behaves the same whether the
+project has one service or twelve.
 
 Private repos, prerequisites, secrets or staging tiers? See
 [Getting it running on a real project](docs/getting-started.md).

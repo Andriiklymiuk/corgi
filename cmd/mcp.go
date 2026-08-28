@@ -332,6 +332,9 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/start", bearerAuth(token, http.HandlerFunc(launchStartHandler), deviceStore))
 		mux.Handle("/launch/stop", bearerAuth(token, http.HandlerFunc(launchStopHandler), deviceStore))
 		mux.Handle("/launch/sessions", bearerAuth(token, http.HandlerFunc(launchSessionsHandler), deviceStore))
+		mux.Handle("/launch/info", bearerAuth(token, http.HandlerFunc(launchInfoHandler), deviceStore))
+		mux.Handle("/launch/devices", bearerAuth(token, http.HandlerFunc(launchDevicesHandler), deviceStore))
+		mux.Handle("/launch/doctor", bearerAuth(token, http.HandlerFunc(launchDoctorHandler), deviceStore))
 	}
 
 	// /pair is deliberately NOT behind the bearer check: its whole purpose is
@@ -438,6 +441,7 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 				// Probe the route the tools are actually served on, not the
 				// root — see probeTunnelExposure.
 				go probeTunnelExposure(ctx, mcpProbeTarget(ev.URL))
+				recordPublicURL(ev.URL)
 				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
 				// Don't reprint the bearer token in a pasteable block on the
 				// public side — the local config (printed earlier) already has it.

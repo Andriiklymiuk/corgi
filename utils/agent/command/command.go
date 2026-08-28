@@ -19,6 +19,9 @@ import (
 const (
 	ActionStart = "start"
 	ActionStop  = "stop"
+	// ActionAttention is a Claude Code hook reporting that a session wants a
+	// person: a permission prompt, a question, or a finished turn.
+	ActionAttention = "attention"
 )
 
 // TTL is how long a written command stays valid. A start that sat in the spool
@@ -28,10 +31,15 @@ const TTL = 60 * time.Second
 
 // Command is one request to the daemon.
 type Command struct {
-	ID          string    `json:"id"`
-	Action      string    `json:"action"`
-	WorkspaceID string    `json:"workspaceId"`
-	Profile     string    `json:"profile,omitempty"`
+	ID          string `json:"id"`
+	Action      string `json:"action"`
+	WorkspaceID string `json:"workspaceId"`
+	Profile     string `json:"profile,omitempty"`
+	// Name is the session name shown in claude.ai. Free text from the phone,
+	// so the daemon sanitizes it before it reaches an argv.
+	Name string `json:"name,omitempty"`
+	// Detail carries a hook's own message, already trimmed by the sender.
+	Detail      string    `json:"detail,omitempty"`
 	Source      string    `json:"source,omitempty"`
 	RequestedAt time.Time `json:"requestedAt"`
 }
@@ -42,7 +50,7 @@ func Dir(agentDir string) string { return filepath.Join(agentDir, "commands") }
 // Write persists one command atomically and returns it with ID and
 // RequestedAt filled.
 func Write(agentDir string, c Command) (Command, error) {
-	if c.Action != ActionStart && c.Action != ActionStop {
+	if c.Action != ActionStart && c.Action != ActionStop && c.Action != ActionAttention {
 		return c, fmt.Errorf("unknown command action %q", c.Action)
 	}
 	if strings.TrimSpace(c.WorkspaceID) == "" {

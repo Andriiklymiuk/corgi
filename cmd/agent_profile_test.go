@@ -94,7 +94,7 @@ func TestAddedProfileIsSelectableByTheResolver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := remoteResolver(dir, false)("acme", "work")
+	cfg, err := remoteResolver(dir, false)("acme", "work", "")
 	if err != nil {
 		t.Fatalf("a profile added by the command must resolve at start, got %v", err)
 	}
