@@ -53,12 +53,15 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 			// fragment (which never reaches the server) and is typed back by
 			// the page's own JS. Rendering it while closed would only invite a
 			// form that cannot succeed.
+			w.Header().Set(headerContentType, "text/html; charset=utf-8")
 			if !session.Open() {
-				w.Header().Set(headerContentType, mimeJSON)
-				writePairError(w, http.StatusForbidden, "pairing is not open — run `corgi agent up` on the machine")
+				// A person, not a client, lands here: a reopened QR link, an
+				// expired one, or a phone that already paired. Say so in a page
+				// that sends an already-paired browser on to the launcher.
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = fmt.Fprint(w, pairClosedHTML)
 				return
 			}
-			w.Header().Set(headerContentType, "text/html; charset=utf-8")
 			_, _ = fmt.Fprint(w, pairPageHTML)
 			return
 		}
@@ -111,6 +114,41 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 // pairPageHTML is the scan-to-pair page: the QR printed by `corgi agent up`
 // points here with the code in the URL fragment. Self-contained, no external
 // assets, nothing server-rendered — the fragment stays in the browser.
+// pairClosedHTML is what a browser sees on a pairing link whose window is no
+// longer open. Deliberately vague about why (used vs expired), like the POST
+// path; it only helps a browser that already holds a token find the launcher.
+const pairClosedHTML = `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>corgi pairing</title>
+<style>
+  body{font-family:-apple-system,system-ui,sans-serif;background:#0f1115;color:#e8e8e8;
+       display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
+  main{max-width:22rem;width:100%;padding:2rem}
+  h1{font-size:1.3rem;margin:0 0 .3rem}
+  p{color:#9aa0a6;font-size:.9rem;margin:.2rem 0 1.2rem;line-height:1.5}
+  code{background:#1a1d23;padding:.15rem .35rem;border-radius:.3rem}
+  a.open{display:inline-block;background:#7ee787;color:#0f1115;text-decoration:none;
+      padding:.7rem 1.1rem;border-radius:.6rem;font-weight:600}
+</style>
+<main>
+  <h1>🐕 This pairing link is closed</h1>
+  <p id="msg">Pairing links work once and expire after two minutes.</p>
+  <p id="paired" hidden>This phone is already paired with this machine.</p>
+  <a id="app" class="open" href="/app" hidden>Open the launcher</a>
+  <p id="fresh">Not paired yet? On the laptop run <code>corgi agent up --fresh</code> and scan the new QR.</p>
+</main>
+<script>
+  let token = '';
+  try { token = localStorage.getItem('corgi_token') || ''; } catch {}
+  if (token) {
+    document.getElementById('paired').hidden = false;
+    document.getElementById('app').hidden = false;
+    document.getElementById('fresh').hidden = true;
+  }
+</script>
+`
+
 const pairPageHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
