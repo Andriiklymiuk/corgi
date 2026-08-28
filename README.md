@@ -56,6 +56,8 @@ What you get:
   Add more later and everyone gets them with a `git pull`.
 - **Commands for the rest of the day.** `corgi db -u` for databases only, `corgi tunnel` for a
   public webhook URL, `corgi status -w` when a service looks wrong.
+- **Every project works the same way.** Each one keeps its own `corgi-compose.yml`, but the
+  commands never change, so switching projects doesn't mean learning someone's bespoke `make dev`.
 - **The same workspace for your [agent](#let-an-agent-take-a-whole-ticket), your
   [CI](#run-the-whole-stack-in-ci) and your [phone](#code-from-your-phone).**
 
@@ -205,17 +207,31 @@ One scan pairs the phone. It gets its own token, which you can revoke without to
 
 The session survives network drops and crashes, which Remote Control on its own does not (it gives up after about 10 minutes offline). `corgi agent install` brings the session back after a reboot, `--tunnel-name` keeps the URL stable, and `corgi agent down` turns it all off. None of it runs unless you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through setup. Full guide: [docs/agent.md](docs/agent.md).
 
-## What corgi does for you
+## What you'll use day to day
 
-- **Repos** — cloned on first run. You can also pull them all, fork them all, or run one service from a branch in a separate worktree. [More](#working-across-many-repos).
-- **Databases** — 38 drivers, running in Docker and **seeded** with real data. `corgi db shell` opens a native shell with the password filled in. `corgi db -u` starts the databases and nothing else. [All drivers](docs/databases.md).
-- **Services** — started together, with env vars already wired between them. `Ctrl-C` stops all of them, `corgi run -d` runs them in the background.
-- **Checks** — missing tools and busy ports found before the run breaks (`corgi doctor`), live health (`corgi status -w`), public HTTPS for webhooks ([`corgi tunnel`](docs/tunnel.md)), saved logs, crash notifications.
-- **Agents** — a Claude Code plugin and an MCP server, so an agent can work across every repo and open a draft PR in each. [More](#let-an-agent-take-a-whole-ticket).
-- **Your phone** — start a session on your laptop from wherever you are. [More](#code-from-your-phone).
-- **CI** — the same file boots the stack in CI and runs cross-repo e2e. [More](#run-the-whole-stack-in-ci).
+| command | what you get |
+| --- | --- |
+| `corgi run` | every database and service up, env wired between them, logs saved |
+| `corgi run --feature ABC-123` | each repo that has the branch runs from a worktree, the rest stay on `main` |
+| `corgi run --service-branch api=fix/login` | one service on another branch, without editing the file |
+| `corgi run --tier staging` | local services against your staging env tier |
+| `corgi db -u` | databases only, seeded, nothing else started |
+| `corgi db shell` | a native `psql`/`mysql` shell with the password already filled in |
+| `corgi db snapshot` / `corgi db restore` | freeze a good database state, come back to it in seconds |
+| `corgi exec api -- go test ./...` | a one-off command in that service's directory and env |
+| `corgi logs --service api` | per-service logs, kept after the process is gone |
+| `corgi status -w` · `corgi ps` | health and run state while you work |
+| `corgi mc` | one pane: each service's run state with its branch, PR and CI |
+| `corgi open web` | opens the localhost URLs in the browser |
+| `corgi tunnel` | public HTTPS for a webhook, a partner, or your phone |
+| `corgi doctor --fix` | missing tools, busy ports, Docker not running |
+| `corgi memory list` | decisions and incidents the team commits next to the code |
 
-Working on a real project with private repos, prerequisites, secrets or staging tiers? See [Getting it running on a real project](docs/getting-started.md).
+38 database drivers ([list](docs/databases.md)), and every command above behaves the same whether
+the project has one service or twelve.
+
+Private repos, prerequisites, secrets or staging tiers? See
+[Getting it running on a real project](docs/getting-started.md).
 
 ## Working across many repos
 
