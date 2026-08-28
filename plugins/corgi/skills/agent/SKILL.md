@@ -199,7 +199,7 @@ Check these before suspecting corgi — all three have been real:
 | symptom | cause | say |
 |---|---|---|
 | requests stall ~15s, Safari says "server stopped responding" | the Mac sleeps on battery; the wake lock is AC-only | plug in, or `sudo pmset -b sleep 0` |
-| works on Wi-Fi, dead on cellular | the tunnel domain is refused by that carrier's DNS — seen with `*.trycloudflare.com` and `*.loca.lt` | try `--provider ngrok` with their `*.ngrok-free.dev` dev domain (free, and has resolved where those two did not); a host they own if it is refused too |
+| works on Wi-Fi, dead on cellular | that network's DNS refuses the tunnel domain — seen with `*.trycloudflare.com` and `*.loca.lt`, but it is per-carrier and most pass them fine, so do not present it as a known defect | try `--provider ngrok` with their `*.ngrok-free.dev` dev domain (free, and has resolved where those two did not); a host they own if that is refused too |
 | any tunnel flakiness, phone at home | no need for a tunnel | `corgi agent up --http 0.0.0.0:8765`, then `http://<lan-ip>:8765/app` |
 
 `corgi agent status` and `doctor` report the sleep risk directly; relay it

@@ -252,13 +252,15 @@ like corgi being down:
   power, so a laptop with `sleep 1` sleeps anyway and every request stalls.
   `corgi agent status`, `doctor` and `up` now say so, with the fix: plug in, or
   `sudo pmset -b sleep 0`.
-- **A blocked tunnel domain.** `*.trycloudflare.com` and `*.loca.lt` sit on
-  enough blocklists that some carriers and filtering resolvers refuse them —
-  the same link then works on Wi-Fi and does nothing on cellular. Which domains
-  a given carrier refuses varies, so this is worth testing rather than
-  assuming: one carrier that dropped both of those resolved ngrok's
-  `*.ngrok-free.dev` fine. Try the ngrok dev domain first, since it costs
-  nothing:
+- **A blocked tunnel domain.** Most networks are fine here — plenty of people
+  run a `*.trycloudflare.com` link over cellular for years and never hit this.
+  But that domain and `*.loca.lt` are on enough blocklists that *some* carriers
+  and filtering resolvers refuse them, and then the same link works on Wi-Fi and
+  does nothing on cellular. It is per-network, so test rather than assume in
+  either direction: one carrier that dropped both of those resolved ngrok's
+  `*.ngrok-free.dev` fine, and someone else's phone may well have been fine on
+  all three. If yours is refused, the ngrok dev domain is the free thing to try
+  next:
 
   ```bash
   corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
