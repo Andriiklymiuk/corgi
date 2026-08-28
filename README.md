@@ -30,15 +30,42 @@ Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
 ## Why corgi
 
-**You build the whole feature, not your slice of it.** Change the API, the web app and the mobile app together, against seeded databases and env vars that already point at each other. You see the feature work end to end on your machine instead of finding out on the PR. Put the change on one branch name and `corgi run --feature ABC-123` runs every repo that has it, while the rest stay on `main`.
+Take one ordinary ticket: a referral program. New endpoint in `api`, new page in `web`,
+new screen in `mobile`, one migration. All of it has to run together before you can tell whether
+any of it works.
 
-**One repo or twelve, same command.** With one service, `corgi run` is still the fastest way to get it up with its database seeded and its `.env` written. When the project grows to five, nothing about your day changes: add the service to the file, commit it, and everyone has it. A new laptop is `corgi run`, not a day of setup.
+```text
+  without corgi                          with corgi
+  ─────────────────────────────────────  ────────────────────────────────────
+  clone the repos                        corgi run --feature ABC-123
+  install postgres, seed it by hand
+  chase three .env files                  ├─ every repo that has the branch
+  find ports nobody else took             ├─ postgres up, seeded
+  four terminals, in the right order      ├─ .env written, services cross-wired
+  mobile still can't reach the api        └─ api + web + mobile, healthy
+  ─────────────────────────────────────  ────────────────────────────────────
+  half a day, per person, per laptop     one command, then you write code
+```
 
-**It's a daily tool, not an onboarding script.** `corgi db -u` when you only need the databases. `corgi run --service-branch api=feature/login` to try a teammate's branch. `corgi tunnel` when a webhook needs a public URL. `corgi status -w` when something looks wrong. If you already use `docker-compose`, keep it: corgi handles the repos, seed data, env files and tool checks around your containers.
+What that buys you:
 
-**Agents get the same workspace you have.** An agent that can see one folder has to guess at the rest of the system. In a corgi workspace it has every repo, databases with real data, the env wiring, and the `corgi` CLI to start the stack and check its own work. That is the difference between editing a file and finishing a ticket. [More below](#let-an-agent-take-a-whole-ticket).
+- **You know the feature works before the PR.** The mobile app calls the real endpoint, which
+  reads the real seeded database, on your laptop. No "works in my service" surprises at review.
+- **Any combination of branches.** `--feature ABC-123` runs every repo that has that branch and
+  leaves the rest on `main`. `--service-branch api=fix/login` swaps just one.
+- **One repo or twelve, same command.** A single service still gets its database seeded and its
+  `.env` written. When the project grows, you add a service to the file and everyone has it.
+- **It doesn't stop at setup.** `corgi db -u` for databases only, `corgi tunnel` for a webhook URL,
+  `corgi status -w` when something looks wrong, `corgi doctor` before you blame your machine.
+- **Your agent gets the same workspace**, so it can finish a ticket instead of editing a file.
+  [More below](#let-an-agent-take-a-whole-ticket).
+- **CI runs the same file**, so the combination is tested, not just each repo alone.
+  [More below](#run-the-whole-stack-in-ci).
+- **Your phone can start work on that laptop**, which matters when the job needs the real machine.
+  [More below](#code-from-your-phone).
 
-**Your laptop, from your phone.** The repos, the working credentials, the seeded databases and the simulator live on your machine, not in a cloud sandbox. Scan a QR code once and you can start a session on that machine from your phone. It helps most when the work needs the real machine, like a mobile build or a stack that takes ten minutes to warm up. [More below](#code-from-your-phone).
+If you already use `docker-compose`, keep it. corgi runs the repos, seed data, env files and tool
+checks around your containers.
 
 ## Quick start
 
