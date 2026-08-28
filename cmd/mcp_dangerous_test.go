@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils/tunnel"
 )
@@ -90,7 +91,7 @@ func TestProbeTunnelExposureLeavesTheGateClosedOnAPublicEndpoint(t *testing.T) {
 	mcpTunnelPrivate.Store(false)
 	t.Cleanup(func() { mcpTunnelPrivate.Store(false) })
 
-	probeTunnelExposure(context.Background(), srv.URL)
+	probeTunnelExposure(context.Background(), srv.URL, noWait)
 
 	if mcpTunnelPrivate.Load() {
 		t.Fatal("probing a public endpoint must not mark the tunnel private")
@@ -124,7 +125,7 @@ func TestExposureProbeUsesTheURLItIsGiven(t *testing.T) {
 		mcpTunnelPrivate.Store(false)
 	})
 
-	probeTunnelExposure(context.Background(), mcpProbeTarget("https://corgi.example"))
+	probeTunnelExposure(context.Background(), mcpProbeTarget("https://corgi.example"), noWait)
 
 	if probed != "https://corgi.example/mcp" {
 		t.Errorf("probed %q, want the gated route", probed)
@@ -172,3 +173,7 @@ func TestCorgisOwn401DoesNotMarkTheEndpointPrivate(t *testing.T) {
 		t.Errorf("corgi's own 401 must never count as an identity proxy (detail: %s)", got.Detail)
 	}
 }
+
+// noWait skips the DNS-propagation delay: these tests point at a live server
+// whose name already resolves.
+func noWait(context.Context, time.Duration) bool { return true }
