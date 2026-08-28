@@ -173,6 +173,25 @@ doctor. Two things worth telling a user unprompted:
   transcripts (`corgi agent status` prints the same). Cache reads are included,
   so the numbers are large by design — do not report them as an anomaly.
 
+### Choosing how the phone reaches the machine
+
+Ask where the phone will be, then pick the row — do not default to a tunnel:
+
+| where the phone is | what to run | URL they save |
+|---|---|---|
+| same Wi-Fi as the machine | `corgi agent up --http 0.0.0.0:8765` | `http://<lan-ip>:8765/app` |
+| anywhere, domain on Cloudflare | `corgi agent tunnel setup corgi.<their-domain>` | `https://corgi.<their-domain>/app` |
+| anywhere, no domain | `corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok` | that host + `/app` |
+| one-off, re-pairing is fine | `corgi agent up` | changes on every restart |
+
+The Wi-Fi row has no tunnel, no DNS and no provider, so it is the one to
+suggest first when the phone is in the same building. The launcher is
+token-protected either way — serving it on the local network is not serving it
+to the internet. The middle two rows hold a fixed origin, which is what keeps
+the phone paired across restarts. ngrok's free plan cannot choose a name;
+every account already has one static `*.ngrok-free.dev` dev domain, and that is
+the one to use.
+
 ### If the phone cannot open the launcher
 
 Check these before suspecting corgi — all three have been real:
@@ -185,6 +204,21 @@ Check these before suspecting corgi — all three have been real:
 
 `corgi agent status` and `doctor` report the sleep risk directly; relay it
 rather than re-deriving.
+
+When it is unclear whether corgi or the tunnel is at fault, run both of these on
+the machine before changing anything:
+
+```bash
+curl -so /dev/null -w '%{http_code} %{time_total}s\n' http://127.0.0.1:8765/app
+curl -so /dev/null -w '%{http_code} %{time_total}s\n' https://<public-host>/app
+```
+
+Loopback slow or failing is corgi — `corgi agent status`, then restart. Loopback
+fast and public failing is the tunnel — switch provider or move to the Wi-Fi
+path. Both fast means the machine is healthy and the phone's network is the
+problem; say so instead of restarting things. That second request shares this
+machine's DNS and route, so a `200` does not prove a phone on cellular can
+resolve the name — confirm from an off-network vantage before concluding it.
 
 ### If a session died
 
@@ -255,8 +289,9 @@ daemon AND the detached MCP + tunnel (`agent stop` stops only the daemon).
 corgi upgrade so the daemon and launcher run the new binary. `up` remembers
 the tunnel flags it last ran with, so a bare `restart` keeps the named tunnel;
 `--tunnel-hostname ""` is the way back to a quick tunnel. ngrok works too:
-`--provider ngrok --tunnel-hostname <yours>.ngrok-free.app` (free static
-domain, no DNS) — its free tier shows an interstitial once on first open.
+`--provider ngrok --tunnel-hostname <yours>.ngrok-free.dev` (the static dev
+domain every free account already has, no DNS; its name cannot be chosen on the
+free tier) — ngrok shows an interstitial once on first open.
 
 The user scans the QR (or opens the printed URL) on their phone, names the
 device, and gets a per-device token. After pairing, the same page offers **Open
