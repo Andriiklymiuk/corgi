@@ -162,14 +162,21 @@ func launchStopHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, result)
 }
 
-// claudeSession is one entry from `claude agents --json`.
+// claudeSession is one running Claude Code process for a workspace: the
+// per-pid records under <configDir>/sessions, with `claude agents --json` as
+// the fallback. BridgeSessionID is the claude.ai id the process registered —
+// the one the site resolves — so a terminal or VS Code session gets a real
+// link, unlike its local SessionID, which the web does not know.
 type claudeSession struct {
-	Name      string `json:"name"`
-	SessionID string `json:"sessionId"`
-	CWD       string `json:"cwd"`
-	Kind      string `json:"kind"`
-	StartedAt int64  `json:"startedAt"`
-	PID       int    `json:"pid"`
+	Name            string `json:"name"`
+	SessionID       string `json:"sessionId"`
+	CWD             string `json:"cwd"`
+	Kind            string `json:"kind"`
+	Entrypoint      string `json:"entrypoint,omitempty"`
+	StartedAt       int64  `json:"startedAt"`
+	PID             int    `json:"pid"`
+	BridgeSessionID string `json:"bridgeSessionId,omitempty"`
+	URL             string `json:"url,omitempty"`
 }
 
 // launchSessionsHandler lists the Claude sessions for one workspace. corgi holds
@@ -308,6 +315,57 @@ func pidExists(pid int) bool {
 // missing claude binary, a timeout, or no sessions all resolve to an empty list,
 // so the launcher shows "no sessions" rather than a 500.
 func listClaudeSessions(absPath, configDir string) []claudeSession {
+	if sessions, ok := localClaudeSessions(absPath, configDir); ok {
+		return sessions
+	}
+	return claudeAgentsSessions(absPath, configDir)
+}
+
+// localClaudeSessions reads the per-process records Claude Code keeps under
+// <configDir>/sessions/<pid>.json. ok is false when the directory is absent
+// (an older CLI), so the caller can fall back to shelling out.
+func localClaudeSessions(absPath, configDir string) ([]claudeSession, bool) {
+	base := expandTilde(configDir)
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, false
+		}
+		base = filepath.Join(home, ".claude")
+	}
+	entries, err := os.ReadDir(filepath.Join(base, "sessions"))
+	if err != nil {
+		return nil, false
+	}
+	out := []claudeSession{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(base, "sessions", e.Name()))
+		if err != nil {
+			continue
+		}
+		var cs claudeSession
+		if json.Unmarshal(data, &cs) != nil || cs.CWD == "" {
+			continue
+		}
+		if cs.CWD != absPath && !strings.HasPrefix(cs.CWD, absPath+string(filepath.Separator)) {
+			continue
+		}
+		if !pidExists(cs.PID) {
+			continue
+		}
+		if strings.HasPrefix(cs.BridgeSessionID, "session_") {
+			cs.URL = "https://claude.ai/code/" + cs.BridgeSessionID
+		}
+		out = append(out, cs)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt > out[j].StartedAt })
+	return out, true
+}
+
+func claudeAgentsSessions(absPath, configDir string) []claudeSession {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	// Fixed argv (no shell); absPath is the trusted registry path.
@@ -383,18 +441,24 @@ const launcherPageHTML = `<!doctype html>
   h1{font-size:1.25rem;margin:0;letter-spacing:.01em}
   header small{display:block;color:var(--dim);font-size:.78rem;font-weight:400;margin-top:.1rem}
   main{padding:.4rem 1.2rem 2.2rem;max-width:34rem;margin:0 auto}
-  .ws{background:var(--card);border:1px solid var(--line);border-radius:1rem;padding:1rem 1.05rem;margin:.7rem 0;
-      display:flex;align-items:center;justify-content:space-between;gap:.7rem;flex-wrap:wrap;
+  .ws{background:var(--card);border:1px solid var(--line);border-radius:.9rem;padding:.8rem .9rem;margin:.55rem 0;
       box-shadow:0 1px 3px rgba(0,0,0,.3)}
-  .ws .name{font-weight:650;display:flex;align-items:center;gap:.5rem;font-size:.98rem}
-  .ws .path{color:var(--dim2);font-size:.7rem;word-break:break-all;margin-top:.2rem;
-      font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.35rem;line-height:1.45}
+  .head{display:flex;align-items:center;gap:.7rem}
+  .main{min-width:0;flex:1}
+  .ws .name{font-weight:650;display:flex;align-items:center;gap:.5rem;font-size:.98rem;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis}
+  .ws .path{color:var(--dim2);font-size:.7rem;margin-top:.15rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .ws .path.full{white-space:normal;word-break:break-all}
+  .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.5rem;line-height:1.45}
   .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
   .dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(126,231,135,.14),0 0 8px rgba(126,231,135,.45)}
-  .sbtn{background:none;border:0;color:var(--dim);font-size:.72rem;font-weight:650;cursor:pointer;
-      padding:.25rem 0 0;margin-top:.3rem}
-  .sessions{flex-basis:100%;margin-top:.6rem;border-top:1px solid var(--line);padding-top:.55rem}
+  .actions{display:flex;align-items:center;gap:.4rem;margin-top:.65rem}
+  .chip{background:none;border:1px solid var(--line);color:var(--dim);font-size:.7rem;font-weight:650;
+      padding:.3rem .65rem;border-radius:999px;cursor:pointer}
+  .chip b{color:var(--text);font-weight:650}
+  .chip.danger{border-color:rgba(255,123,114,.45);color:var(--red);margin-left:auto}
+  .sessions{margin-top:.65rem;border-top:1px solid var(--line);padding-top:.5rem}
   .sessions .s{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.76rem;
       color:#c9cfda;padding:.34rem .1rem;text-decoration:none}
   a.s span:first-child{color:var(--green)}
@@ -402,21 +466,12 @@ const launcherPageHTML = `<!doctype html>
   .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
   .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
       border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px}
-  button{border:0;border-radius:.65rem;padding:.55rem 1rem;font-size:.85rem;font-weight:650;cursor:pointer;
-      background:#232a39;color:var(--text);transition:transform .05s}
+  button{border:0;border-radius:.6rem;padding:.5rem .95rem;font-size:.84rem;font-weight:650;cursor:pointer;
+      background:#232a39;color:var(--text);transition:transform .05s;flex:0 0 auto}
   button:active{transform:scale(.97)}
   button:disabled{opacity:.5}
   a.open,button.open{display:inline-block;background:var(--green);color:#08110a;text-decoration:none;border:0;
-      padding:.55rem 1rem;border-radius:.65rem;font-weight:700;font-size:.85rem;cursor:pointer}
-  .right{display:flex;flex-direction:column;align-items:flex-end;gap:.45rem}
-  button.stopb{background:none;border:1px solid rgba(255,123,114,.45);color:var(--red);
-      padding:.3rem .7rem;font-size:.72rem;border-radius:.5rem}
-  .modes{display:flex;font-size:.68rem;color:var(--dim);align-items:center;background:var(--card2);
-      border:1px solid var(--line);border-radius:.55rem;padding:.14rem}
-  .modes span{padding:0 .3rem 0 .45rem;font-size:.64rem}
-  .modes .m{background:none;border:1px solid transparent;color:var(--dim);border-radius:.42rem;
-      padding:.2rem .5rem;font-size:.68rem;font-weight:650}
-  .modes .m.sel{background:#2b3345;color:var(--text)}
+      padding:.5rem .95rem;border-radius:.6rem;font-weight:700;font-size:.84rem;cursor:pointer;flex:0 0 auto}
   .msg{color:var(--dim);font-size:.9rem;margin:1rem 0;line-height:1.5}
   .err{color:var(--red)}
   code{background:var(--card);border:1px solid var(--line);padding:.1rem .35rem;border-radius:.35rem;font-size:.85em}
@@ -446,7 +501,7 @@ const launcherPageHTML = `<!doctype html>
     <pre id="cfg"></pre>
     <button id="copycfg">Copy connector config</button>
     <p id="copymsg" class="msg"></p>
-    <p>Each workspace above has an <b>open in</b> switch — <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here in this browser; <b>chrome</b> forces Chrome via its URL scheme (needs Chrome installed) — right for a workspace on a different Claude account than the app is signed into. Remembered per workspace, on this browser only.</p>
+    <p>Each workspace has an <b>open in</b> pill — tap it to cycle: <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here; <b>chrome</b> forces Chrome via its URL scheme (needs Chrome installed) — right for a workspace on a different Claude account than the app is signed into. Remembered per workspace, on this browser only.</p>
     <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
     <p>A <b>bridge</b> is a remote-control session someone started on the laptop itself. Its claude.ai page shows only what you send from it — until then it looks empty. The full transcript stays on the laptop.</p>
     <p><b>Push notifications.</b> Set <code>notifyUrl</code> in the agent config on the laptop (for example an ntfy.sh topic you subscribe to in the ntfy app) and every session restart or failure reaches your phone. See <code>corgi agent doctor</code> and the agent docs.</p>
@@ -525,34 +580,53 @@ const launcherPageHTML = `<!doctype html>
     for (const ws of workspaces) {
       const row = document.createElement('div');
       row.className = 'ws';
-      const left = document.createElement('div');
-      // A note is shown only when the workspace is NOT running (a live session's
-      // stale lastReason is not a problem to flag).
-      const note = (!ws.running && ws.note) ? '<div class="wnote">' + esc(ws.note) + '</div>' : '';
-      left.innerHTML = '<div class="name"><span class="dot' + (ws.running ? ' on' : '') + '"></span> ' +
-        esc(ws.id) + '</div><div class="path">' + esc(ws.path) + '</div>' + note;
-      const sbtn = document.createElement('button');
-      sbtn.className = 'sbtn'; sbtn.textContent = 'sessions ⌄';
-      const sessionsBox = document.createElement('div');
-      sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
-      sbtn.onclick = () => toggleSessions(ws, sbtn, sessionsBox);
-      left.appendChild(sbtn);
-      const right = document.createElement('div');
-      right.className = 'right';
+      const head = document.createElement('div');
+      head.className = 'head';
+      const main = document.createElement('div');
+      main.className = 'main';
+      main.innerHTML = '<div class="name"><span class="dot' + (ws.running ? ' on' : '') + '"></span>' + esc(ws.id) + '</div>';
+      const path = document.createElement('div');
+      path.className = 'path'; path.title = ws.path; path.textContent = shortPath(ws.path);
+      path.onclick = () => {
+        const full = path.classList.toggle('full');
+        path.textContent = full ? ws.path : shortPath(ws.path);
+      };
+      main.appendChild(path);
+      head.appendChild(main);
       if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
-        right.appendChild(openControl(ws));
-        right.appendChild(modeSwitch(ws.id));
+        head.appendChild(openControl(ws));
       } else {
         const b = document.createElement('button');
         b.textContent = ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
         b.disabled = ws.running;
         b.onclick = () => startSession(ws.id, b);
-        right.appendChild(b);
+        head.appendChild(b);
       }
-      if (ws.running) right.appendChild(stopControl(ws.id));
-      row.appendChild(left); row.appendChild(right); row.appendChild(sessionsBox);
+      row.appendChild(head);
+      if (!ws.running && ws.note) {
+        const note = document.createElement('div');
+        note.className = 'wnote'; note.textContent = ws.note;
+        row.appendChild(note);
+      }
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const sessionsBox = document.createElement('div');
+      sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
+      const sbtn = document.createElement('button');
+      sbtn.className = 'chip'; sbtn.textContent = 'sessions ⌄';
+      sbtn.onclick = () => toggleSessions(ws, sbtn, sessionsBox);
+      actions.appendChild(sbtn);
+      actions.appendChild(modeSwitch(ws.id));
+      if (ws.running) actions.appendChild(stopControl(ws.id));
+      row.appendChild(actions);
+      row.appendChild(sessionsBox);
       list.appendChild(row);
     }
+  }
+
+  function shortPath(p) {
+    const parts = String(p || '').split('/').filter(Boolean);
+    return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
   }
 
   async function toggleSessions(ws, btn, box) {
@@ -562,7 +636,7 @@ const launcherPageHTML = `<!doctype html>
     // Openable links come ONLY from the per-session URLs remote control printed
     // (captured by the daemon). Ids from the claude CLI are local UUIDs the
     // site does not resolve; those rows render below as plain status, no link.
-    const renderLink = (url, isBridge, when) => {
+    const renderLink = (url, isBridge, when, label) => {
       const el = document.createElement('a');
       el.className = 's';
       el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
@@ -570,8 +644,8 @@ const launcherPageHTML = `<!doctype html>
       if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
       const tag = isBridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
-      el.innerHTML = '<span>' + esc(url.split('/').pop().slice(0, 18)) + '\u2026' + tag + '</span><span class="when">' +
-        esc(when || '') + 'open \u2197</span>';
+      const text = label ? esc(label) : esc(url.split('/').pop().slice(0, 18)) + '\u2026';
+      el.innerHTML = '<span>' + text + tag + '</span><span class="when">' + esc(when || '') + 'open \u2197</span>';
       box.appendChild(el);
     };
     const note = (text) => {
@@ -603,14 +677,31 @@ const launcherPageHTML = `<!doctype html>
       const s = j.sessions || [];
       if (!s.length && !shown.size && !bridges.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
       info.remove();
+      let localOnly = 0;
       for (const sess of s) {
+        const where = whereLabel(sess);
+        if (sess.url && safeClaudeUrl(sess.url) && !shown.has(sess.url)) {
+          shown.add(sess.url);
+          renderLink(sess.url, false, where + ' \u00b7 ' + fmtWhen(sess.startedAt) + ' \u00b7 ', sess.name);
+          continue;
+        }
+        if (sess.url && shown.has(sess.url)) continue;
+        localOnly++;
         const el = document.createElement('div');
         el.className = 's';
         el.innerHTML = '<span>' + esc(sess.name || 'session') + '</span>' +
-          '<span class="when">' + esc(sess.kind || '') + ' \u00b7 ' + esc(fmtWhen(sess.startedAt)) + '</span>';
+          '<span class="when">' + esc(where) + ' \u00b7 ' + esc(fmtWhen(sess.startedAt)) + ' \u00b7 local only</span>';
         box.appendChild(el);
       }
+      if (localOnly) note('local only = running on the laptop with no web link yet; type /remote-control in that session to reach it from here.');
     } catch (e) { info.textContent = '\u2717 ' + e.message; }
+  }
+
+  function whereLabel(sess) {
+    const ep = String(sess.entrypoint || '');
+    if (ep.indexOf('vscode') >= 0) return 'vscode';
+    if (ep === 'sdk-cli') return 'remote';
+    return sess.kind === 'interactive' ? 'terminal' : (sess.kind || 'session');
   }
 
   function fmtWhen(ms) {
@@ -636,7 +727,7 @@ const launcherPageHTML = `<!doctype html>
     const mode = openMode(ws.id);
     if (mode === 'browser' || mode === 'chrome') {
       const b = document.createElement('button');
-      b.className = 'open'; b.textContent = 'Open session';
+      b.className = 'open'; b.textContent = 'Open';
       b.onclick = () => {
         if (mode === 'chrome') { location.href = chromeUrl(ws.sessionUrl); }
         else { window.open(ws.sessionUrl, '_blank', 'noopener'); }
@@ -644,31 +735,25 @@ const launcherPageHTML = `<!doctype html>
       return b;
     }
     const a = document.createElement('a');
-    a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open session';
+    a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open';
     a.target = '_blank'; a.rel = 'noopener noreferrer';
     return a;
   }
 
   function modeSwitch(id) {
+    const order = ['app', 'browser', 'chrome'];
     const cur = openMode(id);
-    const wrap = document.createElement('div');
-    wrap.className = 'modes';
-    const lbl = document.createElement('span');
-    lbl.textContent = 'open in';
-    wrap.appendChild(lbl);
-    for (const m of ['app', 'browser', 'chrome']) {
-      const b = document.createElement('button');
-      b.className = 'm' + (cur === m ? ' sel' : '');
-      b.textContent = m;
-      b.onclick = () => { setOpenMode(id, m); render(lastWorkspaces); };
-      wrap.appendChild(b);
-    }
-    return wrap;
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.title = 'Where session links open — tap to change';
+    b.innerHTML = 'open in <b>' + esc(cur) + '</b> ▾';
+    b.onclick = () => { setOpenMode(id, order[(order.indexOf(cur) + 1) % order.length]); render(lastWorkspaces); };
+    return b;
   }
 
   function stopControl(id) {
     const b = document.createElement('button');
-    b.className = 'stopb'; b.textContent = 'Stop';
+    b.className = 'chip danger'; b.textContent = 'Stop';
     b.onclick = async () => {
       b.disabled = true; b.textContent = 'Stopping…';
       try {

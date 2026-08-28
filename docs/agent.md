@@ -168,6 +168,12 @@ The launcher's per-workspace session list is fed from the same timeline, so
 past sessions survive daemon restarts, and the `corgi_session_events` MCP tool
 exposes it to a connected Claude.
 
+The same list shows every Claude Code process running in the workspace —
+terminal, VS Code, supervised — read from the per-process records under
+`<configDir>/sessions/`. A process that registered a web id links straight to
+its conversation on claude.ai; one that has not is marked *local only*, and
+typing `/remote-control` inside it is what gives it a link.
+
 ### The handover brief
 
 corgi cannot restore the conversation. What it can keep is the half that
