@@ -3,7 +3,7 @@
 
   # 🐶 CORGI 🐶
 
-  **Give your AI agents a whole workspace to build on.** corgi runs your stack from one file — cloning repos, seeding databases, wiring env between services — for you, your agents, and your CI.
+  **Your whole project lives in one file — and everything works from it.** Repos, databases, services, env wiring. `corgi run` boots the lot; the same file is what your AI agents build on, what CI boots, and what your phone connects to when you're not at the desk.
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
@@ -12,86 +12,31 @@
 
 </div>
 
-Describe your stack once in a `corgi-compose.yml`. Then `corgi run` brings it all up:
+Four repos, a Postgres, a Redis, a pile of `.env` files and a tracker full of tickets — that's not four problems, it's one workspace. corgi is the file that describes it and the CLI that runs it:
 
 ```text
-corgi-compose.yml  ─►  corgi run
-                         ├─ clone missing repos
-                         ├─ start + seed databases (in Docker)
-                         ├─ write + wire .env between services
-                         └─ run services as host processes
-                                    ↓
-                         whole stack running 🐶   (Ctrl-C tears it all down)
+                          ┌─ you       corgi run            whole stack up, one command
+                          │
+  corgi-compose.yml ──►   ├─ an agent  /corgi:stories        ticket ─► code ─► draft PR per repo
+   (committed, shared)    │
+                          ├─ your CI   corgi test --e2e      every repo's branch, one suite
+                          │
+                          └─ your phone  scan a QR           Claude Code session on this laptop
 ```
 
 Prefer watching? Here's the [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
 **Install:** `brew install andriiklymiuk/homebrew-tools/corgi` — or [other ways](docs/install.md).
 
-> 🪄 **New — code from your couch.** Scan a QR once, and every repo on your machine is a tap away from a Claude Code session on your phone. [See how ↓](#start-a-coding-session-from-your-phone-)
-
 ## Why corgi
 
-Standing up a multi-repo project by hand is the same slog every time: clone four repos, install Postgres and Redis, seed the databases, copy `.env` files and point every service at the others, pick ports that don't clash, then start it all in the right order across a row of terminal tabs. A day gone — and it breaks again on the next laptop.
+**Day one takes a day.** Clone four repos, install Postgres and Redis, seed them, copy `.env` files and point every service at the others, pick ports that don't clash, start it all in the right order across a row of terminal tabs — then do it again on the next laptop. corgi puts all of it in **one committed file**, so day one is `corgi run`, and so is every day after.
 
-corgi puts all of that in **one committed file** — `corgi run` starts the project on day one and every day after. `docker-compose` runs your containers; corgi runs everything around them: the repos, the seeded data, the env wiring, the tools. And because that file never blocks on a prompt, your agents and CI drive it the same way you do.
+**And then it stays useful.** Not an onboarding script you run once: it's how you work. `corgi db -u` for just the databases, `corgi run --service-branch api=feature/login` to try a teammate's branch, `corgi tunnel` when a webhook needs a public URL, `corgi status -w` when something feels off. `docker-compose` runs your containers; corgi runs everything around them — the repos, the seeded data, the env wiring, the tools — and the two coexist.
 
-## Hand the whole workspace to an agent
+**Your agents get the same workspace you have.** An agent with one folder can only guess at the other services. An agent with a corgi workspace has every repo, databases with real data, the env wiring, and `corgi` itself to boot the stack and check its own work. So the unit of work stops being "a file" and becomes "a ticket, across three repos" — [see below](#ship-a-whole-ticket-not-a-file).
 
-An agent gets the whole workspace — every repo, the databases with real data, the env wiring between services — plus `corgi` itself to drive it. So it can read your tracker, build a feature that touches three services, boot the stack to check its own work, and leave you a draft PR per repo.
-
-[Install corgi](#install), then add the [Claude Code](https://claude.com/claude-code) plugin (other agents: `npx skills add Andriiklymiuk/corgi`):
-
-```
-/plugin marketplace add Andriiklymiuk/corgi
-/plugin install corgi@corgi
-```
-
-Slash-commands and plain English both work:
-
-```
-/corgi-run                      "run the todo stack, then show me the logs"
-/corgi-tracker                  "how's the team doing — anything stuck?"
-/corgi-queue                    "I just joined — what should I pick up first?"
-/corgi:stories ABC-123          "build a referral program across the services"
-/corgi:review <pr-url>          "fix the comments on this MR and answer them"
-```
-
-It never ships on its own — it only ever opens **draft** PRs, behind your go-ahead. New repo? `corgi run -l` grabs an example to try these against.
-
-### Start a coding session from your phone 🪄
-
-Your laptop already has what a cloud sandbox doesn't: the repos cloned, the credentials working, the databases seeded. corgi turns your phone into a remote for it — open the launcher, tap a repo, and a **Claude Code [Remote Control](https://code.claude.com/docs/en/remote-control) session starts on your machine**, under the right account. You watch it work and answer its permission prompts from the phone; the branch is there when you're back at the desk.
-
-Setup, in a corgi stack **or any git repo**:
-
-```text
-$ corgi agent up
-                                        ▄▄▄▄▄▄▄ ▄  ▄▄ ▄▄▄▄▄▄▄
-  ✓ workspace registered                █ ▄▄▄ █ ▀█▄▀ █ ▄▄▄ █
-  ✓ agent daemon running                █ ███ █ ▄ █▀ █ ███ █
-  ✓ tunnel  https://…trycloudflare.com  █▄▄▄▄▄█ █ ▀▄ █▄▄▄▄▄█
-  ✓ pairing open · scan to pair  ──►    ▄▄▄▄  ▄ ▀▄█ ▄▄▄ ▄▄▄▄
-```
-
-```text
-📱 scan QR ──► launcher (one URL, all workspaces)
-                 ├─ dev-stack   [open in: app]     ──► Claude app
-                 └─ client-app  [open in: chrome]  ──► Chrome (its own account)
-```
-
-Scan once and your phone is paired — its own token, revocable without touching your other devices. Each workspace remembers where it opens: your own projects deep-link into the Claude app; a work repo on a different Claude account opens in Chrome, signed into that account. Save the launcher to your home screen and it's one tap from then on.
-
-And it stays up. corgi restarts the session through network drops and crashes (Remote Control alone gives up after ~10 minutes offline), `corgi agent install` brings it back after reboots, `--tunnel-name` pins the URL, and `corgi agent down` shuts it all off. Nothing runs unless you opt in. macOS & Linux. With the plugin, `/corgi-remote` walks you through it. Full guide: [docs/agent.md](docs/agent.md).
-
-**Why agents like it:** it never blocks on a prompt, speaks clean JSON (`--json`), returns clear exit codes (`0` ok, `1` failed, `2` bad usage), and ships an **MCP server** so an agent drives the stack through real tools, not guessed shell commands:
-
-```bash
-corgi mcp                        # stdio, local, no network — point any MCP client at it
-corgi mcp --http :8765 --tunnel  # remote: a bearer-token-protected public URL
-```
-
-More: [agents & scripting](docs/agents.md) · [MCP server](docs/mcp.md) · [planning from your tracker](docs/tracker.md).
+**And it's your machine, from anywhere.** Your laptop has what a cloud sandbox doesn't: the repos, the working credentials, the seeded databases, the simulator. Scan a QR once and your phone can start a session on it — handy when the work needs a real machine (mobile builds, a heavy local stack) and you're on the couch. [See below](#code-from-your-phone-).
 
 ## Quick start
 
@@ -104,6 +49,16 @@ corgi run -l        # browse runnable examples, pick one to try
 corgi doctor        # check required tools, ports, docker
 corgi run           # start every database + service, together
 corgi status -w     # watch each service turn healthy
+```
+
+```text
+corgi-compose.yml  ─►  corgi run
+                         ├─ clone missing repos
+                         ├─ start + seed databases (in Docker)
+                         ├─ write + wire .env between services
+                         └─ run services as host processes
+                                    ↓
+                         whole stack running 🐶   (Ctrl-C tears it all down)
 ```
 
 > **Agents & CI:** use `corgi run --detach` then `corgi status --ready --timeout 2m` instead of the foreground commands above — they return instead of blocking. See [agents & scripting](docs/agents.md).
@@ -142,13 +97,84 @@ services:
 
 `corgi run` clones what's missing, seeds Postgres, writes the `.env` files, then runs `api` and `web` together. `Ctrl-C` shuts it all down. Want every field? Run `corgi docs`, or browse the [examples repo](https://github.com/Andriiklymiuk/corgi_examples).
 
+
+## Ship a whole ticket, not a file
+
+A corgi workspace is the thing an agent needs and rarely gets: every repo, databases with real data, env wiring between services, and a CLI to boot it. Give it that, and it can take a ticket end to end — read the tracker, change three services, run the stack to check itself, and leave you a draft PR in each repo.
+
+```text
+tracker ticket ABC-123
+   │
+   ▼
+agent reads the whole workspace
+   ├─ edits  api/  ·  web/  ·  mobile/
+   ├─ corgi run --detach      boots the real stack (seeded DBs, wired env)
+   ├─ corgi status --ready    waits until healthy, then tries the feature
+   └─ draft PR per repo  ──►  you review, you merge
+```
+
+[Install corgi](#install), then add the [Claude Code](https://claude.com/claude-code) plugin (other agents: `npx skills add Andriiklymiuk/corgi`):
+
+```
+/plugin marketplace add Andriiklymiuk/corgi
+/plugin install corgi@corgi
+```
+
+Slash-commands and plain English both work:
+
+```
+/corgi:stories ABC-123          "build a referral program across the services"
+/corgi:review <pr-url>          "fix the comments on this MR and answer them"
+/corgi-run                      "run the todo stack, then show me the logs"
+/corgi-tracker                  "how's the team doing — anything stuck?"
+/corgi-queue                    "I just joined — what should I pick up first?"
+/corgi-debug                    "the api is 500ing, find out why"
+```
+
+It never ships on its own — it only ever opens **draft** PRs, behind your go-ahead. New repo? `corgi run -l` grabs an example to try these against.
+
+**Why agents get on with it:** corgi never blocks on a prompt, speaks clean JSON (`--json`), returns clear exit codes (`0` ok, `1` failed, `2` bad usage), and ships an **MCP server** so an agent drives the stack through real tools instead of guessed shell commands:
+
+```bash
+corgi mcp                        # stdio, local, no network — point any MCP client at it
+corgi mcp --http :8765 --tunnel  # remote: a bearer-token-protected public URL
+```
+
+More: [agents & scripting](docs/agents.md) · [MCP server](docs/mcp.md) · [planning from your tracker](docs/tracker.md).
+
+## Code from your phone 🪄
+
+Some work needs a real machine — a mobile build against the local API, a stack that takes ten minutes to warm up, credentials that only live on your laptop. corgi turns your phone into a remote for that machine: open the launcher, tap a repo, and a **Claude Code [Remote Control](https://code.claude.com/docs/en/remote-control) session starts on your laptop**, under the right account. You watch it work and answer its permission prompts from the phone; the branch is waiting when you're back at the desk.
+
+Setup, in a corgi stack **or any git repo**:
+
+```text
+$ corgi agent up
+                                        ▄▄▄▄▄▄▄ ▄  ▄▄ ▄▄▄▄▄▄▄
+  ✓ workspace registered                █ ▄▄▄ █ ▀█▄▀ █ ▄▄▄ █
+  ✓ agent daemon running                █ ███ █ ▄ █▀ █ ███ █
+  ✓ tunnel  https://…trycloudflare.com  █▄▄▄▄▄█ █ ▀▄ █▄▄▄▄▄█
+  ✓ pairing open · scan to pair  ──►    ▄▄▄▄  ▄ ▀▄█ ▄▄▄ ▄▄▄▄
+```
+
+```text
+📱 scan QR ──► launcher (one URL, all workspaces)
+                 ├─ dev-stack   [open in: app]     ──► Claude app
+                 └─ client-app  [open in: chrome]  ──► Chrome (its own account)
+```
+
+Scan once and your phone is paired — its own token, revocable without touching your other devices. Each workspace remembers where it opens: your own projects deep-link into the Claude app; a work repo on a different Claude account opens in Chrome, signed into that account. Save the launcher to your home screen and it's one tap from then on.
+
+And it stays up. corgi restarts the session through network drops and crashes (Remote Control alone gives up after ~10 minutes offline), `corgi agent install` brings it back after reboots, `--tunnel-name` pins the URL, and `corgi agent down` shuts it all off. Nothing runs unless you opt in. macOS & Linux. With the plugin, `/corgi-remote` walks you through it. Full guide: [docs/agent.md](docs/agent.md).
+
 ## What corgi does for you
 
 - **Repos** — clones each service on first run; can pull, fork, or run one on a branch in a throwaway worktree. [More](#working-across-many-repos).
 - **Databases** — 38 managed drivers, run in Docker and **seeded** with real data. `corgi db shell` opens a native shell, password filled in. Just the databases? `corgi db -u`. [All drivers](docs/databases.md).
 - **Services** — start together with env vars already wired between them. `Ctrl-C` stops all; `corgi run -d` runs in the background.
 - **The fiddly bits** — catches missing tools and busy ports before they bite (`corgi doctor`), live health (`corgi status -w`), public HTTPS for webhooks ([`corgi tunnel`](docs/tunnel.md)), saved logs, crash pings.
-- **Your phone** — any repo on your machine, one tap from a Claude Code session. [More](#start-a-coding-session-from-your-phone-).
+- **Agents** — the plugin + MCP server let an agent take a ticket across every repo and open a draft PR in each. [More](#ship-a-whole-ticket-not-a-file).
+- **Your phone** — any repo on your machine, one tap from a Claude Code session. [More](#code-from-your-phone-).
 - **CI** — the same file boots a CI runner and runs cross-repo e2e. [More](#run-the-whole-stack-in-ci).
 
 Real project — private repos, prerequisites, secrets, staging tiers? See [Getting it running on a real project](docs/getting-started.md).
