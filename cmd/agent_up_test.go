@@ -382,3 +382,35 @@ func TestLANLauncherURL(t *testing.T) {
 		t.Errorf("with no pairing code there is no pair link to print: %q", noCode)
 	}
 }
+
+func TestLANAddressSkipsVirtualInterfaces(t *testing.T) {
+	// A docker bridge and a VPN tunnel both carry private addresses, and both
+	// are the wrong answer for a phone on the real network.
+	docker := net.Interface{Name: "docker0", Flags: net.FlagUp}
+	vpn := net.Interface{Name: "utun4", Flags: net.FlagUp | net.FlagPointToPoint}
+	loop := net.Interface{Name: "lo0", Flags: net.FlagUp | net.FlagLoopback}
+	down := net.Interface{Name: "en1", Flags: 0}
+	if got := lanAddressOf([]net.Interface{docker, vpn, loop, down}); got != "" {
+		t.Errorf("no usable interface must yield nothing, got %q", got)
+	}
+	if got := lanAddressOf(nil); got != "" {
+		t.Errorf("no interfaces at all must yield nothing, got %q", got)
+	}
+}
+
+func TestOutboundIPIsPrivateAndRoutable(t *testing.T) {
+	ip := outboundIP()
+	if ip == "" {
+		t.Skip("no LAN interface on this machine")
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil || parsed.To4() == nil {
+		t.Fatalf("not an IPv4 address: %q", ip)
+	}
+	if !parsed.IsPrivate() {
+		t.Errorf("a LAN link must use a private address, got %q", ip)
+	}
+	if parsed.IsLoopback() {
+		t.Errorf("loopback is not reachable from a phone, got %q", ip)
+	}
+}

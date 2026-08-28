@@ -1,11 +1,13 @@
 package supervisor
 
 import (
+	"context"
 	"os/exec"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // macOS honours `caffeinate -s` on AC power only, so a laptop on battery
@@ -29,8 +31,11 @@ func CheckSleepRisk() SleepRisk {
 	return sleepRiskFrom(runCommand("pmset", "-g", "batt"), runCommand("pmset", "-g", "custom"))
 }
 
+// Bounded: a hung pmset must not hang `corgi agent status`.
 func runCommand(name string, args ...string) string {
-	out, err := exec.Command(name, args...).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, name, args...).Output()
 	if err != nil {
 		return ""
 	}

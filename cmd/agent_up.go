@@ -627,11 +627,6 @@ func printAgentUp(res agentUpResult) {
 	fmt.Println("  or from any MCP client: corgi_session_start {\"workspace\":\"" + orDefault(res.Workspace, "<name>") + "\"}")
 }
 
-// sharedTunnelHint warns about the failure that looks like corgi being broken
-// but is not: a free tunnel provider's shared domain is on enough blocklists
-// that mobile carriers and filtering resolvers refuse to resolve it, so the
-// page never loads on cellular while the same link works on Wi-Fi. Only for
-// those shared domains — a hostname the user owns is not on any list.
 func lanLauncherURL(addr, code string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil || (host != "0.0.0.0" && host != "::" && host != "") {
@@ -649,18 +644,41 @@ func lanLauncherURL(addr, code string) string {
 	return out + "    launcher: " + base + "/app\n"
 }
 
-// No packet is sent: a UDP socket only records the route.
 func outboundIP() string {
-	conn, err := net.Dial("udp", "1.1.1.1:80")
+	ifaces, err := net.Interfaces()
 	if err != nil {
 		return ""
 	}
-	defer conn.Close()
-	host, _, err := net.SplitHostPort(conn.LocalAddr().String())
-	if err != nil {
-		return ""
+	return lanAddressOf(ifaces)
+}
+
+// A phone reaches this machine over the real network, so a docker bridge or a
+// VPN tunnel is the wrong answer even though both carry a private address.
+func lanAddressOf(ifaces []net.Interface) string {
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 ||
+			iface.Flags&net.FlagLoopback != 0 ||
+			iface.Flags&net.FlagPointToPoint != 0 ||
+			strings.HasPrefix(iface.Name, "docker") ||
+			strings.HasPrefix(iface.Name, "br-") ||
+			strings.HasPrefix(iface.Name, "utun") {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			ipnet, ok := a.(*net.IPNet)
+			if !ok || ipnet.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			if v4 := ipnet.IP.To4(); v4 != nil && v4.IsPrivate() {
+				return v4.String()
+			}
+		}
 	}
-	return host
+	return ""
 }
 
 func sharedTunnelHint(publicURL string) string {

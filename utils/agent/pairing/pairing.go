@@ -35,11 +35,8 @@ import (
 // unauthenticated pairing endpoint; anything else names local paths.
 var ErrBadRequest = errors.New("pairing request rejected")
 
-// CodeTTL is how long a pairing code stays valid. Two minutes was too short in
-// practice: the code has to survive being read off a terminal, sent to a phone
-// and opened there, and a window that closes mid-flow costs a whole restart.
-// Ten still keeps a code left on screen from being a standing invitation, and
-// the attempt cap is what actually bounds guessing.
+// CodeTTL has to survive a code being read off a terminal, sent to a phone and
+// opened there; the single-use rule and MaxAttempts are what bound guessing.
 const CodeTTL = 10 * time.Minute
 
 // MaxAttempts is how many wrong codes are tolerated before pairing closes.
