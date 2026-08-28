@@ -88,6 +88,24 @@ Both flags: the name picks the tunnel, the hostname is the URL corgi prints
 `https://corgi.yourdomain.com/app`, and because the origin never changes the
 phone stays paired across restarts.
 
+`agent up` remembers the settings it last ran with, so from then on a bare
+`corgi agent restart` keeps the named tunnel. Pass the flags again to change
+them; `--tunnel-hostname ""` goes back to a quick tunnel.
+
+No domain on Cloudflare? ngrok's free tier includes one static domain and needs
+no DNS work:
+
+```bash
+brew install ngrok
+ngrok config add-authtoken <token>        # dashboard.ngrok.com → Your Authtoken
+# dashboard.ngrok.com → Domains → claim your free *.ngrok-free.app domain, then:
+corgi agent up --provider ngrok --tunnel-hostname <yours>.ngrok-free.app
+```
+
+The first time the phone opens the page, ngrok's free tier shows its own
+"you are about to visit" interstitial once; tap through. The launcher's own
+requests carry the header that skips it, so pairing and the buttons work.
+
 The launcher now lives at the same hostname forever — save it to the phone's home
 screen once. Provider notes (ngrok's free static `*.ngrok-free.dev` domain,
 localtunnel's best-effort `--subdomain`) and per-service stable tunnels:

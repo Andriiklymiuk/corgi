@@ -190,7 +190,7 @@ const pairPageHTML = `<!doctype html>
     const device = document.getElementById('device').value.trim() || 'my-phone';
     btn.disabled = true; btn.textContent = 'Pairing…';
     try {
-      const r = await fetch('/pair', {method:'POST', headers:{'Content-Type':'application/json'},
+      const r = await fetch('/pair', {method:'POST', headers:{'Content-Type':'application/json', 'ngrok-skip-browser-warning': '1'},
         body: JSON.stringify({code, device})});
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
