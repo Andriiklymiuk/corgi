@@ -80,8 +80,13 @@ cloudflared tunnel create corgi-agent
 cloudflared tunnel route dns corgi-agent corgi.yourdomain.com
 
 # then always:
-corgi agent up --tunnel-name corgi-agent
+corgi agent up --tunnel-name corgi-agent --tunnel-hostname corgi.yourdomain.com
 ```
+
+Both flags: the name picks the tunnel, the hostname is the URL corgi prints
+(cloudflared does not report it). The launcher then lives at
+`https://corgi.yourdomain.com/app`, and because the origin never changes the
+phone stays paired across restarts.
 
 The launcher now lives at the same hostname forever — save it to the phone's home
 screen once. Provider notes (ngrok's free static `*.ngrok-free.dev` domain,

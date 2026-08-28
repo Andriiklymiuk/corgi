@@ -132,6 +132,16 @@ func TestPairEndpointGetWhenClosedSaysSoWithoutDetails(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("status = %d, want 403", rec.Code)
 	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("a browser on a closed link must get a page, not JSON: %q", ct)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "/app") || !strings.Contains(body, "corgi_token") {
+		t.Error("the closed page must route an already-paired browser to the launcher")
+	}
+	if strings.Contains(body, session.Code()) || strings.Contains(body, "expired") && strings.Contains(body, "used by") {
+		t.Error("the closed page must not reveal the code or why the window closed")
+	}
 }
 
 func TestPairEndpointRejectsOtherMethods(t *testing.T) {
