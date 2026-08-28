@@ -55,6 +55,24 @@ var agentHookCmd = &cobra.Command{
 	Run:    runAgentHook,
 }
 
+// samePath compares directories through their symlinks: on macOS a registered
+// /var/... path and the same directory as os.Getwd() reports it (/private/var)
+// are the same place, and a string compare would call them different.
+func samePath(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, err := filepath.EvalSymlinks(a)
+	if err != nil {
+		return false
+	}
+	rb, err := filepath.EvalSymlinks(b)
+	if err != nil {
+		return false
+	}
+	return ra == rb
+}
+
 func claudeLocalSettingsPath(dir string) string {
 	return filepath.Join(dir, ".claude", "settings.local.json")
 }
@@ -68,7 +86,7 @@ func runAgentHooksEnable(_ *cobra.Command, _ []string) {
 	registry.Reconcile(dirIsWorkspace)
 	id := ""
 	for _, w := range registry.Sorted() {
-		if w.AbsPath == cwd {
+		if samePath(w.AbsPath, cwd) {
 			id = w.ID
 			break
 		}

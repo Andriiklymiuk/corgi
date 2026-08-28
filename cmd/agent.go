@@ -18,6 +18,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 	"andriiklymiuk/corgi/utils/art"
 
@@ -420,6 +421,34 @@ func printWorkspaceState(w supervisor.RunState) {
 	}
 	if w.SessionURL != "" {
 		fmt.Printf("  %-20s %s\n", "", w.SessionURL)
+	}
+	if line := workspaceUsageLine(w.WorkspaceID); line != "" {
+		fmt.Printf("  %-20s %s\n", "", line)
+	}
+}
+
+func workspaceUsageLine(id string) string {
+	absPath, configDir, ok := workspaceSessionTarget(id)
+	if !ok || absPath == "" {
+		return ""
+	}
+	rep := usage.ForDir(absPath, expandTilde(configDir), mungeClaudeProjectDir(absPath), time.Now())
+	if rep.Week.Total() == 0 {
+		return ""
+	}
+	return fmt.Sprintf("tokens %s today · %s this week", formatTokens(rep.Today.Total()), formatTokens(rep.Week.Total()))
+}
+
+func formatTokens(n int64) string {
+	switch {
+	case n >= 1_000_000_000:
+		return fmt.Sprintf("%.1fB", float64(n)/1e9)
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	case n >= 1_000:
+		return fmt.Sprintf("%dk", n/1_000)
+	default:
+		return fmt.Sprintf("%d", n)
 	}
 }
 

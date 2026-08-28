@@ -169,6 +169,9 @@ doctor. Two things worth telling a user unprompted:
   to someone, not for disabling a workspace (`autostart: false` does that).
 - The header names the machine, the corgi version and whether the daemon is
   up. If it says an update is available, `corgi upd && corgi agent restart`.
+- Cards show tokens today / this week, summed from Claude Code's own
+  transcripts (`corgi agent status` prints the same). Cache reads are included,
+  so the numbers are large by design — do not report them as an anomaly.
 
 ### If a session died
 

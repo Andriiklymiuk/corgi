@@ -13,6 +13,8 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/pairing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestSanitizeSessionName(t *testing.T) {
@@ -293,5 +295,178 @@ func TestLauncherPageCarriesTheNewControls(t *testing.T) {
 	}
 	if strings.Contains(body, "src=\"http") || strings.Contains(body, "href=\"http") {
 		t.Error("the launcher must stay self-contained")
+	}
+}
+
+func TestWorkspaceUsageIsOmittedWhenIdle(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	t.Setenv("HOME", t.TempDir())
+	agentD, _ := agentDir()
+	stack := stackWithAgentConfig(t, "")
+	registerStack(t, agentD, "acme", stack)
+
+	if got := workspaceUsage("acme", stack); got != nil {
+		t.Errorf("the first call must not block on a scan, got %+v", got)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		usageCache.mu.Lock()
+		done := usageCache.reps["acme"] != nil && !usageCache.reps["acme"].computed.IsZero()
+		usageCache.mu.Unlock()
+		if done {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := workspaceUsage("acme", stack); got != nil {
+		t.Errorf("a workspace with no transcripts must report no usage, got %+v", got)
+	}
+	if got := workspaceUsage("acme", ""); got != nil {
+		t.Errorf("no path means no usage, got %+v", got)
+	}
+	if line := workspaceUsageLine("acme"); line != "" {
+		t.Errorf("status must print nothing when there is no usage, got %q", line)
+	}
+}
+
+func TestFormatTokens(t *testing.T) {
+	cases := map[int64]string{0: "0", 999: "999", 1500: "1k", 2_400_000: "2.4M", 1_050_000_000: "1.1B"}
+	for in, want := range cases {
+		if got := formatTokens(in); got != want {
+			t.Errorf("formatTokens(%d) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestAgentHooksEnableThenDisableRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	stack := stackWithAgentConfig(t, "")
+	registerStack(t, agentD, "acme", stack)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(stack); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	path := claudeLocalSettingsPath(stack)
+	if err := writeJSONObject(path, map[string]any{
+		"hooks": map[string]any{"Notification": []any{
+			map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "echo mine"}}},
+		}},
+		"other": "kept",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	runAgentHooksEnable(nil, nil)
+	after := readJSONObject(path)
+	hooks, _ := after["hooks"].(map[string]any)
+	if hooks == nil || len(hooks) != 2 {
+		t.Fatalf("both events must be hooked, got %v", after["hooks"])
+	}
+	if !strings.Contains(marshalCompact(hooks), "--workspace acme") {
+		t.Errorf("our hook must name the workspace: %s", marshalCompact(hooks))
+	}
+	if after["other"] != "kept" {
+		t.Error("unrelated settings must survive")
+	}
+
+	runAgentHooksDisable(nil, nil)
+	after = readJSONObject(path)
+	body := marshalCompact(after)
+	if strings.Contains(body, hookMarker) {
+		t.Errorf("disable must remove our hooks: %s", body)
+	}
+	if !strings.Contains(body, "echo mine") {
+		t.Errorf("disable must leave other hooks alone: %s", body)
+	}
+	if after["other"] != "kept" {
+		t.Error("disable must not touch unrelated settings")
+	}
+}
+
+func TestReadJSONObjectTolerates(t *testing.T) {
+	dir := t.TempDir()
+	if got := readJSONObject(filepath.Join(dir, "nope.json")); len(got) != 0 {
+		t.Errorf("a missing file is an empty object, got %v", got)
+	}
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := readJSONObject(bad); len(got) != 0 {
+		t.Errorf("unparseable settings must not be treated as content, got %v", got)
+	}
+}
+
+func TestLaunchProfileNamesFromTrustedConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	if err := os.MkdirAll(agentD, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := launchProfileNames(); got != nil {
+		t.Errorf("no config means no profiles, got %v", got)
+	}
+	cfg := "version: 1\nprofiles:\n  work:\n    configDir: ~/.claude-work\n  personal:\n    configDir: ~/.claude\n"
+	if err := os.WriteFile(agentUserConfigPath(agentD), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := launchProfileNames()
+	if len(got) != 2 || got[0] != "personal" || got[1] != "work" {
+		t.Errorf("profiles = %v, want them sorted", got)
+	}
+}
+
+func TestRunAgentHookIsSilentWithoutADaemon(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	c := &cobra.Command{}
+	c.Flags().String("workspace", "acme", "")
+
+	// No daemon, no workspace flag, and a junk payload: every path must return
+	// quietly, because anything printed lands in the user's Claude session.
+	runAgentHook(c, []string{hookEventNotification})
+	runAgentHook(c, nil)
+	empty := &cobra.Command{}
+	empty.Flags().String("workspace", "", "")
+	runAgentHook(empty, []string{hookEventStop})
+}
+
+func TestExecRunnerReportsAFailure(t *testing.T) {
+	if _, err := execRunner("sh", "-c", "exit 3"); err == nil {
+		t.Error("a failing command must report an error")
+	}
+	if out, err := execRunner("sh", "-c", "echo hi"); err != nil || !strings.Contains(out, "hi") {
+		t.Errorf("out=%q err=%v", out, err)
+	}
+}
+
+func TestLookPathFindsAndMisses(t *testing.T) {
+	if err := lookPath("sh"); err != nil {
+		t.Errorf("sh must be found: %v", err)
+	}
+	if err := lookPath("corgi-not-a-real-binary"); err == nil {
+		t.Error("a missing binary must report an error")
+	}
+}
+
+func TestSetupNgrokTunnelChecksTheAuthtoken(t *testing.T) {
+	installed := func(string) error { return nil }
+	failing := func(string, ...string) (string, error) { return "", fmt.Errorf("no authtoken") }
+	if err := setupNgrokTunnel(failing, installed, "x.ngrok-free.app"); err == nil ||
+		!strings.Contains(err.Error(), "authtoken") {
+		t.Errorf("a missing authtoken must be reported with the fix, got %v", err)
+	}
+	ok := func(string, ...string) (string, error) { return "", nil }
+	if err := setupNgrokTunnel(ok, installed, "x.ngrok-free.app"); err != nil {
+		t.Errorf("a configured ngrok must pass, got %v", err)
 	}
 }

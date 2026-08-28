@@ -204,6 +204,20 @@ terminal, VS Code, supervised — read from the per-process records under
 its conversation on claude.ai; one that has not is marked *local only*, and
 typing `/remote-control` inside it is what gives it a link.
 
+### What it has been costing
+
+Claude Code records token counts in its own transcripts, so corgi can add them
+up per workspace — nothing is sent anywhere, and only the numbers are read:
+
+```
+$ corgi agent status
+  corgi                running   restarts=0 wakeLock=true
+                       tokens 147.3M today · 1.0B this week
+```
+
+The launcher shows the same two numbers on each card. Cache reads are included,
+which is why the totals are large — that is the real traffic against the window.
+
 ### Hiding a workspace on the phone
 
 Each card has a **hide** chip. Hidden cards collapse into one `N hidden — show`

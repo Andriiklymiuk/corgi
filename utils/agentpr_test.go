@@ -131,3 +131,94 @@ func TestForgeURL(t *testing.T) {
 		t.Errorf("no URL must be empty, got %q", got)
 	}
 }
+
+func TestDetectForgePicksGitLabForAGitLabRemote(t *testing.T) {
+	run := func(dir, name string, args ...string) (string, error) {
+		if name == "git" && args[0] == "remote" {
+			return "git@gitlab.com:acme/api.git", nil
+		}
+		return "", nil
+	}
+	forge, err := detectForge(run, "api")
+	if err != nil {
+		t.Skip("glab not installed on this machine")
+	}
+	if forge.bin != "glab" {
+		t.Errorf("bin = %q, want glab", forge.bin)
+	}
+	if got := strings.Join(forge.createArgs("b", "main", "T", "B", true), " "); !strings.Contains(got, "mr create") || !strings.Contains(got, "--draft") {
+		t.Errorf("glab create args = %q", got)
+	}
+	if got := strings.Join(forge.viewArgs("b"), " "); !strings.Contains(got, "mr view") {
+		t.Errorf("glab view args = %q", got)
+	}
+}
+
+func TestDetectForgeReportsAMissingRemote(t *testing.T) {
+	run := func(dir, name string, args ...string) (string, error) {
+		return "fatal: no such remote", fmt.Errorf("exit 2")
+	}
+	if _, err := detectForge(run, "api"); err == nil || !strings.Contains(err.Error(), "origin") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestExistingPRIsReturnedNotDuplicated(t *testing.T) {
+	f := &fakeForge{commits: map[string]string{"api": "2"}}
+	run := func(dir, name string, args ...string) (string, error) {
+		if name == "gh" && args[0] == "pr" && args[1] == "view" {
+			return "https://github.com/acme/api/pull/3", nil
+		}
+		return f.run(dir, name, args...)
+	}
+	set, err := openBranchPRs(map[string]string{"api": "api"}, "feature/x", "", "T", "", false, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr := set.PRs[0]
+	if pr.Created || pr.URL != "https://github.com/acme/api/pull/3" || !strings.Contains(pr.Skipped, "already open") {
+		t.Errorf("an existing pull request must be returned, not reopened: %+v", pr)
+	}
+	for _, c := range f.calls {
+		if strings.Contains(c, "pr create") {
+			t.Error("nothing must be created when one is already open")
+		}
+	}
+}
+
+func TestOpenBranchPRsIsTheExportedEntryPoint(t *testing.T) {
+	if _, err := OpenBranchPRs(nil, "", "", "T", "", false); err == nil {
+		t.Error("the exported entry point must validate too")
+	}
+}
+
+func TestBranchHasCommitsFallsBackToOriginHead(t *testing.T) {
+	var refs []string
+	run := func(dir, name string, args ...string) (string, error) {
+		if name == "git" && args[0] == "symbolic-ref" {
+			return "origin/trunk", nil
+		}
+		if name == "git" && args[0] == "rev-list" {
+			refs = append(refs, args[2])
+			return "1", nil
+		}
+		return "", nil
+	}
+	if !branchHasCommits(run, "api", "feature/x", "") {
+		t.Error("a branch with commits must report true")
+	}
+	if len(refs) != 1 || !strings.HasPrefix(refs[0], "origin/trunk..") {
+		t.Errorf("with no base it must use origin HEAD, got %v", refs)
+	}
+}
+
+func TestExecInDirRunsAndReportsFailure(t *testing.T) {
+	dir := t.TempDir()
+	out, err := execInDir(dir, "sh", "-c", "pwd")
+	if err != nil || out == "" {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+	if _, err := execInDir(dir, "sh", "-c", "exit 4"); err == nil {
+		t.Error("a failing command must report an error")
+	}
+}

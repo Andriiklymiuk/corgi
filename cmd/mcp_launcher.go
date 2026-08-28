@@ -148,8 +148,26 @@ func workspaceActivity(id, absPath string) (int, *launchLastEvent) {
 	return live, &launchLastEvent{Kind: e.Kind, Cause: e.Cause, Reason: e.Reason, At: e.At.UnixMilli()}
 }
 
+// usageTTL is how long a summed report is reused. Summing a workspace means
+// scanning its transcripts — a fifth of a second on a busy one — and this list
+// is polled every second while a session starts, so the request path must
+// never pay for it.
+const usageTTL = time.Minute
+
+var usageCache = struct {
+	mu   sync.Mutex
+	reps map[string]*cachedUsage
+}{reps: map[string]*cachedUsage{}}
+
+type cachedUsage struct {
+	report     *usage.Report
+	computed   time.Time
+	refreshing bool
+}
+
 // Zero across both windows is reported as nothing, so an idle workspace shows
-// no number rather than a row of noughts.
+// no number rather than a row of noughts. A stale report is served while a
+// fresh one is summed in the background.
 func workspaceUsage(id, absPath string) *usage.Report {
 	if absPath == "" {
 		return nil
@@ -158,11 +176,38 @@ func workspaceUsage(id, absPath string) *usage.Report {
 	if !ok {
 		return nil
 	}
-	rep := usage.ForDir(absPath, expandTilde(configDir), mungeClaudeProjectDir(absPath), time.Now())
-	if rep.Week.Total() == 0 {
-		return nil
+
+	usageCache.mu.Lock()
+	entry := usageCache.reps[id]
+	if entry == nil {
+		entry = &cachedUsage{}
+		usageCache.reps[id] = entry
 	}
-	return &rep
+	fresh := !entry.computed.IsZero() && time.Since(entry.computed) < usageTTL
+	report := entry.report
+	if !fresh && !entry.refreshing {
+		entry.refreshing = true
+		go refreshUsage(id, absPath, expandTilde(configDir))
+	}
+	usageCache.mu.Unlock()
+	return report
+}
+
+func refreshUsage(id, absPath, configDir string) {
+	rep := usage.ForDir(absPath, configDir, mungeClaudeProjectDir(absPath), time.Now())
+	usageCache.mu.Lock()
+	defer usageCache.mu.Unlock()
+	entry := usageCache.reps[id]
+	if entry == nil {
+		return
+	}
+	entry.refreshing = false
+	entry.computed = time.Now()
+	entry.report = nil
+	if rep.Week.Total() > 0 {
+		copy := rep
+		entry.report = &copy
+	}
 }
 
 // Only the profile NAMES cross the wire; what each selects stays in the
