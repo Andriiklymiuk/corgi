@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -192,7 +193,10 @@ func upgradeViaInstallScript(installDir string) error {
 }
 
 func getLatestGitHubTag() (string, error) {
-	client := &http.Client{}
+	// A timeout matters here beyond the upgrade command: the MCP server calls
+	// this hourly from a goroutine, and a hung connection would park one for
+	// good, once per hour, for the life of the process.
+	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", "https://api.github.com/repos/Andriiklymiuk/corgi/releases/latest", nil)
 	if err != nil {
 		return "", err

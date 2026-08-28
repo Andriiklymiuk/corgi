@@ -97,8 +97,9 @@ func registerAgentMCPTools(s *server.MCPServer) {
 				"named entry from the trusted agent config (a different Claude account, e.g. \"work\")."),
 		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
 		mcp.WithString("profile", mcp.Description("Profile name from the agent config's profiles: section")),
+		mcp.WithString("name", mcp.Description("Session name shown in claude.ai/code, e.g. \"fix login redirect\"")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
-		return mcpSessionStart(r.GetString("workspace", ""), r.GetString("profile", ""))
+		return mcpSessionStart(r.GetString("workspace", ""), r.GetString("profile", ""), r.GetString("name", ""))
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_session_stop",
@@ -137,6 +138,32 @@ func registerAgentMCPTools(s *server.MCPServer) {
 			r.GetString("composePath", ""),
 			r.GetString("branch", ""),
 			splitCSV(r.GetString("services", "")),
+		)
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_pr_open",
+		mcp.WithDescription(
+			"Open a pull request in every repository of the stack that has commits on a branch, and cross-link "+
+				"them so each names its siblings. This is the step after corgi_worktrees_materialize and corgi_diff: "+
+				"it pushes the branch and calls the forge's own CLI (gh, or glab for a GitLab remote). Repositories "+
+				"with no commits are reported as skipped; an already-open pull request is returned, never duplicated."),
+		composeOpt,
+		mcp.WithString("branch", mcp.Required(), mcp.Description("Branch to open pull requests for")),
+		mcp.WithString("title", mcp.Required(), mcp.Description("Pull request title, shared by every repository")),
+		mcp.WithString("body", mcp.Description("Pull request body; the sibling links are appended to it")),
+		mcp.WithString("base", mcp.Description("Base branch (default: each repo's origin HEAD)")),
+		mcp.WithBoolean("draft", mcp.Description("Open them as drafts")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return nil, fmt.Errorf("%s", agentDangerousBlockedMsg)
+		}
+		return mcpPROpen(
+			r.GetString("composePath", ""),
+			r.GetString("branch", ""),
+			r.GetString("title", ""),
+			r.GetString("body", ""),
+			r.GetString("base", ""),
+			r.GetBool("draft", false),
 		)
 	}))
 
@@ -323,7 +350,7 @@ func resolveForSession(query string) (*workspace.Workspace, any, error) {
 	return res.Workspace, nil, nil
 }
 
-func mcpSessionStart(query, profile string) (any, error) {
+func mcpSessionStart(query, profile, name string) (any, error) {
 	w, ambiguous, err := resolveForSession(query)
 	if err != nil {
 		return nil, err
@@ -352,7 +379,7 @@ func mcpSessionStart(query, profile string) (any, error) {
 	// it orders a queued stop before this start by requestedAt, so enqueuing
 	// unconditionally is both correct and simplest.
 	c, err := command.Write(dir, command.Command{
-		Action: command.ActionStart, WorkspaceID: w.ID, Profile: profile, Source: "mcp",
+		Action: command.ActionStart, WorkspaceID: w.ID, Profile: profile, Name: sanitizeSessionName(name), Source: "mcp",
 	})
 	if err != nil {
 		return nil, err
@@ -429,6 +456,33 @@ func mcpWorktreesMaterialize(composePath, branch string, services []string) (any
 		return nil, fmt.Errorf("%s: %w", utils.ErrExecFailed, err)
 	}
 	return set, nil
+}
+
+func mcpPROpen(composePath, branch, title, body, base string, draft bool) (any, error) {
+	corgi, dir, err := loadComposeForAgent(composePath)
+	if err != nil {
+		return nil, err
+	}
+	set, err := utils.ExistingBranchWorktrees(corgi, dir, branch)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", utils.ErrUsage, err)
+	}
+	// One directory per repository: two services sharing a repo share a
+	// worktree, and one pull request covers both.
+	dirs := map[string]string{}
+	for _, w := range set.Worktrees {
+		if w.Skipped == "" && w.Dir != "" {
+			dirs[w.Repo] = w.Dir
+		}
+	}
+	if len(dirs) == 0 {
+		return nil, fmt.Errorf("%s: no worktrees for %s — run corgi_worktrees_materialize first", utils.ErrUsage, branch)
+	}
+	out, err := utils.OpenBranchPRs(dirs, branch, base, title, body, draft)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", utils.ErrExecFailed, err)
+	}
+	return out, nil
 }
 
 func mcpWorktreesRelease(composePath, branch string, force bool) (any, error) {

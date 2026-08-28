@@ -226,6 +226,13 @@ review untouched code.
 - Correctness bugs.
 - Missing or weak tests.
 - Security issues.
+- **Comments the code does not need** — see the rule below.
+- **Overengineering** — abstraction with one caller, a config knob nobody asked
+  for, an interface introduced for a single implementation, a layer that only
+  forwards. Flag it and name the simpler shape.
+- **Performance footguns in a hot path** — work repeated per item that could be
+  done once, an unbounded read or scan, a per-request shell-out or file walk, a
+  network call with no timeout, a goroutine nothing stops.
 - **Leaked secrets** — always `severity: blocking`; flag the file + line + that a secret is present; never echo the value into a finding or comment.
 - Repo-standard / convention violations (names, patterns, style).
 - Scope creep (changes outside the ticket's stated scope).
@@ -234,6 +241,45 @@ review untouched code.
   engine, library, vendor, or infra detail to end users (`nit`); suggest selling
   the user benefit, not the mechanism. Skip if the ticket is about that copy.
 - Ticket-intent mismatch (diff doesn't do what the ticket asked).
+
+### Comments: the bar is high
+
+A comment beside code is a cost — it goes stale, it repeats what the code
+says, and it is the most common thing a generated diff adds too much of.
+**The default is no comment.** In practice this is rare enough that a PR
+adding several is already a finding.
+
+Flag as `nit` (with the deletion as `suggestedReplacement`) any comment that:
+- restates the code (`// loop over users` above a loop over users),
+- narrates a step (`// now save it`), or names what the function already names,
+- documents a parameter or return the signature already states,
+- is a section banner, a TODO with no owner, or commented-out code.
+
+Leave alone — these earn their place:
+- **why**, not what: a non-obvious constraint, a rejected alternative, a bug
+  this shape exists to prevent,
+- a real gotcha the next reader would otherwise reintroduce,
+- an exported identifier's doc comment where the language expects one,
+- a link to a spec, ticket, or upstream issue that explains the shape.
+
+Judge the same way in Mode B: when addressing feedback, do not add explanatory
+comments to justify a change — the change should read for itself.
+
+### Simplicity and cost
+
+Two questions on every non-trivial diff, before any style point:
+
+1. **Is the simplest thing that works being done?** More types, layers or
+   options than the change needs is a finding, not neutral. Name the smaller
+   version in the explanation.
+2. **What does this cost when it runs?** Look at where the code actually sits —
+   a per-request handler, a poll loop, a per-item body. Repeated work, an
+   unbounded scan, a missing timeout, or a leaked goroutine there is
+   `blocking`; the same in a one-shot command is a `nit`.
+
+Both are only findings when they are real. Do not invent an abstraction
+objection to have something to say, and do not call a hot path slow without
+naming what runs and how often.
 
 **Temper with the intent note** — before emitting any finding, check it against
 the ticket's rationale, constraints, and discussion. A choice the ticket
@@ -601,8 +647,11 @@ P4 order) and cross-link the two replies. Then one combined report (6).
    `<!-- corgi-review -->` bots + resolved. Group by file; read each thread's full
    back-and-forth (a later reply can change the ask).
 2. **Judge — apply or push back.** `superpowers:receiving-code-review` if installed,
-   else inline. **Never blind-apply.** Valid + in scope → fix. Wrong / out-of-scope /
-   regresses → **reply why, don't apply** (push-back is a real answer). Needs an owner
+   else inline. **Never blind-apply.** Fix in the same shape as the surrounding
+   code: no comment explaining the change, no new abstraction to hold it, and
+   nothing that adds per-request work. Valid + in scope → fix. Wrong /
+   out-of-scope / regresses → **reply why, don't apply** (push-back is a real
+   answer). Needs an owner
    call → ask.
 3. **Checkout the PR's OWN branch → fix → gate.** Clean tree → `gh pr checkout <n>` /
    `glab mr checkout <n>` (its head — **not** a new branch off base). Dirty tree →
@@ -643,6 +692,9 @@ bullets, the way a person types into the PR box. Not a structured document: no `
 section headers, no long numbered-question lists, no pasted spec / code-map dumps.
 That report shape belongs in the terminal output (P6), never in the comment.
 **Never touch `manualRun` services** when mapping via `corgi-compose.yml`.
+**Never suggest adding a comment to the code.** The reviewer's job is to remove
+the ones that do not earn their place, not to plant more — if a line needs
+explaining, the fix in the suggestion is a clearer name or a smaller function.
 
 **Mode A (give review):**
 - **Comments only.** Never set a formal approve / request-changes state, never merge,
