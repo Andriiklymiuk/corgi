@@ -347,3 +347,38 @@ func TestAwaitMCPLogSurfacesTheTunnelError(t *testing.T) {
 		t.Errorf("the tunnel's own error must be returned at once, got %v", err)
 	}
 }
+
+func TestSharedTunnelHint(t *testing.T) {
+	for _, u := range []string{"https://x.trycloudflare.com", "https://y.loca.lt", "https://z.ngrok-free.app"} {
+		hint := sharedTunnelHint(u)
+		if hint == "" {
+			t.Errorf("%s is a shared domain and must carry the warning", u)
+			continue
+		}
+		if !strings.Contains(hint, "compass") || !strings.Contains(hint, "tunnel setup") {
+			t.Errorf("the hint must name both fixes, got %q", hint)
+		}
+	}
+	if got := sharedTunnelHint("https://corgi.example.com"); got != "" {
+		t.Errorf("a hostname the user owns needs no warning, got %q", got)
+	}
+}
+
+func TestLANLauncherURL(t *testing.T) {
+	if got := lanLauncherURL("127.0.0.1:8765", "CODE"); got != "" {
+		t.Errorf("a loopback-only listener is not reachable from a phone, got %q", got)
+	}
+	got := lanLauncherURL("0.0.0.0:8765", "CODE")
+	if got == "" {
+		t.Skip("no outbound route on this machine")
+	}
+	if !strings.Contains(got, ":8765/app") || !strings.Contains(got, "/pair#CODE") {
+		t.Errorf("both links must be printed, got %q", got)
+	}
+	if strings.Contains(got, "0.0.0.0") {
+		t.Errorf("the printed host must be the LAN address, not the bind address: %q", got)
+	}
+	if noCode := lanLauncherURL("0.0.0.0:8765", ""); strings.Contains(noCode, "/pair#") {
+		t.Errorf("with no pairing code there is no pair link to print: %q", noCode)
+	}
+}

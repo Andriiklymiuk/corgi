@@ -133,7 +133,7 @@ const pairClosedHTML = `<!doctype html>
 </style>
 <main>
   <h1>🐕 This pairing link is closed</h1>
-  <p id="msg">Pairing links work once and expire after two minutes.</p>
+  <p id="msg">Pairing links work once and expire after ten minutes.</p>
   <p id="paired" hidden>This phone is already paired with this machine.</p>
   <a id="app" class="open" href="/app" hidden>Open the launcher</a>
   <p id="fresh">Not paired yet? On the laptop run <code>corgi agent up --fresh</code> and scan the new QR.</p>

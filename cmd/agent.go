@@ -399,6 +399,9 @@ func runAgentStatus(_ *cobra.Command, _ []string) {
 	if !status.WakeLockable {
 		fmt.Println("wake lock: unsupported on this platform")
 	}
+	if risk := supervisor.CheckSleepRisk(); risk.AtRisk() {
+		fmt.Printf("⚠ %s\n  fix: %s\n", risk.Reason, risk.Fix)
+	}
 	for _, w := range status.Workspaces {
 		printWorkspaceState(w)
 	}

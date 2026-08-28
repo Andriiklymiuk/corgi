@@ -17,6 +17,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 	"andriiklymiuk/corgi/utils/tunnel"
 
@@ -595,12 +596,12 @@ func printAgentUp(res agentUpResult) {
 	if res.PairCode != "" {
 		fmt.Println()
 		if res.PairURL != "" {
-			fmt.Println("  📱 scan to pair (single use, 2 minutes):")
+			fmt.Println("  📱 scan to pair (single use, 10 minutes):")
 			fmt.Println()
 			printTerminalQR(res.PairURL)
 			fmt.Printf("    or open: %s\n", res.PairURL)
 		} else {
-			fmt.Println("  pair a device (single use, 2 minutes):")
+			fmt.Println("  pair a device (single use, 10 minutes):")
 			fmt.Printf("    code: %s — POST http://%s/pair {\"code\":\"%s\",\"device\":\"my-phone\"}\n",
 				res.PairCode, res.MCPAddr, res.PairCode)
 		}
@@ -609,10 +610,79 @@ func printAgentUp(res agentUpResult) {
 		fmt.Printf("  %s\n", res.Hint)
 	}
 	fmt.Println()
+	if risk := supervisor.CheckSleepRisk(); risk.AtRisk() {
+		fmt.Printf("  ⚠ %s\n    fix: %s\n", risk.Reason, risk.Fix)
+	}
+	if lan := lanLauncherURL(res.MCPAddr, res.PairCode); lan != "" {
+		fmt.Println()
+		fmt.Print(lan)
+	}
 	if res.PublicURL != "" {
 		fmt.Printf("  after scanning, the phone opens the launcher — tap a repo to start:\n    %s/app\n", res.PublicURL)
+		if hint := sharedTunnelHint(res.PublicURL); hint != "" {
+			fmt.Println()
+			fmt.Print(hint)
+		}
 	}
 	fmt.Println("  or from any MCP client: corgi_session_start {\"workspace\":\"" + orDefault(res.Workspace, "<name>") + "\"}")
+}
+
+// sharedTunnelHint warns about the failure that looks like corgi being broken
+// but is not: a free tunnel provider's shared domain is on enough blocklists
+// that mobile carriers and filtering resolvers refuse to resolve it, so the
+// page never loads on cellular while the same link works on Wi-Fi. Only for
+// those shared domains — a hostname the user owns is not on any list.
+func lanLauncherURL(addr, code string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || (host != "0.0.0.0" && host != "::" && host != "") {
+		return ""
+	}
+	ip := outboundIP()
+	if ip == "" {
+		return ""
+	}
+	base := "http://" + net.JoinHostPort(ip, port)
+	out := "  🏠 on the same Wi-Fi, skip the tunnel entirely:\n"
+	if code != "" {
+		out += "    pair:     " + base + "/pair#" + code + "\n"
+	}
+	return out + "    launcher: " + base + "/app\n"
+}
+
+// No packet is sent: a UDP socket only records the route.
+func outboundIP() string {
+	conn, err := net.Dial("udp", "1.1.1.1:80")
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	host, _, err := net.SplitHostPort(conn.LocalAddr().String())
+	if err != nil {
+		return ""
+	}
+	return host
+}
+
+func sharedTunnelHint(publicURL string) string {
+	shared := []string{".trycloudflare.com", ".loca.lt", ".ngrok-free.app", ".ngrok-free.dev", ".ngrok.io"}
+	matched := false
+	for _, d := range shared {
+		if strings.Contains(publicURL, d) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return ""
+	}
+	return "  \u26a0 if the page never loads on the phone:\n" +
+		"    \u2022 open the link in the real browser, not an app's built-in one\n" +
+		"      (in Safari's in-app view, tap the compass icon) \u2014 scanning the QR\n" +
+		"      with the camera already does this\n" +
+		"    \u2022 this is a free shared tunnel domain; some carriers and filtering\n" +
+		"      DNS refuse to resolve these, so it can work on Wi-Fi and not on\n" +
+		"      cellular. A hostname you own is on no blocklist:\n" +
+		"          corgi agent tunnel setup corgi.yourdomain.com\n"
 }
 
 // printTerminalQR renders a scannable QR in the terminal, indented to match
@@ -747,7 +817,7 @@ func readAgentPidFile(path string) (int, bool) {
 }
 
 func addAgentUpFlags(c *cobra.Command) {
-	c.Flags().String("http", defaultMCPAddr, "Local MCP address")
+	c.Flags().String("http", defaultMCPAddr, "Local MCP address. Use 0.0.0.0:8765 to also serve phones on the same Wi-Fi, which needs no tunnel at all")
 	c.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
 	c.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — a stable public URL you can bookmark, and a phone that stays paired (needs a one-time `cloudflared tunnel create` and --tunnel-hostname; see docs/agent.md)")
 	c.Flags().String("tunnel-hostname", "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass \"\" to go back to a quick tunnel")
