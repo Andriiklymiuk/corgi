@@ -12,7 +12,7 @@
 
 </div>
 
-Most projects are more than one repo. Write them all down once in a `corgi-compose.yml`, and the same file serves everyone who needs the project running:
+A feature is rarely one repo. It's an API change, a web change, a mobile change, and a migration. corgi describes all of that in one `corgi-compose.yml` and runs it, so you can build the whole feature at once:
 
 ```text
                           ┌─ you       corgi run            whole stack up, one command
@@ -30,9 +30,11 @@ Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
 ## Why corgi
 
-**Setup takes a day.** Clone four repos, install Postgres and Redis, seed them, copy `.env` files around and point each service at the others, find ports that are free, then start everything in the right order across five terminal tabs. Next laptop, same day again. corgi keeps all of that in one file you commit, so setup is `corgi run`.
+**You build the whole feature, not your slice of it.** Change the API, the web app and the mobile app together, against seeded databases and env vars that already point at each other. You see the feature work end to end on your machine instead of finding out on the PR. Put the change on one branch name and `corgi run --feature ABC-123` runs every repo that has it, while the rest stay on `main`.
 
-**You keep using it after setup.** `corgi db -u` when you only need the databases up. `corgi run --service-branch api=feature/login` to try a teammate's branch. `corgi tunnel` when a webhook needs a public URL. `corgi status -w` when something looks wrong. If you already use `docker-compose`, keep it. corgi handles the repos, seed data, env files and tool checks around your containers.
+**One repo or twelve, same command.** With one service, `corgi run` is still the fastest way to get it up with its database seeded and its `.env` written. When the project grows to five, nothing about your day changes: add the service to the file, commit it, and everyone has it. A new laptop is `corgi run`, not a day of setup.
+
+**It's a daily tool, not an onboarding script.** `corgi db -u` when you only need the databases. `corgi run --service-branch api=feature/login` to try a teammate's branch. `corgi tunnel` when a webhook needs a public URL. `corgi status -w` when something looks wrong. If you already use `docker-compose`, keep it: corgi handles the repos, seed data, env files and tool checks around your containers.
 
 **Agents get the same workspace you have.** An agent that can see one folder has to guess at the rest of the system. In a corgi workspace it has every repo, databases with real data, the env wiring, and the `corgi` CLI to start the stack and check its own work. That is the difference between editing a file and finishing a ticket. [More below](#let-an-agent-take-a-whole-ticket).
 
