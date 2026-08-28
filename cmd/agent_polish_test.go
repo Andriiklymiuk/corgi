@@ -285,7 +285,7 @@ func TestLauncherPageCarriesTheNewControls(t *testing.T) {
 	body := rec.Body.String()
 	for _, want := range []string{
 		"/launch/info", "/launch/devices", "/launch/doctor",
-		"corgi_hidden", "data-role=\"profile\"", "ngrok-skip-browser-warning",
+		"corgi_hidden", "dataset.role", "ngrok-skip-browser-warning",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the launcher must carry %q", want)

@@ -15,10 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Claude Code fires hooks for its own lifecycle. Two of them answer the
-// question a phone cannot see: is this session waiting for me? corgi writes
-// them into the workspace's LOCAL settings (never the committed file), pointed
-// at `corgi agent hook`, which spools the event for the daemon to notify on.
+// corgi writes these into the workspace's LOCAL settings, never the committed
+// file.
 const (
 	hookEventNotification = "Notification"
 	hookEventStop         = "Stop"
@@ -50,10 +48,8 @@ var agentHooksDisableCmd = &cobra.Command{
 }
 
 var agentHookCmd = &cobra.Command{
-	Use:   "hook",
-	Short: "Internal: called by a Claude Code hook to report a session needs attention",
-	// The event name arrives in the hook payload on stdin. An optional
-	// positional is accepted so a hand-written hook can pass one too.
+	Use:    "hook",
+	Short:  "Internal: called by a Claude Code hook to report a session needs attention",
 	Args:   cobra.MaximumNArgs(1),
 	Hidden: true,
 	Run:    runAgentHook,
@@ -101,7 +97,6 @@ func runAgentHooksEnable(_ *cobra.Command, _ []string) {
 	utils.Info("undo with `corgi agent hooks disable`")
 }
 
-// Leaves every other hook in place; re-running replaces only ours.
 func withCorgiHook(existing any, workspaceID string) []any {
 	out := stripCorgiHooks(existing)
 	return append(out, map[string]any{
@@ -154,8 +149,6 @@ func runAgentHooksDisable(_ *cobra.Command, _ []string) {
 	utils.Infof("✓ removed corgi's hooks from %s\n", path)
 }
 
-// Fast and silent: Claude Code runs this inline, and anything it prints lands
-// in the user's session.
 func runAgentHook(cmd *cobra.Command, args []string) {
 	utils.NonInteractive = true
 	id, _ := cmd.Flags().GetString("workspace")
@@ -184,8 +177,7 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	daemon.Nudge(info)
 }
 
-// The hook payload arrives as JSON on stdin. Only Claude's own message is
-// used, never session content.
+// Only Claude's own message is used, never session content.
 func hookDetail(event string, stdin io.Reader) string {
 	msg := ""
 	if stdin != nil {

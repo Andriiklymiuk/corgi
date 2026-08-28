@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 )
 
 // RepoPR is one repository's pull request, or the reason there is none.
@@ -27,10 +29,19 @@ type PRSet struct {
 
 type prRunner func(dir, name string, args ...string) (string, error)
 
+// prStepTimeout bounds each push and forge call: both talk to a network, and a
+// hung one would block the MCP handler that called the tool.
+const prStepTimeout = 3 * time.Minute
+
 func execInDir(dir, name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), prStepTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return strings.TrimSpace(string(out)), fmt.Errorf("%s timed out after %s", name, prStepTimeout)
+	}
 	return strings.TrimSpace(string(out)), err
 }
 

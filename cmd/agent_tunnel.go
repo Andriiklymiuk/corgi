@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 
@@ -31,12 +33,8 @@ static domain itself is a dashboard step with no CLI equivalent.`,
 	Run:  runAgentTunnelSetup,
 }
 
-// runner executes one setup step. Injected so the plan can be tested without
-// touching cloudflared.
 type tunnelRunner func(name string, args ...string) (string, error)
 
-// binaryLookup reports whether a command exists. Injected so the setup plan can
-// be tested on a machine (or a CI runner) without cloudflared installed.
 type binaryLookup func(string) error
 
 func lookPath(name string) error {
@@ -44,8 +42,21 @@ func lookPath(name string) error {
 	return err
 }
 
+// setupStepTimeout bounds every step except the browser login, which waits on
+// a person. Without it a hung cloudflared call blocks the command for ever.
+const setupStepTimeout = 2 * time.Minute
+
 func execRunner(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).CombinedOutput()
+	timeout := setupStepTimeout
+	if len(args) > 1 && args[1] == "login" {
+		timeout = 10 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+	if ctx.Err() != nil {
+		return string(out), fmt.Errorf("%s %s timed out after %s", name, strings.Join(args, " "), timeout)
+	}
 	return string(out), err
 }
 
@@ -100,8 +111,8 @@ func runAgentTunnelSetup(cmd *cobra.Command, args []string) {
 	utils.Info("next: `corgi agent restart`, then scan the QR once — the phone stays paired from then on")
 }
 
-// tunnelNameFor keeps the name only where it means something: ngrok selects a
-// tunnel by its domain, and passing a name would be recorded but never used.
+// ngrok selects a tunnel by its domain, so a name would be recorded and never
+// used.
 func tunnelNameFor(provider, name string) string {
 	if provider == "ngrok" {
 		return ""

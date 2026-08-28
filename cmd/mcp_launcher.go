@@ -19,6 +19,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/pairing"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
@@ -49,6 +50,7 @@ type launchWorkspace struct {
 	SessionLinks []string         `json:"sessionLinks,omitempty"`
 	Note         string           `json:"note,omitempty"`
 	Live         int              `json:"live"`
+	Usage        *usage.Report    `json:"usage,omitempty"`
 	LastEvent    *launchLastEvent `json:"lastEvent,omitempty"`
 	Profiles     []string         `json:"profiles,omitempty"`
 }
@@ -118,6 +120,7 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 			SessionLinks: s.sessions, Note: s.note, Profiles: profiles,
 		}
 		row.Live, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath)
+		row.Usage = workspaceUsage(ws.ID, ws.AbsPath)
 		out = append(out, row)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -125,9 +128,8 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 }
 
 func workspaceActivity(id, absPath string) (int, *launchLastEvent) {
-	// Deliberately the pid-file reader, not listClaudeSessions: its fallback
-	// shells out to `claude agents --json` with a timeout, and this runs once
-	// per workspace on a list the phone polls every second while starting.
+	// The pid-file reader, never listClaudeSessions: its fallback shells out,
+	// and this runs per workspace on a list the phone polls while starting.
 	var live int
 	if _, configDir, ok := workspaceSessionTarget(id); ok && absPath != "" {
 		if sessions, read := localClaudeSessions(absPath, configDir); read {
@@ -144,6 +146,23 @@ func workspaceActivity(id, absPath string) (int, *launchLastEvent) {
 	}
 	e := recent[0]
 	return live, &launchLastEvent{Kind: e.Kind, Cause: e.Cause, Reason: e.Reason, At: e.At.UnixMilli()}
+}
+
+// Zero across both windows is reported as nothing, so an idle workspace shows
+// no number rather than a row of noughts.
+func workspaceUsage(id, absPath string) *usage.Report {
+	if absPath == "" {
+		return nil
+	}
+	_, configDir, ok := workspaceSessionTarget(id)
+	if !ok {
+		return nil
+	}
+	rep := usage.ForDir(absPath, expandTilde(configDir), mungeClaudeProjectDir(absPath), time.Now())
+	if rep.Week.Total() == 0 {
+		return nil
+	}
+	return &rep
 }
 
 // Only the profile NAMES cross the wire; what each selects stays in the
@@ -942,6 +961,11 @@ const launcherPageHTML = `<!doctype html>
   function metaLine(ws) {
     const bits = [];
     if (ws.live > 0) bits.push('<span class="live">' + ws.live + ' live</span>');
+    if (ws.usage && ws.usage.week) {
+      const t = ws.usage.today, w = ws.usage.week;
+      const sum = u => (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
+      bits.push('<span title="tokens today / this week">' + fmtTokens(sum(t)) + ' today · ' + fmtTokens(sum(w)) + ' this week</span>');
+    }
     const e = ws.lastEvent;
     if (e && !(ws.running && e.kind === 'started')) {
       const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' · ' + esc(e.cause) : '')
@@ -1068,6 +1092,13 @@ const launcherPageHTML = `<!doctype html>
     if (ep.indexOf('vscode') >= 0) return 'vscode';
     if (ep === 'sdk-cli') return 'remote';
     return sess.kind === 'interactive' ? 'terminal' : (sess.kind || 'session');
+  }
+
+  function fmtTokens(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return Math.round(n / 1e3) + 'k';
+    return String(n || 0);
   }
 
   function fmtWhen(ms) {
