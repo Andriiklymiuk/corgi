@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -16,6 +18,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/workspace"
+	"andriiklymiuk/corgi/utils/tunnel"
 
 	qrcode "github.com/skip2/go-qrcode"
 	"github.com/spf13/cobra"
@@ -65,20 +68,31 @@ type agentUpResult struct {
 }
 
 func runAgentUp(cmd *cobra.Command, _ []string) {
-	addr, _ := cmd.Flags().GetString("http")
-	provider, _ := cmd.Flags().GetString("provider")
-	tunnelName, _ := cmd.Flags().GetString("tunnel-name")
-	tunnelHost, _ := cmd.Flags().GetString("tunnel-hostname")
 	fresh, _ := cmd.Flags().GetBool("fresh")
-
-	tunnel, err := tunnelArgs(provider, tunnelName, tunnelHost)
-	if err != nil {
-		exitWithError("agent_up_tunnel", err, 2)
-	}
 
 	dir, err := agentDir()
 	if err != nil {
 		exitWithError("agent_data_dir", err, 1)
+	}
+
+	// Flags given now win; anything not given falls back to what the last
+	// `up` used, so `agent restart` keeps the named tunnel without retyping it.
+	cur := upSettingsFromFlags(cmd)
+	settings, reused := mergeUpSettings(cur, cmd.Flags().Changed, loadUpSettings(dir))
+	if reused != "" {
+		utils.Infof("using saved settings from the last up: %s (pass the flags to change them)\n", reused)
+	}
+	addr := settings.HTTP
+	if addr == "" {
+		addr = defaultMCPAddr
+	}
+
+	tunnel, err := tunnelArgs(settings.Provider, settings.TunnelName, settings.TunnelHostname)
+	if err != nil {
+		exitWithError("agent_up_tunnel", err, 2)
+	}
+	if err := tunnelPreflight(settings.Provider, settings.TunnelName, settings.TunnelHostname); err != nil {
+		exitWithError("agent_up_tunnel", err, 2)
 	}
 
 	// One `agent up` at a time. Two racing invocations both pass the listening
@@ -159,6 +173,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_up_mcp", fmt.Errorf("%w — see %s", err, res.LogPath), 1)
 	}
+	_ = saveUpSettings(dir, settings)
 	res.PublicURL = parsed.publicURL
 	res.PairCode = parsed.pairCode
 	if res.PublicURL != "" && res.PairCode != "" {
@@ -231,6 +246,89 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	return nil, fmt.Errorf("daemon did not come up — see %s", filepath.Join(dir, "serve.log"))
+}
+
+// upSettings is what the last successful `agent up` ran with, kept so a bare
+// `agent up` / `agent restart` repeats it instead of silently dropping the
+// named tunnel — and with it the stable URL the phone is paired to.
+type upSettings struct {
+	HTTP           string `json:"http,omitempty"`
+	Provider       string `json:"provider,omitempty"`
+	TunnelName     string `json:"tunnelName,omitempty"`
+	TunnelHostname string `json:"tunnelHostname,omitempty"`
+}
+
+const upSettingsName = "up.json"
+
+func upSettingsFromFlags(cmd *cobra.Command) upSettings {
+	var s upSettings
+	s.HTTP, _ = cmd.Flags().GetString("http")
+	s.Provider, _ = cmd.Flags().GetString("provider")
+	s.TunnelName, _ = cmd.Flags().GetString("tunnel-name")
+	s.TunnelHostname, _ = cmd.Flags().GetString("tunnel-hostname")
+	return s
+}
+
+// mergeUpSettings fills every flag the user did not pass from the saved run.
+// An explicitly passed flag always wins, including an explicit empty value —
+// `--tunnel-hostname ""` is how you go back to a quick tunnel. The returned
+// string names what was reused, for the notice.
+func mergeUpSettings(cur upSettings, changed func(string) bool, saved upSettings) (upSettings, string) {
+	var reused []string
+	pick := func(flag string, cur *string, saved string) {
+		if changed(flag) || saved == "" {
+			return
+		}
+		*cur = saved
+		reused = append(reused, "--"+flag+" "+saved)
+	}
+	pick("http", &cur.HTTP, saved.HTTP)
+	pick("provider", &cur.Provider, saved.Provider)
+	pick("tunnel-name", &cur.TunnelName, saved.TunnelName)
+	pick("tunnel-hostname", &cur.TunnelHostname, saved.TunnelHostname)
+	return cur, strings.Join(reused, " ")
+}
+
+func loadUpSettings(dir string) upSettings {
+	var s upSettings
+	data, err := os.ReadFile(filepath.Join(dir, upSettingsName))
+	if err != nil || json.Unmarshal(data, &s) != nil {
+		return upSettings{}
+	}
+	if s.HTTP == defaultMCPAddr {
+		s.HTTP = ""
+	}
+	return s
+}
+
+func saveUpSettings(dir string, s upSettings) error {
+	if s.HTTP == defaultMCPAddr {
+		s.HTTP = ""
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, upSettingsName), append(data, '\n'), 0o600)
+}
+
+// tunnelPreflight runs the provider's own auth check before anything is
+// spawned, so a missing ngrok token or cloudflared login fails here with the
+// provider's instructions instead of as a 90-second wait on a log.
+func tunnelPreflight(provider, name, host string) error {
+	if provider == "" {
+		provider = "cloudflared"
+	}
+	p, ok := tunnel.Providers[provider]
+	if !ok {
+		names := tunnel.Names()
+		sort.Strings(names)
+		return fmt.Errorf("unknown tunnel provider %q. Available: %s", provider, strings.Join(names, ", "))
+	}
+	if name == "" && host == "" {
+		return p.PreflightAuth()
+	}
+	return p.PreflightNamedAuth(tunnel.NamedConfig{Name: name, Hostname: host})
 }
 
 // tunnelArgs turns the up flags into `corgi mcp` tunnel flags. A named tunnel
@@ -426,8 +524,9 @@ var (
 	// Anchored to the newline so a code read mid-write ("pairing code: WOR"
 	// before "D-123\n" lands) is not captured truncated and QR-encoded wrong.
 	// The URL pattern needs no such guard: its /mcp suffix is the terminator.
-	mcpPairCodePattern = regexp.MustCompile(`pairing code: (\S+)\n`)
-	mcpFatalPattern    = regexp.MustCompile(`(?m)^(mcp server error:|corgi mcp --pair cannot|could not start pairing:|tunnel: )`)
+	mcpPairCodePattern  = regexp.MustCompile(`pairing code: (\S+)\n`)
+	mcpFatalPattern     = regexp.MustCompile(`(?m)^(mcp server error:|corgi mcp --pair cannot|could not start pairing:|tunnel: )`)
+	mcpTunnelErrPattern = regexp.MustCompile(`(?m)^🌐 ✗ tunnel: (.+)$`)
 )
 
 // parseMCPLog extracts what the summary needs from `corgi mcp`'s own output.
@@ -453,6 +552,9 @@ func awaitMCPLog(path string, timeout time.Duration) (mcpLogInfo, error) {
 			log := string(data)
 			if mcpFatalPattern.MatchString(log) {
 				return last, fmt.Errorf("mcp failed to start")
+			}
+			if m := mcpTunnelErrPattern.FindStringSubmatch(log); m != nil {
+				return last, fmt.Errorf("tunnel: %s", strings.TrimSpace(m[1]))
 			}
 			info, done := parseMCPLog(log)
 			last = info
@@ -648,7 +750,7 @@ func addAgentUpFlags(c *cobra.Command) {
 	c.Flags().String("http", defaultMCPAddr, "Local MCP address")
 	c.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
 	c.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — a stable public URL you can bookmark, and a phone that stays paired (needs a one-time `cloudflared tunnel create` and --tunnel-hostname; see docs/agent.md)")
-	c.Flags().String("tunnel-hostname", "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it)")
+	c.Flags().String("tunnel-hostname", "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass \"\" to go back to a quick tunnel")
 	c.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
 }
 

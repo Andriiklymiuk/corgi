@@ -521,7 +521,7 @@ const launcherPageHTML = `<!doctype html>
   };
   const token = (() => { try { return localStorage.getItem('corgi_token') || ''; } catch { return ''; } })();
   const list = document.getElementById('list');
-  const auth = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+  const auth = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' };
   // Set in JS (not a static href) so the page source carries no external link;
   // this is a user navigation to the Claude session list, not a loaded asset.
   try { document.getElementById('allsessions').href = 'https://claude.ai/code'; } catch {}

@@ -297,3 +297,53 @@ func TestTunnelArgs(t *testing.T) {
 		t.Errorf("hostname only (ngrok static domain): %v %v", args, err)
 	}
 }
+
+func TestMergeUpSettingsReusesOnlyUnchangedFlags(t *testing.T) {
+	saved := upSettings{Provider: "cloudflared", TunnelName: "corgi-agent", TunnelHostname: "corgi.example.com"}
+	changed := func(f string) bool { return f == "tunnel-hostname" }
+	got, reused := mergeUpSettings(upSettings{TunnelHostname: ""}, changed, saved)
+	if got.TunnelHostname != "" {
+		t.Errorf("an explicitly passed empty hostname must win, got %q", got.TunnelHostname)
+	}
+	if got.TunnelName != "corgi-agent" || got.Provider != "cloudflared" {
+		t.Errorf("unchanged flags must come from the saved run, got %+v", got)
+	}
+	if !strings.Contains(reused, "--tunnel-name corgi-agent") || strings.Contains(reused, "hostname") {
+		t.Errorf("notice must name what was reused: %q", reused)
+	}
+	if _, reused := mergeUpSettings(upSettings{}, func(string) bool { return false }, upSettings{}); reused != "" {
+		t.Errorf("nothing saved means nothing reused, got %q", reused)
+	}
+}
+
+func TestUpSettingsRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	if got := loadUpSettings(dir); got != (upSettings{}) {
+		t.Errorf("no file means empty settings, got %+v", got)
+	}
+	in := upSettings{HTTP: defaultMCPAddr, Provider: "ngrok", TunnelHostname: "x.ngrok-free.app"}
+	if err := saveUpSettings(dir, in); err != nil {
+		t.Fatal(err)
+	}
+	got := loadUpSettings(dir)
+	if got.HTTP != "" || got.Provider != "ngrok" || got.TunnelHostname != "x.ngrok-free.app" {
+		t.Errorf("round trip = %+v (the default addr must not be pinned)", got)
+	}
+}
+
+func TestTunnelPreflightRejectsUnknownProvider(t *testing.T) {
+	if err := tunnelPreflight("nope", "", ""); err == nil || !strings.Contains(err.Error(), "unknown tunnel provider") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestAwaitMCPLogSurfacesTheTunnelError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.log")
+	if err := os.WriteFile(path, []byte("🌐 ✗ tunnel: ngrok authtoken not configured.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := awaitMCPLog(path, 2*time.Second)
+	if err == nil || !strings.Contains(err.Error(), "authtoken") {
+		t.Errorf("the tunnel's own error must be returned at once, got %v", err)
+	}
+}
