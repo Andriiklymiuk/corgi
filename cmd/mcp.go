@@ -339,7 +339,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	// /pair is deliberately NOT behind the bearer check: its whole purpose is
 	// to serve a client that has no token yet. It is guarded by the pairing
-	// code — single-use, two minutes, attempt-capped — and the route is only
+	// code — single-use, ten minutes, attempt-capped — and the route is only
 	// mounted while a window is open.
 	var pairSession *pairing.Session
 	if opts.pair {
