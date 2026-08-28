@@ -27,8 +27,9 @@ tunnel when it does not exist, routes the DNS name to it, and saves both flags
 so a plain ` + "`corgi agent restart`" + ` keeps the same URL — and the phone
 stays paired, because the origin never changes.
 
-For ngrok it checks the authtoken and saves the domain; claiming the free
-static domain itself is a dashboard step with no CLI equivalent.`,
+For ngrok it checks the authtoken and saves the domain. Every free account
+already has one static ` + "`*.ngrok-free.dev`" + ` dev domain — copy it from
+dashboard.ngrok.com/domains; its name cannot be chosen on the free tier.`,
 	Args: cobra.ExactArgs(1),
 	Run:  runAgentTunnelSetup,
 }
@@ -172,7 +173,7 @@ https://dashboard.ngrok.com/get-started/your-authtoken then run:
     ngrok config add-authtoken <token>`)
 	}
 	utils.Infof("using ngrok domain %s\n", host)
-	utils.Info("if that domain is not claimed yet: dashboard.ngrok.com → Domains → claim your free static domain")
+	utils.Info("free tier: this is the `dev domain` row on dashboard.ngrok.com/domains — its name is assigned, not chosen")
 	return nil
 }
 

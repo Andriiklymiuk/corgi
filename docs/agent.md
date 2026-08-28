@@ -92,14 +92,15 @@ phone stays paired across restarts.
 `corgi agent restart` keeps the named tunnel. Pass the flags again to change
 them; `--tunnel-hostname ""` goes back to a quick tunnel.
 
-No domain on Cloudflare? ngrok's free tier includes one static domain and needs
-no DNS work:
+No domain on Cloudflare? ngrok's free tier already gave your account one static
+`*.ngrok-free.dev` **dev domain** and needs no DNS work. You cannot choose its
+name — picking one is a paid feature — but the assigned one never changes:
 
 ```bash
 brew install ngrok
-ngrok config add-authtoken <token>        # dashboard.ngrok.com → Your Authtoken
-# dashboard.ngrok.com → Domains → claim your free *.ngrok-free.app domain, then:
-corgi agent up --provider ngrok --tunnel-hostname <yours>.ngrok-free.app
+ngrok config add-authtoken <token>   # dashboard.ngrok.com → Your Authtoken
+# dashboard.ngrok.com → Domains → copy the row tagged `dev domain`, then:
+corgi agent up --provider ngrok --tunnel-hostname <yours>.ngrok-free.dev
 ```
 
 The first time the phone opens the page, ngrok's free tier shows its own
@@ -111,7 +112,7 @@ phone's home screen once. One command does the whole setup and remembers it:
 
 ```bash
 corgi agent tunnel setup corgi.yourdomain.com                  # cloudflared
-corgi agent tunnel setup <yours>.ngrok-free.app --provider ngrok
+corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 ```
 
 Per-service stable tunnels: [docs/tunnel.md](tunnel.md#stable-urls-named-mode).

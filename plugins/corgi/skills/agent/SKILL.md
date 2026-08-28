@@ -255,8 +255,9 @@ daemon AND the detached MCP + tunnel (`agent stop` stops only the daemon).
 corgi upgrade so the daemon and launcher run the new binary. `up` remembers
 the tunnel flags it last ran with, so a bare `restart` keeps the named tunnel;
 `--tunnel-hostname ""` is the way back to a quick tunnel. ngrok works too:
-`--provider ngrok --tunnel-hostname <yours>.ngrok-free.app` (free static
-domain, no DNS) — its free tier shows an interstitial once on first open.
+`--provider ngrok --tunnel-hostname <yours>.ngrok-free.dev` (the static dev
+domain every free account already has, no DNS; its name cannot be chosen on the
+free tier) — ngrok shows an interstitial once on first open.
 
 The user scans the QR (or opens the printed URL) on their phone, names the
 device, and gets a per-device token. After pairing, the same page offers **Open
