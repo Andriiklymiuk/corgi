@@ -7,9 +7,6 @@ import (
 	"strings"
 )
 
-// A change that spans a stack ends as one pull request per repository. Opening
-// them by hand needs a laptop; this is the part corgi can do from a phone.
-
 // RepoPR is one repository's pull request, or the reason there is none.
 type RepoPR struct {
 	Repo    string `json:"repo"`
@@ -28,7 +25,6 @@ type PRSet struct {
 	PRs    []RepoPR `json:"prs"`
 }
 
-// prRunner executes a git/forge command in a directory. Injected for tests.
 type prRunner func(dir, name string, args ...string) (string, error)
 
 func execInDir(dir, name string, args ...string) (string, error) {
@@ -80,14 +76,13 @@ func openOnePR(run prRunner, repo, dir, branch, base, title, body string, draft 
 		pr.Skipped = "no commits on " + branch
 		return pr
 	}
-	if existing := existingPRURL(run, dir, branch); existing != "" {
-		pr.URL, pr.Skipped = existing, "a pull request is already open"
-		return pr
-	}
-
 	forge, err := detectForge(run, dir)
 	if err != nil {
 		pr.Error = err.Error()
+		return pr
+	}
+	if existing := existingPRURL(run, forge, dir, branch); existing != "" {
+		pr.URL, pr.Skipped = existing, "a pull request is already open"
 		return pr
 	}
 	if out, err := run(dir, "git", "push", "-u", "origin", branch); err != nil {
@@ -105,8 +100,7 @@ func openOnePR(run prRunner, repo, dir, branch, base, title, body string, draft 
 	return pr
 }
 
-// crossLinkPRs appends the sibling list to every body, so opening one PR shows
-// the rest of the change. Best effort: a failed edit leaves a working PR.
+// Best effort: a failed edit still leaves a working pull request.
 func crossLinkPRs(run prRunner, set *PRSet, dirs map[string]string, body string) {
 	var links []string
 	for _, pr := range set.PRs {
@@ -134,10 +128,9 @@ type forgeCLI struct {
 	bin        string
 	createArgs func(branch, base, title, body string, draft bool) []string
 	editArgs   func(url, body string) []string
+	viewArgs   func(branch string) []string
 }
 
-// detectForge picks gh or glab from the origin remote, so a GitLab stack is not
-// handed GitHub's CLI.
 func detectForge(run prRunner, dir string) (forgeCLI, error) {
 	remote, err := run(dir, "git", "remote", "get-url", "origin")
 	if err != nil {
@@ -162,6 +155,9 @@ func detectForge(run prRunner, dir string) (forgeCLI, error) {
 			editArgs: func(url, body string) []string {
 				return []string{"mr", "update", url, "--description", body}
 			},
+			viewArgs: func(branch string) []string {
+				return []string{"mr", "view", branch, "--output", "json"}
+			},
 		}, nil
 	}
 	if _, err := exec.LookPath("gh"); err != nil {
@@ -182,11 +178,12 @@ func detectForge(run prRunner, dir string) (forgeCLI, error) {
 		editArgs: func(url, body string) []string {
 			return []string{"pr", "edit", url, "--body", body}
 		},
+		viewArgs: func(branch string) []string {
+			return []string{"pr", "view", branch, "--json", "url", "--jq", ".url"}
+		},
 	}, nil
 }
 
-// branchHasCommits reports whether branch carries anything base does not. With
-// no base, any commit the remote has not seen counts.
 func branchHasCommits(run prRunner, dir, branch, base string) bool {
 	ref := strings.TrimSpace(base)
 	if ref == "" {
@@ -208,16 +205,14 @@ func defaultBaseRef(run prRunner, dir string) string {
 	return "origin/main"
 }
 
-// existingPRURL returns the open pull request for branch, if the forge already
-// has one — so re-running opens nothing twice.
-func existingPRURL(run prRunner, dir, branch string) string {
-	if out, err := run(dir, "gh", "pr", "view", branch, "--json", "url", "--jq", ".url"); err == nil {
+// So re-running opens nothing twice.
+func existingPRURL(run prRunner, forge forgeCLI, dir, branch string) string {
+	if out, err := run(dir, forge.bin, forge.viewArgs(branch)...); err == nil {
 		return forgeURL(out)
 	}
 	return ""
 }
 
-// forgeURL picks the URL out of a CLI's chatty output.
 func forgeURL(out string) string {
 	for _, line := range strings.Fields(out) {
 		if strings.HasPrefix(line, "https://") {

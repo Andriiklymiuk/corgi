@@ -204,6 +204,13 @@ terminal, VS Code, supervised — read from the per-process records under
 its conversation on claude.ai; one that has not is marked *local only*, and
 typing `/remote-control` inside it is what gives it a link.
 
+### Hiding a workspace on the phone
+
+Each card has a **hide** chip. Hidden cards collapse into one `N hidden — show`
+button. It is stored in that browser only and changes nothing on the machine —
+it exists for the moment someone else is looking at your screen. To actually
+stop supervising a workspace, set `autostart: false` for it instead.
+
 ### When a session needs you
 
 A session waiting on a permission prompt is invisible from the phone. Opt in

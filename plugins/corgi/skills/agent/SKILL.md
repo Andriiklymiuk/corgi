@@ -158,6 +158,18 @@ corgi agent init --config-dir ~/.claude-work
 `corgi agent status` prints the account each workspace will actually use. If the
 user has work and personal logins, check it.
 
+### The launcher page
+
+Everything the phone can do without the Claude app: start and stop a session,
+pick a profile and name it, read the timeline, revoke a paired device, run
+doctor. Two things worth telling a user unprompted:
+
+- Cards carry a **hide** chip. Hidden cards collapse into one button, on that
+  browser only — nothing on the machine changes. It is for showing the screen
+  to someone, not for disabling a workspace (`autostart: false` does that).
+- The header names the machine, the corgi version and whether the daemon is
+  up. If it says an update is available, `corgi upd && corgi agent restart`.
+
 ### If a session died
 
 `corgi agent status` shows `lastReason`, and `corgi agent logs <workspace>`
@@ -199,6 +211,7 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
   carries a tap target back to the launcher.
 - `corgi agent hooks enable` in a workspace also notifies when any Claude
   session there is waiting on a permission prompt or has finished its turn.
+  It writes into `.claude/settings.local.json`, never the committed file.
 - `corgi_pr_open { branch, title }` opens one pull request per repository that
   has commits on the branch and cross-links them — the step after
   `corgi_worktrees_materialize` and `corgi_diff`.

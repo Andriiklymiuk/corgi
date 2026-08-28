@@ -46,14 +46,11 @@ type launchWorkspace struct {
 	// SessionLinks are per-session claude.ai URLs captured from remote
 	// control's own output — the only links the site resolves (the ids the
 	// claude CLI lists locally are UUIDs the web does not know).
-	SessionLinks []string `json:"sessionLinks,omitempty"`
-	Note         string   `json:"note,omitempty"`
-	// Live is how many Claude processes are running in the workspace right
-	// now, from the per-pid records; LastEvent is the newest timeline entry,
-	// so a card can say why a session ended without opening anything.
-	Live      int              `json:"live"`
-	LastEvent *launchLastEvent `json:"lastEvent,omitempty"`
-	Profiles  []string         `json:"profiles,omitempty"`
+	SessionLinks []string         `json:"sessionLinks,omitempty"`
+	Note         string           `json:"note,omitempty"`
+	Live         int              `json:"live"`
+	LastEvent    *launchLastEvent `json:"lastEvent,omitempty"`
+	Profiles     []string         `json:"profiles,omitempty"`
 }
 
 type launchLastEvent struct {
@@ -127,13 +124,15 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 	return out
 }
 
-// workspaceActivity counts the live Claude processes in a workspace and reads
-// its newest timeline entry. Best-effort on both halves: a workspace with
-// neither is simply idle with nothing to report.
 func workspaceActivity(id, absPath string) (int, *launchLastEvent) {
+	// Deliberately the pid-file reader, not listClaudeSessions: its fallback
+	// shells out to `claude agents --json` with a timeout, and this runs once
+	// per workspace on a list the phone polls every second while starting.
 	var live int
 	if _, configDir, ok := workspaceSessionTarget(id); ok && absPath != "" {
-		live = len(listClaudeSessions(absPath, configDir))
+		if sessions, read := localClaudeSessions(absPath, configDir); read {
+			live = len(sessions)
+		}
 	}
 	dir, err := agentDir()
 	if err != nil {
@@ -147,8 +146,8 @@ func workspaceActivity(id, absPath string) (int, *launchLastEvent) {
 	return live, &launchLastEvent{Kind: e.Kind, Cause: e.Cause, Reason: e.Reason, At: e.At.UnixMilli()}
 }
 
-// launchProfileNames lists the profiles a phone may pick at start time. Only
-// the NAMES cross the wire — what each selects stays in the trusted config.
+// Only the profile NAMES cross the wire; what each selects stays in the
+// trusted config.
 func launchProfileNames() []string {
 	dir, err := agentDir()
 	if err != nil {
@@ -265,8 +264,6 @@ func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// recentEvents is the tail of a workspace's timeline, newest first, for the
-// launcher's session drawer.
 func recentEvents(workspaceID string, limit int) []launchLastEvent {
 	dir, err := agentDir()
 	if err != nil {
@@ -279,9 +276,6 @@ func recentEvents(workspaceID string, limit int) []launchLastEvent {
 	return out
 }
 
-// launchInfoHandler answers "which machine am I looking at, and is it current".
-// The version check is served from a cache the server refreshes in the
-// background, so the page never waits on GitHub.
 func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -312,9 +306,7 @@ var latestVersion struct {
 	checked time.Time
 }
 
-// cachedLatestVersion returns the newest released version, refreshing at most
-// hourly on a background goroutine. Returning "" (unknown) is normal and just
-// means the page shows no update hint.
+// Refreshed off the request path: the page must never wait on GitHub.
 func cachedLatestVersion() string {
 	latestVersion.mu.Lock()
 	defer latestVersion.mu.Unlock()
@@ -334,9 +326,8 @@ func cachedLatestVersion() string {
 	return latestVersion.value
 }
 
-// launchDevicesHandler lists paired devices and revokes one. A device may not
-// revoke itself: locking yourself out of the only paired phone from the phone
-// is never what you meant, and the laptop can always do it.
+// A device may not revoke itself: locking the only paired phone out, from that
+// phone, is never what was meant.
 func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
@@ -390,8 +381,6 @@ func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// launchDoctorHandler serves the same checks as `corgi agent doctor`, so a
-// failing card can be diagnosed without walking to the laptop.
 func launchDoctorHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -717,6 +706,7 @@ const launcherPageHTML = `<!doctype html>
     <button id="copycfg">Copy connector config</button>
     <p id="copymsg" class="msg"></p>
     <p>Each workspace has an <b>open in</b> pill — tap it to cycle: <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here; <b>chrome</b> forces Chrome via its URL scheme (needs Chrome installed) — right for a workspace on a different Claude account than the app is signed into. Remembered per workspace, on this browser only.</p>
+    <p><b>Hiding workspaces.</b> Each card has a <b>hide</b> chip — useful when showing this screen to someone. Hidden cards collapse into one "N hidden — show" button, on this browser only; nothing on the machine changes.</p>
     <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
     <p>A <b>bridge</b> is a remote-control session someone started on the laptop itself. Its claude.ai page shows only what you send from it — until then it looks empty. The full transcript stays on the laptop.</p>
     <p><b>Paired devices.</b> Every device that scanned a pairing QR. Revoking one leaves the others working.</p>
@@ -750,6 +740,10 @@ const launcherPageHTML = `<!doctype html>
   const openMode = id => { try { return localStorage.getItem('corgi_open_' + id) || 'app'; } catch { return 'app'; } };
   const setOpenMode = (id, m) => { try { localStorage.setItem('corgi_open_' + id, m); } catch {} };
   const showBridges = () => { try { return localStorage.getItem('corgi_show_bridges') !== '0'; } catch { return true; } };
+  const hidden = () => { try { return new Set(JSON.parse(localStorage.getItem('corgi_hidden') || '[]')); } catch { return new Set(); } };
+  const setHidden = s => { try { localStorage.setItem('corgi_hidden', JSON.stringify([...s])); } catch {} };
+  const toggleHidden = id => { const h = hidden(); h.has(id) ? h.delete(id) : h.add(id); setHidden(h); render(lastWorkspaces); };
+  let revealHidden = false;
   const setShowBridges = on => { try { localStorage.setItem('corgi_show_bridges', on ? '1' : '0'); } catch {} };
 
   if (!token) {
@@ -872,7 +866,10 @@ const launcherPageHTML = `<!doctype html>
     }
     list.className = '';
     list.innerHTML = '';
-    for (const ws of workspaces) {
+    const hide = hidden();
+    const shownWs = revealHidden ? workspaces : workspaces.filter(w => !hide.has(w.id));
+    const hiddenCount = workspaces.length - shownWs.length;
+    for (const ws of shownWs) {
       const row = document.createElement('div');
       row.className = 'ws';
       const head = document.createElement('div');
@@ -922,10 +919,23 @@ const launcherPageHTML = `<!doctype html>
         actions.appendChild(opts);
       }
       if (ws.running) actions.appendChild(stopControl(ws.id));
+      const hideBtn = document.createElement('button');
+      hideBtn.className = 'chip';
+      hideBtn.title = 'Hide this workspace on this browser';
+      hideBtn.textContent = hide.has(ws.id) ? 'unhide' : 'hide';
+      hideBtn.onclick = () => toggleHidden(ws.id);
+      actions.appendChild(hideBtn);
       if (startBox) actions.appendChild(startBox);
       row.appendChild(actions);
       row.appendChild(sessionsBox);
       list.appendChild(row);
+    }
+    if (hiddenCount || revealHidden) {
+      const b = document.createElement('button');
+      b.className = 'chip revealer';
+      b.textContent = revealHidden ? 'hide again' : hiddenCount + ' hidden — show';
+      b.onclick = () => { revealHidden = !revealHidden; render(lastWorkspaces); };
+      list.appendChild(b);
     }
   }
 

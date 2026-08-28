@@ -278,3 +278,20 @@ func TestWithCorgiHookReplacesOnlyOurs(t *testing.T) {
 		t.Errorf("disable must leave other hooks alone: %v", stripped)
 	}
 }
+
+func TestLauncherPageCarriesTheNewControls(t *testing.T) {
+	rec := httptest.NewRecorder()
+	launcherPageHandler(rec, httptest.NewRequest(http.MethodGet, "/app", nil))
+	body := rec.Body.String()
+	for _, want := range []string{
+		"/launch/info", "/launch/devices", "/launch/doctor",
+		"corgi_hidden", "data-role=\"profile\"", "ngrok-skip-browser-warning",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the launcher must carry %q", want)
+		}
+	}
+	if strings.Contains(body, "src=\"http") || strings.Contains(body, "href=\"http") {
+		t.Error("the launcher must stay self-contained")
+	}
+}

@@ -9,9 +9,7 @@ import (
 	"time"
 )
 
-// publicURLName records the launcher's public origin so a notification can
-// carry a tap target. Written by the MCP server, read by the daemon — two
-// processes, so a file rather than a variable.
+// Written by the MCP server, read by the daemon — two processes, so a file.
 const publicURLName = "public.url"
 
 func recordPublicURL(url string) {
@@ -22,8 +20,6 @@ func recordPublicURL(url string) {
 	_ = os.WriteFile(filepath.Join(dir, publicURLName), []byte(strings.TrimSpace(url)+"\n"), 0o600)
 }
 
-// launcherURL is where a notification should send someone who taps it. Empty
-// when no tunnel has published one, in which case the push carries no link.
 func launcherURL() string {
 	dir, err := agentDir()
 	if err != nil {

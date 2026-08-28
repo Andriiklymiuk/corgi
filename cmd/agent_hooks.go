@@ -50,9 +50,11 @@ var agentHooksDisableCmd = &cobra.Command{
 }
 
 var agentHookCmd = &cobra.Command{
-	Use:    "hook <event>",
-	Short:  "Internal: called by a Claude Code hook to report a session needs attention",
-	Args:   cobra.ExactArgs(1),
+	Use:   "hook",
+	Short: "Internal: called by a Claude Code hook to report a session needs attention",
+	// The event name arrives in the hook payload on stdin. An optional
+	// positional is accepted so a hand-written hook can pass one too.
+	Args:   cobra.MaximumNArgs(1),
 	Hidden: true,
 	Run:    runAgentHook,
 }
@@ -99,14 +101,13 @@ func runAgentHooksEnable(_ *cobra.Command, _ []string) {
 	utils.Info("undo with `corgi agent hooks disable`")
 }
 
-// withCorgiHook adds corgi's matcher to whatever the file already had for that
-// event, leaving every other hook in place. Re-running replaces only ours.
+// Leaves every other hook in place; re-running replaces only ours.
 func withCorgiHook(existing any, workspaceID string) []any {
 	out := stripCorgiHooks(existing)
 	return append(out, map[string]any{
 		"hooks": []any{map[string]any{
 			"type":    "command",
-			"command": fmt.Sprintf("corgi agent hook $CLAUDE_HOOK_EVENT --workspace %s", workspaceID),
+			"command": fmt.Sprintf("corgi agent hook --workspace %s", workspaceID),
 		}},
 	})
 }
@@ -153,15 +154,19 @@ func runAgentHooksDisable(_ *cobra.Command, _ []string) {
 	utils.Infof("✓ removed corgi's hooks from %s\n", path)
 }
 
-// runAgentHook is the hook target. It must be fast and silent: Claude Code
-// runs it inline, and anything it prints lands in the user's session.
+// Fast and silent: Claude Code runs this inline, and anything it prints lands
+// in the user's session.
 func runAgentHook(cmd *cobra.Command, args []string) {
 	utils.NonInteractive = true
 	id, _ := cmd.Flags().GetString("workspace")
 	if strings.TrimSpace(id) == "" {
 		return
 	}
-	detail := hookDetail(args[0], os.Stdin)
+	event := ""
+	if len(args) > 0 {
+		event = args[0]
+	}
+	detail := hookDetail(event, os.Stdin)
 
 	dir, err := agentDir()
 	if err != nil {
@@ -179,17 +184,21 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	daemon.Nudge(info)
 }
 
-// hookDetail turns the hook payload into one line. Claude Code passes the
-// event as JSON on stdin; only its own message is used, never session content.
+// The hook payload arrives as JSON on stdin. Only Claude's own message is
+// used, never session content.
 func hookDetail(event string, stdin io.Reader) string {
 	msg := ""
 	if stdin != nil {
 		var payload struct {
 			Message string `json:"message"`
+			Event   string `json:"hook_event_name"`
 		}
 		if data, err := io.ReadAll(io.LimitReader(stdin, 8<<10)); err == nil {
 			_ = json.Unmarshal(data, &payload)
 			msg = strings.TrimSpace(payload.Message)
+			if event == "" {
+				event = strings.TrimSpace(payload.Event)
+			}
 		}
 	}
 	switch {
