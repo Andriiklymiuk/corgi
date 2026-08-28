@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -275,5 +276,24 @@ func TestRunAgentRestartRunsDownThenFreshUp(t *testing.T) {
 	}
 	if !freshWhenUpRan {
 		t.Error("restart must force --fresh before up runs")
+	}
+}
+
+func TestTunnelArgs(t *testing.T) {
+	if args, err := tunnelArgs("", "", ""); err != nil || len(args) != 0 {
+		t.Errorf("quick tunnel: %v %v", args, err)
+	}
+	if args, err := tunnelArgs("ngrok", "", ""); err != nil || strings.Join(args, " ") != "--tunnel-provider ngrok" {
+		t.Errorf("provider only: %v %v", args, err)
+	}
+	if _, err := tunnelArgs("", "corgi-agent", ""); err == nil || !strings.Contains(err.Error(), "--tunnel-hostname") {
+		t.Errorf("a name without a hostname must be refused with the fix, got %v", err)
+	}
+	args, err := tunnelArgs("", "corgi-agent", "corgi.example.com")
+	if err != nil || strings.Join(args, " ") != "--tunnel-name corgi-agent --tunnel-hostname corgi.example.com" {
+		t.Errorf("named: %v %v", args, err)
+	}
+	if args, err := tunnelArgs("ngrok", "", "x.ngrok-free.app"); err != nil || strings.Join(args, " ") != "--tunnel-provider ngrok --tunnel-hostname x.ngrok-free.app" {
+		t.Errorf("hostname only (ngrok static domain): %v %v", args, err)
 	}
 }
