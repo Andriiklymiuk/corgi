@@ -67,6 +67,23 @@ corgi agent install              # start at login (launchd / systemd)
 corgi agent status               # what is running, and under which account
 ```
 
+### Which path the phone should use
+
+Pick by where the phone will be, not by which tunnel sounds best:
+
+| where the phone is | run this | URL to save on the phone |
+|---|---|---|
+| on the same Wi-Fi | `corgi agent up --http 0.0.0.0:8765` | `http://<lan-ip>:8765/app` |
+| anywhere, domain on Cloudflare | `corgi agent tunnel setup corgi.yourdomain.com` | `https://corgi.yourdomain.com/app` |
+| anywhere, no domain | `corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok` | that host + `/app` |
+| one-off, re-pairing is fine | `corgi agent up` | changes on every restart |
+
+The Wi-Fi row uses no tunnel, no DNS and no provider, so it is the fastest and
+the least breakable — reach for it first when you are at home. The launcher is
+token-protected either way, so serving it on the local network is not serving it
+to the internet. The middle two rows keep a fixed origin, which is what keeps
+the phone paired across restarts; the quick tunnel does not.
+
 ### A launcher URL that never changes
 
 The default is a Cloudflare **quick tunnel**: free, no signup — and a **new random
@@ -92,14 +109,15 @@ phone stays paired across restarts.
 `corgi agent restart` keeps the named tunnel. Pass the flags again to change
 them; `--tunnel-hostname ""` goes back to a quick tunnel.
 
-No domain on Cloudflare? ngrok's free tier includes one static domain and needs
-no DNS work:
+No domain on Cloudflare? ngrok's free tier already gave your account one static
+`*.ngrok-free.dev` **dev domain** and needs no DNS work. You cannot choose its
+name — picking one is a paid feature — but the assigned one never changes:
 
 ```bash
 brew install ngrok
-ngrok config add-authtoken <token>        # dashboard.ngrok.com → Your Authtoken
-# dashboard.ngrok.com → Domains → claim your free *.ngrok-free.app domain, then:
-corgi agent up --provider ngrok --tunnel-hostname <yours>.ngrok-free.app
+ngrok config add-authtoken <token>   # dashboard.ngrok.com → Your Authtoken
+# dashboard.ngrok.com → Domains → copy the row tagged `dev domain`, then:
+corgi agent up --provider ngrok --tunnel-hostname <yours>.ngrok-free.dev
 ```
 
 The first time the phone opens the page, ngrok's free tier shows its own
@@ -111,7 +129,7 @@ phone's home screen once. One command does the whole setup and remembers it:
 
 ```bash
 corgi agent tunnel setup corgi.yourdomain.com                  # cloudflared
-corgi agent tunnel setup <yours>.ngrok-free.app --provider ngrok
+corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 ```
 
 Per-service stable tunnels: [docs/tunnel.md](tunnel.md#stable-urls-named-mode).
@@ -249,6 +267,22 @@ corgi agent up --http 0.0.0.0:8765     # prints http://<lan-ip>:8765/app too
 That path has no DNS, no provider and no public exposure — it is the one to
 reach for first when you are at home, and the fallback when a tunnel misbehaves.
 Back to loopback with `corgi agent restart --http 127.0.0.1:8765`.
+
+When it is unclear whether corgi or the tunnel is at fault, two requests settle
+it. Run both on the machine:
+
+```bash
+curl -so /dev/null -w '%{http_code} %{time_total}s\n' http://127.0.0.1:8765/app
+curl -so /dev/null -w '%{http_code} %{time_total}s\n' https://<public-host>/app
+```
+
+A slow or failing loopback request means corgi itself — `corgi agent status`,
+then `corgi agent restart`. A fast loopback and a failing public one means the
+tunnel is not delivering; switch provider, or use the Wi-Fi path above. Both
+fast means the machine's side is healthy and the phone's network is the
+problem, so test the public URL again from something that is not on this
+network — the machine shares its own DNS and route with that second request,
+so a `200` there does not prove a phone on cellular can resolve the name.
 
 ### When a session needs you
 
