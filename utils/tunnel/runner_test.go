@@ -207,3 +207,25 @@ func TestRunNamedHostnameEmitted(t *testing.T) {
 		t.Errorf("missing hostname url: %v", urls)
 	}
 }
+
+func TestRunNamedWithoutHostnameFails(t *testing.T) {
+	events := make(chan Event, 8)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		Run(ctx, fakeProvider{}, "svc", 3000, &NamedConfig{Name: "mytun"}, events)
+		close(events)
+	}()
+	var errs []error
+	for ev := range events {
+		if ev.URL != "" {
+			t.Errorf("a hostname-less named tunnel must not emit a URL, got %q", ev.URL)
+		}
+		if ev.Err != nil {
+			errs = append(errs, ev.Err)
+		}
+	}
+	if len(errs) == 0 || !strings.Contains(errs[0].Error(), "mytun") {
+		t.Errorf("expected an error naming the tunnel, got %v", errs)
+	}
+}

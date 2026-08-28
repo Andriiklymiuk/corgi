@@ -68,7 +68,13 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	addr, _ := cmd.Flags().GetString("http")
 	provider, _ := cmd.Flags().GetString("provider")
 	tunnelName, _ := cmd.Flags().GetString("tunnel-name")
+	tunnelHost, _ := cmd.Flags().GetString("tunnel-hostname")
 	fresh, _ := cmd.Flags().GetBool("fresh")
+
+	tunnel, err := tunnelArgs(provider, tunnelName, tunnelHost)
+	if err != nil {
+		exitWithError("agent_up_tunnel", err, 2)
+	}
 
 	dir, err := agentDir()
 	if err != nil {
@@ -144,7 +150,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		}
 	}
 
-	if err := spawnDetachedMCP(dir, addr, provider, tunnelName); err != nil {
+	if err := spawnDetachedMCP(dir, addr, tunnel); err != nil {
 		exitWithError("agent_up_mcp", err, 1)
 	}
 	res.MCPStarted = true
@@ -227,16 +233,29 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 	return nil, fmt.Errorf("daemon did not come up — see %s", filepath.Join(dir, "serve.log"))
 }
 
-func spawnDetachedMCP(dir, addr, provider, tunnelName string) error {
-	args := []string{"mcp", "--http", addr, "--tunnel", "--pair"}
+// tunnelArgs turns the up flags into `corgi mcp` tunnel flags. A named tunnel
+// needs its hostname: cloudflared never reports one, and without it the
+// printed launcher URL would be "https:///app".
+func tunnelArgs(provider, name, host string) ([]string, error) {
+	var args []string
 	if provider != "" {
 		args = append(args, "--tunnel-provider", provider)
 	}
-	// A named tunnel gives a stable public URL, so the launcher can be
-	// bookmarked / saved to a home screen and survive a restart of `agent up`.
-	if tunnelName != "" {
-		args = append(args, "--tunnel-name", tunnelName)
+	if name == "" && host == "" {
+		return args, nil
 	}
+	if host == "" {
+		return nil, fmt.Errorf("--tunnel-name %s needs --tunnel-hostname <host>: the DNS name you routed to it "+
+			"(cloudflared tunnel route dns %s corgi.yourdomain.com)", name, name)
+	}
+	if name != "" {
+		args = append(args, "--tunnel-name", name)
+	}
+	return append(args, "--tunnel-hostname", host), nil
+}
+
+func spawnDetachedMCP(dir, addr string, tunnel []string) error {
+	args := append([]string{"mcp", "--http", addr, "--tunnel", "--pair"}, tunnel...)
 	// Truncate the old log first: awaitMCPLog must not read a previous run's
 	// URL or pairing code as this one's.
 	_ = os.Remove(filepath.Join(dir, mcpLogName))
@@ -628,7 +647,8 @@ func readAgentPidFile(path string) (int, bool) {
 func addAgentUpFlags(c *cobra.Command) {
 	c.Flags().String("http", defaultMCPAddr, "Local MCP address")
 	c.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
-	c.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — gives a stable public URL you can bookmark (needs a one-time `cloudflared tunnel create`; see docs/tunnel.md)")
+	c.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — a stable public URL you can bookmark, and a phone that stays paired (needs a one-time `cloudflared tunnel create` and --tunnel-hostname; see docs/agent.md)")
+	c.Flags().String("tunnel-hostname", "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it)")
 	c.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
 }
 
