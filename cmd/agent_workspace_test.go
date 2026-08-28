@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -279,5 +280,49 @@ func TestEnableWorkspaceSkipPermissionsIsSticky(t *testing.T) {
 	}
 	if user.Workspaces["acme"].ConfigDir != "~/.claude-x" {
 		t.Error("a re-init without --config-dir must keep the existing one")
+	}
+}
+
+func TestLocalClaudeSessionsLinksBridgedProcesses(t *testing.T) {
+	cfg := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "app")
+	dir := filepath.Join(cfg, "sessions")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	me := os.Getpid()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("1.json", fmt.Sprintf(`{"pid":%d,"sessionId":"uuid-1","cwd":%q,"kind":"interactive","entrypoint":"claude-vscode","startedAt":10,"name":"app-0a","bridgeSessionId":"session_01ABC"}`, me, repo))
+	write("2.json", fmt.Sprintf(`{"pid":%d,"sessionId":"uuid-2","cwd":%q,"kind":"interactive","startedAt":20,"name":"app-1b"}`, me, repo))
+	write("3.json", fmt.Sprintf(`{"pid":%d,"sessionId":"uuid-3","cwd":%q,"kind":"interactive","startedAt":30,"name":"app-2c","bridgeSessionId":"session_01DEAD"}`, 999999, repo))
+	write("4.json", fmt.Sprintf(`{"pid":%d,"sessionId":"uuid-4","cwd":%q,"kind":"interactive","startedAt":40,"name":"other","bridgeSessionId":"session_01OTHER"}`, me, "/somewhere/else"))
+	write("5.json", fmt.Sprintf(`{"pid":%d,"sessionId":"uuid-5","cwd":%q,"kind":"interactive","startedAt":50,"name":"app-wt","bridgeSessionId":"nope"}`, me, filepath.Join(repo, ".worktrees", "x")))
+	write("junk.json", "{not json")
+
+	got, ok := localClaudeSessions(repo, cfg)
+	if !ok {
+		t.Fatal("a sessions dir must be recognised")
+	}
+	if len(got) != 3 {
+		t.Fatalf("sessions = %+v, want the 3 live ones under the repo", got)
+	}
+	if got[0].Name != "app-wt" || got[0].URL != "" {
+		t.Errorf("newest first and a non-session_ bridge id gets no link, got %+v", got[0])
+	}
+	if got[2].Name != "app-0a" || got[2].URL != "https://claude.ai/code/session_01ABC" {
+		t.Errorf("a bridged vscode session must link to its bridge id, got %+v", got[2])
+	}
+	if got[1].URL != "" {
+		t.Errorf("a session without a bridge id must not fabricate a link, got %+v", got[1])
+	}
+}
+
+func TestLocalClaudeSessionsFallsBackWithoutTheDir(t *testing.T) {
+	if _, ok := localClaudeSessions("/x", t.TempDir()); ok {
+		t.Error("no sessions dir must report not-ok so the CLI fallback runs")
 	}
 }

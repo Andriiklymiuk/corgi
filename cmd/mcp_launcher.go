@@ -162,14 +162,21 @@ func launchStopHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, result)
 }
 
-// claudeSession is one entry from `claude agents --json`.
+// claudeSession is one running Claude Code process for a workspace: the
+// per-pid records under <configDir>/sessions, with `claude agents --json` as
+// the fallback. BridgeSessionID is the claude.ai id the process registered —
+// the one the site resolves — so a terminal or VS Code session gets a real
+// link, unlike its local SessionID, which the web does not know.
 type claudeSession struct {
-	Name      string `json:"name"`
-	SessionID string `json:"sessionId"`
-	CWD       string `json:"cwd"`
-	Kind      string `json:"kind"`
-	StartedAt int64  `json:"startedAt"`
-	PID       int    `json:"pid"`
+	Name            string `json:"name"`
+	SessionID       string `json:"sessionId"`
+	CWD             string `json:"cwd"`
+	Kind            string `json:"kind"`
+	Entrypoint      string `json:"entrypoint,omitempty"`
+	StartedAt       int64  `json:"startedAt"`
+	PID             int    `json:"pid"`
+	BridgeSessionID string `json:"bridgeSessionId,omitempty"`
+	URL             string `json:"url,omitempty"`
 }
 
 // launchSessionsHandler lists the Claude sessions for one workspace. corgi holds
@@ -308,6 +315,57 @@ func pidExists(pid int) bool {
 // missing claude binary, a timeout, or no sessions all resolve to an empty list,
 // so the launcher shows "no sessions" rather than a 500.
 func listClaudeSessions(absPath, configDir string) []claudeSession {
+	if sessions, ok := localClaudeSessions(absPath, configDir); ok {
+		return sessions
+	}
+	return claudeAgentsSessions(absPath, configDir)
+}
+
+// localClaudeSessions reads the per-process records Claude Code keeps under
+// <configDir>/sessions/<pid>.json. ok is false when the directory is absent
+// (an older CLI), so the caller can fall back to shelling out.
+func localClaudeSessions(absPath, configDir string) ([]claudeSession, bool) {
+	base := expandTilde(configDir)
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, false
+		}
+		base = filepath.Join(home, ".claude")
+	}
+	entries, err := os.ReadDir(filepath.Join(base, "sessions"))
+	if err != nil {
+		return nil, false
+	}
+	out := []claudeSession{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(base, "sessions", e.Name()))
+		if err != nil {
+			continue
+		}
+		var cs claudeSession
+		if json.Unmarshal(data, &cs) != nil || cs.CWD == "" {
+			continue
+		}
+		if cs.CWD != absPath && !strings.HasPrefix(cs.CWD, absPath+string(filepath.Separator)) {
+			continue
+		}
+		if !pidExists(cs.PID) {
+			continue
+		}
+		if strings.HasPrefix(cs.BridgeSessionID, "session_") {
+			cs.URL = "https://claude.ai/code/" + cs.BridgeSessionID
+		}
+		out = append(out, cs)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt > out[j].StartedAt })
+	return out, true
+}
+
+func claudeAgentsSessions(absPath, configDir string) []claudeSession {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	// Fixed argv (no shell); absPath is the trusted registry path.
@@ -578,7 +636,7 @@ const launcherPageHTML = `<!doctype html>
     // Openable links come ONLY from the per-session URLs remote control printed
     // (captured by the daemon). Ids from the claude CLI are local UUIDs the
     // site does not resolve; those rows render below as plain status, no link.
-    const renderLink = (url, isBridge, when) => {
+    const renderLink = (url, isBridge, when, label) => {
       const el = document.createElement('a');
       el.className = 's';
       el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
@@ -586,8 +644,8 @@ const launcherPageHTML = `<!doctype html>
       if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
       const tag = isBridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
-      el.innerHTML = '<span>' + esc(url.split('/').pop().slice(0, 18)) + '\u2026' + tag + '</span><span class="when">' +
-        esc(when || '') + 'open \u2197</span>';
+      const text = label ? esc(label) : esc(url.split('/').pop().slice(0, 18)) + '\u2026';
+      el.innerHTML = '<span>' + text + tag + '</span><span class="when">' + esc(when || '') + 'open \u2197</span>';
       box.appendChild(el);
     };
     const note = (text) => {
@@ -619,14 +677,31 @@ const launcherPageHTML = `<!doctype html>
       const s = j.sessions || [];
       if (!s.length && !shown.size && !bridges.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
       info.remove();
+      let localOnly = 0;
       for (const sess of s) {
+        const where = whereLabel(sess);
+        if (sess.url && safeClaudeUrl(sess.url) && !shown.has(sess.url)) {
+          shown.add(sess.url);
+          renderLink(sess.url, false, where + ' \u00b7 ' + fmtWhen(sess.startedAt) + ' \u00b7 ', sess.name);
+          continue;
+        }
+        if (sess.url && shown.has(sess.url)) continue;
+        localOnly++;
         const el = document.createElement('div');
         el.className = 's';
         el.innerHTML = '<span>' + esc(sess.name || 'session') + '</span>' +
-          '<span class="when">' + esc(sess.kind || '') + ' \u00b7 ' + esc(fmtWhen(sess.startedAt)) + '</span>';
+          '<span class="when">' + esc(where) + ' \u00b7 ' + esc(fmtWhen(sess.startedAt)) + ' \u00b7 local only</span>';
         box.appendChild(el);
       }
+      if (localOnly) note('local only = running on the laptop with no web link yet; type /remote-control in that session to reach it from here.');
     } catch (e) { info.textContent = '\u2717 ' + e.message; }
+  }
+
+  function whereLabel(sess) {
+    const ep = String(sess.entrypoint || '');
+    if (ep.indexOf('vscode') >= 0) return 'vscode';
+    if (ep === 'sdk-cli') return 'remote';
+    return sess.kind === 'interactive' ? 'terminal' : (sess.kind || 'session');
   }
 
   function fmtWhen(ms) {
