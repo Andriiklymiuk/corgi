@@ -30,9 +30,8 @@ Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
 ## Why corgi
 
-Take one ordinary ticket: a referral program. New endpoint in `api`, new page in `web`,
-new screen in `mobile`, one migration. All of it has to run together before you can tell whether
-any of it works.
+Say the ticket is a referral program: new endpoint in `api`, new page in `web`, new screen in
+`mobile`, one migration. All of it has to run together before you can tell if it works.
 
 ```text
   without corgi                          with corgi
@@ -47,22 +46,18 @@ any of it works.
   half a day, per person, per laptop     one command, then you write code
 ```
 
-What that buys you:
+What you get:
 
-- **You know the feature works before the PR.** The mobile app calls the real endpoint, which
-  reads the real seeded database, on your laptop. No "works in my service" surprises at review.
-- **Any combination of branches.** `--feature ABC-123` runs every repo that has that branch and
-  leaves the rest on `main`. `--service-branch api=fix/login` swaps just one.
-- **One repo or twelve, same command.** A single service still gets its database seeded and its
-  `.env` written. When the project grows, you add a service to the file and everyone has it.
-- **It doesn't stop at setup.** `corgi db -u` for databases only, `corgi tunnel` for a webhook URL,
-  `corgi status -w` when something looks wrong, `corgi doctor` before you blame your machine.
-- **Your agent gets the same workspace**, so it can finish a ticket instead of editing a file.
-  [More below](#let-an-agent-take-a-whole-ticket).
-- **CI runs the same file**, so the combination is tested, not just each repo alone.
-  [More below](#run-the-whole-stack-in-ci).
-- **Your phone can start work on that laptop**, which matters when the job needs the real machine.
-  [More below](#code-from-your-phone).
+- **The feature runs before the PR.** The mobile app calls the real endpoint, which reads the
+  seeded database, on your laptop.
+- **Any mix of branches.** `--feature ABC-123` runs every repo that has that branch and leaves the
+  rest on `main`. `--service-branch api=fix/login` swaps one service.
+- **The same with a single repo.** One service still gets a seeded database and a written `.env`.
+  Add more later and everyone gets them with a `git pull`.
+- **Commands for the rest of the day.** `corgi db -u` for databases only, `corgi tunnel` for a
+  public webhook URL, `corgi status -w` when a service looks wrong.
+- **The same workspace for your [agent](#let-an-agent-take-a-whole-ticket), your
+  [CI](#run-the-whole-stack-in-ci) and your [phone](#code-from-your-phone).**
 
 If you already use `docker-compose`, keep it. corgi runs the repos, seed data, env files and tool
 checks around your containers.
