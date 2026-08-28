@@ -440,7 +440,7 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 				mcpPublicTunnelActive.Store(true)
 				// Probe the route the tools are actually served on, not the
 				// root — see probeTunnelExposure.
-				go probeTunnelExposure(ctx, mcpProbeTarget(ev.URL))
+				go probeTunnelExposure(ctx, mcpProbeTarget(ev.URL), nil)
 				recordPublicURL(ev.URL)
 				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
 				// Don't reprint the bearer token in a pasteable block on the
@@ -468,8 +468,28 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 // Runs in the background: nothing may wait on it, because the endpoint is
 // already serving by the time the URL is printed, and a gate that starts closed
 // and opens on evidence is the safe direction to be wrong in.
-func probeTunnelExposure(ctx context.Context, url string) {
-	result := exposureProbe(ctx, url)
+// probeDelays waits out DNS propagation before asking. A quick tunnel's
+// hostname does not resolve for a few seconds after cloudflared prints it, and
+// a query made in that window is answered NXDOMAIN — which resolvers cache
+// against the negative TTL on the zone's SOA, half an hour for trycloudflare.
+// Probing immediately therefore poisons the very hostname corgi just published,
+// for the machine and every device sharing its resolver.
+var probeDelays = []time.Duration{8 * time.Second, 20 * time.Second, 45 * time.Second}
+
+func probeTunnelExposure(ctx context.Context, url string, sleep func(context.Context, time.Duration) bool) {
+	if sleep == nil {
+		sleep = waitOrDone
+	}
+	var result tunnel.AccessResult
+	for _, delay := range probeDelays {
+		if !sleep(ctx, delay) {
+			return
+		}
+		result = exposureProbe(ctx, url)
+		if result.Protected || !probeNameUnresolved(result) {
+			break
+		}
+	}
 	if !result.Protected {
 		// Not a warning: this is the documented default. The block message
 		// already told them how to change it.
@@ -485,6 +505,26 @@ func probeTunnelExposure(ctx context.Context, url string) {
 // exposureProbe is the access check, swappable so a test can assert which URL
 // the gate is measured against without needing a trusted certificate.
 var exposureProbe = tunnel.ProbeAccess
+
+// probeNameUnresolved reports the one failure worth retrying: the hostname is
+// not in DNS yet. Anything else is a real answer about the endpoint.
+func probeNameUnresolved(r tunnel.AccessResult) bool {
+	d := strings.ToLower(r.Detail)
+	return strings.Contains(d, "no such host") || strings.Contains(d, "server misbehaving")
+}
+
+// waitOrDone sleeps unless the context ends first, reporting whether the wait
+// completed and the caller should carry on.
+func waitOrDone(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
 
 // mcpProbeTarget is the URL the exposure probe must measure: the route the
 // tools are served on, never the tunnel root.

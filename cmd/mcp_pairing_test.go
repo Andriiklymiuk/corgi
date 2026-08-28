@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,8 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils/agent/pairing"
+	"andriiklymiuk/corgi/utils/tunnel"
 )
 
 func pairingFixture(t *testing.T) (*pairing.Session, string, string) {
@@ -429,5 +432,76 @@ func TestInspectStoreDistinguishesUnreadable(t *testing.T) {
 	}
 	if got := pairing.InspectStore(path); got != pairing.StoreUnreadable {
 		t.Errorf("corrupt store = %v, want StoreUnreadable", got)
+	}
+}
+
+func TestProbeWaitsBeforeAskingDNS(t *testing.T) {
+	origProbe := exposureProbe
+	t.Cleanup(func() { exposureProbe = origProbe })
+
+	var asked int
+	exposureProbe = func(context.Context, string) tunnel.AccessResult {
+		asked++
+		return tunnel.AccessResult{Detail: "probe failed: dial tcp: lookup x: no such host"}
+	}
+	var waited []time.Duration
+	sleep := func(context.Context, time.Duration) bool { return true }
+	record := func(ctx context.Context, d time.Duration) bool {
+		waited = append(waited, d)
+		return sleep(ctx, d)
+	}
+
+	probeTunnelExposure(context.Background(), "https://x.trycloudflare.com/mcp", record)
+
+	if len(waited) == 0 || waited[0] == 0 {
+		t.Fatalf("the first probe must wait for DNS to propagate, waits=%v", waited)
+	}
+	if asked != len(probeDelays) {
+		t.Errorf("an unresolved name must be retried: asked %d times, want %d", asked, len(probeDelays))
+	}
+	if mcpTunnelPrivate.Load() {
+		t.Error("a failed probe must not mark the tunnel private")
+	}
+}
+
+func TestProbeStopsOnceItGetsAnAnswer(t *testing.T) {
+	origProbe := exposureProbe
+	t.Cleanup(func() { exposureProbe = origProbe; mcpTunnelPrivate.Store(false) })
+
+	var asked int
+	exposureProbe = func(context.Context, string) tunnel.AccessResult {
+		asked++
+		return tunnel.AccessResult{Detail: "public endpoint"}
+	}
+	probeTunnelExposure(context.Background(), "https://x.trycloudflare.com/mcp",
+		func(context.Context, time.Duration) bool { return true })
+	if asked != 1 {
+		t.Errorf("a real answer must end the retries, asked %d times", asked)
+	}
+}
+
+func TestProbeGivesUpWhenTheServerStops(t *testing.T) {
+	origProbe := exposureProbe
+	t.Cleanup(func() { exposureProbe = origProbe })
+	var asked int
+	exposureProbe = func(context.Context, string) tunnel.AccessResult {
+		asked++
+		return tunnel.AccessResult{}
+	}
+	probeTunnelExposure(context.Background(), "https://x/mcp",
+		func(context.Context, time.Duration) bool { return false })
+	if asked != 0 {
+		t.Errorf("a cancelled wait must not probe, asked %d times", asked)
+	}
+}
+
+func TestWaitOrDoneRespectsCancellation(t *testing.T) {
+	if !waitOrDone(context.Background(), time.Millisecond) {
+		t.Error("a completed wait must report true")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if waitOrDone(ctx, time.Hour) {
+		t.Error("a cancelled context must not wait out the delay")
 	}
 }
