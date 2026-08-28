@@ -398,7 +398,7 @@ func dynDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := testDaemon(t)
 	d.CommandTick = 10 * time.Millisecond
-	d.ResolveWorkspace = func(id, profile string) (supervisor.SpawnConfig, error) {
+	d.ResolveWorkspace = func(id, profile, name string) (supervisor.SpawnConfig, error) {
 		if id == "ghost" {
 			return supervisor.SpawnConfig{}, errors.New("no workspace called \"ghost\" in the registry")
 		}
@@ -555,7 +555,7 @@ func TestDaemonSurvivesASIGUSR1Nudge(t *testing.T) {
 
 func TestInfoCarriesCommandSupport(t *testing.T) {
 	d := New("test", t.TempDir())
-	d.ResolveWorkspace = func(string, string) (supervisor.SpawnConfig, error) {
+	d.ResolveWorkspace = func(string, string, string) (supervisor.SpawnConfig, error) {
 		return supervisor.SpawnConfig{}, nil
 	}
 	if err := d.writeInfoIDs(nil); err != nil {

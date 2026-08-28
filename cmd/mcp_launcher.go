@@ -11,12 +11,14 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/events"
+	"andriiklymiuk/corgi/utils/agent/pairing"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
@@ -46,6 +48,19 @@ type launchWorkspace struct {
 	// claude CLI lists locally are UUIDs the web does not know).
 	SessionLinks []string `json:"sessionLinks,omitempty"`
 	Note         string   `json:"note,omitempty"`
+	// Live is how many Claude processes are running in the workspace right
+	// now, from the per-pid records; LastEvent is the newest timeline entry,
+	// so a card can say why a session ended without opening anything.
+	Live      int              `json:"live"`
+	LastEvent *launchLastEvent `json:"lastEvent,omitempty"`
+	Profiles  []string         `json:"profiles,omitempty"`
+}
+
+type launchLastEvent struct {
+	Kind   string `json:"kind"`
+	Cause  string `json:"cause,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	At     int64  `json:"at"`
 }
 
 func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
@@ -96,17 +111,59 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 		}
 	}
 
+	profiles := launchProfileNames()
 	out := make([]launchWorkspace, 0, len(registry.Workspaces))
 	for _, ws := range registry.Sorted() {
 		s := running[ws.ID]
-		out = append(out, launchWorkspace{
+		row := launchWorkspace{
 			ID: ws.ID, Aliases: ws.Aliases, Path: ws.AbsPath,
 			Status: string(ws.Status), Running: s.running, SessionURL: s.url,
-			SessionLinks: s.sessions, Note: s.note,
-		})
+			SessionLinks: s.sessions, Note: s.note, Profiles: profiles,
+		}
+		row.Live, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath)
+		out = append(out, row)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+// workspaceActivity counts the live Claude processes in a workspace and reads
+// its newest timeline entry. Best-effort on both halves: a workspace with
+// neither is simply idle with nothing to report.
+func workspaceActivity(id, absPath string) (int, *launchLastEvent) {
+	var live int
+	if _, configDir, ok := workspaceSessionTarget(id); ok && absPath != "" {
+		live = len(listClaudeSessions(absPath, configDir))
+	}
+	dir, err := agentDir()
+	if err != nil {
+		return live, nil
+	}
+	recent := events.NewLog(dir).Read(id, 1)
+	if len(recent) == 0 {
+		return live, nil
+	}
+	e := recent[0]
+	return live, &launchLastEvent{Kind: e.Kind, Cause: e.Cause, Reason: e.Reason, At: e.At.UnixMilli()}
+}
+
+// launchProfileNames lists the profiles a phone may pick at start time. Only
+// the NAMES cross the wire — what each selects stays in the trusted config.
+func launchProfileNames() []string {
+	dir, err := agentDir()
+	if err != nil {
+		return nil
+	}
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil || user == nil || len(user.Profiles) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(user.Profiles))
+	for n := range user.Profiles {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func launchStartHandler(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +175,7 @@ func launchStartHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Workspace string `json:"workspace"`
 		Profile   string `json:"profile"`
+		Name      string `json:"name"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the start request")
@@ -129,7 +187,7 @@ func launchStartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Same code path as the MCP tool, so the two surfaces cannot drift: it
 	// resolves the name, refuses a sensitive workspace, and enqueues the start.
-	result, err := mcpSessionStart(req.Workspace, req.Profile)
+	result, err := mcpSessionStart(req.Workspace, req.Profile, req.Name)
 	if err != nil {
 		writeLaunchError(w, http.StatusBadRequest, err.Error())
 		return
@@ -203,7 +261,144 @@ func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
 		"sessions": listClaudeSessions(absPath, configDir),
 		"links":    bridgeSessionLinks(absPath, configDir),
 		"history":  sessionHistory(id),
+		"events":   recentEvents(id, 6),
 	})
+}
+
+// recentEvents is the tail of a workspace's timeline, newest first, for the
+// launcher's session drawer.
+func recentEvents(workspaceID string, limit int) []launchLastEvent {
+	dir, err := agentDir()
+	if err != nil {
+		return []launchLastEvent{}
+	}
+	out := []launchLastEvent{}
+	for _, e := range events.NewLog(dir).Read(workspaceID, limit) {
+		out = append(out, launchLastEvent{Kind: e.Kind, Cause: e.Cause, Reason: e.Reason, At: e.At.UnixMilli()})
+	}
+	return out
+}
+
+// launchInfoHandler answers "which machine am I looking at, and is it current".
+// The version check is served from a cache the server refreshes in the
+// background, so the page never waits on GitHub.
+func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodGet {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	host, _ := os.Hostname()
+	info := map[string]any{
+		"host":    host,
+		"version": APP_VERSION,
+		"daemon":  false,
+	}
+	if dir, err := agentDir(); err == nil {
+		if d, derr := daemon.ReadInfo(dir); derr == nil && d != nil {
+			info["daemon"] = true
+			info["daemonPid"] = d.PID
+		}
+	}
+	if latest := cachedLatestVersion(); latest != "" && latest != APP_VERSION {
+		info["latest"] = latest
+	}
+	writeLaunchJSON(w, info)
+}
+
+var latestVersion struct {
+	mu      sync.Mutex
+	value   string
+	checked time.Time
+}
+
+// cachedLatestVersion returns the newest released version, refreshing at most
+// hourly on a background goroutine. Returning "" (unknown) is normal and just
+// means the page shows no update hint.
+func cachedLatestVersion() string {
+	latestVersion.mu.Lock()
+	defer latestVersion.mu.Unlock()
+	if time.Since(latestVersion.checked) < time.Hour {
+		return latestVersion.value
+	}
+	latestVersion.checked = time.Now()
+	go func() {
+		tag, err := getLatestGitHubTag()
+		if err != nil {
+			return
+		}
+		latestVersion.mu.Lock()
+		latestVersion.value = strings.TrimPrefix(strings.TrimSpace(tag), "v")
+		latestVersion.mu.Unlock()
+	}()
+	return latestVersion.value
+}
+
+// launchDevicesHandler lists paired devices and revokes one. A device may not
+// revoke itself: locking yourself out of the only paired phone from the phone
+// is never what you meant, and the laptop can always do it.
+func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, "could not resolve the agent data directory")
+		return
+	}
+	path := pairing.StorePath(dir)
+	me, _ := authorizedDevice(path, r.Header.Get("Authorization"))
+
+	switch r.Method {
+	case http.MethodGet:
+		store, err := pairing.Load(path)
+		if err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, "could not read the paired devices")
+			return
+		}
+		list := make([]map[string]any, 0, len(store.Devices))
+		for _, d := range store.Devices {
+			list = append(list, map[string]any{
+				"name": d.Name, "pairedAt": d.CreatedAt.UnixMilli(), "current": d.Name == me,
+			})
+		}
+		writeLaunchJSON(w, map[string]any{"devices": list})
+	case http.MethodDelete:
+		name := strings.TrimSpace(r.URL.Query().Get("name"))
+		if name == "" {
+			writeLaunchError(w, http.StatusBadRequest, "a device name is required")
+			return
+		}
+		if name == me {
+			writeLaunchError(w, http.StatusBadRequest, "this device cannot revoke itself — do it from the laptop with `corgi mcp devices revoke`")
+			return
+		}
+		store, err := pairing.Load(path)
+		if err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, "could not read the paired devices")
+			return
+		}
+		if !store.Revoke(name) {
+			writeLaunchError(w, http.StatusNotFound, "no device named "+name)
+			return
+		}
+		if err := pairing.Save(path, store); err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, "could not save the paired devices")
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"revoked": name})
+	default:
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET to list, DELETE to revoke")
+	}
+}
+
+// launchDoctorHandler serves the same checks as `corgi agent doctor`, so a
+// failing card can be diagnosed without walking to the laptop.
+func launchDoctorHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodGet {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"checks": collectAgentChecks()})
 }
 
 type launchHistoryEntry struct {
@@ -453,7 +648,27 @@ const launcherPageHTML = `<!doctype html>
   .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.5rem;line-height:1.45}
   .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
   .dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(126,231,135,.14),0 0 8px rgba(126,231,135,.45)}
-  .actions{display:flex;align-items:center;gap:.4rem;margin-top:.65rem}
+  .meta{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.3rem;font-size:.72rem;color:var(--dim2)}
+  .meta .live{color:var(--green)}
+  .meta .why{color:var(--dim)}
+  .actions{display:flex;align-items:center;gap:.4rem;margin-top:.65rem;flex-wrap:wrap}
+  .startbox{flex-basis:100%;display:none;gap:.4rem;margin-top:.5rem}
+  .startbox.on{display:flex}
+  .startbox select,.startbox input{flex:1 1 6rem;min-width:0;background:var(--card2);border:1px solid var(--line);
+      color:var(--text);border-radius:.5rem;padding:.4rem .55rem;font-size:.78rem;font-family:inherit}
+  .evrow{display:flex;justify-content:space-between;gap:.6rem;font-size:.72rem;color:var(--dim);padding:.2rem .1rem}
+  .evrow b{font-weight:600;color:#c9cfda}
+  .dev{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.8rem;
+      padding:.4rem 0;border-bottom:1px solid var(--line)}
+  .dev:last-child{border-bottom:0}
+  .dev .sub{color:var(--dim2);font-size:.7rem}
+  .dev button{background:none;border:1px solid rgba(255,123,114,.45);color:var(--red);font-size:.7rem;
+      padding:.25rem .6rem;border-radius:.5rem}
+  .chk{display:flex;gap:.5rem;font-size:.78rem;padding:.35rem 0;border-bottom:1px solid var(--line);line-height:1.45}
+  .chk:last-child{border-bottom:0}
+  .chk .fix{color:var(--dim);display:block;font-size:.72rem;margin-top:.15rem}
+  .chk.bad .mark{color:var(--red)}
+  .chk .mark{color:var(--green);flex:0 0 auto}
   .chip{background:none;border:1px solid var(--line);color:var(--dim);font-size:.7rem;font-weight:650;
       padding:.3rem .65rem;border-radius:999px;cursor:pointer}
   .chip b{color:var(--text);font-weight:650}
@@ -504,6 +719,11 @@ const launcherPageHTML = `<!doctype html>
     <p>Each workspace has an <b>open in</b> pill — tap it to cycle: <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here; <b>chrome</b> forces Chrome via its URL scheme (needs Chrome installed) — right for a workspace on a different Claude account than the app is signed into. Remembered per workspace, on this browser only.</p>
     <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
     <p>A <b>bridge</b> is a remote-control session someone started on the laptop itself. Its claude.ai page shows only what you send from it — until then it looks empty. The full transcript stays on the laptop.</p>
+    <p><b>Paired devices.</b> Every device that scanned a pairing QR. Revoking one leaves the others working.</p>
+    <div id="devices" class="msg">Loading…</div>
+    <p><b>Something not starting?</b> The same checks as <code>corgi agent doctor</code>, from here.</p>
+    <button id="rundoctor">Run doctor</button>
+    <div id="doctor"></div>
     <p><b>Push notifications.</b> Set <code>notifyUrl</code> in the agent config on the laptop (for example an ntfy.sh topic you subscribe to in the ntfy app) and every session restart or failure reaches your phone. See <code>corgi agent doctor</code> and the agent docs.</p>
   </details>
   <p class="foot">
@@ -538,6 +758,7 @@ const launcherPageHTML = `<!doctype html>
       '<code>corgi agent up</code> and scan the QR to pair, then come back here.';
   } else {
     initSettings();
+    loadInfo();
     load();
   }
 
@@ -555,6 +776,64 @@ const launcherPageHTML = `<!doctype html>
     const bridges = document.getElementById('showbridges');
     bridges.checked = showBridges();
     bridges.onchange = () => setShowBridges(bridges.checked);
+    loadDevices();
+    document.getElementById('rundoctor').onclick = runDoctor;
+  }
+
+  async function loadDevices() {
+    const box = document.getElementById('devices');
+    try {
+      const r = await fetch('/launch/devices', { headers: auth });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      const list = j.devices || [];
+      if (!list.length) { box.className = 'msg'; box.textContent = 'No devices paired yet.'; return; }
+      box.className = ''; box.innerHTML = '';
+      for (const d of list) {
+        const row = document.createElement('div');
+        row.className = 'dev';
+        const left = document.createElement('div');
+        left.innerHTML = esc(d.name) + (d.current ? ' <span class="sub">· this device</span>' : '') +
+          '<div class="sub">paired ' + esc(fmtWhen(d.pairedAt)) + '</div>';
+        row.appendChild(left);
+        if (!d.current) {
+          const b = document.createElement('button');
+          b.textContent = 'Revoke';
+          b.onclick = () => revokeDevice(d.name, b);
+          row.appendChild(b);
+        }
+        box.appendChild(row);
+      }
+    } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
+  }
+
+  async function revokeDevice(name, btn) {
+    btn.disabled = true; btn.textContent = 'Revoking…';
+    try {
+      const r = await fetch('/launch/devices?name=' + encodeURIComponent(name), { method: 'DELETE', headers: auth });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      loadDevices();
+    } catch (e) { btn.disabled = false; btn.textContent = '✗ ' + e.message; }
+  }
+
+  async function runDoctor() {
+    const box = document.getElementById('doctor');
+    box.className = 'msg'; box.textContent = 'Checking…';
+    try {
+      const r = await fetch('/launch/doctor', { headers: auth });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      const checks = (j.checks || []).slice().sort((a, b) => (a.ok === b.ok) ? 0 : (a.ok ? 1 : -1));
+      box.className = ''; box.innerHTML = '';
+      for (const c of checks) {
+        const el = document.createElement('div');
+        el.className = 'chk' + (c.ok ? '' : ' bad');
+        el.innerHTML = '<span class="mark">' + (c.ok ? '✓' : '✗') + '</span><span><b>' + esc(c.name) + '</b> — ' +
+          esc(c.detail || '') + (c.fix ? '<span class="fix">fix: ' + esc(c.fix) + '</span>' : '') + '</span>';
+        box.appendChild(el);
+      }
+    } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
   }
 
   async function load() {
@@ -566,6 +845,22 @@ const launcherPageHTML = `<!doctype html>
     } catch (e) {
       list.className = 'msg err'; list.textContent = '✗ ' + e.message;
     }
+  }
+
+  async function loadInfo() {
+    try {
+      const r = await fetch('/launch/info', { headers: auth });
+      const j = await r.json();
+      if (!r.ok) return;
+      const bits = [];
+      if (j.host) bits.push(j.host);
+      if (j.version) bits.push('corgi ' + j.version);
+      bits.push(j.daemon ? 'daemon up' : 'daemon down');
+      if (j.latest) bits.push('v' + j.latest + ' available — corgi upd');
+      const el = document.getElementById('host');
+      el.textContent = bits.join(' · ');
+      if (!j.daemon) el.style.color = 'var(--red)';
+    } catch {}
   }
 
   function render(workspaces) {
@@ -592,6 +887,8 @@ const launcherPageHTML = `<!doctype html>
         path.textContent = full ? ws.path : shortPath(ws.path);
       };
       main.appendChild(path);
+      const meta = metaLine(ws);
+      if (meta) main.appendChild(meta);
       head.appendChild(main);
       if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
         head.appendChild(openControl(ws));
@@ -610,6 +907,7 @@ const launcherPageHTML = `<!doctype html>
       }
       const actions = document.createElement('div');
       actions.className = 'actions';
+      const startBox = startOptions(ws);
       const sessionsBox = document.createElement('div');
       sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
       const sbtn = document.createElement('button');
@@ -617,11 +915,61 @@ const launcherPageHTML = `<!doctype html>
       sbtn.onclick = () => toggleSessions(ws, sbtn, sessionsBox);
       actions.appendChild(sbtn);
       actions.appendChild(modeSwitch(ws.id));
+      if (!ws.running && startBox) {
+        const opts = document.createElement('button');
+        opts.className = 'chip'; opts.textContent = 'options ⌄';
+        opts.onclick = () => { startBox.classList.toggle('on'); };
+        actions.appendChild(opts);
+      }
       if (ws.running) actions.appendChild(stopControl(ws.id));
+      if (startBox) actions.appendChild(startBox);
       row.appendChild(actions);
       row.appendChild(sessionsBox);
       list.appendChild(row);
     }
+  }
+
+  function metaLine(ws) {
+    const bits = [];
+    if (ws.live > 0) bits.push('<span class="live">' + ws.live + ' live</span>');
+    const e = ws.lastEvent;
+    if (e && !(ws.running && e.kind === 'started')) {
+      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' · ' + esc(e.cause) : '')
+        : e.kind === 'attention' ? 'needs you'
+        : esc(e.kind);
+      bits.push('<span class="why">' + what + ' · ' + esc(fmtWhen(e.at)) + '</span>');
+    }
+    if (!bits.length) return null;
+    const el = document.createElement('div');
+    el.className = 'meta';
+    el.innerHTML = bits.join('<span>·</span>');
+    return el;
+  }
+
+  // The start options are built even when collapsed: Start reads them, so a
+  // profile chosen before opening the panel still applies.
+  function startOptions(ws) {
+    if (ws.running) return null;
+    const box = document.createElement('div');
+    box.className = 'startbox';
+    if ((ws.profiles || []).length) {
+      const sel = document.createElement('select');
+      sel.dataset.role = 'profile';
+      const none = document.createElement('option');
+      none.value = ''; none.textContent = 'default account';
+      sel.appendChild(none);
+      for (const p of ws.profiles) {
+        const o = document.createElement('option');
+        o.value = p; o.textContent = p;
+        sel.appendChild(o);
+      }
+      box.appendChild(sel);
+    }
+    const name = document.createElement('input');
+    name.type = 'text'; name.placeholder = 'session name (optional)'; name.dataset.role = 'name';
+    name.maxLength = 60;
+    box.appendChild(name);
+    return box;
   }
 
   function shortPath(p) {
@@ -674,8 +1022,9 @@ const launcherPageHTML = `<!doctype html>
       }
       const past = (j.history || []).filter(h => h && safeClaudeUrl(h.url) && !shown.has(h.url));
       for (const h of past) { shown.add(h.url); renderLink(h.url, false, fmtWhen(h.at) + ' \u00b7 '); }
+      const evs = j.events || [];
       const s = j.sessions || [];
-      if (!s.length && !shown.size && !bridges.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
+      if (!s.length && !shown.size && !bridges.length && !evs.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
       info.remove();
       let localOnly = 0;
       for (const sess of s) {
@@ -694,6 +1043,13 @@ const launcherPageHTML = `<!doctype html>
         box.appendChild(el);
       }
       if (localOnly) note('local only = running on the laptop with no web link yet; type /remote-control in that session to reach it from here.');
+      for (const ev of evs) {
+        const el = document.createElement('div');
+        el.className = 'evrow';
+        const what = ev.kind + (ev.cause ? ' · ' + ev.cause : '') + (ev.reason ? ' — ' + ev.reason : '');
+        el.innerHTML = '<b>' + esc(what.slice(0, 90)) + '</b><span>' + esc(fmtWhen(ev.at)) + '</span>';
+        box.appendChild(el);
+      }
     } catch (e) { info.textContent = '\u2717 ' + e.message; }
   }
 
@@ -774,9 +1130,14 @@ const launcherPageHTML = `<!doctype html>
 
   async function startSession(id, btn) {
     btn.disabled = true; btn.textContent = 'Starting…';
+    const box = btn.closest('.ws').querySelector('.startbox');
+    const pick = (role) => {
+      const el = box && box.querySelector('[data-role="' + role + '"]');
+      return el ? el.value.trim() : '';
+    };
     try {
       const r = await fetch('/launch/start', { method: 'POST', headers: auth,
-        body: JSON.stringify({ workspace: id }) });
+        body: JSON.stringify({ workspace: id, profile: pick('profile'), name: pick('name') }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
       poll(id, 0);

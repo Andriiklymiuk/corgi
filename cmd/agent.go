@@ -180,8 +180,8 @@ func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, er
 // reloading registry and config so a remote start sees the current files,
 // not the ones from daemon startup. No autostart check: a remote start IS
 // the explicit act autostart substitutes for.
-func remoteResolver(dir string, foreground bool) func(id, profile string) (supervisor.SpawnConfig, error) {
-	return func(id, profile string) (supervisor.SpawnConfig, error) {
+func remoteResolver(dir string, foreground bool) func(id, profile, name string) (supervisor.SpawnConfig, error) {
+	return func(id, profile, name string) (supervisor.SpawnConfig, error) {
 		registry, err := workspace.Load(agentRegistryPath(dir))
 		if err != nil {
 			return supervisor.SpawnConfig{}, err
@@ -216,8 +216,30 @@ func remoteResolver(dir string, foreground bool) func(id, profile string) (super
 		cfg := spawnConfigFrom(w, resolved, foreground)
 		cfg.Origin = supervisor.OriginRemote
 		cfg.Profile = profile
+		if n := sanitizeSessionName(name); n != "" {
+			cfg.Name = n
+		}
 		return cfg, nil
 	}
+}
+
+// sanitizeSessionName makes a phone-supplied session name safe to place in an
+// argv: printable ASCII only, no leading dash (which argv would read as a
+// flag), and short enough to read in claude.ai's session list.
+func sanitizeSessionName(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r >= 32 && r < 127 {
+			b.WriteRune(r)
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	out = strings.TrimLeft(out, "-")
+	out = strings.TrimSpace(out)
+	if len(out) > 60 {
+		out = strings.TrimSpace(out[:60])
+	}
+	return out
 }
 
 // spawnConfigForWorkspace decides whether one registered workspace should be
@@ -579,7 +601,8 @@ var agentSessionStartCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		profile, _ := cmd.Flags().GetString("profile")
-		enqueueSessionCommand(command.ActionStart, args, profile)
+		name, _ := cmd.Flags().GetString("name")
+		enqueueSessionCommand(command.ActionStart, args, profile, name)
 	},
 }
 
@@ -588,14 +611,14 @@ var agentSessionStopCmd = &cobra.Command{
 	Short: "Ask the running daemon to stop a workspace's session",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		enqueueSessionCommand(command.ActionStop, args, "")
+		enqueueSessionCommand(command.ActionStop, args, "", "")
 	},
 }
 
 // enqueueSessionCommand resolves the workspace, writes the spool command and
 // nudges the daemon — the same path the MCP tools use, so the two surfaces
 // cannot drift.
-func enqueueSessionCommand(action string, args []string, profile string) {
+func enqueueSessionCommand(action string, args []string, profile, name string) {
 	registry, _ := mustLoadRegistry()
 	registry.Reconcile(dirIsWorkspace)
 	res := workspace.Resolve(registry, strings.Join(args, " "))
@@ -629,7 +652,7 @@ func enqueueSessionCommand(action string, args []string, profile string) {
 	}
 
 	c, err := command.Write(dir, command.Command{
-		Action: action, WorkspaceID: res.Workspace.ID, Profile: profile, Source: "cli",
+		Action: action, WorkspaceID: res.Workspace.ID, Profile: profile, Name: sanitizeSessionName(name), Source: "cli",
 	})
 	if err != nil {
 		exitWithError("agent_session", err, 1)
@@ -694,6 +717,7 @@ func init() {
 	agentBriefCmd.Flags().Bool("json", false, "Machine-readable output")
 
 	agentSessionStartCmd.Flags().String("profile", "", "Profile from the agent config's profiles: section (e.g. work)")
+	agentSessionStartCmd.Flags().String("name", "", "Session name shown in claude.ai (default: the hostname prefix remote control picks)")
 	agentSessionCmd.AddCommand(agentSessionStartCmd, agentSessionStopCmd)
 
 	agentWorkspacesCmd.AddCommand(agentWorkspacesListCmd, agentWorkspacesForgetCmd, agentWorkspacesRelocateCmd)

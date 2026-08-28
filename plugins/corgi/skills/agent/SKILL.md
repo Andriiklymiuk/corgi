@@ -195,7 +195,13 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
 - Every remote start and stop raises a desktop notification on the laptop, by
   design — the machine's owner always sees what began running.
 - Phone push for those notifications: set `notifyUrl` in the trusted agent
-  config (an ntfy.sh topic works out of the box). See docs/agent.md.
+  config (an ntfy.sh topic works out of the box). See docs/agent.md. The push
+  carries a tap target back to the launcher.
+- `corgi agent hooks enable` in a workspace also notifies when any Claude
+  session there is waiting on a permission prompt or has finished its turn.
+- `corgi_pr_open { branch, title }` opens one pull request per repository that
+  has commits on the branch and cross-links them — the step after
+  `corgi_worktrees_materialize` and `corgi_diff`.
 
 ### Setting it up from a session on the laptop
 
