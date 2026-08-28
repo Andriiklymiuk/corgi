@@ -56,7 +56,7 @@ func init() {
 
 const (
 	errFmt            = "%s: %v"
-	mimeJSON          = "application/json"
+	mimeJSON          = "application/json; charset=utf-8"
 	headerContentType = "Content-Type"
 )
 

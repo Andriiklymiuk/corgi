@@ -51,9 +51,10 @@ const TokenPrefix = "corgi_dev_"
 // off a screen and typed by hand, which is the fallback when a camera fails.
 const codeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-// codeLength gives ~50 bits of entropy, which is far more than a two-minute
-// window with an attempt cap requires.
-const codeLength = 10
+// codeLength gives ~100 bits of entropy. The code rides in the QR / link
+// fragment and is read by the pair page, so length costs the user nothing;
+// hand-typing it is only the fallback when a camera fails.
+const codeLength = 20
 
 // Device is one paired client.
 //
