@@ -204,28 +204,25 @@ One scan pairs the phone. It gets its own token, which you can revoke without to
 
 The session survives network drops and crashes, which Remote Control on its own does not (it gives up after about 10 minutes offline). `corgi agent install` brings the session back after a reboot, `--tunnel-name` keeps the URL stable, and `corgi agent down` turns it all off. None of it runs unless you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through setup. Full guide: [docs/agent.md](docs/agent.md).
 
-## What you'll use day to day
+## The rest of the commands
+
+Beyond the ones above, these are the ones that come up in a normal week:
 
 | command | what you get |
 | --- | --- |
-| `corgi run` | every database and service up, env wired between them, logs saved |
-| `corgi run --feature ABC-123` | each repo that has the branch runs from a worktree, the rest stay on `main` |
-| `corgi run --service-branch api=fix/login` | one service on another branch, without editing the file |
-| `corgi run --tier staging` | local services against your staging env tier |
-| `corgi db -u` | databases only, seeded, nothing else started |
+| `corgi run --tier staging` | local services pointed at your staging env tier |
 | `corgi db shell` | a native `psql`/`mysql` shell with the password already filled in |
-| `corgi db snapshot` / `corgi db restore` | freeze a good database state, come back to it in seconds |
+| `corgi db snapshot` | freeze the current database state so you can come back to it |
 | `corgi exec api -- go test ./...` | a one-off command in that service's directory and env |
-| `corgi logs --service api` | per-service logs, kept after the process is gone |
+| `corgi logs --service api` | logs kept after the process is gone |
 | `corgi status -w` · `corgi ps` | health and run state while you work |
 | `corgi mc` | one pane: each service's run state with its branch, PR and CI |
 | `corgi open web` | opens the localhost URLs in the browser |
-| `corgi tunnel` | public HTTPS for a webhook, a partner, or your phone |
 | `corgi doctor --fix` | missing tools, busy ports, Docker not running |
 | `corgi memory list` | decisions and incidents the team commits next to the code |
 
-38 database drivers ([list](docs/databases.md)), and every command above behaves the same whether
-the project has one service or twelve.
+38 database drivers ([list](docs/databases.md)), and all of this behaves the same whether the
+project has one service or twelve.
 
 Private repos, prerequisites, secrets or staging tiers? See
 [Getting it running on a real project](docs/getting-started.md).
