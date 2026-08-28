@@ -17,8 +17,9 @@ Follow the `agent` skill (`plugins/corgi/skills/agent/SKILL.md`) — the
    pairing URL for the user to scan. Port already held by a healthy corgi MCP →
    it reports as already up; a NEW pairing window needs `corgi agent up --fresh`.
 2. Reboot survival: offer `corgi agent install` (start at login).
-3. Permanent URL: offer the named tunnel (`--tunnel-name`, one-time
-   `cloudflared tunnel create` — the skill + docs/tunnel.md carry the steps).
+3. Permanent URL: offer the named tunnel (`--tunnel-name <name> --tunnel-hostname <host>`,
+   one-time `cloudflared tunnel create` + `route dns` — docs/agent.md carries the
+   steps). Same origin every restart, so the phone never re-pairs.
 4. Separate Claude accounts: `corgi agent init --config-dir <dir>` per
    workspace, or `corgi agent profile add <name> --config-dir <dir>` to pick at
    start time. Per-workspace open target (Claude app vs browser vs Chrome) is

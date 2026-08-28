@@ -62,6 +62,11 @@ func Run(ctx context.Context, provider Provider, service string, port int, named
 	}
 
 	if named != nil {
+		if named.Hostname == "" {
+			send(ctx, events, Event{Service: service, Port: port, Done: true,
+				Err: fmt.Errorf("named tunnel %q has no hostname — pass the DNS name routed to it (cloudflared tunnel route dns %s <host>)", named.Name, named.Name)})
+			return
+		}
 		send(ctx, events, Event{Service: service, Port: port, URL: "https://" + named.Hostname})
 	}
 
