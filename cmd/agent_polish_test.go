@@ -470,3 +470,221 @@ func TestSetupNgrokTunnelChecksTheAuthtoken(t *testing.T) {
 		t.Errorf("a configured ngrok must pass, got %v", err)
 	}
 }
+
+func tunnelSetupCmd(t *testing.T, provider string, dryRun bool) *cobra.Command {
+	t.Helper()
+	c := &cobra.Command{}
+	c.Flags().String("provider", provider, "")
+	c.Flags().String("name", "", "")
+	c.Flags().Bool("dry-run", dryRun, "")
+	return c
+}
+
+func TestRunAgentTunnelSetupSavesTheSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	if err := os.MkdirAll(agentD, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	var ran []string
+	origExec, origLook := tunnelExec, tunnelLookup
+	t.Cleanup(func() { tunnelExec, tunnelLookup = origExec, origLook })
+	tunnelExec = func(name string, args ...string) (string, error) {
+		ran = append(ran, name+" "+strings.Join(args, " "))
+		if len(args) > 1 && args[1] == "list" {
+			return "", nil
+		}
+		return "", nil
+	}
+	tunnelLookup = func(string) error { return nil }
+
+	runAgentTunnelSetup(tunnelSetupCmd(t, "cloudflared", false), []string{"corgi.example.com"})
+
+	saved := loadUpSettings(agentD)
+	if saved.TunnelHostname != "corgi.example.com" || saved.TunnelName != "corgi-agent" || saved.Provider != "cloudflared" {
+		t.Fatalf("settings = %+v", saved)
+	}
+	joined := strings.Join(ran, "\n")
+	if !strings.Contains(joined, "tunnel create corgi-agent") {
+		t.Errorf("a tunnel missing from the list must be created:\n%s", joined)
+	}
+	if !strings.Contains(joined, "route dns corgi-agent corgi.example.com") {
+		t.Errorf("the DNS route must run:\n%s", joined)
+	}
+}
+
+func TestRunAgentTunnelSetupDryRunSavesNothing(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	if err := os.MkdirAll(agentD, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	origExec, origLook := tunnelExec, tunnelLookup
+	t.Cleanup(func() { tunnelExec, tunnelLookup = origExec, origLook })
+	tunnelExec = func(string, ...string) (string, error) { return "", nil }
+	tunnelLookup = func(string) error { return nil }
+
+	runAgentTunnelSetup(tunnelSetupCmd(t, "cloudflared", true), []string{"corgi.example.com"})
+	if saved := loadUpSettings(agentD); saved != (upSettings{}) {
+		t.Errorf("a dry run must save nothing, got %+v", saved)
+	}
+}
+
+func TestRunAgentTunnelSetupNgrokSavesNoName(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	if err := os.MkdirAll(agentD, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	origExec, origLook := tunnelExec, tunnelLookup
+	t.Cleanup(func() { tunnelExec, tunnelLookup = origExec, origLook })
+	tunnelExec = func(string, ...string) (string, error) { return "", nil }
+	tunnelLookup = func(string) error { return nil }
+
+	runAgentTunnelSetup(tunnelSetupCmd(t, "ngrok", false), []string{"x.ngrok-free.app"})
+	saved := loadUpSettings(agentD)
+	if saved.Provider != "ngrok" || saved.TunnelHostname != "x.ngrok-free.app" || saved.TunnelName != "" {
+		t.Errorf("settings = %+v", saved)
+	}
+}
+
+func TestSamePathThroughSymlinks(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("symlinks unavailable")
+	}
+	if !samePath(real, link) {
+		t.Error("a symlink and its target are the same directory")
+	}
+	if !samePath(real, real) {
+		t.Error("an identical path must match without resolving")
+	}
+	if samePath(real, filepath.Join(real, "nope")) {
+		t.Error("different directories must not match")
+	}
+	if samePath("/no/such/a", "/no/such/b") {
+		t.Error("unresolvable paths must not match")
+	}
+}
+
+func TestWebhookNotifierSendsTheClickTarget(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	if err := os.MkdirAll(agentD, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	recordPublicURL("https://x.trycloudflare.com")
+
+	got := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.Header.Get("Click")
+	}))
+	defer srv.Close()
+
+	notify := webhookNotifier(srv.URL, srv.Client())
+	notify("corgi agent", "session restarted")
+	select {
+	case click := <-got:
+		if click != "https://x.trycloudflare.com/app" {
+			t.Errorf("Click = %q", click)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("webhook never arrived")
+	}
+}
+
+func TestWorkspaceActivityCountsLiveSessions(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	agentD, _ := agentDir()
+	stack := stackWithAgentConfig(t, "")
+	registerStack(t, agentD, "acme", stack)
+
+	sessions := filepath.Join(home, ".claude", "sessions")
+	if err := os.MkdirAll(sessions, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	row := fmt.Sprintf(`{"pid":%d,"sessionId":"u1","cwd":%q,"kind":"interactive","startedAt":1,"name":"acme-0a"}`, os.Getpid(), stack)
+	if err := os.WriteFile(filepath.Join(sessions, "1.json"), []byte(row), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	live, _ := workspaceActivity("acme", stack)
+	if live != 1 {
+		t.Errorf("live = %d, want the one running process", live)
+	}
+}
+
+func TestRefreshUsageStoresAReport(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	cfg := t.TempDir()
+	repo := "/dev/app"
+	proj := filepath.Join(cfg, "projects", mungeClaudeProjectDir(repo))
+	if err := os.MkdirAll(proj, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	row := fmt.Sprintf(`{"timestamp":"%s","message":{"usage":{"input_tokens":10,"output_tokens":5}}}`, time.Now().Format(time.RFC3339))
+	if err := os.WriteFile(filepath.Join(proj, "a.jsonl"), []byte(row+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	usageCache.mu.Lock()
+	usageCache.reps["acme"] = &cachedUsage{refreshing: true}
+	usageCache.mu.Unlock()
+	refreshUsage("acme", repo, cfg)
+
+	usageCache.mu.Lock()
+	entry := usageCache.reps["acme"]
+	usageCache.mu.Unlock()
+	if entry.report == nil || entry.report.Today.Total() != 15 {
+		t.Fatalf("report = %+v", entry.report)
+	}
+	if entry.refreshing || entry.computed.IsZero() {
+		t.Error("a finished refresh must clear the flag and stamp the time")
+	}
+}
+
+func TestLaunchInfoReportsARunningDaemon(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	if err := os.MkdirAll(agentD, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	info := map[string]any{
+		"pid": os.Getpid(), "version": APP_VERSION, "startedAt": time.Now().Format(time.RFC3339),
+		"executable": mustExecutable(t), "workspaces": []string{}, "commands": true,
+	}
+	data, _ := json.Marshal(info)
+	if err := os.WriteFile(filepath.Join(agentD, "daemon.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	launchInfoHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/info", nil))
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["daemon"] != true {
+		t.Errorf("a running daemon must be reported, got %v", body)
+	}
+}
+
+func mustExecutable(t *testing.T) string {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return exe
+}

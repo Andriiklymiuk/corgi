@@ -60,6 +60,12 @@ func execRunner(name string, args ...string) (string, error) {
 	return string(out), err
 }
 
+// Seams so the whole command can be exercised without cloudflared installed.
+var (
+	tunnelExec   tunnelRunner = execRunner
+	tunnelLookup binaryLookup = lookPath
+)
+
 func runAgentTunnelSetup(cmd *cobra.Command, args []string) {
 	host := strings.TrimSpace(args[0])
 	provider, _ := cmd.Flags().GetString("provider")
@@ -78,7 +84,7 @@ func runAgentTunnelSetup(cmd *cobra.Command, args []string) {
 		exitWithError("agent_data_dir", err, 1)
 	}
 
-	run := execRunner
+	run := tunnelExec
 	if dryRun {
 		run = func(bin string, a ...string) (string, error) {
 			utils.Infof("  would run: %s %s\n", bin, strings.Join(a, " "))
@@ -88,11 +94,11 @@ func runAgentTunnelSetup(cmd *cobra.Command, args []string) {
 
 	switch provider {
 	case "cloudflared":
-		if err := setupCloudflaredTunnel(run, lookPath, name, host, dryRun); err != nil {
+		if err := setupCloudflaredTunnel(run, tunnelLookup, name, host, dryRun); err != nil {
 			exitWithError("agent_tunnel_setup", err, 1)
 		}
 	case "ngrok":
-		if err := setupNgrokTunnel(run, lookPath, host); err != nil {
+		if err := setupNgrokTunnel(run, tunnelLookup, host); err != nil {
 			exitWithError("agent_tunnel_setup", err, 1)
 		}
 	default:

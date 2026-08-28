@@ -222,3 +222,57 @@ func TestExecInDirRunsAndReportsFailure(t *testing.T) {
 		t.Error("a failing command must report an error")
 	}
 }
+
+func TestOpenOnePRReportsAForgeFailure(t *testing.T) {
+	f := &fakeForge{commits: map[string]string{"api": "1"}}
+	run := func(dir, name string, args ...string) (string, error) {
+		if name == "gh" && args[0] == "pr" && args[1] == "create" {
+			return "GraphQL: a pull request already exists", fmt.Errorf("exit 1")
+		}
+		return f.run(dir, name, args...)
+	}
+	set, err := openBranchPRs(map[string]string{"api": "api"}, "feature/x", "", "T", "", false, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.PRs[0].Created || !strings.Contains(set.PRs[0].Error, "already exists") {
+		t.Errorf("a forge failure must surface verbatim, got %+v", set.PRs[0])
+	}
+}
+
+func TestOpenOnePRReportsAMissingRemote(t *testing.T) {
+	run := func(dir, name string, args ...string) (string, error) {
+		switch {
+		case name == "git" && args[0] == "rev-list":
+			return "2", nil
+		case name == "git" && args[0] == "symbolic-ref":
+			return "origin/main", nil
+		case name == "git" && args[0] == "remote":
+			return "fatal: no such remote 'origin'", fmt.Errorf("exit 2")
+		}
+		return "", nil
+	}
+	set, err := openBranchPRs(map[string]string{"api": "api"}, "feature/x", "main", "T", "", false, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.PRs[0].Created || !strings.Contains(set.PRs[0].Error, "origin") {
+		t.Errorf("a repo with no origin must report it, got %+v", set.PRs[0])
+	}
+}
+
+func TestCrossLinkSkipsWhenOnlyOnePRWasOpened(t *testing.T) {
+	f := &fakeForge{
+		commits: map[string]string{"api": "1", "web": "0"},
+		create:  map[string]string{"api": "https://github.com/acme/api/pull/7"},
+	}
+	if _, err := openBranchPRs(map[string]string{"api": "api", "web": "web"},
+		"feature/x", "main", "T", "", false, f.run); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range f.calls {
+		if strings.Contains(c, "pr edit") {
+			t.Errorf("a lone pull request needs no sibling list: %s", c)
+		}
+	}
+}
