@@ -1,10 +1,15 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 const agentSurfaceCompose = `name: surface
@@ -66,7 +71,7 @@ func TestMCPWaitForLogMatchesAndValidates(t *testing.T) {
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(logDir, "run.ok.log"), []byte("Listening on :3300\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(logDir, "run.log"), []byte("Listening on :3300\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,5 +152,38 @@ func TestMCPRestoreRejectsAnUnknownCheckpoint(t *testing.T) {
 	chdirToTempCompose(t, agentSurfaceCompose)
 	if _, err := mcpRestore(checkpointArgs{Name: "never-made"}); err == nil {
 		t.Error("restoring an unknown checkpoint must error")
+	}
+}
+
+func TestRegisterAgentSurfaceToolsAddsEveryTool(t *testing.T) {
+	s := server.NewMCPServer("corgi-test", APP_VERSION)
+	registerAgentSurfaceTools(s, mcp.WithString("composePath", mcp.Description("compose path")))
+
+	res := s.HandleMessage(context.Background(), []byte(
+		`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	body, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := string(body)
+	for _, name := range []string{
+		"corgi_context", "corgi_why", "corgi_wait_for_log",
+		"corgi_checkout", "corgi_checkpoint", "corgi_restore",
+	} {
+		if !strings.Contains(listed, name) {
+			t.Errorf("%s was not registered", name)
+		}
+	}
+}
+
+func TestMCPCheckpointRejectsATraversalName(t *testing.T) {
+	chdirToTempCompose(t, agentSurfaceCompose)
+	for _, name := range []string{"..", "../escape", ".hidden"} {
+		if _, err := mcpCheckpoint(checkpointArgs{Name: name}); err == nil {
+			t.Errorf("checkpoint name %q must be rejected", name)
+		}
+		if _, err := mcpRestore(checkpointArgs{Name: name}); err == nil {
+			t.Errorf("restore name %q must be rejected", name)
+		}
 	}
 }

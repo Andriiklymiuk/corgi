@@ -9,9 +9,10 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// IsolateLease is the --isolate value: empty means no isolation at all.
 var IsolateLease string
 
 const (
@@ -19,7 +20,7 @@ const (
 	leaseMaxSlots   = 20
 )
 
-var leaseNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,40}$`)
+var leaseNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$`)
 
 type Lease struct {
 	Name       string            `json:"name"`
@@ -34,9 +35,6 @@ func LeasesDir(composeDir string) string {
 	return filepath.Join(composeDir, "corgi_services", ".leases")
 }
 
-// ApplyIsolationLease shifts every declared port by the lease's own offset,
-// suffixes each database name, and scopes container names, so a second agent
-// can run the same stack in the same directory without colliding.
 func ApplyIsolationLease(c *CorgiCompose, name string) error {
 	if c == nil || name == "" {
 		return nil
@@ -53,8 +51,12 @@ func ApplyIsolationLease(c *CorgiCompose, name string) error {
 	lease.Databases = map[string]string{}
 	for i := range c.DatabaseServices {
 		db := &c.DatabaseServices[i]
-		db.Port = shiftPort(db.Port, lease.Offset)
-		db.Port2 = shiftPort(db.Port2, lease.Offset)
+		if db.Port, err = shiftPort(db.Port, lease.Offset); err != nil {
+			return fmt.Errorf("--isolate %s: %v", name, err)
+		}
+		if db.Port2, err = shiftPort(db.Port2, lease.Offset); err != nil {
+			return fmt.Errorf("--isolate %s: %v", name, err)
+		}
 		if db.DatabaseName != "" {
 			db.DatabaseName = db.DatabaseName + "_" + leaseSlug(name)
 			lease.Databases[db.ServiceName] = db.DatabaseName
@@ -65,7 +67,9 @@ func ApplyIsolationLease(c *CorgiCompose, name string) error {
 	}
 	for i := range c.Services {
 		svc := &c.Services[i]
-		svc.Port = shiftPort(svc.Port, lease.Offset)
+		if svc.Port, err = shiftPort(svc.Port, lease.Offset); err != nil {
+			return fmt.Errorf("--isolate %s: %v", name, err)
+		}
 		if svc.Port != 0 {
 			lease.Ports[svc.ServiceName] = svc.Port
 		}
@@ -79,11 +83,15 @@ func ApplyIsolationLease(c *CorgiCompose, name string) error {
 	return writeLease(lease)
 }
 
-func shiftPort(port, offset int) int {
+func shiftPort(port, offset int) (int, error) {
 	if port == 0 {
-		return 0
+		return 0, nil
 	}
-	return port + offset
+	shifted := port + offset
+	if shifted > 65535 {
+		return 0, fmt.Errorf("port %d shifted by +%d is %d, past the top of the port range", port, offset, shifted)
+	}
+	return shifted, nil
 }
 
 func leaseSlug(name string) string {
@@ -91,20 +99,49 @@ func leaseSlug(name string) string {
 }
 
 func loadOrCreateLease(name string) (Lease, error) {
-	if existing, err := ReadLease(name); err == nil {
+	existing, err := ReadLease(name)
+	if err == nil {
 		return existing, nil
 	}
+	if !os.IsNotExist(err) {
+		return Lease{}, fmt.Errorf("lease %q is unreadable: %v", name, err)
+	}
+	return claimLeaseSlot(name)
+}
+
+func claimLeaseSlot(name string) (Lease, error) {
+	dir := LeasesDir(CorgiComposePathDir)
+	if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+		return Lease{}, mkErr
+	}
+	EnsureCorgiServicesIgnore(filepath.Dir(dir), ".leases")
+
 	taken := map[int]bool{}
 	for _, lease := range ListLeases() {
 		taken[lease.Offset] = true
 	}
 	for slot := 1; slot <= leaseMaxSlots; slot++ {
 		offset := slot * leasePortStride
-		if !taken[offset] {
-			return Lease{Name: name, Offset: offset, CreatedAt: time.Now().UTC()}, nil
+		if taken[offset] {
+			continue
 		}
+		claim, err := os.OpenFile(slotClaimPath(dir, offset), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err != nil {
+			if os.IsExist(err) {
+				continue
+			}
+			return Lease{}, err
+		}
+		_, _ = claim.WriteString(name)
+		_ = claim.Close()
+		Infof("new lease %q: ports shifted by +%d (corgi leases release %s to drop it)\n", name, offset, name)
+		return Lease{Name: name, Offset: offset, CreatedAt: time.Now().UTC()}, nil
 	}
 	return Lease{}, fmt.Errorf("no free port block left: %d leases already exist (corgi leases)", leaseMaxSlots)
+}
+
+func slotClaimPath(dir string, offset int) string {
+	return filepath.Join(dir, fmt.Sprintf(".slot-%d", offset))
 }
 
 func leasePath(name string) string {
@@ -133,7 +170,7 @@ func writeLease(lease Lease) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(leasePath(lease.Name), data, 0o644)
+	return atomicfile.Write(leasePath(lease.Name), data, 0o644)
 }
 
 func ListLeases() []Lease {
@@ -143,7 +180,7 @@ func ListLeases() []Lease {
 	}
 	var leases []Lease
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" || strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 		name := strings.TrimSuffix(entry.Name(), ".json")
@@ -156,8 +193,13 @@ func ListLeases() []Lease {
 }
 
 func ReleaseLease(name string) error {
-	if _, err := ReadLease(name); err != nil {
+	if !leaseNameRe.MatchString(name) {
+		return fmt.Errorf("lease %q: use letters, digits, dot, dash or underscore (max 40)", name)
+	}
+	lease, err := ReadLease(name)
+	if err != nil {
 		return fmt.Errorf("no lease named %q", name)
 	}
+	_ = os.Remove(slotClaimPath(LeasesDir(CorgiComposePathDir), lease.Offset))
 	return os.Remove(leasePath(name))
 }

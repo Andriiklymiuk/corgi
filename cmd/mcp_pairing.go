@@ -145,6 +145,7 @@ const pairClosedHTML = `<!doctype html>
     document.getElementById('paired').hidden = false;
     document.getElementById('app').hidden = false;
     document.getElementById('fresh').hidden = true;
+    location.replace('/app');
   }
 </script>
 `
@@ -195,27 +196,12 @@ const pairPageHTML = `<!doctype html>
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
       try { localStorage.setItem('corgi_token', j.token); } catch (_) {}
-      const mcpUrl = location.origin + '/mcp';
-      const connector = JSON.stringify({mcpServers:{corgi:{url:mcpUrl,
-        headers:{Authorization:'Bearer ' + j.token}}}}, null, 2);
+      btn.remove();
       out.innerHTML =
         '<span class="ok">✓ Paired as <b>' + esc(device) + '</b> with <b>' +
           esc(j.daemon||'this machine') + '</b></span>' +
-        '<p>Open the launcher to see your repos and start a session — one tap, ' +
-          'no setup. Save it to your home screen to come back:</p>' +
-        '<a class="open" href="/app">Open launcher →</a>' +
-        '<p style="margin-top:1.4rem">Prefer the Claude app instead? Add corgi as a ' +
-          'custom connector (on claude.ai) — tap to copy:</p>' +
-        '<pre id="cfg">' + esc(connector) + '</pre>' +
-        '<button id="copy">Copy connector config</button>' +
-        '<p>This token is shown once; the launcher remembers it on this browser, ' +
-          'and the config above is the only other copy.</p>';
-      btn.remove();
-      document.getElementById('copy').onclick = async (e) => {
-        try { await navigator.clipboard.writeText(connector); e.target.textContent = '✓ Copied'; }
-        catch { const r = document.createRange(); r.selectNode(document.getElementById('cfg'));
-          getSelection().removeAllRanges(); getSelection().addRange(r); e.target.textContent = 'Selected — long-press to copy'; }
-      };
+        '<p>Opening your repos… <a class="open" href="/app">tap here</a> if nothing happens.</p>';
+      location.replace('/app');
     } catch (e) {
       out.innerHTML = '<span class="err">✗ ' + esc(e.message) + '</span>';
       btn.disabled = false; btn.textContent = 'Pair';

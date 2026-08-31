@@ -21,6 +21,8 @@ type stackEvent struct {
 	ExitCode *int   `json:"exitCode,omitempty"`
 }
 
+const minEventsInterval = 100 * time.Millisecond
+
 var (
 	eventsFollow   bool
 	eventsInterval time.Duration
@@ -56,7 +58,12 @@ func runEvents(cmd *cobra.Command, _ []string) {
 		utils.Info("no run state yet — start the stack with corgi run --detach")
 		return
 	}
-	for _, event := range baselineEvents(statuses, ports, exits) {
+	baseline := baselineEvents(statuses, ports, exits)
+	if utils.JSONOutput && !eventsFollow {
+		utils.PrintJSON(baseline)
+		return
+	}
+	for _, event := range baseline {
 		emitStackEvent(event)
 	}
 	if !eventsFollow {
@@ -71,13 +78,26 @@ func runEvents(cmd *cobra.Command, _ []string) {
 		if !deadline.IsZero() && time.Now().After(deadline) {
 			return
 		}
-		time.Sleep(eventsInterval)
+		time.Sleep(nextEventsPause(deadline))
 		next, nextPorts, nextExits := readStackState()
 		for _, event := range diffStackState(statuses, next, nextPorts, nextExits) {
 			emitStackEvent(event)
 		}
 		statuses = next
 	}
+}
+
+func nextEventsPause(deadline time.Time) time.Duration {
+	pause := eventsInterval
+	if pause < minEventsInterval {
+		pause = minEventsInterval
+	}
+	if !deadline.IsZero() {
+		if left := time.Until(deadline); left > 0 && left < pause {
+			return left
+		}
+	}
+	return pause
 }
 
 func readStackState() (statuses map[string]string, ports map[string]int, exits map[string]*int) {

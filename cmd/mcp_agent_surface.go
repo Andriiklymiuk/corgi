@@ -162,7 +162,11 @@ func mcpWaitForLog(args waitForLogArgs) (waitForLogResult, error) {
 		timeout = time.Minute
 	}
 	started := time.Now()
-	line, matched, err := utils.WaitForLogLine(logsBase(), args.Service, args.Pattern, timeout)
+	line, matched, err := utils.WaitForLogLine(logsBase(), utils.LogWait{
+		Service: args.Service,
+		Pattern: args.Pattern,
+		Timeout: timeout,
+	})
 	if err != nil {
 		return waitForLogResult{}, err
 	}
@@ -233,9 +237,11 @@ func mcpRestore(args checkpointArgs) (restoreResult, error) {
 		return restoreResult{}, err
 	}
 	result := restoreResult{Checkpoint: file.Name, Restored: []string{}}
-	if len(dirtyRepos(file.Repos)) > 0 {
+	if len(reposAtRisk(file.Repos)) > 0 {
 		result.Safety = "restore-" + utils.DefaultSnapshotName(time.Now())
-		saveSafetyCheckpoint(file.Repos, result.Safety)
+		if err := saveSafetyCheckpoint(file.Repos, result.Safety); err != nil {
+			return restoreResult{}, fmt.Errorf("nothing restored, the safety checkpoint failed: %v", err)
+		}
 	}
 	for _, repo := range file.Repos {
 		if err := utils.RestoreWorkTree(repo.Path, repo.Branch, repo.Head, repo.StashSha); err != nil {
