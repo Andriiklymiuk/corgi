@@ -1,6 +1,6 @@
 ---
 name: agent
-description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — "work on the recipe app", "which stacks do I have", "start a branch across the api and mobile repos", "show me the diff", "keep corgi running when I'm away", "why did my remote session die", "set up agent mode", "run it under my work account", "start a session in that repo from my phone", "set up remote session start". Covers resolving a stack by name, materializing one branch across every repository in it, reading a cross-repo diff, supervising `claude remote-control` so it survives reboots and the ten-minute network timeout, and starting/stopping a session in any registered workspace on demand (corgi_session_start, profiles, session URLs). NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
+description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — "work on the recipe app", "which stacks do I have", "start a branch across the api and mobile repos", "show me the diff", "keep corgi running when I'm away", "why did my remote session die", "set up agent mode", "notify my phone when a session needs me", "set up telegram notifications", "run it under my work account", "start a session in that repo from my phone", "set up remote session start". Covers resolving a stack by name, materializing one branch across every repository in it, reading a cross-repo diff, supervising `claude remote-control` so it survives reboots and the ten-minute network timeout, and starting/stopping a session in any registered workspace on demand (corgi_session_start, profiles, session URLs). NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
 ---
 
 # Corgi agent mode
@@ -158,6 +158,55 @@ corgi agent init --config-dir ~/.claude-work
 `corgi agent status` prints the account each workspace will actually use. If the
 user has work and personal logins, check it.
 
+### Getting notifications on a phone
+
+Raise this whenever the user enables hooks, or says a notification only reached
+the laptop. **Without `notifyUrl` every notification stops at the machine** —
+which is the desk they were trying to leave.
+
+**Do not suggest ntfy.sh to an iPhone user.** Its iOS app is paid; Android is
+free. corgi picks the payload from the host, so free destinations exist:
+
+| `notifyUrl` host | payload | free on iOS |
+|---|---|---|
+| `api.telegram.org` | `{"text", "chat_id"}` | yes |
+| `discord.com` | `{"content"}` | yes |
+| `hooks.slack.com` | `{"text"}` | yes |
+| anything else | ntfy shape (body + `Title`/`Click` headers) | only self-hosted |
+
+**Telegram, the free path — walk them through it, do not do it for them.** The
+token is a credential and the steps happen in their Telegram app:
+
+1. Message **@BotFather** in Telegram, send `/newbot`, follow it, copy the token.
+2. Send any message to the new bot (a bot cannot start the conversation).
+3. Open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `result[0].message.chat.id`.
+4. Put both in the trusted user config — never in `.corgi/agent.yml`, which is
+   committed:
+
+```yaml
+# ~/Library/Application Support/corgi/agent/config.yml  (macOS)
+# ~/.config/corgi/agent/config.yml                      (Linux)
+notifyUrl: "https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>"
+```
+
+5. `corgi agent restart`, then `corgi config notifications test` to prove it.
+
+corgi reads `chat_id` out of the URL and copies it into the body, so the full
+`sendMessage` URL works exactly as pasted. `corgi agent doctor` reports whether
+`notifyUrl` parses.
+
+**Discord instead**, if they have a server: channel → Integrations → New Webhook
+→ copy URL → same `notifyUrl` field. Nothing else changes.
+
+**Treat the URL as a secret.** A Telegram bot token lets anyone post as that bot;
+an ntfy topic anyone knows is readable by them. Never echo the configured value
+back into a transcript, a commit, or a PR.
+
+**On the laptop itself**, a desktop toast is clickable when `terminal-notifier`
+is installed (`brew install terminal-notifier`) — it opens that workspace's
+session, or the launcher when corgi has no session URL for it. Without it macOS
+falls back to `osascript`, which cannot carry a click target.
+
 ### The launcher page
 
 Everything the phone can do without the Claude app: start and stop a session,
@@ -260,11 +309,12 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
 - Every remote start and stop raises a desktop notification on the laptop, by
   design — the machine's owner always sees what began running.
 - Phone push for those notifications: set `notifyUrl` in the trusted agent
-  config (an ntfy.sh topic works out of the box). See docs/agent.md. The push
-  carries a tap target back to the launcher.
-- `corgi agent hooks enable` in a workspace also notifies when any Claude
-  session there is waiting on a permission prompt or has finished its turn.
-  It writes into `.claude/settings.local.json`, never the committed file.
+  config — see **Getting notifications on a phone** above. The push carries a
+  tap target back to the session.
+- `corgi agent hooks enable [--all]` in a workspace also notifies when a Claude
+  session there is waiting on a permission prompt. It writes into
+  `.claude/settings.local.json`, never the committed file. `--turns` adds a ping
+  on every finished turn and is off by default because it fires constantly.
 - `corgi_pr_open { branch, title }` opens one pull request per repository that
   has commits on the branch and cross-links them — the step after
   `corgi_worktrees_materialize` and `corgi_diff`.
