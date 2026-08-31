@@ -191,18 +191,29 @@ like continuity and cost you an hour of confusion.
 ### Notifications on your phone
 
 By default notifications are desktop only. Add a `notifyUrl` to the trusted
-agent config and every one is also POSTed there — title in the `Title` header,
-body as plain text, which is exactly what [ntfy.sh](https://ntfy.sh) topics
-expect:
+agent config and every one is also POSTed there. corgi picks the payload from
+the host, so point it at whatever you already have:
 
 ```yaml
 # <agent data dir>/config.yml
-notifyUrl: https://ntfy.sh/your-private-topic
+notifyUrl: https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>
 ```
 
-Subscribe to the topic in the ntfy app and session failures reach your phone
-even when the launcher page is closed. Trusted config only: the URL receives
-restart reasons, so a committed repo file can never set it.
+**Telegram** is the free option on iOS. Message **@BotFather**, send `/newbot`
+and copy the token; message your new bot once (a bot cannot open the
+conversation), then open `https://api.telegram.org/bot<TOKEN>/getUpdates` and
+copy `result[0].message.chat.id`. corgi lifts `chat_id` out of the URL into the
+request body, so the full `sendMessage` URL works as pasted.
+
+**Slack** is a channel's Incoming Webhook URL, **Discord** a channel →
+Integrations → New Webhook URL. Anything else gets the ntfy shape (body as
+plain text, title in the `Title` header), which suits a **self-hosted** ntfy —
+the ntfy.sh iOS app itself is paid, Android is free.
+
+Restart the daemon after changing it, then `corgi config notifications test`.
+Trusted config only: the URL receives restart reasons, so a committed repo file
+can never set it. Treat the value as a secret — a Telegram token lets anyone
+post as that bot.
 
 ### The timeline
 
