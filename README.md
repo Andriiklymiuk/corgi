@@ -233,6 +233,7 @@ corgi treats your repos as part of the stack, not as something you keep in sync 
 
 - **Auto-clone** — `cloneFrom:` clones a service when its folder is missing. A plain `path:` (a monorepo subfolder, or a repo you manage yourself) runs in place. You can mix both.
 - **`corgi pull`** pulls every repo at once. **`corgi fork`** forks them to your account.
+- **`corgi checkout main`** puts every repo back on `main` and fast-forwards it. A repo that calls its trunk something else falls back to its own default branch, and a repo with uncommitted work is skipped, not clobbered.
 - **Run one service on a branch**, without editing the file:
 
 ```bash

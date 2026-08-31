@@ -44,6 +44,7 @@ corgi run
 
 * [corgi autopilot](corgi_autopilot)	 - Supervised loop state: status / pause / resume / stop / heartbeat
 * [corgi cache](corgi_cache)	 - What a CI cache should persist between runs
+* [corgi checkout](corgi_checkout)	 - Checkout every repo to a branch and pull it
 * [corgi clean](corgi_clean)	 - Cleans all services
 * [corgi config](corgi_config)	 - Show global corgi preferences stored in ~/.corgi/config.yml
 * [corgi create](corgi_create)	 - A command to create configurations for corgi

@@ -395,19 +395,26 @@ func CheckoutFeatureBranch(repo, branch string) (bool, error) {
 	if !local && !remote {
 		return false, nil
 	}
-	if !local {
-		if err := fetchBranchFromOrigin(repo, branch); err != nil {
-			return false, err
-		}
-		if err := gitRun(repo, "checkout", "-B", branch, "refs/remotes/origin/"+branch); err != nil {
-			return false, fmt.Errorf("checkout %s: %v", branch, err)
-		}
-		return true, nil
-	}
-	if err := gitRun(repo, "checkout", branch); err != nil {
-		return false, fmt.Errorf("checkout %s: %v", branch, err)
+	if err := checkoutKnownBranch(repo, branch, local); err != nil {
+		return false, err
 	}
 	return true, nil
+}
+
+func checkoutKnownBranch(repo, branch string, local bool) error {
+	if !local {
+		if err := fetchBranchFromOrigin(repo, branch); err != nil {
+			return err
+		}
+		if err := gitRun(repo, "checkout", "-B", branch, "refs/remotes/origin/"+branch); err != nil {
+			return fmt.Errorf("checkout %s: %v", branch, err)
+		}
+		return nil
+	}
+	if err := gitRun(repo, "checkout", branch); err != nil {
+		return fmt.Errorf("checkout %s: %v", branch, err)
+	}
+	return nil
 }
 
 func fetchBranchFromOrigin(repo, branch string) error {
