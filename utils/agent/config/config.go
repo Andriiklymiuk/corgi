@@ -1,17 +1,9 @@
 // Package config resolves agent-mode settings from two files with different
-// trust levels.
+// trust levels: `.corgi/agent.yml` is committed and written by whoever wrote
+// the repo, so it is UNTRUSTED; the user-level file in the corgi data directory
+// is written by the machine's owner and is TRUSTED.
 //
-// `.corgi/agent.yml` lives in the repository and is committed, so it travels
-// with a clone and is written by whoever wrote the repo — which may not be the
-// person running the daemon. It is therefore UNTRUSTED.
-//
-// The user-level file lives in the corgi data directory, is never committed,
-// and is written by the machine's owner. It is TRUSTED.
-//
-// The rule that keeps this safe: **untrusted config may restrict, never
-// relax.** A cloned repository can mark itself sensitive, which only ever
-// removes capability. It cannot choose which binary runs, which credentials
-// are used, or which permission mode applies.
+// The rule that keeps this safe: untrusted config may restrict, never relax.
 package config
 
 import (
@@ -84,13 +76,10 @@ type WorkspaceConfig struct {
 	// subscription.
 	InheritAPIKey     bool `yaml:"inheritApiKey"`
 	InheritOAuthToken bool `yaml:"inheritOauthToken"`
-	// DangerouslySkipPermissions runs this workspace's session with permission
-	// prompts turned off (emitted as --permission-mode bypassPermissions). It
-	// removes the gate a person answers from their phone — the main defence
-	// against a session acting on instructions injected into a file it read.
-	// Trusted config only, and by construction: RepoConfig has no such field, so
-	// a cloned repository can never turn it on. Off unless the machine's owner
-	// sets it, per-workspace or in a profile.
+	// DangerouslySkipPermissions runs the session with permission prompts off,
+	// removing the main defence against it acting on instructions injected into
+	// a file it read. Trusted config only by construction — RepoConfig has no
+	// such field, so a cloned repository can never turn it on.
 	DangerouslySkipPermissions bool `yaml:"dangerouslySkipPermissions"`
 }
 
@@ -171,16 +160,12 @@ type Resolved struct {
 
 // Resolve merges the two files under the restrict-never-relax rule.
 //
-// id comes from the local registry and is the TRUSTED identity. The repo file
-// may not change it, because the id is the lookup key into the trusted
-// per-workspace settings: a cloned repository declaring `id: work` would
-// otherwise inherit that workspace's configDir, bin, and permissionMode —
-// the exact escalation this split exists to prevent. RepoDeclaredID is
-// reported separately so `corgi agent init` can adopt it as a deliberate local
-// act, which is the only moment a repo's own name should matter.
+// id comes from the local registry and the repo file may not change it: the id
+// keys into the trusted per-workspace settings, so a clone declaring `id: work`
+// would inherit that workspace's configDir, bin and permissionMode.
+// RepoDeclaredID is reported separately for `corgi agent init` to adopt.
 //
-// repo may be nil (no committed config). Capability-granting fields come only
-// from user, whose per-workspace entry overrides its defaults.
+// repo may be nil. Capability-granting fields come only from user.
 func Resolve(id string, repo *RepoConfig, user *UserConfig) Resolved {
 	out := Resolved{ID: id}
 
@@ -269,13 +254,10 @@ func ApplyProfile(r Resolved, user *UserConfig, name string) (Resolved, error) {
 	return r, nil
 }
 
-// AutostartEnabled reports whether the workspace should be supervised.
-//
-// Opt-in, not opt-out. `corgi agent scan ~/projects` can register a dozen
-// stacks, and defaulting to on would spawn a remote-control process for every
-// one of them the next time the daemon started — a surprise measured in
-// gigabytes. A workspace runs when the trusted user config says so, which
-// `corgi agent init` writes and `scan` deliberately does not.
+// AutostartEnabled reports whether the workspace should be supervised. Opt-in:
+// `agent scan ~/projects` can register a dozen stacks, and defaulting to on
+// would spawn a process for each on the next daemon start. `agent init` writes
+// the trusted config that enables it; `scan` deliberately does not.
 func (r Resolved) AutostartEnabled() bool {
 	return r.Autostart != nil && *r.Autostart
 }

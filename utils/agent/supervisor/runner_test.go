@@ -268,6 +268,24 @@ func TestWakeLockModeDefaultsToSession(t *testing.T) {
 	}
 }
 
+// waitForActive is waitFor for a session that is working, so it keeps recording
+// activity while it polls. One stamp is not enough: the monitor ticks on its own
+// schedule, and a tick delayed past the idle window reads a single stamp as
+// stale — then never looks again, because nothing re-stamps it. A real session
+// emits output repeatedly, which is what this reproduces.
+func waitForActive(t *testing.T, r *Runner, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		r.recordActivity()
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("condition not met within timeout")
+}
+
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -596,9 +614,8 @@ func TestIdleWakeLockReleasesWhenQuietAndReacquiresOnActivity(t *testing.T) {
 	waitFor(t, func() bool { return lock.Held() })
 	// It goes quiet with no further output — the machine may sleep.
 	waitFor(t, func() bool { return !lock.Held() })
-	// Work resumes (output arrives) — awake again.
-	r.recordActivity()
-	waitFor(t, func() bool { return lock.Held() })
+	// Work resumes — awake again.
+	waitForActive(t, r, func() bool { return lock.Held() })
 
 	r.Stop()
 	<-done

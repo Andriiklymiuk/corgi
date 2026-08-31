@@ -3,6 +3,7 @@
 package events
 
 import (
+	"andriiklymiuk/corgi/utils/atomicfile"
 	"bytes"
 	"encoding/json"
 	"os"
@@ -73,11 +74,7 @@ func (l *Log) trimLocked(path string) {
 	if len(lines) > maxKeep {
 		lines = lines[len(lines)-maxKeep:]
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, path)
+	_ = atomicfile.Write(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 }
 
 func (l *Log) Read(workspaceID string, limit int) []Event {

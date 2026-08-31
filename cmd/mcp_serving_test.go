@@ -142,8 +142,6 @@ func TestServeMCPStdioEndToEnd(t *testing.T) {
 	}
 }
 
-// --- jsonHandler (marshals result, converts error to tool error) ---
-
 func TestJSONHandler_MarshalsResult(t *testing.T) {
 	h := jsonHandler(func(mcp.CallToolRequest) (any, error) {
 		return map[string]string{"hello": "world"}, nil
@@ -181,8 +179,6 @@ type errString string
 
 func (e errString) Error() string { return string(e) }
 
-// --- isAlreadyRunning ---
-
 func TestIsAlreadyRunning_NoStateFile(t *testing.T) {
 	dir := t.TempDir()
 	if isAlreadyRunning(utils.RunStatePath(dir)) {
@@ -204,8 +200,6 @@ func TestIsAlreadyRunning_StoppedState(t *testing.T) {
 	}
 }
 
-// --- printMCPClientConfig (header only when token set) ---
-
 func TestPrintMCPClientConfig(t *testing.T) {
 	var noTok bytes.Buffer
 	printMCPClientConfig(&noTok, "http://127.0.0.1:8765/mcp", "")
@@ -226,8 +220,6 @@ func TestPrintMCPClientConfig(t *testing.T) {
 		t.Errorf("token config must include the bearer header: %s", withTok.String())
 	}
 }
-
-// --- tailLogFile ---
 
 func TestTailLogFile(t *testing.T) {
 	dir := t.TempDir()
@@ -258,8 +250,6 @@ func TestTailLogFile(t *testing.T) {
 		t.Error("expected error for missing file")
 	}
 }
-
-// --- mcpUp already-running guard (no real spawn) ---
 
 func TestMCPUp_BlockedWhenAlreadyRunning(t *testing.T) {
 	chdirToTempCompose(t, mcpComposeFixture)

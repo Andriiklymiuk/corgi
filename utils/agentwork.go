@@ -56,16 +56,11 @@ type RepoState struct {
 }
 
 // ProbeRepoState reads a checkout's branch and whether it holds uncommitted
-// work. Returns false when dir is not a git repository.
+// work. Returns false when dir is not a git repository. Detached HEAD reports
+// an empty branch.
 //
-// Separate from ProbeAgentWork, which additionally shells out to `gh` / `glab`
-// to find the branch's PR. Those calls hit the network with no timeout, which
-// is fine for a snapshot someone asked for and wrong anywhere on a restart
-// path — a session that died *because* the network went away must not then wait
-// on GitHub, once per repository, before it can come back.
-//
-// A detached HEAD reports an empty branch rather than the literal "HEAD", since
-// a name there would be a lie.
+// Separate from ProbeAgentWork, which also shells out to `gh`/`glab` with no
+// timeout — wrong on a restart path, where the network may be why it died.
 func ProbeRepoState(dir string) (RepoState, bool) {
 	if dir == "" || !isGitRepo(dir) {
 		return RepoState{}, false

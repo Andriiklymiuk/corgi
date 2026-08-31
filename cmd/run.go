@@ -367,7 +367,7 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 	utils.KillAllStoredProcesses()
 	cleanup(corgiLatestVersion)
 	utils.PrintFinalMessage()
-	os.Exit(0)
+	exitProcess(0)
 }
 
 func installSignalHandler(cmd *cobra.Command) func() {
@@ -553,7 +553,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 	// --dry-run branches before any side effect: plan only, then exit.
 	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
 		dockerFlag, _ := cmd.Flags().GetBool("docker")
-		os.Exit(emitDryRunPlan(computeDryRunPlan(corgi, dockerFlag)))
+		exitProcess(emitDryRunPlan(computeDryRunPlan(corgi, dockerFlag)))
 	}
 
 	runPortPreflightOrExit(cmd, corgi)
@@ -596,7 +596,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	if err := startDatabasePhase(cmd, corgi); err != nil {
 		fmt.Println(art.RedColor, "aborting corgi run:", err, art.WhiteColor)
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	if detach {
@@ -646,7 +646,7 @@ func loadRunCompose(cmd *cobra.Command) *utils.CorgiCompose {
 		if runReloading.Load() {
 			return nil
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	utils.StartSessionLog()
@@ -655,7 +655,7 @@ func loadRunCompose(cmd *cobra.Command) *utils.CorgiCompose {
 		if runReloading.Load() {
 			return nil
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 	return corgi
 }
@@ -755,7 +755,7 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		} else {
 			fmt.Fprintln(os.Stderr, msg)
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	// --wait gates the return on the whole stack becoming reachable. The state
@@ -787,7 +787,7 @@ func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func
 		} else {
 			fmt.Fprintln(os.Stderr, "❌", msg)
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), remaining)
 	defer cancel()
@@ -811,7 +811,7 @@ func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func
 		if dump, _ := cmd.Flags().GetBool("dump-on-failure"); dump {
 			printFailureLogs()
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 	return stopFollow
 }
@@ -886,7 +886,7 @@ func exitIfDetachedStillRunning(prev utils.RunState) {
 			} else {
 				fmt.Fprintln(os.Stderr, msg)
 			}
-			os.Exit(1)
+			exitProcess(1)
 		}
 	}
 }
@@ -1284,12 +1284,9 @@ func closedGate() chan struct{} {
 }
 
 // startDatabasePhase brings the databases up and writes each service's env.
-//
-// With every service on the default gate this is exactly the old sequence:
-// databases, then env. When a service opted out, the phase moves to the
-// background so that service can start against the databases still coming up.
-// Env is written first either way — corgi derives it from corgi-compose.yml and
-// each driver's config, never from a running container.
+// On the default gate that is the old sequence: databases, then env. A service
+// that opted out moves the phase to the background so it can start against
+// databases still coming up. Env is derived from the compose file either way.
 func startDatabasePhase(cmd *cobra.Command, corgi *utils.CorgiCompose) error {
 	if !utils.AnyServiceStartsWithDatabases(corgi) {
 		runDatabaseServices(cmd, corgi.DatabaseServices)

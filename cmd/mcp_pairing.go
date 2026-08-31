@@ -241,8 +241,6 @@ func announcePairing(code, addr string) {
 	fmt.Fprintln(os.Stderr, "")
 }
 
-// ---------------------------------------------------------------- devices CLI
-
 var mcpDevicesCmd = &cobra.Command{
 	Use:   "devices",
 	Short: "List and revoke devices paired with corgi mcp",

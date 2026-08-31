@@ -90,22 +90,12 @@ func runAgentInstall(_ *cobra.Command, _ []string) {
 	}
 }
 
-// servicePATH is the PATH the supervised daemon runs with.
-//
-// launchd and systemd start services with a minimal PATH that does not include
-// Homebrew or ~/.local/bin, so `claude` would not be found: five startup
-// failures, the workspace disabled, and `corgi agent doctor` in the user's own
-// shell passing all the while. The installing shell's PATH is captured, since
-// that is the one where the user verified their setup, with the usual locations
-// added in case corgi was invoked from somewhere unusual.
-// serviceEnv is the environment the supervised daemon needs to resolve the same
-// state the installing shell did.
-//
-// PATH alone is not enough: the agent dir resolves through NativeDataDir, which
-// keys on CORGI_DATA_DIR, HOME and XDG_DATA_HOME. Capturing them keeps the
-// daemon reading the same agent dir as the shell that ran `corgi agent init` —
-// the same skew capturing PATH exists to prevent. HOMEBREW_PREFIX is kept for
-// the legacy exec-path registry (CorgiDataDir), which the daemon can still touch.
+// servicePATH is the PATH the supervised daemon runs with. launchd and systemd
+// start services with a minimal PATH that would not find `claude`, so the
+// installing shell's PATH is captured plus the usual locations.
+// serviceEnv keeps the daemon reading the same agent dir as the installing
+// shell. NativeDataDir keys on CORGI_DATA_DIR, HOME and XDG_DATA_HOME, so PATH
+// alone is not enough. HOMEBREW_PREFIX is for the legacy exec-path registry.
 func serviceEnv() map[string]string {
 	env := map[string]string{"PATH": servicePATH()}
 	// HOME is normally injected by launchd/systemd, but the daemon's data-dir

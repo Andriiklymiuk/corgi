@@ -95,13 +95,9 @@ func mcpExposure() tunnel.Exposure {
 }
 
 // dangerousTunnelToolsAllowed reports whether corgi_exec / corgi_db_query may
-// run.
-//
-// Always allowed over stdio or a plain (non-tunneled) HTTP endpoint. Over a
-// tunnel it depends on who can reach it: a tunnel behind an identity proxy is
-// not open to the internet, so the tools stay usable from a phone that has
-// signed in. A tunnel anyone holding the URL can reach still requires the
-// explicit opt-in, because that is arbitrary command and DB execution.
+// run. Always over stdio or a plain HTTP endpoint, and over a tunnel behind an
+// identity proxy. A tunnel anyone with the URL can reach needs the explicit
+// opt-in — this is arbitrary command and DB execution.
 func dangerousTunnelToolsAllowed(publicTunnel bool) bool {
 	if !publicTunnel {
 		return true
@@ -127,11 +123,11 @@ func runMCP(cmd *cobra.Command, _ []string) {
 	opts := mcpHTTPOptsFromFlags(cmd)
 	if opts.pair && httpAddr == "" {
 		fmt.Fprintln(os.Stderr, "corgi mcp --pair requires --http (the addr a device connects to).")
-		os.Exit(2)
+		exitProcess(2)
 	}
 	if opts.tunnel && httpAddr == "" {
 		fmt.Fprintln(os.Stderr, "corgi mcp --tunnel requires --http (the local addr to expose).")
-		os.Exit(2)
+		exitProcess(2)
 	}
 	if httpAddr != "" {
 		serveMCPHTTP(s, httpAddr, resolveMCPToken(opts), opts)
@@ -182,7 +178,7 @@ func generateMCPToken() string {
 	if _, err := rand.Read(b); err != nil {
 		// crypto/rand failure is fatal: a weak token would defeat the auth.
 		fmt.Fprintln(os.Stderr, "could not generate token:", err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	return "corgi_mcp_" + base64.RawURLEncoding.EncodeToString(b)
 }
@@ -258,7 +254,7 @@ func serveMCPStdio(s *server.MCPServer) {
 	// WithWorkerPoolSize(1) is defense-in-depth; mcpHandlerMu is the real guard.
 	if err := server.ServeStdio(s, server.WithWorkerPoolSize(1)); err != nil {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 
@@ -284,7 +280,7 @@ func resolveDeviceStore(opts mcpHTTPOpts) string {
 		fmt.Fprintf(os.Stderr,
 			"corgi mcp: cannot read the paired-device store at %s.\n"+
 				"Fix its permissions (chmod 600) or remove it to start over; refusing to serve in the meantime.\n", path)
-		os.Exit(1)
+		exitProcess(1)
 	case pairing.StoreEmpty:
 		if opts.pair {
 			return path
@@ -348,12 +344,12 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 			// single-use code, fail to save, and leave a stray .tmp holding the
 			// token hash wherever corgi happened to be running.
 			fmt.Fprintln(os.Stderr, "corgi mcp --pair cannot be combined with --insecure, and needs a writable corgi data directory.")
-			os.Exit(2)
+			exitProcess(2)
 		}
 		session, _, err := pairing.NewSession()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "could not start pairing:", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		pairSession = session
 		mux.Handle("/pair", pairingHandler(session, deviceStore))
@@ -400,7 +396,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	}
 	if err != nil && err != http.ErrServerClosed {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 
@@ -412,12 +408,12 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 	provider, named, err := buildMCPTunnelConfig(opts.tunnelProvider, opts.tunnelHostname, opts.tunnelName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tunnel:", err)
-		os.Exit(2)
+		exitProcess(2)
 	}
 	port, err := mcpAddrPort(addr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tunnel:", err)
-		os.Exit(2)
+		exitProcess(2)
 	}
 	if token == "" {
 		fmt.Fprintln(os.Stderr, "⚠️⚠️⚠️  --tunnel --insecure exposes corgi control (corgi_up ⇒ arbitrary command execution) to ANYONE with the URL. Do not use on untrusted networks.")
@@ -455,27 +451,15 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 	return done
 }
 
-// probeTunnelExposure checks whether the published tunnel is behind an identity
-// proxy, and says so either way.
-//
-// The url must be the endpoint the tools are served on (`/mcp`), never the
-// tunnel root. Making a non-browser MCP client work behind Cloudflare Access
-// means giving `/mcp` a service-token or bypass policy while `/` keeps
-// redirecting to the login page — so probing the root would see that redirect,
-// call the whole tunnel private, and re-enable corgi_exec on a route anyone
-// with the URL can reach. The gate has to be measured where it applies.
-//
-// Runs in the background: nothing may wait on it, because the endpoint is
-// already serving by the time the URL is printed, and a gate that starts closed
-// and opens on evidence is the safe direction to be wrong in.
-// probeDelays waits out DNS propagation before asking. A quick tunnel's
-// hostname does not resolve for a few seconds after cloudflared prints it, and
-// a query made in that window is answered NXDOMAIN — which resolvers cache
-// against the negative TTL on the zone's SOA, half an hour for trycloudflare.
-// Probing immediately therefore poisons the very hostname corgi just published,
-// for the machine and every device sharing its resolver.
+// probeDelays waits out DNS propagation. A quick tunnel's hostname is NXDOMAIN
+// for a few seconds after cloudflared prints it, and resolvers cache that
+// against the zone's negative TTL — half an hour for trycloudflare.
 var probeDelays = []time.Duration{8 * time.Second, 20 * time.Second, 45 * time.Second}
 
+// probeTunnelExposure reports whether the tunnel is behind an identity proxy.
+// url must be the endpoint the tools are served on (`/mcp`), not the tunnel
+// root: `/` may still redirect to a login page and that would read as private.
+// Runs in the background — the gate starts closed and only opens on evidence.
 func probeTunnelExposure(ctx context.Context, url string, sleep func(context.Context, time.Duration) bool) {
 	if sleep == nil {
 		sleep = waitOrDone
@@ -620,8 +604,6 @@ func loadComposeForMCP(composePath string) (*utils.CorgiCompose, error) {
 	ctx.cleanup()
 	return ctx.corgi, nil
 }
-
-// --- typed handler cores (testable without a JSON-RPC pipe) ---
 
 type validateArgs struct {
 	ComposePath string `json:"composePath"`
@@ -1161,8 +1143,6 @@ func withStdoutToStderr(fn func()) {
 	fn()
 }
 
-// --- MCP tool registration (thin wrappers over the cores above) ---
-
 const profileDesc = "Only these profiles (comma-separated union, e.g. backend,worker)"
 const serviceBranchDesc = `Run service(s) on a git branch via an isolated reused worktree, without editing path: in corgi-compose.yml. Format "svc=branch[,svc2=branch2]". Non-destructive — the main checkout is untouched.`
 const serviceDirDesc = `Run service(s) from an existing directory, e.g. a git worktree. Format "svc=/path[,svc2=/path2]".`
@@ -1347,8 +1327,6 @@ func jsonHandler(core func(mcp.CallToolRequest) (any, error)) server.ToolHandler
 		return mcp.NewToolResultText(string(b)), nil
 	}
 }
-
-// --- MCP resources ---
 
 func registerMCPResources(s *server.MCPServer) {
 	s.AddResource(

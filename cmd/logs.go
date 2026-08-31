@@ -4,7 +4,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 	"bufio"
-	"container/heap"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -90,7 +89,7 @@ func runLogs(cmd *cobra.Command, _ []string) {
 	if logsDumpFlag != "" {
 		if err := dumpNewestLogs(base, logsDumpFlag); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		return
 	}
@@ -372,12 +371,9 @@ func hasTimestampShape(b []byte) bool {
 }
 
 // mergeStream is one input to the k-way merge — a service's log file read line
-// by line, with the current head buffered for heap compare.
-//
-// Deliberately a Reader rather than a Scanner: a Scanner stops for good at EOF,
-// but a log being written to reaches EOF constantly and gains more later. The
-// handle keeps its offset, and a trailing line without a newline is held back
-// until the rest of it arrives.
+// by line, head buffered for heap compare. A Reader rather than a Scanner
+// because a Scanner stops for good at EOF and a live log hits EOF constantly.
+// A trailing line without a newline is held back until the rest arrives.
 type mergeStream struct {
 	service string
 	reader  *bufio.Reader
@@ -385,7 +381,6 @@ type mergeStream struct {
 	headTS  string
 	headBuf string
 	partial string
-	eof     bool
 }
 
 // readLine returns the next complete line. An incomplete trailing line is kept
@@ -406,45 +401,6 @@ func (s *mergeStream) close() {
 		s.f.Close()
 		s.f = nil
 	}
-}
-
-func (s *mergeStream) advance() bool {
-	if s.eof {
-		return false
-	}
-	line, ok := s.readLine()
-	if !ok {
-		s.eof = true
-		s.close()
-		return false
-	}
-	if hasTimestampShape([]byte(line)) {
-		s.headTS = line[:utils.LogTimestampLen-1]
-		s.headBuf = line[utils.LogTimestampLen:]
-	} else {
-		s.headTS = ""
-		s.headBuf = line
-	}
-	return true
-}
-
-type mergeHeap []*mergeStream
-
-func (h mergeHeap) Len() int { return len(h) }
-func (h mergeHeap) Less(i, j int) bool {
-	if h[i].headTS == h[j].headTS {
-		return h[i].service < h[j].service
-	}
-	return h[i].headTS < h[j].headTS
-}
-func (h mergeHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
-func (h *mergeHeap) Push(x interface{}) { *h = append(*h, x.(*mergeStream)) }
-func (h *mergeHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[:n-1]
-	return x
 }
 
 // followAllLogs merges the newest run of every logged service into one
@@ -530,26 +486,9 @@ func drainStreams(out *bufio.Writer, streams map[string]*mergeStream) int {
 	}
 	sort.SliceStable(batch, func(i, j int) bool { return batch[i].ts < batch[j].ts })
 	for _, e := range batch {
-		writeMergedLine(out, &mergeStream{service: e.service, headTS: e.ts, headBuf: e.line})
+		writeMergedLine(out, e.service, e.ts, e.line)
 	}
 	return len(batch)
-}
-
-func buildMergeHeap(base string, services []string) *mergeHeap {
-	h := &mergeHeap{}
-	heap.Init(h)
-	for _, svc := range services {
-		s := openMergeStream(base, svc)
-		if s == nil {
-			continue
-		}
-		if s.advance() {
-			heap.Push(h, s)
-		} else {
-			s.f.Close()
-		}
-	}
-	return h
 }
 
 // advanceTail is advance for a file still being written: EOF means "nothing
@@ -585,16 +524,16 @@ func openMergeStream(base, svc string) *mergeStream {
 	return &mergeStream{service: svc, reader: bufio.NewReader(f), f: f}
 }
 
-func writeMergedLine(out *bufio.Writer, s *mergeStream) {
+func writeMergedLine(out *bufio.Writer, service, ts, line string) {
 	if utils.JSONOutput {
-		fmt.Fprintln(out, logJSONLine(s.service, s.headTS, detectLevel(s.headBuf), s.headBuf))
+		fmt.Fprintln(out, logJSONLine(service, ts, detectLevel(line), line))
 		return
 	}
-	if s.headTS != "" {
-		fmt.Fprintf(out, "%s %s[%s]%s %s\n", s.headTS, art.CyanColor, s.service, art.WhiteColor, s.headBuf)
+	if ts != "" {
+		fmt.Fprintf(out, "%s %s[%s]%s %s\n", ts, art.CyanColor, service, art.WhiteColor, line)
 		return
 	}
-	fmt.Fprintf(out, "%s[%s]%s %s\n", art.CyanColor, s.service, art.WhiteColor, s.headBuf)
+	fmt.Fprintf(out, "%s[%s]%s %s\n", art.CyanColor, service, art.WhiteColor, line)
 }
 
 // isLogFileActive returns true when the log file was modified in the last 2s.

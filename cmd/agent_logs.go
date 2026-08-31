@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"andriiklymiuk/corgi/utils"
@@ -32,7 +31,7 @@ func runAgentLogs(cmd *cobra.Command, args []string) {
 				fmt.Printf("  %-20s %s\n", c.Workspace.ID, c.Workspace.AbsPath)
 			}
 		}
-		os.Exit(2)
+		exitProcess(2)
 	}
 
 	dir, err := agentDir()

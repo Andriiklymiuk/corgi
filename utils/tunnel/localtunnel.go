@@ -6,14 +6,11 @@ import (
 	"strings"
 )
 
-// Localtunnel wraps the npm `localtunnel` CLI (`lt --port <port>`).
-// It emits exactly one line: "your url is: https://<sub>.localtunnel.me".
+// Localtunnel wraps the npm `localtunnel` CLI (`lt --port <port>`), which emits
+// one line: "your url is: https://<sub>.localtunnel.me".
 //
-// Named mode: localtunnel supports `--subdomain <name>` to request a specific
-// subdomain on the public server. Per the official README the request is
-// best-effort — if the subdomain is in use, the server picks a different
-// random one. Pass only the leading subdomain label as `tunnel.hostname`
-// (e.g. `my-api`); the trailing `.localtunnel.me` is fixed.
+// `tunnel.hostname` takes only the leading subdomain label (`my-api`) and is
+// best-effort — the server picks a random one if it is taken.
 type Localtunnel struct{}
 
 func (Localtunnel) Name() string { return "localtunnel" }

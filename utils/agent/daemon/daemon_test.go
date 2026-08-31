@@ -365,15 +365,10 @@ func TestDaemonWithoutABriefProbeStillRuns(t *testing.T) {
 }
 
 func TestRunWaitsForTheStatusPublisherBeforeReturning(t *testing.T) {
-	// Run's contract is "nothing of mine is still up". The status publisher runs
-	// in its own goroutine, so without an explicit wait Run can return — and its
-	// deferred cleanup delete status.json — while the publisher is still
-	// mid-write, resurrecting the file and racing anything clearing the
-	// directory behind it. Under `go test -race` that surfaced in CI as a
-	// TempDir cleanup failure in whichever test happened to run next.
-	//
-	// The delay makes the ordering deterministic: without the wait Run returns
-	// long before the publisher is finished.
+	// Without an explicit wait, Run's deferred delete of status.json races the
+	// status publisher goroutine still mid-write, resurrecting the file. That
+	// surfaced under -race as a TempDir cleanup failure in the next test.
+	// The delay makes the ordering deterministic.
 	d := testDaemon(t)
 	var publisherFinished atomic.Bool
 	d.publishStopped = func() {

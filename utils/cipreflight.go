@@ -13,12 +13,9 @@ var (
 )
 
 // InContainer reports whether this process is running inside a container.
-//
-// It matters because corgi's databases run as containers that publish to
-// localhost, and every generated connection string assumes the services share
-// that localhost. A CI job running inside its own container does not, so the
-// stack boots and then every service fails to reach its database — which reads
-// as "postgres is down" rather than "wrong runner".
+// corgi's generated connection strings assume services share the localhost its
+// database containers publish to; a CI job in its own container does not, and
+// the failure reads as "postgres is down" rather than "wrong runner".
 func InContainer() bool {
 	if _, err := os.Stat(dockerEnvMarkerPath); err == nil {
 		return true

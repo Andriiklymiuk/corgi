@@ -21,8 +21,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ---------------------------------------------------------------- init
-
 var agentInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Opt this stack into agent mode",
@@ -161,13 +159,10 @@ func composeFileName(dir string) string {
 	return "corgi-compose.yml"
 }
 
-// claudeTrustsDir reports whether Claude's own config records an accepted
-// workspace-trust dialog for dir under the given account. remote-control
-// refuses an untrusted directory, and only a human running `claude` there can
-// accept the dialog — so init/up warn up front instead of letting the phone
-// discover a card that can never start. Best-effort: an unparseable config
-// reports trusted, so a format change never produces false warnings; a missing
-// file means Claude never ran under that account, which IS untrusted.
+// claudeTrustsDir reports whether Claude's config records an accepted
+// workspace-trust dialog for dir. remote-control refuses an untrusted directory
+// and only a human at `claude` can accept, so init/up warn up front. An
+// unparseable config reports trusted; a missing one means Claude never ran.
 func claudeTrustsDir(configDir, dir string) bool {
 	base := expandTilde(configDir)
 	if base == "" {
@@ -272,8 +267,6 @@ func enableWorkspace(id, configDir string, skipPerms bool) error {
 	return writeUserConfig(path, user)
 }
 
-// ---------------------------------------------------------------- scan
-
 var agentScanCmd = &cobra.Command{
 	Use:   "scan <dir>",
 	Short: "Find corgi stacks under a directory and register them",
@@ -369,8 +362,6 @@ func findComposeDirs(root string) []string {
 	return out
 }
 
-// ---------------------------------------------------------------- doctor
-
 var agentDoctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check whether agent mode can actually work here",
@@ -397,7 +388,7 @@ func runAgentDoctor(_ *cobra.Command, _ []string) {
 	if utils.JSONOutput {
 		utils.PrintJSON(checks)
 		if anyCheckFailed(checks) {
-			os.Exit(1)
+			exitProcess(1)
 		}
 		return
 	}
@@ -413,7 +404,7 @@ func runAgentDoctor(_ *cobra.Command, _ []string) {
 		}
 	}
 	if anyCheckFailed(checks) {
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 

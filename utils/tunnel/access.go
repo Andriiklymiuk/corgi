@@ -8,13 +8,10 @@ import (
 	"time"
 )
 
-// Exposure is how reachable an endpoint is, which is a different question from
-// whether it has a stable URL.
-//
-// corgi already treats "is there a tunnel" as a yes/no, and gates the mutating
-// tools on it. That is too blunt: a named tunnel behind an identity proxy is
-// not open to the internet, and a quick tunnel is open to anyone who guesses
-// the hostname. Those deserve different answers.
+// Exposure is how reachable an endpoint is — a different question from whether
+// it has a stable URL. "Is there a tunnel" is too blunt to gate on: a named
+// tunnel behind an identity proxy is not open to the internet, and a quick
+// tunnel is open to anyone who guesses the hostname.
 type Exposure string
 
 const (
@@ -54,13 +51,10 @@ const accessProbeTimeout = 10 * time.Second
 
 // ProbeAccess asks whether an identity proxy stands in front of a URL.
 //
-// The check is deliberately positive-only: corgi downgrades an endpoint to
-// "private" solely on evidence that an unauthenticated request was intercepted.
-// Guessing the other way — assuming protection because a probe failed, or
-// because the config said so — would relax a security gate on a hunch, and the
-// failure mode is an open shell endpoint.
-//
-// It follows no redirects, because the redirect itself is the evidence.
+// Positive-only by design: an endpoint is downgraded to "private" solely on
+// evidence that an unauthenticated request was intercepted, because guessing
+// the other way relaxes a security gate onto an open shell endpoint. Follows no
+// redirects — the redirect is the evidence.
 func ProbeAccess(ctx context.Context, rawURL string) AccessResult {
 	return ProbeAccessWith(ctx, rawURL, &http.Client{})
 }

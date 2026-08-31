@@ -18,17 +18,11 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// These are the tools a Remote Control session calls from a phone to do what
-// Remote Control cannot: find the right stack among many, materialize a branch
-// across every repository in it, and read the whole change at once.
+// Tools a Remote Control session calls from a phone: find the right stack,
+// materialize a branch across every repository, read the whole change at once.
 //
-// Two rules hold for all of them:
-//
-//   - Nothing blocks. cmd/mcp.go serializes every handler behind one global
-//     mutex (handlers swap os.Stdout and mutate rootCmd flags), so a handler
-//     that waited on slow work would freeze the server for every client.
-//   - Anything that mutates joins the existing dangerous-tool tunnel gate, the
-//     same one that already covers corgi_exec and corgi_db_query.
+// Nothing here may block — cmd/mcp.go serializes handlers behind one global
+// mutex. Anything that mutates joins the dangerous-tool tunnel gate.
 
 const agentDangerousBlockedMsg = "corgi_worktrees_* are disabled over a public tunnel; set CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1 to allow"
 
@@ -75,19 +69,11 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpWorkspaceResolve(r.GetString("query", ""))
 	}))
 
-	// corgi_session_start/_stop are NOT behind the dangerous-tunnel gate, for
-	// the same reason corgi_up/corgi_down are not: they are the point of a
-	// phone-driven endpoint. What bounds them instead:
-	//   - the endpoint is per-device-token authenticated (pairing), and a lost
-	//     device is revoked, not tolerated — treat its token as the machine key;
-	//   - starts are registry-scoped: a caller picks an existing workspace, it
-	//     cannot define what runs or where;
-	//   - a workspace marked `sensitive` refuses remote start (remoteResolver);
-	//   - the started session's conversation still needs the owner's claude.ai
-	//     account — the sessionUrl reaches paired devices, so status.json is
-	//     0600 and the URL is not otherwise logged.
-	// A stolen token can still stop the owner's sessions (a nuisance, not a
-	// breach); revocation is the answer, as with every tool the token reaches.
+	// Not behind the dangerous-tunnel gate — a phone-driven endpoint is the
+	// point. Bounded instead by per-device-token auth, registry-scoped starts
+	// (no caller-defined command), `sensitive` workspaces refusing remote start,
+	// and 0600 status.json for the sessionUrl. A stolen token can stop sessions;
+	// revocation is the answer, as for every tool the token reaches.
 	s.AddTool(mcp.NewTool("corgi_session_start",
 		mcp.WithDescription(
 			"Start a supervised Claude Code Remote Control session in a registered workspace, by name. "+
@@ -256,8 +242,6 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		)
 	}))
 }
-
-// --- handlers ---
 
 func mcpAgentStatus() (any, error) {
 	dir, err := agentDir()
@@ -627,8 +611,6 @@ func workspaceIsSensitive(dir string) bool {
 	repo, err := config.LoadRepo(dir)
 	return err == nil && repo != nil && repo.Workspace.Sensitive
 }
-
-// --- shared helpers ---
 
 // agentRegistry loads the workspace registry the CLI and MCP both read, so
 // every surface agrees on what exists.

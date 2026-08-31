@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"andriiklymiuk/corgi/utils/atomicfile"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,14 +13,12 @@ import (
 	"time"
 )
 
-// A live preview is a public URL onto a service the agent is editing, so the
-// user can watch it change from a phone. corgi does not need a refresh
-// mechanism — the dev server already hot reloads. corgi needs to keep one
-// tunnel open and be honest about what state the build is in.
+// A live preview is a public URL onto a service the agent is editing. The dev
+// server already hot reloads, so corgi only keeps one tunnel open and reports
+// the build state honestly.
 //
-// The tunnel runs as a DETACHED process writing to a log file, the same shape
-// corgi already uses for detached services. That way a preview outlives the
-// session that started it, and a later corgi run can still find and reap it.
+// The tunnel is a DETACHED process writing to a log file, like corgi's detached
+// services, so a preview outlives its session and a later run can reap it.
 
 // PreviewState is what to show over the webview. A visible banner beats a
 // white screen, so "broken" is a first-class state rather than an absence.
@@ -110,11 +109,7 @@ func SavePreviews(composeDir string, s *PreviewStore) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return atomicfile.Write(path, data, 0o644)
 }
 
 // PreviewOptions configures a new preview.

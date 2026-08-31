@@ -102,8 +102,6 @@ func warnStrandedAgentData() {
 func agentUserConfigPath(dir string) string { return filepath.Join(dir, "config.yml") }
 func agentRegistryPath(dir string) string   { return filepath.Join(dir, "registry.json") }
 
-// ---------------------------------------------------------------- serve
-
 var agentServeCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Supervise Remote Control for every enabled workspace",
@@ -364,8 +362,6 @@ func printStartupDiagnostics(configs []supervisor.SpawnConfig) {
 	}
 }
 
-// ---------------------------------------------------------------- status
-
 var agentStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show what agent mode is running, and under which account",
@@ -478,8 +474,6 @@ func printWorkspaceDiagnostic(d daemon.WorkspaceDiagnostic) {
 	}
 }
 
-// ---------------------------------------------------------------- stop
-
 var agentStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the agent daemon",
@@ -532,8 +526,6 @@ func waitForDaemonExit(dir string, timeout time.Duration) bool {
 	info, err := daemon.ReadInfo(dir)
 	return err != nil || info == nil
 }
-
-// ---------------------------------------------------------------- workspaces
 
 var agentWorkspacesCmd = &cobra.Command{
 	Use:     "workspaces",
@@ -620,8 +612,6 @@ var agentWorkspacesRelocateCmd = &cobra.Command{
 	},
 }
 
-// ---------------------------------------------------------------- session
-
 var agentSessionCmd = &cobra.Command{
 	Use:   "session",
 	Short: "Start or stop a supervised session in a workspace, on demand",
@@ -663,7 +653,7 @@ func enqueueSessionCommand(action string, args []string, profile, name string) {
 				fmt.Printf("  %-20s %s\n", c.Workspace.ID, c.Workspace.AbsPath)
 			}
 		}
-		os.Exit(2)
+		exitProcess(2)
 	}
 
 	dir, err := agentDir()
@@ -715,7 +705,7 @@ var agentResolveCmd = &cobra.Command{
 			// Same exit code as the human path: a script must not read an
 			// ambiguous answer as a resolved one.
 			if !res.Resolved() {
-				os.Exit(2)
+				exitProcess(2)
 			}
 			return
 		}
@@ -729,7 +719,7 @@ var agentResolveCmd = &cobra.Command{
 		}
 		// Ambiguity is a question for a person, not a failure of the machine,
 		// but it must not read as success to a script.
-		os.Exit(2)
+		exitProcess(2)
 	},
 }
 

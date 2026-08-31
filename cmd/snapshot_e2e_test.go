@@ -54,14 +54,10 @@ func composeDownVolumes(t *testing.T, dir string) {
 	}
 }
 
-// waitReady blocks until Postgres in the container is the FINAL server and
-// stably accepting connections. A single successful query is not enough on first
-// boot: the official entrypoint runs a temporary server (to set the password /
-// run init), logs "ready to accept connections", then shuts it down and restarts
-// the real server. A query can slip into that transient window and the next one
-// then hits "shutting down". So we require a sustained streak of successes —
-// long enough to outlast that init/restart blip — which also holds for the plain
-// `start` (post-snapshot) and restore boots, where no init phase runs at all.
+// waitReady blocks until Postgres is the FINAL server and stably accepting
+// connections. One successful query is not enough on first boot: the entrypoint
+// runs a temporary server, says "ready", then restarts the real one — so a
+// sustained streak of successes is required to outlast that blip.
 func waitReady(t *testing.T, container, user, db string) {
 	t.Helper()
 	deadline := time.Now().Add(180 * time.Second)

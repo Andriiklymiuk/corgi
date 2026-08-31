@@ -76,7 +76,7 @@ func runDbSnapshot(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		utils.Info(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	// --list / --rm manage existing snapshots; then the lone positional is the
@@ -92,7 +92,7 @@ func resolvePostgresServiceOrExit(serviceArg string, dbs []utils.DatabaseService
 	svc, err := resolvePostgresService(serviceArg, dbs)
 	if err != nil {
 		utils.Info(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	return svc
 }
@@ -127,12 +127,12 @@ func createSnapshot(args []string, dbs []utils.DatabaseService) {
 	name, err := utils.SanitizeSnapshotName(name)
 	if err != nil {
 		utils.Info(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	if utils.IsStackSupervised(utils.CorgiComposePathDir) {
 		utils.Info("a detached `corgi run` is managing this stack — run `corgi stop` first")
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	container := utils.ContainerName(svc.Driver, svc.ServiceName)
@@ -145,7 +145,7 @@ func createSnapshot(args []string, dbs []utils.DatabaseService) {
 	}, time.Now())
 	if err != nil {
 		utils.Info("snapshot failed:", err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	utils.Infof("📦 snapshot %q saved (%s, pg%s/%s, %d bytes)\n",
 		name, meta.Image, meta.PgVersionMajor, meta.Arch, meta.SizeBytes)
@@ -155,7 +155,7 @@ func runDbRestore(cmd *cobra.Command, args []string) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		utils.Info(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	nameOrPath, serviceArg := "", ""
@@ -167,24 +167,24 @@ func runDbRestore(cmd *cobra.Command, args []string) {
 	}
 	if nameOrPath == "" {
 		utils.Info("usage: corgi db restore [name|path] [service]")
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	svc, err := resolvePostgresService(serviceArg, corgi.DatabaseServices)
 	if err != nil {
 		utils.Info(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	if utils.IsStackSupervised(utils.CorgiComposePathDir) {
 		utils.Info("a detached `corgi run` is managing this stack — run `corgi stop` first")
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	archive, metaPath, fromPath, err := resolveRestoreSource(svc.ServiceName, nameOrPath)
 	if err != nil {
 		utils.Info(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	if !restoreYes {
@@ -204,7 +204,7 @@ func runDbRestore(cmd *cobra.Command, args []string) {
 		FromPath: fromPath, Force: restoreForce,
 	}); err != nil {
 		utils.Info("restore failed:", err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	utils.Infof("✅ restored %q from %s\n", svc.ServiceName, filepath.Base(archive))
 }
@@ -213,7 +213,7 @@ func listSnapshots(service string) {
 	items, err := utils.ListSnapshots(service)
 	if err != nil {
 		utils.Info(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	if utils.JSONOutput {
 		utils.PrintJSON(items)
@@ -255,7 +255,7 @@ func removeSnapshot(service, name string) {
 	archive, metaPath, err := snapshotRemovePaths(service, name)
 	if err != nil {
 		utils.Info(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	_ = os.Remove(archive)
 	_ = os.Remove(metaPath)

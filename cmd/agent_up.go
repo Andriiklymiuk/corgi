@@ -438,12 +438,9 @@ func upLockIsStale(path string) bool {
 }
 
 // corgiListenerPIDs returns the pids of corgi processes listening on addr's
-// port. This is the recovery path for an MCP left over by an older `agent up`
-// (started before mcp.pid existed, or whose pid file was lost): without it the
-// port stays held, every `up` refuses, and pairing can never reopen. Only pids
-// whose command name contains "corgi" are returned — an unidentified listener
-// is never touched. Unix-only (lsof); on Windows or without lsof it returns
-// nothing and callers fall back to the manual hint.
+// port — the recovery path for an MCP whose pid file was lost, which would
+// otherwise hold the port against every `up`. Only pids whose command name
+// contains "corgi". Unix-only (lsof); elsewhere callers fall back to a hint.
 func corgiListenerPIDs(addr string) []int {
 	if runtime.GOOS == "windows" {
 		return nil
@@ -723,8 +720,6 @@ func orDefault(s, def string) string {
 	return s
 }
 
-// ---------------------------------------------------------------- down
-
 var agentDownCmd = &cobra.Command{
 	Use:   "down",
 	Short: "Stop everything `corgi agent up` started — the daemon and the detached MCP + tunnel",
@@ -751,14 +746,10 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 		}
 	}
 
-	// The detached MCP + tunnel that `agent up` recorded. Stopping it is what
-	// takes the public URL down; `agent stop` alone leaves it serving.
-	//
-	// PidAlive guards against a recycled pid: mcp.pid can outlive its process (an
-	// MCP crash, a reboot, an `agent stop` all leave it on disk), and the OS may
-	// hand that number to an unrelated process. PidAlive confirms the pid is still
-	// its own process-group leader — which the detached MCP is and a recycled pid
-	// almost never is — so a stale file cannot make `down` kill your editor.
+	// The detached MCP + tunnel `agent up` recorded; stopping it is what takes
+	// the public URL down. mcp.pid outlives its process on a crash or reboot, so
+	// PidAlive checks the pid is still its own group leader — a stale file must
+	// not make `down` kill an unrelated process.
 	pidPath := filepath.Join(dir, mcpPidName)
 	mcpStopped := false
 	if pid, ok := readAgentPidFile(pidPath); ok {
@@ -797,8 +788,6 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 		utils.Info("corgi agent is not running")
 	}
 }
-
-// ---------------------------------------------------------------- restart
 
 var agentRestartCmd = &cobra.Command{
 	Use:   "restart",

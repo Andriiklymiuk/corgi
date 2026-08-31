@@ -313,26 +313,17 @@ func BuildArgs(c SpawnConfig) ([]string, error) {
 	return kind.Args(c)
 }
 
-// BuildEnv constructs the child environment explicitly rather than handing over
-// the daemon's own.
-//
-// This exists because launchd and systemd never source a shell rc file, so the
-// CLAUDE_CONFIG_DIR aliases people use to separate accounts are simply absent.
-// Without setting it here every workspace would silently run under the default
-// account — no error, correct-looking output, wrong account.
-//
-// parentEnv is the environment to derive from, in "KEY=value" form.
+// BuildEnv constructs the child environment explicitly from parentEnv
+// ("KEY=value" form) rather than handing over the daemon's own. launchd and
+// systemd never source a shell rc file, so without this every workspace runs
+// under the default Claude account — no error, correct-looking output.
 func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 	kind, err := KindFor(c)
 	if err != nil {
-		// Unreachable through the daemon, which validates first. Returning the
-		// parent unchanged would hand the child every ambient credential, so
-		// return an empty environment instead: a process with none fails loudly.
-		//
-		// Non-nil deliberately. exec.Cmd treats a nil Env as "inherit the whole
-		// parent environment", which is the exact opposite of what this line is
-		// for, so returning nil here would turn the safe fallback into total
-		// credential inheritance.
+		// Unreachable via the daemon, which validates first. Empty rather than
+		// the parent env so a misconfigured child fails loudly instead of
+		// inheriting every ambient credential — and non-nil, because exec.Cmd
+		// reads a nil Env as "inherit everything".
 		return []string{}
 	}
 	configVar := kind.ConfigDirEnv
@@ -358,12 +349,9 @@ func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 }
 
 // isStrippedCredential reports whether a variable is one of the kind's ambient
-// credentials and the workspace has not opted in to keeping it.
-//
-// The two opt-ins are split because they fail differently: an API key bills the
-// API instead of a subscription, while an OAuth token points at another
-// account. A name containing OAUTH is treated as the token case, which is the
-// convention every CLI here follows.
+// credentials the workspace has not opted in to keeping. The two opt-ins are
+// split because they fail differently: an API key bills the API instead of a
+// subscription, an OAuth token points at another account.
 func isStrippedCredential(kind Kind, key string, c SpawnConfig) bool {
 	for _, name := range kind.CredentialEnv {
 		if key != name {

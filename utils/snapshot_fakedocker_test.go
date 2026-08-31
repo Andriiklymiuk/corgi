@@ -10,12 +10,9 @@ import (
 	"time"
 )
 
-// The snapshot/restore pipeline shells out to `docker`. The real exercise lives
-// in snapshot_e2e_test.go behind the `e2e` tag and needs a daemon, so it never
-// runs in CI coverage. These tests stub `docker` with a tiny shell script on
-// PATH instead — every docker call returns canned output (tunable per test via
-// FAKE_* env vars), so RunSnapshot, RunRestore and all their helpers run for
-// real with no daemon.
+// snapshot_e2e_test.go needs a real daemon and never runs in CI coverage, so
+// these stub `docker` with a shell script on PATH returning canned output.
+// RunSnapshot, RunRestore and their helpers then run for real with no daemon.
 //
 // Knobs (set after installFakeDocker):
 //

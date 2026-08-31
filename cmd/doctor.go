@@ -4,7 +4,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -200,7 +199,7 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 		} else {
 			fmt.Printf("couldn't get services config, error: %s\n", err)
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	if fix, _ := cmd.Flags().GetBool("fix"); fix {
@@ -225,7 +224,7 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 	}
 
 	fmt.Println(art.RedColor, "❌ Doctor: one or more checks failed", art.WhiteColor)
-	os.Exit(1)
+	exitProcess(1)
 }
 
 func runDoctorFix(cmd *cobra.Command, corgi *utils.CorgiCompose) {
@@ -254,7 +253,7 @@ func runDoctorFix(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		}
 	}
 	if !out.OK {
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 
@@ -262,7 +261,7 @@ func runDoctorJSON(corgi *utils.CorgiCompose) {
 	res := buildDoctorResult(corgi)
 	utils.PrintJSON(res)
 	if !res.OK {
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 

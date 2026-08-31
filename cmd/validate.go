@@ -55,7 +55,7 @@ func runValidate(cmd *cobra.Command, _ []string) {
 		} else {
 			fmt.Fprintf(os.Stderr, "couldn't load corgi-compose.yml: %s\n", err)
 		}
-		os.Exit(2)
+		exitProcess(2)
 	}
 
 	errs, warns := utils.ValidateCompose(corgi)
@@ -71,14 +71,14 @@ func runValidate(cmd *cobra.Command, _ []string) {
 	if jsonOut {
 		utils.PrintJSON(validateReport{Ok: !failed, Errors: errs, Warnings: warns})
 		if failed {
-			os.Exit(1)
+			exitProcess(1)
 		}
 		return
 	}
 
 	printValidateHuman(errs, warns, strict)
 	if failed {
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 

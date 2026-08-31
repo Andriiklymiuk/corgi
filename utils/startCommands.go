@@ -70,13 +70,10 @@ func AwsVpnInit() error {
 	return fmt.Errorf("AWS VPN Client failed to become ready after %d attempts", awsVpnMaxLaunchAttempts)
 }
 
-// connectFirstAwsVpnProfile clicks the first profile's Connect button.
-// AWS VPN Client has no CLI — GUI automation is the only path. State
-// detection runs without activating to avoid focus steal; activates only
-// when clicking Connect.
-//
-// Script uses only generic UI labels (Connect/Disconnect/Cancel) — no
-// profile names. See TestConnectFirstAwsVpnProfile_DoesNotLeakProfileName.
+// connectFirstAwsVpnProfile clicks the first profile's Connect button. AWS VPN
+// Client has no CLI, so GUI automation is the only path; state detection avoids
+// activating to prevent focus steal. The script names only generic UI labels,
+// never profiles — see TestConnectFirstAwsVpnProfile_DoesNotLeakProfileName.
 func connectFirstAwsVpnProfile() error {
 	const script = `
 tell application "System Events"

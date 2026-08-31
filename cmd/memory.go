@@ -83,7 +83,7 @@ var memoryAddCmd = &cobra.Command{
 		pattern, _ := cmd.Flags().GetString("pattern")
 		if t == "" || name == "" || desc == "" {
 			fmt.Fprintln(os.Stderr, "memory add requires --type, --name and --desc")
-			os.Exit(2)
+			exitProcess(2)
 		}
 		path, err := utils.AddFact(memoryRoot(), utils.Fact{
 			Name: name, Description: desc, Type: t, Service: svc, Pattern: pattern,
@@ -141,7 +141,7 @@ var memoryLintCmd = &cobra.Command{
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"ok": len(errs) == 0, "errors": errs, "warnings": warns})
 			if len(errs) > 0 {
-				os.Exit(1)
+				exitProcess(1)
 			}
 			return
 		}
@@ -155,7 +155,7 @@ var memoryLintCmd = &cobra.Command{
 			utils.Infof("memory ok — %d warning(s)\n", len(warns))
 			return
 		}
-		os.Exit(1)
+		exitProcess(1)
 	},
 }
 
@@ -166,7 +166,7 @@ func failMemory(err error) {
 	} else {
 		fmt.Fprintf(os.Stderr, "memory: %s\n", err)
 	}
-	os.Exit(1)
+	exitProcess(1)
 }
 
 func init() {

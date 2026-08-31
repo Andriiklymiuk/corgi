@@ -223,12 +223,9 @@ func ExistingBranchWorktrees(corgi *CorgiCompose, composeDir, branch string) (*W
 }
 
 // ReleaseBranchWorktrees removes the worktrees a branch materialized, leaving
-// the branches themselves alone — the work is usually the point.
-//
-// A worktree with uncommitted changes is kept and reported instead of removed:
-// the tool promises only that branches and commits survive, and `git worktree
-// remove --force` would silently throw away work nobody asked it to. Pass
-// force to remove them anyway.
+// the branches alone — the work is usually the point. A worktree with
+// uncommitted changes is kept and reported rather than removed, since
+// `--force` would discard work nobody asked it to. Pass force to override.
 func ReleaseBranchWorktrees(composeDir, branch string) ([]string, error) {
 	removed, _, err := releaseBranchWorktrees(composeDir, branch, false)
 	return removed, err
@@ -318,36 +315,26 @@ func removeWorktree(dest string) bool {
 }
 
 // HasUncommittedWork reports whether a checkout holds anything not committed,
-// including untracked files.
-//
-// isTreeDirty deliberately ignores untracked files, which is right for asking
-// "has this checkout diverged" — but wrong here. An agent's work is usually a
-// set of brand-new files, and those are the ones it would hurt most to discard,
-// which is equally true when releasing a worktree and when writing a handover
-// brief. .gitignore still applies, so build output does not count.
+// untracked files included — unlike isTreeDirty, which ignores them. An agent's
+// work is usually brand-new files, the ones it would hurt most to discard.
+// .gitignore still applies, so build output does not count.
 func HasUncommittedWork(dir string) bool {
 	out, err := gitOut(dir, "status", "--porcelain")
 	return err == nil && strings.TrimSpace(out) != ""
 }
 
 // worktreeDirName keeps repo and branch in the directory name so a release can
-// find exactly the worktrees a branch created.
-//
-// The repo's basename alone is not unique — a stack can contain ~/work/api and
-// ~/oss/api — so a short hash of the full path is appended. Without it both
-// services would resolve to the same destination and the second would silently
-// be pointed at the first repository's worktree.
+// find exactly the worktrees a branch created. The basename alone is not unique
+// — a stack can hold ~/work/api and ~/oss/api — so a hash of the full path is
+// appended, or the second service silently gets the first's worktree.
 func worktreeDirName(repo, branch string) string {
 	return fmt.Sprintf("%s@%s", WorktreeDirPrefix(repo), branchDirSegment(branch))
 }
 
 // WorktreeDirPrefix is the part of a worktree directory name before the "@",
-// derived only from the repository path.
-//
-// Exported so a caller holding a compose file can map an existing worktree
-// directory back to the service that owns it. Parsing the name by hand does not
-// work: the prefix is "<basename>-<hash>", so splitting on "@" yields
-// "api-3f2a1b" rather than "api".
+// derived only from the repository path. Exported because parsing the name by
+// hand does not work: the prefix is "<basename>-<hash>", so splitting on "@"
+// yields "api-3f2a1b" rather than "api".
 func WorktreeDirPrefix(repo string) string {
 	sum := sha256.Sum256([]byte(repo))
 	return fmt.Sprintf("%s-%x", filepath.Base(repo), sum[:3])

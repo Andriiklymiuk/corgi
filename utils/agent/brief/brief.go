@@ -1,18 +1,13 @@
 // Package brief records what a supervised session was working on, so the one
 // that replaces it can be told.
 //
-// The supervisor restarts a session after a network timeout, a crash, or a
-// reboot. What comes back is a NEW session: the conversation, and everything it
-// had worked out, is gone. corgi cannot restore that — but it does know the
-// part that survives on disk, which is the part worth having. Which branch was
-// checked out in each repository, which of them hold uncommitted work, and
-// which worktrees a cross-repo branch left behind.
-//
-// That is the difference between "your session restarted" and "your session
-// restarted, and here is where it was".
+// A restart gives a NEW session with none of the conversation. corgi cannot
+// restore that, but it does know what survives on disk: the branch in each
+// repository, which hold uncommitted work, and any leftover worktrees.
 package brief
 
 import (
+	"andriiklymiuk/corgi/utils/atomicfile"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -160,11 +155,7 @@ func Write(agentDir string, b Brief) error {
 	}
 	// Write-then-rename, so a daemon killed mid-write cannot leave a truncated
 	// brief that fails to parse for the session that needed it.
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return atomicfile.Write(path, data, 0o600)
 }
 
 // Read returns a workspace's brief, or nil when there is none — which is the
@@ -221,21 +212,11 @@ func Clear(agentDir, workspaceID string) error {
 	return err
 }
 
-// sanitize turns a workspace id into a filename that is safe, collision-free,
-// and case-insensitive.
-//
-// Three things it has to get right, each of which serves the wrong workspace's
-// branches to someone if it does not:
-//
-//   - It must not escape the briefs directory. Ids come from a registry corgi
-//     writes, but this builds a filename from a name, and that pattern is worth
-//     closing wherever it appears.
-//   - Distinct ids must not collapse together. Replacing unsafe runes alone
-//     maps "acme/stack" and "acme-stack" onto one file, so a short hash of the
-//     original is appended whenever the mapping actually changed anything.
-//   - It must match the registry's own comparison, which is case-insensitive
-//     (workspace.Registry.Forget uses EqualFold). Without lowercasing here,
-//     `workspaces forget ACME` drops the row and leaves briefs/acme.json behind.
+// sanitize turns a workspace id into a filename. Getting any of this wrong
+// serves the wrong workspace's branches to someone: it must not escape the
+// briefs directory, distinct ids must not collide (hence the hash suffix when
+// the mapping changed anything), and it lowercases to match the registry's own
+// case-insensitive comparison, or `workspaces forget ACME` orphans the file.
 func sanitize(id string) string {
 	lower := strings.ToLower(id)
 	replaced := strings.Map(func(r rune) rune {

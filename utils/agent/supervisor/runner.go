@@ -66,12 +66,9 @@ type Runner struct {
 	// Notify reports a restart or a shutdown to the user. Optional.
 	Notify func(title, body string)
 	// OnSessionEnd runs after a supervised process exits and before its
-	// replacement starts, while whatever the session left on disk is still
-	// there. It returns a line to append to the restart notification, or "" when
-	// there is nothing worth adding. Optional.
-	//
-	// This is the only moment the state is both final and current, which is why
-	// it is a hook here rather than something the daemon polls for.
+	// replacement starts, while what the session left on disk is still there —
+	// the only moment that state is both final and current, hence a hook rather
+	// than polling. Returns a line for the restart notification, or "". Optional.
 	OnSessionEnd func(Decision) string
 	// Sleep is the delay between restarts. Injected so tests do not wait.
 	Sleep func(ctx context.Context, d time.Duration)

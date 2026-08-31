@@ -83,7 +83,7 @@ func runBuild(cmd *cobra.Command, _ []string) {
 		utils.PrintJSON(results)
 	}
 	if failed > 0 {
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 

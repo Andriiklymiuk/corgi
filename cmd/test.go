@@ -108,7 +108,7 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 	reportTestResults(results, allPassed)
 
 	if !allPassed {
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 

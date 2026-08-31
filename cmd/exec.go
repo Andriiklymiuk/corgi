@@ -73,7 +73,7 @@ func emitExecError(code, msg string, exitCode int) {
 	} else {
 		fmt.Fprintln(os.Stderr, msg)
 	}
-	os.Exit(exitCode)
+	exitProcess(exitCode)
 }
 
 func runExec(cmd *cobra.Command, args []string) {
@@ -94,7 +94,7 @@ func runExec(cmd *cobra.Command, args []string) {
 	}
 
 	if !utils.AbortOnValidationErrors(corgi) {
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	if err := utils.MaterializeServiceWorktrees(cmd, corgi); err != nil {
@@ -120,7 +120,7 @@ func runExec(cmd *cobra.Command, args []string) {
 		emitExecError(utils.ErrExecFailed, err.Error(), 1)
 	}
 	// Propagate the child's exit code (failure cases already emitted their message).
-	os.Exit(code)
+	exitProcess(code)
 }
 
 // readyTimeoutFlag reads --ready-timeout, falling back to the default.

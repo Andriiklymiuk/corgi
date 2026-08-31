@@ -60,7 +60,7 @@ func failE2E(msg string) {
 	} else {
 		fmt.Fprintln(os.Stderr, "❌", msg)
 	}
-	os.Exit(1)
+	exitProcess(1)
 }
 
 // collectE2EArtifacts copies the paths declared in the suite's `artifacts:` into

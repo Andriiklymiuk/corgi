@@ -1,17 +1,13 @@
 // Package pairing issues per-device tokens for corgi's MCP HTTP endpoint.
 //
-// The obvious design — show a QR containing the server's bearer token — is
-// unsafe. That endpoint can run shell (corgi_exec) and query databases
-// (corgi_db_query), so the QR is a credential for the whole machine: anyone who
-// sees the screen, a photo of it, or a screen-share frame has it, and there is
-// no way to revoke one device without re-pairing every other.
-//
-// Instead a short-lived, single-use code is exchanged for a token that belongs
-// to one device and can be revoked on its own. Tokens are stored hashed, so a
-// readable store still does not yield a working credential.
+// A QR holding the server's bearer token would be a credential for the whole
+// machine (the endpoint runs shell and queries databases), visible to anyone
+// who sees the screen and unrevocable per device. Instead a short-lived,
+// single-use code buys a per-device token, stored hashed and revocable alone.
 package pairing
 
 import (
+	"andriiklymiuk/corgi/utils/atomicfile"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -56,13 +52,9 @@ const codeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 // hand-typing it is only the fallback when a camera fails.
 const codeLength = 20
 
-// Device is one paired client.
-//
-// There is deliberately no "last seen" field. Recording it would mean a
-// read-modify-write of this store on every authenticated request, and a
-// concurrent `corgi mcp devices revoke` could then be undone by a touch that
-// loaded before it — resurrecting a revoked device. Knowing when a phone last
-// called is not worth a revocation that silently fails.
+// Device is one paired client. Deliberately no "last seen": recording it means
+// a read-modify-write on every authenticated request, and a concurrent
+// `devices revoke` could then be undone by a touch that loaded before it.
 type Device struct {
 	Name      string    `json:"name"`
 	TokenHash string    `json:"tokenHash"`
@@ -161,11 +153,7 @@ func Save(path string, s *Store) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return atomicfile.Write(path, data, 0o600)
 }
 
 // Find returns the device with the given name.

@@ -727,15 +727,10 @@ var DriverConfigs = map[string]DriverConfig{
 		},
 	},
 	"supabase": {
-		// Wraps the supabase CLI rather than running its containers directly —
-		// the CLI manages its own multi-container stack (postgres, gotrue,
-		// postgrest, kong, studio, storage-api, etc.). corgi only emits env
-		// vars and triggers `supabase start/stop` from the project root.
-		//
-		// Defaults below match `supabase status -o env` output for a project
-		// initialized with the stock JWT secret. Customizing the secret in
-		// supabase/config.toml will diverge ANON_KEY / SERVICE_ROLE_KEY /
-		// JWT_SECRET — handle via overrides in v2.
+		// Wraps the supabase CLI, which manages its own multi-container stack;
+		// corgi only emits env vars and runs `supabase start/stop`. Defaults
+		// match `supabase status -o env` with the stock JWT secret — a custom
+		// secret in supabase/config.toml diverges the keys.
 		Prefix: "SUPABASE_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			var out strings.Builder
@@ -803,13 +798,10 @@ var DriverConfigs = map[string]DriverConfig{
 		},
 	},
 	"image": {
-		// Stateless docker-image driver. Use for services shipped as a public
-		// image with no DB / persistent state (gotenberg, mailhog, jaeger,
-		// redis-commander, etc.). Default env emission: <PREFIX>URL/HOST/PORT.
-		// PREFIX is empty by default; consumers usually set `envAlias:` on
-		// their depends_on_db entry. When no alias is set + no driver prefix,
-		// emit uses the uppercased ServiceName as fallback prefix so vars
-		// don't collide.
+		// Stateless docker-image driver for services shipped as a public image
+		// with no persistent state (gotenberg, mailhog, jaeger). Emits
+		// <PREFIX>URL/HOST/PORT; consumers usually set `envAlias:` instead, and
+		// with neither the uppercased ServiceName is the fallback prefix.
 		Prefix: "",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			prefix := serviceNameInEnv

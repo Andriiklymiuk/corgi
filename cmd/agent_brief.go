@@ -146,8 +146,6 @@ func loadComposeAtDir(dir string) (*utils.CorgiCompose, error) {
 	return nil, fmt.Errorf("no compose file in %s", dir)
 }
 
-// ---------------------------------------------------------------- brief
-
 var agentBriefCmd = &cobra.Command{
 	Use:   "brief [workspace]",
 	Short: "What the last supervised session was working on before it restarted",

@@ -49,13 +49,9 @@ func withMirror(base io.Writer) io.Writer {
 
 func WithMirror(base io.Writer) io.Writer { return withMirror(base) }
 
-// infoWriter is where human-facing log lines go: the console override when set,
-// else stderr in JSON mode so the JSON payload on stdout stays clean, else
-// stdout.
-// PayloadOnStdout marks a command whose stdout is meant to be read by another
-// program — `corgi cache paths` feeding a CI cache action, say. Human-facing
-// lines then go to stderr, exactly as they do in JSON mode, so a command
-// substitution captures the payload and nothing else.
+// PayloadOnStdout marks a command whose stdout another program reads — `corgi
+// cache paths` feeding a CI cache action. Human lines then go to stderr, as in
+// JSON mode, so a command substitution captures the payload and nothing else.
 var PayloadOnStdout bool
 
 func infoWriter() io.Writer {

@@ -34,7 +34,7 @@ func failSuggestHistory(err error) {
 	} else {
 		fmt.Fprintf(os.Stderr, "suggest-history: %s\n", err)
 	}
-	os.Exit(1)
+	exitProcess(1)
 }
 
 // failUsage reports a bad-usage error (JSON via JSONError, else stderr) and exits 2.
@@ -44,7 +44,7 @@ func failUsage(msg string) {
 	} else {
 		fmt.Fprintln(os.Stderr, msg)
 	}
-	os.Exit(2)
+	exitProcess(2)
 }
 
 var suggestHistoryCmd = &cobra.Command{

@@ -116,13 +116,13 @@ func resolveRestartTarget(statePath string, corgi *utils.CorgiCompose, service s
 func restartSingleService(cmd *cobra.Command) {
 	if herr := resolveHostFlag(cmd); herr != nil {
 		emitRestartError(utils.ErrConfig, herr.Error())
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	corgi, cerr := utils.GetCorgiServices(cmd)
 	if cerr != nil {
 		emitRestartError(utils.ErrConfig, cerr.Error())
-		os.Exit(1)
+		exitProcess(1)
 	}
 	// Same re-derivation as stop: the relaunch branch keys off Runner.Name.
 	dockerFlag, _ := cmd.Flags().GetBool("docker")
@@ -138,13 +138,13 @@ func restartSingleService(cmd *cobra.Command) {
 	st, entry, svc, code, err := resolveRestartTarget(statePath, corgi, restartService)
 	if err != nil {
 		emitRestartError(code, err.Error())
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	// bakes --host override + cross-service exports into the .env
 	if eerr := utils.GenerateEnvForServices(corgi); eerr != nil {
 		emitRestartError(utils.ErrConfig, eerr.Error())
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	_ = stopProcessGroup(entry)
@@ -154,7 +154,7 @@ func restartSingleService(cmd *cobra.Command) {
 	pid, command, serr := relaunchDetachedService(*svc)
 	if serr != nil {
 		emitRestartError(utils.ErrExecFailed, serr.Error())
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	updated := updateServiceEntry(st, restartService, pid, command, svc.Port)

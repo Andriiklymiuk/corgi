@@ -56,13 +56,6 @@ func gitRunNoPrompt(dir string, args ...string) error {
 	return c.Run()
 }
 
-func gitOutNoPrompt(dir string, args ...string) (string, error) {
-	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	c.Env = noPromptEnv()
-	out, err := c.Output()
-	return strings.TrimSpace(string(out)), err
-}
-
 func isTreeDirty(dir string) (bool, error) {
 	out, err := gitOut(dir, "status", "--porcelain", "--untracked-files=no")
 	if err != nil {

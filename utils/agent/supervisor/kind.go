@@ -7,16 +7,12 @@ import (
 	"strings"
 )
 
-// A Kind is one agent CLI the supervisor knows how to keep alive.
+// A Kind is one agent CLI the supervisor knows how to keep alive. Only launch
+// details differ between agents, so they live here and the rest of the package
+// never asks which agent it has.
 //
-// Everything the supervisor actually does — restart after the ways a session
-// dies, hold a wake lock, scope credentials and config directory per workspace
-// — is identical whichever agent is running. Only the launch details differ, so
-// they live here and the rest of the package never asks which agent it has.
-//
-// Adding one is a map entry. Deliberately not exported as a registration hook:
-// a kind decides the argv of a process the daemon runs unattended, so the set
-// is fixed at compile time rather than being something config can extend.
+// Adding one is a map entry, deliberately not a registration hook: a kind
+// decides the argv of an unattended process, so the set is fixed at compile time.
 type Kind struct {
 	// Name is what `kind:` in the trusted user config selects.
 	Name string
@@ -40,12 +36,9 @@ type Kind struct {
 	SupportsSpawn          bool
 	SupportsPermissionMode bool
 	// BuildsArgvFromSettings is true for a kind that assembles its own command
-	// line out of the typed settings (spawn, capacity, permissionMode, name),
-	// and false for one handed a complete argv.
-	//
-	// It decides which half of the config is meaningful, so the other half can
-	// be rejected rather than silently dropped: a `capacity: 4` that quietly
-	// does nothing reads as a configured limit that is not being applied.
+	// line from the typed settings, false for one handed a complete argv. It
+	// decides which half of the config is meaningful so the other is rejected,
+	// not silently dropped — a `capacity: 4` that does nothing reads as applied.
 	BuildsArgvFromSettings bool
 }
 
@@ -166,12 +159,9 @@ func customArgs(c SpawnConfig) ([]string, error) {
 }
 
 // forbiddenArgPrefixes never reach a supervised process, whoever wrote them.
-//
-// The permission prompts are what a person answers from their phone, and they
-// are the main defence against a session acting on instructions it read out of
-// a repository. A daemon running unattended must not be able to skip them —
-// which is the same rule that rejects permissionMode: bypassPermissions,
-// applied to the one place a custom kind could otherwise route around it.
+// Permission prompts are the main defence against a session acting on
+// instructions it read out of a repository, so an unattended daemon must not
+// skip them — the same rule that rejects permissionMode: bypassPermissions.
 var forbiddenArgPrefixes = []string{
 	"--dangerously",
 	"--yolo",
