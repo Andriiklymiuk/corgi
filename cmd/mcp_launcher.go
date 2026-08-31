@@ -900,10 +900,10 @@ const launcherPageHTML = `<!doctype html>
       <span class="tip-d">Starts corgi at login, so this page still works when you are away from the desk.</span>
       <span class="tip-cmd"><code>corgi agent install</code><span class="tip-copy">COPY</span></span>
     </button>
-    <button class="tip" data-copy="corgi agent hooks enable">
+    <button class="tip" data-copy="corgi agent hooks enable --all">
       <span class="tip-t">Tell me when a session needs me</span>
-      <span class="tip-d">A session waiting on a permission prompt is invisible from here. This makes it notify instead.</span>
-      <span class="tip-cmd"><code>corgi agent hooks enable</code><span class="tip-copy">COPY</span></span>
+      <span class="tip-d">A session waiting on a permission prompt is invisible from here. <b>--all</b> covers every repo in this list; drop it to do just one.</span>
+      <span class="tip-cmd"><code>corgi agent hooks enable --all</code><span class="tip-copy">COPY</span></span>
     </button>
     <p class="tipnote" id="tipmsg">Tap a row to copy its command.</p>
   </details>

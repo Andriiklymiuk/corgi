@@ -380,6 +380,13 @@ corgi leases release agent-a
 
 The lease is stored under `corgi_services/.leases/` and reused, so the same name always maps to the same ports.
 
+### `corgi agent hooks enable`
+
+Writes two Claude Code hooks into the repo's `.claude/settings.local.json` (never committed) so a session waiting on a permission prompt notifies you instead of sitting there unseen. Per repo, because that is where Claude Code reads hooks from.
+
+- `--all` does every registered workspace in one go, from anywhere.
+- `corgi agent hooks disable [--all]` removes only corgi's hooks, leaving your own alone.
+
 ### `corgi pull`
 
 `git pull` in every service directory. No flags.
