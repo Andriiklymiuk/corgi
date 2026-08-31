@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"andriiklymiuk/corgi/utils"
 )
 
@@ -32,4 +34,18 @@ func exitWithErrorPrefix(jsonCode, stderrPrefix string, err error, exitCode int)
 func exitProcess(code int) {
 	utils.CloseSessionLog()
 	osExit(code)
+}
+
+// mustLoadCorgiServices loads the compose file or exits 1 reporting why.
+func mustLoadCorgiServices(cmd *cobra.Command) *utils.CorgiCompose {
+	corgi, err := utils.GetCorgiServices(cmd)
+	if err != nil {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrConfig, err.Error())
+		} else {
+			utils.Infof("couldn't get services config: %s\n", err)
+		}
+		exitProcess(1)
+	}
+	return corgi
 }

@@ -407,16 +407,16 @@ func generateCobraDocs(cmd *cobra.Command) {
 	)
 	if err != nil {
 		fmt.Println("Cobra docs are not regenerated: ", err)
-		os.Exit(0)
+		exitProcess(0)
 	}
 
 	if err := makeCommandDocsMDXSafe(commandsDocsDir); err != nil {
 		fmt.Println("Cobra docs generated, but MDX escaping failed: ", err)
-		os.Exit(0)
+		exitProcess(0)
 	}
 
 	fmt.Println("Cobra docs are generated, exiting ..")
-	os.Exit(0)
+	exitProcess(0)
 }
 
 const commandsDocsDir = "./resources/readme/commands"

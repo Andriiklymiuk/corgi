@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"runtime"
 
@@ -85,15 +84,7 @@ func launchBrowser(url, browser string) error {
 }
 
 func runOpen(cmd *cobra.Command, args []string) {
-	corgi, err := utils.GetCorgiServices(cmd)
-	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			utils.Infof("couldn't get services config: %s\n", err)
-		}
-		os.Exit(1)
-	}
+	corgi := mustLoadCorgiServices(cmd)
 
 	targets := openTargets(corgi, args)
 

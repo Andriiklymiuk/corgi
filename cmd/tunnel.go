@@ -223,7 +223,7 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 		names := tunnel.Names()
 		sort.Strings(names)
 		fmt.Printf("Unknown provider %q. Available: %s\n", tunnelProvider, strings.Join(names, ", "))
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	flagProvider, flagSet := provider, cmd.Flags().Changed("provider")
@@ -235,19 +235,19 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 		built, err := buildTargetsFromCompose(cmd, args, flagProvider, flagSet)
 		if err != nil {
 			fmt.Println(err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		targets = built
 	}
 
 	if len(targets) == 0 {
 		fmt.Println("No services with port: matched. Nothing to tunnel.")
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	if err := preflightTargets(targets, provider); err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	printTunnelSummary(targets, provider)

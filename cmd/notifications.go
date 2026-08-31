@@ -47,7 +47,7 @@ func runNotifications(cmd *cobra.Command, args []string) {
 		fmt.Println("Test notification dispatched. Nothing shown? Check OS notification permissions for your terminal app.")
 	default:
 		fmt.Fprintf(os.Stderr, "unknown action %q — use one of: on, off, test\n", args[0])
-		os.Exit(2)
+		exitProcess(2)
 	}
 }
 
@@ -55,7 +55,7 @@ func showNotificationsStatus() {
 	cfg, err := utils.LoadUserConfig()
 	if err != nil {
 		fmt.Printf("%s❌ Failed to read user config: %v%s\n", art.RedColor, err, art.WhiteColor)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	state := "off"
 	if cfg.Notifications {
@@ -69,12 +69,12 @@ func writeNotificationsPref(enabled bool) {
 	cfg, err := utils.LoadUserConfig()
 	if err != nil {
 		fmt.Printf("%s❌ Failed to read user config: %v%s\n", art.RedColor, err, art.WhiteColor)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	cfg.Notifications = enabled
 	if err := utils.SaveUserConfig(cfg); err != nil {
 		fmt.Printf("%s❌ Failed to save user config: %v%s\n", art.RedColor, err, art.WhiteColor)
-		os.Exit(1)
+		exitProcess(1)
 	}
 	utils.ResetNotifyCache()
 

@@ -27,7 +27,7 @@ func failAutopilot(humanMsg string, err error) {
 	} else {
 		utils.Infof("%s: %s\n", humanMsg, err)
 	}
-	os.Exit(1)
+	exitProcess(1)
 }
 
 // autopilotStateDir resolves the compose dir the same way sibling commands do
@@ -68,7 +68,7 @@ var autopilotStatusCmd = &cobra.Command{
 			} else {
 				utils.Infof("couldn't read autopilot state: %s\n", err)
 			}
-			os.Exit(1)
+			exitProcess(1)
 		}
 		if utils.JSONOutput {
 			utils.PrintJSON(st)
@@ -109,7 +109,7 @@ func newAutopilotModeCmd(use, short string, mode utils.AutopilotMode) *cobra.Com
 				} else {
 					utils.Infof("couldn't write autopilot state: %s\n", err)
 				}
-				os.Exit(1)
+				exitProcess(1)
 			}
 			if utils.JSONOutput {
 				utils.PrintJSON(st)
@@ -153,7 +153,7 @@ var autopilotHeartbeatCmd = &cobra.Command{
 			} else {
 				utils.Infof("couldn't record heartbeat: %s\n", err)
 			}
-			os.Exit(1)
+			exitProcess(1)
 		}
 		if utils.JSONOutput {
 			utils.PrintJSON(st)

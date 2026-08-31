@@ -101,20 +101,12 @@ func runStop(cmd *cobra.Command, _ []string) {
 
 	emitStopSummary(summary)
 	if len(summary.Failed) > 0 {
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 
 func loadCorgiForStop(cmd *cobra.Command) *utils.CorgiCompose {
-	corgi, err := utils.GetCorgiServices(cmd)
-	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			utils.Infof("couldn't get services config: %s\n", err)
-		}
-		os.Exit(1)
-	}
+	corgi := mustLoadCorgiServices(cmd)
 	// Re-derive docker mode: run resolved it in another process, and cleanup's
 	// container teardown keys off Runner.Name. Detection errors don't block stop.
 	if resolved, rerr := utils.ResolveRunnerModes(corgi.Services, false, false); rerr == nil {

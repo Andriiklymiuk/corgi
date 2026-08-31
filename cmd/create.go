@@ -217,7 +217,7 @@ func runCreate(cmd *cobra.Command, _ []string) {
 			} else {
 				fmt.Fprintln(os.Stderr, err)
 			}
-			os.Exit(2)
+			exitProcess(2)
 		}
 		createNonInteractive(cmd, createOpts)
 		return

@@ -7,7 +7,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -137,7 +136,7 @@ func runScript(cmd *cobra.Command, _ []string) {
 		}
 		if failed > 0 {
 			utils.Infof("✗ %d of %d failed\n", failed, len(results))
-			os.Exit(1)
+			exitProcess(1)
 		}
 		utils.Infof("✓ all %d passed\n", len(results))
 	}
