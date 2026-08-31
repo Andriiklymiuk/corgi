@@ -167,9 +167,14 @@ More: [agents & scripting](docs/agents.md) · [MCP server](docs/mcp.md) · [plan
 
 ## Code from your phone
 
-Some work needs your actual machine: a mobile build against the local API, a stack with a long warm-up, credentials that only exist on that laptop. corgi makes your phone a remote for it. Open the launcher, tap a repo, and a **Claude Code [Remote Control](https://code.claude.com/docs/en/remote-control) session starts on your laptop**, under the right account. You watch it work and answer its permission prompts from the phone. The branch is there when you get back to the desk.
+Run `corgi agent up` on your laptop and scan the QR once. Your phone now has a
+launcher: every repo you registered, one tap each. Tap one and a Claude Code
+session starts on the laptop — your files, your databases, your credentials — and
+you drive it and answer its permission prompts from the phone. The branch is
+waiting when you get back to the desk.
 
-Setup, in a corgi stack **or any git repo**:
+That one command is the whole setup, and it works in a corgi stack **or any git
+repo**:
 
 ```text
 $ corgi agent up
@@ -200,15 +205,41 @@ $ corgi agent up
                  └─ client-app  [open in: chrome]  ──► Chrome (its own account)
 ```
 
-One scan pairs the phone. It gets its own token, which you can revoke without touching your other devices. Each workspace remembers where it should open: personal projects go straight to the Claude app, and a work repo on a different Claude account opens in Chrome signed into that account. Save the launcher to your home screen and it is one tap after that.
+One scan pairs the phone. It gets its own token, revocable without touching your other devices. Each workspace remembers where it should open — personal projects in the Claude app, a work repo on a different Claude account in Chrome signed into that account. Save the launcher to your home screen and it is one tap after that.
 
-corgi does not reimplement Remote Control. Sessions, streaming, approvals, cost tracking — that is its job, and it does it well. What corgi changes is everything around it.
+**Adding your other repos.** `agent up` registered the directory you ran it in, and the launcher lists only what is registered. Add the rest:
 
-The phone can only reach a machine that has `claude rc` running on it. Nobody keeps that running — you reboot, the process dies, you never started it before leaving — and then the machine simply is not in the list. corgi is the part that keeps it there: it comes back at login, restarts the session after a crash or a reboot, and holds a wake lock so the laptop does not sleep through a long task. When one does die anyway, `corgi agent brief` tells you where it stopped and which repo it left dirty.
+```bash
+cd ~/dev/api && corgi agent init          # register this repo and enable it
+corgi agent init --config-dir ~/.claude-work   # …under a different Claude account
 
-And it is not stuck in one repo. Remote Control sees one directory; a stack is five. corgi puts one branch across all of them, so the same session can change the api and the web app together, and you read the result as a single diff on the phone — no tunnel, nothing running.
+corgi agent scan ~/dev                    # find repos under a folder and register them
+                                          # (registers only; enable each with agent init)
 
-`--tunnel-name` keeps the URL stable, and `corgi agent down` turns it all off. None of it runs unless you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through setup. Full guide: [docs/agent.md](docs/agent.md).
+corgi agent workspaces                    # list them · forget <id> drops one
+```
+
+`agent init` writes `.corgi/agent.yml` in the repo. It carries identity only, so it is safe to commit:
+
+```yaml
+version: 1
+workspace:
+  id: acme-stack
+  aliases: [acme, recipe app]
+```
+
+Which Claude account it runs under, and whether it starts on its own, live in your own machine's config instead — a cloned repo can never decide that. The new repo shows up in the launcher on the next refresh; no re-pairing.
+
+**What corgi is doing for you.** The session itself is Claude's own
+[Remote Control](https://code.claude.com/docs/en/remote-control) — corgi
+reimplements none of it, and never asks you to start it. What corgi adds is
+everything that has to be true before a phone is any use:
+
+- **It is running when you are not there.** `corgi agent install` starts corgi at login, so the laptop answers after a reboot without you having set anything up before you left. Sessions come back after a crash, and a wake lock stops the laptop sleeping through a long task. If one dies anyway, `corgi agent brief` says where it stopped and which repo it left dirty.
+- **Every repo, on its own Claude account.** One launcher lists them all. Personal projects open in the Claude app; a work repo opens in Chrome signed into the work account.
+- **One branch across the whole stack.** A session is not stuck in one directory: corgi puts the same branch in every repo that has it, and hands back a single diff over all of them — readable on the phone with no tunnel and nothing running.
+
+The free tunnel gets a new URL on every restart; `corgi agent up --tunnel-name <yours>` keeps it stable so the phone stays paired. `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
 
 ## The rest of the commands
 
