@@ -239,7 +239,25 @@ everything that has to be true before a phone is any use:
 - **Every repo, on its own Claude account.** One launcher lists them all. Personal projects open in the Claude app; a work repo opens in Chrome signed into the work account.
 - **One branch across the whole stack.** A session is not stuck in one directory: corgi puts the same branch in every repo that has it, and hands back a single diff over all of them — readable on the phone with no tunnel and nothing running.
 
-The free tunnel gets a new URL on every restart; `corgi agent up --tunnel-name <yours>` keeps it stable so the phone stays paired. `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
+**Keeping the same URL.** By default `agent up` opens a free Cloudflare quick tunnel, and that URL is different every time it restarts — so the bookmark on your phone goes stale and you re-pair. Pick one of these instead, once:
+
+```bash
+# phone on the same Wi-Fi: no tunnel at all, nothing public
+corgi agent up --http 0.0.0.0:8765          # save http://<your-lan-ip>:8765/app
+
+# a domain you own, on a free Cloudflare account
+cloudflared tunnel login
+cloudflared tunnel create corgi-agent
+cloudflared tunnel route dns corgi-agent corgi.yourdomain.com
+corgi agent tunnel setup corgi.yourdomain.com   # remembered from now on
+
+# no domain, still permanent
+corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
+```
+
+`agent tunnel setup` stores the choice, so plain `corgi agent up` keeps using it after that. Because the origin stops changing, the phone stays paired across restarts and reboots — save `https://<your-host>/app` to the home screen and it keeps working.
+
+`corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
 
 ## The rest of the commands
 
