@@ -10,8 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// --- spawnDetachedServices (seam-injected, no real processes) ---
-
 func TestSpawnDetachedServices_StartsServiceViaSeam(t *testing.T) {
 	os, ds := startDetachedFn, dockerRunnerUp
 	t.Cleanup(func() { startDetachedFn, dockerRunnerUp = os, ds })
@@ -87,8 +85,6 @@ func TestSpawnDetachedServices_StartErrorIsSkipped(t *testing.T) {
 	}
 }
 
-// --- runDetachedBeforeStart / runServiceAfterStop (omit-flag behavior) ---
-
 func TestRunDetachedBeforeStart_NilBeforeStartIsNoop(t *testing.T) {
 	// No BeforeStart → returns without touching the filesystem or shelling out.
 	runDetachedBeforeStart(utils.Service{ServiceName: "api"})
@@ -101,8 +97,6 @@ func TestRunServiceAfterStop_MissingServiceIsNoop(t *testing.T) {
 	// Known service with no AfterStart → also a no-op.
 	runServiceAfterStop(corgi, "api")
 }
-
-// --- settleDetached (status classification) ---
 
 func TestSettleDetached_EmptyIsNoop(t *testing.T) {
 	settleDetached(nil) // must not sleep or panic on empty input
@@ -117,14 +111,10 @@ func TestSettleDetached_SkipsPidZero(t *testing.T) {
 	}
 }
 
-// --- killDetached (only kills real process groups) ---
-
 func TestKillDetached_SkipsPgidZero(t *testing.T) {
 	// pgid<=0 must be skipped; with no positive pgids this is a safe no-op.
 	killDetached([]detachedProc{{name: "dbx", pgid: 0}})
 }
-
-// --- markStarted / markReady (idempotent channel close) ---
 
 func TestReadySignal_MarkIsIdempotent(t *testing.T) {
 	s := &readySignal{started: make(chan struct{}), ready: make(chan struct{})}
@@ -144,8 +134,6 @@ func TestReadySignal_MarkIsIdempotent(t *testing.T) {
 	}
 }
 
-// --- emitDepReady / emitDepTimeout (JSON vs human output) ---
-
 func TestEmitDepReady_HumanAndJSON(t *testing.T) {
 	orig := utils.JSONOutput
 	t.Cleanup(func() { utils.JSONOutput = orig })
@@ -159,8 +147,6 @@ func TestEmitDepReady_HumanAndJSON(t *testing.T) {
 	emitDepTimeout("api", "pg")
 }
 
-// --- runPreflight / runBeforeStart (no-side-effect branches) ---
-
 func TestRunPreflight_NoDockerNoVPNIsNoop(t *testing.T) {
 	c := newRootedCmd()
 	// Neither UseAwsVpn nor docker runners → neither init path is taken.
@@ -170,8 +156,6 @@ func TestRunPreflight_NoDockerNoVPNIsNoop(t *testing.T) {
 func TestRunBeforeStart_EmptyIsNoop(t *testing.T) {
 	runBeforeStart(&utils.CorgiCompose{}) // empty BeforeStart → no commands run
 }
-
-// --- runDetached: already-running guard returns without writing state ---
 
 func TestRunDetached_BlockedWhenAlreadyRunning(t *testing.T) {
 	dir := chdirToTempCompose(t, "name: x\n")

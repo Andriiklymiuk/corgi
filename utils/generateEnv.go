@@ -158,16 +158,9 @@ func (e *producerSkippedError) Error() string {
 
 var crossServiceRefRe = regexp.MustCompile(`\$\{([A-Za-z0-9_\-/]+)\.([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-// topoSortServices returns services in dependency order (deps first).
-//
-// Only "hard" edges add ordering: a hard edge is created when consumer's
-// environment block contains ${producer.VAR}. depends_on_services entries
-// that are alias-only (e.g. envAlias: BASE_URL) are "soft" — their emitted
-// value is a static localhost:port and needs no ordering. Self-deps are
-// always ignored.
-//
-// Cycles only matter when both sides reference each other's exports. If a
-// cycle is detected, the error names the services involved.
+// Only ${producer.VAR} in an environment block creates an ordering edge.
+// Alias-only depends_on_services entries emit a static localhost:port, so they
+// need none. Self-deps are ignored; a real cycle errors naming the services.
 func collectProducers(s Service) map[string]bool {
 	producers := map[string]bool{}
 	for _, env := range s.Environment {
@@ -345,23 +338,12 @@ func substituteCrossServiceRefs(
 	return out, firstErr
 }
 
-// Adds env variables to each service, including dependent db_services and services.
+// GenerateEnvForServices writes each service's env file, resolving
+// ${producer.VAR} references across services.
 //
-// Resolution is two-phase so that bidirectional ${producer.VAR} references
-// (codependencies) work as long as the actual VAR values don't form a true
-// cycle:
-//
-//  1. Try topo-sort. If it succeeds, process services in dependency order —
-//     each service's exports are fully resolved before any consumer runs.
-//     This is the fast path and matches pre-1.12 behavior.
-//
-//  2. If topo-sort detects a cycle (both sides reference each other's
-//     exports), fall back to fixed-point resolution: build each service's
-//     exports from its local env without cross-ref substitution, then
-//     iteratively expand ${producer.VAR} within the exports map until
-//     stable. Finally, write each service's env file using the resolved
-//     map. A genuine VAR-level cycle (e.g. A.X="${B.Y}" and B.Y="${A.X}")
-//     remains unresolvable and surfaces as an error naming the stuck vars.
+// Two phases so codependent services still resolve: topo-sort first, and on a
+// cycle fall back to expanding the exports maps to a fixed point. A true
+// VAR-level cycle (A.X="${B.Y}", B.Y="${A.X}") errors naming the stuck vars.
 func GenerateEnvForServices(corgiCompose *CorgiCompose) error {
 	ordered, err := topoSortServices(corgiCompose.Services)
 	if err == nil {

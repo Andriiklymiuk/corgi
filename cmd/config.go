@@ -4,7 +4,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/art"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -39,7 +38,7 @@ var configPathCmd = &cobra.Command{
 			} else {
 				fmt.Println(err)
 			}
-			os.Exit(1)
+			exitProcess(1)
 		}
 		path := filepath.Join(dir, "config.yml")
 		if utils.JSONOutput {
@@ -63,7 +62,7 @@ func runConfigShow(cmd *cobra.Command, _ []string) {
 		} else {
 			fmt.Printf("%s❌ Failed to read user config: %v%s\n", art.RedColor, err, art.WhiteColor)
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 	dir, _ := utils.GetUserConfigDir()
 	path := filepath.Join(dir, "config.yml")

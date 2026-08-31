@@ -106,7 +106,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 		} else {
 			fmt.Fprintln(os.Stderr, "❌", msg)
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 

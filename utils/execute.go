@@ -24,13 +24,10 @@ const (
 	errPathToServiceNotFound = "path to target service is not found: %s"
 )
 
-// withEnvSource prepends a POSIX `set -a; . <envFile>; set +a; ` prefix to a
-// command when an env file exists for the service. Lets a start command like
-// `npx vite --port $PORT` see PORT and other corgi-emitted vars without each
-// service writing its own `source .env` boilerplate.
-//
-// envFile is the absolute path to the file. Empty / missing → command
-// returned untouched. Sourcing uses POSIX `.` so works under /bin/sh.
+// withEnvSource prepends `set -a; . <envFile>; set +a; ` so a start command like
+// `npx vite --port $PORT` sees corgi-emitted vars without its own `source .env`.
+// envFile is absolute; empty or missing returns the command untouched. POSIX `.`
+// keeps it working under /bin/sh.
 func withEnvSource(command, envFile string) string {
 	if envFile == "" {
 		return command

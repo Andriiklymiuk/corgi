@@ -405,6 +405,3 @@ func WorktreeDirs(set *WorktreeSet) map[string]string {
 	}
 	return dirs
 }
-
-// ShortRepoName is the last path segment, for compact output.
-func ShortRepoName(repo string) string { return filepath.Base(repo) }

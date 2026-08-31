@@ -34,13 +34,13 @@ func runUpAll(cmd *cobra.Command, dbs []utils.DatabaseService) {
 			} else {
 				fmt.Fprintln(os.Stderr, "❌", err)
 			}
-			os.Exit(1)
+			exitProcess(1)
 		}
 	}
 
 	if once, _ := cmd.Root().Flags().GetBool("runOnce"); once {
 		utils.PrintFinalMessage()
-		os.Exit(0)
+		exitProcess(0)
 	}
 }
 
@@ -513,14 +513,14 @@ func runDbShellQuery(dbService utils.DatabaseService, query string) {
 		out, qerr := utils.ExecDBQueryCapture(dbService, query)
 		if qerr != nil {
 			utils.JSONError(utils.ErrExecFailed, qerr.Error())
-			os.Exit(1)
+			exitProcess(1)
 		}
 		utils.PrintJSON(dbQueryResult{Service: dbService.ServiceName, Output: out})
 		return
 	}
 	if err := utils.ExecDBQuery(dbService, query); err != nil {
 		fmt.Printf("%s❌ Query failed: %v%s\n", art.RedColor, err, art.WhiteColor)
-		os.Exit(1)
+		exitProcess(1)
 	}
 }
 

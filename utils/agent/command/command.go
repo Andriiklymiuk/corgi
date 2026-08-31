@@ -5,6 +5,7 @@
 package command
 
 import (
+	"andriiklymiuk/corgi/utils/atomicfile"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -77,11 +78,7 @@ func Write(agentDir string, c Command) (Command, error) {
 		return c, err
 	}
 	path := filepath.Join(dir, c.ID+".json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return c, err
-	}
-	return c, os.Rename(tmp, path)
+	return c, atomicfile.Write(path, data, 0o600)
 }
 
 // Drain reads and removes every pending command, oldest first. Corrupt and

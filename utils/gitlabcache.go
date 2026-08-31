@@ -61,13 +61,10 @@ type gitlabEntry struct {
 	paths []string
 }
 
-// GitLabCacheYAML renders the cache plan as a GitLab CI config fragment: a
-// hidden `.corgi-cache` job template that a real job extends.
-//
-// GitHub reads the plan at runtime through the action's outputs. GitLab cannot
-// — its cache config is static YAML — so the fragment is generated and
-// committed, and `corgi cache paths --gitlab --check` fails once it stops
-// matching the compose file.
+// GitLabCacheYAML renders the cache plan as a hidden `.corgi-cache` job
+// template a real job extends. GitLab's cache config is static YAML, so unlike
+// GitHub it cannot read the plan at runtime — the fragment is committed and
+// `corgi cache paths --gitlab --check` fails once it drifts from the compose.
 func GitLabCacheYAML(plan CachePlan, opts GitLabCacheOptions) string {
 	entries := gitlabEntries(plan, opts)
 
@@ -208,7 +205,7 @@ func gitlabVariables(plan CachePlan) []gitlabVariable {
 	seen := map[string]gitlabVariable{}
 	for _, p := range plan.Paths {
 		if mapped, ok := gitlabHomeCaches[p]; ok {
-			seen[mapped.env] = gitlabVariable{mapped.env, mapped.dir}
+			seen[mapped.env] = gitlabVariable(mapped)
 		}
 	}
 	out := make([]gitlabVariable, 0, len(seen))

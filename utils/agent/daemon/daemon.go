@@ -4,6 +4,7 @@
 package daemon
 
 import (
+	"andriiklymiuk/corgi/utils/atomicfile"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -134,13 +135,10 @@ func (d *Daemon) Nudge() {
 	}
 }
 
-// Nudge pokes a running daemon in another process so it drains the spool now
-// rather than on the next tick. Best-effort: the tick still wins without it.
-//
-// It signals ONLY a daemon that advertised command support. A daemon from
-// before this feature has no handler for SIGUSR1, whose default disposition is
-// to terminate — so nudging one would kill it. Such a daemon cannot drain the
-// spool anyway; the caller should tell the user to restart it.
+// Nudge pokes a running daemon so it drains the spool now rather than on the
+// next tick. Best-effort. Signals ONLY a daemon that advertised command
+// support: an older one has no SIGUSR1 handler and would be killed by the
+// nudge, and cannot drain the spool anyway — tell the user to restart it.
 func Nudge(info *Info) {
 	if info == nil || info.PID <= 0 || !info.Commands {
 		return
@@ -214,23 +212,17 @@ func ReadStatus(dir string) (*Status, error) {
 	return &s, nil
 }
 
-// Run supervises every config until ctx is cancelled.
+// Run supervises every config until ctx is cancelled. One goroutine per
+// workspace, so one disabling itself does not take the others down. Returns
+// only once every supervisor has finished — "nothing of mine is still up".
 //
-// Each workspace gets its own goroutine; one workspace disabling itself does
-// not take the others down. Run returns only when every supervisor has
-// finished, so a caller can rely on it meaning "nothing of mine is still up".
-//
-// With ResolveWorkspace set, Run also drains the command spool and can start
-// and stop workspaces at runtime; without it, the fixed-set lifecycle below is
-// unchanged.
+// With ResolveWorkspace set it also drains the command spool and can start and
+// stop workspaces at runtime.
 func (d *Daemon) Run(ctx context.Context, configs []supervisor.SpawnConfig) error {
-	// Catch SIGUSR1 for the daemon's ENTIRE lifetime, before writeInfo makes
-	// this pid discoverable to a nudge and until after cleanup. Go's default
-	// disposition for SIGUSR1 is to terminate the process, so a nudge landing
-	// in the window before the handler was installed — a phone start racing a
-	// launchd restart, exactly what this feature invites — would kill the
-	// daemon outright. Installed on the fixed path too, where nothing reads the
-	// channel, purely so the signal is never fatal.
+	// Catch SIGUSR1 for the daemon's ENTIRE lifetime — before writeInfo makes
+	// this pid nudgeable, until after cleanup. Go terminates on an unhandled
+	// SIGUSR1, so a nudge racing a launchd restart would kill the daemon.
+	// Installed on the fixed path too, where nothing reads it, for that reason.
 	stopSignals := notifyNudge(d.nudge)
 	defer stopSignals()
 
@@ -704,13 +696,9 @@ func ReadInfo(dir string) (*Info, error) {
 	return &info, nil
 }
 
-// processMatchesRecord checks that the pid is still running the binary that
-// wrote the record.
-//
-// Pids are recycled. Without this, a daemon.json left behind by an unclean exit
-// would make `corgi agent stop` SIGTERM whatever now holds that number, and
-// `corgi agent serve` would refuse to start because it believes a daemon is
-// already running.
+// processMatchesRecord checks the pid is still running the binary that wrote
+// the record. Pids are recycled, so without this a stale daemon.json makes
+// `agent stop` SIGTERM an unrelated process and `agent serve` refuse to start.
 func processMatchesRecord(info Info) bool {
 	name, ok := processName(info.PID)
 	if !ok {
@@ -747,9 +735,5 @@ func writeJSONAtomic(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return atomicfile.Write(path, data, 0o600)
 }

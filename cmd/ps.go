@@ -83,13 +83,10 @@ func psRowFromEntry(e utils.RunStateEntry) psRow {
 // may still be booting. Don't demote it to "stopped" within this window of start.
 const dockerRunnerBootGrace = 15 * time.Second
 
-// probeDockerRunnerServices confirms pid==0 (container-backed / docker-runner)
-// service entries by a port probe. Reconcile can't pid-track them, so without this a
-// service whose container has died lingers as a stale "running". A not-yet-listening
-// container within dockerRunnerBootGrace of start is left as-is (still booting);
-// after that a closed port marks it "stopped". On a real status change StatusChangedAt
-// is advanced (same invariant as ReconcileRunState). db_services keep their own
-// container-state reconciliation.
+// probeDockerRunnerServices confirms pid==0 (container-backed) entries by a port
+// probe, since Reconcile cannot pid-track them and a dead container would linger
+// as "running". Within dockerRunnerBootGrace of start it is left booting; after
+// that a closed port marks it stopped and advances StatusChangedAt.
 func probeDockerRunnerServices(st utils.RunState, probe func(port int) bool, now time.Time) utils.RunState {
 	for i := range st.Services {
 		e := &st.Services[i]
@@ -136,15 +133,7 @@ func makePsRow(name, kind string, port int, probe func(port int) bool) psRow {
 }
 
 func runPs(cmd *cobra.Command, _ []string) {
-	corgi, err := utils.GetCorgiServices(cmd)
-	if err != nil {
-		if utils.JSONOutput {
-			utils.JSONError(utils.ErrConfig, err.Error())
-		} else {
-			utils.Infof("couldn't get services config: %s\n", err)
-		}
-		os.Exit(1)
-	}
+	corgi := mustLoadCorgiServices(cmd)
 
 	var rows []psRow
 	statePath := utils.RunStatePath(utils.CorgiComposePathDir)

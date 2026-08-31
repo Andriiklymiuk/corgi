@@ -22,7 +22,7 @@ var worktreeListCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		if _, err := utils.GetCorgiServices(cmd); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		base := filepath.Join(utils.CorgiComposePathDir, "corgi_services", ".worktrees")
 		entries, err := os.ReadDir(base)
@@ -45,12 +45,12 @@ var worktreePruneCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		if _, err := utils.GetCorgiServices(cmd); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		skipped, err := utils.CleanCorgiWorktrees(worktreePruneForce)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "couldn't prune worktrees:", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		fmt.Println("🗑️ pruned corgi worktrees")
 		if len(skipped) > 0 {

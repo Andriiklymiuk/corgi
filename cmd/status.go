@@ -100,7 +100,7 @@ func resolveStatusRows(cmd *cobra.Command) []statusRow {
 		} else {
 			fmt.Fprintf(os.Stderr, "couldn't get services config: %s\n", err)
 		}
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	rows := collectStatusRows(corgi)
@@ -116,7 +116,7 @@ func resolveStatusRows(cmd *cobra.Command) []statusRow {
 		rows = filterRows(rows, serviceFilter)
 		if len(rows) == 0 {
 			emitNoMatch(serviceFilter)
-			os.Exit(1)
+			exitProcess(1)
 		}
 	}
 	return rows
@@ -139,7 +139,7 @@ func runStatusOnce(rows []statusRow, f statusFlags) {
 	if f.jsonOut {
 		emitJSON(up, down)
 		if anyDown(up, down) {
-			os.Exit(1)
+			exitProcess(1)
 		}
 		return
 	}
@@ -156,7 +156,7 @@ func runStatusOnce(rows []statusRow, f statusFlags) {
 		fmt.Printf("%s%d down, %d up%s — check `corgi run` logs for the failing services.\n",
 			art.RedColor, len(down), len(up), art.WhiteColor)
 	}
-	os.Exit(1)
+	exitProcess(1)
 }
 
 func runStatus(cmd *cobra.Command, _ []string) {
@@ -273,7 +273,7 @@ func runStatusWatchTTY(rows []statusRow, interval time.Duration) {
 	go func() {
 		<-sigCh
 		restore()
-		os.Exit(0)
+		exitProcess(0)
 	}()
 
 	results := probeAllParallel(rows)
@@ -426,7 +426,7 @@ func runStatusUntilHealthy(rows []statusRow, interval, timeout time.Duration, js
 		}
 		if time.Now().After(deadline) {
 			finalize(rows, jsonOut, quiet, false)
-			os.Exit(1)
+			exitProcess(1)
 		}
 	}
 }

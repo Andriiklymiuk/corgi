@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-
 	"andriiklymiuk/corgi/utils"
 
 	"github.com/spf13/cobra"
@@ -52,7 +50,7 @@ func Execute() string {
 	err := rootCmd.Execute()
 
 	if err != nil {
-		os.Exit(1)
+		exitProcess(1)
 	}
 
 	return rootCmd.CalledAs()

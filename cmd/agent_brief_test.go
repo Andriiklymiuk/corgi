@@ -283,14 +283,10 @@ func briefCmdWithJSON(t *testing.T) *cobra.Command {
 }
 
 func TestProbeWorkspaceReposNamesServicesFromTheComposeFile(t *testing.T) {
-	// End to end over the bug this file's naming logic exists for: worktree
-	// directories are named from the git repository ROOT, so a map keyed on the
-	// service path silently never matches and every worktree gets labelled with
-	// the repository basename instead of its service name.
-	//
-	// The service therefore lives in a SUBDIRECTORY of its repository — a
-	// monorepo, which is exactly the layout where the two paths diverge. With
-	// the service path as the key this test reports "mono" instead of "api".
+	// Worktree dirs are named from the git repository ROOT, so a map keyed on
+	// the service path never matches and every worktree gets the repo basename.
+	// The service lives in a subdirectory here — the monorepo layout where the
+	// two paths diverge — so a regression reports "mono" instead of "api".
 	dir := t.TempDir()
 	repo := gitRepo(t, filepath.Join(dir, "mono"), "main")
 	servicePath := filepath.Join(repo, "services", "api")
