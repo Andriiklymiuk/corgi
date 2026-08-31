@@ -428,6 +428,10 @@ func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 		return nil, err
 	}
 
+	if err := ApplyIsolationLease(&corgi, IsolateLease); err != nil {
+		return nil, err
+	}
+
 	CorgiComposeFileContent = &corgi
 	return &corgi, nil
 }

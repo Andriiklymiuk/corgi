@@ -1182,6 +1182,8 @@ func registerMCPTools(s *server.MCPServer) {
 		return mcpEnv(validateArgs{ComposePath: r.GetString("composePath", "")})
 	}))
 
+	registerAgentSurfaceTools(s, composeOpt)
+
 	s.AddTool(mcp.NewTool("corgi_ps",
 		mcp.WithDescription("Runtime snapshot of declared topology with a cheap port-listening probe."),
 		composeOpt,

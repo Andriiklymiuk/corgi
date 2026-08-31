@@ -105,6 +105,20 @@ still bind to `localhost` or front it with an authenticated proxy.
 | `corgi_restart` | `{composePath?, profile?}` | run-state — **always detached** | `corgi_down` then `corgi_up` |
 | `corgi_db_query` | `{composePath?, service, query}` | `{service, output}` | `utils.ExecDBQueryCapture` (non-interactive) |
 | `corgi_schema` | `{}` | the JSON Schema (draft-07) as text | `utils.ComposeJSONSchema` |
+| `corgi_context` | `{composePath?, noGit?}` | topology + status + per-repo git state + tier/profiles + validation | `buildContextReport` |
+| `corgi_why` | `{composePath?, service, logLines?}` | `{verdict, detail, dependencies[], port, lastExitCode, env, logTail[], nextStep}` | `diagnoseService` |
+| `corgi_wait_for_log` | `{composePath?, service, pattern, timeoutSec?}` | `{matched, line, waitedMs}` — blocks | `utils.WaitForLogLine` |
+| `corgi_checkout` | `{composePath?, branch?, allowDirty?}` | `[{name, branch, status, usedDefaultBranch, message}]` | `utils.CheckoutRepo` |
+| `corgi_checkpoint` | `{composePath?, name?}` | `{name, createdAt, repos[]}` | `utils.CaptureWorkTree` |
+| `corgi_restore` | `{composePath?, name}` | `{checkpoint, safetyCheckpoint, restored[], failed[]}` | `utils.RestoreWorkTree` |
+
+`corgi_context` is the call to make first in a workspace: it answers "where am I"
+without a round of `corgi_ps` + `corgi_status` + `corgi_validate` + git. `corgi_why`
+is the one to make when a service is not up — it returns a `verdict` to branch on
+rather than prose. `corgi_wait_for_log` blocks on purpose: use it instead of polling
+`corgi_logs`. `corgi_checkpoint` / `corgi_restore` make a cross-repo change
+reversible; the restore captures whatever is dirty first and names that safety
+checkpoint in its result.
 
 `corgi_up` is **always detached**: it brings databases up, generates env, then
 spawns each service as a detached process group and writes

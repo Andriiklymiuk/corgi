@@ -22,13 +22,15 @@ and cross-service references), with the source of each variable. Writes nothing.
   corgi env                 # all services, masked, human view
   corgi env api             # one service
   eval $(corgi env api --export)
-  corgi env --json`,
+  corgi env --json
+  corgi env api --explain DATABASE_URL   # where that value came from`,
 	RunE: runEnv,
 }
 
 func init() {
 	envCmd.Flags().Bool("export", false, "Emit eval-able 'export KEY=VALUE' lines (real values)")
 	envCmd.Flags().Bool("reveal", false, "Do not mask secret values in the human view (human view only)")
+	envCmd.Flags().String("explain", "", "Show every source that set this variable, in order, with the winner marked")
 	// Persistent so `env check` inherits it (and its shell completion).
 	envCmd.PersistentFlags().StringVar(&utils.EnvTierFromFlag, "tier", "", "Resolve env for this compose envTier (e.g. staging, prod)")
 	rootCmd.AddCommand(envCmd)
@@ -45,6 +47,10 @@ func runEnv(cmd *cobra.Command, args []string) error {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		return fmt.Errorf("%s: %v", utils.ErrComposeNotFound, err)
+	}
+
+	if key, _ := cmd.Flags().GetString("explain"); key != "" {
+		return explainEnvKey(corgi, args, key, reveal)
 	}
 
 	all, err := utils.ResolveAllEnv(corgi)
@@ -206,4 +212,82 @@ func renderJSON(all map[string][]utils.EnvVar, order []string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+type envExplainStep struct {
+	Source string `json:"source"`
+	Value  string `json:"value"`
+	Used   bool   `json:"used"`
+}
+
+type envExplainReport struct {
+	Service string           `json:"service"`
+	Key     string           `json:"key"`
+	Value   string           `json:"value,omitempty"`
+	Found   bool             `json:"found"`
+	Chain   []envExplainStep `json:"chain"`
+}
+
+func explainEnvKey(corgi *utils.CorgiCompose, args []string, key string, reveal bool) error {
+	chains, err := utils.ResolveAllEnvChains(corgi)
+	if err != nil {
+		return err
+	}
+	order, err := selectEnvServices(args, chains)
+	if err != nil {
+		return err
+	}
+
+	reports := make([]envExplainReport, 0, len(order))
+	for _, service := range order {
+		reports = append(reports, buildEnvExplain(service, key, chains[service]))
+	}
+
+	if utils.JSONOutput {
+		utils.PrintJSON(reports)
+		return nil
+	}
+	for _, report := range reports {
+		printEnvExplain(report, reveal)
+	}
+	return nil
+}
+
+func buildEnvExplain(service, key string, chain []utils.EnvVar) envExplainReport {
+	report := envExplainReport{Service: service, Key: key, Chain: []envExplainStep{}}
+	for _, entry := range chain {
+		if entry.Key != key {
+			continue
+		}
+		report.Chain = append(report.Chain, envExplainStep{Source: entry.Source, Value: entry.Value})
+	}
+	if len(report.Chain) == 0 {
+		return report
+	}
+	last := len(report.Chain) - 1
+	report.Chain[last].Used = true
+	report.Found = true
+	report.Value = report.Chain[last].Value
+	return report
+}
+
+func printEnvExplain(report envExplainReport, reveal bool) {
+	utils.Infof("%s · %s\n", report.Service, report.Key)
+	if !report.Found {
+		utils.Info("  nothing sets this variable for this service")
+		utils.Info("")
+		return
+	}
+	for i, step := range report.Chain {
+		value := step.Value
+		if !reveal {
+			value = maskSecret(report.Key, value)
+		}
+		marker := " "
+		if step.Used {
+			marker = "→"
+		}
+		utils.Infof("  %s %d  %-26s %s\n", marker, i+1, step.Source, value)
+	}
+	utils.Info("")
 }

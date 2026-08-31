@@ -34,6 +34,9 @@ whole ladder for a one-liner.
   _before_ run-state is written and `corgi run` streams forever, so a sync call hangs
   (10-min timeout) and never reaches the next step. Always `--detach` (or
   `run_in_background: true`). See `../corgi/references/long-running.md`.
+- **Never poll for a log line.** Waiting for "migrations done" or "Listening on" is
+  `corgi logs --service <x> --wait-for "<regexp>" --timeout <d>` — it blocks, exits 0
+  on match and 1 on timeout. A sleep-and-read loop costs a tool call per iteration.
 - **Bound every read.** Logs via idle-limited `corgi logs` (`--idle <Ns>`); raw files
   via `Read(limit: ~100)`. Never an unbounded read of a `.log`/`.state.json` (logs
   cap at 50MB).
@@ -53,9 +56,39 @@ whole ladder for a one-liner.
   screenshot build number, "broke in the latest release") is evidence; use it, don't substitute `main`.
 - **~2 honest tries per service**, then report `needs attention` + what you saw.
 
+## Step 0a — one service named? `corgi why` first
+
+If the user named a service ("why is the api down", "the worker keeps dying"),
+run this **before** the ladder. It is the whole of Steps 0–2 for one service, in
+one call:
+
+```
+corgi why api --json
+```
+
+Returns a single `verdict` plus the evidence behind it: unmet `dependencies`,
+`port` ownership (who holds it), `lastExitCode`, `env` findings (absent env file,
+missing keys, unfilled placeholders), and `logTail`. Exit is 1 for anything but
+`healthy`, so it gates in a script.
+
+| `verdict` | means | next |
+| --- | --- | --- |
+| `dependency_unready` | a `depends_on` target is not running | start that one first |
+| `port_taken` | another process holds the port | Step 1 (`--kill-port`) |
+| `env_missing` | env file absent, keys missing, or placeholders unfilled | fix env, then `corgi env check` |
+| `crashed` | it started and exited | Step 2, using the returned `logTail` |
+| `no_start_command` | nothing declared to launch | compose bug, not runtime |
+| `not_started` | no run state at all | `corgi run --services <x> --detach` |
+| `unhealthy` | process alive, port not answering | Step 2 (may still be compiling) |
+| `healthy` | not the problem | look elsewhere |
+
+Env is checked as part of this — do not run a separate `corgi env check` first.
+If `why` does not explain it, fall through to the ladder below.
+
 ## Step 0 — Snapshot (broken-stack mode)
 
 ```
+corgi context --json   # orientation in one call: topology, ports, status, each repo's branch/dirty, tier, validation
 corgi ps --json        # name/kind/port/status/url (+ startedAt); reconciles corgi_services/.state.json
 corgi status --json    # live TCP/HTTP probe — the ONLY liveness truth
 # uptime = startedAt from `corgi ps --json`; an older corgi omits it → cat corgi_services/.state.json
