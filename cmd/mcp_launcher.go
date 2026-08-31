@@ -455,20 +455,26 @@ type launchHistoryEntry struct {
 	At  int64  `json:"at"`
 }
 
+const (
+	sessionHistoryMax = 8
+	sessionHistoryAge = 14 * 24 * time.Hour
+)
+
 func sessionHistory(workspaceID string) []launchHistoryEntry {
 	dir, err := agentDir()
 	if err != nil {
 		return []launchHistoryEntry{}
 	}
+	cutoff := time.Now().Add(-sessionHistoryAge)
 	seen := map[string]bool{}
 	out := []launchHistoryEntry{}
 	for _, e := range events.NewLog(dir).Read(workspaceID, 0) {
-		if e.Kind != "session" || e.URL == "" || seen[e.URL] {
+		if e.Kind != "session" || e.URL == "" || seen[e.URL] || e.At.Before(cutoff) {
 			continue
 		}
 		seen[e.URL] = true
 		out = append(out, launchHistoryEntry{URL: e.URL, At: e.At.UnixMilli()})
-		if len(out) >= 20 {
+		if len(out) >= sessionHistoryMax {
 			break
 		}
 	}
@@ -724,8 +730,16 @@ const launcherPageHTML = `<!doctype html>
   .chip.danger{border-color:rgba(255,123,114,.45);color:var(--red);margin-left:auto}
   .sessions{margin-top:.65rem;border-top:1px solid var(--line);padding-top:.5rem}
   .sessions .s{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.76rem;
-      color:#c9cfda;padding:.34rem .1rem;text-decoration:none}
+      color:#c9cfda;padding:.45rem .1rem;min-height:2.1rem;text-decoration:none}
+  .sessions .s span:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   a.s span:first-child{color:var(--green)}
+  .sdot{width:.4rem;height:.4rem;border-radius:50%;background:var(--green);margin-right:.45rem;flex:0 0 auto;
+      box-shadow:0 0 6px rgba(126,231,135,.5)}
+  a.s.past span:first-child{color:var(--dim)}
+  a.s.past .when{color:#5b6274}
+  .sessions .grp{display:flex;align-items:center;gap:.5rem;margin:.55rem .1rem .1rem;color:var(--dim2);
+      font-size:.62rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+  .sessions .grp i{flex:1;height:1px;background:var(--line)}
   .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto}
   .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
   .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
@@ -1056,19 +1070,30 @@ const launcherPageHTML = `<!doctype html>
     if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = 'sessions \u2304'; return; }
     box.style.display = ''; btn.textContent = 'sessions \u2303';
     box.innerHTML = '';
-    // Openable links come ONLY from the per-session URLs remote control printed
-    // (captured by the daemon). Ids from the claude CLI are local UUIDs the
-    // site does not resolve; those rows render below as plain status, no link.
-    const renderLink = (url, isBridge, when, label) => {
+    const group = (label) => {
+      const el = document.createElement('div');
+      el.className = 'grp';
+      el.innerHTML = '<span>' + esc(label) + '</span><i></i>';
+      box.appendChild(el);
+    };
+    const renderLink = (url, o) => {
       const el = document.createElement('a');
-      el.className = 's';
+      el.className = o.past ? 's past' : 's';
       el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
       const m = openMode(ws.id);
       if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
-      const tag = isBridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
-      const text = label ? esc(label) : esc(url.split('/').pop().slice(0, 18)) + '\u2026';
-      el.innerHTML = '<span>' + text + tag + '</span><span class="when">' + esc(when || '') + 'open \u2197</span>';
+      const tag = o.bridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
+      const text = o.label ? esc(o.label) : esc(url.split('/').pop().slice(0, 14)) + '\u2026';
+      const dot = o.past ? '' : '<i class="sdot"></i>';
+      el.innerHTML = '<span>' + dot + text + tag + '</span><span class="when">' + esc(o.when || '') +
+        (o.past ? 'reopen' : 'open \u2197') + '</span>';
+      box.appendChild(el);
+    };
+    const renderLocal = (label, when) => {
+      const el = document.createElement('div');
+      el.className = 's';
+      el.innerHTML = '<span><i class="sdot"></i>' + esc(label) + '</span><span class="when">' + esc(when) + ' \u00b7 local only</span>';
       box.appendChild(el);
     };
     const note = (text) => {
@@ -1076,11 +1101,6 @@ const launcherPageHTML = `<!doctype html>
       el.className = 'hint'; el.textContent = text;
       box.appendChild(el);
     };
-    // Captured from corgi-supervised output; the fetch below adds bridge
-    // pointers from disk, which cover hand-started remote-control sessions.
-    const shown = new Set();
-    const links = (ws.sessionLinks || []).filter(safeClaudeUrl);
-    for (const url of links.slice().reverse()) { shown.add(url); renderLink(url, false); }
     const info = document.createElement('div');
     info.className = 'none'; info.textContent = 'Loading\u2026';
     box.appendChild(info);
@@ -1088,40 +1108,63 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/sessions?workspace=' + encodeURIComponent(ws.id), { headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      const bridges = (j.links || []).filter(safeClaudeUrl).filter(u => !shown.has(u));
-      if (showBridges()) {
-        for (const url of bridges) { shown.add(url); renderLink(url, true); }
-        if (bridges.length) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
-      } else if (bridges.length) {
-        note(bridges.length + ' bridge session' + (bridges.length > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
-      }
-      const past = (j.history || []).filter(h => h && safeClaudeUrl(h.url) && !shown.has(h.url));
-      for (const h of past) { shown.add(h.url); renderLink(h.url, false, fmtWhen(h.at) + ' \u00b7 '); }
-      const evs = j.events || [];
-      const s = j.sessions || [];
-      if (!s.length && !shown.size && !bridges.length && !evs.length) { info.textContent = 'No sessions yet for this workspace.'; return; }
       info.remove();
+
+      const running = j.sessions || [];
+      const bridges = (j.links || []).filter(safeClaudeUrl);
+      const evs = j.events || [];
+      const alive = new Set(bridges);
+      for (const sess of running) if (sess.url && safeClaudeUrl(sess.url)) alive.add(sess.url);
+
+      const seen = new Set();
+      const older = [];
+      const addOlder = (url, when) => {
+        if (!safeClaudeUrl(url) || alive.has(url) || seen.has(url)) return;
+        seen.add(url); older.push({ url: url, when: when });
+      };
+      for (const h of (j.history || [])) if (h) addOlder(h.url, fmtWhen(h.at) + ' \u00b7 ');
+      for (const url of (ws.sessionLinks || []).slice().reverse()) addOlder(url, '');
+
       let localOnly = 0;
-      for (const sess of s) {
+      const showB = showBridges();
+      const liveCount = running.length + (showB ? bridges.filter(u => !running.some(s => s.url === u)).length : 0);
+      if (liveCount) group('live now');
+      for (const sess of running) {
         const where = whereLabel(sess);
-        if (sess.url && safeClaudeUrl(sess.url) && !shown.has(sess.url)) {
-          shown.add(sess.url);
-          renderLink(sess.url, false, where + ' \u00b7 ' + fmtWhen(sess.startedAt) + ' \u00b7 ', sess.name);
+        const when = where + ' \u00b7 ' + fmtWhen(sess.startedAt);
+        if (sess.url && safeClaudeUrl(sess.url) && !seen.has(sess.url)) {
+          seen.add(sess.url);
+          renderLink(sess.url, { label: sess.name, when: when + ' \u00b7 ' });
           continue;
         }
-        if (sess.url && shown.has(sess.url)) continue;
         localOnly++;
-        const el = document.createElement('div');
-        el.className = 's';
-        el.innerHTML = '<span>' + esc(sess.name || 'session') + '</span>' +
-          '<span class="when">' + esc(where) + ' \u00b7 ' + esc(fmtWhen(sess.startedAt)) + ' \u00b7 local only</span>';
-        box.appendChild(el);
+        renderLocal(sess.name || 'session', when);
+      }
+      for (const url of bridges) {
+        if (seen.has(url)) continue;
+        if (!showB) continue;
+        seen.add(url);
+        renderLink(url, { bridge: true });
       }
       if (localOnly) note('local only = running on the laptop with no web link yet; type /remote-control in that session to reach it from here.');
+      if (showB && bridges.length) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
+      if (!showB && bridges.length) note(bridges.length + ' bridge session' + (bridges.length > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
+
+      if (older.length) {
+        group('earlier \u00b7 not running');
+        for (const row of older) renderLink(row.url, { past: true, when: row.when });
+      }
+      if (!liveCount && !older.length && !evs.length) {
+        const none = document.createElement('div');
+        none.className = 'none'; none.textContent = 'No sessions yet for this workspace.';
+        box.appendChild(none);
+        return;
+      }
+      if (evs.length) group('activity');
       for (const ev of evs) {
         const el = document.createElement('div');
         el.className = 'evrow';
-        const what = ev.kind + (ev.cause ? ' · ' + ev.cause : '') + (ev.reason ? ' — ' + ev.reason : '');
+        const what = ev.kind + (ev.cause ? ' \u00b7 ' + ev.cause : '') + (ev.reason ? ' \u2014 ' + ev.reason : '');
         el.innerHTML = '<b>' + esc(what.slice(0, 90)) + '</b><span>' + esc(fmtWhen(ev.at)) + '</span>';
         box.appendChild(el);
       }

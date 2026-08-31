@@ -202,7 +202,13 @@ $ corgi agent up
 
 One scan pairs the phone. It gets its own token, which you can revoke without touching your other devices. Each workspace remembers where it should open: personal projects go straight to the Claude app, and a work repo on a different Claude account opens in Chrome signed into that account. Save the launcher to your home screen and it is one tap after that.
 
-The session survives network drops and crashes, which Remote Control on its own does not (it gives up after about 10 minutes offline). `corgi agent install` brings the session back after a reboot, `--tunnel-name` keeps the URL stable, and `corgi agent down` turns it all off. None of it runs unless you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through setup. Full guide: [docs/agent.md](docs/agent.md).
+corgi does not reimplement Remote Control. Sessions, streaming, approvals, cost tracking — that is its job, and it does it well. What corgi changes is everything around it.
+
+The phone can only reach a machine that has `claude rc` running on it. Nobody keeps that running — you reboot, the process dies, you never started it before leaving — and then the machine simply is not in the list. corgi is the part that keeps it there: it comes back at login, restarts the session after a crash or a reboot, and holds a wake lock so the laptop does not sleep through a long task. When one does die anyway, `corgi agent brief` tells you where it stopped and which repo it left dirty.
+
+And it is not stuck in one repo. Remote Control sees one directory; a stack is five. corgi puts one branch across all of them, so the same session can change the api and the web app together, and you read the result as a single diff on the phone — no tunnel, nothing running.
+
+`--tunnel-name` keeps the URL stable, and `corgi agent down` turns it all off. None of it runs unless you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through setup. Full guide: [docs/agent.md](docs/agent.md).
 
 ## The rest of the commands
 
