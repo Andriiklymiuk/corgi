@@ -101,12 +101,23 @@ func runAgentHooksEnable(cmd *cobra.Command, _ []string) {
 		utils.Info("also notifying on every finished turn (--turns)")
 	}
 	if !notifyURLConfigured() {
-		utils.Info("")
-		utils.Info("these go to this machine only. for a push to your phone, set notifyUrl in:")
-		utils.Infof("  %s\n", agentUserConfigPath(agentDirOrEmpty()))
-		utils.Info("  an ntfy.sh topic you subscribe to in the ntfy app works — see docs/agent.md")
+		printNotifyUrlHelp()
 	}
 	utils.Infof("undo with `corgi agent hooks disable%s`\n", allSuffix(cmd))
+}
+
+func printNotifyUrlHelp() {
+	utils.Info("")
+	utils.Info("these reach this machine only. for a push to your phone, set notifyUrl in:")
+	utils.Infof("  %s\n", agentUserConfigPath(agentDirOrEmpty()))
+	utils.Info("")
+	utils.Info("  telegram   https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>")
+	utils.Info("             @BotFather → /newbot for <TOKEN>; message the bot once, then")
+	utils.Info("             open https://api.telegram.org/bot<TOKEN>/getUpdates for <ID>")
+	utils.Info("  slack      https://hooks.slack.com/services/...   (channel → Incoming Webhooks)")
+	utils.Info("  discord    https://discord.com/api/webhooks/...   (channel → Integrations)")
+	utils.Info("")
+	utils.Info("  then: corgi agent restart. keep the url private — it can post as you.")
 }
 
 func wantsTurnHook(cmd *cobra.Command) bool {
