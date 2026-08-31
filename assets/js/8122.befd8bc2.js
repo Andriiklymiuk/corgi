@@ -1,0 +1,1 @@
+(globalThis.webpackChunkcorgi_docs=globalThis.webpackChunkcorgi_docs||[]).push([[8122],{5741(){}}]);
