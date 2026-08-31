@@ -156,6 +156,7 @@ func detectLevel(line string) string {
 }
 
 func runLogs(cmd *cobra.Command, _ []string) {
+	resolveComposeDirForLogs(cmd)
 	base := logsBase()
 
 	if logsPruneFlag {
@@ -218,33 +219,31 @@ func runLogs(cmd *cobra.Command, _ []string) {
 }
 
 func runWaitForLog(base, serviceName string) {
-	runFile, err := awaitNewestRun(base, serviceName, activeLogFilter.deadline)
+	line, matched, err := utils.WaitForLogLine(base, utils.LogWait{
+		Service: serviceName,
+		Pattern: logsWaitForFlag,
+		Since:   activeLogFilter.since,
+		Timeout: logsTimeoutFlag,
+	})
 	if err != nil {
-		if !utils.JSONOutput {
-			utils.Info(err)
+		exitWithError(utils.ErrUsage, err, 2)
+		return
+	}
+	if !matched {
+		if utils.JSONOutput {
+			utils.JSONError(utils.ErrReadinessTimeout,
+				fmt.Sprintf("no line matched %q in %s within %s", logsWaitForFlag, serviceName, logsTimeoutFlag))
+		} else {
+			utils.Infof("timed out after %s waiting for %q in %s\n", logsTimeoutFlag, logsWaitForFlag, serviceName)
 		}
 		exitProcess(1)
 		return
 	}
-	if !followLog(runFile) {
-		if !utils.JSONOutput {
-			utils.Infof("timed out after %s waiting for %q in %s\n", logsTimeoutFlag, logsWaitForFlag, serviceName)
-		}
-		exitProcess(1)
+	if utils.JSONOutput {
+		fmt.Println(logJSONLine(serviceName, "", detectLevel(line), line))
+		return
 	}
-}
-
-func awaitNewestRun(base, serviceName string, deadline time.Time) (string, error) {
-	for {
-		runs, err := utils.ListServiceRuns(base, serviceName)
-		if err == nil && len(runs) > 0 {
-			return runs[0], nil
-		}
-		if time.Now().After(deadline) {
-			return "", fmt.Errorf("no log file appeared for %s within %s", serviceName, logsTimeoutFlag)
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
+	utils.Info(line)
 }
 
 func chooseLogService(base string) (string, error) {
@@ -255,6 +254,15 @@ func chooseLogService(base string) (string, error) {
 		}
 	}
 	return pickLogService(base)
+}
+
+func resolveComposeDirForLogs(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+	if _, err := utils.GetCorgiServices(cmd); err != nil {
+		utils.Info("no corgi-compose.yml found; reading logs from ./corgi_services")
+	}
 }
 
 func logsBase() string {
@@ -376,21 +384,21 @@ func labelForRun(path string) string {
 	}
 }
 
-func followLog(path string) bool {
+func followLog(path string) {
 	f, err := os.Open(path)
 	if err != nil {
 		utils.Infof("cannot open %s: %v\n", path, err)
-		return false
+		return
 	}
 	defer f.Close()
 
-	if !utils.JSONOutput && !activeLogFilter.waiting() {
+	if !utils.JSONOutput {
 		fmt.Printf("%s📄 %s (Ctrl-C to exit)%s\n\n", art.CyanColor, path, art.WhiteColor)
 	}
-	return streamLogLines(f, path)
+	streamLogLines(f, path)
 }
 
-func streamLogLines(f *os.File, path string) bool {
+func streamLogLines(f *os.File, path string) {
 	service := filepath.Base(filepath.Dir(path))
 	reader := bufio.NewReader(f)
 	stripPrefix := looksLikeStampedLog(path)
@@ -398,35 +406,25 @@ func streamLogLines(f *os.File, path string) bool {
 	for {
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
-			if matched := handleFollowedLine(service, line, stripPrefix); matched {
-				return true
-			}
+			handleFollowedLine(service, line, stripPrefix)
 			idleSince = time.Time{}
 		}
 		if err == nil {
 			continue
 		}
-		if activeLogFilter.waiting() {
-			if time.Now().After(activeLogFilter.deadline) {
-				return false
-			}
-			time.Sleep(200 * time.Millisecond)
-			continue
-		}
 		if followShouldStop(err, path, &idleSince) {
-			return false
+			return
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 }
 
-func handleFollowedLine(service, line string, stripPrefix bool) bool {
+func handleFollowedLine(service, line string, stripPrefix bool) {
 	ts, content := splitLogLine(line, stripPrefix)
 	if !activeLogFilter.allows(ts, content) {
-		return false
+		return
 	}
 	printFollowedLine(service, line, stripPrefix)
-	return activeLogFilter.waitFor != nil && activeLogFilter.waitFor.MatchString(content)
 }
 
 func splitLogLine(line string, stripPrefix bool) (ts, content string) {

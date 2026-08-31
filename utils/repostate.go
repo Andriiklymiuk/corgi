@@ -44,7 +44,7 @@ func RepoChangedSince(dir, base string) (changed, known bool) {
 	if !ok {
 		return false, false
 	}
-	if dirty, err := isTreeDirty(dir); err == nil && dirty {
+	if out, err := gitOut(dir, "status", "--porcelain"); err == nil && strings.TrimSpace(out) != "" {
 		return true, true
 	}
 	out, err := gitOut(dir, "rev-list", "--count", ref+"..HEAD")

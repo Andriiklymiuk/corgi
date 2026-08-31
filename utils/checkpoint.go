@@ -8,9 +8,6 @@ import (
 
 const checkpointRefPrefix = "refs/corgi/checkpoints/"
 
-// CaptureWorkTree records a repo's uncommitted work as a dangling commit
-// without touching the working tree, and anchors it behind a ref so gc cannot
-// collect it. Returns an empty sha when the tree is clean.
 func CaptureWorkTree(dir, checkpoint, label string) (string, error) {
 	if !isGitRepo(dir) {
 		return "", fmt.Errorf("%s is not a git repository", dir)
@@ -48,7 +45,7 @@ func RestoreWorkTree(dir, branch, head, stashSha string) error {
 	if stashSha == "" {
 		return nil
 	}
-	if _, err := gitOut(dir, "stash", "apply", stashSha); err != nil {
+	if _, err := gitOut(dir, "stash", "apply", "--index", stashSha); err != nil {
 		return fmt.Errorf("re-apply the captured work: %v", err)
 	}
 	return nil

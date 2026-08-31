@@ -279,9 +279,6 @@ func reportTestResults(results []testResult, allPassed bool) {
 	utils.Infof("\n%d passed, %d failed, %d skipped\n", passed, failed, skipped)
 }
 
-// narrowToChangedServices keeps the services whose repo differs from base. A
-// repo corgi cannot compare (no such base ref, not a checkout) is kept: a
-// silently skipped test reads exactly like a passing one.
 func narrowToChangedServices(sel selection, base string) selection {
 	var kept []utils.Service
 	var skipped []string

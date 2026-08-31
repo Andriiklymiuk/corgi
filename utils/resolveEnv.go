@@ -60,9 +60,6 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	return dedupeLastWins(chain), nil
 }
 
-// ResolveServiceEnvChain is ResolveServiceEnv without the last-wins collapse:
-// every contributing entry stays, in precedence order, so a caller can show
-// where a value came from and what it overrode.
 func ResolveServiceEnvChain(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	if corgi == nil || svc.IgnoreEnv {
 		return []EnvVar{}, nil
@@ -177,8 +174,6 @@ func ResolveAllEnv(corgi *CorgiCompose) (map[string][]EnvVar, error) {
 	return resolveEveryService(corgi, ResolveServiceEnv)
 }
 
-// ResolveAllEnvChains is ResolveAllEnv with every contributing entry kept,
-// for reporting which source won a key and which ones it overrode.
 func ResolveAllEnvChains(corgi *CorgiCompose) (map[string][]EnvVar, error) {
 	return resolveEveryService(corgi, ResolveServiceEnvChain)
 }

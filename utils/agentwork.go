@@ -50,7 +50,6 @@ func ProbeAgentWork(dir string) *AgentWork {
 }
 
 // RepoState is one checkout's local git state: no forge, no network.
-// ProbeRepoState fills Branch and Dirty only; ReadRepoState fills the rest.
 type RepoState struct {
 	Path     string `json:"path,omitempty"`
 	Branch   string `json:"branch"`

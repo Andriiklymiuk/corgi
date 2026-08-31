@@ -128,6 +128,9 @@ func diagnoseService(corgi *utils.CorgiCompose, service utils.Service) whyReport
 
 func whyVerdict(service utils.Service, report whyReport) (verdict, detail, next string) {
 	switch {
+	case report.Status == "running" && (report.Port == nil || report.Port.Listening):
+		return verdictHealthy, "the service is running and its port answers", ""
+
 	case report.Status == "crashed":
 		return verdictCrashed,
 			fmt.Sprintf("%s started and then exited%s", service.ServiceName, exitCodeSuffix(report.LastExitCode)),
@@ -169,13 +172,10 @@ func whyVerdict(service utils.Service, report whyReport) (verdict, detail, next 
 			"corgi has no run state for this service — it was never started, or the stack was stopped",
 			"corgi run --services " + service.ServiceName
 
-	case report.Status == "running" && report.Port != nil && !report.Port.Listening:
+	case report.Status == "running":
 		return verdictUnhealthy,
 			fmt.Sprintf("the process is alive but nothing is listening on port %d yet", report.Port.Number),
 			"check the log tail; the service may still be compiling"
-
-	case report.Status == "running":
-		return verdictHealthy, "the service is running and its port answers", ""
 	}
 	return verdictUnhealthy, "the service is not running and no single cause stands out", "corgi logs --service " + service.ServiceName
 }

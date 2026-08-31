@@ -85,5 +85,6 @@ func runLeaseRelease(cmd *cobra.Command, args []string) {
 		exitWithError(utils.ErrNotRunning, err, 1)
 		return
 	}
+
 	utils.Infof("released lease %q — stop anything still running under it first\n", args[0])
 }

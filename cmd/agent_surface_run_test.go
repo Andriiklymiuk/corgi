@@ -5,8 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // runCLI drives the real cobra path — root flags merged, PersistentPreRun run —
@@ -21,6 +25,9 @@ func runCLI(t *testing.T, args ...string) (string, int) {
 
 	rootCmd.SetArgs(args)
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	t.Cleanup(resetCommandFlags)
+	resetCommandFlags()
+	activeLogFilter = logStreamFilter{}
 
 	out := captureConsole(t, func() {
 		if err := rootCmd.Execute(); err != nil {
@@ -28,6 +35,24 @@ func runCLI(t *testing.T, args ...string) (string, int) {
 		}
 	})
 	return out, code
+}
+
+// cobra keeps parsed flag values on the shared rootCmd tree between Execute
+// calls, so one test's --wait-for would still be set for the next one.
+func resetCommandFlags() {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		c.Flags().VisitAll(func(f *pflag.Flag) {
+			if f.Changed {
+				_ = f.Value.Set(f.DefValue)
+				f.Changed = false
+			}
+		})
+		for _, child := range c.Commands() {
+			walk(child)
+		}
+	}
+	walk(rootCmd)
 }
 
 func surfaceWorkspace(t *testing.T) string {
@@ -200,5 +225,218 @@ func TestConfirmRestoreRefusesWithoutATerminal(t *testing.T) {
 	})
 	if !strings.Contains(out, "--yes") {
 		t.Errorf("it must say how to proceed: %q", out)
+	}
+}
+
+func TestRunEnvExplainShowsTheChain(t *testing.T) {
+	chdirToTempCompose(t, `name: explain
+services:
+  api:
+    port: 4400
+    environment:
+      - DATABASE_URL=postgres://from-compose
+    start:
+      - go run .
+`)
+	out, code := runCLI(t, "env", "api", "--explain", "DATABASE_URL")
+	if code != 0 {
+		t.Fatalf("exit %d, out %q", code, out)
+	}
+	if !strings.Contains(out, "api · DATABASE_URL") || !strings.Contains(out, "literal") {
+		t.Errorf("explain output = %q", out)
+	}
+
+	out, code = runCLI(t, "env", "api", "--explain", "NOT_SET")
+	if code != 0 || !strings.Contains(out, "nothing sets this variable") {
+		t.Errorf("unset key: exit %d, out %q", code, out)
+	}
+
+	out, code = runCLI(t, "env", "api", "--explain", "DATABASE_URL", "--reveal")
+	if code != 0 || !strings.Contains(out, "postgres://from-compose") {
+		t.Errorf("--reveal must show the real value: %q", out)
+	}
+}
+
+func TestRunLogsWaitForMatchesAndTimesOut(t *testing.T) {
+	dir := chdirToTempCompose(t, agentSurfaceCompose)
+	logDir := filepath.Join(dir, "corgi_services", ".logs", "api")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "2026-01-01T00:00:00.000Z booting\n2026-01-01T00:00:01.000Z Listening on :3300\n"
+	if err := os.WriteFile(filepath.Join(logDir, "2026-01-01_000000.log"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, code := runCLI(t, "logs", "--service", "api", "--wait-for", "Listening on", "--timeout", "5s")
+	if code != 0 {
+		t.Errorf("a match in the running run must exit 0, got %d", code)
+	}
+
+	if err := os.WriteFile(filepath.Join(logDir, "2026-01-02_000000.crashed.log"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, code = runCLI(t, "logs", "--service", "api", "--wait-for", "Listening on", "--timeout", "600ms")
+	if code != 1 {
+		t.Errorf("a match only in a finished run must not count, got exit %d", code)
+	}
+
+	_, code = runCLI(t, "logs", "--service", "api", "--wait-for", "never appears", "--timeout", "600ms")
+	if code != 1 {
+		t.Errorf("a timeout must exit 1, got %d", code)
+	}
+
+	_, code = runCLI(t, "logs", "--service", "ghost", "--wait-for", "x", "--timeout", "400ms")
+	if code != 1 {
+		t.Errorf("a service with no log must exit 1, got %d", code)
+	}
+
+	_, code = runCLI(t, "logs", "--service", "api", "--wait-for", "([", "--timeout", "1s")
+	if code != 2 {
+		t.Errorf("an invalid regexp must exit 2, got %d", code)
+	}
+
+	_, code = runCLI(t, "logs", "--all", "--wait-for", "x", "--timeout", "1s")
+	if code != 2 {
+		t.Errorf("--wait-for with --all must exit 2, got %d", code)
+	}
+
+	_, code = runCLI(t, "logs", "--service", "api", "--since", "not-a-time")
+	if code != 2 {
+		t.Errorf("an unparsable --since must exit 2, got %d", code)
+	}
+}
+
+func TestRunLogsSinceAndGrepNarrowTheStream(t *testing.T) {
+	dir := chdirToTempCompose(t, agentSurfaceCompose)
+	logDir := filepath.Join(dir, "corgi_services", ".logs", "api")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "2026-01-01T00:00:00.000Z quiet line\n2026-01-01T00:00:01.000Z ERROR loud line\n"
+	if err := os.WriteFile(filepath.Join(logDir, "2026-01-01_000000.ok.log"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, code := runCLI(t, "logs", "--service", "api", "--grep", "ERROR", "--idle", "1ms"); code != 0 {
+		t.Errorf("--grep exit = %d", code)
+	}
+	if _, code := runCLI(t, "logs", "--service", "api", "--since", "1h", "--idle", "1ms"); code != 0 {
+		t.Errorf("--since exit = %d", code)
+	}
+}
+
+func TestRunCheckpointRefusesTraversalNames(t *testing.T) {
+	surfaceWorkspace(t)
+	for _, name := range []string{"..", ".hidden", "../escape"} {
+		if _, code := runCLI(t, "checkpoint", name); code != 2 {
+			t.Errorf("checkpoint %q must exit 2, got %d", name, code)
+		}
+		if _, code := runCLI(t, "restore", name, "--yes"); code != 2 {
+			t.Errorf("restore %q must exit 2, got %d", name, code)
+		}
+		if _, code := runCLI(t, "checkpoint", "rm", name); code != 2 {
+			t.Errorf("checkpoint rm %q must exit 2, got %d", name, code)
+		}
+	}
+}
+
+func TestRunLeasesReleaseRefusesTraversalNames(t *testing.T) {
+	surfaceWorkspace(t)
+	if _, code := runCLI(t, "leases", "release", "../../etc/passwd"); code != 1 {
+		t.Errorf("a traversal lease name must be refused, got %d", code)
+	}
+}
+
+func TestRunRestoreKeepsCommitsSafeBehindTheGate(t *testing.T) {
+	needGit(t)
+	dir := surfaceWorkspace(t)
+	newRepo(t, dir)
+
+	if _, code := runCLI(t, "checkpoint", "cp-commits"); code != 0 {
+		t.Fatal("checkpoint failed")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("committed later\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "commit", "-qam", "later work")
+
+	out, code := runCLI(t, "restore", "cp-commits", "--yes")
+	if code != 0 {
+		t.Fatalf("restore exit %d: %s", code, out)
+	}
+	if !strings.Contains(out, "saved current state as checkpoint") {
+		t.Errorf("commits made after the checkpoint must be captured first: %q", out)
+	}
+}
+
+func TestRunEventsRejectsNothingOnAZeroInterval(t *testing.T) {
+	if got := nextEventsPause(time.Time{}); got < minEventsInterval {
+		t.Errorf("pause = %s, must not busy-spin", got)
+	}
+	deadline := time.Now().Add(20 * time.Millisecond)
+	if got := nextEventsPause(deadline); got > time.Second {
+		t.Errorf("pause = %s, must not overshoot the deadline", got)
+	}
+}
+
+func TestCheckpointWithDBSkipsNonPostgresServices(t *testing.T) {
+	needGit(t)
+	dir := chdirToTempCompose(t, `name: dbskip
+services:
+  api:
+    port: 4500
+    start:
+      - go run .
+db_services:
+  cache:
+    driver: redis
+    port: 6399
+`)
+	newRepo(t, dir)
+	if _, err := utils.GetCorgiServices(newRootedCmd()); err != nil {
+		t.Fatal(err)
+	}
+
+	out, code := runCLI(t, "checkpoint", "cp-db", "--with-db")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	if !strings.Contains(out, "only postgres-family drivers can be snapshotted") {
+		t.Errorf("a redis db_service must be reported as skipped: %q", out)
+	}
+
+	file, err := readCheckpoint("cp-db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Databases) != 0 {
+		t.Errorf("no snapshot should be recorded, got %+v", file.Databases)
+	}
+}
+
+func TestRestoreWithDBReportsAMissingSnapshot(t *testing.T) {
+	needGit(t)
+	dir := surfaceWorkspace(t)
+	newRepo(t, dir)
+
+	if _, code := runCLI(t, "checkpoint", "cp-nodb"); code != 0 {
+		t.Fatal("checkpoint failed")
+	}
+	file, err := readCheckpoint("cp-nodb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file.Databases = []checkpointDatabase{{Service: "ghost", Snapshot: "never-made"}}
+	if err := writeCheckpoint(file); err != nil {
+		t.Fatal(err)
+	}
+
+	out, code := runCLI(t, "restore", "cp-nodb", "--yes", "--with-db")
+	if code != 0 {
+		t.Fatalf("a missing snapshot must not fail the code restore: exit %d, %s", code, out)
+	}
+	if !strings.Contains(out, "ghost") {
+		t.Errorf("the missing snapshot must be named: %q", out)
 	}
 }
