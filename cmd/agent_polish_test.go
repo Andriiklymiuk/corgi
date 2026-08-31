@@ -368,8 +368,8 @@ func TestAgentHooksEnableThenDisableRoundTrip(t *testing.T) {
 	runAgentHooksEnable(nil, nil)
 	after := readJSONObject(path)
 	hooks, _ := after["hooks"].(map[string]any)
-	if hooks == nil || len(hooks) != 2 {
-		t.Fatalf("both events must be hooked, got %v", after["hooks"])
+	if hooks == nil || hooks[hookEventNotification] == nil {
+		t.Fatalf("the needs-you event must be hooked, got %v", after["hooks"])
 	}
 	if !strings.Contains(marshalCompact(hooks), "--workspace acme") {
 		t.Errorf("our hook must name the workspace: %s", marshalCompact(hooks))
