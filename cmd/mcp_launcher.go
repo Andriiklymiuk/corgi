@@ -154,8 +154,6 @@ func workspaceActivity(id, absPath string) (int, *launchTopSession, *launchLastE
 	return live, top, &launchLastEvent{Kind: e.Kind, Cause: e.Cause, Reason: e.Reason, At: e.At.UnixMilli()}
 }
 
-// newestLiveSession surfaces one session on the collapsed card so the list is
-// not a dead end for someone who has never opened the sessions panel.
 func newestLiveSession(sessions []claudeSession) *launchTopSession {
 	for _, sess := range sessions {
 		if sess.URL == "" {
@@ -931,7 +929,7 @@ const launcherPageHTML = `<!doctype html>
     <p>The same checks as <code>corgi agent doctor</code>, run from here.</p>
     <button id="rundoctor">Run doctor</button>
     <div id="doctor"></div>
-    <p>For a push when a session restarts or fails, set <code>notifyUrl</code> in the agent config on the laptop — an ntfy.sh topic you subscribe to works.</p>
+    <p>For a push to this phone when a session needs you, set <code>notifyUrl</code> in the agent config on the laptop. A Discord, Slack or Telegram webhook works as well as an ntfy topic — corgi picks the payload from the host, which matters because ntfy's iOS app is paid. Without it, notifications only reach the laptop.</p>
   </details>
   <p class="foot">
     <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
@@ -1211,8 +1209,6 @@ const launcherPageHTML = `<!doctype html>
     }
   }
 
-  // Shown until the first session exists: on an empty launcher nothing on the
-  // card says what tapping it will do, or where the work ends up running.
   function introLine(workspaces) {
     if (workspaces.some(w => (w.live || 0) > 0)) return null;
     const el = document.createElement('div');
@@ -1227,8 +1223,6 @@ const launcherPageHTML = `<!doctype html>
     return more > 0 ? 'sessions +' + more + ' \u2304' : 'sessions \u2304';
   }
 
-  // The collapsed card names one live session, so someone who never taps
-  // "sessions" still sees there is something to open.
   function topSessionRow(ws) {
     const top = ws.topSession;
     if (!top) return null;
@@ -1269,9 +1263,7 @@ const launcherPageHTML = `<!doctype html>
     return el;
   }
 
-  // Token totals are context, not status: they go on their own quiet line so the
-  // status line above them never wraps into an orphaned separator.
-  function usageLine(ws) {
+    function usageLine(ws) {
     if (!ws.usage || !ws.usage.week) return null;
     const sum = u => (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
     const week = sum(ws.usage.week);

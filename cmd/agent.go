@@ -132,6 +132,12 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d := daemon.New(APP_VERSION, dir)
 	d.CaptureBrief = captureWorkspaceBrief
 	d.ResolveWorkspace = remoteResolver(dir, foreground)
+	d.LinkFor = func(workspaceID string) string {
+		if url := d.SessionURLFor(workspaceID); url != "" {
+			return url
+		}
+		return launcherURL()
+	}
 	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.NotifyUrl != "" {
 		hook := webhookNotifier(user.NotifyUrl, nil)
 		if hook == nil {

@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// registerStack rewrites the whole registry, so several workspaces have to be
-// written in one go.
 func registerStacks(t *testing.T, agentDir string, stacks map[string]string) {
 	t.Helper()
 	reg := &workspace.Registry{}
@@ -47,7 +45,6 @@ func TestAgentHooksEnableAllCoversEveryWorkspace(t *testing.T) {
 	web := stackWithAgentConfig(t, "")
 	registerStacks(t, agentD, map[string]string{"api": api, "web": web})
 
-	// --all must not depend on where it is run from.
 	cwd, _ := os.Getwd()
 	away := t.TempDir()
 	if err := os.Chdir(away); err != nil {

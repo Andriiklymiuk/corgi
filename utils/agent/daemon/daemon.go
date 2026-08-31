@@ -71,8 +71,10 @@ type Daemon struct {
 	// Start launches a remote-control process; injected for tests.
 	Start supervisor.Starter
 	// Notify reports restarts. Defaults to corgi's desktop notification.
-	Notify func(title, body string)
-	Events *events.Log
+	Notify         func(title, body string)
+	NotifyWithLink func(title, body, link string)
+	LinkFor        func(workspaceID string) string
+	Events         *events.Log
 	// CaptureBrief probes what an ending session left on disk. Injected because
 	// enumerating a stack's repositories means parsing a compose file, which the
 	// daemon has no business knowing about. Nil disables briefs entirely.
@@ -108,13 +110,14 @@ type Daemon struct {
 // New returns a Daemon writing state under dir.
 func New(version, dir string) *Daemon {
 	return &Daemon{
-		Version:       version,
-		Dir:           dir,
-		Start:         supervisor.StartProcess,
-		Notify:        utils.Notify,
-		Events:        events.NewLog(dir),
-		publishSignal: make(chan struct{}, 1),
-		nudge:         make(chan struct{}, 1),
+		Version:        version,
+		Dir:            dir,
+		Start:          supervisor.StartProcess,
+		Notify:         utils.Notify,
+		NotifyWithLink: utils.NotifyWithLink,
+		Events:         events.NewLog(dir),
+		publishSignal:  make(chan struct{}, 1),
+		nudge:          make(chan struct{}, 1),
 	}
 }
 
@@ -439,10 +442,22 @@ func (d *Daemon) reportAttention(c command.Command) {
 		detail = "a session is waiting for you"
 	}
 	d.Events.Append(c.WorkspaceID, events.Event{Kind: "attention", Reason: detail})
-	if d.Notify != nil {
-		d.Notify("corgi agent · "+c.WorkspaceID, detail)
-	}
+	d.notifyAttention("corgi agent · "+c.WorkspaceID, detail, c.WorkspaceID)
 	d.requestPublish()
+}
+
+func (d *Daemon) notifyAttention(title, body, workspaceID string) {
+	link := ""
+	if d.LinkFor != nil {
+		link = d.LinkFor(workspaceID)
+	}
+	if link != "" && d.NotifyWithLink != nil {
+		d.NotifyWithLink(title, body, link)
+		return
+	}
+	if d.Notify != nil {
+		d.Notify(title, body)
+	}
 }
 
 func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {
@@ -587,6 +602,14 @@ func (d *Daemon) runnerIDs() []string {
 }
 
 // Runners returns the live supervisors.
+func (d *Daemon) SessionURLFor(workspaceID string) string {
+	r := d.findRunner(workspaceID)
+	if r == nil {
+		return ""
+	}
+	return r.State().SessionURL
+}
+
 func (d *Daemon) Runners() []*supervisor.Runner {
 	d.mu.Lock()
 	defer d.mu.Unlock()
