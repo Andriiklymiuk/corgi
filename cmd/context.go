@@ -196,7 +196,7 @@ func printContextReport(report contextReport) {
 	utils.Info("  " + contextHeadline(report))
 	utils.Info("")
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	w := tabwriter.NewWriter(utils.ConsoleOut(), 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tKIND\tPORT\tSTATUS\tBRANCH\tREPO")
 	for _, entry := range append(append([]contextEntry{}, report.Databases...), report.Services...) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
