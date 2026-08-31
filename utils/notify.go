@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -82,6 +83,14 @@ func NotifyRaw(title, body string) {
 	sendNotification(title, body)
 }
 
+func NotifyWithLink(title, body, link string) {
+	notifyLink = link
+	defer func() { notifyLink = "" }()
+	Notify(title, body)
+}
+
+var notifyLink string
+
 var sendNotificationOverride func(title, body string)
 
 func SilenceNotificationsForTests() {
@@ -102,12 +111,16 @@ func sendNotification(title, body string) {
 		// "corgi" branding + survives Focus filters that block Script
 		// Editor by default. Fall back to osascript otherwise.
 		if path, err := exec.LookPath("terminal-notifier"); err == nil {
-			cmd = exec.Command(path,
+			args := []string{
 				"-title", title,
 				"-message", body,
 				"-group", "com.andriiklymiuk.corgi",
 				"-sender", "com.apple.Terminal",
-			)
+			}
+			if link := safeNotifyLink(notifyLink); link != "" {
+				args = append(args, "-open", link)
+			}
+			cmd = exec.Command(path, args...)
 			_ = cmd.Run()
 			return
 		}
@@ -148,4 +161,16 @@ func IsNotificationsEnabled() bool {
 func powershellQuote(s string) string {
 	escaped := strings.ReplaceAll(s, "'", "''")
 	return fmt.Sprintf("'%s'", escaped)
+}
+
+func safeNotifyLink(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return ""
+	}
+	return u.String()
 }

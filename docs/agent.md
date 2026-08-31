@@ -315,7 +315,23 @@ corgi agent hooks enable --all --turns   # also ping on every finished turn (noi
 Only the permission prompt notifies by default: it blocks the session until you
 answer, while a finished turn fires constantly once several workspaces are busy.
 Notifications go to the machine running corgi — **set `notifyUrl` to reach your
-phone**, or the hooks only reach the desk you were trying to leave.
+phone**, or the hooks only reach the desk you were trying to leave. On macOS with
+`terminal-notifier` installed, clicking the desktop toast opens that workspace's
+session (or the launcher when corgi does not know a session URL for it).
+
+`notifyUrl` picks its payload from the host, so it is not ntfy-only — useful
+because ntfy's **iOS** app is paid:
+
+| host | what it sends | free on iOS |
+|---|---|---|
+| anything else | ntfy shape: body + `Title`/`Click` headers | self-hosted yes, ntfy.sh app no |
+| `discord.com` | `{"content": …}` | yes |
+| `hooks.slack.com` | `{"text": …}` | yes |
+| `api.telegram.org` | `{"text": …, "chat_id": …}` | yes |
+
+For Telegram put the chat in the URL and corgi copies it into the body:
+`https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>`. Each message
+carries the title, the detail, and the link to open.
 
 They call `corgi agent hook`, which reports to the daemon, which sends the same
 notification as a restart — including the phone push when `notifyUrl` is set.

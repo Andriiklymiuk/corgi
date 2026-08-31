@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"os"
@@ -45,18 +47,12 @@ func webhookNotifier(rawURL string, client *http.Client) func(title, body string
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
 	target := u.String()
+	shape := webhookShapeFor(u.Host)
 	return func(title, body string) {
 		go func() {
-			req, err := http.NewRequest(http.MethodPost, target, strings.NewReader(body))
+			req, err := buildNotifyRequest(shape, target, title, body, launcherURL())
 			if err != nil {
 				return
-			}
-			// ntfy shows raw bytes for non-ASCII header values, so keep it ASCII.
-			req.Header.Set("Title", asciiHeader(title))
-			req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-			// ntfy turns this into the notification's tap target.
-			if link := launcherURL(); link != "" {
-				req.Header.Set("Click", link)
 			}
 			resp, err := client.Do(req)
 			if err != nil {
@@ -65,6 +61,69 @@ func webhookNotifier(rawURL string, client *http.Client) func(title, body string
 			_ = resp.Body.Close()
 		}()
 	}
+}
+
+const (
+	webhookNtfy     = "ntfy"
+	webhookDiscord  = "discord"
+	webhookSlack    = "slack"
+	webhookTelegram = "telegram"
+)
+
+func webhookShapeFor(host string) string {
+	host = strings.ToLower(host)
+	switch {
+	case strings.HasSuffix(host, "discord.com") || strings.HasSuffix(host, "discordapp.com"):
+		return webhookDiscord
+	case strings.HasSuffix(host, "slack.com"):
+		return webhookSlack
+	case strings.HasSuffix(host, "api.telegram.org"):
+		return webhookTelegram
+	}
+	return webhookNtfy
+}
+
+func buildNotifyRequest(shape, target, title, body, link string) (*http.Request, error) {
+	if shape == webhookNtfy {
+		req, err := http.NewRequest(http.MethodPost, target, strings.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Title", asciiHeader(title))
+		req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+		if link != "" {
+			req.Header.Set("Click", link)
+		}
+		return req, nil
+	}
+
+	text := title + "\n" + body
+	if link != "" {
+		text += "\n" + link
+	}
+	payload := map[string]any{}
+	switch shape {
+	case webhookDiscord:
+		payload["content"] = text
+	case webhookSlack:
+		payload["text"] = text
+	case webhookTelegram:
+		payload["text"] = text
+		payload["disable_web_page_preview"] = true
+		if chat := telegramChatID(target); chat != "" {
+			payload["chat_id"] = chat
+		}
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(encoded))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return req, nil
 }
 
 func asciiHeader(s string) string {
@@ -95,4 +154,12 @@ func combinedNotifier(notifiers ...func(title, body string)) func(title, body st
 			n(title, body)
 		}
 	}
+}
+
+func telegramChatID(target string) string {
+	u, err := url.Parse(target)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(u.Query().Get("chat_id"))
 }

@@ -387,7 +387,7 @@ Writes two Claude Code hooks into the repo's `.claude/settings.local.json` (neve
 - Only the permission prompt notifies by default. `--turns` adds one on every finished turn — noisy once several workspaces are busy, so it is opt-in. Re-running without `--turns` takes it back out.
 - `--all` does every registered workspace in one go, from anywhere.
 - `corgi agent hooks disable [--all]` removes only corgi's hooks, leaving your own alone.
-- Notifications land on the machine running corgi. For a push to your phone, set `notifyUrl` in the user agent config (an ntfy.sh topic you subscribe to works).
+- Notifications land on the machine running corgi; on macOS with `terminal-notifier` a click opens that workspace's session. For a push to your phone set `notifyUrl` — the payload is chosen from the host, so a Discord, Slack or Telegram webhook works as well as ntfy (which matters because ntfy's iOS app is paid).
 
 ### `corgi pull`
 

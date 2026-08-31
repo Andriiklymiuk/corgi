@@ -142,8 +142,6 @@ type hookTarget struct {
 	dir string
 }
 
-// hookTargets is the whole registry with --all, otherwise the one workspace the
-// current directory belongs to.
 func hookTargets(cmd *cobra.Command) []hookTarget {
 	registry, _ := mustLoadRegistry()
 	registry.Reconcile(dirIsWorkspace)
@@ -192,9 +190,6 @@ func allSuffix(cmd *cobra.Command) string {
 	return ""
 }
 
-// enableHooksIn always clears corgi's own hooks from both events first, so
-// turning --turns off again actually removes the turn-end hook rather than
-// leaving an earlier one behind.
 func enableHooksIn(dir, id string, turns bool) error {
 	path := claudeLocalSettingsPath(dir)
 	settings := readJSONObject(path)
