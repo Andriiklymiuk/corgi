@@ -2,14 +2,24 @@ package utils
 
 import (
 	"strings"
+	"sync"
 	"testing"
 )
+
+func enableNotificationsForTest(t *testing.T) {
+	t.Helper()
+	notifyConfigOnce = sync.Once{}
+	notifyConfigEnabled.Store(true)
+	notifyConfigOnce.Do(func() {})
+	t.Cleanup(ResetNotifyCache)
+}
 
 func TestNotifyWithLinkReachesTheSender(t *testing.T) {
 	var gotLink string
 	previous := sendNotificationOverride
 	sendNotificationOverride = func(string, string) { gotLink = notifyLink }
 	t.Cleanup(func() { sendNotificationOverride = previous })
+	enableNotificationsForTest(t)
 	ResetNotifyThrottleForTests()
 
 	NotifyWithLink("corgi agent · idid", "a session is waiting for you", "https://claude.ai/code/s1")
@@ -23,6 +33,7 @@ func TestPlainNotifyCarriesNoLink(t *testing.T) {
 	previous := sendNotificationOverride
 	sendNotificationOverride = func(string, string) { gotLink = notifyLink }
 	t.Cleanup(func() { sendNotificationOverride = previous })
+	enableNotificationsForTest(t)
 	ResetNotifyThrottleForTests()
 
 	Notify("corgi agent · idid", "plain body with no link")
@@ -36,6 +47,7 @@ func TestNotifyLinkDoesNotLeakBetweenCalls(t *testing.T) {
 	previous := sendNotificationOverride
 	sendNotificationOverride = func(string, string) { seen = append(seen, notifyLink) }
 	t.Cleanup(func() { sendNotificationOverride = previous })
+	enableNotificationsForTest(t)
 
 	ResetNotifyThrottleForTests()
 	NotifyWithLink("t1", "b1", "https://x.test/one")
