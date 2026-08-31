@@ -37,14 +37,20 @@ finished turn. Both call ` + "`corgi agent hook`" + `, which tells the corgi
 daemon, which sends the same notification as a restart — including the phone
 push when notifyUrl is set.
 
-Covers every Claude session in the directory, not just supervised ones.`,
+Covers every Claude session in the directory, not just supervised ones.
+
+--all does the same for every registered workspace, so a machine with several
+stacks does not need one visit each.`,
 	Run: runAgentHooksEnable,
 }
 
 var agentHooksDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Remove the hooks corgi added to this workspace",
-	Run:   runAgentHooksDisable,
+	Long: `Removes the two hooks corgi wrote, leaving any other hooks in the file alone.
+
+--all removes them from every registered workspace.`,
+	Run: runAgentHooksDisable,
 }
 
 var agentHookCmd = &cobra.Command{
@@ -77,26 +83,76 @@ func claudeLocalSettingsPath(dir string) string {
 	return filepath.Join(dir, ".claude", "settings.local.json")
 }
 
-func runAgentHooksEnable(_ *cobra.Command, _ []string) {
+func runAgentHooksEnable(cmd *cobra.Command, _ []string) {
+	targets := hookTargets(cmd)
+	for _, target := range targets {
+		if err := enableHooksIn(target.dir, target.id); err != nil {
+			exitWithError("agent_hooks", err, 1)
+		}
+		utils.Infof("✓ %s will notify you when a session there needs you (%s)\n",
+			target.id, claudeLocalSettingsPath(target.dir))
+	}
+	utils.Info("phone push needs notifyUrl in the agent config — see docs/agent.md")
+	utils.Infof("undo with `corgi agent hooks disable%s`\n", allSuffix(cmd))
+}
+
+type hookTarget struct {
+	id  string
+	dir string
+}
+
+// hookTargets is the whole registry with --all, otherwise the one workspace the
+// current directory belongs to.
+func hookTargets(cmd *cobra.Command) []hookTarget {
+	registry, _ := mustLoadRegistry()
+	registry.Reconcile(dirIsWorkspace)
+
+	if wantsAllWorkspaces(cmd) {
+		var targets []hookTarget
+		for _, w := range registry.Sorted() {
+			if w.AbsPath == "" {
+				continue
+			}
+			targets = append(targets, hookTarget{id: w.ID, dir: w.AbsPath})
+		}
+		if len(targets) == 0 {
+			exitWithError("agent_hooks", fmt.Errorf(
+				"no registered workspaces — run `corgi agent init` in a repo first"), 2)
+		}
+		return targets
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		exitWithError("agent_cwd", err, 1)
 	}
-	registry, _ := mustLoadRegistry()
-	registry.Reconcile(dirIsWorkspace)
-	id := ""
 	for _, w := range registry.Sorted() {
 		if samePath(w.AbsPath, cwd) {
-			id = w.ID
-			break
+			return []hookTarget{{id: w.ID, dir: cwd}}
 		}
 	}
-	if id == "" {
-		exitWithError("agent_hooks", fmt.Errorf(
-			"this directory is not a registered workspace — run `corgi agent init` here first"), 2)
-	}
+	exitWithError("agent_hooks", fmt.Errorf(
+		"this directory is not a registered workspace — run `corgi agent init` here first, or pass --all"), 2)
+	return nil
+}
 
-	path := claudeLocalSettingsPath(cwd)
+func wantsAllWorkspaces(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	all, _ := cmd.Flags().GetBool("all")
+	return all
+}
+
+func allSuffix(cmd *cobra.Command) string {
+	if wantsAllWorkspaces(cmd) {
+		return " --all"
+	}
+	return ""
+}
+
+func enableHooksIn(dir, id string) error {
+	path := claudeLocalSettingsPath(dir)
 	settings := readJSONObject(path)
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
@@ -106,13 +162,7 @@ func runAgentHooksEnable(_ *cobra.Command, _ []string) {
 		hooks[event] = withCorgiHook(hooks[event], id)
 	}
 	settings["hooks"] = hooks
-
-	if err := writeJSONObject(path, settings); err != nil {
-		exitWithError("agent_hooks", err, 1)
-	}
-	utils.Infof("✓ %s will notify you when a session here needs you (%s)\n", id, path)
-	utils.Info("phone push needs notifyUrl in the agent config — see docs/agent.md")
-	utils.Info("undo with `corgi agent hooks disable`")
+	return writeJSONObject(path, settings)
 }
 
 func withCorgiHook(existing any, workspaceID string) []any {
@@ -136,17 +186,26 @@ func stripCorgiHooks(existing any) []any {
 	return out
 }
 
-func runAgentHooksDisable(_ *cobra.Command, _ []string) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		exitWithError("agent_cwd", err, 1)
+func runAgentHooksDisable(cmd *cobra.Command, _ []string) {
+	for _, target := range hookTargets(cmd) {
+		removed, err := disableHooksIn(target.dir)
+		if err != nil {
+			exitWithError("agent_hooks", err, 1)
+		}
+		if !removed {
+			utils.Infof("%s had no corgi hooks\n", target.id)
+			continue
+		}
+		utils.Infof("✓ removed corgi's hooks from %s\n", claudeLocalSettingsPath(target.dir))
 	}
-	path := claudeLocalSettingsPath(cwd)
+}
+
+func disableHooksIn(dir string) (bool, error) {
+	path := claudeLocalSettingsPath(dir)
 	settings := readJSONObject(path)
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
-		utils.Info("no corgi hooks here")
-		return
+		return false, nil
 	}
 	for _, event := range []string{hookEventNotification, hookEventStop} {
 		remaining := stripCorgiHooks(hooks[event])
@@ -161,10 +220,7 @@ func runAgentHooksDisable(_ *cobra.Command, _ []string) {
 	} else {
 		settings["hooks"] = hooks
 	}
-	if err := writeJSONObject(path, settings); err != nil {
-		exitWithError("agent_hooks", err, 1)
-	}
-	utils.Infof("✓ removed corgi's hooks from %s\n", path)
+	return true, writeJSONObject(path, settings)
 }
 
 func runAgentHook(cmd *cobra.Command, args []string) {
@@ -262,6 +318,8 @@ func marshalCompact(v any) string {
 
 func init() {
 	agentHookCmd.Flags().String("workspace", "", "Workspace id the hook belongs to")
+	agentHooksEnableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
+	agentHooksDisableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
 	agentHooksCmd.AddCommand(agentHooksEnableCmd, agentHooksDisableCmd)
 	agentCmd.AddCommand(agentHooksCmd, agentHookCmd)
 }

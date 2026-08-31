@@ -308,6 +308,7 @@ per workspace and corgi tells you:
 ```bash
 cd ~/dev/your-stack
 corgi agent hooks enable        # writes two hooks into .claude/settings.local.json
+corgi agent hooks enable --all  # or every registered workspace at once, from anywhere
 ```
 
 They call `corgi agent hook`, which reports to the daemon, which sends the same
