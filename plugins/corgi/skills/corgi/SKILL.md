@@ -99,6 +99,7 @@ corgi init                 # scaffold db_services/ + cloned repos
 corgi create               # interactive yml editor
 corgi clean -i db          # stop+remove db containers (also: services, corgi_services, all)
 corgi pull                 # git pull in every service dir
+corgi checkout main        # every repo → main (or its own default branch), then pull
 corgi version              # show installed version
 corgi --describe           # built-in: per-service JSON during parse; does NOT short-circuit. Use /corgi-describe for a rendered doc + Mermaid diagram
 ```
