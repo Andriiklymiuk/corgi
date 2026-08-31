@@ -148,7 +148,7 @@ func TestWorkspaceActivityReadsTheTimeline(t *testing.T) {
 	agentD, _ := agentDir()
 	events.NewLog(agentD).Append("acme", events.Event{Kind: "exited", Cause: "network-timeout", Reason: "boom"})
 
-	live, last := workspaceActivity("acme", "")
+	live, _, last := workspaceActivity("acme", "")
 	if live != 0 {
 		t.Errorf("live = %d with no workspace path", live)
 	}
@@ -156,7 +156,7 @@ func TestWorkspaceActivityReadsTheTimeline(t *testing.T) {
 		t.Errorf("lastEvent = %+v", last)
 	}
 
-	if _, none := workspaceActivity("ghost", ""); none != nil {
+	if _, _, none := workspaceActivity("ghost", ""); none != nil {
 		t.Errorf("a workspace with no timeline has no last event, got %+v", none)
 	}
 }
@@ -617,7 +617,7 @@ func TestWorkspaceActivityCountsLiveSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	live, _ := workspaceActivity("acme", stack)
+	live, _, _ := workspaceActivity("acme", stack)
 	if live != 1 {
 		t.Errorf("live = %d, want the one running process", live)
 	}
