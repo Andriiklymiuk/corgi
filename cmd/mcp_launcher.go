@@ -902,7 +902,7 @@ const launcherPageHTML = `<!doctype html>
     </button>
     <button class="tip" data-copy="corgi agent hooks enable --all">
       <span class="tip-t">Tell me when a session needs me</span>
-      <span class="tip-d">A session waiting on a permission prompt is invisible from here. <b>--all</b> covers every repo in this list; drop it to do just one.</span>
+      <span class="tip-d">A session waiting on a permission prompt is invisible from here. <b>--all</b> covers every repo in this list. For a push to this phone rather than the laptop, set <b>notifyUrl</b> in the agent config.</span>
       <span class="tip-cmd"><code>corgi agent hooks enable --all</code><span class="tip-copy">COPY</span></span>
     </button>
     <p class="tipnote" id="tipmsg">Tap a row to copy its command.</p>

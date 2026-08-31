@@ -10,6 +10,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
+	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 
 	"github.com/spf13/cobra"
@@ -31,11 +32,15 @@ var agentHooksCmd = &cobra.Command{
 var agentHooksEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Notify when a Claude session here asks for permission or finishes",
-	Long: `Writes two Claude Code hooks into .claude/settings.local.json (local to this
-machine, never committed): one for permission prompts and questions, one for a
-finished turn. Both call ` + "`corgi agent hook`" + `, which tells the corgi
-daemon, which sends the same notification as a restart — including the phone
-push when notifyUrl is set.
+	Long: `Writes Claude Code hooks into .claude/settings.local.json (local to this
+machine, never committed): one for permission prompts and questions, and with
+--turns one for a finished turn. They call ` + "`corgi agent hook`" + `, which
+tells the corgi daemon, which sends the same notification as a restart —
+including the phone push when notifyUrl is set.
+
+By default only the first: a permission prompt blocks the session until you
+answer it, while a finished turn is just noise once several workspaces are busy.
+Add --turns if you do want one on every turn.
 
 Covers every Claude session in the directory, not just supervised ones.
 
@@ -84,16 +89,52 @@ func claudeLocalSettingsPath(dir string) string {
 }
 
 func runAgentHooksEnable(cmd *cobra.Command, _ []string) {
-	targets := hookTargets(cmd)
-	for _, target := range targets {
-		if err := enableHooksIn(target.dir, target.id); err != nil {
+	turns := wantsTurnHook(cmd)
+	for _, target := range hookTargets(cmd) {
+		if err := enableHooksIn(target.dir, target.id, turns); err != nil {
 			exitWithError("agent_hooks", err, 1)
 		}
 		utils.Infof("✓ %s will notify you when a session there needs you (%s)\n",
 			target.id, claudeLocalSettingsPath(target.dir))
 	}
-	utils.Info("phone push needs notifyUrl in the agent config — see docs/agent.md")
+	if turns {
+		utils.Info("also notifying on every finished turn (--turns)")
+	}
+	if !notifyURLConfigured() {
+		utils.Info("")
+		utils.Info("these go to this machine only. for a push to your phone, set notifyUrl in:")
+		utils.Infof("  %s\n", agentUserConfigPath(agentDirOrEmpty()))
+		utils.Info("  an ntfy.sh topic you subscribe to in the ntfy app works — see docs/agent.md")
+	}
 	utils.Infof("undo with `corgi agent hooks disable%s`\n", allSuffix(cmd))
+}
+
+func wantsTurnHook(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	turns, _ := cmd.Flags().GetBool("turns")
+	return turns
+}
+
+func agentDirOrEmpty() string {
+	dir, err := agentDir()
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
+func notifyURLConfigured() bool {
+	dir := agentDirOrEmpty()
+	if dir == "" {
+		return false
+	}
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(user.NotifyUrl) != ""
 }
 
 type hookTarget struct {
@@ -151,17 +192,36 @@ func allSuffix(cmd *cobra.Command) string {
 	return ""
 }
 
-func enableHooksIn(dir, id string) error {
+// enableHooksIn always clears corgi's own hooks from both events first, so
+// turning --turns off again actually removes the turn-end hook rather than
+// leaving an earlier one behind.
+func enableHooksIn(dir, id string, turns bool) error {
 	path := claudeLocalSettingsPath(dir)
 	settings := readJSONObject(path)
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
-	for _, event := range []string{hookEventNotification, hookEventStop} {
-		hooks[event] = withCorgiHook(hooks[event], id)
+
+	wanted := map[string]bool{hookEventNotification: true, hookEventStop: turns}
+	for event, want := range wanted {
+		if want {
+			hooks[event] = withCorgiHook(hooks[event], id)
+			continue
+		}
+		remaining := stripCorgiHooks(hooks[event])
+		if len(remaining) == 0 {
+			delete(hooks, event)
+			continue
+		}
+		hooks[event] = remaining
 	}
-	settings["hooks"] = hooks
+
+	if len(hooks) == 0 {
+		delete(settings, "hooks")
+	} else {
+		settings["hooks"] = hooks
+	}
 	return writeJSONObject(path, settings)
 }
 
@@ -319,6 +379,7 @@ func marshalCompact(v any) string {
 func init() {
 	agentHookCmd.Flags().String("workspace", "", "Workspace id the hook belongs to")
 	agentHooksEnableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
+	agentHooksEnableCmd.Flags().Bool("turns", false, "Also notify when a session finishes a turn (noisy across several workspaces)")
 	agentHooksDisableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
 	agentHooksCmd.AddCommand(agentHooksEnableCmd, agentHooksDisableCmd)
 	agentCmd.AddCommand(agentHooksCmd, agentHookCmd)

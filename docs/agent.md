@@ -307,9 +307,15 @@ per workspace and corgi tells you:
 
 ```bash
 cd ~/dev/your-stack
-corgi agent hooks enable        # writes two hooks into .claude/settings.local.json
+corgi agent hooks enable        # writes the needs-you hook into .claude/settings.local.json
 corgi agent hooks enable --all  # or every registered workspace at once, from anywhere
+corgi agent hooks enable --all --turns   # also ping on every finished turn (noisy)
 ```
+
+Only the permission prompt notifies by default: it blocks the session until you
+answer, while a finished turn fires constantly once several workspaces are busy.
+Notifications go to the machine running corgi — **set `notifyUrl` to reach your
+phone**, or the hooks only reach the desk you were trying to leave.
 
 They call `corgi agent hook`, which reports to the daemon, which sends the same
 notification as a restart — including the phone push when `notifyUrl` is set.

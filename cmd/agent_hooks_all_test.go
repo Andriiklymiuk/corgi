@@ -25,12 +25,13 @@ func registerStacks(t *testing.T, agentDir string, stacks map[string]string) {
 	}
 }
 
-func allFlagCmd(t *testing.T, all bool) *cobra.Command {
+func allFlagCmd(t *testing.T, flags ...string) *cobra.Command {
 	t.Helper()
 	c := &cobra.Command{Use: "enable"}
 	c.Flags().Bool("all", false, "")
-	if all {
-		if err := c.Flags().Set("all", "true"); err != nil {
+	c.Flags().Bool("turns", false, "")
+	for _, name := range flags {
+		if err := c.Flags().Set(name, "true"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -54,19 +55,22 @@ func TestAgentHooksEnableAllCoversEveryWorkspace(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	runAgentHooksEnable(allFlagCmd(t, true), nil)
+	runAgentHooksEnable(allFlagCmd(t, "all"), nil)
 
 	for id, stack := range map[string]string{"api": api, "web": web} {
 		hooks, _ := readJSONObject(claudeLocalSettingsPath(stack))["hooks"].(map[string]any)
-		if hooks == nil || len(hooks) != 2 {
-			t.Fatalf("%s: both events must be hooked, got %v", id, hooks)
+		if hooks == nil || hooks[hookEventNotification] == nil {
+			t.Fatalf("%s: the needs-you event must be hooked, got %v", id, hooks)
+		}
+		if hooks[hookEventStop] != nil {
+			t.Errorf("%s: turn-end must stay off unless --turns is passed, got %v", id, hooks[hookEventStop])
 		}
 		if !strings.Contains(marshalCompact(hooks), "--workspace "+id) {
 			t.Errorf("%s: hook must name its own workspace: %s", id, marshalCompact(hooks))
 		}
 	}
 
-	runAgentHooksDisable(allFlagCmd(t, true), nil)
+	runAgentHooksDisable(allFlagCmd(t, "all"), nil)
 	for id, stack := range map[string]string{"api": api, "web": web} {
 		if hooks, ok := readJSONObject(claudeLocalSettingsPath(stack))["hooks"]; ok {
 			t.Errorf("%s: hooks should be gone, got %v", id, hooks)
@@ -89,5 +93,69 @@ func TestAgentHooksEnableAllRefusesWithNoWorkspaces(t *testing.T) {
 			t.Errorf("an empty registry must exit 2, got %d", code)
 		}
 	}()
-	runAgentHooksEnable(allFlagCmd(t, true), nil)
+	runAgentHooksEnable(allFlagCmd(t, "all"), nil)
+}
+
+func TestAgentHooksTurnsIsOptInAndReversible(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	stack := stackWithAgentConfig(t, "")
+	registerStacks(t, agentD, map[string]string{"api": stack})
+
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(stack); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	runAgentHooksEnable(allFlagCmd(t, "turns"), nil)
+	hooks, _ := readJSONObject(claudeLocalSettingsPath(stack))["hooks"].(map[string]any)
+	if hooks[hookEventStop] == nil {
+		t.Fatalf("--turns must hook the turn end, got %v", hooks)
+	}
+
+	runAgentHooksEnable(allFlagCmd(t), nil)
+	hooks, _ = readJSONObject(claudeLocalSettingsPath(stack))["hooks"].(map[string]any)
+	if hooks[hookEventStop] != nil {
+		t.Errorf("re-running without --turns must take the turn-end hook back out, got %v", hooks[hookEventStop])
+	}
+	if hooks[hookEventNotification] == nil {
+		t.Error("the needs-you hook must survive")
+	}
+}
+
+func TestAgentHooksEnableKeepsOtherHooks(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	stack := stackWithAgentConfig(t, "")
+	registerStacks(t, agentD, map[string]string{"api": stack})
+
+	path := claudeLocalSettingsPath(stack)
+	if err := writeJSONObject(path, map[string]any{
+		"hooks": map[string]any{"Stop": []any{
+			map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "echo mine"}}},
+		}},
+		"other": "kept",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(stack); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	runAgentHooksEnable(allFlagCmd(t), nil)
+
+	after := readJSONObject(path)
+	if after["other"] != "kept" {
+		t.Error("unrelated settings must survive")
+	}
+	hooks, _ := after["hooks"].(map[string]any)
+	if !strings.Contains(marshalCompact(hooks[hookEventStop]), "echo mine") {
+		t.Errorf("someone else's Stop hook must survive: %v", hooks[hookEventStop])
+	}
 }

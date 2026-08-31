@@ -384,8 +384,10 @@ The lease is stored under `corgi_services/.leases/` and reused, so the same name
 
 Writes two Claude Code hooks into the repo's `.claude/settings.local.json` (never committed) so a session waiting on a permission prompt notifies you instead of sitting there unseen. Per repo, because that is where Claude Code reads hooks from.
 
+- Only the permission prompt notifies by default. `--turns` adds one on every finished turn — noisy once several workspaces are busy, so it is opt-in. Re-running without `--turns` takes it back out.
 - `--all` does every registered workspace in one go, from anywhere.
 - `corgi agent hooks disable [--all]` removes only corgi's hooks, leaving your own alone.
+- Notifications land on the machine running corgi. For a push to your phone, set `notifyUrl` in the user agent config (an ntfy.sh topic you subscribe to works).
 
 ### `corgi pull`
 
