@@ -27,7 +27,8 @@ Examples:
   corgi test
   corgi test --service api
   corgi test --profile backend --json
-  corgi test --ensure-deps`,
+  corgi test --ensure-deps
+  corgi test --changed --base main   # only repos that differ from main`,
 	Run: runTestCmd,
 }
 
@@ -35,6 +36,8 @@ func init() {
 	rootCmd.AddCommand(testCmd)
 	testCmd.Flags().String("service", "", "Only run the test script for this service.")
 	testCmd.Flags().String("profile", "", "Narrow to services in this profile (comma-separated for a union) before selecting test scripts.")
+	testCmd.Flags().Bool("changed", false, "Only test services whose repo differs from --base (uncommitted work counts as changed).")
+	testCmd.Flags().String("base", "main", "Branch to compare against for --changed. Falls back to origin/<base>.")
 	testCmd.Flags().Bool(
 		"ensure-deps",
 		false,
@@ -102,6 +105,15 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 	sel, err := resolveSelection(corgi, serviceName, profile)
 	if err != nil {
 		exitWithError(utils.ErrServiceNotFound, err, 2)
+	}
+
+	if changed, _ := cmd.Flags().GetBool("changed"); changed {
+		base, _ := cmd.Flags().GetString("base")
+		sel = narrowToChangedServices(sel, base)
+		if len(sel.services) == 0 {
+			utils.Infof("no service repo differs from %s — nothing to test\n", base)
+			return
+		}
 	}
 
 	results, allPassed := runTests(corgi, sel, ensureDeps, readyTimeout)
@@ -265,4 +277,24 @@ func reportTestResults(results []testResult, allPassed bool) {
 		}
 	}
 	utils.Infof("\n%d passed, %d failed, %d skipped\n", passed, failed, skipped)
+}
+
+// narrowToChangedServices keeps the services whose repo differs from base. A
+// repo corgi cannot compare (no such base ref, not a checkout) is kept: a
+// silently skipped test reads exactly like a passing one.
+func narrowToChangedServices(sel selection, base string) selection {
+	var kept []utils.Service
+	var skipped []string
+	for _, service := range sel.services {
+		changed, known := utils.RepoChangedSince(service.AbsolutePath, base)
+		if !known || changed {
+			kept = append(kept, service)
+			continue
+		}
+		skipped = append(skipped, service.ServiceName)
+	}
+	if len(skipped) > 0 {
+		utils.Infof("unchanged vs %s, skipped: %s\n", base, strings.Join(skipped, ", "))
+	}
+	return selection{services: kept}
 }

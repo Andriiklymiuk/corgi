@@ -50,9 +50,15 @@ func ProbeAgentWork(dir string) *AgentWork {
 }
 
 // RepoState is one checkout's local git state: no forge, no network.
+// ProbeRepoState fills Branch and Dirty only; ReadRepoState fills the rest.
 type RepoState struct {
-	Branch string
-	Dirty  bool
+	Path     string `json:"path,omitempty"`
+	Branch   string `json:"branch"`
+	Dirty    bool   `json:"dirty"`
+	Head     string `json:"head,omitempty"`
+	Upstream string `json:"upstream,omitempty"`
+	Ahead    int    `json:"ahead,omitempty"`
+	Behind   int    `json:"behind,omitempty"`
 }
 
 // ProbeRepoState reads a checkout's branch and whether it holds uncommitted

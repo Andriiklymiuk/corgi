@@ -100,6 +100,14 @@ corgi create               # interactive yml editor
 corgi clean -i db          # stop+remove db containers (also: services, corgi_services, all)
 corgi pull                 # git pull in every service dir
 corgi checkout main        # every repo → main (or its own default branch), then pull
+corgi context --json       # one-call orientation: topology + health + every repo's branch/dirty
+corgi why api --json       # why one service is down: deps, port owner, exit code, env, log tail
+corgi logs --service api --wait-for "Listening on" --timeout 90s   # block, don't poll
+corgi checkpoint before-x  # mark every repo · corgi restore before-x puts it all back
+corgi test --changed       # only the repos that differ from --base
+corgi env api --explain DATABASE_URL     # which source won
+corgi events --follow --json             # lifecycle stream instead of polling status
+corgi run --isolate agent-a --detach     # own ports/db/containers; corgi leases lists them
 corgi version              # show installed version
 corgi --describe           # built-in: per-service JSON during parse; does NOT short-circuit. Use /corgi-describe for a rendered doc + Mermaid diagram
 ```

@@ -134,5 +134,11 @@ func init() {
 		false,
 		"Force interactive prompts even when no TTY/agent detected",
 	)
+	rootCmd.PersistentFlags().StringVar(
+		&utils.IsolateLease,
+		"isolate",
+		"",
+		"Run this workspace under a named lease: own port block, own database names, own containers",
+	)
 	rootCmd.SetVersionTemplate("corgi version {{.Version}}\nChangelog: https://github.com/Andriiklymiuk/corgi/releases/tag/v{{.Version}}\n")
 }
