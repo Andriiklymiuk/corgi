@@ -40,7 +40,7 @@ var (
 	restoreConfirmed bool
 )
 
-var checkpointNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+var checkpointNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 var checkpointCmd = &cobra.Command{
 	Use:   "checkpoint [name]",
@@ -116,6 +116,11 @@ func runCheckpoint(cmd *cobra.Command, args []string) {
 	for _, target := range checkpointTargets(corgi) {
 		repo, ok := captureRepo(target, name)
 		if !ok {
+			if state, isRepo := utils.ReadRepoState(target.path); isRepo && state.Dirty {
+				exitWithError(utils.ErrConfig,
+					fmt.Errorf("could not capture %s's uncommitted work; nothing was saved", target.name), 1)
+				return
+			}
 			continue
 		}
 		file.Repos = append(file.Repos, repo)
@@ -173,6 +178,7 @@ func captureRepo(target checkoutTarget, checkpoint string) (checkpointRepo, bool
 		sha, capErr := utils.CaptureWorkTree(target.path, checkpoint, target.name)
 		if capErr != nil {
 			utils.Infof("could not capture uncommitted work in %s: %v\n", target.name, capErr)
+			return checkpointRepo{}, false
 		}
 		repo.StashSha = sha
 	}
@@ -214,6 +220,10 @@ func snapshotCheckpointDatabases(corgi *utils.CorgiCompose, checkpoint string) [
 func runRestore(cmd *cobra.Command, args []string) {
 	mustLoadCorgiServices(cmd)
 	name := args[0]
+	if !checkpointNameRe.MatchString(name) {
+		exitWithError(utils.ErrUsage, fmt.Errorf("%q is not a checkpoint name", name), 2)
+		return
+	}
 
 	file, err := readCheckpoint(name)
 	if err != nil {
@@ -222,13 +232,17 @@ func runRestore(cmd *cobra.Command, args []string) {
 	}
 
 	safety := "restore-" + utils.DefaultSnapshotName(time.Now())
-	dirty := dirtyRepos(file.Repos)
-	if len(dirty) > 0 {
-		if !restoreConfirmed && !confirmRestore(dirty, safety) {
+	atRisk := reposAtRisk(file.Repos)
+	if len(atRisk) > 0 {
+		if !restoreConfirmed && !confirmRestore(atRisk, safety) {
 			utils.Info("nothing restored")
 			return
 		}
-		saveSafetyCheckpoint(file.Repos, safety)
+		if err := saveSafetyCheckpoint(file.Repos, safety); err != nil {
+			exitWithError(utils.ErrConfig,
+				fmt.Errorf("could not save the safety checkpoint, so nothing was restored: %v", err), 1)
+			return
+		}
 	}
 
 	var failures int
@@ -258,12 +272,30 @@ func dirtyRepos(repos []checkpointRepo) []string {
 	return dirty
 }
 
-func confirmRestore(dirty []string, safety string) bool {
-	utils.Info("these repos have uncommitted work right now:")
-	for _, name := range dirty {
+func reposAtRisk(repos []checkpointRepo) []string {
+	var at []string
+	for _, repo := range repos {
+		state, ok := utils.ReadRepoState(repo.Path)
+		if !ok {
+			continue
+		}
+		head, err := utils.RepoHead(repo.Path)
+		switch {
+		case state.Dirty:
+			at = append(at, repo.Name+" (uncommitted work)")
+		case err == nil && head != repo.Head:
+			at = append(at, repo.Name+" (commits made since the checkpoint)")
+		}
+	}
+	return at
+}
+
+func confirmRestore(atRisk []string, safety string) bool {
+	utils.Info("restoring discards the current state of these repos:")
+	for _, name := range atRisk {
 		utils.Info("  " + name)
 	}
-	utils.Infof("it will be captured as checkpoint %q first, then the trees are reset.\n", safety)
+	utils.Infof("tracked changes and current HEADs are saved as checkpoint %q first, then the trees are reset.\n", safety)
 	if utils.NonInteractive {
 		utils.Info("re-run with --yes to go ahead")
 		return false
@@ -272,19 +304,23 @@ func confirmRestore(dirty []string, safety string) bool {
 	return err == nil && answer == "yes, restore"
 }
 
-func saveSafetyCheckpoint(repos []checkpointRepo, safety string) {
+func saveSafetyCheckpoint(repos []checkpointRepo, safety string) error {
 	file := checkpointFile{Name: safety, CreatedAt: time.Now().UTC()}
 	for _, repo := range repos {
 		captured, ok := captureRepo(checkoutTarget{name: repo.Name, path: repo.Path}, safety)
-		if ok {
-			file.Repos = append(file.Repos, captured)
+		if !ok {
+			if state, isRepo := utils.ReadRepoState(repo.Path); isRepo && state.Dirty {
+				return fmt.Errorf("could not capture %s's uncommitted work", repo.Name)
+			}
+			continue
 		}
+		file.Repos = append(file.Repos, captured)
 	}
 	if err := writeCheckpoint(file); err != nil {
-		utils.Infof("could not save the safety checkpoint: %v\n", err)
-		return
+		return err
 	}
 	utils.Infof("saved current state as checkpoint %q\n", safety)
+	return nil
 }
 
 func restoreCheckpointDatabases(file checkpointFile) {
@@ -336,6 +372,10 @@ func dbSuffix(file checkpointFile) string {
 func runCheckpointRemove(cmd *cobra.Command, args []string) {
 	mustLoadCorgiServices(cmd)
 	name := args[0]
+	if !checkpointNameRe.MatchString(name) {
+		exitWithError(utils.ErrUsage, fmt.Errorf("%q is not a checkpoint name", name), 2)
+		return
+	}
 	file, err := readCheckpoint(name)
 	if err != nil {
 		exitWithError(utils.ErrConfig, err, 1)
@@ -370,6 +410,9 @@ func writeCheckpoint(file checkpointFile) error {
 
 func readCheckpoint(name string) (checkpointFile, error) {
 	var file checkpointFile
+	if !checkpointNameRe.MatchString(name) {
+		return file, fmt.Errorf("%q is not a checkpoint name", name)
+	}
 	data, err := os.ReadFile(checkpointPath(name))
 	if err != nil {
 		return file, fmt.Errorf("no checkpoint named %q (corgi checkpoint list)", name)
