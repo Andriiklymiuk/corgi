@@ -108,16 +108,12 @@ func runAgentHooksEnable(cmd *cobra.Command, _ []string) {
 
 func printNotifyUrlHelp() {
 	utils.Info("")
-	utils.Info("these reach this machine only. for a push to your phone, set notifyUrl in:")
-	utils.Infof("  %s\n", agentUserConfigPath(agentDirOrEmpty()))
+	utils.Info("these reach this machine only. to also get them on your phone:")
 	utils.Info("")
-	utils.Info("  telegram   https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>")
-	utils.Info("             @BotFather → /newbot for <TOKEN>; message the bot once, then")
-	utils.Info("             open https://api.telegram.org/bot<TOKEN>/getUpdates for <ID>")
-	utils.Info("  slack      https://hooks.slack.com/services/...   (channel → Incoming Webhooks)")
-	utils.Info("  discord    https://discord.com/api/webhooks/...   (channel → Integrations)")
+	utils.Info("  corgi agent notify telegram --token <TOKEN>   # @BotFather → /newbot")
+	utils.Info("  corgi agent notify set <slack-or-discord-webhook-url>")
 	utils.Info("")
-	utils.Info("  then: corgi agent restart. keep the url private — it can post as you.")
+	utils.Info("  then: corgi agent restart")
 }
 
 func wantsTurnHook(cmd *cobra.Command) bool {

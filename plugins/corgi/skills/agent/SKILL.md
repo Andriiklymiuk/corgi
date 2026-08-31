@@ -174,33 +174,36 @@ free. corgi picks the payload from the host, so free destinations exist:
 | `hooks.slack.com` | `{"text"}` | yes |
 | anything else | ntfy shape (body + `Title`/`Click` headers) | only self-hosted |
 
-**Telegram, the free path — walk them through it, do not do it for them.** The
-token is a credential and the steps happen in their Telegram app:
+**Telegram is set up by one command — do not walk them through getUpdates.**
 
-1. Message **@BotFather** in Telegram, send `/newbot`, follow it, copy the token.
-2. Send any message to the new bot (a bot cannot start the conversation).
-3. Open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `result[0].message.chat.id`.
-4. Put both in the trusted user config — never in `.corgi/agent.yml`, which is
-   committed:
-
-```yaml
-# ~/Library/Application Support/corgi/agent/config.yml  (macOS)
-# ~/.config/corgi/agent/config.yml                      (Linux)
-notifyUrl: "https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>"
+```bash
+corgi agent notify telegram --token <TOKEN>
+corgi agent restart
 ```
 
-5. `corgi agent restart`, then `corgi config notifications test` to prove it.
+It validates the token, waits while they message the bot, resolves the chat id,
+writes `notifyUrl` and sends a test. Their part is only: message **@BotFather**,
+`/newbot`, copy the token, then message the new bot when the command asks.
 
-corgi reads `chat_id` out of the URL and copies it into the body, so the full
-`sendMessage` URL works exactly as pasted. `corgi agent doctor` reports whether
-`notifyUrl` parses.
+**Never ask for the token in chat and never echo one back.** It is a credential;
+it belongs in that command's flag and nowhere else. If one has been pasted
+somewhere, tell them to `/revoke` in @BotFather — the chat id survives.
 
-**Discord instead**, if they have a server: channel → Integrations → New Webhook
-→ copy URL → same `notifyUrl` field. Nothing else changes.
+**Slack or Discord**: `corgi agent notify set <webhook-url>`.
+
+`corgi agent notify show` prints the destination with the secret masked, and
+`corgi agent notify test` posts to it.
 
 **Treat the URL as a secret.** A Telegram bot token lets anyone post as that bot;
 an ntfy topic anyone knows is readable by them. Never echo the configured value
 back into a transcript, a commit, or a PR.
+
+**Two traps worth naming unprompted**, because both look like a broken webhook:
+
+- The daemon attaches the webhook **at startup**, so a `notifyUrl` written while
+  it is running reaches nothing until `corgi agent restart`.
+- `corgi notifications test` only fires the **desktop** notification. The one
+  that posts to the URL is `corgi agent notify test`.
 
 **On the laptop itself**, a desktop toast is clickable when `terminal-notifier`
 is installed (`brew install terminal-notifier`) — it opens that workspace's

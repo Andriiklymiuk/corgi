@@ -199,21 +199,37 @@ the host, so point it at whatever you already have:
 notifyUrl: https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>
 ```
 
-**Telegram** is the free option on iOS. Message **@BotFather**, send `/newbot`
-and copy the token; message your new bot once (a bot cannot open the
-conversation), then open `https://api.telegram.org/bot<TOKEN>/getUpdates` and
-copy `result[0].message.chat.id`. corgi lifts `chat_id` out of the URL into the
-request body, so the full `sendMessage` URL works as pasted.
+**Telegram** is the free option on iOS, and corgi sets it up for you:
+
+```bash
+corgi agent notify telegram --token <TOKEN>   # from @BotFather → /newbot
+```
+
+It checks the token, waits while you message the bot (a bot cannot open the
+conversation), reads the chat id out of that message, writes `notifyUrl` and
+sends a test. `--chat-id` skips the wait if you already know it.
 
 **Slack** is a channel's Incoming Webhook URL, **Discord** a channel →
-Integrations → New Webhook URL. Anything else gets the ntfy shape (body as
-plain text, title in the `Title` header), which suits a **self-hosted** ntfy —
-the ntfy.sh iOS app itself is paid, Android is free.
+Integrations → New Webhook URL — `corgi agent notify set <url>` for either.
+Anything else gets the ntfy shape (body as plain text, title in the `Title`
+header), which suits a **self-hosted** ntfy — the ntfy.sh iOS app itself is
+paid, Android is free.
 
-Restart the daemon after changing it, then `corgi config notifications test`.
+```bash
+corgi agent notify show   # what is configured, secret masked
+corgi agent notify test   # send one to that destination now
+corgi agent restart       # a running daemon reads notifyUrl at startup
+```
+
+**The restart is the step people miss.** The webhook is attached when the daemon
+starts, so a `notifyUrl` written under a running daemon reaches nothing until it
+is restarted. Note also that `corgi notifications test` only exercises the
+**desktop** path — `corgi agent notify test` is the one that posts to the URL.
+
 Trusted config only: the URL receives restart reasons, so a committed repo file
 can never set it. Treat the value as a secret — a Telegram token lets anyone
-post as that bot.
+post as that bot, so never paste it into a chat, a commit or an issue. If one
+leaks, `/revoke` in @BotFather issues a new one; the chat id does not change.
 
 ### The timeline
 

@@ -115,10 +115,11 @@ func sendNotification(title, body string) {
 				"-title", title,
 				"-message", body,
 				"-group", "com.andriiklymiuk.corgi",
-				"-sender", "com.apple.Terminal",
 			}
 			if link := safeNotifyLink(notifyLink); link != "" {
 				args = append(args, "-open", link)
+			} else {
+				args = append(args, "-sender", "com.apple.Terminal")
 			}
 			cmd = exec.Command(path, args...)
 			_ = cmd.Run()

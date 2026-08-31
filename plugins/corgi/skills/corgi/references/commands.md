@@ -387,7 +387,17 @@ Writes two Claude Code hooks into the repo's `.claude/settings.local.json` (neve
 - Only the permission prompt notifies by default. `--turns` adds one on every finished turn — noisy once several workspaces are busy, so it is opt-in. Re-running without `--turns` takes it back out.
 - `--all` does every registered workspace in one go, from anywhere.
 - `corgi agent hooks disable [--all]` removes only corgi's hooks, leaving your own alone.
-- Notifications land on the machine running corgi; on macOS with `terminal-notifier` a click opens that workspace's session. For a push to your phone set `notifyUrl` — the payload is chosen from the host, so a Discord, Slack or Telegram webhook works as well as ntfy (which matters because ntfy's iOS app is paid).
+- Notifications land on the machine running corgi; on macOS with `terminal-notifier` a click opens that workspace's session.
+
+### `corgi agent notify`
+
+Where notifications go when you are away from the machine. Without it they stop at the laptop.
+
+- `corgi agent notify telegram --token <TOKEN>` — the whole setup: validates the token, waits while you message the bot, resolves the chat id, writes `notifyUrl`, sends a test. `--chat-id` skips the wait.
+- `corgi agent notify set <url>` — a Slack or Discord webhook (or a self-hosted ntfy topic). The payload is chosen from the host.
+- `corgi agent notify show` — the destination with its secret masked. `corgi agent notify test` posts to it.
+- **`corgi agent restart` after any change** — the daemon attaches the webhook at startup.
+- `corgi notifications test` is the *desktop* path only; it never posts to the URL.
 
 ### `corgi pull`
 
