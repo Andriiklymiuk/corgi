@@ -764,9 +764,13 @@ const launcherPageHTML = `<!doctype html>
   .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.5rem;line-height:1.45}
   .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
   .dot.on{background:var(--green)}
-  .meta{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.3rem;font-size:.72rem;color:var(--dim2)}
+  .meta{display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;margin-top:.25rem;
+      font-size:.73rem;color:var(--dim2)}
+  .meta span + span::before{content:"\00b7";color:var(--dim2);margin-right:.4rem}
   .meta .live{color:var(--green)}
   .meta .why{color:var(--dim)}
+  .usage{font-size:.68rem;color:var(--dim2);margin-top:.15rem;
+      font-variant-numeric:tabular-nums;opacity:.85}
   .actions{display:flex;align-items:center;gap:.4rem;margin-top:.65rem;flex-wrap:wrap}
   .startbox{flex-basis:100%;display:none;gap:.4rem;margin-top:.5rem}
   .startbox.on{display:flex}
@@ -822,13 +826,20 @@ const launcherPageHTML = `<!doctype html>
   .err{color:var(--red)}
   code{background:var(--card);border:1px solid var(--line);padding:.1rem .35rem;border-radius:.35rem;font-size:.85em}
   .tips{margin:1.5rem 0 0;background:var(--card);border:1px solid var(--line);border-radius:.75rem;
-      padding:var(--sp3)}
-  .tips h2{font-size:.64rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-      color:var(--dim2);margin:0 0 var(--sp2)}
+      padding:0 var(--sp3)}
+  .tips summary{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
+      list-style:none;cursor:pointer;padding:var(--sp3) 0;
+      font-size:.64rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim2)}
+  .tips summary::-webkit-details-marker{display:none}
+  .tips-hint{text-transform:none;letter-spacing:0;font-weight:400;font-size:.72rem;color:var(--dim2)}
+  .tips[open] .tips-hint::after{content:" \2303"}
+  .tips:not([open]) .tips-hint::after{content:" \2304"}
+  .tips > .tip:first-of-type{border-top:1px solid var(--hair);padding-top:var(--sp3)}
+  .tips[open]{padding-bottom:var(--sp3)}
   .tip{display:flex;flex-direction:column;align-items:stretch;gap:.15rem;width:100%;text-align:left;
       background:none;border:0;border-top:1px solid var(--hair);border-radius:0;
       padding:var(--sp3) 0 var(--sp2);margin:0;cursor:pointer;font-family:inherit}
-  .tips .tip:first-of-type{border-top:0;padding-top:0}
+
   .tip-t{font-size:.84rem;font-weight:600;color:var(--text);letter-spacing:-.005em}
   .tip-d{font-size:.75rem;color:var(--dim);line-height:1.5}
   .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
@@ -862,8 +873,13 @@ const launcherPageHTML = `<!doctype html>
 </header>
 <main>
   <div id="list" class="msg">Loading…</div>
-  <section class="tips" id="tips" hidden>
-    <h2>On the laptop</h2>
+  <details class="tips" id="tips" hidden>
+    <summary><span>On the laptop</span><span class="tips-hint">setup commands</span></summary>
+    <button class="tip" data-copy="/corgi-remote">
+      <span class="tip-t">Set it all up, guided</span>
+      <span class="tip-d">With the corgi plugin installed, this skill walks Claude Code through registering the repo, the tunnel and login start.</span>
+      <span class="tip-cmd"><code>/corgi-remote</code><span class="tip-copy">COPY</span></span>
+    </button>
     <button class="tip" data-copy="corgi agent init">
       <span class="tip-t">Add another repo</span>
       <span class="tip-d">Run it inside any git repo and it joins this list.</span>
@@ -884,8 +900,13 @@ const launcherPageHTML = `<!doctype html>
       <span class="tip-d">Starts corgi at login, so this page still works when you are away from the desk.</span>
       <span class="tip-cmd"><code>corgi agent install</code><span class="tip-copy">COPY</span></span>
     </button>
-    <p class="tipnote" id="tipmsg">Tap a card to copy the command.</p>
-  </section>
+    <button class="tip" data-copy="corgi agent hooks enable">
+      <span class="tip-t">Tell me when a session needs me</span>
+      <span class="tip-d">A session waiting on a permission prompt is invisible from here. This makes it notify instead.</span>
+      <span class="tip-cmd"><code>corgi agent hooks enable</code><span class="tip-copy">COPY</span></span>
+    </button>
+    <p class="tipnote" id="tipmsg">Tap a row to copy its command.</p>
+  </details>
 
   <details class="settings" id="settings" hidden>
     <summary>Settings</summary>
@@ -974,6 +995,10 @@ const launcherPageHTML = `<!doctype html>
   function initTips() {
     const box = document.getElementById('tips');
     box.hidden = false;
+    try { box.open = localStorage.getItem('corgi_tips_open') === '1'; } catch {}
+    box.addEventListener('toggle', () => {
+      try { localStorage.setItem('corgi_tips_open', box.open ? '1' : '0'); } catch {}
+    });
     const msg = document.getElementById('tipmsg');
     for (const tip of box.querySelectorAll('.tip')) {
       tip.onclick = async () => {
@@ -1129,6 +1154,8 @@ const launcherPageHTML = `<!doctype html>
       main.appendChild(path);
       const meta = metaLine(ws);
       if (meta) main.appendChild(meta);
+      const usage = usageLine(ws);
+      if (usage) main.appendChild(usage);
       head.appendChild(main);
       if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
         head.appendChild(openControl(ws));
@@ -1228,22 +1255,31 @@ const launcherPageHTML = `<!doctype html>
   function metaLine(ws) {
     const bits = [];
     if (ws.live > 0) bits.push('<span class="live">' + ws.live + ' live</span>');
-    if (ws.usage && ws.usage.week) {
-      const t = ws.usage.today, w = ws.usage.week;
-      const sum = u => (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
-      bits.push('<span title="tokens today / this week">' + fmtTokens(sum(t)) + ' today · ' + fmtTokens(sum(w)) + ' this week</span>');
-    }
     const e = ws.lastEvent;
     if (e && !(ws.running && e.kind === 'started')) {
-      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' · ' + esc(e.cause) : '')
+      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + esc(e.cause) : '')
         : e.kind === 'attention' ? 'needs you'
         : esc(e.kind);
-      bits.push('<span class="why">' + what + ' · ' + esc(fmtWhen(e.at)) + '</span>');
+      bits.push('<span class="why">' + what + ' ' + esc(fmtWhen(e.at)) + '</span>');
     }
     if (!bits.length) return null;
     const el = document.createElement('div');
     el.className = 'meta';
-    el.innerHTML = bits.join('<span>·</span>');
+    el.innerHTML = bits.join('');
+    return el;
+  }
+
+  // Token totals are context, not status: they go on their own quiet line so the
+  // status line above them never wraps into an orphaned separator.
+  function usageLine(ws) {
+    if (!ws.usage || !ws.usage.week) return null;
+    const sum = u => (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
+    const week = sum(ws.usage.week);
+    if (!week) return null;
+    const el = document.createElement('div');
+    el.className = 'usage';
+    el.title = 'tokens today / this week';
+    el.textContent = fmtTokens(sum(ws.usage.today)) + ' today \u00b7 ' + fmtTokens(week) + ' this week';
     return el;
   }
 
