@@ -1140,15 +1140,18 @@ const launcherPageHTML = `<!doctype html>
         localOnly++;
         renderLocal(sess.name || 'session', when);
       }
+      let bridgeRows = 0;
+      let bridgeHidden = 0;
       for (const url of bridges) {
         if (seen.has(url)) continue;
-        if (!showB) continue;
+        if (!showB) { bridgeHidden++; continue; }
         seen.add(url);
+        bridgeRows++;
         renderLink(url, { bridge: true });
       }
       if (localOnly) note('local only = running on the laptop with no web link yet; type /remote-control in that session to reach it from here.');
-      if (showB && bridges.length) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
-      if (!showB && bridges.length) note(bridges.length + ' bridge session' + (bridges.length > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
+      if (bridgeRows) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
+      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
 
       if (older.length) {
         group('earlier \u00b7 not running');
