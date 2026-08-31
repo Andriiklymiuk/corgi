@@ -186,6 +186,34 @@ This is what lets one agent run an isolated branch while another runs `main`, or
 multi-service story verify a producer from its worktree without committing to the
 main checkout.
 
+## Put every repo back on a branch
+
+`corgi checkout [branch]` switches the workspace repo and every service repo to
+`<branch>` and fast-forwards it (`git pull --ff-only`). A repo without that branch
+falls back to its own default branch (`origin/HEAD`), so `corgi checkout main`
+still lands next to a repo whose trunk is `master`. Omit `<branch>` to send every
+repo to its own default branch.
+
+Safety: a repo with uncommitted changes is skipped, never clobbered (`--allow-dirty`
+tries anyway; git still refuses an unsafe switch). Exit is **1** if any repo failed.
+
+```bash
+corgi checkout main --json
+```
+
+```json
+[
+  { "name": "workspace", "path": "/ws", "branch": "main", "status": "up-to-date" },
+  { "name": "api", "path": "/ws/corgi_services/api", "branch": "main", "status": "updated" },
+  { "name": "web", "path": "/ws/corgi_services/web", "branch": "master", "status": "up-to-date", "usedDefaultBranch": true },
+  { "name": "mobile", "path": "/ws/corgi_services/mobile", "status": "skipped", "message": "uncommitted changes; commit or stash them, or pass --allow-dirty" }
+]
+```
+
+`status` is `updated`, `up-to-date`, `skipped`, or `failed`. Other flags:
+`--service <list>` (only these services; also leaves the workspace repo alone) and
+`--skip-workspace`.
+
 ## Exit codes
 
 | Code | Meaning |

@@ -354,6 +354,8 @@ func registerCompletions() {
 	_ = testCmd.RegisterFlagCompletionFunc("service", completeServices)
 	_ = testCmd.RegisterFlagCompletionFunc("profile", completeProfiles)
 
+	_ = checkoutCmd.RegisterFlagCompletionFunc("service", completeServices)
+
 	_ = forkCmd.RegisterFlagCompletionFunc("service", completeServices)
 	_ = forkCmd.RegisterFlagCompletionFunc("gitProvider", completeGitProvider)
 

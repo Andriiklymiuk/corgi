@@ -341,6 +341,19 @@ Manage the worktrees corgi creates for `run/exec/test --service-branch` (under `
 
 `git pull` in every service directory. No flags.
 
+### `corgi checkout [branch]` (alias: `co`)
+
+Puts the workspace repo and every service repo on `<branch>`, then `git pull --ff-only`. Branch name is free-form — `main`, `trunk`, `develop`.
+
+- A repo without that branch falls back to its own default branch (`origin/HEAD`), so one command lands across repos that disagree on the trunk name. The row says `(default branch)`.
+- A repo with uncommitted changes is **skipped**, never clobbered. `--allow-dirty` tries anyway (git still refuses an unsafe switch).
+- A repo that has neither the branch nor a resolvable default is reported `failed`; the command exits **1** if anything failed.
+- Omit `<branch>` to send every repo to its own default branch.
+- Two services in one repo: the repo is done once, the rest are `skipped: same repo as <name>`.
+- `--service <list>` — only these services (repeatable or comma separated); also leaves the workspace repo alone.
+- `--skip-workspace` — leave the repo holding `corgi-compose.yml` on its current branch.
+- `--json` — one row per repo (`name`, `path`, `branch`, `status`, `usedDefaultBranch`, `message`); `status` is `updated` / `up-to-date` / `skipped` / `failed`.
+
 ### `corgi script` (aliases: `scripts`, `commands`, `asdf`, `asd`)
 
 Run named scripts declared under `services.<name>.scripts`.

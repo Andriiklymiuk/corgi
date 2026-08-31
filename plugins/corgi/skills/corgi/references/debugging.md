@@ -123,6 +123,7 @@ See repo-root `docs/tunnel.md` for full provider matrix + Quick Tunnel limitatio
 
 - `corgi clean -i corgi_services` — regenerates all the docker-compose/Makefile artifacts from templates. Safe, non-destructive to cloned service repos.
 - `corgi pull` — pulls latest in every service dir. Does not touch corgi itself.
+- `corgi checkout main` — every repo back on `main` (or its own default branch) + pull. Skips repos with uncommitted work.
 - `corgi upgrade` — upgrade corgi binary via Homebrew.
 
 ## When you've tried everything
