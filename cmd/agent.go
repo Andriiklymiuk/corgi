@@ -140,16 +140,30 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.NotifyUrl != "" {
 		hook := webhookNotifier(user.NotifyUrl, nil)
-		if hook == nil {
+		linked := webhookLinkNotifier(user.NotifyUrl, nil)
+		if hook == nil || linked == nil {
 			utils.Infof("⚠ notifyUrl %q is not a usable http(s) URL — webhook notifications are off\n", user.NotifyUrl)
-		} else if n := combinedNotifier(d.Notify, hook); n != nil {
-			d.Notify = n
+		} else {
+			if n := combinedNotifier(d.Notify, hook); n != nil {
+				d.Notify = n
+			}
+			desktop := d.NotifyWithLink
+			d.NotifyWithLink = func(title, body, link string) {
+				if desktop != nil {
+					desktop(title, body, link)
+				}
+				linked(title, body, link)
+			}
 		}
 	}
 	printStartupDiagnostics(configs)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil {
+		startTelegramControl(ctx, user.NotifyUrl, dir)
+	}
 
 	if err := d.Run(ctx, configs); err != nil && !errors.Is(err, context.Canceled) {
 		exitWithError("agent_serve", err, 1)

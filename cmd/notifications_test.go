@@ -124,8 +124,11 @@ func TestRunNotifications_OffDisables(t *testing.T) {
 func TestRunNotifications_TestActionDispatches(t *testing.T) {
 	withTempHome(t)
 	out := captureStdout(t, func() { runNotifications(&cobra.Command{}, []string{"test"}) })
-	if !strings.Contains(out, "Test notification") {
-		t.Errorf("expected 'Test notification' in output, got: %q", out)
+	if !strings.Contains(out, "Desktop notification dispatched") {
+		t.Errorf("expected the desktop dispatch line, got: %q", out)
+	}
+	if !strings.Contains(out, "corgi agent notify") {
+		t.Errorf("it must say which command posts to the webhook, got: %q", out)
 	}
 }
 

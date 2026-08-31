@@ -46,11 +46,28 @@ func webhookNotifier(rawURL string, client *http.Client) func(title, body string
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
+	linked := webhookLinkNotifier(rawURL, client)
+	if linked == nil {
+		return nil
+	}
+	return func(title, body string) {
+		linked(title, body, launcherURL())
+	}
+}
+
+func webhookLinkNotifier(rawURL string, client *http.Client) func(title, body, link string) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
 	target := u.String()
 	shape := webhookShapeFor(u.Host)
-	return func(title, body string) {
+	return func(title, body, link string) {
 		go func() {
-			req, err := buildNotifyRequest(shape, target, title, body, launcherURL())
+			req, err := buildNotifyRequest(shape, target, title, body, link)
 			if err != nil {
 				return
 			}

@@ -44,7 +44,8 @@ func runNotifications(cmd *cobra.Command, args []string) {
 		writeNotificationsPref(false)
 	case "test":
 		utils.NotifyRaw("corgi 🐶", "Test notification — if you see this, OS-level notifications work.")
-		fmt.Println("Test notification dispatched. Nothing shown? Check OS notification permissions for your terminal app.")
+		fmt.Println("Desktop notification dispatched. Nothing shown? Check OS notification permissions for your terminal app.")
+		reportNotifyDestination()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown action %q — use one of: on, off, test\n", args[0])
 		exitProcess(2)
@@ -85,4 +86,18 @@ func writeNotificationsPref(enabled bool) {
 	dir, _ := utils.GetUserConfigDir()
 	fmt.Printf("%s✅ Notifications %s%s\n", art.GreenColor, state, art.WhiteColor)
 	fmt.Printf("   Saved to %s\n", filepath.Join(dir, "config.yml"))
+}
+
+func reportNotifyDestination() {
+	target, path := configuredNotifyURL()
+	if target == "" {
+		fmt.Println()
+		fmt.Println("This tests the desktop only. Notifications from the agent stop at this")
+		fmt.Println("machine until notifyUrl is set:  corgi agent notify telegram --token <TOKEN>")
+		return
+	}
+	fmt.Println()
+	fmt.Printf("Agent notifications also POST to %s.\n", maskNotifyURL(target))
+	fmt.Println("Send one there with: corgi agent notify test")
+	fmt.Printf("A running daemon reads %s at startup — restart it after changing that file.\n", path)
 }
