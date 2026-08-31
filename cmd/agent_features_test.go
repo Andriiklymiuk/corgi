@@ -240,7 +240,7 @@ func TestMcpSessionEventsReturnsTimeline(t *testing.T) {
 	}
 }
 
-func TestSessionHistoryCapsAtTwenty(t *testing.T) {
+func TestSessionHistoryCapsAtMax(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", dir)
 	agentD, _ := agentDir()
@@ -248,8 +248,26 @@ func TestSessionHistoryCapsAtTwenty(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		log.Append("acme", events.Event{Kind: "session", URL: fmt.Sprintf("https://claude.ai/code/session_%02d", i)})
 	}
-	if got := sessionHistory("acme"); len(got) != 20 {
-		t.Errorf("history = %d entries, cap is 20", len(got))
+	if got := sessionHistory("acme"); len(got) != sessionHistoryMax {
+		t.Errorf("history = %d entries, cap is %d", len(got), sessionHistoryMax)
+	}
+}
+
+func TestSessionHistoryDropsAgedOutSessions(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	agentD, _ := agentDir()
+	log := events.NewLog(agentD)
+	log.Append("acme", events.Event{
+		Kind: "session",
+		URL:  "https://claude.ai/code/session_old",
+		At:   time.Now().Add(-sessionHistoryAge - time.Hour),
+	})
+	log.Append("acme", events.Event{Kind: "session", URL: "https://claude.ai/code/session_new"})
+
+	got := sessionHistory("acme")
+	if len(got) != 1 || got[0].URL != "https://claude.ai/code/session_new" {
+		t.Fatalf("history = %+v, want only the recent session", got)
 	}
 }
 

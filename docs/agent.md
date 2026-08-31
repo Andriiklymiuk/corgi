@@ -13,10 +13,13 @@ you actually want:
 
 1. **It is not always on.** Its docs are explicit: *"If you close the terminal,
    quit VS Code, or otherwise stop the `claude` process, the session goes
-   offline"*, and *"if your machine is awake but unable to reach the network for
-   more than roughly 10 minutes, the session times out and the process exits"*.
-   So you have to remember to arm it — and forgetting is the failure this exists
-   to remove.
+   offline"*. An extended network outage ends it too — in server mode, the one
+   corgi supervises, *"Claude Code gives up after roughly 10 minutes and the
+   `claude remote-control` process exits"* (an interactive session instead
+   retries for as long as the outage lasts). Either way you have to remember to
+   arm it again — and forgetting is the failure this exists to remove. Check the
+   [Remote Control docs](https://code.claude.com/docs/en/remote-control) for the
+   current wording; the exact deadlines move.
 2. **It sees one directory.** A corgi stack is several repositories, databases,
    and the env wiring between them. Remote Control sees none of that.
 
