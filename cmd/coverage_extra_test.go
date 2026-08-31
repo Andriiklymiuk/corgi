@@ -35,8 +35,6 @@ func runRoot(t *testing.T, args ...string) {
 	}
 }
 
-// --- autopilot.go: pure renderers + the cobra command paths ---
-
 func TestPrintAutopilotStatus(t *testing.T) {
 	// No heartbeat yet.
 	out := captureStdout(t, func() {
@@ -102,8 +100,6 @@ func TestAutopilotCommandsViaCobra(t *testing.T) {
 		t.Fatalf("expected an autopilot state file: %v", err)
 	}
 }
-
-// --- memory.go: human + json branches (no os.Exit paths) ---
 
 func TestMemoryListHumanAndTypeFilter(t *testing.T) {
 	dir := t.TempDir()
@@ -174,8 +170,6 @@ func TestMemoryLintWarnsOnDanglingLink(t *testing.T) {
 	}
 }
 
-// --- suggest_history.go: human output, config, --workspace, cooldown default ---
-
 func TestSuggestHistoryHumanFlows(t *testing.T) {
 	withTempHome(t)
 	dir := t.TempDir()
@@ -231,8 +225,6 @@ func TestSuggestHistoryWorkspaceFlag(t *testing.T) {
 		t.Fatalf("--workspace state file not written under %s: %v", ws, err)
 	}
 }
-
-// --- missioncontrol.go: label parsing, the agent-work prober, command path ---
 
 func TestLabelToNameKind(t *testing.T) {
 	cases := []struct {

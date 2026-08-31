@@ -4,15 +4,13 @@ package utils
 
 import "syscall"
 
-// PidAlive reports whether pid is a live process still owned by corgi. The bare
-// kill(pid,0) check isn't enough: after a detached service exits the OS recycles
-// its PID, and signaling that recycled pgid would hit an unrelated process group.
+// PidAlive reports whether pid is a live process still owned by corgi.
 //
-// Detached procs are process-group leaders (Setpgid → pgid==pid), so we confirm
-// pid is still its own group leader. That survives the child exec'ing into
-// another binary (npm→node) yet rejects a recycled pid, which is almost never a
-// group leader. Unreadable pgid → assume alive (safe: at worst we orphan).
-// command is unused here; kept for signature/back-compat.
+// kill(pid,0) alone is not enough: a recycled PID would make corgi signal an
+// unrelated process group. Detached procs are group leaders (Setpgid), so pid
+// must still be its own — that survives npm exec'ing into node but rejects a
+// recycled pid. Unreadable pgid assumes alive; at worst corgi orphans it.
+// command is unused, kept for back-compat.
 func PidAlive(pid int, command string) bool {
 	if pid <= 0 {
 		return false

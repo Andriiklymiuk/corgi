@@ -198,8 +198,6 @@ func TestPairEndpointRefusedWhenTheWindowIsClosed(t *testing.T) {
 	}
 }
 
-// --- device-token auth ---
-
 func pairedToken(t *testing.T, storeDir, device string) string {
 	t.Helper()
 	store := pairing.StorePath(storeDir)

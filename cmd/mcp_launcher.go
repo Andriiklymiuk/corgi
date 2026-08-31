@@ -23,18 +23,14 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// The launcher is corgi's own phone UI: after pairing, the same browser page
-// lists the machine's workspaces and starts a session in one tap, then hands
-// back the claude.ai link. It needs no claude.ai custom connector — the page
-// holds the device token and calls these endpoints directly:
+// corgi's own phone UI: after pairing the browser page lists workspaces and
+// starts a session in one tap, no claude.ai connector needed.
 //
 //   GET  /app                 the launcher page (static; uses the stored token)
 //   GET  /launch/workspaces   list workspaces with running state + sessionUrl
 //   POST /launch/start        {workspace, profile?} → start a session
 //
-// /launch/* sit behind the same bearer/device-token auth as /mcp, and start is
-// the same capability as corgi_session_start — no new power, just a browser
-// transport. /app is static and carries no secret.
+// /launch/* sits behind the same auth as /mcp and grants no new capability.
 
 // launchWorkspace is one row in the launcher list.
 type launchWorkspace struct {

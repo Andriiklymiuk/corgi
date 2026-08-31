@@ -15,8 +15,6 @@ func prependPATH(t *testing.T, bin string) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// --- dbdump.go: RunPgDump / RunPgSeed via fake binaries on PATH ---
-
 func TestRunPgDump(t *testing.T) {
 	db := DatabaseService{Host: "h", Port: 5432, User: "u", DatabaseName: "app", Password: "p"}
 
@@ -96,8 +94,6 @@ func TestMergeEnv(t *testing.T) {
 	}
 }
 
-// --- agentwork.go: GitLab MR probe + CI rollup ---
-
 func TestProbeAgentWork_GitlabMR(t *testing.T) {
 	bin := t.TempDir()
 	writeFakeBin(t, bin, "git", `
@@ -160,8 +156,6 @@ func TestRollupCI(t *testing.T) {
 		}
 	}
 }
-
-// --- validate.go: AbortOnValidationErrors + duplicate-key branch ---
 
 func TestAbortOnValidationErrors_Clean(t *testing.T) {
 	clean := &CorgiCompose{Services: []Service{{ServiceName: "api", Port: 3000, Start: []string{"x"}}}}
@@ -233,8 +227,6 @@ func TestCheckDuplicateNames_DuplicateKeys(t *testing.T) {
 		t.Fatalf("a duplicate decode key must surface E_DUPLICATE_NAME, got %v", codesOf(issues))
 	}
 }
-
-// --- memory.go: error and edge paths ---
 
 func TestMemoryHelperFallbacks(t *testing.T) {
 	if typeForDir("unknown-dir") != "" {
@@ -318,8 +310,6 @@ func TestRenderIndexIncludesService(t *testing.T) {
 	}
 }
 
-// --- autopilotstate.go: write failure when the parent isn't a directory ---
-
 func TestWriteAutopilotStateMkdirFails(t *testing.T) {
 	fileAsParent := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(fileAsParent, []byte("x"), 0o644); err != nil {
@@ -332,8 +322,6 @@ func TestWriteAutopilotStateMkdirFails(t *testing.T) {
 	}
 }
 
-// --- output.go: ConsoleOut honors the override ---
-
 func TestConsoleOutUsesOverride(t *testing.T) {
 	var buf bytes.Buffer
 	SetConsoleOverride(&buf)
@@ -345,8 +333,6 @@ func TestConsoleOutUsesOverride(t *testing.T) {
 		t.Fatalf("ConsoleOut did not route to the override: %q", buf.String())
 	}
 }
-
-// --- config.go: small direct-call edges ---
 
 func TestDetectDuplicateComposeKeysEdges(t *testing.T) {
 	// A top-level sequence (not a mapping) yields no duplicates.
@@ -379,8 +365,6 @@ func TestServiceRepoDir(t *testing.T) {
 		t.Errorf("ServiceRepoDir = %q, want %q", got, want)
 	}
 }
-
-// --- suggesthistory.go: parse errors, version default, nil guards ---
 
 func TestLoadSuggestHistory_MalformedJSON(t *testing.T) {
 	root := t.TempDir()

@@ -9,13 +9,10 @@ import (
 // readinessPollInterval is how often readiness probes retry while waiting.
 const readinessPollInterval = 500 * time.Millisecond
 
-// readinessProbeTimeout is how long one probe may take before it counts as a
-// failure. Deliberately far longer than the poll interval: a dev server does
-// real work on its first request — Vite pre-bundles dependencies, Metro builds
-// a bundle, Nest warms up — and on a machine busy starting a whole stack that
-// easily takes seconds. Timing out in half a second reports a healthy service
-// as down.
-// ReadinessProbeTimeout is exported so status probes share the same tolerance.
+// ReadinessProbeTimeout is how long one probe may take before it counts as a
+// failure, deliberately far longer than the poll interval: a dev server does
+// real work on its first request (Vite pre-bundling, Metro building), so a short
+// timeout reports a healthy service as down. Exported so status probes match.
 const ReadinessProbeTimeout = 10 * time.Second
 
 // WaitForDBReady blocks until the db is reachable or ctx is done. With no known
