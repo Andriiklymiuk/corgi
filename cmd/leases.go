@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"text/tabwriter"
 
@@ -56,7 +55,7 @@ func runLeases(cmd *cobra.Command, _ []string) {
 		utils.Info("no leases — corgi run --isolate <name> creates one")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	w := tabwriter.NewWriter(utils.ConsoleOut(), 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "LEASE\tPORT SHIFT\tCONTAINERS\tPORTS")
 	for _, lease := range leases {
 		fmt.Fprintf(w, "%s\t+%d\t%s\t%s\n", lease.Name, lease.Offset, lease.Containers, leasePortSummary(lease))
