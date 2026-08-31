@@ -43,12 +43,20 @@ type launchWorkspace struct {
 	// SessionLinks are per-session claude.ai URLs captured from remote
 	// control's own output — the only links the site resolves (the ids the
 	// claude CLI lists locally are UUIDs the web does not know).
-	SessionLinks []string         `json:"sessionLinks,omitempty"`
-	Note         string           `json:"note,omitempty"`
-	Live         int              `json:"live"`
-	Usage        *usage.Report    `json:"usage,omitempty"`
-	LastEvent    *launchLastEvent `json:"lastEvent,omitempty"`
-	Profiles     []string         `json:"profiles,omitempty"`
+	SessionLinks []string          `json:"sessionLinks,omitempty"`
+	Note         string            `json:"note,omitempty"`
+	Live         int               `json:"live"`
+	TopSession   *launchTopSession `json:"topSession,omitempty"`
+	Usage        *usage.Report     `json:"usage,omitempty"`
+	LastEvent    *launchLastEvent  `json:"lastEvent,omitempty"`
+	Profiles     []string          `json:"profiles,omitempty"`
+}
+
+type launchTopSession struct {
+	Name      string `json:"name"`
+	Where     string `json:"where"`
+	StartedAt int64  `json:"startedAt,omitempty"`
+	URL       string `json:"url,omitempty"`
 }
 
 type launchLastEvent struct {
@@ -115,7 +123,7 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 			Status: string(ws.Status), Running: s.running, SessionURL: s.url,
 			SessionLinks: s.sessions, Note: s.note, Profiles: profiles,
 		}
-		row.Live, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath)
+		row.Live, row.TopSession, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath)
 		row.Usage = workspaceUsage(ws.ID, ws.AbsPath)
 		out = append(out, row)
 	}
@@ -123,25 +131,73 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 	return out
 }
 
-func workspaceActivity(id, absPath string) (int, *launchLastEvent) {
+func workspaceActivity(id, absPath string) (int, *launchTopSession, *launchLastEvent) {
 	// The pid-file reader, never listClaudeSessions: its fallback shells out,
 	// and this runs per workspace on a list the phone polls while starting.
 	var live int
+	var top *launchTopSession
 	if _, configDir, ok := workspaceSessionTarget(id); ok && absPath != "" {
 		if sessions, read := localClaudeSessions(absPath, configDir); read {
 			live = len(sessions)
+			top = newestLiveSession(sessions)
 		}
 	}
 	dir, err := agentDir()
 	if err != nil {
-		return live, nil
+		return live, top, nil
 	}
 	recent := events.NewLog(dir).Read(id, 1)
 	if len(recent) == 0 {
-		return live, nil
+		return live, top, nil
 	}
 	e := recent[0]
-	return live, &launchLastEvent{Kind: e.Kind, Cause: e.Cause, Reason: e.Reason, At: e.At.UnixMilli()}
+	return live, top, &launchLastEvent{Kind: e.Kind, Cause: e.Cause, Reason: e.Reason, At: e.At.UnixMilli()}
+}
+
+// newestLiveSession surfaces one session on the collapsed card so the list is
+// not a dead end for someone who has never opened the sessions panel.
+func newestLiveSession(sessions []claudeSession) *launchTopSession {
+	for _, sess := range sessions {
+		if sess.URL == "" {
+			continue
+		}
+		return &launchTopSession{
+			Name:      sessionDisplayName(sess),
+			Where:     sessionWhereLabel(sess),
+			StartedAt: sess.StartedAt,
+			URL:       sess.URL,
+		}
+	}
+	if len(sessions) == 0 {
+		return nil
+	}
+	return &launchTopSession{
+		Name:      sessionDisplayName(sessions[0]),
+		Where:     sessionWhereLabel(sessions[0]),
+		StartedAt: sessions[0].StartedAt,
+	}
+}
+
+func sessionDisplayName(sess claudeSession) string {
+	if sess.Name != "" {
+		return sess.Name
+	}
+	return "session"
+}
+
+func sessionWhereLabel(sess claudeSession) string {
+	entrypoint := strings.ToLower(sess.Entrypoint)
+	switch {
+	case strings.Contains(entrypoint, "vscode"):
+		return "vscode"
+	case entrypoint == "sdk-cli":
+		return "remote"
+	case sess.Kind == "interactive":
+		return "terminal"
+	case sess.Kind != "":
+		return sess.Kind
+	}
+	return "session"
 }
 
 // usageTTL is how long a summed report is reused. Summing a workspace means
@@ -679,9 +735,12 @@ const launcherPageHTML = `<!doctype html>
 <meta name="theme-color" content="#0b0d12">
 <title>corgi</title>
 <style>
-  :root{--bg:#0b0d12;--card:#161a23;--card2:#11151d;--line:#262c3a;--text:#e9ecf1;
-      --dim:#8b93a7;--dim2:#6b7285;--green:#7ee787;--amber:#ffa657;--red:#ff7b72}
+  :root{--bg:#0a0b0e;--card:#141519;--card2:#0f1013;--line:#22242b;--hair:#1a1c22;
+      --text:#eceef2;--dim:#8f94a3;--dim2:#63677a;--green:#6ee787;--amber:#ffa657;--red:#ff7b72;
+      --sp1:.25rem;--sp2:.5rem;--sp3:.75rem;--sp4:1rem;--r:.5rem}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{-webkit-text-size-adjust:100%}
+  button,a,summary,label,input,.chip,.ws,.top,.s{touch-action:manipulation}
   body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
       padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased}
   header{padding:calc(1.2rem + env(safe-area-inset-top)) 1.2rem .3rem;max-width:34rem;margin:0 auto}
@@ -690,19 +749,21 @@ const launcherPageHTML = `<!doctype html>
       border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.35rem;flex:0 0 auto}
   h1{font-size:1.25rem;margin:0;letter-spacing:.01em}
   header small{display:block;color:var(--dim);font-size:.78rem;font-weight:400;margin-top:.1rem}
+  header small .what{color:var(--dim);border-bottom:1px dotted var(--line-soft,#3a4152);cursor:pointer}
+  .hostnote{color:var(--dim);font-size:.74rem;line-height:1.5;margin:.45rem 0 0;max-width:30rem}
   main{padding:.4rem 1.2rem 2.2rem;max-width:34rem;margin:0 auto}
-  .ws{background:var(--card);border:1px solid var(--line);border-radius:.9rem;padding:.8rem .9rem;margin:.55rem 0;
-      box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .ws{background:var(--card);border:1px solid var(--line);border-radius:.75rem;
+      padding:var(--sp3) var(--sp3) var(--sp2);margin:var(--sp2) 0}
   .head{display:flex;align-items:center;gap:.7rem}
   .main{min-width:0;flex:1}
-  .ws .name{font-weight:650;display:flex;align-items:center;gap:.5rem;font-size:.98rem;white-space:nowrap;
-      overflow:hidden;text-overflow:ellipsis}
+  .ws .name{font-weight:600;display:flex;align-items:center;gap:.5rem;font-size:.94rem;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;letter-spacing:-.006em}
   .ws .path{color:var(--dim2);font-size:.7rem;margin-top:.15rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
   .ws .path.full{white-space:normal;word-break:break-all}
   .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.5rem;line-height:1.45}
   .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
-  .dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(126,231,135,.14),0 0 8px rgba(126,231,135,.45)}
+  .dot.on{background:var(--green)}
   .meta{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.3rem;font-size:.72rem;color:var(--dim2)}
   .meta .live{color:var(--green)}
   .meta .why{color:var(--dim)}
@@ -724,37 +785,64 @@ const launcherPageHTML = `<!doctype html>
   .chk .fix{color:var(--dim);display:block;font-size:.72rem;margin-top:.15rem}
   .chk.bad .mark{color:var(--red)}
   .chk .mark{color:var(--green);flex:0 0 auto}
-  .chip{background:none;border:1px solid var(--line);color:var(--dim);font-size:.7rem;font-weight:650;
-      padding:.3rem .65rem;border-radius:999px;cursor:pointer}
-  .chip b{color:var(--text);font-weight:650}
-  .chip.danger{border-color:rgba(255,123,114,.45);color:var(--red);margin-left:auto}
-  .sessions{margin-top:.65rem;border-top:1px solid var(--line);padding-top:.5rem}
+  .chip{background:none;border:1px solid var(--line);color:var(--dim);font-size:.72rem;font-weight:500;
+      padding:.32rem .6rem;border-radius:var(--r);cursor:pointer}
+  .chip b{color:var(--text);font-weight:600}
+  .chip.danger{border-color:transparent;color:var(--dim);margin-left:auto}
+  .chip.danger:active{color:var(--red)}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
+      margin-top:var(--sp2);padding:var(--sp2) 0 0;border-top:1px solid var(--hair);
+      font-size:.78rem;color:var(--text);text-decoration:none;min-height:2rem}
+  .top span:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap}
+  .top .when{color:var(--dim2);font-size:.7rem;flex:0 0 auto}
+  .intro{color:var(--dim);font-size:.8rem;line-height:1.5;margin:.2rem 0 .9rem}
+  .sessions{margin-top:var(--sp2);border-top:1px solid var(--hair);padding-top:var(--sp2)}
   .sessions .s{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.76rem;
       color:#c9cfda;padding:.45rem .1rem;min-height:2.1rem;text-decoration:none}
-  .sessions .s span:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  a.s span:first-child{color:var(--green)}
-  .sdot{width:.4rem;height:.4rem;border-radius:50%;background:var(--green);margin-right:.45rem;flex:0 0 auto;
-      box-shadow:0 0 6px rgba(126,231,135,.5)}
+  .sessions .s span:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+  .sdot{width:.375rem;height:.375rem;border-radius:50%;background:var(--green);margin-right:.5rem;flex:0 0 auto}
   a.s.past span:first-child{color:var(--dim)}
   a.s.past .when{color:#5b6274}
-  .sessions .grp{display:flex;align-items:center;gap:.5rem;margin:.55rem .1rem .1rem;color:var(--dim2);
-      font-size:.62rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
-  .sessions .grp i{flex:1;height:1px;background:var(--line)}
+  .sessions .grp{display:flex;align-items:center;gap:.5rem;margin:.6rem .1rem .1rem;color:var(--dim2);
+      font-size:.62rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+  .sessions .grp i{flex:1;height:1px;background:var(--hair)}
   .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto}
   .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
   .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
       border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px}
-  button{border:0;border-radius:.6rem;padding:.5rem .95rem;font-size:.84rem;font-weight:650;cursor:pointer;
-      background:#232a39;color:var(--text);transition:transform .05s;flex:0 0 auto}
+  button{border:0;border-radius:var(--r);padding:.48rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer;
+      background:#1e2027;color:var(--text);transition:transform .05s;flex:0 0 auto}
   button:active{transform:scale(.97)}
   button:disabled{opacity:.5}
   a.open,button.open{display:inline-block;background:var(--green);color:#08110a;text-decoration:none;border:0;
-      padding:.5rem .95rem;border-radius:.6rem;font-weight:700;font-size:.84rem;cursor:pointer;flex:0 0 auto}
+      padding:.48rem .9rem;border-radius:var(--r);font-weight:600;font-size:.82rem;cursor:pointer;flex:0 0 auto}
   .msg{color:var(--dim);font-size:.9rem;margin:1rem 0;line-height:1.5}
   .err{color:var(--red)}
   code{background:var(--card);border:1px solid var(--line);padding:.1rem .35rem;border-radius:.35rem;font-size:.85em}
-  details.settings{margin:1.8rem 0 0;background:var(--card2);border:1px solid var(--line);
+  .tips{margin:1.5rem 0 0;background:var(--card);border:1px solid var(--line);border-radius:.75rem;
+      padding:var(--sp3)}
+  .tips h2{font-size:.64rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+      color:var(--dim2);margin:0 0 var(--sp2)}
+  .tip{display:flex;flex-direction:column;align-items:stretch;gap:.15rem;width:100%;text-align:left;
+      background:none;border:0;border-top:1px solid var(--hair);border-radius:0;
+      padding:var(--sp3) 0 var(--sp2);margin:0;cursor:pointer;font-family:inherit}
+  .tips .tip:first-of-type{border-top:0;padding-top:0}
+  .tip-t{font-size:.84rem;font-weight:600;color:var(--text);letter-spacing:-.005em}
+  .tip-d{font-size:.75rem;color:var(--dim);line-height:1.5}
+  .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
+      margin-top:var(--sp2);background:var(--card2);border-radius:var(--r);padding:.42rem .5rem}
+  .tip-cmd code{min-width:0;overflow-x:auto;white-space:nowrap;font-size:.7rem;color:var(--text);
+      background:none;border:0;padding:0}
+  .tip-copy{font-size:.66rem;font-weight:600;color:var(--dim2);flex:0 0 auto;letter-spacing:.02em}
+  .tip.copied .tip-copy{color:var(--green)}
+  .tipnote{color:var(--dim2);font-size:.72rem;margin:var(--sp3) 0 0}
+  details.settings{margin:1.6rem 0 0;background:var(--card2);border:1px solid var(--line);
       border-radius:1rem;padding:.4rem 1rem}
+  details.settings h3{font-size:.66rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+      color:var(--dim2);margin:1.4rem 0 .4rem}
+  details.settings h3:first-of-type{margin-top:.6rem}
   details.settings summary{color:var(--dim);font-size:.85rem;cursor:pointer;padding:.5rem 0;list-style:none}
   details.settings summary::-webkit-details-marker{display:none}
   details.settings p{color:var(--dim);font-size:.76rem;line-height:1.55}
@@ -768,27 +856,61 @@ const launcherPageHTML = `<!doctype html>
 </style>
 <header>
   <div class="brand"><span class="logo">🐕</span>
-    <div><h1>corgi</h1><small id="host">your machine</small></div>
+    <div><h1>corgi</h1><small id="host">your machine</small>
+      <p id="hostnote" class="hostnote" hidden></p></div>
   </div>
 </header>
 <main>
   <div id="list" class="msg">Loading…</div>
+  <section class="tips" id="tips" hidden>
+    <h2>On the laptop</h2>
+    <button class="tip" data-copy="corgi agent init">
+      <span class="tip-t">Add another repo</span>
+      <span class="tip-d">Run it inside any git repo and it joins this list.</span>
+      <span class="tip-cmd"><code>cd ~/dev/api &amp;&amp; corgi agent init</code><span class="tip-copy">COPY</span></span>
+    </button>
+    <button class="tip" data-copy="corgi agent tunnel setup corgi.yourdomain.com">
+      <span class="tip-t">Keep this link working</span>
+      <span class="tip-d">The free tunnel changes address on every restart, which un-pairs your phone. Point it at a host you own once.</span>
+      <span class="tip-cmd"><code>corgi agent tunnel setup corgi.yourdomain.com</code><span class="tip-copy">COPY</span></span>
+    </button>
+    <button class="tip" data-copy="corgi agent init --config-dir ~/.claude-work">
+      <span class="tip-t">Use a second Claude account</span>
+      <span class="tip-d">Give a work repo its own account, then set its <b>open in</b> pill to <b>chrome</b>.</span>
+      <span class="tip-cmd"><code>corgi agent init --config-dir ~/.claude-work</code><span class="tip-copy">COPY</span></span>
+    </button>
+    <button class="tip" data-copy="corgi agent install">
+      <span class="tip-t">Survive a reboot</span>
+      <span class="tip-d">Starts corgi at login, so this page still works when you are away from the desk.</span>
+      <span class="tip-cmd"><code>corgi agent install</code><span class="tip-copy">COPY</span></span>
+    </button>
+    <p class="tipnote" id="tipmsg">Tap a card to copy the command.</p>
+  </section>
+
   <details class="settings" id="settings" hidden>
-    <summary>⚙ Settings</summary>
-    <p><b>Claude app connector.</b> Prefer the Claude app? Add corgi as a custom connector on claude.ai (Settings → Connectors → Add custom), so the app can control this machine too. Tap to copy:</p>
+    <summary>Settings</summary>
+
+    <h3>Claude app</h3>
+    <p>Add corgi as a custom connector on claude.ai (Settings → Connectors → Add custom) to drive this machine from the Claude app too.</p>
     <pre id="cfg"></pre>
     <button id="copycfg">Copy connector config</button>
     <p id="copymsg" class="msg"></p>
-    <p>Each workspace has an <b>open in</b> pill — tap it to cycle: <b>app</b> deep-links into the Claude app; <b>browser</b> keeps the session here; <b>chrome</b> forces Chrome via its URL scheme (needs Chrome installed) — right for a workspace on a different Claude account than the app is signed into. Remembered per workspace, on this browser only.</p>
-    <p><b>Hiding workspaces.</b> Each card has a <b>hide</b> chip — useful when showing this screen to someone. Hidden cards collapse into one "N hidden — show" button, on this browser only; nothing on the machine changes.</p>
+
+    <h3>This browser</h3>
+    <p>The <b>open in</b> pill on each card cycles where session links open: <b>app</b> deep-links into the Claude app, <b>browser</b> keeps them here, <b>chrome</b> forces Chrome — the one to pick for a repo on a different Claude account. Remembered per workspace, here only.</p>
+    <p><b>hide</b> tucks a card away when you are showing this screen to someone. Hidden cards collapse into one button; nothing on the machine changes.</p>
     <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
-    <p>A <b>bridge</b> is a remote-control session someone started on the laptop itself. Its claude.ai page shows only what you send from it — until then it looks empty. The full transcript stays on the laptop.</p>
-    <p><b>Paired devices.</b> Every device that scanned a pairing QR. Revoking one leaves the others working.</p>
+    <p>A bridge is a session started on the laptop itself. Its claude.ai page shows only what you send from here, so it looks empty at first — the full transcript stays on the laptop.</p>
+
+    <h3>Devices</h3>
+    <p>Everything that scanned a pairing QR. Revoking one leaves the others working.</p>
     <div id="devices" class="msg">Loading…</div>
-    <p><b>Something not starting?</b> The same checks as <code>corgi agent doctor</code>, from here.</p>
+
+    <h3>If something will not start</h3>
+    <p>The same checks as <code>corgi agent doctor</code>, run from here.</p>
     <button id="rundoctor">Run doctor</button>
     <div id="doctor"></div>
-    <p><b>Push notifications.</b> Set <code>notifyUrl</code> in the agent config on the laptop (for example an ntfy.sh topic you subscribe to in the ntfy app) and every session restart or failure reaches your phone. See <code>corgi agent doctor</code> and the agent docs.</p>
+    <p>For a push when a session restarts or fails, set <code>notifyUrl</code> in the agent config on the laptop — an ntfy.sh topic you subscribe to works.</p>
   </details>
   <p class="foot">
     <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
@@ -846,6 +968,31 @@ const launcherPageHTML = `<!doctype html>
     bridges.onchange = () => setShowBridges(bridges.checked);
     loadDevices();
     document.getElementById('rundoctor').onclick = runDoctor;
+    initTips();
+  }
+
+  function initTips() {
+    const box = document.getElementById('tips');
+    box.hidden = false;
+    const msg = document.getElementById('tipmsg');
+    for (const tip of box.querySelectorAll('.tip')) {
+      tip.onclick = async () => {
+        const text = tip.dataset.copy;
+        try {
+          await navigator.clipboard.writeText(text);
+          tip.classList.add('copied');
+          const label = tip.querySelector('.tip-copy');
+          if (label) label.textContent = 'COPIED';
+          msg.textContent = 'Copied — paste it in a terminal on that machine.';
+          setTimeout(() => {
+            tip.classList.remove('copied');
+            if (label) label.textContent = 'COPY';
+          }, 1400);
+        } catch {
+          msg.textContent = 'Long-press the command to copy it.';
+        }
+      };
+    }
   }
 
   async function loadDevices() {
@@ -926,9 +1073,29 @@ const launcherPageHTML = `<!doctype html>
       bits.push(j.daemon ? 'daemon up' : 'daemon down');
       if (j.latest) bits.push('v' + j.latest + ' available — corgi upd');
       const el = document.getElementById('host');
-      el.textContent = bits.join(' · ');
+      el.textContent = '';
+      bits.forEach((bit, i) => {
+        if (i) el.appendChild(document.createTextNode(' \u00b7 '));
+        if (bit.indexOf('daemon ') === 0) {
+          const tap = document.createElement('span');
+          tap.className = 'what'; tap.textContent = bit;
+          tap.onclick = () => toggleDaemonNote(j.daemon);
+          el.appendChild(tap);
+          return;
+        }
+        el.appendChild(document.createTextNode(bit));
+      });
       if (!j.daemon) el.style.color = 'var(--red)';
     } catch {}
+  }
+
+  function toggleDaemonNote(up) {
+    const note = document.getElementById('hostnote');
+    if (!note.hidden) { note.hidden = true; return; }
+    note.textContent = up
+      ? 'The corgi daemon is the process on that machine that starts your sessions and keeps them running — after a crash, after a reboot, and while the laptop would otherwise sleep. This page talks to it.'
+      : 'The corgi daemon is not running on that machine, so nothing here can start a session. On the laptop run: corgi agent up';
+    note.hidden = false;
   }
 
   function render(workspaces) {
@@ -940,6 +1107,8 @@ const launcherPageHTML = `<!doctype html>
     }
     list.className = '';
     list.innerHTML = '';
+    const intro = introLine(workspaces);
+    if (intro) list.appendChild(intro);
     const hide = hidden();
     const shownWs = revealHidden ? workspaces : workspaces.filter(w => !hide.has(w.id));
     const hiddenCount = workspaces.length - shownWs.length;
@@ -982,10 +1151,12 @@ const launcherPageHTML = `<!doctype html>
       const sessionsBox = document.createElement('div');
       sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
       const sbtn = document.createElement('button');
-      sbtn.className = 'chip'; sbtn.textContent = 'sessions ⌄';
+      sbtn.className = 'chip'; sbtn.textContent = sessionsChipLabel(ws);
       sbtn.onclick = () => toggleSessions(ws, sbtn, sessionsBox);
       actions.appendChild(sbtn);
       actions.appendChild(modeSwitch(ws.id));
+      const top = topSessionRow(ws);
+      if (top) row.appendChild(top);
       if (!ws.running && startBox) {
         const opts = document.createElement('button');
         opts.className = 'chip'; opts.textContent = 'options ⌄';
@@ -1011,6 +1182,47 @@ const launcherPageHTML = `<!doctype html>
       b.onclick = () => { revealHidden = !revealHidden; render(lastWorkspaces); };
       list.appendChild(b);
     }
+  }
+
+  // Shown until the first session exists: on an empty launcher nothing on the
+  // card says what tapping it will do, or where the work ends up running.
+  function introLine(workspaces) {
+    if (workspaces.some(w => (w.live || 0) > 0)) return null;
+    const el = document.createElement('div');
+    el.className = 'intro';
+    el.textContent = 'Tap a repo to start a Claude Code session on that machine. ' +
+      'It runs there with your files and databases; you drive it from here.';
+    return el;
+  }
+
+  function sessionsChipLabel(ws) {
+    const more = (ws.live || 0) - (ws.topSession ? 1 : 0);
+    return more > 0 ? 'sessions +' + more + ' \u2304' : 'sessions \u2304';
+  }
+
+  // The collapsed card names one live session, so someone who never taps
+  // "sessions" still sees there is something to open.
+  function topSessionRow(ws) {
+    const top = ws.topSession;
+    if (!top) return null;
+    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : ''].filter(Boolean).join(' \u00b7 ');
+
+    if (!top.url || !safeClaudeUrl(top.url)) {
+      const el = document.createElement('div');
+      el.className = 'top';
+      el.innerHTML = '<span><i class="sdot"></i>' + esc(top.name) + '</span>' +
+        '<span class="when">' + esc(when) + ' \u00b7 local only</span>';
+      return el;
+    }
+    const el = document.createElement('a');
+    el.className = 'top';
+    el.href = top.url; el.target = '_blank'; el.rel = 'noopener noreferrer';
+    const mode = openMode(ws.id);
+    if (mode === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(top.url, '_blank', 'noopener'); };
+    if (mode === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(top.url); };
+    el.innerHTML = '<span><i class="sdot"></i>' + esc(top.name) + '</span>' +
+      '<span class="when">' + esc(when) + ' \u00b7 open \u2197</span>';
+    return el;
   }
 
   function metaLine(ws) {
