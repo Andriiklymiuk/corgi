@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"andriiklymiuk/corgi/utils/atomicfile"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -87,11 +88,10 @@ func AppendSuggestEntry(workspaceRoot string, e SuggestEntry) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal suggest history: %w", err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := atomicfile.Write(path, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write suggest history: %w", err)
 	}
-	return os.Rename(tmp, path)
+	return nil
 }
 
 // ShouldSkip reports whether a candidate slug is already known and so should be
