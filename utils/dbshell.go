@@ -59,10 +59,7 @@ func redisArgs(db DatabaseService) []string {
 func redisExecArgs(db DatabaseService, query string) []string {
 	args := redisArgs(db)
 	// redis-cli treats trailing space-separated tokens as the command.
-	for _, tok := range strings.Fields(query) {
-		args = append(args, tok)
-	}
-	return args
+	return append(args, strings.Fields(query)...)
 }
 
 func mongoArgs(db DatabaseService) []string {
