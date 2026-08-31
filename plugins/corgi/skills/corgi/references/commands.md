@@ -337,6 +337,49 @@ Manage the worktrees corgi creates for `run/exec/test --service-branch` (under `
 - `corgi worktree prune` (alias `clean`) — `git worktree remove` each one and prune the source repos' admin entries. A worktree with **uncommitted or untracked changes is kept and named**, not removed; `--force` drops those too (discards the work). Safe to run anytime; recreated on next `--service-branch`. Prints `[n/total]` per worktree — deleting a big `node_modules` takes a while and the line is how you tell work from a hang.
 - Only covers `corgi_services/.worktrees/`. Worktrees you made yourself elsewhere (e.g. the `stories` skill's `/tmp/corgi-wt/`) are untouched — remove those with `git worktree remove` in the source repo.
 
+### `corgi context` (alias: `ctx`)
+
+**The first call of a session.** One snapshot instead of `ps` + `status` + `validate` + a `git` call per repo:
+
+- every service and `db_service` with port, status and URL
+- each repo's `branch`, `dirty`, `head`, `upstream`, `ahead`/`behind`
+- the active env tier, the declared profiles, whether a detached run is active
+- validation `errors` / `warnings`
+
+`--no-git` skips the per-repo git reads. `--json` for the machine-readable form.
+
+### `corgi why <service>` (alias: `diagnose`)
+
+Why one service is not up, in a single call. Returns `verdict` — `healthy`, `crashed`, `not_started`, `dependency_unready`, `port_taken`, `env_missing`, `no_start_command`, `unhealthy` — plus the evidence: unmet `dependencies`, `port` ownership, `lastExitCode`, `env` findings (absent env file, missing keys, unfilled `envPlaceholdersToCheck`), `logTail`, and a `nextStep`.
+
+Exit is **1** for any verdict but `healthy`. `--log-lines N` sets the tail size. See the `debug` skill, Step 0a.
+
+### `corgi checkpoint [name]` / `corgi restore <name>`
+
+Undo across repos. `checkpoint` records every repo's branch, HEAD and uncommitted work under one name; `restore` puts all of it back.
+
+- Uncommitted work is captured with `git stash create`, so the working tree is untouched and nothing lands in your stash list.
+- `restore` captures whatever is dirty **now** as a safety checkpoint first, and names it — nothing is lost. `--yes` skips the prompt.
+- `--with-db` also snapshots (and restores) each postgres-family `db_service`.
+- `corgi checkpoint list`, `corgi checkpoint rm <name>`.
+
+### `corgi events`
+
+Service lifecycle instead of polling `status`. Prints the current state and exits; `--follow` stays open and emits a line per transition (`started`, `crashed`, `stopped`, `gone`). `--json` gives NDJSON. `--interval`, `--timeout`.
+
+### `corgi leases` and `--isolate <name>`
+
+`--isolate <name>` is a **root flag on every command**: it gives that run its own port block (+100 per lease), its own database names, and its own container names, so two agents can drive one workspace at once.
+
+```bash
+corgi run --isolate agent-a --detach
+corgi ps  --isolate agent-a          # same shifted view
+corgi leases                         # who holds which block
+corgi leases release agent-a
+```
+
+The lease is stored under `corgi_services/.leases/` and reused, so the same name always maps to the same ports.
+
 ### `corgi pull`
 
 `git pull` in every service directory. No flags.
@@ -362,6 +405,21 @@ Run named scripts declared under `services.<name>.scripts`.
 - `--services <list>` — restrict to specific services
 - `--ignore-dependent-services` — skip running on dependents
 - `--continue-on-error` — run the script across all matching services, print a pass/fail summary, and exit non-zero if any failed (replaces hand-rolled lintAll/testAll loops). Without it, exit code is unchanged (0).
+
+### `corgi test --changed`
+
+`corgi test --changed --base main` runs only the services whose repo differs from `main` (uncommitted work counts as changed). A repo corgi cannot compare — no such base ref, not a checkout — is **kept**, because a silently skipped test reads exactly like a passing one.
+
+### `corgi logs` waiting and filtering
+
+- `--wait-for <regexp>` — block until a line matches, then exit **0**; exit **1** on timeout. Use it instead of a sleep-and-read loop.
+- `--timeout <d>` — how long `--wait-for` waits (default 60s).
+- `--since <5m|RFC3339>` — only lines newer than that.
+- `--grep <regexp>` — only lines matching.
+
+### `corgi env --explain <KEY>`
+
+Prints every source that set the variable, in order, with the winner marked — the copied env file, a `depends_on` chunk, `self:port`, the literal `environment:` block. The answer to "where did this value come from".
 
 ### `corgi fork`
 

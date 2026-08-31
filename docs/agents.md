@@ -214,6 +214,86 @@ corgi checkout main --json
 `--service <list>` (only these services; also leaves the workspace repo alone) and
 `--skip-workspace`.
 
+## Orientation, diagnosis, waiting
+
+Three calls replace most of the plumbing an agent otherwise does by hand.
+
+`corgi context --json` — where am I. Topology, ports, status, each repo's branch /
+dirty / ahead-behind, the active tier, the declared profiles, validation findings.
+One call instead of `ps` + `status` + `validate` + a `git` call per repo. `--no-git`
+skips the repo reads.
+
+`corgi why <service> --json` — why is it not up. Returns one `verdict` to branch on,
+with the evidence behind it:
+
+```json
+{"service":"api","verdict":"dependency_unready",
+ "detail":"depends on db_service pg, which is stopped",
+ "dependencies":[{"name":"pg","kind":"db_service","status":"stopped"}],
+ "port":{"number":4000,"listening":false,"ours":false},
+ "env":{"missing":["STRIPE_KEY"]},
+ "logTail":["…"],"nextStep":"start the dependency first: corgi run --services pg"}
+```
+
+Verdicts: `healthy`, `crashed`, `not_started`, `dependency_unready`, `port_taken`,
+`env_missing`, `no_start_command`, `unhealthy`. Exit is 1 for anything but `healthy`.
+Env is part of the check — an absent env file, keys the example declares that
+nothing provides, and unfilled `envPlaceholdersToCheck`.
+
+`corgi logs --service <x> --wait-for <regexp> --timeout <d>` — block until a line
+matches, then exit 0; exit 1 on timeout. Never sleep-and-read in a loop. `--since`
+and `--grep` narrow what comes back; `--json` emits one object per line.
+
+`corgi env <service> --explain <KEY>` prints every source that set the variable, in
+order, with the winner marked.
+
+## Undo across repos
+
+```bash
+corgi checkpoint before-referral        # every repo's branch, HEAD and uncommitted work
+corgi restore before-referral --yes     # put all of it back
+```
+
+Uncommitted work is captured with `git stash create`, so the working tree is not
+touched and nothing lands in the stash list. `restore` captures whatever is dirty at
+that moment as its own safety checkpoint first and names it, so no state is lost.
+`--with-db` also snapshots and restores each postgres-family `db_service`.
+`corgi checkpoint list` / `rm`.
+
+## Two agents in one workspace
+
+`--isolate <name>` is a root flag on every command. It gives the run its own port
+block, its own database names and its own container names, so a second agent does
+not collide with the first:
+
+```bash
+corgi run --isolate agent-a --detach
+corgi ps  --isolate agent-a       # the same shifted view
+corgi leases                      # which lease holds which block
+corgi leases release agent-a
+```
+
+The allocation is stored under `corgi_services/.leases/`, so the same name always
+maps to the same ports. Without the flag nothing changes.
+
+## Reacting instead of polling
+
+`corgi events --json` prints the current state of every service and exits.
+`corgi events --follow --json` stays open and emits NDJSON per transition:
+
+```json
+{"at":"2026-08-31T10:14:02Z","service":"worker","kind":"crashed","status":"crashed","exitCode":137}
+```
+
+Kinds: `started`, `crashed`, `stopped`, `gone`, `state`. `--interval` sets the
+re-read rate, `--timeout` bounds the run.
+
+## Testing only what changed
+
+`corgi test --changed --base main` runs the test script only for services whose repo
+differs from the base (uncommitted work counts). A repo corgi cannot compare is kept
+rather than skipped — a silently skipped test looks exactly like a passing one.
+
 ## Exit codes
 
 | Code | Meaning |

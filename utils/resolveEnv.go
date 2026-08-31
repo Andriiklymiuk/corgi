@@ -53,6 +53,17 @@ func parseChunkInOrder(chunk, source string) []EnvVar {
 // ResolveServiceEnv returns svc's fully-resolved env entries with source
 // attribution. Read-only: calls the same builders as corgi run, writes nothing.
 func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
+	chain, err := ResolveServiceEnvChain(svc, corgi)
+	if err != nil {
+		return nil, err
+	}
+	return dedupeLastWins(chain), nil
+}
+
+// ResolveServiceEnvChain is ResolveServiceEnv without the last-wins collapse:
+// every contributing entry stays, in precedence order, so a caller can show
+// where a value came from and what it overrode.
+func ResolveServiceEnvChain(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	if corgi == nil || svc.IgnoreEnv {
 		return []EnvVar{}, nil
 	}
@@ -68,9 +79,8 @@ func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	}
 	entries = append(entries, literal...)
 
-	resolved := dedupeLastWins(entries)
-	rewriteLocalhostInEntries(resolved, svc)
-	return resolved, nil
+	rewriteLocalhostInEntries(entries, svc)
+	return entries, nil
 }
 
 // copiedEnvFileEntries is the copied env file (lowest precedence); honors
@@ -164,6 +174,19 @@ func rewriteLocalhostInEntries(resolved []EnvVar, svc Service) {
 // the cross-service exports fixed point first so ${producer.VAR} references in
 // any service resolve to real values.
 func ResolveAllEnv(corgi *CorgiCompose) (map[string][]EnvVar, error) {
+	return resolveEveryService(corgi, ResolveServiceEnv)
+}
+
+// ResolveAllEnvChains is ResolveAllEnv with every contributing entry kept,
+// for reporting which source won a key and which ones it overrode.
+func ResolveAllEnvChains(corgi *CorgiCompose) (map[string][]EnvVar, error) {
+	return resolveEveryService(corgi, ResolveServiceEnvChain)
+}
+
+func resolveEveryService(
+	corgi *CorgiCompose,
+	resolve func(Service, *CorgiCompose) ([]EnvVar, error),
+) (map[string][]EnvVar, error) {
 	if corgi == nil {
 		return map[string][]EnvVar{}, nil
 	}
@@ -179,7 +202,7 @@ func ResolveAllEnv(corgi *CorgiCompose) (map[string][]EnvVar, error) {
 
 	out := make(map[string][]EnvVar, len(corgi.Services))
 	for _, svc := range corgi.Services {
-		entries, err := ResolveServiceEnv(svc, corgi)
+		entries, err := resolve(svc, corgi)
 		if err != nil {
 			return nil, err
 		}
