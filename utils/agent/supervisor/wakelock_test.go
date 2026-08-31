@@ -22,7 +22,11 @@ func fakeLock(t *testing.T, mode WakeLockMode) (*WakeLock, *int) {
 		starts++
 		cmd := exec.Command("sleep", "30")
 		if err := cmd.Start(); err != nil {
-			t.Fatalf("could not start stand-in process: %v", err)
+			// The idle monitor calls this from its own goroutine, where
+			// t.Fatal would stop only that goroutine and leave the test to
+			// time out on a lock nothing re-acquires. Acquire propagates the
+			// error instead, so the test fails on its real assertion.
+			return nil, err
 		}
 		return cmd, nil
 	}
