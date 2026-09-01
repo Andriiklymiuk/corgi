@@ -42,6 +42,10 @@ By default only the first: a permission prompt blocks the session until you
 answer it, while a finished turn is just noise once several workspaces are busy.
 Add --turns if you do want one on every turn.
 
+Claude also nudges after about a minute of no input, with nothing blocked.
+corgi drops that one — it is the notification that arrives when the session
+wants nothing, and it is why people stop reading them. --idle keeps it.
+
 Covers every Claude session in the directory, not just supervised ones.
 
 --all does the same for every registered workspace, so a machine with several
@@ -90,8 +94,9 @@ func claudeLocalSettingsPath(dir string) string {
 
 func runAgentHooksEnable(cmd *cobra.Command, _ []string) {
 	turns := wantsTurnHook(cmd)
+	idle := wantsIdleHook(cmd)
 	for _, target := range hookTargets(cmd) {
-		if err := enableHooksIn(target.dir, target.id, turns); err != nil {
+		if err := enableHooksIn(target.dir, target.id, turns, idle); err != nil {
 			exitWithError("agent_hooks", err, 1)
 		}
 		utils.Infof("✓ %s will notify you when a session there needs you (%s)\n",
@@ -99,6 +104,9 @@ func runAgentHooksEnable(cmd *cobra.Command, _ []string) {
 	}
 	if turns {
 		utils.Info("also notifying on every finished turn (--turns)")
+	}
+	if idle {
+		utils.Info("also notifying when a session has just been idle a while (--idle)")
 	}
 	if !notifyURLConfigured() {
 		printNotifyUrlHelp()
@@ -114,6 +122,14 @@ func printNotifyUrlHelp() {
 	utils.Info("  corgi agent notify set <slack-or-discord-webhook-url>")
 	utils.Info("")
 	utils.Info("  then: corgi agent restart")
+}
+
+func wantsIdleHook(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	idle, _ := cmd.Flags().GetBool("idle")
+	return idle
 }
 
 func wantsTurnHook(cmd *cobra.Command) bool {
@@ -197,7 +213,7 @@ func allSuffix(cmd *cobra.Command) string {
 	return ""
 }
 
-func enableHooksIn(dir, id string, turns bool) error {
+func enableHooksIn(dir, id string, turns, idle bool) error {
 	path := claudeLocalSettingsPath(dir)
 	settings := readJSONObject(path)
 	hooks, _ := settings["hooks"].(map[string]any)
@@ -208,7 +224,7 @@ func enableHooksIn(dir, id string, turns bool) error {
 	wanted := map[string]bool{hookEventNotification: true, hookEventStop: turns}
 	for event, want := range wanted {
 		if want {
-			hooks[event] = withCorgiHook(hooks[event], id)
+			hooks[event] = withCorgiHook(hooks[event], id, idle)
 			continue
 		}
 		remaining := stripCorgiHooks(hooks[event])
@@ -227,12 +243,18 @@ func enableHooksIn(dir, id string, turns bool) error {
 	return writeJSONObject(path, settings)
 }
 
-func withCorgiHook(existing any, workspaceID string) []any {
+func withCorgiHook(existing any, workspaceID string, idle bool) []any {
 	out := stripCorgiHooks(existing)
+	// The choice rides in the command corgi writes, so it is per workspace and
+	// visible in the settings file rather than hidden in another config.
+	command := fmt.Sprintf("corgi agent hook --workspace %s", workspaceID)
+	if idle {
+		command += " --idle"
+	}
 	return append(out, map[string]any{
 		"hooks": []any{map[string]any{
 			"type":    "command",
-			"command": fmt.Sprintf("corgi agent hook --workspace %s", workspaceID),
+			"command": command,
 		}},
 	})
 }
@@ -297,6 +319,17 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	}
 	detail := hookDetail(event, os.Stdin)
 
+	// Claude Code fires Notification for two different things: a permission
+	// prompt, which blocks the session until someone answers, and a 60-second
+	// idle nudge, which blocks nothing at all. Only the first is worth a toast
+	// on your desk or a push to your phone — the second arrives when the
+	// session is simply sitting at its prompt, and reading "waiting for your
+	// input" for something that wants nothing is how people learn to ignore
+	// every notification corgi sends.
+	if idle, _ := cmd.Flags().GetBool("idle"); isIdleNudge(detail) && !idle {
+		return
+	}
+
 	dir, err := agentDir()
 	if err != nil {
 		return
@@ -337,6 +370,13 @@ func hookDetail(event string, stdin io.Reader) string {
 	default:
 		return "a session is waiting for you"
 	}
+}
+
+// isIdleNudge recognises Claude Code's "nothing is blocked, you have just been
+// away" message. Matched on the message rather than the event name because the
+// event is Notification for both kinds.
+func isIdleNudge(detail string) bool {
+	return strings.Contains(strings.ToLower(detail), "waiting for your input")
 }
 
 func truncateLine(s string, max int) string {
@@ -380,8 +420,10 @@ func marshalCompact(v any) string {
 
 func init() {
 	agentHookCmd.Flags().String("workspace", "", "Workspace id the hook belongs to")
+	agentHookCmd.Flags().Bool("idle", false, "Report Claude's idle nudge too, not just a prompt that is actually blocking")
 	agentHooksEnableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
 	agentHooksEnableCmd.Flags().Bool("turns", false, "Also notify when a session finishes a turn (noisy across several workspaces)")
+	agentHooksEnableCmd.Flags().Bool("idle", false, "Also notify on Claude's \"waiting for your input\" nudge, which fires when nothing is actually blocked")
 	agentHooksDisableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
 	agentHooksCmd.AddCommand(agentHooksEnableCmd, agentHooksDisableCmd)
 	agentCmd.AddCommand(agentHooksCmd, agentHookCmd)

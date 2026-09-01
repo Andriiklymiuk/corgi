@@ -372,6 +372,7 @@ var agentDoctorCmd = &cobra.Command{
 // check and its assertions.
 const (
 	checkWakeLock   = "wake lock"
+	checkAtLogin    = "start at login"
 	checkUserConfig = "user config"
 )
 
@@ -427,6 +428,9 @@ func collectAgentChecks() []agentCheck {
 		return append(checks, agentCheck{Name: "data directory", Detail: err.Error()})
 	}
 	checks = append(checks, checkUserConfigPermissions(agentUserConfigPath(dir)), checkRegisteredWorkspaces(), checkDaemonRunning(dir))
+	if c, ok := checkMacOSFileAccess(); ok {
+		checks = append(checks, c)
+	}
 	checks = append(checks, checkWorkspaceTrust()...)
 	return checks
 }
@@ -493,25 +497,56 @@ func checkWakeLockSupport() agentCheck {
 			Fix:    "install " + argv[0] + ", or set wakeLock: off",
 		}
 	}
+	detail := argv[0] + " · " + wakeLockScope()
 	if risk := supervisor.CheckSleepRisk(); risk.AtRisk() {
-		return agentCheck{Name: checkWakeLock, Detail: risk.Reason, Fix: risk.Fix}
+		// A caveat, not a failure. Idle sleep IS held off on battery, so a red
+		// cross here sent people chasing a setting that was never the problem.
+		return agentCheck{Name: checkWakeLock, OK: true, Detail: detail + " — " + risk.Reason, Fix: risk.Fix}
 	}
-	detail := argv[0]
 	if runtime.GOOS == "darwin" {
 		detail += " — note: " + supervisor.ClamshellWarning
 	}
 	return agentCheck{Name: checkWakeLock, OK: true, Detail: detail}
 }
 
+// wakeLockScope says whether the machine stays awake between sessions, which is
+// the difference between a phone tap reaching this laptop and reaching nothing.
+func wakeLockScope() string {
+	dir, err := agentDir()
+	if err != nil {
+		return "per session"
+	}
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil || user == nil || !user.StayAwake {
+		return "per session (the machine may sleep between them — `corgi agent awake on`)"
+	}
+	return "held for the daemon's whole life (stayAwake)"
+}
+
 func checkInstallSupport() agentCheck {
 	if !installSupported() {
 		return agentCheck{
-			Name:   "start at login",
+			Name:   checkAtLogin,
 			Detail: "not supported on " + runtime.GOOS,
 			Fix:    "run `corgi agent serve` yourself, or supervise it with your own tooling",
 		}
 	}
-	return agentCheck{Name: "start at login", OK: true, Detail: installMechanism()}
+	// Not a failure — plenty of machines are meant to start it by hand. It is
+	// still the answer to "why is my phone dead after a reboot", so it says
+	// what is actually installed rather than what the platform could support.
+	if !loginServiceInstalled() {
+		return agentCheck{
+			Name:   checkAtLogin,
+			OK:     true,
+			Detail: "not installed — nothing comes back after a reboot",
+			Fix:    "`corgi agent up --at-login` in a stack, or `corgi agent install` for the daemon alone",
+		}
+	}
+	detail := installMechanism() + " — daemon only"
+	if dir, err := agentDir(); err == nil && loadUpSettings(dir).AtLogin {
+		detail = installMechanism() + " — daemon, MCP endpoint and tunnel"
+	}
+	return agentCheck{Name: checkAtLogin, OK: true, Detail: detail}
 }
 
 func checkUserConfigPermissions(path string) agentCheck {

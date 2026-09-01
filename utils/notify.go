@@ -93,6 +93,18 @@ var notifyLink string
 
 var sendNotificationOverride func(title, body string)
 
+// runNotifyCommand is the dispatch, replaced in tests so building the argv can
+// be exercised without a toast appearing on the developer's own screen.
+var runNotifyCommand = func(cmd *exec.Cmd) error { return cmd.Run() }
+
+// SilenceNotifyDispatchForTests keeps the per-OS argv building under test while
+// stopping anything from actually being displayed.
+func SilenceNotifyDispatchForTests(t interface{ Cleanup(func()) }) {
+	original := runNotifyCommand
+	runNotifyCommand = func(*exec.Cmd) error { return nil }
+	t.Cleanup(func() { runNotifyCommand = original })
+}
+
 func SilenceNotificationsForTests() {
 	sendNotificationOverride = func(string, string) {
 		// no desktop alerts in tests
@@ -122,7 +134,7 @@ func sendNotification(title, body string) {
 				args = append(args, "-sender", "com.apple.Terminal")
 			}
 			cmd = exec.Command(path, args...)
-			_ = cmd.Run()
+			_ = runNotifyCommand(cmd)
 			return
 		}
 		script := fmt.Sprintf(
@@ -147,7 +159,7 @@ func sendNotification(title, body string) {
 	default:
 		return
 	}
-	_ = cmd.Run() // best-effort; notification failure is never fatal
+	_ = runNotifyCommand(cmd) // best-effort; notification failure is never fatal
 }
 
 // IsNotificationsEnabled returns true when the user has opted into notifications.
