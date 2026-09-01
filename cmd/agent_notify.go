@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -36,6 +37,53 @@ func launcherURL() string {
 		return ""
 	}
 	return strings.TrimSuffix(u.String(), "/") + "/app"
+}
+
+// localLauncherURL is the same launcher page, served from this machine. Empty
+// when no MCP that `agent up` started is listening.
+func localLauncherURL() string {
+	dir, err := agentDir()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(dir, mcpAddrName))
+	if err != nil {
+		return ""
+	}
+	addr := loopbackAddr(strings.TrimSpace(string(data)))
+	if addr == "" || !mcpListening(addr) {
+		return ""
+	}
+	return "http://" + addr + "/app"
+}
+
+// loopbackAddr turns a listen address into one this machine can dial.
+// `--http 0.0.0.0:8765` listens everywhere but is not itself dialable.
+func loopbackAddr(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		return ""
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		return net.JoinHostPort("127.0.0.1", port)
+	}
+	return net.JoinHostPort(host, port)
+}
+
+// preferLocalLink rewrites the launcher link for the desktop toast. The toast
+// is read at the machine corgi runs on, where the public URL is a round trip
+// out to the internet and back to reach a page already served from localhost —
+// and it is dead whenever the tunnel is. Only the launcher is swapped: a
+// claude.ai session URL is the session, and has no local equivalent.
+func preferLocalLink(link string) string {
+	if link == "" || link != launcherURL() {
+		return link
+	}
+	if local := localLauncherURL(); local != "" {
+		return local
+	}
+	return link
 }
 
 func webhookNotifier(rawURL string, client *http.Client) func(title, body string) {

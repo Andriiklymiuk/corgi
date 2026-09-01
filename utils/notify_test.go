@@ -49,9 +49,9 @@ func TestNotify_DisabledNoOp(t *testing.T) {
 }
 
 func TestNotifyRaw_DoesNotPanic(t *testing.T) {
-	// NotifyRaw fires unconditionally. On CI/test machines the OS tools
-	// (osascript/notify-send) may not be present — that is fine, errors are
-	// swallowed. Just ensure no panic.
+	// Dispatch is stubbed: NotifyRaw fires unconditionally, and a test run must
+	// not put toasts on the screen of whoever is running it.
+	SilenceNotifyDispatchForTests(t)
 	NotifyRaw("corgi test", "test notification from unit tests")
 }
 
@@ -70,10 +70,9 @@ func TestPowershellQuote(t *testing.T) {
 }
 
 func TestSendNotification_DoesNotPanic(t *testing.T) {
-	// Ensure sendNotification doesn't panic on any OS.
-	// The underlying command may fail (no osascript in Linux CI) — that's OK.
-	_ = os.Getenv("GOOS") // just to make the import used
+	SilenceNotifyDispatchForTests(t)
 	sendNotification("corgi", "unit test")
+	NotifyWithLink("corgi", "unit test", "https://example.com/app")
 }
 
 func TestClaimNotifyToken_Throttles(t *testing.T) {

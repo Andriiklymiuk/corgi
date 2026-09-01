@@ -38,6 +38,13 @@ const systemdUnitName = "corgi-agent.service"
 // systemctlUser scopes systemctl to the calling user's manager.
 const systemctlUser = "--user"
 
+// runSupervisorCommand runs launchctl / systemctl. A seam, so the file-writing and
+// error paths can be tested without loading a real job into the test runner's
+// login session.
+var runSupervisorCommand = func(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).CombinedOutput()
+}
+
 func installSupported() bool {
 	switch runtime.GOOS {
 	case "darwin", "linux":
@@ -56,18 +63,83 @@ func installMechanism() string {
 	return "unsupported"
 }
 
+func unsupportedInstallError() error {
+	return fmt.Errorf("agent mode start-at-login is macOS and Linux for now, not %s.\n"+
+		"Run `corgi agent serve` under your own supervisor instead", runtime.GOOS)
+}
+
+// loginServicePath is where this platform keeps corgi's start-at-login file.
+// Empty on a platform with no supported mechanism.
+func loginServicePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
+	case "linux":
+		return filepath.Join(home, ".config", "systemd", "user", systemdUnitName)
+	}
+	return ""
+}
+
+// loginServiceInstalled reports whether the start-at-login file is in place.
+// The file, not the running process: the question it answers is "will this come
+// back after a reboot", which a currently-running daemon does not settle.
+func loginServiceInstalled() bool {
+	path := loginServicePath()
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 func runAgentInstall(_ *cobra.Command, _ []string) {
 	if !installSupported() {
 		// Stated plainly rather than half-installing: silent partial support is
 		// the worst option, because it looks like it worked.
-		exitWithError("agent_install_unsupported",
-			fmt.Errorf("agent mode start-at-login is macOS and Linux for now, not %s.\n"+
-				"Run `corgi agent serve` under your own supervisor instead", runtime.GOOS), 2)
+		exitWithError("agent_install_unsupported", unsupportedInstallError(), 2)
 	}
+	if err := installLoginService(); err != nil {
+		exitWithError("agent_install", err, 1)
+	}
+	reportLoginInstall(adoptSavedUpAtLogin())
+}
 
+// reportLoginInstall says what login start will actually bring back, which is
+// the daemon alone unless a previous `agent up` left settings to repeat.
+func reportLoginInstall(withUp bool) {
+	utils.Info("corgi agent now starts at login. Check it with `corgi agent status`.")
+	if withUp {
+		utils.Info("it also restores the MCP endpoint and tunnel from your last `corgi agent up`")
+		return
+	}
+	utils.Info("that is the daemon only — run `corgi agent up --at-login` in a stack to also restore the tunnel and pairing server")
+}
+
+// adoptSavedUpAtLogin turns on tunnel restore when a previous `agent up` left
+// settings to repeat. Nothing is invented for a user who never ran `up`: a
+// public tunnel must never start from a command that did not ask for one.
+func adoptSavedUpAtLogin() bool {
+	dir, err := agentDir()
+	if err != nil || !upSettingsExist(dir) {
+		return false
+	}
+	s := loadUpSettings(dir)
+	if s.AtLogin {
+		return true
+	}
+	s.AtLogin, s.AtLoginAsked = true, true
+	return saveUpSettings(dir, s) == nil
+}
+
+// installLoginService writes the platform's service file and loads it.
+func installLoginService() error {
 	binary, err := os.Executable()
 	if err != nil {
-		exitWithError("agent_install", err, 1)
+		return err
 	}
 	// Deliberately NOT EvalSymlinks. Homebrew installs corgi as a symlink into
 	// a versioned Cellar directory; resolving it would bake that version into
@@ -76,18 +148,19 @@ func runAgentInstall(_ *cobra.Command, _ []string) {
 
 	logDir, err := agentDir()
 	if err != nil {
-		exitWithError("agent_data_dir", err, 1)
+		return err
 	}
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		exitWithError("agent_install", err, 1)
+		return err
 	}
 
 	switch runtime.GOOS {
 	case "darwin":
-		installLaunchd(binary, logDir)
+		return installLaunchd(binary, logDir)
 	case "linux":
-		installSystemd(binary, logDir)
+		return installSystemd(binary, logDir)
 	}
+	return unsupportedInstallError()
 }
 
 // servicePATH is the PATH the supervised daemon runs with. launchd and systemd
@@ -146,31 +219,29 @@ func servicePATH() string {
 	return strings.Join(parts, string(filepath.ListSeparator))
 }
 
-func installLaunchd(binary, logDir string) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		exitWithError("agent_install", err, 1)
+func installLaunchd(binary, logDir string) error {
+	plistPath := loginServicePath()
+	if plistPath == "" {
+		return fmt.Errorf("could not resolve your home directory")
 	}
-	plistPath := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
 
 	plist := renderedLaunchdPlist(binary, filepath.Join(logDir, "agent.log"), filepath.Join(logDir, "agent.err.log"), serviceEnv())
 
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
-		exitWithError("agent_install", err, 1)
+		return err
 	}
 	if err := os.WriteFile(plistPath, []byte(plist), 0o644); err != nil {
-		exitWithError("agent_install", err, 1)
+		return err
 	}
 
 	// bootout first so a reinstall picks up a changed binary path.
-	_ = exec.Command("launchctl", "bootout", "gui/"+currentUID(), plistPath).Run()
-	if out, err := exec.Command("launchctl", "bootstrap", "gui/"+currentUID(), plistPath).CombinedOutput(); err != nil {
-		exitWithError("agent_install",
-			fmt.Errorf("launchctl bootstrap failed: %v\n%s", err, out), 1)
+	_, _ = runSupervisorCommand("launchctl", "bootout", "gui/"+currentUID(), plistPath)
+	if out, err := runSupervisorCommand("launchctl", "bootstrap", "gui/"+currentUID(), plistPath); err != nil {
+		return fmt.Errorf("launchctl bootstrap failed: %v\n%s", err, out)
 	}
 
 	utils.Infof("installed %s\n", plistPath)
-	utils.Info("corgi agent now starts at login. Check it with `corgi agent status`.")
+	return nil
 }
 
 // renderedLaunchdPlist is the plist corgi installs. It deliberately contains no
@@ -222,36 +293,38 @@ func renderedLaunchdPlist(binary, outLog, errLog string, env map[string]string) 
 `, launchdLabel, binary, envEntries.String(), outLog, errLog)
 }
 
-func installSystemd(binary, logDir string) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		exitWithError("agent_install", err, 1)
+func installSystemd(binary, logDir string) error {
+	unitPath := loginServicePath()
+	if unitPath == "" {
+		return fmt.Errorf("could not resolve your home directory")
 	}
-	unitDir := filepath.Join(home, ".config", "systemd", "user")
-	unitPath := filepath.Join(unitDir, systemdUnitName)
 
 	unit := renderedSystemdUnit(binary, serviceEnv())
 
-	if err := os.MkdirAll(unitDir, 0o755); err != nil {
-		exitWithError("agent_install", err, 1)
+	if err := os.MkdirAll(filepath.Dir(unitPath), 0o755); err != nil {
+		return err
 	}
 	if err := os.WriteFile(unitPath, []byte(unit), 0o644); err != nil {
-		exitWithError("agent_install", err, 1)
+		return err
 	}
 
-	run := func(args ...string) {
-		if out, err := exec.Command("systemctl", args...).CombinedOutput(); err != nil {
-			exitWithError("agent_install",
-				fmt.Errorf("systemctl %v failed: %v\n%s", args, err, out), 1)
+	run := func(args ...string) error {
+		if out, err := runSupervisorCommand("systemctl", args...); err != nil {
+			return fmt.Errorf("systemctl %v failed: %v\n%s", args, err, out)
 		}
+		return nil
 	}
-	run(systemctlUser, "daemon-reload")
-	run(systemctlUser, "enable", "--now", systemdUnitName)
+	if err := run(systemctlUser, "daemon-reload"); err != nil {
+		return err
+	}
+	if err := run(systemctlUser, "enable", "--now", systemdUnitName); err != nil {
+		return err
+	}
 
 	utils.Infof("installed %s\n", unitPath)
-	utils.Info("corgi agent now starts at login. Check it with `corgi agent status`.")
 	utils.Info("If it should survive logout too: `loginctl enable-linger $USER`")
 	_ = logDir
+	return nil
 }
 
 // renderedSystemdUnit is the user unit corgi installs. Like the plist, it
@@ -285,29 +358,41 @@ func runAgentUninstall(_ *cobra.Command, _ []string) {
 		exitWithError("agent_install_unsupported",
 			fmt.Errorf("nothing to uninstall on %s", runtime.GOOS), 2)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		exitWithError("agent_uninstall", err, 1)
-	}
+	path := loginServicePath()
 
 	switch runtime.GOOS {
 	case "darwin":
-		plistPath := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
-		_ = exec.Command("launchctl", "bootout", "gui/"+currentUID(), plistPath).Run()
-		if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
-			exitWithError("agent_uninstall", err, 1)
-		}
-		utils.Infof("removed %s\n", plistPath)
+		_, _ = runSupervisorCommand("launchctl", "bootout", "gui/"+currentUID(), path)
 	case "linux":
-		_ = exec.Command("systemctl", systemctlUser, "disable", "--now", systemdUnitName).Run()
-		unitPath := filepath.Join(home, ".config", "systemd", "user", systemdUnitName)
-		if err := os.Remove(unitPath); err != nil && !os.IsNotExist(err) {
-			exitWithError("agent_uninstall", err, 1)
-		}
-		_ = exec.Command("systemctl", systemctlUser, "daemon-reload").Run()
-		utils.Infof("removed %s\n", unitPath)
+		_, _ = runSupervisorCommand("systemctl", systemctlUser, "disable", "--now", systemdUnitName)
 	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		exitWithError("agent_uninstall", err, 1)
+	}
+	if runtime.GOOS == "linux" {
+		_, _ = runSupervisorCommand("systemctl", systemctlUser, "daemon-reload")
+	}
+	utils.Infof("removed %s\n", path)
+
+	// The service file is gone, so nothing would read the flag anyway; clearing
+	// it keeps `agent status` from claiming a restore that cannot happen.
+	clearAtLogin()
 	utils.Info("corgi agent no longer starts at login")
+}
+
+// clearAtLogin turns off tunnel restore, leaving the rest of the saved `up`
+// settings alone so the next `agent up` still repeats the named tunnel.
+func clearAtLogin() {
+	dir, err := agentDir()
+	if err != nil || !upSettingsExist(dir) {
+		return
+	}
+	s := loadUpSettings(dir)
+	if !s.AtLogin {
+		return
+	}
+	s.AtLogin = false
+	_ = saveUpSettings(dir, s)
 }
 
 // escapeXML makes a path safe to interpolate into the plist.

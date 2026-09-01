@@ -26,8 +26,13 @@ func TestSleepRiskOnBatteryWithSleepEnabled(t *testing.T) {
 	if !strings.Contains(risk.Reason, "1 minute") || strings.Contains(risk.Reason, "1 minutes") {
 		t.Errorf("reason must read naturally: %q", risk.Reason)
 	}
-	if !strings.Contains(risk.Fix, "pmset -b sleep 0") {
-		t.Errorf("fix must be the command that removes it: %q", risk.Fix)
+	// `caffeinate -i` IS honoured on battery — only `-s` is AC-only — so the
+	// warning must not tell people the wake lock does nothing here.
+	if strings.Contains(risk.Reason, "cannot stop that") || strings.Contains(risk.Fix, "pmset -b sleep 0") {
+		t.Errorf("the old claim that battery defeats the wake lock is wrong: %q / %q", risk.Reason, risk.Fix)
+	}
+	if !strings.Contains(risk.Reason, "lid") {
+		t.Errorf("what actually ends a session on battery is the lid: %q", risk.Reason)
 	}
 }
 

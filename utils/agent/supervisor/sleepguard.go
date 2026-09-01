@@ -10,8 +10,11 @@ import (
 	"time"
 )
 
-// macOS honours `caffeinate -s` on AC power only, so a laptop on battery
-// sleeps with the wake lock held and every remote request stalls or fails.
+// `caffeinate -s` (PreventSystemSleep) is honoured on AC power only — that is
+// documented in `man caffeinate`. `-i` (PreventUserIdleSystemSleep) is NOT: it
+// holds off idle sleep on battery too, and corgi passes both. So a laptop on
+// battery does not doze off mid-session; what still ends the session is a
+// closed lid or a flat battery, neither of which any assertion can stop.
 type SleepRisk struct {
 	OnBattery bool
 	// SleepMinutes is 0 for never, negative when it could not be read.
@@ -73,9 +76,9 @@ func sleepRiskFrom(battOutput, customOutput string) SleepRisk {
 		return risk
 	}
 
-	risk.Reason = "on battery, this Mac sleeps after " + plural(risk.SleepMinutes, "minute") +
-		" — the wake lock cannot stop that (macOS honours it on AC power only), so remote sessions stall or fail"
-	risk.Fix = "plug in, or `sudo pmset -b sleep 0`"
+	risk.Reason = "on battery (idle sleep is set to " + plural(risk.SleepMinutes, "minute") +
+		"). The wake lock holds idle sleep off, but a closed lid or a flat battery still ends a remote session"
+	risk.Fix = "plug in and keep the lid open for a long unattended run"
 	return risk
 }
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -138,6 +139,11 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		}
 		return launcherURL()
 	}
+	// The desktop toast is read here, at the machine corgi runs on, so it opens
+	// the launcher served from localhost rather than the public tunnel.
+	d.NotifyWithLink = func(title, body, link string) {
+		utils.NotifyWithLink(title, body, preferLocalLink(link))
+	}
 	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.NotifyUrl != "" {
 		hook := webhookNotifier(user.NotifyUrl, nil)
 		linked := webhookLinkNotifier(user.NotifyUrl, nil)
@@ -158,6 +164,17 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 	printStartupDiagnostics(configs)
 
+	// Held for the daemon's whole life, not just a session's: a sleeping laptop
+	// answers no phone, and the gap between sessions is exactly when the phone
+	// is used to start one.
+	if lock := daemonWakeLock(dir); lock != nil {
+		defer lock.Release()
+	}
+
+	// Started at login, this is the half `corgi agent install` never covered:
+	// the endpoint and tunnel the last `up --at-login` used come back too.
+	restoreUpAtLogin(dir)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -169,6 +186,27 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_serve", err, 1)
 	}
 	utils.Info(art.BlueColor, "corgi agent stopped", art.WhiteColor)
+}
+
+// daemonWakeLock takes the machine-wide wake lock when the user config asks for
+// it. Returns nil when it is off or unavailable, so the caller has nothing to
+// release. Never fatal: a daemon that cannot hold a lock still supervises.
+func daemonWakeLock(dir string) *supervisor.WakeLock {
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil || user == nil || !user.StayAwake {
+		return nil
+	}
+	if !supervisor.Supported() {
+		utils.Infof("⚠ stayAwake is set but no wake lock exists on %s\n", runtime.GOOS)
+		return nil
+	}
+	lock := supervisor.NewWakeLock(supervisor.WakeLockAlways)
+	if err := lock.Acquire(os.Getpid()); err != nil {
+		utils.Infof("⚠ stayAwake is set but the wake lock did not start: %v\n", err)
+		return nil
+	}
+	utils.Info("agent: holding the machine awake for as long as this daemon runs (stayAwake)")
+	return lock
 }
 
 // loadSpawnConfigs turns the registry plus both config files into launch
