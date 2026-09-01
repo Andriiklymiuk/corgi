@@ -618,19 +618,7 @@ func printAgentUp(res agentUpResult) {
 	default:
 		fmt.Printf("  ✓ local endpoint: http://%s/mcp (no tunnel yet — see %s)\n", res.MCPAddr, res.LogPath)
 	}
-	if res.PairCode != "" {
-		fmt.Println()
-		if res.PairURL != "" {
-			fmt.Println("  📱 scan to pair (single use, 10 minutes):")
-			fmt.Println()
-			printTerminalQR(res.PairURL)
-			fmt.Printf("    or open: %s\n", res.PairURL)
-		} else {
-			fmt.Println("  pair a device (single use, 10 minutes):")
-			fmt.Printf("    code: %s — POST http://%s/pair {\"code\":\"%s\",\"device\":\"my-phone\"}\n",
-				res.PairCode, res.MCPAddr, res.PairCode)
-		}
-	}
+	printAgentUpPairing(res)
 	if res.Hint != "" {
 		fmt.Printf("  %s\n", res.Hint)
 	}
@@ -650,6 +638,25 @@ func printAgentUp(res agentUpResult) {
 		}
 	}
 	fmt.Println("  or from any MCP client: corgi_session_start {\"workspace\":\"" + orDefault(res.Workspace, "<name>") + "\"}")
+}
+
+// printAgentUpPairing is the pairing half of the summary, split out so the
+// printer stays under the complexity the linter allows.
+func printAgentUpPairing(res agentUpResult) {
+	if res.PairCode == "" {
+		return
+	}
+	fmt.Println()
+	if res.PairURL != "" {
+		fmt.Println("  📱 scan to pair (single use, 10 minutes):")
+		fmt.Println()
+		printTerminalQR(res.PairURL)
+		fmt.Printf("    or open: %s\n", res.PairURL)
+		return
+	}
+	fmt.Println("  pair a device (single use, 10 minutes):")
+	fmt.Printf("    code: %s — POST http://%s/pair {\"code\":\"%s\",\"device\":\"my-phone\"}\n",
+		res.PairCode, res.MCPAddr, res.PairCode)
 }
 
 func lanLauncherURL(addr, code string) string {

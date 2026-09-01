@@ -385,8 +385,11 @@ life — that is the replacement for a `caffeinate` left running in a terminal.
 On macOS, a workspace under `~/Documents`, `~/Desktop`, `~/Downloads` or iCloud
 Drive makes macOS ask to let corgi read it — and ask again after every corgi
 upgrade, because corgi is ad-hoc signed. Suggest moving the stack to `~/dev`
-(then `corgi agent workspaces relocate <id> <new path>`); nothing else makes it
-stop for good.
+(then `corgi agent workspaces relocate <id> <new path>`).
+
+A "Claude is waiting for your input" toast when nothing is blocked is Claude's
+60-second idle nudge. corgi drops it by default; `corgi agent hooks enable
+--idle` puts it back.
 
 ### What travels through the corgi tunnel — and what does not
 

@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"time"
+
 	"andriiklymiuk/corgi/utils"
 
 	"github.com/manifoldco/promptui"
@@ -108,6 +110,19 @@ func confirmAtLogin() bool {
 // back the MCP endpoint and tunnel the last `up --at-login` used. Silent and
 // best-effort — a daemon must never fail to supervise workspaces because a
 // tunnel provider was not reachable yet.
+// awaitMCPBound waits for the freshly spawned server to take the port. A
+// timeout is not an error: the server logs its own failure, and the caller has
+// nothing useful left to do about it.
+func awaitMCPBound(addr string, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if mcpListening(addr) {
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
 func restoreUpAtLogin(dir string) {
 	settings := loadUpSettings(dir)
 	if !settings.AtLogin {
@@ -138,4 +153,8 @@ func restoreUpAtLogin(dir string) {
 		return
 	}
 	utils.Infof("agent: restoring the MCP endpoint on %s from your last `corgi agent up`\n", addr)
+	// Keep the lock until the port is actually bound. Releasing at spawn leaves
+	// a window where an `agent up` seconds later still sees a free port and
+	// starts a second server, and the two fight over it.
+	awaitMCPBound(addr, 15*time.Second)
 }

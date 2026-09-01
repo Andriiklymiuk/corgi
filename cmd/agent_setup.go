@@ -372,6 +372,7 @@ var agentDoctorCmd = &cobra.Command{
 // check and its assertions.
 const (
 	checkWakeLock   = "wake lock"
+	checkAtLogin    = "start at login"
 	checkUserConfig = "user config"
 )
 
@@ -525,7 +526,7 @@ func wakeLockScope() string {
 func checkInstallSupport() agentCheck {
 	if !installSupported() {
 		return agentCheck{
-			Name:   "start at login",
+			Name:   checkAtLogin,
 			Detail: "not supported on " + runtime.GOOS,
 			Fix:    "run `corgi agent serve` yourself, or supervise it with your own tooling",
 		}
@@ -535,7 +536,7 @@ func checkInstallSupport() agentCheck {
 	// what is actually installed rather than what the platform could support.
 	if !loginServiceInstalled() {
 		return agentCheck{
-			Name:   "start at login",
+			Name:   checkAtLogin,
 			OK:     true,
 			Detail: "not installed — nothing comes back after a reboot",
 			Fix:    "`corgi agent up --at-login` in a stack, or `corgi agent install` for the daemon alone",
@@ -545,7 +546,7 @@ func checkInstallSupport() agentCheck {
 	if dir, err := agentDir(); err == nil && loadUpSettings(dir).AtLogin {
 		detail = installMechanism() + " — daemon, MCP endpoint and tunnel"
 	}
-	return agentCheck{Name: "start at login", OK: true, Detail: detail}
+	return agentCheck{Name: checkAtLogin, OK: true, Detail: detail}
 }
 
 func checkUserConfigPermissions(path string) agentCheck {

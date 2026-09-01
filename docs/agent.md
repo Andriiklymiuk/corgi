@@ -366,6 +366,11 @@ corgi agent hooks enable --all --turns   # also ping on every finished turn (noi
 
 Only the permission prompt notifies by default: it blocks the session until you
 answer, while a finished turn fires constantly once several workspaces are busy.
+
+Claude fires the same hook for a second thing — a **60-second idle nudge**
+("Claude is waiting for your input") that arrives when nothing is blocked at all.
+corgi drops that one: a notification for a session that wants nothing is how
+people learn to ignore all of them. `corgi agent hooks enable --idle` keeps it.
 Notifications go to the machine running corgi — **set `notifyUrl` to reach your
 phone**, or the hooks only reach the desk you were trying to leave. On macOS with
 `terminal-notifier` installed, clicking the desktop toast opens that workspace's
@@ -868,9 +873,20 @@ corgi agent workspaces relocate your-stack ~/dev/your-stack
 ```
 
 `corgi agent status` lists the registered workspaces macOS gates, so the dialog
-has an explanation somewhere other than your memory. Until corgi is
-Developer-ID signed and notarized, an upgrade will re-ask for any workspace left
-in one of them.
+has an explanation somewhere other than your memory.
+
+### The permanent fix (maintainers only)
+
+One Developer ID signature gives corgi a single identity that survives upgrades,
+and the answer sticks. That is a **release-side** job, done once by whoever
+publishes corgi — nothing for anyone installing it to do, and nothing anyone
+installing it has to pay for.
+
+`.goreleaser.yaml` already carries the `notarize` block. It is inert until five
+repo secrets exist, so releases without them ship unsigned exactly as today.
+See [RELEASING.md](../RELEASING.md) for how to create them.
+
+Until that is done, an upgrade re-asks for any workspace left in a gated folder.
 
 ## Security summary
 

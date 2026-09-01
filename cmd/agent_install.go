@@ -38,6 +38,13 @@ const systemdUnitName = "corgi-agent.service"
 // systemctlUser scopes systemctl to the calling user's manager.
 const systemctlUser = "--user"
 
+// runSupervisorCommand runs launchctl / systemctl. A seam, so the file-writing and
+// error paths can be tested without loading a real job into the test runner's
+// login session.
+var runSupervisorCommand = func(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).CombinedOutput()
+}
+
 func installSupported() bool {
 	switch runtime.GOOS {
 	case "darwin", "linux":
@@ -228,8 +235,8 @@ func installLaunchd(binary, logDir string) error {
 	}
 
 	// bootout first so a reinstall picks up a changed binary path.
-	_ = exec.Command("launchctl", "bootout", "gui/"+currentUID(), plistPath).Run()
-	if out, err := exec.Command("launchctl", "bootstrap", "gui/"+currentUID(), plistPath).CombinedOutput(); err != nil {
+	_, _ = runSupervisorCommand("launchctl", "bootout", "gui/"+currentUID(), plistPath)
+	if out, err := runSupervisorCommand("launchctl", "bootstrap", "gui/"+currentUID(), plistPath); err != nil {
 		return fmt.Errorf("launchctl bootstrap failed: %v\n%s", err, out)
 	}
 
@@ -302,7 +309,7 @@ func installSystemd(binary, logDir string) error {
 	}
 
 	run := func(args ...string) error {
-		if out, err := exec.Command("systemctl", args...).CombinedOutput(); err != nil {
+		if out, err := runSupervisorCommand("systemctl", args...); err != nil {
 			return fmt.Errorf("systemctl %v failed: %v\n%s", args, err, out)
 		}
 		return nil
@@ -355,15 +362,15 @@ func runAgentUninstall(_ *cobra.Command, _ []string) {
 
 	switch runtime.GOOS {
 	case "darwin":
-		_ = exec.Command("launchctl", "bootout", "gui/"+currentUID(), path).Run()
+		_, _ = runSupervisorCommand("launchctl", "bootout", "gui/"+currentUID(), path)
 	case "linux":
-		_ = exec.Command("systemctl", systemctlUser, "disable", "--now", systemdUnitName).Run()
+		_, _ = runSupervisorCommand("systemctl", systemctlUser, "disable", "--now", systemdUnitName)
 	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		exitWithError("agent_uninstall", err, 1)
 	}
 	if runtime.GOOS == "linux" {
-		_ = exec.Command("systemctl", systemctlUser, "daemon-reload").Run()
+		_, _ = runSupervisorCommand("systemctl", systemctlUser, "daemon-reload")
 	}
 	utils.Infof("removed %s\n", path)
 

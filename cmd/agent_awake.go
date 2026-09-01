@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -103,6 +104,11 @@ func writeStayAwake(path string, on bool) error {
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("cannot read %s: %v", path, err)
+	}
+	// A machine that never ran `agent init` has no agent dir yet, and this is a
+	// perfectly reasonable first command to run.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
 	}
 	line := fmt.Sprintf("stayAwake: %t", on)
 	body := string(data)
