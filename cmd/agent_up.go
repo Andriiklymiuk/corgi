@@ -65,6 +65,7 @@ type agentUpResult struct {
 	PairCode   string `json:"pairingCode,omitempty"`
 	PairURL    string `json:"pairingUrl,omitempty"`
 	LogPath    string `json:"mcpLog,omitempty"`
+	AtLogin    bool   `json:"atLogin"`
 	Hint       string `json:"hint,omitempty"`
 }
 
@@ -124,6 +125,11 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_up_daemon", err, 1)
 	}
 	res.DaemonPID = info.PID
+
+	// Before the MCP branch, so every path below — including "already
+	// listening" — answers the reboot question exactly once.
+	ensureAtLogin(dir, cmd, &settings)
+	res.AtLogin = settings.AtLogin
 
 	res.LogPath = filepath.Join(dir, mcpLogName)
 	if mcpListening(addr) {
@@ -227,6 +233,10 @@ func registerCwdWorkspace() (string, bool) {
 	if err := workspace.Save(path, registry); err != nil {
 		exitWithError("agent_registry_write", err, 1)
 	}
+	// Said at registration, once, while the choice of directory is still fresh.
+	if note := protectedWorkspaceNote(cwd); note != "" {
+		utils.Infof("ℹ %s\n", note)
+	}
 	return id, true
 }
 
@@ -257,6 +267,10 @@ type upSettings struct {
 	Provider       string `json:"provider,omitempty"`
 	TunnelName     string `json:"tunnelName,omitempty"`
 	TunnelHostname string `json:"tunnelHostname,omitempty"`
+	// AtLogin is read by the daemon at startup: it repeats this up after a
+	// reboot. AtLoginAsked stops a declined offer being made every morning.
+	AtLogin      bool `json:"atLogin,omitempty"`
+	AtLoginAsked bool `json:"atLoginAsked,omitempty"`
 }
 
 const upSettingsName = "up.json"
@@ -275,6 +289,9 @@ func upSettingsFromFlags(cmd *cobra.Command) upSettings {
 // `--tunnel-hostname ""` is how you go back to a quick tunnel. The returned
 // string names what was reused, for the notice.
 func mergeUpSettings(cur upSettings, changed func(string) bool, saved upSettings) (upSettings, string) {
+	// Not flags, so they are never in cur: carried across, or a bare `up` would
+	// silently switch start-at-login back off.
+	cur.AtLogin, cur.AtLoginAsked = saved.AtLogin, saved.AtLoginAsked
 	var reused []string
 	pick := func(flag string, cur *string, saved string) {
 		if changed(flag) || saved == "" {
@@ -300,6 +317,14 @@ func loadUpSettings(dir string) upSettings {
 		s.HTTP = ""
 	}
 	return s
+}
+
+// upSettingsExist reports whether an `agent up` ever completed here. It gates
+// start-at-login restore: there is nothing to bring back for a machine that
+// only ever ran the daemon.
+func upSettingsExist(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, upSettingsName))
+	return err == nil && !info.IsDir()
 }
 
 func saveUpSettings(dir string, s upSettings) error {
@@ -584,6 +609,9 @@ func printAgentUp(res agentUpResult) {
 		fmt.Printf("  ✓ workspace %s (%s)\n", res.Workspace, verb)
 	}
 	fmt.Printf("  ✓ agent daemon running (pid %d)\n", res.DaemonPID)
+	if res.AtLogin {
+		fmt.Printf("  ✓ starts at login (%s) — survives a reboot\n", installMechanism())
+	}
 	switch {
 	case res.PublicURL != "":
 		fmt.Printf("  ✓ public endpoint: %s/mcp\n", res.PublicURL)
@@ -828,6 +856,7 @@ func addAgentUpFlags(c *cobra.Command) {
 	c.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
 	c.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — a stable public URL you can bookmark, and a phone that stays paired (needs a one-time `cloudflared tunnel create` and --tunnel-hostname; see docs/agent.md)")
 	c.Flags().String("tunnel-hostname", "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass \"\" to go back to a quick tunnel")
+	c.Flags().Bool(atLoginFlag, false, "Also start corgi agent at login, so the daemon, this endpoint and this tunnel come back after a reboot (--at-login=false turns it off again)")
 	c.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
 }
 

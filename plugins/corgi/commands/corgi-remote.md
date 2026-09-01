@@ -16,7 +16,7 @@ Follow the `agent` skill (`plugins/corgi/skills/agent/SKILL.md`) — the
 1. `corgi agent up` (detached; `--json` for structured output). Print the QR /
    pairing URL for the user to scan. Port already held by a healthy corgi MCP →
    it reports as already up; a NEW pairing window needs `corgi agent up --fresh`.
-2. Reboot survival: offer `corgi agent install` (start at login).
+2. Reboot survival: offer `corgi agent up --at-login` (daemon + endpoint + tunnel at login; `corgi agent install` is the daemon alone).
 3. Permanent URL: offer the named tunnel (`--tunnel-name <name> --tunnel-hostname <host>`,
    one-time `cloudflared tunnel create` + `route dns` — docs/agent.md carries the
    steps). Same origin every restart, so the phone never re-pairs.

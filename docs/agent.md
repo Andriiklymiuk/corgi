@@ -55,11 +55,33 @@ daemon + MCP + tunnel + pairing, and print a QR (and the pairing code):
 ```bash
 cd ~/dev/your-stack
 corgi agent up                   # register + daemon + tunnel + pairing, prints a QR
+corgi agent up --at-login        # the same, and it all comes back after a reboot
 ```
 
 Everything `agent up` starts is **detached**, so it survives crashes and the
-Remote Control network timeout — but not a reboot. Add `corgi agent install`
-once to start the daemon at login so it comes back after a restart.
+Remote Control network timeout — but not a reboot, unless you say so once.
+
+### Surviving a reboot
+
+`--at-login` installs the platform service (launchd / systemd) **and** records
+this up, so the daemon repeats it when it next starts itself: the MCP endpoint,
+the tunnel and the pairing server come back with it. In a terminal, a bare
+`agent up` offers the same thing once and remembers your answer.
+
+`corgi agent install` on its own is the daemon half only — supervised sessions
+come back, the endpoint your phone talks to does not. Run it after an `up` and
+it adopts that up; run it on a machine that has never done one and it says so.
+
+```bash
+corgi agent up --at-login        # daemon + endpoint + tunnel at login
+corgi agent up --at-login=false  # stop doing that (the service is left alone)
+corgi agent uninstall            # remove the service entirely
+corgi agent status               # "start at login: launchd — daemon, MCP endpoint and tunnel"
+```
+
+A quick tunnel gets a **new URL** each time it comes back, so the phone has to
+re-pair. Pair a named tunnel with it (`--tunnel-hostname`) and the URL after a
+reboot is the one already saved on the phone.
 
 Or do it step by step:
 
@@ -165,7 +187,9 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent init` | register this stack, write `.corgi/agent.yml` |
 | `corgi agent scan <dir>` | find stacks under a directory and register them (does not enable) |
 | `corgi agent serve` | supervise Remote Control for every enabled workspace |
-| `corgi agent install` / `uninstall` | start (or stop starting) at login |
+| `corgi agent install` / `uninstall` | start (or stop starting) at login — daemon only |
+| `corgi agent up --at-login` | the same, plus the endpoint and tunnel that up used |
+| `corgi agent awake [on\|off]` | keep the machine awake for the daemon's whole life |
 | `corgi agent status [--json]` | what is running, restarts, which account |
 | `corgi agent doctor [--json]` | can this work here, and what to fix |
 | `corgi agent workspaces` | list, `forget`, `relocate` |
@@ -278,10 +302,11 @@ stop supervising a workspace, set `autostart: false` for it instead.
 The tunnel is the fragile part, and three things break it in ways that look
 like corgi being down:
 
-- **The Mac sleeps.** On battery, macOS honours the wake lock's `-s` only on AC
-  power, so a laptop with `sleep 1` sleeps anyway and every request stalls.
-  `corgi agent status`, `doctor` and `up` now say so, with the fix: plug in, or
-  `sudo pmset -b sleep 0`.
+- **The Mac sleeps between sessions.** The wake lock is held per session by
+  default, so with nothing running the laptop dozes off and a phone tap reaches
+  nothing at all. `corgi agent awake on` holds it for as long as the daemon
+  runs. On battery `caffeinate -i` still works — only `-s` is AC-only — so what
+  actually ends a session is a closed lid or a flat battery.
 - **A blocked tunnel domain.** Most networks are fine here — plenty of people
   run a `*.trycloudflare.com` link over cellular for years and never hit this.
   But that domain and `*.loca.lt` are on enough blocklists that *some* carriers
@@ -345,6 +370,11 @@ Notifications go to the machine running corgi — **set `notifyUrl` to reach you
 phone**, or the hooks only reach the desk you were trying to leave. On macOS with
 `terminal-notifier` installed, clicking the desktop toast opens that workspace's
 session (or the launcher when corgi does not know a session URL for it).
+
+The toast is read at the machine corgi runs on, so the launcher it opens is the
+one served from **localhost**, not the public tunnel URL: no round trip out to
+the internet and back, and it still works when the tunnel is down. The phone
+push keeps the public URL, which is the only one that is any use to a phone.
 
 `notifyUrl` picks its payload from the host, so it is not ntfy-only — useful
 because ntfy's **iOS** app is paid:
@@ -421,9 +451,29 @@ to forever, because an always-awake laptop is a flat battery.
 - Configurable per workspace: `wakeLock: session | always | off`. On a desktop
   you want `off`.
 
-**Honest limit:** on macOS, closing the lid on battery sleeps the machine no
-matter what `caffeinate` does. "Lid closed on the train" only works plugged in.
-If that is your workflow, supervise from a machine that stays on.
+### Staying awake between sessions
+
+Per-session scope leaves the worst gap open: with no session running, nothing
+holds the lock, the laptop sleeps, and the phone tap that would have started one
+reaches nothing. That is the gap people paper over with a `caffeinate` left
+running in a terminal all day.
+
+```bash
+corgi agent awake on       # hold the lock for the daemon's whole life
+corgi agent awake          # what is set now
+corgi agent awake off      # back to per session (the default)
+corgi agent restart        # so the running daemon picks it up
+```
+
+It writes `stayAwake: true` into the user config, and the daemon takes
+`caffeinate -i -m -s -w <its own pid>` at startup. Off by default, because a
+machine that never sleeps is a flat battery and that is the owner's call.
+
+**Honest limits:** `caffeinate -s` (prevent system sleep) is AC-only, but `-i`
+(prevent idle sleep) is honoured on battery too, so an idle laptop on battery
+does *not* doze off with the lock held. What still ends a session is closing the
+lid, or the battery running out. "Lid closed on the train" only works plugged
+in; if that is your workflow, supervise from a machine that stays on.
 
 ## Supervising an agent other than Claude Code
 
@@ -793,6 +843,34 @@ export CORGI_DATA_DIR="$(brew --prefix)/var/corgi"
 | macOS | yes — launchd, `caffeinate` |
 | Linux | yes — systemd user unit, `systemd-inhibit` |
 | Windows | **not yet.** `corgi agent install` exits 2 and says so rather than half-installing. Run `corgi agent serve` under your own supervisor. |
+
+## macOS keeps asking to let corgi read Documents
+
+macOS puts `~/Desktop`, `~/Documents`, `~/Downloads` and iCloud Drive behind
+TCC. The first time corgi reads one it has to ask — and the answer is filed
+against that exact binary. corgi ships **ad-hoc signed**, with no Developer ID,
+so every upgrade is a new identity as far as TCC is concerned and the dialog
+comes back. Homebrew makes it worse: the real path is versioned
+(`/opt/homebrew/Cellar/corgi/<version>/bin/corgi`), so it changes too.
+
+```bash
+codesign -dv "$(readlink -f "$(which corgi)")" 2>&1 | grep -E 'Signature|TeamIdentifier'
+# Signature=adhoc / TeamIdentifier=not set  → the answer lasts until the next upgrade
+```
+
+The fix that needs nobody's certificate is to keep workspaces **outside** those
+four folders — `~/dev`, `~/code`, `~/src` are not gated, and macOS never asks
+about them at all:
+
+```bash
+mv ~/Documents/your-stack ~/dev/your-stack
+corgi agent workspaces relocate your-stack ~/dev/your-stack
+```
+
+`corgi agent status` lists the registered workspaces macOS gates, so the dialog
+has an explanation somewhere other than your memory. Until corgi is
+Developer-ID signed and notarized, an upgrade will re-ask for any workspace left
+in one of them.
 
 ## Security summary
 

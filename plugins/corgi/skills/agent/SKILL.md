@@ -129,7 +129,7 @@ Only when the user asks for it, or when they say a remote session keeps dying.
 ```bash
 cd <the stack>
 corgi agent init                 # register AND enable this stack
-corgi agent install              # start at login
+corgi agent up --at-login        # daemon + endpoint + tunnel, back after a reboot
 corgi agent doctor               # what is missing, and how to fix it
 corgi agent status               # what is running, under which account
 ```
@@ -373,6 +373,21 @@ The old longhand still works when you want the pieces separately:
 it with `&`, or use `corgi agent install` to run it at login); `corgi agent up`
 backgrounds it for you.
 
+`corgi agent install` covers the **daemon** only. To have the MCP endpoint and
+the tunnel come back after a reboot too, run `corgi agent up --at-login` once —
+the daemon then repeats that up when it starts itself. Pair it with a named
+tunnel, or the URL after a reboot is new and the phone has to re-pair.
+
+A laptop that sleeps between sessions answers no phone tap: the wake lock is
+per session by default. `corgi agent awake on` holds it for the daemon's whole
+life — that is the replacement for a `caffeinate` left running in a terminal.
+
+On macOS, a workspace under `~/Documents`, `~/Desktop`, `~/Downloads` or iCloud
+Drive makes macOS ask to let corgi read it — and ask again after every corgi
+upgrade, because corgi is ad-hoc signed. Suggest moving the stack to `~/dev`
+(then `corgi agent workspaces relocate <id> <new path>`); nothing else makes it
+stop for good.
+
 ### What travels through the corgi tunnel — and what does not
 
 The corgi tunnel is a **control plane only**: it carries `corgi_session_start`,
@@ -428,7 +443,8 @@ sessions awake but sleeps between turns.
 
 | symptom | what to say / do |
 |---|---|
-| tool errors "daemon is not running" | `corgi agent serve` on the laptop (or `corgi agent install`). |
+| tool errors "daemon is not running" | `corgi agent serve` on the laptop (or `corgi agent up --at-login` so it comes back by itself). |
+| everything gone after a reboot | `corgi agent install` restores the daemon only. `corgi agent up --at-login` restores the endpoint and tunnel too. |
 | tool errors "predates remote session start" | The daemon is an older corgi. Restart it: `corgi agent stop` then `corgi agent serve` (or `corgi agent up`). |
 | workspace `unreachable` | Drive not mounted or folder moved — `corgi agent workspaces relocate`. |
 | workspace marked sensitive | Remote start is refused by design. Start it on the laptop, or unset `sensitive` in `.corgi/agent.yml`. |

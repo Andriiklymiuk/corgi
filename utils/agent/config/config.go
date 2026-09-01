@@ -43,6 +43,12 @@ type UserConfig struct {
 	Defaults   WorkspaceConfig            `yaml:"defaults"`
 	// NotifyUrl gets a POST per daemon notification; trusted config only.
 	NotifyUrl string `yaml:"notifyUrl"`
+	// StayAwake keeps the machine awake for as long as the DAEMON runs, not
+	// just while a session does. Without it a laptop with no session running
+	// goes to sleep and stops answering the phone entirely — which is the one
+	// state agent mode exists to avoid. Off by default: a machine that never
+	// sleeps is a flat battery, and that must be the owner's choice.
+	StayAwake bool `yaml:"stayAwake"`
 	// Profiles are named setting bundles pickable at session-start time —
 	// "work", "personal" — for running one workspace under different Claude
 	// accounts. Trusted like everything else here: a remote caller sends only
