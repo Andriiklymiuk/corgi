@@ -13,29 +13,12 @@ before:
     - sh -c "go run . completion zsh  > completions/corgi.zsh"
     - sh -c "go run . completion fish > completions/corgi.fish"
 builds:
-  - id: corgi
-    env:
+  - env:
       - CGO_ENABLED=0
     goos:
       - linux
       - windows
       - darwin
-
-# Inert without the secrets, so an unsigned release still ships. See RELEASING.md.
-notarize:
-  macos:
-    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
-      ids:
-        - corgi
-      sign:
-        certificate: "{{.Env.MACOS_SIGN_P12}}"
-        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
-      notarize:
-        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
-        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
-        key: "{{.Env.MACOS_NOTARY_KEY}}"
-        wait: true
-        timeout: 20m
 archives:
   - files:
       - completions/*

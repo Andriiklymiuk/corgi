@@ -875,18 +875,8 @@ corgi agent workspaces relocate your-stack ~/dev/your-stack
 `corgi agent status` lists the registered workspaces macOS gates, so the dialog
 has an explanation somewhere other than your memory.
 
-### The permanent fix (maintainers only)
-
-One Developer ID signature gives corgi a single identity that survives upgrades,
-and the answer sticks. That is a **release-side** job, done once by whoever
-publishes corgi — nothing for anyone installing it to do, and nothing anyone
-installing it has to pay for.
-
-`.goreleaser.yaml` already carries the `notarize` block. It is inert until five
-repo secrets exist, so releases without them ship unsigned exactly as today.
-See [RELEASING.md](../RELEASING.md) for how to create them.
-
-Until that is done, an upgrade re-asks for any workspace left in a gated folder.
+So an upgrade re-asks for any workspace left in a gated folder. Moving it out is
+the whole fix.
 
 ## Security summary
 
