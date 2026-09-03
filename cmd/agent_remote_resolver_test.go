@@ -121,3 +121,35 @@ func TestRemoteResolverRejectsAnUnknownProfile(t *testing.T) {
 		t.Errorf("an unknown profile must error and list the defined ones, got %v", err)
 	}
 }
+
+func TestRemoteResolverNamesTheSessionByBranch(t *testing.T) {
+	agentDir := t.TempDir()
+	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n")
+	gitRepoOnBranch(t, stack, "feature/referral")
+	registerStack(t, agentDir, "acme", stack)
+
+	cfg, err := remoteResolver(agentDir, false)("acme", "", "")
+
+	if err != nil {
+		t.Fatalf("a normal workspace must resolve, got %v", err)
+	}
+	if !strings.HasPrefix(cfg.Name, "acme · feature/referral · ") {
+		t.Errorf("name = %q, want the workspace and its branch — a bare id makes every session look alike", cfg.Name)
+	}
+}
+
+func TestRemoteResolverPrefersThePhoneSuppliedName(t *testing.T) {
+	agentDir := t.TempDir()
+	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n")
+	gitRepoOnBranch(t, stack, "main")
+	registerStack(t, agentDir, "acme", stack)
+
+	cfg, err := remoteResolver(agentDir, false)("acme", "", "fix login redirect")
+
+	if err != nil {
+		t.Fatalf("a normal workspace must resolve, got %v", err)
+	}
+	if cfg.Name != "fix login redirect" {
+		t.Errorf("name = %q, want the name typed on the phone", cfg.Name)
+	}
+}
