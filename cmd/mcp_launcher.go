@@ -730,149 +730,247 @@ const launcherPageHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0b0d12">
+<meta name="theme-color" content="#000000">
 <title>corgi</title>
 <style>
-  :root{--bg:#0a0b0e;--card:#141519;--card2:#0f1013;--line:#22242b;--hair:#1a1c22;
-      --text:#eceef2;--dim:#8f94a3;--dim2:#63677a;--green:#6ee787;--amber:#ffa657;--red:#ff7b72;
-      --sp1:.25rem;--sp2:.5rem;--sp3:.75rem;--sp4:1rem;--r:.5rem}
+  /* One scale, one contrast ladder. Sizes are the ones a thumb and an arm's
+     length of daylight need — this page is read on a phone, outdoors, in a
+     hurry, so nothing here is smaller than 12px or shorter than 44px. */
+  :root{
+    --bg:#000;--surface:#101114;--surface2:#191a1e;--press:#212227;
+    --line:#26272c;--hair:#1c1d21;
+    --text:#fff;--dim:#a3a6ad;--dim2:#74777f;
+    --green:#3ddc91;--amber:#ffb84d;--red:#ff6f61;
+    --r:18px;--r-sm:12px;--pill:999px;
+    --tap:48px;--pad:20px;
+    --f-title:1.45rem;--f-row:1.06rem;--f-body:.95rem;--f-sub:.82rem;--f-cap:.75rem;
+  }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* Flex and grid beat the hidden attribute on specificity; this page toggles
+     controls with .hidden, so it must not. */
+  [hidden]{display:none!important}
   html{-webkit-text-size-adjust:100%}
-  button,a,summary,label,input,.chip,.ws,.top,.s{touch-action:manipulation}
-  body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
-      padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased}
-  header{padding:calc(1.2rem + env(safe-area-inset-top)) 1.2rem .3rem;max-width:34rem;margin:0 auto}
-  .brand{display:flex;align-items:center;gap:.7rem}
-  .logo{width:2.6rem;height:2.6rem;border-radius:.9rem;background:linear-gradient(135deg,#1e2634,#131824);
-      border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.35rem;flex:0 0 auto}
-  h1{font-size:1.25rem;margin:0;letter-spacing:.01em}
-  header small{display:block;color:var(--dim);font-size:.78rem;font-weight:400;margin-top:.1rem}
-  header small .what{color:var(--dim);border-bottom:1px dotted var(--line-soft,#3a4152);cursor:pointer}
-  .hostnote{color:var(--dim);font-size:.74rem;line-height:1.5;margin:.45rem 0 0;max-width:30rem}
-  main{padding:.4rem 1.2rem 2.2rem;max-width:34rem;margin:0 auto}
-  .ws{background:var(--card);border:1px solid var(--line);border-radius:.75rem;
-      padding:var(--sp3) var(--sp3) var(--sp2);margin:var(--sp2) 0}
-  .head{display:flex;align-items:center;gap:.7rem}
-  .main{min-width:0;flex:1}
-  .ws .name{font-weight:600;display:flex;align-items:center;gap:.5rem;font-size:.94rem;white-space:nowrap;
-      overflow:hidden;text-overflow:ellipsis;letter-spacing:-.006em}
-  .ws .path{color:var(--dim2);font-size:.7rem;margin-top:.15rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-  .ws .path.full{white-space:normal;word-break:break-all}
-  .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.5rem;line-height:1.45}
-  .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
-  .dot.on{background:var(--green)}
-  .meta{display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;margin-top:.25rem;
-      font-size:.73rem;color:var(--dim2)}
-  .meta span + span::before{content:"\00b7";color:var(--dim2);margin-right:.4rem}
-  .meta .live{color:var(--green)}
-  .meta .why{color:var(--dim)}
-  .usage{font-size:.68rem;color:var(--dim2);margin-top:.15rem;
-      font-variant-numeric:tabular-nums;opacity:.85}
-  .actions{display:flex;align-items:center;gap:.4rem;margin-top:.65rem;flex-wrap:wrap}
-  .startbox{flex-basis:100%;display:none;gap:.4rem;margin-top:.5rem}
-  .startbox.on{display:flex}
-  .startbox select,.startbox input{flex:1 1 6rem;min-width:0;background:var(--card2);border:1px solid var(--line);
-      color:var(--text);border-radius:.5rem;padding:.4rem .55rem;font-size:.78rem;font-family:inherit}
-  .evrow{display:flex;justify-content:space-between;gap:.6rem;font-size:.72rem;color:var(--dim);padding:.2rem .1rem}
-  .evrow b{font-weight:600;color:#c9cfda}
-  .dev{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.8rem;
-      padding:.4rem 0;border-bottom:1px solid var(--line)}
-  .dev:last-child{border-bottom:0}
-  .dev .sub{color:var(--dim2);font-size:.7rem}
-  .dev button{background:none;border:1px solid rgba(255,123,114,.45);color:var(--red);font-size:.7rem;
-      padding:.25rem .6rem;border-radius:.5rem}
-  .chk{display:flex;gap:.5rem;font-size:.78rem;padding:.35rem 0;border-bottom:1px solid var(--line);line-height:1.45}
-  .chk:last-child{border-bottom:0}
-  .chk .fix{color:var(--dim);display:block;font-size:.72rem;margin-top:.15rem}
-  .chk.bad .mark{color:var(--red)}
-  .chk .mark{color:var(--green);flex:0 0 auto}
-  .chip{background:none;border:1px solid var(--line);color:var(--dim);font-size:.72rem;font-weight:500;
-      padding:.32rem .6rem;border-radius:var(--r);cursor:pointer}
-  .chip b{color:var(--text);font-weight:600}
-  .chip.danger{border-color:transparent;color:var(--dim);margin-left:auto}
-  .chip.danger:active{color:var(--red)}
-  .top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
-      margin-top:var(--sp2);padding:var(--sp2) 0 0;border-top:1px solid var(--hair);
-      font-size:.78rem;color:var(--text);text-decoration:none;min-height:2rem}
-  .top span:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;
-      text-overflow:ellipsis;white-space:nowrap}
-  .top .when{color:var(--dim2);font-size:.7rem;flex:0 0 auto}
-  .intro{color:var(--dim);font-size:.8rem;line-height:1.5;margin:.2rem 0 .9rem}
-  .sessions{margin-top:var(--sp2);border-top:1px solid var(--hair);padding-top:var(--sp2)}
-  .sessions .s{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.76rem;
-      color:#c9cfda;padding:.45rem .1rem;min-height:2.1rem;text-decoration:none}
-  .sessions .s span:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;
-      text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
-  .sdot{width:.375rem;height:.375rem;border-radius:50%;background:var(--green);margin-right:.5rem;flex:0 0 auto}
-  a.s.past span:first-child{color:var(--dim)}
-  a.s.past .when{color:#5b6274}
-  .sessions .grp{display:flex;align-items:center;gap:.5rem;margin:.6rem .1rem .1rem;color:var(--dim2);
-      font-size:.62rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
-  .sessions .grp i{flex:1;height:1px;background:var(--hair)}
-  .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto}
-  .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
-  .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
-      border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px}
-  button{border:0;border-radius:var(--r);padding:.48rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer;
-      background:#1e2027;color:var(--text);transition:transform .05s;flex:0 0 auto}
-  button:active{transform:scale(.97)}
-  button:disabled{opacity:.5}
-  a.open,button.open{display:inline-block;background:var(--green);color:#08110a;text-decoration:none;border:0;
-      padding:.48rem .9rem;border-radius:var(--r);font-weight:600;font-size:.82rem;cursor:pointer;flex:0 0 auto}
-  .msg{color:var(--dim);font-size:.9rem;margin:1rem 0;line-height:1.5}
-  .err{color:var(--red)}
-  code{background:var(--card);border:1px solid var(--line);padding:.1rem .35rem;border-radius:.35rem;font-size:.85em}
-  .tips{margin:1.5rem 0 0;background:var(--card);border:1px solid var(--line);border-radius:.75rem;
-      padding:0 var(--sp3)}
-  .tips summary{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
-      list-style:none;cursor:pointer;padding:var(--sp3) 0;
-      font-size:.64rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim2)}
-  .tips summary::-webkit-details-marker{display:none}
-  .tips-hint{text-transform:none;letter-spacing:0;font-weight:400;font-size:.72rem;color:var(--dim2)}
-  .tips[open] .tips-hint::after{content:" \2303"}
-  .tips:not([open]) .tips-hint::after{content:" \2304"}
-  .tips > .tip:first-of-type{border-top:1px solid var(--hair);padding-top:var(--sp3)}
-  .tips[open]{padding-bottom:var(--sp3)}
-  .tip{display:flex;flex-direction:column;align-items:stretch;gap:.15rem;width:100%;text-align:left;
-      background:none;border:0;border-top:1px solid var(--hair);border-radius:0;
-      padding:var(--sp3) 0 var(--sp2);margin:0;cursor:pointer;font-family:inherit}
+  body{margin:0;background:var(--bg);color:var(--text);
+      font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+      font-size:var(--f-body);line-height:1.45;-webkit-font-smoothing:antialiased;
+      padding-bottom:calc(2rem + env(safe-area-inset-bottom))}
+  h1,h2,h3{margin:0;letter-spacing:-.02em}
+  button,input,select{font-family:inherit}
+  button,a,summary,label,input,[role=button]{touch-action:manipulation}
+  :focus-visible{outline:2px solid var(--text);outline-offset:2px;border-radius:6px}
 
-  .tip-t{font-size:.84rem;font-weight:600;color:var(--text);letter-spacing:-.005em}
-  .tip-d{font-size:.75rem;color:var(--dim);line-height:1.5}
-  .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
-      margin-top:var(--sp2);background:var(--card2);border-radius:var(--r);padding:.42rem .5rem}
-  .tip-cmd code{min-width:0;overflow-x:auto;white-space:nowrap;font-size:.7rem;color:var(--text);
-      background:none;border:0;padding:0}
-  .tip-copy{font-size:.66rem;font-weight:600;color:var(--dim2);flex:0 0 auto;letter-spacing:.02em}
+  /* Header: stays put, so the machine you are driving is never off-screen. */
+  header{position:sticky;top:0;z-index:20;padding:calc(.85rem + env(safe-area-inset-top)) var(--pad) .85rem;
+      background:rgba(0,0,0,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+      border-bottom:1px solid transparent;transition:border-color .2s}
+  header.scrolled{border-bottom-color:var(--hair)}
+  .bar{display:flex;align-items:center;gap:.75rem;max-width:34rem;margin:0 auto}
+  .logo{width:2.5rem;height:2.5rem;border-radius:.85rem;background:var(--surface2);
+      display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex:0 0 auto}
+  .bar .main{min-width:0;flex:1}
+  h1{font-size:var(--f-title);font-weight:800;line-height:1.1}
+  #host{display:block;color:var(--dim);font-size:var(--f-sub);margin-top:.1rem;line-height:1.35}
+  #host .what{color:var(--dim);border-bottom:1px dotted var(--dim2);cursor:pointer}
+  #host .down{color:var(--red)}
+  .icon{width:var(--tap);height:var(--tap);border-radius:var(--pill);border:0;flex:0 0 auto;
+      background:var(--surface2);color:var(--text);font-size:1.15rem;cursor:pointer;
+      display:flex;align-items:center;justify-content:center}
+  .icon:active{background:var(--press)}
+  .icon.spin{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hostnote{max-width:34rem;margin:.7rem auto 0;color:var(--dim);font-size:var(--f-sub);line-height:1.5}
+
+  main{max-width:34rem;margin:0 auto;padding:.5rem var(--pad) 0}
+  .sectionlabel{font-size:var(--f-cap);font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+      color:var(--dim2);margin:1.1rem .15rem .55rem}
+
+  /* A workspace is one card: identity on the left, the one action on the
+     right, everything else a tap into the sheet. */
+  .ws{background:var(--surface);border-radius:var(--r);padding:.9rem;margin-bottom:.7rem;
+      cursor:pointer;transition:background .12s}
+  .ws:active{background:var(--surface2)}
+  .row{display:flex;align-items:center;gap:.8rem}
+  .ava{width:3rem;height:3rem;border-radius:.95rem;flex:0 0 auto;display:flex;align-items:center;
+      justify-content:center;font-size:1.15rem;font-weight:700;color:#fff;letter-spacing:-.02em;
+      background:linear-gradient(150deg,hsl(var(--h) 42% 34%),hsl(var(--h) 46% 20%))}
+  .ws .main{min-width:0;flex:1}
+  .name{font-size:var(--f-row);font-weight:700;letter-spacing:-.015em;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .path{color:var(--dim2);font-size:var(--f-sub);margin-top:.05rem;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tags{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.35rem}
+  .pill{display:inline-flex;align-items:center;gap:.3rem;height:1.4rem;padding:0 .5rem;
+      border-radius:var(--pill);font-size:var(--f-cap);font-weight:700;letter-spacing:.01em;
+      background:var(--surface2);color:var(--dim)}
+  .pill.live{background:rgba(61,220,145,.14);color:var(--green)}
+  .pill.warn{background:rgba(255,111,97,.14);color:var(--red)}
+  .pill i{width:.4rem;height:.4rem;border-radius:50%;background:currentColor;
+      animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .why{color:var(--dim2);font-size:var(--f-sub)}
+  .wnote{color:var(--red);font-size:var(--f-sub);line-height:1.5;margin-top:.6rem}
+
+  /* Buttons: exactly one white one per card — Uber's rule, and the reason you
+     never have to read a card twice to know what tapping it does. */
+  .btn{height:2.65rem;min-width:5.2rem;padding:0 1.05rem;border:0;border-radius:var(--r-sm);
+      font-size:var(--f-body);font-weight:700;letter-spacing:-.01em;cursor:pointer;flex:0 0 auto;
+      display:inline-flex;align-items:center;justify-content:center;gap:.35rem;
+      background:var(--surface2);color:var(--text);text-decoration:none;transition:transform .06s}
+  .btn:active{transform:scale(.97)}
+  .btn:disabled{opacity:.45}
+  .btn.primary{background:#fff;color:#000}
+  .btn.block{width:100%;height:3.4rem;font-size:1.02rem;margin-top:.7rem}
+  .btn.danger{background:rgba(255,111,97,.13);color:var(--red)}
+  .btn.quiet{background:none;color:var(--dim);font-weight:600}
+
+  .cardfoot{display:flex;align-items:center;justify-content:space-between;gap:.6rem;width:100%;
+      margin-top:.7rem;padding:.65rem 0 0;border:0;border-top:1px solid var(--hair);
+      background:none;font-family:inherit;font-size:var(--f-sub);color:var(--dim2);
+      text-align:left;cursor:pointer;min-height:2.4rem}
+  .cardfoot .more{color:var(--dim);font-weight:600;flex:0 0 auto}
+  .usage{font-variant-numeric:tabular-nums}
+
+  /* The live session gets its own row: it is the thing you came here to open. */
+  .top{display:flex;align-items:center;gap:.6rem;margin-top:.7rem;padding:.6rem .7rem;
+      background:var(--surface2);border-radius:var(--r-sm);color:var(--text);
+      text-decoration:none;min-height:2.9rem}
+  .top .tmain{display:flex;flex-direction:column;min-width:0;flex:1}
+  .top .tname{font-size:var(--f-body);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .when{color:var(--dim2);font-size:var(--f-cap);margin-top:.05rem}
+  .top .go{color:var(--dim);font-size:1.1rem;flex:0 0 auto}
+  .top .go.small{font-size:var(--f-cap);color:var(--dim2)}
+  .sdot{width:.45rem;height:.45rem;border-radius:50%;background:var(--green);flex:0 0 auto;
+      animation:pulse 2s ease-in-out infinite}
+
+  .intro{color:var(--dim);font-size:var(--f-body);line-height:1.55;margin:.2rem .15rem 1rem}
+  .skel{background:var(--surface);border-radius:var(--r);height:5.6rem;margin-bottom:.7rem;
+      background-image:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.05) 40%,transparent 60%);
+      background-size:220% 100%;animation:sweep 1.3s linear infinite}
+  @keyframes sweep{to{background-position:-220% 0}}
+  .msg{color:var(--dim);font-size:var(--f-body);line-height:1.55;margin:1rem .15rem}
+  .empty{padding:2.4rem .15rem 1rem}
+  .empty h2{font-size:1.35rem;font-weight:800;margin-bottom:.5rem}
+  .empty p{color:var(--dim);font-size:var(--f-body);line-height:1.6;margin:0}
+  .err{color:var(--red)}
+  code{background:var(--surface2);padding:.12rem .4rem;border-radius:.4rem;font-size:.9em}
+
+  /* Bottom sheet: every secondary control lives here, so the list stays one
+     line of thought. Reachable with a thumb, dismissed with one. */
+  body.locked{overflow:hidden}
+  .sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end}
+  .sheet[hidden]{display:none}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.65);opacity:0;transition:opacity .22s;border:0}
+  .sheet.on .scrim{opacity:1}
+  .panel{position:relative;width:100%;max-width:34rem;margin:0 auto;background:var(--surface);
+      border-radius:1.4rem 1.4rem 0 0;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+      padding:.4rem var(--pad) calc(1.1rem + env(safe-area-inset-bottom));
+      transform:translateY(101%);transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+  .sheet.on .panel{transform:none}
+  @media (prefers-reduced-motion:reduce){
+    .panel,.scrim{transition:none}
+    .skel,.sdot,.pill i,.icon.spin{animation:none}
+  }
+  .panel:focus,.panel:focus-visible{outline:none}
+  .grab{display:block;width:2.4rem;height:.25rem;border-radius:var(--pill);background:#3a3c42;
+      border:0;padding:0;margin:.5rem auto .9rem}
+  .sheet h2{font-size:1.25rem;font-weight:800}
+  .sheet .sub{color:var(--dim2);font-size:var(--f-sub);margin-top:.15rem;word-break:break-all;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .srow{display:flex;align-items:center;gap:.8rem;width:100%;min-height:3.4rem;padding:.7rem 0;
+      background:none;border:0;border-top:1px solid var(--hair);color:var(--text);
+      font-size:var(--f-body);font-weight:600;text-align:left;cursor:pointer}
+  .srow:first-of-type{margin-top:.9rem}
+  .srow .sval{margin-left:auto;color:var(--dim);font-weight:500;flex:0 0 auto}
+  .srow .go{color:var(--dim2);font-size:1.05rem;flex:0 0 auto}
+  .srow.bad{color:var(--red)}
+  .srow .desc{display:block;color:var(--dim2);font-size:var(--f-cap);font-weight:400;margin-top:.1rem}
+  .field{margin-top:.9rem}
+  .field label{display:block;font-size:var(--f-cap);font-weight:700;letter-spacing:.07em;
+      text-transform:uppercase;color:var(--dim2);margin-bottom:.35rem}
+  .field select,.field input{width:100%;height:3rem;background:var(--surface2);border:1px solid var(--line);
+      color:var(--text);border-radius:var(--r-sm);padding:0 .8rem;font-size:var(--f-body)}
+  .field input::placeholder{color:var(--dim2)}
+
+  /* Session lists inside the sheet. */
+  .grp{display:flex;align-items:center;gap:.6rem;margin:1.1rem 0 .2rem;color:var(--dim2);
+      font-size:var(--f-cap);font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+  .grp i{flex:1;height:1px;background:var(--hair)}
+  .s{display:flex;align-items:center;gap:.6rem;min-height:3rem;padding:.55rem 0;
+      border-top:1px solid var(--hair);color:var(--text);text-decoration:none;font-size:var(--f-body)}
+  .s .smain{display:flex;flex-direction:column;min-width:0;flex:1}
+  .s .sname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .s .when{color:var(--dim2);font-size:var(--f-cap);margin-top:.05rem}
+  .s.past .sname{color:var(--dim);font-weight:500}
+  .s .go{color:var(--dim2);flex:0 0 auto;font-size:1.05rem}
+  .tag{font-size:.65rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,184,77,.4);
+      border-radius:.35rem;padding:.05rem .3rem;margin-left:.4rem;vertical-align:1px}
+  .hint,.none{color:var(--dim2);font-size:var(--f-cap);line-height:1.5;padding:.45rem 0}
+  .evrow{display:flex;justify-content:space-between;gap:.6rem;font-size:var(--f-sub);
+      color:var(--dim2);padding:.35rem 0}
+  .evrow b{font-weight:600;color:var(--dim);min-width:0}
+  .evrow span{flex:0 0 auto;white-space:nowrap}
+
+  /* Toast: a failure says so once, over the thumb, and gets out of the way. */
+  .toast{position:fixed;left:50%;bottom:calc(1.2rem + env(safe-area-inset-bottom));transform:translate(-50%,1rem);
+      z-index:60;max-width:calc(100% - 2.4rem);background:#fff;color:#000;font-size:var(--f-sub);
+      font-weight:600;padding:.75rem 1rem;border-radius:var(--r-sm);opacity:0;
+      transition:opacity .2s,transform .2s;box-shadow:0 .6rem 2rem rgba(0,0,0,.5)}
+  .toast[hidden]{display:none}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .toast.bad{background:var(--red);color:#1a0503}
+
+  /* Panels that are not the main job: quiet until opened. */
+  details.card{background:var(--surface);border-radius:var(--r);padding:0 var(--pad);margin-top:.7rem}
+  details.card summary{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
+      list-style:none;cursor:pointer;min-height:3.4rem;padding:.9rem 0;font-size:var(--f-body);font-weight:600}
+  details.card summary::-webkit-details-marker{display:none}
+  details.card summary .sh{color:var(--dim2);font-size:var(--f-sub);font-weight:400}
+  details.card[open] summary .sh::after{content:" \2303"}
+  details.card:not([open]) summary .sh::after{content:" \2304"}
+  details.card[open]{padding-bottom:1.1rem}
+  details.card h3{font-size:var(--f-cap);font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+      color:var(--dim2);margin:1.4rem 0 .5rem}
+  details.card p{color:var(--dim);font-size:var(--f-sub);line-height:1.55;margin:.5rem 0}
+  .tip{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--hair);
+      padding:.9rem 0 .8rem;cursor:pointer;color:var(--text)}
+  .tip-t{display:block;font-size:var(--f-body);font-weight:700}
+  .tip-d{display:block;font-size:var(--f-sub);color:var(--dim);line-height:1.5;margin-top:.15rem}
+  .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.6rem;
+      background:var(--surface2);border-radius:var(--r-sm);padding:.6rem .7rem;min-height:2.6rem}
+  .tip-cmd code{min-width:0;overflow-x:auto;white-space:nowrap;background:none;padding:0;
+      font-size:var(--f-sub);color:var(--text)}
+  .tip-copy{font-size:var(--f-cap);font-weight:700;color:var(--dim2);flex:0 0 auto;letter-spacing:.04em}
   .tip.copied .tip-copy{color:var(--green)}
-  .tipnote{color:var(--dim2);font-size:.72rem;margin:var(--sp3) 0 0}
-  details.settings{margin:1.6rem 0 0;background:var(--card2);border:1px solid var(--line);
-      border-radius:1rem;padding:.4rem 1rem}
-  details.settings h3{font-size:.66rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-      color:var(--dim2);margin:1.4rem 0 .4rem}
-  details.settings h3:first-of-type{margin-top:.6rem}
-  details.settings summary{color:var(--dim);font-size:.85rem;cursor:pointer;padding:.5rem 0;list-style:none}
-  details.settings summary::-webkit-details-marker{display:none}
-  details.settings p{color:var(--dim);font-size:.76rem;line-height:1.55}
-  label.toggle{display:flex;align-items:center;gap:.5rem;color:var(--dim);font-size:.78rem;
-      padding:.3rem 0 .7rem;cursor:pointer}
-  label.toggle input{accent-color:var(--green);width:1rem;height:1rem;margin:0}
-  pre{background:var(--bg);border:1px solid var(--line);border-radius:.6rem;padding:.7rem;
-      overflow-x:auto;font-size:.7rem;line-height:1.45;white-space:pre;color:#c9cfda}
-  .foot{text-align:center;margin-top:1.6rem;font-size:.85rem}
-  .foot a{color:var(--green);text-decoration:none}
+  .dev{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
+      padding:.75rem 0;border-top:1px solid var(--hair);font-size:var(--f-body)}
+  .dev .sub{color:var(--dim2);font-size:var(--f-cap)}
+  .chk{display:flex;gap:.6rem;font-size:var(--f-sub);padding:.7rem 0;border-top:1px solid var(--hair);line-height:1.5}
+  .chk .mark{color:var(--green);flex:0 0 auto}
+  .chk.bad .mark{color:var(--red)}
+  .chk .fix{display:block;color:var(--dim2);font-size:var(--f-cap);margin-top:.15rem}
+  .toggle{display:flex;align-items:center;gap:.7rem;min-height:var(--tap);color:var(--text);
+      font-size:var(--f-body);cursor:pointer}
+  .toggle input{accent-color:var(--green);width:1.2rem;height:1.2rem;margin:0}
+  pre{background:#0a0b0d;border:1px solid var(--line);border-radius:var(--r-sm);padding:.8rem;
+      overflow-x:auto;font-size:var(--f-cap);line-height:1.5;white-space:pre;color:var(--dim)}
+  .foot{text-align:center;margin:1.6rem 0 0}
+  .foot a{color:var(--text);font-size:var(--f-body);font-weight:600;text-decoration:none;
+      display:inline-flex;align-items:center;min-height:var(--tap);padding:0 1rem}
 </style>
-<header>
-  <div class="brand"><span class="logo">🐕</span>
-    <div><h1>corgi</h1><small id="host">your machine</small>
-      <p id="hostnote" class="hostnote" hidden></p></div>
+<header id="top">
+  <div class="bar">
+    <span class="logo">🐕</span>
+    <div class="main"><h1>corgi</h1><small id="host">your machine</small></div>
+    <button class="icon" id="refresh" aria-label="Refresh" title="Refresh">&#x21bb;</button>
   </div>
+  <p id="hostnote" class="hostnote" hidden></p>
 </header>
 <main>
-  <div id="list" class="msg">Loading…</div>
-  <details class="tips" id="tips" hidden>
-    <summary><span>On the laptop</span><span class="tips-hint">setup commands</span></summary>
+  <div id="list"></div>
+
+  <details class="card" id="tips" hidden>
+    <summary><span>On the laptop</span><span class="sh">setup commands</span></summary>
     <button class="tip" data-copy="/corgi-remote">
       <span class="tip-t">Set it all up, guided</span>
       <span class="tip-d">With the corgi plugin installed, this skill walks Claude Code through registering the repo, the tunnel and login start.</span>
@@ -890,7 +988,7 @@ const launcherPageHTML = `<!doctype html>
     </button>
     <button class="tip" data-copy="corgi agent init --config-dir ~/.claude-work">
       <span class="tip-t">Use a second Claude account</span>
-      <span class="tip-d">Give a work repo its own account, then set its <b>open in</b> pill to <b>chrome</b>.</span>
+      <span class="tip-d">Give a work repo its own account, then set its <b>Open links in</b> row to <b>chrome</b>.</span>
       <span class="tip-cmd"><code>corgi agent init --config-dir ~/.claude-work</code><span class="tip-copy">COPY</span></span>
     </button>
     <button class="tip" data-copy="corgi agent install">
@@ -903,38 +1001,48 @@ const launcherPageHTML = `<!doctype html>
       <span class="tip-d">A session waiting on a permission prompt is invisible from here. <b>--all</b> covers every repo in this list. These reach the laptop only — <b>corgi agent notify telegram --token …</b> sends them to this phone too.</span>
       <span class="tip-cmd"><code>corgi agent hooks enable --all</code><span class="tip-copy">COPY</span></span>
     </button>
-    <p class="tipnote" id="tipmsg">Tap a row to copy its command.</p>
+    <p class="hint" id="tipmsg">Tap a row to copy its command.</p>
   </details>
 
-  <details class="settings" id="settings" hidden>
-    <summary>Settings</summary>
+  <details class="card" id="settings" hidden>
+    <summary><span>Settings</span><span class="sh">devices, doctor, connector</span></summary>
 
     <h3>Claude app</h3>
     <p>Add corgi as a custom connector on claude.ai (Settings → Connectors → Add custom) to drive this machine from the Claude app too.</p>
     <pre id="cfg"></pre>
-    <button id="copycfg">Copy connector config</button>
-    <p id="copymsg" class="msg"></p>
+    <button class="btn block" id="copycfg">Copy connector config</button>
+    <p id="copymsg" class="hint"></p>
 
     <h3>This browser</h3>
-    <p>The <b>open in</b> pill on each card cycles where session links open: <b>app</b> deep-links into the Claude app, <b>browser</b> keeps them here, <b>chrome</b> forces Chrome — the one to pick for a repo on a different Claude account. Remembered per workspace, here only.</p>
-    <p><b>hide</b> tucks a card away when you are showing this screen to someone. Hidden cards collapse into one button; nothing on the machine changes.</p>
+    <p>Each card's <b>Open links in</b> row picks where session links open: <b>app</b> deep-links into the Claude app, <b>browser</b> keeps them here, <b>chrome</b> forces Chrome — the one to pick for a repo on a different Claude account. Remembered per workspace, here only.</p>
+    <p><b>Hide</b> tucks a card away when you are showing this screen to someone. Hidden cards collapse into one button; nothing on the machine changes.</p>
     <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
     <p>A bridge is a session started on the laptop itself. Its claude.ai page shows only what you send from here, so it looks empty at first — the full transcript stays on the laptop.</p>
 
     <h3>Devices</h3>
     <p>Everything that scanned a pairing QR. Revoking one leaves the others working.</p>
-    <div id="devices" class="msg">Loading…</div>
+    <div id="devices" class="hint">Loading…</div>
 
     <h3>If something will not start</h3>
     <p>The same checks as <code>corgi agent doctor</code>, run from here.</p>
-    <button id="rundoctor">Run doctor</button>
+    <button class="btn block" id="rundoctor">Run doctor</button>
     <div id="doctor"></div>
     <p>For a push to this phone when a session needs you, set <code>notifyUrl</code> in the agent config on the laptop. A Discord, Slack or Telegram webhook works as well as an ntfy topic — corgi picks the payload from the host, which matters because ntfy's iOS app is paid. Without it, notifications only reach the laptop.</p>
   </details>
-  <p class="foot">
-    <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
-  </p>
+
+  <p class="foot"><a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a></p>
 </main>
+
+<div class="sheet" id="sheet" hidden>
+  <button class="scrim" id="scrim" aria-label="Close"></button>
+  <section class="panel" role="dialog" aria-modal="true" aria-labelledby="sheettitle" tabindex="-1">
+    <button class="grab" id="grab" aria-label="Close"></button>
+    <h2 id="sheettitle"></h2>
+    <div class="sub" id="sheetsub"></div>
+    <div id="sheetbody"></div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
 <script>
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -955,20 +1063,54 @@ const launcherPageHTML = `<!doctype html>
   const openMode = id => { try { return localStorage.getItem('corgi_open_' + id) || 'app'; } catch { return 'app'; } };
   const setOpenMode = (id, m) => { try { localStorage.setItem('corgi_open_' + id, m); } catch {} };
   const showBridges = () => { try { return localStorage.getItem('corgi_show_bridges') !== '0'; } catch { return true; } };
+  const setShowBridges = on => { try { localStorage.setItem('corgi_show_bridges', on ? '1' : '0'); } catch {} };
   const hidden = () => { try { return new Set(JSON.parse(localStorage.getItem('corgi_hidden') || '[]')); } catch { return new Set(); } };
   const setHidden = s => { try { localStorage.setItem('corgi_hidden', JSON.stringify([...s])); } catch {} };
   const toggleHidden = id => { const h = hidden(); h.has(id) ? h.delete(id) : h.add(id); setHidden(h); render(lastWorkspaces); };
   let revealHidden = false;
-  const setShowBridges = on => { try { localStorage.setItem('corgi_show_bridges', on ? '1' : '0'); } catch {} };
+
+  // One failure, one line, over the thumb — never a red block that pushes the
+  // card you were aiming at somewhere else.
+  let toastTimer = 0;
+  function toast(text, bad) {
+    const el = document.getElementById('toast');
+    el.textContent = text;
+    el.className = 'toast' + (bad ? ' bad' : '');
+    el.hidden = false;
+    requestAnimationFrame(() => el.classList.add('on'));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      el.classList.remove('on');
+      setTimeout(() => { el.hidden = true; }, 220);
+    }, 3600);
+  }
+
+  addEventListener('scroll', () => {
+    document.getElementById('top').classList.toggle('scrolled', scrollY > 4);
+  }, { passive: true });
 
   if (!token) {
-    list.className = 'msg';
-    list.innerHTML = 'Not paired on this browser yet. On your laptop run ' +
-      '<code>corgi agent up</code> and scan the QR to pair, then come back here.';
+    list.className = 'empty';
+    list.innerHTML = '<h2>Pair this browser</h2><p>On the laptop run <code>corgi agent up</code> ' +
+      'and scan the QR it prints. Then this page lists that machine&#39;s repos and starts ' +
+      'Claude Code sessions on them.</p>';
+    document.getElementById('refresh').hidden = true;
   } else {
+    initSheet();
     initSettings();
     loadInfo();
+    skeleton();
     load();
+    document.getElementById('refresh').onclick = () => {
+      const b = document.getElementById('refresh');
+      b.classList.add('spin');
+      Promise.all([load(), loadInfo()]).finally(() => setTimeout(() => b.classList.remove('spin'), 400));
+    };
+  }
+
+  function skeleton() {
+    list.className = '';
+    list.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
   }
 
   function initSettings() {
@@ -977,9 +1119,9 @@ const launcherPageHTML = `<!doctype html>
       url: location.origin + '/mcp', headers: { Authorization: 'Bearer ' + token } } } }, null, 2);
     document.getElementById('cfg').textContent = connector;
     s.hidden = false;
-    document.getElementById('copycfg').onclick = async (e) => {
+    document.getElementById('copycfg').onclick = async () => {
       const msg = document.getElementById('copymsg');
-      try { await navigator.clipboard.writeText(connector); msg.textContent = '✓ Copied'; }
+      try { await navigator.clipboard.writeText(connector); msg.textContent = '✓ Copied'; toast('Connector config copied'); }
       catch { msg.textContent = 'Long-press the box above to copy.'; }
     };
     const bridges = document.getElementById('showbridges');
@@ -1024,10 +1166,10 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/devices', { headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      const list = j.devices || [];
-      if (!list.length) { box.className = 'msg'; box.textContent = 'No devices paired yet.'; return; }
+      const devices = j.devices || [];
+      if (!devices.length) { box.className = 'hint'; box.textContent = 'No devices paired yet.'; return; }
       box.className = ''; box.innerHTML = '';
-      for (const d of list) {
+      for (const d of devices) {
         const row = document.createElement('div');
         row.className = 'dev';
         const left = document.createElement('div');
@@ -1036,13 +1178,13 @@ const launcherPageHTML = `<!doctype html>
         row.appendChild(left);
         if (!d.current) {
           const b = document.createElement('button');
-          b.textContent = 'Revoke';
+          b.className = 'btn danger'; b.textContent = 'Revoke';
           b.onclick = () => revokeDevice(d.name, b);
           row.appendChild(b);
         }
         box.appendChild(row);
       }
-    } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
+    } catch (e) { box.className = 'hint err'; box.textContent = '✗ ' + e.message; }
   }
 
   async function revokeDevice(name, btn) {
@@ -1051,13 +1193,14 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/devices?name=' + encodeURIComponent(name), { method: 'DELETE', headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
+      toast('Revoked ' + name);
       loadDevices();
-    } catch (e) { btn.disabled = false; btn.textContent = '✗ ' + e.message; }
+    } catch (e) { btn.disabled = false; btn.textContent = 'Revoke'; toast(e.message, true); }
   }
 
   async function runDoctor() {
     const box = document.getElementById('doctor');
-    box.className = 'msg'; box.textContent = 'Checking…';
+    box.className = 'hint'; box.textContent = 'Checking…';
     try {
       const r = await fetch('/launch/doctor', { headers: auth });
       const j = await r.json();
@@ -1071,7 +1214,7 @@ const launcherPageHTML = `<!doctype html>
           esc(c.detail || '') + (c.fix ? '<span class="fix">fix: ' + esc(c.fix) + '</span>' : '') + '</span>';
         box.appendChild(el);
       }
-    } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
+    } catch (e) { box.className = 'hint err'; box.textContent = '✗ ' + e.message; }
   }
 
   async function load() {
@@ -1098,17 +1241,16 @@ const launcherPageHTML = `<!doctype html>
       const el = document.getElementById('host');
       el.textContent = '';
       bits.forEach((bit, i) => {
-        if (i) el.appendChild(document.createTextNode(' \u00b7 '));
+        if (i) el.appendChild(document.createTextNode(' · '));
         if (bit.indexOf('daemon ') === 0) {
           const tap = document.createElement('span');
-          tap.className = 'what'; tap.textContent = bit;
+          tap.className = 'what' + (j.daemon ? '' : ' down'); tap.textContent = bit;
           tap.onclick = () => toggleDaemonNote(j.daemon);
           el.appendChild(tap);
           return;
         }
         el.appendChild(document.createTextNode(bit));
       });
-      if (!j.daemon) el.style.color = 'var(--red)';
     } catch {}
   }
 
@@ -1121,168 +1263,325 @@ const launcherPageHTML = `<!doctype html>
     note.hidden = false;
   }
 
+  // A stable colour per repo: the card you want is found by shape before it is
+  // found by reading, which is the whole point of an avatar.
+  function hue(id) {
+    let h = 0;
+    for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return h;
+  }
+
   function render(workspaces) {
     lastWorkspaces = workspaces;
     if (!workspaces.length) {
-      list.className = 'msg';
-      list.innerHTML = 'No workspaces registered. On the laptop: <code>corgi agent scan ~/dev</code>.';
+      list.className = 'empty';
+      list.innerHTML = '<h2>No repos yet</h2><p>On the laptop run <code>corgi agent scan ~/dev</code> ' +
+        'to register the stacks it finds, then pull this page down to refresh.</p>';
       return;
     }
     list.className = '';
     list.innerHTML = '';
     const intro = introLine(workspaces);
     if (intro) list.appendChild(intro);
+    const label = document.createElement('div');
+    label.className = 'sectionlabel';
+    label.textContent = workspaces.length + (workspaces.length === 1 ? ' repo' : ' repos') + ' on this machine';
+    list.appendChild(label);
+
     const hide = hidden();
-    const shownWs = revealHidden ? workspaces : workspaces.filter(w => !hide.has(w.id));
-    const hiddenCount = workspaces.length - shownWs.length;
-    for (const ws of shownWs) {
-      const row = document.createElement('div');
-      row.className = 'ws';
-      const head = document.createElement('div');
-      head.className = 'head';
-      const main = document.createElement('div');
-      main.className = 'main';
-      main.innerHTML = '<div class="name"><span class="dot' + (ws.running ? ' on' : '') + '"></span>' + esc(ws.id) + '</div>';
-      const path = document.createElement('div');
-      path.className = 'path'; path.title = ws.path; path.textContent = shortPath(ws.path);
-      path.onclick = () => {
-        const full = path.classList.toggle('full');
-        path.textContent = full ? ws.path : shortPath(ws.path);
-      };
-      main.appendChild(path);
-      const meta = metaLine(ws);
-      if (meta) main.appendChild(meta);
-      const usage = usageLine(ws);
-      if (usage) main.appendChild(usage);
-      head.appendChild(main);
-      if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
-        head.appendChild(openControl(ws));
-      } else {
-        const b = document.createElement('button');
-        b.textContent = ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
-        b.disabled = ws.running;
-        b.onclick = () => startSession(ws.id, b);
-        head.appendChild(b);
-      }
-      row.appendChild(head);
-      if (!ws.running && ws.note) {
-        const note = document.createElement('div');
-        note.className = 'wnote'; note.textContent = ws.note;
-        row.appendChild(note);
-      }
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-      const startBox = startOptions(ws);
-      const sessionsBox = document.createElement('div');
-      sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
-      const sbtn = document.createElement('button');
-      sbtn.className = 'chip'; sbtn.textContent = sessionsChipLabel(ws);
-      sbtn.onclick = () => toggleSessions(ws, sbtn, sessionsBox);
-      actions.appendChild(sbtn);
-      actions.appendChild(modeSwitch(ws.id));
-      const top = topSessionRow(ws);
-      if (top) row.appendChild(top);
-      if (!ws.running && startBox) {
-        const opts = document.createElement('button');
-        opts.className = 'chip'; opts.textContent = 'options ⌄';
-        opts.onclick = () => { startBox.classList.toggle('on'); };
-        actions.appendChild(opts);
-      }
-      if (ws.running) actions.appendChild(stopControl(ws.id));
-      const hideBtn = document.createElement('button');
-      hideBtn.className = 'chip';
-      hideBtn.title = 'Hide this workspace on this browser';
-      hideBtn.textContent = hide.has(ws.id) ? 'unhide' : 'hide';
-      hideBtn.onclick = () => toggleHidden(ws.id);
-      actions.appendChild(hideBtn);
-      if (startBox) actions.appendChild(startBox);
-      row.appendChild(actions);
-      row.appendChild(sessionsBox);
-      list.appendChild(row);
-    }
+    const shown = revealHidden ? workspaces : workspaces.filter(w => !hide.has(w.id));
+    const hiddenCount = workspaces.length - shown.length;
+    for (const ws of shown) list.appendChild(card(ws, hide));
     if (hiddenCount || revealHidden) {
       const b = document.createElement('button');
-      b.className = 'chip revealer';
-      b.textContent = revealHidden ? 'hide again' : hiddenCount + ' hidden — show';
+      b.className = 'btn quiet block';
+      b.textContent = revealHidden ? 'Hide those again' : hiddenCount + ' hidden — show';
       b.onclick = () => { revealHidden = !revealHidden; render(lastWorkspaces); };
       list.appendChild(b);
     }
+  }
+
+  function card(ws, hide) {
+    const el = document.createElement('article');
+    el.className = 'ws';
+    // Tap anywhere that is not itself a control; the footer button below is the
+    // same door, and the one a keyboard or screen reader can find.
+    el.onclick = () => openSheet(ws);
+
+    const row = document.createElement('div');
+    row.className = 'row';
+    const ava = document.createElement('span');
+    ava.className = 'ava';
+    ava.style.setProperty('--h', hue(ws.id));
+    ava.textContent = String(ws.id || '?').replace(/[^a-zA-Z0-9]/g, '').slice(0, 1).toUpperCase() || '?';
+    ava.setAttribute('aria-hidden', 'true');
+    row.appendChild(ava);
+
+    const main = document.createElement('div');
+    main.className = 'main';
+    const name = document.createElement('div');
+    name.className = 'name'; name.textContent = ws.id;
+    main.appendChild(name);
+    const path = document.createElement('div');
+    path.className = 'path'; path.textContent = shortPath(ws.path);
+    main.appendChild(path);
+    const tags = statusTags(ws);
+    if (tags) main.appendChild(tags);
+    row.appendChild(main);
+    row.appendChild(primaryAction(ws));
+    el.appendChild(row);
+
+    if (!ws.running && ws.note) {
+      const note = document.createElement('div');
+      note.className = 'wnote'; note.textContent = ws.note;
+      el.appendChild(note);
+    }
+    const top = topSessionRow(ws);
+    if (top) el.appendChild(top);
+
+    const foot = document.createElement('button');
+    foot.className = 'cardfoot';
+    foot.setAttribute('aria-label', ws.id + ' — sessions and options');
+    const left = document.createElement('span');
+    left.className = 'usage';
+    left.textContent = usageText(ws) || (hide.has(ws.id) ? 'hidden on this browser' : sessionsHint(ws));
+    const more = document.createElement('span');
+    more.className = 'more';
+    more.textContent = 'Details ›';
+    foot.appendChild(left); foot.appendChild(more);
+    el.appendChild(foot);
+    return el;
+  }
+
+  // The one white button on the card. Open when there is something to open,
+  // Start when there is not — never both, never neither.
+  function primaryAction(ws) {
+    if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
+      const mode = openMode(ws.id);
+      if (mode === 'browser' || mode === 'chrome') {
+        const b = document.createElement('button');
+        b.className = 'btn primary'; b.textContent = 'Open';
+        b.onclick = (e) => {
+          e.stopPropagation();
+          if (mode === 'chrome') { location.href = chromeUrl(ws.sessionUrl); }
+          else { window.open(ws.sessionUrl, '_blank', 'noopener'); }
+        };
+        return b;
+      }
+      // app mode uses a real anchor tap so iOS deep-links into the Claude app.
+      const a = document.createElement('a');
+      a.className = 'btn primary'; a.href = ws.sessionUrl; a.textContent = 'Open';
+      a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.onclick = (e) => e.stopPropagation();
+      return a;
+    }
+    const b = document.createElement('button');
+    b.className = 'btn primary';
+    b.textContent = ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
+    b.disabled = ws.running;
+    b.onclick = (e) => { e.stopPropagation(); startSession(ws.id, b, null); };
+    return b;
+  }
+
+  function statusTags(ws) {
+    const el = document.createElement('div');
+    el.className = 'tags';
+    let any = false;
+    if (ws.live > 0) {
+      const p = document.createElement('span');
+      p.className = 'pill live';
+      p.innerHTML = '<i></i>' + ws.live + ' live';
+      el.appendChild(p); any = true;
+    } else if (ws.running) {
+      const p = document.createElement('span');
+      p.className = 'pill'; p.textContent = 'starting';
+      el.appendChild(p); any = true;
+    }
+    const e = ws.lastEvent;
+    if (e && !(ws.running && e.kind === 'started')) {
+      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + e.cause : '')
+        : e.kind === 'attention' ? 'needs you' : e.kind;
+      const s = document.createElement('span');
+      s.className = e.kind === 'attention' ? 'pill warn' : 'why';
+      s.textContent = what + ' ' + fmtWhen(e.at);
+      el.appendChild(s); any = true;
+    }
+    return any ? el : null;
+  }
+
+  function topSessionRow(ws) {
+    const top = ws.topSession;
+    if (!top) return null;
+    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : ''].filter(Boolean).join(' · ');
+    const body = '<i class="sdot"></i><span class="tmain"><span class="tname">' +
+      esc(shortSessionName(top.name, ws.id)) + '</span>' +
+      '<span class="when">' + esc(when) + '</span></span>';
+
+    if (!top.url || !safeClaudeUrl(top.url)) {
+      const el = document.createElement('div');
+      el.className = 'top';
+      el.innerHTML = body + '<span class="go small">local only</span>';
+      return el;
+    }
+    const el = document.createElement('a');
+    el.className = 'top';
+    el.href = top.url; el.target = '_blank'; el.rel = 'noopener noreferrer';
+    el.innerHTML = body + '<span class="go">↗</span>';
+    const mode = openMode(ws.id);
+    el.onclick = (e) => {
+      e.stopPropagation();
+      if (mode === 'browser') { e.preventDefault(); window.open(top.url, '_blank', 'noopener'); }
+      if (mode === 'chrome') { e.preventDefault(); location.href = chromeUrl(top.url); }
+    };
+    return el;
+  }
+
+  // Inside one repo's card the leading workspace name is noise — the card
+  // already says which repo this is, so the branch and time get the width.
+  function shortSessionName(name, id) {
+    const full = String(name || '');
+    const prefix = id + ' · ';
+    return full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full;
+  }
+
+  function sessionsHint(ws) {
+    const more = (ws.live || 0) - (ws.topSession ? 1 : 0);
+    if (more > 0) return more + ' more session' + (more > 1 ? 's' : '');
+    return ws.running ? 'sessions, options' : 'sessions, account, options';
+  }
+
+  function usageText(ws) {
+    if (!ws.usage || !ws.usage.week) return '';
+    const sum = u => (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
+    const week = sum(ws.usage.week);
+    if (!week) return '';
+    return fmtTokens(sum(ws.usage.today)) + ' today · ' + fmtTokens(week) + ' this week';
   }
 
   function introLine(workspaces) {
     if (workspaces.some(w => (w.live || 0) > 0)) return null;
     const el = document.createElement('div');
     el.className = 'intro';
-    el.textContent = 'Tap a repo to start a Claude Code session on that machine. ' +
-      'It runs there with your files and databases; you drive it from here.';
+    el.textContent = 'Tap Start to run a Claude Code session on that machine. ' +
+      'It works there with your files and databases; you drive it from here.';
     return el;
   }
 
-  function sessionsChipLabel(ws) {
-    const more = (ws.live || 0) - (ws.topSession ? 1 : 0);
-    return more > 0 ? 'sessions +' + more + ' \u2304' : 'sessions \u2304';
+  function shortPath(p) {
+    const parts = String(p || '').split('/').filter(Boolean);
+    return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
   }
 
-  function topSessionRow(ws) {
-    const top = ws.topSession;
-    if (!top) return null;
-    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : ''].filter(Boolean).join(' \u00b7 ');
+  /* ---- the bottom sheet: every secondary control, one thumb away ---- */
 
-    if (!top.url || !safeClaudeUrl(top.url)) {
-      const el = document.createElement('div');
-      el.className = 'top';
-      el.innerHTML = '<span><i class="sdot"></i>' + esc(top.name) + '</span>' +
-        '<span class="when">' + esc(when) + ' \u00b7 local only</span>';
-      return el;
+  let sheetWs = null;
+
+  function initSheet() {
+    const sheet = document.getElementById('sheet');
+    const close = (e) => { e.stopPropagation(); closeSheet(); };
+    document.getElementById('scrim').onclick = close;
+    document.getElementById('grab').onclick = close;
+    addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
+  }
+
+  function closeSheet() {
+    const sheet = document.getElementById('sheet');
+    if (sheet.hidden) return;
+    sheet.classList.remove('on');
+    sheetWs = null;
+    document.body.classList.remove('locked');
+    setTimeout(() => { sheet.hidden = true; }, 240);
+  }
+
+  function openSheet(ws) {
+    sheetWs = ws.id;
+    const sheet = document.getElementById('sheet');
+    document.getElementById('sheettitle').textContent = ws.id;
+    document.getElementById('sheetsub').textContent = ws.path || '';
+    const body = document.getElementById('sheetbody');
+    body.innerHTML = '';
+
+    // What you came for first: start it, or open what is already running.
+    if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
+      const open = primaryAction(ws);
+      open.classList.add('block');
+      open.textContent = 'Open the running session ↗';
+      body.appendChild(open);
+    } else if (!ws.running) {
+      const box = startOptions(ws);
+      if (box) body.appendChild(box);
+      const b = document.createElement('button');
+      b.className = 'btn primary block';
+      b.textContent = ws.note ? 'Try starting again' : 'Start a session';
+      b.onclick = (e) => { e.stopPropagation(); startSession(ws.id, b, box); };
+      body.appendChild(b);
     }
-    const el = document.createElement('a');
-    el.className = 'top';
-    el.href = top.url; el.target = '_blank'; el.rel = 'noopener noreferrer';
-    const mode = openMode(ws.id);
-    if (mode === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(top.url, '_blank', 'noopener'); };
-    if (mode === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(top.url); };
-    el.innerHTML = '<span><i class="sdot"></i>' + esc(top.name) + '</span>' +
-      '<span class="when">' + esc(when) + ' \u00b7 open \u2197</span>';
-    return el;
-  }
 
-  function metaLine(ws) {
-    const bits = [];
-    if (ws.live > 0) bits.push('<span class="live">' + ws.live + ' live</span>');
-    const e = ws.lastEvent;
-    if (e && !(ws.running && e.kind === 'started')) {
-      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + esc(e.cause) : '')
-        : e.kind === 'attention' ? 'needs you'
-        : esc(e.kind);
-      bits.push('<span class="why">' + what + ' ' + esc(fmtWhen(e.at)) + '</span>');
+    body.appendChild(sheetRow('Open links in', openMode(ws.id), () => {
+      const order = ['app', 'browser', 'chrome'];
+      setOpenMode(ws.id, order[(order.indexOf(openMode(ws.id)) + 1) % order.length]);
+      render(lastWorkspaces);
+      openSheet(lastWorkspaces.find(w => w.id === ws.id) || ws);
+    }, 'app deep-links into the Claude app, browser stays here, chrome forces Chrome'));
+
+    const isHidden = hidden().has(ws.id);
+    body.appendChild(sheetRow(isHidden ? 'Unhide this repo' : 'Hide from this browser', '', () => {
+      toggleHidden(ws.id);
+      closeSheet();
+    }, 'Nothing on the machine changes — this browser only'));
+
+    if (ws.running) {
+      const stop = sheetRow('Stop the session', '', (row) => stopSession(ws.id, row), '');
+      stop.classList.add('bad');
+      body.appendChild(stop);
     }
-    if (!bits.length) return null;
-    const el = document.createElement('div');
-    el.className = 'meta';
-    el.innerHTML = bits.join('');
-    return el;
+
+    const sessions = document.createElement('div');
+    body.appendChild(sessions);
+    loadSessions(ws, sessions);
+
+    sheet.hidden = false;
+    document.body.classList.add('locked');
+    requestAnimationFrame(() => {
+      sheet.classList.add('on');
+      const panel = sheet.querySelector('.panel');
+      panel.scrollTop = 0;
+      panel.focus({ preventScroll: true });
+    });
   }
 
-    function usageLine(ws) {
-    if (!ws.usage || !ws.usage.week) return null;
-    const sum = u => (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
-    const week = sum(ws.usage.week);
-    if (!week) return null;
-    const el = document.createElement('div');
-    el.className = 'usage';
-    el.title = 'tokens today / this week';
-    el.textContent = fmtTokens(sum(ws.usage.today)) + ' today \u00b7 ' + fmtTokens(week) + ' this week';
-    return el;
+  function sheetRow(label, value, onTap, desc) {
+    const b = document.createElement('button');
+    b.className = 'srow';
+    const main = document.createElement('span');
+    main.innerHTML = esc(label) + (desc ? '<span class="desc">' + esc(desc) + '</span>' : '');
+    b.appendChild(main);
+    if (value) {
+      const v = document.createElement('span');
+      v.className = 'sval'; v.textContent = value;
+      b.appendChild(v);
+    }
+    const go = document.createElement('span');
+    go.className = 'go'; go.textContent = '›';
+    if (!value) go.style.marginLeft = 'auto';
+    b.appendChild(go);
+    b.onclick = (e) => { e.stopPropagation(); onTap(b); };
+    return b;
   }
 
-  // The start options are built even when collapsed: Start reads them, so a
-  // profile chosen before opening the panel still applies.
+  // The start options are built even when the sheet is closed again: Start
+  // reads them, so a profile chosen before tapping still applies.
   function startOptions(ws) {
     if (ws.running) return null;
     const box = document.createElement('div');
     box.className = 'startbox';
     if ((ws.profiles || []).length) {
+      const field = document.createElement('div');
+      field.className = 'field';
+      field.innerHTML = '<label for="prof-' + esc(ws.id) + '">Claude account</label>';
       const sel = document.createElement('select');
+      sel.id = 'prof-' + ws.id;
       sel.dataset.role = 'profile';
       const none = document.createElement('option');
       none.value = ''; none.textContent = 'default account';
@@ -1292,24 +1591,25 @@ const launcherPageHTML = `<!doctype html>
         o.value = p; o.textContent = p;
         sel.appendChild(o);
       }
-      box.appendChild(sel);
+      field.appendChild(sel);
+      box.appendChild(field);
     }
+    const field = document.createElement('div');
+    field.className = 'field';
+    field.innerHTML = '<label for="name-' + esc(ws.id) + '">Session name</label>';
     const name = document.createElement('input');
-    name.type = 'text'; name.placeholder = 'session name (optional)'; name.dataset.role = 'name';
+    name.id = 'name-' + ws.id;
+    name.type = 'text';
+    name.placeholder = 'what is it for? (optional)';
+    name.dataset.role = 'name';
     name.maxLength = 60;
-    box.appendChild(name);
+    field.appendChild(name);
+    box.appendChild(field);
     return box;
   }
 
-  function shortPath(p) {
-    const parts = String(p || '').split('/').filter(Boolean);
-    return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
-  }
-
-  async function toggleSessions(ws, btn, box) {
-    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = 'sessions \u2304'; return; }
-    box.style.display = ''; btn.textContent = 'sessions \u2303';
-    box.innerHTML = '';
+  async function loadSessions(ws, box) {
+    box.innerHTML = '<div class="grp"><span>sessions</span><i></i></div><div class="none">Loading…</div>';
     const group = (label) => {
       const el = document.createElement('div');
       el.className = 'grp';
@@ -1323,17 +1623,19 @@ const launcherPageHTML = `<!doctype html>
       const m = openMode(ws.id);
       if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
-      const tag = o.bridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
-      const text = o.label ? esc(o.label) : esc(url.split('/').pop().slice(0, 14)) + '\u2026';
+      const tag = o.bridge ? '<span class="tag">bridge</span>' : '';
+      const text = o.label ? esc(o.label) : esc(url.split('/').pop().slice(0, 14)) + '…';
       const dot = o.past ? '' : '<i class="sdot"></i>';
-      el.innerHTML = '<span>' + dot + text + tag + '</span><span class="when">' + esc(o.when || '') +
-        (o.past ? 'reopen' : 'open \u2197') + '</span>';
+      el.innerHTML = dot + '<span class="smain"><span class="sname">' + text + tag + '</span>' +
+        '<span class="when">' + esc(o.when || '') + '</span></span>' +
+        '<span class="go">' + (o.past ? '↻' : '↗') + '</span>';
       box.appendChild(el);
     };
     const renderLocal = (label, when) => {
       const el = document.createElement('div');
       el.className = 's';
-      el.innerHTML = '<span><i class="sdot"></i>' + esc(label) + '</span><span class="when">' + esc(when) + ' \u00b7 local only</span>';
+      el.innerHTML = '<i class="sdot"></i><span class="smain"><span class="sname">' + esc(label) + '</span>' +
+        '<span class="when">' + esc(when) + ' · local only</span></span>';
       box.appendChild(el);
     };
     const note = (text) => {
@@ -1341,14 +1643,12 @@ const launcherPageHTML = `<!doctype html>
       el.className = 'hint'; el.textContent = text;
       box.appendChild(el);
     };
-    const info = document.createElement('div');
-    info.className = 'none'; info.textContent = 'Loading\u2026';
-    box.appendChild(info);
     try {
       const r = await fetch('/launch/sessions?workspace=' + encodeURIComponent(ws.id), { headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      info.remove();
+      if (sheetWs !== ws.id) return; // the sheet moved on while this was in flight
+      box.innerHTML = '';
 
       const running = j.sessions || [];
       const bridges = (j.links || []).filter(safeClaudeUrl);
@@ -1362,7 +1662,7 @@ const launcherPageHTML = `<!doctype html>
         if (!safeClaudeUrl(url) || alive.has(url) || seen.has(url)) return;
         seen.add(url); older.push({ url: url, when: when });
       };
-      for (const h of (j.history || [])) if (h) addOlder(h.url, fmtWhen(h.at) + ' \u00b7 ');
+      for (const h of (j.history || [])) if (h) addOlder(h.url, fmtWhen(h.at));
       for (const url of (ws.sessionLinks || []).slice().reverse()) addOlder(url, '');
 
       let localOnly = 0;
@@ -1371,14 +1671,14 @@ const launcherPageHTML = `<!doctype html>
       if (liveCount) group('live now');
       for (const sess of running) {
         const where = whereLabel(sess);
-        const when = where + ' \u00b7 ' + fmtWhen(sess.startedAt);
+        const when = where + ' · ' + fmtWhen(sess.startedAt);
         if (sess.url && safeClaudeUrl(sess.url) && !seen.has(sess.url)) {
           seen.add(sess.url);
-          renderLink(sess.url, { label: sess.name, when: when + ' \u00b7 ' });
+          renderLink(sess.url, { label: shortSessionName(sess.name, ws.id), when: when });
           continue;
         }
         localOnly++;
-        renderLocal(sess.name || 'session', when);
+        renderLocal(shortSessionName(sess.name, ws.id) || 'session', when);
       }
       let bridgeRows = 0;
       let bridgeHidden = 0;
@@ -1391,13 +1691,14 @@ const launcherPageHTML = `<!doctype html>
       }
       if (localOnly) note('local only = running on the laptop with no web link yet; type /remote-control in that session to reach it from here.');
       if (bridgeRows) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
-      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
+      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden — enable in Settings.');
 
       if (older.length) {
-        group('earlier \u00b7 not running');
+        group('earlier · not running');
         for (const row of older) renderLink(row.url, { past: true, when: row.when });
       }
       if (!liveCount && !older.length && !evs.length) {
+        group('sessions');
         const none = document.createElement('div');
         none.className = 'none'; none.textContent = 'No sessions yet for this workspace.';
         box.appendChild(none);
@@ -1407,11 +1708,16 @@ const launcherPageHTML = `<!doctype html>
       for (const ev of evs) {
         const el = document.createElement('div');
         el.className = 'evrow';
-        const what = ev.kind + (ev.cause ? ' \u00b7 ' + ev.cause : '') + (ev.reason ? ' \u2014 ' + ev.reason : '');
+        const what = ev.kind + (ev.cause ? ' · ' + ev.cause : '') + (ev.reason ? ' — ' + ev.reason : '');
         el.innerHTML = '<b>' + esc(what.slice(0, 90)) + '</b><span>' + esc(fmtWhen(ev.at)) + '</span>';
         box.appendChild(el);
       }
-    } catch (e) { info.textContent = '\u2717 ' + e.message; }
+    } catch (e) {
+      if (sheetWs !== ws.id) return;
+      box.innerHTML = '';
+      group('sessions');
+      note('✗ ' + e.message);
+    }
   }
 
   function whereLabel(sess) {
@@ -1443,62 +1749,27 @@ const launcherPageHTML = `<!doctype html>
   // Safari or the Claude app's webview.
   const chromeUrl = u => u.replace(/^https:\/\//, 'googlechromes://');
 
-  // app mode uses a real anchor tap so iOS deep-links into the Claude app;
-  // browser mode opens via JS, which keeps the session in this browser; chrome
-  // mode forces Chrome via its URL scheme (right for a workspace signed into a
-  // different Claude account than the app — e.g. work vs personal).
-  function openControl(ws) {
-    const mode = openMode(ws.id);
-    if (mode === 'browser' || mode === 'chrome') {
-      const b = document.createElement('button');
-      b.className = 'open'; b.textContent = 'Open';
-      b.onclick = () => {
-        if (mode === 'chrome') { location.href = chromeUrl(ws.sessionUrl); }
-        else { window.open(ws.sessionUrl, '_blank', 'noopener'); }
-      };
-      return b;
+  async function stopSession(id, btn) {
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Stopping…';
+    try {
+      const r = await fetch('/launch/stop', { method: 'POST', headers: auth,
+        body: JSON.stringify({ workspace: id }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      closeSheet();
+      toast('Stopping ' + id + '…');
+      setTimeout(load, 1200);
+    } catch (e) {
+      btn.disabled = false;
+      btn.querySelector('span').textContent = 'Stop the session';
+      toast(e.message, true);
     }
-    const a = document.createElement('a');
-    a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open';
-    a.target = '_blank'; a.rel = 'noopener noreferrer';
-    return a;
   }
 
-  function modeSwitch(id) {
-    const order = ['app', 'browser', 'chrome'];
-    const cur = openMode(id);
-    const b = document.createElement('button');
-    b.className = 'chip';
-    b.title = 'Where session links open — tap to change';
-    b.innerHTML = 'open in <b>' + esc(cur) + '</b> ▾';
-    b.onclick = () => { setOpenMode(id, order[(order.indexOf(cur) + 1) % order.length]); render(lastWorkspaces); };
-    return b;
-  }
-
-  function stopControl(id) {
-    const b = document.createElement('button');
-    b.className = 'chip danger'; b.textContent = 'Stop';
-    b.onclick = async () => {
-      b.disabled = true; b.textContent = 'Stopping…';
-      try {
-        const r = await fetch('/launch/stop', { method: 'POST', headers: auth,
-          body: JSON.stringify({ workspace: id }) });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || r.status);
-        setTimeout(load, 1200);
-      } catch (e) {
-        b.disabled = false; b.textContent = 'Stop';
-        const err = document.createElement('div');
-        err.className = 'msg err'; err.textContent = '✗ ' + e.message;
-        b.parentElement.appendChild(err);
-      }
-    };
-    return b;
-  }
-
-  async function startSession(id, btn) {
+  async function startSession(id, btn, box) {
+    const label = btn.textContent;
     btn.disabled = true; btn.textContent = 'Starting…';
-    const box = btn.closest('.ws').querySelector('.startbox');
     const pick = (role) => {
       const el = box && box.querySelector('[data-role="' + role + '"]');
       return el ? el.value.trim() : '';
@@ -1508,12 +1779,17 @@ const launcherPageHTML = `<!doctype html>
         body: JSON.stringify({ workspace: id, profile: pick('profile'), name: pick('name') }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
+      closeSheet();
+      toast('Starting ' + id + '…');
+      // Show it as starting straight away: the list is the same surface the
+      // Start button lives on, and a card still offering Start invites a
+      // second one before the daemon has answered the first.
+      const w = lastWorkspaces.find(x => x.id === id);
+      if (w) { w.running = true; w.note = ''; render(lastWorkspaces); }
       poll(id, 0);
     } catch (e) {
-      btn.disabled = false; btn.textContent = 'Retry';
-      const err = document.createElement('div');
-      err.className = 'msg err'; err.textContent = '✗ ' + e.message;
-      btn.parentElement.appendChild(err);
+      btn.disabled = false; btn.textContent = label;
+      toast(e.message, true);
     }
   }
 
@@ -1525,7 +1801,11 @@ const launcherPageHTML = `<!doctype html>
       const ws = (j.workspaces || []).find(w => w.id === id);
       // Got the link, or the daemon reported why it won't start — either way, stop
       // polling and re-render so the reason (or the Open button) shows.
-      if (ws && (ws.sessionUrl || (!ws.running && ws.note))) { render(j.workspaces); return; }
+      if (ws && (ws.sessionUrl || (!ws.running && ws.note))) {
+        render(j.workspaces);
+        if (ws.note && !ws.running) toast(ws.note, true);
+        return;
+      }
     } catch {}
     setTimeout(() => poll(id, n + 1), 1000);
   }

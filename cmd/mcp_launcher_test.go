@@ -107,6 +107,30 @@ func TestLauncherPageIsSelfContainedAndUsesTheStoredToken(t *testing.T) {
 	}
 }
 
+func TestLauncherPageKeepsThePhoneControlsItNeeds(t *testing.T) {
+	rec := httptest.NewRecorder()
+	launcherPageHandler(rec, httptest.NewRequest(http.MethodGet, "/app", nil))
+	body := rec.Body.String()
+	// The redesign moved these into the details sheet; losing any of them
+	// silently would take a control off the phone altogether.
+	for what, want := range map[string]string{
+		"the details sheet":            "function openSheet(",
+		"start options in the sheet":   "data-role=\"' + role + '\"",
+		"the where-links-open control": "Open links in",
+		"hiding a card":                "Hide from this browser",
+		"stopping a session":           "/launch/stop",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the launcher must keep %s (%q)", what, want)
+		}
+	}
+	// A control toggled with the hidden attribute must actually disappear:
+	// every flex rule on this page outranks the attribute without it.
+	if !strings.Contains(body, "[hidden]{display:none!important}") {
+		t.Error("the launcher must force [hidden] over its flex display rules")
+	}
+}
+
 func TestBuildLaunchWorkspacesSurfacesADiagnostic(t *testing.T) {
 	reg := &workspace.Registry{}
 	reg.Upsert(workspace.Workspace{ID: "acme", AbsPath: "/dev/acme", Status: workspace.StatusOK})

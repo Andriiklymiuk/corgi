@@ -121,18 +121,27 @@ const pairClosedHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>corgi pairing</title>
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
 <style>
-  body{font-family:-apple-system,system-ui,sans-serif;background:#0f1115;color:#e8e8e8;
-       display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
-  main{max-width:22rem;width:100%;padding:2rem}
-  h1{font-size:1.3rem;margin:0 0 .3rem}
-  p{color:#9aa0a6;font-size:.9rem;margin:.2rem 0 1.2rem;line-height:1.5}
-  code{background:#1a1d23;padding:.15rem .35rem;border-radius:.3rem}
-  a.open{display:inline-block;background:#7ee787;color:#0f1115;text-decoration:none;
-      padding:.7rem 1.1rem;border-radius:.6rem;font-weight:600}
+  /* Same ladder as the launcher: black ground, one white action, thumb-sized. */
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;background:#000;color:#fff;
+       display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;
+       -webkit-font-smoothing:antialiased;padding:calc(1.5rem + env(safe-area-inset-top)) 1.25rem
+       calc(1.5rem + env(safe-area-inset-bottom))}
+  main{max-width:24rem;width:100%}
+  .logo{width:3rem;height:3rem;border-radius:1rem;background:#191a1e;display:flex;align-items:center;
+      justify-content:center;font-size:1.6rem;margin-bottom:1.1rem}
+  h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;margin:0 0 .5rem;line-height:1.2}
+  p{color:#a3a6ad;font-size:.95rem;margin:.4rem 0 1.2rem;line-height:1.55}
+  code{background:#191a1e;padding:.15rem .4rem;border-radius:.4rem;font-size:.9em}
+  a.open{display:flex;align-items:center;justify-content:center;background:#fff;color:#000;
+      text-decoration:none;height:3.4rem;border-radius:.75rem;font-weight:700;font-size:1.02rem}
 </style>
 <main>
-  <h1>🐕 This pairing link is closed</h1>
+  <div class="logo">🐕</div>
+  <h1>This pairing link is closed</h1>
   <p id="msg">Pairing links work once and expire after ten minutes.</p>
   <p id="paired" hidden>This phone is already paired with this machine.</p>
   <a id="app" class="open" href="/app" hidden>Open the launcher</a>
@@ -154,30 +163,41 @@ const pairPageHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pair with corgi</title>
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
 <style>
-  body{font-family:-apple-system,system-ui,sans-serif;background:#0f1115;color:#e8e8e8;
-       display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
-  main{max-width:22rem;width:100%;padding:2rem}
-  h1{font-size:1.3rem;margin:0 0 .3rem}
-  p{color:#9aa0a6;font-size:.9rem;margin:.2rem 0 1.2rem}
-  input,button{width:100%;box-sizing:border-box;font-size:1rem;padding:.7rem .8rem;border-radius:.6rem}
-  input{border:1px solid #333;background:#1a1d23;color:#e8e8e8;margin-bottom:.8rem}
-  button{border:0;background:#e8e8e8;color:#0f1115;font-weight:600;cursor:pointer}
-  button:disabled{opacity:.5}
-  #out{margin-top:1rem;font-size:.85rem}
-  .ok{color:#7ee787}.err{color:#ff7b72;word-break:break-word}
-  code{background:#1a1d23;padding:.15rem .35rem;border-radius:.3rem}
-  pre{background:#1a1d23;border:1px solid #333;border-radius:.5rem;padding:.8rem;
-      overflow-x:auto;font-size:.78rem;line-height:1.4;white-space:pre;margin:.6rem 0}
-  #copy{margin-bottom:.4rem}
-  a.open{display:inline-block;background:#7ee787;color:#0f1115;text-decoration:none;
-      padding:.7rem 1.1rem;border-radius:.6rem;font-weight:600}
+  /* Same ladder as the launcher: black ground, one white action, thumb-sized. */
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;background:#000;color:#fff;
+       display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;
+       -webkit-font-smoothing:antialiased;padding:calc(1.5rem + env(safe-area-inset-top)) 1.25rem
+       calc(1.5rem + env(safe-area-inset-bottom))}
+  main{max-width:24rem;width:100%}
+  .logo{width:3rem;height:3rem;border-radius:1rem;background:#191a1e;display:flex;align-items:center;
+      justify-content:center;font-size:1.6rem;margin-bottom:1.1rem}
+  h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;margin:0 0 .5rem;line-height:1.2}
+  p{color:#a3a6ad;font-size:.95rem;margin:.4rem 0 1.4rem;line-height:1.55}
+  label{display:block;font-size:.75rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+      color:#74777f;margin-bottom:.4rem}
+  input,button{width:100%;font-size:1.02rem;border-radius:.75rem;font-family:inherit}
+  input{height:3.4rem;border:1px solid #26272c;background:#191a1e;color:#fff;padding:0 .9rem;margin-bottom:1rem}
+  input::placeholder{color:#74777f}
+  button{height:3.4rem;border:0;background:#fff;color:#000;font-weight:700;cursor:pointer}
+  button:active{transform:scale(.99)}
+  button:disabled{opacity:.45}
+  #out{margin-top:1.2rem;font-size:.95rem;line-height:1.55}
+  .ok{color:#3ddc91}.err{color:#ff6f61;word-break:break-word}
+  code{background:#191a1e;padding:.15rem .4rem;border-radius:.4rem;font-size:.9em}
+  a.open{display:flex;align-items:center;justify-content:center;background:#fff;color:#000;
+      text-decoration:none;height:3.4rem;border-radius:.75rem;font-weight:700;margin-top:.8rem}
 </style>
 <main>
-  <h1>🐕 Pair with corgi</h1>
-  <p>Name this device, tap pair. The code came along in the QR you scanned.</p>
+  <div class="logo">🐕</div>
+  <h1>Pair with corgi</h1>
+  <p>Name this device and tap pair. The code came along in the QR you scanned.</p>
+  <label for="device">Device name</label>
   <input id="device" placeholder="my-phone" autocomplete="off" autocapitalize="none">
-  <button id="go">Pair</button>
+  <button id="go">Pair this device</button>
   <div id="out"></div>
 </main>
 <script>
@@ -204,7 +224,7 @@ const pairPageHTML = `<!doctype html>
       location.replace('/app');
     } catch (e) {
       out.innerHTML = '<span class="err">✗ ' + esc(e.message) + '</span>';
-      btn.disabled = false; btn.textContent = 'Pair';
+      btn.disabled = false; btn.textContent = 'Pair this device';
     }
   };
 </script>
