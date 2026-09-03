@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -819,32 +820,93 @@ func sessionProcessIsLive(cs claudeSession) bool {
 	if !pidExists(cs.PID) {
 		return false
 	}
-	started, ok := processStartTicks(cs.PID)
+	started, ok := processStartToken(cs.PID)
 	if !ok || strings.TrimSpace(cs.ProcStart) == "" {
 		return true
 	}
-	return strings.TrimSpace(cs.ProcStart) == started
+	return sameStartToken(cs.ProcStart, started)
 }
 
-// processStartTicks reads the start time Linux keeps for a pid (field 22 of
-// /proc/<pid>/stat, in clock ticks since boot) — the same value Claude Code
-// stores. ok is false anywhere else, including macOS, where the equivalent
-// costs a subprocess per session and this list is polled every second.
-func processStartTicks(pid int) (string, bool) {
-	if runtime.GOOS != "linux" || pid <= 0 {
+// processStartToken reads the start time the OS keeps for a pid, in the exact
+// form Claude Code records it, so the two can be compared as strings:
+//
+//	linux   field 22 of /proc/<pid>/stat — clock ticks since boot
+//	darwin  the output of `ps -o lstart= -p <pid>` under LC_ALL=C and TZ=UTC
+//
+// ok is false where neither is available (Windows, or the read failed), and
+// the caller then falls back to "a live pid is live", as it did everywhere
+// before this existed. Comparing a token we could not read is never worth a
+// session vanishing from the list.
+func processStartToken(pid int) (string, bool) {
+	if pid <= 0 {
 		return "", false
 	}
+	if token, ok := cachedStartToken(pid); ok {
+		return token, true
+	}
+	var token string
+	var ok bool
+	switch runtime.GOOS {
+	case "linux":
+		token, ok = linuxStartTicks(pid)
+	case "darwin":
+		token, ok = darwinStartDate(pid)
+	}
+	if ok {
+		rememberStartToken(pid, token)
+	}
+	return token, ok
+}
+
+// startTokenTTL bounds how long a read is reused. A process's start time never
+// changes, so this only exists so a recycled pid cannot keep a dead session's
+// answer — and so the darwin path costs at most one `ps` per pid per minute
+// while the phone polls this list every second.
+const startTokenTTL = time.Minute
+
+var startTokens = struct {
+	mu   sync.Mutex
+	seen map[int]startToken
+}{seen: map[int]startToken{}}
+
+type startToken struct {
+	value string
+	read  time.Time
+}
+
+func cachedStartToken(pid int) (string, bool) {
+	startTokens.mu.Lock()
+	defer startTokens.mu.Unlock()
+	entry, ok := startTokens.seen[pid]
+	if !ok || time.Since(entry.read) > startTokenTTL {
+		return "", false
+	}
+	return entry.value, true
+}
+
+func rememberStartToken(pid int, value string) {
+	startTokens.mu.Lock()
+	defer startTokens.mu.Unlock()
+	if len(startTokens.seen) > 512 {
+		// A daemon alive for weeks must not accumulate an entry per pid ever
+		// seen; every entry is re-readable, so dropping them costs one read.
+		startTokens.seen = map[int]startToken{}
+	}
+	startTokens.seen[pid] = startToken{value: value, read: time.Now()}
+}
+
+func linuxStartTicks(pid int) (string, bool) {
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
 		return "", false
 	}
 	// The second field is the executable name in parentheses and may itself
 	// contain spaces and parentheses, so fields are counted from the last ')'.
-	close := strings.LastIndex(string(data), ")")
-	if close < 0 {
+	closing := strings.LastIndex(string(data), ")")
+	if closing < 0 {
 		return "", false
 	}
-	fields := strings.Fields(string(data)[close+1:])
+	fields := strings.Fields(string(data)[closing+1:])
 	// state is the field after comm, so starttime (22nd overall) is index 19
 	// of what is left.
 	const startTimeOffset = 19
@@ -852,6 +914,33 @@ func processStartTicks(pid int) (string, bool) {
 		return "", false
 	}
 	return fields[startTimeOffset], true
+}
+
+// darwinStartDate runs the same command Claude Code does, with the same
+// locale and timezone pinned, so the strings line up. Bounded: this sits on a
+// request path the phone polls.
+func darwinStartDate(pid int) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ps", "-o", "lstart=", "-p", strconv.Itoa(pid)) // NOSONAR — fixed argv, numeric pid
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "TZ=UTC")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false
+	}
+	line := strings.TrimSpace(string(out))
+	if line == "" {
+		return "", false
+	}
+	return line, true
+}
+
+// sameStartToken compares two start times for the same pid. Internal spacing
+// is normalised first: `ps` pads a single-digit day ("Sep  3"), and a session
+// disappearing from the phone over a space would be a far worse bug than the
+// stale record this is here to catch.
+func sameStartToken(a, b string) bool {
+	return strings.Join(strings.Fields(a), " ") == strings.Join(strings.Fields(b), " ")
 }
 
 func pidExists(pid int) bool {
