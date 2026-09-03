@@ -43,20 +43,30 @@ type launchWorkspace struct {
 	// SessionLinks are per-session claude.ai URLs captured from remote
 	// control's own output — the only links the site resolves (the ids the
 	// claude CLI lists locally are UUIDs the web does not know).
-	SessionLinks []string          `json:"sessionLinks,omitempty"`
-	Note         string            `json:"note,omitempty"`
-	Live         int               `json:"live"`
-	TopSession   *launchTopSession `json:"topSession,omitempty"`
-	Usage        *usage.Report     `json:"usage,omitempty"`
-	LastEvent    *launchLastEvent  `json:"lastEvent,omitempty"`
-	Profiles     []string          `json:"profiles,omitempty"`
+	SessionLinks []string `json:"sessionLinks,omitempty"`
+	Note         string   `json:"note,omitempty"`
+	// State is the one word the card leads with: what this workspace is doing
+	// right now, decided here rather than in three places in the page.
+	State      string            `json:"state"`
+	Live       int               `json:"live"`
+	TopSession *launchTopSession `json:"topSession,omitempty"`
+	Usage      *usage.Report     `json:"usage,omitempty"`
+	LastEvent  *launchLastEvent  `json:"lastEvent,omitempty"`
+	Profiles   []string          `json:"profiles,omitempty"`
 }
 
 type launchTopSession struct {
-	Name      string `json:"name"`
-	Where     string `json:"where"`
-	StartedAt int64  `json:"startedAt,omitempty"`
-	URL       string `json:"url,omitempty"`
+	Name string `json:"name"`
+	// NameSource and NameSince are Claude Code's own record of where the
+	// session's current name came from — "user" for one someone typed,
+	// "derived"/"auto" for one Claude picked, "hook" for one a hook set — and
+	// when it last changed. corgi shows the live name, so a session Claude has
+	// since renamed reads as its new name here too.
+	NameSource string `json:"nameSource,omitempty"`
+	NameSince  int64  `json:"nameSince,omitempty"`
+	Where      string `json:"where"`
+	StartedAt  int64  `json:"startedAt,omitempty"`
+	URL        string `json:"url,omitempty"`
 }
 
 type launchLastEvent struct {
@@ -125,10 +135,34 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 		}
 		row.Live, row.TopSession, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath)
 		row.Usage = workspaceUsage(ws.ID, ws.AbsPath)
+		row.State = launchState(row)
 		out = append(out, row)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+// launchState reduces running, live sessions, the last event and a refused
+// start to the one word the card leads with. Decided here so the phone and
+// anything else reading /launch/workspaces agree on it. Finer than `corgi
+// agent status`'s workspaceState, which answers a different question: whether
+// the daemon is supervising, not whether a human is needed.
+func launchState(row launchWorkspace) string {
+	switch {
+	case row.Note != "" && !row.Running:
+		// A start the daemon refused, or a diagnostic: the reason is on the card.
+		return "blocked"
+	case row.LastEvent != nil && row.LastEvent.Kind == "attention":
+		// A permission prompt or a question is blocking the session — the one
+		// state where the session is running and still needs a human.
+		return "attention"
+	case row.Live > 0:
+		return "live"
+	case row.Running:
+		// Supervised, but no session has registered yet.
+		return "starting"
+	}
+	return "stopped"
 }
 
 func workspaceActivity(id, absPath string) (int, *launchTopSession, *launchLastEvent) {
@@ -160,19 +194,23 @@ func newestLiveSession(sessions []claudeSession) *launchTopSession {
 			continue
 		}
 		return &launchTopSession{
-			Name:      sessionDisplayName(sess),
-			Where:     sessionWhereLabel(sess),
-			StartedAt: sess.StartedAt,
-			URL:       sess.URL,
+			Name:       sessionDisplayName(sess),
+			NameSource: sess.NameSource,
+			NameSince:  sess.NameSince,
+			Where:      sessionWhereLabel(sess),
+			StartedAt:  sess.StartedAt,
+			URL:        sess.URL,
 		}
 	}
 	if len(sessions) == 0 {
 		return nil
 	}
 	return &launchTopSession{
-		Name:      sessionDisplayName(sessions[0]),
-		Where:     sessionWhereLabel(sessions[0]),
-		StartedAt: sessions[0].StartedAt,
+		Name:       sessionDisplayName(sessions[0]),
+		NameSource: sessions[0].NameSource,
+		NameSince:  sessions[0].NameSince,
+		Where:      sessionWhereLabel(sessions[0]),
+		StartedAt:  sessions[0].StartedAt,
 	}
 }
 
@@ -339,7 +377,10 @@ func launchStopHandler(w http.ResponseWriter, r *http.Request) {
 // the one the site resolves — so a terminal or VS Code session gets a real
 // link, unlike its local SessionID, which the web does not know.
 type claudeSession struct {
-	Name            string `json:"name"`
+	Name string `json:"name"`
+	// Written by Claude Code beside the name; see launchTopSession.
+	NameSource      string `json:"nameSource,omitempty"`
+	NameSince       int64  `json:"nameSince,omitempty"`
 	SessionID       string `json:"sessionId"`
 	CWD             string `json:"cwd"`
 	Kind            string `json:"kind"`
@@ -733,17 +774,17 @@ const launcherPageHTML = `<!doctype html>
 <meta name="theme-color" content="#000000">
 <title>corgi</title>
 <style>
-  /* One scale, one contrast ladder. Sizes are the ones a thumb and an arm's
-     length of daylight need — this page is read on a phone, outdoors, in a
-     hurry, so nothing here is smaller than 12px or shorter than 44px. */
+  /* Compact by default: this is a list you scan, not a poster. Sizes sit where
+     the old page had them — 11-14px, 30px controls — with the spacing and the
+     hairlines doing the work that bigger type was doing badly. */
   :root{
-    --bg:#000;--surface:#101114;--surface2:#191a1e;--press:#212227;
-    --line:#26272c;--hair:#1c1d21;
-    --text:#fff;--dim:#a3a6ad;--dim2:#74777f;
-    --green:#3ddc91;--amber:#ffb84d;--red:#ff6f61;
-    --r:18px;--r-sm:12px;--pill:999px;
-    --tap:48px;--pad:20px;
-    --f-title:1.45rem;--f-row:1.06rem;--f-body:.95rem;--f-sub:.82rem;--f-cap:.75rem;
+    --bg:#08090a;--surface:#0f1012;--surface2:#16171a;--press:#1d1e22;
+    --line:#212228;--hair:#191a1e;
+    --text:#e9eaec;--dim:#9a9ca4;--dim2:#6b6d76;
+    --green:#4cc38a;--amber:#e2a03f;--red:#f2555a;
+    --r:.6rem;--r-sm:.42rem;--pill:999px;
+    --pad:1rem;
+    --f-h1:1.05rem;--f-row:.875rem;--f-body:.8rem;--f-sub:.74rem;--f-cap:.68rem;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   /* Flex and grid beat the hidden attribute on specificity; this page toggles
@@ -753,210 +794,212 @@ const launcherPageHTML = `<!doctype html>
   body{margin:0;background:var(--bg);color:var(--text);
       font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
       font-size:var(--f-body);line-height:1.45;-webkit-font-smoothing:antialiased;
-      padding-bottom:calc(2rem + env(safe-area-inset-bottom))}
-  h1,h2,h3{margin:0;letter-spacing:-.02em}
+      padding-bottom:calc(1.5rem + env(safe-area-inset-bottom))}
+  h1,h2,h3{margin:0;letter-spacing:-.01em}
   button,input,select{font-family:inherit}
   button,a,summary,label,input,[role=button]{touch-action:manipulation}
-  :focus-visible{outline:2px solid var(--text);outline-offset:2px;border-radius:6px}
+  :focus-visible{outline:1px solid var(--dim);outline-offset:2px;border-radius:4px}
 
-  /* Header: stays put, so the machine you are driving is never off-screen. */
-  header{position:sticky;top:0;z-index:20;padding:calc(.85rem + env(safe-area-inset-top)) var(--pad) .85rem;
-      background:rgba(0,0,0,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-      border-bottom:1px solid transparent;transition:border-color .2s}
+  header{position:sticky;top:0;z-index:20;padding:calc(.7rem + env(safe-area-inset-top)) var(--pad) .7rem;
+      background:rgba(8,9,10,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+      border-bottom:1px solid transparent;transition:border-color .15s}
   header.scrolled{border-bottom-color:var(--hair)}
-  .bar{display:flex;align-items:center;gap:.75rem;max-width:34rem;margin:0 auto}
-  .logo{width:2.5rem;height:2.5rem;border-radius:.85rem;background:var(--surface2);
-      display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex:0 0 auto}
+  .bar{display:flex;align-items:center;gap:.55rem;max-width:34rem;margin:0 auto}
+  .logo{width:1.65rem;height:1.65rem;border-radius:.45rem;background:var(--surface2);
+      display:flex;align-items:center;justify-content:center;font-size:.9rem;flex:0 0 auto}
   .bar .main{min-width:0;flex:1}
-  h1{font-size:var(--f-title);font-weight:800;line-height:1.1}
-  #host{display:block;color:var(--dim);font-size:var(--f-sub);margin-top:.1rem;line-height:1.35}
-  #host .what{color:var(--dim);border-bottom:1px dotted var(--dim2);cursor:pointer}
+  h1{font-size:var(--f-h1);font-weight:650;line-height:1.2}
+  #host{display:block;color:var(--dim2);font-size:var(--f-cap);margin-top:.05rem;line-height:1.35}
+  #host .what{color:var(--dim2);border-bottom:1px dotted #33353c;cursor:pointer}
   #host .down{color:var(--red)}
-  .icon{width:var(--tap);height:var(--tap);border-radius:var(--pill);border:0;flex:0 0 auto;
-      background:var(--surface2);color:var(--text);font-size:1.15rem;cursor:pointer;
+  .icon{width:1.9rem;height:1.9rem;border-radius:var(--r-sm);border:1px solid var(--line);flex:0 0 auto;
+      background:var(--surface);color:var(--dim);font-size:.8rem;cursor:pointer;
       display:flex;align-items:center;justify-content:center}
-  .icon:active{background:var(--press)}
-  .icon.spin{animation:spin .8s linear infinite}
+  .icon:active{background:var(--press);color:var(--text)}
+  .icon.spin{animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .hostnote{max-width:34rem;margin:.7rem auto 0;color:var(--dim);font-size:var(--f-sub);line-height:1.5}
+  .hostnote{max-width:34rem;margin:.55rem auto 0;color:var(--dim);font-size:var(--f-sub);line-height:1.5}
 
-  main{max-width:34rem;margin:0 auto;padding:.5rem var(--pad) 0}
-  .sectionlabel{font-size:var(--f-cap);font-weight:700;letter-spacing:.09em;text-transform:uppercase;
-      color:var(--dim2);margin:1.1rem .15rem .55rem}
+  main{max-width:34rem;margin:0 auto;padding:.35rem var(--pad) 0}
+  .sectionlabel{display:flex;align-items:center;gap:.5rem;font-size:var(--f-cap);font-weight:600;
+      letter-spacing:.07em;text-transform:uppercase;color:var(--dim2);margin:.85rem .1rem .4rem}
 
-  /* A workspace is one card: identity on the left, the one action on the
-     right, everything else a tap into the sheet. */
-  .ws{background:var(--surface);border-radius:var(--r);padding:.9rem;margin-bottom:.7rem;
-      cursor:pointer;transition:background .12s}
-  .ws:active{background:var(--surface2)}
-  .row{display:flex;align-items:center;gap:.8rem}
-  .ava{width:3rem;height:3rem;border-radius:.95rem;flex:0 0 auto;display:flex;align-items:center;
-      justify-content:center;font-size:1.15rem;font-weight:700;color:#fff;letter-spacing:-.02em;
-      background:linear-gradient(150deg,hsl(var(--h) 42% 34%),hsl(var(--h) 46% 20%))}
+  .ws{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+      padding:.6rem .65rem;margin-bottom:.4rem;cursor:pointer;transition:border-color .12s,background .12s}
+  .ws:active{background:var(--surface2);border-color:#2b2d34}
+  /* Top-aligned: a card with a note or a second line must not leave the
+     avatar and the button floating in the middle of it. */
+  .row{display:flex;align-items:flex-start;gap:.55rem}
+  .ava{width:1.6rem;height:1.6rem;border-radius:.45rem;flex:0 0 auto;margin-top:.05rem;display:flex;align-items:center;
+      justify-content:center;font-size:.66rem;font-weight:700;color:#fff;letter-spacing:.01em;
+      background:linear-gradient(150deg,hsl(var(--h) 38% 36%),hsl(var(--h) 42% 22%))}
   .ws .main{min-width:0;flex:1}
-  .name{font-size:var(--f-row);font-weight:700;letter-spacing:-.015em;
+  .nameline{display:flex;align-items:center;gap:.4rem;min-width:0}
+  .name{font-size:var(--f-row);font-weight:600;letter-spacing:-.008em;
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .path{color:var(--dim2);font-size:var(--f-sub);margin-top:.05rem;
+  .path{color:var(--dim2);font-size:var(--f-cap);margin-top:.05rem;
       font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tags{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.35rem}
-  .pill{display:inline-flex;align-items:center;gap:.3rem;height:1.4rem;padding:0 .5rem;
-      border-radius:var(--pill);font-size:var(--f-cap);font-weight:700;letter-spacing:.01em;
-      background:var(--surface2);color:var(--dim)}
-  .pill.live{background:rgba(61,220,145,.14);color:var(--green)}
-  .pill.warn{background:rgba(255,111,97,.14);color:var(--red)}
-  .pill i{width:.4rem;height:.4rem;border-radius:50%;background:currentColor;
-      animation:pulse 2s ease-in-out infinite}
-  @keyframes pulse{50%{opacity:.35}}
-  .why{color:var(--dim2);font-size:var(--f-sub)}
-  .wnote{color:var(--red);font-size:var(--f-sub);line-height:1.5;margin-top:.6rem}
+  .tags{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.2rem}
+  .why{color:var(--dim2);font-size:var(--f-cap)}
+  .wnote{color:var(--red);font-size:var(--f-cap);line-height:1.5;margin-top:.45rem}
 
-  /* Buttons: exactly one white one per card — Uber's rule, and the reason you
-     never have to read a card twice to know what tapping it does. */
-  .btn{height:2.65rem;min-width:5.2rem;padding:0 1.05rem;border:0;border-radius:var(--r-sm);
-      font-size:var(--f-body);font-weight:700;letter-spacing:-.01em;cursor:pointer;flex:0 0 auto;
-      display:inline-flex;align-items:center;justify-content:center;gap:.35rem;
-      background:var(--surface2);color:var(--text);text-decoration:none;transition:transform .06s}
-  .btn:active{transform:scale(.97)}
+  /* Status: a dot and a word, the way a list of machines reads fastest. */
+  .state{display:inline-flex;align-items:center;gap:.3rem;font-size:var(--f-cap);font-weight:600;
+      color:var(--dim);flex:0 0 auto}
+  .state i{width:.35rem;height:.35rem;border-radius:50%;background:var(--dim2);flex:0 0 auto}
+  .state.live{color:var(--green)}
+  .state.live i{background:var(--green);animation:pulse 2s ease-in-out infinite}
+  .state.attention{color:var(--amber)}
+  .state.attention i{background:var(--amber);animation:pulse 1.4s ease-in-out infinite}
+  .state.blocked{color:var(--red)}
+  .state.blocked i{background:var(--red)}
+  .state.starting i{background:var(--green);animation:pulse .9s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.3}}
+
+  .btn{height:1.9rem;min-width:3.6rem;padding:0 .7rem;border:1px solid transparent;border-radius:var(--r-sm);
+      font-size:var(--f-sub);font-weight:600;letter-spacing:-.005em;cursor:pointer;flex:0 0 auto;
+      display:inline-flex;align-items:center;justify-content:center;gap:.3rem;
+      background:var(--surface2);border-color:var(--line);color:var(--text);text-decoration:none}
+  .btn:active{background:var(--press)}
   .btn:disabled{opacity:.45}
-  .btn.primary{background:#fff;color:#000}
-  .btn.block{width:100%;height:3.4rem;font-size:1.02rem;margin-top:.7rem}
-  .btn.danger{background:rgba(255,111,97,.13);color:var(--red)}
-  .btn.quiet{background:none;color:var(--dim);font-weight:600}
+  .btn.primary{background:#fff;border-color:#fff;color:#000}
+  .btn.primary:active{background:#d8d9dc}
+  .btn.block{width:100%;height:2.3rem;font-size:var(--f-body);margin-top:.5rem}
+  .btn.danger{background:none;border-color:rgba(242,85,90,.35);color:var(--red)}
+  .btn.quiet{background:none;border-color:var(--line);color:var(--dim);font-weight:500}
 
-  .cardfoot{display:flex;align-items:center;justify-content:space-between;gap:.6rem;width:100%;
-      margin-top:.7rem;padding:.65rem 0 0;border:0;border-top:1px solid var(--hair);
-      background:none;font-family:inherit;font-size:var(--f-sub);color:var(--dim2);
-      text-align:left;cursor:pointer;min-height:2.4rem}
-  .cardfoot .more{color:var(--dim);font-weight:600;flex:0 0 auto}
-  .usage{font-variant-numeric:tabular-nums}
+  .cardfoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;
+      margin-top:.5rem;padding:.45rem 0 0;border:0;border-top:1px solid var(--hair);
+      background:none;font-family:inherit;font-size:var(--f-cap);color:var(--dim2);
+      text-align:left;cursor:pointer;min-height:1.6rem}
+  .cardfoot .more{color:var(--dim);flex:0 0 auto}
+  .usage{font-variant-numeric:tabular-nums;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  /* The live session gets its own row: it is the thing you came here to open. */
-  .top{display:flex;align-items:center;gap:.6rem;margin-top:.7rem;padding:.6rem .7rem;
+  .top{display:flex;align-items:center;gap:.45rem;margin-top:.5rem;padding:.4rem .5rem;
       background:var(--surface2);border-radius:var(--r-sm);color:var(--text);
-      text-decoration:none;min-height:2.9rem}
+      text-decoration:none;min-height:2.1rem}
   .top .tmain{display:flex;flex-direction:column;min-width:0;flex:1}
-  .top .tname{font-size:var(--f-body);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .top .when{color:var(--dim2);font-size:var(--f-cap);margin-top:.05rem}
-  .top .go{color:var(--dim);font-size:1.1rem;flex:0 0 auto}
-  .top .go.small{font-size:var(--f-cap);color:var(--dim2)}
-  .sdot{width:.45rem;height:.45rem;border-radius:50%;background:var(--green);flex:0 0 auto;
+  .top .tname{font-size:var(--f-sub);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .when{color:var(--dim2);font-size:var(--f-cap);margin-top:.02rem}
+  .top .go{color:var(--dim2);font-size:.8rem;flex:0 0 auto}
+  .top .go.small{font-size:var(--f-cap)}
+  .sdot{width:.35rem;height:.35rem;border-radius:50%;background:var(--green);flex:0 0 auto;
       animation:pulse 2s ease-in-out infinite}
 
-  .intro{color:var(--dim);font-size:var(--f-body);line-height:1.55;margin:.2rem .15rem 1rem}
-  .skel{background:var(--surface);border-radius:var(--r);height:5.6rem;margin-bottom:.7rem;
-      background-image:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.05) 40%,transparent 60%);
-      background-size:220% 100%;animation:sweep 1.3s linear infinite}
+  .intro{color:var(--dim);font-size:var(--f-sub);line-height:1.55;margin:.15rem .1rem .7rem}
+  .skel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);height:3.4rem;
+      margin-bottom:.4rem;
+      background-image:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.04) 40%,transparent 60%);
+      background-size:220% 100%;animation:sweep 1.2s linear infinite}
   @keyframes sweep{to{background-position:-220% 0}}
-  .msg{color:var(--dim);font-size:var(--f-body);line-height:1.55;margin:1rem .15rem}
-  .empty{padding:2.4rem .15rem 1rem}
-  .empty h2{font-size:1.35rem;font-weight:800;margin-bottom:.5rem}
-  .empty p{color:var(--dim);font-size:var(--f-body);line-height:1.6;margin:0}
+  .msg{color:var(--dim);font-size:var(--f-sub);line-height:1.55;margin:.8rem .1rem}
+  .empty{padding:1.6rem .1rem .6rem}
+  .empty h2{font-size:var(--f-h1);font-weight:650;margin-bottom:.3rem}
+  .empty p{color:var(--dim);font-size:var(--f-sub);line-height:1.6;margin:0}
   .err{color:var(--red)}
-  code{background:var(--surface2);padding:.12rem .4rem;border-radius:.4rem;font-size:.9em}
+  code{background:var(--surface2);padding:.08rem .3rem;border-radius:.3rem;font-size:.92em;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 
-  /* Bottom sheet: every secondary control lives here, so the list stays one
-     line of thought. Reachable with a thumb, dismissed with one. */
   body.locked{overflow:hidden}
   .sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end}
-  .sheet[hidden]{display:none}
-  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.65);opacity:0;transition:opacity .22s;border:0}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.6);opacity:0;transition:opacity .18s;border:0}
   .sheet.on .scrim{opacity:1}
   .panel{position:relative;width:100%;max-width:34rem;margin:0 auto;background:var(--surface);
-      border-radius:1.4rem 1.4rem 0 0;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
-      padding:.4rem var(--pad) calc(1.1rem + env(safe-area-inset-bottom));
-      transform:translateY(101%);transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+      border:1px solid var(--line);border-bottom:0;
+      border-radius:.85rem .85rem 0 0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+      padding:.3rem var(--pad) calc(.9rem + env(safe-area-inset-bottom));
+      transform:translateY(101%);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
   .sheet.on .panel{transform:none}
   @media (prefers-reduced-motion:reduce){
     .panel,.scrim{transition:none}
-    .skel,.sdot,.pill i,.icon.spin{animation:none}
+    .skel,.sdot,.state i,.icon.spin{animation:none}
   }
   .panel:focus,.panel:focus-visible{outline:none}
-  .grab{display:block;width:2.4rem;height:.25rem;border-radius:var(--pill);background:#3a3c42;
-      border:0;padding:0;margin:.5rem auto .9rem}
-  .sheet h2{font-size:1.25rem;font-weight:800}
-  .sheet .sub{color:var(--dim2);font-size:var(--f-sub);margin-top:.15rem;word-break:break-all;
+  .grab{display:block;width:2rem;height:.2rem;border-radius:var(--pill);background:#2e3037;
+      border:0;padding:0;margin:.4rem auto .7rem}
+  .sheet h2{font-size:var(--f-h1);font-weight:650}
+  .sheet .sub{color:var(--dim2);font-size:var(--f-cap);margin-top:.1rem;word-break:break-all;
       font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  .srow{display:flex;align-items:center;gap:.8rem;width:100%;min-height:3.4rem;padding:.7rem 0;
+  .srow{display:flex;align-items:center;gap:.6rem;width:100%;min-height:2.5rem;padding:.5rem 0;
       background:none;border:0;border-top:1px solid var(--hair);color:var(--text);
-      font-size:var(--f-body);font-weight:600;text-align:left;cursor:pointer}
-  .srow:first-of-type{margin-top:.9rem}
-  .srow .sval{margin-left:auto;color:var(--dim);font-weight:500;flex:0 0 auto}
-  .srow .go{color:var(--dim2);font-size:1.05rem;flex:0 0 auto}
+      font-size:var(--f-body);font-weight:500;text-align:left;cursor:pointer}
+  .srow:first-of-type{margin-top:.6rem}
+  .srow .sval{margin-left:auto;color:var(--dim);flex:0 0 auto}
+  .srow .go{color:var(--dim2);font-size:.85rem;flex:0 0 auto}
   .srow.bad{color:var(--red)}
-  .srow .desc{display:block;color:var(--dim2);font-size:var(--f-cap);font-weight:400;margin-top:.1rem}
-  .field{margin-top:.9rem}
-  .field label{display:block;font-size:var(--f-cap);font-weight:700;letter-spacing:.07em;
-      text-transform:uppercase;color:var(--dim2);margin-bottom:.35rem}
-  .field select,.field input{width:100%;height:3rem;background:var(--surface2);border:1px solid var(--line);
-      color:var(--text);border-radius:var(--r-sm);padding:0 .8rem;font-size:var(--f-body)}
+  .srow .desc{display:block;color:var(--dim2);font-size:var(--f-cap);font-weight:400;margin-top:.05rem;
+      line-height:1.45}
+  .field{margin-top:.6rem}
+  .field label{display:block;font-size:var(--f-cap);font-weight:600;letter-spacing:.06em;
+      text-transform:uppercase;color:var(--dim2);margin-bottom:.25rem}
+  .field select,.field input{width:100%;height:2.3rem;background:var(--surface2);border:1px solid var(--line);
+      color:var(--text);border-radius:var(--r-sm);padding:0 .6rem;font-size:var(--f-body)}
   .field input::placeholder{color:var(--dim2)}
+  .field .desc{display:block;color:var(--dim2);font-size:var(--f-cap);margin-top:.25rem;line-height:1.45}
 
-  /* Session lists inside the sheet. */
-  .grp{display:flex;align-items:center;gap:.6rem;margin:1.1rem 0 .2rem;color:var(--dim2);
-      font-size:var(--f-cap);font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+  .grp{display:flex;align-items:center;gap:.5rem;margin:.85rem 0 .1rem;color:var(--dim2);
+      font-size:var(--f-cap);font-weight:600;letter-spacing:.07em;text-transform:uppercase}
   .grp i{flex:1;height:1px;background:var(--hair)}
-  .s{display:flex;align-items:center;gap:.6rem;min-height:3rem;padding:.55rem 0;
-      border-top:1px solid var(--hair);color:var(--text);text-decoration:none;font-size:var(--f-body)}
+  .s{display:flex;align-items:center;gap:.5rem;min-height:2.4rem;padding:.4rem 0;
+      border-top:1px solid var(--hair);color:var(--text);text-decoration:none;font-size:var(--f-sub)}
   .s .smain{display:flex;flex-direction:column;min-width:0;flex:1}
   .s .sname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-  .s .when{color:var(--dim2);font-size:var(--f-cap);margin-top:.05rem}
+  .s .when{color:var(--dim2);font-size:var(--f-cap);margin-top:.02rem}
   .s.past .sname{color:var(--dim);font-weight:500}
-  .s .go{color:var(--dim2);flex:0 0 auto;font-size:1.05rem}
-  .tag{font-size:.65rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,184,77,.4);
-      border-radius:.35rem;padding:.05rem .3rem;margin-left:.4rem;vertical-align:1px}
-  .hint,.none{color:var(--dim2);font-size:var(--f-cap);line-height:1.5;padding:.45rem 0}
-  .evrow{display:flex;justify-content:space-between;gap:.6rem;font-size:var(--f-sub);
-      color:var(--dim2);padding:.35rem 0}
-  .evrow b{font-weight:600;color:var(--dim);min-width:0}
+  .s .go{color:var(--dim2);flex:0 0 auto;font-size:.8rem}
+  .tag{font-size:.58rem;font-weight:700;color:var(--amber);border:1px solid rgba(226,160,63,.4);
+      border-radius:.3rem;padding:0 .25rem;margin-left:.35rem;vertical-align:1px}
+  .hint,.none{color:var(--dim2);font-size:var(--f-cap);line-height:1.5;padding:.35rem 0}
+  .evrow{display:flex;justify-content:space-between;gap:.5rem;font-size:var(--f-cap);
+      color:var(--dim2);padding:.28rem 0}
+  .evrow b{font-weight:500;color:var(--dim);min-width:0}
   .evrow span{flex:0 0 auto;white-space:nowrap}
 
-  /* Toast: a failure says so once, over the thumb, and gets out of the way. */
-  .toast{position:fixed;left:50%;bottom:calc(1.2rem + env(safe-area-inset-bottom));transform:translate(-50%,1rem);
-      z-index:60;max-width:calc(100% - 2.4rem);background:#fff;color:#000;font-size:var(--f-sub);
-      font-weight:600;padding:.75rem 1rem;border-radius:var(--r-sm);opacity:0;
-      transition:opacity .2s,transform .2s;box-shadow:0 .6rem 2rem rgba(0,0,0,.5)}
-  .toast[hidden]{display:none}
+  .toast{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom));transform:translate(-50%,.6rem);
+      z-index:60;max-width:calc(100% - 2rem);background:#fff;color:#000;font-size:var(--f-sub);
+      font-weight:600;padding:.5rem .8rem;border-radius:var(--r-sm);opacity:0;
+      transition:opacity .16s,transform .16s;box-shadow:0 .5rem 1.4rem rgba(0,0,0,.55)}
   .toast.on{opacity:1;transform:translate(-50%,0)}
-  .toast.bad{background:var(--red);color:#1a0503}
+  .toast.bad{background:var(--red);color:#150202}
 
-  /* Panels that are not the main job: quiet until opened. */
-  details.card{background:var(--surface);border-radius:var(--r);padding:0 var(--pad);margin-top:.7rem}
-  details.card summary{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
-      list-style:none;cursor:pointer;min-height:3.4rem;padding:.9rem 0;font-size:var(--f-body);font-weight:600}
+  details.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+      padding:0 .7rem;margin-top:.4rem}
+  details.card summary{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+      list-style:none;cursor:pointer;min-height:2.4rem;padding:.55rem 0;font-size:var(--f-body);font-weight:600}
   details.card summary::-webkit-details-marker{display:none}
-  details.card summary .sh{color:var(--dim2);font-size:var(--f-sub);font-weight:400}
+  details.card summary .sh{color:var(--dim2);font-size:var(--f-cap);font-weight:400}
   details.card[open] summary .sh::after{content:" \2303"}
   details.card:not([open]) summary .sh::after{content:" \2304"}
-  details.card[open]{padding-bottom:1.1rem}
-  details.card h3{font-size:var(--f-cap);font-weight:700;letter-spacing:.09em;text-transform:uppercase;
-      color:var(--dim2);margin:1.4rem 0 .5rem}
-  details.card p{color:var(--dim);font-size:var(--f-sub);line-height:1.55;margin:.5rem 0}
+  details.card[open]{padding-bottom:.7rem}
+  details.card h3{font-size:var(--f-cap);font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+      color:var(--dim2);margin:1rem 0 .35rem}
+  details.card p{color:var(--dim);font-size:var(--f-sub);line-height:1.55;margin:.35rem 0}
   .tip{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--hair);
-      padding:.9rem 0 .8rem;cursor:pointer;color:var(--text)}
-  .tip-t{display:block;font-size:var(--f-body);font-weight:700}
-  .tip-d{display:block;font-size:var(--f-sub);color:var(--dim);line-height:1.5;margin-top:.15rem}
-  .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.6rem;
-      background:var(--surface2);border-radius:var(--r-sm);padding:.6rem .7rem;min-height:2.6rem}
+      padding:.6rem 0 .55rem;cursor:pointer;color:var(--text)}
+  .tip-t{display:block;font-size:var(--f-body);font-weight:600}
+  .tip-d{display:block;font-size:var(--f-sub);color:var(--dim);line-height:1.5;margin-top:.1rem}
+  .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.4rem;
+      background:var(--surface2);border-radius:var(--r-sm);padding:.4rem .5rem;min-height:1.9rem}
   .tip-cmd code{min-width:0;overflow-x:auto;white-space:nowrap;background:none;padding:0;
-      font-size:var(--f-sub);color:var(--text)}
-  .tip-copy{font-size:var(--f-cap);font-weight:700;color:var(--dim2);flex:0 0 auto;letter-spacing:.04em}
+      font-size:var(--f-cap);color:var(--text)}
+  .tip-copy{font-size:.6rem;font-weight:700;color:var(--dim2);flex:0 0 auto;letter-spacing:.04em}
   .tip.copied .tip-copy{color:var(--green)}
-  .dev{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
-      padding:.75rem 0;border-top:1px solid var(--hair);font-size:var(--f-body)}
+  .dev{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+      padding:.5rem 0;border-top:1px solid var(--hair);font-size:var(--f-sub)}
   .dev .sub{color:var(--dim2);font-size:var(--f-cap)}
-  .chk{display:flex;gap:.6rem;font-size:var(--f-sub);padding:.7rem 0;border-top:1px solid var(--hair);line-height:1.5}
+  .chk{display:flex;gap:.5rem;font-size:var(--f-sub);padding:.5rem 0;border-top:1px solid var(--hair);line-height:1.5}
   .chk .mark{color:var(--green);flex:0 0 auto}
   .chk.bad .mark{color:var(--red)}
-  .chk .fix{display:block;color:var(--dim2);font-size:var(--f-cap);margin-top:.15rem}
-  .toggle{display:flex;align-items:center;gap:.7rem;min-height:var(--tap);color:var(--text);
-      font-size:var(--f-body);cursor:pointer}
-  .toggle input{accent-color:var(--green);width:1.2rem;height:1.2rem;margin:0}
-  pre{background:#0a0b0d;border:1px solid var(--line);border-radius:var(--r-sm);padding:.8rem;
+  .chk .fix{display:block;color:var(--dim2);font-size:var(--f-cap);margin-top:.1rem}
+  .toggle{display:flex;align-items:center;gap:.5rem;min-height:2.2rem;color:var(--text);
+      font-size:var(--f-sub);cursor:pointer}
+  .toggle input{accent-color:var(--green);width:.95rem;height:.95rem;margin:0}
+  pre{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);padding:.6rem;
       overflow-x:auto;font-size:var(--f-cap);line-height:1.5;white-space:pre;color:var(--dim)}
-  .foot{text-align:center;margin:1.6rem 0 0}
-  .foot a{color:var(--text);font-size:var(--f-body);font-weight:600;text-decoration:none;
-      display:inline-flex;align-items:center;min-height:var(--tap);padding:0 1rem}
+  .foot{text-align:center;margin:1.1rem 0 0}
+  .foot a{color:var(--dim);font-size:var(--f-sub);font-weight:500;text-decoration:none;
+      display:inline-flex;align-items:center;min-height:2.2rem;padding:0 .8rem}
 </style>
 <header id="top">
   <div class="bar">
@@ -1088,6 +1131,22 @@ const launcherPageHTML = `<!doctype html>
   addEventListener('scroll', () => {
     document.getElementById('top').classList.toggle('scrolled', scrollY > 4);
   }, { passive: true });
+
+  // A session's name and state both change while you are looking at them —
+  // Claude renames the session as the work takes shape, a permission prompt
+  // arrives, a session exits. Refresh on a slow tick, only while the page is
+  // actually on screen, and never under an open sheet (it would re-render the
+  // row the thumb is on).
+  const REFRESH_MS = 15000;
+  function autoRefresh() {
+    if (document.visibilityState !== 'visible') return;
+    if (!document.getElementById('sheet').hidden) return;
+    load();
+  }
+  setInterval(autoRefresh, REFRESH_MS);
+  addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') autoRefresh();
+  });
 
   if (!token) {
     list.className = 'empty';
@@ -1319,9 +1378,13 @@ const launcherPageHTML = `<!doctype html>
 
     const main = document.createElement('div');
     main.className = 'main';
-    const name = document.createElement('div');
+    const nameline = document.createElement('div');
+    nameline.className = 'nameline';
+    const name = document.createElement('span');
     name.className = 'name'; name.textContent = ws.id;
-    main.appendChild(name);
+    nameline.appendChild(name);
+    nameline.appendChild(stateChip(ws));
+    main.appendChild(nameline);
     const path = document.createElement('div');
     path.className = 'path'; path.textContent = shortPath(ws.path);
     main.appendChild(path);
@@ -1383,36 +1446,55 @@ const launcherPageHTML = `<!doctype html>
     return b;
   }
 
+  // The state word comes from the daemon (/launch/workspaces), so the phone
+  // and any other client say the same thing about the same workspace.
+  const STATE_LABEL = {
+    live: ws => (ws.live > 1 ? ws.live + ' sessions' : 'live'),
+    attention: () => 'needs you',
+    starting: () => 'starting',
+    blocked: () => 'will not start',
+    stopped: () => 'stopped',
+  };
+
+  function stateChip(ws) {
+    const state = ws.state || (ws.running ? 'starting' : 'stopped');
+    const label = (STATE_LABEL[state] || STATE_LABEL.stopped)(ws);
+    const el = document.createElement('span');
+    el.className = 'state ' + state;
+    el.innerHTML = '<i></i>' + esc(label);
+    return el;
+  }
+
   function statusTags(ws) {
     const el = document.createElement('div');
     el.className = 'tags';
     let any = false;
-    if (ws.live > 0) {
-      const p = document.createElement('span');
-      p.className = 'pill live';
-      p.innerHTML = '<i></i>' + ws.live + ' live';
-      el.appendChild(p); any = true;
-    } else if (ws.running) {
-      const p = document.createElement('span');
-      p.className = 'pill'; p.textContent = 'starting';
-      el.appendChild(p); any = true;
-    }
     const e = ws.lastEvent;
-    if (e && !(ws.running && e.kind === 'started')) {
-      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + e.cause : '')
-        : e.kind === 'attention' ? 'needs you' : e.kind;
-      const s = document.createElement('span');
-      s.className = e.kind === 'attention' ? 'pill warn' : 'why';
-      s.textContent = what + ' ' + fmtWhen(e.at);
-      el.appendChild(s); any = true;
+    if (e && !(ws.running && e.kind === 'started') && e.kind !== 'attention') {
+      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + e.cause : '') : e.kind;
+      const why = document.createElement('span');
+      why.className = 'why';
+      why.textContent = what + ' ' + fmtWhen(e.at);
+      el.appendChild(why); any = true;
     }
     return any ? el : null;
+  }
+
+  // Claude Code owns a session's name after it starts — /rename, a hook, or
+  // its own naming all rewrite the record corgi reads — so this is whatever
+  // the session is called right now, not what corgi called it at start.
+  // nameSource says who last set it; nameSince, when.
+  function nameNote(top) {
+    if (!top.nameSource || top.nameSource === 'user') return '';
+    if (!top.nameSince || !top.startedAt || top.nameSince - top.startedAt < 5000) return '';
+    return 'renamed ' + fmtWhen(top.nameSince);
   }
 
   function topSessionRow(ws) {
     const top = ws.topSession;
     if (!top) return null;
-    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : ''].filter(Boolean).join(' · ');
+    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : '', nameNote(top)]
+      .filter(Boolean).join(' · ');
     const body = '<i class="sdot"></i><span class="tmain"><span class="tname">' +
       esc(shortSessionName(top.name, ws.id)) + '</span>' +
       '<span class="when">' + esc(when) + '</span></span>';
@@ -1604,6 +1686,13 @@ const launcherPageHTML = `<!doctype html>
     name.dataset.role = 'name';
     name.maxLength = 60;
     field.appendChild(name);
+    // Says what the field actually does: Claude owns the name once the session
+    // is running, so this is the starting one, not the last word.
+    const desc = document.createElement('span');
+    desc.className = 'desc';
+    desc.textContent = 'The name it starts with. Claude renames the session as the work takes ' +
+      'shape, and this list follows it.';
+    field.appendChild(desc);
     box.appendChild(field);
     return box;
   }

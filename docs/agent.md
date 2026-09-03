@@ -111,16 +111,27 @@ the phone paired across restarts; the quick tunnel does not.
 
 ### What the launcher looks like
 
-One card per repo, and one white button on each: **Open** when a session is
-already up, **Start** when it is not — never both. The card carries the repo,
-its path, a green *N live* pill, the last thing that happened, and a row for
-the running session that opens the conversation in one tap.
+One card per repo, one button on each: **Open** when a session is already up,
+**Start** when it is not — never both. Next to the repo name is the one word
+that matters, with a dot in front of it:
 
+| state | what it means |
+|---|---|
+| `live` | a session is running (`N sessions` when there is more than one) |
+| `needs you` | a permission prompt or a question is blocking it |
+| `starting` | supervised, no session has registered yet |
+| `will not start` | the daemon refused, and the reason is on the card |
+| `stopped` | nothing running here |
+
+Below it, the running session's own row opens the conversation in one tap.
 Everything else is behind **Details**: tap the card and a sheet comes up from
 the bottom with the session name and account to start under, where links
 should open, hide, stop, and the full session list and timeline for that
-workspace. Nothing that changes the machine is more than two taps away, and
-nothing that does not is competing for the first one.
+workspace.
+
+The list refreshes itself every 15 seconds while the page is on screen, so a
+name, a state or a session that changed on the machine shows up without a
+reload — and it holds still while a sheet is open.
 
 ### A launcher URL that never changes
 
@@ -284,6 +295,18 @@ The profile appears only when the session runs under one. The branch is
 dropped for a checkout on a detached HEAD, or a workspace that is not a git
 repository, and is the part shortened when the name would run past the 60
 characters claude.ai shows.
+
+That is the name it **starts** with. After that the name belongs to Claude
+Code, which keeps its own record of it (`<configDir>/sessions/<pid>.json`,
+with a `nameSource` saying who last set it — `user` for one someone typed,
+`derived` or `auto` for one Claude picked, `hook` for one a hook set). A
+session renamed in flight — by `/rename`, by a hook, or by Claude as the work
+takes shape — is renamed in corgi's list too: the launcher reads that record
+on every refresh and shows the current name, with *renamed 4m ago* beside it.
+
+What corgi cannot do is rename a session on claude.ai after the fact: the name
+in that list is the one remote control registered at start, which is why the
+starting name is worth composing well.
 
 Name a session yourself and that wins — it says what the session is *for*,
 which no local probe can know:
