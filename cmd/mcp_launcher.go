@@ -771,249 +771,185 @@ const launcherPageHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#0b0d12">
 <title>corgi</title>
 <style>
-  /* Compact by default: this is a list you scan, not a poster. Sizes sit where
-     the old page had them — 11-14px, 30px controls — with the spacing and the
-     hairlines doing the work that bigger type was doing badly. */
-  :root{
-    --bg:#08090a;--surface:#0f1012;--surface2:#16171a;--press:#1d1e22;
-    --line:#212228;--hair:#191a1e;
-    --text:#e9eaec;--dim:#9a9ca4;--dim2:#6b6d76;
-    --green:#4cc38a;--amber:#e2a03f;--red:#f2555a;
-    --r:.6rem;--r-sm:.42rem;--pill:999px;
-    --pad:1rem;
-    --f-h1:1.05rem;--f-row:.875rem;--f-body:.8rem;--f-sub:.74rem;--f-cap:.68rem;
-  }
+  :root{--bg:#0a0b0e;--card:#141519;--card2:#0f1013;--line:#22242b;--hair:#1a1c22;
+      --text:#eceef2;--dim:#8f94a3;--dim2:#63677a;--green:#6ee787;--amber:#ffa657;--red:#ff7b72;
+      --sp1:.25rem;--sp2:.5rem;--sp3:.75rem;--sp4:1rem;--r:.5rem}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  /* Flex and grid beat the hidden attribute on specificity; this page toggles
-     controls with .hidden, so it must not. */
+  /* Flex and grid beat the hidden attribute on specificity, and this page
+     toggles controls with .hidden. */
   [hidden]{display:none!important}
   html{-webkit-text-size-adjust:100%}
-  body{margin:0;background:var(--bg);color:var(--text);
-      font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
-      font-size:var(--f-body);line-height:1.45;-webkit-font-smoothing:antialiased;
-      padding-bottom:calc(1.5rem + env(safe-area-inset-bottom))}
-  h1,h2,h3{margin:0;letter-spacing:-.01em}
-  button,input,select{font-family:inherit}
-  button,a,summary,label,input,[role=button]{touch-action:manipulation}
-  :focus-visible{outline:1px solid var(--dim);outline-offset:2px;border-radius:4px}
-
-  header{position:sticky;top:0;z-index:20;padding:calc(.7rem + env(safe-area-inset-top)) var(--pad) .7rem;
-      background:rgba(8,9,10,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-      border-bottom:1px solid transparent;transition:border-color .15s}
-  header.scrolled{border-bottom-color:var(--hair)}
-  .bar{display:flex;align-items:center;gap:.55rem;max-width:34rem;margin:0 auto}
-  .logo{width:1.65rem;height:1.65rem;border-radius:.45rem;background:var(--surface2);
-      display:flex;align-items:center;justify-content:center;font-size:.9rem;flex:0 0 auto}
-  .bar .main{min-width:0;flex:1}
-  h1{font-size:var(--f-h1);font-weight:650;line-height:1.2}
-  #host{display:block;color:var(--dim2);font-size:var(--f-cap);margin-top:.05rem;line-height:1.35}
-  #host .what{color:var(--dim2);border-bottom:1px dotted #33353c;cursor:pointer}
-  #host .down{color:var(--red)}
-  .icon{width:1.9rem;height:1.9rem;border-radius:var(--r-sm);border:1px solid var(--line);flex:0 0 auto;
-      background:var(--surface);color:var(--dim);font-size:.8rem;cursor:pointer;
-      display:flex;align-items:center;justify-content:center}
-  .icon:active{background:var(--press);color:var(--text)}
-  .icon.spin{animation:spin .7s linear infinite}
+  button,a,summary,label,input,.chip,.ws,.top,.s{touch-action:manipulation}
+  body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
+      padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased}
+  header{padding:calc(1.2rem + env(safe-area-inset-top)) 1.2rem .3rem;max-width:34rem;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:.7rem}
+  .brand .who{min-width:0;flex:1}
+  .chip.refresh{flex:0 0 auto;width:2rem;height:2rem;padding:0;display:flex;align-items:center;
+      justify-content:center;font-size:.85rem;color:var(--dim)}
+  .chip.refresh:active{color:var(--text)}
+  .chip.refresh.spin{animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .hostnote{max-width:34rem;margin:.55rem auto 0;color:var(--dim);font-size:var(--f-sub);line-height:1.5}
-
-  main{max-width:34rem;margin:0 auto;padding:.35rem var(--pad) 0}
-  .sectionlabel{display:flex;align-items:center;gap:.5rem;font-size:var(--f-cap);font-weight:600;
-      letter-spacing:.07em;text-transform:uppercase;color:var(--dim2);margin:.85rem .1rem .4rem}
-
-  .ws{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
-      padding:.6rem .65rem;margin-bottom:.4rem;cursor:pointer;transition:border-color .12s,background .12s}
-  .ws:active{background:var(--surface2);border-color:#2b2d34}
-  /* Top-aligned: a card with a note or a second line must not leave the
-     avatar and the button floating in the middle of it. */
-  .row{display:flex;align-items:flex-start;gap:.55rem}
-  .ava{width:1.6rem;height:1.6rem;border-radius:.45rem;flex:0 0 auto;margin-top:.05rem;display:flex;align-items:center;
-      justify-content:center;font-size:.66rem;font-weight:700;color:#fff;letter-spacing:.01em;
-      background:linear-gradient(150deg,hsl(var(--h) 38% 36%),hsl(var(--h) 42% 22%))}
-  .ws .main{min-width:0;flex:1}
-  .nameline{display:flex;align-items:center;gap:.4rem;min-width:0}
-  .name{font-size:var(--f-row);font-weight:600;letter-spacing:-.008em;
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .path{color:var(--dim2);font-size:var(--f-cap);margin-top:.05rem;
-      font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tags{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.2rem}
-  .why{color:var(--dim2);font-size:var(--f-cap)}
-  .wnote{color:var(--red);font-size:var(--f-cap);line-height:1.5;margin-top:.45rem}
-
-  /* Status: a dot and a word, the way a list of machines reads fastest. */
-  .state{display:inline-flex;align-items:center;gap:.3rem;font-size:var(--f-cap);font-weight:600;
-      color:var(--dim);flex:0 0 auto}
-  .state i{width:.35rem;height:.35rem;border-radius:50%;background:var(--dim2);flex:0 0 auto}
-  .state.live{color:var(--green)}
-  .state.live i{background:var(--green);animation:pulse 2s ease-in-out infinite}
-  .state.attention{color:var(--amber)}
-  .state.attention i{background:var(--amber);animation:pulse 1.4s ease-in-out infinite}
-  .state.blocked{color:var(--red)}
-  .state.blocked i{background:var(--red)}
-  .state.starting i{background:var(--green);animation:pulse .9s ease-in-out infinite}
+  .logo{width:2.6rem;height:2.6rem;border-radius:.9rem;background:linear-gradient(135deg,#1e2634,#131824);
+      border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.35rem;flex:0 0 auto}
+  h1{font-size:1.25rem;margin:0;letter-spacing:.01em}
+  header small{display:block;color:var(--dim);font-size:.78rem;font-weight:400;margin-top:.1rem}
+  header small .what{color:var(--dim);border-bottom:1px dotted var(--line-soft,#3a4152);cursor:pointer}
+  .hostnote{color:var(--dim);font-size:.74rem;line-height:1.5;margin:.45rem 0 0;max-width:30rem}
+  main{padding:.4rem 1.2rem 2.2rem;max-width:34rem;margin:0 auto}
+  .ws{background:var(--card);border:1px solid var(--line);border-radius:.75rem;
+      padding:var(--sp3) var(--sp3) var(--sp2);margin:var(--sp2) 0}
+  .head{display:flex;align-items:center;gap:.7rem}
+  .main{min-width:0;flex:1}
+  .ws .name{font-weight:600;display:flex;align-items:center;gap:.5rem;font-size:.94rem;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;letter-spacing:-.006em}
+  .ws .path{color:var(--dim2);font-size:.7rem;margin-top:.15rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .ws .path.full{white-space:normal;word-break:break-all}
+  .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.5rem;line-height:1.45}
+  /* The dot carries the state: green live, amber blocking on you, red a start
+     that was refused, grey nothing running. */
+  .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
+  .dot.live{background:var(--green)}
+  .dot.starting{background:var(--green);animation:pulse 1s ease-in-out infinite}
+  .dot.attention{background:var(--amber)}
+  .dot.blocked{background:var(--red)}
   @keyframes pulse{50%{opacity:.3}}
-
-  .btn{height:1.9rem;min-width:3.6rem;padding:0 .7rem;border:1px solid transparent;border-radius:var(--r-sm);
-      font-size:var(--f-sub);font-weight:600;letter-spacing:-.005em;cursor:pointer;flex:0 0 auto;
-      display:inline-flex;align-items:center;justify-content:center;gap:.3rem;
-      background:var(--surface2);border-color:var(--line);color:var(--text);text-decoration:none}
-  .btn:active{background:var(--press)}
-  .btn:disabled{opacity:.45}
-  .btn.primary{background:#fff;border-color:#fff;color:#000}
-  .btn.primary:active{background:#d8d9dc}
-  .btn.block{width:100%;height:2.3rem;font-size:var(--f-body);margin-top:.5rem}
-  .btn.danger{background:none;border-color:rgba(242,85,90,.35);color:var(--red)}
-  .btn.quiet{background:none;border-color:var(--line);color:var(--dim);font-weight:500}
-
-  .cardfoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;
-      margin-top:.5rem;padding:.45rem 0 0;border:0;border-top:1px solid var(--hair);
-      background:none;font-family:inherit;font-size:var(--f-cap);color:var(--dim2);
-      text-align:left;cursor:pointer;min-height:1.6rem}
-  .cardfoot .more{color:var(--dim);flex:0 0 auto}
-  .usage{font-variant-numeric:tabular-nums;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-  .top{display:flex;align-items:center;gap:.45rem;margin-top:.5rem;padding:.4rem .5rem;
-      background:var(--surface2);border-radius:var(--r-sm);color:var(--text);
-      text-decoration:none;min-height:2.1rem}
-  .top .tmain{display:flex;flex-direction:column;min-width:0;flex:1}
-  .top .tname{font-size:var(--f-sub);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .top .when{color:var(--dim2);font-size:var(--f-cap);margin-top:.02rem}
-  .top .go{color:var(--dim2);font-size:.8rem;flex:0 0 auto}
-  .top .go.small{font-size:var(--f-cap)}
-  .sdot{width:.35rem;height:.35rem;border-radius:50%;background:var(--green);flex:0 0 auto;
-      animation:pulse 2s ease-in-out infinite}
-
-  .intro{color:var(--dim);font-size:var(--f-sub);line-height:1.55;margin:.15rem .1rem .7rem}
-  .skel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);height:3.4rem;
-      margin-bottom:.4rem;
-      background-image:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.04) 40%,transparent 60%);
+  .meta{display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;margin-top:.25rem;
+      font-size:.73rem;color:var(--dim2)}
+  .meta span + span::before{content:"\00b7";color:var(--dim2);margin-right:.4rem}
+  .meta .live{color:var(--green)}
+  .meta .warn{color:var(--red)}
+  .meta .why{color:var(--dim)}
+  .usage{font-size:.68rem;color:var(--dim2);margin-top:.15rem;
+      font-variant-numeric:tabular-nums;opacity:.85}
+  .actions{display:flex;align-items:center;gap:.4rem;margin-top:.65rem;flex-wrap:wrap}
+  .startbox{flex-basis:100%;display:none;gap:.4rem;margin-top:.5rem}
+  .startbox.on{display:flex}
+  .startbox select,.startbox input{flex:1 1 6rem;min-width:0;background:var(--card2);border:1px solid var(--line);
+      color:var(--text);border-radius:.5rem;padding:.4rem .55rem;font-size:.78rem;font-family:inherit}
+  .evrow{display:flex;justify-content:space-between;gap:.6rem;font-size:.72rem;color:var(--dim);padding:.2rem .1rem}
+  .evrow b{font-weight:600;color:#c9cfda}
+  .dev{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.8rem;
+      padding:.4rem 0;border-bottom:1px solid var(--line)}
+  .dev:last-child{border-bottom:0}
+  .dev .sub{color:var(--dim2);font-size:.7rem}
+  .dev button{background:none;border:1px solid rgba(255,123,114,.45);color:var(--red);font-size:.7rem;
+      padding:.25rem .6rem;border-radius:.5rem}
+  .chk{display:flex;gap:.5rem;font-size:.78rem;padding:.35rem 0;border-bottom:1px solid var(--line);line-height:1.45}
+  .chk:last-child{border-bottom:0}
+  .chk .fix{color:var(--dim);display:block;font-size:.72rem;margin-top:.15rem}
+  .chk.bad .mark{color:var(--red)}
+  .chk .mark{color:var(--green);flex:0 0 auto}
+  .chip{background:none;border:1px solid var(--line);color:var(--dim);font-size:.72rem;font-weight:500;
+      padding:.32rem .6rem;border-radius:var(--r);cursor:pointer}
+  .chip b{color:var(--text);font-weight:600}
+  .chip.danger{border-color:transparent;color:var(--dim);margin-left:auto}
+  .chip.danger:active{color:var(--red)}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
+      margin-top:var(--sp2);padding:var(--sp2) 0 0;border-top:1px solid var(--hair);
+      font-size:.78rem;color:var(--text);text-decoration:none;min-height:2rem}
+  .top span:first-child{display:flex;align-items:center;flex:1 1 auto;min-width:3rem;overflow:hidden}
+  .tname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .top .when{color:var(--dim2);font-size:.7rem;flex:0 0 auto;max-width:60%;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .intro{color:var(--dim);font-size:.8rem;line-height:1.5;margin:.2rem 0 .9rem}
+  .skel{background:var(--card);border:1px solid var(--line);border-radius:.75rem;height:5.2rem;
+      margin:var(--sp2) 0;
+      background-image:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.045) 40%,transparent 60%);
       background-size:220% 100%;animation:sweep 1.2s linear infinite}
   @keyframes sweep{to{background-position:-220% 0}}
-  .msg{color:var(--dim);font-size:var(--f-sub);line-height:1.55;margin:.8rem .1rem}
-  .empty{padding:1.6rem .1rem .6rem}
-  .empty h2{font-size:var(--f-h1);font-weight:650;margin-bottom:.3rem}
-  .empty p{color:var(--dim);font-size:var(--f-sub);line-height:1.6;margin:0}
+  .sessions{margin-top:var(--sp2);border-top:1px solid var(--hair);padding-top:var(--sp2)}
+  .sessions .s{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.76rem;
+      color:#c9cfda;padding:.45rem .1rem;min-height:2.1rem;text-decoration:none}
+  .sessions .s span:first-child{display:flex;align-items:center;flex:1 1 auto;min-width:3rem;
+      overflow:hidden;color:var(--text)}
+  .sdot{width:.375rem;height:.375rem;border-radius:50%;background:var(--green);margin-right:.5rem;flex:0 0 auto}
+  a.s.past span:first-child{color:var(--dim)}
+  a.s.past .when{color:#5b6274}
+  .sessions .grp{display:flex;align-items:center;gap:.5rem;margin:.6rem .1rem .1rem;color:var(--dim2);
+      font-size:.62rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+  .sessions .grp i{flex:1;height:1px;background:var(--hair)}
+  .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto;max-width:60%;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
+  .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
+      border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px;flex:0 0 auto;
+      white-space:nowrap}
+  button{border:0;border-radius:var(--r);padding:.48rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer;
+      background:#1e2027;color:var(--text);transition:transform .05s;flex:0 0 auto}
+  button:active{transform:scale(.97)}
+  button:disabled{opacity:.5}
+  a.open,button.open{display:inline-block;background:var(--green);color:#08110a;text-decoration:none;border:0;
+      padding:.48rem .9rem;border-radius:var(--r);font-weight:600;font-size:.82rem;cursor:pointer;flex:0 0 auto}
+  .msg{color:var(--dim);font-size:.9rem;margin:1rem 0;line-height:1.5}
+  .empty{padding:1.6rem 0 .6rem}
+  .empty h2{font-size:1.05rem;margin:0 0 .3rem;letter-spacing:-.01em}
+  .empty p{color:var(--dim);font-size:.82rem;line-height:1.6;margin:0}
   .err{color:var(--red)}
-  code{background:var(--surface2);padding:.08rem .3rem;border-radius:.3rem;font-size:.92em;
-      font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  code{background:var(--card);border:1px solid var(--line);padding:.1rem .35rem;border-radius:.35rem;font-size:.85em}
+  .tips{margin:1.5rem 0 0;background:var(--card);border:1px solid var(--line);border-radius:.75rem;
+      padding:0 var(--sp3)}
+  .tips summary{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
+      list-style:none;cursor:pointer;padding:var(--sp3) 0;
+      font-size:.64rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim2)}
+  .tips summary::-webkit-details-marker{display:none}
+  .tips-hint{text-transform:none;letter-spacing:0;font-weight:400;font-size:.72rem;color:var(--dim2)}
+  .tips[open] .tips-hint::after{content:" \2303"}
+  .tips:not([open]) .tips-hint::after{content:" \2304"}
+  .tips > .tip:first-of-type{border-top:1px solid var(--hair);padding-top:var(--sp3)}
+  .tips[open]{padding-bottom:var(--sp3)}
+  .tip{display:flex;flex-direction:column;align-items:stretch;gap:.15rem;width:100%;text-align:left;
+      background:none;border:0;border-top:1px solid var(--hair);border-radius:0;
+      padding:var(--sp3) 0 var(--sp2);margin:0;cursor:pointer;font-family:inherit}
 
-  body.locked{overflow:hidden}
-  .sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end}
-  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.6);opacity:0;transition:opacity .18s;border:0}
-  .sheet.on .scrim{opacity:1}
-  .panel{position:relative;width:100%;max-width:34rem;margin:0 auto;background:var(--surface);
-      border:1px solid var(--line);border-bottom:0;
-      border-radius:.85rem .85rem 0 0;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
-      padding:.3rem var(--pad) calc(.9rem + env(safe-area-inset-bottom));
-      transform:translateY(101%);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
-  .sheet.on .panel{transform:none}
-  @media (prefers-reduced-motion:reduce){
-    .panel,.scrim{transition:none}
-    .skel,.sdot,.state i,.icon.spin{animation:none}
-  }
-  .panel:focus,.panel:focus-visible{outline:none}
-  .grab{display:block;width:2rem;height:.2rem;border-radius:var(--pill);background:#2e3037;
-      border:0;padding:0;margin:.4rem auto .7rem}
-  .sheet h2{font-size:var(--f-h1);font-weight:650}
-  .sheet .sub{color:var(--dim2);font-size:var(--f-cap);margin-top:.1rem;word-break:break-all;
-      font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  .srow{display:flex;align-items:center;gap:.6rem;width:100%;min-height:2.5rem;padding:.5rem 0;
-      background:none;border:0;border-top:1px solid var(--hair);color:var(--text);
-      font-size:var(--f-body);font-weight:500;text-align:left;cursor:pointer}
-  .srow:first-of-type{margin-top:.6rem}
-  .srow .sval{margin-left:auto;color:var(--dim);flex:0 0 auto}
-  .srow .go{color:var(--dim2);font-size:.85rem;flex:0 0 auto}
-  .srow.bad{color:var(--red)}
-  .srow .desc{display:block;color:var(--dim2);font-size:var(--f-cap);font-weight:400;margin-top:.05rem;
-      line-height:1.45}
-  .field{margin-top:.6rem}
-  .field label{display:block;font-size:var(--f-cap);font-weight:600;letter-spacing:.06em;
-      text-transform:uppercase;color:var(--dim2);margin-bottom:.25rem}
-  .field select,.field input{width:100%;height:2.3rem;background:var(--surface2);border:1px solid var(--line);
-      color:var(--text);border-radius:var(--r-sm);padding:0 .6rem;font-size:var(--f-body)}
-  .field input::placeholder{color:var(--dim2)}
-  .field .desc{display:block;color:var(--dim2);font-size:var(--f-cap);margin-top:.25rem;line-height:1.45}
-
-  .grp{display:flex;align-items:center;gap:.5rem;margin:.85rem 0 .1rem;color:var(--dim2);
-      font-size:var(--f-cap);font-weight:600;letter-spacing:.07em;text-transform:uppercase}
-  .grp i{flex:1;height:1px;background:var(--hair)}
-  .s{display:flex;align-items:center;gap:.5rem;min-height:2.4rem;padding:.4rem 0;
-      border-top:1px solid var(--hair);color:var(--text);text-decoration:none;font-size:var(--f-sub)}
-  .s .smain{display:flex;flex-direction:column;min-width:0;flex:1}
-  .s .sname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-  .s .when{color:var(--dim2);font-size:var(--f-cap);margin-top:.02rem}
-  .s.past .sname{color:var(--dim);font-weight:500}
-  .s .go{color:var(--dim2);flex:0 0 auto;font-size:.8rem}
-  .tag{font-size:.58rem;font-weight:700;color:var(--amber);border:1px solid rgba(226,160,63,.4);
-      border-radius:.3rem;padding:0 .25rem;margin-left:.35rem;vertical-align:1px}
-  .hint,.none{color:var(--dim2);font-size:var(--f-cap);line-height:1.5;padding:.35rem 0}
-  .evrow{display:flex;justify-content:space-between;gap:.5rem;font-size:var(--f-cap);
-      color:var(--dim2);padding:.28rem 0}
-  .evrow b{font-weight:500;color:var(--dim);min-width:0}
-  .evrow span{flex:0 0 auto;white-space:nowrap}
-
-  .toast{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom));transform:translate(-50%,.6rem);
-      z-index:60;max-width:calc(100% - 2rem);background:#fff;color:#000;font-size:var(--f-sub);
-      font-weight:600;padding:.5rem .8rem;border-radius:var(--r-sm);opacity:0;
-      transition:opacity .16s,transform .16s;box-shadow:0 .5rem 1.4rem rgba(0,0,0,.55)}
-  .toast.on{opacity:1;transform:translate(-50%,0)}
-  .toast.bad{background:var(--red);color:#150202}
-
-  details.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
-      padding:0 .7rem;margin-top:.4rem}
-  details.card summary{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
-      list-style:none;cursor:pointer;min-height:2.4rem;padding:.55rem 0;font-size:var(--f-body);font-weight:600}
-  details.card summary::-webkit-details-marker{display:none}
-  details.card summary .sh{color:var(--dim2);font-size:var(--f-cap);font-weight:400}
-  details.card[open] summary .sh::after{content:" \2303"}
-  details.card:not([open]) summary .sh::after{content:" \2304"}
-  details.card[open]{padding-bottom:.7rem}
-  details.card h3{font-size:var(--f-cap);font-weight:600;letter-spacing:.07em;text-transform:uppercase;
-      color:var(--dim2);margin:1rem 0 .35rem}
-  details.card p{color:var(--dim);font-size:var(--f-sub);line-height:1.55;margin:.35rem 0}
-  .tip{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--hair);
-      padding:.6rem 0 .55rem;cursor:pointer;color:var(--text)}
-  .tip-t{display:block;font-size:var(--f-body);font-weight:600}
-  .tip-d{display:block;font-size:var(--f-sub);color:var(--dim);line-height:1.5;margin-top:.1rem}
-  .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.4rem;
-      background:var(--surface2);border-radius:var(--r-sm);padding:.4rem .5rem;min-height:1.9rem}
-  .tip-cmd code{min-width:0;overflow-x:auto;white-space:nowrap;background:none;padding:0;
-      font-size:var(--f-cap);color:var(--text)}
-  .tip-copy{font-size:.6rem;font-weight:700;color:var(--dim2);flex:0 0 auto;letter-spacing:.04em}
+  .tip-t{font-size:.84rem;font-weight:600;color:var(--text);letter-spacing:-.005em}
+  .tip-d{font-size:.75rem;color:var(--dim);line-height:1.5}
+  .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
+      margin-top:var(--sp2);background:var(--card2);border-radius:var(--r);padding:.42rem .5rem}
+  .tip-cmd code{min-width:0;overflow-x:auto;white-space:nowrap;font-size:.7rem;color:var(--text);
+      background:none;border:0;padding:0}
+  .tip-copy{font-size:.66rem;font-weight:600;color:var(--dim2);flex:0 0 auto;letter-spacing:.02em}
   .tip.copied .tip-copy{color:var(--green)}
-  .dev{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
-      padding:.5rem 0;border-top:1px solid var(--hair);font-size:var(--f-sub)}
-  .dev .sub{color:var(--dim2);font-size:var(--f-cap)}
-  .chk{display:flex;gap:.5rem;font-size:var(--f-sub);padding:.5rem 0;border-top:1px solid var(--hair);line-height:1.5}
-  .chk .mark{color:var(--green);flex:0 0 auto}
-  .chk.bad .mark{color:var(--red)}
-  .chk .fix{display:block;color:var(--dim2);font-size:var(--f-cap);margin-top:.1rem}
-  .toggle{display:flex;align-items:center;gap:.5rem;min-height:2.2rem;color:var(--text);
-      font-size:var(--f-sub);cursor:pointer}
-  .toggle input{accent-color:var(--green);width:.95rem;height:.95rem;margin:0}
-  pre{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);padding:.6rem;
-      overflow-x:auto;font-size:var(--f-cap);line-height:1.5;white-space:pre;color:var(--dim)}
-  .foot{text-align:center;margin:1.1rem 0 0}
-  .foot a{color:var(--dim);font-size:var(--f-sub);font-weight:500;text-decoration:none;
-      display:inline-flex;align-items:center;min-height:2.2rem;padding:0 .8rem}
+  .tipnote{color:var(--dim2);font-size:.72rem;margin:var(--sp3) 0 0}
+  details.settings{margin:1.6rem 0 0;background:var(--card2);border:1px solid var(--line);
+      border-radius:1rem;padding:.4rem 1rem}
+  details.settings h3{font-size:.66rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+      color:var(--dim2);margin:1.4rem 0 .4rem}
+  details.settings h3:first-of-type{margin-top:.6rem}
+  details.settings summary{color:var(--dim);font-size:.85rem;cursor:pointer;padding:.5rem 0;list-style:none}
+  details.settings summary::-webkit-details-marker{display:none}
+  details.settings p{color:var(--dim);font-size:.76rem;line-height:1.55}
+  label.toggle{display:flex;align-items:center;gap:.5rem;color:var(--dim);font-size:.78rem;
+      padding:.3rem 0 .7rem;cursor:pointer}
+  label.toggle input{accent-color:var(--green);width:1rem;height:1rem;margin:0}
+  pre{background:var(--bg);border:1px solid var(--line);border-radius:.6rem;padding:.7rem;
+      overflow-x:auto;font-size:.7rem;line-height:1.45;white-space:pre;color:#c9cfda}
+  .toast{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom));
+      transform:translate(-50%,.6rem);z-index:60;max-width:calc(100% - 2rem);
+      background:var(--text);color:#0b0d12;font-size:.78rem;font-weight:600;padding:.5rem .8rem;
+      border-radius:var(--r);opacity:0;transition:opacity .16s,transform .16s;
+      box-shadow:0 .5rem 1.4rem rgba(0,0,0,.55)}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .toast.bad{background:var(--red);color:#1a0503}
+  @media (prefers-reduced-motion:reduce){.toast,.skel,.dot.starting,.chip.refresh.spin{animation:none;transition:none}}
+  .foot{text-align:center;margin-top:1.6rem;font-size:.85rem}
+  .foot a{color:var(--green);text-decoration:none}
 </style>
-<header id="top">
-  <div class="bar">
-    <span class="logo">🐕</span>
-    <div class="main"><h1>corgi</h1><small id="host">your machine</small></div>
-    <button class="icon" id="refresh" aria-label="Refresh" title="Refresh">&#x21bb;</button>
+<header>
+  <div class="brand"><span class="logo">🐕</span>
+    <div class="who"><h1>corgi</h1><small id="host">your machine</small></div>
+    <button class="chip refresh" id="refresh" aria-label="Refresh" title="Refresh">&#x21bb;</button>
   </div>
   <p id="hostnote" class="hostnote" hidden></p>
 </header>
 <main>
-  <div id="list"></div>
-
-  <details class="card" id="tips" hidden>
-    <summary><span>On the laptop</span><span class="sh">setup commands</span></summary>
+  <div id="list" class="msg">Loading…</div>
+  <details class="tips" id="tips" hidden>
+    <summary><span>On the laptop</span><span class="tips-hint">setup commands</span></summary>
     <button class="tip" data-copy="/corgi-remote">
       <span class="tip-t">Set it all up, guided</span>
       <span class="tip-d">With the corgi plugin installed, this skill walks Claude Code through registering the repo, the tunnel and login start.</span>
@@ -1031,7 +967,7 @@ const launcherPageHTML = `<!doctype html>
     </button>
     <button class="tip" data-copy="corgi agent init --config-dir ~/.claude-work">
       <span class="tip-t">Use a second Claude account</span>
-      <span class="tip-d">Give a work repo its own account, then set its <b>Open links in</b> row to <b>chrome</b>.</span>
+      <span class="tip-d">Give a work repo its own account, then set its <b>open in</b> pill to <b>chrome</b>.</span>
       <span class="tip-cmd"><code>corgi agent init --config-dir ~/.claude-work</code><span class="tip-copy">COPY</span></span>
     </button>
     <button class="tip" data-copy="corgi agent install">
@@ -1044,47 +980,38 @@ const launcherPageHTML = `<!doctype html>
       <span class="tip-d">A session waiting on a permission prompt is invisible from here. <b>--all</b> covers every repo in this list. These reach the laptop only — <b>corgi agent notify telegram --token …</b> sends them to this phone too.</span>
       <span class="tip-cmd"><code>corgi agent hooks enable --all</code><span class="tip-copy">COPY</span></span>
     </button>
-    <p class="hint" id="tipmsg">Tap a row to copy its command.</p>
+    <p class="tipnote" id="tipmsg">Tap a row to copy its command.</p>
   </details>
 
-  <details class="card" id="settings" hidden>
-    <summary><span>Settings</span><span class="sh">devices, doctor, connector</span></summary>
+  <details class="settings" id="settings" hidden>
+    <summary>Settings</summary>
 
     <h3>Claude app</h3>
     <p>Add corgi as a custom connector on claude.ai (Settings → Connectors → Add custom) to drive this machine from the Claude app too.</p>
     <pre id="cfg"></pre>
-    <button class="btn block" id="copycfg">Copy connector config</button>
-    <p id="copymsg" class="hint"></p>
+    <button id="copycfg">Copy connector config</button>
+    <p id="copymsg" class="msg"></p>
 
     <h3>This browser</h3>
-    <p>Each card's <b>Open links in</b> row picks where session links open: <b>app</b> deep-links into the Claude app, <b>browser</b> keeps them here, <b>chrome</b> forces Chrome — the one to pick for a repo on a different Claude account. Remembered per workspace, here only.</p>
-    <p><b>Hide</b> tucks a card away when you are showing this screen to someone. Hidden cards collapse into one button; nothing on the machine changes.</p>
+    <p>The <b>open in</b> pill on each card cycles where session links open: <b>app</b> deep-links into the Claude app, <b>browser</b> keeps them here, <b>chrome</b> forces Chrome — the one to pick for a repo on a different Claude account. Remembered per workspace, here only.</p>
+    <p><b>hide</b> tucks a card away when you are showing this screen to someone. Hidden cards collapse into one button; nothing on the machine changes.</p>
     <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
     <p>A bridge is a session started on the laptop itself. Its claude.ai page shows only what you send from here, so it looks empty at first — the full transcript stays on the laptop.</p>
 
     <h3>Devices</h3>
     <p>Everything that scanned a pairing QR. Revoking one leaves the others working.</p>
-    <div id="devices" class="hint">Loading…</div>
+    <div id="devices" class="msg">Loading…</div>
 
     <h3>If something will not start</h3>
     <p>The same checks as <code>corgi agent doctor</code>, run from here.</p>
-    <button class="btn block" id="rundoctor">Run doctor</button>
+    <button id="rundoctor">Run doctor</button>
     <div id="doctor"></div>
     <p>For a push to this phone when a session needs you, set <code>notifyUrl</code> in the agent config on the laptop. A Discord, Slack or Telegram webhook works as well as an ntfy topic — corgi picks the payload from the host, which matters because ntfy's iOS app is paid. Without it, notifications only reach the laptop.</p>
   </details>
-
-  <p class="foot"><a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a></p>
+  <p class="foot">
+    <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
+  </p>
 </main>
-
-<div class="sheet" id="sheet" hidden>
-  <button class="scrim" id="scrim" aria-label="Close"></button>
-  <section class="panel" role="dialog" aria-modal="true" aria-labelledby="sheettitle" tabindex="-1">
-    <button class="grab" id="grab" aria-label="Close"></button>
-    <h2 id="sheettitle"></h2>
-    <div class="sub" id="sheetsub"></div>
-    <div id="sheetbody"></div>
-  </section>
-</div>
 <div class="toast" id="toast" hidden></div>
 <script>
   const esc = s => String(s).replace(/[&<>"']/g, c =>
@@ -1102,18 +1029,9 @@ const launcherPageHTML = `<!doctype html>
   // this is a user navigation to the Claude session list, not a loaded asset.
   try { document.getElementById('allsessions').href = 'https://claude.ai/code'; } catch {}
 
-  let lastWorkspaces = [];
-  const openMode = id => { try { return localStorage.getItem('corgi_open_' + id) || 'app'; } catch { return 'app'; } };
-  const setOpenMode = (id, m) => { try { localStorage.setItem('corgi_open_' + id, m); } catch {} };
-  const showBridges = () => { try { return localStorage.getItem('corgi_show_bridges') !== '0'; } catch { return true; } };
-  const setShowBridges = on => { try { localStorage.setItem('corgi_show_bridges', on ? '1' : '0'); } catch {} };
-  const hidden = () => { try { return new Set(JSON.parse(localStorage.getItem('corgi_hidden') || '[]')); } catch { return new Set(); } };
-  const setHidden = s => { try { localStorage.setItem('corgi_hidden', JSON.stringify([...s])); } catch {} };
-  const toggleHidden = id => { const h = hidden(); h.has(id) ? h.delete(id) : h.add(id); setHidden(h); render(lastWorkspaces); };
-  let revealHidden = false;
-
   // One failure, one line, over the thumb — never a red block that pushes the
   // card you were aiming at somewhere else.
+  const REFRESH_MS = 15000;
   let toastTimer = 0;
   function toast(text, bad) {
     const el = document.getElementById('toast');
@@ -1124,52 +1042,61 @@ const launcherPageHTML = `<!doctype html>
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       el.classList.remove('on');
-      setTimeout(() => { el.hidden = true; }, 220);
+      setTimeout(() => { el.hidden = true; }, 200);
     }, 3600);
   }
 
-  addEventListener('scroll', () => {
-    document.getElementById('top').classList.toggle('scrolled', scrollY > 4);
-  }, { passive: true });
-
-  // A session's name and state both change while you are looking at them —
-  // Claude renames the session as the work takes shape, a permission prompt
-  // arrives, a session exits. Refresh on a slow tick, only while the page is
-  // actually on screen, and never under an open sheet (it would re-render the
-  // row the thumb is on).
-  const REFRESH_MS = 15000;
-  function autoRefresh() {
-    if (document.visibilityState !== 'visible') return;
-    if (!document.getElementById('sheet').hidden) return;
-    load();
-  }
-  setInterval(autoRefresh, REFRESH_MS);
-  addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') autoRefresh();
-  });
+  let lastWorkspaces = [];
+  const openMode = id => { try { return localStorage.getItem('corgi_open_' + id) || 'app'; } catch { return 'app'; } };
+  const setOpenMode = (id, m) => { try { localStorage.setItem('corgi_open_' + id, m); } catch {} };
+  const showBridges = () => { try { return localStorage.getItem('corgi_show_bridges') !== '0'; } catch { return true; } };
+  const hidden = () => { try { return new Set(JSON.parse(localStorage.getItem('corgi_hidden') || '[]')); } catch { return new Set(); } };
+  const setHidden = s => { try { localStorage.setItem('corgi_hidden', JSON.stringify([...s])); } catch {} };
+  const toggleHidden = id => { const h = hidden(); h.has(id) ? h.delete(id) : h.add(id); setHidden(h); render(lastWorkspaces); };
+  let revealHidden = false;
+  const setShowBridges = on => { try { localStorage.setItem('corgi_show_bridges', on ? '1' : '0'); } catch {} };
 
   if (!token) {
     list.className = 'empty';
     list.innerHTML = '<h2>Pair this browser</h2><p>On the laptop run <code>corgi agent up</code> ' +
       'and scan the QR it prints. Then this page lists that machine&#39;s repos and starts ' +
-      'Claude Code sessions on them.</p>';
+      'sessions on them.</p>';
     document.getElementById('refresh').hidden = true;
   } else {
-    initSheet();
     initSettings();
     loadInfo();
     skeleton();
     load();
-    document.getElementById('refresh').onclick = () => {
-      const b = document.getElementById('refresh');
-      b.classList.add('spin');
-      Promise.all([load(), loadInfo()]).finally(() => setTimeout(() => b.classList.remove('spin'), 400));
-    };
+    initRefresh();
   }
 
   function skeleton() {
     list.className = '';
     list.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+  }
+
+  // A session's name and its state both change while you are looking at them:
+  // Claude renames a session as the work takes shape, a permission prompt
+  // arrives, a session exits. Refresh on a slow tick — only while the page is
+  // on screen, and never while a panel is open under the thumb, since
+  // re-rendering would collapse it.
+  function initRefresh() {
+    const btn = document.getElementById('refresh');
+    btn.onclick = () => {
+      btn.classList.add('spin');
+      Promise.all([load(), loadInfo()]).finally(() => setTimeout(() => btn.classList.remove('spin'), 400));
+    };
+    setInterval(autoRefresh, REFRESH_MS);
+    addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') autoRefresh();
+    });
+  }
+
+  function autoRefresh() {
+    if (document.visibilityState !== 'visible') return;
+    const openPanel = [...document.querySelectorAll('.sessions')].some(el => el.style.display !== 'none');
+    if (openPanel || document.querySelector('.startbox.on')) return;
+    load();
   }
 
   function initSettings() {
@@ -1178,9 +1105,9 @@ const launcherPageHTML = `<!doctype html>
       url: location.origin + '/mcp', headers: { Authorization: 'Bearer ' + token } } } }, null, 2);
     document.getElementById('cfg').textContent = connector;
     s.hidden = false;
-    document.getElementById('copycfg').onclick = async () => {
+    document.getElementById('copycfg').onclick = async (e) => {
       const msg = document.getElementById('copymsg');
-      try { await navigator.clipboard.writeText(connector); msg.textContent = '✓ Copied'; toast('Connector config copied'); }
+      try { await navigator.clipboard.writeText(connector); msg.textContent = '✓ Copied'; }
       catch { msg.textContent = 'Long-press the box above to copy.'; }
     };
     const bridges = document.getElementById('showbridges');
@@ -1225,10 +1152,10 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/devices', { headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      const devices = j.devices || [];
-      if (!devices.length) { box.className = 'hint'; box.textContent = 'No devices paired yet.'; return; }
+      const list = j.devices || [];
+      if (!list.length) { box.className = 'msg'; box.textContent = 'No devices paired yet.'; return; }
       box.className = ''; box.innerHTML = '';
-      for (const d of devices) {
+      for (const d of list) {
         const row = document.createElement('div');
         row.className = 'dev';
         const left = document.createElement('div');
@@ -1237,13 +1164,13 @@ const launcherPageHTML = `<!doctype html>
         row.appendChild(left);
         if (!d.current) {
           const b = document.createElement('button');
-          b.className = 'btn danger'; b.textContent = 'Revoke';
+          b.textContent = 'Revoke';
           b.onclick = () => revokeDevice(d.name, b);
           row.appendChild(b);
         }
         box.appendChild(row);
       }
-    } catch (e) { box.className = 'hint err'; box.textContent = '✗ ' + e.message; }
+    } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
   }
 
   async function revokeDevice(name, btn) {
@@ -1252,14 +1179,13 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/devices?name=' + encodeURIComponent(name), { method: 'DELETE', headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      toast('Revoked ' + name);
       loadDevices();
-    } catch (e) { btn.disabled = false; btn.textContent = 'Revoke'; toast(e.message, true); }
+    } catch (e) { btn.disabled = false; btn.textContent = '✗ ' + e.message; }
   }
 
   async function runDoctor() {
     const box = document.getElementById('doctor');
-    box.className = 'hint'; box.textContent = 'Checking…';
+    box.className = 'msg'; box.textContent = 'Checking…';
     try {
       const r = await fetch('/launch/doctor', { headers: auth });
       const j = await r.json();
@@ -1273,7 +1199,7 @@ const launcherPageHTML = `<!doctype html>
           esc(c.detail || '') + (c.fix ? '<span class="fix">fix: ' + esc(c.fix) + '</span>' : '') + '</span>';
         box.appendChild(el);
       }
-    } catch (e) { box.className = 'hint err'; box.textContent = '✗ ' + e.message; }
+    } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
   }
 
   async function load() {
@@ -1300,16 +1226,17 @@ const launcherPageHTML = `<!doctype html>
       const el = document.getElementById('host');
       el.textContent = '';
       bits.forEach((bit, i) => {
-        if (i) el.appendChild(document.createTextNode(' · '));
+        if (i) el.appendChild(document.createTextNode(' \u00b7 '));
         if (bit.indexOf('daemon ') === 0) {
           const tap = document.createElement('span');
-          tap.className = 'what' + (j.daemon ? '' : ' down'); tap.textContent = bit;
+          tap.className = 'what'; tap.textContent = bit;
           tap.onclick = () => toggleDaemonNote(j.daemon);
           el.appendChild(tap);
           return;
         }
         el.appendChild(document.createTextNode(bit));
       });
+      if (!j.daemon) el.style.color = 'var(--red)';
     } catch {}
   }
 
@@ -1322,168 +1249,120 @@ const launcherPageHTML = `<!doctype html>
     note.hidden = false;
   }
 
-  // A stable colour per repo: the card you want is found by shape before it is
-  // found by reading, which is the whole point of an avatar.
-  function hue(id) {
-    let h = 0;
-    for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) % 360;
-    return h;
-  }
-
   function render(workspaces) {
     lastWorkspaces = workspaces;
     if (!workspaces.length) {
       list.className = 'empty';
       list.innerHTML = '<h2>No repos yet</h2><p>On the laptop run <code>corgi agent scan ~/dev</code> ' +
-        'to register the stacks it finds, then pull this page down to refresh.</p>';
+        'to register the stacks it finds, then tap refresh.</p>';
       return;
     }
     list.className = '';
     list.innerHTML = '';
     const intro = introLine(workspaces);
     if (intro) list.appendChild(intro);
-    const label = document.createElement('div');
-    label.className = 'sectionlabel';
-    label.textContent = workspaces.length + (workspaces.length === 1 ? ' repo' : ' repos') + ' on this machine';
-    list.appendChild(label);
-
     const hide = hidden();
-    const shown = revealHidden ? workspaces : workspaces.filter(w => !hide.has(w.id));
-    const hiddenCount = workspaces.length - shown.length;
-    for (const ws of shown) list.appendChild(card(ws, hide));
+    const shownWs = revealHidden ? workspaces : workspaces.filter(w => !hide.has(w.id));
+    const hiddenCount = workspaces.length - shownWs.length;
+    for (const ws of shownWs) {
+      const row = document.createElement('div');
+      row.className = 'ws';
+      const head = document.createElement('div');
+      head.className = 'head';
+      const main = document.createElement('div');
+      main.className = 'main';
+      main.innerHTML = '<div class="name"><span class="dot ' + esc(dotState(ws)) + '"></span>' + esc(ws.id) + '</div>';
+      const path = document.createElement('div');
+      path.className = 'path'; path.title = ws.path; path.textContent = shortPath(ws.path);
+      path.onclick = () => {
+        const full = path.classList.toggle('full');
+        path.textContent = full ? ws.path : shortPath(ws.path);
+      };
+      main.appendChild(path);
+      const meta = metaLine(ws);
+      if (meta) main.appendChild(meta);
+      const usage = usageLine(ws);
+      if (usage) main.appendChild(usage);
+      head.appendChild(main);
+      if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
+        head.appendChild(openControl(ws));
+      } else {
+        const b = document.createElement('button');
+        b.textContent = ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
+        b.disabled = ws.running;
+        b.onclick = () => startSession(ws.id, b);
+        head.appendChild(b);
+      }
+      row.appendChild(head);
+      if (!ws.running && ws.note) {
+        const note = document.createElement('div');
+        note.className = 'wnote'; note.textContent = ws.note;
+        row.appendChild(note);
+      }
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const startBox = startOptions(ws);
+      const sessionsBox = document.createElement('div');
+      sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
+      const sbtn = document.createElement('button');
+      sbtn.className = 'chip'; sbtn.textContent = sessionsChipLabel(ws);
+      sbtn.onclick = () => toggleSessions(ws, sbtn, sessionsBox);
+      actions.appendChild(sbtn);
+      actions.appendChild(modeSwitch(ws.id));
+      const top = topSessionRow(ws);
+      if (top) row.appendChild(top);
+      if (!ws.running && startBox) {
+        const opts = document.createElement('button');
+        opts.className = 'chip'; opts.textContent = 'options ⌄';
+        opts.onclick = () => { startBox.classList.toggle('on'); };
+        actions.appendChild(opts);
+      }
+      if (ws.running) actions.appendChild(stopControl(ws.id));
+      const hideBtn = document.createElement('button');
+      hideBtn.className = 'chip';
+      hideBtn.title = 'Hide this workspace on this browser';
+      hideBtn.textContent = hide.has(ws.id) ? 'unhide' : 'hide';
+      hideBtn.onclick = () => toggleHidden(ws.id);
+      actions.appendChild(hideBtn);
+      if (startBox) actions.appendChild(startBox);
+      row.appendChild(actions);
+      row.appendChild(sessionsBox);
+      list.appendChild(row);
+    }
     if (hiddenCount || revealHidden) {
       const b = document.createElement('button');
-      b.className = 'btn quiet block';
-      b.textContent = revealHidden ? 'Hide those again' : hiddenCount + ' hidden — show';
+      b.className = 'chip revealer';
+      b.textContent = revealHidden ? 'hide again' : hiddenCount + ' hidden — show';
       b.onclick = () => { revealHidden = !revealHidden; render(lastWorkspaces); };
       list.appendChild(b);
     }
   }
 
-  function card(ws, hide) {
-    const el = document.createElement('article');
-    el.className = 'ws';
-    // Tap anywhere that is not itself a control; the footer button below is the
-    // same door, and the one a keyboard or screen reader can find.
-    el.onclick = () => openSheet(ws);
-
-    const row = document.createElement('div');
-    row.className = 'row';
-    const ava = document.createElement('span');
-    ava.className = 'ava';
-    ava.style.setProperty('--h', hue(ws.id));
-    ava.textContent = String(ws.id || '?').replace(/[^a-zA-Z0-9]/g, '').slice(0, 1).toUpperCase() || '?';
-    ava.setAttribute('aria-hidden', 'true');
-    row.appendChild(ava);
-
-    const main = document.createElement('div');
-    main.className = 'main';
-    const nameline = document.createElement('div');
-    nameline.className = 'nameline';
-    const name = document.createElement('span');
-    name.className = 'name'; name.textContent = ws.id;
-    nameline.appendChild(name);
-    nameline.appendChild(stateChip(ws));
-    main.appendChild(nameline);
-    const path = document.createElement('div');
-    path.className = 'path'; path.textContent = shortPath(ws.path);
-    main.appendChild(path);
-    const tags = statusTags(ws);
-    if (tags) main.appendChild(tags);
-    row.appendChild(main);
-    row.appendChild(primaryAction(ws));
-    el.appendChild(row);
-
-    if (!ws.running && ws.note) {
-      const note = document.createElement('div');
-      note.className = 'wnote'; note.textContent = ws.note;
-      el.appendChild(note);
-    }
-    const top = topSessionRow(ws);
-    if (top) el.appendChild(top);
-
-    const foot = document.createElement('button');
-    foot.className = 'cardfoot';
-    foot.setAttribute('aria-label', ws.id + ' — sessions and options');
-    const left = document.createElement('span');
-    left.className = 'usage';
-    left.textContent = usageText(ws) || (hide.has(ws.id) ? 'hidden on this browser' : sessionsHint(ws));
-    const more = document.createElement('span');
-    more.className = 'more';
-    more.textContent = 'Details ›';
-    foot.appendChild(left); foot.appendChild(more);
-    el.appendChild(foot);
-    return el;
-  }
-
-  // The one white button on the card. Open when there is something to open,
-  // Start when there is not — never both, never neither.
-  function primaryAction(ws) {
-    if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
-      const mode = openMode(ws.id);
-      if (mode === 'browser' || mode === 'chrome') {
-        const b = document.createElement('button');
-        b.className = 'btn primary'; b.textContent = 'Open';
-        b.onclick = (e) => {
-          e.stopPropagation();
-          if (mode === 'chrome') { location.href = chromeUrl(ws.sessionUrl); }
-          else { window.open(ws.sessionUrl, '_blank', 'noopener'); }
-        };
-        return b;
-      }
-      // app mode uses a real anchor tap so iOS deep-links into the Claude app.
-      const a = document.createElement('a');
-      a.className = 'btn primary'; a.href = ws.sessionUrl; a.textContent = 'Open';
-      a.target = '_blank'; a.rel = 'noopener noreferrer';
-      a.onclick = (e) => e.stopPropagation();
-      return a;
-    }
-    const b = document.createElement('button');
-    b.className = 'btn primary';
-    b.textContent = ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
-    b.disabled = ws.running;
-    b.onclick = (e) => { e.stopPropagation(); startSession(ws.id, b, null); };
-    return b;
-  }
-
-  // The state word comes from the daemon (/launch/workspaces), so the phone
-  // and any other client say the same thing about the same workspace.
-  const STATE_LABEL = {
-    live: ws => (ws.live > 1 ? ws.live + ' sessions' : 'live'),
-    attention: () => 'needs you',
-    starting: () => 'starting',
-    blocked: () => 'will not start',
-    stopped: () => 'stopped',
-  };
-
-  function stateChip(ws) {
-    const state = ws.state || (ws.running ? 'starting' : 'stopped');
-    const label = (STATE_LABEL[state] || STATE_LABEL.stopped)(ws);
-    const el = document.createElement('span');
-    el.className = 'state ' + state;
-    el.innerHTML = '<i></i>' + esc(label);
-    return el;
-  }
-
-  function statusTags(ws) {
+  function introLine(workspaces) {
+    if (workspaces.some(w => (w.live || 0) > 0)) return null;
     const el = document.createElement('div');
-    el.className = 'tags';
-    let any = false;
-    const e = ws.lastEvent;
-    if (e && !(ws.running && e.kind === 'started') && e.kind !== 'attention') {
-      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + e.cause : '') : e.kind;
-      const why = document.createElement('span');
-      why.className = 'why';
-      why.textContent = what + ' ' + fmtWhen(e.at);
-      el.appendChild(why); any = true;
-    }
-    return any ? el : null;
+    el.className = 'intro';
+    el.textContent = 'Tap a repo to start a Claude Code session on that machine. ' +
+      'It runs there with your files and databases; you drive it from here.';
+    return el;
   }
 
-  // Claude Code owns a session's name after it starts — /rename, a hook, or
-  // its own naming all rewrite the record corgi reads — so this is whatever
-  // the session is called right now, not what corgi called it at start.
-  // nameSource says who last set it; nameSince, when.
+  function sessionsChipLabel(ws) {
+    const more = (ws.live || 0) - (ws.topSession ? 1 : 0);
+    return more > 0 ? 'sessions +' + more + ' \u2304' : 'sessions \u2304';
+  }
+
+  // Inside one repo's card the leading workspace name is noise — the card
+  // already says which repo this is, so the branch and the time get the width.
+  function shortSessionName(name, id) {
+    const full = String(name || '');
+    const prefix = id + ' \u00b7 ';
+    return full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full;
+  }
+
+  // Claude Code owns a session's name after it starts — /rename, a hook, or its
+  // own naming all rewrite the record corgi reads — so this row shows what the
+  // session is called right now, and says when that last changed.
   function nameNote(top) {
     if (!top.nameSource || top.nameSource === 'user') return '';
     if (!top.nameSince || !top.startedAt || top.nameSince - top.startedAt < 5000) return '';
@@ -1493,177 +1372,76 @@ const launcherPageHTML = `<!doctype html>
   function topSessionRow(ws) {
     const top = ws.topSession;
     if (!top) return null;
-    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : '', nameNote(top)]
-      .filter(Boolean).join(' · ');
-    const body = '<i class="sdot"></i><span class="tmain"><span class="tname">' +
-      esc(shortSessionName(top.name, ws.id)) + '</span>' +
-      '<span class="when">' + esc(when) + '</span></span>';
+    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : '']
+      .filter(Boolean).join(' \u00b7 ');
 
     if (!top.url || !safeClaudeUrl(top.url)) {
       const el = document.createElement('div');
       el.className = 'top';
-      el.innerHTML = body + '<span class="go small">local only</span>';
+      el.innerHTML = '<span><i class="sdot"></i><span class="tname">' +
+        esc(shortSessionName(top.name, ws.id)) + '</span></span>' +
+        '<span class="when">' + esc(when) + ' \u00b7 local only</span>';
       return el;
     }
     const el = document.createElement('a');
     el.className = 'top';
     el.href = top.url; el.target = '_blank'; el.rel = 'noopener noreferrer';
-    el.innerHTML = body + '<span class="go">↗</span>';
     const mode = openMode(ws.id);
-    el.onclick = (e) => {
-      e.stopPropagation();
-      if (mode === 'browser') { e.preventDefault(); window.open(top.url, '_blank', 'noopener'); }
-      if (mode === 'chrome') { e.preventDefault(); location.href = chromeUrl(top.url); }
-    };
+    if (mode === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(top.url, '_blank', 'noopener'); };
+    if (mode === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(top.url); };
+    el.innerHTML = '<span><i class="sdot"></i><span class="tname">' +
+      esc(shortSessionName(top.name, ws.id)) + '</span></span>' +
+      '<span class="when">' + esc(when) + ' \u00b7 open \u2197</span>';
     return el;
   }
 
-  // Inside one repo's card the leading workspace name is noise — the card
-  // already says which repo this is, so the branch and time get the width.
-  function shortSessionName(name, id) {
-    const full = String(name || '');
-    const prefix = id + ' · ';
-    return full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full;
+  // The state word comes from the daemon (/launch/workspaces), so the phone
+  // and anything else reading it say the same thing about the same workspace.
+  function dotState(ws) {
+    const state = ws.state || (ws.running ? 'starting' : 'stopped');
+    return state === 'live' || state === 'starting' || state === 'attention' || state === 'blocked'
+      ? state : '';
   }
 
-  function sessionsHint(ws) {
-    const more = (ws.live || 0) - (ws.topSession ? 1 : 0);
-    if (more > 0) return more + ' more session' + (more > 1 ? 's' : '');
-    return ws.running ? 'sessions, options' : 'sessions, account, options';
+  function metaLine(ws) {
+    const bits = [];
+    if (ws.live > 0) bits.push('<span class="live">' + ws.live + ' live</span>');
+    else if (ws.state === 'starting') bits.push('<span class="live">starting</span>');
+    else if (ws.state === 'blocked') bits.push('<span class="warn">will not start</span>');
+    const e = ws.lastEvent;
+    if (e && !(ws.running && e.kind === 'started')) {
+      const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + esc(e.cause) : '')
+        : e.kind === 'attention' ? 'needs you'
+        : esc(e.kind);
+      bits.push('<span class="why">' + what + ' ' + esc(fmtWhen(e.at)) + '</span>');
+    }
+    if (!bits.length) return null;
+    const el = document.createElement('div');
+    el.className = 'meta';
+    el.innerHTML = bits.join('');
+    return el;
   }
 
-  function usageText(ws) {
-    if (!ws.usage || !ws.usage.week) return '';
+    function usageLine(ws) {
+    if (!ws.usage || !ws.usage.week) return null;
     const sum = u => (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
     const week = sum(ws.usage.week);
-    if (!week) return '';
-    return fmtTokens(sum(ws.usage.today)) + ' today · ' + fmtTokens(week) + ' this week';
-  }
-
-  function introLine(workspaces) {
-    if (workspaces.some(w => (w.live || 0) > 0)) return null;
+    if (!week) return null;
     const el = document.createElement('div');
-    el.className = 'intro';
-    el.textContent = 'Tap Start to run a Claude Code session on that machine. ' +
-      'It works there with your files and databases; you drive it from here.';
+    el.className = 'usage';
+    el.title = 'tokens today / this week';
+    el.textContent = fmtTokens(sum(ws.usage.today)) + ' today \u00b7 ' + fmtTokens(week) + ' this week';
     return el;
   }
 
-  function shortPath(p) {
-    const parts = String(p || '').split('/').filter(Boolean);
-    return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
-  }
-
-  /* ---- the bottom sheet: every secondary control, one thumb away ---- */
-
-  let sheetWs = null;
-
-  function initSheet() {
-    const sheet = document.getElementById('sheet');
-    const close = (e) => { e.stopPropagation(); closeSheet(); };
-    document.getElementById('scrim').onclick = close;
-    document.getElementById('grab').onclick = close;
-    addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
-    sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
-  }
-
-  function closeSheet() {
-    const sheet = document.getElementById('sheet');
-    if (sheet.hidden) return;
-    sheet.classList.remove('on');
-    sheetWs = null;
-    document.body.classList.remove('locked');
-    setTimeout(() => { sheet.hidden = true; }, 240);
-  }
-
-  function openSheet(ws) {
-    sheetWs = ws.id;
-    const sheet = document.getElementById('sheet');
-    document.getElementById('sheettitle').textContent = ws.id;
-    document.getElementById('sheetsub').textContent = ws.path || '';
-    const body = document.getElementById('sheetbody');
-    body.innerHTML = '';
-
-    // What you came for first: start it, or open what is already running.
-    if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
-      const open = primaryAction(ws);
-      open.classList.add('block');
-      open.textContent = 'Open the running session ↗';
-      body.appendChild(open);
-    } else if (!ws.running) {
-      const box = startOptions(ws);
-      if (box) body.appendChild(box);
-      const b = document.createElement('button');
-      b.className = 'btn primary block';
-      b.textContent = ws.note ? 'Try starting again' : 'Start a session';
-      b.onclick = (e) => { e.stopPropagation(); startSession(ws.id, b, box); };
-      body.appendChild(b);
-    }
-
-    body.appendChild(sheetRow('Open links in', openMode(ws.id), () => {
-      const order = ['app', 'browser', 'chrome'];
-      setOpenMode(ws.id, order[(order.indexOf(openMode(ws.id)) + 1) % order.length]);
-      render(lastWorkspaces);
-      openSheet(lastWorkspaces.find(w => w.id === ws.id) || ws);
-    }, 'app deep-links into the Claude app, browser stays here, chrome forces Chrome'));
-
-    const isHidden = hidden().has(ws.id);
-    body.appendChild(sheetRow(isHidden ? 'Unhide this repo' : 'Hide from this browser', '', () => {
-      toggleHidden(ws.id);
-      closeSheet();
-    }, 'Nothing on the machine changes — this browser only'));
-
-    if (ws.running) {
-      const stop = sheetRow('Stop the session', '', (row) => stopSession(ws.id, row), '');
-      stop.classList.add('bad');
-      body.appendChild(stop);
-    }
-
-    const sessions = document.createElement('div');
-    body.appendChild(sessions);
-    loadSessions(ws, sessions);
-
-    sheet.hidden = false;
-    document.body.classList.add('locked');
-    requestAnimationFrame(() => {
-      sheet.classList.add('on');
-      const panel = sheet.querySelector('.panel');
-      panel.scrollTop = 0;
-      panel.focus({ preventScroll: true });
-    });
-  }
-
-  function sheetRow(label, value, onTap, desc) {
-    const b = document.createElement('button');
-    b.className = 'srow';
-    const main = document.createElement('span');
-    main.innerHTML = esc(label) + (desc ? '<span class="desc">' + esc(desc) + '</span>' : '');
-    b.appendChild(main);
-    if (value) {
-      const v = document.createElement('span');
-      v.className = 'sval'; v.textContent = value;
-      b.appendChild(v);
-    }
-    const go = document.createElement('span');
-    go.className = 'go'; go.textContent = '›';
-    if (!value) go.style.marginLeft = 'auto';
-    b.appendChild(go);
-    b.onclick = (e) => { e.stopPropagation(); onTap(b); };
-    return b;
-  }
-
-  // The start options are built even when the sheet is closed again: Start
-  // reads them, so a profile chosen before tapping still applies.
+  // The start options are built even when collapsed: Start reads them, so a
+  // profile chosen before opening the panel still applies.
   function startOptions(ws) {
     if (ws.running) return null;
     const box = document.createElement('div');
     box.className = 'startbox';
     if ((ws.profiles || []).length) {
-      const field = document.createElement('div');
-      field.className = 'field';
-      field.innerHTML = '<label for="prof-' + esc(ws.id) + '">Claude account</label>';
       const sel = document.createElement('select');
-      sel.id = 'prof-' + ws.id;
       sel.dataset.role = 'profile';
       const none = document.createElement('option');
       none.value = ''; none.textContent = 'default account';
@@ -1673,32 +1451,24 @@ const launcherPageHTML = `<!doctype html>
         o.value = p; o.textContent = p;
         sel.appendChild(o);
       }
-      field.appendChild(sel);
-      box.appendChild(field);
+      box.appendChild(sel);
     }
-    const field = document.createElement('div');
-    field.className = 'field';
-    field.innerHTML = '<label for="name-' + esc(ws.id) + '">Session name</label>';
     const name = document.createElement('input');
-    name.id = 'name-' + ws.id;
-    name.type = 'text';
-    name.placeholder = 'what is it for? (optional)';
-    name.dataset.role = 'name';
+    name.type = 'text'; name.placeholder = 'session name (optional)'; name.dataset.role = 'name';
     name.maxLength = 60;
-    field.appendChild(name);
-    // Says what the field actually does: Claude owns the name once the session
-    // is running, so this is the starting one, not the last word.
-    const desc = document.createElement('span');
-    desc.className = 'desc';
-    desc.textContent = 'The name it starts with. Claude renames the session as the work takes ' +
-      'shape, and this list follows it.';
-    field.appendChild(desc);
-    box.appendChild(field);
+    box.appendChild(name);
     return box;
   }
 
-  async function loadSessions(ws, box) {
-    box.innerHTML = '<div class="grp"><span>sessions</span><i></i></div><div class="none">Loading…</div>';
+  function shortPath(p) {
+    const parts = String(p || '').split('/').filter(Boolean);
+    return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
+  }
+
+  async function toggleSessions(ws, btn, box) {
+    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = 'sessions \u2304'; return; }
+    box.style.display = ''; btn.textContent = 'sessions \u2303';
+    box.innerHTML = '';
     const group = (label) => {
       const el = document.createElement('div');
       el.className = 'grp';
@@ -1712,19 +1482,18 @@ const launcherPageHTML = `<!doctype html>
       const m = openMode(ws.id);
       if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
-      const tag = o.bridge ? '<span class="tag">bridge</span>' : '';
-      const text = o.label ? esc(o.label) : esc(url.split('/').pop().slice(0, 14)) + '…';
+      const tag = o.bridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
+      const text = o.label ? esc(o.label) : esc(url.split('/').pop().slice(0, 14)) + '\u2026';
       const dot = o.past ? '' : '<i class="sdot"></i>';
-      el.innerHTML = dot + '<span class="smain"><span class="sname">' + text + tag + '</span>' +
-        '<span class="when">' + esc(o.when || '') + '</span></span>' +
-        '<span class="go">' + (o.past ? '↻' : '↗') + '</span>';
+      el.innerHTML = '<span>' + dot + '<span class="tname">' + text + '</span>' + tag + '</span>' +
+        '<span class="when">' + esc(o.when || '') + (o.past ? 'reopen' : 'open \u2197') + '</span>';
       box.appendChild(el);
     };
     const renderLocal = (label, when) => {
       const el = document.createElement('div');
       el.className = 's';
-      el.innerHTML = '<i class="sdot"></i><span class="smain"><span class="sname">' + esc(label) + '</span>' +
-        '<span class="when">' + esc(when) + ' · local only</span></span>';
+      el.innerHTML = '<span><i class="sdot"></i><span class="tname">' + esc(label) +
+        '</span></span><span class="when">' + esc(when) + ' \u00b7 local only</span>';
       box.appendChild(el);
     };
     const note = (text) => {
@@ -1732,12 +1501,14 @@ const launcherPageHTML = `<!doctype html>
       el.className = 'hint'; el.textContent = text;
       box.appendChild(el);
     };
+    const info = document.createElement('div');
+    info.className = 'none'; info.textContent = 'Loading\u2026';
+    box.appendChild(info);
     try {
       const r = await fetch('/launch/sessions?workspace=' + encodeURIComponent(ws.id), { headers: auth });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      if (sheetWs !== ws.id) return; // the sheet moved on while this was in flight
-      box.innerHTML = '';
+      info.remove();
 
       const running = j.sessions || [];
       const bridges = (j.links || []).filter(safeClaudeUrl);
@@ -1751,7 +1522,7 @@ const launcherPageHTML = `<!doctype html>
         if (!safeClaudeUrl(url) || alive.has(url) || seen.has(url)) return;
         seen.add(url); older.push({ url: url, when: when });
       };
-      for (const h of (j.history || [])) if (h) addOlder(h.url, fmtWhen(h.at));
+      for (const h of (j.history || [])) if (h) addOlder(h.url, fmtWhen(h.at) + ' \u00b7 ');
       for (const url of (ws.sessionLinks || []).slice().reverse()) addOlder(url, '');
 
       let localOnly = 0;
@@ -1760,10 +1531,13 @@ const launcherPageHTML = `<!doctype html>
       if (liveCount) group('live now');
       for (const sess of running) {
         const where = whereLabel(sess);
-        const when = where + ' · ' + fmtWhen(sess.startedAt);
+        const when = where + ' \u00b7 ' + fmtWhen(sess.startedAt);
         if (sess.url && safeClaudeUrl(sess.url) && !seen.has(sess.url)) {
           seen.add(sess.url);
-          renderLink(sess.url, { label: shortSessionName(sess.name, ws.id), when: when });
+          renderLink(sess.url, {
+            label: shortSessionName(sess.name, ws.id),
+            when: [when, nameNote(sess)].filter(Boolean).join(' \u00b7 ') + ' \u00b7 ',
+          });
           continue;
         }
         localOnly++;
@@ -1780,14 +1554,13 @@ const launcherPageHTML = `<!doctype html>
       }
       if (localOnly) note('local only = running on the laptop with no web link yet; type /remote-control in that session to reach it from here.');
       if (bridgeRows) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
-      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden — enable in Settings.');
+      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
 
       if (older.length) {
-        group('earlier · not running');
+        group('earlier \u00b7 not running');
         for (const row of older) renderLink(row.url, { past: true, when: row.when });
       }
       if (!liveCount && !older.length && !evs.length) {
-        group('sessions');
         const none = document.createElement('div');
         none.className = 'none'; none.textContent = 'No sessions yet for this workspace.';
         box.appendChild(none);
@@ -1797,16 +1570,11 @@ const launcherPageHTML = `<!doctype html>
       for (const ev of evs) {
         const el = document.createElement('div');
         el.className = 'evrow';
-        const what = ev.kind + (ev.cause ? ' · ' + ev.cause : '') + (ev.reason ? ' — ' + ev.reason : '');
+        const what = ev.kind + (ev.cause ? ' \u00b7 ' + ev.cause : '') + (ev.reason ? ' \u2014 ' + ev.reason : '');
         el.innerHTML = '<b>' + esc(what.slice(0, 90)) + '</b><span>' + esc(fmtWhen(ev.at)) + '</span>';
         box.appendChild(el);
       }
-    } catch (e) {
-      if (sheetWs !== ws.id) return;
-      box.innerHTML = '';
-      group('sessions');
-      note('✗ ' + e.message);
-    }
+    } catch (e) { info.textContent = '\u2717 ' + e.message; }
   }
 
   function whereLabel(sess) {
@@ -1838,27 +1606,61 @@ const launcherPageHTML = `<!doctype html>
   // Safari or the Claude app's webview.
   const chromeUrl = u => u.replace(/^https:\/\//, 'googlechromes://');
 
-  async function stopSession(id, btn) {
-    btn.disabled = true;
-    btn.querySelector('span').textContent = 'Stopping…';
-    try {
-      const r = await fetch('/launch/stop', { method: 'POST', headers: auth,
-        body: JSON.stringify({ workspace: id }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || r.status);
-      closeSheet();
-      toast('Stopping ' + id + '…');
-      setTimeout(load, 1200);
-    } catch (e) {
-      btn.disabled = false;
-      btn.querySelector('span').textContent = 'Stop the session';
-      toast(e.message, true);
+  // app mode uses a real anchor tap so iOS deep-links into the Claude app;
+  // browser mode opens via JS, which keeps the session in this browser; chrome
+  // mode forces Chrome via its URL scheme (right for a workspace signed into a
+  // different Claude account than the app — e.g. work vs personal).
+  function openControl(ws) {
+    const mode = openMode(ws.id);
+    if (mode === 'browser' || mode === 'chrome') {
+      const b = document.createElement('button');
+      b.className = 'open'; b.textContent = 'Open';
+      b.onclick = () => {
+        if (mode === 'chrome') { location.href = chromeUrl(ws.sessionUrl); }
+        else { window.open(ws.sessionUrl, '_blank', 'noopener'); }
+      };
+      return b;
     }
+    const a = document.createElement('a');
+    a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open';
+    a.target = '_blank'; a.rel = 'noopener noreferrer';
+    return a;
   }
 
-  async function startSession(id, btn, box) {
-    const label = btn.textContent;
+  function modeSwitch(id) {
+    const order = ['app', 'browser', 'chrome'];
+    const cur = openMode(id);
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.title = 'Where session links open — tap to change';
+    b.innerHTML = 'open in <b>' + esc(cur) + '</b> ▾';
+    b.onclick = () => { setOpenMode(id, order[(order.indexOf(cur) + 1) % order.length]); render(lastWorkspaces); };
+    return b;
+  }
+
+  function stopControl(id) {
+    const b = document.createElement('button');
+    b.className = 'chip danger'; b.textContent = 'Stop';
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Stopping…';
+      try {
+        const r = await fetch('/launch/stop', { method: 'POST', headers: auth,
+          body: JSON.stringify({ workspace: id }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || r.status);
+        toast('Stopping ' + id + '…');
+        setTimeout(load, 1200);
+      } catch (e) {
+        b.disabled = false; b.textContent = 'Stop';
+        toast(e.message, true);
+      }
+    };
+    return b;
+  }
+
+  async function startSession(id, btn) {
     btn.disabled = true; btn.textContent = 'Starting…';
+    const box = btn.closest('.ws').querySelector('.startbox');
     const pick = (role) => {
       const el = box && box.querySelector('[data-role="' + role + '"]');
       return el ? el.value.trim() : '';
@@ -1868,16 +1670,14 @@ const launcherPageHTML = `<!doctype html>
         body: JSON.stringify({ workspace: id, profile: pick('profile'), name: pick('name') }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
-      closeSheet();
       toast('Starting ' + id + '…');
-      // Show it as starting straight away: the list is the same surface the
-      // Start button lives on, and a card still offering Start invites a
-      // second one before the daemon has answered the first.
-      const w = lastWorkspaces.find(x => x.id === id);
-      if (w) { w.running = true; w.note = ''; render(lastWorkspaces); }
+      // Show it as starting straight away: a card still offering Start invites
+      // a second one before the daemon has answered the first.
+      const ws = lastWorkspaces.find(w => w.id === id);
+      if (ws) { ws.running = true; ws.state = 'starting'; ws.note = ''; render(lastWorkspaces); }
       poll(id, 0);
     } catch (e) {
-      btn.disabled = false; btn.textContent = label;
+      btn.disabled = false; btn.textContent = 'Retry';
       toast(e.message, true);
     }
   }

@@ -111,27 +111,28 @@ the phone paired across restarts; the quick tunnel does not.
 
 ### What the launcher looks like
 
-One card per repo, one button on each: **Open** when a session is already up,
-**Start** when it is not — never both. Next to the repo name is the one word
-that matters, with a dot in front of it:
+One card per repo: a dot, the repo, its path, what it is doing, what it has
+cost, and the running session on its own row — tap that row and the
+conversation opens. The green button on the right is **Open** when a session
+is up and **Start** when it is not. Under it sit the controls that change
+something: `sessions` (the full list and timeline for that workspace),
+`open in` (app / browser / chrome), `options` (account and starting name),
+`Stop`, `hide`.
 
-| state | what it means |
+The dot is the state, and the line under the path spells it out:
+
+| dot | state |
 |---|---|
-| `live` | a session is running (`N sessions` when there is more than one) |
-| `needs you` | a permission prompt or a question is blocking it |
-| `starting` | supervised, no session has registered yet |
-| `will not start` | the daemon refused, and the reason is on the card |
-| `stopped` | nothing running here |
-
-Below it, the running session's own row opens the conversation in one tap.
-Everything else is behind **Details**: tap the card and a sheet comes up from
-the bottom with the session name and account to start under, where links
-should open, hide, stop, and the full session list and timeline for that
-workspace.
+| green | a session is running (`N live`) |
+| green, pulsing | `starting` — supervised, nothing registered yet |
+| amber | `needs you` — a permission prompt or a question is blocking it |
+| red | `will not start` — the daemon refused, and the reason is on the card |
+| grey | nothing running here |
 
 The list refreshes itself every 15 seconds while the page is on screen, so a
 name, a state or a session that changed on the machine shows up without a
-reload — and it holds still while a sheet is open.
+reload. It holds still while a `sessions` or `options` panel is open, so a
+refresh never collapses the panel under your thumb.
 
 ### A launcher URL that never changes
 
@@ -315,9 +316,8 @@ which no local probe can know:
 corgi agent session start acme --name "fix login redirect"
 ```
 
-The launcher asks for it too — tap a card to open its details sheet, where
-**Session name** sits above **Start a session** — and `corgi_session_start`
-takes a `name`.
+The launcher asks for it too — the `options` chip on a stopped card — and
+`corgi_session_start` takes a `name`.
 
 ### The timeline
 
@@ -356,8 +356,8 @@ which is why the totals are large — that is the real traffic against the windo
 
 ### Hiding a workspace on the phone
 
-Open a card's details sheet and tap **Hide from this browser**. Hidden cards
-collapse into one `N hidden — show` button. It is stored in that browser only and changes nothing on the machine —
+Each card has a **hide** chip. Hidden cards collapse into one `N hidden — show`
+button. It is stored in that browser only and changes nothing on the machine —
 it exists for the moment someone else is looking at your screen. To actually
 stop supervising a workspace, set `autostart: false` for it instead.
 
