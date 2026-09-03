@@ -12,9 +12,9 @@ Before asking anything, look around:
 - `cat` each service's manifest to infer language/runtime and likely port.
 - Check for existing `.env`, `docker-compose.yml`, `Makefile` — pull defaults from them.
 - Note which service dirs ship a `Dockerfile` or their own compose file — those can run with no `start:` scripts at all (see the rung rule in Step 3).
-- Check for an already-existing `corgi-compose.yml`. If present, stop: ask the user whether they want to edit it (offer `/corgi-add-service` if one day that exists, otherwise read `skills/corgi/references/yml-schema.md` and edit directly) rather than overwrite.
+- Check for an already-existing `corgi-compose.yml`. If present, stop: ask the user whether they want to edit it (read `skills/corgi/references/yml-schema.md` and edit directly; `corgi create` is the interactive editor and needs a TTY) rather than overwrite.
 
-Present what you found in 3–5 bullets. Don't proceed blindly.
+Present what you found before asking anything.
 
 ## Step 2 — Ask only what you can't infer
 

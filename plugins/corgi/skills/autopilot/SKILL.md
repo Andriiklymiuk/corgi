@@ -30,7 +30,7 @@ Supervised loop. One iteration = one `/corgi-queue` pickup → `stories` (spec g
    - `mode: uninitialized` (no state file yet — genuine **first run**, NOT a stop) → `corgi autopilot resume --json` to init `running`, continue.
    - `mode: running` → continue.
    - `mode: stopped` (kill switch) or `mode: paused` → emit heartbeat noting why, **end the iteration** (no pickup).
-   The `uninitialized` sentinel tells a first run apart from an explicit `stop` — both used to look like `stopped`; don't mistake first run for the kill switch.
+   The `uninitialized` sentinel tells a first run apart from an explicit `stop`; don't mistake first run for the kill switch.
 2. **Workspace + tracker** — as `tracker` Phase 0: `ls corgi-compose.yml *.corgi-compose.yml`; detect Linear/Jira MCP. No compose or no tracker MCP → `corgi autopilot pause` with a note, surface what to connect, stop. Don't guess a layout.
 
 ## Phase 1 — Resolve a batch (delegate to tracker pickup)

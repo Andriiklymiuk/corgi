@@ -335,34 +335,24 @@ batch-level, not per-branch. Re-present only changed specs. Blocked held out.
 Superpowers-escalated stories pass here too: their `writing-plans` output is the
 spec.
 
-**Fast-path — collapse the approval round to inline diagnosis ONLY when all hold.**
-Gate just confirms intent before branching. Collapse it (state diagnosis + the exact
-change inline, then go — that _is_ the gate, they can still stop you) **only when
-every one is true:**
+**Fast-path — collapse the approval round to inline diagnosis.** The gate confirms
+intent before branching; it collapses (state diagnosis + the exact change inline, then
+go — that _is_ the gate, the user can still stop you) in exactly two cases:
 
-- exactly **one** named item (one ticket, or one specific fix the user named),
-- tier **adjustment or bug** (never feature),
-- **single service**, no cross-service contract,
-- you can state the **exact change in one sentence**, no open question.
+- **One unambiguous item:** one ticket or one named fix, tier adjustment or bug, single
+  service, no cross-service contract, and you can state the exact change in one
+  sentence with no open question. Anything else — feature tier, >1 story,
+  multi-service, an ambiguous target, a clarifying question you had to ask yourself —
+  is the full gate. A vague "just fix it" with no scope is open intent, not clearance.
+- **Blanket pre-authorization:** the user explicitly pre-approved the changes
+  sight-unseen and told you to proceed to PR/MR ("I approve all changes", "do them all
+  and open the MRs"). That is the sign-off for any tier, span, or batch size; state
+  each spec inline and go. The signal is explicit approval plus a directive, not
+  impatience.
 
-**Any one false → full gate:** feature tier · >1 story · multi-service · ambiguous
-target · you had to ask yourself a clarifying question · can't name the change in one
-sentence. **Unsure → full gate.** "User said 'just fix it'" is **not** clearance if
-you can't say exactly what "it" is — a vague directive = _open_ intent → gate. The
-fast-path skips the _pause_, never the _thinking_.
-
-**Fast-path drops the approval pause, NOT the tracker artifacts.** Even on a
-one-liner, post the **spec comment (with its QA "what to test" section)** (Phase 1 triage) —
-durable record, and a visual/QA defect is what a human must re-verify. Don't skip.
-
-**Blanket pre-authorization collapses the gate for ANY tier/span.** The single-item
-fast-path above is for _unambiguous_ changes. Separately, when the user has **explicitly
-pre-approved the changes sight-unseen** and told you to proceed to PR/MR ("I approve all
-changes", "do them all and open the MRs") — that _is_ the sign-off, even for a feature /
-multi-service / multi-story batch. State each spec inline (diagnosis + change) and go;
-the tracker still gets the spec comment (QA section included). NOT the same as a vague "just fix it" with
-no scope (that stays _open_ intent → full gate). Signal = explicit approval + a directive
-to proceed, not mere impatience.
+Either way the fast-path drops the pause — never the thinking, and not the artifacts:
+post the spec comment (with its QA section) even for a one-liner. It is the durable
+record, and a visual/QA defect is what a human must re-verify.
 
 ## Phase 3 — Branch + implement + verify per story
 

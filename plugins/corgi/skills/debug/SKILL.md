@@ -63,7 +63,7 @@ run this **before** the ladder. It is the whole of Steps 0–2 for one service, 
 one call:
 
 ```
-corgi why api --json
+corgi why api --json        # MCP: corgi_why { service: "api" }
 ```
 
 Returns a single `verdict` plus the evidence behind it: unmet `dependencies`,
@@ -88,7 +88,7 @@ If `why` does not explain it, fall through to the ladder below.
 ## Step 0 — Snapshot (broken-stack mode)
 
 ```
-corgi context --json   # orientation in one call: topology, ports, status, each repo's branch/dirty, tier, validation
+corgi context --json   # orientation in one call: topology, ports, status, each repo's branch/dirty, tier, validation (MCP: corgi_context)
 corgi ps --json        # name/kind/port/status/url (+ startedAt); reconciles corgi_services/.state.json
 corgi status --json    # live TCP/HTTP probe — the ONLY liveness truth
 # uptime = startedAt from `corgi ps --json`; an older corgi omits it → cat corgi_services/.state.json

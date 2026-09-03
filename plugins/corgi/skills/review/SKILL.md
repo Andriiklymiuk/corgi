@@ -236,7 +236,6 @@ review untouched code.
 - **Leaked secrets** — always `severity: blocking`; flag the file + line + that a secret is present; never echo the value into a finding or comment.
 - Repo-standard / convention violations (names, patterns, style).
 - Scope creep (changes outside the ticket's stated scope).
-- Perf footguns.
 - **User-facing copy that names internal tech** — a string/label exposing an
   engine, library, vendor, or infra detail to end users (`nit`); suggest selling
   the user benefit, not the mechanism. Skip if the ticket is about that copy.
@@ -281,11 +280,7 @@ Both are only findings when they are real. Do not invent an abstraction
 objection to have something to say, and do not call a hot path slow without
 naming what runs and how often.
 
-**Temper with the intent note** — before emitting any finding, check it against
-the ticket's rationale, constraints, and discussion. A choice the ticket
-explicitly justifies (deliberate hack, scoped approach, known debt with a
-follow-up) is not a bug; drop it or downgrade to a soft note citing the
-ticket's reasoning.
+**Temper with the intent note** (P1.5, point 2) before emitting any finding.
 
 **Finding shape** (exact — used by P4/P5):
 ```
@@ -658,10 +653,6 @@ P4 order) and cross-link the two replies. Then one combined report (6).
    `git worktree add` off the fetched head so the user's work is untouched (`stories`
    P3 worktree rules). Gate: `corgi test --service` / `corgi exec` + scoped self-review
    (`stories` P3.5). **Minimum diff — only what the threads ask.**
-   **Minimal code comments.** Don't narrate the change in code comments — it should read
-   from the diff and the PR/commit message. Add a comment only for a genuinely non-obvious
-   invariant that would otherwise be lost, and only where the file already comments. No
-   "// added/changed X" notes.
 4. **Reply + resolve per thread** (§5) — what changed (commit/line), or why you pushed
    back. **Reply INSIDE the reviewer's thread** — GitHub `in_reply_to`, GitLab
    `POST …/discussions/<id>/notes`; never `gh pr comment` / `glab mr note create`,
