@@ -236,7 +236,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent logs <workspace>` | the session timeline: starts, exits and why, links |
 | `corgi agent restart` | `down` + `up --fresh` in one — run it after `corgi upgrade` |
 | `corgi agent tunnel setup <host>` | one-time permanent-URL setup, remembered for later runs |
-| `corgi agent hooks enable` / `disable` | notify when a session in this workspace needs you |
+| `corgi agent hooks enable` / `disable` | notify when a session needs you, and name sessions after what you ask them |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -314,13 +314,43 @@ That is the name it **starts** with. After that the name belongs to Claude
 Code, which keeps its own record of it (`<configDir>/sessions/<pid>.json`,
 with a `nameSource` saying who last set it — `user` for one someone typed,
 `derived` or `auto` for one Claude picked, `hook` for one a hook set). A
-session renamed in flight — by `/rename`, by a hook, or by Claude as the work
-takes shape — is renamed in corgi's list too: the launcher reads that record
-on every refresh and shows the current name, with *renamed 4m ago* beside it.
+session renamed in flight is renamed in corgi's list too: the launcher reads
+that record on every refresh and shows the current name, with *renamed 4m ago*
+beside it.
 
 What corgi cannot do is rename a session on claude.ai after the fact: the name
-in that list is the one remote control registered at start, which is why the
-starting name is worth composing well.
+in that list is the one remote control registered at start.
+
+### Naming a session after what you asked it
+
+A start-time name answers *which machine, which checkout, when*. It cannot
+answer the question you actually scan the list for — what is this session
+doing — because nothing knows that until you say it.
+
+`corgi agent hooks enable` writes a `UserPromptSubmit` hook for that: the
+first thing you ask becomes the name.
+
+```
+corgi · main · 18:55        →   corgi · fix the login redirect
+```
+
+The workspace stays in front, because claude.ai lists every session you have
+running on every machine and the ask alone does not say where. corgi's own
+list trims it back off — the card it sits on has already said which repo this
+is.
+
+It renames once, and only a name nobody chose: the one corgi composed (they
+all end in a clock) or the one Claude Code derived from the directory
+(`corgi-3e`). A name you typed from the phone, and the one this hook already
+set, are left alone — a session that renames itself on every prompt flickers
+through "ok", "continue", "now the tests", and a name that changes under you
+is worse than a dull one. Prompts that describe nothing — a slash command,
+"yes", "continue", anything under twelve characters — are ignored.
+
+Skip it with `corgi agent hooks enable --no-title`, and note that the
+`sessionTitle` field it replies with is in Claude Code's own hook schema but
+not in the published hooks reference: if a release stops reading it, the
+session keeps its starting name and nothing else changes.
 
 Name a session yourself and that wins — it says what the session is *for*,
 which no local probe can know:
@@ -436,9 +466,10 @@ per workspace and corgi tells you:
 
 ```bash
 cd ~/dev/your-stack
-corgi agent hooks enable        # writes the needs-you hook into .claude/settings.local.json
+corgi agent hooks enable        # writes the needs-you and naming hooks into .claude/settings.local.json
 corgi agent hooks enable --all  # or every registered workspace at once, from anywhere
 corgi agent hooks enable --all --turns   # also ping on every finished turn (noisy)
+corgi agent hooks enable --no-title      # skip the one that names a session after your first ask
 ```
 
 Only the permission prompt notifies by default: it blocks the session until you

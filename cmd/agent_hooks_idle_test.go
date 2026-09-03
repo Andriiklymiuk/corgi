@@ -27,11 +27,11 @@ func TestIsIdleNudge(t *testing.T) {
 // The default hook drops the idle nudge; --idle keeps it, and the choice is
 // visible in the command written into the settings file.
 func TestWithCorgiHookRecordsTheIdleChoice(t *testing.T) {
-	plain := marshalCompact(withCorgiHook(nil, "acme", false))
+	plain := marshalCompact(withCorgiHook(nil, "acme", hookEventNotification, false))
 	if strings.Contains(plain, "--idle") {
 		t.Errorf("the default hook asked for idle notifications: %s", plain)
 	}
-	withIdle := marshalCompact(withCorgiHook(nil, "acme", true))
+	withIdle := marshalCompact(withCorgiHook(nil, "acme", hookEventNotification, true))
 	if !strings.Contains(withIdle, "--idle") {
 		t.Errorf("--idle was not written into the hook: %s", withIdle)
 	}
@@ -43,7 +43,7 @@ func TestWithCorgiHookRecordsTheIdleChoice(t *testing.T) {
 
 func TestEnableHooksInWritesTheIdleFlag(t *testing.T) {
 	dir := t.TempDir()
-	if err := enableHooksIn(dir, "acme", false, true); err != nil {
+	if err := enableHooksIn(dir, "acme", false, true, false); err != nil {
 		t.Fatal(err)
 	}
 	body, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
@@ -119,5 +119,43 @@ func TestHookDetailFallbacks(t *testing.T) {
 	}
 	if got := hookDetail("", nil); got != "a session is waiting for you" {
 		t.Errorf("default detail = %q", got)
+	}
+}
+
+func TestEnableWritesTheTitleHookAndDisableTakesItBack(t *testing.T) {
+	dir := t.TempDir()
+	if err := enableHooksIn(dir, "acme", false, false, true); err != nil {
+		t.Fatal(err)
+	}
+	settings := readJSONObject(claudeLocalSettingsPath(dir))
+	hooks, _ := settings["hooks"].(map[string]any)
+	written := marshalCompact(hooks[hookEventPrompt])
+	if !strings.Contains(written, "corgi agent hook --workspace acme title") {
+		t.Errorf("UserPromptSubmit hook = %s, want the title hook for this workspace", written)
+	}
+	// --idle belongs to the notification hook; the title hook has no use for it.
+	if strings.Contains(written, "--idle") {
+		t.Errorf("the title hook must not carry notification flags: %s", written)
+	}
+
+	// Off by request, without touching the notification hook.
+	if err := enableHooksIn(dir, "acme", false, false, false); err != nil {
+		t.Fatal(err)
+	}
+	settings = readJSONObject(claudeLocalSettingsPath(dir))
+	hooks, _ = settings["hooks"].(map[string]any)
+	if _, still := hooks[hookEventPrompt]; still {
+		t.Error("--no-title must remove the hook corgi wrote")
+	}
+	if _, gone := hooks[hookEventNotification]; !gone {
+		t.Error("the notification hook must be left in place")
+	}
+
+	if _, err := disableHooksIn(dir); err != nil {
+		t.Fatal(err)
+	}
+	settings = readJSONObject(claudeLocalSettingsPath(dir))
+	if _, left := settings["hooks"]; left {
+		t.Errorf("disable must remove every hook corgi wrote: %v", settings)
 	}
 }
