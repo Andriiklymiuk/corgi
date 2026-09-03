@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/events"
@@ -47,7 +48,22 @@ type launchWorkspace struct {
 	Note         string   `json:"note,omitempty"`
 	// State is the one word the card leads with: what this workspace is doing
 	// right now, decided here rather than in three places in the page.
-	State      string            `json:"state"`
+	State string `json:"state"`
+	// Everything from here down the daemon already knew and the phone could
+	// not see: `corgi agent status` on the laptop said more than the page you
+	// carry around.
+	Disabled  bool   `json:"disabled,omitempty"`
+	StartedAt int64  `json:"startedAt,omitempty"`
+	Restarts  int    `json:"restarts,omitempty"`
+	Profile   string `json:"profile,omitempty"`
+	WakeLock  bool   `json:"wakeLock,omitempty"`
+	Origin    string `json:"origin,omitempty"`
+	PID       int    `json:"pid,omitempty"`
+	LastCause string `json:"lastCause,omitempty"`
+	// Branch and Dirty describe the checkout a session here would start on —
+	// the answer to "which of these two is the one I was working in?".
+	Branch     string            `json:"branch,omitempty"`
+	Dirty      bool              `json:"dirty,omitempty"`
 	Live       int               `json:"live"`
 	TopSession *launchTopSession `json:"topSession,omitempty"`
 	Usage      *usage.Report     `json:"usage,omitempty"`
@@ -64,6 +80,10 @@ type launchTopSession struct {
 	// since renamed reads as its new name here too.
 	NameSource string `json:"nameSource,omitempty"`
 	NameSince  int64  `json:"nameSince,omitempty"`
+	// WaitingFor is what Claude Code says this session is blocked on, when it
+	// says anything ("input needed", "dialog open", "sandbox request"). Absent
+	// means it did not say, never that the session is idle.
+	WaitingFor string `json:"waitingFor,omitempty"`
 	Where      string `json:"where"`
 	StartedAt  int64  `json:"startedAt,omitempty"`
 	URL        string `json:"url,omitempty"`
@@ -98,10 +118,18 @@ func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type wsRunState struct {
-	running  bool
-	url      string
-	note     string
-	sessions []string
+	running   bool
+	url       string
+	note      string
+	sessions  []string
+	disabled  bool
+	startedAt int64
+	restarts  int
+	profile   string
+	wakeLock  bool
+	origin    string
+	pid       int
+	lastCause string
 }
 
 // buildLaunchWorkspaces joins the registry with the daemon's live status into
@@ -112,7 +140,16 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 	running := map[string]wsRunState{}
 	if status != nil {
 		for _, ws := range status.Workspaces {
-			running[ws.WorkspaceID] = wsRunState{running: ws.Running, url: ws.SessionURL, note: ws.LastReason, sessions: ws.Sessions}
+			started := int64(0)
+			if !ws.StartedAt.IsZero() {
+				started = ws.StartedAt.UnixMilli()
+			}
+			running[ws.WorkspaceID] = wsRunState{
+				running: ws.Running, url: ws.SessionURL, note: ws.LastReason, sessions: ws.Sessions,
+				disabled: ws.Disabled, startedAt: started, restarts: ws.Restarts,
+				profile: ws.Profile, wakeLock: ws.WakeLock, origin: ws.Origin,
+				pid: ws.PID, lastCause: string(ws.LastCause),
+			}
 		}
 		for _, d := range status.Diagnostics {
 			if d.Warning == "" {
@@ -132,9 +169,13 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 			ID: ws.ID, Aliases: ws.Aliases, Path: ws.AbsPath,
 			Status: string(ws.Status), Running: s.running, SessionURL: s.url,
 			SessionLinks: s.sessions, Note: s.note, Profiles: profiles,
+			Disabled: s.disabled, StartedAt: s.startedAt, Restarts: s.restarts,
+			Profile: s.profile, WakeLock: s.wakeLock, Origin: s.origin,
+			PID: s.pid, LastCause: s.lastCause,
 		}
-		row.Live, row.TopSession, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath)
-		row.Usage = workspaceUsage(ws.ID, ws.AbsPath)
+		row.Branch, row.Dirty = workspaceCheckout(ws.ID, ws.AbsPath)
+		row.Live, row.TopSession, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath, s.profile)
+		row.Usage = workspaceUsage(ws.ID, ws.AbsPath, s.profile)
 		row.State = launchState(row)
 		out = append(out, row)
 	}
@@ -149,6 +190,11 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 // the daemon is supervising, not whether a human is needed.
 func launchState(row launchWorkspace) string {
 	switch {
+	case row.Disabled:
+		// The daemon gave up on this one after repeated failures. It looked
+		// exactly like "stopped" on the phone, and Start on a disabled
+		// workspace is the tap that appears to do nothing.
+		return "disabled"
 	case row.Note != "" && !row.Running:
 		// A start the daemon refused, or a diagnostic: the reason is on the card.
 		return "blocked"
@@ -165,12 +211,12 @@ func launchState(row launchWorkspace) string {
 	return "stopped"
 }
 
-func workspaceActivity(id, absPath string) (int, *launchTopSession, *launchLastEvent) {
+func workspaceActivity(id, absPath, profile string) (int, *launchTopSession, *launchLastEvent) {
 	// The pid-file reader, never listClaudeSessions: its fallback shells out,
 	// and this runs per workspace on a list the phone polls while starting.
 	var live int
 	var top *launchTopSession
-	if _, configDir, ok := workspaceSessionTarget(id); ok && absPath != "" {
+	if _, configDir, ok := workspaceSessionTarget(id, profile); ok && absPath != "" {
 		if sessions, read := localClaudeSessions(absPath, configDir); read {
 			live = len(sessions)
 			top = newestLiveSession(sessions)
@@ -197,6 +243,7 @@ func newestLiveSession(sessions []claudeSession) *launchTopSession {
 			Name:       sessionDisplayName(sess),
 			NameSource: sess.NameSource,
 			NameSince:  sess.NameSince,
+			WaitingFor: sessionWaitingFor(sess),
 			Where:      sessionWhereLabel(sess),
 			StartedAt:  sess.StartedAt,
 			URL:        sess.URL,
@@ -209,6 +256,7 @@ func newestLiveSession(sessions []claudeSession) *launchTopSession {
 		Name:       sessionDisplayName(sessions[0]),
 		NameSource: sessions[0].NameSource,
 		NameSince:  sessions[0].NameSince,
+		WaitingFor: sessionWaitingFor(sessions[0]),
 		Where:      sessionWhereLabel(sessions[0]),
 		StartedAt:  sessions[0].StartedAt,
 	}
@@ -219,6 +267,19 @@ func sessionDisplayName(sess claudeSession) string {
 		return sess.Name
 	}
 	return "session"
+}
+
+// sessionWaitingFor reports what a session is blocked on, in Claude Code's own
+// words, and only when it actually said so: "waiting" with nothing named, or a
+// session that never writes status at all, must not read as an answer.
+func sessionWaitingFor(sess claudeSession) string {
+	if w := strings.TrimSpace(sess.WaitingFor); w != "" {
+		return w
+	}
+	if strings.EqualFold(sess.Status, "waiting") || strings.EqualFold(sess.Tempo, "blocked") {
+		return "your answer"
+	}
+	return ""
 }
 
 func sessionWhereLabel(sess claudeSession) string {
@@ -234,6 +295,60 @@ func sessionWhereLabel(sess claudeSession) string {
 		return sess.Kind
 	}
 	return "session"
+}
+
+// checkoutTTL bounds how often the branch probe runs. `git status` on a big
+// repo is not free and this list is polled every second while a session
+// starts, so the request path serves the last answer and refreshes behind it —
+// the same deal as the usage sums below.
+const checkoutTTL = 20 * time.Second
+
+var checkoutCache = struct {
+	mu    sync.Mutex
+	repos map[string]*cachedCheckout
+}{repos: map[string]*cachedCheckout{}}
+
+type cachedCheckout struct {
+	branch     string
+	dirty      bool
+	computed   time.Time
+	refreshing bool
+}
+
+func workspaceCheckout(id, absPath string) (string, bool) {
+	if absPath == "" {
+		return "", false
+	}
+	checkoutCache.mu.Lock()
+	defer checkoutCache.mu.Unlock()
+	entry := checkoutCache.repos[id]
+	if entry == nil {
+		entry = &cachedCheckout{}
+		checkoutCache.repos[id] = entry
+	}
+	fresh := !entry.computed.IsZero() && time.Since(entry.computed) < checkoutTTL
+	if !fresh && !entry.refreshing {
+		entry.refreshing = true
+		go refreshCheckout(id, absPath)
+	}
+	return entry.branch, entry.dirty
+}
+
+func refreshCheckout(id, absPath string) {
+	state, ok := utils.ProbeRepoState(absPath)
+	checkoutCache.mu.Lock()
+	defer checkoutCache.mu.Unlock()
+	entry := checkoutCache.repos[id]
+	if entry == nil {
+		return
+	}
+	entry.refreshing = false
+	entry.computed = time.Now()
+	if !ok {
+		entry.branch, entry.dirty = "", false
+		return
+	}
+	entry.branch, entry.dirty = state.Branch, state.Dirty
 }
 
 // usageTTL is how long a summed report is reused. Summing a workspace means
@@ -256,36 +371,40 @@ type cachedUsage struct {
 // Zero across both windows is reported as nothing, so an idle workspace shows
 // no number rather than a row of noughts. A stale report is served while a
 // fresh one is summed in the background.
-func workspaceUsage(id, absPath string) *usage.Report {
+func workspaceUsage(id, absPath, profile string) *usage.Report {
 	if absPath == "" {
 		return nil
 	}
-	_, configDir, ok := workspaceSessionTarget(id)
+	_, configDir, ok := workspaceSessionTarget(id, profile)
 	if !ok {
 		return nil
 	}
 
+	// Keyed by account too: the same workspace under a different profile has a
+	// different transcript directory, and a stale entry would report the other
+	// account's tokens.
+	key := id + "\x00" + profile
 	usageCache.mu.Lock()
-	entry := usageCache.reps[id]
+	entry := usageCache.reps[key]
 	if entry == nil {
 		entry = &cachedUsage{}
-		usageCache.reps[id] = entry
+		usageCache.reps[key] = entry
 	}
 	fresh := !entry.computed.IsZero() && time.Since(entry.computed) < usageTTL
 	report := entry.report
 	if !fresh && !entry.refreshing {
 		entry.refreshing = true
-		go refreshUsage(id, absPath, expandTilde(configDir))
+		go refreshUsage(key, absPath, expandTilde(configDir))
 	}
 	usageCache.mu.Unlock()
 	return report
 }
 
-func refreshUsage(id, absPath, configDir string) {
+func refreshUsage(key, absPath, configDir string) {
 	rep := usage.ForDir(absPath, configDir, mungeClaudeProjectDir(absPath), time.Now())
 	usageCache.mu.Lock()
 	defer usageCache.mu.Unlock()
-	entry := usageCache.reps[id]
+	entry := usageCache.reps[key]
 	if entry == nil {
 		return
 	}
@@ -379,8 +498,19 @@ func launchStopHandler(w http.ResponseWriter, r *http.Request) {
 type claudeSession struct {
 	Name string `json:"name"`
 	// Written by Claude Code beside the name; see launchTopSession.
-	NameSource      string `json:"nameSource,omitempty"`
-	NameSince       int64  `json:"nameSince,omitempty"`
+	NameSource string `json:"nameSource,omitempty"`
+	NameSince  int64  `json:"nameSince,omitempty"`
+	// ProcStart is the process's start time as the OS reports it. Claude Code
+	// records it so a recycled pid cannot pass for the process that wrote the
+	// record — see sessionProcessIsLive.
+	ProcStart string `json:"procStart,omitempty"`
+	// Status, WaitingFor and Tempo are Claude Code's own live view of the
+	// session. Not every session writes them (an interactive one on a laptop
+	// often does not), so everything reading them treats absent as unknown
+	// rather than idle.
+	Status          string `json:"status,omitempty"`
+	WaitingFor      string `json:"waitingFor,omitempty"`
+	Tempo           string `json:"tempo,omitempty"`
 	SessionID       string `json:"sessionId"`
 	CWD             string `json:"cwd"`
 	Kind            string `json:"kind"`
@@ -406,7 +536,7 @@ func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusBadRequest, "a workspace is required")
 		return
 	}
-	absPath, configDir, ok := workspaceSessionTarget(id)
+	absPath, configDir, ok := workspaceSessionTarget(id, runningProfile(id))
 	if !ok {
 		writeLaunchError(w, http.StatusNotFound, "unknown workspace")
 		return
@@ -580,7 +710,13 @@ func sessionHistory(workspaceID string) []launchHistoryEntry {
 // config dir (account) its sessions live under. The id is the trusted registry
 // key, and the directory comes from the registry — never from the caller — so a
 // device token cannot point the shell-out at an arbitrary path.
-func workspaceSessionTarget(id string) (absPath, configDir string, ok bool) {
+// workspaceSessionTarget resolves where a workspace's Claude state lives.
+//
+// profile matters: a workspace running under one keeps its session records and
+// its transcripts in that account's config dir, so resolving the default one
+// showed the phone no sessions and no token counts for exactly the workspaces
+// that run under a second account. Pass "" for the default account.
+func workspaceSessionTarget(id, profile string) (absPath, configDir string, ok bool) {
 	registry, _, err := agentRegistry()
 	if err != nil {
 		return "", "", false
@@ -598,7 +734,34 @@ func workspaceSessionTarget(id string) (absPath, configDir string, ok bool) {
 		return ws.AbsPath, "", true
 	}
 	repo, _ := config.LoadRepo(ws.AbsPath)
-	return ws.AbsPath, config.Resolve(id, repo, user).ConfigDir, true
+	resolved := config.Resolve(id, repo, user)
+	if p := strings.TrimSpace(profile); p != "" {
+		// An unknown profile is not this function's error to report — the start
+		// that named it already refused — so fall back to the default account.
+		if withProfile, perr := config.ApplyProfile(resolved, user, p); perr == nil {
+			resolved = withProfile
+		}
+	}
+	return ws.AbsPath, resolved.ConfigDir, true
+}
+
+// runningProfile is the account the daemon actually started this workspace
+// under, for the handlers that are given an id and nothing else.
+func runningProfile(id string) string {
+	dir, err := agentDir()
+	if err != nil {
+		return ""
+	}
+	status, err := daemon.ReadStatus(dir)
+	if err != nil || status == nil {
+		return ""
+	}
+	for _, ws := range status.Workspaces {
+		if ws.WorkspaceID == id {
+			return ws.Profile
+		}
+	}
+	return ""
 }
 
 // bridgeSessionLinks reads the claude.ai session URL a remote-control bridge
@@ -641,6 +804,56 @@ func mungeClaudeProjectDir(dir string) string {
 
 // pidExists is a plain liveness probe. Not PidAlive: a hand-started bridge runs
 // under a shell and is no process-group leader, which PidAlive requires.
+// sessionProcessIsLive answers whether the process that wrote a session record
+// is still the process running under that pid.
+//
+// A live pid is not enough on its own: session records outlive the machine
+// (they sit in the config dir across reboots) and pids are handed out again
+// from low numbers after one, so a stale record whose pid now belongs to
+// something else made a finished session show up as live — a phantom "1 live"
+// on a workspace with nothing running in it. Claude Code writes procStart for
+// exactly this check, so where the OS will tell us a process's start time
+// cheaply, compare it. Where it will not, a live pid stays the best answer
+// available, which is what this did everywhere before.
+func sessionProcessIsLive(cs claudeSession) bool {
+	if !pidExists(cs.PID) {
+		return false
+	}
+	started, ok := processStartTicks(cs.PID)
+	if !ok || strings.TrimSpace(cs.ProcStart) == "" {
+		return true
+	}
+	return strings.TrimSpace(cs.ProcStart) == started
+}
+
+// processStartTicks reads the start time Linux keeps for a pid (field 22 of
+// /proc/<pid>/stat, in clock ticks since boot) — the same value Claude Code
+// stores. ok is false anywhere else, including macOS, where the equivalent
+// costs a subprocess per session and this list is polled every second.
+func processStartTicks(pid int) (string, bool) {
+	if runtime.GOOS != "linux" || pid <= 0 {
+		return "", false
+	}
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return "", false
+	}
+	// The second field is the executable name in parentheses and may itself
+	// contain spaces and parentheses, so fields are counted from the last ')'.
+	close := strings.LastIndex(string(data), ")")
+	if close < 0 {
+		return "", false
+	}
+	fields := strings.Fields(string(data)[close+1:])
+	// state is the field after comm, so starttime (22nd overall) is index 19
+	// of what is left.
+	const startTimeOffset = 19
+	if len(fields) <= startTimeOffset {
+		return "", false
+	}
+	return fields[startTimeOffset], true
+}
+
 func pidExists(pid int) bool {
 	if pid <= 0 {
 		return false
@@ -698,7 +911,7 @@ func localClaudeSessions(absPath, configDir string) ([]claudeSession, bool) {
 		if cs.CWD != absPath && !strings.HasPrefix(cs.CWD, absPath+string(filepath.Separator)) {
 			continue
 		}
-		if !pidExists(cs.PID) {
+		if !sessionProcessIsLive(cs) {
 			continue
 		}
 		if strings.HasPrefix(cs.BridgeSessionID, "session_") {
@@ -876,6 +1089,9 @@ const launcherPageHTML = `<!doctype html>
   .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto;max-width:60%;
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
+  .kv{display:flex;gap:.6rem;font-size:.72rem;padding:.22rem .1rem;line-height:1.45}
+  .kv b{color:var(--dim2);font-weight:600;flex:0 0 5.4rem}
+  .kv span{color:#c9cfda;min-width:0}
   .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
       border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px;flex:0 0 auto;
       white-space:nowrap}
@@ -1273,10 +1489,12 @@ const launcherPageHTML = `<!doctype html>
       main.className = 'main';
       main.innerHTML = '<div class="name"><span class="dot ' + esc(dotState(ws)) + '"></span>' + esc(ws.id) + '</div>';
       const path = document.createElement('div');
-      path.className = 'path'; path.title = ws.path; path.textContent = shortPath(ws.path);
+      path.className = 'path'; path.title = ws.path;
+      const short = () => shortPath(ws.path, !!ws.branch) + branchSuffix(ws);
+      path.textContent = short();
       path.onclick = () => {
         const full = path.classList.toggle('full');
-        path.textContent = full ? ws.path : shortPath(ws.path);
+        path.textContent = full ? ws.path + branchSuffix(ws) : short();
       };
       main.appendChild(path);
       const meta = metaLine(ws);
@@ -1408,6 +1626,15 @@ const launcherPageHTML = `<!doctype html>
     if (ws.live > 0) bits.push('<span class="live">' + ws.live + ' live</span>');
     else if (ws.state === 'starting') bits.push('<span class="live">starting</span>');
     else if (ws.state === 'blocked') bits.push('<span class="warn">will not start</span>');
+    else if (ws.state === 'disabled') bits.push('<span class="warn">disabled after repeated failures</span>');
+    // What the daemon knew all along and the phone never showed.
+    const waiting = shortWait(ws.topSession && ws.topSession.waitingFor);
+    if (waiting) bits.push('<span class="warn">waiting: ' + esc(waiting) + '</span>');
+    if (ws.running && ws.startedAt) bits.push('<span>up ' + esc(fmtSpan(Date.now() - ws.startedAt)) + '</span>');
+    if (ws.running && ws.restarts > 0) {
+      bits.push('<span>' + ws.restarts + ' restart' + (ws.restarts > 1 ? 's' : '') + '</span>');
+    }
+    if (ws.profile) bits.push('<span>' + esc(ws.profile) + ' account</span>');
     const e = ws.lastEvent;
     if (e && !(ws.running && e.kind === 'started')) {
       const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + esc(e.cause) : '')
@@ -1460,9 +1687,25 @@ const launcherPageHTML = `<!doctype html>
     return box;
   }
 
-  function shortPath(p) {
+  // The branch a session here would start on, with a * for uncommitted work —
+  // the answer to "which of these two checkouts am I looking at?". Clamped,
+  // because a branch name has no upper bound and the path is sharing the line.
+  function branchSuffix(ws) {
+    if (!ws.branch) return '';
+    return ' \u00b7 ' + clamp(ws.branch, 24) + (ws.dirty ? '*' : '');
+  }
+
+  function clamp(text, max) {
+    const s = String(text || '');
+    return s.length > max ? s.slice(0, max - 1) + '\u2026' : s;
+  }
+
+  // tight drops another segment: when the branch is sharing this line, the
+  // repo directory identifies the checkout and its parents do not.
+  function shortPath(p, tight) {
     const parts = String(p || '').split('/').filter(Boolean);
-    return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
+    const keep = tight ? 1 : 2;
+    return parts.length > keep ? '…/' + parts.slice(-keep).join('/') : p;
   }
 
   async function toggleSessions(ws, btn, box) {
@@ -1531,7 +1774,9 @@ const launcherPageHTML = `<!doctype html>
       if (liveCount) group('live now');
       for (const sess of running) {
         const where = whereLabel(sess);
-        const when = where + ' \u00b7 ' + fmtWhen(sess.startedAt);
+        const waiting = sessionWaiting(sess);
+        const when = where + ' \u00b7 ' + fmtWhen(sess.startedAt) +
+          (waiting ? ' \u00b7 waiting: ' + waiting : '');
         if (sess.url && safeClaudeUrl(sess.url) && !seen.has(sess.url)) {
           seen.add(sess.url);
           renderLink(sess.url, {
@@ -1574,7 +1819,47 @@ const launcherPageHTML = `<!doctype html>
         el.innerHTML = '<b>' + esc(what.slice(0, 90)) + '</b><span>' + esc(fmtWhen(ev.at)) + '</span>';
         box.appendChild(el);
       }
+      renderWorkspaceFacts(ws, box, group);
     } catch (e) { info.textContent = '\u2717 ' + e.message; }
+  }
+
+  // What the daemon knows about this workspace and the card has no room for.
+  // corgi agent status on the laptop always showed these; the phone did not.
+  function workspaceFacts(ws) {
+    const facts = [];
+    if (ws.branch) facts.push(['checkout', ws.branch + (ws.dirty ? ' \u00b7 uncommitted work' : ' \u00b7 clean')]);
+    if (ws.profile) facts.push(['account', ws.profile]);
+    if (ws.running && ws.startedAt) {
+      const how = ws.origin === 'remote' ? ' \u00b7 started from a phone'
+        : ws.origin === 'auto' ? ' \u00b7 started with the daemon' : '';
+      facts.push(['supervised', 'for ' + fmtSpan(Date.now() - ws.startedAt) + how]);
+    }
+    if (ws.restarts > 0) facts.push(['restarts', String(ws.restarts) + (ws.lastCause ? ' \u00b7 last ' + ws.lastCause : '')]);
+    else if (ws.lastCause) facts.push(['last exit', ws.lastCause]);
+    if (ws.wakeLock) facts.push(['wake lock', 'the machine is held awake while this runs']);
+    if (ws.pid) facts.push(['pid', String(ws.pid)]);
+    if (ws.disabled) facts.push(['disabled', 'the daemon stopped retrying this one \u2014 fix the cause, then Start']);
+    return facts;
+  }
+
+  function renderWorkspaceFacts(ws, box, group) {
+    const facts = workspaceFacts(ws);
+    if (!facts.length) return;
+    group('this workspace');
+    for (const [label, value] of facts) {
+      const el = document.createElement('div');
+      el.className = 'kv';
+      el.innerHTML = '<b>' + esc(label) + '</b><span>' + esc(value) + '</span>';
+      box.appendChild(el);
+    }
+  }
+
+  // Claude Code names what a session is blocked on when it knows; absent means
+  // it did not say, not that the session is idle.
+  function sessionWaiting(sess) {
+    if (sess.waitingFor) return sess.waitingFor;
+    if (sess.status === 'waiting' || sess.tempo === 'blocked') return 'your answer';
+    return '';
   }
 
   function whereLabel(sess) {
@@ -1585,10 +1870,28 @@ const launcherPageHTML = `<!doctype html>
   }
 
   function fmtTokens(n) {
-    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3) return Math.round(n / 1e3) + 'k';
+    // Rounding is applied before the threshold is chosen: 999,500 is 1.0M, not
+    // "1000k", and 999,999,500 is 1.0B.
+    if (Math.round(n / 1e8) >= 10) return (n / 1e9).toFixed(1) + 'B';
+    if (Math.round(n / 1e5) >= 10) return (n / 1e6).toFixed(1) + 'M';
+    if (Math.round(n / 1e3) >= 1) return Math.round(n / 1e3) + 'k';
     return String(n || 0);
+  }
+
+  // "choose: allow or deny the edit" is written for a dialog box; the card has
+  // room for the ask, not the sentence.
+  function shortWait(text) {
+    if (!text) return '';
+    return clamp(String(text).replace(/^choose:\s*/i, ''), 28);
+  }
+
+  function fmtSpan(ms) {
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return 'a moment';
+    if (mins < 60) return mins + 'm';
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + 'h';
+    return Math.floor(hours / 24) + 'd';
   }
 
   function fmtWhen(ms) {

@@ -487,7 +487,7 @@ func printWorkspaceState(w supervisor.RunState) {
 }
 
 func workspaceUsageLine(id string) string {
-	absPath, configDir, ok := workspaceSessionTarget(id)
+	absPath, configDir, ok := workspaceSessionTarget(id, runningProfile(id))
 	if !ok || absPath == "" {
 		return ""
 	}

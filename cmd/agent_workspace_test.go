@@ -66,18 +66,34 @@ func TestWorkspaceSessionTarget(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	agentD := mustAgentDir()
 
-	if _, _, ok := workspaceSessionTarget("nope"); ok {
+	if _, _, ok := workspaceSessionTarget("nope", ""); ok {
 		t.Error("an unknown workspace must not resolve")
 	}
 
 	stack := stackWithAgentConfig(t, "")
 	registerStack(t, agentD, "acme", stack)
-	absPath, configDir, ok := workspaceSessionTarget("acme")
+	absPath, configDir, ok := workspaceSessionTarget("acme", "")
 	if !ok || absPath != stack {
 		t.Fatalf("workspaceSessionTarget = %q, %v; want the registry path", absPath, ok)
 	}
 	if configDir != "" {
 		t.Errorf("no user config → default account, got %q", configDir)
+	}
+
+	// A workspace running under a profile keeps its sessions and transcripts in
+	// that account's config dir; resolving the default one is why the phone
+	// showed no sessions and no tokens for a second-account workspace.
+	if err := os.WriteFile(agentUserConfigPath(agentD),
+		[]byte("version: 1\nprofiles:\n  work:\n    configDir: ~/claude-configs/work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, configDir, _ := workspaceSessionTarget("acme", "work"); configDir != "~/claude-configs/work" {
+		t.Errorf("configDir = %q, want the profile's account dir", configDir)
+	}
+	// An unknown profile falls back to the default account rather than failing:
+	// the start that named it already refused.
+	if _, configDir, _ := workspaceSessionTarget("acme", "ghost"); configDir != "" {
+		t.Errorf("configDir = %q, want the default account for an unknown profile", configDir)
 	}
 }
 
