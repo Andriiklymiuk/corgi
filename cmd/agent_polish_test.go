@@ -264,11 +264,11 @@ func TestHookDetail(t *testing.T) {
 
 func TestWithCorgiHookReplacesOnlyOurs(t *testing.T) {
 	other := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "echo mine"}}}
-	first := withCorgiHook([]any{other}, "acme", false)
+	first := withCorgiHook([]any{other}, "acme", hookEventNotification, false)
 	if len(first) != 2 {
 		t.Fatalf("entries = %d, want the existing one plus ours", len(first))
 	}
-	again := withCorgiHook(first, "acme", false)
+	again := withCorgiHook(first, "acme", hookEventNotification, false)
 	if len(again) != 2 {
 		t.Errorf("re-running must replace ours, not add another: %d entries", len(again))
 	}

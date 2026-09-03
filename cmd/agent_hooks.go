@@ -21,8 +21,13 @@ import (
 const (
 	hookEventNotification = "Notification"
 	hookEventStop         = "Stop"
+	hookEventPrompt       = "UserPromptSubmit"
 	hookMarker            = "corgi agent hook"
 )
+
+// corgiHookEvents is every event corgi writes, so enable and disable can never
+// disagree about what to clean up.
+var corgiHookEvents = []string{hookEventNotification, hookEventStop, hookEventPrompt}
 
 var agentHooksCmd = &cobra.Command{
 	Use:   "hooks",
@@ -33,10 +38,17 @@ var agentHooksEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Notify when a Claude session here asks for permission or finishes",
 	Long: `Writes Claude Code hooks into .claude/settings.local.json (local to this
-machine, never committed): one for permission prompts and questions, and with
---turns one for a finished turn. They call ` + "`corgi agent hook`" + `, which
-tells the corgi daemon, which sends the same notification as a restart —
-including the phone push when notifyUrl is set.
+machine, never committed): one for permission prompts and questions, one that
+names a session after the first thing you ask it, and with --turns one for a
+finished turn. They call ` + "`corgi agent hook`" + `, which tells the corgi
+daemon, which sends the same notification as a restart — including the phone
+push when notifyUrl is set.
+
+The naming one answers nothing to the daemon: it replies to Claude Code with a
+title, so "corgi · main · 18:55" becomes "corgi · fix the login redirect" as
+soon as you say what you want. It only ever replaces a name corgi composed or
+Claude Code derived — one you typed, or one it already set, is left alone —
+and --no-title skips it entirely.
 
 By default only the first: a permission prompt blocks the session until you
 answer it, while a finished turn is just noise once several workspaces are busy.
@@ -95,8 +107,9 @@ func claudeLocalSettingsPath(dir string) string {
 func runAgentHooksEnable(cmd *cobra.Command, _ []string) {
 	turns := wantsTurnHook(cmd)
 	idle := wantsIdleHook(cmd)
+	title := wantsTitleHook(cmd)
 	for _, target := range hookTargets(cmd) {
-		if err := enableHooksIn(target.dir, target.id, turns, idle); err != nil {
+		if err := enableHooksIn(target.dir, target.id, turns, idle, title); err != nil {
 			exitWithError("agent_hooks", err, 1)
 		}
 		utils.Infof("✓ %s will notify you when a session there needs you (%s)\n",
@@ -107,6 +120,9 @@ func runAgentHooksEnable(cmd *cobra.Command, _ []string) {
 	}
 	if idle {
 		utils.Info("also notifying when a session has just been idle a while (--idle)")
+	}
+	if title {
+		utils.Info("sessions here will also be named after the first thing you ask them (--no-title to skip)")
 	}
 	if !notifyURLConfigured() {
 		printNotifyUrlHelp()
@@ -122,6 +138,17 @@ func printNotifyUrlHelp() {
 	utils.Info("  corgi agent notify set <slack-or-discord-webhook-url>")
 	utils.Info("")
 	utils.Info("  then: corgi agent restart")
+}
+
+// The title hook is on by default: a list of sessions all called after their
+// repo is the thing people ask corgi to fix, and the hook only ever renames a
+// session corgi named itself.
+func wantsTitleHook(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return true
+	}
+	skip, _ := cmd.Flags().GetBool("no-title")
+	return !skip
 }
 
 func wantsIdleHook(cmd *cobra.Command) bool {
@@ -213,7 +240,7 @@ func allSuffix(cmd *cobra.Command) string {
 	return ""
 }
 
-func enableHooksIn(dir, id string, turns, idle bool) error {
+func enableHooksIn(dir, id string, turns, idle, title bool) error {
 	path := claudeLocalSettingsPath(dir)
 	settings := readJSONObject(path)
 	hooks, _ := settings["hooks"].(map[string]any)
@@ -221,10 +248,10 @@ func enableHooksIn(dir, id string, turns, idle bool) error {
 		hooks = map[string]any{}
 	}
 
-	wanted := map[string]bool{hookEventNotification: true, hookEventStop: turns}
-	for event, want := range wanted {
-		if want {
-			hooks[event] = withCorgiHook(hooks[event], id, idle)
+	wanted := map[string]bool{hookEventNotification: true, hookEventStop: turns, hookEventPrompt: title}
+	for _, event := range corgiHookEvents {
+		if wanted[event] {
+			hooks[event] = withCorgiHook(hooks[event], id, event, idle)
 			continue
 		}
 		remaining := stripCorgiHooks(hooks[event])
@@ -243,12 +270,15 @@ func enableHooksIn(dir, id string, turns, idle bool) error {
 	return writeJSONObject(path, settings)
 }
 
-func withCorgiHook(existing any, workspaceID string, idle bool) []any {
+func withCorgiHook(existing any, workspaceID, event string, idle bool) []any {
 	out := stripCorgiHooks(existing)
 	// The choice rides in the command corgi writes, so it is per workspace and
 	// visible in the settings file rather than hidden in another config.
 	command := fmt.Sprintf("corgi agent hook --workspace %s", workspaceID)
-	if idle {
+	if event == hookEventPrompt {
+		command += " title"
+	}
+	if idle && event != hookEventPrompt {
 		command += " --idle"
 	}
 	return append(out, map[string]any{
@@ -291,7 +321,7 @@ func disableHooksIn(dir string) (bool, error) {
 	if hooks == nil {
 		return false, nil
 	}
-	for _, event := range []string{hookEventNotification, hookEventStop} {
+	for _, event := range corgiHookEvents {
 		remaining := stripCorgiHooks(hooks[event])
 		if len(remaining) == 0 {
 			delete(hooks, event)
@@ -316,6 +346,12 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	event := ""
 	if len(args) > 0 {
 		event = args[0]
+	}
+	if event == "title" {
+		// The one hook that answers rather than reports: it prints a session
+		// title on stdout and tells the daemon nothing.
+		runAgentTitleHook(id, titleHookStdin, os.Stdout)
+		return
 	}
 	detail := hookDetail(event, os.Stdin)
 
@@ -424,6 +460,7 @@ func init() {
 	agentHooksEnableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
 	agentHooksEnableCmd.Flags().Bool("turns", false, "Also notify when a session finishes a turn (noisy across several workspaces)")
 	agentHooksEnableCmd.Flags().Bool("idle", false, "Also notify on Claude's \"waiting for your input\" nudge, which fires when nothing is actually blocked")
+	agentHooksEnableCmd.Flags().Bool("no-title", false, "Do not name sessions after the first thing you ask them")
 	agentHooksDisableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
 	agentHooksCmd.AddCommand(agentHooksEnableCmd, agentHooksDisableCmd)
 	agentCmd.AddCommand(agentHooksCmd, agentHookCmd)
