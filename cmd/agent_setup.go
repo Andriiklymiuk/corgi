@@ -442,7 +442,7 @@ func checkWorkspaceTrust() []agentCheck {
 	}
 	var checks []agentCheck
 	for _, ws := range registry.Sorted() {
-		absPath, configDir, ok := workspaceSessionTarget(ws.ID)
+		absPath, configDir, ok := workspaceSessionTarget(ws.ID, runningProfile(ws.ID))
 		if !ok || absPath == "" {
 			continue
 		}

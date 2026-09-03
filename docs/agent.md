@@ -111,13 +111,13 @@ the phone paired across restarts; the quick tunnel does not.
 
 ### What the launcher looks like
 
-One card per repo: a dot, the repo, its path, what it is doing, what it has
-cost, and the running session on its own row — tap that row and the
-conversation opens. The green button on the right is **Open** when a session
-is up and **Start** when it is not. Under it sit the controls that change
-something: `sessions` (the full list and timeline for that workspace),
-`open in` (app / browser / chrome), `options` (account and starting name),
-`Stop`, `hide`.
+One card per repo: a dot, the repo, the checkout under it, what it is doing,
+what it has cost, and the running session on its own row — tap that row and
+the conversation opens. The green button on the right is **Open** when a
+session is up and **Start** when it is not. Under it sit the controls that
+change something: `sessions` (the full list, the timeline, and everything the
+daemon knows about that workspace), `open in` (app / browser / chrome),
+`options` (account and starting name), `Stop`, `hide`.
 
 The dot is the state, and the line under the path spells it out:
 
@@ -127,7 +127,20 @@ The dot is the state, and the line under the path spells it out:
 | green, pulsing | `starting` — supervised, nothing registered yet |
 | amber | `needs you` — a permission prompt or a question is blocking it |
 | red | `will not start` — the daemon refused, and the reason is on the card |
+| red | `disabled after repeated failures` — the daemon stopped retrying |
 | grey | nothing running here |
+
+That line also carries what the laptop always knew and the phone did not: how
+long the session has been up, how many restarts it took, which account it runs
+under, and — when Claude Code says so — what it is **waiting** for (*waiting:
+allow or deny the edit*). Next to the path is the branch, with a `*` when the
+checkout has uncommitted work, which is the fastest way to tell two clones of
+the same repo apart.
+
+The `sessions` panel ends with **this workspace**: checkout, account,
+how long it has been supervised and what started it, restarts and the last
+exit cause, whether the machine is being held awake for it, and its pid. The
+same facts `corgi agent status` prints on the laptop.
 
 The list refreshes itself every 15 seconds while the page is on screen, so a
 name, a state or a session that changed on the machine shows up without a

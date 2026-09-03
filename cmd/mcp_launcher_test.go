@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -176,6 +177,60 @@ func TestTopSessionCarriesTheLiveName(t *testing.T) {
 	if top.NameSource != "auto" || top.NameSince != 1700000001000 {
 		t.Errorf("nameSource/nameSince = %q/%d, want them passed through so the page can say it was renamed",
 			top.NameSource, top.NameSince)
+	}
+}
+
+func TestLaunchStateReportsADisabledWorkspace(t *testing.T) {
+	// A workspace the daemon gave up on looked exactly like a stopped one, so
+	// Start was the tap that appeared to do nothing.
+	if got := launchState(launchWorkspace{Disabled: true}); got != "disabled" {
+		t.Errorf("state = %q, want disabled", got)
+	}
+	if got := launchState(launchWorkspace{Disabled: true, Running: true, Live: 2}); got != "disabled" {
+		t.Errorf("state = %q; disabled outranks a live session — it is the thing to explain", got)
+	}
+}
+
+func TestSessionProcessIsLiveRejectsARecycledPID(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("start times are only read from /proc")
+	}
+	mine := os.Getpid()
+	started, ok := processStartTicks(mine)
+	if !ok || started == "" {
+		t.Fatalf("this process's start time must be readable, got %q ok=%v", started, ok)
+	}
+	if !sessionProcessIsLive(claudeSession{PID: mine, ProcStart: started}) {
+		t.Error("a record whose start time matches the live process is live")
+	}
+	// The record outlived the machine and something else now holds its pid:
+	// a live pid alone made a finished session show as live.
+	if sessionProcessIsLive(claudeSession{PID: mine, ProcStart: "1"}) {
+		t.Error("a start time that does not match must not pass for the same process")
+	}
+	// No recorded start time (an older CLI) keeps the old behaviour.
+	if !sessionProcessIsLive(claudeSession{PID: mine}) {
+		t.Error("without a recorded start time a live pid is still the best answer")
+	}
+	if sessionProcessIsLive(claudeSession{PID: 0}) {
+		t.Error("pid 0 is not a session")
+	}
+}
+
+func TestSessionWaitingForOnlyAnswersWhenClaudeSaid(t *testing.T) {
+	for name, tc := range map[string]struct {
+		sess claudeSession
+		want string
+	}{
+		"nothing recorded":      {claudeSession{}, ""},
+		"a named block":         {claudeSession{WaitingFor: "input needed"}, "input needed"},
+		"waiting without a why": {claudeSession{Status: "waiting"}, "your answer"},
+		"a blocked tempo":       {claudeSession{Tempo: "blocked"}, "your answer"},
+		"busy is not waiting":   {claudeSession{Status: "busy"}, ""},
+	} {
+		if got := sessionWaitingFor(tc.sess); got != tc.want {
+			t.Errorf("%s: waitingFor = %q, want %q", name, got, tc.want)
+		}
 	}
 }
 
