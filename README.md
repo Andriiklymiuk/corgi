@@ -152,6 +152,7 @@ Slash-commands and plain English both work:
 /corgi-tracker                  "how's the team doing — anything stuck?"
 /corgi-queue                    "I just joined — what should I pick up first?"
 /corgi-debug                    "the api is 500ing, find out why"
+/corgi-complexity               "this handler branches like a jungle — simplify it"
 ```
 
 Nothing ships without you. It opens **draft** PRs and waits. If you have no project to try this on, `corgi run -l` fetches an example.
