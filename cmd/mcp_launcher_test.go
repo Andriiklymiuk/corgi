@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -104,6 +105,132 @@ func TestLauncherPageIsSelfContainedAndUsesTheStoredToken(t *testing.T) {
 	}
 	if !strings.Contains(body, "noopener") {
 		t.Error("the session link must open with rel=noopener")
+	}
+}
+
+func TestLauncherPageKeepsThePhoneControlsItNeeds(t *testing.T) {
+	rec := httptest.NewRecorder()
+	launcherPageHandler(rec, httptest.NewRequest(http.MethodGet, "/app", nil))
+	body := rec.Body.String()
+	for what, want := range map[string]string{
+		"the sessions panel":           "toggleSessions(",
+		"start options":                "data-role=\"' + role + '\"",
+		"the where-links-open control": "modeSwitch(",
+		"hiding a card":                "corgi_hidden",
+		"stopping a session":           "/launch/stop",
+		"the state on the dot":         "dotState(",
+		"the live session name":        "nameNote(",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the launcher must keep %s (%q)", what, want)
+		}
+	}
+	// A control toggled with the hidden attribute must actually disappear:
+	// a flex display rule outranks the attribute without this.
+	if !strings.Contains(body, "[hidden]{display:none!important}") {
+		t.Error("the launcher must force [hidden] over its display rules")
+	}
+	// The refresh tick reads the session records again, which is how a session
+	// Claude renamed shows its new name here without a reload.
+	if !strings.Contains(body, "REFRESH_MS") {
+		t.Error("the launcher must refresh itself while it is on screen")
+	}
+}
+
+func TestLaunchStateNamesWhatTheCardLeadsWith(t *testing.T) {
+	attention := &launchLastEvent{Kind: "attention"}
+	exited := &launchLastEvent{Kind: "exited", Cause: "network timeout"}
+	for name, tc := range map[string]struct {
+		row  launchWorkspace
+		want string
+	}{
+		"a refused start is blocked":      {launchWorkspace{Note: "not logged in"}, "blocked"},
+		"a blocking prompt outranks live": {launchWorkspace{Running: true, Live: 1, LastEvent: attention}, "attention"},
+		"a live session is live":          {launchWorkspace{Running: true, Live: 2, LastEvent: exited}, "live"},
+		"supervised with no session yet":  {launchWorkspace{Running: true}, "starting"},
+		"nothing running is stopped":      {launchWorkspace{LastEvent: exited}, "stopped"},
+		// A session someone started on the laptop is live even though the
+		// daemon is not supervising the workspace.
+		"an unsupervised session is live": {launchWorkspace{Live: 1}, "live"},
+	} {
+		if got := launchState(tc.row); got != tc.want {
+			t.Errorf("%s: state = %q, want %q", name, got, tc.want)
+		}
+	}
+}
+
+func TestTopSessionCarriesTheLiveName(t *testing.T) {
+	// Claude Code rewrites name/nameSource/nameSince in its own session record
+	// when the session is renamed; the launcher must pass that through rather
+	// than the name corgi started it with.
+	top := newestLiveSession([]claudeSession{{
+		Name: "Trim the launcher type scale", NameSource: "auto", NameSince: 1700000001000,
+		StartedAt: 1700000000000, Kind: "interactive", Entrypoint: "sdk-cli",
+		URL: "https://claude.ai/code/session_abc",
+	}})
+	if top == nil {
+		t.Fatal("a session with a URL must become the top session")
+	}
+	if top.Name != "Trim the launcher type scale" {
+		t.Errorf("name = %q, want the session's current name", top.Name)
+	}
+	if top.NameSource != "auto" || top.NameSince != 1700000001000 {
+		t.Errorf("nameSource/nameSince = %q/%d, want them passed through so the page can say it was renamed",
+			top.NameSource, top.NameSince)
+	}
+}
+
+func TestLaunchStateReportsADisabledWorkspace(t *testing.T) {
+	// A workspace the daemon gave up on looked exactly like a stopped one, so
+	// Start was the tap that appeared to do nothing.
+	if got := launchState(launchWorkspace{Disabled: true}); got != "disabled" {
+		t.Errorf("state = %q, want disabled", got)
+	}
+	if got := launchState(launchWorkspace{Disabled: true, Running: true, Live: 2}); got != "disabled" {
+		t.Errorf("state = %q; disabled outranks a live session — it is the thing to explain", got)
+	}
+}
+
+func TestSessionProcessIsLiveRejectsARecycledPID(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("start times are only read from /proc")
+	}
+	mine := os.Getpid()
+	started, ok := processStartTicks(mine)
+	if !ok || started == "" {
+		t.Fatalf("this process's start time must be readable, got %q ok=%v", started, ok)
+	}
+	if !sessionProcessIsLive(claudeSession{PID: mine, ProcStart: started}) {
+		t.Error("a record whose start time matches the live process is live")
+	}
+	// The record outlived the machine and something else now holds its pid:
+	// a live pid alone made a finished session show as live.
+	if sessionProcessIsLive(claudeSession{PID: mine, ProcStart: "1"}) {
+		t.Error("a start time that does not match must not pass for the same process")
+	}
+	// No recorded start time (an older CLI) keeps the old behaviour.
+	if !sessionProcessIsLive(claudeSession{PID: mine}) {
+		t.Error("without a recorded start time a live pid is still the best answer")
+	}
+	if sessionProcessIsLive(claudeSession{PID: 0}) {
+		t.Error("pid 0 is not a session")
+	}
+}
+
+func TestSessionWaitingForOnlyAnswersWhenClaudeSaid(t *testing.T) {
+	for name, tc := range map[string]struct {
+		sess claudeSession
+		want string
+	}{
+		"nothing recorded":      {claudeSession{}, ""},
+		"a named block":         {claudeSession{WaitingFor: "input needed"}, "input needed"},
+		"waiting without a why": {claudeSession{Status: "waiting"}, "your answer"},
+		"a blocked tempo":       {claudeSession{Tempo: "blocked"}, "your answer"},
+		"busy is not waiting":   {claudeSession{Status: "busy"}, ""},
+	} {
+		if got := sessionWaitingFor(tc.sess); got != tc.want {
+			t.Errorf("%s: waitingFor = %q, want %q", name, got, tc.want)
+		}
 	}
 }
 

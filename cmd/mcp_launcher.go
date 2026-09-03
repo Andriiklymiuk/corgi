@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/events"
@@ -43,20 +44,49 @@ type launchWorkspace struct {
 	// SessionLinks are per-session claude.ai URLs captured from remote
 	// control's own output — the only links the site resolves (the ids the
 	// claude CLI lists locally are UUIDs the web does not know).
-	SessionLinks []string          `json:"sessionLinks,omitempty"`
-	Note         string            `json:"note,omitempty"`
-	Live         int               `json:"live"`
-	TopSession   *launchTopSession `json:"topSession,omitempty"`
-	Usage        *usage.Report     `json:"usage,omitempty"`
-	LastEvent    *launchLastEvent  `json:"lastEvent,omitempty"`
-	Profiles     []string          `json:"profiles,omitempty"`
+	SessionLinks []string `json:"sessionLinks,omitempty"`
+	Note         string   `json:"note,omitempty"`
+	// State is the one word the card leads with: what this workspace is doing
+	// right now, decided here rather than in three places in the page.
+	State string `json:"state"`
+	// Everything from here down the daemon already knew and the phone could
+	// not see: `corgi agent status` on the laptop said more than the page you
+	// carry around.
+	Disabled  bool   `json:"disabled,omitempty"`
+	StartedAt int64  `json:"startedAt,omitempty"`
+	Restarts  int    `json:"restarts,omitempty"`
+	Profile   string `json:"profile,omitempty"`
+	WakeLock  bool   `json:"wakeLock,omitempty"`
+	Origin    string `json:"origin,omitempty"`
+	PID       int    `json:"pid,omitempty"`
+	LastCause string `json:"lastCause,omitempty"`
+	// Branch and Dirty describe the checkout a session here would start on —
+	// the answer to "which of these two is the one I was working in?".
+	Branch     string            `json:"branch,omitempty"`
+	Dirty      bool              `json:"dirty,omitempty"`
+	Live       int               `json:"live"`
+	TopSession *launchTopSession `json:"topSession,omitempty"`
+	Usage      *usage.Report     `json:"usage,omitempty"`
+	LastEvent  *launchLastEvent  `json:"lastEvent,omitempty"`
+	Profiles   []string          `json:"profiles,omitempty"`
 }
 
 type launchTopSession struct {
-	Name      string `json:"name"`
-	Where     string `json:"where"`
-	StartedAt int64  `json:"startedAt,omitempty"`
-	URL       string `json:"url,omitempty"`
+	Name string `json:"name"`
+	// NameSource and NameSince are Claude Code's own record of where the
+	// session's current name came from — "user" for one someone typed,
+	// "derived"/"auto" for one Claude picked, "hook" for one a hook set — and
+	// when it last changed. corgi shows the live name, so a session Claude has
+	// since renamed reads as its new name here too.
+	NameSource string `json:"nameSource,omitempty"`
+	NameSince  int64  `json:"nameSince,omitempty"`
+	// WaitingFor is what Claude Code says this session is blocked on, when it
+	// says anything ("input needed", "dialog open", "sandbox request"). Absent
+	// means it did not say, never that the session is idle.
+	WaitingFor string `json:"waitingFor,omitempty"`
+	Where      string `json:"where"`
+	StartedAt  int64  `json:"startedAt,omitempty"`
+	URL        string `json:"url,omitempty"`
 }
 
 type launchLastEvent struct {
@@ -88,10 +118,18 @@ func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type wsRunState struct {
-	running  bool
-	url      string
-	note     string
-	sessions []string
+	running   bool
+	url       string
+	note      string
+	sessions  []string
+	disabled  bool
+	startedAt int64
+	restarts  int
+	profile   string
+	wakeLock  bool
+	origin    string
+	pid       int
+	lastCause string
 }
 
 // buildLaunchWorkspaces joins the registry with the daemon's live status into
@@ -102,7 +140,16 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 	running := map[string]wsRunState{}
 	if status != nil {
 		for _, ws := range status.Workspaces {
-			running[ws.WorkspaceID] = wsRunState{running: ws.Running, url: ws.SessionURL, note: ws.LastReason, sessions: ws.Sessions}
+			started := int64(0)
+			if !ws.StartedAt.IsZero() {
+				started = ws.StartedAt.UnixMilli()
+			}
+			running[ws.WorkspaceID] = wsRunState{
+				running: ws.Running, url: ws.SessionURL, note: ws.LastReason, sessions: ws.Sessions,
+				disabled: ws.Disabled, startedAt: started, restarts: ws.Restarts,
+				profile: ws.Profile, wakeLock: ws.WakeLock, origin: ws.Origin,
+				pid: ws.PID, lastCause: string(ws.LastCause),
+			}
 		}
 		for _, d := range status.Diagnostics {
 			if d.Warning == "" {
@@ -122,21 +169,54 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 			ID: ws.ID, Aliases: ws.Aliases, Path: ws.AbsPath,
 			Status: string(ws.Status), Running: s.running, SessionURL: s.url,
 			SessionLinks: s.sessions, Note: s.note, Profiles: profiles,
+			Disabled: s.disabled, StartedAt: s.startedAt, Restarts: s.restarts,
+			Profile: s.profile, WakeLock: s.wakeLock, Origin: s.origin,
+			PID: s.pid, LastCause: s.lastCause,
 		}
-		row.Live, row.TopSession, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath)
-		row.Usage = workspaceUsage(ws.ID, ws.AbsPath)
+		row.Branch, row.Dirty = workspaceCheckout(ws.ID, ws.AbsPath)
+		row.Live, row.TopSession, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath, s.profile)
+		row.Usage = workspaceUsage(ws.ID, ws.AbsPath, s.profile)
+		row.State = launchState(row)
 		out = append(out, row)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
-func workspaceActivity(id, absPath string) (int, *launchTopSession, *launchLastEvent) {
+// launchState reduces running, live sessions, the last event and a refused
+// start to the one word the card leads with. Decided here so the phone and
+// anything else reading /launch/workspaces agree on it. Finer than `corgi
+// agent status`'s workspaceState, which answers a different question: whether
+// the daemon is supervising, not whether a human is needed.
+func launchState(row launchWorkspace) string {
+	switch {
+	case row.Disabled:
+		// The daemon gave up on this one after repeated failures. It looked
+		// exactly like "stopped" on the phone, and Start on a disabled
+		// workspace is the tap that appears to do nothing.
+		return "disabled"
+	case row.Note != "" && !row.Running:
+		// A start the daemon refused, or a diagnostic: the reason is on the card.
+		return "blocked"
+	case row.LastEvent != nil && row.LastEvent.Kind == "attention":
+		// A permission prompt or a question is blocking the session — the one
+		// state where the session is running and still needs a human.
+		return "attention"
+	case row.Live > 0:
+		return "live"
+	case row.Running:
+		// Supervised, but no session has registered yet.
+		return "starting"
+	}
+	return "stopped"
+}
+
+func workspaceActivity(id, absPath, profile string) (int, *launchTopSession, *launchLastEvent) {
 	// The pid-file reader, never listClaudeSessions: its fallback shells out,
 	// and this runs per workspace on a list the phone polls while starting.
 	var live int
 	var top *launchTopSession
-	if _, configDir, ok := workspaceSessionTarget(id); ok && absPath != "" {
+	if _, configDir, ok := workspaceSessionTarget(id, profile); ok && absPath != "" {
 		if sessions, read := localClaudeSessions(absPath, configDir); read {
 			live = len(sessions)
 			top = newestLiveSession(sessions)
@@ -160,19 +240,25 @@ func newestLiveSession(sessions []claudeSession) *launchTopSession {
 			continue
 		}
 		return &launchTopSession{
-			Name:      sessionDisplayName(sess),
-			Where:     sessionWhereLabel(sess),
-			StartedAt: sess.StartedAt,
-			URL:       sess.URL,
+			Name:       sessionDisplayName(sess),
+			NameSource: sess.NameSource,
+			NameSince:  sess.NameSince,
+			WaitingFor: sessionWaitingFor(sess),
+			Where:      sessionWhereLabel(sess),
+			StartedAt:  sess.StartedAt,
+			URL:        sess.URL,
 		}
 	}
 	if len(sessions) == 0 {
 		return nil
 	}
 	return &launchTopSession{
-		Name:      sessionDisplayName(sessions[0]),
-		Where:     sessionWhereLabel(sessions[0]),
-		StartedAt: sessions[0].StartedAt,
+		Name:       sessionDisplayName(sessions[0]),
+		NameSource: sessions[0].NameSource,
+		NameSince:  sessions[0].NameSince,
+		WaitingFor: sessionWaitingFor(sessions[0]),
+		Where:      sessionWhereLabel(sessions[0]),
+		StartedAt:  sessions[0].StartedAt,
 	}
 }
 
@@ -181,6 +267,19 @@ func sessionDisplayName(sess claudeSession) string {
 		return sess.Name
 	}
 	return "session"
+}
+
+// sessionWaitingFor reports what a session is blocked on, in Claude Code's own
+// words, and only when it actually said so: "waiting" with nothing named, or a
+// session that never writes status at all, must not read as an answer.
+func sessionWaitingFor(sess claudeSession) string {
+	if w := strings.TrimSpace(sess.WaitingFor); w != "" {
+		return w
+	}
+	if strings.EqualFold(sess.Status, "waiting") || strings.EqualFold(sess.Tempo, "blocked") {
+		return "your answer"
+	}
+	return ""
 }
 
 func sessionWhereLabel(sess claudeSession) string {
@@ -196,6 +295,60 @@ func sessionWhereLabel(sess claudeSession) string {
 		return sess.Kind
 	}
 	return "session"
+}
+
+// checkoutTTL bounds how often the branch probe runs. `git status` on a big
+// repo is not free and this list is polled every second while a session
+// starts, so the request path serves the last answer and refreshes behind it —
+// the same deal as the usage sums below.
+const checkoutTTL = 20 * time.Second
+
+var checkoutCache = struct {
+	mu    sync.Mutex
+	repos map[string]*cachedCheckout
+}{repos: map[string]*cachedCheckout{}}
+
+type cachedCheckout struct {
+	branch     string
+	dirty      bool
+	computed   time.Time
+	refreshing bool
+}
+
+func workspaceCheckout(id, absPath string) (string, bool) {
+	if absPath == "" {
+		return "", false
+	}
+	checkoutCache.mu.Lock()
+	defer checkoutCache.mu.Unlock()
+	entry := checkoutCache.repos[id]
+	if entry == nil {
+		entry = &cachedCheckout{}
+		checkoutCache.repos[id] = entry
+	}
+	fresh := !entry.computed.IsZero() && time.Since(entry.computed) < checkoutTTL
+	if !fresh && !entry.refreshing {
+		entry.refreshing = true
+		go refreshCheckout(id, absPath)
+	}
+	return entry.branch, entry.dirty
+}
+
+func refreshCheckout(id, absPath string) {
+	state, ok := utils.ProbeRepoState(absPath)
+	checkoutCache.mu.Lock()
+	defer checkoutCache.mu.Unlock()
+	entry := checkoutCache.repos[id]
+	if entry == nil {
+		return
+	}
+	entry.refreshing = false
+	entry.computed = time.Now()
+	if !ok {
+		entry.branch, entry.dirty = "", false
+		return
+	}
+	entry.branch, entry.dirty = state.Branch, state.Dirty
 }
 
 // usageTTL is how long a summed report is reused. Summing a workspace means
@@ -218,36 +371,40 @@ type cachedUsage struct {
 // Zero across both windows is reported as nothing, so an idle workspace shows
 // no number rather than a row of noughts. A stale report is served while a
 // fresh one is summed in the background.
-func workspaceUsage(id, absPath string) *usage.Report {
+func workspaceUsage(id, absPath, profile string) *usage.Report {
 	if absPath == "" {
 		return nil
 	}
-	_, configDir, ok := workspaceSessionTarget(id)
+	_, configDir, ok := workspaceSessionTarget(id, profile)
 	if !ok {
 		return nil
 	}
 
+	// Keyed by account too: the same workspace under a different profile has a
+	// different transcript directory, and a stale entry would report the other
+	// account's tokens.
+	key := id + "\x00" + profile
 	usageCache.mu.Lock()
-	entry := usageCache.reps[id]
+	entry := usageCache.reps[key]
 	if entry == nil {
 		entry = &cachedUsage{}
-		usageCache.reps[id] = entry
+		usageCache.reps[key] = entry
 	}
 	fresh := !entry.computed.IsZero() && time.Since(entry.computed) < usageTTL
 	report := entry.report
 	if !fresh && !entry.refreshing {
 		entry.refreshing = true
-		go refreshUsage(id, absPath, expandTilde(configDir))
+		go refreshUsage(key, absPath, expandTilde(configDir))
 	}
 	usageCache.mu.Unlock()
 	return report
 }
 
-func refreshUsage(id, absPath, configDir string) {
+func refreshUsage(key, absPath, configDir string) {
 	rep := usage.ForDir(absPath, configDir, mungeClaudeProjectDir(absPath), time.Now())
 	usageCache.mu.Lock()
 	defer usageCache.mu.Unlock()
-	entry := usageCache.reps[id]
+	entry := usageCache.reps[key]
 	if entry == nil {
 		return
 	}
@@ -339,7 +496,21 @@ func launchStopHandler(w http.ResponseWriter, r *http.Request) {
 // the one the site resolves — so a terminal or VS Code session gets a real
 // link, unlike its local SessionID, which the web does not know.
 type claudeSession struct {
-	Name            string `json:"name"`
+	Name string `json:"name"`
+	// Written by Claude Code beside the name; see launchTopSession.
+	NameSource string `json:"nameSource,omitempty"`
+	NameSince  int64  `json:"nameSince,omitempty"`
+	// ProcStart is the process's start time as the OS reports it. Claude Code
+	// records it so a recycled pid cannot pass for the process that wrote the
+	// record — see sessionProcessIsLive.
+	ProcStart string `json:"procStart,omitempty"`
+	// Status, WaitingFor and Tempo are Claude Code's own live view of the
+	// session. Not every session writes them (an interactive one on a laptop
+	// often does not), so everything reading them treats absent as unknown
+	// rather than idle.
+	Status          string `json:"status,omitempty"`
+	WaitingFor      string `json:"waitingFor,omitempty"`
+	Tempo           string `json:"tempo,omitempty"`
 	SessionID       string `json:"sessionId"`
 	CWD             string `json:"cwd"`
 	Kind            string `json:"kind"`
@@ -365,7 +536,7 @@ func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusBadRequest, "a workspace is required")
 		return
 	}
-	absPath, configDir, ok := workspaceSessionTarget(id)
+	absPath, configDir, ok := workspaceSessionTarget(id, runningProfile(id))
 	if !ok {
 		writeLaunchError(w, http.StatusNotFound, "unknown workspace")
 		return
@@ -539,7 +710,13 @@ func sessionHistory(workspaceID string) []launchHistoryEntry {
 // config dir (account) its sessions live under. The id is the trusted registry
 // key, and the directory comes from the registry — never from the caller — so a
 // device token cannot point the shell-out at an arbitrary path.
-func workspaceSessionTarget(id string) (absPath, configDir string, ok bool) {
+// workspaceSessionTarget resolves where a workspace's Claude state lives.
+//
+// profile matters: a workspace running under one keeps its session records and
+// its transcripts in that account's config dir, so resolving the default one
+// showed the phone no sessions and no token counts for exactly the workspaces
+// that run under a second account. Pass "" for the default account.
+func workspaceSessionTarget(id, profile string) (absPath, configDir string, ok bool) {
 	registry, _, err := agentRegistry()
 	if err != nil {
 		return "", "", false
@@ -557,7 +734,34 @@ func workspaceSessionTarget(id string) (absPath, configDir string, ok bool) {
 		return ws.AbsPath, "", true
 	}
 	repo, _ := config.LoadRepo(ws.AbsPath)
-	return ws.AbsPath, config.Resolve(id, repo, user).ConfigDir, true
+	resolved := config.Resolve(id, repo, user)
+	if p := strings.TrimSpace(profile); p != "" {
+		// An unknown profile is not this function's error to report — the start
+		// that named it already refused — so fall back to the default account.
+		if withProfile, perr := config.ApplyProfile(resolved, user, p); perr == nil {
+			resolved = withProfile
+		}
+	}
+	return ws.AbsPath, resolved.ConfigDir, true
+}
+
+// runningProfile is the account the daemon actually started this workspace
+// under, for the handlers that are given an id and nothing else.
+func runningProfile(id string) string {
+	dir, err := agentDir()
+	if err != nil {
+		return ""
+	}
+	status, err := daemon.ReadStatus(dir)
+	if err != nil || status == nil {
+		return ""
+	}
+	for _, ws := range status.Workspaces {
+		if ws.WorkspaceID == id {
+			return ws.Profile
+		}
+	}
+	return ""
 }
 
 // bridgeSessionLinks reads the claude.ai session URL a remote-control bridge
@@ -600,6 +804,56 @@ func mungeClaudeProjectDir(dir string) string {
 
 // pidExists is a plain liveness probe. Not PidAlive: a hand-started bridge runs
 // under a shell and is no process-group leader, which PidAlive requires.
+// sessionProcessIsLive answers whether the process that wrote a session record
+// is still the process running under that pid.
+//
+// A live pid is not enough on its own: session records outlive the machine
+// (they sit in the config dir across reboots) and pids are handed out again
+// from low numbers after one, so a stale record whose pid now belongs to
+// something else made a finished session show up as live — a phantom "1 live"
+// on a workspace with nothing running in it. Claude Code writes procStart for
+// exactly this check, so where the OS will tell us a process's start time
+// cheaply, compare it. Where it will not, a live pid stays the best answer
+// available, which is what this did everywhere before.
+func sessionProcessIsLive(cs claudeSession) bool {
+	if !pidExists(cs.PID) {
+		return false
+	}
+	started, ok := processStartTicks(cs.PID)
+	if !ok || strings.TrimSpace(cs.ProcStart) == "" {
+		return true
+	}
+	return strings.TrimSpace(cs.ProcStart) == started
+}
+
+// processStartTicks reads the start time Linux keeps for a pid (field 22 of
+// /proc/<pid>/stat, in clock ticks since boot) — the same value Claude Code
+// stores. ok is false anywhere else, including macOS, where the equivalent
+// costs a subprocess per session and this list is polled every second.
+func processStartTicks(pid int) (string, bool) {
+	if runtime.GOOS != "linux" || pid <= 0 {
+		return "", false
+	}
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return "", false
+	}
+	// The second field is the executable name in parentheses and may itself
+	// contain spaces and parentheses, so fields are counted from the last ')'.
+	close := strings.LastIndex(string(data), ")")
+	if close < 0 {
+		return "", false
+	}
+	fields := strings.Fields(string(data)[close+1:])
+	// state is the field after comm, so starttime (22nd overall) is index 19
+	// of what is left.
+	const startTimeOffset = 19
+	if len(fields) <= startTimeOffset {
+		return "", false
+	}
+	return fields[startTimeOffset], true
+}
+
 func pidExists(pid int) bool {
 	if pid <= 0 {
 		return false
@@ -657,7 +911,7 @@ func localClaudeSessions(absPath, configDir string) ([]claudeSession, bool) {
 		if cs.CWD != absPath && !strings.HasPrefix(cs.CWD, absPath+string(filepath.Separator)) {
 			continue
 		}
-		if !pidExists(cs.PID) {
+		if !sessionProcessIsLive(cs) {
 			continue
 		}
 		if strings.HasPrefix(cs.BridgeSessionID, "session_") {
@@ -737,12 +991,21 @@ const launcherPageHTML = `<!doctype html>
       --text:#eceef2;--dim:#8f94a3;--dim2:#63677a;--green:#6ee787;--amber:#ffa657;--red:#ff7b72;
       --sp1:.25rem;--sp2:.5rem;--sp3:.75rem;--sp4:1rem;--r:.5rem}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* Flex and grid beat the hidden attribute on specificity, and this page
+     toggles controls with .hidden. */
+  [hidden]{display:none!important}
   html{-webkit-text-size-adjust:100%}
   button,a,summary,label,input,.chip,.ws,.top,.s{touch-action:manipulation}
   body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
       padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased}
   header{padding:calc(1.2rem + env(safe-area-inset-top)) 1.2rem .3rem;max-width:34rem;margin:0 auto}
   .brand{display:flex;align-items:center;gap:.7rem}
+  .brand .who{min-width:0;flex:1}
+  .chip.refresh{flex:0 0 auto;width:2rem;height:2rem;padding:0;display:flex;align-items:center;
+      justify-content:center;font-size:.85rem;color:var(--dim)}
+  .chip.refresh:active{color:var(--text)}
+  .chip.refresh.spin{animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
   .logo{width:2.6rem;height:2.6rem;border-radius:.9rem;background:linear-gradient(135deg,#1e2634,#131824);
       border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.35rem;flex:0 0 auto}
   h1{font-size:1.25rem;margin:0;letter-spacing:.01em}
@@ -760,12 +1023,19 @@ const launcherPageHTML = `<!doctype html>
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
   .ws .path.full{white-space:normal;word-break:break-all}
   .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.5rem;line-height:1.45}
+  /* The dot carries the state: green live, amber blocking on you, red a start
+     that was refused, grey nothing running. */
   .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
-  .dot.on{background:var(--green)}
+  .dot.live{background:var(--green)}
+  .dot.starting{background:var(--green);animation:pulse 1s ease-in-out infinite}
+  .dot.attention{background:var(--amber)}
+  .dot.blocked{background:var(--red)}
+  @keyframes pulse{50%{opacity:.3}}
   .meta{display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;margin-top:.25rem;
       font-size:.73rem;color:var(--dim2)}
   .meta span + span::before{content:"\00b7";color:var(--dim2);margin-right:.4rem}
   .meta .live{color:var(--green)}
+  .meta .warn{color:var(--red)}
   .meta .why{color:var(--dim)}
   .usage{font-size:.68rem;color:var(--dim2);margin-top:.15rem;
       font-variant-numeric:tabular-nums;opacity:.85}
@@ -795,25 +1065,36 @@ const launcherPageHTML = `<!doctype html>
   .top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
       margin-top:var(--sp2);padding:var(--sp2) 0 0;border-top:1px solid var(--hair);
       font-size:.78rem;color:var(--text);text-decoration:none;min-height:2rem}
-  .top span:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;
-      text-overflow:ellipsis;white-space:nowrap}
-  .top .when{color:var(--dim2);font-size:.7rem;flex:0 0 auto}
+  .top span:first-child{display:flex;align-items:center;flex:1 1 auto;min-width:3rem;overflow:hidden}
+  .tname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .top .when{color:var(--dim2);font-size:.7rem;flex:0 0 auto;max-width:60%;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .intro{color:var(--dim);font-size:.8rem;line-height:1.5;margin:.2rem 0 .9rem}
+  .skel{background:var(--card);border:1px solid var(--line);border-radius:.75rem;height:5.2rem;
+      margin:var(--sp2) 0;
+      background-image:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.045) 40%,transparent 60%);
+      background-size:220% 100%;animation:sweep 1.2s linear infinite}
+  @keyframes sweep{to{background-position:-220% 0}}
   .sessions{margin-top:var(--sp2);border-top:1px solid var(--hair);padding-top:var(--sp2)}
   .sessions .s{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.76rem;
       color:#c9cfda;padding:.45rem .1rem;min-height:2.1rem;text-decoration:none}
-  .sessions .s span:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;
-      text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+  .sessions .s span:first-child{display:flex;align-items:center;flex:1 1 auto;min-width:3rem;
+      overflow:hidden;color:var(--text)}
   .sdot{width:.375rem;height:.375rem;border-radius:50%;background:var(--green);margin-right:.5rem;flex:0 0 auto}
   a.s.past span:first-child{color:var(--dim)}
   a.s.past .when{color:#5b6274}
   .sessions .grp{display:flex;align-items:center;gap:.5rem;margin:.6rem .1rem .1rem;color:var(--dim2);
       font-size:.62rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
   .sessions .grp i{flex:1;height:1px;background:var(--hair)}
-  .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto}
+  .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto;max-width:60%;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
+  .kv{display:flex;gap:.6rem;font-size:.72rem;padding:.22rem .1rem;line-height:1.45}
+  .kv b{color:var(--dim2);font-weight:600;flex:0 0 5.4rem}
+  .kv span{color:#c9cfda;min-width:0}
   .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
-      border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px}
+      border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px;flex:0 0 auto;
+      white-space:nowrap}
   button{border:0;border-radius:var(--r);padding:.48rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer;
       background:#1e2027;color:var(--text);transition:transform .05s;flex:0 0 auto}
   button:active{transform:scale(.97)}
@@ -821,6 +1102,9 @@ const launcherPageHTML = `<!doctype html>
   a.open,button.open{display:inline-block;background:var(--green);color:#08110a;text-decoration:none;border:0;
       padding:.48rem .9rem;border-radius:var(--r);font-weight:600;font-size:.82rem;cursor:pointer;flex:0 0 auto}
   .msg{color:var(--dim);font-size:.9rem;margin:1rem 0;line-height:1.5}
+  .empty{padding:1.6rem 0 .6rem}
+  .empty h2{font-size:1.05rem;margin:0 0 .3rem;letter-spacing:-.01em}
+  .empty p{color:var(--dim);font-size:.82rem;line-height:1.6;margin:0}
   .err{color:var(--red)}
   code{background:var(--card);border:1px solid var(--line);padding:.1rem .35rem;border-radius:.35rem;font-size:.85em}
   .tips{margin:1.5rem 0 0;background:var(--card);border:1px solid var(--line);border-radius:.75rem;
@@ -860,14 +1144,23 @@ const launcherPageHTML = `<!doctype html>
   label.toggle input{accent-color:var(--green);width:1rem;height:1rem;margin:0}
   pre{background:var(--bg);border:1px solid var(--line);border-radius:.6rem;padding:.7rem;
       overflow-x:auto;font-size:.7rem;line-height:1.45;white-space:pre;color:#c9cfda}
+  .toast{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom));
+      transform:translate(-50%,.6rem);z-index:60;max-width:calc(100% - 2rem);
+      background:var(--text);color:#0b0d12;font-size:.78rem;font-weight:600;padding:.5rem .8rem;
+      border-radius:var(--r);opacity:0;transition:opacity .16s,transform .16s;
+      box-shadow:0 .5rem 1.4rem rgba(0,0,0,.55)}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .toast.bad{background:var(--red);color:#1a0503}
+  @media (prefers-reduced-motion:reduce){.toast,.skel,.dot.starting,.chip.refresh.spin{animation:none;transition:none}}
   .foot{text-align:center;margin-top:1.6rem;font-size:.85rem}
   .foot a{color:var(--green);text-decoration:none}
 </style>
 <header>
   <div class="brand"><span class="logo">🐕</span>
-    <div><h1>corgi</h1><small id="host">your machine</small>
-      <p id="hostnote" class="hostnote" hidden></p></div>
+    <div class="who"><h1>corgi</h1><small id="host">your machine</small></div>
+    <button class="chip refresh" id="refresh" aria-label="Refresh" title="Refresh">&#x21bb;</button>
   </div>
+  <p id="hostnote" class="hostnote" hidden></p>
 </header>
 <main>
   <div id="list" class="msg">Loading…</div>
@@ -935,6 +1228,7 @@ const launcherPageHTML = `<!doctype html>
     <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
   </p>
 </main>
+<div class="toast" id="toast" hidden></div>
 <script>
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -951,6 +1245,23 @@ const launcherPageHTML = `<!doctype html>
   // this is a user navigation to the Claude session list, not a loaded asset.
   try { document.getElementById('allsessions').href = 'https://claude.ai/code'; } catch {}
 
+  // One failure, one line, over the thumb — never a red block that pushes the
+  // card you were aiming at somewhere else.
+  const REFRESH_MS = 15000;
+  let toastTimer = 0;
+  function toast(text, bad) {
+    const el = document.getElementById('toast');
+    el.textContent = text;
+    el.className = 'toast' + (bad ? ' bad' : '');
+    el.hidden = false;
+    requestAnimationFrame(() => el.classList.add('on'));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      el.classList.remove('on');
+      setTimeout(() => { el.hidden = true; }, 200);
+    }, 3600);
+  }
+
   let lastWorkspaces = [];
   const openMode = id => { try { return localStorage.getItem('corgi_open_' + id) || 'app'; } catch { return 'app'; } };
   const setOpenMode = (id, m) => { try { localStorage.setItem('corgi_open_' + id, m); } catch {} };
@@ -962,12 +1273,45 @@ const launcherPageHTML = `<!doctype html>
   const setShowBridges = on => { try { localStorage.setItem('corgi_show_bridges', on ? '1' : '0'); } catch {} };
 
   if (!token) {
-    list.className = 'msg';
-    list.innerHTML = 'Not paired on this browser yet. On your laptop run ' +
-      '<code>corgi agent up</code> and scan the QR to pair, then come back here.';
+    list.className = 'empty';
+    list.innerHTML = '<h2>Pair this browser</h2><p>On the laptop run <code>corgi agent up</code> ' +
+      'and scan the QR it prints. Then this page lists that machine&#39;s repos and starts ' +
+      'sessions on them.</p>';
+    document.getElementById('refresh').hidden = true;
   } else {
     initSettings();
     loadInfo();
+    skeleton();
+    load();
+    initRefresh();
+  }
+
+  function skeleton() {
+    list.className = '';
+    list.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+  }
+
+  // A session's name and its state both change while you are looking at them:
+  // Claude renames a session as the work takes shape, a permission prompt
+  // arrives, a session exits. Refresh on a slow tick — only while the page is
+  // on screen, and never while a panel is open under the thumb, since
+  // re-rendering would collapse it.
+  function initRefresh() {
+    const btn = document.getElementById('refresh');
+    btn.onclick = () => {
+      btn.classList.add('spin');
+      Promise.all([load(), loadInfo()]).finally(() => setTimeout(() => btn.classList.remove('spin'), 400));
+    };
+    setInterval(autoRefresh, REFRESH_MS);
+    addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') autoRefresh();
+    });
+  }
+
+  function autoRefresh() {
+    if (document.visibilityState !== 'visible') return;
+    const openPanel = [...document.querySelectorAll('.sessions')].some(el => el.style.display !== 'none');
+    if (openPanel || document.querySelector('.startbox.on')) return;
     load();
   }
 
@@ -1124,8 +1468,9 @@ const launcherPageHTML = `<!doctype html>
   function render(workspaces) {
     lastWorkspaces = workspaces;
     if (!workspaces.length) {
-      list.className = 'msg';
-      list.innerHTML = 'No workspaces registered. On the laptop: <code>corgi agent scan ~/dev</code>.';
+      list.className = 'empty';
+      list.innerHTML = '<h2>No repos yet</h2><p>On the laptop run <code>corgi agent scan ~/dev</code> ' +
+        'to register the stacks it finds, then tap refresh.</p>';
       return;
     }
     list.className = '';
@@ -1142,12 +1487,14 @@ const launcherPageHTML = `<!doctype html>
       head.className = 'head';
       const main = document.createElement('div');
       main.className = 'main';
-      main.innerHTML = '<div class="name"><span class="dot' + (ws.running ? ' on' : '') + '"></span>' + esc(ws.id) + '</div>';
+      main.innerHTML = '<div class="name"><span class="dot ' + esc(dotState(ws)) + '"></span>' + esc(ws.id) + '</div>';
       const path = document.createElement('div');
-      path.className = 'path'; path.title = ws.path; path.textContent = shortPath(ws.path);
+      path.className = 'path'; path.title = ws.path;
+      const short = () => shortPath(ws.path, !!ws.branch) + branchSuffix(ws);
+      path.textContent = short();
       path.onclick = () => {
         const full = path.classList.toggle('full');
-        path.textContent = full ? ws.path : shortPath(ws.path);
+        path.textContent = full ? ws.path + branchSuffix(ws) : short();
       };
       main.appendChild(path);
       const meta = metaLine(ws);
@@ -1223,15 +1570,34 @@ const launcherPageHTML = `<!doctype html>
     return more > 0 ? 'sessions +' + more + ' \u2304' : 'sessions \u2304';
   }
 
+  // Inside one repo's card the leading workspace name is noise — the card
+  // already says which repo this is, so the branch and the time get the width.
+  function shortSessionName(name, id) {
+    const full = String(name || '');
+    const prefix = id + ' \u00b7 ';
+    return full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full;
+  }
+
+  // Claude Code owns a session's name after it starts — /rename, a hook, or its
+  // own naming all rewrite the record corgi reads — so this row shows what the
+  // session is called right now, and says when that last changed.
+  function nameNote(top) {
+    if (!top.nameSource || top.nameSource === 'user') return '';
+    if (!top.nameSince || !top.startedAt || top.nameSince - top.startedAt < 5000) return '';
+    return 'renamed ' + fmtWhen(top.nameSince);
+  }
+
   function topSessionRow(ws) {
     const top = ws.topSession;
     if (!top) return null;
-    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : ''].filter(Boolean).join(' \u00b7 ');
+    const when = [top.where, top.startedAt ? fmtWhen(top.startedAt) : '']
+      .filter(Boolean).join(' \u00b7 ');
 
     if (!top.url || !safeClaudeUrl(top.url)) {
       const el = document.createElement('div');
       el.className = 'top';
-      el.innerHTML = '<span><i class="sdot"></i>' + esc(top.name) + '</span>' +
+      el.innerHTML = '<span><i class="sdot"></i><span class="tname">' +
+        esc(shortSessionName(top.name, ws.id)) + '</span></span>' +
         '<span class="when">' + esc(when) + ' \u00b7 local only</span>';
       return el;
     }
@@ -1241,14 +1607,34 @@ const launcherPageHTML = `<!doctype html>
     const mode = openMode(ws.id);
     if (mode === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(top.url, '_blank', 'noopener'); };
     if (mode === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(top.url); };
-    el.innerHTML = '<span><i class="sdot"></i>' + esc(top.name) + '</span>' +
+    el.innerHTML = '<span><i class="sdot"></i><span class="tname">' +
+      esc(shortSessionName(top.name, ws.id)) + '</span></span>' +
       '<span class="when">' + esc(when) + ' \u00b7 open \u2197</span>';
     return el;
+  }
+
+  // The state word comes from the daemon (/launch/workspaces), so the phone
+  // and anything else reading it say the same thing about the same workspace.
+  function dotState(ws) {
+    const state = ws.state || (ws.running ? 'starting' : 'stopped');
+    return state === 'live' || state === 'starting' || state === 'attention' || state === 'blocked'
+      ? state : '';
   }
 
   function metaLine(ws) {
     const bits = [];
     if (ws.live > 0) bits.push('<span class="live">' + ws.live + ' live</span>');
+    else if (ws.state === 'starting') bits.push('<span class="live">starting</span>');
+    else if (ws.state === 'blocked') bits.push('<span class="warn">will not start</span>');
+    else if (ws.state === 'disabled') bits.push('<span class="warn">disabled after repeated failures</span>');
+    // What the daemon knew all along and the phone never showed.
+    const waiting = shortWait(ws.topSession && ws.topSession.waitingFor);
+    if (waiting) bits.push('<span class="warn">waiting: ' + esc(waiting) + '</span>');
+    if (ws.running && ws.startedAt) bits.push('<span>up ' + esc(fmtSpan(Date.now() - ws.startedAt)) + '</span>');
+    if (ws.running && ws.restarts > 0) {
+      bits.push('<span>' + ws.restarts + ' restart' + (ws.restarts > 1 ? 's' : '') + '</span>');
+    }
+    if (ws.profile) bits.push('<span>' + esc(ws.profile) + ' account</span>');
     const e = ws.lastEvent;
     if (e && !(ws.running && e.kind === 'started')) {
       const what = e.kind === 'exited' ? 'exited' + (e.cause ? ' ' + esc(e.cause) : '')
@@ -1301,9 +1687,25 @@ const launcherPageHTML = `<!doctype html>
     return box;
   }
 
-  function shortPath(p) {
+  // The branch a session here would start on, with a * for uncommitted work —
+  // the answer to "which of these two checkouts am I looking at?". Clamped,
+  // because a branch name has no upper bound and the path is sharing the line.
+  function branchSuffix(ws) {
+    if (!ws.branch) return '';
+    return ' \u00b7 ' + clamp(ws.branch, 24) + (ws.dirty ? '*' : '');
+  }
+
+  function clamp(text, max) {
+    const s = String(text || '');
+    return s.length > max ? s.slice(0, max - 1) + '\u2026' : s;
+  }
+
+  // tight drops another segment: when the branch is sharing this line, the
+  // repo directory identifies the checkout and its parents do not.
+  function shortPath(p, tight) {
     const parts = String(p || '').split('/').filter(Boolean);
-    return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
+    const keep = tight ? 1 : 2;
+    return parts.length > keep ? '…/' + parts.slice(-keep).join('/') : p;
   }
 
   async function toggleSessions(ws, btn, box) {
@@ -1326,14 +1728,15 @@ const launcherPageHTML = `<!doctype html>
       const tag = o.bridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
       const text = o.label ? esc(o.label) : esc(url.split('/').pop().slice(0, 14)) + '\u2026';
       const dot = o.past ? '' : '<i class="sdot"></i>';
-      el.innerHTML = '<span>' + dot + text + tag + '</span><span class="when">' + esc(o.when || '') +
-        (o.past ? 'reopen' : 'open \u2197') + '</span>';
+      el.innerHTML = '<span>' + dot + '<span class="tname">' + text + '</span>' + tag + '</span>' +
+        '<span class="when">' + esc(o.when || '') + (o.past ? 'reopen' : 'open \u2197') + '</span>';
       box.appendChild(el);
     };
     const renderLocal = (label, when) => {
       const el = document.createElement('div');
       el.className = 's';
-      el.innerHTML = '<span><i class="sdot"></i>' + esc(label) + '</span><span class="when">' + esc(when) + ' \u00b7 local only</span>';
+      el.innerHTML = '<span><i class="sdot"></i><span class="tname">' + esc(label) +
+        '</span></span><span class="when">' + esc(when) + ' \u00b7 local only</span>';
       box.appendChild(el);
     };
     const note = (text) => {
@@ -1371,14 +1774,19 @@ const launcherPageHTML = `<!doctype html>
       if (liveCount) group('live now');
       for (const sess of running) {
         const where = whereLabel(sess);
-        const when = where + ' \u00b7 ' + fmtWhen(sess.startedAt);
+        const waiting = sessionWaiting(sess);
+        const when = where + ' \u00b7 ' + fmtWhen(sess.startedAt) +
+          (waiting ? ' \u00b7 waiting: ' + waiting : '');
         if (sess.url && safeClaudeUrl(sess.url) && !seen.has(sess.url)) {
           seen.add(sess.url);
-          renderLink(sess.url, { label: sess.name, when: when + ' \u00b7 ' });
+          renderLink(sess.url, {
+            label: shortSessionName(sess.name, ws.id),
+            when: [when, nameNote(sess)].filter(Boolean).join(' \u00b7 ') + ' \u00b7 ',
+          });
           continue;
         }
         localOnly++;
-        renderLocal(sess.name || 'session', when);
+        renderLocal(shortSessionName(sess.name, ws.id) || 'session', when);
       }
       let bridgeRows = 0;
       let bridgeHidden = 0;
@@ -1411,7 +1819,47 @@ const launcherPageHTML = `<!doctype html>
         el.innerHTML = '<b>' + esc(what.slice(0, 90)) + '</b><span>' + esc(fmtWhen(ev.at)) + '</span>';
         box.appendChild(el);
       }
+      renderWorkspaceFacts(ws, box, group);
     } catch (e) { info.textContent = '\u2717 ' + e.message; }
+  }
+
+  // What the daemon knows about this workspace and the card has no room for.
+  // corgi agent status on the laptop always showed these; the phone did not.
+  function workspaceFacts(ws) {
+    const facts = [];
+    if (ws.branch) facts.push(['checkout', ws.branch + (ws.dirty ? ' \u00b7 uncommitted work' : ' \u00b7 clean')]);
+    if (ws.profile) facts.push(['account', ws.profile]);
+    if (ws.running && ws.startedAt) {
+      const how = ws.origin === 'remote' ? ' \u00b7 started from a phone'
+        : ws.origin === 'auto' ? ' \u00b7 started with the daemon' : '';
+      facts.push(['supervised', 'for ' + fmtSpan(Date.now() - ws.startedAt) + how]);
+    }
+    if (ws.restarts > 0) facts.push(['restarts', String(ws.restarts) + (ws.lastCause ? ' \u00b7 last ' + ws.lastCause : '')]);
+    else if (ws.lastCause) facts.push(['last exit', ws.lastCause]);
+    if (ws.wakeLock) facts.push(['wake lock', 'the machine is held awake while this runs']);
+    if (ws.pid) facts.push(['pid', String(ws.pid)]);
+    if (ws.disabled) facts.push(['disabled', 'the daemon stopped retrying this one \u2014 fix the cause, then Start']);
+    return facts;
+  }
+
+  function renderWorkspaceFacts(ws, box, group) {
+    const facts = workspaceFacts(ws);
+    if (!facts.length) return;
+    group('this workspace');
+    for (const [label, value] of facts) {
+      const el = document.createElement('div');
+      el.className = 'kv';
+      el.innerHTML = '<b>' + esc(label) + '</b><span>' + esc(value) + '</span>';
+      box.appendChild(el);
+    }
+  }
+
+  // Claude Code names what a session is blocked on when it knows; absent means
+  // it did not say, not that the session is idle.
+  function sessionWaiting(sess) {
+    if (sess.waitingFor) return sess.waitingFor;
+    if (sess.status === 'waiting' || sess.tempo === 'blocked') return 'your answer';
+    return '';
   }
 
   function whereLabel(sess) {
@@ -1422,10 +1870,28 @@ const launcherPageHTML = `<!doctype html>
   }
 
   function fmtTokens(n) {
-    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3) return Math.round(n / 1e3) + 'k';
+    // Rounding is applied before the threshold is chosen: 999,500 is 1.0M, not
+    // "1000k", and 999,999,500 is 1.0B.
+    if (Math.round(n / 1e8) >= 10) return (n / 1e9).toFixed(1) + 'B';
+    if (Math.round(n / 1e5) >= 10) return (n / 1e6).toFixed(1) + 'M';
+    if (Math.round(n / 1e3) >= 1) return Math.round(n / 1e3) + 'k';
     return String(n || 0);
+  }
+
+  // "choose: allow or deny the edit" is written for a dialog box; the card has
+  // room for the ask, not the sentence.
+  function shortWait(text) {
+    if (!text) return '';
+    return clamp(String(text).replace(/^choose:\s*/i, ''), 28);
+  }
+
+  function fmtSpan(ms) {
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return 'a moment';
+    if (mins < 60) return mins + 'm';
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + 'h';
+    return Math.floor(hours / 24) + 'd';
   }
 
   function fmtWhen(ms) {
@@ -1485,12 +1951,11 @@ const launcherPageHTML = `<!doctype html>
           body: JSON.stringify({ workspace: id }) });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || r.status);
+        toast('Stopping ' + id + '…');
         setTimeout(load, 1200);
       } catch (e) {
         b.disabled = false; b.textContent = 'Stop';
-        const err = document.createElement('div');
-        err.className = 'msg err'; err.textContent = '✗ ' + e.message;
-        b.parentElement.appendChild(err);
+        toast(e.message, true);
       }
     };
     return b;
@@ -1508,12 +1973,15 @@ const launcherPageHTML = `<!doctype html>
         body: JSON.stringify({ workspace: id, profile: pick('profile'), name: pick('name') }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.status);
+      toast('Starting ' + id + '…');
+      // Show it as starting straight away: a card still offering Start invites
+      // a second one before the daemon has answered the first.
+      const ws = lastWorkspaces.find(w => w.id === id);
+      if (ws) { ws.running = true; ws.state = 'starting'; ws.note = ''; render(lastWorkspaces); }
       poll(id, 0);
     } catch (e) {
       btn.disabled = false; btn.textContent = 'Retry';
-      const err = document.createElement('div');
-      err.className = 'msg err'; err.textContent = '✗ ' + e.message;
-      btn.parentElement.appendChild(err);
+      toast(e.message, true);
     }
   }
 
@@ -1525,7 +1993,11 @@ const launcherPageHTML = `<!doctype html>
       const ws = (j.workspaces || []).find(w => w.id === id);
       // Got the link, or the daemon reported why it won't start — either way, stop
       // polling and re-render so the reason (or the Open button) shows.
-      if (ws && (ws.sessionUrl || (!ws.running && ws.note))) { render(j.workspaces); return; }
+      if (ws && (ws.sessionUrl || (!ws.running && ws.note))) {
+        render(j.workspaces);
+        if (ws.note && !ws.running) toast(ws.note, true);
+        return;
+      }
     } catch {}
     setTimeout(() => poll(id, n + 1), 1000);
   }

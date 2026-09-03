@@ -148,7 +148,7 @@ func TestWorkspaceActivityReadsTheTimeline(t *testing.T) {
 	agentD, _ := agentDir()
 	events.NewLog(agentD).Append("acme", events.Event{Kind: "exited", Cause: "network-timeout", Reason: "boom"})
 
-	live, _, last := workspaceActivity("acme", "")
+	live, _, last := workspaceActivity("acme", "", "")
 	if live != 0 {
 		t.Errorf("live = %d with no workspace path", live)
 	}
@@ -156,7 +156,7 @@ func TestWorkspaceActivityReadsTheTimeline(t *testing.T) {
 		t.Errorf("lastEvent = %+v", last)
 	}
 
-	if _, _, none := workspaceActivity("ghost", ""); none != nil {
+	if _, _, none := workspaceActivity("ghost", "", ""); none != nil {
 		t.Errorf("a workspace with no timeline has no last event, got %+v", none)
 	}
 }
@@ -306,7 +306,7 @@ func TestWorkspaceUsageIsOmittedWhenIdle(t *testing.T) {
 	stack := stackWithAgentConfig(t, "")
 	registerStack(t, agentD, "acme", stack)
 
-	if got := workspaceUsage("acme", stack); got != nil {
+	if got := workspaceUsage("acme", stack, ""); got != nil {
 		t.Errorf("the first call must not block on a scan, got %+v", got)
 	}
 	deadline := time.Now().Add(3 * time.Second)
@@ -319,10 +319,10 @@ func TestWorkspaceUsageIsOmittedWhenIdle(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if got := workspaceUsage("acme", stack); got != nil {
+	if got := workspaceUsage("acme", stack, ""); got != nil {
 		t.Errorf("a workspace with no transcripts must report no usage, got %+v", got)
 	}
-	if got := workspaceUsage("acme", ""); got != nil {
+	if got := workspaceUsage("acme", "", ""); got != nil {
 		t.Errorf("no path means no usage, got %+v", got)
 	}
 	if line := workspaceUsageLine("acme"); line != "" {
@@ -617,7 +617,7 @@ func TestWorkspaceActivityCountsLiveSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	live, _, _ := workspaceActivity("acme", stack)
+	live, _, _ := workspaceActivity("acme", stack, "")
 	if live != 1 {
 		t.Errorf("live = %d, want the one running process", live)
 	}

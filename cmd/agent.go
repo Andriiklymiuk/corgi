@@ -270,10 +270,12 @@ func remoteResolver(dir string, foreground bool) func(id, profile, name string) 
 		if err != nil {
 			return supervisor.SpawnConfig{}, err
 		}
-		cfg := spawnConfigFrom(w, resolved, foreground)
+		cfg := spawnConfigFrom(w, resolved, profile, foreground)
 		cfg.Origin = supervisor.OriginRemote
 		cfg.Profile = profile
 		if n := sanitizeSessionName(name); n != "" {
+			// A name typed on the phone beats anything composed here: it says
+			// what the session is *for*, which no local probe can know.
 			cfg.Name = n
 		}
 		return cfg, nil
@@ -319,10 +321,10 @@ func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, for
 		utils.Infof("agent: skipping %s (not enabled — run `corgi agent init` there, or set autostart: true)\n", w.ID)
 		return supervisor.SpawnConfig{}, false
 	}
-	return spawnConfigFrom(w, resolved, foreground), true
+	return spawnConfigFrom(w, resolved, "", foreground), true
 }
 
-func spawnConfigFrom(w workspace.Workspace, r config.Resolved, foreground bool) supervisor.SpawnConfig {
+func spawnConfigFrom(w workspace.Workspace, r config.Resolved, profile string, foreground bool) supervisor.SpawnConfig {
 	cfg := supervisor.SpawnConfig{
 		WorkspaceID:       r.ID,
 		Dir:               w.AbsPath,
@@ -350,7 +352,7 @@ func spawnConfigFrom(w workspace.Workspace, r config.Resolved, foreground bool) 
 	if kind.BuildsArgvFromSettings {
 		// The session name shown in claude.ai/code. Meaningless to a kind handed
 		// a complete argv, where it would be a setting that never takes effect.
-		cfg.Name = r.ID
+		cfg.Name = defaultSessionName(r.ID, w.AbsPath, profile, time.Now())
 	}
 	if cfg.Spawn == "" && kind.SupportsSpawn {
 		// Isolate each on-demand session, so two remote sessions in one
@@ -485,7 +487,7 @@ func printWorkspaceState(w supervisor.RunState) {
 }
 
 func workspaceUsageLine(id string) string {
-	absPath, configDir, ok := workspaceSessionTarget(id)
+	absPath, configDir, ok := workspaceSessionTarget(id, runningProfile(id))
 	if !ok || absPath == "" {
 		return ""
 	}
@@ -797,7 +799,7 @@ func init() {
 	agentBriefCmd.Flags().Bool("json", false, "Machine-readable output")
 
 	agentSessionStartCmd.Flags().String("profile", "", "Profile from the agent config's profiles: section (e.g. work)")
-	agentSessionStartCmd.Flags().String("name", "", "Session name shown in claude.ai (default: the hostname prefix remote control picks)")
+	agentSessionStartCmd.Flags().String("name", "", "Session name shown in claude.ai (default: workspace · branch · start time)")
 	agentSessionCmd.AddCommand(agentSessionStartCmd, agentSessionStopCmd)
 
 	agentWorkspacesCmd.AddCommand(agentWorkspacesListCmd, agentWorkspacesForgetCmd, agentWorkspacesRelocateCmd)

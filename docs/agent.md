@@ -109,6 +109,44 @@ token-protected either way, so serving it on the local network is not serving it
 to the internet. The middle two rows keep a fixed origin, which is what keeps
 the phone paired across restarts; the quick tunnel does not.
 
+### What the launcher looks like
+
+One card per repo: a dot, the repo, the checkout under it, what it is doing,
+what it has cost, and the running session on its own row — tap that row and
+the conversation opens. The green button on the right is **Open** when a
+session is up and **Start** when it is not. Under it sit the controls that
+change something: `sessions` (the full list, the timeline, and everything the
+daemon knows about that workspace), `open in` (app / browser / chrome),
+`options` (account and starting name), `Stop`, `hide`.
+
+The dot is the state, and the line under the path spells it out:
+
+| dot | state |
+|---|---|
+| green | a session is running (`N live`) |
+| green, pulsing | `starting` — supervised, nothing registered yet |
+| amber | `needs you` — a permission prompt or a question is blocking it |
+| red | `will not start` — the daemon refused, and the reason is on the card |
+| red | `disabled after repeated failures` — the daemon stopped retrying |
+| grey | nothing running here |
+
+That line also carries what the laptop always knew and the phone did not: how
+long the session has been up, how many restarts it took, which account it runs
+under, and — when Claude Code says so — what it is **waiting** for (*waiting:
+allow or deny the edit*). Next to the path is the branch, with a `*` when the
+checkout has uncommitted work, which is the fastest way to tell two clones of
+the same repo apart.
+
+The `sessions` panel ends with **this workspace**: checkout, account,
+how long it has been supervised and what started it, restarts and the last
+exit cause, whether the machine is being held awake for it, and its pid. The
+same facts `corgi agent status` prints on the laptop.
+
+The list refreshes itself every 15 seconds while the page is on screen, so a
+name, a state or a session that changed on the machine shows up without a
+reload. It holds still while a `sessions` or `options` panel is open, so a
+refresh never collapses the panel under your thumb.
+
 ### A launcher URL that never changes
 
 The default is a Cloudflare **quick tunnel**: free, no signup — and a **new random
@@ -254,6 +292,45 @@ Trusted config only: the URL receives restart reasons, so a committed repo file
 can never set it. Treat the value as a secret — a Telegram token lets anyone
 post as that bot, so never paste it into a chat, a commit or an issue. If one
 leaks, `/revoke` in @BotFather issues a new one; the chat id does not change.
+
+### What a session is called
+
+Every supervised session carries a name into claude.ai/code's list. The
+workspace id alone is not enough — four rows called `corgi` say nothing about
+which one to open — so corgi composes the branch it started on and the clock
+time with it:
+
+```
+corgi · fix/login-redirect · 18:55
+corgi (work) · main · 09:02
+```
+
+The profile appears only when the session runs under one. The branch is
+dropped for a checkout on a detached HEAD, or a workspace that is not a git
+repository, and is the part shortened when the name would run past the 60
+characters claude.ai shows.
+
+That is the name it **starts** with. After that the name belongs to Claude
+Code, which keeps its own record of it (`<configDir>/sessions/<pid>.json`,
+with a `nameSource` saying who last set it — `user` for one someone typed,
+`derived` or `auto` for one Claude picked, `hook` for one a hook set). A
+session renamed in flight — by `/rename`, by a hook, or by Claude as the work
+takes shape — is renamed in corgi's list too: the launcher reads that record
+on every refresh and shows the current name, with *renamed 4m ago* beside it.
+
+What corgi cannot do is rename a session on claude.ai after the fact: the name
+in that list is the one remote control registered at start, which is why the
+starting name is worth composing well.
+
+Name a session yourself and that wins — it says what the session is *for*,
+which no local probe can know:
+
+```bash
+corgi agent session start acme --name "fix login redirect"
+```
+
+The launcher asks for it too — the `options` chip on a stopped card — and
+`corgi_session_start` takes a `name`.
 
 ### The timeline
 

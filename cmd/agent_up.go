@@ -115,7 +115,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		// Same trust pre-check init does: an untrusted folder produces a phone
 		// card that can only ever fail, so say it now, while the fix is one
 		// `claude` run away in the terminal the user is already in.
-		if absPath, cfgDir, ok := workspaceSessionTarget(res.Workspace); ok {
+		if absPath, cfgDir, ok := workspaceSessionTarget(res.Workspace, runningProfile(res.Workspace)); ok {
 			warnIfUntrusted(cfgDir, absPath)
 		}
 	}
