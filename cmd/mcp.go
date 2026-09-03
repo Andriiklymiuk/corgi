@@ -115,7 +115,7 @@ func runMCP(cmd *cobra.Command, _ []string) {
 
 	warnStrandedAgentData()
 
-	s := server.NewMCPServer("corgi", APP_VERSION)
+	s := server.NewMCPServer("corgi", APP_VERSION, server.WithInstructions(mcpServerInstructions))
 	registerMCPTools(s)
 	registerMCPResources(s)
 
@@ -1169,7 +1169,7 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_status",
-		mcp.WithDescription("Live health snapshot of declared services and db_services (TCP/HTTP probe)."),
+		mcp.WithDescription("Live health of every declared service and db_service, probed right now (TCP, or HTTP when a healthCheck path is declared). Returns one entry per target: {label, kind, port, url, healthy, detail}. This is the liveness truth — corgi_ps only says whether a pid or container exists. Targets with no declared port are not probed and do not appear, so an empty list is not a healthy stack. Read-only."),
 		composeOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpStatus(validateArgs{ComposePath: r.GetString("composePath", "")})
@@ -1185,14 +1185,14 @@ func registerMCPTools(s *server.MCPServer) {
 	registerAgentSurfaceTools(s, composeOpt)
 
 	s.AddTool(mcp.NewTool("corgi_ps",
-		mcp.WithDescription("Runtime snapshot of declared topology with a cheap port-listening probe."),
+		mcp.WithDescription("Runtime snapshot of the detached run: one row per declared service and db_service, {name, kind, port, status, url, startedAt}, reconciled against corgi_services/.state.json with a cheap port-listening check. status is process/container state (running | crashed | stopped), not health — db_services and container-backed services never report crashed. Use corgi_status for liveness. Read-only."),
 		composeOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpPs(validateArgs{ComposePath: r.GetString("composePath", "")})
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_up",
-		mcp.WithDescription("Start all databases and services DETACHED and return promptly with the run-state."),
+		mcp.WithDescription("Start every database and service detached and return the run-state {services[], dbServices[]} with each entry's name, pid, port, status. Not instant: it clones missing repos, runs every beforeStart (installs, migrations, builds) and brings databases up before returning — minutes on a cold stack. Returning is not a ready gate; poll corgi_status until healthy. Fails with E_ALREADY_RUNNING while a run is live — call corgi_down first. A service that crashed on spawn shows status \"crashed\" in the returned array."),
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
 		mcp.WithBoolean("seed", mcp.Description("Seed db_services that have a dump/seed source")),
@@ -1209,14 +1209,14 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_down",
-		mcp.WithDescription("Stop detached services and bring db_service containers down. Idempotent."),
+		mcp.WithDescription("Stop the detached run: end the service processes, run each service's afterStart, bring db_service containers down, clear the run-state. Idempotent — nothing running is a clean no-op. Returns {stopped[], failed[]}."),
 		composeOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpDown(validateArgs{ComposePath: r.GetString("composePath", "")})
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_logs",
-		mcp.WithDescription("Read the last N lines of a service's newest captured log run."),
+		mcp.WithDescription("Read the last N lines of a service's newest captured log run (capture is on by default for detached runs). Returns {service, lines[]}. Needs a prior corgi_up; a service that never spawned has no log. To wait for a specific line use corgi_wait_for_log instead of polling this. Read-only."),
 		composeOpt,
 		serviceOpt,
 		mcp.WithNumber("lines", mcp.Description("Number of trailing lines (default 200)")),
@@ -1277,7 +1277,7 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_restart",
-		mcp.WithDescription("Stop the detached stack then start it again DETACHED. Returns the new run-state."),
+		mcp.WithDescription("corgi_down then corgi_up in one call; returns the new run-state. Same cost and caveats as corgi_up: beforeStart re-runs unless its cacheKey is warm, and returning is not a ready gate — poll corgi_status."),
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -1288,7 +1288,7 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_db_query",
-		mcp.WithDescription("Run a single non-interactive query against a running db_service container. Returns {service, output}."),
+		mcp.WithDescription("Run one non-interactive query inside a running db_service container through its driver's own client (psql, redis-cli, mongosh, …); write the query in that client's syntax. Returns {service, output, truncated}. The db_service must already be up (corgi_up). Writes are not blocked — a mutating statement runs. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
 		composeOpt,
 		serviceOpt,
 		mcp.WithString("query", mcp.Required(), mcp.Description("Query/command to run (e.g. SQL for psql)")),

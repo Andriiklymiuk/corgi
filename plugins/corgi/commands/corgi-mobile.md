@@ -15,15 +15,15 @@ Per `plugins/corgi/skills/mobile/SKILL.md`:
 2. **Navigate** — deep link (`adb shell am start … -d "<scheme>://<route>"` /
    `xcrun simctl openurl booted "<scheme>://<route>"`) or Maestro `scrollUntilVisible` +
    `tapOn`.
-3. **Drive + assert** with a Maestro flow **FILE** (`--device <udid>` when two devices
+3. **Drive + assert** with a Maestro flow **file** (`--device <udid>` when two devices
    attached); `screenshot` (`adb … screencap` / `simctl io … screenshot`); crop a detail
-   with `sips`; **READ** the frame.
+   with `sips`; **read** the frame.
 4. **Honor the gotchas** — Maestro `inputText` ASCII-only; local iOS builds run in a
    **non-login shell** with `LANG=en_US.UTF-8` (else the `visionos` pod error, then
    `Encoding::CompatibilityError`); background long builds + poll the log; a Metro
-   `--clear` redbox is usually a STALE desync (cold reload + `tapOn: Dismiss`); a system
-   dialog over the app reads as `element not found` (dismiss the SYSTEM button); SceneKit
-   shader failures + a missing `particleImage` only show at RUNTIME (magenta / square
-   particles) → verify on a sim BEFORE any TestFlight submit.
+   `--clear` redbox is usually a stale desync (cold reload + `tapOn: Dismiss`); a system
+   dialog over the app reads as `element not found` (dismiss the system button); SceneKit
+   shader failures + a missing `particleImage` only show at runtime (magenta / square
+   particles) → verify on a sim before any TestFlight submit.
 5. **Verify before done** — screenshot evidence; native visuals need a real on-device
    render, not just a green build.

@@ -195,14 +195,12 @@ packages instead of starting empty; the markers slot stays exact-match on
 purpose. GitHub also scopes caches per ref — a fresh PR restores only what its
 base branch saved, so a scheduled default-branch run is what keeps new PRs
 warm. Neither a
-workflow expression nor a composite action can loop, so the copies stay — but
-the action warns by itself when an ecosystem does not fit, which used to be a
-hand-written step.
+workflow expression nor a composite action can loop, so the copies stay; the
+action warns by itself when an ecosystem does not fit.
 
-**`corgi cache paths` now says when caching is off.** A workspace where no
+**`corgi cache paths` says when caching is off.** A workspace where no
 service declares a `cacheKey` gets a list of the install steps that could opt
-in, on stderr, naming the lockfile for each. Silence used to be the only signal
-that every CI run was reinstalling everything.
+in, on stderr, naming the lockfile for each.
 
 GitLab cannot read the plan mid-run — its cache config is static YAML — so
 generate it, commit it, and guard it:

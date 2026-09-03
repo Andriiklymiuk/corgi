@@ -196,7 +196,7 @@ Compose `services.<name>.tunnel:` block enables named/static mode (stable URL ac
 
 Auth-needing providers (e.g. ngrok) preflight before any tunnel spawns; corgi prints the exact login command and exits without partial state.
 
-Full docs: [docs/tunnel.md](../../../../docs/tunnel.md).
+Full docs: [docs/tunnel.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/tunnel.md).
 
 ### `corgi init` (aliases: `initialize`, `clone`)
 

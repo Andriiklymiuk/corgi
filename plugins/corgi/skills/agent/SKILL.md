@@ -1,6 +1,6 @@
 ---
 name: agent
-description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — "work on the recipe app", "which stacks do I have", "start a branch across the api and mobile repos", "show me the diff", "keep corgi running when I'm away", "why did my remote session die", "set up agent mode", "notify my phone when a session needs me", "set up telegram notifications", "run it under my work account", "start a session in that repo from my phone", "set up remote session start". Covers resolving a stack by name, materializing one branch across every repository in it, reading a cross-repo diff, supervising `claude remote-control` so it survives reboots and the ten-minute network timeout, and starting/stopping a session in any registered workspace on demand (corgi_session_start, profiles, session URLs). NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
+description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — resolving a stack by name, putting one branch across every repository in it, reading a cross-repo diff, previewing a running service over a tunnel, picking up where a restarted session left off, keeping `claude remote-control` alive across reboots and the ten-minute network timeout, phone notifications (Telegram / Slack / Discord / ntfy), Claude account profiles, and starting or stopping a session in any registered workspace on demand. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
 ---
 
 # Corgi agent mode
@@ -120,7 +120,18 @@ code.
 
 The existing tools still apply, pointed at the worktree directories:
 `corgi_up`, `corgi_status`, `corgi_logs`, `corgi_test`, `corgi_down`. See the
-`run` and `debug` skills.
+`run` and `debug` skills. The orientation and repair tools work the same way:
+
+- `corgi_context` — one call for topology, ports, health and every repo's branch;
+  make it first in a workspace you have not looked at this session.
+- `corgi_why { service }` — one verdict for a service that is down (dependency,
+  port owner, exit code, env, log tail) instead of reading three snapshots.
+- `corgi_wait_for_log { service, pattern }` — block until a log line matches;
+  never poll `corgi_logs` on a timer.
+- `corgi_checkpoint { name }` / `corgi_restore { name }` — mark every repo's branch,
+  HEAD and uncommitted work before a cross-repo change, and put it all back.
+- `corgi_checkout { branch }` — every repo onto one branch (or its own default),
+  fast-forwarded; dirty repos are skipped, never clobbered.
 
 ## Setting agent mode up
 
@@ -246,7 +257,7 @@ the one to use.
 
 ### If the phone cannot open the launcher
 
-Check these before suspecting corgi — all three have been real:
+Check these before suspecting corgi:
 
 | symptom | cause | say |
 |---|---|---|
@@ -280,7 +291,13 @@ diagnosis the wrong way.
 `corgi agent status` shows `lastReason`, and `corgi agent logs <workspace>`
 (or the `corgi_session_events` tool) shows the whole timeline — every start,
 exit with its classified cause, and captured session link, newest first. Use
-the timeline when the current reason is not enough. The common reasons:
+the timeline when the current reason is not enough.
+
+A restarted session starts with none of the earlier conversation. Call
+`corgi_session_brief { workspace }` first when the user picks up where they left
+off: it reports the branch each repository was on, which held uncommitted
+changes, and which cross-repo worktrees exist. `null` means nothing restarted,
+which is the ordinary case. The common reasons:
 
 | reason | what to say |
 |---|---|
