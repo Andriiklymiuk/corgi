@@ -131,6 +131,49 @@ func TestLauncherPageKeepsThePhoneControlsItNeeds(t *testing.T) {
 	}
 }
 
+func TestLaunchStateNamesWhatTheCardLeadsWith(t *testing.T) {
+	attention := &launchLastEvent{Kind: "attention"}
+	exited := &launchLastEvent{Kind: "exited", Cause: "network timeout"}
+	for name, tc := range map[string]struct {
+		row  launchWorkspace
+		want string
+	}{
+		"a refused start is blocked":      {launchWorkspace{Note: "not logged in"}, "blocked"},
+		"a blocking prompt outranks live": {launchWorkspace{Running: true, Live: 1, LastEvent: attention}, "attention"},
+		"a live session is live":          {launchWorkspace{Running: true, Live: 2, LastEvent: exited}, "live"},
+		"supervised with no session yet":  {launchWorkspace{Running: true}, "starting"},
+		"nothing running is stopped":      {launchWorkspace{LastEvent: exited}, "stopped"},
+		// A session someone started on the laptop is live even though the
+		// daemon is not supervising the workspace.
+		"an unsupervised session is live": {launchWorkspace{Live: 1}, "live"},
+	} {
+		if got := launchState(tc.row); got != tc.want {
+			t.Errorf("%s: state = %q, want %q", name, got, tc.want)
+		}
+	}
+}
+
+func TestTopSessionCarriesTheLiveName(t *testing.T) {
+	// Claude Code rewrites name/nameSource/nameSince in its own session record
+	// when the session is renamed; the launcher must pass that through rather
+	// than the name corgi started it with.
+	top := newestLiveSession([]claudeSession{{
+		Name: "Trim the launcher type scale", NameSource: "auto", NameSince: 1700000001000,
+		StartedAt: 1700000000000, Kind: "interactive", Entrypoint: "sdk-cli",
+		URL: "https://claude.ai/code/session_abc",
+	}})
+	if top == nil {
+		t.Fatal("a session with a URL must become the top session")
+	}
+	if top.Name != "Trim the launcher type scale" {
+		t.Errorf("name = %q, want the session's current name", top.Name)
+	}
+	if top.NameSource != "auto" || top.NameSince != 1700000001000 {
+		t.Errorf("nameSource/nameSince = %q/%d, want them passed through so the page can say it was renamed",
+			top.NameSource, top.NameSince)
+	}
+}
+
 func TestBuildLaunchWorkspacesSurfacesADiagnostic(t *testing.T) {
 	reg := &workspace.Registry{}
 	reg.Upsert(workspace.Workspace{ID: "acme", AbsPath: "/dev/acme", Status: workspace.StatusOK})
