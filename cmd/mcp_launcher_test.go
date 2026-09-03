@@ -111,23 +111,28 @@ func TestLauncherPageKeepsThePhoneControlsItNeeds(t *testing.T) {
 	rec := httptest.NewRecorder()
 	launcherPageHandler(rec, httptest.NewRequest(http.MethodGet, "/app", nil))
 	body := rec.Body.String()
-	// The redesign moved these into the details sheet; losing any of them
-	// silently would take a control off the phone altogether.
 	for what, want := range map[string]string{
-		"the details sheet":            "function openSheet(",
-		"start options in the sheet":   "data-role=\"' + role + '\"",
-		"the where-links-open control": "Open links in",
-		"hiding a card":                "Hide from this browser",
+		"the sessions panel":           "toggleSessions(",
+		"start options":                "data-role=\"' + role + '\"",
+		"the where-links-open control": "modeSwitch(",
+		"hiding a card":                "corgi_hidden",
 		"stopping a session":           "/launch/stop",
+		"the state on the dot":         "dotState(",
+		"the live session name":        "nameNote(",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the launcher must keep %s (%q)", what, want)
 		}
 	}
 	// A control toggled with the hidden attribute must actually disappear:
-	// every flex rule on this page outranks the attribute without it.
+	// a flex display rule outranks the attribute without this.
 	if !strings.Contains(body, "[hidden]{display:none!important}") {
-		t.Error("the launcher must force [hidden] over its flex display rules")
+		t.Error("the launcher must force [hidden] over its display rules")
+	}
+	// The refresh tick reads the session records again, which is how a session
+	// Claude renamed shows its new name here without a reload.
+	if !strings.Contains(body, "REFRESH_MS") {
+		t.Error("the launcher must refresh itself while it is on screen")
 	}
 }
 
