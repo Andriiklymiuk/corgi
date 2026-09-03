@@ -47,7 +47,7 @@ No hardcoded host-port default per driver — host port is whatever you set in `
 | `skytable` | 2003 | `SKYTABLE_` | `skytable/skytable:latest` | |
 | `dynamodb` | 4566 | `DYNAMODB_` | `localstack/localstack:3.8` (`SERVICES=dynamodb`) | localstack-backed local emulator |
 | `localstack` | 4566 | `AWS_` | `localstack/localstack:latest` | Unified AWS emulator — see below |
-| `supabase` | 54321 | `SUPABASE_` | wraps `supabase` CLI | Local auth + storage. Reads ports from `supabase/config.toml`. Seeds `buckets:` + `authUsers:` on `up`. See below + [docs/drivers/supabase.md](../../../../docs/drivers/supabase.md) |
+| `supabase` | 54321 | `SUPABASE_` | wraps `supabase` CLI | Local auth + storage. Reads ports from `supabase/config.toml`. Seeds `buckets:` + `authUsers:` on `up`. See below + [docs/drivers/supabase.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/drivers/supabase.md) |
 | `image` | (you set) | `<SERVICE>_` | (you set via `image:`) | Generic stateless docker-image driver. For services that ship as a public image with no DB/state (gotenberg, mailhog, jaeger). See below |
 
 ## localstack special keys
@@ -109,7 +109,7 @@ required:
     install: [brew install supabase/tap/supabase]
 ```
 
-Full docs: [docs/drivers/supabase.md](../../../../docs/drivers/supabase.md)
+Full docs: [docs/drivers/supabase.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/drivers/supabase.md)
 
 ## image driver (generic docker image)
 

@@ -26,7 +26,7 @@ A scheduled **push** wrapper around `suggest`: on a cadence (owned by `/schedule
 
 ## Phase 1 — Rank (reuse `suggest`)
 
-- Invoke the `suggest` skill flow (its **Phases 0–3**) **scoped to this workspace, both lenses**, to produce the ranked shortlist. Do NOT re-spec everything — only the chosen survivor gets specced (Phase 3), and only after it survives dedupe.
+- Invoke the `suggest` skill flow (its **Phases 0–3**) **scoped to this workspace, both lenses**, to produce the ranked shortlist. Don't re-spec everything — only the chosen survivor gets specced (Phase 3), and only after it survives dedupe.
 - State explicitly to yourself: **ranking + evidence + measurable-outcome rules are owned by `suggest`; this skill only consumes the ranked list.**
 
 ## Phase 2 — Dedupe + rate-limit
@@ -51,7 +51,10 @@ A scheduled **push** wrapper around `suggest`: on a cadence (owned by `/schedule
 ## Phase 5 — Arm/maintain the schedule
 
 - Point at `references/schedule-config.md` for the literal CronCreate args.
-- If the user asked to set it up: emit the config (weekly, **off-:00 minute**, `durable: true`, the **absolute workspace path** in the prompt) and **warn about the 7-day auto-expire** (CronCreate recurring jobs fire a final time then delete after 7 days) — offer to re-arm, and offer a `--once` next-Monday one-shot as the conservative default for first-time users.
+- If the user asked to set it up: an unattended weekly cadence is a `/schedule` routine
+  (weekly, off-:00 minute, the absolute workspace path in the prompt). A first-time trial
+  is a one-shot `CronCreate` job — session-only, so say it dies with the session and a
+  recurring one expires after 7 days.
 - Disarm: `CronList` → `CronDelete` by id (see the reference).
 
 ## [[workspace-memory]] integration (loose)

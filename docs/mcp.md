@@ -22,6 +22,16 @@ launches it in. Any tool also accepts an explicit `composePath`.
 stdio is the default and recommended transport for local use — the client owns
 the process lifecycle and nothing is exposed on the network.
 
+## Server instructions
+
+At `initialize` the server sends a short instructions block: which call to make
+first (`corgi_context`, or `corgi_workspace_resolve` for a stack named by a human),
+that `corgi_up` is not a ready gate, that `corgi_status` — not `corgi_ps` — is
+liveness, and which tools the public-tunnel gate refuses. Clients that honour
+instructions (Claude Code, Claude Desktop, the Claude app connector) show it to the
+model before its first tool call, so a client with no corgi skills loaded still gets
+the rules. The plugin's skills carry the same rules in more depth.
+
 ## HTTP transport
 
 Instead of stdio, corgi can serve the same tools/resources over Streamable HTTP:
@@ -95,15 +105,15 @@ still bind to `localhost` or front it with an authenticated proxy.
 | `corgi_plan` | `{composePath?, profile?}` | dry-run plan (`order`, `databases`, `services`, `warnings`) | `computeDryRunPlan` |
 | `corgi_status` | `{composePath?}` | `[{label, port, kind, url, healthy, detail}]` | `collectStatusRows` + `probeAll` |
 | `corgi_env` | `{composePath?}` | `{service: {KEY: {value, source}}}` | `utils.ResolveAllEnv` |
-| `corgi_ps` | `{composePath?}` | `[{name, kind, port, status, url}]` | `buildPsRows` |
+| `corgi_ps` | `{composePath?}` | `[{name, kind, port, status, url, startedAt}]` — `status` is process/container state, not health | `buildPsRows` |
 | `corgi_up` | `{composePath?, profile?, seed?, serviceBranch?, serviceDir?}` | run-state (`services[]`, `dbServices[]`) — **always detached** | run prelude + `runDetached` machinery |
 | `corgi_down` | `{composePath?}` | `{stopped[], failed[]}` | stop machinery (`stopProcessGroup`) |
 | `corgi_logs` | `{service, lines?}` | `{service, lines[]}` | newest captured log run |
-| `corgi_exec` | `{service, command, ensureDeps?, serviceBranch?, serviceDir?}` | `{exitCode, output, durationMs}` | `RunServiceCommandExitCode` (output captured) |
+| `corgi_exec` | `{service, command, ensureDeps?, serviceBranch?, serviceDir?}` | `{exitCode, output, truncated, durationMs}` | `RunServiceCommandExitCode` (output captured) |
 | `corgi_test` | `{composePath?, service?, profile?, ensureDeps?, serviceBranch?, serviceDir?}` | `{services[], passed}` | `runTests` (does not start db/services) |
 | `corgi_doctor` | `{composePath?}` | `{ok, checks[]}` | `buildDoctorResult` (required tools, Docker, ports) |
 | `corgi_restart` | `{composePath?, profile?}` | run-state — **always detached** | `corgi_down` then `corgi_up` |
-| `corgi_db_query` | `{composePath?, service, query}` | `{service, output}` | `utils.ExecDBQueryCapture` (non-interactive) |
+| `corgi_db_query` | `{composePath?, service, query}` | `{service, output, truncated}` | `utils.ExecDBQueryCapture` (non-interactive) |
 | `corgi_schema` | `{}` | the JSON Schema (draft-07) as text | `utils.ComposeJSONSchema` |
 | `corgi_context` | `{composePath?, noGit?}` | topology + status + per-repo git state + tier/profiles + validation | `buildContextReport` |
 | `corgi_why` | `{composePath?, service, logLines?}` | `{verdict, detail, dependencies[], port, lastExitCode, env, logTail[], nextStep}` | `diagnoseService` |

@@ -12,9 +12,9 @@ before the next:
 
 1. **Capture** the matrix — N screens × iPhone / iPad / Android-phone+tablet × every locale,
    into `/tmp`, then copy into the repo. Drive via deep links + Maestro (the `mobile` skill).
-   Non-negotiables: **one Maestro flow PER SCREEN**; **`takeScreenshot` INSIDE the flow**
+   Non-negotiables: **one Maestro flow per screen**; **`takeScreenshot` inside the flow**
    (a shell shot after captures home — Maestro relaunches); gate home with
-   `extendedWaitUntil` (NOT `assertVisible … timeout`); **double `waitForAnimationToEnd`**
+   `extendedWaitUntil` (not `assertVisible … timeout`); **double `waitForAnimationToEnd`**
    to beat the push-slide; **stage to `/tmp`** so Metro's watcher doesn't hot-reload
    mid-shoot; **stabilize per locale** (terminate+relaunch, hard-reboot if it rots);
    switch locale **in-app** (tap by language autonym); recreate persisted game state per
@@ -33,16 +33,16 @@ before the next:
    into fastlane's per-field `.txt` tree + stages the framed shots. `deliver`
    (`skip_binary_upload`, `submit_for_review: false`) updates the in-flight App Store
    version; `supply` (`skip_upload_apk/aab`, `track: production`, `validate_only` to dry-run)
-   updates the Play listing. **Submit-for-review is opt-in, default OFF** — keep upload and
+   updates the Play listing. **Submit-for-review is opt-in, default off** — keep upload and
    submit as separate targets gated by a flag (`SUBMIT_FOR_REVIEW=1`) so iterating never
    starts the review clock; when submitting, App Store needs `submission_information`
    (`export_compliance_uses_encryption: false`, `add_id_info_uses_idfa: false`) +
    `automatic_release`, Play needs `changes_not_sent_for_review: false`. **iOS auth, no env:**
-   App Store Connect **API key json file** at a gitignored path (no 2FA) — NOT the `altool`
+   App Store Connect **API key json file** at a gitignored path (no 2FA) — not the `altool`
    app-specific password from Keychain, which `deliver` can't use. Map locales per store
    (`ru` → ASC `ru` / Play `ru-RU`).
 
-**Verify before done** — `magick identify` every PNG and **READ a montage** of every
+**Verify before done** — `magick identify` every PNG and **read a montage** of every
 screen × locale (wrong-screen / wrong-language / mid-transition shots all pass a file
 check); **revert the capture-only app edits** (LogBox / resume-to-route / import skips) and
 shut the sims/emulators down; **never commit** the API-key / service-account json.

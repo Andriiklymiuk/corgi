@@ -63,7 +63,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithDescription(
 			"Resolve a human name like \"the recipe app\" to one registered workspace. Read-only. "+
 				"Returns either a single workspace or a candidate list — it never guesses, because picking the "+
-				"wrong one means editing the wrong repository. Echo the resolved path back to the user before working."),
+				"wrong one means editing the wrong repository."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("What the user called it")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWorkspaceResolve(r.GetString("query", ""))
@@ -172,8 +172,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 			"Open a public tunnel to a running service so the user can watch it on their phone while you edit. "+
 				"Returns immediately with state \"starting\"; poll corgi_preview_state for the URL. "+
 				"The stack must already be up (corgi_up). Refused for a workspace marked sensitive. "+
-				"A quick tunnel's URL changes if it restarts; declare a named tunnel in the service's tunnel: block for a stable one. "+
-				"Prefer corgi_diff when the question is \"what changed\" — it needs no tunnel and survives bad signal."),
+				"A quick tunnel's URL changes if it restarts; declare a named tunnel in the service's tunnel: block for a stable one."),
 		composeOpt,
 		serviceOpt,
 		mcp.WithString("branch", mcp.Description("Branch being previewed, recorded for context")),
@@ -189,8 +188,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("corgi_preview_state",
 		mcp.WithDescription(
 			"State of one preview, or all of them. States: starting (no URL yet), ready, broken (the tunnel is up "+
-				"but nothing answers on the port — usually a build in progress), stopped. "+
-				"Tell the user which state it is in rather than handing over a URL that shows a stack trace."),
+				"but nothing answers on the port — usually a build in progress), stopped. A url is present only in ready."),
 		composeOpt,
 		mcp.WithString("id", mcp.Description("Preview id or service name; omit for all")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -214,7 +212,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 
 	s.AddTool(mcp.NewTool("corgi_preview_stop",
 		mcp.WithDescription(
-			"Tear a preview down. Do this when the user is finished — a forgotten preview is a public URL onto seeded data."),
+			"Tear a preview down and close its public URL. An un-stopped preview is reaped after idleMinutes unless frozen."),
 		composeOpt,
 		mcp.WithString("id", mcp.Required(), mcp.Description("Preview id or service name")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {

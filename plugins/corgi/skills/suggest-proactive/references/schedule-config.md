@@ -1,46 +1,40 @@
-# Arming the proactive-suggest schedule (`/schedule` / CronCreate)
+# Arming the proactive-suggest schedule
 
-`suggest-proactive` does **not** schedule itself — the host harness `/schedule`
-(CronCreate) owns the cadence and fires the job while the REPL is idle. This is the
-exact config to arm, disarm, and re-arm it.
+`suggest-proactive` does **not** schedule itself. Two host mechanisms can fire it, and
+they are not the same thing:
 
-## Arm (recurring, weekly)
+- **`/schedule`** creates a cloud routine on a cron. It outlives the terminal session.
+  Use it for the unattended weekly run.
+- **`CronCreate`** is session-only: the job lives in memory, fires while the REPL is
+  idle, dies when the session ends, and a recurring job auto-expires after 7 days.
+  Use it for a one-off or a same-day trial.
 
-Create the job via CronCreate with a standard 5-field cron, an **off-:00 minute** (to
-avoid fleet pile-up), `durable: true` (survives session restarts →
-`.claude/scheduled_tasks.json`), and the **absolute workspace path** baked into the
-prompt (the cron fires with no implied cwd):
+Either way the prompt names the absolute workspace path — the job fires with no implied
+cwd, and the skill refuses to run without a `corgi-compose.yml`.
 
-```
-cron:      "23 9 * * 1"          # ~weekly, Monday ~09:23 local (off-minute on purpose)
-recurring: true
-durable:   true
-prompt:    "Run /corgi-suggest-proactive in workspace /abs/path/to/workspace"
-```
+## Arm (recurring, weekly) — `/schedule`
 
-- **Default cadence is weekly** — it matches the rate-limit (default 1 ticket/week).
-  Hourly/daily is allowed, but the per-week cap (hard ceiling 3) still binds, so a
-  tighter cadence does NOT file more.
-- The prompt MUST name the absolute workspace path. The skill `cd`s / resolves there
-  and refuses if no `corgi-compose.yml` is found.
-
-## 7-day auto-expire — you MUST warn the user
-
-CronCreate **recurring** jobs fire a final time and then **delete themselves after 7
-days**. When you arm a recurring job, tell the user this and offer to **re-arm** it
-when it lapses. Re-arming is just creating the job again with the same config.
-
-## One-shot alternative (conservative default for first-timers)
-
-For a first run, prefer a single next-Monday shot instead of a recurring job — it
-proves the flow end-to-end without committing to a cadence:
+Weekly matches the rate limit (default 1 ticket/week; hard ceiling 3 — a tighter
+cadence does not file more). Pick an off-:00 minute.
 
 ```
-cron:      "23 9 * * 1"          # next Monday ~09:23
+cron:    "23 9 * * 1"          # Monday ~09:23 local
+prompt:  "Run /corgi-suggest-proactive in workspace /abs/path/to/workspace"
+```
+
+## Trial run — `CronCreate`, one shot
+
+For a first run, a single next-Monday shot proves the flow without committing to a
+cadence:
+
+```
+cron:      "23 9 * * 1"
 recurring: false
-durable:   true
 prompt:    "Run /corgi-suggest-proactive in workspace /abs/path/to/workspace"
 ```
+
+A recurring `CronCreate` job also works for a week-long trial; tell the user it
+expires after 7 days and offer to move it to `/schedule` when it lapses.
 
 ## Disarm
 
@@ -48,6 +42,9 @@ prompt:    "Run /corgi-suggest-proactive in workspace /abs/path/to/workspace"
 CronList                          # find the job id
 CronDelete <id>                   # remove it
 ```
+
+`CronList` / `CronDelete` only see `CronCreate` jobs; a `/schedule` routine is managed
+through `/schedule` itself.
 
 Cancelling the job is safe at any time — the `corgi_services/suggest-history.json` state stays
 consistent (it's only appended to by the run itself).

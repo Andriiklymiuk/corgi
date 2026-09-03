@@ -77,7 +77,7 @@ installers are often denied). Keep flows in the repo's `e2e/` so they ship with
 the PR; they are the mobile equivalent of the visual/e2e harness for
 FAILS-on-base regression checks when the bug is reproducible by flow.
 
-Quirks that WILL bite (each cost a failed run once):
+Quirks:
 
 - **Always `launchApp: {stopApp: true}`** — apps that persist/resume their last
   route do not start on the home screen; tap sequences assuming the menu fail.

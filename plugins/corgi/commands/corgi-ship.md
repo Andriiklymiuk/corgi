@@ -10,14 +10,14 @@ Run the **ship** flow for `$ARGUMENTS`.
 
 Per `plugins/corgi/skills/ship/SKILL.md`:
 
-1. **Gate first.** Verify the change on a device + READ a screenshot (the `mobile` skill) —
+1. **Gate first.** Verify the change on a device + read a screenshot (the `mobile` skill) —
    native-invisible changes ship magenta/blank. Tests + lint green. `df -h` for disk.
-2. **Shell + locale.** Build in a NON-LOGIN shell that EXPORTS the locale:
+2. **Shell + locale.** Build in a non-login shell that exports the locale:
    `nohup bash -c 'export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8; make <ship-target>' > build/ship.log 2>&1 &`.
-   The locale must be exported in the PARENT (EAS's nested pod install inherits it), not
+   The locale must be exported in the parent (EAS's nested pod install inherits it), not
    only inline in the Makefile.
-3. **Bump ONCE.** `make ship` bumps the version first; if it dies after the bump, re-run the
-   build+submit targets DIRECTLY (they don't bump) — never `make ship` again.
+3. **Bump once.** `make ship` bumps the version first; if it dies after the bump, re-run the
+   build+submit targets directly (they don't bump) — never `make ship` again.
 4. **Background + poll** the log for `BUILD SUCCEEDED|Submitting|Submitted your app|error:` —
    there is no completion event for the detached build. `stop` → kill
    `xcodebuild|gradle|eas build|eas submit|fastlane`.
