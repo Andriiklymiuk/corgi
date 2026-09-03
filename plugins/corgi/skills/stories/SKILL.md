@@ -472,6 +472,12 @@ change, matching existing patterns.
     mapping as `corgi run` (Phase 3); drop for in-place. Needs the flag.
 - **Bug tier: red test first** — write it, confirm **FAILS on base**, then make it
   pass. Adjustments skip.
+- **New code lowers complexity, never raises it.** Before the per-service gate, run
+  the `complexity` skill in `gate` mode on the diff (touched functions vs `<base>`): a
+  function that started at or under the repo's threshold ends at or under it, one that
+  started over it does not rise, a new function starts under it. `fail` → apply the
+  skill's tactics to that function, re-gate. The review loop (Phase 5.5) checks the
+  same rule, so a regression caught here is one round saved there.
 - **Pre-existing red baseline.** Repo typecheck/lint may already fail on `<base>`,
   unrelated. Don't chase a whole-repo green that never existed; don't let baseline
   noise hide your breakage. Gate on **no NEW errors** — filter the run to changed
