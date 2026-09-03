@@ -108,8 +108,8 @@ still bind to `localhost` or front it with an authenticated proxy.
 | `corgi_ps` | `{composePath?}` | `[{name, kind, port, status, url, startedAt}]` — `status` is process/container state, not health | `buildPsRows` |
 | `corgi_up` | `{composePath?, profile?, seed?, serviceBranch?, serviceDir?}` | run-state (`services[]`, `dbServices[]`) — **always detached** | run prelude + `runDetached` machinery |
 | `corgi_down` | `{composePath?}` | `{stopped[], failed[]}` | stop machinery (`stopProcessGroup`) |
-| `corgi_logs` | `{service, lines?}` | `{service, lines[]}` | newest captured log run |
-| `corgi_exec` | `{service, command, ensureDeps?, serviceBranch?, serviceDir?}` | `{exitCode, output, truncated, durationMs}` | `RunServiceCommandExitCode` (output captured) |
+| `corgi_logs` | `{composePath?, service, lines?}` | `{service, lines[]}` | newest captured log run |
+| `corgi_exec` | `{composePath?, service, command, ensureDeps?, serviceBranch?, serviceDir?}` | `{exitCode, output, truncated, durationMs}` | `RunServiceCommandExitCode` (output captured) |
 | `corgi_test` | `{composePath?, service?, profile?, ensureDeps?, serviceBranch?, serviceDir?}` | `{services[], passed}` | `runTests` (does not start db/services) |
 | `corgi_doctor` | `{composePath?}` | `{ok, checks[]}` | `buildDoctorResult` (required tools, Docker, ports) |
 | `corgi_restart` | `{composePath?, profile?}` | run-state — **always detached** | `corgi_down` then `corgi_up` |

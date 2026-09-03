@@ -230,6 +230,14 @@ review untouched code.
 - **Overengineering** — abstraction with one caller, a config knob nobody asked
   for, an interface introduced for a single implementation, a layer that only
   forwards. Flag it and name the simpler shape.
+- **Complexity regressions** — run the `complexity` skill in `report` mode on the
+  diff. A touched function whose cyclomatic complexity rose, or a new function over
+  the repo's threshold (its own linter config, else 10), is a finding: `nit` by
+  default, `blocking` over 15 or in a hot path (the cost rule below). The finding
+  carries the number before and after and the tactic that brings it down (guard
+  clauses, an extracted function with a what-not-how name, a lookup table, a named
+  predicate). A suppression added to pass a linter's complexity rule is a finding on
+  its own.
 - **Performance footguns in a hot path** — work repeated per item that could be
   done once, an unbounded read or scan, a per-request shell-out or file walk, a
   network call with no timeout, a goroutine nothing stops.

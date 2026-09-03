@@ -94,7 +94,7 @@ echo 'export API_TUNNEL_HOST=api.dev.example.com' >> ~/.zshrc
 
 ### ngrok one-time setup (per dev)
 
-Free static domain — one per ngrok account, on `*.ngrok-free.app`. No DNS work.
+Free static domain — one per ngrok account, on `*.ngrok-free.dev`. No DNS work.
 
 ```bash
 # 1. Sign up at ngrok.com (free)
