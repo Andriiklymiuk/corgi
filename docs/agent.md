@@ -109,6 +109,19 @@ token-protected either way, so serving it on the local network is not serving it
 to the internet. The middle two rows keep a fixed origin, which is what keeps
 the phone paired across restarts; the quick tunnel does not.
 
+### What the launcher looks like
+
+One card per repo, and one white button on each: **Open** when a session is
+already up, **Start** when it is not — never both. The card carries the repo,
+its path, a green *N live* pill, the last thing that happened, and a row for
+the running session that opens the conversation in one tap.
+
+Everything else is behind **Details**: tap the card and a sheet comes up from
+the bottom with the session name and account to start under, where links
+should open, hide, stop, and the full session list and timeline for that
+workspace. Nothing that changes the machine is more than two taps away, and
+nothing that does not is competing for the first one.
+
 ### A launcher URL that never changes
 
 The default is a Cloudflare **quick tunnel**: free, no signup — and a **new random
@@ -279,8 +292,9 @@ which no local probe can know:
 corgi agent session start acme --name "fix login redirect"
 ```
 
-The launcher's start form has the same optional field, and
-`corgi_session_start` takes a `name`.
+The launcher asks for it too — tap a card to open its details sheet, where
+**Session name** sits above **Start a session** — and `corgi_session_start`
+takes a `name`.
 
 ### The timeline
 
@@ -319,8 +333,8 @@ which is why the totals are large — that is the real traffic against the windo
 
 ### Hiding a workspace on the phone
 
-Each card has a **hide** chip. Hidden cards collapse into one `N hidden — show`
-button. It is stored in that browser only and changes nothing on the machine —
+Open a card's details sheet and tap **Hide from this browser**. Hidden cards
+collapse into one `N hidden — show` button. It is stored in that browser only and changes nothing on the machine —
 it exists for the moment someone else is looking at your screen. To actually
 stop supervising a workspace, set `autostart: false` for it instead.
 
