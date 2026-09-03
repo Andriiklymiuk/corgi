@@ -192,11 +192,11 @@ func TestLaunchStateReportsADisabledWorkspace(t *testing.T) {
 }
 
 func TestSessionProcessIsLiveRejectsARecycledPID(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("start times are only read from /proc")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("no start time to read on this platform")
 	}
 	mine := os.Getpid()
-	started, ok := processStartTicks(mine)
+	started, ok := processStartToken(mine)
 	if !ok || started == "" {
 		t.Fatalf("this process's start time must be readable, got %q ok=%v", started, ok)
 	}
@@ -214,6 +214,36 @@ func TestSessionProcessIsLiveRejectsARecycledPID(t *testing.T) {
 	}
 	if sessionProcessIsLive(claudeSession{PID: 0}) {
 		t.Error("pid 0 is not a session")
+	}
+}
+
+func TestSameStartTokenIgnoresPsPadding(t *testing.T) {
+	// ps pads a single-digit day, and the same reading must not look like a
+	// different process over a space: that would drop a live session.
+	if !sameStartToken("Wed Sep  3 16:04:12 2025", "Wed Sep 3 16:04:12 2025") {
+		t.Error("internal padding must not matter")
+	}
+	if sameStartToken("Wed Sep  3 16:04:12 2025", "Wed Sep  3 16:04:13 2025") {
+		t.Error("a different second is a different process")
+	}
+	if !sameStartToken(" 690 ", "690") {
+		t.Error("surrounding space must not matter")
+	}
+}
+
+func TestStartTokenCacheAnswersTwice(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("no start time to read on this platform")
+	}
+	// The second read must come from the cache: on darwin the uncached path
+	// runs ps, and this list is polled every second.
+	first, ok := processStartToken(os.Getpid())
+	if !ok {
+		t.Skip("could not read this process's start time")
+	}
+	cached, hit := cachedStartToken(os.Getpid())
+	if !hit || cached != first {
+		t.Errorf("cached = %q hit=%v, want the first reading %q", cached, hit, first)
 	}
 }
 
