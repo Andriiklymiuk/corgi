@@ -67,3 +67,18 @@ func resolveBaseRef(dir, base string) (string, bool) {
 func RepoHead(dir string) (string, error) {
 	return gitOut(dir, gitRevParse, "HEAD")
 }
+
+// CurrentBranch reads just the branch a checkout is on: no network, and none
+// of ProbeRepoState's status scan, which walks the whole worktree. Returns ""
+// for a directory that is not a git repository and for a detached HEAD, where
+// there is no branch name to show.
+func CurrentBranch(dir string) string {
+	if dir == "" || !isGitRepo(dir) {
+		return ""
+	}
+	branch, err := gitOut(dir, gitRevParse, gitAbbrevRef, "HEAD")
+	if err != nil || branch == "HEAD" {
+		return ""
+	}
+	return branch
+}

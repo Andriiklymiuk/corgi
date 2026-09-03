@@ -255,6 +255,33 @@ can never set it. Treat the value as a secret — a Telegram token lets anyone
 post as that bot, so never paste it into a chat, a commit or an issue. If one
 leaks, `/revoke` in @BotFather issues a new one; the chat id does not change.
 
+### What a session is called
+
+Every supervised session carries a name into claude.ai/code's list. The
+workspace id alone is not enough — four rows called `corgi` say nothing about
+which one to open — so corgi composes the branch it started on and the clock
+time with it:
+
+```
+corgi · fix/login-redirect · 18:55
+corgi (work) · main · 09:02
+```
+
+The profile appears only when the session runs under one. The branch is
+dropped for a checkout on a detached HEAD, or a workspace that is not a git
+repository, and is the part shortened when the name would run past the 60
+characters claude.ai shows.
+
+Name a session yourself and that wins — it says what the session is *for*,
+which no local probe can know:
+
+```bash
+corgi agent session start acme --name "fix login redirect"
+```
+
+The launcher's start form has the same optional field, and
+`corgi_session_start` takes a `name`.
+
 ### The timeline
 
 Every start, exit (with its classified cause), disable, and captured session

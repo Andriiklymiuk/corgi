@@ -83,7 +83,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 				"named entry from the trusted agent config (a different Claude account, e.g. \"work\")."),
 		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
 		mcp.WithString("profile", mcp.Description("Profile name from the agent config's profiles: section")),
-		mcp.WithString("name", mcp.Description("Session name shown in claude.ai/code, e.g. \"fix login redirect\"")),
+		mcp.WithString("name", mcp.Description("Session name shown in claude.ai/code, e.g. \"fix login redirect\". Defaults to the workspace, its branch and the start time — pass one whenever the task is known, it reads better in the list.")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpSessionStart(r.GetString("workspace", ""), r.GetString("profile", ""), r.GetString("name", ""))
 	}))
