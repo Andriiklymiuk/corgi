@@ -34,6 +34,8 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithDescription(
 			"Health of the corgi agent daemon: whether it is running, each workspace's supervised session, "+
 				"restart count, wake lock, and which Claude account each workspace uses. Read-only. "+
+				"A workspace that is running with deviceOnly true and sessionsThisRun 0 is online as a device "+
+				"with no session yet — the resting state, not a failure; corgi_session_start opens one. "+
 				"Use this to answer \"is it up\" and \"why did my session die\"."),
 	), jsonHandler(func(mcp.CallToolRequest) (any, error) {
 		return mcpAgentStatus()
@@ -371,7 +373,7 @@ func mcpSessionStart(query, profile, name string) (any, error) {
 		"workspaceId": w.ID,
 		"state":       "starting",
 		"commandId":   c.ID,
-		"hint":        "poll corgi_agent_status until this workspace is running; its sessionUrl opens the conversation",
+		"hint":        "poll corgi_agent_status until this workspace is running with a sessionUrl; that URL opens the conversation. A workspace that was already online as a device (running, deviceOnly, no sessions) is being given a session now — expect a short gap while the process is swapped",
 	}, nil
 }
 

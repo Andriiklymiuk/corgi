@@ -3,6 +3,7 @@ package supervisor
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,6 +43,18 @@ type RunState struct {
 	// Sessions are the canonical per-session claude.ai URLs spotted in the
 	// process output, oldest first — the only ids the site actually resolves.
 	Sessions []string `json:"sessions,omitempty"`
+	// DeviceOnly says this run opened no session of its own: the server is
+	// online as a device and sessions are created on demand. A launcher
+	// reading it knows "running with no session" is the resting state, not a
+	// start that never finished.
+	DeviceOnly bool `json:"deviceOnly,omitempty"`
+	// SessionsThisRun counts the distinct session links the CURRENT process
+	// has printed. Zero on a device-only run means nobody has opened a
+	// session through it yet, so replacing the process loses nothing.
+	SessionsThisRun int `json:"sessionsThisRun,omitempty"`
+	// Note is a standing remark about how this workspace runs — a flag the
+	// installed CLI turned out not to know, for instance. Not an error.
+	Note string `json:"note,omitempty"`
 }
 
 // maxTrackedSessions bounds RunState.Sessions; a runner alive for weeks must
@@ -119,6 +132,9 @@ func NewRunner(cfg SpawnConfig, start Starter, lock *WakeLock) *Runner {
 func (r *Runner) addSessionLink(id string) {
 	url := "https://claude.ai/code/" + id
 	r.mu.Lock()
+	// Counted before the cross-restart dedup: a session the new process
+	// brought back is still a session it serves now.
+	r.state.SessionsThisRun++
 	for _, s := range r.state.Sessions {
 		if s == url {
 			r.mu.Unlock()
@@ -288,9 +304,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		_ = r.WakeLock.Acquire(os.Getpid())
 	}
 
-	attempt := 0
-	startupFailures := 0
-
+	var s streak
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -300,16 +314,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		exit, startErr := r.runOnce(ctx, alwaysAwake)
-		decision := Decide(exit, attempt, startupFailures)
-		healthy := decision.Cause != CauseStartupFailure
-
-		if healthy {
-			// A run that lasted long enough to be useful clears the streak, so
-			// one bad night does not disable a workspace weeks later.
-			startupFailures = 0
-		} else {
-			startupFailures++
+		if r.retryWithoutUnsupportedFlag(exit) {
+			// Not a failure of the workspace, so neither the streak nor the
+			// backoff moves: the same start, minus one flag, right now.
+			continue
 		}
+		decision := Decide(exit, s.attempt, s.startupFailures)
+		healthy := decision.Cause != CauseStartupFailure
+		s.observe(healthy)
 
 		r.record(decision, 0, decision.Disable)
 		r.announce(decision, r.captureSessionEnd(decision))
@@ -317,17 +329,39 @@ func (r *Runner) Run(ctx context.Context) error {
 		if !decision.Restart {
 			return stopReason(decision, startErr, ctx)
 		}
-
-		// Reset AFTER choosing this delay, so the next failure starts from the
-		// beginning of the backoff. Zeroing before the increment left it pinned
-		// at the second step forever.
-		if healthy {
-			attempt = 0
-		} else {
-			attempt++
-		}
+		s.advance(healthy)
 		r.sleepUnlessStopped(ctx, decision.Delay)
 	}
+}
+
+// streak is the failure bookkeeping between restarts: how many restarts this
+// bad patch has taken (selects the backoff step) and how many of them were
+// too-fast exits (the give-up rule).
+type streak struct {
+	attempt         int
+	startupFailures int
+}
+
+// observe counts the exit just classified. A run that lasted long enough to
+// be useful clears the failure streak, so one bad night does not disable a
+// workspace weeks later.
+func (s *streak) observe(healthy bool) {
+	if healthy {
+		s.startupFailures = 0
+		return
+	}
+	s.startupFailures++
+}
+
+// advance moves the backoff pointer AFTER this restart's delay was chosen, so
+// the next failure starts from the beginning of the backoff. Zeroing before
+// the increment left it pinned at the second step forever.
+func (s *streak) advance(healthy bool) {
+	if healthy {
+		s.attempt = 0
+		return
+	}
+	s.attempt++
 }
 
 // sleepUnlessStopped waits out the backoff, returning early if Stop is called.
@@ -348,6 +382,13 @@ func (r *Runner) sleepUnlessStopped(ctx context.Context, d time.Duration) {
 // A launch that never got off the ground reports as an instant failure, so it
 // falls under the same give-up rule as one that exits immediately.
 func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
+	// Reset before Start, not after: the exec layer can report a session link
+	// while the process is still being launched, and that link belongs to
+	// this run.
+	r.mu.Lock()
+	r.state.SessionsThisRun = 0
+	r.state.DeviceOnly = r.Config.DeviceOnly
+	r.mu.Unlock()
 	proc, err := r.Start(ctx, r.Config)
 	if err != nil {
 		return Exit{Code: -1, Output: err.Error(), healthyAfter: r.healthyAfter()}, err
@@ -400,6 +441,56 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 		Requested:    ctx.Err() != nil || r.stopRequested(),
 		healthyAfter: r.healthyAfter(),
 	}, nil
+}
+
+// unknownOptionMarker is how the CLI's argument parser rejects a flag it does
+// not have. Matched case-insensitively together with the flag itself, so an
+// unrelated "unknown option" in a session's output cannot trip it.
+const unknownOptionMarker = "unknown option"
+
+// unsupportedFlagNote is what status and the launcher show once the flag has
+// been dropped. It names the fix, because nothing corgi does can restore the
+// device-only behaviour on this CLI.
+const unsupportedFlagNote = "this Claude Code predates " + DeviceOnlyFlag +
+	" — a session is opened in the checkout at every start; update Claude Code to stop that"
+
+// flagUnsupported reports whether output is the CLI refusing flag as unknown.
+func flagUnsupported(output, flag string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, unknownOptionMarker) && strings.Contains(lower, strings.ToLower(flag))
+}
+
+// retryWithoutUnsupportedFlag handles the one startup failure that is corgi's
+// own doing: an optional flag the installed CLI predates. Older Claude Code
+// rejects --no-create-session-in-dir as an unknown option and exits at once.
+// Retrying with the same argv would fail five times and disable the workspace
+// for a flag it never needed; instead the flag is dropped for the rest of
+// this runner's life, the reason is left in the state for status and the
+// launcher, and the loop starts the process again without a backoff.
+//
+// Reports true when it consumed the exit. Only a run too short to have served
+// anything qualifies — a long session that happened to print those words is
+// the session's business.
+func (r *Runner) retryWithoutUnsupportedFlag(e Exit) bool {
+	if e.Requested || e.Uptime >= e.healthyThreshold() {
+		return false
+	}
+	r.mu.Lock()
+	if !r.Config.DeviceOnly || !flagUnsupported(e.Output, DeviceOnlyFlag) {
+		r.mu.Unlock()
+		return false
+	}
+	r.Config.DeviceOnly = false
+	r.proc = nil
+	r.state.Running = false
+	r.state.Note = unsupportedFlagNote
+	r.mu.Unlock()
+	// The timeline gets the exit and its cause, so two consecutive starts do
+	// not read as a mystery; the daemon reads the cause to stop sending the
+	// flag to this workspace at all.
+	r.emit(RunEvent{Kind: "exited", Cause: string(CauseUnsupportedFlag), Reason: unsupportedFlagNote})
+	r.notifyChange()
+	return true
 }
 
 // stopReason is what Run returns when it will not restart: the launch error if

@@ -98,6 +98,18 @@ type Daemon struct {
 	runners   []*supervisor.Runner
 	diags     []WorkspaceDiagnostic
 	startedAt time.Time
+	// autostart is the startup set by workspace id. A workspace that came up
+	// with the daemon goes back to that after a remote stop, so "Stop" from
+	// the phone ends the session without also taking the machine offline.
+	autostart map[string]supervisor.SpawnConfig
+	// replacing marks workspaces whose process is being swapped for another —
+	// a device-only server being given a session, or a stopped session going
+	// back to device-only. A second start in that window would race the swap.
+	replacing map[string]bool
+	// swaps counts relaunch goroutines in flight. Run drains it before it
+	// waits for the runners: a swap that launches after the runner wait has
+	// begun would add to a WaitGroup already being waited on.
+	swaps sync.WaitGroup
 
 	// nudge wakes the command loop; the cross-process doorbell is SIGUSR1.
 	nudge chan struct{}
@@ -126,6 +138,22 @@ func (d *Daemon) recordEvent(workspaceID string) func(supervisor.RunEvent) {
 		d.Events.Append(workspaceID, events.Event{
 			Kind: e.Kind, PID: e.PID, Cause: e.Cause, Reason: e.Reason, URL: e.URL,
 		})
+		if e.Cause == string(supervisor.CauseUnsupportedFlag) {
+			// The runner already dropped the flag for itself. Drop it from the
+			// startup settings too, or the next swap back to a device would
+			// send it again, fail again, and open the session it was meant to
+			// avoid — once per phone Stop.
+			d.forgetDeviceOnly(workspaceID)
+		}
+	}
+}
+
+func (d *Daemon) forgetDeviceOnly(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if cfg, ok := d.autostart[id]; ok {
+		cfg.DeviceOnly = false
+		d.autostart[id] = cfg
 	}
 }
 
@@ -244,6 +272,7 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 		}
 	}
 	d.startedAt = time.Now().UTC()
+	d.rememberAutostart(configs)
 	d.buildRunners(configs)
 	if err := d.writeInfoIDs(d.runnerIDs()); err != nil {
 		return err
@@ -288,6 +317,9 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 		case <-ticker.C:
 		}
 	}
+	// Swaps first: one still running sees the cancelled context and launches
+	// nothing, but it must be finished before the runner wait begins.
+	d.swaps.Wait()
 	wg.Wait()
 	return ctx.Err()
 }
@@ -360,6 +392,15 @@ func (d *Daemon) runFixed(ctx context.Context, configs []supervisor.SpawnConfig)
 	return ctx.Err()
 }
 
+func (d *Daemon) rememberAutostart(configs []supervisor.SpawnConfig) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.autostart = make(map[string]supervisor.SpawnConfig, len(configs))
+	for _, cfg := range configs {
+		d.autostart[cfg.WorkspaceID] = cfg
+	}
+}
+
 func (d *Daemon) buildRunners(configs []supervisor.SpawnConfig) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -368,15 +409,22 @@ func (d *Daemon) buildRunners(configs []supervisor.SpawnConfig) {
 	env := os.Environ()
 
 	for _, cfg := range configs {
-		lock := supervisor.NewWakeLock(cfg.WakeLockMode())
-		r := supervisor.NewRunner(cfg, d.Start, lock)
-		r.Notify = d.Notify
-		r.OnChange = d.requestPublish
-		r.OnSessionEnd = d.sessionEndHook(cfg, r)
-		r.OnEvent = d.recordEvent(cfg.WorkspaceID)
-		d.runners = append(d.runners, r)
+		d.runners = append(d.runners, d.newRunner(cfg))
 		d.diags = append(d.diags, diagnose(cfg, env))
 	}
+}
+
+// newRunner wires one supervisor to the daemon's notifications, timeline and
+// handover brief. The one place that wiring lives, so a runner started at
+// boot and one started from a phone cannot differ.
+func (d *Daemon) newRunner(cfg supervisor.SpawnConfig) *supervisor.Runner {
+	lock := supervisor.NewWakeLock(cfg.WakeLockMode())
+	r := supervisor.NewRunner(cfg, d.Start, lock)
+	r.Notify = d.Notify
+	r.OnChange = d.requestPublish
+	r.OnSessionEnd = d.sessionEndHook(cfg, r)
+	r.OnEvent = d.recordEvent(cfg.WorkspaceID)
+	return r
 }
 
 // sessionEndHook writes the handover brief for one workspace.
@@ -426,7 +474,7 @@ func (d *Daemon) drainCommands(ctx context.Context, launch func(*supervisor.Runn
 		case command.ActionStart:
 			d.startWorkspace(ctx, c, launch)
 		case command.ActionStop:
-			d.stopRemoteWorkspace(c)
+			d.stopRemoteWorkspace(ctx, c, launch)
 		case command.ActionAttention:
 			d.reportAttention(c)
 		}
@@ -461,8 +509,30 @@ func (d *Daemon) notifyAttention(title, body, workspaceID string) {
 }
 
 func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {
+	if d.isReplacing(c.WorkspaceID) {
+		// A swap is under way — a phone Stop putting the device back, most
+		// likely, with this Start a few seconds behind it. Dropping it would
+		// leave the card on "ready" and the person tapping again; put it back
+		// in the spool instead, same id and request time, so the next drain
+		// retries it and the command's own TTL bounds the retries.
+		_, _ = command.Write(d.Dir, c)
+		return
+	}
 	if r := d.findRunner(c.WorkspaceID); r != nil && r.Supervising() {
-		if r.State().Running {
+		st := r.State()
+		switch {
+		case st.Running && st.DeviceOnly && st.SessionsThisRun == 0:
+			// Online as a device and nobody has opened a session through it.
+			// Start from the phone means "give me a conversation now", which
+			// this process cannot: it was told not to open one. Swap it for a
+			// server that does, once it is gone — two servers in one directory
+			// would fight over the session record. Nothing is lost: there is
+			// no session on it to lose.
+			d.relaunchAfter(ctx, r, func() (supervisor.SpawnConfig, error) { return d.resolveRemote(c) },
+				launch, func() { d.announceRemote(c, "session started remotely") },
+				func(err error) { d.commandFailed(c, err) })
+			return
+		case st.Running:
 			d.requestPublish() // already up — the fresh status is the answer
 			return
 		}
@@ -474,43 +544,120 @@ func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch f
 		// the runner and try right now, with a fresh failure streak.
 		r.StopAsync()
 	}
-	cfg, err := d.ResolveWorkspace(c.WorkspaceID, c.Profile, c.Name)
+	cfg, err := d.resolveRemote(c)
 	if err != nil {
 		d.commandFailed(c, err)
 		return
 	}
+	if d.launchRunner(ctx, cfg, launch) {
+		d.announceRemote(c, "session started remotely")
+	}
+}
+
+// resolveRemote builds and validates the launch settings a spool command asks
+// for. A remote start always opens a session: that is the whole request.
+func (d *Daemon) resolveRemote(c command.Command) (supervisor.SpawnConfig, error) {
+	cfg, err := d.ResolveWorkspace(c.WorkspaceID, c.Profile, c.Name)
+	if err != nil {
+		return supervisor.SpawnConfig{}, err
+	}
 	if cfg.Origin == "" {
 		cfg.Origin = supervisor.OriginRemote
 	}
+	cfg.DeviceOnly = false
 	if err := supervisor.ValidateSpawnConfig(cfg); err != nil {
-		d.commandFailed(c, err)
-		return
+		return supervisor.SpawnConfig{}, err
 	}
-	if ctx.Err() != nil {
-		// The daemon is shutting down. Resolving took long enough for cancel to
-		// land; launching now would fire a "started" notification for a session
-		// that returns instantly and does not survive the restart.
-		return
-	}
-	lock := supervisor.NewWakeLock(cfg.WakeLockMode())
-	r := supervisor.NewRunner(cfg, d.Start, lock)
-	r.Notify = d.Notify
-	r.OnChange = d.requestPublish
-	r.OnSessionEnd = d.sessionEndHook(cfg, r)
-	r.OnEvent = d.recordEvent(cfg.WorkspaceID)
-	d.replaceRunner(r, diagnose(cfg, os.Environ()))
-	launch(r)
-	d.announceRemote(c, "session started remotely")
-	d.requestPublish()
-	_ = d.writeInfoIDs(d.runnerIDs())
+	return cfg, nil
 }
 
-func (d *Daemon) stopRemoteWorkspace(c command.Command) {
+// launchRunner puts a new supervisor in place for cfg's workspace and starts
+// it. False when the daemon is already shutting down: resolving can take long
+// enough for cancel to land, and launching then would fire a "started"
+// notification for a session that returns instantly and does not survive the
+// restart.
+func (d *Daemon) launchRunner(ctx context.Context, cfg supervisor.SpawnConfig, launch func(*supervisor.Runner)) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	r := d.newRunner(cfg)
+	d.replaceRunner(r, diagnose(cfg, os.Environ()))
+	launch(r)
+	d.requestPublish()
+	_ = d.writeInfoIDs(d.runnerIDs())
+	return true
+}
+
+// relaunchAfter swaps a workspace's process for another: stops the current
+// one, waits for it to be gone, then starts what resolve returns. The wait
+// happens on its own goroutine so the command loop never sits out a teardown,
+// and the workspace is marked as replacing so a second start in that window
+// does not race the swap. The stop flag itself is set synchronously, so a
+// stop later in the same drain batch sees the old runner as already going.
+func (d *Daemon) relaunchAfter(ctx context.Context, old *supervisor.Runner, resolve func() (supervisor.SpawnConfig, error),
+	launch func(*supervisor.Runner), started func(), failed func(error)) {
+	id := old.Config.WorkspaceID
+	d.mu.Lock()
+	if d.replacing == nil {
+		d.replacing = map[string]bool{}
+	}
+	d.replacing[id] = true
+	d.mu.Unlock()
+	old.StopAsync()
+	d.swaps.Add(1)
+	go func() {
+		defer d.swaps.Done()
+		defer func() {
+			d.mu.Lock()
+			delete(d.replacing, id)
+			d.mu.Unlock()
+		}()
+		// Stop joins the teardown StopAsync began, so this returns only once
+		// the process is down (or was never up).
+		old.Stop()
+		cfg, err := resolve()
+		if err != nil {
+			if failed != nil {
+				failed(err)
+			}
+			return
+		}
+		if d.launchRunner(ctx, cfg, launch) && started != nil {
+			started()
+		}
+	}()
+}
+
+func (d *Daemon) isReplacing(id string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.replacing[id]
+}
+
+func (d *Daemon) stopRemoteWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {
 	r := d.findRunner(c.WorkspaceID)
 	if r == nil || !r.Supervising() {
 		// A clean no-op, as the tool advertises. The id was resolved against the
 		// registry before it reached the spool, so a missing or already-stopped
 		// runner just means "not running" — not a failure to flash at the owner.
+		return
+	}
+	// A workspace that came up with the daemon as a device goes back to being
+	// one: Stop ends the session, it does not take the machine offline. A
+	// device-only run with nothing on it is left alone — stopping it would
+	// only put the same thing back.
+	if auto, ok := d.autostartConfig(c.WorkspaceID); ok && auto.DeviceOnly {
+		st := r.State()
+		if st.DeviceOnly && st.SessionsThisRun == 0 {
+			// Up, or between restarts: either way a device with nothing on it,
+			// and a relaunch would only put the same thing back — and cut short
+			// a backoff the runner is honouring.
+			d.requestPublish()
+			return
+		}
+		d.relaunchAfter(ctx, r, func() (supervisor.SpawnConfig, error) { return auto, nil }, launch, nil, nil)
+		d.announceRemote(c, "session stopped remotely · back online as a device")
+		d.requestPublish()
 		return
 	}
 	// StopAsync sets the stop flag synchronously — so a start later in this same
@@ -521,6 +668,13 @@ func (d *Daemon) stopRemoteWorkspace(c command.Command) {
 	r.StopAsync()
 	d.announceRemote(c, "session stopped remotely")
 	d.requestPublish()
+}
+
+func (d *Daemon) autostartConfig(id string) (supervisor.SpawnConfig, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	cfg, ok := d.autostart[id]
+	return cfg, ok
 }
 
 // commandFailed surfaces a rejected command where a phone will see it: the

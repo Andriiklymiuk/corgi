@@ -295,6 +295,16 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
    `decision` constraint, reuse an `incident` fix for a regression, ground a
    free-text feature in `domain` facts. Absent → skip.
 
+### Forecast the risk — every story
+
+Before the spec, run the `risk` skill on the **story** (ticket text + the code area it
+names): a forecast, `confidence: low`, never auto-approve. It decides two things here:
+which **tier** the story gets when the ticket alone is unclear (a forecast of 7+ is
+never an adjustment), and what goes in the spec's **Before building** list — the
+decisions the human makes at the Phase 2 gate (flag, migration strategy, rollout,
+which service owns the data). Put the forecast line in the spec comment so the sign-off
+is made knowing it; the real score comes from the diff at Phase 5.
+
 ### Write the spec — every story
 
 `docs/stories/<issue-key>-<slug>.md`, actionable or not (micro adjustment → skip the
@@ -304,7 +314,9 @@ file; the `## Spec` comment is the spec — _Express lane_):
 - **Tier** — adjustment/bug/feature.
 - Root cause / current behaviour, `file:line` refs.
 - Change plan (snippets) **grouped by service**, tests, manual verification, risks.
-  Multi-service: `## Contract` + cross-service order.
+  Name what the plan deliberately does **not** build and what covers it instead (a
+  native element, an existing helper) — the cheapest spec is the one with the fewest
+  new parts. Multi-service: `## Contract` + cross-service order.
 
 ### Triage: actionable vs blocked — controls POSTING, not writing
 
@@ -455,10 +467,17 @@ dirty → ask the user to stash/commit first.
     the PR is up. **Failure (Stop rule) →** leave it; report its `/tmp` path. Never
     `worktree remove` a failed story.
 
-Implement to spec; reuse before building. **Minimum diff — no opportunistic refactor,
-no over-engineering, no code comments** unless the file already comments heavily. Run
-the **per-service gate** (tests + typecheck + lint) BEFORE commit. Tests for every
-change, matching existing patterns.
+Implement to spec, and **before each piece, walk the ladder in
+`references/smallest-change.md`** — not needed → already in the repo → the language
+ships it → the platform ships it → an installed dependency does it → one clear line →
+the least code that passes the check. Stop at the first rung that holds. **Minimum
+diff — no opportunistic refactor, no abstraction nobody asked for, no new dependency
+for what an installed one covers, no code comments** unless the file already comments
+heavily. Validation at trust boundaries, data-loss error handling, security,
+accessibility and the tier's test are never what gets trimmed. A shortcut with a known
+ceiling goes in the PR body's `Deferred` list (Phase 5), not in a comment. Run the
+**per-service gate** (tests + typecheck + lint) BEFORE commit. Tests for every change,
+matching existing patterns.
 
 - **Run the gate through corgi when the service is in `corgi-compose.yml`** — gives
   the worktree full resolved env, deps, cwd, so you don't guess the runner or
@@ -652,6 +671,13 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 ```
 
 - **Draft only.** Report each PR/MR's diff summary + link; human flips to ready.
+- **Risk card in the body.** Right after the draft is up, run the `risk` skill in
+  `stamp` mode on it (pre-authorised here — the run already passed the spec gate, so
+  print the card, no prompt). The card lands at the end of the description between its
+  markers and tells the human who flips it to ready how much review it needs and
+  whether it may be merged on the score alone. Re-stamp after every push in the
+  Phase 5.5 loop so the score follows the diff. Multi-repo → stamp each PR/MR; the set's
+  score is the maximum, and the contract lines go on every side.
 - **Watch CI to green (when asked, or in a pre-authorized autonomous run).** After the
   draft is up, poll checks to conclusion and report pass/fail per PR/MR — don't stop at
   "opened".
@@ -675,6 +701,11 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 - **Run-locally line in the body** — the same one-paste
   `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report) so a
   reviewer spins the branch up without hunting.
+- **`Deferred` in the body** — one line per deliberate shortcut from Phase 3
+  (`<what> · ceiling: <limit> · revisit when: <trigger>`), and one line per thing
+  the ladder left out with the rung that covered it. Omit the section when there is
+  nothing; never pad it. The `risk` card reads it, so a ceiling below today's load
+  is a Check line rather than a surprise.
 - Canonical spec already on the tracker (Phase 1); PR/MR comment is a convenience
   copy.
 
@@ -728,6 +759,9 @@ between stories.
   suggestions). Skip blocked/failed.
 - **CI line (when watched)** → one line per PR/MR after the link: `✓ CI green` or
   `✗ CI red — <failing job>`. Omit if CI wasn't watched.
+- **Risk line** → one line per story after the link(s): `risk N/10 <tier> ·
+  auto-approve: yes|no — <reason>` (the set's maximum for multi-repo). Exactly the
+  `risk` skill's `gate` line, so a reader — or `autopilot` — can sort the batch by it.
 - **Review line** → one line per PR/MR after the link: `✓ review clean (<n> rounds)`,
   `✗ review open — round <n>: <short finding or "stopped by user">`, or
   `review skipped` when the phase was skipped up front (Phase 5.5 — one canonical
@@ -757,12 +791,14 @@ between stories.
 ```
 [ABC-123] web: Remove address step from mobile signup
 https://github.com/<org>/<repo>/pull/<n>
+risk 2/10 trivial · auto-approve: yes
 ↳ review it: /corgi-review https://github.com/<org>/<repo>/pull/<n>
 ▶ corgi run --service-branch web=feature/ABC-123/remove-address-step --with-deps
 
 [ABC-200] Add phone field to user
 api: https://github.com/<org>/api/pull/<n>
 web: https://github.com/<org>/web/pull/<n>
+risk 7/10 high · auto-approve: no — cross-service contract
 ↳ review it: /corgi-review https://github.com/<org>/api/pull/<n> https://github.com/<org>/web/pull/<n>
 ▶ corgi run --with-deps --service-branch api=feature/ABC-200/user-phone --service-branch web=feature/ABC-200/user-phone
 

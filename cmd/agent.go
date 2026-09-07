@@ -321,7 +321,18 @@ func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, for
 		utils.Infof("agent: skipping %s (not enabled — run `corgi agent init` there, or set autostart: true)\n", w.ID)
 		return supervisor.SpawnConfig{}, false
 	}
-	return spawnConfigFrom(w, resolved, "", foreground), true
+	cfg := spawnConfigFrom(w, resolved, "", foreground)
+	if kind, err := supervisor.KindFor(cfg); err == nil && kind.BuildsArgvFromSettings {
+		// A server the daemon starts on its own is there so the machine is
+		// reachable — not to open a conversation nobody asked for. Remote
+		// control would pre-create one session per start, and every restart
+		// (login, the ten-minute network exit, `corgi agent restart`) would
+		// leave another "<workspace> · main · 10:00" row in the phone's list.
+		// So it runs as a device: sessions come from claude.ai's device list
+		// or a launcher Start, and a restart leaves nothing behind.
+		cfg.DeviceOnly = !resolved.AutostartSessionEnabled()
+	}
+	return cfg, true
 }
 
 func spawnConfigFrom(w workspace.Workspace, r config.Resolved, profile string, foreground bool) supervisor.SpawnConfig {
@@ -353,6 +364,12 @@ func spawnConfigFrom(w workspace.Workspace, r config.Resolved, profile string, f
 		// The session name shown in claude.ai/code. Meaningless to a kind handed
 		// a complete argv, where it would be a setting that never takes effect.
 		cfg.Name = defaultSessionName(r.ID, w.AbsPath, profile, time.Now())
+	}
+	if kind.SessionPrefixEnv != "" {
+		// Sessions remote control creates on demand get "<workspace>-brave-otter"
+		// instead of "<hostname>-brave-otter": the hostname is the same for
+		// every workspace on this machine and says nothing.
+		cfg.SessionNamePrefix = sessionNamePrefix(r.ID, profile)
 	}
 	if cfg.Spawn == "" && kind.SupportsSpawn {
 		// Isolate each on-demand session, so two remote sessions in one
@@ -410,6 +427,9 @@ func printStartupDiagnostics(configs []supervisor.SpawnConfig) {
 			kind = supervisor.DefaultKind
 		}
 		utils.Infof("agent: %-20s dir=%s kind=%s configDir=%s spawn=%s\n", c.WorkspaceID, c.Dir, kind, configDir, c.Spawn)
+		if c.DeviceOnly {
+			utils.Infof("agent: %-20s device only: no session is opened at start (autostartSession: true restores one)\n", c.WorkspaceID)
+		}
 		if stripped := supervisor.StrippedCredentials(c, env); len(stripped) > 0 {
 			utils.Infof("agent: %-20s stripped from child env: %v\n", c.WorkspaceID, stripped)
 		}
@@ -471,6 +491,12 @@ func printWorkspaceState(w supervisor.RunState) {
 	if w.LastReason != "" {
 		fmt.Printf("  %-20s %s\n", "", w.LastReason)
 	}
+	if w.Running && w.DeviceOnly {
+		fmt.Printf("  %-20s %s\n", "", deviceOnlyLine(w.SessionsThisRun))
+	}
+	if w.Note != "" {
+		fmt.Printf("  %-20s note: %s\n", "", w.Note)
+	}
 	if w.Origin == supervisor.OriginRemote {
 		label := "started remotely"
 		if w.Profile != "" {
@@ -513,15 +539,28 @@ func formatTokens(n int64) string {
 
 // workspaceState collapses the flags into the one word worth reading first.
 // Disabled outranks running: a disabled workspace is the thing to explain.
+// A device-only server with nothing on it is "online" rather than "running":
+// the machine answers, and there is no session to look for.
 func workspaceState(w supervisor.RunState) string {
 	switch {
 	case w.Disabled:
 		return "disabled"
+	case w.Running && w.DeviceOnly && w.SessionsThisRun == 0:
+		return "online"
 	case w.Running:
 		return "running"
 	default:
 		return "stopped"
 	}
+}
+
+// deviceOnlyLine explains the online state in the words status and the
+// launcher share, so the laptop and the phone describe it the same way.
+func deviceOnlyLine(sessions int) string {
+	if sessions > 0 {
+		return fmt.Sprintf("device · %d session(s) opened on demand", sessions)
+	}
+	return "device only · no session opened at start — create one from the Claude app's device list, or Start it from the launcher"
 }
 
 func printWorkspaceDiagnostic(d daemon.WorkspaceDiagnostic) {

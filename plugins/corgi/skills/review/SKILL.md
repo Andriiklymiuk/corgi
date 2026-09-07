@@ -229,7 +229,16 @@ review untouched code.
 - **Comments the code does not need** — see the rule below.
 - **Overengineering** — abstraction with one caller, a config knob nobody asked
   for, an interface introduced for a single implementation, a layer that only
-  forwards. Flag it and name the simpler shape.
+  forwards. Flag it and name the simpler shape. The other four shapes of too much
+  code, each a `nit` with the replacement in `suggestedReplacement` and its line
+  count in the title: **hand-rolled what the language ships** (a date/URL/sort
+  helper the stdlib has), **hand-rolled what the platform ships** (a picker, a
+  modal, validation, a constraint the browser, framework or database provides), **a
+  new dependency for what an installed one covers** (check the lockfile), and
+  **dead flexibility** (a parameter, branch or option nothing in the diff uses).
+  The ladder the `stories` skill builds by is `stories/references/smallest-change.md`;
+  a PR body's `Deferred` list says which shortcuts were deliberate — a deferred item
+  with no trigger is a finding, a deliberate one with a trigger is not.
 - **Complexity regressions** — run the `complexity` skill in `report` mode on the
   diff. A touched function whose cyclomatic complexity rose, or a new function over
   the repo's threshold (its own linter config, else 10), is a finding: `nit` by
@@ -238,6 +247,14 @@ review untouched code.
   clauses, an extracted function with a what-not-how name, a lookup table, a named
   predicate). A suppression added to pass a linter's complexity rule is a finding on
   its own.
+- **Risk score** — run the `risk` skill in `assess` mode on the diff (its Phase 1
+  evidence table reuses this PR's fetch; no second checkout). The first line of its
+  card — `Risk N/10 — <tier> · <what the reviewer does>` — becomes the summary's
+  headline (P5), and `auto-approve: yes|no — <reason>` its last line. The card's
+  **Check** items are the reading order for the rest of this hunt: a floor it hit
+  (auth, payment, migration, secret, native module, CI) is where the blocking
+  findings will be. Offer `stamp` (write the card into the description) at the P4
+  gate; never stamp without it.
 - **Performance footguns in a hot path** — work repeated per item that could be
   done once, an unbounded read or scan, a per-request shell-out or file walk, a
   network call with no timeout, a goroutine nothing stops.
@@ -574,12 +591,15 @@ LLM-generated title:**
 
 ## Phase 6 — Grouped report
 
-**Single PR** → one line `[<repo>] <summary headline>` + link, then counts.
+**Single PR** → one line `[<repo>] <summary headline>` + link, then the `risk`
+skill's summary line (`risk N/10 <tier> · auto-approve: yes|no — <reason>`) on its
+own line, then counts.
 
 **Multi-PR** → group by **related change**, not one flat list:
 - PRs of the **same change/story** (same issue key or branch across repos) → one
   header `[<issue-key>] <change headline>`, then one `<repo>: <bare link> — <counts
-  or top finding>` line per repo.
+  or top finding>` line per repo, then one risk summary line for the set (the
+  maximum across its PRs, contract counted once).
 - **Unrelated targets in one batch never share a header** — each gets its own
   block, blank line between.
 
@@ -615,9 +635,11 @@ Example:
 [ABC-200] Add address field to user
 api: https://github.com/<org>/api/pull/42 — no blockers, 2 nits
 web: https://github.com/<org>/web/pull/37 — 1 blocking: missing null-check on user.address
+risk 7/10 high · auto-approve: no — cross-service contract
 
 [api] Fix pagination cursor on empty page
 https://github.com/<org>/api/pull/45 — no blockers
+risk 2/10 trivial · auto-approve: yes
 
 Contract
   api#42 + web#37: api adds address?: string | null; web reads .address without null guard (blocking, posted to both)
