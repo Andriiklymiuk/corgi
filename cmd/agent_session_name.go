@@ -59,23 +59,14 @@ func defaultSessionName(id, dir, profile string, now time.Time) string {
 // sessionNamePrefix is what remote control's own generated names start with
 // for this workspace: "corgi-brave-otter", or "corgi-work-brave-otter" under a
 // profile, in place of the hostname every workspace on the machine shares.
-// Dots and spaces become dashes so the prefix reads as one word in the list.
+// Shaping it into one safe word is the supervisor's job (it owns the env
+// entry); this only says what goes in.
 func sessionNamePrefix(id, profile string) string {
 	parts := []string{strings.TrimSpace(id)}
 	if p := strings.TrimSpace(profile); p != "" {
 		parts = append(parts, p)
 	}
-	name := strings.Join(parts, "-")
-	name = strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-			return r
-		case r == '.', r == ' ':
-			return '-'
-		}
-		return -1
-	}, name)
-	return strings.Trim(name, "-")
+	return strings.Join(parts, "-")
 }
 
 // clipSessionName trims by rune, never by byte: cutting a multi-byte character

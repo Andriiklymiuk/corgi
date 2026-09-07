@@ -414,18 +414,22 @@ func StrippedCredentials(c SpawnConfig, parentEnv []string) []string {
 	return stripped
 }
 
-// sanitizePrefix keeps a session-name prefix to what reads in a list and
-// cannot break an environment entry: letters, digits, dots, dashes and
-// underscores. Anything else is dropped rather than escaped.
+// sanitizePrefix keeps a session-name prefix to what reads as one word in a
+// list and cannot break an environment entry: letters, digits, dashes and
+// underscores. A dot or a space becomes a dash, so "my stack.v2" reads as
+// "my-stack-v2"; anything else is dropped rather than escaped. The one place
+// this shaping happens — callers hand over the raw id.
 func sanitizePrefix(p string) string {
 	var b strings.Builder
 	for _, r := range strings.TrimSpace(p) {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
 			b.WriteRune(r)
+		case r == '.', r == ' ':
+			b.WriteRune('-')
 		}
 	}
-	return strings.Trim(b.String(), "-.")
+	return strings.Trim(b.String(), "-")
 }
 
 // expandHome resolves a leading ~ so config files can use the short form.

@@ -747,7 +747,7 @@ between stories.
   `✗ CI red — <failing job>`. Omit if CI wasn't watched.
 - **Risk line** → one line per story after the link(s): `risk N/10 <tier> ·
   auto-approve: yes|no — <reason>` (the set's maximum for multi-repo). Exactly the
-  `risk` skill's summary form, so a reader — or `autopilot` — can sort the batch by it.
+  `risk` skill's `gate` line, so a reader — or `autopilot` — can sort the batch by it.
 - **Review line** → one line per PR/MR after the link: `✓ review clean (<n> rounds)`,
   `✗ review open — round <n>: <short finding or "stopped by user">`, or
   `review skipped` when the phase was skipped up front (Phase 5.5 — one canonical

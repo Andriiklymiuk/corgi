@@ -330,7 +330,7 @@ func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, for
 		// leave another "<workspace> · main · 10:00" row in the phone's list.
 		// So it runs as a device: sessions come from claude.ai's device list
 		// or a launcher Start, and a restart leaves nothing behind.
-		cfg.DeviceOnly = !resolved.AutostartSession
+		cfg.DeviceOnly = !resolved.AutostartSessionEnabled()
 	}
 	return cfg, true
 }

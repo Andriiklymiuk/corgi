@@ -352,8 +352,8 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
   hand it to the user, one tap opens the conversation in that repo.
 - Idempotent: an already-running workspace answers `state: "running"` with its
   URL. Ambiguous names return candidates — ask, as always. A workspace that is
-  `running` with `deviceOnly: true` and no `sessions` is being **swapped** for a
-  session-opening server — poll on; the URL follows.
+  `running` with `deviceOnly: true` and `sessionsThisRun: 0` is being **swapped** for
+  a session-opening server — poll on; the URL follows.
 - `sessionUrl` is best-effort. If it never appears, the session still runs;
   tell the user to find it in claude.ai/code by the workspace's name.
 - `corgi_session_stop { "workspace": "..." }` ends it. Stopping a non-running
@@ -505,8 +505,8 @@ sessions awake but sleeps between turns.
 | queued but nothing started | Commands expire after 60s. Check `corgi agent status` diagnostics — a rejected start says why there. |
 | running but no `sessionUrl` | The session is fine; the URL was not spotted in output. Find it in claude.ai/code. |
 | status says `online`, launcher says *online · no session* | Not a failure: a supervised server waiting as a device. Start from the launcher or the Claude app's device list opens a session. |
-| my claude.ai list is full of `<ws> · main · HH:MM` rows | Pre-created sessions from an older corgi. Archive them once; the current daemon starts device-only servers, which leave none behind. `autostartSession: true` brings them back on purpose. |
-| status shows *note: this Claude Code predates --no-create-session-in-dir* | The installed CLI rejected the flag; corgi fell back to opening a session at start. `claude update`, then `corgi agent restart`. |
+| my claude.ai list is full of `<ws> · main · HH:MM` rows | Leftovers from an older corgi — see *Supervised servers are devices* above. Archive them once. |
+| status shows *note: this Claude Code predates --no-create-session-in-dir* | `claude update`, then `corgi agent restart`. |
 | `up` says the port is in use, pairing "not open" on the old URL | A leftover MCP holds the port. Newer corgi reclaims it on `up` automatically; otherwise `corgi agent down` then `corgi agent up` for a fresh tunnel + pairing window. |
 
 ## Things not to do

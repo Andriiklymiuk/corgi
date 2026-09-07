@@ -198,7 +198,9 @@ func runStateOf(ws supervisor.RunState) wsRunState {
 	if !ws.StartedAt.IsZero() {
 		started = ws.StartedAt.UnixMilli()
 	}
-	idleDevice := ws.DeviceOnly && ws.SessionsThisRun == 0
+	// Gated on Running: DeviceOnly describes the last run and survives its
+	// exit, and a server sitting in a restart backoff is not "online".
+	idleDevice := ws.Running && ws.DeviceOnly && ws.SessionsThisRun == 0
 	url := ws.SessionURL
 	if idleDevice {
 		// Whatever link a device with no session printed, it is not a

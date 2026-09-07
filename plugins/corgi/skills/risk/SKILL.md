@@ -17,8 +17,9 @@ Three modes:
 - **stamp** — assess, then write the card into the PR/MR description (idempotent,
   behind a preview). What `stories` does when it opens a draft and what `review` offers
   on an existing one.
-- **gate** — one line, `risk gate: <score>/10 · <tier> · auto-approve: yes|no — <reason>`.
-  What `autopilot` and `stories` read.
+- **gate** — the one summary line and nothing else,
+  `risk N/10 <tier> · auto-approve: yes|no — <reason>`. What a caller that wants only
+  the verdict prints — `stories` under each PR link, `tracker` beside each pickup.
 
 Two targets:
 
@@ -56,7 +57,7 @@ Two targets:
 - **PR/MR link or number** → forge from the link or `corgi-compose.yml` (`review`
   Phase 0 rules). Fetch title, body, base, head SHA, diff, changed files, check
   status, linked ticket. **No checkout.**
-- **Branch** → `git -C <dir> diff <base>...<branch>` plus `--name-only --numstat`.
+- **Branch** → `git -C <dir> diff <base>...<branch>`, and `--numstat` for the sizes.
 - **Local diff** → `git diff <base>...HEAD` in the current service dir; uncommitted
   work included only when asked.
 - **Story** → the ticket (Linear/Jira via the `tracker` skill's read path, or the
@@ -102,6 +103,14 @@ not average: a tiny, well-tested change to the auth middleware is still an auth 
 | **Mobile & native** | native modules, ABI/SDK bumps, permissions (push, ATT, location), deep links, offline persistence, navigation stack, store metadata / IAP, app config, platform-specific code — see `references/checklists.md` |
 | **Novelty** | new dependency, new pattern for this repo, first change in an area, large generated diff, dependency upgrades with changelog-worthy breaks |
 
+Two rules on top of the sum:
+
+- **Escalation.** When a floor applies and verification scores 3 or more, add 1: a
+  change that is risky by nature *and* unproven is the case the critical band exists
+  for. This is the only way past 8 short of a 4 with five other dimensions raised.
+- **Story targets** score verification 3 — nothing is proven yet — and the floors apply
+  to what the ticket says the change will touch, since there is no diff to read.
+
 ### Floors
 | Condition (evidence in the diff) | Minimum |
 |----------------------------------|---------|
@@ -118,7 +127,7 @@ not average: a tiny, well-tested change to the auth middleware is still an auth 
 ### Bands → review tier
 | Score | Tier | What the reviewer does |
 |-------|------|------------------------|
-| 1–2 | **trivial** | one reviewer glances; auto-approve candidate |
+| 1–2 | **trivial** | one reviewer glances; the only band where auto-approve can be `yes` |
 | 3–4 | **low** | one reviewer reads the diff; ~10 min |
 | 5–6 | **moderate** | one reviewer reads carefully **and runs it** (the `corgi run --service-branch` line); ~30 min |
 | 7–8 | **high** | two reviewers, one owning the touched area; manual check on the real environment or device; ship behind a flag or in a staged rollout |
@@ -126,7 +135,7 @@ not average: a tiny, well-tested change to the auth middleware is still an auth 
 
 ### Auto-approval
 `auto-approve: yes` only when **all** hold and are visible in the evidence:
-1. score ≤ 3 after floors;
+1. score ≤ 2 after floors and escalation;
 2. every CI check on head is green (and at least one check exists);
 3. every changed non-test line is exercised by a test in the diff or a named existing
    test, or the change is copy/config with a screenshot;
@@ -142,11 +151,13 @@ merge on the score alone; it never means the skill merges (nothing in corgi does
 Short, evidence-first, phone-readable. Exact shape:
 
 ```
-<!-- corgi-risk score=6 tier=moderate -->
-## Risk 6/10 — moderate · one reviewer, read carefully and run it
+<!-- corgi-risk score=7 tier=high -->
+## Risk 7/10 — high · two reviewers, one owning api; run it before merging
 
 **Why**
-- contract: `api/handlers/user.go` adds `address` to the user response; `web` reads it (`web/src/user.ts:41`)
+- blast radius: two services — `api/handlers/user.go` and `web/src/user.ts` both change
+- contract: `api` adds `address` to the user response; `web` reads it (`web/src/user.ts:41`)
+- data: a new user field is stored and returned (`api/migrations/0042_address.sql`)
 - verification: 3 tests added for the handler; no test touches the `web` reader
 - reversibility: additive column, migration has a down path
 
@@ -191,22 +202,18 @@ No write permission → print the card and say it was not stamped; never fall ba
 comment silently.
 
 ## Output
-`assess` and `stamp` end with the card, then one line per target for a set, then:
+`assess` and `stamp` end with the card, then one line per target for a set, then the
+summary line — one form everywhere, so a caller can match it as a prefix:
 
 ```
-risk: 6/10 moderate · auto-approve: no — cross-service contract · stamped: yes (api#42, web#37)
+risk 7/10 high · auto-approve: no — cross-service contract
 ```
 
-`gate` prints only:
-
-```
-risk gate: 6/10 · moderate · auto-approve: no — cross-service contract
-```
-
-The `review` skill folds the first line of the card into its summary headline; the
-`stories` grouped report prints `risk N/10 <tier>` under each PR link; `autopilot`
-records the batch maximum in its heartbeat. Keep those forms exact so callers can parse
-them.
+`stamp` appends ` · stamped: yes (api#42, web#37)` (or `stamped: no — <why>`) to that
+line; `gate` prints the line alone. The `review` skill folds the card's first line
+into its summary headline and prints this line in its report; `stories` prints it
+under each PR link and `tracker` beside each pickup; `autopilot` names over-ceiling
+stories in its heartbeat note with it. Keep the form exact.
 
 ## Red flags — stop
 - A card with no file references → you scored from the title. Re-read the diff.
@@ -226,5 +233,5 @@ them.
   infra) so Check lines are specific, not generic.
 - **`review`** — runs `assess` on every PR it reviews and offers `stamp`.
 - **`stories`** — runs `stamp` when it opens a draft PR/MR; prints the score in its report.
-- **`autopilot`** — reads `gate`; a batch above its ceiling waits for a human.
+- **`autopilot`** — compares the line against its `maxRisk`; an over-ceiling story is left for a human.
 - **`complexity`** — a complexity-gate fail is verification evidence here, not a score of its own.

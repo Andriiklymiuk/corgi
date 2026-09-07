@@ -582,13 +582,14 @@ LLM-generated title:**
 
 ## Phase 6 — Grouped report
 
-**Single PR** → one line `[<repo>] <summary headline>` + link, then
-`risk N/10 <tier>` on its own line, then counts.
+**Single PR** → one line `[<repo>] <summary headline>` + link, then the `risk`
+skill's summary line (`risk N/10 <tier> · auto-approve: yes|no — <reason>`) on its
+own line, then counts.
 
 **Multi-PR** → group by **related change**, not one flat list:
 - PRs of the **same change/story** (same issue key or branch across repos) → one
   header `[<issue-key>] <change headline>`, then one `<repo>: <bare link> — <counts
-  or top finding>` line per repo, then one `risk N/10 <tier>` line for the set (the
+  or top finding>` line per repo, then one risk summary line for the set (the
   maximum across its PRs, contract counted once).
 - **Unrelated targets in one batch never share a header** — each gets its own
   block, blank line between.
@@ -625,11 +626,11 @@ Example:
 [ABC-200] Add address field to user
 api: https://github.com/<org>/api/pull/42 — no blockers, 2 nits
 web: https://github.com/<org>/web/pull/37 — 1 blocking: missing null-check on user.address
-risk 7/10 high — two reviewers, merge order api → web
+risk 7/10 high · auto-approve: no — cross-service contract
 
 [api] Fix pagination cursor on empty page
 https://github.com/<org>/api/pull/45 — no blockers
-risk 2/10 trivial — auto-approve: yes
+risk 2/10 trivial · auto-approve: yes
 
 Contract
   api#42 + web#37: api adds address?: string | null; web reads .address without null guard (blocking, posted to both)

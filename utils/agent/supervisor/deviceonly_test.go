@@ -66,10 +66,11 @@ func TestSessionNamePrefixIsKeptToWhatAnEnvEntryCanHold(t *testing.T) {
 	for in, want := range map[string]string{
 		"acme":          "acme",
 		" acme-stack ":  "acme-stack",
-		"a=b c":         "abc",
+		"a=b c":         "ab-c",
 		"-.acme.-":      "acme",
 		"работа":        "",
-		"api_v2.stable": "api_v2.stable",
+		"api_v2.stable": "api_v2-stable",
+		"my stack.v2":   "my-stack-v2",
 	} {
 		if got := sanitizePrefix(in); got != want {
 			t.Errorf("sanitizePrefix(%q) = %q, want %q", in, got, want)
@@ -78,13 +79,13 @@ func TestSessionNamePrefixIsKeptToWhatAnEnvEntryCanHold(t *testing.T) {
 }
 
 func TestFlagUnsupportedNeedsBothTheMarkerAndTheFlag(t *testing.T) {
-	if !FlagUnsupported("error: unknown option '--no-create-session-in-dir'", DeviceOnlyFlag) {
+	if !flagUnsupported("error: unknown option '--no-create-session-in-dir'", DeviceOnlyFlag) {
 		t.Error("the CLI's own rejection must be recognised")
 	}
-	if FlagUnsupported("unknown option '--frobnicate'", DeviceOnlyFlag) {
+	if flagUnsupported("unknown option '--frobnicate'", DeviceOnlyFlag) {
 		t.Error("another flag's rejection is not ours")
 	}
-	if FlagUnsupported("reading --no-create-session-in-dir from the docs", DeviceOnlyFlag) {
+	if flagUnsupported("reading --no-create-session-in-dir from the docs", DeviceOnlyFlag) {
 		t.Error("the flag's name alone, without a rejection, is just output")
 	}
 }
@@ -108,6 +109,9 @@ func TestRunnerDropsAFlagTheCLIDoesNotKnowAndRetriesAtOnce(t *testing.T) {
 	r.Config.DeviceOnly = true
 	var slept atomic.Int32
 	r.Sleep = func(context.Context, time.Duration) { slept.Add(1) }
+	var events []RunEvent
+	var evMu sync.Mutex
+	r.OnEvent = func(e RunEvent) { evMu.Lock(); events = append(events, e); evMu.Unlock() }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -130,6 +134,17 @@ func TestRunnerDropsAFlagTheCLIDoesNotKnowAndRetriesAtOnce(t *testing.T) {
 	// not count against the workspace.
 	if n := slept.Load(); n > 1 {
 		t.Errorf("the flag retry must not wait out a backoff; slept %d times", n)
+	}
+	evMu.Lock()
+	defer evMu.Unlock()
+	var explained bool
+	for _, e := range events {
+		if e.Kind == "exited" && e.Cause == string(CauseUnsupportedFlag) {
+			explained = true
+		}
+	}
+	if !explained {
+		t.Errorf("the timeline must say why the first process ended, got %+v", events)
 	}
 }
 

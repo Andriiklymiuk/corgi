@@ -67,8 +67,9 @@ type WorkspaceConfig struct {
 	// what fills the phone's list with rows nobody opened. Sessions are
 	// created from claude.ai or by a launcher Start instead. Turn this on for
 	// a workspace whose session you want waiting in the list the moment the
-	// daemon is up.
-	AutostartSession bool `yaml:"autostartSession"`
+	// daemon is up. A pointer, like Autostart, so a workspace can turn a
+	// default off as well as on.
+	AutostartSession *bool `yaml:"autostartSession"`
 	// Kind selects which agent CLI to supervise. Empty keeps the default, so a
 	// config written before this existed behaves exactly as it did.
 	Kind string `yaml:"kind"`
@@ -206,7 +207,9 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.Autostart != nil {
 		base.Autostart = over.Autostart
 	}
-	base.AutostartSession = base.AutostartSession || over.AutostartSession
+	if over.AutostartSession != nil {
+		base.AutostartSession = over.AutostartSession
+	}
 	if over.Kind != "" {
 		base.Kind = over.Kind
 	}
@@ -269,6 +272,12 @@ func ApplyProfile(r Resolved, user *UserConfig, name string) (Resolved, error) {
 	}
 	r.WorkspaceConfig = overlay(r.WorkspaceConfig, p)
 	return r, nil
+}
+
+// AutostartSessionEnabled reports whether a server the daemon starts by
+// itself should also open a session in the checkout. Off unless asked for.
+func (r Resolved) AutostartSessionEnabled() bool {
+	return r.AutostartSession != nil && *r.AutostartSession
 }
 
 // AutostartEnabled reports whether the workspace should be supervised. Opt-in:

@@ -71,11 +71,12 @@ func TestRemoteStartAlwaysOpensASession(t *testing.T) {
 	}
 }
 
-func TestSessionNamePrefixReadsAsOneWord(t *testing.T) {
+func TestSessionNamePrefixJoinsWorkspaceAndProfile(t *testing.T) {
+	// Shaping into one safe word happens in the supervisor's BuildEnv; this
+	// only decides what goes in.
 	for _, tc := range []struct{ id, profile, want string }{
 		{"corgi", "", "corgi"},
 		{"corgi", "work", "corgi-work"},
-		{"my stack.v2", "", "my-stack-v2"},
 		{"  api  ", "personal", "api-personal"},
 	} {
 		if got := sessionNamePrefix(tc.id, tc.profile); got != tc.want {
@@ -127,14 +128,45 @@ func TestStatusCallsAnIdleDeviceOnline(t *testing.T) {
 	}
 }
 
-func TestAutostartSessionOverlaysLikeACapability(t *testing.T) {
-	on := true
+func TestAutostartSessionOverlaysInBothDirections(t *testing.T) {
+	on, off := true, false
 	user := &config.UserConfig{
-		Defaults:   config.WorkspaceConfig{AutostartSession: true},
-		Workspaces: map[string]config.WorkspaceConfig{"acme": {Autostart: &on}},
+		Defaults: config.WorkspaceConfig{AutostartSession: &on},
+		Workspaces: map[string]config.WorkspaceConfig{
+			"acme": {Autostart: &on},
+			"lab":  {Autostart: &on, AutostartSession: &off},
+		},
 	}
-	if r := config.Resolve("acme", nil, user); !r.AutostartSession {
+	if r := config.Resolve("acme", nil, user); !r.AutostartSessionEnabled() {
 		t.Error("a default a workspace entry does not mention must survive the overlay")
+	}
+	if r := config.Resolve("lab", nil, user); r.AutostartSessionEnabled() {
+		t.Error("a workspace must be able to turn a default off, not only on")
+	}
+	if (config.Resolved{}).AutostartSessionEnabled() {
+		t.Error("unset means off")
+	}
+}
+
+func TestRunStateOfBlanksTheLinkOfAnIdleDevice(t *testing.T) {
+	url := "https://claude.ai/code/session_x"
+	for name, tc := range map[string]struct {
+		in         supervisor.RunState
+		wantURL    string
+		wantDevice bool
+	}{
+		"idle device":         {supervisor.RunState{Running: true, DeviceOnly: true, SessionURL: url}, "", true},
+		"device with session": {supervisor.RunState{Running: true, DeviceOnly: true, SessionsThisRun: 1, SessionURL: url}, url, false},
+		"device in backoff":   {supervisor.RunState{Running: false, DeviceOnly: true, SessionURL: url}, url, false},
+		"session server":      {supervisor.RunState{Running: true, SessionURL: url}, url, false},
+	} {
+		got := runStateOf(tc.in)
+		if got.url != tc.wantURL || got.device != tc.wantDevice {
+			t.Errorf("%s: url %q device %v, want %q %v", name, got.url, got.device, tc.wantURL, tc.wantDevice)
+		}
+	}
+	if got := runStateOf(supervisor.RunState{Note: "old CLI"}); got.remark != "old CLI" {
+		t.Errorf("the runner's note must reach the row as the remark, got %q", got.remark)
 	}
 	_ = filepath.Join // keep the import honest if helpers move
 }
