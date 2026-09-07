@@ -629,13 +629,45 @@ terminals' shell pids and its own extension-host pid to the daemon, and reveals
 the tab (or the Claude Code panel, whose `claude` is a child of that extension
 host) when asked. Without the extension, focus is window-level, matched by
 folder. `corgi agent doctor` lists any session with `unknown` host — the first
-thing to check when a key press goes nowhere. iTerm2 and Terminal.app sessions
-get their app brought forward.
+thing to check when a key press goes nowhere. For iTerm2 and Terminal.app the
+hook records the `claude` process's controlling tty, and focus selects that
+exact tab through the emulator's own scripting; with no tty the app comes
+forward on its own.
 
 **Tab titles.** A second, synchronous hook prints a terminal title on the
 events that change status, so every VS Code terminal tab running Claude reads
 `● acme-api`, `▲ acme-api NEEDS YOU` or `✓ acme-api` with no deck at all.
 `--no-tab-title` skips it.
+
+**The plugin contract.** A Stream Deck plugin (or anything else) needs three
+things, all of them files or commands, nothing to pair or authenticate:
+
+| it wants | it does |
+|---|---|
+| the board | watch `sessions.json` in the agent data dir (`corgi agent sessions --json` prints its `path`) |
+| a key's look | `slots[i]`: `label`, `status`, `profile`, `pinned`, `detail`, `elapsedS`, `host`; `pager` + `overflow` for the `+N` key; `empty` |
+| the totals | `needsInput`, `working`, `overflow` at the top level |
+| a press | `corgi agent focus <sessionId>` · long press `corgi agent pin <key>` / `--off` · pager `corgi agent page next|prev` |
+| a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
+
+Slot indexes never move unless paged or unpinned, so the plugin can map keys by
+`(row, column)` order and hold nothing else. From a phone, the same board is the
+`corgi_sessions` MCP tool.
+
+**The plugin contract.** A Stream Deck plugin (or anything else) needs three
+things, all of them files or commands, nothing to pair or authenticate:
+
+| it wants | it does |
+|---|---|
+| the board | watch `sessions.json` in the agent data dir (`corgi agent sessions --json` prints its `path`) |
+| a key's look | `slots[i]`: `label`, `status`, `profile`, `pinned`, `detail`, `elapsedS`, `host`; `pager` + `overflow` for the `+N` key; `empty` |
+| the totals | `needsInput`, `working`, `overflow` at the top level |
+| a press | `corgi agent focus <sessionId>` · long press `corgi agent pin <key>` / `--off` · pager `corgi agent page next|prev` |
+| a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
+
+Slot indexes never move unless paged or unpinned, so the plugin can map keys by
+`(row, column)` order and hold nothing else. From a phone, the same board is the
+`corgi_sessions` MCP tool.
 
 Everything lives in the agent data directory (`sessions.json`, `windows/`,
 `reveal/`, the command spool), owner-only. Remote sessions
@@ -889,6 +921,8 @@ phone; they also work from any other MCP client.
 | tool | what it does |
 |---|---|
 | `corgi_session_brief` | what the previous session was working on before it restarted |
+| `corgi_sessions` | every Claude session on the machine and its status — "is anything waiting on me" |
+| `corgi_sessions` | every Claude session on the machine and its status — "is anything waiting on me" |
 | `corgi_session_events` | the workspace timeline: starts, exits and why, session links |
 | `corgi_workspaces` | every stack registered on this machine |
 | `corgi_workspace_resolve` | "the recipe app" → one stack, or candidates |

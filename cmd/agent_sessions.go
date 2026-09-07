@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )
 
@@ -174,16 +177,53 @@ func runAgentSessions(cmd *cobra.Command, _ []string) {
 	if !watch {
 		return
 	}
-	last := rep.UpdatedAt
+	if err := watchBoard(context.Background(), dir, rep.UpdatedAt, func(next boardReport) {
+		fmt.Print("\033[H\033[2J")
+		printBoard(next, time.Now())
+	}); err != nil {
+		exitWithError("agent_sessions", err, 1)
+	}
+}
+
+// watchBoard redraws on every publish. The daemon writes sessions.json by
+// rename, which is one create event, so a directory watch is exact; the
+// slow tick is the safety net for a watcher that misses one.
+func watchBoard(ctx context.Context, dir string, last time.Time, redraw func(boardReport)) error {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	defer watcher.Close()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := watcher.Add(dir); err != nil {
+		return err
+	}
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	name := filepath.Base(daemon.SessionsPath(dir))
 	for {
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-watcher.Events:
+			if !ok {
+				return nil
+			}
+			if filepath.Base(ev.Name) != name {
+				continue
+			}
+		case <-ticker.C:
+		case err := <-watcher.Errors:
+			return err
+		}
 		next, err := readBoard(dir)
 		if err != nil || next.UpdatedAt.Equal(last) {
 			continue
 		}
 		last = next.UpdatedAt
-		fmt.Print("\033[H\033[2J")
-		printBoard(next, time.Now())
+		redraw(next)
 	}
 }
 

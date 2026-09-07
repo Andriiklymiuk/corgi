@@ -277,8 +277,8 @@ func TestWindowJoinRules(t *testing.T) {
 	}
 	r.RecordFocus("term", ErrNoSession)
 	r.RecordFocus("term", ErrNoSession)
-	if s, _ := r.Lookup("term"); s.FocusError == "" {
-		t.Fatal("focus failure is recorded")
+	if s, _ := r.Lookup("term"); s.FocusError == "" || s.FocusAt.IsZero() {
+		t.Fatal("focus failure is recorded, with its time")
 	}
 	r.RecordFocus("nobody", nil)
 	r.Apply(ev("Stop", "term", time.Minute))
@@ -468,6 +468,14 @@ func TestPagerInSnapshot(t *testing.T) {
 	st := r.Snapshot(t0)
 	if st.Overflow != 2 || !st.Slots[2].Pager || st.Slots[2].Overflow != 2 || st.Slots[2].SessionID != "" {
 		t.Fatalf("pager slot = %+v overflow %d", st.Slots[2], st.Overflow)
+	}
+	perm := ev("PermissionRequest", "d", 5*time.Second)
+	perm.Tool, perm.ClaudePID = "Bash", 103
+	r.Apply(perm)
+	busy := ev("UserPromptSubmit", "a", 6*time.Second)
+	r.Apply(busy)
+	if st := r.Snapshot(t0); st.NeedsInput != 1 || st.Working != 1 {
+		t.Fatalf("counts: needs %d working %d", st.NeedsInput, st.Working)
 	}
 	if !r.Page(1) || r.Snapshot(t0).Slots[0].SessionID != "c" {
 		t.Fatalf("page: %+v", r.Snapshot(t0).Slots)

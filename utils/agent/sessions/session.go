@@ -96,8 +96,11 @@ type Event struct {
 	// Names are the ancestors' process names, in the same order. They say
 	// which editor a terminal belongs to ("Cursor Helper (Plugin)") when no
 	// extension is there to say so.
-	Names []string  `json:"names,omitempty"`
-	At    time.Time `json:"at"`
+	Names []string `json:"names,omitempty"`
+	// TTY is the claude process's controlling terminal device, which names
+	// the exact iTerm2 or Terminal.app tab.
+	TTY uint64    `json:"tty,omitempty"`
+	At  time.Time `json:"at"`
 }
 
 // Host is where a session's terminal was found.
@@ -137,6 +140,7 @@ type Session struct {
 	ClaudePID int      `json:"claudePid,omitempty"`
 	Ancestors []int    `json:"ancestors,omitempty"`
 	Names     []string `json:"names,omitempty"`
+	TTY       uint64   `json:"tty,omitempty"`
 	// Window, TermProgram and TermSession are kept from the hook so the join
 	// can be redone whenever the set of windows changes.
 	Window      string    `json:"window,omitempty"`
@@ -152,8 +156,11 @@ type Session struct {
 	StartedAt    time.Time `json:"startedAt"`
 	LastActivity time.Time `json:"lastActivity"`
 	// FocusError is the last failed focus attempt, cleared by the next event
-	// or a focus that worked. A key flashes it once.
-	FocusError string `json:"focusError,omitempty"`
+	// or a focus that worked. FocusAt is when the attempt was made, so a
+	// plugin that reconnects can tell a fresh failure from one it already
+	// flashed.
+	FocusError string    `json:"focusError,omitempty"`
+	FocusAt    time.Time `json:"focusAt,omitempty"`
 }
 
 // Terminal is one integrated-terminal tab of an editor window.

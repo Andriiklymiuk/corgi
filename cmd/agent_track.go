@@ -414,6 +414,7 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 	ev.Names = proc.Names(chain)
 	if owner, ok := proc.Owner(chain); ok {
 		ev.ClaudePID = owner.PID
+		ev.TTY = owner.TTY
 	}
 	return ev, true
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -230,5 +231,13 @@ func TestDaemonWithoutTrackingStillDrains(t *testing.T) {
 	d.reapSessions(context.Background())
 	if !d.alive(os.Getpid()) {
 		t.Fatal("default liveness probe")
+	}
+}
+
+func TestTerminalScriptsNameTheTTY(t *testing.T) {
+	for _, script := range []string{itermScript("/dev/ttys003"), terminalAppScript("/dev/ttys003")} {
+		if !strings.Contains(script, `"/dev/ttys003"`) || !strings.Contains(script, "activate") {
+			t.Fatalf("script = %s", script)
+		}
 	}
 }

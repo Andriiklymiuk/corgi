@@ -45,10 +45,15 @@ type State struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 	Size      int       `json:"size"`
 	// Overflow is how many sessions have no key of their own.
-	Overflow int       `json:"overflow"`
-	Slots    []Slot    `json:"slots"`
-	Sessions []Session `json:"sessions"`
-	Windows  []Window  `json:"windows,omitempty"`
+	Overflow int `json:"overflow"`
+	// NeedsInput and Working count sessions in those states, wherever they
+	// sit — a pager key or a status bar can say "2 waiting" without walking
+	// the board.
+	NeedsInput int       `json:"needsInput"`
+	Working    int       `json:"working"`
+	Slots      []Slot    `json:"slots"`
+	Sessions   []Session `json:"sessions"`
+	Windows    []Window  `json:"windows,omitempty"`
 }
 
 // Slot is one key, ready to draw.
@@ -66,8 +71,10 @@ type Slot struct {
 	ElapsedS  int      `json:"elapsedS,omitempty"`
 	Detail    string   `json:"detail,omitempty"`
 	Host      HostKind `json:"host,omitempty"`
-	// FocusError is set when the last press on this key could not land.
-	FocusError string `json:"focusError,omitempty"`
+	// FocusError is set when the last press on this key could not land;
+	// FocusAt says when.
+	FocusError string    `json:"focusError,omitempty"`
+	FocusAt    time.Time `json:"focusAt,omitempty"`
 }
 
 // New returns a registry persisted at path, with a board of size keys.
@@ -351,6 +358,9 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if len(ev.Ancestors) > 0 {
 		s.Ancestors = ev.Ancestors
 		s.Names = ev.Names
+	}
+	if ev.TTY != 0 {
+		s.TTY = ev.TTY
 	}
 	if ev.Window != "" {
 		s.Window = ev.Window
@@ -680,6 +690,8 @@ type FocusTarget struct {
 	// Panel asks the window to reveal the Claude Code panel rather than a
 	// terminal tab.
 	Panel bool
+	// TTY is the controlling terminal device for an emulator session.
+	TTY uint64
 	// Connected says a reveal request will be read by a live extension.
 	Connected bool
 }
@@ -701,7 +713,7 @@ func (r *Registry) Focus(ref string) (FocusTarget, error) {
 	h := s.Host
 	return FocusTarget{
 		SessionID: s.ID, Kind: h.Kind, App: h.App, Folder: h.Folder, WindowID: h.WindowID,
-		ShellPID: h.ShellPID, Panel: h.Kind == HostVSCodePanel, Connected: h.Connected,
+		ShellPID: h.ShellPID, Panel: h.Kind == HostVSCodePanel, Connected: h.Connected, TTY: s.TTY,
 	}, nil
 }
 
@@ -718,7 +730,8 @@ func (r *Registry) RecordFocus(id string, err error) {
 	if err != nil {
 		msg = err.Error()
 	}
-	if s.FocusError == msg {
+	s.FocusAt = time.Now()
+	if s.FocusError == msg && msg == "" {
 		return
 	}
 	s.FocusError = msg
@@ -814,7 +827,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 			continue
 		}
 		sl.SessionID, sl.Label, sl.Profile, sl.Status = s.ID, r.displayLocked(s), s.Profile, s.Status
-		sl.Detail, sl.Host, sl.FocusError = s.Detail, s.Host.Kind, s.FocusError
+		sl.Detail, sl.Host, sl.FocusError, sl.FocusAt = s.Detail, s.Host.Kind, s.FocusError, s.FocusAt
 		if !s.StatusSince.IsZero() && now.After(s.StatusSince) {
 			sl.ElapsedS = int(now.Sub(s.StatusSince).Seconds())
 		}
@@ -824,6 +837,12 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		c := *s
 		c.Display = r.displayLocked(s)
 		st.Sessions = append(st.Sessions, c)
+		switch s.Status {
+		case StatusNeedsInput:
+			st.NeedsInput++
+		case StatusWorking:
+			st.Working++
+		}
 	}
 	st.Windows = r.sortedWindowsLocked()
 	return st

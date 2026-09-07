@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -126,5 +127,21 @@ func TestNamesAndHasCorgi(t *testing.T) {
 	}
 	if !HasCorgi(chain) || HasCorgi(chain[:2]) || HasCorgi(nil) {
 		t.Fatal("HasCorgi")
+	}
+}
+
+func TestTTYNameOfSelfOrNone(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip()
+	}
+	if TTYName(0) != "" {
+		t.Fatal("0 is no terminal")
+	}
+	p, _ := Lookup(os.Getpid())
+	if p.TTY == 0 {
+		return // no controlling terminal under the test runner
+	}
+	if name := TTYName(p.TTY); !strings.HasPrefix(name, "/dev/") {
+		t.Fatalf("tty %d resolved to %q", p.TTY, name)
 	}
 }

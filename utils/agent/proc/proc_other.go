@@ -29,3 +29,6 @@ func List() ([]Process, error) {
 
 // Cwd is unknown here.
 func Cwd(int) string { return "" }
+
+// TTYName is unknown here.
+func TTYName(uint64) string { return "" }

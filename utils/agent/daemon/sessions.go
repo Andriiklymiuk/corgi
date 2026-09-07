@@ -210,16 +210,66 @@ func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 			}
 			return run(ctx, editorCLI(t.App), "--reuse-window", t.Folder)
 		}
-	case sessions.HostITerm:
-		if runtime.GOOS == "darwin" {
-			return run(ctx, "open", "-a", "iTerm")
+	case sessions.HostITerm, sessions.HostTerminalApp:
+		if runtime.GOOS != "darwin" {
+			break
 		}
-	case sessions.HostTerminalApp:
-		if runtime.GOOS == "darwin" {
-			return run(ctx, "open", "-a", "Terminal")
+		// Both emulators expose each tab's tty to AppleScript, and the
+		// hook recorded the claude process's controlling terminal: the
+		// script selects that exact tab. Without a tty the app comes
+		// forward on its own.
+		if tty := proc.TTYName(t.TTY); tty != "" {
+			script := itermScript(tty)
+			if t.Kind == sessions.HostTerminalApp {
+				script = terminalAppScript(tty)
+			}
+			if err := run(ctx, "osascript", "-e", script); err == nil {
+				return nil
+			}
 		}
+		app := "iTerm"
+		if t.Kind == sessions.HostTerminalApp {
+			app = "Terminal"
+		}
+		return run(ctx, "open", "-a", app)
 	}
 	return fmt.Errorf("no window known for a %s session on %s", t.Kind, runtime.GOOS)
+}
+
+// itermScript selects the iTerm2 session on tty and brings its window up.
+// The tty is a /dev path corgi resolved itself, never text from a hook.
+func itermScript(tty string) string {
+	return `tell application "iTerm2"
+	repeat with w in windows
+		repeat with t in tabs of w
+			repeat with s in sessions of t
+				if tty of s is "` + tty + `" then
+					select s
+					select t
+					select w
+					activate
+					return
+				end if
+			end repeat
+		end repeat
+	end repeat
+end tell`
+}
+
+// terminalAppScript does the same for Terminal.app.
+func terminalAppScript(tty string) string {
+	return `tell application "Terminal"
+	repeat with w in windows
+		repeat with t in tabs of w
+			if tty of t is "` + tty + `" then
+				set selected tab of w to t
+				set index of w to 1
+				activate
+				return
+			end if
+		end repeat
+	end repeat
+end tell`
 }
 
 // editorCLI maps an editor's application name to its command-line launcher.

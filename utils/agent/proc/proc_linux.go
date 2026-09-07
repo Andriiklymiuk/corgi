@@ -35,6 +35,12 @@ func parseStat(pid int, stat string) (Process, bool) {
 		return Process{}, false
 	}
 	p := Process{PID: pid, PPID: ppid, Name: stat[open+1 : close]}
+	if len(fields) > 4 {
+		// tty_nr: 0 when there is no controlling terminal.
+		if tty, err := strconv.ParseUint(fields[4], 10, 64); err == nil {
+			p.TTY = tty
+		}
+	}
 	if cmdline, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline")); err == nil {
 		p.Args = strings.TrimSpace(strings.ReplaceAll(string(cmdline), "\x00", " "))
 	}
@@ -79,4 +85,12 @@ func Cwd(pid int) string {
 		return ""
 	}
 	return dir
+}
+
+// TTYName resolves a device number to its /dev/pts path.
+func TTYName(dev uint64) string {
+	if dev == 0 {
+		return ""
+	}
+	return findDev("/dev/pts", "", dev)
 }

@@ -18,6 +18,10 @@ type Process struct {
 	// Args is the full command line where the platform hands it out cheaply
 	// (Linux /proc). Empty on macOS, whose sysctl carries only the name.
 	Args string `json:"args,omitempty"`
+	// TTY is the controlling terminal's device number, 0 for none. It is
+	// what lets focus pick the exact iTerm2 or Terminal.app tab: both
+	// expose each tab's tty, and TTYName turns the number into that path.
+	TTY uint64 `json:"tty,omitempty"`
 }
 
 // MaxAncestors bounds a parent walk. A chain deeper than this is not a

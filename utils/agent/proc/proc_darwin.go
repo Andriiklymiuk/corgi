@@ -20,7 +20,25 @@ func lookup(pid int) (Process, bool) {
 	if err != nil || kp == nil {
 		return Process{}, false
 	}
-	return Process{PID: pid, PPID: int(kp.Eproc.Ppid), Name: comm(kp.Proc.P_comm[:])}, true
+	return Process{PID: pid, PPID: int(kp.Eproc.Ppid), Name: comm(kp.Proc.P_comm[:]), TTY: ttyDev(kp.Eproc.Tdev)}, true
+}
+
+// ttyDev is e_tdev as a device number, with the kernel's NODEV (-1) mapped
+// to 0.
+func ttyDev(tdev int32) uint64 {
+	if tdev < 0 {
+		return 0
+	}
+	return uint64(tdev)
+}
+
+// TTYName resolves a device number to its /dev path by matching st_rdev
+// over the pty entries. A few hundred stats at most, and only at focus time.
+func TTYName(dev uint64) string {
+	if dev == 0 {
+		return ""
+	}
+	return findDev("/dev", "ttys", dev)
 }
 
 func comm(b []byte) string {
@@ -58,7 +76,7 @@ func List() ([]Process, error) {
 		if pid <= 0 {
 			continue
 		}
-		out = append(out, Process{PID: pid, PPID: int(kp.Eproc.Ppid), Name: comm(kp.Proc.P_comm[:]), Args: args[pid]})
+		out = append(out, Process{PID: pid, PPID: int(kp.Eproc.Ppid), Name: comm(kp.Proc.P_comm[:]), Args: args[pid], TTY: ttyDev(kp.Eproc.Tdev)})
 	}
 	return out, nil
 }

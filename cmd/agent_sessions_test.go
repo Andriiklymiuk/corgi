@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -124,5 +125,58 @@ func TestSessionTrackingDoctorChecks(t *testing.T) {
 	}
 	if checks[1].OK || !strings.Contains(checks[1].Detail, "1 with no known window") {
 		t.Fatalf("board check: %+v", checks[1])
+	}
+}
+
+func TestWatchBoardRedrawsOnPublish(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	dir, _ := agentDir()
+	_ = os.MkdirAll(dir, 0o700)
+	seen := make(chan boardReport, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- watchBoard(ctx, dir, time.Time{}, func(r boardReport) { seen <- r })
+	}()
+	time.Sleep(100 * time.Millisecond)
+	st := sessions.State{UpdatedAt: time.Now(), Size: 6, Sessions: []sessions.Session{{ID: "a"}}}
+	data, _ := json.Marshal(st)
+	tmp := daemon.SessionsPath(dir) + ".tmp"
+	_ = os.WriteFile(tmp, data, 0o600)
+	_ = os.Rename(tmp, daemon.SessionsPath(dir))
+	select {
+	case r := <-seen:
+		if len(r.Sessions) != 1 {
+			t.Fatalf("redrawn with %d sessions", len(r.Sessions))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no redraw after a publish")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMCPSessionsTool(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	out, err := mcpSessions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := out.(map[string]any); !ok || m["hint"] == nil {
+		t.Fatalf("empty board explains itself: %+v", out)
+	}
+	dir, _ := agentDir()
+	_ = os.MkdirAll(dir, 0o700)
+	data, _ := json.Marshal(sessions.State{Size: 6, NeedsInput: 1, Sessions: []sessions.Session{{ID: "a", Status: sessions.StatusNeedsInput}}})
+	_ = os.WriteFile(daemon.SessionsPath(dir), data, 0o600)
+	out, err = mcpSessions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep, ok := out.(boardReport); !ok || rep.NeedsInput != 1 {
+		t.Fatalf("board: %+v", out)
 	}
 }
