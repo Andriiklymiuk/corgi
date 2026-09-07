@@ -127,8 +127,15 @@ gate.**
 2. **Drop drift** (Phase 1): skip anything already merged or with an open PR — flag,
    don't rebuild. All scopes.
 3. **Present + confirm** (one line each, size + service; tag **"has spec"** when the
-   ticket already carries one — `stories` reuses **and re-verifies** it). Auto-pick =
-   all ready for a **batch** ask; a singular/question ask → present, let the user pick.
+   ticket already carries one — `stories` reuses **and re-verifies** it). Add the
+   `risk` skill's **story forecast** to each line — `risk 3/10 low` — scored from the
+   ticket text and the code area it names (`confidence: low`, never auto-approve). It
+   is what makes a queue readable at a glance: a forecast of 7+ is a ticket a human
+   should own the spec of, not one to hand an agent in an unattended round. Auto-pick
+   = all ready for a **batch** ask, **below the caller's risk ceiling** (`autopilot`
+   `maxRisk`, default 6; an interactive ask has none); anything above is listed, not
+   picked, with the forecast's *Before building* items as the reason. A
+   singular/question ask → present, let the user pick.
 4. **Hand picked keys to `stories`** — it builds and, as each branch is created,
    **moves the ticket to in-progress + self-assigns** (then → the team's review state
    when its draft PR opens) — `stories` Phases 3 & 5. The in-progress move de-dupes a
