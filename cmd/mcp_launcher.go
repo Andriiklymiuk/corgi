@@ -21,6 +21,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/pairing"
+	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
@@ -147,38 +148,7 @@ type wsRunState struct {
 // unreachable, bad bin) leaves a diagnostic warning, not a run state — merging
 // it in is what stops the phone showing "Starting…" then silently giving up.
 func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) []launchWorkspace {
-	running := map[string]wsRunState{}
-	if status != nil {
-		for _, ws := range status.Workspaces {
-			started := int64(0)
-			if !ws.StartedAt.IsZero() {
-				started = ws.StartedAt.UnixMilli()
-			}
-			idleDevice := ws.DeviceOnly && ws.SessionsThisRun == 0
-			url := ws.SessionURL
-			if idleDevice {
-				// Whatever link a device with no session printed, it is not a
-				// conversation to open. The card's button must be Start.
-				url = ""
-			}
-			running[ws.WorkspaceID] = wsRunState{
-				running: ws.Running, url: url, note: ws.LastReason, sessions: ws.Sessions,
-				disabled: ws.Disabled, startedAt: started, restarts: ws.Restarts,
-				profile: ws.Profile, wakeLock: ws.WakeLock, origin: ws.Origin,
-				pid: ws.PID, lastCause: string(ws.LastCause),
-				device: idleDevice, remark: ws.Note,
-			}
-		}
-		for _, d := range status.Diagnostics {
-			if d.Warning == "" {
-				continue
-			}
-			s := running[d.WorkspaceID]
-			s.note = d.Warning
-			running[d.WorkspaceID] = s
-		}
-	}
-
+	running := launchRunStates(status)
 	profiles := launchProfileNames()
 	out := make([]launchWorkspace, 0, len(registry.Workspaces))
 	for _, ws := range registry.Sorted() {
@@ -200,6 +170,48 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+// launchRunStates flattens the daemon's published status into one record per
+// workspace id, with a refused start's warning folded in as the note.
+func launchRunStates(status *daemon.Status) map[string]wsRunState {
+	running := map[string]wsRunState{}
+	if status == nil {
+		return running
+	}
+	for _, ws := range status.Workspaces {
+		running[ws.WorkspaceID] = runStateOf(ws)
+	}
+	for _, d := range status.Diagnostics {
+		if d.Warning == "" {
+			continue
+		}
+		s := running[d.WorkspaceID]
+		s.note = d.Warning
+		running[d.WorkspaceID] = s
+	}
+	return running
+}
+
+func runStateOf(ws supervisor.RunState) wsRunState {
+	started := int64(0)
+	if !ws.StartedAt.IsZero() {
+		started = ws.StartedAt.UnixMilli()
+	}
+	idleDevice := ws.DeviceOnly && ws.SessionsThisRun == 0
+	url := ws.SessionURL
+	if idleDevice {
+		// Whatever link a device with no session printed, it is not a
+		// conversation to open. The card's button must be Start.
+		url = ""
+	}
+	return wsRunState{
+		running: ws.Running, url: url, note: ws.LastReason, sessions: ws.Sessions,
+		disabled: ws.Disabled, startedAt: started, restarts: ws.Restarts,
+		profile: ws.Profile, wakeLock: ws.WakeLock, origin: ws.Origin,
+		pid: ws.PID, lastCause: string(ws.LastCause),
+		device: idleDevice, remark: ws.Note,
+	}
 }
 
 // launchState reduces running, live sessions, the last event and a refused

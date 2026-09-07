@@ -304,9 +304,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		_ = r.WakeLock.Acquire(os.Getpid())
 	}
 
-	attempt := 0
-	startupFailures := 0
-
+	var s streak
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -321,16 +319,9 @@ func (r *Runner) Run(ctx context.Context) error {
 			// backoff moves: the same start, minus one flag, right now.
 			continue
 		}
-		decision := Decide(exit, attempt, startupFailures)
+		decision := Decide(exit, s.attempt, s.startupFailures)
 		healthy := decision.Cause != CauseStartupFailure
-
-		if healthy {
-			// A run that lasted long enough to be useful clears the streak, so
-			// one bad night does not disable a workspace weeks later.
-			startupFailures = 0
-		} else {
-			startupFailures++
-		}
+		s.observe(healthy)
 
 		r.record(decision, 0, decision.Disable)
 		r.announce(decision, r.captureSessionEnd(decision))
@@ -338,17 +329,39 @@ func (r *Runner) Run(ctx context.Context) error {
 		if !decision.Restart {
 			return stopReason(decision, startErr, ctx)
 		}
-
-		// Reset AFTER choosing this delay, so the next failure starts from the
-		// beginning of the backoff. Zeroing before the increment left it pinned
-		// at the second step forever.
-		if healthy {
-			attempt = 0
-		} else {
-			attempt++
-		}
+		s.advance(healthy)
 		r.sleepUnlessStopped(ctx, decision.Delay)
 	}
+}
+
+// streak is the failure bookkeeping between restarts: how many restarts this
+// bad patch has taken (selects the backoff step) and how many of them were
+// too-fast exits (the give-up rule).
+type streak struct {
+	attempt         int
+	startupFailures int
+}
+
+// observe counts the exit just classified. A run that lasted long enough to
+// be useful clears the failure streak, so one bad night does not disable a
+// workspace weeks later.
+func (s *streak) observe(healthy bool) {
+	if healthy {
+		s.startupFailures = 0
+		return
+	}
+	s.startupFailures++
+}
+
+// advance moves the backoff pointer AFTER this restart's delay was chosen, so
+// the next failure starts from the beginning of the backoff. Zeroing before
+// the increment left it pinned at the second step forever.
+func (s *streak) advance(healthy bool) {
+	if healthy {
+		s.attempt = 0
+		return
+	}
+	s.attempt++
 }
 
 // sleepUnlessStopped waits out the backoff, returning early if Stop is called.
