@@ -188,3 +188,66 @@ type osProcess = os.Process
 
 // fakeProcess builds a minimal *os.Process for seam stubs; only Pid is read.
 func fakeProcess(pid int) *osProcess { return &os.Process{Pid: pid} }
+
+func TestOmitted_FlagAndEnv(t *testing.T) {
+	prev := omitItems
+	t.Cleanup(func() { omitItems = prev })
+
+	omitItems = nil
+	t.Setenv("CORGI_OMIT", "")
+	if omitted(utils.UseAwsVpnInConfig) {
+		t.Error("nothing omitted → false")
+	}
+
+	omitItems = []string{utils.UseAwsVpnInConfig}
+	if !omitted(utils.UseAwsVpnInConfig) || omitted(utils.UseDockerInConfig) {
+		t.Error("--omit should match exactly the listed key")
+	}
+
+	omitItems = nil
+	t.Setenv("CORGI_OMIT", " useDocker , useAwsVpn ")
+	if !omitted(utils.UseAwsVpnInConfig) || !omitted(utils.UseDockerInConfig) {
+		t.Error("CORGI_OMIT should be split on commas and trimmed")
+	}
+	if omitted(utils.BeforeStartInConfig) {
+		t.Error("unlisted key must not be omitted")
+	}
+}
+
+func TestRunPreflight_OmitUseAwsVpnSkipsInit(t *testing.T) {
+	prevInit, prevOmit := awsVpnInit, omitItems
+	t.Cleanup(func() { awsVpnInit, omitItems = prevInit, prevOmit })
+	t.Setenv("CORGI_OMIT", "")
+
+	calls := 0
+	awsVpnInit = func() error { calls++; return nil }
+	c := newRootedCmd()
+	corgi := &utils.CorgiCompose{UseAwsVpn: true}
+
+	omitItems = nil
+	runPreflight(c, corgi)
+	if calls != 1 {
+		t.Fatalf("useAwsVpn: true should init the VPN once, got %d", calls)
+	}
+
+	omitItems = []string{utils.UseAwsVpnInConfig}
+	runPreflight(c, corgi)
+	if calls != 1 {
+		t.Fatalf("--omit useAwsVpn must skip VPN init, got %d calls", calls)
+	}
+}
+
+func TestWithOmit_RestoresPrevious(t *testing.T) {
+	prev := omitItems
+	t.Cleanup(func() { omitItems = prev })
+	omitItems = []string{"beforeStart"}
+
+	withOmit([]string{utils.UseAwsVpnInConfig}, func() {
+		if !omitted("beforeStart") || !omitted(utils.UseAwsVpnInConfig) {
+			t.Error("inside withOmit both the previous and the extra keys are omitted")
+		}
+	})
+	if omitted(utils.UseAwsVpnInConfig) || !omitted("beforeStart") {
+		t.Error("withOmit must restore the previous list on return")
+	}
+}
