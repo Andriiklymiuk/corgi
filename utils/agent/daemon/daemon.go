@@ -482,8 +482,12 @@ func (d *Daemon) sessionEndHook(cfg supervisor.SpawnConfig, r *supervisor.Runner
 	}
 }
 
-// drainCommands executes every pending spool command.
+// drainCommands executes every pending spool command, then refreshes the
+// editor windows (a window's extension nudges after writing its record) and
+// publishes the board if anything changed.
 func (d *Daemon) drainCommands(ctx context.Context, launch func(*supervisor.Runner)) {
+	defer d.flushSessions()
+	defer d.syncWindows()
 	cmds, err := command.Drain(d.Dir, time.Now(), command.TTL)
 	if err != nil {
 		utils.Infof("agent: reading commands: %v\n", err)
@@ -504,7 +508,6 @@ func (d *Daemon) drainCommands(ctx context.Context, launch func(*supervisor.Runn
 			d.handleSessionCommand(ctx, c)
 		}
 	}
-	d.flushSessions()
 }
 
 // reportAttention turns a hook's "this session wants a person" into a timeline

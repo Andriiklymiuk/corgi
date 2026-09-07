@@ -173,13 +173,15 @@ func PlaceholderID(pid int) string { return "pid:" + itoa(pid) }
 // Placeholder reports whether an id came from a rescan.
 func Placeholder(id string) bool { return strings.HasPrefix(id, "pid:") }
 
-// DefaultResolve labels a session by its directory.
+// DefaultResolve labels a session by its directory. It names no folder: a
+// directory nothing registered is not a root an editor should be told to
+// open.
 func DefaultResolve(cwd string) (label, folder string) {
 	cwd = strings.TrimSpace(cwd)
 	if cwd == "" {
 		return "?", ""
 	}
-	return filepath.Base(cwd), cwd
+	return filepath.Base(cwd), ""
 }
 
 // DefaultProfile turns CLAUDE_CONFIG_DIR into a badge: ~/.claude-work becomes

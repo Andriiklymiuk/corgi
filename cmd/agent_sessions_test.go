@@ -104,13 +104,17 @@ func TestSessionTrackingDoctorChecks(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	dir, _ := agentDir()
 	checks := checkSessionTracking(dir)
-	if len(checks) != 1 || checks[0].OK || !strings.Contains(checks[0].Fix, "track enable") {
-		t.Fatalf("no hooks: %+v", checks)
+	if len(checks) != 1 || !checks[0].OK || !strings.Contains(checks[0].Detail, "track enable") {
+		t.Fatalf("tracking is optional, so off is not a failure: %+v", checks)
 	}
 	if err := enableTrackingIn(filepath.Join(home, ".claude", "settings.json"), "corgi", true); err != nil {
 		t.Fatal(err)
 	}
-	st := sessions.State{Size: 6, Sessions: []sessions.Session{{ID: "a", Host: sessions.Host{Kind: sessions.HostUnknown}}, {ID: "b", Host: sessions.Host{Kind: sessions.HostVSCodePanel}}}}
+	st := sessions.State{Size: 6, Sessions: []sessions.Session{
+		{ID: "a", Host: sessions.Host{Kind: sessions.HostUnknown}},
+		{ID: "b", Host: sessions.Host{Kind: sessions.HostVSCodePanel}},
+		{ID: "c", Status: sessions.StatusGone, Host: sessions.Host{Kind: sessions.HostUnknown}},
+	}}
 	data, _ := json.Marshal(st)
 	_ = os.MkdirAll(dir, 0o700)
 	_ = os.WriteFile(daemon.SessionsPath(dir), data, 0o600)

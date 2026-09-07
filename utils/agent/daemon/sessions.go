@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -106,7 +107,6 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 		if tick%sweepEvery == 0 {
 			d.Sessions.Sweep(now)
 		}
-		d.syncWindows()
 		d.flushSessions()
 	}
 }
@@ -119,7 +119,9 @@ func (d *Daemon) alive(pid int) bool {
 }
 
 // syncWindows reads the editor windows the corgi VS Code extension left on
-// disk and re-runs the join. Cheap: a handful of small files.
+// disk and re-runs the join. Runs on every drain, because the extension
+// nudges the daemon after writing its record. Cheap: a handful of small
+// files, and the join is skipped when none of them changed.
 func (d *Daemon) syncWindows() {
 	if d.Sessions == nil {
 		return
@@ -193,6 +195,9 @@ func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 		}
 		switch runtime.GOOS {
 		case "darwin":
+			// With a folder, the window that has it open comes forward;
+			// without one, the app does. Never a folder corgi is not sure
+			// of: that opens a new window instead.
 			args := []string{"-a", app}
 			if t.Folder != "" {
 				args = append(args, t.Folder)
@@ -202,7 +207,7 @@ func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 			if t.Folder == "" {
 				return errors.New("no folder known for this window")
 			}
-			return run(ctx, "code", t.Folder)
+			return run(ctx, editorCLI(app), "--reuse-window", t.Folder)
 		}
 	case sessions.HostITerm:
 		if runtime.GOOS == "darwin" {
@@ -214,6 +219,21 @@ func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 		}
 	}
 	return fmt.Errorf("no window known for a %s session on %s", t.Kind, runtime.GOOS)
+}
+
+// editorCLI maps an editor's application name to its command-line launcher.
+func editorCLI(app string) string {
+	switch {
+	case strings.Contains(app, "Insiders"):
+		return "code-insiders"
+	case strings.Contains(app, "Cursor"):
+		return "cursor"
+	case strings.Contains(app, "Codium"):
+		return "codium"
+	case strings.Contains(app, "Windsurf"):
+		return "windsurf"
+	}
+	return "code"
 }
 
 func run(ctx context.Context, name string, args ...string) error {

@@ -451,7 +451,9 @@ func checkSessionTracking(dir string) []agentCheck {
 	}
 	c := agentCheck{Name: "session tracking", OK: true, Detail: fmt.Sprintf("hooks in %d of %d Claude config dir(s)", hooked, len(dirs))}
 	if hooked == 0 {
-		c.OK, c.Detail, c.Fix = false, "no tracking hooks installed", "`corgi agent track enable` (optional — only needed for a Stream Deck or `corgi agent sessions`)"
+		// Optional, so not a failure: doctor must not exit 1 for a feature
+		// nobody asked for.
+		c.Detail = "off — `corgi agent track enable` for a Stream Deck or `corgi agent sessions`"
 		return append(checks, c)
 	}
 	if hooked < len(dirs) {
@@ -464,7 +466,7 @@ func checkSessionTracking(dir string) []agentCheck {
 	}
 	unknown := 0
 	for _, s := range rep.Sessions {
-		if s.Host.Kind == sessions.HostUnknown {
+		if s.Host.Kind == sessions.HostUnknown && s.Status != sessions.StatusGone {
 			unknown++
 		}
 	}

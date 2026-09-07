@@ -96,14 +96,15 @@ func (r *Registry) Load() {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// The configured size wins over the file's: a `--slots` change applies
+	// on the next start, and seats past the new edge spill into overflow.
 	size := r.board.Size
-	if st.Size > 0 {
-		size = st.Size
-	}
 	r.board = NewBoard(size)
 	for i := range st.Sessions {
 		s := st.Sessions[i]
-		if s.ID == "" {
+		if s.ID == "" || s.ClaudePID <= 0 {
+			// Nothing to probe: a session with no pid could sit on a key
+			// forever. Its next event brings it back.
 			continue
 		}
 		r.sessions[s.ID] = &s
@@ -168,12 +169,14 @@ func (r *Registry) Apply(ev Event) bool {
 	}
 
 	s := r.sessions[ev.SessionID]
-	if s == nil {
+	created := s == nil
+	if created {
 		if ev.Name == "SessionEnd" {
 			return false
 		}
 		s = r.adoptLocked(ev, now)
 	}
+	before := s.visible()
 	r.refresh(s, ev)
 	s.LastActivity = now
 	s.FocusError = ""
@@ -239,8 +242,25 @@ func (r *Registry) Apply(ev Event) bool {
 	default:
 		// An event corgi did not ask for still says the session is alive.
 	}
-	r.touch()
-	return true
+	// A tool call that changes nothing a key shows must not rewrite the
+	// file: twenty of them in a row would be twenty redraws for nothing.
+	if created || r.sessions[s.ID] == nil || s.visible() != before {
+		r.touch()
+		return true
+	}
+	return false
+}
+
+// visible is the part of a session a key draws, compared to decide whether
+// an event is worth publishing.
+type visible struct {
+	Label, Profile, Detail, Tool string
+	Status                       Status
+	Host                         Host
+}
+
+func (s *Session) visible() visible {
+	return visible{Label: s.Label, Profile: s.Profile, Detail: s.Detail, Tool: s.Tool, Status: s.Status, Host: s.Host}
 }
 
 func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
@@ -266,19 +286,39 @@ func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
 // SessionStart — the daemon was down, or the session predates the hooks. A
 // rescan placeholder for the same pid is upgraded in place, keeping its key.
 func (r *Registry) adoptLocked(ev Event, now time.Time) *Session {
-	if ev.ClaudePID > 0 {
-		if old := r.sessions[PlaceholderID(ev.ClaudePID)]; old != nil {
-			delete(r.sessions, old.ID)
-			r.board.Rename(old.ID, ev.SessionID)
-			old.ID = ev.SessionID
-			r.sessions[ev.SessionID] = old
-			return old
-		}
+	if old := r.samePIDLocked(ev.ClaudePID); old != nil {
+		// A rescan placeholder, or the same process under a new session id
+		// (/clear, /resume): the key stays, the id changes.
+		delete(r.sessions, old.ID)
+		r.board.Rename(old.ID, ev.SessionID)
+		old.ID = ev.SessionID
+		old.StartedAt = now
+		r.sessions[ev.SessionID] = old
+		return old
 	}
 	s := &Session{ID: ev.SessionID, StartedAt: now, Status: StatusUnknown, StatusSince: now}
 	r.sessions[s.ID] = s
 	r.board.Place(s.ID)
 	return s
+}
+
+// samePIDLocked finds the session already tracked for a process: the
+// placeholder first, else whichever last spoke for that pid. One process
+// hosts one session at a time, so a second id on it replaces the first.
+func (r *Registry) samePIDLocked(pid int) *Session {
+	if pid <= 0 {
+		return nil
+	}
+	if old := r.sessions[PlaceholderID(pid)]; old != nil {
+		return old
+	}
+	var latest *Session
+	for _, s := range r.sessions {
+		if s.ClaudePID == pid && (latest == nil || s.LastActivity.After(latest.LastActivity)) {
+			latest = s
+		}
+	}
+	return latest
 }
 
 // refresh copies the identity fields every event carries. A hook that could
@@ -441,7 +481,11 @@ func sameWindows(a, b map[string]Window) bool {
 //  3. TERM_PROGRAM: an integrated terminal without the extension (matched to
 //     a window by folder when one is connected), or a terminal emulator.
 func (r *Registry) bind(s *Session) {
-	h := Host{Kind: HostUnknown, TermProgram: s.TermProgram, Folder: firstNonEmpty(s.Folder, s.Cwd)}
+	// Folder is what `open -a` may be given. Only a known root qualifies —
+	// a window's own folder, or a registered workspace. A bare cwd would
+	// make the editor open a NEW window on it, which is worse than just
+	// bringing the app forward.
+	h := Host{Kind: HostUnknown, TermProgram: s.TermProgram, Folder: s.Folder}
 	defer func() { s.Host = h }()
 
 	if s.Window != "" {
@@ -559,7 +603,7 @@ func (r *Registry) Adopt(procs []proc.Process, cwd func(pid int) string, now tim
 	}
 	added := 0
 	for _, p := range procs {
-		if known[p.PID] || !proc.LooksLikeClaude(p) || strings.Contains(p.Args, "remote-control") {
+		if known[p.PID] || !proc.LooksLikeClaude(p) || notASession(p.Args) {
 			continue
 		}
 		known[p.PID] = true
@@ -581,6 +625,18 @@ func (r *Registry) Adopt(procs []proc.Process, cwd func(pid int) string, now tim
 		r.touch()
 	}
 	return added
+}
+
+// notASession recognises claude processes that are not an interactive
+// session: the supervised remote-control server, an MCP server, a one-shot
+// --print run. Adopting one would park it on a key forever.
+func notASession(args string) bool {
+	for _, marker := range []string{"remote-control", " mcp ", " mcp serve", "--print", " -p ", " -p\n"} {
+		if strings.Contains(args+"\n", marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // FocusTarget is what the daemon needs to bring a session to the front.

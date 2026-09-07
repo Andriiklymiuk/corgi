@@ -342,7 +342,6 @@ type hookInput struct {
 	Tool             string          `json:"tool_name"`
 	NotificationType string          `json:"notification_type"`
 	Message          string          `json:"message"`
-	Title            string          `json:"title"`
 	ErrorType        string          `json:"error_type"`
 	Error            json.RawMessage `json:"error"`
 }
@@ -352,7 +351,10 @@ func readHookInput(stdin io.Reader) (hookInput, bool) {
 	if stdin == nil {
 		return in, false
 	}
-	data, err := io.ReadAll(io.LimitReader(stdin, 256<<10))
+	// The payload carries the whole tool input — a Write of a large file is
+	// megabytes — and a truncated one would drop the event, so the cap is
+	// generous. Decoding it is the hook's one real cost.
+	data, err := io.ReadAll(io.LimitReader(stdin, 64<<20))
 	if err != nil || json.Unmarshal(data, &in) != nil {
 		return in, false
 	}
@@ -419,17 +421,22 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 	return ev, true
 }
 
+// deliverEvent spools the event for a running daemon and rings its bell.
+// No daemon, no file: with hooks on every tool call, a spool nobody drains
+// would grow without bound. The next daemon rescans instead.
 func deliverEvent(ev sessions.Event) {
 	dir, err := agentDir()
 	if err != nil {
 		return
 	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil || info == nil || !info.Commands {
+		return
+	}
 	if _, err := command.Write(dir, command.Command{Action: command.ActionSession, Event: &ev, Source: "hook"}); err != nil {
 		return
 	}
-	if info, err := daemon.ReadInfo(dir); err == nil && info != nil {
-		daemon.Nudge(info)
-	}
+	daemon.Nudge(info)
 }
 
 // tabTitle composes the terminal title for an event, or "" for one that

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/proc"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -108,12 +109,22 @@ func TestEmitHookWithoutAProbeStillEmits(t *testing.T) {
 	}
 }
 
-func TestDeliverEventWritesTheSpool(t *testing.T) {
+func TestDeliverEventSpoolsOnlyForARunningDaemon(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	dir, _ := agentDir()
 	deliverEvent(sessions.Event{Name: "Stop", SessionID: "s1"})
-	entries, _ := os.ReadDir(filepath.Join(dir, "commands"))
-	if len(entries) != 1 {
+	if entries, _ := os.ReadDir(filepath.Join(dir, "commands")); len(entries) != 0 {
+		t.Fatalf("no daemon, no spool file — the spool would grow forever: %d entries", len(entries))
+	}
+	// A record naming this very process passes the liveness and name checks.
+	exe, _ := os.Executable()
+	data, _ := json.Marshal(daemon.Info{PID: os.Getpid(), Executable: exe, Commands: true})
+	_ = os.MkdirAll(dir, 0o700)
+	if err := os.WriteFile(filepath.Join(dir, "daemon.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deliverEvent(sessions.Event{Name: "Stop", SessionID: "s1"})
+	if entries, _ := os.ReadDir(filepath.Join(dir, "commands")); len(entries) != 1 {
 		t.Fatalf("spool has %d entries", len(entries))
 	}
 }
@@ -299,7 +310,7 @@ func TestWorkspaceLabelPrefersTheDeepestRegisteredRoot(t *testing.T) {
 	if l, _ := workspaceLabel(reg, "/home/me/dev/acme-apiary"); l != "dev" {
 		t.Fatalf("a sibling with the same prefix is not inside: %s", l)
 	}
-	if l, f := workspaceLabel(reg, "/tmp/scratch"); l != "scratch" || f != "/tmp/scratch" {
+	if l, f := workspaceLabel(reg, "/tmp/scratch"); l != "scratch" || f != "" {
 		t.Fatalf("unregistered: %s %s", l, f)
 	}
 	if l, _ := workspaceLabel(nil, "/tmp/x"); l != "x" {

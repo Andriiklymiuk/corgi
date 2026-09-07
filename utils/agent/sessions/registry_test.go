@@ -177,9 +177,11 @@ func TestReapFreesKeysAndPinnedSlotsStayGone(t *testing.T) {
 func TestSweepMarksStaleButNeverANeed(t *testing.T) {
 	r := newTestRegistry(t)
 	r.Apply(ev("Stop", "done", 0))
-	r.Apply(ev("UserPromptSubmit", "busy", 0))
+	busy := ev("UserPromptSubmit", "busy", 0)
+	busy.ClaudePID = 101
+	r.Apply(busy)
 	need := ev("PermissionRequest", "need", 0)
-	need.Tool = "Edit"
+	need.Tool, need.ClaudePID = "Edit", 102
 	r.Apply(need)
 	if r.Sweep(t0.Add(StaleAfter - time.Minute)) {
 		t.Fatal("nothing is stale yet")
@@ -243,6 +245,16 @@ func TestWindowJoinRules(t *testing.T) {
 	got, _ = r.Lookup("iterm")
 	if got.Host.Kind != HostITerm || got.Host.Folder != "/home/me/dev/acme-api" {
 		t.Fatalf("iTerm: %+v", got.Host)
+	}
+	// An unregistered directory names no folder: focus activates the app
+	// rather than opening a new window on the cwd.
+	r.Resolve = DefaultResolve
+	scratch := ev("SessionStart", "scratch", 0)
+	scratch.ClaudePID, scratch.Ancestors, scratch.Cwd, scratch.TermProgram = 600, []int{600}, "/tmp/scratch", "vscode"
+	r.Apply(scratch)
+	got, _ = r.Lookup("scratch")
+	if got.Host.Kind != HostVSCodeTerminal || got.Host.Folder != "" || got.Host.Connected {
+		t.Fatalf("scratch: %+v", got.Host)
 	}
 
 	target, err := r.Focus("term")
@@ -366,13 +378,23 @@ func TestPersistenceKeepsTheBoard(t *testing.T) {
 	again := New(path, 6)
 	again.Load()
 	snap := again.Snapshot(t0)
-	if snap.Size != 3 || snap.Slots[0].SessionID != "a" || snap.Slots[1].SessionID != "b" || !snap.Slots[1].Pinned {
-		t.Fatalf("the board survives a restart: %+v", snap.Slots)
+	if snap.Size != 6 || snap.Slots[0].SessionID != "a" || snap.Slots[1].SessionID != "b" || !snap.Slots[1].Pinned {
+		t.Fatalf("the board survives a restart at the configured size: %+v", snap.Slots)
 	}
 	again.Resize(2)
 	again.Resize(2)
 	if snap := again.Snapshot(t0); snap.Size != 2 || snap.Slots[1].SessionID != "b" {
 		t.Fatalf("resize keeps seats: %+v", snap.Slots)
+	}
+
+	// A session with no pid to probe is not restored: it could never be reaped.
+	nopid := New(path, 3)
+	nopid.Apply(Event{Name: "Stop", SessionID: "ghost", At: t0})
+	_ = nopid.Save()
+	restored := New(path, 3)
+	restored.Load()
+	if _, err := restored.Lookup("ghost"); err == nil {
+		t.Fatal("a pid-less session is dropped on load")
 	}
 
 	missing := New(filepath.Join(t.TempDir(), "none.json"), 2)
@@ -457,13 +479,67 @@ func TestDefaults(t *testing.T) {
 	if l, f := DefaultResolve(""); l != "?" || f != "" {
 		t.Fatal("empty cwd")
 	}
-	if l, _ := DefaultResolve("/a/b/c"); l != "c" {
-		t.Fatal("base name")
+	if l, f := DefaultResolve("/a/b/c"); l != "c" || f != "" {
+		t.Fatal("base name, and no folder an editor should open")
+	}
+	for args, want := range map[string]bool{"claude": false, "claude remote-control": true, "claude mcp serve": true, "claude -p hi": true, "claude --print x": true, "claude -p": true} {
+		if notASession(args) != want {
+			t.Errorf("notASession(%q) = %v", args, !want)
+		}
 	}
 	if itoa(0) != "0" || itoa(-12) != "-12" || itoa(345) != "345" {
 		t.Fatal("itoa")
 	}
 	if shorten("a\nb", 5) != "a" || shorten("abcdefgh", 5) != "abcd…" {
 		t.Fatal("shorten")
+	}
+}
+
+func TestSameProcessUnderANewSessionIdKeepsItsKey(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Apply(ev("Stop", "old-id", 0))
+	other := ev("Stop", "other", time.Second)
+	other.ClaudePID = 101
+	r.Apply(other)
+	r.Pin(0, true)
+	end := ev("SessionEnd", "old-id", 2*time.Second)
+	end.Reason = "resume"
+	r.Apply(end)
+	start := ev("SessionStart", "new-id", 3*time.Second)
+	start.Source = "resume"
+	r.Apply(start)
+	if _, err := r.Lookup("old-id"); err == nil {
+		t.Fatal("the old id is gone: one process, one session")
+	}
+	snap := r.Snapshot(t0)
+	if snap.Slots[0].SessionID != "new-id" || !snap.Slots[0].Pinned || snap.Slots[0].Status != StatusDone || snap.Slots[1].SessionID != "other" {
+		t.Fatalf("slots = %+v", snap.Slots)
+	}
+	if len(snap.Sessions) != 2 {
+		t.Fatalf("sessions = %d", len(snap.Sessions))
+	}
+}
+
+func TestOnlyVisibleChangesArePublished(t *testing.T) {
+	r := newTestRegistry(t)
+	pre := ev("PreToolUse", "s1", 0)
+	pre.Tool = "Read"
+	if !r.Apply(pre) {
+		t.Fatal("a new session is a change")
+	}
+	_ = r.Save()
+	pre.At = t0.Add(time.Second)
+	if r.Apply(pre) {
+		t.Fatal("the same tool again changes nothing a key shows")
+	}
+	if r.Save() != nil || r.dirty {
+		t.Fatal("nothing to write")
+	}
+	if s, _ := r.Lookup("s1"); !s.LastActivity.Equal(t0.Add(time.Second)) {
+		t.Fatal("activity is still tracked in memory")
+	}
+	pre.Tool = "Bash"
+	if !r.Apply(pre) {
+		t.Fatal("a different tool is a change")
 	}
 }
