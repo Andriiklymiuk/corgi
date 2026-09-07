@@ -124,16 +124,16 @@ func TestHasDatabaseToRun(t *testing.T) {
 	})
 }
 
-func TestOmitServiceCmd(t *testing.T) {
+func TestOmitted_ServiceParts(t *testing.T) {
 	t.Cleanup(func() { omitItems = nil })
 	omitItems = []string{"beforeStart", "afterStart"}
-	if !omitServiceCmd("beforeStart") {
+	if !omitted("beforeStart") {
 		t.Error("want true")
 	}
-	if !omitServiceCmd("afterStart") {
+	if !omitted("afterStart") {
 		t.Error("want true")
 	}
-	if omitServiceCmd("start") {
+	if omitted("start") {
 		t.Error("want false")
 	}
 }

@@ -251,3 +251,21 @@ func TestWithOmit_RestoresPrevious(t *testing.T) {
 		t.Error("withOmit must restore the previous list on return")
 	}
 }
+
+func TestUnknownOmitKeys(t *testing.T) {
+	prev := omitItems
+	t.Cleanup(func() { omitItems = prev })
+
+	omitItems = []string{utils.UseAwsVpnInConfig, "useAWSVpn"}
+	t.Setenv("CORGI_OMIT", "useDocker,api")
+	got := unknownOmitKeys()
+	if len(got) != 2 || got[0] != "useAWSVpn" || got[1] != "api" {
+		t.Fatalf("expected the two typos, got %v", got)
+	}
+
+	omitItems = nil
+	t.Setenv("CORGI_OMIT", "")
+	if got := unknownOmitKeys(); len(got) != 0 {
+		t.Fatalf("nothing requested → nothing unknown, got %v", got)
+	}
+}

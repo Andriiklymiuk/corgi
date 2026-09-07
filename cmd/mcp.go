@@ -748,28 +748,30 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 		envErr      error
 		overrideErr error
 	)
-	withStdoutToStderr(func() {
-		if CheckClonedReposExistence(corgi.Services) {
-			CloneServices(corgi.Services)
-		}
-		// After clone (so it doesn't clobber the worktree), before env/beforeStart.
-		if overrideErr = utils.ApplyServiceWorkdirs(corgi, splitPairs(args.ServiceDir), splitPairs(args.ServiceBranch), nil); overrideErr != nil {
-			return
-		}
-		withOmit(splitPairs(args.Omit), func() {
+	// Per-service beforeStart runs inside spawnDetachedServices, so the omit
+	// window has to cover the whole boot, not just preflight.
+	withOmit(splitPairs(args.Omit), func() {
+		withStdoutToStderr(func() {
+			if CheckClonedReposExistence(corgi.Services) {
+				CloneServices(corgi.Services)
+			}
+			// After clone (so it doesn't clobber the worktree), before env/beforeStart.
+			if overrideErr = utils.ApplyServiceWorkdirs(corgi, splitPairs(args.ServiceDir), splitPairs(args.ServiceBranch), nil); overrideErr != nil {
+				return
+			}
 			runPreflight(ctx.cmd, corgi)
 			runBeforeStart(corgi)
+			CreateDatabaseServices(corgi.DatabaseServices)
+			runDatabaseServices(ctx.cmd, corgi.DatabaseServices)
+			if envErr = utils.GenerateEnvForServices(corgi); envErr != nil {
+				return
+			}
+			setupLogWriters(corgi)
+			CreateServices(corgi.Services)
+			procs := spawnDetachedServices(corgi)
+			dbs := detachedDBEntries(corgi)
+			state = buildDetachState(utils.CorgiComposePath, procs, dbs)
 		})
-		CreateDatabaseServices(corgi.DatabaseServices)
-		runDatabaseServices(ctx.cmd, corgi.DatabaseServices)
-		if envErr = utils.GenerateEnvForServices(corgi); envErr != nil {
-			return
-		}
-		setupLogWriters(corgi)
-		CreateServices(corgi.Services)
-		procs := spawnDetachedServices(corgi)
-		dbs := detachedDBEntries(corgi)
-		state = buildDetachState(utils.CorgiComposePath, procs, dbs)
 	})
 	if overrideErr != nil {
 		return utils.RunState{}, fmt.Errorf(errFmt, utils.ErrConfig, overrideErr)
@@ -1147,7 +1149,7 @@ func withStdoutToStderr(fn func()) {
 }
 
 const profileDesc = "Only these profiles (comma-separated union, e.g. backend,worker)"
-const omitDesc = `Compose keys to skip for this run, comma-separated, same as corgi run --omit: beforeStart, afterStart, useAwsVpn (do not launch the AWS VPN client), useDocker (do not auto-start Docker). Use useAwsVpn when the VPN is not needed for the slice you start or cannot be driven from this session.`
+const omitDesc = `Compose keys to skip for this call, comma-separated, same as corgi run --omit: beforeStart, useAwsVpn (do not launch the AWS VPN client), useDocker (do not auto-start Docker). Use useAwsVpn when the VPN is not needed for the slice you start or cannot be driven from this session.`
 
 const serviceBranchDesc = `Run service(s) on a git branch via an isolated reused worktree, without editing path: in corgi-compose.yml. Format "svc=branch[,svc2=branch2]". Non-destructive — the main checkout is untouched.`
 const serviceDirDesc = `Run service(s) from an existing directory, e.g. a git worktree. Format "svc=/path[,svc2=/path2]".`
