@@ -705,6 +705,7 @@ func mcpPs(args validateArgs) ([]psRow, error) {
 type upArgs struct {
 	ComposePath   string `json:"composePath"`
 	Profile       string `json:"profile"`
+	Omit          string `json:"omit"`
 	Seed          bool   `json:"seed"`
 	ServiceBranch string `json:"serviceBranch"`
 	ServiceDir    string `json:"serviceDir"`
@@ -755,8 +756,10 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 		if overrideErr = utils.ApplyServiceWorkdirs(corgi, splitPairs(args.ServiceDir), splitPairs(args.ServiceBranch), nil); overrideErr != nil {
 			return
 		}
-		runPreflight(ctx.cmd, corgi)
-		runBeforeStart(corgi)
+		withOmit(splitPairs(args.Omit), func() {
+			runPreflight(ctx.cmd, corgi)
+			runBeforeStart(corgi)
+		})
 		CreateDatabaseServices(corgi.DatabaseServices)
 		runDatabaseServices(ctx.cmd, corgi.DatabaseServices)
 		if envErr = utils.GenerateEnvForServices(corgi); envErr != nil {
@@ -1144,6 +1147,8 @@ func withStdoutToStderr(fn func()) {
 }
 
 const profileDesc = "Only these profiles (comma-separated union, e.g. backend,worker)"
+const omitDesc = `Compose keys to skip for this run, comma-separated, same as corgi run --omit: beforeStart, afterStart, useAwsVpn (do not launch the AWS VPN client), useDocker (do not auto-start Docker). Use useAwsVpn when the VPN is not needed for the slice you start or cannot be driven from this session.`
+
 const serviceBranchDesc = `Run service(s) on a git branch via an isolated reused worktree, without editing path: in corgi-compose.yml. Format "svc=branch[,svc2=branch2]". Non-destructive — the main checkout is untouched.`
 const serviceDirDesc = `Run service(s) from an existing directory, e.g. a git worktree. Format "svc=/path[,svc2=/path2]".`
 
@@ -1195,6 +1200,7 @@ func registerMCPTools(s *server.MCPServer) {
 		mcp.WithDescription("Start every database and service detached and return the run-state {services[], dbServices[]} with each entry's name, pid, port, status. Not instant: it clones missing repos, runs every beforeStart (installs, migrations, builds) and brings databases up before returning — minutes on a cold stack. Returning is not a ready gate; poll corgi_status until healthy. Fails with E_ALREADY_RUNNING while a run is live — call corgi_down first. A service that crashed on spawn shows status \"crashed\" in the returned array."),
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
+		mcp.WithString("omit", mcp.Description(omitDesc)),
 		mcp.WithBoolean("seed", mcp.Description("Seed db_services that have a dump/seed source")),
 		mcp.WithString("serviceBranch", mcp.Description(serviceBranchDesc)),
 		mcp.WithString("serviceDir", mcp.Description(serviceDirDesc)),
@@ -1202,6 +1208,7 @@ func registerMCPTools(s *server.MCPServer) {
 		return mcpUp(upArgs{
 			ComposePath:   r.GetString("composePath", ""),
 			Profile:       r.GetString("profile", ""),
+			Omit:          r.GetString("omit", ""),
 			Seed:          r.GetBool("seed", false),
 			ServiceBranch: r.GetString("serviceBranch", ""),
 			ServiceDir:    r.GetString("serviceDir", ""),

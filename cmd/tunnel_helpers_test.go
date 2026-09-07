@@ -89,6 +89,18 @@ func TestUsesDocker(t *testing.T) {
 			t.Error("expected true when UseDocker is set")
 		}
 	})
+	t.Run("UseDocker omitted", func(t *testing.T) {
+		prev := omitItems
+		t.Cleanup(func() { omitItems = prev })
+		omitItems = []string{utils.UseDockerInConfig}
+		if usesDocker(&utils.CorgiCompose{UseDocker: true}) {
+			t.Error("--omit useDocker should neutralise useDocker: true")
+		}
+		c := &utils.CorgiCompose{UseDocker: true, Services: []utils.Service{{Runner: utils.Runner{Name: "docker"}}}}
+		if !usesDocker(c) {
+			t.Error("a docker runner still needs docker even when useDocker is omitted")
+		}
+	})
 	t.Run("docker runner triggers", func(t *testing.T) {
 		c := &utils.CorgiCompose{Services: []utils.Service{{Runner: utils.Runner{Name: "docker"}}}}
 		if !usesDocker(c) {
