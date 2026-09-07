@@ -34,6 +34,8 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithDescription(
 			"Health of the corgi agent daemon: whether it is running, each workspace's supervised session, "+
 				"restart count, wake lock, and which Claude account each workspace uses. Read-only. "+
+				"A workspace that is running with deviceOnly true and sessionsThisRun 0 is online as a device "+
+				"with no session yet — the resting state, not a failure; corgi_session_start opens one. "+
 				"Use this to answer \"is it up\" and \"why did my session die\"."),
 	), jsonHandler(func(mcp.CallToolRequest) (any, error) {
 		return mcpAgentStatus()
