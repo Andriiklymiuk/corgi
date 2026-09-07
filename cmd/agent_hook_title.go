@@ -137,9 +137,11 @@ func worthTitling(line string) bool {
 }
 
 // titleIsStillCorgis says whether the current title is one nobody chose: the
-// name corgi started the session with, or the one Claude Code derives from the
-// directory (workspace-3e). Anything else — a name typed from the phone, or
-// the one this hook already wrote — was a decision, and is left alone.
+// name corgi started the session with, the one Claude Code derives from the
+// directory (workspace-3e), or the one it generates for a session created on
+// demand under corgi's prefix (workspace-brave-otter). Anything else — a name
+// typed from the phone, or the one this hook already wrote — was a decision,
+// and is left alone.
 //
 // The tell is the clock: every name corgi composes ends in one
 // (workspace · branch · 18:55), and no title made from an ask does. Matching
@@ -160,9 +162,38 @@ func titleIsStillCorgis(title, workspaceID string) bool {
 	if strings.HasPrefix(title, id+" · ") || strings.HasPrefix(title, id+" (") {
 		return endsWithClock(title)
 	}
-	// Claude Code's own derived name: the directory with a short suffix.
+	// Claude Code's own derived name: the directory with a short suffix — or
+	// its generated "adjective-animal" pair after the prefix corgi sets for
+	// on-demand sessions.
 	rest, cut := strings.CutPrefix(title, id+"-")
-	return cut && rest != "" && len(rest) <= 4 && isShortSuffix(rest)
+	if !cut || rest == "" {
+		return false
+	}
+	if len(rest) <= 4 && isShortSuffix(rest) {
+		return true
+	}
+	return isGeneratedPair(rest)
+}
+
+// isGeneratedPair matches the "brave-otter" tail of a name Claude Code made
+// up: exactly two lowercase words. An ask someone typed has spaces, capitals
+// or punctuation long before it looks like that.
+func isGeneratedPair(s string) bool {
+	words := strings.Split(s, "-")
+	if len(words) != 2 {
+		return false
+	}
+	for _, w := range words {
+		if w == "" {
+			return false
+		}
+		for _, r := range w {
+			if !unicode.IsLower(r) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // endsWithClock matches the HH:MM every composed name ends with.

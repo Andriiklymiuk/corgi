@@ -371,7 +371,7 @@ func mcpSessionStart(query, profile, name string) (any, error) {
 		"workspaceId": w.ID,
 		"state":       "starting",
 		"commandId":   c.ID,
-		"hint":        "poll corgi_agent_status until this workspace is running; its sessionUrl opens the conversation",
+		"hint":        "poll corgi_agent_status until this workspace is running with a sessionUrl; that URL opens the conversation. A workspace that was already online as a device (running, deviceOnly, no sessions) is being given a session now — expect a short gap while the process is swapped",
 	}, nil
 }
 

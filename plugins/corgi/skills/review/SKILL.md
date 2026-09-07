@@ -238,6 +238,14 @@ review untouched code.
   clauses, an extracted function with a what-not-how name, a lookup table, a named
   predicate). A suppression added to pass a linter's complexity rule is a finding on
   its own.
+- **Risk score** — run the `risk` skill in `assess` mode on the diff (its Phase 1
+  evidence table reuses this PR's fetch; no second checkout). The first line of its
+  card — `Risk N/10 — <tier> · <what the reviewer does>` — becomes the summary's
+  headline (P5), and `auto-approve: yes|no — <reason>` its last line. The card's
+  **Check** items are the reading order for the rest of this hunt: a floor it hit
+  (auth, payment, migration, secret, native module, CI) is where the blocking
+  findings will be. Offer `stamp` (write the card into the description) at the P4
+  gate; never stamp without it.
 - **Performance footguns in a hot path** — work repeated per item that could be
   done once, an unbounded read or scan, a per-request shell-out or file walk, a
   network call with no timeout, a goroutine nothing stops.
@@ -574,12 +582,14 @@ LLM-generated title:**
 
 ## Phase 6 — Grouped report
 
-**Single PR** → one line `[<repo>] <summary headline>` + link, then counts.
+**Single PR** → one line `[<repo>] <summary headline>` + link, then
+`risk N/10 <tier>` on its own line, then counts.
 
 **Multi-PR** → group by **related change**, not one flat list:
 - PRs of the **same change/story** (same issue key or branch across repos) → one
   header `[<issue-key>] <change headline>`, then one `<repo>: <bare link> — <counts
-  or top finding>` line per repo.
+  or top finding>` line per repo, then one `risk N/10 <tier>` line for the set (the
+  maximum across its PRs, contract counted once).
 - **Unrelated targets in one batch never share a header** — each gets its own
   block, blank line between.
 
@@ -615,9 +625,11 @@ Example:
 [ABC-200] Add address field to user
 api: https://github.com/<org>/api/pull/42 — no blockers, 2 nits
 web: https://github.com/<org>/web/pull/37 — 1 blocking: missing null-check on user.address
+risk 7/10 high — two reviewers, merge order api → web
 
 [api] Fix pagination cursor on empty page
 https://github.com/<org>/api/pull/45 — no blockers
+risk 2/10 trivial — auto-approve: yes
 
 Contract
   api#42 + web#37: api adds address?: string | null; web reads .address without null guard (blocking, posted to both)
