@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -973,7 +974,7 @@ func startDetachedShellService(svc utils.Service) (detachedProc, bool) {
 // cacheKey it uses the original joined-&&-chain (unchanged behavior). When any
 // step has a cacheKey, steps run individually so unchanged ones can be skipped.
 func runServiceBeforeStart(service utils.Service, envFile string) {
-	if service.BeforeStart == nil || omitServiceCmd("beforeStart") {
+	if service.BeforeStart == nil || omitted(utils.BeforeStartInConfig) {
 		return
 	}
 	if !service.BeforeStart.HasCacheKeys() {
@@ -1061,7 +1062,7 @@ func maybeOpenOnReady(service utils.Service) {
 // Run one service's afterStart teardown on single-service stop/restart.
 func runServiceAfterStop(corgi *utils.CorgiCompose, name string) {
 	svc := findService(corgi, name)
-	if svc == nil || svc.AfterStart == nil || omitServiceCmd("afterStart") {
+	if svc == nil || svc.AfterStart == nil || omitted(utils.AfterStartInConfig) {
 		return
 	}
 	utils.RunCleanupCommands("afterStart", svc.ServiceName, svc.AfterStart, svc.AbsolutePath, getServiceEnv(*svc))
@@ -1152,6 +1153,9 @@ func applyRunFlags(cmd *cobra.Command) {
 	if ci, _ := cmd.Flags().GetBool("ci"); ci {
 		utils.SetCIMode(true)
 	}
+	if unknown := unknownOmitKeys(); len(unknown) > 0 {
+		utils.Info("⚠ --omit / CORGI_OMIT ignores unknown keys:", unknown, "— valid:", omitKeys)
+	}
 	gateDepsFlag, _ = cmd.Flags().GetBool("gate-deps")
 	noBeforeStartCache, _ = cmd.Flags().GetBool("no-cache")
 	openOnReadyFlag, _ = cmd.Flags().GetBool("open")
@@ -1239,7 +1243,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 	stopDockerRunners(corgi)
 
 	for _, service := range corgi.Services {
-		if service.AfterStart != nil && !omitServiceCmd("afterStart") {
+		if service.AfterStart != nil && !omitted(utils.AfterStartInConfig) {
 			utils.Info("\nAfter start commands:")
 			utils.RunCleanupCommands(
 				"afterStart",
@@ -1488,7 +1492,7 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 
 	utils.Info(art.BlueColor, "🐶 RUNNING SERVICE", service.ServiceName, art.WhiteColor)
 
-	if service.BeforeStart != nil && !omitServiceCmd("beforeStart") {
+	if service.BeforeStart != nil && !omitted(utils.BeforeStartInConfig) {
 		utils.Info("\nBefore start commands:")
 		runServiceBeforeStart(service, getServiceEnv(service))
 	}
@@ -1619,26 +1623,43 @@ func getServiceEnv(service utils.Service) string {
 	return service.EnvPath
 }
 
-func omitServiceCmd(cmdName string) bool {
-	return omitted(cmdName)
+var omitKeys = []string{
+	utils.BeforeStartInConfig,
+	utils.AfterStartInConfig,
+	utils.UseAwsVpnInConfig,
+	utils.UseDockerInConfig,
 }
 
-// omitted reports whether a compose key was excluded via --omit or CORGI_OMIT.
-func omitted(key string) bool {
-	for _, s := range omitItems {
-		if key == s {
-			return true
+func requestedOmitKeys() []string {
+	keys := append([]string{}, omitItems...)
+	for _, s := range strings.Split(os.Getenv("CORGI_OMIT"), ",") {
+		if t := strings.TrimSpace(s); t != "" {
+			keys = append(keys, t)
 		}
 	}
-	for _, s := range strings.Split(os.Getenv("CORGI_OMIT"), ",") {
-		if key == strings.TrimSpace(s) {
+	return keys
+}
+
+func omitted(key string) bool {
+	for _, s := range requestedOmitKeys() {
+		if key == s {
 			return true
 		}
 	}
 	return false
 }
 
-// withOmit runs fn with extra keys omitted, then restores the previous list.
+// A typo here is silent otherwise: --omit useAWSVpn still launches the VPN.
+func unknownOmitKeys() []string {
+	var unknown []string
+	for _, k := range requestedOmitKeys() {
+		if !slices.Contains(omitKeys, k) {
+			unknown = append(unknown, k)
+		}
+	}
+	return unknown
+}
+
 // The MCP daemon is long-lived, so a per-call omit must not leak into the next.
 func withOmit(extra []string, fn func()) {
 	prev := omitItems
