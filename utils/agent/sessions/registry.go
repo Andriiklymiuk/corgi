@@ -1,0 +1,806 @@
+package sessions
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"andriiklymiuk/corgi/utils/agent/proc"
+	"andriiklymiuk/corgi/utils/atomicfile"
+)
+
+// Registry holds every tracked session and the board they sit on. One mutex,
+// in memory, persisted as the same JSON the plugin reads.
+type Registry struct {
+	// Resolve labels a session from its cwd: the registered workspace id and
+	// its root when the cwd is inside one, otherwise the directory itself.
+	// Injected by cmd, which owns the workspace registry.
+	Resolve func(cwd string) (label, folder string)
+	// ProfileFor names the badge for a CLAUDE_CONFIG_DIR: a corgi profile
+	// name when one points at that directory, else the directory's own name.
+	ProfileFor func(configDir string) string
+
+	mu        sync.Mutex
+	path      string
+	sessions  map[string]*Session
+	board     Board
+	windows   map[string]Window
+	updatedAt time.Time
+	dirty     bool
+}
+
+// State is the published board: what sessions.json holds and what
+// `corgi agent sessions --json` prints.
+type State struct {
+	UpdatedAt time.Time `json:"updatedAt"`
+	Size      int       `json:"size"`
+	// Overflow is how many sessions have no key of their own.
+	Overflow int       `json:"overflow"`
+	Slots    []Slot    `json:"slots"`
+	Sessions []Session `json:"sessions"`
+	Windows  []Window  `json:"windows,omitempty"`
+}
+
+// Slot is one key, ready to draw.
+type Slot struct {
+	Index int  `json:"index"`
+	Empty bool `json:"empty,omitempty"`
+	// Pager marks the "+N" key; Overflow is that N.
+	Pager     bool     `json:"pager,omitempty"`
+	Overflow  int      `json:"overflow,omitempty"`
+	SessionID string   `json:"sessionId,omitempty"`
+	Label     string   `json:"label,omitempty"`
+	Profile   string   `json:"profile,omitempty"`
+	Status    Status   `json:"status,omitempty"`
+	Pinned    bool     `json:"pinned,omitempty"`
+	ElapsedS  int      `json:"elapsedS,omitempty"`
+	Detail    string   `json:"detail,omitempty"`
+	Host      HostKind `json:"host,omitempty"`
+	// FocusError is set when the last press on this key could not land.
+	FocusError string `json:"focusError,omitempty"`
+}
+
+// New returns a registry persisted at path, with a board of size keys.
+func New(path string, size int) *Registry {
+	return &Registry{
+		path:       path,
+		sessions:   map[string]*Session{},
+		board:      NewBoard(size),
+		windows:    map[string]Window{},
+		Resolve:    DefaultResolve,
+		ProfileFor: DefaultProfile,
+	}
+}
+
+// Path is where the registry persists.
+func (r *Registry) Path() string { return r.path }
+
+// Load restores a previous daemon's board so a restart keeps the keys where
+// they were. Windows are not restored: their extensions re-register. A file
+// that is missing or unreadable is an empty board, never an error worth
+// refusing to start over.
+func (r *Registry) Load() {
+	data, err := os.ReadFile(r.path)
+	if err != nil {
+		return
+	}
+	var st State
+	if json.Unmarshal(data, &st) != nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	size := r.board.Size
+	if st.Size > 0 {
+		size = st.Size
+	}
+	r.board = NewBoard(size)
+	for i := range st.Sessions {
+		s := st.Sessions[i]
+		if s.ID == "" {
+			continue
+		}
+		r.sessions[s.ID] = &s
+	}
+	for _, sl := range st.Slots {
+		if sl.SessionID == "" || sl.Index < 0 || sl.Index >= size || r.sessions[sl.SessionID] == nil {
+			continue
+		}
+		r.board.Slots[sl.Index] = sl.SessionID
+		r.board.Pinned[sl.Index] = sl.Pinned
+	}
+	for _, s := range r.sortedLocked() {
+		r.board.Place(s.ID)
+	}
+	r.dirty = true
+}
+
+// Save writes the board when something changed. Cheap to call after every
+// drain: a batch of twenty tool events is one write.
+func (r *Registry) Save() error {
+	r.mu.Lock()
+	if !r.dirty {
+		r.mu.Unlock()
+		return nil
+	}
+	r.dirty = false
+	st := r.snapshotLocked(time.Now())
+	r.mu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(r.path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	// 0600: cwds, pids and window ids are the owner's business.
+	return atomicfile.Write(r.path, data, 0o600)
+}
+
+// Resize changes the board, keeping every seat that still fits.
+func (r *Registry) Resize(size int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if size == r.board.Size {
+		return
+	}
+	r.board.Resize(size)
+	r.touch()
+}
+
+// Apply folds one hook event into the registry. Returns whether anything
+// visible changed.
+func (r *Registry) Apply(ev Event) bool {
+	if ev.SessionID == "" || ev.Name == "" {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := ev.At
+	if now.IsZero() {
+		now = time.Now()
+	}
+
+	s := r.sessions[ev.SessionID]
+	if s == nil {
+		if ev.Name == "SessionEnd" {
+			return false
+		}
+		s = r.adoptLocked(ev, now)
+	}
+	r.refresh(s, ev)
+	s.LastActivity = now
+	s.FocusError = ""
+
+	switch ev.Name {
+	case "SessionStart":
+		if ev.Source == "compact" {
+			// Compaction is mid-session housekeeping, not a new session and
+			// not a change of state.
+			break
+		}
+		if s.Status == StatusGone {
+			// Pinned and dead, now back: the same key lights up again.
+			r.board.Pin(r.board.IndexOf(s.ID), true)
+		}
+		s.Tool, s.Detail = "", ""
+		r.setStatus(s, StatusDone, now)
+	case "UserPromptSubmit":
+		s.Tool, s.Detail = "", ""
+		r.setStatus(s, StatusWorking, now)
+	case "PreToolUse":
+		s.Tool = ev.Tool
+		s.Detail = ev.Tool
+		if ev.Tool == "AskUserQuestion" {
+			// The question is on screen the moment the tool starts; the idle
+			// nudge would only confirm it a minute later.
+			s.Detail = "question"
+			r.setStatus(s, StatusNeedsInput, now)
+			break
+		}
+		r.setStatus(s, StatusWorking, now)
+	case "PostToolUse", "PostToolUseFailure":
+		// A tool that finished means whatever prompt preceded it was
+		// answered.
+		s.Tool = ""
+		if s.Detail == ev.Tool || s.Status == StatusNeedsInput {
+			s.Detail = ""
+		}
+		r.setStatus(s, StatusWorking, now)
+	case "PermissionRequest":
+		s.Tool = ev.Tool
+		s.Detail = "permission: " + ev.Tool
+		r.setStatus(s, StatusNeedsInput, now)
+	case "Notification":
+		r.applyNotification(s, ev, now)
+	case "Stop":
+		s.Tool, s.Detail = "", ""
+		r.setStatus(s, StatusDone, now)
+	case "StopFailure":
+		s.Tool = ""
+		s.Detail = firstNonEmpty(ev.Error, "api error")
+		r.setStatus(s, StatusNeedsInput, now)
+	case "SessionEnd":
+		if ev.Reason == "resume" {
+			// The process is about to become another session; the key waits
+			// for its SessionStart rather than blinking off and on.
+			r.setStatus(s, StatusStale, now)
+			break
+		}
+		r.dropLocked(s, now)
+	case "CwdChanged":
+		// Already refreshed above; the label follows the directory.
+	default:
+		// An event corgi did not ask for still says the session is alive.
+	}
+	r.touch()
+	return true
+}
+
+func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
+	switch ev.Notification {
+	case "permission_prompt", "agent_needs_input", "elicitation_dialog", "elicitation_url_dialog":
+		s.Detail = firstNonEmpty(shorten(ev.Message, 48), "needs you")
+		r.setStatus(s, StatusNeedsInput, now)
+	case "idle_prompt":
+		// "Waiting for your input" fires a minute into ANY wait — after a
+		// finished turn as much as after a question. A done session that
+		// wants nothing stays done; only a session still mid-turn has a
+		// question corgi did not otherwise see.
+		if s.Status == StatusWorking {
+			s.Detail = firstNonEmpty(shorten(ev.Message, 48), "waiting for input")
+			r.setStatus(s, StatusNeedsInput, now)
+		}
+	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response":
+		// Nothing a key needs to say.
+	}
+}
+
+// adoptLocked creates a session for an event that arrived without a
+// SessionStart — the daemon was down, or the session predates the hooks. A
+// rescan placeholder for the same pid is upgraded in place, keeping its key.
+func (r *Registry) adoptLocked(ev Event, now time.Time) *Session {
+	if ev.ClaudePID > 0 {
+		if old := r.sessions[PlaceholderID(ev.ClaudePID)]; old != nil {
+			delete(r.sessions, old.ID)
+			r.board.Rename(old.ID, ev.SessionID)
+			old.ID = ev.SessionID
+			r.sessions[ev.SessionID] = old
+			return old
+		}
+	}
+	s := &Session{ID: ev.SessionID, StartedAt: now, Status: StatusUnknown, StatusSince: now}
+	r.sessions[s.ID] = s
+	r.board.Place(s.ID)
+	return s
+}
+
+// refresh copies the identity fields every event carries. A hook that could
+// not determine a pid does not erase one an earlier hook found.
+func (r *Registry) refresh(s *Session, ev Event) {
+	if ev.Cwd != "" && ev.Cwd != s.Cwd {
+		s.Cwd = ev.Cwd
+		s.Label, s.Folder = r.resolve(ev.Cwd)
+	}
+	if s.Label == "" {
+		s.Label, s.Folder = r.resolve(s.Cwd)
+	}
+	if ev.ConfigDir != "" || s.Profile == "" {
+		s.ConfigDir = ev.ConfigDir
+		s.Profile = r.profile(ev.ConfigDir)
+	}
+	if ev.ClaudePID > 0 {
+		s.ClaudePID = ev.ClaudePID
+	}
+	if len(ev.Ancestors) > 0 {
+		s.Ancestors = ev.Ancestors
+	}
+	if ev.Window != "" {
+		s.Window = ev.Window
+	}
+	if ev.TermProgram != "" {
+		s.TermProgram = ev.TermProgram
+	}
+	if ev.TermSession != "" {
+		s.TermSession = ev.TermSession
+	}
+	r.bind(s)
+}
+
+func (r *Registry) resolve(cwd string) (string, string) {
+	if r.Resolve == nil {
+		return DefaultResolve(cwd)
+	}
+	label, folder := r.Resolve(cwd)
+	if label == "" {
+		return DefaultResolve(cwd)
+	}
+	return label, folder
+}
+
+func (r *Registry) profile(configDir string) string {
+	if r.ProfileFor == nil {
+		return DefaultProfile(configDir)
+	}
+	if p := r.ProfileFor(configDir); p != "" {
+		return p
+	}
+	return DefaultProfile(configDir)
+}
+
+func (r *Registry) setStatus(s *Session, st Status, now time.Time) {
+	if s.Status == st {
+		return
+	}
+	s.Status = st
+	s.StatusSince = now
+}
+
+// dropLocked ends a session: off the board, or gone-but-pinned.
+func (r *Registry) dropLocked(s *Session, now time.Time) {
+	if r.board.Remove(s.ID) {
+		s.Tool, s.Detail = "", ""
+		r.setStatus(s, StatusGone, now)
+		return
+	}
+	delete(r.sessions, s.ID)
+}
+
+// Reap drops every session whose process is gone. SessionEnd never fires for
+// a force-quit window, so this is what actually frees a key. alive is
+// injected: the daemon passes proc.Alive.
+func (r *Registry) Reap(alive func(pid int) bool, now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	changed := false
+	for _, s := range r.sortedLocked() {
+		if s.Status == StatusGone || s.ClaudePID <= 0 {
+			continue
+		}
+		if alive(s.ClaudePID) {
+			continue
+		}
+		r.dropLocked(s, now)
+		changed = true
+	}
+	if changed {
+		r.touch()
+	}
+	return changed
+}
+
+// Sweep marks sessions nothing has happened to for StaleAfter.
+func (r *Registry) Sweep(now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	changed := false
+	for _, s := range r.sessions {
+		if s.Status != StatusWorking && s.Status != StatusDone && s.Status != StatusUnknown {
+			continue
+		}
+		if now.Sub(s.LastActivity) < StaleAfter {
+			continue
+		}
+		r.setStatus(s, StatusStale, now)
+		changed = true
+	}
+	if changed {
+		r.touch()
+	}
+	return changed
+}
+
+// SetWindows replaces the set of connected editor windows and re-runs the
+// join for every session. Sessions keep their keys; only how focus reaches
+// them changes.
+func (r *Registry) SetWindows(windows []Window) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	next := make(map[string]Window, len(windows))
+	for _, w := range windows {
+		if w.ID != "" {
+			next[w.ID] = w
+		}
+	}
+	if sameWindows(r.windows, next) {
+		return false
+	}
+	r.windows = next
+	for _, s := range r.sessions {
+		r.bind(s)
+	}
+	r.touch()
+	return true
+}
+
+func sameWindows(a, b map[string]Window) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for id, w := range a {
+		o, ok := b[id]
+		if !ok || !o.UpdatedAt.Equal(w.UpdatedAt) || o.ExtHostPID != w.ExtHostPID || len(o.Terminals) != len(w.Terminals) {
+			return false
+		}
+	}
+	return true
+}
+
+// bind joins a session to a window and a tab, in the order that trusts the
+// most exact evidence first:
+//  1. The window id the extension injected into the terminal's environment,
+//     then the tab whose shell is in the session's parent chain.
+//  2. A window whose extension host is in the parent chain: the Claude Code
+//     panel, which spawns claude from the extension host itself.
+//  3. TERM_PROGRAM: an integrated terminal without the extension (matched to
+//     a window by folder when one is connected), or a terminal emulator.
+func (r *Registry) bind(s *Session) {
+	h := Host{Kind: HostUnknown, TermProgram: s.TermProgram, Folder: firstNonEmpty(s.Folder, s.Cwd)}
+	defer func() { s.Host = h }()
+
+	if s.Window != "" {
+		h.Kind = HostVSCodeTerminal
+		h.WindowID = s.Window
+		if w, ok := r.windows[s.Window]; ok {
+			h.Connected, h.App = true, w.App
+			if len(w.Folders) > 0 {
+				h.Folder = w.Folders[0]
+			}
+			for _, t := range w.Terminals {
+				if containsInt(s.Ancestors, t.ShellPID) {
+					h.ShellPID, h.Terminal = t.ShellPID, t.Name
+					break
+				}
+			}
+		}
+		return
+	}
+	for _, w := range r.sortedWindowsLocked() {
+		if w.ExtHostPID > 0 && containsInt(s.Ancestors, w.ExtHostPID) {
+			h.Kind, h.WindowID, h.App, h.Connected = HostVSCodePanel, w.ID, w.App, true
+			if len(w.Folders) > 0 {
+				h.Folder = w.Folders[0]
+			}
+			return
+		}
+	}
+	switch strings.ToLower(s.TermProgram) {
+	case "vscode":
+		h.Kind = HostVSCodeTerminal
+		if w, ok := r.windowForDir(s.Cwd); ok {
+			h.WindowID, h.App, h.Connected = w.ID, w.App, true
+			h.Folder = w.Folders[0]
+		}
+	case "iterm.app":
+		h.Kind = HostITerm
+	case "apple_terminal":
+		h.Kind = HostTerminalApp
+	}
+}
+
+// windowForDir finds the connected window whose folder contains dir. The
+// deepest folder wins, so a window on the repo beats one on the whole
+// projects directory.
+func (r *Registry) windowForDir(dir string) (Window, bool) {
+	var best Window
+	bestLen := -1
+	for _, w := range r.sortedWindowsLocked() {
+		for _, f := range w.Folders {
+			if f == "" || !within(dir, f) || len(f) <= bestLen {
+				continue
+			}
+			best, bestLen = Window{ID: w.ID, App: w.App, ExtHostPID: w.ExtHostPID, Folders: []string{f}}, len(f)
+		}
+	}
+	return best, bestLen >= 0
+}
+
+func within(dir, root string) bool {
+	dir, root = filepath.Clean(dir), filepath.Clean(root)
+	return dir == root || strings.HasPrefix(dir, root+string(filepath.Separator))
+}
+
+func containsInt(list []int, n int) bool {
+	if n <= 0 {
+		return false
+	}
+	for _, x := range list {
+		if x == n {
+			return true
+		}
+	}
+	return false
+}
+
+// Pin toggles a key's reservation. Unpinning a gone session drops it.
+func (r *Registry) Pin(index int, on bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.board.Pin(index, on) {
+		return false
+	}
+	if !on {
+		if s := r.sessions[r.board.Slots[index]]; s != nil && s.Status == StatusGone {
+			r.board.Free(index)
+			delete(r.sessions, s.ID)
+		}
+	}
+	r.touch()
+	return true
+}
+
+// Page rotates the unpinned keys through the overflow.
+func (r *Registry) Page(direction int) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.board.Page(direction) {
+		return false
+	}
+	r.touch()
+	return true
+}
+
+// Adopt registers Claude processes no hook has reported — sessions started
+// while the daemon was down. Each gets a placeholder id, an unknown status
+// and whatever cwd the platform will give up; the first hook from it fills
+// in the rest. Processes already tracked are left alone.
+func (r *Registry) Adopt(procs []proc.Process, cwd func(pid int) string, now time.Time) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	known := map[int]bool{}
+	for _, s := range r.sessions {
+		known[s.ClaudePID] = true
+	}
+	added := 0
+	for _, p := range procs {
+		if known[p.PID] || !proc.LooksLikeClaude(p) || strings.Contains(p.Args, "remote-control") {
+			continue
+		}
+		known[p.PID] = true
+		s := &Session{
+			ID: PlaceholderID(p.PID), ClaudePID: p.PID, Ancestors: proc.PIDs(proc.Ancestors(p.PID)),
+			StartedAt: now, LastActivity: now, Status: StatusUnknown, StatusSince: now,
+		}
+		if cwd != nil {
+			s.Cwd = cwd(p.PID)
+		}
+		s.Label, s.Folder = r.resolve(s.Cwd)
+		s.Profile = r.profile("")
+		r.bind(s)
+		r.sessions[s.ID] = s
+		r.board.Place(s.ID)
+		added++
+	}
+	if added > 0 {
+		r.touch()
+	}
+	return added
+}
+
+// FocusTarget is what the daemon needs to bring a session to the front.
+type FocusTarget struct {
+	SessionID string
+	Kind      HostKind
+	App       string
+	Folder    string
+	WindowID  string
+	ShellPID  int
+	// Panel asks the window to reveal the Claude Code panel rather than a
+	// terminal tab.
+	Panel bool
+	// Connected says a reveal request will be read by a live extension.
+	Connected bool
+}
+
+// ErrNoSession is returned for an id or label nothing matches.
+var ErrNoSession = errors.New("no such session")
+
+// Focus resolves a session reference into a focus target.
+func (r *Registry) Focus(ref string) (FocusTarget, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return FocusTarget{}, err
+	}
+	if s.Status == StatusGone {
+		return FocusTarget{}, fmt.Errorf("%s has exited", s.Label)
+	}
+	h := s.Host
+	return FocusTarget{
+		SessionID: s.ID, Kind: h.Kind, App: h.App, Folder: h.Folder, WindowID: h.WindowID,
+		ShellPID: h.ShellPID, Panel: h.Kind == HostVSCodePanel, Connected: h.Connected,
+	}, nil
+}
+
+// RecordFocus stores the outcome of a focus attempt on the session, so the
+// key can flash a failure on the next push.
+func (r *Registry) RecordFocus(id string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s := r.sessions[id]
+	if s == nil {
+		return
+	}
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	if s.FocusError == msg {
+		return
+	}
+	s.FocusError = msg
+	r.touch()
+}
+
+// Lookup finds a session by id, id prefix, label, or slot index.
+func (r *Registry) Lookup(ref string) (Session, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return Session{}, err
+	}
+	return *s, nil
+}
+
+func (r *Registry) lookupLocked(ref string) (*Session, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, ErrNoSession
+	}
+	if s := r.sessions[ref]; s != nil {
+		return s, nil
+	}
+	var byPrefix, byLabel []*Session
+	for _, s := range r.sortedLocked() {
+		if strings.HasPrefix(s.ID, ref) {
+			byPrefix = append(byPrefix, s)
+		}
+		if strings.EqualFold(s.Label, ref) || strings.EqualFold(r.displayLocked(s), ref) {
+			byLabel = append(byLabel, s)
+		}
+	}
+	switch {
+	case len(byPrefix) == 1:
+		return byPrefix[0], nil
+	case len(byPrefix) > 1:
+		return nil, fmt.Errorf("%q matches %d sessions — use more of the id", ref, len(byPrefix))
+	case len(byLabel) == 1:
+		return byLabel[0], nil
+	case len(byLabel) > 1:
+		return nil, fmt.Errorf("%d sessions are called %q — use the id", len(byLabel), ref)
+	}
+	if n, ok := slotRef(ref); ok && n >= 0 && n < r.board.Size && r.board.Slots[n] != "" {
+		return r.sessions[r.board.Slots[n]], nil
+	}
+	return nil, ErrNoSession
+}
+
+// slotRef reads a key number: "3" or "#3", 1-based as printed on the board.
+func slotRef(ref string) (int, bool) {
+	ref = strings.TrimPrefix(ref, "#")
+	n := 0
+	for _, c := range ref {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n - 1, ref != ""
+}
+
+// Snapshot is the board as of now.
+func (r *Registry) Snapshot(now time.Time) State {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.snapshotLocked(now)
+}
+
+func (r *Registry) snapshotLocked(now time.Time) State {
+	st := State{UpdatedAt: r.updatedAt, Size: r.board.Size, Overflow: r.board.Hidden()}
+	if st.UpdatedAt.IsZero() {
+		st.UpdatedAt = now
+	}
+	pager := r.board.PagerIndex()
+	for i := 0; i < r.board.Size; i++ {
+		sl := Slot{Index: i, Pinned: r.board.Pinned[i]}
+		if i == pager {
+			sl.Pager, sl.Overflow = true, r.board.Hidden()
+			st.Slots = append(st.Slots, sl)
+			continue
+		}
+		s := r.sessions[r.board.Slots[i]]
+		if s == nil {
+			sl.Empty = true
+			st.Slots = append(st.Slots, sl)
+			continue
+		}
+		sl.SessionID, sl.Label, sl.Profile, sl.Status = s.ID, r.displayLocked(s), s.Profile, s.Status
+		sl.Detail, sl.Host, sl.FocusError = s.Detail, s.Host.Kind, s.FocusError
+		if !s.StatusSince.IsZero() && now.After(s.StatusSince) {
+			sl.ElapsedS = int(now.Sub(s.StatusSince).Seconds())
+		}
+		st.Slots = append(st.Slots, sl)
+	}
+	for _, s := range r.sortedLocked() {
+		c := *s
+		c.Display = r.displayLocked(s)
+		st.Sessions = append(st.Sessions, c)
+	}
+	st.Windows = r.sortedWindowsLocked()
+	return st
+}
+
+// displayLocked makes a label unique among live sessions: two sessions in
+// the same repo get their terminal name, or a piece of the id, appended.
+func (r *Registry) displayLocked(s *Session) string {
+	twins := 0
+	for _, o := range r.sessions {
+		if o.Label == s.Label {
+			twins++
+		}
+	}
+	if twins <= 1 {
+		return s.Label
+	}
+	if s.Host.Terminal != "" {
+		return s.Label + "·" + s.Host.Terminal
+	}
+	id := strings.TrimPrefix(s.ID, "pid:")
+	if len(id) > 4 {
+		id = id[:4]
+	}
+	return s.Label + "·" + id
+}
+
+func (r *Registry) sortedLocked() []*Session {
+	out := make([]*Session, 0, len(r.sessions))
+	for _, s := range r.sessions {
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].StartedAt.Equal(out[j].StartedAt) {
+			return out[i].StartedAt.Before(out[j].StartedAt)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+func (r *Registry) sortedWindowsLocked() []Window {
+	out := make([]Window, 0, len(r.windows))
+	for _, w := range r.windows {
+		out = append(out, w)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+func (r *Registry) touch() {
+	r.updatedAt = time.Now()
+	r.dirty = true
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func shorten(s string, max int) string {
+	s = strings.TrimSpace(strings.SplitN(s, "\n", 2)[0])
+	if runes := []rune(s); len(runes) > max {
+		return strings.TrimSpace(string(runes[:max-1])) + "…"
+	}
+	return s
+}

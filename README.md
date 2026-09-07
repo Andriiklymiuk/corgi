@@ -44,6 +44,7 @@ a day are one command each:
 | the same stack in CI, on the branches under review | `corgi run --feature $BRANCH --detach --wait` |
 | an agent to take the ticket across every repo | `/corgi:stories ABC-123` |
 | your laptop still working while you're out | `corgi agent up`, then scan the QR |
+| which of your Claude sessions is waiting on you, on a Stream Deck | `corgi agent track enable` |
 | the next project tomorrow | the same commands, in its folder |
 
 The part that changes how you work is the second row. A feature that touches three repos normally

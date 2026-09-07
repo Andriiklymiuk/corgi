@@ -19,6 +19,8 @@ import (
 	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/events"
+	"andriiklymiuk/corgi/utils/agent/proc"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
@@ -87,6 +89,19 @@ type Daemon struct {
 	// CommandTick is the spool poll interval; the SIGUSR1 nudge only shortens
 	// the wait. Zero means statusPublishInterval. Test seam.
 	CommandTick time.Duration
+
+	// Sessions is the registry of interactive Claude Code sessions, fed by
+	// hooks and published as sessions.json. Nil turns tracking off.
+	Sessions *sessions.Registry
+	// Raise brings a session's window to the front; nil means the platform
+	// default. Alive, ListProcesses and Cwd are the process probes the
+	// reaper and rescan use. All test seams.
+	Raise         func(ctx context.Context, t sessions.FocusTarget) error
+	Alive         func(pid int) bool
+	ListProcesses func() ([]proc.Process, error)
+	Cwd           func(pid int) string
+	// ReapTick overrides reapInterval.
+	ReapTick time.Duration
 	// publishStopped is called as the status publisher exits.
 	//
 	// A test seam. Whether Run waits for that goroutine is otherwise observable
@@ -128,6 +143,9 @@ func New(version, dir string) *Daemon {
 		Notify:         utils.Notify,
 		NotifyWithLink: utils.NotifyWithLink,
 		Events:         events.NewLog(dir),
+		Sessions:       sessions.New(SessionsPath(dir), sessions.DefaultSize),
+		ListProcesses:  proc.List,
+		Cwd:            proc.Cwd,
 		publishSignal:  make(chan struct{}, 1),
 		nudge:          make(chan struct{}, 1),
 	}
@@ -301,6 +319,11 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	if len(configs) == 0 {
 		utils.Info("agent: no autostart workspaces — waiting for remote session starts")
 	}
+
+	d.startSessionTracking()
+	reapDone := make(chan struct{})
+	go func() { defer close(reapDone); d.reapSessions(ctx) }()
+	defer func() { <-reapDone }()
 
 	tick := d.CommandTick
 	if tick == 0 {
@@ -477,8 +500,11 @@ func (d *Daemon) drainCommands(ctx context.Context, launch func(*supervisor.Runn
 			d.stopRemoteWorkspace(ctx, c, launch)
 		case command.ActionAttention:
 			d.reportAttention(c)
+		default:
+			d.handleSessionCommand(ctx, c)
 		}
 	}
+	d.flushSessions()
 }
 
 // reportAttention turns a hook's "this session wants a person" into a timeline
