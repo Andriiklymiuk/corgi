@@ -26,7 +26,11 @@ type Registry struct {
 	// name when one points at that directory, else the directory's own name.
 	ProfileFor func(configDir string) string
 
-	mu        sync.Mutex
+	mu sync.Mutex
+	// saveMu orders writers: the command loop, the reaper and a focus
+	// goroutine all Save, and two snapshots racing for the same .tmp file
+	// could leave the older one on disk.
+	saveMu    sync.Mutex
 	path      string
 	sessions  map[string]*Session
 	board     Board
@@ -118,6 +122,9 @@ func (r *Registry) Load() {
 	}
 	for _, s := range r.sortedLocked() {
 		r.board.Place(s.ID)
+		// No window has reconnected yet: a host restored as connected would
+		// send reveal requests nobody reads.
+		r.bind(s)
 	}
 	r.dirty = true
 }
@@ -125,6 +132,8 @@ func (r *Registry) Load() {
 // Save writes the board when something changed. Cheap to call after every
 // drain: a batch of twenty tool events is one write.
 func (r *Registry) Save() error {
+	r.saveMu.Lock()
+	defer r.saveMu.Unlock()
 	r.mu.Lock()
 	if !r.dirty {
 		r.mu.Unlock()
@@ -230,9 +239,10 @@ func (r *Registry) Apply(ev Event) bool {
 		s.Detail = firstNonEmpty(ev.Error, "api error")
 		r.setStatus(s, StatusNeedsInput, now)
 	case "SessionEnd":
-		if ev.Reason == "resume" {
-			// The process is about to become another session; the key waits
-			// for its SessionStart rather than blinking off and on.
+		if ev.Reason == "resume" || ev.Reason == "clear" {
+			// The same process is about to start another session under a
+			// new id; the record waits so that SessionStart renames it in
+			// place and the key stays where it was.
 			r.setStatus(s, StatusStale, now)
 			break
 		}
@@ -331,7 +341,7 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if s.Label == "" {
 		s.Label, s.Folder = r.resolve(s.Cwd)
 	}
-	if ev.ConfigDir != "" || s.Profile == "" {
+	if s.Profile == "" || ev.ConfigDir != s.ConfigDir {
 		s.ConfigDir = ev.ConfigDir
 		s.Profile = r.profile(ev.ConfigDir)
 	}
@@ -340,6 +350,7 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	}
 	if len(ev.Ancestors) > 0 {
 		s.Ancestors = ev.Ancestors
+		s.Names = ev.Names
 	}
 	if ev.Window != "" {
 		s.Window = ev.Window
@@ -400,7 +411,18 @@ func (r *Registry) Reap(alive func(pid int) bool, now time.Time) bool {
 	defer r.mu.Unlock()
 	changed := false
 	for _, s := range r.sortedLocked() {
-		if s.Status == StatusGone || s.ClaudePID <= 0 {
+		if s.Status == StatusGone {
+			continue
+		}
+		if s.ClaudePID <= 0 {
+			// Nothing to probe (no process table on this platform, or a
+			// chain the hook could not read): the session leaves once it
+			// has been silent for as long as one would take to go stale,
+			// instead of sitting on a key until the next restart.
+			if now.Sub(s.LastActivity) >= StaleAfter {
+				r.dropLocked(s, now)
+				changed = true
+			}
 			continue
 		}
 		if alive(s.ClaudePID) {
@@ -485,7 +507,13 @@ func (r *Registry) bind(s *Session) {
 	// a window's own folder, or a registered workspace. A bare cwd would
 	// make the editor open a NEW window on it, which is worse than just
 	// bringing the app forward.
-	h := Host{Kind: HostUnknown, TermProgram: s.TermProgram, Folder: s.Folder}
+	// Folder is only ever a folder a connected window reported open: an
+	// editor told to open any other folder opens a NEW window on it, or
+	// reloads one, which is worse than just bringing the app forward. App
+	// likewise comes from the window, or from the process names in the
+	// session's parent chain — never a default, since Cursor, Windsurf and
+	// VSCodium all claim TERM_PROGRAM=vscode.
+	h := Host{Kind: HostUnknown, TermProgram: s.TermProgram, App: EditorFromChain(s.Names)}
 	defer func() { s.Host = h }()
 
 	if s.Window != "" {
@@ -514,6 +542,12 @@ func (r *Registry) bind(s *Session) {
 			return
 		}
 	}
+	if h.App != "" && strings.ToLower(s.TermProgram) == "" {
+		// An editor in the chain with no TERM_PROGRAM: the panel, most
+		// likely, before its window has connected.
+		h.Kind = HostVSCodePanel
+		return
+	}
 	switch strings.ToLower(s.TermProgram) {
 	case "vscode":
 		h.Kind = HostVSCodeTerminal
@@ -536,18 +570,13 @@ func (r *Registry) windowForDir(dir string) (Window, bool) {
 	bestLen := -1
 	for _, w := range r.sortedWindowsLocked() {
 		for _, f := range w.Folders {
-			if f == "" || !within(dir, f) || len(f) <= bestLen {
+			if f == "" || !Within(dir, f) || len(f) <= bestLen {
 				continue
 			}
 			best, bestLen = Window{ID: w.ID, App: w.App, ExtHostPID: w.ExtHostPID, Folders: []string{f}}, len(f)
 		}
 	}
 	return best, bestLen >= 0
-}
-
-func within(dir, root string) bool {
-	dir, root = filepath.Clean(dir), filepath.Clean(root)
-	return dir == root || strings.HasPrefix(dir, root+string(filepath.Separator))
 }
 
 func containsInt(list []int, n int) bool {
@@ -607,8 +636,9 @@ func (r *Registry) Adopt(procs []proc.Process, cwd func(pid int) string, now tim
 			continue
 		}
 		known[p.PID] = true
+		chain := proc.Ancestors(p.PID)
 		s := &Session{
-			ID: PlaceholderID(p.PID), ClaudePID: p.PID, Ancestors: proc.PIDs(proc.Ancestors(p.PID)),
+			ID: PlaceholderID(p.PID), ClaudePID: p.PID, Ancestors: proc.PIDs(chain), Names: proc.Names(chain),
 			StartedAt: now, LastActivity: now, Status: StatusUnknown, StatusSince: now,
 		}
 		if cwd != nil {
@@ -714,6 +744,14 @@ func (r *Registry) lookupLocked(ref string) (*Session, error) {
 	if s := r.sessions[ref]; s != nil {
 		return s, nil
 	}
+	// A key number comes before an id prefix: ids are hex, so "2" would
+	// otherwise match a sixteenth of them and focus the wrong window.
+	if n, ok := slotRef(ref); ok {
+		if n >= 0 && n < r.board.Size && r.board.Slots[n] != "" {
+			return r.sessions[r.board.Slots[n]], nil
+		}
+		return nil, fmt.Errorf("key %s is empty", ref)
+	}
 	var byPrefix, byLabel []*Session
 	for _, s := range r.sortedLocked() {
 		if strings.HasPrefix(s.ID, ref) {
@@ -732,9 +770,6 @@ func (r *Registry) lookupLocked(ref string) (*Session, error) {
 		return byLabel[0], nil
 	case len(byLabel) > 1:
 		return nil, fmt.Errorf("%d sessions are called %q — use the id", len(byLabel), ref)
-	}
-	if n, ok := slotRef(ref); ok && n >= 0 && n < r.board.Size && r.board.Slots[n] != "" {
-		return r.sessions[r.board.Slots[n]], nil
 	}
 	return nil, ErrNoSession
 }

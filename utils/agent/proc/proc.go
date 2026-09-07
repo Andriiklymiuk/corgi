@@ -55,6 +55,27 @@ func PIDs(chain []Process) []int {
 	return out
 }
 
+// Names flattens a chain to its process names, in the same order.
+func Names(chain []Process) []string {
+	out := make([]string, 0, len(chain))
+	for _, p := range chain {
+		out = append(out, p.Name)
+	}
+	return out
+}
+
+// HasCorgi reports whether corgi itself is in the chain: a hook fired by a
+// claude the corgi daemon supervises, which is a remote-control server, not
+// a session on a screen.
+func HasCorgi(chain []Process) bool {
+	for _, p := range chain {
+		if filepath.Base(p.Name) == "corgi" {
+			return true
+		}
+	}
+	return false
+}
+
 // shells are the interpreters a hook runs under before reaching the process
 // that spawned it. Claude Code runs command hooks through a shell, and the
 // integrated terminal runs claude under another one, so "the first ancestor

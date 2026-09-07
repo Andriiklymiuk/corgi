@@ -189,25 +189,26 @@ func (d *Daemon) dispatchFocus(ctx context.Context, t sessions.FocusTarget) {
 func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 	switch t.Kind {
 	case sessions.HostVSCodeTerminal, sessions.HostVSCodePanel:
-		app := t.App
-		if app == "" {
-			app = "Visual Studio Code"
+		if t.App == "" {
+			// TERM_PROGRAM=vscode is what Cursor and Windsurf say too. A
+			// guess would start the wrong editor and open a new window.
+			return errors.New("which editor is unknown — install the corgi VS Code extension, or reopen the terminal")
 		}
 		switch runtime.GOOS {
 		case "darwin":
-			// With a folder, the window that has it open comes forward;
-			// without one, the app does. Never a folder corgi is not sure
-			// of: that opens a new window instead.
-			args := []string{"-a", app}
+			// With a folder (one a connected window reported open), the
+			// window that has it comes forward; without one, the app does.
+			args := []string{"-a", t.App}
 			if t.Folder != "" {
 				args = append(args, t.Folder)
 			}
 			return run(ctx, "open", args...)
 		case "linux":
 			if t.Folder == "" {
-				return errors.New("no folder known for this window")
+				// `code` alone opens a new window; there is no "just raise".
+				return errors.New("no connected window to raise — install the corgi VS Code extension")
 			}
-			return run(ctx, editorCLI(app), "--reuse-window", t.Folder)
+			return run(ctx, editorCLI(t.App), "--reuse-window", t.Folder)
 		}
 	case sessions.HostITerm:
 		if runtime.GOOS == "darwin" {

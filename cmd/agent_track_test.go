@@ -347,3 +347,17 @@ func TestProfileResolverNamesTheProfileForAConfigDir(t *testing.T) {
 		t.Fatal("empty")
 	}
 }
+
+func TestEmitHookSkipsAClaudeTheDaemonSupervises(t *testing.T) {
+	orig := proc.Lookup
+	table := map[int]proc.Process{
+		50: {PID: 50, PPID: 40, Name: "sh"},
+		40: {PID: 40, PPID: 30, Name: "claude"},
+		30: {PID: 30, PPID: 1, Name: "corgi"},
+	}
+	proc.Lookup = func(pid int) (proc.Process, bool) { p, ok := table[pid]; return p, ok }
+	t.Cleanup(func() { proc.Lookup = orig })
+	if _, ok := runEmitHook(strings.NewReader(`{"session_id":"s1","hook_event_name":"Stop"}`), fakeEnv(nil), 50); ok {
+		t.Fatal("a remote-control server under the daemon is not a session on a screen")
+	}
+}

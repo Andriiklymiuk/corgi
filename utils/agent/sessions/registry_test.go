@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -243,8 +244,8 @@ func TestWindowJoinRules(t *testing.T) {
 		t.Fatalf("rule 3 matches an integrated terminal to a window by folder: %+v", got.Host)
 	}
 	got, _ = r.Lookup("iterm")
-	if got.Host.Kind != HostITerm || got.Host.Folder != "/home/me/dev/acme-api" {
-		t.Fatalf("iTerm: %+v", got.Host)
+	if got.Host.Kind != HostITerm || got.Host.Folder != "" {
+		t.Fatalf("iTerm: no folder an editor should open: %+v", got.Host)
 	}
 	// An unregistered directory names no folder: focus activates the app
 	// rather than opening a new window on the cwd.
@@ -337,8 +338,14 @@ func TestLabelsAndLookup(t *testing.T) {
 	if s, err := r.Lookup("#3"); err != nil || s.ID != "ijkl-3" {
 		t.Fatalf("lookup by key number: %+v %v", s, err)
 	}
-	if _, err := r.Lookup("9"); err == nil {
-		t.Fatal("an empty key is nothing")
+	// A bare digit is a key, never an id prefix: ids are hex.
+	r.sessions["2222-hex"] = &Session{ID: "2222-hex", ClaudePID: 9, StartedAt: t0}
+	if s, err := r.Lookup("2"); err != nil || s.ID != "efgh-2" {
+		t.Fatalf("\"2\" is key 2, got %+v %v", s, err)
+	}
+	delete(r.sessions, "2222-hex")
+	if _, err := r.Lookup("9"); err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("an empty key says so: %v", err)
 	}
 	if _, err := r.Lookup(""); err == nil {
 		t.Fatal("empty ref")
@@ -487,8 +494,17 @@ func TestDefaults(t *testing.T) {
 			t.Errorf("notASession(%q) = %v", args, !want)
 		}
 	}
-	if itoa(0) != "0" || itoa(-12) != "-12" || itoa(345) != "345" {
-		t.Fatal("itoa")
+	for names, want := range map[string]string{
+		"sh,claude,zsh,Code Helper (Plu": "Visual Studio Code", "sh,claude,zsh,code": "Visual Studio Code",
+		"sh,claude,zsh,Cursor Helper (P": "Cursor", "sh,node,bash,code-insiders": "Visual Studio Code - Insiders",
+		"sh,claude,zsh,Windsurf Helper": "Windsurf", "sh,claude,zsh,iTerm2": "", "": "",
+	} {
+		if got := EditorFromChain(strings.Split(names, ",")); got != want {
+			t.Errorf("EditorFromChain(%q) = %q, want %q", names, got, want)
+		}
+	}
+	if !Within("/a/b/c", "/a/b") || Within("/a/bc", "/a/b") || !Within("/a/b/", "/a/b") {
+		t.Fatal("Within")
 	}
 	if shorten("a\nb", 5) != "a" || shorten("abcdefgh", 5) != "abcd…" {
 		t.Fatal("shorten")
@@ -541,5 +557,82 @@ func TestOnlyVisibleChangesArePublished(t *testing.T) {
 	pre.Tool = "Bash"
 	if !r.Apply(pre) {
 		t.Fatal("a different tool is a change")
+	}
+}
+
+func TestClearKeepsTheKeyLikeResume(t *testing.T) {
+	r := newTestRegistry(t)
+	gone := ev("Stop", "first", 0)
+	gone.ClaudePID = 55
+	r.Apply(gone)
+	r.Apply(ev("Stop", "s1", time.Second)) // key 2
+	r.Apply(Event{Name: "SessionEnd", SessionID: "first", Reason: "other", ClaudePID: 55, At: t0.Add(2 * time.Second)})
+	end := ev("SessionEnd", "s1", 3*time.Second)
+	end.Reason = "clear"
+	r.Apply(end)
+	if status(t, r, "s1") != StatusStale {
+		t.Fatal("clear waits for the new id")
+	}
+	start := ev("SessionStart", "s2", 4*time.Second)
+	start.Source = "clear"
+	r.Apply(start)
+	snap := r.Snapshot(t0)
+	if !snap.Slots[0].Empty || snap.Slots[1].SessionID != "s2" {
+		t.Fatalf("the key must not move on /clear: %+v", snap.Slots)
+	}
+}
+
+func TestReapDropsPidlessSessionsAfterStaleAfter(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Apply(Event{Name: "Stop", SessionID: "nopid", At: t0})
+	alive := func(int) bool { t.Fatal("nothing to probe"); return true }
+	if r.Reap(alive, t0.Add(StaleAfter-time.Minute)) {
+		t.Fatal("too soon")
+	}
+	if !r.Reap(alive, t0.Add(StaleAfter)) {
+		t.Fatal("a pid-less session leaves once it has been silent long enough")
+	}
+	if _, err := r.Lookup("nopid"); err == nil {
+		t.Fatal("gone")
+	}
+}
+
+func TestLoadRebindsRestoredHosts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	r := New(path, 3)
+	e := ev("Stop", "s1", 0)
+	e.Window = "w1"
+	r.Apply(e)
+	r.SetWindows([]Window{{ID: "w1", App: "Cursor", ExtHostPID: 7, Folders: []string{"/f"}, Terminals: []Terminal{{Name: "zsh", ShellPID: 90}}, UpdatedAt: t0}})
+	if s, _ := r.Lookup("s1"); !s.Host.Connected || s.Host.ShellPID != 90 {
+		t.Fatalf("bound: %+v", s.Host)
+	}
+	_ = r.Save()
+	again := New(path, 3)
+	again.Load()
+	s, _ := again.Lookup("s1")
+	if s.Host.Connected || s.Host.ShellPID != 0 || s.Host.Folder != "" || s.Host.WindowID != "w1" {
+		t.Fatalf("a restored host is not connected until its window reconnects: %+v", s.Host)
+	}
+	if _, err := again.Focus("s1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEditorFromChainBindsAPanelBeforeItsWindowConnects(t *testing.T) {
+	r := newTestRegistry(t)
+	e := ev("Stop", "panel", 0)
+	e.Names = []string{"sh", "claude", "Cursor Helper (P", "Cursor"}
+	r.Apply(e)
+	s, _ := r.Lookup("panel")
+	if s.Host.Kind != HostVSCodePanel || s.Host.App != "Cursor" || s.Host.Connected {
+		t.Fatalf("panel: %+v", s.Host)
+	}
+	term := ev("Stop", "term", time.Second)
+	term.ClaudePID, term.TermProgram, term.Names = 77, "vscode", []string{"sh", "claude", "zsh", "Code Helper (Plu"}
+	r.Apply(term)
+	s, _ = r.Lookup("term")
+	if s.Host.Kind != HostVSCodeTerminal || s.Host.App != "Visual Studio Code" {
+		t.Fatalf("terminal: %+v", s.Host)
 	}
 }

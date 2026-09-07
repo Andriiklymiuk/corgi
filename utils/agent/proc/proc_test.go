@@ -118,3 +118,13 @@ func TestRealLookupSeesSelf(t *testing.T) {
 		t.Fatalf("List() = %d, %v", len(list), err)
 	}
 }
+
+func TestNamesAndHasCorgi(t *testing.T) {
+	chain := []Process{{PID: 3, Name: "sh"}, {PID: 2, Name: "claude"}, {PID: 1, Name: "/opt/homebrew/bin/corgi"}}
+	if got := Names(chain); len(got) != 3 || got[1] != "claude" {
+		t.Fatalf("Names = %v", got)
+	}
+	if !HasCorgi(chain) || HasCorgi(chain[:2]) || HasCorgi(nil) {
+		t.Fatal("HasCorgi")
+	}
+}

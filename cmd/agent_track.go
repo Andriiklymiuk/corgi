@@ -376,16 +376,7 @@ func (in hookInput) errorType() string {
 		Kind string `json:"kind"`
 	}
 	if json.Unmarshal(in.Error, &obj) == nil {
-		return firstNonEmptyString(obj.Type, obj.Kind)
-	}
-	return ""
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
+		return firstNonEmpty(obj.Type, obj.Kind)
 	}
 	return ""
 }
@@ -410,11 +401,17 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 		Tool: in.Tool, Notification: in.NotificationType, Message: truncateLine(in.Message, 160),
 		Error: in.errorType(), Window: getenv("CORGI_VSCODE_WINDOW"),
 		TermProgram: getenv("TERM_PROGRAM"),
-		TermSession: firstNonEmptyString(getenv("ITERM_SESSION_ID"), getenv("TERM_SESSION_ID")),
+		TermSession: firstNonEmpty(getenv("ITERM_SESSION_ID"), getenv("TERM_SESSION_ID")),
 		At:          time.Now().UTC(),
 	}
 	chain := proc.Ancestors(parent)
+	if proc.HasCorgi(chain) {
+		// A claude the corgi daemon supervises: the remote-control server,
+		// which has no window to focus and would only eat a key.
+		return sessions.Event{}, false
+	}
 	ev.Ancestors = proc.PIDs(chain)
+	ev.Names = proc.Names(chain)
 	if owner, ok := proc.Owner(chain); ok {
 		ev.ClaudePID = owner.PID
 	}
@@ -490,7 +487,7 @@ func workspaceLabel(registry *workspace.Registry, cwd string) (string, string) {
 	if registry != nil && cwd != "" {
 		best, bestLen := workspace.Workspace{}, -1
 		for _, w := range registry.Workspaces {
-			if w.AbsPath == "" || len(w.AbsPath) <= bestLen || !pathWithin(cwd, w.AbsPath) {
+			if w.AbsPath == "" || len(w.AbsPath) <= bestLen || !sessions.Within(cwd, w.AbsPath) {
 				continue
 			}
 			best, bestLen = w, len(w.AbsPath)
@@ -500,14 +497,6 @@ func workspaceLabel(registry *workspace.Registry, cwd string) (string, string) {
 		}
 	}
 	return sessions.DefaultResolve(cwd)
-}
-
-func pathWithin(dir, root string) bool {
-	dir, root = filepath.Clean(dir), filepath.Clean(root)
-	if dir == root {
-		return true
-	}
-	return strings.HasPrefix(dir, root+string(filepath.Separator))
 }
 
 // workspaceResolver is the daemon's label function, reloading the registry
@@ -529,13 +518,26 @@ func workspaceResolver(agentDir string) func(cwd string) (string, string) {
 }
 
 // profileResolver names a CLAUDE_CONFIG_DIR after the corgi profile that
-// points at it, so the badge reads "work" rather than ".claude-work".
+// points at it, so the badge reads "work" rather than ".claude-work". The
+// profiles are cached like the registry: the registry asks under its lock,
+// and a burst of tool events must not become a burst of YAML parses.
 func profileResolver(agentDir string) func(configDir string) string {
+	var (
+		cached   map[string]config.WorkspaceConfig
+		loadedAt time.Time
+	)
 	return func(configDir string) string {
-		profiles, err := loadProfiles(agentDir)
-		if err != nil || configDir == "" {
+		if configDir == "" {
 			return ""
 		}
+		if cached == nil || time.Since(loadedAt) > 10*time.Second {
+			cached, _ = loadProfiles(agentDir)
+			loadedAt = time.Now()
+			if cached == nil {
+				cached = map[string]config.WorkspaceConfig{}
+			}
+		}
+		profiles := cached
 		want := expandTilde(configDir)
 		names := make([]string, 0, len(profiles))
 		for name, p := range profiles {

@@ -111,13 +111,26 @@ func TestDaemonRescanAdoptsRunningClaudeProcesses(t *testing.T) {
 	cancel()
 	<-done
 
-	// The board survives a restart of the daemon.
-	again := trackingDaemon(t)
-	again.Dir = d.Dir
+	// The board survives a restart of the daemon: a second daemon on the
+	// same directory, told nothing by the process table, still lists it.
+	_ = os.Remove(SessionsPath(d.Dir) + ".stale")
+	again := New("test", d.Dir)
+	again.Start, again.Notify = d.Start, d.Notify
+	again.CommandTick, again.ReapTick = d.CommandTick, d.ReapTick
+	again.ResolveWorkspace = d.ResolveWorkspace
+	again.ListProcesses = func() ([]proc.Process, error) { return nil, nil }
+	again.Alive = func(int) bool { return true }
+	before, _ := os.Stat(SessionsPath(d.Dir))
 	ctx, cancel = context.WithCancel(context.Background())
 	done = make(chan struct{})
 	go func() { defer close(done); _ = again.Run(ctx, nil) }()
-	waitFor(t, func() bool { return len(readBoard(t, again).Sessions) == 1 })
+	waitFor(t, func() bool {
+		info, err := os.Stat(SessionsPath(d.Dir))
+		return err == nil && info.ModTime().After(before.ModTime()) && len(readBoard(t, again).Sessions) == 1
+	})
+	if st := readBoard(t, again); st.Sessions[0].ID != sessions.PlaceholderID(9001) {
+		t.Fatalf("restored = %+v", st.Sessions[0])
+	}
 	cancel()
 	<-done
 }
@@ -192,6 +205,12 @@ func TestRaiseWindowRefusesTheUnknown(t *testing.T) {
 	defer cancel()
 	if err := raiseWindow(ctx, sessions.FocusTarget{Kind: sessions.HostUnknown}); err == nil {
 		t.Fatal("an unknown host has no window to raise")
+	}
+	if err := raiseWindow(ctx, sessions.FocusTarget{Kind: sessions.HostVSCodeTerminal, Folder: "/x"}); err == nil {
+		t.Fatal("an unknown editor is never guessed")
+	}
+	if editorCLI("Cursor") != "cursor" || editorCLI("Visual Studio Code - Insiders") != "code-insiders" || editorCLI("Visual Studio Code") != "code" || editorCLI("VSCodium") != "codium" {
+		t.Fatal("editorCLI")
 	}
 	if err := run(ctx, "definitely-not-a-command-corgi"); err == nil {
 		t.Fatal("a missing command is an error")

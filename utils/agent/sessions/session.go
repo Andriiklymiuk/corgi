@@ -10,6 +10,7 @@ package sessions
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -90,9 +91,13 @@ type Event struct {
 	// ClaudePID is the process the hook belongs to, and Ancestors its parent
 	// chain up to init. The reaper probes the first; window binding joins on
 	// the second.
-	ClaudePID int       `json:"claudePid,omitempty"`
-	Ancestors []int     `json:"ancestors,omitempty"`
-	At        time.Time `json:"at"`
+	ClaudePID int   `json:"claudePid,omitempty"`
+	Ancestors []int `json:"ancestors,omitempty"`
+	// Names are the ancestors' process names, in the same order. They say
+	// which editor a terminal belongs to ("Cursor Helper (Plugin)") when no
+	// extension is there to say so.
+	Names []string  `json:"names,omitempty"`
+	At    time.Time `json:"at"`
 }
 
 // Host is where a session's terminal was found.
@@ -126,11 +131,12 @@ type Session struct {
 	Display string `json:"display,omitempty"`
 	Cwd     string `json:"cwd,omitempty"`
 	// Folder is the workspace root the label came from, if any.
-	Folder    string `json:"folder,omitempty"`
-	Profile   string `json:"profile,omitempty"`
-	ConfigDir string `json:"configDir,omitempty"`
-	ClaudePID int    `json:"claudePid,omitempty"`
-	Ancestors []int  `json:"ancestors,omitempty"`
+	Folder    string   `json:"folder,omitempty"`
+	Profile   string   `json:"profile,omitempty"`
+	ConfigDir string   `json:"configDir,omitempty"`
+	ClaudePID int      `json:"claudePid,omitempty"`
+	Ancestors []int    `json:"ancestors,omitempty"`
+	Names     []string `json:"names,omitempty"`
 	// Window, TermProgram and TermSession are kept from the hook so the join
 	// can be redone whenever the set of windows changes.
 	Window      string    `json:"window,omitempty"`
@@ -166,9 +172,39 @@ type Window struct {
 	UpdatedAt  time.Time  `json:"updatedAt"`
 }
 
+// EditorFromChain names the editor whose process tree a session runs in,
+// from the ancestor names a hook captured: VS Code's pty host is "Code
+// Helper (Plugin)" on macOS and "code" on Linux, Cursor's "Cursor Helper
+// (Plugin)" and "cursor", and so on. The kernel's names are cut at 16
+// characters, so prefixes are matched. Empty when nothing is recognised.
+func EditorFromChain(names []string) string {
+	for _, raw := range names {
+		name := strings.ToLower(filepath.Base(raw))
+		switch {
+		case strings.HasPrefix(name, "cursor"):
+			return "Cursor"
+		case strings.HasPrefix(name, "windsurf"):
+			return "Windsurf"
+		case strings.HasPrefix(name, "codium"), strings.HasPrefix(name, "vscodium"):
+			return "VSCodium"
+		case strings.HasPrefix(name, "code - insiders"), strings.HasPrefix(name, "code-insiders"):
+			return "Visual Studio Code - Insiders"
+		case name == "code", strings.HasPrefix(name, "code helper"):
+			return "Visual Studio Code"
+		}
+	}
+	return ""
+}
+
+// Within reports whether dir is root or inside it.
+func Within(dir, root string) bool {
+	dir, root = filepath.Clean(dir), filepath.Clean(root)
+	return dir == root || strings.HasPrefix(dir, root+string(filepath.Separator))
+}
+
 // PlaceholderID is the id a rescan gives a session no hook has named yet.
 // The next hook from that process replaces it with the real session id.
-func PlaceholderID(pid int) string { return "pid:" + itoa(pid) }
+func PlaceholderID(pid int) string { return "pid:" + strconv.Itoa(pid) }
 
 // Placeholder reports whether an id came from a rescan.
 func Placeholder(id string) bool { return strings.HasPrefix(id, "pid:") }
@@ -196,26 +232,4 @@ func DefaultProfile(configDir string) string {
 		return rest
 	}
 	return base
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
 }
