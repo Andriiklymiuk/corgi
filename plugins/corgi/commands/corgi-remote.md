@@ -25,10 +25,8 @@ Follow the `agent` skill (`plugins/corgi/skills/agent/SKILL.md`) — the
    start time. Per-workspace open target (Claude app vs browser vs Chrome) is
    set on the phone launcher itself, not in config.
 5. Tear-down: `corgi agent down` (daemon + MCP + tunnel).
-6. If the user asks why their claude.ai list fills with `<ws> · main · HH:MM` rows:
-   those were pre-created sessions from an older corgi; the daemon now starts
-   supervised servers as devices (no session until Start / the Claude app), and
-   `autostartSession: true` is the deliberate opt-in back. Archive the old rows once.
+6. A list full of `<ws> · main · HH:MM` rows → the skill's *Supervised servers are
+   devices* section; archive the old rows once.
 
 Guardrails from the skill hold: never enable `--dangerously-skip-permissions`
 on your own — it is the user's explicit, trusted-config choice; a `sensitive`

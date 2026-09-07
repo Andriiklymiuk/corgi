@@ -2,7 +2,10 @@
 
 Each dimension scores 0–4 from the evidence. **Score = the highest dimension, plus 1
 for every other dimension at 2 or more, capped at 10, then raised to any floor** in
-SKILL.md. Points are awarded for what the diff shows, never for what the title claims.
+SKILL.md, **plus 1 when a floor applied and verification is 3 or more** (the
+escalation rule). A story target scores verification 3 and takes its floors from what
+the ticket says it will touch. Points are awarded for what the diff shows, never for
+what the title claims.
 
 ## Blast radius
 | Points | Evidence |
@@ -45,7 +48,7 @@ handles any of these counts as touching it.
 | 0 | tests in the diff cover the changed lines; CI green; bug fix has a FAILS-on-base test; UI change has a screenshot or recording |
 | 1 | tests exist for most changed lines; one gap named |
 | 2 | tests touch the area but not the new branch/edge; or CI has no check for this service |
-| 3 | no test for the changed lines; or a test was deleted, skipped, or loosened (`.skip`, `t.Skip`, weakened assertion); or a `complexity` gate fail on a touched function |
+| 3 | no test for the changed lines; or a test was deleted, skipped, or loosened (`.skip`, `t.Skip`, weakened assertion) |
 | 4 | CI red on head, or a test modified to pass without a behaviour reason, or manual-only claim with no test plan |
 
 A `complexity` gate fail (SKILL: `complexity gate: fail`) adds 1 here, once.
@@ -103,17 +106,20 @@ novelty 0 → highest 3 + four others at ≥2 = **7**; floor "contract changed" 
 change → **7 high**. Two reviewers, merge order api → web, auto-approve **no — cross-service contract**.
 
 **Rotate the JWT signing key handling.**
-data 4 → floor "secret handling" 8 → whatever else, **≥ 8 high**; with a red CI check
-it is **9 critical**.
+data 4 · verification 0 (tests cover it, CI green) · everything else under 2 → sum 4,
+floor "secret handling" → **8 high**. The same change with CI red: verification 4 →
+sum 5, floor 8, escalation +1 → **9 critical**.
 
 **Expo SDK 52 → 53 bump, lockfile only, no screenshots.**
-mobile 4 · novelty 3 · verification 3 (no device proof) → 4 + 2 = 6, floor "native SDK
-bumped" 6 → **6 moderate**? No: reversibility 4 (binary release) raises the highest to
-4 and the count to three → **7 high**. Check list must include a device run per
-platform before submit (`mobile` skill).
+mobile 4 · reversibility 4 (binary release) · novelty 3 · verification 3 (no device
+proof) → highest 4 + three others = 7; floor "native SDK bumped" 6 applies, and
+verification is 3, so escalation adds 1 → **8 high**. Check list must include a device
+launch log or screenshot per platform before submit (`mobile` skill).
 
 **Story target: "Let users delete their account."**
-Forecast: data 4 (PII deletion), reversibility 4 (destructive), contract 3 (every
-service holding user rows) → **9 critical, confidence: low**. Before building: which
+Forecast: data 4 (PII deletion) · reversibility 4 (destructive) · contract 3 (every
+service holding user rows) · verification 3 (a story) → 4 + 3 = 7; the ticket says it
+deletes user data, so the destructive-data floor 8 applies, and verification 3 escalates
+→ **9 critical, confidence: low**. Before building: which
 services own user data, soft- vs hard-delete, retention law, the flag. Never
 auto-approve; an agent may draft it only with a human owning the spec gate.

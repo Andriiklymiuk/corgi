@@ -28,6 +28,10 @@ const (
 	CauseStartupFailure ExitCause = "startup-failure"
 	// CauseCrash is an unexpected exit after a healthy run.
 	CauseCrash ExitCause = "crash"
+	// CauseUnsupportedFlag is an exit corgi caused itself: an optional flag the
+	// installed CLI predates. Recorded so the timeline explains the immediate
+	// restart, and so the daemon stops sending the flag to this workspace.
+	CauseUnsupportedFlag ExitCause = "unsupported-flag"
 )
 
 // MinHealthyUptime is how long a process must survive before the run counts as

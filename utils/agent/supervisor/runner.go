@@ -448,9 +448,14 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 // unrelated "unknown option" in a session's output cannot trip it.
 const unknownOptionMarker = "unknown option"
 
-// FlagUnsupported reports whether output is the CLI refusing flag as unknown.
-// Exported for the daemon's diagnostics and the tests.
-func FlagUnsupported(output, flag string) bool {
+// unsupportedFlagNote is what status and the launcher show once the flag has
+// been dropped. It names the fix, because nothing corgi does can restore the
+// device-only behaviour on this CLI.
+const unsupportedFlagNote = "this Claude Code predates " + DeviceOnlyFlag +
+	" — a session is opened in the checkout at every start; update Claude Code to stop that"
+
+// flagUnsupported reports whether output is the CLI refusing flag as unknown.
+func flagUnsupported(output, flag string) bool {
 	lower := strings.ToLower(output)
 	return strings.Contains(lower, unknownOptionMarker) && strings.Contains(lower, strings.ToLower(flag))
 }
@@ -471,14 +476,20 @@ func (r *Runner) retryWithoutUnsupportedFlag(e Exit) bool {
 		return false
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.Config.DeviceOnly || !FlagUnsupported(e.Output, DeviceOnlyFlag) {
+	if !r.Config.DeviceOnly || !flagUnsupported(e.Output, DeviceOnlyFlag) {
+		r.mu.Unlock()
 		return false
 	}
 	r.Config.DeviceOnly = false
 	r.proc = nil
 	r.state.Running = false
-	r.state.Note = "this Claude Code predates " + DeviceOnlyFlag + " — a session is opened in the checkout at every start; update Claude Code to stop that"
+	r.state.Note = unsupportedFlagNote
+	r.mu.Unlock()
+	// The timeline gets the exit and its cause, so two consecutive starts do
+	// not read as a mystery; the daemon reads the cause to stop sending the
+	// flag to this workspace at all.
+	r.emit(RunEvent{Kind: "exited", Cause: string(CauseUnsupportedFlag), Reason: unsupportedFlagNote})
+	r.notifyChange()
 	return true
 }
 

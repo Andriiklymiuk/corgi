@@ -138,6 +138,22 @@ func (d *Daemon) recordEvent(workspaceID string) func(supervisor.RunEvent) {
 		d.Events.Append(workspaceID, events.Event{
 			Kind: e.Kind, PID: e.PID, Cause: e.Cause, Reason: e.Reason, URL: e.URL,
 		})
+		if e.Cause == string(supervisor.CauseUnsupportedFlag) {
+			// The runner already dropped the flag for itself. Drop it from the
+			// startup settings too, or the next swap back to a device would
+			// send it again, fail again, and open the session it was meant to
+			// avoid — once per phone Stop.
+			d.forgetDeviceOnly(workspaceID)
+		}
+	}
+}
+
+func (d *Daemon) forgetDeviceOnly(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if cfg, ok := d.autostart[id]; ok {
+		cfg.DeviceOnly = false
+		d.autostart[id] = cfg
 	}
 }
 
@@ -494,7 +510,12 @@ func (d *Daemon) notifyAttention(title, body, workspaceID string) {
 
 func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {
 	if d.isReplacing(c.WorkspaceID) {
-		d.requestPublish() // a swap is already under way; the status will show it
+		// A swap is under way — a phone Stop putting the device back, most
+		// likely, with this Start a few seconds behind it. Dropping it would
+		// leave the card on "ready" and the person tapping again; put it back
+		// in the spool instead, same id and request time, so the next drain
+		// retries it and the command's own TTL bounds the retries.
+		_, _ = command.Write(d.Dir, c)
 		return
 	}
 	if r := d.findRunner(c.WorkspaceID); r != nil && r.Supervising() {
@@ -627,7 +648,10 @@ func (d *Daemon) stopRemoteWorkspace(ctx context.Context, c command.Command, lau
 	// only put the same thing back.
 	if auto, ok := d.autostartConfig(c.WorkspaceID); ok && auto.DeviceOnly {
 		st := r.State()
-		if st.Running && st.DeviceOnly && st.SessionsThisRun == 0 {
+		if st.DeviceOnly && st.SessionsThisRun == 0 {
+			// Up, or between restarts: either way a device with nothing on it,
+			// and a relaunch would only put the same thing back — and cut short
+			// a backoff the runner is honouring.
 			d.requestPublish()
 			return
 		}

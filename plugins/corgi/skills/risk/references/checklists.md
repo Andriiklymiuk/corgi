@@ -42,8 +42,8 @@ line here that the diff does not touch does not go on the card.
   the repo has one.
 
 ## Mobile (Expo / React Native, native)
-- **Both platforms**: the change was run on iOS and Android (simulator or device), not
-  only the one the developer had open; screenshots for each when UI changed.
+- **Both platforms**: a screenshot or recording per platform in the PR body when UI
+  changed — one platform's proof says nothing about the other.
 - **OTA vs binary**: does this need a store build (native module, SDK bump, config
   plugin, entitlement, permission string)? If yes, the card says so and the review tier
   cannot be below high — an OTA cannot fix it after release.
@@ -61,8 +61,8 @@ line here that the diff does not touch does not go on the card.
 - **Startup path**: nothing new runs before the root navigator mounts that can throw;
   an error boundary catches it; splash hides on both success and failure.
 - **Native modules**: version pinned exact (a `~` range re-resolves upward),
-  `npx expo install --check` clean, autolinking confirmed on both platforms, a device
-  launch performed (a DYLD symbol crash passes every CI check).
+  `npx expo install --check` output in the PR body, and a device launch log or
+  screenshot per platform linked (a DYLD symbol crash passes every CI check).
 - **Rendering that CI cannot see**: shaders, particles, 3D, Skia, video — verified by a
   screenshot read by a person; a green build proves nothing here.
 - **IAP / store**: product ids match the stores, restore-purchases path exists, receipt
@@ -92,8 +92,8 @@ line here that the diff does not touch does not go on the card.
   that needs them.
 - **Failure behaviour**: a red step fails the job (no `|| true`), logs are dumped on
   failure, health waits are bounded (`ci` skill rules).
-- **Rollback**: the previous image/tag is still deployable; the change was run once
-  on a branch before it lands on main.
+- **Rollback**: the previous image/tag is still deployable; a link to one green run of
+  the changed pipeline on this branch.
 - **Cost**: per-run wall clock and what triggers it, when either changed.
 
 ## Cross-service (any set spanning repos)

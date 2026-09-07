@@ -16,7 +16,7 @@ Follow the `risk` skill (`plugins/corgi/skills/risk/SKILL.md`): resolve the targ
 without a checkout, gather the evidence table, score with `references/rubric.md`
 (highest dimension first, floors never lowered), pick the Check lines from
 `references/checklists.md`, and end with the one-line
-`risk: N/10 <tier> · auto-approve: yes|no — <reason>` summary.
+`risk N/10 <tier> · auto-approve: yes|no — <reason>` summary.
 
 Every line on the card cites a file, a test, a check, or a ticket line; a risk you
 cannot point at is not on the card. Never mark a story, a red CI, or a cross-repo set
