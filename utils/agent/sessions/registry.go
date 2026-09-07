@@ -197,33 +197,38 @@ func (r *Registry) Apply(ev Event) bool {
 	s.LastActivity = now
 	s.FocusError = ""
 
+	r.transition(s, ev, now)
+	// A tool call that changes nothing a key shows must not rewrite the
+	// file: twenty of them in a row would be twenty redraws for nothing.
+	if created || r.sessions[s.ID] == nil || s.visible() != before {
+		r.touch()
+		return true
+	}
+	return false
+}
+
+// visible is the part of a session a key draws, compared to decide whether
+// an event is worth publishing.
+type visible struct {
+	Label, Profile, Detail, Tool string
+	Status                       Status
+	Host                         Host
+}
+
+func (s *Session) visible() visible {
+	return visible{Label: s.Label, Profile: s.Profile, Detail: s.Detail, Tool: s.Tool, Status: s.Status, Host: s.Host}
+}
+
+// transition is the status model: what each hook event means for a session.
+func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	switch ev.Name {
 	case "SessionStart":
-		if ev.Source == "compact" {
-			// Compaction is mid-session housekeeping, not a new session and
-			// not a change of state.
-			break
-		}
-		if s.Status == StatusGone {
-			// Pinned and dead, now back: the same key lights up again.
-			r.board.Pin(r.board.IndexOf(s.ID), true)
-		}
-		s.Tool, s.Detail = "", ""
-		r.setStatus(s, StatusDone, now)
+		r.applyStart(s, ev, now)
 	case "UserPromptSubmit":
 		s.Tool, s.Detail = "", ""
 		r.setStatus(s, StatusWorking, now)
 	case "PreToolUse":
-		s.Tool = ev.Tool
-		s.Detail = ev.Tool
-		if ev.Tool == "AskUserQuestion" {
-			// The question is on screen the moment the tool starts; the idle
-			// nudge would only confirm it a minute later.
-			s.Detail = "question"
-			r.setStatus(s, StatusNeedsInput, now)
-			break
-		}
-		r.setStatus(s, StatusWorking, now)
+		r.applyToolStart(s, ev, now)
 	case "PostToolUse", "PostToolUseFailure":
 		// A tool that finished means whatever prompt preceded it was
 		// answered.
@@ -246,38 +251,49 @@ func (r *Registry) Apply(ev Event) bool {
 		s.Detail = firstNonEmpty(ev.Error, "api error")
 		r.setStatus(s, StatusNeedsInput, now)
 	case "SessionEnd":
-		if ev.Reason == "resume" || ev.Reason == "clear" {
-			// The same process is about to start another session under a
-			// new id; the record waits so that SessionStart renames it in
-			// place and the key stays where it was.
-			r.setStatus(s, StatusStale, now)
-			break
-		}
-		r.dropLocked(s, now)
-	case "CwdChanged":
-		// Already refreshed above; the label follows the directory.
+		r.applyEnd(s, ev, now)
 	default:
-		// An event corgi did not ask for still says the session is alive.
+		// CwdChanged was refreshed already; anything else still says the
+		// session is alive.
 	}
-	// A tool call that changes nothing a key shows must not rewrite the
-	// file: twenty of them in a row would be twenty redraws for nothing.
-	if created || r.sessions[s.ID] == nil || s.visible() != before {
-		r.touch()
-		return true
-	}
-	return false
 }
 
-// visible is the part of a session a key draws, compared to decide whether
-// an event is worth publishing.
-type visible struct {
-	Label, Profile, Detail, Tool string
-	Status                       Status
-	Host                         Host
+func (r *Registry) applyStart(s *Session, ev Event, now time.Time) {
+	if ev.Source == "compact" {
+		// Compaction is mid-session housekeeping, not a new session and
+		// not a change of state.
+		return
+	}
+	if s.Status == StatusGone {
+		// Pinned and dead, now back: the same key lights up again.
+		r.board.Pin(r.board.IndexOf(s.ID), true)
+	}
+	s.Tool, s.Detail = "", ""
+	r.setStatus(s, StatusDone, now)
 }
 
-func (s *Session) visible() visible {
-	return visible{Label: s.Label, Profile: s.Profile, Detail: s.Detail, Tool: s.Tool, Status: s.Status, Host: s.Host}
+func (r *Registry) applyToolStart(s *Session, ev Event, now time.Time) {
+	s.Tool = ev.Tool
+	s.Detail = ev.Tool
+	if ev.Tool == "AskUserQuestion" {
+		// The question is on screen the moment the tool starts; the idle
+		// nudge would only confirm it a minute later.
+		s.Detail = "question"
+		r.setStatus(s, StatusNeedsInput, now)
+		return
+	}
+	r.setStatus(s, StatusWorking, now)
+}
+
+func (r *Registry) applyEnd(s *Session, ev Event, now time.Time) {
+	if ev.Reason == "resume" || ev.Reason == "clear" {
+		// The same process is about to start another session under a
+		// new id; the record waits so that SessionStart renames it in
+		// place and the key stays where it was.
+		r.setStatus(s, StatusStale, now)
+		return
+	}
+	r.dropLocked(s, now)
 }
 
 func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
@@ -513,10 +529,6 @@ func sameWindows(a, b map[string]Window) bool {
 //  3. TERM_PROGRAM: an integrated terminal without the extension (matched to
 //     a window by folder when one is connected), or a terminal emulator.
 func (r *Registry) bind(s *Session) {
-	// Folder is what `open -a` may be given. Only a known root qualifies —
-	// a window's own folder, or a registered workspace. A bare cwd would
-	// make the editor open a NEW window on it, which is worse than just
-	// bringing the app forward.
 	// Folder is only ever a folder a connected window reported open: an
 	// editor told to open any other folder opens a NEW window on it, or
 	// reloads one, which is worse than just bringing the app forward. App
@@ -524,40 +536,61 @@ func (r *Registry) bind(s *Session) {
 	// session's parent chain — never a default, since Cursor, Windsurf and
 	// VSCodium all claim TERM_PROGRAM=vscode.
 	h := Host{Kind: HostUnknown, TermProgram: s.TermProgram, App: EditorFromChain(s.Names)}
-	defer func() { s.Host = h }()
+	switch {
+	case s.Window != "":
+		r.bindInjectedWindow(s, &h)
+	case r.bindPanel(s, &h):
+	default:
+		r.bindTermProgram(s, &h)
+	}
+	s.Host = h
+}
 
-	if s.Window != "" {
-		h.Kind = HostVSCodeTerminal
-		h.WindowID = s.Window
-		if w, ok := r.windows[s.Window]; ok {
-			h.Connected, h.App = true, w.App
-			if len(w.Folders) > 0 {
-				h.Folder = w.Folders[0]
-			}
-			for _, t := range w.Terminals {
-				if containsInt(s.Ancestors, t.ShellPID) {
-					h.ShellPID, h.Terminal = t.ShellPID, t.Name
-					break
-				}
-			}
-		}
+// bindInjectedWindow is rule 1: the window id the extension put in the
+// terminal's environment, then the tab whose shell is in the parent chain.
+func (r *Registry) bindInjectedWindow(s *Session, h *Host) {
+	h.Kind = HostVSCodeTerminal
+	h.WindowID = s.Window
+	w, ok := r.windows[s.Window]
+	if !ok {
 		return
 	}
+	h.Connected, h.App = true, w.App
+	if len(w.Folders) > 0 {
+		h.Folder = w.Folders[0]
+	}
+	for _, t := range w.Terminals {
+		if containsInt(s.Ancestors, t.ShellPID) {
+			h.ShellPID, h.Terminal = t.ShellPID, t.Name
+			return
+		}
+	}
+}
+
+// bindPanel is rule 2: a window whose extension host is in the parent
+// chain — the Claude Code panel, which spawns claude from the extension
+// host itself. An editor in the chain with no window connected yet and no
+// TERM_PROGRAM is most likely the panel too.
+func (r *Registry) bindPanel(s *Session, h *Host) bool {
 	for _, w := range r.sortedWindowsLocked() {
 		if w.ExtHostPID > 0 && containsInt(s.Ancestors, w.ExtHostPID) {
 			h.Kind, h.WindowID, h.App, h.Connected = HostVSCodePanel, w.ID, w.App, true
 			if len(w.Folders) > 0 {
 				h.Folder = w.Folders[0]
 			}
-			return
+			return true
 		}
 	}
-	if h.App != "" && strings.ToLower(s.TermProgram) == "" {
-		// An editor in the chain with no TERM_PROGRAM: the panel, most
-		// likely, before its window has connected.
+	if h.App != "" && s.TermProgram == "" {
 		h.Kind = HostVSCodePanel
-		return
+		return true
 	}
+	return false
+}
+
+// bindTermProgram is rule 3: an integrated terminal without the extension
+// (matched to a window by folder when one is connected), or an emulator.
+func (r *Registry) bindTermProgram(s *Session, h *Host) {
 	switch strings.ToLower(s.TermProgram) {
 	case "vscode":
 		h.Kind = HostVSCodeTerminal

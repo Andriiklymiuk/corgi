@@ -31,8 +31,9 @@ import (
 // session you might be waiting on.
 
 const (
-	hookEmit     = "corgi agent hook emit"
-	hookTabTitle = "corgi agent hook tab"
+	flagConfigDir = "config-dir"
+	hookEmit      = "corgi agent hook emit"
+	hookTabTitle  = "corgi agent hook tab"
 	// trackMarkers identify corgi's tracking hooks in a settings file, so
 	// enable and disable never touch anyone else's.
 	trackMarkerEmit = "agent hook emit"
@@ -94,7 +95,7 @@ var trackedEvents = []struct {
 }
 
 func runAgentTrackEnable(cmd *cobra.Command, _ []string) {
-	extra, _ := cmd.Flags().GetStringArray("config-dir")
+	extra, _ := cmd.Flags().GetStringArray(flagConfigDir)
 	noTab, _ := cmd.Flags().GetBool("no-tab-title")
 	slots, _ := cmd.Flags().GetInt("slots")
 	dir := mustAgentDir()
@@ -127,7 +128,7 @@ func runAgentTrackEnable(cmd *cobra.Command, _ []string) {
 }
 
 func runAgentTrackDisable(cmd *cobra.Command, _ []string) {
-	extra, _ := cmd.Flags().GetStringArray("config-dir")
+	extra, _ := cmd.Flags().GetStringArray(flagConfigDir)
 	dir := mustAgentDir()
 	for _, cfgDir := range trackConfigDirs(dir, extra) {
 		path := claudeUserSettingsPath(cfgDir)
@@ -555,31 +556,31 @@ func profileResolver(agentDir string) func(configDir string) string {
 		if cached == nil || time.Since(loadedAt) > 10*time.Second {
 			cached, _ = loadProfiles(agentDir)
 			loadedAt = time.Now()
-			if cached == nil {
-				cached = map[string]config.WorkspaceConfig{}
-			}
 		}
-		profiles := cached
-		want := expandTilde(configDir)
-		names := make([]string, 0, len(profiles))
-		for name, p := range profiles {
-			if p.ConfigDir != "" && samePath(expandTilde(p.ConfigDir), want) {
-				names = append(names, name)
-			}
-		}
-		if len(names) == 0 {
-			return ""
-		}
-		sort.Strings(names)
-		return names[0]
+		return profileNamed(cached, expandTilde(configDir))
 	}
 }
 
+// profileNamed is the alphabetically first profile whose config dir is dir.
+func profileNamed(profiles map[string]config.WorkspaceConfig, dir string) string {
+	var names []string
+	for name, p := range profiles {
+		if p.ConfigDir != "" && samePath(expandTilde(p.ConfigDir), dir) {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	return names[0]
+}
+
 func init() {
-	agentTrackEnableCmd.Flags().StringArray("config-dir", nil, "Also hook this Claude config directory (repeatable); corgi profiles are included automatically")
+	agentTrackEnableCmd.Flags().StringArray(flagConfigDir, nil, "Also hook this Claude config directory (repeatable); corgi profiles are included automatically")
 	agentTrackEnableCmd.Flags().Bool("no-tab-title", false, "Do not set the terminal tab title to the session's status")
 	agentTrackEnableCmd.Flags().Int("slots", 0, "Number of keys on the board (default 6, a Stream Deck Mini)")
-	agentTrackDisableCmd.Flags().StringArray("config-dir", nil, "Also clean this Claude config directory (repeatable)")
+	agentTrackDisableCmd.Flags().StringArray(flagConfigDir, nil, "Also clean this Claude config directory (repeatable)")
 	agentTrackCmd.AddCommand(agentTrackEnableCmd, agentTrackDisableCmd)
 	agentCmd.AddCommand(agentTrackCmd)
 }

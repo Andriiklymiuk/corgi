@@ -84,32 +84,40 @@ type Command struct {
 // Dir is the spool directory under the agent data dir.
 func Dir(agentDir string) string { return filepath.Join(agentDir, "commands") }
 
-// Write persists one command atomically and returns it with ID and
-// RequestedAt filled.
-func Write(agentDir string, c Command) (Command, error) {
+// validate rejects a command the daemon could not act on.
+func (c Command) validate() error {
 	if !known[c.Action] {
-		return c, fmt.Errorf("unknown command action %q", c.Action)
+		return fmt.Errorf("unknown command action %q", c.Action)
 	}
 	if needsWorkspace[c.Action] && strings.TrimSpace(c.WorkspaceID) == "" {
-		return c, fmt.Errorf("command needs a workspaceId")
+		return fmt.Errorf("command needs a workspaceId")
 	}
 	switch c.Action {
 	case ActionSession:
 		if c.Event == nil || c.Event.SessionID == "" || c.Event.Name == "" {
-			return c, fmt.Errorf("a session command needs an event with a session id and a name")
+			return fmt.Errorf("a session command needs an event with a session id and a name")
 		}
 	case ActionFocus:
 		if strings.TrimSpace(c.SessionID) == "" {
-			return c, fmt.Errorf("focus needs a session")
+			return fmt.Errorf("focus needs a session")
 		}
 	case ActionPage:
 		if c.Direction == 0 {
-			return c, fmt.Errorf("page needs a direction")
+			return fmt.Errorf("page needs a direction")
 		}
 	case ActionResize:
 		if c.Size < 1 || c.Size > 64 {
-			return c, fmt.Errorf("resize needs a size between 1 and 64")
+			return fmt.Errorf("resize needs a size between 1 and 64")
 		}
+	}
+	return nil
+}
+
+// Write persists one command atomically and returns it with ID and
+// RequestedAt filled.
+func Write(agentDir string, c Command) (Command, error) {
+	if err := c.validate(); err != nil {
+		return c, err
 	}
 	if c.ID == "" {
 		var b [8]byte

@@ -191,51 +191,55 @@ func (d *Daemon) dispatchFocus(ctx context.Context, t sessions.FocusTarget) {
 func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 	switch t.Kind {
 	case sessions.HostVSCodeTerminal, sessions.HostVSCodePanel:
-		if t.App == "" {
-			// TERM_PROGRAM=vscode is what Cursor and Windsurf say too. A
-			// guess would start the wrong editor and open a new window.
-			return errors.New("which editor is unknown — install the corgi VS Code extension, or reopen the terminal")
-		}
-		switch runtime.GOOS {
-		case "darwin":
-			// With a folder (one a connected window reported open), the
-			// window that has it comes forward; without one, the app does.
-			args := []string{"-a", t.App}
-			if t.Folder != "" {
-				args = append(args, t.Folder)
-			}
-			return run(ctx, "open", args...)
-		case "linux":
-			if t.Folder == "" {
-				// `code` alone opens a new window; there is no "just raise".
-				return errors.New("no connected window to raise — install the corgi VS Code extension")
-			}
-			return run(ctx, editorCLI(t.App), "--reuse-window", t.Folder)
-		}
+		return raiseEditor(ctx, t)
 	case sessions.HostITerm, sessions.HostTerminalApp:
-		if runtime.GOOS != "darwin" {
-			break
+		if runtime.GOOS == "darwin" {
+			return raiseTerminal(ctx, t)
 		}
-		// Both emulators expose each tab's tty to AppleScript, and the
-		// hook recorded the claude process's controlling terminal: the
-		// script selects that exact tab. Without a tty the app comes
-		// forward on its own.
-		if tty := proc.TTYName(t.TTY); tty != "" {
-			script := itermScript(tty)
-			if t.Kind == sessions.HostTerminalApp {
-				script = terminalAppScript(tty)
-			}
-			if err := run(ctx, "osascript", "-e", script); err == nil {
-				return nil
-			}
-		}
-		app := "iTerm"
-		if t.Kind == sessions.HostTerminalApp {
-			app = "Terminal"
-		}
-		return run(ctx, "open", "-a", app)
 	}
 	return fmt.Errorf("no window known for a %s session on %s", t.Kind, runtime.GOOS)
+}
+
+// raiseEditor brings an editor window forward. The app must be known:
+// TERM_PROGRAM=vscode is what Cursor and Windsurf say too, and a guess
+// would start the wrong editor and open a new window.
+func raiseEditor(ctx context.Context, t sessions.FocusTarget) error {
+	if t.App == "" {
+		return errors.New("which editor is unknown — install the corgi VS Code extension, or reopen the terminal")
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		// With a folder (one a connected window reported open), the
+		// window that has it comes forward; without one, the app does.
+		args := []string{"-a", t.App}
+		if t.Folder != "" {
+			args = append(args, t.Folder)
+		}
+		return run(ctx, "open", args...)
+	case "linux":
+		if t.Folder == "" {
+			// `code` alone opens a new window; there is no "just raise".
+			return errors.New("no connected window to raise — install the corgi VS Code extension")
+		}
+		return run(ctx, editorCLI(t.App), "--reuse-window", t.Folder)
+	}
+	return fmt.Errorf("no window known for a %s session on %s", t.Kind, runtime.GOOS)
+}
+
+// raiseTerminal selects the exact iTerm2 or Terminal.app tab: both expose
+// each tab's tty to AppleScript, and the hook recorded the claude process's
+// controlling terminal. Without a tty the app comes forward on its own.
+func raiseTerminal(ctx context.Context, t sessions.FocusTarget) error {
+	app, script := "iTerm", itermScript
+	if t.Kind == sessions.HostTerminalApp {
+		app, script = "Terminal", terminalAppScript
+	}
+	if tty := proc.TTYName(t.TTY); tty != "" {
+		if err := run(ctx, "osascript", "-e", script(tty)); err == nil {
+			return nil
+		}
+	}
+	return run(ctx, "open", "-a", app)
 }
 
 // itermScript selects the iTerm2 session on tty and brings its window up.
