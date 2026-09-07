@@ -37,6 +37,9 @@ const (
 	ActionRescan = "rescan"
 	// ActionResize changes the number of keys on the board in place.
 	ActionResize = "resize"
+	// ActionNew opens a fresh Claude Code session in an editor window: the
+	// one named, else the one last focused, else the most recent.
+	ActionNew = "new"
 )
 
 // needsWorkspace lists the actions addressed to a workspace; the rest are
@@ -45,7 +48,7 @@ var needsWorkspace = map[string]bool{ActionStart: true, ActionStop: true, Action
 
 var known = map[string]bool{
 	ActionStart: true, ActionStop: true, ActionAttention: true, ActionSession: true,
-	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true,
+	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true, ActionNew: true,
 }
 
 // TTL is how long a written command stays valid. A start that sat in the spool
@@ -79,6 +82,8 @@ type Command struct {
 	Direction int `json:"direction,omitempty"`
 	// Size is ActionResize's new key count.
 	Size int `json:"size,omitempty"`
+	// WindowID is ActionNew's editor window, when the caller has one.
+	WindowID string `json:"windowId,omitempty"`
 }
 
 // Dir is the spool directory under the agent data dir.

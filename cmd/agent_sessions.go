@@ -98,6 +98,20 @@ var agentRescanCmd = &cobra.Command{
 	},
 }
 
+var agentNewCmd = &cobra.Command{
+	Use:   "new",
+	Short: "Open a new Claude Code session in the last-focused editor window",
+	Long: `Asks the corgi VS Code extension to open a fresh integrated terminal in
+an editor window and run claude in it: the window named with --window, else
+the one the last focus landed in, else the most recently connected. The new
+session takes the lowest free key within a second. The "+" key on a deck.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		window, _ := cmd.Flags().GetString("window")
+		sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: window, Source: "cli"},
+			"asked the editor for a new Claude session — `corgi agent sessions` in a moment")
+	},
+}
+
 var agentWindowsCmd = &cobra.Command{
 	Use:   "windows",
 	Short: "List the editor windows the corgi VS Code extension has connected",
@@ -242,6 +256,9 @@ func printBoard(rep boardReport, now time.Time) {
 		extra = fmt.Sprintf(", %d more than fit", rep.Overflow)
 	}
 	fmt.Printf("%d session(s) on %d keys%s\n", len(rep.Sessions), rep.Size, extra)
+	if rep.Notice != "" {
+		fmt.Printf("⚠ %s\n", rep.Notice)
+	}
 	for _, sl := range rep.Slots {
 		fmt.Println(formatSlot(sl))
 	}
@@ -345,7 +362,8 @@ func runAgentWindows(_ *cobra.Command, _ []string) {
 func init() {
 	agentSessionsCmd.Flags().Bool("watch", false, "Redraw the board whenever it changes")
 	agentPinCmd.Flags().Bool("off", false, "Release the key instead")
-	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentPageCmd, agentRescanCmd, agentWindowsCmd)
+	agentNewCmd.Flags().String("window", "", "Editor window id, as `corgi agent windows` lists them (default: the last focused)")
+	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentPageCmd, agentRescanCmd, agentWindowsCmd, agentNewCmd)
 }
 
 var agentBoardCmd = &cobra.Command{

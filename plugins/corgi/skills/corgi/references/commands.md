@@ -396,7 +396,7 @@ Installs asynchronous Claude Code hooks into the **account** settings (`~/.claud
 - `--slots N` sizes the board (default 6, applied live to a running daemon); `--no-tab-title` skips the `● repo` / `▲ repo NEEDS YOU` tab titles.
 - `corgi agent sessions [--json|--watch]` prints the board; `--json` includes the `path` of `sessions.json` for a plugin to watch.
 - `corgi agent focus <label|id|key>` brings the session's window forward (exact tab with the corgi VS Code extension; iTerm2/Terminal.app by tty).
-- `corgi agent pin <key> [--off]`, `corgi agent page [next|prev]`, `corgi agent rescan`, `corgi agent windows`, `corgi agent board [--slots N]` (size, applied live).
+- `corgi agent pin <key> [--off]`, `corgi agent page [next|prev]`, `corgi agent rescan`, `corgi agent windows`, `corgi agent board [--slots N]` (size, applied live), `corgi agent new [--window ID]` (a fresh session in the last-focused editor window — needs the corgi VS Code extension).
 - `corgi agent track disable` removes only corgi's tracking hooks. `corgi agent doctor` reports hook coverage and sessions with no known window.
 
 ### `corgi agent track enable`
@@ -406,7 +406,7 @@ Installs asynchronous Claude Code hooks into the **account** settings (`~/.claud
 - `--slots N` sizes the board (default 6, applied live to a running daemon); `--no-tab-title` skips the `● repo` / `▲ repo NEEDS YOU` tab titles (VS Code shows them with `terminal.integrated.tabs.title: ${sequence}`).
 - `corgi agent sessions [--json|--watch]` prints the board; `--json` includes the `path` of `sessions.json` for a plugin to watch.
 - `corgi agent focus <label|id|key>` brings the session's window forward (exact tab with the corgi VS Code extension; iTerm2/Terminal.app by tty).
-- `corgi agent pin <key> [--off]`, `corgi agent page [next|prev]`, `corgi agent rescan`, `corgi agent windows`, `corgi agent board [--slots N]` (size, applied live).
+- `corgi agent pin <key> [--off]`, `corgi agent page [next|prev]`, `corgi agent rescan`, `corgi agent windows`, `corgi agent board [--slots N]` (size, applied live), `corgi agent new [--window ID]` (a fresh session in the last-focused editor window — needs the corgi VS Code extension).
 - `corgi agent track disable` removes only corgi's tracking hooks. `corgi agent doctor` reports hook coverage and sessions with no known window.
 
 ### `corgi agent notify`

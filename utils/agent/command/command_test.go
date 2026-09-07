@@ -131,6 +131,8 @@ func TestWriteValidatesSessionAndBoardCommands(t *testing.T) {
 		{Action: ActionPage, Direction: -1},
 		{Action: ActionRescan},
 		{Action: ActionResize, Size: 15},
+		{Action: ActionNew},
+		{Action: ActionNew, WindowID: "w1"},
 	}
 	for _, c := range good {
 		if _, err := Write(dir, c); err != nil {

@@ -562,6 +562,9 @@ What the user gets, and the words to use for it:
   frees its key. `corgi agent pin <key>` reserves one (its session stays even
   after exit, dimmed, until `--off`). More sessions than keys → the last
   unpinned key is a `+N` pager, `corgi agent page next|prev` turns it.
+- **New session from the deck**: `corgi agent new` opens a fresh terminal
+  running `claude` in the last-focused editor window (needs the corgi VS
+  Code extension); the session takes the lowest free key within a second.
 - **Nothing is lost when the daemon is down**: hooks are async and exit 0, and
   the next daemon rescans the process table (`corgi agent rescan` on demand).
   Remote sessions (`CLAUDE_CODE_REMOTE`) and subagents are never registered;
@@ -623,6 +626,9 @@ What the user gets, and the words to use for it:
   frees its key. `corgi agent pin <key>` reserves one (its session stays even
   after exit, dimmed, until `--off`). More sessions than keys → the last
   unpinned key is a `+N` pager, `corgi agent page next|prev` turns it.
+- **New session from the deck**: `corgi agent new` opens a fresh terminal
+  running `claude` in the last-focused editor window (needs the corgi VS
+  Code extension); the session takes the lowest free key within a second.
 - **Nothing is lost when the daemon is down**: hooks are async and exit 0, and
   the next daemon rescans the process table (`corgi agent rescan` on demand).
   Remote sessions (`CLAUDE_CODE_REMOTE`) and subagents are never registered;

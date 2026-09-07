@@ -61,10 +61,14 @@ func LoadWindows(agentDir string, alive func(pid int) bool) []Window {
 
 // Reveal is one request to an editor window: show this tab, or the panel.
 type Reveal struct {
-	WindowID    string    `json:"windowId"`
-	SessionID   string    `json:"sessionId"`
-	ShellPID    int       `json:"shellPid,omitempty"`
-	Panel       bool      `json:"panel,omitempty"`
+	WindowID  string `json:"windowId"`
+	SessionID string `json:"sessionId,omitempty"`
+	ShellPID  int    `json:"shellPid,omitempty"`
+	Panel     bool   `json:"panel,omitempty"`
+	// New asks the window to open a fresh integrated terminal in Folder
+	// and run claude in it — the "+" key.
+	New         bool      `json:"new,omitempty"`
+	Folder      string    `json:"folder,omitempty"`
 	RequestedAt time.Time `json:"requestedAt"`
 }
 

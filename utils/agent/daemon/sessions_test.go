@@ -242,3 +242,45 @@ func TestTerminalScriptsNameTheTTY(t *testing.T) {
 		}
 	}
 }
+
+func TestDaemonNewSessionRaisesTheWindowAndAsksForATerminal(t *testing.T) {
+	d := trackingDaemon(t)
+	var mu sync.Mutex
+	var raised []sessions.FocusTarget
+	d.Raise = func(_ context.Context, t sessions.FocusTarget) error {
+		mu.Lock()
+		defer mu.Unlock()
+		raised = append(raised, t)
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	// No window yet: the failure is a board notice.
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionNew})
+	d.Nudge()
+	waitFor(t, func() bool { return readBoard(t, d).Notice != "" })
+
+	wdir := sessions.WindowsDir(d.Dir)
+	_ = os.MkdirAll(wdir, 0o700)
+	win, _ := json.Marshal(sessions.Window{ID: "w1", App: "Cursor", ExtHostPID: 77, Folders: []string{"/tmp/acme-api"}, UpdatedAt: time.Now()})
+	_ = os.WriteFile(filepath.Join(wdir, "w1.json"), win, 0o600)
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionNew})
+	d.Nudge()
+	revealPath := filepath.Join(sessions.RevealDir(d.Dir), "w1.json")
+	waitFor(t, func() bool { _, err := os.Stat(revealPath); return err == nil })
+	data, _ := os.ReadFile(revealPath)
+	var req sessions.Reveal
+	if json.Unmarshal(data, &req) != nil || !req.New || req.Folder != "/tmp/acme-api" || req.WindowID != "w1" {
+		t.Fatalf("reveal = %+v", req)
+	}
+	waitFor(t, func() bool { return readBoard(t, d).Notice == "" })
+	mu.Lock()
+	if len(raised) != 1 || !raised[0].New || raised[0].App != "Cursor" || raised[0].Folder != "/tmp/acme-api" {
+		t.Fatalf("raised = %+v", raised)
+	}
+	mu.Unlock()
+	cancel()
+	<-done
+}

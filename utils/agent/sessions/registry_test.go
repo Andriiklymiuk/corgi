@@ -644,3 +644,48 @@ func TestEditorFromChainBindsAPanelBeforeItsWindowConnects(t *testing.T) {
 		t.Fatalf("terminal: %+v", s.Host)
 	}
 }
+
+func TestNewSessionTargetPrefersTheLastFocusedWindow(t *testing.T) {
+	r := newTestRegistry(t)
+	if _, err := r.NewSessionTarget(""); err != ErrNoWindow {
+		t.Fatalf("no windows: %v", err)
+	}
+	r.SetWindows([]Window{
+		{ID: "old", App: "Visual Studio Code", ExtHostPID: 1, Folders: []string{"/old"}, UpdatedAt: t0},
+		{ID: "new", App: "Cursor", ExtHostPID: 2, Folders: []string{"/new"}, UpdatedAt: t0.Add(time.Minute)},
+	})
+	target, err := r.NewSessionTarget("")
+	if err != nil || target.WindowID != "new" || target.Folder != "/new" || !target.New || !target.Connected {
+		t.Fatalf("most recent window by default: %+v %v", target, err)
+	}
+	e := ev("Stop", "s1", 0)
+	e.Window = "old"
+	r.Apply(e)
+	r.RecordFocus("s1", nil)
+	target, _ = r.NewSessionTarget("")
+	if target.WindowID != "old" || target.App != "Visual Studio Code" {
+		t.Fatalf("the last focused window wins: %+v", target)
+	}
+	if st := r.Snapshot(t0); st.LastFocusWindow != "old" {
+		t.Fatalf("published: %+v", st.LastFocusWindow)
+	}
+	target, _ = r.NewSessionTarget("new")
+	if target.WindowID != "new" {
+		t.Fatal("an explicit window wins over everything")
+	}
+	if _, err := r.NewSessionTarget("ghost"); err == nil {
+		t.Fatal("an unknown window is an error")
+	}
+	r.SetWindows(nil)
+	if _, err := r.NewSessionTarget(""); err != ErrNoWindow {
+		t.Fatal("a last-focused window that went away does not count")
+	}
+	r.SetNotice(ErrNoWindow)
+	if st := r.Snapshot(t0); st.Notice == "" || st.NoticeAt.IsZero() {
+		t.Fatal("notice published")
+	}
+	r.SetNotice(nil)
+	if st := r.Snapshot(t0); st.Notice != "" {
+		t.Fatal("notice cleared")
+	}
+}

@@ -37,6 +37,14 @@ type Registry struct {
 	windows   map[string]Window
 	updatedAt time.Time
 	dirty     bool
+	// lastFocus is the window the last successful focus landed in: where
+	// a new session opens when nobody says otherwise.
+	lastFocus struct {
+		WindowID string
+		At       time.Time
+	}
+	notice   string
+	noticeAt time.Time
 }
 
 // State is the published board: what sessions.json holds and what
@@ -49,11 +57,18 @@ type State struct {
 	// NeedsInput and Working count sessions in those states, wherever they
 	// sit — a pager key or a status bar can say "2 waiting" without walking
 	// the board.
-	NeedsInput int       `json:"needsInput"`
-	Working    int       `json:"working"`
-	Slots      []Slot    `json:"slots"`
-	Sessions   []Session `json:"sessions"`
-	Windows    []Window  `json:"windows,omitempty"`
+	NeedsInput int    `json:"needsInput"`
+	Working    int    `json:"working"`
+	Slots      []Slot `json:"slots"`
+	// LastFocusWindow is where the last successful focus went, and where
+	// `corgi agent new` opens a session by default.
+	LastFocusWindow string `json:"lastFocusWindow,omitempty"`
+	// Notice is the last board-level failure — a `new` with no window to
+	// open in, say — with its time, for a key to flash once.
+	Notice   string    `json:"notice,omitempty"`
+	NoticeAt time.Time `json:"noticeAt,omitempty"`
+	Sessions []Session `json:"sessions"`
+	Windows  []Window  `json:"windows,omitempty"`
 }
 
 // Slot is one key, ready to draw.
@@ -725,6 +740,8 @@ type FocusTarget struct {
 	Panel bool
 	// TTY is the controlling terminal device for an emulator session.
 	TTY uint64
+	// New asks the window for a fresh terminal running claude, in Folder.
+	New bool
 	// Connected says a reveal request will be read by a live extension.
 	Connected bool
 }
@@ -764,11 +781,63 @@ func (r *Registry) RecordFocus(id string, err error) {
 		msg = err.Error()
 	}
 	s.FocusAt = time.Now()
+	if err == nil && s.Host.WindowID != "" {
+		r.lastFocus.WindowID, r.lastFocus.At = s.Host.WindowID, s.FocusAt
+	}
 	if s.FocusError == msg && msg == "" {
 		return
 	}
 	s.FocusError = msg
 	r.touch()
+}
+
+// SetNotice records a board-level failure for the next publish.
+func (r *Registry) SetNotice(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	r.notice, r.noticeAt = msg, time.Now()
+	r.touch()
+}
+
+// ErrNoWindow is returned when nothing can open a new session.
+var ErrNoWindow = errors.New("no editor window connected — open a folder in VS Code with the corgi extension installed")
+
+// NewSessionTarget picks the window a fresh session opens in: the one
+// named, else the one the last focus landed in, else the most recently
+// updated. The window must be connected: only its extension can open a
+// terminal in it.
+func (r *Registry) NewSessionTarget(windowID string) (FocusTarget, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var w Window
+	var ok bool
+	switch {
+	case windowID != "":
+		if w, ok = r.windows[windowID]; !ok {
+			return FocusTarget{}, fmt.Errorf("window %s is not connected", windowID)
+		}
+	case r.lastFocus.WindowID != "":
+		w, ok = r.windows[r.lastFocus.WindowID]
+	}
+	if !ok {
+		for _, cand := range r.sortedWindowsLocked() {
+			if !ok || cand.UpdatedAt.After(w.UpdatedAt) {
+				w, ok = cand, true
+			}
+		}
+	}
+	if !ok {
+		return FocusTarget{}, ErrNoWindow
+	}
+	t := FocusTarget{Kind: HostVSCodeTerminal, App: w.App, WindowID: w.ID, Connected: true, New: true}
+	if len(w.Folders) > 0 {
+		t.Folder = w.Folders[0]
+	}
+	return t, nil
 }
 
 // Lookup finds a session by id, id prefix, label, or slot index.
@@ -841,7 +910,8 @@ func (r *Registry) Snapshot(now time.Time) State {
 }
 
 func (r *Registry) snapshotLocked(now time.Time) State {
-	st := State{UpdatedAt: r.updatedAt, Size: r.board.Size, Overflow: r.board.Hidden()}
+	st := State{UpdatedAt: r.updatedAt, Size: r.board.Size, Overflow: r.board.Hidden(),
+		LastFocusWindow: r.lastFocus.WindowID, Notice: r.notice, NoticeAt: r.noticeAt}
 	if st.UpdatedAt.IsZero() {
 		st.UpdatedAt = now
 	}

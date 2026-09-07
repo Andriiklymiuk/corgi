@@ -287,6 +287,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent focus <session>` | bring that session's window to the front and reveal its terminal tab |
 | `corgi agent pin <key> [--off]` / `page` / `rescan` / `windows` | reserve a key, turn the overflow page, adopt untracked sessions, list connected editor windows |
 | `corgi agent board [--slots N]` | the board's size, or set it — applied to a running daemon at once |
+| `corgi agent new [--window ID]` | open a new Claude session in the last-focused editor window (the "+" key) |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -652,6 +653,7 @@ things, all of them files or commands, nothing to pair or authenticate:
 | the totals | `needsInput`, `working`, `overflow` at the top level |
 | a press | `corgi agent focus <sessionId>` · long press `corgi agent pin <key>` / `--off` · pager `corgi agent page next|prev` |
 | its key count | `corgi agent board --slots N` once; the next `sessions.json` has `size: N` |
+| an empty key pressed | `corgi agent new`: a fresh terminal running `claude` in the last-focused window (`lastFocusWindow`); a failure lands in `notice` / `noticeAt` |
 | a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
 
 Slot indexes never move unless paged or unpinned, so the plugin can map keys by
@@ -668,6 +670,7 @@ things, all of them files or commands, nothing to pair or authenticate:
 | the totals | `needsInput`, `working`, `overflow` at the top level |
 | a press | `corgi agent focus <sessionId>` · long press `corgi agent pin <key>` / `--off` · pager `corgi agent page next|prev` |
 | its key count | `corgi agent board --slots N` once; the next `sessions.json` has `size: N` |
+| an empty key pressed | `corgi agent new`: a fresh terminal running `claude` in the last-focused window (`lastFocusWindow`); a failure lands in `notice` / `noticeAt` |
 | a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
 
 Slot indexes never move unless paged or unpinned, so the plugin can map keys by

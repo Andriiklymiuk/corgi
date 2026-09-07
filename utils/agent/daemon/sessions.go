@@ -58,6 +58,8 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		d.rescan()
 	case command.ActionResize:
 		d.Sessions.Resize(c.Size)
+	case command.ActionNew:
+		d.newSession(ctx, c.WindowID)
 	default:
 		return false
 	}
@@ -158,6 +160,37 @@ func (d *Daemon) focusSession(ctx context.Context, ref string) {
 	go func() {
 		defer d.swaps.Done()
 		d.dispatchFocus(ctx, target)
+	}()
+}
+
+// newSession asks an editor window for a fresh terminal running claude:
+// raise the window, then leave the request its extension acts on. The "+"
+// key. A failure is a board notice, since no session exists yet to carry it.
+func (d *Daemon) newSession(ctx context.Context, windowID string) {
+	target, err := d.Sessions.NewSessionTarget(windowID)
+	if err != nil {
+		utils.Infof("agent: new session: %v\n", err)
+		d.Sessions.SetNotice(err)
+		return
+	}
+	d.swaps.Add(1)
+	go func() {
+		defer d.swaps.Done()
+		ctx, cancel := context.WithTimeout(ctx, focusBudget)
+		defer cancel()
+		raise := d.Raise
+		if raise == nil {
+			raise = raiseWindow
+		}
+		err := raise(ctx, target)
+		if err == nil {
+			err = sessions.WriteReveal(d.Dir, sessions.Reveal{WindowID: target.WindowID, New: true, Folder: target.Folder})
+		}
+		if err != nil {
+			utils.Infof("agent: new session in %s: %v\n", target.WindowID, err)
+		}
+		d.Sessions.SetNotice(err)
+		d.flushSessions()
 	}()
 }
 
