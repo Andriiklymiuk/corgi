@@ -286,6 +286,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent sessions [--json\|--watch]` | the board: one line per key, status, account, where the terminal is |
 | `corgi agent focus <session>` | bring that session's window to the front and reveal its terminal tab |
 | `corgi agent pin <key> [--off]` / `page` / `rescan` / `windows` | reserve a key, turn the overflow page, adopt untracked sessions, list connected editor windows |
+| `corgi agent board [--slots N]` | the board's size, or set it — applied to a running daemon at once |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -580,8 +581,8 @@ corgi agent focus acme-api        # that window, that terminal tab
  6  +2  (press to page)
 ```
 
-What it is: a fixed board of keys (six, a Stream Deck Mini — `--slots N` for
-another deck, applied to a running daemon at once) that the daemon assigns and publishes as `sessions.json` in the
+What it is: a fixed board of keys (six, a Stream Deck Mini — `corgi agent
+board --slots N` for another deck, applied to a running daemon at once) that the daemon assigns and publishes as `sessions.json` in the
 agent data directory. A Stream Deck plugin only has to watch that file and shell
 out to `corgi agent focus`, `pin` and `page` on a press; it holds no state of
 its own, so it can be restarted, reinstalled or replaced without the board
@@ -650,6 +651,7 @@ things, all of them files or commands, nothing to pair or authenticate:
 | a key's look | `slots[i]`: `label`, `status`, `profile`, `pinned`, `detail`, `elapsedS`, `host`; `pager` + `overflow` for the `+N` key; `empty` |
 | the totals | `needsInput`, `working`, `overflow` at the top level |
 | a press | `corgi agent focus <sessionId>` · long press `corgi agent pin <key>` / `--off` · pager `corgi agent page next|prev` |
+| its key count | `corgi agent board --slots N` once; the next `sessions.json` has `size: N` |
 | a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
 
 Slot indexes never move unless paged or unpinned, so the plugin can map keys by
@@ -665,6 +667,7 @@ things, all of them files or commands, nothing to pair or authenticate:
 | a key's look | `slots[i]`: `label`, `status`, `profile`, `pinned`, `detail`, `elapsedS`, `host`; `pager` + `overflow` for the `+N` key; `empty` |
 | the totals | `needsInput`, `working`, `overflow` at the top level |
 | a press | `corgi agent focus <sessionId>` · long press `corgi agent pin <key>` / `--off` · pager `corgi agent page next|prev` |
+| its key count | `corgi agent board --slots N` once; the next `sessions.json` has `size: N` |
 | a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
 
 Slot indexes never move unless paged or unpinned, so the plugin can map keys by

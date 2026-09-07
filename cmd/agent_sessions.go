@@ -347,3 +347,55 @@ func init() {
 	agentPinCmd.Flags().Bool("off", false, "Release the key instead")
 	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentPageCmd, agentRescanCmd, agentWindowsCmd)
 }
+
+var agentBoardCmd = &cobra.Command{
+	Use:   "board",
+	Short: "Show or set how many keys the session board has",
+	Long: `Without flags, prints the board's size and how many sessions are on it.
+With --slots, sets the number of keys — the size of the Stream Deck the
+board is drawn on — and applies it to a running daemon at once; seats past
+the new edge move to the overflow, nothing is lost. The size is remembered
+for the next daemon start.`,
+	Run: runAgentBoard,
+}
+
+func runAgentBoard(cmd *cobra.Command, _ []string) {
+	dir := mustAgentDir()
+	slots, _ := cmd.Flags().GetInt("slots")
+	if slots != 0 {
+		if err := setTrackSlots(dir, slots); err != nil {
+			exitWithError("agent_board", err, 2)
+		}
+		live := resizeRunningBoard(dir, slots)
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"ok": true, "size": slots, "applied": live})
+			return
+		}
+		if live {
+			utils.Infof("✓ board has %d keys\n", slots)
+		} else {
+			utils.Infof("✓ board will have %d keys once the daemon runs\n", slots)
+		}
+		return
+	}
+	rep, err := readBoard(dir)
+	if err != nil {
+		exitWithError("agent_board", err, 1)
+	}
+	if utils.JSONOutput {
+		utils.PrintJSON(map[string]any{
+			"size": rep.Size, "sessions": len(rep.Sessions), "overflow": rep.Overflow,
+			"needsInput": rep.NeedsInput, "daemonRunning": rep.Running, "path": rep.Path,
+		})
+		return
+	}
+	fmt.Printf("%d keys · %d session(s) · %d in overflow · %d waiting on you\n", rep.Size, len(rep.Sessions), rep.Overflow, rep.NeedsInput)
+	if !rep.Running {
+		fmt.Println("corgi agent is not running — sizes apply once it does")
+	}
+}
+
+func init() {
+	agentBoardCmd.Flags().Int("slots", 0, "Number of keys on the board (1–64)")
+	agentCmd.AddCommand(agentBoardCmd)
+}

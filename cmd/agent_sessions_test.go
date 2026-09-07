@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/config"
 	"context"
 	"encoding/json"
+	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,5 +180,30 @@ func TestMCPSessionsTool(t *testing.T) {
 	}
 	if rep, ok := out.(boardReport); !ok || rep.NeedsInput != 1 {
 		t.Fatalf("board: %+v", out)
+	}
+}
+
+func TestAgentBoardShowsAndSetsTheSize(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	dir, _ := agentDir()
+	c := &cobra.Command{Use: "board"}
+	c.Flags().Int("slots", 0, "")
+	out := captureStdout(t, func() { runAgentBoard(c, nil) })
+	if !strings.Contains(out, "6 keys") || !strings.Contains(out, "not running") {
+		t.Fatalf("default board: %s", out)
+	}
+	if err := c.Flags().Set("slots", "15"); err != nil {
+		t.Fatal(err)
+	}
+	out = captureStdout(t, func() { runAgentBoard(c, nil) })
+	if !strings.Contains(out, "15 keys once the daemon runs") {
+		t.Fatalf("set without daemon: %s", out)
+	}
+	user, _ := config.LoadUser(agentUserConfigPath(dir))
+	if user.TrackSlots != 15 {
+		t.Fatalf("slots = %d", user.TrackSlots)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(dir, "commands")); len(entries) != 0 {
+		t.Fatal("no daemon, no spool entry")
 	}
 }

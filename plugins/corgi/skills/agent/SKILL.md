@@ -538,7 +538,7 @@ Set it up once, for the whole account (and every corgi profile's config dir):
 
 ```bash
 corgi agent track enable            # hooks into ~/.claude/settings.json + each profile's dir
-corgi agent track enable --slots 15 # a bigger deck (default 6, a Stream Deck Mini)
+corgi agent board --slots 15        # a bigger deck (default 6, a Stream Deck Mini), applied live
 corgi agent track enable --no-tab-title
 corgi agent doctor                  # "session tracking" and "session board" lines
 ```
@@ -597,7 +597,7 @@ Set it up once, for the whole account (and every corgi profile's config dir):
 
 ```bash
 corgi agent track enable            # hooks into ~/.claude/settings.json + each profile's dir
-corgi agent track enable --slots 15 # a bigger deck (default 6, a Stream Deck Mini)
+corgi agent board --slots 15        # a bigger deck (default 6, a Stream Deck Mini), applied live
 corgi agent track enable --no-tab-title
 corgi agent doctor                  # "session tracking" and "session board" lines
 ```
