@@ -154,6 +154,37 @@ re-diagnosing.
 run `init` in the stacks they actually want supervised, rather than assuming a
 scan armed them. `corgi agent serve` names every workspace it skipped and why.
 
+### Supervised servers are devices, not conversations
+
+A server the daemon starts on its own opens **no session**: it registers with
+claude.ai as a device (`claude remote-control --no-create-session-in-dir`) and waits.
+`corgi agent status` calls that state `online`; the launcher card says *online · no
+session* with a solid green dot and a **Start** button. That is the resting state,
+not a start that failed — do not restart anything because of it.
+
+A session exists once someone asks for one: the Claude app's device list (new
+session on that machine), the launcher's Start, or `corgi_session_start`. The last
+two swap the device server for one that opens a session and returns its link —
+expect a few seconds' gap and a `starting` card in between. Those sessions are
+named `<workspace>-brave-otter` (corgi sets the name prefix), so the list still
+says which repo each is in. **Stop** on a session in an autostart workspace ends
+the session and puts the device back.
+
+Why: remote control pre-creates a session on every start and leaves it in the
+claude.ai list when it stops, so four supervised workspaces restarted at login, on
+the network timeout and on `corgi agent restart` used to fill the phone's list with
+`<ws> · main · 10:00` rows nobody opened. Two things worth telling a user who asks
+about that:
+
+- rows an older corgi left behind are ordinary offline sessions — archive them once
+  in the claude.ai list; new ones will not appear;
+- `autostartSession: true` in the trusted config (per workspace or `defaults:`) is
+  the way back to a session waiting in the list the moment the daemon is up.
+
+A Claude Code older than the flag rejects it; the daemon drops it on the first exit,
+restarts at once with a session, and `corgi agent status` shows a *note:* line
+saying so. The fix is `claude update`, not a corgi setting.
+
 ### If they run more than one Claude account
 
 This is the trap worth raising unprompted, because it fails silently.
@@ -320,7 +351,9 @@ corgi_session_start { "workspace": "the recipe app", "profile": "work" }
   until the workspace reports `running` — its `sessionUrl` is the magic moment:
   hand it to the user, one tap opens the conversation in that repo.
 - Idempotent: an already-running workspace answers `state: "running"` with its
-  URL. Ambiguous names return candidates — ask, as always.
+  URL. Ambiguous names return candidates — ask, as always. A workspace that is
+  `running` with `deviceOnly: true` and `sessionsThisRun: 0` is being **swapped** for
+  a session-opening server — poll on; the URL follows.
 - `sessionUrl` is best-effort. If it never appears, the session still runs;
   tell the user to find it in claude.ai/code by the workspace's name.
 - `corgi_session_stop { "workspace": "..." }` ends it. Stopping a non-running
@@ -471,6 +504,9 @@ sessions awake but sleeps between turns.
 | workspace marked sensitive | Remote start is refused by design. Start it on the laptop, or unset `sensitive` in `.corgi/agent.yml`. |
 | queued but nothing started | Commands expire after 60s. Check `corgi agent status` diagnostics — a rejected start says why there. |
 | running but no `sessionUrl` | The session is fine; the URL was not spotted in output. Find it in claude.ai/code. |
+| status says `online`, launcher says *online · no session* | Not a failure: a supervised server waiting as a device. Start from the launcher or the Claude app's device list opens a session. |
+| my claude.ai list is full of `<ws> · main · HH:MM` rows | Leftovers from an older corgi — see *Supervised servers are devices* above. Archive them once. |
+| status shows *note: this Claude Code predates --no-create-session-in-dir* | `claude update`, then `corgi agent restart`. |
 | `up` says the port is in use, pairing "not open" on the old URL | A leftover MCP holds the port. Newer corgi reclaims it on `up` automatically; otherwise `corgi agent down` then `corgi agent up` for a fresh tunnel + pairing window. |
 
 ## Things not to do

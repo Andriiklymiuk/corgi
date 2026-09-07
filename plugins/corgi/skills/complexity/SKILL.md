@@ -82,6 +82,9 @@ the report table. `review` turns a fail into a finding: `nit` by default, `block
 over 15 or on a hot path (its cost rule), naming the number and the tactic that fixes it.
 
 ## Refactor tactics, in order
+0. **Delete it, or call what already exists.** A branch nothing reaches, an option
+   nothing sets, a helper the stdlib or the repo already has (`stories/references/
+   smallest-change.md`). The only refactor with a CC of zero.
 1. **Guard clauses.** Invert the condition, return early, delete a nesting level. The
    cheapest CC you will ever remove.
 2. **Extract a function whose name says what, not how.** `resolveDiscount(order)`
