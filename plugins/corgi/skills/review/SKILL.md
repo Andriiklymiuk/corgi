@@ -229,7 +229,16 @@ review untouched code.
 - **Comments the code does not need** — see the rule below.
 - **Overengineering** — abstraction with one caller, a config knob nobody asked
   for, an interface introduced for a single implementation, a layer that only
-  forwards. Flag it and name the simpler shape.
+  forwards. Flag it and name the simpler shape. The other four shapes of too much
+  code, each a `nit` with the replacement in `suggestedReplacement` and its line
+  count in the title: **hand-rolled what the language ships** (a date/URL/sort
+  helper the stdlib has), **hand-rolled what the platform ships** (a picker, a
+  modal, validation, a constraint the browser, framework or database provides), **a
+  new dependency for what an installed one covers** (check the lockfile), and
+  **dead flexibility** (a parameter, branch or option nothing in the diff uses).
+  The ladder the `stories` skill builds by is `stories/references/smallest-change.md`;
+  a PR body's `Deferred` list says which shortcuts were deliberate — a deferred item
+  with no trigger is a finding, a deliberate one with a trigger is not.
 - **Complexity regressions** — run the `complexity` skill in `report` mode on the
   diff. A touched function whose cyclomatic complexity rose, or a new function over
   the repo's threshold (its own linter config, else 10), is a finding: `nit` by
