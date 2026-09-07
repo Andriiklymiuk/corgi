@@ -89,6 +89,7 @@ When the user wants to *see* it, not just read the diff:
 
 ```
 corgi_up { }                                     # the stack must be up first
+corgi_up { "omit": "useAwsVpn" }                 # compose has useAwsVpn but this run doesn't need it
 corgi_preview_start { "service": "web", "branch": "feature/x" }
 corgi_preview_state { }                          # poll until state is ready
 ```

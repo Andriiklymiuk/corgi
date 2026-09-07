@@ -29,7 +29,7 @@ Long-running. Starts all db_services + services concurrently, streams logs. **Do
 
 Notable flags:
 - `-s, --seed` — run seed scripts after db boot
-- `--omit <list>` — comma-separated service names to skip
+- `--omit <list>` — comma-separated compose keys to skip for this run: `beforeStart`, `afterStart`, `useAwsVpn` (don't launch the AWS VPN client), `useDocker` (don't auto-start Docker; dbs/`docker` runners still do). `CORGI_OMIT=useAwsVpn,useDocker` in the env adds to the list — set it once in an agent session instead of flipping the compose
 - `--services <list>` — whitelist only these services
 - `--dbServices <list>` — whitelist only these dbs
 - `--pull` — `git pull` in service dirs before starting

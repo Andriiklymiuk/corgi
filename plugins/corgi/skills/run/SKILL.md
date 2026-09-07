@@ -38,6 +38,14 @@ tunnel,manualRun,runner}`, `db_services`, `envTiers`, `useAwsVpn`, `useDocker`,
 - **corgi auto-handles VPN + Docker.** Compose sets `useAwsVpn`/`useDocker` (or any
   service uses the `docker` runner) → `corgi run` starts VPN + Docker itself in
   preflight. Don't add a manual VPN/docker step.
+- **Skip them per run with `--omit`, never by editing the compose.** `useAwsVpn`
+  drives the AWS VPN Client GUI (needs Accessibility, may wait for a manual click) —
+  from an agent session that hangs or steals focus. When the slice you start does
+  not need the VPN (frontend against a remote backend, `--dbServices none`, a tier
+  run), pass `corgi run --omit useAwsVpn`. Same for Docker Desktop auto-start:
+  `--omit useDocker` (dbs and `docker` runners still start Docker themselves).
+  `CORGI_OMIT=useAwsVpn` in the shell env does the same for every run in that
+  session; the MCP `corgi_up` tool takes `omit: "useAwsVpn"`.
 
 ## Phase 1 — Resolve intent → command
 
@@ -55,6 +63,7 @@ quirks. Match the user's words → translate to a **detached** command.
 | In containers ("run in docker", no local toolchain) | `corgi run --docker --detach` — every service whose repo ships a Dockerfile / compose file runs containerized; the rest stay native. A service with **no** `start:` and a Dockerfile does this automatically, no flag. `corgi run --dry-run` shows each service's resolved `mode=` |
 | + webhook tunnel | can't combine with `--detach` — see **Tunnel**, Phase 2 |
 | Staging/prod tier | `--tier <name>` if `envTiers:` defines it; else the repo's `run<X>Staging` make target's underlying corgi command (tier run usually `--dbServices none` — no local dbs) |
+| Compose says `useAwsVpn: true` but this run doesn't need it | `corgi run --omit useAwsVpn --detach` (add `useDocker` to also skip the Docker auto-start). Compose file stays as is |
 | One DB only | `corgi run --dbServices <name> --services none --detach` |
 
 **Names match compose keys exactly.** `--services`/`--dbServices` = exact-name match.

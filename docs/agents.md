@@ -20,6 +20,13 @@ with a clear error (exit code 2) instead of hanging. It is triggered by any of:
 
 Force prompts back on with the global `--interactive` flag.
 
+A compose that sets `useAwsVpn: true` launches the AWS VPN Client GUI in
+preflight, which an agent session cannot click through. Skip it for one run
+with `corgi run --omit useAwsVpn` (also `useDocker` for the Docker auto-start),
+or for the whole session with `CORGI_OMIT=useAwsVpn` in the environment. The
+compose file stays unchanged; the MCP `corgi_up` tool takes the same list as
+`omit`.
+
 ## JSON output
 
 Global `--json` makes stdout pure machine-readable JSON; human/log lines go to

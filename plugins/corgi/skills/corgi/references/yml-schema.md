@@ -10,8 +10,8 @@ description: Full corgi-compose.yml schema — top-level keys, services, db_serv
 ```yaml
 name:         string                # Project name (required in practice)
 description:  string                # Free-text description
-useDocker:    bool                  # Run services via Docker (vs native)
-useAwsVpn:    bool                  # Initialize AWS VPN before run
+useDocker:    bool                  # Auto-start Docker before run (skip per run: --omit useDocker)
+useAwsVpn:    bool                  # Initialize AWS VPN before run (skip per run: --omit useAwsVpn / CORGI_OMIT)
 init:         [string]              # Shell commands run on `corgi init`
 beforeStart:  [string]              # Shell commands run before any service starts
 afterStart:   [string]              # Shell commands run on shutdown (SIGINT/SIGTERM)

@@ -127,12 +127,16 @@ func init() {
 		"omit",
 		"",
 		[]string{},
-		`Slice of parts of service to omit.
+		`Compose keys to skip for this run, without editing corgi-compose.yml.
 
 beforeStart - beforeStart in services is omitted.
 afterStart - afterStart in services is omitted.
+useAwsVpn - do not launch/connect the AWS VPN client in preflight.
+useDocker - do not auto-start Docker in preflight (db_services and docker
+            runners still start it when they need it).
 
-By default nothing is omitted
+CORGI_OMIT=useAwsVpn,useDocker in the environment adds to this list, so an
+agent session can set it once. By default nothing is omitted
 		`,
 	)
 
@@ -407,7 +411,7 @@ func setupComposeWatcher(cmd *cobra.Command) (*fsnotify.Watcher, error) {
 }
 
 func usesDocker(corgi *utils.CorgiCompose) bool {
-	if corgi.UseDocker {
+	if corgi.UseDocker && !omitted(utils.UseDockerInConfig) {
 		return true
 	}
 	for _, s := range corgi.Services {
@@ -1163,9 +1167,12 @@ func applyRunFlags(cmd *cobra.Command) {
 	}
 }
 
+// Seam so tests can observe the VPN init without driving the GUI client.
+var awsVpnInit = utils.AwsVpnInit
+
 func runPreflight(cmd *cobra.Command, corgi *utils.CorgiCompose) {
-	if corgi.UseAwsVpn {
-		if err := utils.AwsVpnInit(); err != nil {
+	if corgi.UseAwsVpn && !omitted(utils.UseAwsVpnInConfig) {
+		if err := awsVpnInit(); err != nil {
 			utils.Info("AWS VPN init failed", err)
 		}
 	}
@@ -1613,12 +1620,31 @@ func getServiceEnv(service utils.Service) string {
 }
 
 func omitServiceCmd(cmdName string) bool {
+	return omitted(cmdName)
+}
+
+// omitted reports whether a compose key was excluded via --omit or CORGI_OMIT.
+func omitted(key string) bool {
 	for _, s := range omitItems {
-		if cmdName == s {
+		if key == s {
+			return true
+		}
+	}
+	for _, s := range strings.Split(os.Getenv("CORGI_OMIT"), ",") {
+		if key == strings.TrimSpace(s) {
 			return true
 		}
 	}
 	return false
+}
+
+// withOmit runs fn with extra keys omitted, then restores the previous list.
+// The MCP daemon is long-lived, so a per-call omit must not leak into the next.
+func withOmit(extra []string, fn func()) {
+	prev := omitItems
+	omitItems = append(append([]string{}, prev...), extra...)
+	defer func() { omitItems = prev }()
+	fn()
 }
 
 func handleComposeWriteEvent(watcher *fsnotify.Watcher, cmd *cobra.Command, eventName string) bool {
