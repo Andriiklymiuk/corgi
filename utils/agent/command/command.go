@@ -35,6 +35,8 @@ const (
 	ActionPin    = "pin"
 	ActionPage   = "page"
 	ActionRescan = "rescan"
+	// ActionResize changes the number of keys on the board in place.
+	ActionResize = "resize"
 )
 
 // needsWorkspace lists the actions addressed to a workspace; the rest are
@@ -43,7 +45,7 @@ var needsWorkspace = map[string]bool{ActionStart: true, ActionStop: true, Action
 
 var known = map[string]bool{
 	ActionStart: true, ActionStop: true, ActionAttention: true, ActionSession: true,
-	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true,
+	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true,
 }
 
 // TTL is how long a written command stays valid. A start that sat in the spool
@@ -75,6 +77,8 @@ type Command struct {
 	Pinned bool `json:"pinned,omitempty"`
 	// Direction is ActionPage's +1 (next) or -1 (previous).
 	Direction int `json:"direction,omitempty"`
+	// Size is ActionResize's new key count.
+	Size int `json:"size,omitempty"`
 }
 
 // Dir is the spool directory under the agent data dir.
@@ -101,6 +105,10 @@ func Write(agentDir string, c Command) (Command, error) {
 	case ActionPage:
 		if c.Direction == 0 {
 			return c, fmt.Errorf("page needs a direction")
+		}
+	case ActionResize:
+		if c.Size < 1 || c.Size > 64 {
+			return c, fmt.Errorf("resize needs a size between 1 and 64")
 		}
 	}
 	if c.ID == "" {

@@ -56,6 +56,8 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		d.Sessions.Page(c.Direction)
 	case command.ActionRescan:
 		d.rescan()
+	case command.ActionResize:
+		d.Sessions.Resize(c.Size)
 	default:
 		return false
 	}

@@ -581,7 +581,7 @@ corgi agent focus acme-api        # that window, that terminal tab
 ```
 
 What it is: a fixed board of keys (six, a Stream Deck Mini — `--slots N` for
-another deck) that the daemon assigns and publishes as `sessions.json` in the
+another deck, applied to a running daemon at once) that the daemon assigns and publishes as `sessions.json` in the
 agent data directory. A Stream Deck plugin only has to watch that file and shell
 out to `corgi agent focus`, `pin` and `page` on a press; it holds no state of
 its own, so it can be restarted, reinstalled or replaced without the board

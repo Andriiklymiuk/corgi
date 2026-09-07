@@ -393,7 +393,7 @@ Writes two Claude Code hooks into the repo's `.claude/settings.local.json` (neve
 
 Installs asynchronous Claude Code hooks into the **account** settings (`~/.claude/settings.json`, plus every corgi profile's config dir, plus any `--config-dir`) so the daemon knows what every session on the machine is doing. Feeds the Stream Deck board, terminal tab titles, the phone launcher's "waiting on you" line and the `corgi_sessions` MCP tool.
 
-- `--slots N` sizes the board (default 6); `--no-tab-title` skips the `● repo` / `▲ repo NEEDS YOU` tab titles.
+- `--slots N` sizes the board (default 6, applied live to a running daemon); `--no-tab-title` skips the `● repo` / `▲ repo NEEDS YOU` tab titles.
 - `corgi agent sessions [--json|--watch]` prints the board; `--json` includes the `path` of `sessions.json` for a plugin to watch.
 - `corgi agent focus <label|id|key>` brings the session's window forward (exact tab with the corgi VS Code extension; iTerm2/Terminal.app by tty).
 - `corgi agent pin <key> [--off]`, `corgi agent page [next|prev]`, `corgi agent rescan`, `corgi agent windows`.
@@ -403,7 +403,7 @@ Installs asynchronous Claude Code hooks into the **account** settings (`~/.claud
 
 Installs asynchronous Claude Code hooks into the **account** settings (`~/.claude/settings.json`, plus every corgi profile's config dir, plus any `--config-dir`) so the daemon knows what every session on the machine is doing. Feeds the Stream Deck board, terminal tab titles, the phone launcher's "waiting on you" line and the `corgi_sessions` MCP tool.
 
-- `--slots N` sizes the board (default 6); `--no-tab-title` skips the `● repo` / `▲ repo NEEDS YOU` tab titles (VS Code shows them with `terminal.integrated.tabs.title: ${sequence}`).
+- `--slots N` sizes the board (default 6, applied live to a running daemon); `--no-tab-title` skips the `● repo` / `▲ repo NEEDS YOU` tab titles (VS Code shows them with `terminal.integrated.tabs.title: ${sequence}`).
 - `corgi agent sessions [--json|--watch]` prints the board; `--json` includes the `path` of `sessions.json` for a plugin to watch.
 - `corgi agent focus <label|id|key>` brings the session's window forward (exact tab with the corgi VS Code extension; iTerm2/Terminal.app by tty).
 - `corgi agent pin <key> [--off]`, `corgi agent page [next|prev]`, `corgi agent rescan`, `corgi agent windows`.

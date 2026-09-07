@@ -63,8 +63,9 @@ func TestDaemonFoldsHookEventsIntoThePublishedBoard(t *testing.T) {
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionPin, Index: 0, Pinned: true})
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionPage, Direction: 1})
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionRescan})
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionResize, Size: 8})
 	d.Nudge()
-	waitFor(t, func() bool { return readBoard(t, d).Slots[0].Pinned })
+	waitFor(t, func() bool { st := readBoard(t, d); return st.Slots[0].Pinned && st.Size == 8 })
 
 	cancel()
 	<-done

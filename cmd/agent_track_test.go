@@ -286,6 +286,24 @@ func TestTrackConfigDirsCoversAccountProfilesAndExtras(t *testing.T) {
 	}
 }
 
+func TestResizeRunningBoardNeedsADaemon(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	dir, _ := agentDir()
+	if resizeRunningBoard(dir, 8) {
+		t.Fatal("no daemon, nothing to resize")
+	}
+	exe, _ := os.Executable()
+	data, _ := json.Marshal(daemon.Info{PID: os.Getpid(), Executable: exe, Commands: true})
+	_ = os.MkdirAll(dir, 0o700)
+	_ = os.WriteFile(filepath.Join(dir, "daemon.json"), data, 0o600)
+	if !resizeRunningBoard(dir, 8) {
+		t.Fatal("a live daemon gets the resize command")
+	}
+	if entries, _ := os.ReadDir(filepath.Join(dir, "commands")); len(entries) != 1 {
+		t.Fatalf("spool has %d entries", len(entries))
+	}
+}
+
 func TestSetTrackSlots(t *testing.T) {
 	dir := t.TempDir()
 	if err := setTrackSlots(dir, 0); err == nil {

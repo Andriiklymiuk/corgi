@@ -102,7 +102,11 @@ func runAgentTrackEnable(cmd *cobra.Command, _ []string) {
 		if err := setTrackSlots(dir, slots); err != nil {
 			exitWithError("agent_track", err, 1)
 		}
-		utils.Infof("✓ board has %d keys (restart the daemon to apply)\n", slots)
+		if resizeRunningBoard(dir, slots) {
+			utils.Infof("✓ board has %d keys\n", slots)
+		} else {
+			utils.Infof("✓ board will have %d keys once the daemon runs\n", slots)
+		}
 	}
 	bin := corgiCommandPath()
 	for _, cfgDir := range trackConfigDirs(dir, extra) {
@@ -137,6 +141,20 @@ func runAgentTrackDisable(cmd *cobra.Command, _ []string) {
 			utils.Infof("%s had no tracking hooks\n", path)
 		}
 	}
+}
+
+// resizeRunningBoard applies a new size to a daemon that is up, so a plugin
+// that learns its device's key count never has to ask for a restart.
+func resizeRunningBoard(dir string, slots int) bool {
+	info, err := daemon.ReadInfo(dir)
+	if err != nil || info == nil || !info.Commands {
+		return false
+	}
+	if _, err := command.Write(dir, command.Command{Action: command.ActionResize, Size: slots, Source: "cli"}); err != nil {
+		return false
+	}
+	daemon.Nudge(info)
+	return true
 }
 
 // setTrackSlots records the board size in the trusted user config.

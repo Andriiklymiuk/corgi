@@ -115,6 +115,8 @@ func TestWriteValidatesSessionAndBoardCommands(t *testing.T) {
 		{Action: ActionSession, Event: &sessions.Event{Name: "Stop"}},
 		{Action: ActionFocus},
 		{Action: ActionPage},
+		{Action: ActionResize},
+		{Action: ActionResize, Size: 99},
 		{Action: "dance"},
 	}
 	for _, c := range bad {
@@ -128,6 +130,7 @@ func TestWriteValidatesSessionAndBoardCommands(t *testing.T) {
 		{Action: ActionPin, Index: 2, Pinned: true},
 		{Action: ActionPage, Direction: -1},
 		{Action: ActionRescan},
+		{Action: ActionResize, Size: 15},
 	}
 	for _, c := range good {
 		if _, err := Write(dir, c); err != nil {
