@@ -1,6 +1,6 @@
 ---
 name: agent
-description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — resolving a stack by name, putting one branch across every repository in it, reading a cross-repo diff, previewing a running service over a tunnel, picking up where a restarted session left off, keeping `claude remote-control` alive across reboots and the ten-minute network timeout, phone notifications (Telegram / Slack / Discord / ntfy), Claude account profiles, and starting or stopping a session in any registered workspace on demand. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
+description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — resolving a stack by name, putting one branch across every repository in it, reading a cross-repo diff, previewing a running service over a tunnel, picking up where a restarted session left off, keeping `claude remote-control` alive across reboots and the ten-minute network timeout, phone notifications (Telegram / Slack / Discord / ntfy), Claude account profiles, starting or stopping a session in any registered workspace on demand, and session tracking — which Claude Code sessions on the machine are waiting on a person, on a Stream Deck, in terminal tab titles, on the phone launcher or via `corgi agent sessions` / `corgi agent focus`. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
 ---
 
 # Corgi agent mode
@@ -257,7 +257,11 @@ falls back to `osascript`, which cannot carry a click target.
 
 Everything the phone can do without the Claude app: start and stop a session,
 pick a profile and name it, read the timeline, revoke a paired device, run
-doctor. Two things worth telling a user unprompted:
+doctor. With session tracking on, the top of the page is the session board —
+"2 waiting on you", each with what it is waiting for — so the phone answers
+the question it was unlocked for before any card is tapped. With session tracking on, the top of the page is the session board —
+"2 waiting on you", each with what it is waiting for — so the phone answers
+the question it was unlocked for before any card is tapped. Two things worth telling a user unprompted:
 
 - Cards carry a **hide** chip. Hidden cards collapse into one button, on that
   browser only — nothing on the machine changes. It is for showing the screen
@@ -507,7 +511,132 @@ sessions awake but sleeps between turns.
 | status says `online`, launcher says *online · no session* | Not a failure: a supervised server waiting as a device. Start from the launcher or the Claude app's device list opens a session. |
 | my claude.ai list is full of `<ws> · main · HH:MM` rows | Leftovers from an older corgi — see *Supervised servers are devices* above. Archive them once. |
 | status shows *note: this Claude Code predates --no-create-session-in-dir* | `claude update`, then `corgi agent restart`. |
+| `corgi agent sessions` is empty though Claude is running | Hooks not installed, or installed after the session started: `corgi agent track enable`, then `corgi agent rescan`; new sessions report from their next event. |
+| a Stream Deck / `focus` press does nothing | `corgi agent doctor` → a session with `unknown` host. Install the corgi VS Code extension and reopen the terminal; iTerm2 needs the tty (a session started before tracking shows none until its next event). |
+| VS Code tabs still say "claude" | Set `terminal.integrated.tabs.title` to `${sequence}` — the default `${process}` ignores the title the hook sets. |
+| `corgi agent sessions` is empty though Claude is running | Hooks not installed, or installed after the session started: `corgi agent track enable`, then `corgi agent rescan`; new sessions report from their next event. |
+| a Stream Deck / `focus` press does nothing | `corgi agent doctor` → a session with `unknown` host. Install the corgi VS Code extension and reopen the terminal; iTerm2 needs the tty (a session started before tracking shows none until its next event). |
 | `up` says the port is in use, pairing "not open" on the old URL | A leftover MCP holds the port. Newer corgi reclaims it on `up` automatically; otherwise `corgi agent down` then `corgi agent up` for a fresh tunnel + pairing window. |
+
+## Tracking every session on the machine
+
+`corgi agent hooks` covers one workspace. `corgi agent track` covers **every**
+Claude Code session on the machine, wherever it was started — a VS Code
+terminal, the Claude Code panel, iTerm2 — and keeps them on a fixed board of
+keys the daemon publishes as `sessions.json`. That board is what a Stream Deck
+plugin draws, what the phone launcher shows at the top ("2 waiting on you"),
+what `corgi_sessions` returns, and what `corgi agent sessions` prints:
+
+```text
+7 session(s) on 6 keys, 1 more than fit
+ 1   ▲ acme-api           NEEDS YOU  permission: Bash  work · vscode-terminal · 12s
+ 2 📌 ● web                WORKING    Edit              default · vscode-panel · 3m
+ 6  +2  (press to page)
+```
+
+Set it up once, for the whole account (and every corgi profile's config dir):
+
+```bash
+corgi agent track enable            # hooks into ~/.claude/settings.json + each profile's dir
+corgi agent track enable --slots 15 # a bigger deck (default 6, a Stream Deck Mini)
+corgi agent track enable --no-tab-title
+corgi agent doctor                  # "session tracking" and "session board" lines
+```
+
+What the user gets, and the words to use for it:
+
+- **Status per session**: `working` (model or tool running), `needs_input`
+  (permission prompt, a question, an API failure — the one that matters),
+  `done`, `stale` (30 min of nothing), `gone` (exited, but the key is pinned).
+  Claude's "waiting for your input" nudge after a *finished* turn is not
+  `needs_input`; the same nudge mid-turn is.
+- **Tab titles**: every terminal tab running Claude reads `● repo`,
+  `▲ repo NEEDS YOU` or `✓ repo` — no deck needed.
+- **Focus**: `corgi agent focus <label|id|key>` brings that session's window
+  to the front. The exact terminal tab or the Claude Code panel needs the
+  corgi VS Code extension (it injects `CORGI_VSCODE_WINDOW` and reveals tabs);
+  iTerm2 and Terminal.app tabs are found by tty. Without either, the app comes
+  forward and nothing else — never a guessed folder, which would open a new
+  window.
+- **Keys never move**: a new session takes the lowest free key, an ending one
+  frees its key. `corgi agent pin <key>` reserves one (its session stays even
+  after exit, dimmed, until `--off`). More sessions than keys → the last
+  unpinned key is a `+N` pager, `corgi agent page next|prev` turns it.
+- **Nothing is lost when the daemon is down**: hooks are async and exit 0, and
+  the next daemon rescans the process table (`corgi agent rescan` on demand).
+  Remote sessions (`CLAUDE_CODE_REMOTE`) and subagents are never registered;
+  neither is the `claude remote-control` server corgi itself supervises.
+
+When a key press goes nowhere, `corgi agent doctor` names sessions with no
+known window (`unknown` host). The usual cause is a terminal opened before the
+extension activated: reopen it. `corgi agent windows` lists the editor windows
+the extension has connected. `corgi agent track disable` removes the hooks and
+touches nothing else in `settings.json`.
+
+From a phone, `corgi_sessions` is the same board as JSON — call it for "is
+anything waiting on me" or "what is running right now"; it says so when
+tracking is not enabled yet.
+
+## Tracking every session on the machine
+
+`corgi agent hooks` covers one workspace. `corgi agent track` covers **every**
+Claude Code session on the machine, wherever it was started — a VS Code
+terminal, the Claude Code panel, iTerm2 — and keeps them on a fixed board of
+keys the daemon publishes as `sessions.json`. That board is what a Stream Deck
+plugin draws, what the phone launcher shows at the top ("2 waiting on you"),
+what `corgi_sessions` returns, and what `corgi agent sessions` prints:
+
+```text
+7 session(s) on 6 keys, 1 more than fit
+ 1   ▲ acme-api           NEEDS YOU  permission: Bash  work · vscode-terminal · 12s
+ 2 📌 ● web                WORKING    Edit              default · vscode-panel · 3m
+ 6  +2  (press to page)
+```
+
+Set it up once, for the whole account (and every corgi profile's config dir):
+
+```bash
+corgi agent track enable            # hooks into ~/.claude/settings.json + each profile's dir
+corgi agent track enable --slots 15 # a bigger deck (default 6, a Stream Deck Mini)
+corgi agent track enable --no-tab-title
+corgi agent doctor                  # "session tracking" and "session board" lines
+```
+
+What the user gets, and the words to use for it:
+
+- **Status per session**: `working` (model or tool running), `needs_input`
+  (permission prompt, a question, an API failure — the one that matters),
+  `done`, `stale` (30 min of nothing), `gone` (exited, but the key is pinned).
+  Claude's "waiting for your input" nudge after a *finished* turn is not
+  `needs_input`; the same nudge mid-turn is.
+- **Tab titles**: every terminal tab running Claude reads `● repo`,
+  `▲ repo NEEDS YOU` or `✓ repo`. VS Code shows them once
+  `terminal.integrated.tabs.title` is `${sequence}` (its default, `${process}`,
+  shows only "claude"); the corgi VS Code extension offers that setting once.
+- **Focus**: `corgi agent focus <label|id|key>` brings that session's window
+  to the front. The exact terminal tab or the Claude Code panel needs the
+  corgi VS Code extension (it injects `CORGI_VSCODE_WINDOW` and reveals tabs);
+  iTerm2 and Terminal.app tabs are found by tty. Without either, the app comes
+  forward and nothing else — never a guessed folder, which would open a new
+  window.
+- **Keys never move**: a new session takes the lowest free key, an ending one
+  frees its key. `corgi agent pin <key>` reserves one (its session stays even
+  after exit, dimmed, until `--off`). More sessions than keys → the last
+  unpinned key is a `+N` pager, `corgi agent page next|prev` turns it.
+- **Nothing is lost when the daemon is down**: hooks are async and exit 0, and
+  the next daemon rescans the process table (`corgi agent rescan` on demand).
+  Remote sessions (`CLAUDE_CODE_REMOTE`) and subagents are never registered;
+  neither is the `claude remote-control` server corgi itself supervises.
+
+When a key press goes nowhere, `corgi agent doctor` names sessions with no
+known window (`unknown` host). The usual cause is a terminal opened before the
+extension activated: reopen it. `corgi agent windows` lists the editor windows
+the extension has connected. `corgi agent track disable` removes the hooks and
+touches nothing else in `settings.json`.
+
+From a phone, `corgi_sessions` is the same board as JSON — call it for "is
+anything waiting on me" or "what is running right now"; it says so when
+tracking is not enabled yet.
 
 ## Things not to do
 

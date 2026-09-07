@@ -113,6 +113,9 @@ func runAgentTrackEnable(cmd *cobra.Command, _ []string) {
 		utils.Infof("✓ sessions under %s are tracked (%s)\n", cfgDir, path)
 	}
 	utils.Info("new sessions report from their next event; `corgi agent sessions` shows the board")
+	if !noTab {
+		utils.Info("VS Code shows the tab titles once terminal.integrated.tabs.title is \"${sequence}\" (the corgi extension offers this)")
+	}
 	if info, err := daemon.ReadInfo(dir); err != nil || info == nil {
 		utils.Info("the daemon is not running — `corgi agent install` starts it at login, `corgi agent serve` now")
 	}

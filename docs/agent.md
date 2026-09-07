@@ -635,9 +635,11 @@ exact tab through the emulator's own scripting; with no tty the app comes
 forward on its own.
 
 **Tab titles.** A second, synchronous hook prints a terminal title on the
-events that change status, so every VS Code terminal tab running Claude reads
+events that change status, so every terminal tab running Claude reads
 `● acme-api`, `▲ acme-api NEEDS YOU` or `✓ acme-api` with no deck at all.
-`--no-tab-title` skips it.
+VS Code's default tab title is `${process}` — the word "claude" — so set
+`terminal.integrated.tabs.title` to `${sequence}` (the corgi VS Code extension
+offers to, once). `--no-tab-title` skips the hook.
 
 **The plugin contract.** A Stream Deck plugin (or anything else) needs three
 things, all of them files or commands, nothing to pair or authenticate:
