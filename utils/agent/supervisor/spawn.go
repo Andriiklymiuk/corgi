@@ -49,6 +49,23 @@ type SpawnConfig struct {
 	SkipPermissions bool
 	// Name is the remote-control session name shown in claude.ai/code.
 	Name string
+	// DeviceOnly runs the server without opening a session in the checkout.
+	//
+	// `claude remote-control` pre-creates one session in its directory as it
+	// starts, so there is somewhere to type — and leaves it listed on claude.ai
+	// when it stops. A daemon that restarts four servers at login, again after
+	// the ten-minute network exit, and again after `corgi agent restart` fills
+	// the phone's session list with rows nobody opened. Device-only is the
+	// mode for a server that exists so the machine is REACHABLE: it registers
+	// with claude.ai, sessions are created from there (or by a launcher Start)
+	// on demand, and a restart leaves nothing behind. Ignored by kinds that
+	// build no argv of their own.
+	DeviceOnly bool
+	// SessionNamePrefix names the sessions remote control creates on demand —
+	// "<prefix>-graceful-unicorn" instead of the machine's hostname — so a
+	// list of sessions from three workspaces on one laptop still says which
+	// repo each is in. Carried in the environment, which an older CLI ignores.
+	SessionNamePrefix string
 	// WakeLock controls whether the machine is kept awake while this
 	// workspace's session runs. Empty means WakeLockSession.
 	WakeLock WakeLockMode
@@ -124,6 +141,11 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	}
 	if err := validateSpawnMode(c, kind); err != nil {
 		return err
+	}
+	if c.DeviceOnly && !kind.BuildsArgvFromSettings {
+		return fmt.Errorf(
+			"workspace %s: kind %q builds no argv of its own, so deviceOnly would be ignored — put this CLI's own flag in args: instead",
+			c.WorkspaceID, kind.Name)
 	}
 	if c.Capacity < 0 {
 		return fmt.Errorf("workspace %s: capacity cannot be negative", c.WorkspaceID)
@@ -327,6 +349,8 @@ func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 		return []string{}
 	}
 	configVar := kind.ConfigDirEnv
+	prefixVar := kind.SessionPrefixEnv
+	prefix := sanitizePrefix(c.SessionNamePrefix)
 
 	keep := make([]string, 0, len(parentEnv))
 	for _, entry := range parentEnv {
@@ -340,10 +364,16 @@ func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 		if configVar != "" && key == configVar && c.ConfigDir != "" {
 			continue // replaced below
 		}
+		if prefixVar != "" && key == prefixVar && prefix != "" {
+			continue // replaced below
+		}
 		keep = append(keep, entry)
 	}
 	if c.ConfigDir != "" && configVar != "" {
 		keep = append(keep, configVar+"="+expandHome(c.ConfigDir))
+	}
+	if prefix != "" && prefixVar != "" {
+		keep = append(keep, prefixVar+"="+prefix)
 	}
 	return keep
 }
@@ -382,6 +412,20 @@ func StrippedCredentials(c SpawnConfig, parentEnv []string) []string {
 	}
 	sort.Strings(stripped)
 	return stripped
+}
+
+// sanitizePrefix keeps a session-name prefix to what reads in a list and
+// cannot break an environment entry: letters, digits, dots, dashes and
+// underscores. Anything else is dropped rather than escaped.
+func sanitizePrefix(p string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(p) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		}
+	}
+	return strings.Trim(b.String(), "-.")
 }
 
 // expandHome resolves a leading ~ so config files can use the short form.

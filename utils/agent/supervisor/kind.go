@@ -28,6 +28,9 @@ type Kind struct {
 	// workspace opts in. An inherited key routes work to another account with no
 	// visible error, so removing them is the default.
 	CredentialEnv []string
+	// SessionPrefixEnv names the variable this CLI reads for the prefix of the
+	// session names it generates itself. Empty when it has none.
+	SessionPrefixEnv string
 	// Args builds argv after the binary name.
 	Args func(SpawnConfig) ([]string, error)
 	// SupportsSpawn and SupportsPermissionMode say whether this CLI understands
@@ -64,6 +67,7 @@ var kinds = map[string]Kind{
 			"ANTHROPIC_AUTH_TOKEN",
 			"CLAUDE_CODE_OAUTH_TOKEN",
 		},
+		SessionPrefixEnv:       "CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX",
 		Args:                   claudeArgs,
 		SupportsSpawn:          true,
 		SupportsPermissionMode: true,
@@ -120,11 +124,20 @@ func KindNames() []string {
 	return out
 }
 
+// DeviceOnlyFlag is what turns off remote control's pre-created session: the
+// server then registers as a device with no session, and creates them on
+// demand. Older CLIs reject it as an unknown option, which the runner catches
+// and retries without — see Runner.retryWithoutUnsupportedFlag.
+const DeviceOnlyFlag = "--no-create-session-in-dir"
+
 // claudeArgs builds `claude remote-control ...`.
 func claudeArgs(c SpawnConfig) ([]string, error) {
 	args := []string{"remote-control"}
 	if s := strings.ToLower(strings.TrimSpace(c.Spawn)); s != "" {
 		args = append(args, "--spawn", s)
+	}
+	if c.DeviceOnly {
+		args = append(args, DeviceOnlyFlag)
 	}
 	if c.Capacity > 0 {
 		args = append(args, "--capacity", strconv.Itoa(c.Capacity))

@@ -153,6 +153,7 @@ Slash-commands and plain English both work:
 /corgi-queue                    "I just joined — what should I pick up first?"
 /corgi-debug                    "the api is 500ing, find out why"
 /corgi-complexity               "this handler branches like a jungle — simplify it"
+/corgi-risk <pr-url>            "how much review does this need — can it be auto-approved?"
 ```
 
 Nothing ships without you. It opens **draft** PRs and waits. If you have no project to try this on, `corgi run -l` fetches an example.
@@ -236,7 +237,7 @@ Which Claude account it runs under, and whether it starts on its own, live in yo
 reimplements none of it, and never asks you to start it. What corgi adds is
 everything that has to be true before a phone is any use:
 
-- **It is running when you are not there.** `corgi agent up --at-login` brings the daemon, the endpoint and the tunnel back at login, so the laptop answers after a reboot without you having set anything up before you left. Sessions come back after a crash, and a wake lock stops the laptop sleeping through a long task. If one dies anyway, `corgi agent brief` says where it stopped and which repo it left dirty.
+- **It is running when you are not there.** `corgi agent up --at-login` brings the daemon, the endpoint and the tunnel back at login, so the laptop answers after a reboot without you having set anything up before you left. Sessions come back after a crash, and a wake lock stops the laptop sleeping through a long task. If one dies anyway, `corgi agent brief` says where it stopped and which repo it left dirty. The supervised servers wait as **devices**, not as pre-opened conversations, so a restart leaves no empty `corgi · main · 10:00` rows in your session list — a session exists once you start one, from the launcher or the Claude app.
 - **Every repo, on its own Claude account.** One launcher lists them all. Personal projects open in the Claude app; a work repo opens in Chrome signed into the work account.
 - **One branch across the whole stack.** A session is not stuck in one directory: corgi puts the same branch in every repo that has it, and hands back a single diff over all of them — readable on the phone with no tunnel and nothing running.
 

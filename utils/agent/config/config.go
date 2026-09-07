@@ -59,6 +59,16 @@ type UserConfig struct {
 // WorkspaceConfig is everything that grants capability. Trusted sources only.
 type WorkspaceConfig struct {
 	Autostart *bool `yaml:"autostart"`
+	// AutostartSession makes the server the daemon starts by itself also open
+	// a session in the checkout, the way `claude remote-control` does when
+	// run by hand. Off by default: a server that comes up with the daemon is
+	// there so the machine is reachable, and the session it would pre-create
+	// — one per workspace, per daemon start, per network-timeout restart — is
+	// what fills the phone's list with rows nobody opened. Sessions are
+	// created from claude.ai or by a launcher Start instead. Turn this on for
+	// a workspace whose session you want waiting in the list the moment the
+	// daemon is up.
+	AutostartSession bool `yaml:"autostartSession"`
 	// Kind selects which agent CLI to supervise. Empty keeps the default, so a
 	// config written before this existed behaves exactly as it did.
 	Kind string `yaml:"kind"`
@@ -196,6 +206,7 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.Autostart != nil {
 		base.Autostart = over.Autostart
 	}
+	base.AutostartSession = base.AutostartSession || over.AutostartSession
 	if over.Kind != "" {
 		base.Kind = over.Kind
 	}

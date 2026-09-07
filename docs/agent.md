@@ -203,6 +203,51 @@ the Claude app. But the `model` setting in that workspace's config dir
 (`<configDir>/settings.json`) sets the default a new session starts with, and it
 rides along with `--config-dir` / profiles automatically.
 
+### What the daemon does not do: open a conversation for you
+
+`claude remote-control` pre-creates one session in its directory the moment it
+starts — somewhere to type — and leaves that session in claude.ai's list, offline,
+when it stops. Supervised across four workspaces, restarted at login, after the
+ten-minute network exit and after every `corgi agent restart`, that is a list full
+of `corgi · main · 10:00`, `corgi · main · 13:26`, … rows nobody ever opened.
+
+So a server the daemon starts on its own runs as a **device**: it registers with
+claude.ai and opens no session (`--no-create-session-in-dir`). Sessions come from
+where you actually ask for one:
+
+- the Claude app's **device list** — pick the machine, new session, it lands in a
+  worktree of that workspace;
+- the launcher's **Start** — corgi swaps the device server for one that opens a
+  session and hands you the link;
+- `corgi_session_start` / `corgi agent session start` — the same swap.
+
+Those sessions are named `<workspace>-brave-otter` instead of
+`<hostname>-brave-otter`, so a list from three repos on one laptop still says which
+is which. **Stop** on a session that belongs to an autostart workspace ends the
+session and puts the device back — the machine stays reachable.
+
+`corgi agent status` shows the resting state as `online` with *device only · no
+session opened at start*; the launcher card says *online · no session* with a solid
+green dot, and its button is **Start**. A restart of the daemon now leaves nothing
+behind on claude.ai.
+
+Want the old behaviour for one workspace — a session already waiting in the list the
+moment the daemon is up? Trusted config, per workspace or under `defaults:`:
+
+```yaml
+workspaces:
+  corgi:
+    autostart: true
+    autostartSession: true
+```
+
+A Claude Code older than the flag rejects it as an unknown option; the daemon notices
+on the first exit, drops the flag, starts again at once with the session and says so
+in `corgi agent status` (*note: this Claude Code predates …*). Update Claude Code to
+get the device-only behaviour back. The rows an older corgi already left behind are
+ordinary offline sessions — archive them from the claude.ai list once; new ones will
+not appear.
+
 `corgi agent scan <dir>` registers stacks it finds but **does not enable them**.
 Supervision is opt-in per workspace: scanning a projects folder should not
 quietly spawn a Claude session for every stack in it. Run `corgi agent init` in
@@ -228,7 +273,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent install` / `uninstall` | start (or stop starting) at login — daemon only |
 | `corgi agent up --at-login` | the same, plus the endpoint and tunnel that up used |
 | `corgi agent awake [on\|off]` | keep the machine awake for the daemon's whole life |
-| `corgi agent status [--json]` | what is running, restarts, which account |
+| `corgi agent status [--json]` | what is running (`online` = device with no session yet), restarts, which account |
 | `corgi agent doctor [--json]` | can this work here, and what to fix |
 | `corgi agent workspaces` | list, `forget`, `relocate` |
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |

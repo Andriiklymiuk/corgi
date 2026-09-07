@@ -61,6 +61,13 @@ type launchWorkspace struct {
 	Origin    string `json:"origin,omitempty"`
 	PID       int    `json:"pid,omitempty"`
 	LastCause string `json:"lastCause,omitempty"`
+	// DeviceOnly says the supervised server opened no session of its own: it
+	// is online as a device, and Start on the card is what gives it one.
+	DeviceOnly bool `json:"deviceOnly,omitempty"`
+	// Remark is the daemon's standing note about how this workspace runs — a
+	// flag the installed CLI did not know, say. Informational, unlike Note,
+	// which is a refusal.
+	Remark string `json:"remark,omitempty"`
 	// Branch and Dirty describe the checkout a session here would start on —
 	// the answer to "which of these two is the one I was working in?".
 	Branch     string            `json:"branch,omitempty"`
@@ -131,6 +138,8 @@ type wsRunState struct {
 	origin    string
 	pid       int
 	lastCause string
+	device    bool
+	remark    string
 }
 
 // buildLaunchWorkspaces joins the registry with the daemon's live status into
@@ -145,11 +154,19 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 			if !ws.StartedAt.IsZero() {
 				started = ws.StartedAt.UnixMilli()
 			}
+			idleDevice := ws.DeviceOnly && ws.SessionsThisRun == 0
+			url := ws.SessionURL
+			if idleDevice {
+				// Whatever link a device with no session printed, it is not a
+				// conversation to open. The card's button must be Start.
+				url = ""
+			}
 			running[ws.WorkspaceID] = wsRunState{
-				running: ws.Running, url: ws.SessionURL, note: ws.LastReason, sessions: ws.Sessions,
+				running: ws.Running, url: url, note: ws.LastReason, sessions: ws.Sessions,
 				disabled: ws.Disabled, startedAt: started, restarts: ws.Restarts,
 				profile: ws.Profile, wakeLock: ws.WakeLock, origin: ws.Origin,
 				pid: ws.PID, lastCause: string(ws.LastCause),
+				device: idleDevice, remark: ws.Note,
 			}
 		}
 		for _, d := range status.Diagnostics {
@@ -173,6 +190,7 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 			Disabled: s.disabled, StartedAt: s.startedAt, Restarts: s.restarts,
 			Profile: s.profile, WakeLock: s.wakeLock, Origin: s.origin,
 			PID: s.pid, LastCause: s.lastCause,
+			DeviceOnly: s.device, Remark: s.remark,
 		}
 		row.Branch, row.Dirty = workspaceCheckout(ws.ID, ws.AbsPath)
 		row.Live, row.TopSession, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath, s.profile)
@@ -190,6 +208,16 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 // agent status`'s workspaceState, which answers a different question: whether
 // the daemon is supervising, not whether a human is needed.
 func launchState(row launchWorkspace) string {
+	return launchStateAt(row, time.Now())
+}
+
+// launchReadyAfter is how long a device-only server gets to register before
+// the card stops calling it "starting". Remote control is up within seconds;
+// past this, running with no session is its resting state, not a start that
+// never finished.
+const launchReadyAfter = 15 * time.Second
+
+func launchStateAt(row launchWorkspace, now time.Time) string {
 	switch {
 	case row.Disabled:
 		// The daemon gave up on this one after repeated failures. It looked
@@ -205,6 +233,11 @@ func launchState(row launchWorkspace) string {
 		return "attention"
 	case row.Live > 0:
 		return "live"
+	case row.Running && row.DeviceOnly && row.StartedAt > 0 &&
+		now.Sub(time.UnixMilli(row.StartedAt)) >= launchReadyAfter:
+		// Online as a device with no session: the machine answers, and Start
+		// is what opens a conversation. Not "starting" — nothing is pending.
+		return "ready"
 	case row.Running:
 		// Supervised, but no session has registered yet.
 		return "starting"
@@ -1116,6 +1149,7 @@ const launcherPageHTML = `<!doctype html>
      that was refused, grey nothing running. */
   .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
   .dot.live{background:var(--green)}
+  .dot.ready{background:var(--green);opacity:.55}
   .dot.starting{background:var(--green);animation:pulse 1s ease-in-out infinite}
   .dot.attention{background:var(--amber)}
   .dot.blocked{background:var(--red)}
@@ -1591,12 +1625,15 @@ const launcherPageHTML = `<!doctype html>
       const usage = usageLine(ws);
       if (usage) main.appendChild(usage);
       head.appendChild(main);
-      if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl)) {
+      if (ws.sessionUrl && safeClaudeUrl(ws.sessionUrl) && ws.state !== 'ready') {
         head.appendChild(openControl(ws));
       } else {
         const b = document.createElement('button');
-        b.textContent = ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
-        b.disabled = ws.running;
+        // A device with no session is online, not busy: Start on it opens
+        // the session the daemon deliberately did not pre-create.
+        const ready = ws.state === 'ready';
+        b.textContent = ready ? 'Start' : ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
+        b.disabled = ws.running && !ready;
         b.onclick = () => startSession(ws.id, b);
         head.appendChild(b);
       }
@@ -1706,7 +1743,7 @@ const launcherPageHTML = `<!doctype html>
   // and anything else reading it say the same thing about the same workspace.
   function dotState(ws) {
     const state = ws.state || (ws.running ? 'starting' : 'stopped');
-    return state === 'live' || state === 'starting' || state === 'attention' || state === 'blocked'
+    return state === 'live' || state === 'ready' || state === 'starting' || state === 'attention' || state === 'blocked'
       ? state : '';
   }
 
@@ -1714,6 +1751,7 @@ const launcherPageHTML = `<!doctype html>
     const bits = [];
     if (ws.live > 0) bits.push('<span class="live">' + ws.live + ' live</span>');
     else if (ws.state === 'starting') bits.push('<span class="live">starting</span>');
+    else if (ws.state === 'ready') bits.push('<span class="live">online · no session</span>');
     else if (ws.state === 'blocked') bits.push('<span class="warn">will not start</span>');
     else if (ws.state === 'disabled') bits.push('<span class="warn">disabled after repeated failures</span>');
     // What the daemon knew all along and the phone never showed.
@@ -1926,6 +1964,8 @@ const launcherPageHTML = `<!doctype html>
     if (ws.restarts > 0) facts.push(['restarts', String(ws.restarts) + (ws.lastCause ? ' \u00b7 last ' + ws.lastCause : '')]);
     else if (ws.lastCause) facts.push(['last exit', ws.lastCause]);
     if (ws.wakeLock) facts.push(['wake lock', 'the machine is held awake while this runs']);
+    if (ws.deviceOnly) facts.push(['device', 'online with no session — Start opens one here, or create one from the Claude app’s device list']);
+    if (ws.remark) facts.push(['note', ws.remark]);
     if (ws.pid) facts.push(['pid', String(ws.pid)]);
     if (ws.disabled) facts.push(['disabled', 'the daemon stopped retrying this one \u2014 fix the cause, then Start']);
     return facts;
