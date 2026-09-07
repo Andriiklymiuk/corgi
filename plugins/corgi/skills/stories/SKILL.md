@@ -314,7 +314,9 @@ file; the `## Spec` comment is the spec — _Express lane_):
 - **Tier** — adjustment/bug/feature.
 - Root cause / current behaviour, `file:line` refs.
 - Change plan (snippets) **grouped by service**, tests, manual verification, risks.
-  Multi-service: `## Contract` + cross-service order.
+  Name what the plan deliberately does **not** build and what covers it instead (a
+  native element, an existing helper) — the cheapest spec is the one with the fewest
+  new parts. Multi-service: `## Contract` + cross-service order.
 
 ### Triage: actionable vs blocked — controls POSTING, not writing
 
@@ -465,10 +467,17 @@ dirty → ask the user to stash/commit first.
     the PR is up. **Failure (Stop rule) →** leave it; report its `/tmp` path. Never
     `worktree remove` a failed story.
 
-Implement to spec; reuse before building. **Minimum diff — no opportunistic refactor,
-no over-engineering, no code comments** unless the file already comments heavily. Run
-the **per-service gate** (tests + typecheck + lint) BEFORE commit. Tests for every
-change, matching existing patterns.
+Implement to spec, and **before each piece, walk the ladder in
+`references/smallest-change.md`** — not needed → already in the repo → the language
+ships it → the platform ships it → an installed dependency does it → one clear line →
+the least code that passes the check. Stop at the first rung that holds. **Minimum
+diff — no opportunistic refactor, no abstraction nobody asked for, no new dependency
+for what an installed one covers, no code comments** unless the file already comments
+heavily. Validation at trust boundaries, data-loss error handling, security,
+accessibility and the tier's test are never what gets trimmed. A shortcut with a known
+ceiling goes in the PR body's `Deferred` list (Phase 5), not in a comment. Run the
+**per-service gate** (tests + typecheck + lint) BEFORE commit. Tests for every change,
+matching existing patterns.
 
 - **Run the gate through corgi when the service is in `corgi-compose.yml`** — gives
   the worktree full resolved env, deps, cwd, so you don't guess the runner or
@@ -692,6 +701,11 @@ glab mr note create <iid> -m "$(cat docs/stories/<issue-key>-<slug>.md)"   # spe
 - **Run-locally line in the body** — the same one-paste
   `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report) so a
   reviewer spins the branch up without hunting.
+- **`Deferred` in the body** — one line per deliberate shortcut from Phase 3
+  (`<what> · ceiling: <limit> · revisit when: <trigger>`), and one line per thing
+  the ladder left out with the rung that covered it. Omit the section when there is
+  nothing; never pad it. The `risk` card reads it, so a ceiling below today's load
+  is a Check line rather than a surprise.
 - Canonical spec already on the tracker (Phase 1); PR/MR comment is a convenience
   copy.
 

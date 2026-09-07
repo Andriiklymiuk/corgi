@@ -4,6 +4,14 @@ The **Check** lines on a card must be specific to the change. Use these lists to
 the checks that apply; cite the file and line for each one you put on the card. A
 line here that the diff does not touch does not go on the card.
 
+## Any area
+- **Deferred list**: each item in the PR body's `Deferred` section has a ceiling and
+  a trigger, and no ceiling sits below today's load (a "first 100 rows" shortcut on a
+  table with 10k). An item with no trigger is a Check line.
+- **Built-in not used**: a new dependency, helper or component for something the
+  language, platform or an installed dependency already does — more surface for the
+  same behaviour, and the reviewer has to learn it.
+
 ## Backend / API
 - **Input at the boundary**: every new request field validated (type, length, range,
   enum), and the error path returns the repo's standard error shape.
