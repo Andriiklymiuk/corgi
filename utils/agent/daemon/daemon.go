@@ -111,6 +111,10 @@ type Daemon struct {
 	// cmd. TypeText is the emulator typing seam.
 	AccountDirs func() []string
 	TypeText    func(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error
+	// DigestAt is the local HH:MM for the daily digest; Digest builds its
+	// text. Both injected by cmd; either empty means no digest.
+	DigestAt string
+	Digest   func(now time.Time) string
 	// publishStopped is called as the status publisher exits.
 	//
 	// A test seam. Whether Run waits for that goroutine is otherwise observable
@@ -238,6 +242,7 @@ func (d *Daemon) publishStatus(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		_ = writeJSONAtomic(d.StatusPath(), d.Status())
+		d.sendDigestIfDue(time.Now())
 		select {
 		case <-ctx.Done():
 			return
@@ -981,4 +986,45 @@ func writeJSONAtomic(path string, v any) error {
 		return err
 	}
 	return atomicfile.Write(path, data, 0o600)
+}
+
+// digestMarker remembers the day the digest last went out, across restarts.
+func digestMarker(dir string) string { return filepath.Join(dir, "digest.sent") }
+
+// DigestDue says whether a digest configured for at ("HH:MM", local) should
+// go out now, given the last day one was sent ("2006-01-02" or ""). Due
+// from that minute until midnight, once: a daemon that was asleep at 20:00
+// still sends at 20:07, and never twice.
+func DigestDue(now time.Time, at, lastDay string) bool {
+	at = strings.TrimSpace(at)
+	if at == "" {
+		return false
+	}
+	t, err := time.ParseInLocation("15:04", at, now.Location())
+	if err != nil {
+		return false
+	}
+	today := now.Format("2006-01-02")
+	if lastDay == today {
+		return false
+	}
+	due := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
+	return !now.Before(due)
+}
+
+func (d *Daemon) sendDigestIfDue(now time.Time) {
+	if d.DigestAt == "" || d.Digest == nil || d.Notify == nil {
+		return
+	}
+	last, _ := os.ReadFile(digestMarker(d.Dir))
+	if !DigestDue(now, d.DigestAt, strings.TrimSpace(string(last))) {
+		return
+	}
+	// Mark first: a digest that fails to send is not worth a retry storm.
+	_ = os.WriteFile(digestMarker(d.Dir), []byte(now.Format("2006-01-02")), 0o600)
+	body := strings.TrimSpace(d.Digest(now))
+	if body == "" {
+		return
+	}
+	d.Notify("corgi agent · today", body)
 }

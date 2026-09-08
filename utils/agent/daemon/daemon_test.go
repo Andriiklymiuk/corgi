@@ -778,3 +778,20 @@ func TestRepeatedAttentionStaysQuietForTenMinutes(t *testing.T) {
 		t.Fatal("after the window: send again")
 	}
 }
+
+func TestDigestDue(t *testing.T) {
+	loc := time.FixedZone("x", 0)
+	at := func(h, m int) time.Time { return time.Date(2026, 9, 8, h, m, 0, 0, loc) }
+	if DigestDue(at(19, 59), "20:00", "") {
+		t.Fatal("not yet")
+	}
+	if !DigestDue(at(20, 0), "20:00", "") || !DigestDue(at(23, 30), "20:00", "2026-09-07") {
+		t.Fatal("due from the minute on, once a day, even late")
+	}
+	if DigestDue(at(20, 5), "20:00", "2026-09-08") {
+		t.Fatal("already sent today")
+	}
+	if DigestDue(at(20, 5), "", "") || DigestDue(at(20, 5), "20h", "") {
+		t.Fatal("no or bad time means no digest")
+	}
+}
