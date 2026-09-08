@@ -164,7 +164,18 @@ func upgradeViaHomebrew() error {
 	upgradeCmd := exec.Command("brew", "upgrade", "andriiklymiuk/homebrew-tools/corgi")
 	upgradeCmd.Stdout = os.Stdout
 	upgradeCmd.Stderr = os.Stderr
-	return upgradeCmd.Run()
+	if err := upgradeCmd.Run(); err == nil {
+		return nil
+	}
+	// corgi moved from a formula to a cask in the tap. brew migrates an
+	// installed formula on upgrade through the tap's tap_migrations.json;
+	// when it does not (an older brew, a stale tap clone), installing the
+	// cask outright is the same end state.
+	fmt.Println("brew upgrade did not finish — installing the corgi cask")
+	installCmd := exec.Command("brew", "install", "--cask", "andriiklymiuk/homebrew-tools/corgi")
+	installCmd.Stdout = os.Stdout
+	installCmd.Stderr = os.Stderr
+	return installCmd.Run()
 }
 
 func upgradeViaInstallScript(installDir string) error {
