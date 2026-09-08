@@ -41,6 +41,16 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpAgentStatus()
 	}))
 
+	s.AddTool(mcp.NewTool("corgi_sessions",
+		mcp.WithDescription(
+			"Every interactive Claude Code session on this machine, as the board `corgi agent track` keeps: "+
+				"label, status (working, needs_input, done, stale, gone), what it is doing, which account, and where "+
+				"its terminal is. Read-only. needsInput counts the sessions waiting on a person — use this to answer "+
+				"\"is anything waiting on me\" and \"what is running right now\". Empty until `corgi agent track enable`."),
+	), jsonHandler(func(mcp.CallToolRequest) (any, error) {
+		return mcpSessions()
+	}))
+
 	s.AddTool(mcp.NewTool("corgi_session_brief",
 		mcp.WithDescription(
 			"What the previous supervised session in this workspace was working on before it was restarted. "+
@@ -259,6 +269,24 @@ func mcpAgentStatus() (any, error) {
 		}, nil
 	}
 	return status, nil
+}
+
+func mcpSessions() (any, error) {
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	rep, err := readBoard(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(rep.Sessions) == 0 {
+		return map[string]any{
+			"sessions": []any{}, "daemonRunning": rep.Running,
+			"hint": "nothing tracked — `corgi agent track enable` installs the hooks; sessions appear from their next event",
+		}, nil
+	}
+	return rep, nil
 }
 
 func mcpSessionBrief(workspace string) (any, error) {

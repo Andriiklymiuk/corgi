@@ -14,6 +14,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 
@@ -432,7 +433,51 @@ func collectAgentChecks() []agentCheck {
 		checks = append(checks, c)
 	}
 	checks = append(checks, checkWorkspaceTrust()...)
+	checks = append(checks, checkSessionTracking(dir)...)
 	return checks
+}
+
+// checkSessionTracking says whether the board can work: hooks in every
+// account, and — the first thing to debug when a key press goes nowhere —
+// any tracked session whose window corgi could not identify.
+func checkSessionTracking(dir string) []agentCheck {
+	var checks []agentCheck
+	hooked := 0
+	dirs := trackConfigDirs(dir, nil)
+	for _, cfgDir := range dirs {
+		if hasTrackingHooks(claudeUserSettingsPath(cfgDir)) {
+			hooked++
+		}
+	}
+	c := agentCheck{Name: "session tracking", OK: true, Detail: fmt.Sprintf("hooks in %d of %d Claude config dir(s)", hooked, len(dirs))}
+	if hooked == 0 {
+		// Optional, so not a failure: doctor must not exit 1 for a feature
+		// nobody asked for.
+		c.Detail = "off — `corgi agent track enable` for a Stream Deck or `corgi agent sessions`"
+		return append(checks, c)
+	}
+	if hooked < len(dirs) {
+		c.Fix = "`corgi agent track enable` covers every profile's config dir"
+	}
+	checks = append(checks, c)
+	rep, err := readBoard(dir)
+	if err != nil {
+		return append(checks, agentCheck{Name: "session board", Detail: err.Error()})
+	}
+	unknown := 0
+	for _, s := range rep.Sessions {
+		if s.Host.Kind == sessions.HostUnknown && s.Status != sessions.StatusGone {
+			unknown++
+		}
+	}
+	board := agentCheck{Name: "session board", OK: true,
+		Detail: fmt.Sprintf("%d session(s), %d window(s) connected", len(rep.Sessions), len(rep.Windows))}
+	if unknown > 0 {
+		board.OK = false
+		board.Detail += fmt.Sprintf(", %d with no known window", unknown)
+		board.Fix = "focus reaches those at app level only — reopen the terminal after installing the corgi VS Code extension"
+	}
+	return append(checks, board)
 }
 
 func checkWorkspaceTrust() []agentCheck {

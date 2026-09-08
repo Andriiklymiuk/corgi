@@ -132,6 +132,13 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 
 	d := daemon.New(APP_VERSION, dir)
 	d.CaptureBrief = captureWorkspaceBrief
+	// Session tracking: label sessions by registered workspace, badge them
+	// by corgi profile, and size the board as the user config says.
+	d.Sessions.Resolve = workspaceResolver(dir)
+	d.Sessions.ProfileFor = profileResolver(dir)
+	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.TrackSlots > 0 {
+		d.Sessions.Resize(user.TrackSlots)
+	}
 	d.ResolveWorkspace = remoteResolver(dir, foreground)
 	d.LinkFor = func(workspaceID string) string {
 		if url := d.SessionURLFor(workspaceID); url != "" {

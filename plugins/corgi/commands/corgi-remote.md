@@ -1,5 +1,5 @@
 ---
-description: Set up or manage phone-startable Claude Code sessions on this machine — "make this repo phone-startable", "set up remote control", "pair my phone", "start a session from my phone", "give the launcher a permanent URL", "run this workspace under my work account", "stop the remote setup". Works in a corgi stack OR any git repository; no args = set up the current directory.
+description: Set up or manage phone-startable Claude Code sessions on this machine — "make this repo phone-startable", "set up remote control", "pair my phone", "start a session from my phone", "give the launcher a permanent URL", "run this workspace under my work account", "track my Claude sessions on a Stream Deck", "stop the remote setup". Works in a corgi stack OR any git repository; no args = set up the current directory.
 ---
 
 Run the agent-mode remote setup for the request in `$ARGUMENTS`.
@@ -24,8 +24,12 @@ Follow the `agent` skill (`plugins/corgi/skills/agent/SKILL.md`) — the
    workspace, or `corgi agent profile add <name> --config-dir <dir>` to pick at
    start time. Per-workspace open target (Claude app vs browser vs Chrome) is
    set on the phone launcher itself, not in config.
-5. Tear-down: `corgi agent down` (daemon + MCP + tunnel).
-6. A list full of `<ws> · main · HH:MM` rows → the skill's *Supervised servers are
+5. Session tracking: offer `corgi agent track enable` — every Claude session on
+   the machine on a Stream Deck / `corgi agent sessions`, tab titles, and the
+   "waiting on you" line at the top of the phone launcher (skill section
+   *Tracking every session on the machine*).
+6. Tear-down: `corgi agent down` (daemon + MCP + tunnel).
+7. A list full of `<ws> · main · HH:MM` rows → the skill's *Supervised servers are
    devices* section; archive the old rows once.
 
 Guardrails from the skill hold: never enable `--dangerously-skip-permissions`
