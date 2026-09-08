@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
 func TestWriteThenDrainRoundTrips(t *testing.T) {
@@ -103,5 +105,45 @@ func TestWriteRejectsBadInput(t *testing.T) {
 	}
 	if _, err := Write(t.TempDir(), Command{Action: ActionStart}); err == nil {
 		t.Error("missing workspaceId must be rejected")
+	}
+}
+
+func TestWriteValidatesSessionAndBoardCommands(t *testing.T) {
+	dir := t.TempDir()
+	bad := []Command{
+		{Action: ActionSession},
+		{Action: ActionSession, Event: &sessions.Event{Name: "Stop"}},
+		{Action: ActionFocus},
+		{Action: ActionPage},
+		{Action: ActionResize},
+		{Action: ActionResize, Size: 99},
+		{Action: "dance"},
+	}
+	for _, c := range bad {
+		if _, err := Write(dir, c); err == nil {
+			t.Errorf("%+v should be rejected", c)
+		}
+	}
+	good := []Command{
+		{Action: ActionSession, Event: &sessions.Event{Name: "Stop", SessionID: "s1"}},
+		{Action: ActionFocus, SessionID: "s1"},
+		{Action: ActionPin, Index: 2, Pinned: true},
+		{Action: ActionPage, Direction: -1},
+		{Action: ActionRescan},
+		{Action: ActionResize, Size: 15},
+		{Action: ActionNew},
+		{Action: ActionNew, WindowID: "w1"},
+	}
+	for _, c := range good {
+		if _, err := Write(dir, c); err != nil {
+			t.Errorf("%+v: %v", c, err)
+		}
+	}
+	got, err := Drain(dir, time.Now(), TTL)
+	if err != nil || len(got) != len(good) {
+		t.Fatalf("drained %d, %v", len(got), err)
+	}
+	if got[0].Event == nil || got[0].Event.SessionID != "s1" || got[2].Index != 2 || !got[2].Pinned || got[3].Direction != -1 {
+		t.Fatalf("payloads survive the round trip: %+v", got)
 	}
 }

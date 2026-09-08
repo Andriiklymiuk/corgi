@@ -54,6 +54,9 @@ type UserConfig struct {
 	// accounts. Trusted like everything else here: a remote caller sends only
 	// a profile NAME; what it selects is defined in this file.
 	Profiles map[string]WorkspaceConfig `yaml:"profiles"`
+	// TrackSlots is how many keys the session board has — the size of the
+	// Stream Deck it is drawn on. Zero means the default (a Mini's six).
+	TrackSlots int `yaml:"trackSlots,omitempty"`
 }
 
 // WorkspaceConfig is everything that grants capability. Trusted sources only.

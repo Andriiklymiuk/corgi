@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
 const (
@@ -23,7 +25,31 @@ const (
 	// ActionAttention is a Claude Code hook reporting that a session wants a
 	// person: a permission prompt, a question, or a finished turn.
 	ActionAttention = "attention"
+	// ActionSession is one Claude Code hook event for the session registry,
+	// written by `corgi agent hook emit`.
+	ActionSession = "session"
+	// ActionFocus, ActionPin and ActionPage are key presses: bring a session
+	// to the front, reserve a key, turn the overflow page. ActionRescan asks
+	// for a fresh look at the process table.
+	ActionFocus  = "focus"
+	ActionPin    = "pin"
+	ActionPage   = "page"
+	ActionRescan = "rescan"
+	// ActionResize changes the number of keys on the board in place.
+	ActionResize = "resize"
+	// ActionNew opens a fresh Claude Code session in an editor window: the
+	// one named, else the one last focused, else the most recent.
+	ActionNew = "new"
 )
+
+// needsWorkspace lists the actions addressed to a workspace; the rest are
+// addressed to a session or to the board.
+var needsWorkspace = map[string]bool{ActionStart: true, ActionStop: true, ActionAttention: true}
+
+var known = map[string]bool{
+	ActionStart: true, ActionStop: true, ActionAttention: true, ActionSession: true,
+	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true, ActionNew: true,
+}
 
 // TTL is how long a written command stays valid. A start that sat in the spool
 // longer than this is deleted unexecuted: a clear failure now beats a session
@@ -43,19 +69,60 @@ type Command struct {
 	Detail      string    `json:"detail,omitempty"`
 	Source      string    `json:"source,omitempty"`
 	RequestedAt time.Time `json:"requestedAt"`
+
+	// Event is the hook payload for ActionSession.
+	Event *sessions.Event `json:"event,omitempty"`
+	// SessionID names the target of ActionFocus: an id, an id prefix, a
+	// label or a key number, resolved by the registry.
+	SessionID string `json:"sessionId,omitempty"`
+	// Index and Pinned are ActionPin's key and its new state.
+	Index  int  `json:"index,omitempty"`
+	Pinned bool `json:"pinned,omitempty"`
+	// Direction is ActionPage's +1 (next) or -1 (previous).
+	Direction int `json:"direction,omitempty"`
+	// Size is ActionResize's new key count.
+	Size int `json:"size,omitempty"`
+	// WindowID is ActionNew's editor window, when the caller has one.
+	WindowID string `json:"windowId,omitempty"`
 }
 
 // Dir is the spool directory under the agent data dir.
 func Dir(agentDir string) string { return filepath.Join(agentDir, "commands") }
 
+// validate rejects a command the daemon could not act on.
+func (c Command) validate() error {
+	if !known[c.Action] {
+		return fmt.Errorf("unknown command action %q", c.Action)
+	}
+	if needsWorkspace[c.Action] && strings.TrimSpace(c.WorkspaceID) == "" {
+		return fmt.Errorf("command needs a workspaceId")
+	}
+	switch c.Action {
+	case ActionSession:
+		if c.Event == nil || c.Event.SessionID == "" || c.Event.Name == "" {
+			return fmt.Errorf("a session command needs an event with a session id and a name")
+		}
+	case ActionFocus:
+		if strings.TrimSpace(c.SessionID) == "" {
+			return fmt.Errorf("focus needs a session")
+		}
+	case ActionPage:
+		if c.Direction == 0 {
+			return fmt.Errorf("page needs a direction")
+		}
+	case ActionResize:
+		if c.Size < 1 || c.Size > 64 {
+			return fmt.Errorf("resize needs a size between 1 and 64")
+		}
+	}
+	return nil
+}
+
 // Write persists one command atomically and returns it with ID and
 // RequestedAt filled.
 func Write(agentDir string, c Command) (Command, error) {
-	if c.Action != ActionStart && c.Action != ActionStop && c.Action != ActionAttention {
-		return c, fmt.Errorf("unknown command action %q", c.Action)
-	}
-	if strings.TrimSpace(c.WorkspaceID) == "" {
-		return c, fmt.Errorf("command needs a workspaceId")
+	if err := c.validate(); err != nil {
+		return c, err
 	}
 	if c.ID == "" {
 		var b [8]byte
@@ -73,7 +140,7 @@ func Write(agentDir string, c Command) (Command, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return c, err
 	}
-	data, err := json.MarshalIndent(c, "", "  ")
+	data, err := json.Marshal(c)
 	if err != nil {
 		return c, err
 	}

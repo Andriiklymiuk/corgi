@@ -633,6 +633,29 @@ func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, info)
 }
 
+// launchBoardHandler is the session board for the phone: which Claude
+// sessions on this machine are waiting on a person, which are working. The
+// same sessions.json the Stream Deck reads, minus nothing — the page decides
+// what to show.
+func launchBoardHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodGet {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	rep, err := readBoard(dir)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeLaunchJSON(w, rep)
+}
+
 var latestVersion struct {
 	mu      sync.Mutex
 	value   string
@@ -1149,6 +1172,22 @@ const launcherPageHTML = `<!doctype html>
   header small .what{color:var(--dim);border-bottom:1px dotted var(--line-soft,#3a4152);cursor:pointer}
   .hostnote{color:var(--dim);font-size:.74rem;line-height:1.5;margin:.45rem 0 0;max-width:30rem}
   main{padding:.4rem 1.2rem 2.2rem;max-width:34rem;margin:0 auto}
+  /* The session board: what every Claude on the machine is doing, the ones
+     waiting on a person first. Hidden until tracking reports anything. */
+  .board{margin:var(--sp2) 0 var(--sp3)}
+  .board .sum{color:var(--dim);font-size:.74rem;margin:0 0 .35rem .1rem}
+  .board .sum.hot{color:var(--red);font-weight:600}
+  .sess{display:flex;align-items:center;gap:.6rem;background:var(--card2);border:1px solid var(--hair);
+      border-radius:.6rem;padding:.5rem .7rem;margin:.3rem 0;font-size:.82rem}
+  .sess .sdot{margin:0}
+  .sess .sdot.needs{background:var(--red);animation:pulse 1s ease-in-out infinite}
+  .sess .sdot.working{background:var(--amber)}
+  .sess .sdot.done{background:var(--green);opacity:.6}
+  .sess .sdot.stale,.sess .sdot.gone,.sess .sdot.unknown{background:var(--dim2)}
+  .sess .slabel{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+  .sess .sdetail{color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+  .sess .sbadge{font-size:.6rem;font-weight:700;color:var(--dim);border:1px solid var(--line);border-radius:.3rem;
+      padding:.05rem .3rem;flex:0 0 auto;text-transform:uppercase;letter-spacing:.04em}
   .ws{background:var(--card);border:1px solid var(--line);border-radius:.75rem;
       padding:var(--sp3) var(--sp3) var(--sp2);margin:var(--sp2) 0}
   .head{display:flex;align-items:center;gap:.7rem}
@@ -1300,6 +1339,7 @@ const launcherPageHTML = `<!doctype html>
   <p id="hostnote" class="hostnote" hidden></p>
 </header>
 <main>
+  <section id="board" class="board" hidden></section>
   <div id="list" class="msg">Loading…</div>
   <details class="tips" id="tips" hidden>
     <summary><span>On the laptop</span><span class="tips-hint">setup commands</span></summary>
@@ -1418,6 +1458,7 @@ const launcherPageHTML = `<!doctype html>
   } else {
     initSettings();
     loadInfo();
+    loadBoard();
     skeleton();
     load();
     initRefresh();
@@ -1437,7 +1478,7 @@ const launcherPageHTML = `<!doctype html>
     const btn = document.getElementById('refresh');
     btn.onclick = () => {
       btn.classList.add('spin');
-      Promise.all([load(), loadInfo()]).finally(() => setTimeout(() => btn.classList.remove('spin'), 400));
+      Promise.all([load(), loadInfo(), loadBoard()]).finally(() => setTimeout(() => btn.classList.remove('spin'), 400));
     };
     setInterval(autoRefresh, REFRESH_MS);
     addEventListener('visibilitychange', () => {
@@ -1450,6 +1491,7 @@ const launcherPageHTML = `<!doctype html>
     const openPanel = [...document.querySelectorAll('.sessions')].some(el => el.style.display !== 'none');
     if (openPanel || document.querySelector('.startbox.on')) return;
     load();
+    loadBoard();
   }
 
   function initSettings() {
@@ -1564,6 +1606,56 @@ const launcherPageHTML = `<!doctype html>
     } catch (e) {
       list.className = 'msg err'; list.textContent = '✗ ' + e.message;
     }
+  }
+
+  // The session board answers the question the phone is usually unlocked
+  // for: is anything waiting on me. Sessions needing a person come first
+  // and pulse; the rest are one muted line. Nothing tracked, nothing shown.
+  const STATUS_WORD = { needs_input: 'needs you', working: 'working', done: 'done', stale: 'idle', gone: 'closed', unknown: '' };
+  async function loadBoard() {
+    const box = document.getElementById('board');
+    try {
+      const r = await fetch('/launch/board', { headers: auth });
+      if (!r.ok) { box.hidden = true; return; }
+      const j = await r.json();
+      const sessions = (j.sessions || []).filter(s => s.status !== 'gone');
+      if (!sessions.length) { box.hidden = true; return; }
+      box.innerHTML = '';
+      const hot = sessions.filter(s => s.status === 'needs_input');
+      const sum = document.createElement('p');
+      sum.className = 'sum' + (hot.length ? ' hot' : '');
+      const parts = [];
+      if (hot.length) parts.push(hot.length + ' waiting on you');
+      const working = sessions.filter(s => s.status === 'working').length;
+      if (working) parts.push(working + ' working');
+      const rest = sessions.length - hot.length - working;
+      if (rest) parts.push(rest + ' idle');
+      sum.textContent = 'Claude sessions on this machine · ' + parts.join(' · ');
+      box.appendChild(sum);
+      const shown = hot.length ? hot : sessions.filter(s => s.status === 'working').slice(0, 3);
+      for (const s of shown) {
+        const row = document.createElement('div');
+        row.className = 'sess';
+        const dot = document.createElement('span');
+        dot.className = 'sdot ' + (s.status === 'needs_input' ? 'needs' : esc(s.status || 'unknown'));
+        const label = document.createElement('span');
+        label.className = 'slabel'; label.textContent = s.display || s.label || '?';
+        row.appendChild(dot); row.appendChild(label);
+        const detail = s.detail || STATUS_WORD[s.status] || '';
+        if (detail) {
+          const d = document.createElement('span');
+          d.className = 'sdetail'; d.textContent = detail;
+          row.appendChild(d);
+        }
+        if (s.profile && s.profile !== 'default') {
+          const b = document.createElement('span');
+          b.className = 'sbadge'; b.textContent = s.profile;
+          row.appendChild(b);
+        }
+        box.appendChild(row);
+      }
+      box.hidden = false;
+    } catch { box.hidden = true; }
   }
 
   async function loadInfo() {

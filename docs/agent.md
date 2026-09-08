@@ -282,6 +282,12 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent restart` | `down` + `up --fresh` in one — run it after `corgi upgrade` |
 | `corgi agent tunnel setup <host>` | one-time permanent-URL setup, remembered for later runs |
 | `corgi agent hooks enable` / `disable` | notify when a session needs you, and name sessions after what you ask them |
+| `corgi agent track enable` / `disable` | track every Claude session on the machine: the board for a Stream Deck, tab titles, `focus` |
+| `corgi agent sessions [--json\|--watch]` | the board: one line per key, status, account, where the terminal is |
+| `corgi agent focus <session>` | bring that session's window to the front and reveal its terminal tab |
+| `corgi agent pin <key> [--off]` / `page` / `rescan` / `windows` | reserve a key, turn the overflow page, adopt untracked sessions, list connected editor windows |
+| `corgi agent board [--slots N]` | the board's size, or set it — applied to a running daemon at once |
+| `corgi agent new [--window ID]` | open a new Claude session in the last-focused editor window (the "+" key) |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -553,6 +559,130 @@ notification as a restart — including the phone push when `notifyUrl` is set.
 It covers every Claude session in that directory, supervised or not.
 `corgi agent hooks disable` removes them and leaves your other hooks alone.
 
+### Sessions on a Stream Deck
+
+`corgi agent hooks` covers one workspace. The other question — *which of the
+seven Claude sessions across three VS Code windows is the one waiting on me* —
+needs every session, wherever it was started. That is `corgi agent track`:
+
+```bash
+corgi agent track enable          # hooks into ~/.claude/settings.json and every profile's config dir
+corgi agent sessions              # the board
+corgi agent sessions --watch      # redrawn on every change
+corgi agent focus acme-api        # that window, that terminal tab
+```
+
+```text
+7 session(s) on 6 keys, 1 more than fit
+ 1   ▲ acme-api           NEEDS YOU  permission: Bash  work · vscode-terminal · 12s
+ 2 📌 ● web                WORKING    Edit              default · vscode-panel · 3m
+ 3   ✓ mobile             DONE                         default · iterm · 8m
+ 4   ◌ infra              IDLE                         default · unknown · 41m
+ 5   ● acme-api·zsh 2     WORKING    Bash              work · vscode-terminal · 5s
+ 6  +2  (press to page)
+```
+
+What it is: a fixed board of keys (six, a Stream Deck Mini — `corgi agent
+board --slots N` for another deck, applied to a running daemon at once) that the daemon assigns and publishes as `sessions.json` in the
+agent data directory. A Stream Deck plugin only has to watch that file and shell
+out to `corgi agent focus`, `pin` and `page` on a press; it holds no state of
+its own, so it can be restarted, reinstalled or replaced without the board
+moving. `corgi agent sessions --json` prints the file's path along with it.
+
+How it knows: the hooks call `corgi agent hook emit` on every event that
+changes what a session is doing — start, prompt, tool, permission, notification,
+stop, failure, end. Each is asynchronous and exits 0 whatever happens, so a
+daemon that is down costs a millisecond and shows nothing in the transcript.
+`emit` reads only the session id, the event, the directory and the tool name;
+prompts, tool inputs and the transcript never leave the hook. It also records
+the `claude` process's pid and parent chain, which is what makes the rest work:
+
+| status | when | key |
+|---|---|---|
+| `working` | the model is running or a tool is executing | amber |
+| `needs_input` | a permission prompt, a question, an API failure | red — the one that matters |
+| `done` | the turn finished; waiting for a prompt | green |
+| `stale` | alive, but nothing for 30 minutes | gray |
+| `gone` | the process exited, but the key is pinned | dimmed |
+
+Claude's "waiting for your input" nudge a minute after a turn ends is **not**
+`needs_input`: a finished session that wants nothing stays `done`. The same
+nudge mid-turn — a question you have not seen — is.
+
+The **reaper** probes every session's pid every five seconds, so a force-quit
+window frees its key within that, `SessionEnd` or no `SessionEnd`. On start
+the daemon **rescans** the process table and adopts sessions that began while
+it was down (`corgi agent rescan` does the same on demand); their first hook
+fills in the rest. A daemon restart keeps the board where it was.
+
+Keys never re-sort: a new session takes the lowest free key, an ending one
+frees its key, the rest stay put. **Pin** a key (`corgi agent pin 2`, or a
+long press on the deck) and it keeps its session even after the session
+exits, dimmed until you unpin it. With more sessions than keys, the last
+unpinned key becomes a `+N` pager and `corgi agent page` rotates the others
+through the overflow.
+
+**Focus.** On macOS `open -a "Visual Studio Code" <folder>` brings the window
+that has the folder open to the front — no Accessibility permission. Getting
+to the exact terminal *tab* needs code inside that window, which is what the
+[corgi VS Code extension](https://github.com/Andriiklymiuk/corgi_vscode_extension)
+does: it puts `CORGI_VSCODE_WINDOW` into every integrated terminal, reports its
+terminals' shell pids and its own extension-host pid to the daemon, and reveals
+the tab (or the Claude Code panel, whose `claude` is a child of that extension
+host) when asked. Without the extension, focus is window-level, matched by
+folder. `corgi agent doctor` lists any session with `unknown` host — the first
+thing to check when a key press goes nowhere. For iTerm2 and Terminal.app the
+hook records the `claude` process's controlling tty, and focus selects that
+exact tab through the emulator's own scripting; with no tty the app comes
+forward on its own.
+
+**Tab titles.** A second, synchronous hook prints a terminal title on the
+events that change status, so every terminal tab running Claude reads
+`● acme-api`, `▲ acme-api NEEDS YOU` or `✓ acme-api` with no deck at all.
+VS Code's default tab title is `${process}` — the word "claude" — so set
+`terminal.integrated.tabs.title` to `${sequence}` (the corgi VS Code extension
+offers to, once). `--no-tab-title` skips the hook.
+
+**The plugin contract.** A Stream Deck plugin (or anything else) needs three
+things, all of them files or commands, nothing to pair or authenticate:
+
+| it wants | it does |
+|---|---|
+| the board | watch `sessions.json` in the agent data dir (`corgi agent sessions --json` prints its `path`) |
+| a key's look | `slots[i]`: `label`, `status`, `profile`, `pinned`, `detail`, `elapsedS`, `host`; `pager` + `overflow` for the `+N` key; `empty` |
+| the totals | `needsInput`, `working`, `overflow` at the top level |
+| a press | `corgi agent focus <sessionId>` · long press `corgi agent pin <key>` / `--off` · pager `corgi agent page next|prev` |
+| its key count | `corgi agent board --slots N` once; the next `sessions.json` has `size: N` |
+| an empty key pressed | `corgi agent new`: a fresh terminal running `claude` in the last-focused window (`lastFocusWindow`); a failure lands in `notice` / `noticeAt` |
+| a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
+
+Slot indexes never move unless paged or unpinned, so the plugin can map keys by
+`(row, column)` order and hold nothing else. From a phone, the same board is the
+`corgi_sessions` MCP tool.
+
+**The plugin contract.** A Stream Deck plugin (or anything else) needs three
+things, all of them files or commands, nothing to pair or authenticate:
+
+| it wants | it does |
+|---|---|
+| the board | watch `sessions.json` in the agent data dir (`corgi agent sessions --json` prints its `path`) |
+| a key's look | `slots[i]`: `label`, `status`, `profile`, `pinned`, `detail`, `elapsedS`, `host`; `pager` + `overflow` for the `+N` key; `empty` |
+| the totals | `needsInput`, `working`, `overflow` at the top level |
+| a press | `corgi agent focus <sessionId>` · long press `corgi agent pin <key>` / `--off` · pager `corgi agent page next|prev` |
+| its key count | `corgi agent board --slots N` once; the next `sessions.json` has `size: N` |
+| an empty key pressed | `corgi agent new`: a fresh terminal running `claude` in the last-focused window (`lastFocusWindow`); a failure lands in `notice` / `noticeAt` |
+| a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
+
+Slot indexes never move unless paged or unpinned, so the plugin can map keys by
+`(row, column)` order and hold nothing else. From a phone, the same board is the
+`corgi_sessions` MCP tool.
+
+Everything lives in the agent data directory (`sessions.json`, `windows/`,
+`reveal/`, the command spool), owner-only. Remote sessions
+(`CLAUDE_CODE_REMOTE`) and subagents are never registered.
+`corgi agent track disable` removes the hooks and leaves every other hook in
+`settings.json` alone.
+
 ### The handover brief
 
 corgi cannot restore the conversation. What it can keep is the half that
@@ -799,6 +929,8 @@ phone; they also work from any other MCP client.
 | tool | what it does |
 |---|---|
 | `corgi_session_brief` | what the previous session was working on before it restarted |
+| `corgi_sessions` | every Claude session on the machine and its status — "is anything waiting on me" |
+| `corgi_sessions` | every Claude session on the machine and its status — "is anything waiting on me" |
 | `corgi_session_events` | the workspace timeline: starts, exits and why, session links |
 | `corgi_workspaces` | every stack registered on this machine |
 | `corgi_workspace_resolve` | "the recipe app" → one stack, or candidates |

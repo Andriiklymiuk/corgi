@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -331,5 +332,39 @@ func TestExpandTilde(t *testing.T) {
 	}
 	if got := expandTilde(""); got != "" {
 		t.Errorf("empty must stay empty, got %q", got)
+	}
+}
+
+func TestLaunchBoardServesTheSessionBoard(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	rec := httptest.NewRecorder()
+	launchBoardHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/board", nil))
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("status = %d, cache = %q", rec.Code, rec.Header().Get("Cache-Control"))
+	}
+	var empty boardReport
+	if err := json.Unmarshal(rec.Body.Bytes(), &empty); err != nil || len(empty.Sessions) != 0 {
+		t.Fatalf("empty board: %+v %v", empty, err)
+	}
+
+	dir, _ := agentDir()
+	_ = os.MkdirAll(dir, 0o700)
+	st := sessions.State{Size: 6, NeedsInput: 1, Sessions: []sessions.Session{{ID: "a", Label: "acme", Status: sessions.StatusNeedsInput, Detail: "permission: Bash"}}}
+	data, _ := json.Marshal(st)
+	_ = os.WriteFile(daemon.SessionsPath(dir), data, 0o600)
+	rec = httptest.NewRecorder()
+	launchBoardHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/board", nil))
+	var rep boardReport
+	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil || rep.NeedsInput != 1 || rep.Sessions[0].Detail != "permission: Bash" {
+		t.Fatalf("board: %+v %v", rep, err)
+	}
+
+	rec = httptest.NewRecorder()
+	launchBoardHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/board", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST = %d", rec.Code)
+	}
+	if !strings.Contains(launcherPageHTML, "/launch/board") || !strings.Contains(launcherPageHTML, "waiting on you") {
+		t.Fatal("the page must fetch and show the board")
 	}
 }

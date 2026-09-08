@@ -12,6 +12,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 
 	"github.com/spf13/cobra"
 )
@@ -339,13 +340,28 @@ func disableHooksIn(dir string) (bool, error) {
 
 func runAgentHook(cmd *cobra.Command, args []string) {
 	utils.NonInteractive = true
-	id, _ := cmd.Flags().GetString("workspace")
-	if strings.TrimSpace(id) == "" {
-		return
-	}
 	event := ""
 	if len(args) > 0 {
 		event = args[0]
+	}
+	switch event {
+	case "emit":
+		// The session-tracking hook: one spool entry, one nudge, no output.
+		if ev, ok := runEmitHook(os.Stdin, os.Getenv, os.Getppid()); ok {
+			deliverEvent(ev)
+		}
+		return
+	case "tab":
+		registry, _ := workspace.Load(agentRegistryPath(agentDirOrEmpty()))
+		runTabTitleHook(os.Stdin, os.Stdout, func(cwd string) string {
+			label, _ := workspaceLabel(registry, cwd)
+			return label
+		})
+		return
+	}
+	id, _ := cmd.Flags().GetString("workspace")
+	if strings.TrimSpace(id) == "" {
+		return
 	}
 	if event == "title" {
 		// The one hook that answers rather than reports: it prints a session
