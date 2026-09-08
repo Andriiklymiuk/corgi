@@ -469,7 +469,7 @@ func runAgentStatus(_ *cobra.Command, _ []string) {
 	}
 
 	if utils.JSONOutput {
-		utils.PrintJSON(status)
+		utils.PrintJSON(statusWithUsage(dir, status))
 		return
 	}
 
@@ -517,6 +517,46 @@ func printWorkspaceState(w supervisor.RunState) {
 	if line := workspaceUsageLine(w.WorkspaceID); line != "" {
 		fmt.Printf("  %-20s %s\n", "", line)
 	}
+}
+
+// statusJSON is `corgi agent status --json`: the daemon's status plus what
+// the human output adds — token usage per workspace, the account each runs
+// under, and the dashboard URL — so a menu bar or a deck need not re-derive
+// them.
+type statusJSON struct {
+	*daemon.Status
+	Usage        []workspaceUsageJSON `json:"usage,omitempty"`
+	DashboardURL string               `json:"dashboardUrl,omitempty"`
+}
+
+type workspaceUsageJSON struct {
+	WorkspaceID string `json:"workspaceId"`
+	Dir         string `json:"dir,omitempty"`
+	ConfigDir   string `json:"configDir,omitempty"`
+	TokensToday int64  `json:"tokensToday"`
+	TokensWeek  int64  `json:"tokensWeek"`
+}
+
+func statusWithUsage(dir string, status *daemon.Status) statusJSON {
+	out := statusJSON{Status: status}
+	registry, _, err := agentRegistry()
+	if err == nil {
+		for _, ws := range registry.Sorted() {
+			absPath, configDir, ok := workspaceSessionTarget(ws.ID, runningProfile(ws.ID))
+			if !ok || absPath == "" {
+				continue
+			}
+			rep := usage.ForDir(absPath, expandTilde(configDir), mungeClaudeProjectDir(absPath), time.Now())
+			out.Usage = append(out.Usage, workspaceUsageJSON{
+				WorkspaceID: ws.ID, Dir: absPath, ConfigDir: expandTilde(configDir),
+				TokensToday: rep.Today.Total(), TokensWeek: rep.Week.Total(),
+			})
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(dir, "public.url")); err == nil {
+		out.DashboardURL = strings.TrimSpace(string(data))
+	}
+	return out
 }
 
 func workspaceUsageLine(id string) string {
