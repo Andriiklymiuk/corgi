@@ -768,3 +768,44 @@ func TestFrontSessionFollowsTheWindowInFront(t *testing.T) {
 		t.Fatalf("a lone window is the front one: %+v", st)
 	}
 }
+
+func TestClosedPanelChatsLeaveTheBoard(t *testing.T) {
+	r := newTestRegistry(t)
+	for i, id := range []string{"old", "mid", "busy"} {
+		e := ev("Stop", id, time.Duration(i)*time.Minute)
+		e.ClaudePID, e.Ancestors = 200+i, []int{200 + i, 7}
+		r.Apply(e)
+	}
+	working := ev("PreToolUse", "busy", 3*time.Minute)
+	working.ClaudePID, working.Ancestors = 202, []int{202, 7}
+	r.Apply(working)
+	two := 2
+	w := Window{ID: "w1", App: "Visual Studio Code", ExtHostPID: 7, UpdatedAt: t0}
+	r.SetWindows([]Window{w})
+	if len(r.Snapshot(t0).Sessions) != 3 {
+		t.Fatal("a window that does not count tabs drops nothing")
+	}
+	w.ClaudeTabs = &two
+	r.SetWindows([]Window{w})
+	st := r.Snapshot(t0)
+	if len(st.Sessions) != 3 {
+		t.Fatalf("two tabs, two idle panel sessions and a working one: nothing to drop: %d", len(st.Sessions))
+	}
+	one := 1
+	w.ClaudeTabs = &one
+	r.SetWindows([]Window{w})
+	st = r.Snapshot(t0)
+	ids := ""
+	for _, s := range st.Sessions {
+		ids += s.ID + " "
+	}
+	if ids != "mid busy " {
+		t.Fatalf("the quietest idle panel session goes, the working one never: %q", ids)
+	}
+	back := ev("Stop", "old", 10*time.Minute)
+	back.ClaudePID, back.Ancestors = 200, []int{200, 7}
+	r.Apply(back)
+	if _, err := r.Lookup("old"); err != nil {
+		t.Fatal("a dropped session returns with its next event")
+	}
+}

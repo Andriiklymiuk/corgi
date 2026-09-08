@@ -135,6 +135,18 @@ func LooksLikeClaude(p Process) bool {
 	if base != "node" && base != "bun" {
 		return false
 	}
-	args := strings.ToLower(p.Args)
-	return strings.Contains(args, "claude-code") || strings.Contains(args, "/claude") || strings.HasSuffix(args, " claude")
+	// The script the runtime runs must be the CLI itself, or live in the
+	// claude-code package: a path that merely mentions claude (a hook
+	// package, a folder named after it) is not a session.
+	for _, arg := range strings.Fields(strings.ToLower(p.Args)) {
+		if filepath.Base(arg) == "claude" {
+			return true
+		}
+		for _, dir := range strings.Split(filepath.Dir(arg), "/") {
+			if dir == "claude-code" {
+				return true
+			}
+		}
+	}
+	return false
 }

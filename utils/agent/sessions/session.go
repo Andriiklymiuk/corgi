@@ -184,8 +184,13 @@ type Window struct {
 	// PanelActive is true while the Claude Code panel is the active editor
 	// tab: the user is typing there, not in the terminal VS Code still
 	// calls active.
-	PanelActive bool      `json:"panelActive,omitempty"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	PanelActive bool `json:"panelActive,omitempty"`
+	// ClaudeTabs is how many Claude Code panel tabs the window has open, when
+	// its extension counts them. A finished panel session beyond that count
+	// has no tab left to show it: its chat was closed and Claude Code merely
+	// keeps the process for "reopen closed session".
+	ClaudeTabs *int      `json:"claudeTabs,omitempty"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // EditorFromChain names the editor whose process tree a session runs in,

@@ -85,7 +85,13 @@ func TestLooksLikeClaude(t *testing.T) {
 			t.Errorf("%+v should look like claude", p)
 		}
 	}
-	no := []Process{{Name: "node", Args: "node server.js"}, {Name: "zsh"}, {Name: "Code Helper"}}
+	no := []Process{
+		{Name: "node", Args: "node server.js"},
+		{Name: "zsh"},
+		{Name: "Code Helper"},
+		{Name: "node", Args: "/opt/homebrew/bin/node /Users/me/.npm/_npx/e5b3/node_modules/claude-stats-hook/index.js"},
+		{Name: "node", Args: "node /home/me/claude/notes/server.js"},
+	}
 	for _, p := range no {
 		if LooksLikeClaude(p) {
 			t.Errorf("%+v should not look like claude", p)

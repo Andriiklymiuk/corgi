@@ -655,7 +655,8 @@ things, all of them files or commands, nothing to pair or authenticate:
 | its key count | `corgi agent board --slots N` once; the next `sessions.json` has `size: N` |
 | an empty key pressed | `corgi agent new`: a fresh terminal running `claude` in the window in front (`frontWindow`, else `lastFocusWindow`); a failure lands in `notice` / `noticeAt` |
 | a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
-| a talk key pressed | `frontSession`: the session in the window in front (its active terminal tab, else its panel), so dictation lands without a key press first |
+| a talk key pressed | `frontSession`: the session in the window in front (its panel while that is the active tab, else its active terminal tab, else its panel), so dictation lands without a key press first |
+| a panel chat closed | the window's extension counts its Claude tabs (`claudeTabs`); a finished panel session beyond that count leaves the board, and returns with its next hook event |
 
 Slot indexes never move unless paged or unpinned, so the plugin can map keys by
 `(row, column)` order and hold nothing else. From a phone, the same board is the
@@ -673,7 +674,8 @@ things, all of them files or commands, nothing to pair or authenticate:
 | its key count | `corgi agent board --slots N` once; the next `sessions.json` has `size: N` |
 | an empty key pressed | `corgi agent new`: a fresh terminal running `claude` in the window in front (`frontWindow`, else `lastFocusWindow`); a failure lands in `notice` / `noticeAt` |
 | a failed press | `focusError` and `focusAt` on the slot, cleared by the session's next event |
-| a talk key pressed | `frontSession`: the session in the window in front (its active terminal tab, else its panel), so dictation lands without a key press first |
+| a talk key pressed | `frontSession`: the session in the window in front (its panel while that is the active tab, else its active terminal tab, else its panel), so dictation lands without a key press first |
+| a panel chat closed | the window's extension counts its Claude tabs (`claudeTabs`); a finished panel session beyond that count leaves the board, and returns with its next hook event |
 
 Slot indexes never move unless paged or unpinned, so the plugin can map keys by
 `(row, column)` order and hold nothing else. From a phone, the same board is the

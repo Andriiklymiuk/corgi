@@ -527,8 +527,41 @@ func (r *Registry) SetWindows(windows []Window) bool {
 	for _, s := range r.sessions {
 		r.bind(s)
 	}
+	r.dropClosedPanelsLocked(time.Now())
 	r.touch()
 	return true
+}
+
+// dropClosedPanelsLocked frees the keys of panel sessions whose chat tab is
+// gone. A window that counts its Claude tabs can have more finished panel
+// sessions bound to it than tabs; the quietest surplus ones are dropped. A
+// session still working or waiting is never touched, and a dropped one
+// comes back with its next hook event, so a miscount (the sidebar view is
+// not a tab) costs a key for a moment, not a session.
+func (r *Registry) dropClosedPanelsLocked(now time.Time) {
+	for _, w := range r.windows {
+		if w.ClaudeTabs == nil {
+			continue
+		}
+		var idle []*Session
+		for _, s := range r.sortedLocked() {
+			if s.Host.Kind != HostVSCodePanel || s.Host.WindowID != w.ID {
+				continue
+			}
+			switch s.Status {
+			case StatusDone, StatusStale, StatusUnknown:
+				idle = append(idle, s)
+			}
+		}
+		surplus := len(idle) - *w.ClaudeTabs
+		if surplus <= 0 {
+			continue
+		}
+		sort.Slice(idle, func(i, j int) bool { return idle[i].LastActivity.Before(idle[j].LastActivity) })
+		for _, s := range idle[:surplus] {
+			r.dropLocked(s, now)
+		}
+	}
 }
 
 func sameWindows(a, b map[string]Window) bool {
@@ -541,6 +574,9 @@ func sameWindows(a, b map[string]Window) bool {
 			return false
 		}
 		if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID || o.PanelActive != w.PanelActive {
+			return false
+		}
+		if (o.ClaudeTabs == nil) != (w.ClaudeTabs == nil) || (o.ClaudeTabs != nil && *o.ClaudeTabs != *w.ClaudeTabs) {
 			return false
 		}
 	}
