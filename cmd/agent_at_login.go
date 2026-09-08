@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+	"syscall"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -141,7 +145,9 @@ func restoreUpAtLogin(dir string) {
 	defer release()
 
 	if mcpListening(addr) {
-		return
+		if !stopStaleMCP(dir, addr) {
+			return
+		}
 	}
 	tunnelFlags, err := tunnelArgs(settings.Provider, settings.TunnelName, settings.TunnelHostname)
 	if err != nil {
@@ -157,4 +163,40 @@ func restoreUpAtLogin(dir string) {
 	// a window where an `agent up` seconds later still sees a free port and
 	// starts a second server, and the two fight over it.
 	awaitMCPBound(addr, 15*time.Second)
+}
+
+// stopStaleMCP ends an MCP server spawned by an older corgi than this one
+// (or one that never recorded its version), so the restart that follows
+// runs the current binary. The pid file must name a live process — a server
+// corgi cannot stop is left alone rather than joined by a second one.
+// Returns true when the port is free to take again.
+func stopStaleMCP(dir, addr string) bool {
+	spawnedBy := ""
+	if data, err := os.ReadFile(filepath.Join(dir, mcpVersionName)); err == nil {
+		spawnedBy = strings.TrimSpace(string(data))
+	}
+	if spawnedBy == APP_VERSION {
+		return false
+	}
+	pid, ok := readAgentPidFile(filepath.Join(dir, mcpPidName))
+	if !ok || !utils.PidAlive(pid, "") {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil || proc.Signal(syscall.SIGTERM) != nil {
+		return false
+	}
+	was := spawnedBy
+	if was == "" {
+		was = "an older corgi"
+	}
+	utils.Infof("agent: restarting the MCP endpoint — it was started by %s, this is %s\n", was, APP_VERSION)
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if !mcpListening(addr) {
+			return true
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return false
 }
