@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var APP_VERSION = "1.21.36"
+var APP_VERSION = "1.21.37"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
