@@ -181,7 +181,11 @@ type Window struct {
 	// they say which session the user is looking at.
 	FocusedAt      time.Time `json:"focusedAt,omitempty"`
 	ActiveShellPID int       `json:"activeShellPid,omitempty"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	// PanelActive is true while the Claude Code panel is the active editor
+	// tab: the user is typing there, not in the terminal VS Code still
+	// calls active.
+	PanelActive bool      `json:"panelActive,omitempty"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // EditorFromChain names the editor whose process tree a session runs in,

@@ -739,6 +739,19 @@ func TestFrontSessionFollowsTheWindowInFront(t *testing.T) {
 		t.Fatalf("a tab with no session: the panel session is in front: %+v", st)
 	}
 
+	w1.ActiveShellPID, w1.PanelActive = 90, true
+	if !r.SetWindows([]Window{w1, w2}) {
+		t.Fatal("the panel becoming the active tab is a window change")
+	}
+	if st := r.Snapshot(t0); st.FrontSession != "panel" {
+		t.Fatalf("the panel is the active tab: it wins over the active terminal: %+v", st)
+	}
+	w1.PanelActive = false
+	r.SetWindows([]Window{w1, w2})
+	if st := r.Snapshot(t0); st.FrontSession != "tab" {
+		t.Fatalf("panel closed: the active terminal's session again: %+v", st)
+	}
+
 	w2.FocusedAt = t0.Add(2 * time.Hour)
 	r.SetWindows([]Window{w1, w2})
 	if st := r.Snapshot(t0); st.FrontWindow != "w2" || st.FrontSession != "other" {
