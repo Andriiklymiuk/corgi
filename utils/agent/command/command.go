@@ -40,6 +40,9 @@ const (
 	// ActionNew opens a fresh Claude Code session in an editor window: the
 	// one named, else the one last focused, else the most recent.
 	ActionNew = "new"
+	// ActionDismiss takes a finished session off the board until its next
+	// event: a closed chat whose process lingers, a key wanted back.
+	ActionDismiss = "dismiss"
 )
 
 // needsWorkspace lists the actions addressed to a workspace; the rest are
@@ -49,6 +52,7 @@ var needsWorkspace = map[string]bool{ActionStart: true, ActionStop: true, Action
 var known = map[string]bool{
 	ActionStart: true, ActionStop: true, ActionAttention: true, ActionSession: true,
 	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true, ActionNew: true,
+	ActionDismiss: true,
 }
 
 // TTL is how long a written command stays valid. A start that sat in the spool
@@ -72,7 +76,7 @@ type Command struct {
 
 	// Event is the hook payload for ActionSession.
 	Event *sessions.Event `json:"event,omitempty"`
-	// SessionID names the target of ActionFocus: an id, an id prefix, a
+	// SessionID names the target of ActionFocus and ActionDismiss: an id, an id prefix, a
 	// label or a key number, resolved by the registry.
 	SessionID string `json:"sessionId,omitempty"`
 	// Index and Pinned are ActionPin's key and its new state.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -60,6 +61,11 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		d.Sessions.Resize(c.Size)
 	case command.ActionNew:
 		d.newSession(ctx, c.WindowID)
+	case command.ActionDismiss:
+		if err := d.Sessions.Dismiss(c.SessionID, time.Now()); err != nil {
+			utils.Infof("agent: dismiss %s: %v\n", c.SessionID, err)
+			d.Sessions.SetNotice(err)
+		}
 	default:
 		return false
 	}
@@ -184,7 +190,7 @@ func (d *Daemon) newSession(ctx context.Context, windowID string) {
 		}
 		err := raise(ctx, target)
 		if err == nil {
-			err = sessions.WriteReveal(d.Dir, sessions.Reveal{WindowID: target.WindowID, New: true, Folder: target.Folder})
+			err = sessions.WriteReveal(d.Dir, sessions.Reveal{WindowID: target.WindowID, New: true, Folder: target.Folder, Command: newSessionCommand()})
 		}
 		if err != nil {
 			utils.Infof("agent: new session in %s: %v\n", target.WindowID, err)
@@ -332,4 +338,18 @@ func run(ctx context.Context, name string, args ...string) error {
 		return fmt.Errorf("%s: %v: %s", name, err, string(out))
 	}
 	return nil
+}
+
+// newSessionCommand is what the "+" terminal runs: this corgi's `agent
+// claude`, which picks the folder's workspace account and settings. The
+// path is absolute so the terminal's PATH does not matter.
+func newSessionCommand() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "corgi agent claude"
+	}
+	if strings.ContainsAny(exe, " \t'\"") {
+		exe = "'" + strings.ReplaceAll(exe, "'", `'\''`) + "'"
+	}
+	return exe + " agent claude"
 }

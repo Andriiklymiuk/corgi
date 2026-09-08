@@ -10,6 +10,7 @@ package sessions
 
 import (
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -33,7 +34,28 @@ const (
 	StatusGone Status = "gone"
 	// StatusUnknown: found by rescan, no hook has spoken for it yet.
 	StatusUnknown Status = "unknown"
+	// StatusLimited: the account hit its usage limit. Nothing to answer;
+	// Detail says when it resets.
+	StatusLimited Status = "limited"
 )
+
+var (
+	limitText  = regexp.MustCompile(`(?i)\b(session|usage|rate|weekly|daily) limit\b|\brate.?limited?\b`)
+	limitReset = regexp.MustCompile(`(?i)\bresets?\s+(?:at\s+)?([^\n]+?)\s*$`)
+)
+
+// LimitReset says whether a StopFailure or notification is the account's
+// usage limit rather than something to answer, and when it resets ("12:10pm
+// (Europe/Kiev)") when the text says.
+func LimitReset(errorType, message string) (bool, string) {
+	if errorType != "rate_limit" && !limitText.MatchString(message) {
+		return false, ""
+	}
+	if m := limitReset.FindStringSubmatch(message); m != nil {
+		return true, strings.TrimSpace(m[1])
+	}
+	return true, ""
+}
 
 // StaleAfter is how long a working or done session may sit without an event
 // before it is called stale. A needs_input session never goes stale: it is

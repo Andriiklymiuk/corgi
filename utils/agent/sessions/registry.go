@@ -270,6 +270,10 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 		r.setStatus(s, StatusDone, now)
 	case "StopFailure":
 		s.Tool = ""
+		if limited, reset := LimitReset(ev.Error, ev.Message); limited {
+			r.applyLimit(s, reset, now)
+			return
+		}
 		s.Detail = firstNonEmpty(ev.Error, "api error")
 		r.setStatus(s, StatusNeedsInput, now)
 	case "SessionEnd":
@@ -318,7 +322,21 @@ func (r *Registry) applyEnd(s *Session, ev Event, now time.Time) {
 	r.dropLocked(s, now)
 }
 
+// applyLimit: the account is out of quota. Not a question, so not
+// needs_input; the key says when to come back instead.
+func (r *Registry) applyLimit(s *Session, reset string, now time.Time) {
+	s.Detail = "limit reached"
+	if reset != "" {
+		s.Detail = "resets " + reset
+	}
+	r.setStatus(s, StatusLimited, now)
+}
+
 func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
+	if limited, reset := LimitReset("", ev.Message); limited {
+		r.applyLimit(s, reset, now)
+		return
+	}
 	switch ev.Notification {
 	case "permission_prompt", "agent_needs_input", "elicitation_dialog", "elicitation_url_dialog":
 		s.Detail = firstNonEmpty(shorten(ev.Message, 48), "needs you")
@@ -549,7 +567,7 @@ func (r *Registry) dropClosedPanelsLocked(now time.Time) {
 				continue
 			}
 			switch s.Status {
-			case StatusDone, StatusStale, StatusUnknown:
+			case StatusDone, StatusStale, StatusUnknown, StatusLimited:
 				idle = append(idle, s)
 			}
 		}
@@ -712,6 +730,28 @@ func (r *Registry) Pin(index int, on bool) bool {
 	}
 	r.touch()
 	return true
+}
+
+// Dismiss takes a session off the board — and off its pin — until its next
+// hook event brings it back. For a chat that was closed while Claude Code
+// kept its process, or any finished session hogging a key. A session still
+// working or waiting on a person is refused: nothing should hide those.
+func (r *Registry) Dismiss(ref string, now time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return err
+	}
+	if s.Status == StatusWorking || s.Status == StatusNeedsInput {
+		return fmt.Errorf("%s is %s — not dismissing a live session", s.Label, s.Status)
+	}
+	if i := r.board.IndexOf(s.ID); i >= 0 {
+		r.board.Pin(i, false)
+	}
+	r.dropLocked(s, now)
+	r.touch()
+	return nil
 }
 
 // Page rotates the unpinned keys through the overflow.

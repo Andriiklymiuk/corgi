@@ -65,9 +65,9 @@ func TestApplyWalksTheStatusModel(t *testing.T) {
 		t.Fatal("Stop means done")
 	}
 	fail := ev("StopFailure", "s1", 6*time.Second)
-	fail.Error = "rate_limit"
+	fail.Error = "server_error"
 	r.Apply(fail)
-	if s, _ := r.Lookup("s1"); s.Status != StatusNeedsInput || s.Detail != "rate_limit" {
+	if s, _ := r.Lookup("s1"); s.Status != StatusNeedsInput || s.Detail != "server_error" {
 		t.Fatalf("an API failure needs a person, got %+v", s)
 	}
 	end := ev("SessionEnd", "s1", 7*time.Second)
@@ -807,5 +807,62 @@ func TestClosedPanelChatsLeaveTheBoard(t *testing.T) {
 	r.Apply(back)
 	if _, err := r.Lookup("old"); err != nil {
 		t.Fatal("a dropped session returns with its next event")
+	}
+}
+
+func TestUsageLimitIsNotAQuestion(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Apply(ev("UserPromptSubmit", "s1", 0))
+	limit := ev("StopFailure", "s1", time.Second)
+	limit.Error, limit.Message = "rate_limit", "You've hit your session limit · resets 12:10pm (Europe/Kiev)"
+	r.Apply(limit)
+	s, _ := r.Lookup("s1")
+	if s.Status != StatusLimited || s.Detail != "resets 12:10pm (Europe/Kiev)" {
+		t.Fatalf("limited with the reset time: %s %q", s.Status, s.Detail)
+	}
+	if st := r.Snapshot(t0); st.NeedsInput != 0 {
+		t.Fatal("a limit is not something to answer")
+	}
+	note := ev("Notification", "s1", 2*time.Second)
+	note.Notification, note.Message = "agent_needs_input", "Usage limit reached, resets at 3pm"
+	r.Apply(note)
+	if s, _ := r.Lookup("s1"); s.Status != StatusLimited || s.Detail != "resets 3pm" {
+		t.Fatalf("a limit notification too: %s %q", s.Status, s.Detail)
+	}
+	r.Apply(ev("UserPromptSubmit", "s1", 3*time.Second))
+	if s, _ := r.Lookup("s1"); s.Status != StatusWorking {
+		t.Fatal("the next prompt clears it")
+	}
+	fail := ev("StopFailure", "s1", 4*time.Second)
+	fail.Error = "server_error"
+	r.Apply(fail)
+	if s, _ := r.Lookup("s1"); s.Status != StatusNeedsInput {
+		t.Fatal("other failures still need you")
+	}
+}
+
+func TestDismissFreesAFinishedSessionUntilItSpeaks(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Apply(ev("Stop", "quiet", 0))
+	busy := ev("PreToolUse", "busy", time.Second)
+	busy.ClaudePID, busy.Ancestors = 101, []int{101, 90, 80}
+	r.Apply(busy)
+	r.Pin(0, true)
+	if err := r.Dismiss("busy", t0); err == nil {
+		t.Fatal("a working session is not dismissed")
+	}
+	if err := r.Dismiss("quiet", t0); err != nil {
+		t.Fatal(err)
+	}
+	st := r.Snapshot(t0)
+	if len(st.Sessions) != 1 || st.Slots[0].Pinned {
+		t.Fatalf("gone from the board and its pin released: %+v", st.Slots)
+	}
+	if err := r.Dismiss("quiet", t0); err == nil {
+		t.Fatal("already gone")
+	}
+	r.Apply(ev("UserPromptSubmit", "quiet", time.Minute))
+	if _, err := r.Lookup("quiet"); err != nil {
+		t.Fatal("back with its next event")
 	}
 }
