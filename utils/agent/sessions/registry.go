@@ -1209,7 +1209,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		}
 		st.Slots = append(st.Slots, sl)
 	}
-	for _, s := range r.sortedLocked() {
+	for _, s := range r.groupedLocked() {
 		c := *s
 		c.Display = r.displayLocked(s)
 		st.Sessions = append(st.Sessions, c)
@@ -1335,6 +1335,18 @@ func (r *Registry) sortedLocked() []*Session {
 			return out[i].StartedAt.Before(out[j].StartedAt)
 		}
 		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+// groupedLocked is the published order: sessions of one workspace together,
+// workspaces alphabetically, oldest session first within each. A list that
+// reads top to bottom by repository, and does not reshuffle when a status
+// changes.
+func (r *Registry) groupedLocked() []*Session {
+	out := r.sortedLocked()
+	sort.SliceStable(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Label) < strings.ToLower(out[j].Label)
 	})
 	return out
 }

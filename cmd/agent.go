@@ -580,9 +580,8 @@ func statusWithUsage(dir string, status *daemon.Status) statusJSON {
 		}
 	}
 	out.Accounts = accountLimits(out.Usage)
-	if data, err := os.ReadFile(filepath.Join(dir, "public.url")); err == nil {
-		out.DashboardURL = strings.TrimSpace(string(data))
-	}
+	// The launcher page, not the tunnel's root: "/" is a 404 there.
+	out.DashboardURL = launcherURL()
 	return out
 }
 
