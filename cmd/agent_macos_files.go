@@ -135,6 +135,8 @@ func checkMacOSFileAccess() (agentCheck, bool) {
 	}
 	if corgiIsAdhocSigned() {
 		c.Detail += " — and asks again after every corgi upgrade (corgi is not Developer-ID signed, so each build is a new identity to macOS)"
+	} else {
+		c.Detail += " — once: this corgi is Developer-ID signed, so the answer survives upgrades"
 	}
 	return c, true
 }
