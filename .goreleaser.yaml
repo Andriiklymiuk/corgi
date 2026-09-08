@@ -13,7 +13,8 @@ before:
     - sh -c "go run . completion zsh  > completions/corgi.zsh"
     - sh -c "go run . completion fish > completions/corgi.fish"
 builds:
-  - env:
+  - id: corgi
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -22,6 +23,26 @@ builds:
 archives:
   - files:
       - completions/*
+# Developer ID signing + notarization of the macOS binaries, from any runner
+# (no Xcode: GoReleaser signs with the p12 and talks to Apple's notary API).
+# Enabled only when the secrets are set, so a fork releases unsigned as
+# before. Signing matters beyond Gatekeeper: macOS ties file-access grants
+# (Documents, Desktop) to the signing identity, so a signed corgi stops
+# asking again after every upgrade. See docs/release-signing.md.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - corgi
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
 checksum:
   name_template: "checksums.txt"
 snapshot:
