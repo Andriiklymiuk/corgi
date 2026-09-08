@@ -540,7 +540,7 @@ func sameWindows(a, b map[string]Window) bool {
 		if !ok || !o.UpdatedAt.Equal(w.UpdatedAt) || o.ExtHostPID != w.ExtHostPID || len(o.Terminals) != len(w.Terminals) {
 			return false
 		}
-		if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID {
+		if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID || o.PanelActive != w.PanelActive {
 			return false
 		}
 	}
@@ -992,21 +992,22 @@ func (r *Registry) frontWindowLocked() (Window, bool) {
 
 // frontSessionLocked is the session the user sees in a window: the one
 // corgi just focused there, until the window reports something newer; else
-// the one in its active terminal tab, else its panel session, else the one
-// that moved last. Nil when no live session is bound to the window.
+// its panel session while the Claude Code panel is the active tab; else the
+// one in its active terminal tab, else its panel session, else the one that
+// moved last. Nil when no live session is bound to the window.
 func (r *Registry) frontSessionLocked(w Window) *Session {
 	if r.lastFocus.WindowID == w.ID && r.lastFocus.At.After(w.FocusedAt) {
 		if s := r.sessions[r.lastFocus.SessionID]; s != nil && s.Status != StatusGone {
 			return s
 		}
 	}
-	var panel, latest *Session
+	var tab, panel, latest *Session
 	for _, s := range r.sortedLocked() {
 		if s.Host.WindowID != w.ID || s.Status == StatusGone {
 			continue
 		}
 		if w.ActiveShellPID != 0 && s.Host.ShellPID == w.ActiveShellPID {
-			return s
+			tab = s
 		}
 		if s.Host.Kind == HostVSCodePanel && (panel == nil || s.LastActivity.After(panel.LastActivity)) {
 			panel = s
@@ -1015,7 +1016,12 @@ func (r *Registry) frontSessionLocked(w Window) *Session {
 			latest = s
 		}
 	}
-	if panel != nil {
+	switch {
+	case w.PanelActive && panel != nil:
+		return panel
+	case tab != nil:
+		return tab
+	case panel != nil:
 		return panel
 	}
 	return latest
