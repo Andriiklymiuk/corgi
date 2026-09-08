@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/proc"
+	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
 var t0 = time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
@@ -184,14 +185,26 @@ func TestSweepMarksStaleButNeverANeed(t *testing.T) {
 	need := ev("PermissionRequest", "need", 0)
 	need.Tool, need.ClaudePID = "Edit", 102
 	r.Apply(need)
-	if r.Sweep(t0.Add(StaleAfter - time.Minute)) {
-		t.Fatal("nothing is stale yet")
+	if r.Sweep(t0.Add(StuckAfter - time.Minute)) {
+		t.Fatal("nothing is stuck or stale yet")
+	}
+	if !r.Sweep(t0.Add(StaleAfter - time.Minute)) {
+		t.Fatal("a quiet working session is flagged stuck")
+	}
+	if s, _ := r.Lookup("busy"); !s.Stuck || s.Status != StatusWorking {
+		t.Fatalf("stuck keeps working, got %+v", s)
+	}
+	if s, _ := r.Lookup("done"); s.Stuck {
+		t.Fatal("a done session is never stuck")
 	}
 	if !r.Sweep(t0.Add(StaleAfter + time.Minute)) {
 		t.Fatal("sweep should mark")
 	}
 	if status(t, r, "done") != StatusStale || status(t, r, "busy") != StatusStale {
 		t.Fatal("done and working go stale")
+	}
+	if s, _ := r.Lookup("busy"); s.Stuck {
+		t.Fatal("stale clears stuck")
 	}
 	if status(t, r, "need") != StatusNeedsInput {
 		t.Fatal("a session waiting on a person never goes stale")
@@ -902,5 +915,80 @@ func TestTwinsWithTheSameTabNameFallBackToTheId(t *testing.T) {
 	}
 	if !names["acme-api·api"] || !names["acme-api·web"] {
 		t.Fatalf("tab names when they differ: %v", names)
+	}
+}
+
+func TestToolSubjectPendingAndContext(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Apply(ev("SessionStart", "s1", 0))
+	pre := ev("PreToolUse", "s1", time.Second)
+	pre.Tool, pre.Subject = "Edit", "registry.go"
+	r.Apply(pre)
+	if s, _ := r.Lookup("s1"); s.Detail != "Edit registry.go" || s.Pending != nil {
+		t.Fatalf("tool line carries the subject, got %+v", s)
+	}
+	perm := ev("PermissionRequest", "s1", 2*time.Second)
+	perm.Tool, perm.Subject = "Bash", "go test"
+	r.Apply(perm)
+	s, _ := r.Lookup("s1")
+	if s.Pending == nil || s.Pending.Tool != "Bash" || s.Pending.Subject != "go test" || s.Detail != "permission: Bash go test" {
+		t.Fatalf("permission sets pending, got %+v", s)
+	}
+	if st := r.Snapshot(t0.Add(3 * time.Second)); st.Slots[0].Pending != "Bash" {
+		t.Fatalf("slot names the pending tool, got %+v", st.Slots[0])
+	}
+	post := ev("PostToolUse", "s1", 3*time.Second)
+	post.Tool = "Bash"
+	post.Context = &usage.Context{Tokens: 90_000, Window: 200_000, Percent: 45}
+	r.Apply(post)
+	s, _ = r.Lookup("s1")
+	if s.Pending != nil || s.Detail != "" || s.Context == nil || s.Context.Percent != 45 {
+		t.Fatalf("tool done clears pending and keeps context, got %+v", s)
+	}
+	if st := r.Snapshot(t0.Add(4 * time.Second)); st.Slots[0].Context != 45 {
+		t.Fatalf("slot carries context percent, got %+v", st.Slots[0])
+	}
+}
+
+func TestNoteAndAccounts(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Apply(ev("Stop", "s1", 0))
+	if err := r.SetNote("s1", "  waiting on review  "); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.Snapshot(t0); st.Sessions[0].Note != "waiting on review" || st.Slots[0].Note != "waiting on review" {
+		t.Fatalf("note shows on session and slot: %+v", st.Slots[0])
+	}
+	accounts := []Account{{Profile: "default"}, {Profile: "work", ConfigDir: "/home/me/.claude-work"}}
+	if !r.SetAccounts(accounts) {
+		t.Fatal("first accounts are a change")
+	}
+	if r.SetAccounts([]Account{{Profile: "default"}, {Profile: "work", ConfigDir: "/home/me/.claude-work"}}) {
+		t.Fatal("same accounts are not a change")
+	}
+	st := r.Snapshot(t0)
+	if len(st.Accounts) != 2 || st.Accounts[0].Sessions != 1 || st.Accounts[1].Sessions != 0 {
+		t.Fatalf("accounts count their sessions: %+v", st.Accounts)
+	}
+	if err := r.Dismiss("s1", t0); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOnTransitionSeesEveryChange(t *testing.T) {
+	r := newTestRegistry(t)
+	var seen []string
+	r.OnTransition = func(s Session, from, to Status, _ time.Time) { seen = append(seen, string(from)+">"+string(to)) }
+	r.Apply(ev("SessionStart", "s1", 0))
+	r.Apply(ev("UserPromptSubmit", "s1", time.Second))
+	fail := ev("StopFailure", "s1", 2*time.Second)
+	fail.Error, fail.Message = "rate_limit", "You've hit your session limit · resets 6:10pm"
+	r.Apply(fail)
+	resume := ev("Notification", "s1", 3*time.Second)
+	resume.Notification = "quota_auto_resume_fired"
+	r.Apply(resume)
+	want := "unknown>done done>working working>limited limited>working"
+	if got := strings.Join(seen, " "); got != want {
+		t.Fatalf("got %q want %q", got, want)
 	}
 }

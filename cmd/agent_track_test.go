@@ -59,6 +59,55 @@ func TestEmitHookBuildsAnEventFromStdinAndTheProcessTree(t *testing.T) {
 	if strings.Contains(string(raw), "rm -rf") || strings.Contains(string(raw), "/secret") {
 		t.Fatalf("tool inputs and the transcript path must never leave the hook: %s", raw)
 	}
+	if ev.Subject != "rm" {
+		t.Fatalf("the program name is the one safe word, got %q", ev.Subject)
+	}
+}
+
+func TestSubjectOfKeepsOneSafeWord(t *testing.T) {
+	for _, tc := range []struct{ tool, input, want string }{
+		{"Edit", `{"file_path":"/home/me/dev/acme/utils/registry.go"}`, "registry.go"},
+		{"Write", `{"file_path":"/tmp/x/.env","content":"SECRET=1"}`, ".env"},
+		{"Bash", `{"command":"git push origin main --force"}`, "git push origin"},
+		{"Bash", `{"command":"go test ./..."}`, "go test"},
+		{"Bash", `{"command":"curl -H \"Authorization: Bearer abc\" https://x"}`, "curl"},
+		{"Bash", `{"command":"export TOKEN=abc && ./run"}`, "export"},
+		{"Bash", `{"command":"/usr/local/bin/corgi agent status"}`, "corgi agent status"},
+		{"Bash", `{"command":"  "}`, ""},
+		{"Grep", `{"pattern":"func .*Registry","path":"/x"}`, "func .*Registry"},
+		{"WebFetch", `{"url":"https://api.github.com/repos/x?token=abc"}`, "api.github.com"},
+		{"Task", `{"description":"Review the daemon","prompt":"very long secret prompt"}`, "Review the daemon"},
+		{"Unknown", `{"anything":"x"}`, ""},
+		{"Edit", ``, ""},
+	} {
+		if got := subjectOf(tc.tool, json.RawMessage(tc.input)); got != tc.want {
+			t.Errorf("%s %s: got %q want %q", tc.tool, tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestEmitHookReadsTheTranscriptForNumbersOnly(t *testing.T) {
+	fakeChain(t)
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	body := `{"type":"ai-title","aiTitle":"Fix the daemon"}
+{"type":"assistant","timestamp":"2026-09-08T10:01:00Z","message":{"model":"claude-opus-4-7","usage":{"input_tokens":20,"cache_read_input_tokens":99980}}}
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdin := strings.NewReader(`{"session_id":"s1","hook_event_name":"Stop","cwd":"/x","transcript_path":"` + path + `"}`)
+	ev, ok := runEmitHook(stdin, fakeEnv(nil), 50)
+	if !ok || ev.Context == nil || ev.Context.Percent != 50 || ev.Title != "Fix the daemon" {
+		t.Fatalf("stop reads context and title: %+v", ev)
+	}
+	raw, _ := json.Marshal(ev)
+	if strings.Contains(string(raw), path) {
+		t.Fatalf("the path stays in the hook: %s", raw)
+	}
+	stdin = strings.NewReader(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Read","transcript_path":"` + path + `"}`)
+	if ev, _ := runEmitHook(stdin, fakeEnv(nil), 50); ev.Context != nil || ev.Title != "" {
+		t.Fatal("a tool start does not touch the transcript")
+	}
 }
 
 func TestEmitHookIgnoresWhatIsNotASession(t *testing.T) {

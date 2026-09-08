@@ -15,6 +15,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/proc"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
 // Session tracking rides on the daemon that is already always up. The hooks
@@ -60,12 +61,26 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 	case command.ActionResize:
 		d.Sessions.Resize(c.Size)
 	case command.ActionNew:
-		d.newSession(ctx, c.WindowID)
+		d.newSession(ctx, c.WindowID, c.Command)
 	case command.ActionDismiss:
 		if err := d.Sessions.Dismiss(c.SessionID, time.Now()); err != nil {
 			utils.Infof("agent: dismiss %s: %v\n", c.SessionID, err)
 			d.Sessions.SetNotice(err)
 		}
+	case command.ActionNote:
+		if err := d.Sessions.SetNote(c.SessionID, c.Note); err != nil {
+			d.Sessions.SetNotice(err)
+		}
+	case command.ActionSend:
+		d.sendToSession(ctx, c.SessionID, c.Text, c.Enter)
+	case command.ActionAnswer:
+		keys, err := d.Sessions.PendingAnswer(c.SessionID, c.Answer)
+		if err != nil {
+			utils.Infof("agent: answer %s: %v\n", c.SessionID, err)
+			d.Sessions.SetNotice(err)
+			return true
+		}
+		d.sendToSession(ctx, c.SessionID, keys, false)
 	default:
 		return false
 	}
@@ -89,10 +104,190 @@ func (d *Daemon) startSessionTracking() {
 	if d.Sessions == nil {
 		return
 	}
+	d.Sessions.OnTransition = d.onSessionTransition
 	d.Sessions.Load()
 	d.rescan()
 	d.syncWindows()
+	d.sampleAccounts(time.Now())
 	d.flushSessions()
+}
+
+// onSessionTransition runs under the registry lock, so it only records and
+// hands off: a limit lifting is worth one notification, and every wait that
+// ends is a number for `corgi agent usage`.
+func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Status, now time.Time) {
+	label := s.Display
+	if label == "" {
+		label = s.Label
+	}
+	switch from {
+	case sessions.StatusNeedsInput, sessions.StatusLimited:
+		kind := "wait"
+		if from == sessions.StatusLimited {
+			kind = "limited"
+		}
+		if secs := int(now.Sub(s.StatusSince).Seconds()); secs > 0 {
+			_ = usage.RecordWait(d.Dir, usage.Wait{At: now.UTC(), Kind: kind, Label: label, Profile: s.Profile, Seconds: secs})
+		}
+	}
+	if from == sessions.StatusLimited && to == sessions.StatusWorking {
+		go d.notifyAttention("corgi agent · "+label, "limit lifted — back to work", s.Folder)
+	}
+}
+
+// sampleAccounts reads every account's cached /usage numbers, keeps the
+// fresh ones for the slope, and puts the picture on the board.
+func (d *Daemon) sampleAccounts(now time.Time) {
+	if d.Sessions == nil {
+		return
+	}
+	seen := map[string]bool{}
+	var dirs []string
+	add := func(dir string) {
+		if !seen[dir] {
+			seen[dir] = true
+			dirs = append(dirs, dir)
+		}
+	}
+	add("")
+	if d.AccountDirs != nil {
+		for _, dir := range d.AccountDirs() {
+			add(dir)
+		}
+	}
+	for _, s := range d.Sessions.Sessions() {
+		add(s.ConfigDir)
+	}
+	var accounts []sessions.Account
+	for _, dir := range dirs {
+		a := sessions.Account{ConfigDir: dir, Profile: sessions.DefaultProfile(dir)}
+		if d.Sessions.ProfileFor != nil {
+			if p := d.Sessions.ProfileFor(dir); p != "" {
+				a.Profile = p
+			}
+		}
+		if l, ok := usage.ReadLimits(dir); ok {
+			a.Limits = &l
+			if _, err := usage.RecordSample(d.Dir, a.Profile, l, now); err != nil {
+				utils.Infof("agent: usage sample %s: %v\n", a.Profile, err)
+			}
+			a.Forecast = usage.ForecastFrom(usage.LoadSamples(usage.SamplesPath(d.Dir, a.Profile), now.Add(-24*time.Hour)), l, now)
+		}
+		accounts = append(accounts, a)
+	}
+	d.Sessions.SetAccounts(accounts)
+}
+
+// sendToSession types text into a session after bringing it forward. An
+// integrated terminal takes it through the window's extension; iTerm2 and
+// Terminal.app through AppleScript; the Claude Code panel takes nothing
+// from here — its input is a web view — so the outcome says so and a key
+// falls back to its own keystrokes.
+func (d *Daemon) sendToSession(ctx context.Context, ref, text string, enter bool) {
+	target, err := d.Sessions.Focus(ref)
+	if err != nil {
+		utils.Infof("agent: send to %q: %v\n", ref, err)
+		d.Sessions.SetNotice(err)
+		return
+	}
+	d.swaps.Add(1)
+	go func() {
+		defer d.swaps.Done()
+		ctx, cancel := context.WithTimeout(ctx, focusBudget)
+		defer cancel()
+		raise := d.Raise
+		if raise == nil {
+			raise = raiseWindow
+		}
+		err := raise(ctx, target)
+		if err == nil {
+			err = d.deliverText(ctx, target, text, enter)
+		}
+		if err != nil {
+			utils.Infof("agent: send to %s: %v\n", target.SessionID, err)
+		}
+		d.Sessions.RecordFocus(target.SessionID, err)
+		d.flushSessions()
+	}()
+}
+
+func (d *Daemon) deliverText(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error {
+	switch t.Kind {
+	case sessions.HostVSCodeTerminal:
+		if t.WindowID == "" || !t.Connected {
+			return fmt.Errorf("%s: no connected window to type into", t.Label)
+		}
+		return sessions.WriteReveal(d.Dir, sessions.Reveal{WindowID: t.WindowID, SessionID: t.SessionID, ShellPID: t.ShellPID, Text: text, Enter: enter})
+	case sessions.HostVSCodePanel:
+		return fmt.Errorf("%s runs in the Claude Code panel, which takes text only from the keyboard", t.Label)
+	case sessions.HostITerm, sessions.HostTerminalApp:
+		if d.TypeText != nil {
+			return d.TypeText(ctx, t, text, enter)
+		}
+		return typeIntoTerminal(ctx, t, text, enter)
+	}
+	return fmt.Errorf("%s: nowhere to type", t.Label)
+}
+
+// typeIntoTerminal writes text into the emulator tab a session runs in.
+// iTerm2 has `write text`; Terminal.app has `do script`, which runs the
+// text as a shell command, so its tab gets keystrokes through System Events
+// instead (Accessibility permission for corgi).
+func typeIntoTerminal(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error {
+	tty := proc.TTYName(t.TTY)
+	if tty == "" {
+		return fmt.Errorf("%s: no terminal tab to type into", t.Label)
+	}
+	if t.Kind == sessions.HostITerm {
+		return run(ctx, "osascript", "-e", itermWriteScript(tty, text, enter))
+	}
+	script := `tell application "System Events" to keystroke ` + appleScriptString(text)
+	if enter {
+		script += "\ntell application \"System Events\" to key code 36"
+	}
+	return run(ctx, "osascript", "-e", script)
+}
+
+func itermWriteScript(tty, text string, enter bool) string {
+	newline := "no"
+	if enter {
+		newline = "yes"
+	}
+	return `tell application "iTerm2"
+	repeat with w in windows
+		repeat with t in tabs of w
+			repeat with s in sessions of t
+				if tty of s is "` + tty + `" then
+					tell s to write text ` + appleScriptString(text) + ` newline ` + newline + `
+					return
+				end if
+			end repeat
+		end repeat
+	end repeat
+end tell`
+}
+
+// appleScriptString quotes text for AppleScript: backslashes and quotes
+// escaped, control characters spelled out.
+func appleScriptString(text string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range text {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		case '\r', '\n':
+			b.WriteString(`" & return & "`)
+		case 0x1b:
+			b.WriteString(`" & (ASCII character 27) & "`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 // reapSessions runs the periodic checks until ctx ends.
@@ -116,6 +311,7 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 		d.Sessions.Reap(d.alive, now)
 		if tick%sweepEvery == 0 {
 			d.Sessions.Sweep(now)
+			d.sampleAccounts(now)
 		}
 		d.flushSessions()
 	}
@@ -172,7 +368,10 @@ func (d *Daemon) focusSession(ctx context.Context, ref string) {
 // newSession asks an editor window for a fresh terminal running claude:
 // raise the window, then leave the request its extension acts on. The "+"
 // key. A failure is a board notice, since no session exists yet to carry it.
-func (d *Daemon) newSession(ctx context.Context, windowID string) {
+func (d *Daemon) newSession(ctx context.Context, windowID, cmdline string) {
+	if strings.TrimSpace(cmdline) == "" {
+		cmdline = newSessionCommand()
+	}
 	target, err := d.Sessions.NewSessionTarget(windowID)
 	if err != nil {
 		utils.Infof("agent: new session: %v\n", err)
@@ -190,7 +389,7 @@ func (d *Daemon) newSession(ctx context.Context, windowID string) {
 		}
 		err := raise(ctx, target)
 		if err == nil {
-			err = sessions.WriteReveal(d.Dir, sessions.Reveal{WindowID: target.WindowID, New: true, Folder: target.Folder, Command: newSessionCommand()})
+			err = sessions.WriteReveal(d.Dir, sessions.Reveal{WindowID: target.WindowID, New: true, Folder: target.Folder, Command: cmdline})
 		}
 		if err != nil {
 			utils.Infof("agent: new session in %s: %v\n", target.WindowID, err)
@@ -213,7 +412,7 @@ func (d *Daemon) dispatchFocus(ctx context.Context, t sessions.FocusTarget) {
 	err := raise(ctx, t)
 	if err == nil && t.WindowID != "" && t.Connected {
 		err = sessions.WriteReveal(d.Dir, sessions.Reveal{
-			WindowID: t.WindowID, SessionID: t.SessionID, ShellPID: t.ShellPID, Panel: t.Panel,
+			WindowID: t.WindowID, SessionID: t.SessionID, ShellPID: t.ShellPID, Panel: t.Panel, Title: t.Title,
 		})
 	}
 	if err != nil {

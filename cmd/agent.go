@@ -137,6 +137,19 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	// by corgi profile, and size the board as the user config says.
 	d.Sessions.Resolve = workspaceResolver(dir)
 	d.Sessions.ProfileFor = profileResolver(dir)
+	d.AccountDirs = func() []string {
+		profiles, err := loadProfiles(dir)
+		if err != nil {
+			return nil
+		}
+		var dirs []string
+		for _, name := range sortedProfileNames(profiles) {
+			if cfg := strings.TrimSpace(profiles[name].ConfigDir); cfg != "" {
+				dirs = append(dirs, expandTilde(cfg))
+			}
+		}
+		return dirs
+	}
 	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.TrackSlots > 0 {
 		d.Sessions.Resize(user.TrackSlots)
 	}
@@ -536,9 +549,10 @@ type statusJSON struct {
 // as Claude Code last cached it. Absent windows mean no session under that
 // account has fetched usage yet.
 type accountJSON struct {
-	Profile   string        `json:"profile"`
-	ConfigDir string        `json:"configDir,omitempty"`
-	Limits    *usage.Limits `json:"limits,omitempty"`
+	Profile   string          `json:"profile"`
+	ConfigDir string          `json:"configDir,omitempty"`
+	Limits    *usage.Limits   `json:"limits,omitempty"`
+	Forecast  *usage.Forecast `json:"forecast,omitempty"`
 }
 
 type workspaceUsageJSON struct {
@@ -583,11 +597,16 @@ func accountLimits(usages []workspaceUsageJSON) []accountJSON {
 			dirs = append(dirs, u.ConfigDir)
 		}
 	}
+	agentD, _ := agentDir()
 	var out []accountJSON
 	for _, d := range dirs {
 		a := accountJSON{Profile: sessions.DefaultProfile(d), ConfigDir: d}
 		if l, ok := usage.ReadLimits(d); ok {
 			a.Limits = &l
+			if agentD != "" {
+				now := time.Now()
+				a.Forecast = usage.ForecastFrom(usage.LoadSamples(usage.SamplesPath(agentD, a.Profile), now.Add(-24*time.Hour)), l, now)
+			}
 		}
 		out = append(out, a)
 	}
@@ -605,9 +624,9 @@ func printAccountLimits(accounts []accountJSON) {
 			fmt.Printf("  %-20s no usage snapshot yet — run /usage once in a session under it\n", name)
 			continue
 		}
-		fmt.Printf("  %-20s 5h %d%% · resets %s · week %d%% · as of %s ago\n", name,
+		fmt.Printf("  %-20s 5h %d%% · resets %s · week %d%% · as of %s ago%s\n", name,
 			a.Limits.FiveHour.Percent, a.Limits.FiveHour.ResetsAt.Local().Format("3:04pm"),
-			a.Limits.SevenDay.Percent, agoText(time.Since(a.Limits.FetchedAt)))
+			a.Limits.SevenDay.Percent, agoText(time.Since(a.Limits.FetchedAt)), forecastSuffix(a.Forecast))
 	}
 }
 

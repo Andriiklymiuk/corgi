@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
 // Status is what a session is doing, in the five words a key can show.
@@ -103,6 +105,17 @@ type Event struct {
 	Message string `json:"message,omitempty"`
 	// Error is StopFailure's error type.
 	Error string `json:"error,omitempty"`
+	// Subject is the one safe word about a tool's input: a file's base name,
+	// a command's program, a pattern. The hook reduces the input to this
+	// before anything is written; the input itself is never spooled.
+	Subject string `json:"subject,omitempty"`
+	// Context is the session's context-window fill as the hook read it from
+	// the transcript's newest assistant turn. The path stays with the hook;
+	// only the numbers travel.
+	Context *usage.Context `json:"context,omitempty"`
+	// Title is the chat's name as its panel tab shows it, read from the
+	// transcript on Stop and SessionStart.
+	Title string `json:"title,omitempty"`
 	// Window is CORGI_VSCODE_WINDOW, injected by the corgi VS Code extension
 	// into every integrated terminal of its window.
 	Window string `json:"window,omitempty"`
@@ -183,6 +196,45 @@ type Session struct {
 	// flashed.
 	FocusError string    `json:"focusError,omitempty"`
 	FocusAt    time.Time `json:"focusAt,omitempty"`
+	// Context is how full the context window is, from the last hook that
+	// could read it. Absent until a turn has completed.
+	Context *usage.Context `json:"context,omitempty"`
+	// Pending is the permission the session is waiting on, when that is what
+	// needs_input means: what `corgi agent answer` would answer.
+	Pending *Pending `json:"pending,omitempty"`
+	// Title is what the Claude Code panel tab is called, when known: how a
+	// window tells one chat tab from another.
+	Title string `json:"title,omitempty"`
+	// Note is the owner's own line under the label (`corgi agent note`).
+	// Kept until dismissed or cleared.
+	Note string `json:"note,omitempty"`
+	// Stuck is a working session that has produced no event for StuckAfter:
+	// probably spinning, or waiting on a call that will not return.
+	Stuck bool `json:"stuck,omitempty"`
+}
+
+// Pending is one permission prompt: the tool and the safe word about its
+// input, and when it was raised.
+type Pending struct {
+	Tool    string    `json:"tool"`
+	Subject string    `json:"subject,omitempty"`
+	At      time.Time `json:"at"`
+}
+
+// StuckAfter is how long a working session may sit without a hook event
+// before it is flagged. Well under StaleAfter: stuck is a warning on a
+// live key, stale is a key going grey.
+const StuckAfter = 12 * time.Minute
+
+// Account is one Claude account the board's sessions run under, with the
+// limits Claude Code last fetched for it and where they are heading.
+type Account struct {
+	Profile   string          `json:"profile"`
+	ConfigDir string          `json:"configDir,omitempty"`
+	Limits    *usage.Limits   `json:"limits,omitempty"`
+	Forecast  *usage.Forecast `json:"forecast,omitempty"`
+	// Sessions is how many live sessions run under it.
+	Sessions int `json:"sessions"`
 }
 
 // Terminal is one integrated-terminal tab of an editor window.

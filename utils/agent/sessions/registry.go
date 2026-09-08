@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/proc"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
@@ -46,6 +48,10 @@ type Registry struct {
 	}
 	notice   string
 	noticeAt time.Time
+	accounts []Account
+	// OnTransition, when set, is told about every status change after it
+	// happened. The daemon turns some into notifications and metrics.
+	OnTransition func(s Session, from, to Status, now time.Time)
 }
 
 // State is the published board: what sessions.json holds and what
@@ -76,6 +82,8 @@ type State struct {
 	NoticeAt time.Time `json:"noticeAt,omitempty"`
 	Sessions []Session `json:"sessions"`
 	Windows  []Window  `json:"windows,omitempty"`
+	// Accounts is every account the sessions run under, with its limits.
+	Accounts []Account `json:"accounts,omitempty"`
 }
 
 // Slot is one key, ready to draw.
@@ -97,6 +105,12 @@ type Slot struct {
 	// FocusAt says when.
 	FocusError string    `json:"focusError,omitempty"`
 	FocusAt    time.Time `json:"focusAt,omitempty"`
+	// Context is the context-window fill in percent, 0 when unknown.
+	Context int `json:"context,omitempty"`
+	// Pending names the tool of a permission prompt the key could answer.
+	Pending string `json:"pending,omitempty"`
+	Note    string `json:"note,omitempty"`
+	Stuck   bool   `json:"stuck,omitempty"`
 }
 
 // New returns a registry persisted at path, with a board of size keys.
@@ -247,29 +261,30 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	case "SessionStart":
 		r.applyStart(s, ev, now)
 	case "UserPromptSubmit":
-		s.Tool, s.Detail = "", ""
+		s.Tool, s.Detail, s.Pending = "", "", nil
 		r.setStatus(s, StatusWorking, now)
 	case "PreToolUse":
 		r.applyToolStart(s, ev, now)
 	case "PostToolUse", "PostToolUseFailure":
 		// A tool that finished means whatever prompt preceded it was
 		// answered.
-		s.Tool = ""
-		if s.Detail == ev.Tool || s.Status == StatusNeedsInput {
+		s.Tool, s.Pending = "", nil
+		if strings.HasPrefix(s.Detail, ev.Tool) || s.Status == StatusNeedsInput {
 			s.Detail = ""
 		}
 		r.setStatus(s, StatusWorking, now)
 	case "PermissionRequest":
 		s.Tool = ev.Tool
-		s.Detail = "permission: " + ev.Tool
+		s.Detail = "permission: " + toolLine(ev.Tool, ev.Subject)
+		s.Pending = &Pending{Tool: ev.Tool, Subject: ev.Subject, At: now}
 		r.setStatus(s, StatusNeedsInput, now)
 	case "Notification":
 		r.applyNotification(s, ev, now)
 	case "Stop":
-		s.Tool, s.Detail = "", ""
+		s.Tool, s.Detail, s.Pending = "", "", nil
 		r.setStatus(s, StatusDone, now)
 	case "StopFailure":
-		s.Tool = ""
+		s.Tool, s.Pending = "", nil
 		if limited, reset := LimitReset(ev.Error, ev.Message); limited {
 			r.applyLimit(s, reset, now)
 			return
@@ -294,13 +309,23 @@ func (r *Registry) applyStart(s *Session, ev Event, now time.Time) {
 		// Pinned and dead, now back: the same key lights up again.
 		r.board.Pin(r.board.IndexOf(s.ID), true)
 	}
-	s.Tool, s.Detail = "", ""
+	s.Tool, s.Detail, s.Pending = "", "", nil
 	r.setStatus(s, StatusDone, now)
+}
+
+// toolLine is the detail a key shows for a tool: "Edit registry.go", "Bash
+// go test", or just the tool when the hook had nothing safe to add.
+func toolLine(tool, subject string) string {
+	if subject == "" {
+		return tool
+	}
+	return tool + " " + subject
 }
 
 func (r *Registry) applyToolStart(s *Session, ev Event, now time.Time) {
 	s.Tool = ev.Tool
-	s.Detail = ev.Tool
+	s.Detail = toolLine(ev.Tool, ev.Subject)
+	s.Pending = nil
 	if ev.Tool == "AskUserQuestion" {
 		// The question is on screen the moment the tool starts; the idle
 		// nudge would only confirm it a minute later.
@@ -340,6 +365,9 @@ func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
 	switch ev.Notification {
 	case "permission_prompt", "agent_needs_input", "elicitation_dialog", "elicitation_url_dialog":
 		s.Detail = firstNonEmpty(shorten(ev.Message, 48), "needs you")
+		if ev.Notification == "permission_prompt" && s.Pending == nil && s.Tool != "" {
+			s.Pending = &Pending{Tool: s.Tool, At: now}
+		}
 		r.setStatus(s, StatusNeedsInput, now)
 	case "idle_prompt":
 		// "Waiting for your input" fires a minute into ANY wait — after a
@@ -352,7 +380,7 @@ func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
 		}
 	case "quota_auto_resume_fired":
 		// The limit lifted and Claude picked the turn back up.
-		s.Tool, s.Detail = "", ""
+		s.Tool, s.Detail, s.Pending = "", "", nil
 		r.setStatus(s, StatusWorking, now)
 	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response", "quota_auto_resume_stale", "quota_auto_resume_disabled":
 		// Nothing a key needs to say.
@@ -433,6 +461,15 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.TermSession != "" {
 		s.TermSession = ev.TermSession
 	}
+	if ev.Context != nil {
+		c := *ev.Context
+		s.Context = &c
+	}
+	if ev.Title != "" {
+		s.Title = ev.Title
+	}
+	// Any event at all means the process is alive and talking.
+	s.Stuck = false
 	r.bind(s)
 }
 
@@ -461,8 +498,12 @@ func (r *Registry) setStatus(s *Session, st Status, now time.Time) {
 	if s.Status == st {
 		return
 	}
+	from := s.Status
 	s.Status = st
 	s.StatusSince = now
+	if r.OnTransition != nil {
+		r.OnTransition(*s, from, st, now)
+	}
 }
 
 // dropLocked ends a session: off the board, or gone-but-pinned.
@@ -518,9 +559,15 @@ func (r *Registry) Sweep(now time.Time) bool {
 		if s.Status != StatusWorking && s.Status != StatusDone && s.Status != StatusUnknown {
 			continue
 		}
-		if now.Sub(s.LastActivity) < StaleAfter {
+		quiet := now.Sub(s.LastActivity)
+		if s.Status == StatusWorking && !s.Stuck && quiet >= StuckAfter && quiet < StaleAfter {
+			s.Stuck = true
+			changed = true
+		}
+		if quiet < StaleAfter {
 			continue
 		}
+		s.Stuck = false
 		r.setStatus(s, StatusStale, now)
 		changed = true
 	}
@@ -758,9 +805,96 @@ func (r *Registry) Dismiss(ref string, now time.Time) error {
 	if i := r.board.IndexOf(s.ID); i >= 0 {
 		r.board.Pin(i, false)
 	}
+	s.Note = ""
 	r.dropLocked(s, now)
 	r.touch()
 	return nil
+}
+
+// SetNote puts the owner's line on a session, or clears it with "".
+func (r *Registry) SetNote(ref, note string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return err
+	}
+	note = strings.TrimSpace(note)
+	if len(note) > 80 {
+		note = note[:80]
+	}
+	if s.Note == note {
+		return nil
+	}
+	s.Note = note
+	r.touch()
+	return nil
+}
+
+// SetAccounts replaces the accounts block. Sessions per account are counted
+// here so callers pass only what they read.
+func (r *Registry) SetAccounts(accounts []Account) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range accounts {
+		accounts[i].Sessions = 0
+		for _, s := range r.sessions {
+			if s.ConfigDir == accounts[i].ConfigDir && s.Status != StatusGone {
+				accounts[i].Sessions++
+			}
+		}
+	}
+	if sameAccounts(r.accounts, accounts) {
+		return false
+	}
+	r.accounts = accounts
+	r.touch()
+	return true
+}
+
+func sameAccounts(a, b []Account) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		x, y := a[i], b[i]
+		if x.Profile != y.Profile || x.ConfigDir != y.ConfigDir || x.Sessions != y.Sessions {
+			return false
+		}
+		if (x.Limits == nil) != (y.Limits == nil) || (x.Limits != nil && *x.Limits != *y.Limits) {
+			return false
+		}
+		if (x.Forecast == nil) != (y.Forecast == nil) {
+			return false
+		}
+		if x.Forecast != nil && !sameWindowForecast(x.Forecast.FiveHour, y.Forecast.FiveHour) {
+			return false
+		}
+		if x.Forecast != nil && !sameWindowForecast(x.Forecast.SevenDay, y.Forecast.SevenDay) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameWindowForecast(a, b *usage.WindowForecast) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	return a == nil || (a.PercentPerHour == b.PercentPerHour && a.Safe == b.Safe && a.ExhaustAt.Equal(b.ExhaustAt))
+}
+
+// Sessions is a copy of every tracked session, board order.
+func (r *Registry) Sessions() []Session {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []Session
+	for _, s := range r.sortedLocked() {
+		c := *s
+		c.Display = r.displayLocked(s)
+		out = append(out, c)
+	}
+	return out
 }
 
 // Page rotates the unpinned keys through the overflow.
@@ -841,6 +975,10 @@ type FocusTarget struct {
 	New bool
 	// Connected says a reveal request will be read by a live extension.
 	Connected bool
+	// Title is the chat tab's name, for a window with several panels open.
+	Title string
+	// Label is the session's display name, for messages.
+	Label string
 }
 
 // ErrNoSession is returned for an id or label nothing matches.
@@ -861,8 +999,41 @@ func (r *Registry) Focus(ref string) (FocusTarget, error) {
 	return FocusTarget{
 		SessionID: s.ID, Kind: h.Kind, App: h.App, Folder: h.Folder, WindowID: h.WindowID,
 		ShellPID: h.ShellPID, Panel: h.Kind == HostVSCodePanel, Connected: h.Connected, TTY: s.TTY,
+		Title: s.Title, Label: r.displayLocked(s),
 	}, nil
 }
+
+// PendingAnswer resolves a permission answer into the keys that give it,
+// refusing what should not be answered blind. answer is allow, always or
+// deny.
+func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return "", err
+	}
+	if s.Status != StatusNeedsInput || s.Pending == nil {
+		return "", fmt.Errorf("%s has no permission prompt to answer", r.displayLocked(s))
+	}
+	switch answer {
+	case "deny":
+		return "\x1b", nil
+	case "allow", "always":
+		if s.Pending.Tool == "Bash" && riskyCommand.MatchString(s.Pending.Subject) {
+			return "", fmt.Errorf("%s asks to run %q — look at it before allowing", r.displayLocked(s), s.Pending.Subject)
+		}
+		if answer == "always" {
+			return "2\r", nil
+		}
+		return "\r", nil
+	}
+	return "", fmt.Errorf("answer is allow, always or deny, not %q", answer)
+}
+
+// riskyCommand is what an Allow button must not approve unseen. The subject
+// is the program and two words, so this is coarse on purpose.
+var riskyCommand = regexp.MustCompile(`(?i)(^|\s)(rm|sudo|mkfs|dd|shutdown|reboot|kill|pkill|killall|chmod|chown|launchctl|diskutil)(\s|$)|--force|--hard|--no-verify|\bdrop\b|\btruncate\b|\bpurge\b`)
 
 // RecordFocus stores the outcome of a focus attempt on the session, so the
 // key can flash a failure on the next push.
@@ -1026,6 +1197,13 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		}
 		sl.SessionID, sl.Label, sl.Profile, sl.Status = s.ID, r.displayLocked(s), s.Profile, s.Status
 		sl.Detail, sl.Host, sl.FocusError, sl.FocusAt = s.Detail, s.Host.Kind, s.FocusError, s.FocusAt
+		sl.Note, sl.Stuck = s.Note, s.Stuck
+		if s.Context != nil {
+			sl.Context = s.Context.Percent
+		}
+		if s.Pending != nil {
+			sl.Pending = s.Pending.Tool
+		}
 		if !s.StatusSince.IsZero() && now.After(s.StatusSince) {
 			sl.ElapsedS = int(now.Sub(s.StatusSince).Seconds())
 		}
@@ -1043,6 +1221,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		}
 	}
 	st.Windows = r.sortedWindowsLocked()
+	st.Accounts = append([]Account(nil), r.accounts...)
 	if w, ok := r.frontWindowLocked(); ok {
 		st.FrontWindow = w.ID
 		if s := r.frontSessionLocked(w); s != nil {

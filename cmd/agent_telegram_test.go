@@ -41,3 +41,16 @@ func TestTelegramHelpNamesEveryCommand(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionFromNotificationReadsTheTitleLine(t *testing.T) {
+	for text, want := range map[string]string{
+		"corgi agent · acme-api\npermission: Bash go test": "acme-api",
+		"corgi agent · corgi-77: a session finished":       "corgi-77",
+		"something else entirely":                          "",
+		"":                                                 "",
+	} {
+		if got := sessionFromNotification(text); got != want {
+			t.Errorf("%q: got %q want %q", text, got, want)
+		}
+	}
+}

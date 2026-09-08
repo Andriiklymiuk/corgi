@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -281,6 +282,71 @@ func TestDaemonNewSessionRaisesTheWindowAndAsksForATerminal(t *testing.T) {
 		t.Fatalf("raised = %+v", raised)
 	}
 	mu.Unlock()
+	cancel()
+	<-done
+}
+
+func TestSendAnswerAndNoteReachTheSession(t *testing.T) {
+	d := trackingDaemon(t)
+	var mu sync.Mutex
+	var typed []string
+	d.Raise = func(context.Context, sessions.FocusTarget) error { return nil }
+	d.TypeText = func(_ context.Context, target sessions.FocusTarget, text string, enter bool) error {
+		mu.Lock()
+		defer mu.Unlock()
+		typed = append(typed, target.SessionID+":"+text+":"+strconv.FormatBool(enter))
+		return nil
+	}
+	wdir := sessions.WindowsDir(d.Dir)
+	_ = os.MkdirAll(wdir, 0o700)
+	win, _ := json.Marshal(sessions.Window{ID: "w1", App: "Cursor", ExtHostPID: 77, Folders: []string{"/tmp/acme-api"},
+		Terminals: []sessions.Terminal{{Name: "zsh", ShellPID: 55}}, UpdatedAt: time.Now()})
+	_ = os.WriteFile(filepath.Join(wdir, "w1.json"), win, 0o600)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	inWindow := sessions.Event{Name: "Stop", SessionID: "s1", Cwd: "/tmp/acme-api", ClaudePID: 100, Ancestors: []int{100, 55, 77}, Window: "w1", At: time.Now()}
+	inITerm := sessions.Event{Name: "PermissionRequest", Tool: "Bash", Subject: "go test", SessionID: "s2", Cwd: "/tmp/other", ClaudePID: 200, TermProgram: "iTerm.app", TTY: 5, At: time.Now()}
+	risky := sessions.Event{Name: "PermissionRequest", Tool: "Bash", Subject: "rm", SessionID: "s3", Cwd: "/tmp/third", ClaudePID: 300, TermProgram: "iTerm.app", TTY: 6, At: time.Now()}
+	for _, ev := range []sessions.Event{inWindow, inITerm, risky} {
+		ev := ev
+		_, _ = command.Write(d.Dir, command.Command{Action: command.ActionSession, Event: &ev})
+	}
+	d.Nudge()
+	waitFor(t, func() bool { return len(readBoard(t, d).Sessions) == 3 })
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionSend, SessionID: "s1", Text: "/compact", Enter: true})
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionAnswer, SessionID: "s2", Answer: "allow"})
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionAnswer, SessionID: "s3", Answer: "allow"})
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionNote, SessionID: "s1", Note: "waiting on review"})
+	d.Nudge()
+
+	revealPath := filepath.Join(sessions.RevealDir(d.Dir), "w1.json")
+	waitFor(t, func() bool { _, err := os.Stat(revealPath); return err == nil })
+	data, _ := os.ReadFile(revealPath)
+	var req sessions.Reveal
+	if json.Unmarshal(data, &req) != nil || req.ShellPID != 55 || req.Text != "/compact" || !req.Enter {
+		t.Fatalf("reveal = %+v", req)
+	}
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(typed) == 1
+	})
+	mu.Lock()
+	if typed[0] != "s2:\r:false" {
+		t.Fatalf("typed = %v", typed)
+	}
+	mu.Unlock()
+	waitFor(t, func() bool {
+		b := readBoard(t, d)
+		return strings.Contains(b.Notice, "look at it") && b.Sessions[0].Note == "waiting on review"
+	})
+	if b := readBoard(t, d); b.Slots[0].Note != "waiting on review" {
+		t.Fatalf("slot carries the note: %+v", b.Slots[0])
+	}
 	cancel()
 	<-done
 }

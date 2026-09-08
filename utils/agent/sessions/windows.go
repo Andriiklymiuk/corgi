@@ -65,13 +65,21 @@ type Reveal struct {
 	SessionID string `json:"sessionId,omitempty"`
 	ShellPID  int    `json:"shellPid,omitempty"`
 	Panel     bool   `json:"panel,omitempty"`
+	// Title is the chat tab to pick when the window has several Claude
+	// Code panels open; empty means whichever the editor considers current.
+	Title string `json:"title,omitempty"`
 	// New asks the window to open a fresh integrated terminal in Folder
 	// and run claude in it — the "+" key.
 	New    bool   `json:"new,omitempty"`
 	Folder string `json:"folder,omitempty"`
 	// Command is what the new terminal runs — `corgi agent claude`, which
 	// applies the folder's workspace account — else the extension's default.
-	Command     string    `json:"command,omitempty"`
+	Command string `json:"command,omitempty"`
+	// Text asks the window to type into the session's terminal after
+	// revealing it; Enter adds a carriage return. What `corgi agent send`
+	// delivers when the session runs in an integrated terminal.
+	Text        string    `json:"text,omitempty"`
+	Enter       bool      `json:"enter,omitempty"`
 	RequestedAt time.Time `json:"requestedAt"`
 }
 
