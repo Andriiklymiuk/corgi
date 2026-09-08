@@ -32,11 +32,29 @@ const contextTail = 256 << 10
 const DefaultWindow = 200_000
 
 // WindowFor is the context window for a model name as the transcript spells
-// it. A name nobody recognises gets the default: a wrong percentage is worse
-// than a slightly conservative one.
+// it: a million for the long-context variants ("[1m]") and for the Claude 5
+// family (Fable and Mythos run sessions well past 200k), else the default.
+// A name nobody recognises gets the default: a wrong percentage is worse
+// than a slightly conservative one. CORGI_CONTEXT_WINDOW overrides all.
 func WindowFor(model string) int64 {
+	if v := strings.TrimSpace(os.Getenv("CORGI_CONTEXT_WINDOW")); v != "" {
+		var n int64
+		for _, c := range v {
+			if c < '0' || c > '9' {
+				n = 0
+				break
+			}
+			n = n*10 + int64(c-'0')
+		}
+		if n > 0 {
+			return n
+		}
+	}
 	m := strings.ToLower(model)
-	if strings.Contains(m, "[1m]") || strings.Contains(m, "-1m") {
+	switch {
+	case strings.Contains(m, "[1m]"), strings.Contains(m, "-1m"),
+		strings.Contains(m, "fable"), strings.Contains(m, "mythos"),
+		strings.Contains(m, "opus-5"), strings.Contains(m, "sonnet-5"):
 		return 1_000_000
 	}
 	return DefaultWindow

@@ -214,3 +214,62 @@ func init() {
 	agentUsageCmd.Flags().Bool("watch", false, "Redraw every minute")
 	agentCmd.AddCommand(agentUsageCmd)
 }
+
+// digestText is the one message a day: what ran, what it cost in waiting,
+// where the limits stand. Plain lines, short enough for a phone.
+func digestText(dir string, now time.Time) string {
+	rep := buildUsageReport(dir, now)
+	var lines []string
+	for _, d := range rep.Today {
+		if d.Sessions == 0 && d.Messages == 0 {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %d sessions, %d messages, %d tool calls", d.Profile, d.Sessions, d.Messages, d.ToolCalls))
+	}
+	if rep.Waits.Count > 0 {
+		lines = append(lines, fmt.Sprintf("waited on you %d× — median %s, longest %s (%s)", rep.Waits.Count,
+			shortDuration(time.Duration(rep.Waits.Median)*time.Second), shortDuration(time.Duration(rep.Waits.Longest)*time.Second), rep.Waits.LongestLabel))
+	}
+	if rep.Limited.Count > 0 {
+		lines = append(lines, fmt.Sprintf("limits cost %s", shortDuration(time.Duration(rep.Limited.Total)*time.Second)))
+	}
+	for _, a := range rep.Accounts {
+		if a.Limits == nil {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: 5h %d%%, week %d%%", a.Profile, a.Limits.FiveHour.Percent, a.Limits.SevenDay.Percent))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n")
+}
+
+var agentDigestCmd = &cobra.Command{
+	Use:   "digest",
+	Short: "Today's one-message summary, as the daily digest would send it",
+	Long: `Prints what the daily digest says: sessions and messages per account, how
+long sessions waited on you, what limits cost, where each account stands.
+Set digestAt: "20:00" in the agent config and the daemon sends it once a
+day wherever notifications go (desktop, Telegram, webhook). --send sends it now.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		send, _ := cmd.Flags().GetBool("send")
+		text := digestText(mustAgentDir(), time.Now())
+		if text == "" {
+			text = "nothing on record today"
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"text": text, "sent": send})
+		} else {
+			fmt.Println(text)
+		}
+		if send {
+			utils.Notify("corgi agent · today", text)
+		}
+	},
+}
+
+func init() {
+	agentDigestCmd.Flags().Bool("send", false, "Send it now, the way the daemon would")
+	agentCmd.AddCommand(agentDigestCmd)
+}

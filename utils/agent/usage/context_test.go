@@ -57,3 +57,20 @@ func TestContextOfMissingOrEmpty(t *testing.T) {
 		t.Fatal("no assistant turn is no context")
 	}
 }
+
+func TestWindowForKnowsTheLongContextModels(t *testing.T) {
+	t.Setenv("CORGI_CONTEXT_WINDOW", "")
+	for model, want := range map[string]int64{
+		"claude-opus-4-7": DefaultWindow, "claude-opus-4-7[1m]": 1_000_000,
+		"claude-fable-5-1": 1_000_000, "claude-mythos-5-1": 1_000_000, "claude-sonnet-5": 1_000_000,
+		"claude-haiku-4-5-20251001": DefaultWindow, "": DefaultWindow,
+	} {
+		if got := WindowFor(model); got != want {
+			t.Errorf("%q: got %d want %d", model, got, want)
+		}
+	}
+	t.Setenv("CORGI_CONTEXT_WINDOW", "500000")
+	if got := WindowFor("claude-opus-4-7"); got != 500_000 {
+		t.Errorf("override: got %d", got)
+	}
+}

@@ -43,6 +43,10 @@ type UserConfig struct {
 	Defaults   WorkspaceConfig            `yaml:"defaults"`
 	// NotifyUrl gets a POST per daemon notification; trusted config only.
 	NotifyUrl string `yaml:"notifyUrl"`
+	// DigestAt is a local "HH:MM" at which the daemon sends one message a
+	// day — sessions run, limits hit, how long you were waited on — to the
+	// same place notifications go. Empty means no digest.
+	DigestAt string `yaml:"digestAt"`
 	// StayAwake keeps the machine awake for as long as the DAEMON runs, not
 	// just while a session does. Without it a laptop with no session running
 	// goes to sleep and stops answering the phone entirely — which is the one

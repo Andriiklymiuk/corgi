@@ -1184,6 +1184,14 @@ const launcherPageHTML = `<!doctype html>
   .sess .sdot.working{background:var(--amber)}
   .sess .sdot.done{background:var(--green);opacity:.6}
   .sess .sdot.stale,.sess .sdot.gone,.sess .sdot.unknown{background:var(--dim2)}
+  .sess .sdot.limited{background:#5B8DEF}
+  .acct{display:flex;flex-wrap:wrap;gap:.35rem .8rem;font-size:.74rem;color:var(--dim);margin:0 0 .45rem .1rem}
+  .acct b{color:var(--fg);font-weight:600}
+  .acct .bar{display:inline-block;width:3.2rem;height:.4rem;border-radius:.2rem;background:var(--hair);vertical-align:middle;margin:0 .3rem;overflow:hidden}
+  .acct .bar i{display:block;height:100%;background:var(--green)}
+  .acct .bar.warm i{background:var(--amber)}
+  .acct .bar.hot i{background:var(--red)}
+  .acct .out{color:var(--red);font-weight:600}
   .sess .slabel{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
   .sess .sdetail{color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
   .sess .sbadge{font-size:.6rem;font-weight:700;color:var(--dim);border:1px solid var(--line);border-radius:.3rem;
@@ -1611,7 +1619,41 @@ const launcherPageHTML = `<!doctype html>
   // The session board answers the question the phone is usually unlocked
   // for: is anything waiting on me. Sessions needing a person come first
   // and pulse; the rest are one muted line. Nothing tracked, nothing shown.
-  const STATUS_WORD = { needs_input: 'needs you', working: 'working', done: 'done', stale: 'idle', gone: 'closed', unknown: '' };
+  const STATUS_WORD = { needs_input: 'needs you', working: 'working', done: 'done', stale: 'idle', gone: 'closed', unknown: '', limited: 'limit' };
+  // Each account's 5-hour window: the number the phone is unlocked for when
+  // the question is "can I start another task".
+  function clock(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  function renderAccounts(accounts, box) {
+    const known = (accounts || []).filter(a => a.limits && a.limits.fiveHour);
+    if (!known.length) return;
+    const line = document.createElement('div');
+    line.className = 'acct';
+    for (const a of known) {
+      const pct = a.limits.fiveHour.percent || 0;
+      const span = document.createElement('span');
+      const name = document.createElement('b'); name.textContent = a.profile || 'default';
+      span.appendChild(name);
+      const bar = document.createElement('span');
+      bar.className = 'bar' + (pct >= 90 ? ' hot' : pct >= 70 ? ' warm' : '');
+      const fill = document.createElement('i'); fill.style.width = Math.min(100, pct) + '%';
+      bar.appendChild(fill); span.appendChild(bar);
+      let text = pct + '%';
+      if (a.limits.fiveHour.resetsAt) text += ' · resets ' + clock(a.limits.fiveHour.resetsAt);
+      span.appendChild(document.createTextNode(text));
+      const f = a.forecast && a.forecast.fiveHour;
+      if (f && f.exhaustAt && f.safe === false) {
+        const out = document.createElement('span');
+        out.className = 'out'; out.textContent = ' · runs out ' + clock(f.exhaustAt);
+        span.appendChild(out);
+      }
+      line.appendChild(span);
+    }
+    box.appendChild(line);
+  }
   async function loadBoard() {
     const box = document.getElementById('board');
     try {
@@ -1621,6 +1663,7 @@ const launcherPageHTML = `<!doctype html>
       const sessions = (j.sessions || []).filter(s => s.status !== 'gone');
       if (!sessions.length) { box.hidden = true; return; }
       box.innerHTML = '';
+      renderAccounts(j.accounts, box);
       const hot = sessions.filter(s => s.status === 'needs_input');
       const sum = document.createElement('p');
       sum.className = 'sum' + (hot.length ? ' hot' : '');
@@ -1641,7 +1684,8 @@ const launcherPageHTML = `<!doctype html>
         const label = document.createElement('span');
         label.className = 'slabel'; label.textContent = s.display || s.label || '?';
         row.appendChild(dot); row.appendChild(label);
-        const detail = s.detail || STATUS_WORD[s.status] || '';
+        let detail = s.detail || STATUS_WORD[s.status] || '';
+        if (s.context && s.context.percent >= 50) detail += (detail ? ' · ' : '') + 'ctx ' + s.context.percent + '%';
         if (detail) {
           const d = document.createElement('span');
           d.className = 'sdetail'; d.textContent = detail;
