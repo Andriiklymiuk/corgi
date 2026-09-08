@@ -18,6 +18,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -488,6 +489,7 @@ func runAgentStatus(_ *cobra.Command, _ []string) {
 	for _, w := range status.Workspaces {
 		printWorkspaceState(w)
 	}
+	printAccountLimits(statusWithUsage(dir, status).Accounts)
 	for _, d := range status.Diagnostics {
 		printWorkspaceDiagnostic(d)
 	}
@@ -526,7 +528,17 @@ func printWorkspaceState(w supervisor.RunState) {
 type statusJSON struct {
 	*daemon.Status
 	Usage        []workspaceUsageJSON `json:"usage,omitempty"`
+	Accounts     []accountJSON        `json:"accounts,omitempty"`
 	DashboardURL string               `json:"dashboardUrl,omitempty"`
+}
+
+// accountJSON is one Claude account: the rate-limit picture /usage shows,
+// as Claude Code last cached it. Absent windows mean no session under that
+// account has fetched usage yet.
+type accountJSON struct {
+	Profile   string        `json:"profile"`
+	ConfigDir string        `json:"configDir,omitempty"`
+	Limits    *usage.Limits `json:"limits,omitempty"`
 }
 
 type workspaceUsageJSON struct {
@@ -553,10 +565,50 @@ func statusWithUsage(dir string, status *daemon.Status) statusJSON {
 			})
 		}
 	}
+	out.Accounts = accountLimits(out.Usage)
 	if data, err := os.ReadFile(filepath.Join(dir, "public.url")); err == nil {
 		out.DashboardURL = strings.TrimSpace(string(data))
 	}
 	return out
+}
+
+// accountLimits: one entry per distinct config dir the workspaces run under,
+// the default account first.
+func accountLimits(usages []workspaceUsageJSON) []accountJSON {
+	seen := map[string]bool{"": true}
+	dirs := []string{""}
+	for _, u := range usages {
+		if !seen[u.ConfigDir] {
+			seen[u.ConfigDir] = true
+			dirs = append(dirs, u.ConfigDir)
+		}
+	}
+	var out []accountJSON
+	for _, d := range dirs {
+		a := accountJSON{Profile: sessions.DefaultProfile(d), ConfigDir: d}
+		if l, ok := usage.ReadLimits(d); ok {
+			a.Limits = &l
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// printAccountLimits is the /usage line per account in `corgi agent status`.
+func printAccountLimits(accounts []accountJSON) {
+	for _, a := range accounts {
+		name := "~/.claude"
+		if a.ConfigDir != "" {
+			name = strings.Replace(a.ConfigDir, os.Getenv("HOME"), "~", 1)
+		}
+		if a.Limits == nil {
+			fmt.Printf("  %-20s no usage snapshot yet — run /usage once in a session under it\n", name)
+			continue
+		}
+		fmt.Printf("  %-20s 5h %d%% · resets %s · week %d%% · as of %s ago\n", name,
+			a.Limits.FiveHour.Percent, a.Limits.FiveHour.ResetsAt.Local().Format("3:04pm"),
+			a.Limits.SevenDay.Percent, agoText(time.Since(a.Limits.FetchedAt)))
+	}
 }
 
 func workspaceUsageLine(id string) string {
@@ -900,4 +952,15 @@ func init() {
 		agentBriefCmd,
 	)
 	rootCmd.AddCommand(agentCmd)
+}
+
+func agoText(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "seconds"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
 }

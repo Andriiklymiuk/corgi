@@ -288,7 +288,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent pin <key> [--off]` / `page` / `rescan` / `windows` | reserve a key, turn the overflow page, adopt untracked sessions, list connected editor windows |
 | `corgi agent board [--slots N]` | the board's size, or set it — applied to a running daemon at once |
 | `corgi agent new [--window ID]` | open a new Claude session in the editor window in front (the "+" key); the terminal runs `corgi agent claude` |
-| `corgi agent status --json` | the daemon's status plus `usage[]` (tokens today / this week per workspace, with its `configDir`) and `dashboardUrl` — what corgi-bar and the deck read |
+| `corgi agent status --json` | the daemon's status plus `usage[]` (tokens today / this week per workspace, with its `configDir`), `accounts[]` (per Claude account, the /usage picture Claude Code last cached: 5-hour and 7-day percent used and reset times) and `dashboardUrl` — what corgi-bar and the deck read |
 | `corgi agent claude [--profile P] [-- args]` | run Claude Code for this folder's workspace: its account (`configDir`), binary and permission mode; plain `claude` outside every workspace |
 | `corgi agent dismiss <session>` | take a done, idle or closed session off the board until its next event (a closed chat whose process lingers) |
 | `corgi agent stop` | stop the daemon |
