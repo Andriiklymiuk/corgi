@@ -36,6 +36,9 @@ const mcpLogName = "mcp.log"
 // stop the tunnel + pairing server that `agent up` started, not just the daemon.
 const mcpPidName = "mcp.pid"
 
+// mcpVersionName records which corgi spawned the MCP server.
+const mcpVersionName = "mcp.version"
+
 // mcpAddrName records the address that MCP listens on, so `agent down`'s
 // no-pid-file fallback can look at the right port even after --http.
 const mcpAddrName = "mcp.addr"
@@ -391,6 +394,9 @@ func spawnDetachedMCP(dir, addr string, tunnel []string) error {
 	// MCP for you, not that anything is wrong with the running server.
 	_ = os.WriteFile(filepath.Join(dir, mcpPidName), []byte(strconv.Itoa(pid)+"\n"), 0o600)
 	_ = os.WriteFile(filepath.Join(dir, mcpAddrName), []byte(addr+"\n"), 0o600)
+	// The version that spawned it: a daemon starting from a newer binary
+	// restarts the server, so an upgrade reaches the dashboard too.
+	_ = os.WriteFile(filepath.Join(dir, mcpVersionName), []byte(APP_VERSION+"\n"), 0o600)
 	return nil
 }
 

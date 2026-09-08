@@ -269,3 +269,21 @@ func TestProtectedWorkspaceNoteIsSilentOutsideTheGatedFolders(t *testing.T) {
 		t.Fatalf("warned about an unguarded directory: %q", note)
 	}
 }
+
+func TestRestoreUpRestartsAnMCPFromAnOlderCorgi(t *testing.T) {
+	dir := t.TempDir()
+	// A version file that is not ours and no live pid: nothing corgi can
+	// stop, so the running server is left alone.
+	if err := os.WriteFile(filepath.Join(dir, mcpVersionName), []byte("0.0.1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if stopStaleMCP(dir, "127.0.0.1:1") {
+		t.Fatal("no pid to stop: not free to take")
+	}
+	if err := os.WriteFile(filepath.Join(dir, mcpVersionName), []byte(APP_VERSION+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if stopStaleMCP(dir, "127.0.0.1:1") {
+		t.Fatal("same version: leave it running")
+	}
+}
