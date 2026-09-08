@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -56,19 +58,40 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		if launch.Workspace != "" {
 			utils.Info(fmt.Sprintf("corgi: claude for %s%s", launch.Workspace, launch.accountSuffix()))
 		}
-		c := exec.Command(launch.Bin, launch.Args...)
-		c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-		c.Env = os.Environ()
+		env := os.Environ()
 		for k, v := range launch.Env {
-			c.Env = append(c.Env, k+"="+v)
+			env = append(env, k+"="+v)
 		}
-		if err := c.Run(); err != nil {
+		if err := runClaudeInPlace(launch.Bin, launch.Args, env); err != nil {
 			if exit, ok := err.(*exec.ExitError); ok {
 				os.Exit(exit.ExitCode())
 			}
 			exitWithError("agent_claude", err, 1)
 		}
 	},
+}
+
+// runClaudeInPlace replaces this process with claude where the OS allows,
+// so claude's parent is the shell, not corgi. The tracking hook skips any
+// claude with a corgi ancestor — that is how the daemon's own remote-control
+// sessions stay off the board — and a claude run as corgi's child would be
+// skipped the same way: started from the "+" key, never on a key. Where exec
+// is unavailable it runs as a child and returns when claude exits.
+func runClaudeInPlace(bin string, args []string, env []string) error {
+	path, err := exec.LookPath(bin)
+	if err != nil {
+		return err
+	}
+	if runtime.GOOS != "windows" {
+		if err := syscall.Exec(path, append([]string{bin}, args...), env); err == nil {
+			return nil
+		}
+		// Exec refused (a script without a shebang, say): fall through.
+	}
+	c := exec.Command(path, args...)
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	c.Env = env
+	return c.Run()
 }
 
 // resolveClaudeLaunch picks the workspace whose path contains dir (the
