@@ -421,10 +421,12 @@ func (in hookInput) errorMessage() string {
 	var obj struct {
 		Message string `json:"message"`
 	}
-	if json.Unmarshal(in.Error, &obj) == nil {
+	if json.Unmarshal(in.Error, &obj) == nil && obj.Message != "" {
 		return obj.Message
 	}
-	return ""
+	// Whatever shape the error has, the human text is in there somewhere;
+	// the registry only greps it for "resets …".
+	return strings.TrimSpace(string(in.Error))
 }
 
 // runEmitHook turns one hook firing into a spool entry and a nudge. It

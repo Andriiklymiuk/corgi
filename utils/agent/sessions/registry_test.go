@@ -866,3 +866,41 @@ func TestDismissFreesAFinishedSessionUntilItSpeaks(t *testing.T) {
 		t.Fatal("back with its next event")
 	}
 }
+
+func TestLimitResetIsFoundInsideAnErrorObject(t *testing.T) {
+	limited, reset := LimitReset("rate_limit", `{"type":"rate_limit","message":"You've hit your session limit · resets 1:10pm (Europe/Kiev)"}`)
+	if !limited || reset != "1:10pm (Europe/Kiev)" {
+		t.Fatalf("reset from raw json: %v %q", limited, reset)
+	}
+	if _, reset := LimitReset("", "Usage limit reached, resets at 3pm"); reset != "3pm" {
+		t.Fatalf("plain text: %q", reset)
+	}
+	if limited, _ := LimitReset("server_error", "boom"); limited {
+		t.Fatal("not a limit")
+	}
+}
+
+func TestTwinsWithTheSameTabNameFallBackToTheId(t *testing.T) {
+	r := newTestRegistry(t)
+	for i, id := range []string{"aaaa-1", "bbbb-2"} {
+		e := ev("Stop", id, time.Duration(i)*time.Second)
+		e.Window, e.ClaudePID, e.Ancestors = "w1", 300+i, []int{300 + i, 90 + i, 80}
+		r.Apply(e)
+	}
+	r.SetWindows([]Window{{ID: "w1", ExtHostPID: 7, Terminals: []Terminal{{Name: "2.1.263", ShellPID: 90}, {Name: "2.1.263", ShellPID: 91}}, UpdatedAt: t0}})
+	names := map[string]bool{}
+	for _, s := range r.Snapshot(t0).Sessions {
+		names[s.Display] = true
+	}
+	if !names["acme-api·aaaa"] || !names["acme-api·bbbb"] {
+		t.Fatalf("id suffixes when the tab names match: %v", names)
+	}
+	r.SetWindows([]Window{{ID: "w1", ExtHostPID: 7, Terminals: []Terminal{{Name: "api", ShellPID: 90}, {Name: "web", ShellPID: 91}}, UpdatedAt: t0}})
+	names = map[string]bool{}
+	for _, s := range r.Snapshot(t0).Sessions {
+		names[s.Display] = true
+	}
+	if !names["acme-api·api"] || !names["acme-api·web"] {
+		t.Fatalf("tab names when they differ: %v", names)
+	}
+}

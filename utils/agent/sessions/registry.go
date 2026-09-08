@@ -350,7 +350,11 @@ func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
 			s.Detail = firstNonEmpty(shorten(ev.Message, 48), "waiting for input")
 			r.setStatus(s, StatusNeedsInput, now)
 		}
-	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response":
+	case "quota_auto_resume_fired":
+		// The limit lifted and Claude picked the turn back up.
+		s.Tool, s.Detail = "", ""
+		r.setStatus(s, StatusWorking, now)
+	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response", "quota_auto_resume_stale", "quota_auto_resume_disabled":
 		// Nothing a key needs to say.
 	}
 }
@@ -590,6 +594,11 @@ func sameWindows(a, b map[string]Window) bool {
 		o, ok := b[id]
 		if !ok || !o.UpdatedAt.Equal(w.UpdatedAt) || o.ExtHostPID != w.ExtHostPID || len(o.Terminals) != len(w.Terminals) {
 			return false
+		}
+		for i := range o.Terminals {
+			if o.Terminals[i] != w.Terminals[i] {
+				return false
+			}
 		}
 		if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID || o.PanelActive != w.PanelActive {
 			return false
@@ -1115,14 +1124,26 @@ func (r *Registry) displayLocked(s *Session) string {
 	if twins <= 1 {
 		return s.Label
 	}
-	if s.Host.Terminal != "" {
-		return s.Label + "·" + s.Host.Terminal
+	if term := s.Host.Terminal; term != "" && r.terminalNameUniqueLocked(s) {
+		return s.Label + "·" + term
 	}
 	id := strings.TrimPrefix(s.ID, "pid:")
 	if len(id) > 4 {
 		id = id[:4]
 	}
 	return s.Label + "·" + id
+}
+
+// terminalNameUniqueLocked: a tab name only tells sessions apart when the
+// twins have different ones. VS Code names every tab running claude by the
+// process ("2.1.263"), which tells nothing.
+func (r *Registry) terminalNameUniqueLocked(s *Session) bool {
+	for _, o := range r.sessions {
+		if o.ID != s.ID && o.Label == s.Label && o.Host.Terminal == s.Host.Terminal {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Registry) sortedLocked() []*Session {
