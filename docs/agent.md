@@ -287,7 +287,9 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent focus <session>` | bring that session's window to the front and reveal its terminal tab |
 | `corgi agent pin <key> [--off]` / `page` / `rescan` / `windows` | reserve a key, turn the overflow page, adopt untracked sessions, list connected editor windows |
 | `corgi agent board [--slots N]` | the board's size, or set it — applied to a running daemon at once |
-| `corgi agent new [--window ID]` | open a new Claude session in the editor window in front (the "+" key) |
+| `corgi agent new [--window ID]` | open a new Claude session in the editor window in front (the "+" key); the terminal runs `corgi agent claude` |
+| `corgi agent claude [--profile P] [-- args]` | run Claude Code for this folder's workspace: its account (`configDir`), binary and permission mode; plain `claude` outside every workspace |
+| `corgi agent dismiss <session>` | take a done, idle or closed session off the board until its next event (a closed chat whose process lingers) |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -601,6 +603,7 @@ the `claude` process's pid and parent chain, which is what makes the rest work:
 |---|---|---|
 | `working` | the model is running or a tool is executing | amber |
 | `needs_input` | a permission prompt, a question, an API failure | red — the one that matters |
+| `limited` | the account hit its usage limit; `detail` says when it resets | blue — come back later, nothing to answer |
 | `done` | the turn finished; waiting for a prompt | green |
 | `stale` | alive, but nothing for 30 minutes | gray |
 | `gone` | the process exited, but the key is pinned | dimmed |

@@ -71,6 +71,20 @@ session exits the key stays reserved and dimmed until unpinned.`,
 	},
 }
 
+var agentDismissCmd = &cobra.Command{
+	Use:   "dismiss <session>",
+	Short: "Take a finished session off the board until its next event",
+	Long: `Frees the key of a session that is done, idle or closed — a chat tab you
+closed while Claude Code kept its process, say. The session is not touched;
+its next hook event puts it back on a key. A working or waiting session is
+refused. Same references as focus: id, id prefix, label, or key number.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		sendBoardCommand(command.Command{Action: command.ActionDismiss, SessionID: args[0], Source: "cli"},
+			fmt.Sprintf("asked the daemon to dismiss %s", args[0]))
+	},
+}
+
 var agentPageCmd = &cobra.Command{
 	Use:   "page [next|prev]",
 	Short: "Turn the board's overflow page when more sessions run than keys",
@@ -363,7 +377,7 @@ func init() {
 	agentSessionsCmd.Flags().Bool("watch", false, "Redraw the board whenever it changes")
 	agentPinCmd.Flags().Bool("off", false, "Release the key instead")
 	agentNewCmd.Flags().String("window", "", "Editor window id, as `corgi agent windows` lists them (default: the one in front)")
-	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentPageCmd, agentRescanCmd, agentWindowsCmd, agentNewCmd)
+	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentDismissCmd, agentPageCmd, agentRescanCmd, agentWindowsCmd, agentNewCmd)
 }
 
 var agentBoardCmd = &cobra.Command{

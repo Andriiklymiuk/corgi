@@ -408,6 +408,25 @@ func (in hookInput) errorType() string {
 	return ""
 }
 
+// errorMessage reads StopFailure's human text: the error when it is a
+// string, or its message field. The usage-limit reset time lives here.
+func (in hookInput) errorMessage() string {
+	if in.Message != "" {
+		return in.Message
+	}
+	var s string
+	if json.Unmarshal(in.Error, &s) == nil {
+		return s
+	}
+	var obj struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(in.Error, &obj) == nil {
+		return obj.Message
+	}
+	return ""
+}
+
 // runEmitHook turns one hook firing into a spool entry and a nudge. It
 // never prints, never blocks on the daemon and never fails: the session is
 // unaffected whatever corgi's state is. Returns what it built, for tests.
@@ -425,7 +444,7 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 	ev := sessions.Event{
 		Name: in.Event, SessionID: in.SessionID, Cwd: in.Cwd,
 		ConfigDir: getenv("CLAUDE_CONFIG_DIR"), Source: in.Source, Reason: in.Reason,
-		Tool: in.Tool, Notification: in.NotificationType, Message: truncateLine(in.Message, 160),
+		Tool: in.Tool, Notification: in.NotificationType, Message: truncateLine(in.errorMessage(), 160),
 		Error: in.errorType(), Window: getenv("CORGI_VSCODE_WINDOW"),
 		TermProgram: getenv("TERM_PROGRAM"),
 		TermSession: firstNonEmpty(getenv("ITERM_SESSION_ID"), getenv("TERM_SESSION_ID")),
@@ -475,6 +494,9 @@ func tabTitle(in hookInput, label string) string {
 	case "Stop":
 		return "✓ " + label
 	case "StopFailure":
+		if limited, reset := sessions.LimitReset(in.errorType(), in.errorMessage()); limited {
+			return "⏳ " + label + " LIMIT " + shortReset(reset)
+		}
 		return "▲ " + label + " FAILED"
 	case "Notification":
 		switch in.NotificationType {
@@ -483,6 +505,15 @@ func tabTitle(in hookInput, label string) string {
 		}
 	}
 	return ""
+}
+
+// shortReset keeps "12:10pm" out of "12:10pm (Europe/Kiev)": a tab title
+// has no room for the zone.
+func shortReset(reset string) string {
+	if i := strings.Index(reset, " ("); i > 0 {
+		reset = reset[:i]
+	}
+	return strings.TrimSpace(reset)
 }
 
 // runTabTitleHook prints the terminalSequence Claude Code forwards to the

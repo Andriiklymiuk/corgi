@@ -67,8 +67,11 @@ type Reveal struct {
 	Panel     bool   `json:"panel,omitempty"`
 	// New asks the window to open a fresh integrated terminal in Folder
 	// and run claude in it — the "+" key.
-	New         bool      `json:"new,omitempty"`
-	Folder      string    `json:"folder,omitempty"`
+	New    bool   `json:"new,omitempty"`
+	Folder string `json:"folder,omitempty"`
+	// Command is what the new terminal runs — `corgi agent claude`, which
+	// applies the folder's workspace account — else the extension's default.
+	Command     string    `json:"command,omitempty"`
 	RequestedAt time.Time `json:"requestedAt"`
 }
 
