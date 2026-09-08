@@ -176,7 +176,12 @@ type Window struct {
 	ExtHostPID int        `json:"extHostPid"`
 	Folders    []string   `json:"folders,omitempty"`
 	Terminals  []Terminal `json:"terminals,omitempty"`
-	UpdatedAt  time.Time  `json:"updatedAt"`
+	// FocusedAt is when the window last came to the front, as its extension
+	// saw it; ActiveShellPID is the shell of its active terminal tab. Together
+	// they say which session the user is looking at.
+	FocusedAt      time.Time `json:"focusedAt,omitempty"`
+	ActiveShellPID int       `json:"activeShellPid,omitempty"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 // EditorFromChain names the editor whose process tree a session runs in,

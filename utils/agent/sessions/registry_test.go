@@ -695,3 +695,63 @@ func TestNewSessionTargetPrefersTheLastFocusedWindow(t *testing.T) {
 		t.Fatal("notice cleared")
 	}
 }
+
+func TestFrontSessionFollowsTheWindowInFront(t *testing.T) {
+	r := newTestRegistry(t)
+	if st := r.Snapshot(t0); st.FrontWindow != "" || st.FrontSession != "" {
+		t.Fatalf("nothing in front without windows: %+v", st)
+	}
+	tab := ev("Stop", "tab", 0)
+	tab.Window, tab.ClaudePID, tab.Ancestors = "w1", 101, []int{101, 90, 80}
+	r.Apply(tab)
+	panel := ev("Stop", "panel", time.Second)
+	panel.ClaudePID, panel.Ancestors = 102, []int{102, 7}
+	r.Apply(panel)
+	other := ev("Stop", "other", 2*time.Second)
+	other.Window, other.ClaudePID, other.Ancestors = "w2", 103, []int{103, 95, 80}
+	r.Apply(other)
+	w1 := Window{ID: "w1", App: "Visual Studio Code", ExtHostPID: 7, Folders: []string{"/f"}, Terminals: []Terminal{{Name: "zsh", ShellPID: 90}}, UpdatedAt: t0}
+	w2 := Window{ID: "w2", App: "Visual Studio Code", ExtHostPID: 8, Folders: []string{"/g"}, Terminals: []Terminal{{Name: "zsh", ShellPID: 95}}, UpdatedAt: t0.Add(time.Minute)}
+
+	r.SetWindows([]Window{w1, w2})
+	if st := r.Snapshot(t0); st.FrontWindow != "" || st.FrontSession != "" {
+		t.Fatalf("two windows and no focus word: nobody is in front: %+v", st)
+	}
+	if target, err := r.NewSessionTarget(""); err != nil || target.WindowID != "w2" {
+		t.Fatalf("new falls back to the most recently updated window: %+v %v", target, err)
+	}
+
+	w1.FocusedAt, w1.ActiveShellPID = t0.Add(time.Hour), 90
+	if !r.SetWindows([]Window{w1, w2}) {
+		t.Fatal("a focus change is a window change")
+	}
+	st := r.Snapshot(t0)
+	if st.FrontWindow != "w1" || st.FrontSession != "tab" {
+		t.Fatalf("the active tab's session is in front: %+v", st)
+	}
+	if target, _ := r.NewSessionTarget(""); target.WindowID != "w1" {
+		t.Fatalf("new opens in the window in front: %+v", target)
+	}
+
+	w1.ActiveShellPID = 91
+	r.SetWindows([]Window{w1, w2})
+	if st := r.Snapshot(t0); st.FrontSession != "panel" {
+		t.Fatalf("a tab with no session: the panel session is in front: %+v", st)
+	}
+
+	w2.FocusedAt = t0.Add(2 * time.Hour)
+	r.SetWindows([]Window{w1, w2})
+	if st := r.Snapshot(t0); st.FrontWindow != "w2" || st.FrontSession != "other" {
+		t.Fatalf("the newest focus wins: %+v", st)
+	}
+
+	r.RecordFocus("tab", nil)
+	if st := r.Snapshot(t0); st.FrontWindow != "w1" || st.FrontSession != "tab" {
+		t.Fatalf("corgi's own focus, being newer, wins: %+v", st)
+	}
+
+	r.SetWindows([]Window{w2})
+	if st := r.Snapshot(t0); st.FrontWindow != "w2" {
+		t.Fatalf("a lone window is the front one: %+v", st)
+	}
+}
