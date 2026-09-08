@@ -2,10 +2,26 @@
 
 Once installed, `corgi` works from any folder. corgi is a single binary on a steady semver release train (1.x).
 
-## macOS / Linux — [Homebrew](https://brew.sh)
+## macOS — [Homebrew](https://brew.sh)
 
 ```bash
 brew install andriiklymiuk/homebrew-tools/corgi
+```
+
+corgi is a Homebrew *cask* since 1.21.44. `brew upgrade corgi` moves an
+older formula install over by itself; if it complains, `brew uninstall
+--formula corgi && brew install --cask andriiklymiuk/homebrew-tools/corgi`.
+
+## Linux — deb / rpm / apk
+
+Every [release](https://github.com/Andriiklymiuk/corgi/releases) ships
+`corgi_<version>_linux_<arch>.deb`, `.rpm` and `.apk` with the binary and shell
+completions:
+
+```bash
+sudo dpkg -i corgi_*_linux_amd64.deb      # Debian, Ubuntu
+sudo rpm -i corgi_*_linux_amd64.rpm       # Fedora, RHEL
+apk add --allow-untrusted corgi_*.apk     # Alpine
 ```
 
 ## macOS / Linux — install script

@@ -46,15 +46,17 @@ notarize:
 checksum:
   name_template: "checksums.txt"
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 changelog:
   sort: asc
   filters:
     exclude:
       - "^docs:"
       - "^test:"
-# .goreleaser.yaml
-brews:
+# Homebrew: a cask in andriiklymiuk/homebrew-tools (macOS). The tap's
+# tap_migrations.json moves anyone on the old formula over on their next
+# `brew upgrade`. Linux gets the install script and the deb/rpm/apk below.
+homebrew_casks:
   - name: corgi
     homepage: https://github.com/Andriiklymiuk/corgi
     description: "Command line interface for database configurations and other
@@ -62,13 +64,12 @@ brews:
     repository:
       owner: Andriiklymiuk
       name: homebrew-tools
-    # Install shell completions alongside the binary so `brew install corgi`
-    # gives users tab-completion out of the box (zsh users may need
-    # `compinit` once; brew bash users need bash-completion@2 installed).
-    extra_install: |
-      bash_completion.install "completions/corgi.bash" => "corgi"
-      zsh_completion.install  "completions/corgi.zsh"  => "_corgi"
-      fish_completion.install "completions/corgi.fish"
+    binaries:
+      - corgi
+    completions:
+      bash: completions/corgi.bash
+      zsh: completions/corgi.zsh
+      fish: completions/corgi.fish
     caveats: |
       Shell tab-completion installed for bash, zsh, fish:
         corgi run --services <TAB>      # services from corgi-compose.yml
@@ -87,3 +88,25 @@ brews:
 
       What's new:
         https://github.com/Andriiklymiuk/corgi/releases/tag/v#{version}
+
+# Linux packages, attached to the release: `sudo dpkg -i corgi_*.deb`,
+# `sudo rpm -i corgi_*.rpm`, `apk add --allow-untrusted corgi_*.apk`.
+nfpms:
+  - id: corgi
+    package_name: corgi
+    homepage: https://github.com/Andriiklymiuk/corgi
+    maintainer: Andrii Klymiuk <klim.andrew@hotmail.com>
+    description: Command line interface for database configurations and other useful things
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    contents:
+      - src: completions/corgi.bash
+        dst: /usr/share/bash-completion/completions/corgi
+      - src: completions/corgi.zsh
+        dst: /usr/share/zsh/site-functions/_corgi
+      - src: completions/corgi.fish
+        dst: /usr/share/fish/vendor_completions.d/corgi.fish
