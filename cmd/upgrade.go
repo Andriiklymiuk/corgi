@@ -75,7 +75,7 @@ func upgradeRun(cmd *cobra.Command, args []string) {
 	default:
 		fmt.Printf("Could not detect how corgi was installed (located at %s).\n", exePath)
 		fmt.Println("Re-install with one of:")
-		fmt.Println("  brew upgrade andriiklymiuk/homebrew-tools/corgi")
+		fmt.Println("  brew upgrade --cask andriiklymiuk/tools/corgi")
 		fmt.Printf("  curl -fsSL %s | sh\n", installScriptURL)
 		if runtime.GOOS == "windows" {
 			fmt.Printf("  irm %s | iex\n", installPs1ScriptURL)
@@ -154,28 +154,30 @@ func pathsEqual(a, b string) bool {
 }
 
 func upgradeViaHomebrew() error {
-	updateCmd := exec.Command("brew", "update")
-	updateCmd.Stdout = os.Stdout
-	updateCmd.Stderr = os.Stderr
-	if err := updateCmd.Run(); err != nil {
+	run := func(args ...string) error {
+		c := exec.Command("brew", args...)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		return c.Run()
+	}
+	if err := run("update"); err != nil {
 		return fmt.Errorf("brew update failed: %w", err)
 	}
+	// Homebrew loads casks only from trusted taps; older brews have no
+	// such command, and then there is nothing to trust.
+	_ = exec.Command("brew", "trust", "andriiklymiuk/tools").Run()
 
-	upgradeCmd := exec.Command("brew", "upgrade", "andriiklymiuk/homebrew-tools/corgi")
-	upgradeCmd.Stdout = os.Stdout
-	upgradeCmd.Stderr = os.Stderr
-	if err := upgradeCmd.Run(); err == nil {
-		return nil
+	// corgi moved from a formula to a cask. An install that predates that
+	// still holds the formula keg, which brew upgrade will not replace on
+	// its own; swap it for the cask once.
+	if exec.Command("brew", "list", "--formula", "corgi").Run() == nil {
+		fmt.Println("corgi is a Homebrew cask now — replacing the old formula install")
+		if err := run("uninstall", "--formula", "corgi"); err != nil {
+			return err
+		}
+		return run("install", "--cask", "andriiklymiuk/tools/corgi")
 	}
-	// corgi moved from a formula to a cask in the tap. brew migrates an
-	// installed formula on upgrade through the tap's tap_migrations.json;
-	// when it does not (an older brew, a stale tap clone), installing the
-	// cask outright is the same end state.
-	fmt.Println("brew upgrade did not finish — installing the corgi cask")
-	installCmd := exec.Command("brew", "install", "--cask", "andriiklymiuk/homebrew-tools/corgi")
-	installCmd.Stdout = os.Stdout
-	installCmd.Stderr = os.Stderr
-	return installCmd.Run()
+	return run("upgrade", "--cask", "andriiklymiuk/tools/corgi")
 }
 
 func upgradeViaInstallScript(installDir string) error {
