@@ -40,8 +40,9 @@ type Registry struct {
 	// lastFocus is the window the last successful focus landed in: where
 	// a new session opens when nobody says otherwise.
 	lastFocus struct {
-		WindowID string
-		At       time.Time
+		WindowID  string
+		SessionID string
+		At        time.Time
 	}
 	notice   string
 	noticeAt time.Time
@@ -63,6 +64,12 @@ type State struct {
 	// LastFocusWindow is where the last successful focus went, and where
 	// `corgi agent new` opens a session by default.
 	LastFocusWindow string `json:"lastFocusWindow,omitempty"`
+	// FrontWindow is the connected window most recently in front, and
+	// FrontSession the session the user is looking at in it: the one in its
+	// active terminal tab, else its panel session, else the one that moved
+	// last. What a talk key dictates into without a key being pressed first.
+	FrontWindow  string `json:"frontWindow,omitempty"`
+	FrontSession string `json:"frontSession,omitempty"`
 	// Notice is the last board-level failure — a `new` with no window to
 	// open in, say — with its time, for a key to flash once.
 	Notice   string    `json:"notice,omitempty"`
@@ -533,6 +540,9 @@ func sameWindows(a, b map[string]Window) bool {
 		if !ok || !o.UpdatedAt.Equal(w.UpdatedAt) || o.ExtHostPID != w.ExtHostPID || len(o.Terminals) != len(w.Terminals) {
 			return false
 		}
+		if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID {
+			return false
+		}
 	}
 	return true
 }
@@ -784,7 +794,7 @@ func (r *Registry) RecordFocus(id string, err error) {
 	}
 	s.FocusAt = time.Now()
 	if err == nil && s.Host.WindowID != "" {
-		r.lastFocus.WindowID, r.lastFocus.At = s.Host.WindowID, s.FocusAt
+		r.lastFocus.WindowID, r.lastFocus.SessionID, r.lastFocus.At = s.Host.WindowID, s.ID, s.FocusAt
 	}
 	if s.FocusError == msg && msg == "" {
 		return
@@ -809,21 +819,19 @@ func (r *Registry) SetNotice(err error) {
 var ErrNoWindow = errors.New("no editor window connected — open a folder in VS Code with the corgi extension installed")
 
 // NewSessionTarget picks the window a fresh session opens in: the one
-// named, else the one the last focus landed in, else the most recently
-// updated. The window must be connected: only its extension can open a
-// terminal in it.
+// named, else the one in front, else the most recently updated. The window
+// must be connected: only its extension can open a terminal in it.
 func (r *Registry) NewSessionTarget(windowID string) (FocusTarget, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var w Window
 	var ok bool
-	switch {
-	case windowID != "":
+	if windowID != "" {
 		if w, ok = r.windows[windowID]; !ok {
 			return FocusTarget{}, fmt.Errorf("window %s is not connected", windowID)
 		}
-	case r.lastFocus.WindowID != "":
-		w, ok = r.windows[r.lastFocus.WindowID]
+	} else {
+		w, ok = r.frontWindowLocked()
 	}
 	if !ok {
 		for _, cand := range r.sortedWindowsLocked() {
@@ -950,7 +958,67 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		}
 	}
 	st.Windows = r.sortedWindowsLocked()
+	if w, ok := r.frontWindowLocked(); ok {
+		st.FrontWindow = w.ID
+		if s := r.frontSessionLocked(w); s != nil {
+			st.FrontSession = s.ID
+		}
+	}
 	return st
+}
+
+// frontWindowLocked is the connected window most recently in front: the
+// newest focus its extension reported, or where corgi's own last focus
+// landed when that is newer. A lone window with no word either way is the
+// front one too.
+func (r *Registry) frontWindowLocked() (Window, bool) {
+	var best Window
+	found := false
+	for _, w := range r.sortedWindowsLocked() {
+		if !w.FocusedAt.IsZero() && (!found || w.FocusedAt.After(best.FocusedAt)) {
+			best, found = w, true
+		}
+	}
+	if w, ok := r.windows[r.lastFocus.WindowID]; ok && (!found || r.lastFocus.At.After(best.FocusedAt)) {
+		return w, true
+	}
+	if !found && len(r.windows) == 1 {
+		for _, w := range r.windows {
+			return w, true
+		}
+	}
+	return best, found
+}
+
+// frontSessionLocked is the session the user sees in a window: the one
+// corgi just focused there, until the window reports something newer; else
+// the one in its active terminal tab, else its panel session, else the one
+// that moved last. Nil when no live session is bound to the window.
+func (r *Registry) frontSessionLocked(w Window) *Session {
+	if r.lastFocus.WindowID == w.ID && r.lastFocus.At.After(w.FocusedAt) {
+		if s := r.sessions[r.lastFocus.SessionID]; s != nil && s.Status != StatusGone {
+			return s
+		}
+	}
+	var panel, latest *Session
+	for _, s := range r.sortedLocked() {
+		if s.Host.WindowID != w.ID || s.Status == StatusGone {
+			continue
+		}
+		if w.ActiveShellPID != 0 && s.Host.ShellPID == w.ActiveShellPID {
+			return s
+		}
+		if s.Host.Kind == HostVSCodePanel && (panel == nil || s.LastActivity.After(panel.LastActivity)) {
+			panel = s
+		}
+		if latest == nil || s.LastActivity.After(latest.LastActivity) {
+			latest = s
+		}
+	}
+	if panel != nil {
+		return panel
+	}
+	return latest
 }
 
 // displayLocked makes a label unique among live sessions: two sessions in

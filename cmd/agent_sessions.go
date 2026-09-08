@@ -100,7 +100,7 @@ var agentRescanCmd = &cobra.Command{
 
 var agentNewCmd = &cobra.Command{
 	Use:   "new",
-	Short: "Open a new Claude Code session in the last-focused editor window",
+	Short: "Open a new Claude Code session in the editor window in front",
 	Long: `Asks the corgi VS Code extension to open a fresh integrated terminal in
 an editor window and run claude in it: the window named with --window, else
 the one the last focus landed in, else the most recently connected. The new
@@ -362,7 +362,7 @@ func runAgentWindows(_ *cobra.Command, _ []string) {
 func init() {
 	agentSessionsCmd.Flags().Bool("watch", false, "Redraw the board whenever it changes")
 	agentPinCmd.Flags().Bool("off", false, "Release the key instead")
-	agentNewCmd.Flags().String("window", "", "Editor window id, as `corgi agent windows` lists them (default: the last focused)")
+	agentNewCmd.Flags().String("window", "", "Editor window id, as `corgi agent windows` lists them (default: the one in front)")
 	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentPageCmd, agentRescanCmd, agentWindowsCmd, agentNewCmd)
 }
 
