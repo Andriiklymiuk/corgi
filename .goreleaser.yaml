@@ -70,6 +70,14 @@ homebrew_casks:
       bash: completions/corgi.bash
       zsh: completions/corgi.zsh
       fish: completions/corgi.fish
+    # A downloaded binary carries the quarantine flag; unsigned, Gatekeeper
+    # holds it behind a dialog on first run — which for a CLI just looks like a
+    # hang. Signed and notarized builds (docs/release-signing.md) pass without
+    # this; it stays harmless for them.
+    hooks:
+      post:
+        install: |
+          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/corgi"]
     caveats: |
       Shell tab-completion installed for bash, zsh, fish:
         corgi run --services <TAB>      # services from corgi-compose.yml

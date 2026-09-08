@@ -26,7 +26,7 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
 
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
-**Install:** `brew install andriiklymiuk/homebrew-tools/corgi` ([other ways](docs/install.md)).
+**Install:** `brew install andriiklymiuk/homebrew-tools/corgi` (Homebrew 5 asks you to `brew trust andriiklymiuk/tools` once; [other ways](docs/install.md)).
 
 ## Why corgi
 

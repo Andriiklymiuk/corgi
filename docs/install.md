@@ -8,9 +8,10 @@ Once installed, `corgi` works from any folder. corgi is a single binary on a ste
 brew install andriiklymiuk/homebrew-tools/corgi
 ```
 
-corgi is a Homebrew *cask* since 1.21.44. `brew upgrade corgi` moves an
-older formula install over by itself; if it complains, `brew uninstall
---formula corgi && brew install --cask andriiklymiuk/homebrew-tools/corgi`.
+corgi is a Homebrew *cask* since 1.21.44. Homebrew 5 loads casks only from
+taps you trust, once: `brew trust andriiklymiuk/tools`. `corgi upgrade` does
+that, and swaps an older formula install for the cask by itself; by hand it
+is `brew uninstall --formula corgi && brew install --cask andriiklymiuk/tools/corgi`.
 
 ## Linux — deb / rpm / apk
 
