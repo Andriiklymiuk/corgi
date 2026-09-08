@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -46,7 +48,11 @@ func telegramControlFrom(notifyURL, agentDir string) *telegramControl {
 }
 
 func (t *telegramControl) run(ctx context.Context) {
-	t.send("corgi is listening here. /help for what it can do.")
+	// Once per chat, not on every daemon restart: the greeting is for a
+	// chat that just got wired up, and a restart is not news.
+	if t.firstTimeInChat() {
+		t.send("corgi is listening here. /help for what it can do.")
+	}
 	for {
 		if ctx.Err() != nil {
 			return
@@ -245,4 +251,19 @@ func startTelegramControl(ctx context.Context, notifyURL, agentDir string) {
 	}
 	utils.Info("📨 telegram control on — /help in the chat")
 	go control.run(ctx)
+}
+
+// firstTimeInChat reports whether this chat has been greeted, and marks it.
+func (t *telegramControl) firstTimeInChat() bool {
+	if t.agentIn == "" {
+		return true
+	}
+	dir := filepath.Join(t.agentIn, "telegram")
+	marker := filepath.Join(dir, "greeted-"+t.chatID)
+	if _, err := os.Stat(marker); err == nil {
+		return false
+	}
+	_ = os.MkdirAll(dir, 0o700)
+	_ = os.WriteFile(marker, []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o600)
+	return true
 }
