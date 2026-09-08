@@ -41,7 +41,7 @@ const (
 
 var (
 	limitText  = regexp.MustCompile(`(?i)\b(session|usage|rate|weekly|daily) limit\b|\brate.?limited?\b`)
-	limitReset = regexp.MustCompile(`(?i)\bresets?\s+(?:at\s+)?([^\n]+?)\s*$`)
+	limitReset = regexp.MustCompile(`(?i)\bresets?\s+(?:at\s+)?([^\n"}\\]+?)\s*(?:$|["}\\])`)
 )
 
 // LimitReset says whether a StopFailure or notification is the account's
