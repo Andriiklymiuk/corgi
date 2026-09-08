@@ -173,7 +173,8 @@ func setTrackSlots(dir string, slots int) error {
 }
 
 // trackConfigDirs is every Claude config directory hooks go into: the
-// account in use now, each corgi profile's, and any passed explicitly. A
+// account in use now, each corgi profile's, each workspace's own (a
+// workspace can run under another account), and any passed explicitly. A
 // profile IS a config directory, so a second account never needs naming
 // twice.
 func trackConfigDirs(agentDir string, extra []string) []string {
@@ -194,9 +195,13 @@ func trackConfigDirs(agentDir string, extra []string) []string {
 		out = append(out, d)
 	}
 	add(defaultClaudeConfigDir())
-	if profiles, err := loadProfiles(agentDir); err == nil {
-		for _, name := range sortedProfileNames(profiles) {
-			add(profiles[name].ConfigDir)
+	if user, err := config.LoadUser(agentUserConfigPath(agentDir)); err == nil && user != nil {
+		for _, name := range sortedProfileNames(user.Profiles) {
+			add(user.Profiles[name].ConfigDir)
+		}
+		add(user.Defaults.ConfigDir)
+		for _, id := range sortedProfileNames(user.Workspaces) {
+			add(user.Workspaces[id].ConfigDir)
 		}
 	}
 	for _, d := range extra {

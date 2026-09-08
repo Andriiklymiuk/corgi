@@ -264,7 +264,7 @@ func TestHookCommandQuotesAPathWithSpaces(t *testing.T) {
 	}
 }
 
-func TestTrackConfigDirsCoversAccountProfilesAndExtras(t *testing.T) {
+func TestTrackConfigDirsCoversAccountProfilesWorkspacesAndExtras(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
@@ -275,8 +275,20 @@ func TestTrackConfigDirsCoversAccountProfilesAndExtras(t *testing.T) {
 	if err := addProfile(agentD, "fast", config.WorkspaceConfig{Bin: "claude"}); err != nil {
 		t.Fatal(err)
 	}
+	user, err := config.LoadUser(agentUserConfigPath(agentD))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Workspaces == nil {
+		user.Workspaces = map[string]config.WorkspaceConfig{}
+	}
+	user.Workspaces["onboarding"] = config.WorkspaceConfig{ConfigDir: "~/.claude-skp"}
+	user.Workspaces["plain"] = config.WorkspaceConfig{Bin: "claude"}
+	if err := writeUserConfig(agentUserConfigPath(agentD), user); err != nil {
+		t.Fatal(err)
+	}
 	dirs := trackConfigDirs(agentD, []string{"~/.claude-work", filepath.Join(home, "other"), " "})
-	want := []string{filepath.Join(home, ".claude"), filepath.Join(home, ".claude-work"), filepath.Join(home, "other")}
+	want := []string{filepath.Join(home, ".claude"), filepath.Join(home, ".claude-work"), filepath.Join(home, ".claude-skp"), filepath.Join(home, "other")}
 	if strings.Join(dirs, ",") != strings.Join(want, ",") {
 		t.Fatalf("dirs = %v, want %v", dirs, want)
 	}
