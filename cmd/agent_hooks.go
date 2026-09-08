@@ -369,7 +369,7 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 		runAgentTitleHook(id, titleHookStdin, os.Stdout)
 		return
 	}
-	detail := hookDetail(event, os.Stdin)
+	detail, kind := hookDetailAndKind(event, os.Stdin)
 
 	// Claude Code fires Notification for two different things: a permission
 	// prompt, which blocks the session until someone answers, and a 60-second
@@ -379,6 +379,9 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	// input" for something that wants nothing is how people learn to ignore
 	// every notification corgi sends.
 	if idle, _ := cmd.Flags().GetBool("idle"); isIdleNudge(detail) && !idle {
+		return
+	}
+	if quietNotification(kind) {
 		return
 	}
 
@@ -400,15 +403,24 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 
 // Only Claude's own message is used, never session content.
 func hookDetail(event string, stdin io.Reader) string {
-	msg := ""
+	detail, _ := hookDetailAndKind(event, stdin)
+	return detail
+}
+
+// hookDetailAndKind also returns the notification_type, so the caller can
+// drop the kinds that report news rather than ask for a person.
+func hookDetailAndKind(event string, stdin io.Reader) (string, string) {
+	msg, kind := "", ""
 	if stdin != nil {
 		var payload struct {
 			Message string `json:"message"`
 			Event   string `json:"hook_event_name"`
+			Kind    string `json:"notification_type"`
 		}
 		if data, err := io.ReadAll(io.LimitReader(stdin, 8<<10)); err == nil {
 			_ = json.Unmarshal(data, &payload)
 			msg = strings.TrimSpace(payload.Message)
+			kind = strings.TrimSpace(payload.Kind)
 			if event == "" {
 				event = strings.TrimSpace(payload.Event)
 			}
@@ -416,12 +428,25 @@ func hookDetail(event string, stdin io.Reader) string {
 	}
 	switch {
 	case msg != "":
-		return truncateLine(msg, 160)
+		return truncateLine(msg, 160), kind
 	case event == hookEventStop:
-		return "a session finished its turn"
+		return "a session finished its turn", kind
 	default:
-		return "a session is waiting for you"
+		return "a session is waiting for you", kind
 	}
+}
+
+// quietNotification: Claude Code notifications that carry news, not a
+// request — a login that worked, a usage limit that lifted and the task
+// resuming on its own, an elicitation that completed. Nobody has to act, so
+// nobody's phone should buzz.
+func quietNotification(kind string) bool {
+	switch kind {
+	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response",
+		"quota_auto_resume_fired", "quota_auto_resume_stale", "quota_auto_resume_disabled":
+		return true
+	}
+	return false
 }
 
 // isIdleNudge recognises Claude Code's "nothing is blocked, you have just been

@@ -156,3 +156,20 @@ func TestAgentHooksEnableKeepsOtherHooks(t *testing.T) {
 		t.Errorf("someone else's Stop hook must survive: %v", hooks[hookEventStop])
 	}
 }
+
+func TestQuietNotificationsAreNotForwarded(t *testing.T) {
+	for _, kind := range []string{"auth_success", "quota_auto_resume_fired", "agent_completed"} {
+		if !quietNotification(kind) {
+			t.Errorf("%s is news, not a request", kind)
+		}
+	}
+	for _, kind := range []string{"permission_prompt", "agent_needs_input", "elicitation_dialog", ""} {
+		if quietNotification(kind) {
+			t.Errorf("%s needs a person", kind)
+		}
+	}
+	detail, kind := hookDetailAndKind("Notification", strings.NewReader(`{"hook_event_name":"Notification","notification_type":"auth_success","message":"Claude Code login successful"}`))
+	if detail != "Claude Code login successful" || kind != "auth_success" {
+		t.Fatalf("detail+kind: %q %q", detail, kind)
+	}
+}

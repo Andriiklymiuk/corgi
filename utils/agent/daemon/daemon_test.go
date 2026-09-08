@@ -758,3 +758,23 @@ func TestAttentionCommandNotifiesAndRecords(t *testing.T) {
 		t.Errorf("attention must not start a runner, got %+v", d.Status().Workspaces)
 	}
 }
+
+func TestRepeatedAttentionStaysQuietForTenMinutes(t *testing.T) {
+	d := &Daemon{}
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	if d.repeatedAttention("acme", "permission: Bash", now) {
+		t.Fatal("first time: send")
+	}
+	if !d.repeatedAttention("acme", "permission: Bash", now.Add(time.Minute)) {
+		t.Fatal("same thing a minute later: quiet")
+	}
+	if d.repeatedAttention("acme", "question", now.Add(time.Minute)) {
+		t.Fatal("a different message: send")
+	}
+	if d.repeatedAttention("other", "permission: Bash", now.Add(time.Minute)) {
+		t.Fatal("another workspace: send")
+	}
+	if d.repeatedAttention("acme", "permission: Bash", now.Add(11*time.Minute)) {
+		t.Fatal("after the window: send again")
+	}
+}

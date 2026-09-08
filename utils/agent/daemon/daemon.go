@@ -67,6 +67,10 @@ type WorkspaceDiagnostic struct {
 
 // Daemon supervises every autostart workspace.
 type Daemon struct {
+	// recentAttention remembers what was just sent, so a duplicate stays quiet.
+	attentionMu     sync.Mutex
+	recentAttention map[string]time.Time
+
 	Version string
 	// Dir is the agent data directory holding daemon.json and registry.json.
 	Dir string
@@ -520,8 +524,37 @@ func (d *Daemon) reportAttention(c command.Command) {
 		detail = "a session is waiting for you"
 	}
 	d.Events.Append(c.WorkspaceID, events.Event{Kind: "attention", Reason: detail})
+	if d.repeatedAttention(c.WorkspaceID, detail, time.Now()) {
+		d.requestPublish()
+		return
+	}
 	d.notifyAttention("corgi agent · "+c.WorkspaceID, detail, c.WorkspaceID)
 	d.requestPublish()
+}
+
+// attentionRepeatWindow is how long the same message from the same
+// workspace stays silent after it was sent once: Claude Code fires some
+// notifications twice, and two sessions in one repo hitting the same
+// prompt read as one thing to answer.
+const attentionRepeatWindow = 10 * time.Minute
+
+func (d *Daemon) repeatedAttention(workspaceID, detail string, now time.Time) bool {
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	if d.recentAttention == nil {
+		d.recentAttention = map[string]time.Time{}
+	}
+	key := workspaceID + "\x00" + detail
+	for k, at := range d.recentAttention {
+		if now.Sub(at) > attentionRepeatWindow {
+			delete(d.recentAttention, k)
+		}
+	}
+	if at, ok := d.recentAttention[key]; ok && now.Sub(at) <= attentionRepeatWindow {
+		return true
+	}
+	d.recentAttention[key] = now
+	return false
 }
 
 func (d *Daemon) notifyAttention(title, body, workspaceID string) {
