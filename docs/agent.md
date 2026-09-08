@@ -291,6 +291,13 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent status --json` | the daemon's status plus `usage[]` (tokens today / this week per workspace, with its `configDir`), `accounts[]` (per Claude account, the /usage picture Claude Code last cached: 5-hour and 7-day percent used and reset times) and `dashboardUrl` — what corgi-bar and the deck read |
 | `corgi agent claude [--profile P] [-- args]` | run Claude Code for this folder's workspace: its account (`configDir`), binary and permission mode; plain `claude` outside every workspace |
 | `corgi agent dismiss <session>` | take a done, idle or closed session off the board until its next event (a closed chat whose process lingers) |
+| `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
+| `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
+| `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent usage [--json\|--watch]` | every account's 5-hour and 7-day windows, the pace and when they run out, today's tokens by model, how long sessions waited on you |
+| `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
+| `corgi agent carry <session> --profile P` | continue a session under another listed account, conversation included (copies the transcript, resumes it in a new terminal) |
+| `corgi agent standup [--since 24h] [--write]` | what you asked Claude and what got committed, per workspace; `--write` has `claude -p` turn it into three sentences |
 | `corgi agent stop` | stop the daemon |
 
 ## Restarts, and being told about them
@@ -597,7 +604,12 @@ changes what a session is doing — start, prompt, tool, permission, notificatio
 stop, failure, end. Each is asynchronous and exits 0 whatever happens, so a
 daemon that is down costs a millisecond and shows nothing in the transcript.
 `emit` reads only the session id, the event, the directory and the tool name;
-prompts, tool inputs and the transcript never leave the hook. It also records
+prompts, tool inputs and the transcript never leave the hook. Two things are
+reduced on the spot before anything is written: the tool input becomes one
+safe word (`registry.go`, `git push`, `api.github.com` — the file's name, the
+program and its subcommand, a host; never a path, a flag or a value), and on
+Stop the transcript's newest assistant turn becomes a context number (see
+below) and the chat's title. It also records
 the `claude` process's pid and parent chain, which is what makes the rest work:
 
 | status | when | key |
@@ -690,6 +702,63 @@ Everything lives in the agent data directory (`sessions.json`, `windows/`,
 (`CLAUDE_CODE_REMOTE`) and subagents are never registered.
 `corgi agent track disable` removes the hooks and leaves every other hook in
 `settings.json` alone.
+
+### What the board says beyond the status
+
+Every session on the board carries, when known:
+
+- `context` — how full its context window is: `{tokens, window, percent,
+  model}`. Read from the transcript's newest assistant turn (its input plus
+  what it read from and wrote to the cache is the context the next turn
+  starts from) on every Stop, tool result and prompt. Slots carry the
+  percent. Past 60% a key goes amber, past 85% red: `/compact` before it
+  forgets. The terminal tab title carries it too from 50% up (`✓ acme-api
+  71%`).
+- `title` — the chat's name as its Claude Code panel tab shows it, so a
+  window with several chats open reveals the right one on focus.
+- `pending` — the permission prompt it is waiting on: `{tool, subject}`.
+  What `corgi agent answer` answers, and what an Allow button shows first.
+- `note` — yours, from `corgi agent note`.
+- `stuck` — working, but no hook event for twelve minutes. Probably
+  spinning or waiting on a call that died; a key shows SLOW.
+
+And the board carries `accounts[]`: every account the sessions run under (and
+every profile in the config, whether in use or not) with the /usage picture
+Claude Code last cached — `limits.fiveHour` and `limits.sevenDay`, percent
+and reset time — and a `forecast`: the daemon keeps a reading per minute
+(one per fetch; `usage/<profile>.jsonl` in the agent dir), fits a line
+through the last ninety minutes and says `percentPerHour`, `exhaustAt`, and
+`safe` — whether the reset comes before the window runs out. `corgi agent
+usage` prints the same as a sentence: *5h: 60%/h, RUNS OUT 2:32pm (before
+the 4:10pm reset)*.
+
+Claude Code refreshes those numbers when a session asks; an account that
+shows nothing has never run `/usage`.
+
+### Typing into a session from elsewhere
+
+`corgi agent send` is how a Stream Deck prompt key, the menu bar's prompt
+field and a Telegram reply put text into a session: focus it, then type. An
+integrated terminal takes the text through the VS Code extension (a reveal
+request with `text` and `enter`; Enter is a literal carriage return, so the
+Claude Code TUI reads it as the Return key and nothing is ever run as a shell
+command). iTerm2 takes it through `write text`, Terminal.app through System
+Events keystrokes. The Claude Code panel takes nothing from here — its input
+is a web view — so the send fails with a `focusError` saying so and a surface
+falls back to its own keystrokes after the focus it already got.
+
+`corgi agent answer` types the keys a permission prompt takes: Return for
+allow, `2` then Return for always, Escape for deny. It refuses to allow a
+Bash command whose subject the board recognises as risky — `rm`, `sudo`,
+`--force`, `--hard`, `drop` and the like: those you look at.
+
+### Waits, and what they cost
+
+When a session leaves `needs_input` or `limited`, the daemon records how
+long it sat there (`waits.jsonl`). `corgi agent usage` sums the day: how many
+waits, the median, the longest and which session, and how long limits cost.
+A limit lifting is one notification ("limit lifted — back to work"); the
+work resumes by itself.
 
 ### The handover brief
 
@@ -847,6 +916,27 @@ instead of your subscription.
 
 `corgi agent status` prints which account each workspace will actually use.
 That one line prevents the most likely surprise in agent mode.
+
+A workspace may be allowed more than one account. List them under it in the
+user config, as profile names:
+
+```yaml
+workspaces:
+  acme-api:
+    configDir: ~/.claude
+    accounts: [default, work]
+profiles:
+  work:
+    configDir: ~/.claude-work
+```
+
+Then `corgi agent claude --profile auto` (what the "+" key can run) starts
+under whichever listed account has the most 5-hour budget left, and `corgi
+agent carry <session> --profile work` moves a session that hit its limit to
+the other one: the transcript is copied into that account's config directory
+and a new terminal in the same window runs `corgi agent claude --profile work
+-- --resume <id>`, so the conversation carries on. A workspace that lists no
+accounts never switches and cannot be carried — the list is the permission.
 
 This is environment and config-path scoping, not a sandbox. It prevents
 accidents. It does not contain a compromised session. For a real boundary,

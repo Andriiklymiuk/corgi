@@ -106,6 +106,11 @@ type Daemon struct {
 	Cwd           func(pid int) string
 	// ReapTick overrides reapInterval.
 	ReapTick time.Duration
+	// AccountDirs lists the config dirs of every configured profile, so the
+	// board shows an account before a session runs under it. Injected by
+	// cmd. TypeText is the emulator typing seam.
+	AccountDirs func() []string
+	TypeText    func(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error
 	// publishStopped is called as the status publisher exits.
 	//
 	// A test seam. Whether Run waits for that goroutine is otherwise observable

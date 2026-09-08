@@ -12,6 +12,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
+	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
 // claudeLaunch is the command line `corgi agent claude` runs: the binary,
@@ -34,6 +35,7 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 
   corgi agent claude                 # this folder's workspace
   corgi agent claude --profile work  # under a corgi profile
+  corgi agent claude --profile auto  # the listed account with most budget left
   corgi agent claude --show          # print the command instead of running it
   corgi agent claude -- --resume     # arguments after -- go to claude`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -102,6 +104,9 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 	}
 	repo, _ := config.LoadRepo(best)
 	resolved := config.Resolve(id, repo, user)
+	if strings.EqualFold(strings.TrimSpace(profile), "auto") {
+		profile = pickAccountProfile(user, resolved)
+	}
 	if p := strings.TrimSpace(profile); p != "" {
 		withProfile, err := config.ApplyProfile(resolved, user, p)
 		if err != nil {
@@ -174,4 +179,37 @@ func init() {
 	agentClaudeCmd.Flags().String("profile", "", "Run under this corgi profile's account and settings")
 	agentClaudeCmd.Flags().Bool("show", false, "Print the resolved command and exit")
 	agentCmd.AddCommand(agentClaudeCmd)
+}
+
+// pickAccountProfile is --profile auto: among the profiles the workspace's
+// accounts: list allows, the one whose 5-hour window has the most room, by
+// the numbers Claude Code last fetched. "" keeps the workspace's own account
+// — a workspace that lists nothing never switches — and a profile with no
+// snapshot yet counts as full, so an account nobody has used is tried last.
+func pickAccountProfile(user *config.UserConfig, resolved config.Resolved) string {
+	if user == nil || len(resolved.Accounts) == 0 {
+		return ""
+	}
+	best, bestLeft := "", -1
+	for _, name := range resolved.Accounts {
+		name = strings.TrimSpace(name)
+		p, ok := user.Profiles[name]
+		if !ok && name != "default" {
+			continue
+		}
+		left := 0
+		if l, ok := usage.ReadLimits(expandTilde(p.ConfigDir)); ok {
+			left = 100 - l.FiveHour.Percent
+			if l.FiveHour.Percent >= 100 {
+				left = 0
+			}
+		}
+		if left > bestLeft {
+			best, bestLeft = name, left
+		}
+	}
+	if best == "default" {
+		return ""
+	}
+	return best
 }

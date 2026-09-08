@@ -43,6 +43,12 @@ const (
 	// ActionDismiss takes a finished session off the board until its next
 	// event: a closed chat whose process lingers, a key wanted back.
 	ActionDismiss = "dismiss"
+	// ActionSend types Text into a session's terminal; ActionAnswer answers
+	// its pending permission prompt with Answer (allow, always, deny).
+	ActionSend   = "send"
+	ActionAnswer = "answer"
+	// ActionNote sets or clears a session's note.
+	ActionNote = "note"
 )
 
 // needsWorkspace lists the actions addressed to a workspace; the rest are
@@ -53,6 +59,9 @@ var known = map[string]bool{
 	ActionStart: true, ActionStop: true, ActionAttention: true, ActionSession: true,
 	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true, ActionNew: true,
 	ActionDismiss: true,
+	ActionSend:    true,
+	ActionAnswer:  true,
+	ActionNote:    true,
 }
 
 // TTL is how long a written command stays valid. A start that sat in the spool
@@ -88,6 +97,15 @@ type Command struct {
 	Size int `json:"size,omitempty"`
 	// WindowID is ActionNew's editor window, when the caller has one.
 	WindowID string `json:"windowId,omitempty"`
+	// Text and Enter are ActionSend's payload; Note is ActionNote's line;
+	// Answer is ActionAnswer's choice.
+	Text   string `json:"text,omitempty"`
+	Enter  bool   `json:"enter,omitempty"`
+	Note   string `json:"note,omitempty"`
+	Answer string `json:"answer,omitempty"`
+	// Command is what ActionNew's terminal runs when the caller has a
+	// specific command line (carry's `--resume`); else `corgi agent claude`.
+	Command string `json:"command,omitempty"`
 }
 
 // Dir is the spool directory under the agent data dir.

@@ -58,8 +58,8 @@ func (t *telegramControl) run(ctx context.Context) {
 			return
 		}
 		texts := t.poll(ctx)
-		for _, text := range texts {
-			t.handle(text)
+		for _, m := range texts {
+			t.handle(m.Text, m.ReplyTo)
 		}
 		if len(texts) == 0 {
 			select {
@@ -71,7 +71,14 @@ func (t *telegramControl) run(ctx context.Context) {
 	}
 }
 
-func (t *telegramControl) poll(ctx context.Context) []string {
+// telegramMessage is one incoming message: its text and, when it answers
+// one of corgi's own notifications, that notification's text.
+type telegramMessage struct {
+	Text    string
+	ReplyTo string
+}
+
+func (t *telegramControl) poll(ctx context.Context) []telegramMessage {
 	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?timeout=30&offset=%d",
 		t.token, t.offset)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -93,6 +100,9 @@ func (t *telegramControl) poll(ctx context.Context) []string {
 				Chat struct {
 					ID int64 `json:"id"`
 				} `json:"chat"`
+				ReplyTo *struct {
+					Text string `json:"text"`
+				} `json:"reply_to_message"`
 			} `json:"message"`
 		} `json:"result"`
 	}
@@ -100,7 +110,7 @@ func (t *telegramControl) poll(ctx context.Context) []string {
 		return nil
 	}
 
-	var texts []string
+	var texts []telegramMessage
 	for _, update := range payload.Result {
 		if update.UpdateID >= t.offset {
 			t.offset = update.UpdateID + 1
@@ -109,15 +119,29 @@ func (t *telegramControl) poll(ctx context.Context) []string {
 			continue
 		}
 		if text := strings.TrimSpace(update.Message.Text); text != "" {
-			texts = append(texts, text)
+			m := telegramMessage{Text: text}
+			if update.Message.ReplyTo != nil {
+				m.ReplyTo = update.Message.ReplyTo.Text
+			}
+			texts = append(texts, m)
 		}
 	}
 	return texts
 }
 
-func (t *telegramControl) handle(text string) {
+func (t *telegramControl) handle(text, replyTo string) {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
+		return
+	}
+	if !strings.HasPrefix(fields[0], "/") {
+		// Plain text is either a reply to a "needs you" notification —
+		// typed into that session — or noise.
+		if label := sessionFromNotification(replyTo); label != "" {
+			t.sendToSession(label, text)
+		} else if replyTo == "" {
+			t.send("reply to a session's notification to type into it, or /help")
+		}
 		return
 	}
 	verb := strings.ToLower(strings.TrimPrefix(fields[0], "/"))
@@ -138,15 +162,143 @@ func (t *telegramControl) handle(text string) {
 		t.control(command.ActionStart, arg)
 	case "stop":
 		t.control(command.ActionStop, arg)
+	case "sessions", "board":
+		t.send(t.boardText())
+	case "usage", "limits":
+		t.send(t.usageText())
+	case "allow", "yes":
+		t.answer(arg, "allow")
+	case "always":
+		t.answer(arg, "always")
+	case "deny", "no":
+		t.answer(arg, "deny")
+	case "send", "say":
+		if len(fields) < 3 {
+			t.send("/send <session> <text>")
+			return
+		}
+		t.sendToSession(arg, strings.Join(fields[2:], " "))
+	case "focus":
+		t.board(command.Command{Action: command.ActionFocus, SessionID: arg}, "focusing "+arg)
 	default:
 		t.send("unknown command. /help")
 	}
+}
+
+// sessionFromNotification finds the session a corgi notification was about:
+// its title line reads "corgi agent · <label>".
+func sessionFromNotification(text string) string {
+	first := strings.TrimSpace(strings.SplitN(text, "\n", 2)[0])
+	_, label, ok := strings.Cut(first, "corgi agent · ")
+	if !ok {
+		return ""
+	}
+	if i := strings.IndexAny(label, ":\n"); i >= 0 {
+		label = label[:i]
+	}
+	return strings.TrimSpace(label)
+}
+
+func (t *telegramControl) sendToSession(ref, text string) {
+	t.board(command.Command{Action: command.ActionSend, SessionID: ref, Text: text, Enter: true, Source: "telegram"},
+		"typed into "+ref)
+}
+
+func (t *telegramControl) answer(ref, answer string) {
+	if ref == "" {
+		t.send("/" + answer + " <session>")
+		return
+	}
+	t.board(command.Command{Action: command.ActionAnswer, SessionID: ref, Answer: answer, Source: "telegram"},
+		answer+" sent to "+ref)
+}
+
+// board drops a board command in the spool for the daemon, and reports the
+// board's notice a moment later when the daemon refused it.
+func (t *telegramControl) board(c command.Command, done string) {
+	if t.agentIn == "" {
+		return
+	}
+	info, err := daemon.ReadInfo(t.agentIn)
+	if err != nil || info == nil {
+		t.send("corgi agent is not running")
+		return
+	}
+	before, _ := readBoard(t.agentIn)
+	if _, err := command.Write(t.agentIn, c); err != nil {
+		t.send("could not queue that: " + err.Error())
+		return
+	}
+	daemon.Nudge(info)
+	time.Sleep(1500 * time.Millisecond)
+	after, err := readBoard(t.agentIn)
+	if err == nil && after.Notice != "" && after.NoticeAt.After(before.NoticeAt) {
+		t.send("corgi: " + after.Notice)
+		return
+	}
+	if err == nil && c.SessionID != "" {
+		for _, s := range after.Sessions {
+			if (s.ID == c.SessionID || strings.EqualFold(s.Display, c.SessionID) || strings.EqualFold(s.Label, c.SessionID)) && s.FocusError != "" && s.FocusAt.After(before.UpdatedAt) {
+				t.send("corgi: " + s.FocusError)
+				return
+			}
+		}
+	}
+	t.send(done)
+}
+
+func (t *telegramControl) boardText() string {
+	board, err := readBoard(t.agentIn)
+	if err != nil || len(board.Sessions) == 0 {
+		return "no sessions on the board"
+	}
+	var b strings.Builder
+	for _, s := range board.Sessions {
+		fmt.Fprintf(&b, "%s %s — %s", statusGlyph(s.Status), s.Display, statusWord(s.Status))
+		if s.Detail != "" {
+			b.WriteString(" · " + s.Detail)
+		}
+		if s.Context != nil && s.Context.Percent > 0 {
+			fmt.Fprintf(&b, " · ctx %d%%", s.Context.Percent)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("reply to a notification, or /send <session> <text> · /allow /deny <session>")
+	return b.String()
+}
+
+func (t *telegramControl) usageText() string {
+	rep := buildUsageReport(t.agentIn, time.Now())
+	if len(rep.Accounts) == 0 {
+		return "no accounts known yet"
+	}
+	var b strings.Builder
+	for _, a := range rep.Accounts {
+		if a.Limits == nil {
+			fmt.Fprintf(&b, "%s: no /usage snapshot yet\n", a.Profile)
+			continue
+		}
+		fmt.Fprintf(&b, "%s: 5h %d%% (resets %s) · week %d%%", a.Profile, a.Limits.FiveHour.Percent, resetText(a.Limits.FiveHour.ResetsAt), a.Limits.SevenDay.Percent)
+		if line := forecastLine(a.Limits, a.Forecast); line != "" {
+			b.WriteString(" · " + line)
+		}
+		b.WriteString("\n")
+	}
+	if rep.Waits.Count > 0 {
+		fmt.Fprintf(&b, "waited on you %d× today, longest %s", rep.Waits.Count, shortDuration(time.Duration(rep.Waits.Longest)*time.Second))
+	}
+	return strings.TrimSpace(b.String())
 }
 
 const telegramHelp = `corgi commands:
 /status            what is registered and running
 /start <workspace> start a session there
 /stop <workspace>  stop it
+/sessions          the board: every Claude session and what it is doing
+/usage             each account's limits and when they run out
+/send <s> <text>   type into a session (reply to its notification does the same)
+/allow /always /deny <s>  answer its permission prompt
+/focus <s>         bring its window to the front
 /help              this`
 
 func (t *telegramControl) statusText() string {

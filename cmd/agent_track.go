@@ -17,6 +17,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/proc"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 
 	"github.com/spf13/cobra"
@@ -357,8 +358,9 @@ func readUserSettings(path string) (map[string]any, error) {
 
 // --- the hooks themselves ---------------------------------------------------
 
-// hookInput is the slice of a hook's stdin the tracking hooks read. Tool
-// inputs, prompts and the transcript path are deliberately not here.
+// hookInput is the slice of a hook's stdin the tracking hooks read. The tool
+// input and transcript path are read only to be reduced on the spot — to a
+// safe subject word and to numbers — and never leave the hook themselves.
 type hookInput struct {
 	SessionID        string          `json:"session_id"`
 	Event            string          `json:"hook_event_name"`
@@ -371,6 +373,22 @@ type hookInput struct {
 	Message          string          `json:"message"`
 	ErrorType        string          `json:"error_type"`
 	Error            json.RawMessage `json:"error"`
+	ToolInput        json.RawMessage `json:"tool_input"`
+	TranscriptPath   string          `json:"transcript_path"`
+}
+
+// readsTranscript says which events are worth a look at the transcript:
+// the context number changes once per turn, the title rarely.
+func (in hookInput) readsTranscript() (context, title bool) {
+	switch in.Event {
+	case "Stop", "StopFailure":
+		return true, true
+	case "SessionStart":
+		return in.Source != "startup", true
+	case "PostToolUse", "PostToolUseFailure", "UserPromptSubmit":
+		return true, false
+	}
+	return false, false
 }
 
 func readHookInput(stdin io.Reader) (hookInput, bool) {
@@ -450,7 +468,18 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 		Error: in.errorType(), Window: getenv("CORGI_VSCODE_WINDOW"),
 		TermProgram: getenv("TERM_PROGRAM"),
 		TermSession: firstNonEmpty(getenv("ITERM_SESSION_ID"), getenv("TERM_SESSION_ID")),
+		Subject:     subjectOf(in.Tool, in.ToolInput),
 		At:          time.Now().UTC(),
+	}
+	if wantContext, wantTitle := in.readsTranscript(); in.TranscriptPath != "" && (wantContext || wantTitle) {
+		if wantContext {
+			if c, ok := usage.ContextOf(in.TranscriptPath); ok {
+				ev.Context = &c
+			}
+		}
+		if wantTitle {
+			ev.Title = usage.TitleOf(in.TranscriptPath)
+		}
 	}
 	chain := proc.Ancestors(parent)
 	if proc.HasCorgi(chain) {
@@ -494,6 +523,11 @@ func tabTitle(in hookInput, label string) string {
 	case "UserPromptSubmit":
 		return "● " + label
 	case "Stop":
+		if in.TranscriptPath != "" {
+			if c, ok := usage.ContextOf(in.TranscriptPath); ok && c.Percent >= 50 {
+				return fmt.Sprintf("✓ %s %d%%", label, c.Percent)
+			}
+		}
 		return "✓ " + label
 	case "StopFailure":
 		if limited, reset := sessions.LimitReset(in.errorType(), in.errorMessage()); limited {

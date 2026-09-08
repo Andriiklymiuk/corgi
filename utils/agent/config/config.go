@@ -89,7 +89,12 @@ type WorkspaceConfig struct {
 	Capacity       int      `yaml:"capacity"`
 	PermissionMode string   `yaml:"permissionMode"`
 	ConfigDir      string   `yaml:"configDir"`
-	WakeLock       string   `yaml:"wakeLock"`
+	// Accounts lists the profiles this workspace may run under, for `corgi
+	// agent claude --profile auto` (the one with the most budget left) and
+	// `corgi agent carry` (moving a limited session to another). Empty means
+	// only its own account: a workspace never switches unless told it may.
+	Accounts []string `yaml:"accounts"`
+	WakeLock string   `yaml:"wakeLock"`
 	// InheritAPIKey lets this workspace keep an ambient ANTHROPIC_API_KEY.
 	// Off unless the machine's owner asks for it: remote control refuses to
 	// run with one set, and an inherited key bills the API instead of a
@@ -242,6 +247,9 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	}
 	if over.ConfigDir != "" {
 		base.ConfigDir = over.ConfigDir
+	}
+	if len(over.Accounts) > 0 {
+		base.Accounts = over.Accounts
 	}
 	if over.WakeLock != "" {
 		base.WakeLock = over.WakeLock

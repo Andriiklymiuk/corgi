@@ -290,11 +290,18 @@ func formatSlot(sl sessions.Slot) string {
 	if sl.Pinned {
 		pin = "📌"
 	}
-	line := fmt.Sprintf("%s %s %s %-18s %-10s", key, pin, statusGlyph(sl.Status), clipTitle(sl.Label, 18), statusWord(sl.Status))
-	if sl.Detail != "" {
-		line += " " + clipTitle(sl.Detail, 24)
+	word := statusWord(sl.Status)
+	if sl.Stuck {
+		word = "SLOW"
+	}
+	line := fmt.Sprintf("%s %s %s %-18s %-10s", key, pin, statusGlyph(sl.Status), clipTitle(sl.Label, 18), word)
+	if detail := firstNonEmpty(sl.Note, sl.Detail); detail != "" {
+		line += " " + clipTitle(detail, 24)
 	}
 	line += "  " + sl.Profile + " · " + string(sl.Host)
+	if sl.Context > 0 {
+		line += fmt.Sprintf(" · ctx %d%%", sl.Context)
+	}
 	if sl.ElapsedS > 0 {
 		line += " · " + shortDuration(time.Duration(sl.ElapsedS)*time.Second)
 	}
