@@ -350,6 +350,12 @@ func TestLabelsAndLookup(t *testing.T) {
 	if _, err := r.Lookup(""); err == nil {
 		t.Fatal("empty ref")
 	}
+	bare := ev("Stop", "abcd-1", 3*time.Second)
+	bare.ConfigDir = ""
+	r.Apply(bare)
+	if s, _ := r.Lookup("abcd-1"); s.Profile != "work" {
+		t.Fatalf("an event without a config dir keeps the profile, got %q", s.Profile)
+	}
 	cwd := ev("CwdChanged", "ijkl-3", 3*time.Second)
 	cwd.Cwd = "/home/me/dev/acme-api"
 	r.Apply(cwd)

@@ -379,7 +379,9 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if s.Label == "" {
 		s.Label, s.Folder = r.resolve(s.Cwd)
 	}
-	if s.Profile == "" || ev.ConfigDir != s.ConfigDir {
+	if s.Profile == "" || (ev.ConfigDir != "" && ev.ConfigDir != s.ConfigDir) {
+		// An event that carries no config dir (a hook run without the env,
+		// or a synthetic one) must not demote a session to "default".
 		s.ConfigDir = ev.ConfigDir
 		s.Profile = r.profile(ev.ConfigDir)
 	}
