@@ -1,0 +1,301 @@
+// Draws the README pictures: terminal sessions of the commands that matter,
+// as HTML for Chrome to screenshot, one file per animation frame. Every line
+// is the format the code prints (cmd/*.go, utils/*.go), so the pictures do
+// not drift from the CLI. scripts/capture-showcase.sh turns the frames into
+// docs/media/*.png and *.gif.
+import { mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+
+// Colours: the ANSI palette of utils/art, on a dark terminal.
+const c = { g: "#3fb950", r: "#ff7b72", y: "#e3b341", b: "#79c0ff", c: "#56d4dd", d: "#8b949e", w: "#e6edf3", m: "#d2a8ff" };
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+/** {g}green{/} {r}red{/} {y}yellow{/} {b}blue{/} {c}cyan{/} {d}dim{/} {m}magenta{/} {B}bold{/} */
+const mark = (s) => esc(s).replace(/\{([grybcdmB])\}/g, (_, k) => (k === "B" ? `<b>` : `<span style="color:${c[k]}">`)).replace(/\{\/\}/g, "</span>").replace(/<\/span>(?=[^<]*<\/b>)/g, "</b>");
+const line = (s) => s.startsWith("{Q}") ? `<div class="qr">${esc(s.slice(3))}</div>` : `<div class="l">${s === "" ? "&nbsp;" : mark(s)}</div>`;
+
+const css = `
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0d1117;font-family:-apple-system,"SF Pro Text",Inter,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e6edf3}
+  .stage{position:absolute;left:0;top:0;padding:28px;display:flex;gap:28px;align-items:flex-start}
+  .term{width:900px;background:#161b22;border:1px solid #30363d;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden}
+  .bar{height:38px;display:flex;align-items:center;padding:0 14px;background:#21262d;border-bottom:1px solid #30363d;font-size:12px;color:#8b949e;position:relative}
+  .bar i{width:12px;height:12px;border-radius:50%;background:#ff5f57;margin-right:8px}.bar i+i{background:#febc2e}.bar i+i+i{background:#28c840}
+  .bar span{position:absolute;left:0;right:0;text-align:center;pointer-events:none}
+  .body{padding:14px 18px;font:13.5px/1.55 "SF Mono",ui-monospace,Menlo,Consolas,monospace;white-space:pre;color:#e6edf3}
+  .l{min-height:21px}
+  .cur{display:inline-block;width:8px;height:16px;background:#e6edf3;vertical-align:-3px;margin-left:2px}
+  .body b{font-weight:600;color:#fff}
+  .qr{font:13.5px/1 "Menlo",monospace;letter-spacing:0;color:#fff;white-space:pre;margin:2px 0}
+  /* phone */
+  .phone{width:300px;height:620px;border-radius:44px;background:#0b0b0d;border:3px solid #2a2a2e;box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 0 0 2px #000;position:relative;overflow:hidden;flex:none}
+  .notch{position:absolute;left:50%;top:10px;transform:translateX(-50%);width:100px;height:26px;border-radius:14px;background:#000;z-index:3}
+  .screen{position:absolute;inset:0;overflow:hidden;font-family:-apple-system,system-ui,sans-serif}
+  .clock{color:#fff;text-align:center;margin-top:90px;font-size:64px;font-weight:200;letter-spacing:-2px}
+  .date{color:#fff;text-align:center;font-size:17px;opacity:.85}
+  .lock{background:linear-gradient(160deg,#1a2352,#4b2a6e 60%,#a04a4a)}
+  .cam{background:#111;position:relative}
+  .cam .view{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#2b2b2b}
+  .cam .view .qr{color:#111;background:#fff;padding:10px;font-size:8px;line-height:1;border-radius:4px;transform:rotate(-3deg)}
+  .cam .frame{position:absolute;left:40px;right:40px;top:170px;bottom:250px;border:2px solid rgba(255,225,0,.9);border-radius:12px}
+  .cam .pill{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);background:#ffd60a;color:#111;font-size:13px;font-weight:600;padding:8px 14px;border-radius:20px;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  .cam .shutter{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);width:66px;height:66px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px #111,0 0 0 6px #fff}
+  /* the launcher page, its own palette (cmd/mcp_launcher.go) */
+  .app{background:#0a0b0e;color:#eceef2;position:absolute;inset:0;padding:54px 16px 0;font-size:13px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .logo{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#1e2634,#131824);border:1px solid #22242b;display:flex;align-items:center;justify-content:center;font-size:19px}
+  .brand h1{font-size:17px;margin:0}.brand small{display:block;color:#8f94a3;font-size:11px}
+  .ws{background:#141519;border:1px solid #22242b;border-radius:11px;padding:11px 11px 8px;margin:8px 0}
+  .head{display:flex;align-items:center;gap:9px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#3a4152;flex:none}.dot.live{background:#6ee787}.dot.starting{background:#6ee787;opacity:.45}.dot.attention{background:#ffa657}
+  .name{font-weight:600;font-size:14px;flex:1}
+  .path{color:#63677a;font-size:10px;font-family:ui-monospace,Menlo,monospace;margin:2px 0 0 17px}
+  .meta{font-size:11px;color:#63677a;margin:4px 0 0 17px}.meta .live{color:#6ee787}.meta .warn{color:#ff7b72}.meta .why{color:#8f94a3}
+  .meta span+span::before{content:"·";margin:0 5px;color:#63677a}
+  .actions{display:flex;gap:5px;margin-top:9px;align-items:center;flex-wrap:wrap}
+  .go{background:#6ee787;color:#05110a;font-weight:700;font-size:12px;padding:6px 14px;border-radius:8px}
+  .go.tap{box-shadow:0 0 0 4px rgba(110,231,135,.35)}
+  .chip{border:1px solid #22242b;color:#8f94a3;font-size:10.5px;padding:5px 8px;border-radius:8px}
+  .top{display:flex;justify-content:space-between;margin-top:8px;padding-top:7px;border-top:1px solid #1a1c22;font-size:12px}
+  .top .when{color:#63677a;font-size:10.5px}
+  .sum{color:#8f94a3;font-size:11px;margin:0 0 6px 2px}.sum.hot{color:#ff7b72;font-weight:600}
+`;
+
+const term = (title, lines, { rows = lines.length, cursor = false, extra = "" } = {}) => {
+	const body = lines.map(line).join("") + (cursor ? `<div class="l"><span class="cur"></span></div>` : "");
+	const pad = Math.max(0, rows - lines.length - (cursor ? 1 : 0));
+	return `<div class="term"><div class="bar"><i></i><i></i><i></i><span>${esc(title)}</span></div><div class="body">${body}${`<div class="l">&nbsp;</div>`.repeat(pad)}</div></div>${extra}`;
+};
+
+const page = (inner, width = 960) => `<!doctype html><meta charset="utf-8"><title>corgi</title><style>${css}</style><div class="stage" style="width:${width}px">${inner}</div>`;
+
+/** Frames that grow: the first n lines of the script at each cut. */
+const grow = (lines, cuts) => cuts.map((n) => lines.slice(0, n));
+
+const out = "docs/media/frames";
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
+const scenes = {};
+const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((html, i) => writeFileSync(`${out}/${name}-${i}.html`, html)); };
+
+// ---- corgi run ------------------------------------------------------------------
+{
+	const s = [
+		"{g}${/} {B}corgi run{/}",
+		"Path /Users/me/dev/stack/api does not exist for service api. It should be cloned.",
+		"",
+		"🚀 🤖 Executing command for api:  {g}git clone https://github.com/acme/api.git api{/}",
+		"Cloning into 'api'...",
+		"{g}✅{/} Db service db was successfully created",
+		"{b} 🤖 Starting database db {/}",
+		"",
+		"🚀 🤖 Executing command for db:  {g}docker compose -f corgi_services/db/docker-compose.yml up -d{/}",
+		"{b} ⛅ GETTING DATABASE DUMP for db {/}",
+		"✅ Successfully added database dump to db",
+		"{b} 🎉  db  IS SEEDED {/}",
+		"{b} 🐶 RUNNING SERVICE api {/}",
+		"",
+		"Before start commands:",
+		"🚀 🤖 Executing command for api:  {g}go mod download{/}",
+		"",
+		"Start commands:",
+		"🚀 🤖 Executing command for api:  {g}go run .{/}",
+		"{b} 🐶 RUNNING SERVICE web {/}",
+		"⏳ web dependency api satisfied (ready)",
+		"🚀 🤖 Executing command for web:  {g}yarn dev{/}",
+		"{c}[api]{/} listening on :7012",
+		"{c}[web]{/} ➜  Local: http://localhost:5173/",
+		"😉 corgi is running — Ctrl+C to stop",
+	];
+	const cuts = [1, 2, 5, 7, 9, 12, 13, 16, 19, 22, 24, 25];
+	scene("run", grow(s, cuts).map((l, i) => page(term("corgi run — stack", l, { rows: s.length, cursor: i < cuts.length - 1 }))));
+}
+
+// ---- one feature across repos, then mission control ----------------------------
+{
+	const s = [
+		"{g}${/} {B}corgi run --feature ABC-123{/}",
+		"feature: api → ABC-123 @ /Users/me/dev/stack/corgi_services/.worktrees/api-ABC-123",
+		"feature: web → ABC-123 @ /Users/me/dev/stack/corgi_services/.worktrees/web-ABC-123",
+		"feature: mobile → no ABC-123 branch, staying on current checkout",
+		"{b} 🤖 Starting database db {/}",
+		"{b} 🐶 RUNNING SERVICE api {/}",
+		"{b} 🐶 RUNNING SERVICE web {/}",
+		"{b} 🐶 RUNNING SERVICE mobile {/}",
+		"😉 corgi is running — Ctrl+C to stop",
+	];
+	const mc = (t) => [
+		"{g}${/} {B}corgi mc --watch{/}",
+		"🛰️  corgi mission-control",
+		"  {g}✅ db                           running   {/}",
+		`  {g}✅ api                          running   {/}  {c}ABC-123{/} *  PR #412 [draft] CI:${t ? "success" : "pending"}`,
+		"  {g}✅ web                          running   {/}  {c}ABC-123{/}  PR #98 [open] CI:success",
+		"  {g}✅ mobile                       running   {/}  {c}main{/}",
+		"",
+		`{c}🛰️  4 services every 3s — 4 up, 0 down, 2 open PRs — last update 14:07:${t ? "36" : "33"}{/}`,
+	];
+	const frames = [...grow(s, [1, 4, 9]).map((l, i) => term("corgi run --feature", l, { rows: 9, cursor: i < 2 })), term("corgi mc", mc(0), { rows: 9 }), term("corgi mc", mc(1), { rows: 9 })];
+	scene("feature", frames.map((t) => page(t)));
+}
+
+// ---- status -w ----------------------------------------------------------------------
+{
+	const f = (webUp, t, up) => [
+		"{g}${/} {B}corgi status -w{/}",
+		"🩺 corgi status",
+		"  {g} ✅ db_services.db (postgres)               localhost:5432 listening{/}",
+		"  {g} ✅ services.api                            http://localhost:7012/health [HTTP 200]{/}",
+		webUp ? "  {g} ✅ services.web                            http://localhost:5173 [HTTP 200]{/}" : "  {r} ❌ services.web                            localhost:5173 not listening{/}",
+		"",
+		`{c}👀 watching 3 targets every 2s — last update 14:02:${t} (${up} up, ${3 - up} down) — Ctrl+C to stop{/}`,
+	];
+	scene("status", [f(0, "09", 2), f(0, "11", 2), f(1, "13", 3), f(1, "15", 3)].map((l) => page(term("corgi status -w", l))));
+}
+
+// ---- doctor, then doctor --fix -----------------------------------------------------
+{
+	const doc = (ok) => [
+		"{g}${/} {B}corgi doctor{/}",
+		"🤖 Required: {g}docker{/}",
+		"✅ docker is found",
+		"🤖 Required: {g}go{/}",
+		"✅ go is found",
+		"✅ {g}Docker daemon is running{/}",
+		"🔌 Port availability:",
+		"  {g}✅ 5432 free — for db_services.db (postgres){/}",
+		ok ? "  {g}✅ 7012 free — for services.api{/}" : "  {r}❌ 7012 busy — needed for services.api — held by: node (pid 41221){/}",
+		"  {g}✅ 5173 free — for services.web{/}",
+		"",
+		ok ? "{g}🎉 Doctor: all checks passed{/}" : "{r}❌ Doctor: one or more checks failed{/}",
+	];
+	const fix = [
+		"{g}${/} {B}corgi doctor --fix{/}",
+		"Fix port:7012? {g}y{/}",
+		"✅ fixed: port:7012",
+	];
+	scene("doctor", [
+		term("corgi doctor", doc(0), { rows: 12 }),
+		term("corgi doctor", fix, { rows: 12, cursor: true }),
+		term("corgi doctor", doc(1), { rows: 12 }),
+	].map((t) => page(t)));
+}
+
+// ---- db: snapshot, restore, shell ---------------------------------------------------
+{
+	const s = [
+		"{g}${/} {B}corgi db snapshot nightly{/}",
+		'📦 snapshot "nightly" saved (postgres:16-alpine, pg16/arm64, 4823104 bytes)',
+		"",
+		"{g}${/} {B}corgi db snapshot --list{/}",
+		"nightly              pg16/arm64  4823104 bytes  2026-09-08T22:10:03Z",
+		"pre-migration        pg16/arm64  4102331 bytes  2026-09-07T09:44:12Z",
+		"",
+		"{g}${/} {B}corgi db restore nightly{/}",
+		'⚠️  This WIPES the current "db" data volume and restores nightly.tar.zst. Continue? [y/N] {g}y{/}',
+		'✅ restored "db" from nightly.tar.zst',
+		"",
+		"{g}${/} {B}corgi db shell{/}",
+		"{c}🐚 Opening postgres shell for db...{/}",
+		"psql (16.4)",
+		"app=# {B}select count(*) from orders;{/}",
+		" count",
+		"-------",
+		"  4812",
+		"app=#",
+	];
+	scene("db", grow(s, [1, 2, 4, 6, 8, 9, 10, 12, 14, 15, 19]).map((l, i) => page(term("corgi db", l, { rows: s.length, cursor: i < 10 }))));
+}
+
+// ---- CI: the whole stack on the PR branches, one e2e suite ---------------------------
+{
+	const s = [
+		"{d}▸ Run{/} {B}corgi init --depth 1 --feature PR-812{/}",
+		"feature: api → PR-812",
+		"feature: web → PR-812",
+		"feature: mobile → no PR-812 branch, staying on its default",
+		"✅ Service api was successfully created",
+		"✅ Service web was successfully created",
+		"✅ Service mobile was successfully created",
+		"{d}▸ Run{/} {B}corgi run --feature PR-812 --detach --wait{/}",
+		"🐶 corgi running detached — 4 service(s), state: /home/runner/work/stack/.corgi/run-state.json",
+		"{c}⏳ waiting up to 5m0s for 4 targets to become healthy...{/}",
+		"{g}🎉 all 4 targets healthy{/}",
+		"{d}▸ Run{/} {B}corgi test --e2e{/}",
+		"🚀 🤖 Executing command for e2e:  {g}npx playwright test{/}",
+		"  Running 24 tests using 4 workers",
+		"  24 passed (1.4m)",
+		"📦 collected 2 e2e artifact path(s) into /home/runner/work/stack/corgi_artifacts/e2e",
+		"✅ e2e passed",
+	];
+	scene("ci", grow(s, [1, 4, 7, 8, 9, 11, 12, 15, 17]).map((l, i) => page(term("GitHub Actions · e2e · PR #812", l, { rows: s.length, cursor: i < 8 }))));
+}
+
+// ---- an agent takes the ticket ---------------------------------------------------------
+{
+	const s = [
+		"{d}>{/} {B}/corgi:stories ABC-123{/}",
+		"",
+		"{g}●{/} {B}Read{/} corgi-compose.yml",
+		"  ⎿  api (go) · web (vite) · mobile (expo) · db (postgres, seeded)",
+		"{g}●{/} {B}Linear{/} ABC-123 · Referral codes at checkout",
+		"  ⎿  api: POST /referrals + migration · web: code field · mobile: share sheet",
+		"{g}●{/} {B}Edit{/} api/internal/referrals/handler.go",
+		"{g}●{/} {B}Edit{/} api/migrations/0042_referrals.sql",
+		"{g}●{/} {B}Edit{/} web/src/checkout/Referral.tsx",
+		"{g}●{/} {B}Edit{/} mobile/app/checkout.tsx",
+		"{g}●{/} {B}Bash{/}(corgi run --feature ABC-123 --detach --wait)",
+		"  ⎿  🐶 corgi running detached — 4 service(s)",
+		"{g}●{/} {B}Bash{/}(corgi status --ready --timeout 2m)",
+		"  ⎿  🎉 all 4 targets healthy",
+		"{g}●{/} {B}Bash{/}(corgi test --e2e)",
+		"  ⎿  ✅ e2e passed",
+		"{g}●{/} {B}Bash{/}(gh pr create --draft) in api, web, mobile",
+		"  ⎿  https://github.com/acme/api/pull/412",
+		"  ⎿  https://github.com/acme/web/pull/98",
+		"  ⎿  https://github.com/acme/mobile/pull/231",
+		"{g}●{/} Three draft PRs. The stack ran with all three branches and the e2e suite passed. Nothing is merged.",
+	];
+	scene("stories", grow(s, [1, 4, 6, 8, 10, 12, 14, 16, 20, 21]).map((l, i) => page(term("Claude Code — stack", l, { rows: s.length, cursor: i < 9 }))));
+}
+
+// ---- the phone: agent up, scan, tap a repo -----------------------------------------------
+{
+	const qr = readFileSync("scripts/showcase-qr.txt", "utf8").trimEnd().split("\n");
+	const up = [
+		"{g}${/} {B}corgi agent up{/}",
+		"",
+		"  ✓ workspace acme-stack (registered)",
+		"  ✓ agent daemon running (pid 41902)",
+		"  ✓ starts at login (launchd) — survives a reboot",
+		"  ✓ public endpoint: https://blue-fox-42.trycloudflare.com/mcp",
+		"",
+		"  📱 scan to pair (single use, 10 minutes):",
+		"",
+		"{Q}" + qr.map((l) => `   ${l}`).join("\n"),
+		"",
+		"    or open: https://blue-fox-42.trycloudflare.com/pair#A7K2M9",
+		"",
+		"  after scanning, the phone opens the launcher — tap a repo to start:",
+		"    https://blue-fox-42.trycloudflare.com/app",
+	];
+	const card = ({ name, path, branch, dot, meta, btn, tap, session }) => `<div class="ws"><div class="head"><span class="dot ${dot}"></span><span class="name">${name}</span></div><div class="path">${path} <span style="color:#8f94a3">${branch}</span></div><div class="meta">${meta}</div><div class="actions"><span class="go${tap ? " tap" : ""}">${btn}</span><span class="chip">sessions</span><span class="chip">open in <b>app</b></span><span class="chip">options</span></div>${session ? `<div class="top"><span>${session}</span><span class="when">13:04</span></div>` : ""}</div>`;
+	const launcher = (t) => `<div class="app"><div class="brand"><div class="logo">🐶</div><div><h1>corgi</h1><small>andrii-mbp · 3 workspaces</small></div></div>
+	<div class="sum${t < 2 ? " hot" : ""}">${t < 2 ? "1 session needs you" : "2 live · 1 needs you"}</div>
+	${card({ name: "acme-stack", path: "~/dev/acme-stack", branch: "main", dot: t === 0 ? "" : t === 1 ? "starting" : "live", meta: t === 0 ? "<span>nothing running</span><span>default</span>" : t === 1 ? '<span class="live">starting</span><span>default</span>' : '<span class="live">1 live</span><span>12s</span><span>default</span>', btn: t === 0 ? "Start" : "Open", tap: t === 1, session: t >= 2 ? "acme-stack · main" : "" })}
+	${card({ name: "recipe-app", path: "~/dev/recipe-app", branch: "feat/search*", dot: "live", meta: '<span class="live">1 live</span><span>2h 10m</span><span>default</span>', btn: "Open", session: "recipe-app · search index" })}
+	${card({ name: "client-app", path: "~/work/client-app", branch: "main", dot: "attention", meta: '<span class="warn">needs you</span><span class="why">waiting: allow or deny the edit</span><span>work</span>', btn: "Open", session: "client-app · onboarding copy" })}
+	</div>`;
+	const phone = (screen) => `<div class="phone"><div class="notch"></div><div class="screen">${screen}</div></div>`;
+	const lock = `<div class="lock" style="position:absolute;inset:0"><div class="clock">13:04</div><div class="date">Tuesday 9 September</div></div>`;
+	const cam = `<div class="cam" style="position:absolute;inset:0"><div class="view"><div class="qr">${esc(qr.join("\n"))}</div></div><div class="frame"></div><div class="pill">Open “blue-fox-42.trycloudflare.com”</div><div class="shutter"></div></div>`;
+	const frames = [
+		[grow(up, [1])[0], lock, true],
+		[up, lock, false],
+		[up, cam, false],
+		[up, launcher(0), false],
+		[up, launcher(1), false],
+		[up, launcher(2), false],
+	];
+	scene("phone", frames.map(([l, screen, cur]) => page(term("corgi agent up", l, { rows: up.length, cursor: cur, extra: phone(screen) }), 1290)));
+}
+
+writeFileSync(`${out}/scenes.json`, JSON.stringify(scenes));
+console.log("wrote", Object.entries(scenes).map(([k, v]) => `${k}:${v}`).join(" "));

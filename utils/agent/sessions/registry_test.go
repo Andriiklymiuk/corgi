@@ -916,6 +916,25 @@ func TestTwinsWithTheSameTabNameFallBackToTheId(t *testing.T) {
 	if !names["acme-api·api"] || !names["acme-api·web"] {
 		t.Fatalf("tab names when they differ: %v", names)
 	}
+	// Tabs corgi titled itself repeat the label; the chat titles win, then the ids.
+	r.SetWindows([]Window{{ID: "w1", ExtHostPID: 7, Terminals: []Terminal{{Name: "✓ acme-api 55%", ShellPID: 90}, {Name: "● acme-api", ShellPID: 91}}, UpdatedAt: t0}})
+	names = map[string]bool{}
+	for _, s := range r.Snapshot(t0).Sessions {
+		names[s.Display] = true
+	}
+	if !names["acme-api·aaaa"] || !names["acme-api·bbbb"] {
+		t.Fatalf("ids when the tabs carry corgi's own titles: %v", names)
+	}
+	titled := ev("Stop", "aaaa-1", 5*time.Second)
+	titled.Title = "Order emails"
+	r.Apply(titled)
+	names = map[string]bool{}
+	for _, s := range r.Snapshot(t0).Sessions {
+		names[s.Display] = true
+	}
+	if !names["acme-api·Order emails"] {
+		t.Fatalf("the chat title when there is one: %v", names)
+	}
 }
 
 func TestToolSubjectPendingAndContext(t *testing.T) {

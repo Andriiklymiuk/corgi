@@ -1303,8 +1303,11 @@ func (r *Registry) displayLocked(s *Session) string {
 	if twins <= 1 {
 		return s.Label
 	}
-	if term := s.Host.Terminal; term != "" && r.terminalNameUniqueLocked(s) {
+	if term := s.Host.Terminal; term != "" && !strings.Contains(term, s.Label) && r.terminalNameUniqueLocked(s) {
 		return s.Label + "·" + term
+	}
+	if s.Title != "" && r.titleUniqueLocked(s) {
+		return s.Label + "·" + s.Title
 	}
 	id := strings.TrimPrefix(s.ID, "pid:")
 	if len(id) > 4 {
@@ -1313,8 +1316,19 @@ func (r *Registry) displayLocked(s *Session) string {
 	return s.Label + "·" + id
 }
 
+// titleUniqueLocked: the chat's own name tells twins apart when they differ.
+func (r *Registry) titleUniqueLocked(s *Session) bool {
+	for _, o := range r.sessions {
+		if o.ID != s.ID && o.Label == s.Label && o.Title == s.Title {
+			return false
+		}
+	}
+	return true
+}
+
 // terminalNameUniqueLocked: a tab name only tells sessions apart when the
-// twins have different ones. VS Code names every tab running claude by the
+// twins have different ones. A tab corgi named itself ("✓ acme-api 55%")
+// repeats the label and tells nothing either. VS Code names every tab running claude by the
 // process ("2.1.263"), which tells nothing.
 func (r *Registry) terminalNameUniqueLocked(s *Session) bool {
 	for _, o := range r.sessions {

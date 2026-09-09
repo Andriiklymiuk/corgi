@@ -91,7 +91,7 @@ fmt-check:
 coverage-check: test
 	./scripts/coverage-floor.sh coverage.out
 
-.PHONY: \
+.PHONY: showcase \
 fixHooks \
 release \
 tag \
@@ -110,3 +110,6 @@ coverage-by-pkg \
 test\:cov \
 fmt-check \
 coverage-check
+
+showcase: ## redraw docs/media (terminal mockups + gifs) with Chrome
+	scripts/capture-showcase.sh

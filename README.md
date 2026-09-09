@@ -85,6 +85,8 @@ corgi-compose.yml  ─►  corgi run
                          whole stack running 🐶   (Ctrl-C tears it all down)
 ```
 
+<p align="center"><img src="docs/media/run.gif" width="760" alt="corgi run: clones the missing repo, starts and seeds the database, writes the env, starts api and web"></p>
+
 > **Agents & CI:** use `corgi run --detach` then `corgi status --ready --timeout 2m` instead of the foreground commands above — they return instead of blocking. See [agents & scripting](docs/agents.md).
 
 No `corgi-compose.yml` yet? `corgi create` writes a starter one, or `/corgi-new` writes one with Claude.
@@ -159,6 +161,8 @@ Slash-commands and plain English both work:
 
 Nothing ships without you. It opens **draft** PRs and waits. If you have no project to try this on, `corgi run -l` fetches an example.
 
+<p align="center"><img src="docs/media/stories.gif" width="760" alt="/corgi:stories ABC-123: the agent edits api, web and mobile, runs the stack, waits for health, runs e2e, opens three draft PRs"></p>
+
 corgi is built to be driven by a program: it never stops to ask a question, prints JSON with `--json`, and returns exit codes you can branch on (`0` ok, `1` failed, `2` bad usage). It also ships an **MCP server**, so an agent calls real tools instead of guessing shell commands:
 
 ```bash
@@ -209,6 +213,8 @@ $ corgi agent up
 ```
 
 One scan pairs the phone. It gets its own token, revocable without touching your other devices. Each workspace remembers where it should open — personal projects in the Claude app, a work repo on a different Claude account in Chrome signed into that account. Save the launcher to your home screen and it is one tap after that.
+
+<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and opens the launcher; a tap on Start brings a session up"></p>
 
 **Adding your other repos.** `agent up` registered the directory you ran it in, and the launcher lists only what is registered. Add the rest:
 
@@ -315,6 +321,12 @@ Beyond the ones above, these are the ones that come up in a normal week:
 38 database drivers ([list](docs/databases.md)), and all of this behaves the same whether the
 project has one service or twelve.
 
+<p align="center"><img src="docs/media/db.gif" width="760" alt="corgi db: snapshot, list, restore with a confirmation, and a psql shell with the password filled in"></p>
+
+<p align="center"><img src="docs/media/doctor.gif" width="760" alt="corgi doctor finds a busy port, doctor --fix frees it, all checks pass"> </p>
+
+<p align="center"><img src="docs/media/status.gif" width="760" alt="corgi status -w: each target turns healthy, the footer counts up"></p>
+
 Private repos, prerequisites, secrets or staging tiers? See
 [Getting it running on a real project](docs/getting-started.md).
 
@@ -334,6 +346,8 @@ corgi run --feature ABC-123                     # every repo that has the branch
 
 `--feature` takes one branch name. Every repo that has that branch runs from a worktree, and the rest stay where they are. Good for testing a PR branch, or for letting an agent work on a branch while you keep running `main`.
 
+<p align="center"><img src="docs/media/feature.gif" width="760" alt="corgi run --feature ABC-123: api and web join on the branch, mobile stays; corgi mc shows each service with its branch, PR and CI"></p>
+
 ## Run the whole stack in CI
 
 Each repo's pipeline only proves that repo works alone, so the bug that only shows up in the combination still ships. corgi's CI job starts the whole stack from the branches under review and runs one e2e suite against it.
@@ -348,6 +362,8 @@ corgi detects CI and runs non-interactive. With the official action the job is a
 ```
 
 `--feature` tests each PR against the exact combination it will ship into. `--wait` blocks until every service is healthy, so there is no `sleep 60` in your pipeline. Full guide: [Run the stack in CI](https://andriiklymiuk.github.io/corgi/docs/ci).
+
+<p align="center"><img src="docs/media/ci.gif" width="760" alt="A CI job: init on the PR branch, run detached and wait for health, one e2e suite, artifacts collected"></p>
 
 ## Security & scope
 
