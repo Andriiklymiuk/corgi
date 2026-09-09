@@ -210,25 +210,75 @@ func getLatestGitHubTag() (string, error) {
 	// this hourly from a goroutine, and a hung connection would park one for
 	// good, once per hour, for the life of the process.
 	client := &http.Client{Timeout: 10 * time.Second}
+	if tag, err := latestTagFromAPI(client); err == nil && tag != "" {
+		return tag, nil
+	}
+	// The API allows sixty anonymous calls an hour per address and answers
+	// 403 past that; the release page's redirect carries the same tag and
+	// has no such limit.
+	return latestTagFromRedirect(client)
+}
+
+func latestTagFromAPI(client *http.Client) (string, error) {
 	req, err := http.NewRequest("GET", "https://api.github.com/repos/Andriiklymiuk/corgi/releases/latest", nil)
 	if err != nil {
 		return "", err
 	}
-
-	req.Header.Set("User-Agent", "request")
-
+	req.Header.Set("User-Agent", "corgi")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("github api: %s", resp.Status)
+	}
 	var data struct {
 		TagName string `json:"tag_name"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return "", err
 	}
-
+	if data.TagName == "" {
+		return "", fmt.Errorf("github api: no tag in the response")
+	}
 	return data.TagName, nil
+}
+
+func latestTagFromRedirect(client *http.Client) (string, error) {
+	noFollow := *client
+	noFollow.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	req, err := http.NewRequest("HEAD", "https://github.com/Andriiklymiuk/corgi/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "corgi")
+	resp, err := noFollow.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	tag := tagFromReleaseLocation(resp.Header.Get("Location"))
+	if tag == "" {
+		return "", fmt.Errorf("github releases: %s, no tag in the redirect", resp.Status)
+	}
+	return tag, nil
+}
+
+// tagFromReleaseLocation reads the tag out of the Location a releases/latest
+// request redirects to: .../releases/tag/v1.21.50 → v1.21.50.
+func tagFromReleaseLocation(location string) string {
+	const marker = "/releases/tag/"
+	i := strings.LastIndex(location, marker)
+	if i < 0 {
+		return ""
+	}
+	tag := location[i+len(marker):]
+	if j := strings.IndexAny(tag, "?#"); j >= 0 {
+		tag = tag[:j]
+	}
+	return strings.TrimSpace(tag)
 }
