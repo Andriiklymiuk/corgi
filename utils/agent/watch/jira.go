@@ -41,6 +41,10 @@ type jiraIssue struct {
 		} `json:"assignee"`
 		Created string `json:"created"`
 		Updated string `json:"updated"`
+		Comment *struct {
+			Total    int           `json:"total"`
+			Comments []jiraComment `json:"comments"`
+		} `json:"comment"`
 	} `json:"fields"`
 }
 
@@ -98,12 +102,14 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	var search struct {
 		Issues []jiraIssue `json:"issues"`
 	}
+	// The comment field rides along, so a comment on my issue costs no
+	// second request unless Jira truncated the list.
 	params := url.Values{
 		"jql":        {jql},
-		"fields":     {"summary,description,labels,status,assignee,created,updated"},
+		"fields":     {"summary,description,labels,status,assignee,created,updated,comment"},
 		"maxResults": {"50"},
 	}
-	if err := j.get(ctx, "/rest/api/3/search", params, &search); err != nil {
+	if err := j.get(ctx, "/rest/api/3/search/jql", params, &search); err != nil {
 		return nil, cursor, err
 	}
 
@@ -143,9 +149,13 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 		var page struct {
 			Comments []jiraComment `json:"comments"`
 		}
-		params := url.Values{"orderBy": {"-created"}, "maxResults": {"20"}}
-		if err := j.get(ctx, "/rest/api/3/issue/"+url.PathEscape(issue.Key)+"/comment", params, &page); err != nil {
-			return nil, cursor, err
+		if c := issue.Fields.Comment; c != nil && c.Total <= len(c.Comments) {
+			page.Comments = c.Comments
+		} else {
+			params := url.Values{"orderBy": {"-created"}, "maxResults": {"20"}}
+			if err := j.get(ctx, "/rest/api/3/issue/"+url.PathEscape(issue.Key)+"/comment", params, &page); err != nil {
+				return nil, cursor, err
+			}
 		}
 		for _, c := range page.Comments {
 			created := trackerTime(c.Created)
@@ -195,7 +205,7 @@ func (j *Jira) get(ctx context.Context, path string, params url.Values, out any)
 	req.Header.Set("Accept", "application/json")
 	client := j.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: 30 * time.Second}
 	}
 	resp, err := client.Do(req)
 	if err != nil {

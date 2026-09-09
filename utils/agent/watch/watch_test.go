@@ -64,6 +64,9 @@ func TestOnceDedupesAndSavesCursors(t *testing.T) {
 	var got []string
 	w := &Watch{Workspace: "acme", Rules: Rules{Enabled: true}, Sources: []Source{src}, State: LoadState(dir),
 		Sink: func(_ context.Context, e Event) { got = append(got, e.Key) }}
+	if n := w.Once(context.Background(), time.Now()); n != 0 || len(got) != 0 {
+		t.Fatalf("the first round only sets the bookmark, handed %d", n)
+	}
 	if n := w.Once(context.Background(), time.Now()); n != 1 {
 		t.Fatalf("handed %d, want the one unseen match", n)
 	}
@@ -71,10 +74,10 @@ func TestOnceDedupesAndSavesCursors(t *testing.T) {
 		t.Fatalf("sink got %v", got)
 	}
 	if n := w.Once(context.Background(), time.Now()); n != 0 {
-		t.Fatalf("second round handed %d", n)
+		t.Fatalf("third round handed %d", n)
 	}
 	reloaded := LoadState(dir)
-	if reloaded.cursor("acme", "fake")["at"] != "t2" {
+	if reloaded.cursor("acme", "fake")["at"] != "t3" {
 		t.Fatalf("cursor not saved: %v", reloaded.Cursors)
 	}
 	if reloaded.MarkSeen("fake:1") {

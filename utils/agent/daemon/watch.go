@@ -61,6 +61,9 @@ var claudeCommand = func(ctx context.Context, dir string, env []string, args ...
 	cmd := exec.CommandContext(ctx, "claude", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
+	// A timeout must take the tools claude spawned with it, not just claude.
+	killProcessGroup(cmd)
+	cmd.WaitDelay = 10 * time.Second
 	return cmd
 }
 
@@ -122,11 +125,38 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		if d.Events != nil {
 			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "watch", Reason: string(e.Kind) + " " + e.Ref, URL: e.URL})
 		}
-		go d.notifyAttention("corgi agent · "+spec.Workspace, watchBody(e), spec.Workspace)
+		body := watchBody(e)
 		if spec.Action == "fix" {
-			go d.runFix(ctx, spec, e)
+			if d.claimFix(spec.Workspace, e.Ref) {
+				go d.runFix(ctx, spec, e)
+			} else {
+				body += " (a fix for it is already running)"
+			}
 		}
+		go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
 	}
+}
+
+// claimFix keeps one fix per issue or PR in flight: a second event on the
+// same ref while claude is still working is reported, not run again.
+func (d *Daemon) claimFix(workspace, ref string) bool {
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	if d.fixActive == nil {
+		d.fixActive = map[string]bool{}
+	}
+	key := workspace + "/" + ref
+	if d.fixActive[key] {
+		return false
+	}
+	d.fixActive[key] = true
+	return true
+}
+
+func (d *Daemon) releaseFix(workspace, ref string) {
+	d.attentionMu.Lock()
+	delete(d.fixActive, workspace+"/"+ref)
+	d.attentionMu.Unlock()
 }
 
 func watchBody(e watch.Event) string {
@@ -167,6 +197,7 @@ var prLink = regexp.MustCompile(`https://(?:github\.com/[^\s)]+/pull/\d+|[^\s)]+
 // runFix runs one event's fix, one at a time per workspace, and reports
 // how it ended. A key runs once: the seen list already holds it.
 func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
+	defer d.releaseFix(spec.Workspace, e.Ref)
 	mu := d.fixBusy[spec.Workspace]
 	mu.Lock()
 	defer mu.Unlock()

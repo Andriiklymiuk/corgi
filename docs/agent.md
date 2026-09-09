@@ -834,7 +834,9 @@ corgi agent restart
 a saved cursor: Linear and Jira are asked only for issues updated since the
 last round, GitHub notifications answer 304 when nothing changed, GitLab
 todos are read by id. A poll that finds nothing costs one HTTP request per
-source and no agent tokens. Every event is deduplicated by key across polls
+source and no agent tokens. The first round after enabling only sets the
+bookmark: what is already in the tracker is not news, and with `fix` it
+would be a burst of runs. Every event is deduplicated by key across polls
 and webhooks, so a comment seen twice runs once. A failing token backs the
 interval off, up to ten times, instead of hammering the API.
 
@@ -851,7 +853,9 @@ webhooks.
 workspace with the matching skill: `/corgi:stories ABC-123` for an issue or
 a comment on it, `/corgi:review <pr>` to address review feedback. The skills
 keep their rules: draft PRs only, never a merge. One fix at a time per
-workspace, thirty minutes at most, the transcript under
+workspace and one per issue or PR (a second comment while claude is still
+on it is reported, not run again), thirty minutes at most and the whole
+process group is killed at the deadline, the transcript under
 `<agent dir>/watch/runs/`, and a notification with the PR links when it
 ends. A fix runs unattended only for a workspace enabled with
 `corgi agent init --dangerously-skip-permissions`; otherwise it runs with

@@ -68,8 +68,9 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
   issues(filter: {%s}, first: 50, sort: [{updatedAt: {order: Ascending}}]) {
     nodes { id identifier title description url state { name } labels { nodes { name } } assignee { id name } createdAt updatedAt }
   }
-  comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50) {
+  comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt) {
     nodes { id body createdAt user { id name } issue { identifier url title } }
+    pageInfo { hasNextPage endCursor }
   }
 }`, issueFilter, graphqlString(commentsSince), strconv.Quote(l.Me))
 
@@ -83,16 +84,25 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 				CreatedAt, UpdatedAt                    string
 			}
 		}
-		Comments struct {
-			Nodes []struct {
-				ID, Body, CreatedAt string
-				User                *struct{ ID, Name string }
-				Issue               struct{ Identifier, URL, Title string }
-			}
-		}
+		Comments linearComments
 	}
 	if err := l.query(ctx, query, &data); err != nil {
 		return nil, cursor, err
+	}
+	// A busy interval can hold more than one page of comments; the oldest
+	// would otherwise slip past the cursor.
+	comments := data.Comments.Nodes
+	for page := data.Comments; page.PageInfo.HasNextPage && len(comments) < 500; {
+		var more struct{ Comments linearComments }
+		q := fmt.Sprintf(`{ comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt, after: %s) {
+    nodes { id body createdAt user { id name } issue { identifier url title } }
+    pageInfo { hasNextPage endCursor }
+  } }`, graphqlString(commentsSince), strconv.Quote(l.Me), strconv.Quote(page.PageInfo.EndCursor))
+		if err := l.query(ctx, q, &more); err != nil {
+			return nil, cursor, err
+		}
+		comments = append(comments, more.Comments.Nodes...)
+		page = more.Comments
 	}
 
 	var events []Event
@@ -123,7 +133,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		}
 		events = append(events, e)
 	}
-	for _, n := range data.Comments.Nodes {
+	for _, n := range comments {
 		created := trackerTime(n.CreatedAt)
 		newestComment = later(newestComment, created)
 		if !created.After(commentsSince) || (n.User != nil && isMe(l.Me, n.User.ID)) {
@@ -152,6 +162,18 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	return events, next, nil
 }
 
+type linearComments struct {
+	Nodes []struct {
+		ID, Body, CreatedAt string
+		User                *struct{ ID, Name string }
+		Issue               struct{ Identifier, URL, Title string }
+	}
+	PageInfo struct {
+		HasNextPage bool
+		EndCursor   string
+	}
+}
+
 // query posts one GraphQL document and decodes data into out; HTTP and
 // GraphQL errors both come back as one descriptive error.
 func (l *Linear) query(ctx context.Context, document string, out any) error {
@@ -171,7 +193,7 @@ func (l *Linear) query(ctx context.Context, document string, out any) error {
 	req.Header.Set("Authorization", l.Token)
 	client := l.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: 30 * time.Second}
 	}
 	resp, err := client.Do(req)
 	if err != nil {

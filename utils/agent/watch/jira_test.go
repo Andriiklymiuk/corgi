@@ -54,7 +54,7 @@ func newJiraFake(t *testing.T) *jiraFake {
 		case "/rest/api/3/myself":
 			f.myself.Add(1)
 			_, _ = w.Write([]byte(`{"accountId":"me-1","displayName":"Andrii","timeZone":"UTC"}`))
-		case "/rest/api/3/search":
+		case "/rest/api/3/search/jql":
 			f.jql = r.URL.Query().Get("jql")
 			if r.URL.Query().Get("maxResults") != "50" || !strings.Contains(r.URL.Query().Get("fields"), "assignee") {
 				t.Errorf("search params: %s", r.URL.RawQuery)

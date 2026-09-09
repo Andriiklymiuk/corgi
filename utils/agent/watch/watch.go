@@ -226,10 +226,19 @@ type Watch struct {
 func (w *Watch) Once(ctx context.Context, now time.Time) int {
 	handed := 0
 	for _, src := range w.Sources {
-		events, cursor, err := src.Poll(ctx, w.State.cursor(w.Workspace, src.Name()))
+		before := w.State.cursor(w.Workspace, src.Name())
+		events, cursor, err := src.Poll(ctx, before)
 		w.State.setCursor(w.Workspace, src.Name(), cursor, now, err)
 		if err != nil {
 			w.logf("watch %s/%s: %v", w.Workspace, src.Name(), err)
+			continue
+		}
+		// The first round only sets the bookmark: what is already in the
+		// tracker is not news, and with action fix it would be a burst of runs.
+		if len(before) == 0 {
+			if len(events) > 0 {
+				w.logf("watch %s/%s: bookmark set, %d older item(s) skipped", w.Workspace, src.Name(), len(events))
+			}
 			continue
 		}
 		for _, e := range events {

@@ -154,7 +154,7 @@ var agentWatchRunCmd = &cobra.Command{
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		state := watch.LoadState(dir)
 		if dryRun {
-			state = watch.LoadState(filepath.Join(os.TempDir(), "corgi-watch-dry-run"))
+			state = watch.LoadState(filepath.Join(dir, "watch", "dry-run"))
 		}
 		var found []watch.Event
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -438,10 +438,17 @@ func currentWorkspaceID(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	best := ""
+	if real, err := filepath.EvalSymlinks(cwd); err == nil {
+		cwd = real
+	}
+	best, bestLen := "", 0
 	for _, w := range registry.Sorted() {
-		if w.AbsPath != "" && (cwd == w.AbsPath || strings.HasPrefix(cwd, w.AbsPath+string(os.PathSeparator))) && len(w.AbsPath) > len(best) {
-			best = w.ID
+		path := w.AbsPath
+		if real, err := filepath.EvalSymlinks(path); err == nil {
+			path = real
+		}
+		if path != "" && (cwd == path || strings.HasPrefix(cwd, path+string(os.PathSeparator))) && len(path) > bestLen {
+			best, bestLen = w.ID, len(path)
 		}
 	}
 	if best == "" {
