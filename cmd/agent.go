@@ -781,6 +781,32 @@ func runAgentWorkspacesList(_ *cobra.Command, _ []string) {
 	}
 }
 
+var agentWorkspacesPauseCmd = &cobra.Command{
+	Use:   "pause <id>",
+	Short: "Stop supervising a workspace (autostart: false): no device at login, no restarts; it stays registered",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		if err := setWorkspaceAutostart(args[0], false); err != nil {
+			return err
+		}
+		utils.Infof("%s paused — takes effect when the daemon restarts (corgi agent restart); `corgi agent workspaces resume %s` brings it back\n", args[0], args[0])
+		return nil
+	},
+}
+
+var agentWorkspacesResumeCmd = &cobra.Command{
+	Use:   "resume <id>",
+	Short: "Supervise a paused workspace again (autostart: true)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		if err := setWorkspaceAutostart(args[0], true); err != nil {
+			return err
+		}
+		utils.Infof("%s resumed\n", args[0])
+		return nil
+	},
+}
+
 var agentWorkspacesForgetCmd = &cobra.Command{
 	Use:   "forget <id>",
 	Short: "Remove a workspace from the registry",
@@ -962,7 +988,7 @@ func init() {
 	agentSessionStartCmd.Flags().String("name", "", "Session name shown in claude.ai (default: workspace · branch · start time)")
 	agentSessionCmd.AddCommand(agentSessionStartCmd, agentSessionStopCmd)
 
-	agentWorkspacesCmd.AddCommand(agentWorkspacesListCmd, agentWorkspacesForgetCmd, agentWorkspacesRelocateCmd)
+	agentWorkspacesCmd.AddCommand(agentWorkspacesListCmd, agentWorkspacesForgetCmd, agentWorkspacesRelocateCmd, agentWorkspacesPauseCmd, agentWorkspacesResumeCmd)
 	agentCmd.AddCommand(
 		agentServeCmd,
 		agentStatusCmd,

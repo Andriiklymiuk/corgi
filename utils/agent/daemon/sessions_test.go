@@ -350,3 +350,22 @@ func TestSendAnswerAndNoteReachTheSession(t *testing.T) {
 	cancel()
 	<-done
 }
+
+func TestLimitLiftedWaitsForAFinishedTurn(t *testing.T) {
+	d := testDaemon(t)
+	var got []string
+	d.Notify = func(title, body string) { got = append(got, body) }
+	s := sessions.Session{ID: "s1", Label: "corgi", StatusSince: time.Now()}
+	now := time.Now()
+	d.onSessionTransition(s, sessions.StatusLimited, sessions.StatusWorking, now)
+	d.onSessionTransition(s, sessions.StatusWorking, sessions.StatusLimited, now)
+	if len(got) != 0 {
+		t.Fatalf("a prompt that hits the wall again is not a lift: %v", got)
+	}
+	d.onSessionTransition(s, sessions.StatusLimited, sessions.StatusWorking, now)
+	d.onSessionTransition(s, sessions.StatusWorking, sessions.StatusDone, now)
+	time.Sleep(50 * time.Millisecond)
+	if len(got) != 1 || got[0] != "limit lifted — back to work" {
+		t.Fatalf("a finished turn after the limit is the lift: %v", got)
+	}
+}

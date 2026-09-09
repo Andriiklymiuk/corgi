@@ -174,6 +174,12 @@ func forecastLine(l *usage.Limits, f *usage.Forecast) string {
 		return ""
 	}
 	var parts []string
+	if l != nil && l.FiveHour.Percent >= 100 {
+		if l.FiveHour.ResetsAt.IsZero() {
+			return "5h: limit reached"
+		}
+		return "5h: limit reached, lifts " + resetText(l.FiveHour.ResetsAt)
+	}
 	if w := f.FiveHour; w != nil {
 		switch {
 		case w.ExhaustAt.IsZero():
