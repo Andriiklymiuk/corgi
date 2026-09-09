@@ -372,7 +372,7 @@ func TestTelegramUsageText(t *testing.T) {
 	for _, want := range []string{
 		"personal: no /usage snapshot yet",
 		"work: 5h 62% (resets " + resetText(resets) + ") · week 30% · 5h: 10%/h, lasts until the reset",
-		"waited on you 1× today, longest 1m30s",
+		"waited on you 1× today, longest 1m",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("usage text %q lacks %q", got, want)

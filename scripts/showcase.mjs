@@ -297,5 +297,136 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	scene("phone", frames.map(([l, screen, cur]) => page(term("corgi agent up", l, { rows: up.length, cursor: cur, extra: phone(screen) }), 1290)));
 }
 
+
+// ---- the launcher on the phone, after pairing: board, accounts, sessions, doctor ----
+{
+	const qr = readFileSync("scripts/showcase-qr.txt", "utf8").trimEnd().split("\n");
+	const up = [
+		"{g}${/} {B}corgi agent up{/}",
+		"",
+		"  ✓ workspace acme-stack (registered)",
+		"  ✓ agent daemon running (pid 41902)",
+		"  ✓ starts at login (launchd) — survives a reboot",
+		"  ✓ public endpoint: https://blue-fox-42.trycloudflare.com/mcp",
+		"",
+		"  📱 scan to pair (single use, 10 minutes):",
+		"",
+		"{Q}" + qr.map((l) => `   ${l}`).join("\n"),
+		"",
+		"    or open: https://blue-fox-42.trycloudflare.com/pair#A7K2M9",
+		"",
+		"  after scanning, the phone opens the launcher — tap a repo to start:",
+		"    https://blue-fox-42.trycloudflare.com/app",
+	];
+	const sess = (dot, label, detail, badge) => `<div class="sess"><span class="sdot ${dot}"></span><span class="slabel">${label}</span><span class="sdetail">${detail}</span>${badge ? `<span class="sbadge">${badge}</span>` : ""}</div>`;
+	const board = `<div class="board"><div class="sum hot">Claude sessions on this machine · 1 waiting on you · 2 working</div>
+		${sess("needs", "acme-api", "permission: Bash go test · ctx 72%", "work")}${sess("working", "Fix the login redirect", "Edit registry.go · ctx 43%")}${sess("working", "web", "Bash npm test · ctx 58%")}
+		<div class="acct"><span><b>default</b><i class="bar"><i style="width:55%"></i></i>55% · resets 5:10pm</span><span><b>work</b><i class="bar hot"><i style="width:100%"></i></i>100% · resets 1:10pm</span></div></div>`;
+	const card = ({ name, path, branch, dot, meta, usage, btn, tap, session, open }) => `<div class="ws"><div class="head"><span class="dot ${dot}"></span><span class="name">${name}</span></div><div class="path">${path} <span style="color:#8f94a3">${branch}</span></div><div class="meta">${meta}</div>${usage ? `<div class="usage">${usage}</div>` : ""}<div class="actions"><span class="go${tap ? " tap" : ""}">${btn}</span><span class="chip">${open ? "sessions ⌃" : "sessions ⌄"}</span><span class="chip">open in <b>app</b> ▾</span>${btn === "Open" ? `<span class="chip">Stop</span>` : `<span class="chip">options ⌄</span>`}</div>${session ? `<div class="top"><span><i class="sdot"></i>${session}</span><span class="when">vscode · 12s ago · open ↗</span></div>` : ""}${open ? panel : ""}</div>`;
+	const panel = `<div class="panel"><div class="grp">live now</div><div class="s"><span><i class="sdot"></i>brave-otter</span><span class="when">remote · 12s ago · open ↗</span></div>
+		<div class="grp">earlier · not running</div><div class="s past"><span><i class="sdot off"></i>quiet-heron</span><span class="when">2h ago · reopen</span></div>
+		<div class="grp">activity</div><div class="evrow"><b>started · phone</b><span>12s ago</span></div><div class="evrow"><b>exited · network timeout — restarted</b><span>2h ago</span></div>
+		<div class="grp">this workspace</div><div class="kv"><span>checkout</span><span>main · clean</span></div><div class="kv"><span>account</span><span>default</span></div><div class="kv"><span>supervised</span><span>for 3d · started with the daemon</span></div><div class="kv"><span>restarts</span><span>1 · last network timeout</span></div><div class="kv"><span>wake lock</span><span>the machine is held awake while this runs</span></div></div>`;
+	const launcher = (t) => `<div class="app"><div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 1.21.53 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
+	${t >= 1 ? board : ""}
+	${card({ name: "acme-stack", path: "…/dev/acme-stack", branch: "· main", dot: "live", meta: '<span class="live">1 live</span><span>up 2h</span><span>default account</span>', usage: "1.2M today · 8.4M this week", btn: "Open", session: "brave-otter", open: t === 2 })}
+	${t === 2 ? "" : card({ name: "recipe-app", path: "…/dev/recipe-app", branch: "· feat/search*", dot: "live", meta: '<span class="live">1 live</span><span class="warn">waiting: allow or deny the edit</span><span>default account</span>', usage: "640k today · 3.1M this week", btn: "Open", session: "search index" })}
+	${t === 2 ? "" : card({ name: "client-app", path: "…/work/client-app", branch: "· main", dot: "ready", meta: '<span class="live">online · no session</span><span>up 2h</span><span>work account</span>', btn: "Start" })}
+	${t === 3 ? doctor : ""}
+	</div>`;
+	const doctor = `<div class="settings"><div class="grp">Settings</div><div class="h3">If something will not start</div><div class="chk"><span class="mark">✓</span><span><b>claude binary</b> — /opt/homebrew/bin/claude</span></div><div class="chk"><span class="mark">✓</span><span><b>daemon</b> — running, pid 41902</span></div><div class="chk"><span class="mark">✓</span><span><b>start at login</b> — launchd</span></div><div class="chk bad"><span class="mark">✗</span><span><b>trust · client-app</b> — Claude has not trusted ~/work/client-app under ~/.claude-work<span class="fix">fix: run \`claude\` there once, accept the trust dialog</span></span></div><div class="chk"><span class="mark">✓</span><span><b>session tracking</b> — hooks in 2 of 2 Claude config dirs</span></div></div>`;
+	const phone = (screen) => `<div class="phone"><div class="notch"></div><div class="screen">${screen}</div></div>`;
+	const extraCss = `<style>
+	  .board{margin:2px 0 8px}.sum{color:#8f94a3;font-size:10.5px;margin:0 0 5px 2px}.sum.hot{color:#ff7b72;font-weight:600}
+	  .sess{display:flex;align-items:center;gap:7px;background:#0f1013;border:1px solid #1a1c22;border-radius:8px;padding:6px 8px;margin:4px 0;font-size:11px}
+	  .sdot{width:7px;height:7px;border-radius:50%;background:#6ee787;flex:none;display:inline-block;margin-right:6px}.sdot.needs{background:#ff7b72}.sdot.working{background:#ffa657}.sdot.off{background:#3a4152}
+	  .sess .sdot{margin:0}.slabel{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sdetail{color:#8f94a3;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48%}
+	  .sbadge{font-size:8px;font-weight:700;color:#8f94a3;border:1px solid #22242b;border-radius:4px;padding:1px 4px;text-transform:uppercase}
+	  .acct{display:flex;gap:10px;font-size:9.5px;color:#8f94a3;margin:2px 0 0 2px}.acct b{color:#eceef2}.acct .bar{display:inline-block;width:38px;height:5px;border-radius:3px;background:#1a1c22;vertical-align:middle;margin:0 4px;overflow:hidden}.acct .bar i{display:block;height:100%;background:#6ee787}.acct .bar.hot i{background:#ff7b72}
+	  .usage{font-size:9.5px;color:#63677a;margin:3px 0 0 17px}
+	  .panel{margin-top:8px;border-top:1px solid #1a1c22;padding-top:4px}.grp{color:#63677a;font-size:9px;text-transform:uppercase;letter-spacing:.04em;margin:8px 0 3px}
+	  .s{display:flex;justify-content:space-between;font-size:11px;padding:3px 0}.s.past{opacity:.6}.s .when{color:#63677a;font-size:9.5px}
+	  .evrow{display:flex;justify-content:space-between;font-size:10px;color:#8f94a3;padding:2px 0}.evrow b{color:#c9cfda;font-weight:600}
+	  .kv{display:flex;justify-content:space-between;gap:8px;font-size:10px;padding:2px 0}.kv span:first-child{color:#63677a}.kv span:last-child{text-align:right;color:#c9cfda}
+	  .settings{background:#141519;border:1px solid #22242b;border-radius:11px;padding:8px 11px;margin:8px 0}.h3{font-size:11px;font-weight:600;margin:2px 0 4px}
+	  .chk{display:flex;gap:6px;font-size:10px;padding:4px 0;border-bottom:1px solid #22242b;line-height:1.4}.chk:last-child{border-bottom:0}.chk .mark{color:#6ee787}.chk.bad .mark{color:#ff7b72}.chk .fix{display:block;color:#8f94a3;font-size:9px}
+	</style>`;
+	const frames = [0, 1, 2, 3].map((t) => page(extraCss + term("corgi agent up", up, { rows: up.length, extra: phone(launcher(t)) }), 1290));
+	scene("dashboard", frames);
+}
+
+// ---- Telegram: the same board and answers from a chat -------------------------------
+{
+	let clock = 0;
+	const msg = (who, text, quote) => `<div class="m ${who}">${quote ? `<div class="q">${esc(quote)}</div>` : ""}${esc(text).replace(/\n/g, "<br>")}<span class="t">13:${String(4 + clock++).padStart(2, "0")}</span></div>`;
+	const flow = [
+		["bot", "corgi agent · acme-api\nBash go test\nhttps://blue-fox-42.trycloudflare.com/app"],
+		["me", "/allow acme-api"],
+		["bot", "allow sent to acme-api"],
+		["me", "/sessions"],
+		["bot", "● corgi — WORKING · Edit registry.go · ctx 43%\n● acme-api — WORKING · Bash go test · ctx 72%\n✓ web — DONE · ctx 23%\nreply to a notification, or /send <session> <text> · /allow /deny <session>"],
+		["me", "run the tests again and fix what fails", "corgi agent · acme-api"],
+		["bot", "typed into acme-api"],
+		["me", "/usage"],
+		["bot", "default: 5h 55% (resets 5:10pm) · week 10% · 12%/h, lasts until the reset\nwork: 5h 100% (resets 1:10pm) · week 64% · limit reached, lifts 1:10pm\nwaited on you 3× today, longest 9m"],
+		["bot", "corgi agent · acme-api\nlimit lifted — back to work"],
+	];
+	const css2 = `<style>
+	  .tg{position:absolute;inset:0;background:#0e1621;color:#fff;font-family:-apple-system,system-ui,sans-serif;display:flex;flex-direction:column}
+	  .tg .hdr{height:84px;background:#17212b;padding:46px 14px 0;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600}
+	  .tg .hdr .av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:16px}
+	  .tg .hdr small{display:block;color:#8ba0b8;font-size:10px;font-weight:400}
+	  .tg .list{flex:1;padding:10px 10px 0;display:flex;flex-direction:column;gap:6px;justify-content:flex-end;overflow:hidden}
+	  .m{max-width:86%;padding:7px 10px 7px;border-radius:12px;font-size:12px;line-height:1.35;position:relative;white-space:pre-wrap;word-break:break-word}
+	  .m.bot{background:#182533;align-self:flex-start;border-bottom-left-radius:3px}.m.me{background:#2b5278;align-self:flex-end;border-bottom-right-radius:3px}
+	  .m .t{display:block;text-align:right;font-size:9px;color:#8ba0b8;margin-top:2px}
+	  .m .q{border-left:2px solid #5eb5f7;padding-left:6px;color:#5eb5f7;font-size:10.5px;margin-bottom:4px}
+	  .tg .input{height:48px;background:#17212b;display:flex;align-items:center;padding:0 12px;gap:10px;color:#6c7883;font-size:12px}
+	  .tg .input span{flex:1;background:#242f3d;border-radius:16px;padding:7px 12px}
+	</style>`;
+	const phone = (n) => `<div class="phone"><div class="notch"></div><div class="screen"><div class="tg"><div class="hdr"><div class="av">🐶</div><div>corgi<small>bot</small></div></div><div class="list">${flow.slice(0, n).map((m) => msg(...m)).join("")}</div><div class="input"><span>Message</span>🎤</div></div></div></div>`;
+	const cuts = [1, 3, 5, 7, 9, 10];
+	scene("telegram", cuts.map((n) => page(css2 + phone(n), 380)));
+}
+
+// ---- tunnels ----------------------------------------------------------------------------
+{
+	const s = [
+		"{g}${/} {B}corgi tunnel{/}",
+		"🌐 Tunnels (cloudflared) — Ctrl+C to stop",
+		"",
+		"  api                            :7012   cloudflared/quick → starting...",
+		"  web                            :5173   cloudflared/quick → starting...",
+		"",
+		"  {g}✓{/} api                          :7012  → https://muddy-otter-42.trycloudflare.com",
+		"  {g}✓{/} web                          :5173  → https://calm-fox-17.trycloudflare.com",
+		"",
+		"{g}${/} {B}corgi open web{/}",
+		"opening http://localhost:5173",
+	];
+	scene("tunnel", grow(s, [1, 5, 8, 11]).map((l, i) => page(term("corgi tunnel", l, { rows: s.length, cursor: i < 3 }))));
+}
+
+// ---- logs -----------------------------------------------------------------------------------
+{
+	const s = [
+		"{g}${/} {B}corgi logs --service api{/}",
+		"{c}📄 /Users/me/dev/stack/corgi_services/.logs/api/2026-09-09T12-03-11.ok.log (Ctrl-C to exit){/}",
+		"",
+		"listening on :7012",
+		"GET /health 200 1ms",
+		"POST /referrals 201 14ms",
+		"",
+		"{y}— end of log —{/}",
+		"",
+		"{g}${/} {B}corgi logs --all{/}",
+		"{c}[api]{/} listening on :7012",
+		"{c}[web]{/} ➜  Local: http://localhost:5173/",
+		"{c}[api]{/} GET /health 200 1ms",
+		"{c}[web]{/} hmr update /src/checkout/Referral.tsx",
+	];
+	scene("logs", grow(s, [1, 2, 6, 8, 10, 14]).map((l, i) => page(term("corgi logs", l, { rows: s.length, cursor: i < 5 }))));
+}
+
 writeFileSync(`${out}/scenes.json`, JSON.stringify(scenes));
 console.log("wrote", Object.entries(scenes).map(([k, v]) => `${k}:${v}`).join(" "));

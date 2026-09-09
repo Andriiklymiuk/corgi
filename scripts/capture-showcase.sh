@@ -13,7 +13,7 @@ trim() { magick "$1" -fuzz 1% -trim +repage -bordercolor "$GROUND" -border 28 "$
 
 for scene in $(node -e 'const s=require("./docs/media/frames/scenes.json");console.log(Object.keys(s).join(" "))'); do
   n=$(node -e "console.log(require('./docs/media/frames/scenes.json')['$scene'])")
-  size=960,1000; [ "$scene" = phone ] && size=1300,1000
+  size=960,1000; case "$scene" in phone|dashboard) size=1300,1000;; telegram) size=420,700;; esac
   i=0; files=""
   while [ $i -lt $n ]; do
     shot $F/$scene-$i.html $F/$scene-$i.png $size
