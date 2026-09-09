@@ -572,11 +572,10 @@ It covers every Claude session in that directory, supervised or not.
 
 ### Sessions on a Stream Deck
 
-The board below is drawn by three things: [corgi-bar](https://github.com/Andriiklymiuk/corgi-bar)
+Three clients show this board: [corgi-bar](https://github.com/Andriiklymiuk/corgi-bar)
 in the macOS menu bar, the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi)
-(Agent sessions view, status bar, toasts) and
-[Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck) on a
-Stream Deck. Each is a thin client of the commands here.
+and [Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck) on a
+Stream Deck. They run the commands below.
 
 `corgi agent hooks` covers one workspace. The other question — *which of the
 seven Claude sessions across three VS Code windows is the one waiting on me* —
