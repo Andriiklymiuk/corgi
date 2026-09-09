@@ -264,7 +264,7 @@ func TestPrintUsageReport(t *testing.T) {
 		"Today (Claude Code's own stats cache; lags by hours)",
 		"work                         2 sessions · 12 messages · 7 tool calls · opus-4-7 2.5M, sonnet-5 1k",
 		"Waiting on you today",
-		"2 waits · median 30s · longest 5m (web) · total 5m30s",
+		"2 waits · median 30s · longest 5m (web) · total 5m",
 		"limits cost 10m across 1 session(s)",
 	} {
 		if !strings.Contains(out, want) {
@@ -348,7 +348,7 @@ func TestDigestText(t *testing.T) {
 	got := digestText(agentD, now)
 	want := strings.Join([]string{
 		"work: 2 sessions, 12 messages, 7 tool calls",
-		"waited on you 2× — median 30s, longest 5m (web)",
+		"waited on you 2× — median 5m, longest 5m (web)",
 		"limits cost 10m",
 		"work: 5h 62%, week 10%",
 	}, "\n")

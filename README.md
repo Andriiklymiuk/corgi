@@ -24,6 +24,10 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
                           └─ your phone  scan a QR           send work to this laptop from anywhere
 ```
 
+<p align="center"><img src="docs/media/run.gif" width="760" alt="corgi run: clones the missing repo, starts and seeds the database, writes the env, starts api and web"></p>
+
+<p align="center"><img src="docs/media/stories.gif" width="380" alt="An agent takes a ticket across three repos and opens three draft PRs"> <img src="docs/media/phone.gif" width="380" alt="corgi agent up prints a QR; the phone scans it and starts a session"></p>
+
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
 **Install:** `brew install andriiklymiuk/homebrew-tools/corgi` (Homebrew 5 asks you to `brew trust andriiklymiuk/tools` once; [other ways](docs/install.md)).
@@ -84,8 +88,6 @@ corgi-compose.yml  ─►  corgi run
                                     ↓
                          whole stack running 🐶   (Ctrl-C tears it all down)
 ```
-
-<p align="center"><img src="docs/media/run.gif" width="760" alt="corgi run: clones the missing repo, starts and seeds the database, writes the env, starts api and web"></p>
 
 > **Agents & CI:** use `corgi run --detach` then `corgi status --ready --timeout 2m` instead of the foreground commands above — they return instead of blocking. See [agents & scripting](docs/agents.md).
 
@@ -214,7 +216,7 @@ $ corgi agent up
 
 One scan pairs the phone. It gets its own token, revocable without touching your other devices. Each workspace remembers where it should open — personal projects in the Claude app, a work repo on a different Claude account in Chrome signed into that account. Save the launcher to your home screen and it is one tap after that.
 
-<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and opens the launcher; a tap on Start brings a session up"></p>
+<p align="center"><img src="docs/media/dashboard.gif" width="900" alt="The phone launcher: every Claude session on the machine, accounts and their windows, a card per repo with Open and Start, the sessions panel, doctor checks"></p>
 
 **Adding your other repos.** `agent up` registered the directory you ran it in, and the launcher lists only what is registered. Add the rest:
 
@@ -301,6 +303,8 @@ A Telegram bot has the same: reply to a "needs you" message to type into
 that session, `/allow`, `/sessions`, `/usage`. Details in
 [docs/agent.md](docs/agent.md#sessions-on-a-stream-deck).
 
+<p align="center"><img src="docs/media/telegram.gif" width="340" alt="Telegram: a needs-you message, /allow, /sessions, a reply typed into the session, /usage, limit lifted"></p>
+
 ## The rest of the commands
 
 Beyond the ones above, these are the ones that come up in a normal week:
@@ -326,6 +330,10 @@ project has one service or twelve.
 <p align="center"><img src="docs/media/doctor.gif" width="760" alt="corgi doctor finds a busy port, doctor --fix frees it, all checks pass"> </p>
 
 <p align="center"><img src="docs/media/status.gif" width="760" alt="corgi status -w: each target turns healthy, the footer counts up"></p>
+
+<p align="center"><img src="docs/media/tunnel.gif" width="760" alt="corgi tunnel: a public HTTPS URL per service, then corgi open"></p>
+
+<p align="center"><img src="docs/media/logs.gif" width="760" alt="corgi logs: one service's kept log, then every service merged with a prefix"></p>
 
 Private repos, prerequisites, secrets or staging tiers? See
 [Getting it running on a real project](docs/getting-started.md).
