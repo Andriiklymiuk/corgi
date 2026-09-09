@@ -22,8 +22,16 @@ var notifyIconFile string
 
 func notifyIconPath() string {
 	notifyIconOnce.Do(func() {
-		path := filepath.Join(os.TempDir(), "corgi-notify-icon.png")
-		if err := os.WriteFile(path, notifyIconPNG, 0o644); err == nil {
+		base, err := os.UserCacheDir()
+		if err != nil {
+			return
+		}
+		dir := filepath.Join(base, "corgi")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return
+		}
+		path := filepath.Join(dir, "notify-icon.png")
+		if err := os.WriteFile(path, notifyIconPNG, 0o600); err == nil {
 			notifyIconFile = path
 		}
 	})
