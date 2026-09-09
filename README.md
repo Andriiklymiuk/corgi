@@ -162,6 +162,7 @@ Slash-commands and plain English both work:
 /corgi-debug                    "the api is 500ing, find out why"
 /corgi-complexity               "this handler branches like a jungle — simplify it"
 /corgi-risk <pr-url>            "how much review does this need — can it be auto-approved?"
+/corgi:showcase                 "make README gifs of the new feature"
 ```
 
 Nothing ships without you. It opens **draft** PRs and waits. If you have no project to try this on, `corgi run -l` fetches an example.

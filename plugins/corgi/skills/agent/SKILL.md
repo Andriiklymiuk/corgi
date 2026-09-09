@@ -1,6 +1,6 @@
 ---
 name: agent
-description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — resolving a stack by name, putting one branch across every repository in it, reading a cross-repo diff, previewing a running service over a tunnel, picking up where a restarted session left off, keeping `claude remote-control` alive across reboots and the ten-minute network timeout, phone notifications (Telegram / Slack / Discord / ntfy), Claude account profiles, starting or stopping a session in any registered workspace on demand, and session tracking — which Claude Code sessions on the machine are waiting on a person, on a Stream Deck, in terminal tab titles, on the phone launcher or via `corgi agent sessions` / `corgi agent focus`. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
+description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or when setting that up — resolving a stack by name, putting one branch across every repository in it, reading a cross-repo diff, previewing a running service over a tunnel, picking up where a restarted session left off, keeping `claude remote-control` alive across reboots and the ten-minute network timeout, phone notifications (Telegram / Slack / Discord / ntfy), Claude account profiles, starting or stopping a session in any registered workspace on demand, and session tracking — which Claude Code sessions on the machine are waiting on a person, on a Stream Deck, in terminal tab titles, on the phone launcher or via `corgi agent sessions` / `corgi agent focus` — and acting on them from elsewhere (send text, answer a permission, carry a limited session to another account, usage and forecasts, standup, Telegram), plus `corgi agent watch`: the daemon listening to Linear/Jira issues and GitHub/GitLab PR reviews by polling or webhooks and notifying or starting the fix. NOT for authoring corgi-compose.yml (corgi skill), starting a stack (run skill), or diagnosing a broken stack (debug skill).
 ---
 
 # Corgi agent mode
@@ -643,6 +643,63 @@ touches nothing else in `settings.json`.
 From a phone, `corgi_sessions` is the same board as JSON — call it for "is
 anything waiting on me" or "what is running right now"; it says so when
 tracking is not enabled yet.
+
+## Acting on the board from elsewhere
+
+Everything the keys do is a command, so the same board reaches other places:
+
+```bash
+corgi agent send <session> --enter "run the tests"   # type into a session (VS Code terminal, iTerm, Terminal.app)
+corgi agent answer <session> allow|always|deny       # its permission prompt; risky Bash (rm -rf, sudo, --force, drop) is refused
+corgi agent note <session> "waiting on PR"           # a line of yours under the session
+corgi agent usage [--json|--watch]                   # every account: 5h and week windows, forecast, when a reached limit lifts
+corgi agent carry <session> --profile work           # continue a limited session under another listed account
+corgi agent claude --profile auto                    # start under the listed account with the most budget
+corgi agent standup [--write]                        # yesterday from sessions and git
+corgi agent digest --send                            # the daily message (digestAt in the user config)
+corgi agent workspaces pause|resume <id>             # stop supervising one (autostart: false), or resume
+```
+
+Surfaces that draw the board: **corgi-bar** (macOS menu bar: rows by
+workspace, Allow/Deny, accounts, Talk, Remote devices with Pause), the
+**VS Code extension** (Agent sessions view, status bar, toast with Go, quick
+pick), **Corgi Agent Deck** (Stream Deck keys; "+" opens a session in the
+window in front, a hold picks another open window), and the **Telegram bot**
+(`corgi agent notify telegram --token …`: reply to a "needs you" message to
+type into it; `/sessions`, `/usage`, `/send`, `/allow`, `/always`, `/deny`,
+`/focus`). "limit lifted — back to work" arrives once a limited session
+finishes a turn again.
+
+## Watching the tracker and your pull requests
+
+`corgi agent watch` makes the daemon notice work that arrives while nobody
+is at the desk, and optionally start the fix:
+
+```bash
+cd ~/dev/acme-stack
+corgi agent watch enable --labels bug,defect --prs            # notify: new issues assigned to me, reviews on my PRs
+corgi agent watch enable --labels bug --prs --action fix      # and run the skill: /corgi:stories <id>, /corgi:review <pr>
+corgi agent watch auth linear --token lin_api_…               # or LINEAR_API_KEY / JIRA_URL+JIRA_EMAIL+JIRA_API_TOKEN / GITHUB_TOKEN (gh auth) / GITLAB_TOKEN
+corgi agent watch                                             # tokens, watched workspaces, last polls, events today
+corgi agent watch run                                         # one poll now
+corgi agent watch hooks                                       # webhook URLs on the tunnel + the shared secret; --interval 0 for webhooks only
+corgi agent restart
+```
+
+How it stays cheap: a saved cursor per source (Linear/Jira `updated >`,
+GitHub notifications with `If-Modified-Since` → 304, GitLab todos by id), a
+seen list across polls and webhooks, the first round only sets the bookmark,
+a failing token backs off. Nothing spends agent tokens unless a new event
+matched the rules; with `fix`, one headless `claude -p` per issue or PR at
+a time, thirty minutes at most, the process group killed at the deadline,
+draft PRs only. A fix runs unattended only for a workspace enabled with
+`corgi agent init --dangerously-skip-permissions`. Rules live in the user
+config under `workspaces.<id>.watch` (`labels`, `states`, `assignee`,
+`comments`, `prs`, `repos`, `project`, `interval`, `action`).
+
+When the user asks "can corgi listen to new Jira/Linear issues or PR
+comments and fix them", this is the answer: enable watch with `--action fix`,
+add tokens, restart the daemon; webhooks for instant reaction.
 
 ## Things not to do
 
