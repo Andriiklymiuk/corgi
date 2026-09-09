@@ -44,7 +44,7 @@ a day are one command each:
 | the same stack in CI, on the branches under review | `corgi run --feature $BRANCH --detach --wait` |
 | an agent to take the ticket across every repo | `/corgi:stories ABC-123` |
 | your laptop still working while you're out | `corgi agent up`, then scan the QR |
-| which of your Claude sessions is waiting on you, on a Stream Deck | `corgi agent track enable` |
+| which of your Claude sessions is waiting on you: menu bar, VS Code, Stream Deck | `corgi agent track enable` |
 | the next project tomorrow | the same commands, in its folder |
 
 The part that changes how you work is the second row. A feature that touches three repos normally
@@ -261,6 +261,39 @@ corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 `agent tunnel setup` stores the choice, so plain `corgi agent up` keeps using it after that. Because the origin stops changing, the phone stays paired across restarts and reboots — save `https://<your-host>/app` to the home screen and it keeps working.
 
 `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
+
+## See every Claude session at once
+
+`corgi agent track enable` hooks into Claude Code and the daemon keeps a board:
+every session on the machine, which window and tab it is in, whether it works,
+waits on you, finished or hit the account's usage limit, how full its context
+is, what it is doing right now. Three things draw that board:
+
+| where | what |
+|---|---|
+| [corgi-bar](https://github.com/Andriiklymiuk/corgi-bar) (macOS menu bar) | rows grouped by workspace, Allow/Deny from the bar, accounts with their 5-hour and weekly windows and a forecast, Talk to dictate, a prompt field |
+| [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi) | an Agent sessions view, a status bar item, a toast with Go when a session in another window waits |
+| [Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck) (Stream Deck) | one key per session, press to jump there, Talk, Prompt and Budget keys |
+
+<p align="center"><img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi-bar/main/docs/media/hero.png" width="380" alt="corgi-bar in the menu bar"> <img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi_vscode_extension/main/docs/media/sessions.png" width="380" alt="The Agent sessions view in VS Code"></p>
+
+<p align="center"><img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi-agent-deck/main/docs/media/deck-mk2.png" width="760" alt="Corgi Agent Deck on a Stream Deck"></p>
+
+All three shell out to the same commands, so the terminal has them too:
+
+```bash
+corgi agent sessions --watch            # the board, redrawn on every change
+corgi agent focus acme-api              # that window, that terminal tab
+corgi agent send acme-api --enter "run the tests"
+corgi agent answer acme-api allow       # the permission prompt it is waiting on
+corgi agent usage                       # every account: 5-hour and weekly windows, forecast
+corgi agent carry acme-api --profile work   # continue under another account when one hits its limit
+corgi agent standup                     # yesterday, from the sessions and git
+```
+
+A Telegram bot gets the same: reply to a "needs you" message to type into that
+session, `/allow`, `/sessions`, `/usage`. Details in
+[docs/agent.md](docs/agent.md#sessions-on-a-stream-deck).
 
 ## The rest of the commands
 
