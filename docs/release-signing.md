@@ -47,7 +47,7 @@ unsigned, as before.
    ```bash
    gh secret set MACOS_NOTARY_ISSUER_ID --repo Andriiklymiuk/corgi
    gh secret set MACOS_NOTARY_KEY_ID --repo Andriiklymiuk/corgi
-   gh secret set MACOS_NOTARY_KEY --repo Andriiklymiuk/corgi < AuthKey_XXXX.p8
+   gh secret set MACOS_NOTARY_KEY --repo Andriiklymiuk/corgi < AuthKey_XXXX.p8   # the .p8 as is; the workflow base64-encodes it for GoReleaser
    ```
 
    corgi-bar takes the same five, plus `APPLE_TEAM_ID` (the ten characters in

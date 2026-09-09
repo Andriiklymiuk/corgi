@@ -59,6 +59,19 @@ jobs:
 
       - run: git fetch --force --tags
 
+      # GoReleaser wants the App Store Connect key base64-encoded; the secret
+      # holds the .p8 as downloaded (the same value corgi-bar's workflow uses).
+      - name: Encode the notary key for GoReleaser
+        if: env.TAG_EXISTS == 'false'
+        env:
+          RAW_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          if [ -n "$RAW_KEY" ]; then
+            echo "::add-mask::$RAW_KEY"
+            ENCODED=$(printf '%s' "$RAW_KEY" | base64 -w0)
+            echo "::add-mask::$ENCODED"
+            echo "MACOS_NOTARY_KEY_B64=$ENCODED" >> "$GITHUB_ENV"
+          fi
       - name: Run GoReleaser
         if: env.TAG_EXISTS == 'false'
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
@@ -73,7 +86,7 @@ jobs:
           MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY: ${{ env.MACOS_NOTARY_KEY_B64 }}
 
       # The GitHub Action is consumed as andriiklymiuk/corgi@v1, so that tag has
       # to follow each release or callers would be stuck on whatever it pointed
