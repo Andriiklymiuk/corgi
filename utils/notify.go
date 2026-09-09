@@ -1,15 +1,34 @@
 package utils
 
 import (
+	_ "embed"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+//go:embed notify_icon.png
+var notifyIconPNG []byte
+
+var notifyIconOnce sync.Once
+var notifyIconFile string
+
+func notifyIconPath() string {
+	notifyIconOnce.Do(func() {
+		path := filepath.Join(os.TempDir(), "corgi-notify-icon.png")
+		if err := os.WriteFile(path, notifyIconPNG, 0o644); err == nil {
+			notifyIconFile = path
+		}
+	})
+	return notifyIconFile
+}
 
 // notifyThrottleWindow is the dedupe gap between two notifications with
 // the same title+body — stops crash-loop services from spamming toasts.
@@ -127,6 +146,9 @@ func sendNotification(title, body string) {
 				"-title", title,
 				"-message", body,
 				"-group", "com.andriiklymiuk.corgi",
+			}
+			if icon := notifyIconPath(); icon != "" {
+				args = append(args, "-appIcon", icon, "-contentImage", icon)
 			}
 			if link := safeNotifyLink(notifyLink); link != "" {
 				args = append(args, "-open", link)

@@ -464,7 +464,8 @@ which is why the totals are large — that is the real traffic against the windo
 Each card has a **hide** chip. Hidden cards collapse into one `N hidden — show`
 button. It is stored in that browser only and changes nothing on the machine —
 it exists for the moment someone else is looking at your screen. To actually
-stop supervising a workspace, set `autostart: false` for it instead.
+stop supervising a workspace, `corgi agent workspaces pause <id>` (sets
+`autostart: false`; `resume` puts it back). Takes effect when the daemon restarts.
 
 ### If the phone cannot reach it
 

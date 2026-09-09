@@ -70,6 +70,8 @@ type Daemon struct {
 	// recentAttention remembers what was just sent, so a duplicate stays quiet.
 	attentionMu     sync.Mutex
 	recentAttention map[string]time.Time
+	// limitWatch: sessions that left "limited"; the notice waits for a finished turn.
+	limitWatch map[string]bool
 
 	Version string
 	// Dir is the agent data directory holding daemon.json and registry.json.

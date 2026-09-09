@@ -130,7 +130,22 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 			_ = usage.RecordWait(d.Dir, usage.Wait{At: now.UTC(), Kind: kind, Label: label, Profile: s.Profile, Seconds: secs})
 		}
 	}
-	if from == sessions.StatusLimited && to == sessions.StatusWorking {
+	d.attentionMu.Lock()
+	if d.limitWatch == nil {
+		d.limitWatch = map[string]bool{}
+	}
+	lifted := false
+	switch {
+	case from == sessions.StatusLimited && to == sessions.StatusWorking:
+		d.limitWatch[s.ID] = true
+	case to == sessions.StatusLimited:
+		delete(d.limitWatch, s.ID)
+	case d.limitWatch[s.ID] && (to == sessions.StatusDone || to == sessions.StatusNeedsInput):
+		delete(d.limitWatch, s.ID)
+		lifted = true
+	}
+	d.attentionMu.Unlock()
+	if lifted {
 		go d.notifyAttention("corgi agent · "+label, "limit lifted — back to work", s.Folder)
 	}
 }

@@ -239,6 +239,22 @@ func writeRepoAgentConfig(dir, id string, aliases []string, sensitive bool) erro
 	return os.WriteFile(filepath.Join(target, "agent.yml"), append(header, body...), 0o644)
 }
 
+func setWorkspaceAutostart(id string, on bool) error {
+	dir, err := agentDir()
+	if err != nil {
+		return err
+	}
+	path := agentUserConfigPath(dir)
+	user, err := config.LoadUser(path)
+	if err != nil {
+		return err
+	}
+	entry := user.Workspaces[id]
+	entry.Autostart = &on
+	user.Workspaces[id] = entry
+	return writeUserConfig(path, user)
+}
+
 // enableWorkspace turns on supervision for a workspace, and records its Claude
 // config directory, in the trusted user-level file.
 func enableWorkspace(id, configDir string, skipPerms bool) error {
