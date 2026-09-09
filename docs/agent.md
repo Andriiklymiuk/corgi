@@ -298,6 +298,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
 | `corgi agent carry <session> --profile P` | continue a session under another listed account, conversation included (copies the transcript, resumes it in a new terminal) |
 | `corgi agent digest [--send]` | today's one-message summary; with `digestAt: "20:00"` in the agent config the daemon sends it once a day where notifications go |
+| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events |
 | `corgi agent standup [--since 24h] [--write]` | what you asked Claude and what got committed, per workspace; `--write` has `claude -p` turn it into three sentences |
 | `corgi agent stop` | stop the daemon |
 
@@ -810,6 +811,68 @@ Not every exit is worth retrying:
 | exits immediately, repeatedly | stop after 5, disable the workspace, notify |
 | auth failure | **do not restart** — retrying cannot produce credentials |
 | `corgi agent stop` | stay stopped |
+
+## Watching the tracker and your pull requests
+
+`corgi agent watch` makes the daemon notice work that arrives while you are
+elsewhere: a new bug in Linear or Jira, a comment on an issue assigned to
+you, a review on a pull request you opened. It tells you, and it can start
+the fix.
+
+```bash
+cd ~/dev/acme-stack
+corgi agent watch enable --labels bug,defect --prs           # tell me
+corgi agent watch enable --labels bug --prs --action fix     # and fix it
+corgi agent watch auth linear --token lin_api_…               # or LINEAR_API_KEY in the env
+corgi agent watch auth jira --url https://acme.atlassian.net --email me@acme.io --token …
+corgi agent watch                                            # tokens, watched workspaces, last polls
+corgi agent watch run                                        # poll once, now
+corgi agent restart
+```
+
+**What it costs.** The daemon polls every three minutes (`--interval`) with
+a saved cursor: Linear and Jira are asked only for issues updated since the
+last round, GitHub notifications answer 304 when nothing changed, GitLab
+todos are read by id. A poll that finds nothing costs one HTTP request per
+source and no agent tokens. Every event is deduplicated by key across polls
+and webhooks, so a comment seen twice runs once. A failing token backs the
+interval off, up to ten times, instead of hammering the API.
+
+**Webhooks** remove the polling delay. `corgi agent watch hooks` prints one
+URL per service on your tunnel and a shared secret; paste them into the
+service's webhook settings. Linear and GitHub payloads are checked against
+an HMAC of the body, GitLab against its secret token header, Jira against a
+token in the URL. A named tunnel (`corgi agent tunnel setup`) keeps the
+URLs stable. `--interval 0` turns polling off for a workspace that has
+webhooks.
+
+**Notify** sends the same notification a waiting session does: desktop,
+`notifyUrl`, Telegram. **Fix** also runs a headless `claude -p` in the
+workspace with the matching skill: `/corgi:stories ABC-123` for an issue or
+a comment on it, `/corgi:review <pr>` to address review feedback. The skills
+keep their rules: draft PRs only, never a merge. One fix at a time per
+workspace, thirty minutes at most, the transcript under
+`<agent dir>/watch/runs/`, and a notification with the PR links when it
+ends. A fix runs unattended only for a workspace enabled with
+`corgi agent init --dangerously-skip-permissions`; otherwise it runs with
+`acceptEdits` and a Bash step that needs approval stalls until the timeout.
+
+Rules per workspace, in the trusted user config:
+
+```yaml
+workspaces:
+  acme-stack:
+    watch:
+      enabled: true
+      labels: [bug, defect]     # new issues with one of these
+      assignee: me              # or any
+      comments: true            # comments on issues assigned to me
+      prs: true                 # reviews and comments on my pull requests
+      repos: [acme/api]         # limit GitHub to these; empty is any
+      project: ABC              # Linear team key or Jira project; routes webhooks
+      interval: 3m              # 0 = webhooks only
+      action: fix               # or notify
+```
 
 ## Wake lock
 

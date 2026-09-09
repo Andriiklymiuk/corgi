@@ -51,6 +51,7 @@ a day are one command each:
 | an agent to take the ticket across every repo | `/corgi:stories ABC-123` |
 | your laptop still working while you're out | `corgi agent up`, then scan the QR |
 | which of your Claude sessions is waiting on you: menu bar, VS Code, Stream Deck | `corgi agent track enable` |
+| a new bug or a PR review handled while you are away | `corgi agent watch enable --action fix` |
 | the next project tomorrow | the same commands, in its folder |
 
 The part that changes how you work is the second row. A feature that touches three repos normally
@@ -299,6 +300,7 @@ corgi agent answer acme-api allow       # the permission prompt it waits on
 corgi agent usage                       # every account: windows and forecast
 corgi agent carry acme-api --profile work   # continue under another account
 corgi agent standup                     # yesterday, from sessions and git
+corgi agent watch enable --labels bug --prs --action fix   # new bugs and PR reviews: tell me, or fix them
 ```
 
 A Telegram bot has the same: reply to a "needs you" message to type into
@@ -306,6 +308,17 @@ that session, `/allow`, `/sessions`, `/usage`. Details in
 [docs/agent.md](docs/agent.md#sessions-on-a-stream-deck).
 
 <p align="center"><img src="docs/media/telegram.gif" width="340" alt="Telegram: a needs-you message, /allow, /sessions, a reply typed into the session, /usage, limit lifted"></p>
+
+**Work that arrives while you are away.** `corgi agent watch` has the daemon
+poll Linear or Jira and GitHub or GitLab, with a saved cursor, so a round
+that finds nothing costs one request and no agent tokens. A new bug
+assigned to you, a comment on it, a review on your PR: you get the
+notification, and with `--action fix` a headless Claude runs the matching
+skill in the workspace and opens draft PRs. Webhooks (`corgi agent watch
+hooks`) make it instant. Details in
+[docs/agent.md](docs/agent.md#watching-the-tracker-and-your-pull-requests).
+
+<p align="center"><img src="docs/media/watch.gif" width="760" alt="corgi agent watch: enable, status, a new bug notification, the fix with draft PR links, a review comment addressed"></p>
 
 ## The rest of the commands
 

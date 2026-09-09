@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 const (
@@ -49,6 +50,8 @@ const (
 	ActionAnswer = "answer"
 	// ActionNote sets or clears a session's note.
 	ActionNote = "note"
+	// ActionWatch delivers a tracker or code-host event a webhook received.
+	ActionWatch = "watch"
 )
 
 // needsWorkspace lists the actions addressed to a workspace; the rest are
@@ -59,6 +62,7 @@ var known = map[string]bool{
 	ActionStart: true, ActionStop: true, ActionAttention: true, ActionSession: true,
 	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true, ActionNew: true,
 	ActionDismiss: true,
+	ActionWatch:   true,
 	ActionSend:    true,
 	ActionAnswer:  true,
 	ActionNote:    true,
@@ -103,6 +107,8 @@ type Command struct {
 	Enter  bool   `json:"enter,omitempty"`
 	Note   string `json:"note,omitempty"`
 	Answer string `json:"answer,omitempty"`
+	// WatchEvent is ActionWatch's payload.
+	WatchEvent *watch.Event `json:"watchEvent,omitempty"`
 	// Command is what ActionNew's terminal runs when the caller has a
 	// specific command line (carry's `--resume`); else `corgi agent claude`.
 	Command string `json:"command,omitempty"`
