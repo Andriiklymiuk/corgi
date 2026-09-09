@@ -74,10 +74,13 @@ homebrew_casks:
     # holds it behind a dialog on first run — which for a CLI just looks like a
     # hang. Signed and notarized builds (docs/release-signing.md) pass without
     # this; it stays harmless for them.
-    hooks:
-      post:
-        install: |
-          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/corgi"]
+    # Homebrew 5 wants postflight_steps; GoReleaser's hooks still write the
+    # deprecated postflight, so the block is spelled out. The braces around
+    # staged_path are Homebrew's template token, escaped from GoReleaser's.
+    custom_block: |
+      postflight_steps do
+        run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{" }}staged_path{{ "}}" }}/corgi"], must_succeed: false
+      end
     caveats: |
       Shell tab-completion installed for bash, zsh, fish:
         corgi run --services <TAB>      # services from corgi-compose.yml
