@@ -121,20 +121,49 @@ Voice: in Claude Code run `/voice tap` once; bind `voice:pushToTalk` to
 `ctrl+y` in `~/.claude/keybindings.json` (and in each profile's config dir).
 The Claude Code panel uses its own `cmd+d`.
 
-### 7. The tracker watch (optional)
+### 7. The tracker and code-host watch (optional)
 
-Ask whether they want the daemon to notice new bugs and PR reviews. If so,
-in the workspace:
+Ask whether they want the daemon to notice new bugs and PR reviews while
+they are away. Then, per service they use, get the token into the command
+(never into the chat):
+
+| service | where the token comes from | command |
+|---|---|---|
+| Linear | linear.app → Settings → Security & access → Personal API keys → New key (read is enough) | `corgi agent watch auth linear --token lin_api_…` or `LINEAR_API_KEY` |
+| Jira Cloud | id.atlassian.com → Security → API tokens → Create; plus the site URL and the login email | `corgi agent watch auth jira --url https://you.atlassian.net --email me@x.io --token …` or `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
+| GitHub | `gh auth login` is enough (the watch reads the notifications feed through it); or a fine-grained PAT with Notifications read | nothing, or `corgi agent watch auth github --token ghp_…` / `GITHUB_TOKEN` |
+| GitLab | gitlab.com → Preferences → Access tokens → scope `read_api`; self-hosted needs the URL | `corgi agent watch auth gitlab --token glpat-… --url https://gitlab.example.com` or `GITLAB_TOKEN`, `GITLAB_URL` |
+
+Then, in each workspace:
 
 ```bash
-corgi agent watch auth linear --token <KEY>            # or jira --url --email --token; github uses gh auth; gitlab --token
-corgi agent watch enable --labels bug,defect --prs     # --action fix to also run the skill (draft PRs only)
-corgi agent watch hooks                                # webhook URLs + secret, for instant events
+corgi agent watch enable --labels bug,defect --prs --project ABC     # ABC = Linear team key or Jira project key
+corgi agent watch enable --labels bug --prs --project ABC --action fix   # also run the fix skill, draft PRs only
+corgi agent watch run --dry-run                                      # prove the tokens work: no bookmark moved
 corgi agent restart
+corgi agent watch                                                    # tokens present, watched workspaces, last polls
 ```
 
 `--action fix` runs unattended only after `corgi agent init
---dangerously-skip-permissions`; say that before enabling it.
+--dangerously-skip-permissions`; say that before enabling it. The first
+round only sets the bookmark, so nothing old gets run.
+
+**Webhooks** (instant instead of every three minutes): `corgi agent watch
+hooks` prints one URL per service and a shared secret. A named tunnel
+(step 3) keeps those URLs alive across restarts; with a quick tunnel they
+change on every restart and must be re-entered. `--interval 0` on a
+workspace turns polling off once its webhooks work. The clicks, per
+service, go on the manual checklist:
+
+- Linear: Settings → API → Webhooks → New: URL `<base>/hooks/linear`, the
+  secret, events Issues and Comments.
+- GitHub: repo Settings → Webhooks → Add: URL `<base>/hooks/github`, content
+  type `application/json`, the secret, events Pull request reviews, Pull
+  request review comments, Issue comments.
+- GitLab: project Settings → Webhooks → Add: URL `<base>/hooks/gitlab`, the
+  secret in Secret token, trigger Comments.
+- Jira: Settings → System → WebHooks → Create: URL
+  `<base>/hooks/jira?token=<secret>`, events Issue created, Comment created.
 
 ### 8. Verify, then hand over
 
@@ -164,6 +193,9 @@ URL), and the manual checklist that is still open.
 - `/voice tap` and the `ctrl+y` binding inside Claude Code.
 - Trust: run `claude` once in each workspace and accept the trust dialog,
   or `corgi agent doctor` keeps saying `trust · <id>`.
+- Tokens for the watch: Linear API key, Jira API token, `gh auth login`,
+  GitLab access token (table in step 7). Webhook entries in each service,
+  from `corgi agent watch hooks`.
 
 ## Done when
 
