@@ -22,6 +22,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/proc"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 // Info is the daemon's own record, written so `corgi agent status` and
@@ -72,6 +73,12 @@ type Daemon struct {
 	recentAttention map[string]time.Time
 	// limitWatch: sessions that left "limited"; the notice waits for a finished turn.
 	limitWatch map[string]bool
+
+	// Watches are the workspaces that poll their tracker and code host.
+	Watches    []WatchSpec
+	watchState *watch.State
+	watchers   map[string]*watch.Watch
+	fixBusy    map[string]*sync.Mutex
 
 	Version string
 	// Dir is the agent data directory holding daemon.json and registry.json.
@@ -337,6 +344,7 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	}
 
 	d.startSessionTracking()
+	d.startWatches(ctx)
 	reapDone := make(chan struct{})
 	go func() { defer close(reapDone); d.reapSessions(ctx) }()
 	defer func() { <-reapDone }()

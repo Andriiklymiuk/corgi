@@ -428,5 +428,38 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	scene("logs", grow(s, [1, 2, 6, 8, 10, 14]).map((l, i) => page(term("corgi logs", l, { rows: s.length, cursor: i < 5 }))));
 }
 
+
+// ---- watch: the tracker and your PRs, handled while you are away --------------------
+{
+	const s = [
+		"{g}${/} {B}corgi agent watch enable --labels bug,defect --prs --action fix{/}",
+		"watching acme-stack — labels bug,defect · assigned to me · PR reviews and comments → fix",
+		"restart the daemon to pick it up: corgi agent restart",
+		"",
+		"{g}${/} {B}corgi agent watch{/}",
+		"Tokens",
+		"  linear 3f9a12c0 · jira none · github 8be1d4f7 · gitlab none · webhook secret a7c2e910",
+		"",
+		"Watched",
+		"  acme-stack           fix      every 3m0s linear, github",
+		"",
+		"Last polls",
+		"  acme-stack/github            2026-09-09T13:04:02Z",
+		"  acme-stack/linear            2026-09-09T13:04:02Z",
+		"",
+		"{g}${/} {B}corgi agent watch run{/}",
+		"nothing new",
+		"",
+		"{d}# 13:07 — a bug lands in Linear, assigned to you{/}",
+		"{y}🔔 corgi agent · acme-stack{/}  new issue ABC-7 — Login loops after password reset",
+		"{d}# 13:19 — the headless claude ran /corgi:stories ABC-7 in the workspace{/}",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed ABC-7 — https://github.com/acme/api/pull/412",
+		"{d}# 13:31 — a reviewer comments on your PR{/}",
+		"{y}🔔 corgi agent · acme-stack{/}  max commented on acme/api#412: please cover the empty-path case",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#412 — https://github.com/acme/api/pull/412",
+	];
+	scene("watch", grow(s, [1, 3, 5, 14, 17, 20, 22, 24, 25]).map((l, i) => page(term("corgi agent watch", l, { rows: s.length, cursor: i < 8 }))));
+}
+
 writeFileSync(`${out}/scenes.json`, JSON.stringify(scenes));
 console.log("wrote", Object.entries(scenes).map(([k, v]) => `${k}:${v}`).join(" "));

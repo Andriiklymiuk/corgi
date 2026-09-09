@@ -334,6 +334,11 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/doctor", bearerAuth(token, http.HandlerFunc(launchDoctorHandler), deviceStore))
 	}
 
+	// Webhooks verify their own shared secret; no bearer token, no device.
+	for _, source := range []string{"linear", "github", "gitlab", "jira"} {
+		mux.HandleFunc("/hooks/"+source, watchHookHandler(source))
+	}
+
 	// /pair is deliberately NOT behind the bearer check: its whole purpose is
 	// to serve a client that has no token yet. It is guarded by the pairing
 	// code — single-use, ten minutes, attempt-capped — and the route is only

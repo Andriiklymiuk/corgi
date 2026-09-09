@@ -158,6 +158,11 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		d.Sessions.Resize(user.TrackSlots)
 	}
 	d.ResolveWorkspace = remoteResolver(dir, foreground)
+	if specs, werr := loadWatchSpecs(dir); werr == nil {
+		d.Watches = specs
+	} else {
+		utils.Infof("agent: watch config: %v\n", werr)
+	}
 	d.LinkFor = func(workspaceID string) string {
 		if url := d.SessionURLFor(workspaceID); url != "" {
 			return url

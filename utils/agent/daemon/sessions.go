@@ -73,6 +73,10 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		}
 	case command.ActionSend:
 		d.sendToSession(ctx, c.SessionID, c.Text, c.Enter)
+	case command.ActionWatch:
+		if c.WatchEvent != nil {
+			d.handleWatchEvent(ctx, *c.WatchEvent)
+		}
 	case command.ActionAnswer:
 		keys, err := d.Sessions.PendingAnswer(c.SessionID, c.Answer)
 		if err != nil {

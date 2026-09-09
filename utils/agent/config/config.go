@@ -105,6 +105,9 @@ type WorkspaceConfig struct {
 	// subscription.
 	InheritAPIKey     bool `yaml:"inheritApiKey"`
 	InheritOAuthToken bool `yaml:"inheritOauthToken"`
+	// Watch asks the daemon to poll the tracker and code host for this
+	// workspace and act on new issues and review comments.
+	Watch *WatchConfig `yaml:"watch"`
 	// DangerouslySkipPermissions runs the session with permission prompts off,
 	// removing the main defence against it acting on instructions injected into
 	// a file it read. Trusted config only by construction — RepoConfig has no
@@ -214,6 +217,31 @@ func Resolve(id string, repo *RepoConfig, user *UserConfig) Resolved {
 	return out
 }
 
+// WatchConfig is what `corgi agent watch enable` writes.
+type WatchConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Interval string `yaml:"interval"` // "3m"; "0" polls never (webhooks only)
+	// Tracker is linear or jira; empty picks whichever has a token.
+	Tracker string `yaml:"tracker"`
+	// Project is the Linear team key or Jira project key.
+	Project string `yaml:"project"`
+	// Labels and States filter new issues; empty matches any.
+	Labels []string `yaml:"labels"`
+	States []string `yaml:"states"`
+	// Assignee is "me" (default) or "any".
+	Assignee string `yaml:"assignee"`
+	// Comments: new comments on issues assigned to me.
+	Comments bool `yaml:"comments"`
+	// PRs: reviews and comments on pull requests I opened.
+	PRs bool `yaml:"prs"`
+	// Repos limits GitHub polling to owner/repo names; empty means every
+	// notification.
+	Repos []string `yaml:"repos"`
+	// Action is notify (default) or fix: fix runs `claude -p` in the
+	// workspace with the matching skill and opens draft PRs.
+	Action string `yaml:"action"`
+}
+
 // overlay applies the non-empty fields of over onto base.
 func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.Autostart != nil {
@@ -257,6 +285,9 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	}
 	if over.WakeLock != "" {
 		base.WakeLock = over.WakeLock
+	}
+	if over.Watch != nil {
+		base.Watch = over.Watch
 	}
 	// Booleans that grant capability are OR-ed rather than overwritten, so a
 	// per-workspace entry cannot silently turn off a default the user set.
