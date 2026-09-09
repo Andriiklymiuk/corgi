@@ -17,6 +17,13 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
+// telegramAPIBase is swapped for an httptest server in tests.
+var telegramAPIBase = "https://api.telegram.org"
+
+// waitForDaemonToAct gives the daemon a moment to refuse a board command
+// before the reply goes out; tests replace it.
+var waitForDaemonToAct = func() { time.Sleep(1500 * time.Millisecond) }
+
 type telegramControl struct {
 	token   string
 	chatID  string
@@ -79,8 +86,8 @@ type telegramMessage struct {
 }
 
 func (t *telegramControl) poll(ctx context.Context) []telegramMessage {
-	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?timeout=30&offset=%d",
-		t.token, t.offset)
+	endpoint := fmt.Sprintf("%s/bot%s/getUpdates?timeout=30&offset=%d",
+		telegramAPIBase, t.token, t.offset)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil
@@ -230,7 +237,7 @@ func (t *telegramControl) board(c command.Command, done string) {
 		return
 	}
 	daemon.Nudge(info)
-	time.Sleep(1500 * time.Millisecond)
+	waitForDaemonToAct()
 	after, err := readBoard(t.agentIn)
 	if err == nil && after.Notice != "" && after.NoticeAt.After(before.NoticeAt) {
 		t.send("corgi: " + after.Notice)
@@ -383,7 +390,7 @@ func (t *telegramControl) send(text string) {
 		return
 	}
 	req, err := http.NewRequest(http.MethodPost,
-		fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.token),
+		fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIBase, t.token),
 		strings.NewReader(string(payload)))
 	if err != nil {
 		return
