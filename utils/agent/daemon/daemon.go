@@ -79,6 +79,7 @@ type Daemon struct {
 	watchState *watch.State
 	watchers   map[string]*watch.Watch
 	fixBusy    map[string]*sync.Mutex
+	fixActive  map[string]bool
 
 	Version string
 	// Dir is the agent data directory holding daemon.json and registry.json.
