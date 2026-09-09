@@ -32,7 +32,7 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
 
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
-**Install:** `brew install andriiklymiuk/homebrew-tools/corgi` (Homebrew 5 asks you to `brew trust andriiklymiuk/tools` once; [other ways](docs/install.md)).
+**Install:** `brew install andriiklymiuk/homebrew-tools/corgi` (Homebrew 5 asks you to `brew trust andriiklymiuk/tools` once; [other ways](docs/install.md)). Then, in Claude Code with the plugin: **`/corgi:setup`** installs the rest — VS Code extension, menu bar app, the daemon at login with a tunnel and the pairing QR, notifications, session tracking — and lists the few clicks only you can do.
 
 ## Why corgi
 
@@ -162,6 +162,7 @@ Slash-commands and plain English both work:
 /corgi-debug                    "the api is 500ing, find out why"
 /corgi-complexity               "this handler branches like a jungle — simplify it"
 /corgi-risk <pr-url>            "how much review does this need — can it be auto-approved?"
+/corgi:setup                    "set corgi up for me: agent, phone, Telegram, menu bar, Stream Deck"
 /corgi:showcase                 "make README gifs of the new feature"
 ```
 

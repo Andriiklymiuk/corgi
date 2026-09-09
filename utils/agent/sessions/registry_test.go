@@ -935,6 +935,15 @@ func TestTwinsWithTheSameTabNameFallBackToTheId(t *testing.T) {
 	if !names["acme-api·Order emails"] {
 		t.Fatalf("the chat title when there is one: %v", names)
 	}
+	// Claude's own tab title ("✻ …") is not a suffix either; the title wins, then the id.
+	r.SetWindows([]Window{{ID: "w1", ExtHostPID: 7, Terminals: []Terminal{{Name: "✻ Order emails", ShellPID: 90}, {Name: "✻ Refund flow", ShellPID: 91}}, UpdatedAt: t0}})
+	names = map[string]bool{}
+	for _, s := range r.Snapshot(t0).Sessions {
+		names[s.Display] = true
+	}
+	if !names["acme-api·Order emails"] || !names["acme-api·bbbb"] {
+		t.Fatalf("glyph-named tabs are skipped: %v", names)
+	}
 }
 
 func TestToolSubjectPendingAndContext(t *testing.T) {

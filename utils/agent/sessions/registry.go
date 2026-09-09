@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"andriiklymiuk/corgi/utils/agent/proc"
 	"andriiklymiuk/corgi/utils/agent/usage"
@@ -1303,17 +1304,25 @@ func (r *Registry) displayLocked(s *Session) string {
 	if twins <= 1 {
 		return s.Label
 	}
-	if term := s.Host.Terminal; term != "" && !strings.Contains(term, s.Label) && r.terminalNameUniqueLocked(s) {
-		return s.Label + "·" + term
-	}
+	// The chat's own title first: a tab named by corgi or by Claude repeats
+	// the label or the title with a glyph in front.
 	if s.Title != "" && r.titleUniqueLocked(s) {
 		return s.Label + "·" + s.Title
+	}
+	if term := s.Host.Terminal; term != "" && !strings.Contains(term, s.Label) && !glyphNamed(term) && r.terminalNameUniqueLocked(s) {
+		return s.Label + "·" + term
 	}
 	id := strings.TrimPrefix(s.ID, "pid:")
 	if len(id) > 4 {
 		id = id[:4]
 	}
 	return s.Label + "·" + id
+}
+
+// glyphNamed: a tab Claude Code or corgi titled itself ("✻ Fix login", "▲ api NEEDS YOU").
+func glyphNamed(term string) bool {
+	r := []rune(strings.TrimSpace(term))
+	return len(r) > 0 && !unicode.IsLetter(r[0]) && !unicode.IsDigit(r[0])
 }
 
 // titleUniqueLocked: the chat's own name tells twins apart when they differ.
