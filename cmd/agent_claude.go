@@ -71,6 +71,9 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 	},
 }
 
+// execProcess is syscall.Exec, swappable so tests can watch the exec path.
+var execProcess = syscall.Exec
+
 // runClaudeInPlace replaces this process with claude where the OS allows,
 // so claude's parent is the shell, not corgi. The tracking hook skips any
 // claude with a corgi ancestor — that is how the daemon's own remote-control
@@ -83,7 +86,7 @@ func runClaudeInPlace(bin string, args []string, env []string) error {
 		return err
 	}
 	if runtime.GOOS != "windows" {
-		if err := syscall.Exec(path, append([]string{bin}, args...), env); err == nil {
+		if err := execProcess(path, append([]string{bin}, args...), env); err == nil {
 			return nil
 		}
 		// Exec refused (a script without a shebang, say): fall through.
