@@ -11,7 +11,8 @@ GROUND="#0d1117"
 shot() { "$CHROME" --headless=new --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1; }
 trim() { magick "$1" -fuzz 1% -trim +repage -bordercolor "$GROUND" -border 28 "$1"; }
 
-for scene in $(node -e 'const s=require("./docs/media/frames/scenes.json");console.log(Object.keys(s).join(" "))'); do
+scenes=${*:-$(node -e 'const s=require("./docs/media/frames/scenes.json");console.log(Object.keys(s).join(" "))')}
+for scene in $scenes; do
   n=$(node -e "console.log(require('./docs/media/frames/scenes.json')['$scene'])")
   size=960,1000; case "$scene" in phone|dashboard) size=1300,1000;; telegram) size=420,700;; esac
   i=0; files=""
@@ -33,5 +34,5 @@ for scene in $(node -e 'const s=require("./docs/media/frames/scenes.json");conso
   cp $last $M/$scene.png
   echo "$scene: $n frames"
 done
-rm -rf $F
+[ $# -eq 0 ] && rm -rf $F
 ls -la $M | awk '{print $5, $9}'

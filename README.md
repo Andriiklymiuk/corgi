@@ -26,7 +26,9 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
 
 <p align="center"><img src="docs/media/run.gif" width="760" alt="corgi run: clones the missing repo, starts and seeds the database, writes the env, starts api and web"></p>
 
-<p align="center"><img src="docs/media/stories.gif" width="380" alt="An agent takes a ticket across three repos and opens three draft PRs"> <img src="docs/media/phone.gif" width="380" alt="corgi agent up prints a QR; the phone scans it and starts a session"></p>
+<p align="center"><img src="docs/media/stories.gif" width="760" alt="An agent takes a ticket across three repos and opens three draft PRs"></p>
+
+<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and starts a session"></p>
 
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
