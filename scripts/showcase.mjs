@@ -384,7 +384,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	  .tg .input{height:48px;background:#17212b;display:flex;align-items:center;padding:0 12px;gap:10px;color:#6c7883;font-size:12px}
 	  .tg .input span{flex:1;background:#242f3d;border-radius:16px;padding:7px 12px}
 	</style>`;
-	const phone = (n) => `<div class="phone"><div class="notch"></div><div class="screen"><div class="tg"><div class="hdr"><div class="av">🐶</div><div>corgi<small>bot</small></div></div><div class="list">${flow.slice(0, n).map((m) => msg(...m)).join("")}</div><div class="input"><span>Message</span>🎤</div></div></div></div>`;
+	const phone = (n) => `<div class="phone"><div class="notch"></div><div class="screen"><div class="tg"><div class="hdr"><div class="av">🐶</div><div>corgi<small>bot</small></div></div><div class="list">${flow.slice(0, n).map((m) => msg(...m)).join("")}</div><div class="input"><span>Message</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6c7883" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg></div></div></div></div>`;
 	const cuts = [1, 3, 5, 7, 9, 10];
 	scene("telegram", cuts.map((n) => page(css2 + phone(n), 380)));
 }
