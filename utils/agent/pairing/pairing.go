@@ -362,3 +362,40 @@ func Pair(storePath string, session *Session, code, deviceName string) (string, 
 	}
 	return token, nil
 }
+
+// PairLocal mints a device token without a pairing code, for a browser on
+// the machine that owns the store. Anyone who can run this already has the
+// store on disk, so no code is being skipped — there is nothing a code
+// would protect against here. Remote pairing still goes through Pair.
+func PairLocal(storePath, deviceName string) (string, error) {
+	deviceName = strings.TrimSpace(deviceName)
+	if deviceName == "" {
+		return "", fmt.Errorf("%w: a device name is required", ErrBadRequest)
+	}
+	if len(deviceName) > 64 {
+		return "", fmt.Errorf("%w: device name is too long", ErrBadRequest)
+	}
+	for _, r := range deviceName {
+		if r == '\t' || !unicode.IsGraphic(r) {
+			return "", fmt.Errorf("%w: device name must be printable text", ErrBadRequest)
+		}
+	}
+	store, err := Load(storePath)
+	if err != nil {
+		return "", err
+	}
+	token, err := NewDeviceToken()
+	if err != nil {
+		return "", err
+	}
+	store.Revoke(deviceName)
+	store.Devices = append(store.Devices, Device{
+		Name:      deviceName,
+		TokenHash: HashToken(token),
+		CreatedAt: time.Now().UTC(),
+	})
+	if err := Save(storePath, store); err != nil {
+		return "", err
+	}
+	return token, nil
+}

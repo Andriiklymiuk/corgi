@@ -1164,10 +1164,12 @@ const launcherPageHTML = `<!doctype html>
   html{-webkit-text-size-adjust:100%}
   button,a,summary,label,input,.chip,.ws,.top,.s{touch-action:manipulation}
   body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
-      padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased}
+      padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased;
+      overscroll-behavior-y:none}
   header{position:sticky;top:0;z-index:30;background:rgba(8,9,10,.88);backdrop-filter:blur(14px);
       -webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);
-      padding:calc(.7rem + env(safe-area-inset-top)) 1.2rem 0}
+      padding-top:calc(.7rem + env(safe-area-inset-top));padding-bottom:0;
+      padding-left:max(1.2rem,env(safe-area-inset-left));padding-right:max(1.2rem,env(safe-area-inset-right))}
   header>*{max-width:34rem;margin-left:auto;margin-right:auto}
   .brand{display:flex;align-items:center;gap:.7rem}
   .brand .who{min-width:0;flex:1}
@@ -1183,11 +1185,18 @@ const launcherPageHTML = `<!doctype html>
   header small{display:block;color:var(--dim);font-size:.78rem;font-weight:400;margin-top:.1rem}
   header small .what{color:var(--dim);border-bottom:1px dotted var(--line-soft,#3a4152);cursor:pointer}
   .hostnote{color:var(--dim);font-size:.74rem;line-height:1.5;margin:.45rem 0 0;max-width:30rem}
-  main{padding:.7rem 1.2rem 2.6rem;max-width:34rem;margin:0 auto}
+  /* The last row has to clear Safari's floating toolbar, which sits over the
+     page rather than beside it, and the home indicator under that. */
+  main{max-width:34rem;margin:0 auto;padding-top:.7rem;
+      padding-bottom:calc(5rem + env(safe-area-inset-bottom));
+      padding-left:max(1.2rem,env(safe-area-inset-left));
+      padding-right:max(1.2rem,env(safe-area-inset-right))}
 
   /* Tabs. The page answers three questions and they are not equally urgent:
      what wants me, what is running, what could run. One at a time. */
-  .tabs{display:flex;gap:.15rem;padding:.5rem 0 .45rem;overflow-x:auto;scrollbar-width:none}
+  .tabs{display:flex;gap:.15rem;padding:.5rem .6rem .45rem 0;overflow-x:auto;scrollbar-width:none;
+      -webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+  .tabs button{scroll-snap-align:start}
   .tabs::-webkit-scrollbar{display:none}
   .tabs button{flex:0 0 auto}
   .tabs button{padding:.35rem .6rem;border-radius:.4rem;border:0;background:none;
@@ -1261,8 +1270,9 @@ const launcherPageHTML = `<!doctype html>
   .ev .ekind{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin-left:.35rem}
   .ev .etitle{font-size:.78rem;opacity:.85;margin:.15rem 0 .4rem;overflow-wrap:anywhere}
   .ev .erow{display:flex;gap:.4rem;align-items:center}
-  .ev a.eopen{font-size:.76rem;text-decoration:none;padding:.28rem .6rem;border-radius:.45rem;border:1px solid var(--line);color:inherit}
-  .ev button{font:inherit;font-size:.76rem;font-weight:500;padding:.3rem .7rem;border-radius:.45rem;
+  .ev a.eopen{font-size:.76rem;text-decoration:none;padding:.45rem .75rem;border-radius:.45rem;
+    border:1px solid var(--line);color:inherit;min-height:2rem;display:inline-flex;align-items:center}
+  .ev button{font:inherit;font-size:.76rem;font-weight:500;padding:.45rem .75rem;border-radius:.45rem;min-height:2rem;
     border:1px solid var(--line);background:transparent;color:var(--dim)}
   .ev button:disabled{opacity:.5}
   /* One action leads; the rest are there when you want them. Four equally
@@ -1554,7 +1564,20 @@ const launcherPageHTML = `<!doctype html>
     try { const p = new URL(u); return p.protocol === 'https:' && (p.hostname === 'claude.ai' || p.hostname.endsWith('.claude.ai')); }
     catch { return false; }
   };
-  const token = (() => { try { return localStorage.getItem('corgi_token') || ''; } catch { return ''; } })();
+  const token = (() => {
+    // corgi agent dashboard puts a token in the fragment, which never
+    // reaches the server or its logs. Keep it, then drop it from the address
+    // bar so it is not left sitting in history or a shared screenshot.
+    try {
+      const m = /(?:^|[#&])token=([A-Za-z0-9._-]+)/.exec(location.hash || '');
+      if (m) {
+        localStorage.setItem('corgi_token', m[1]);
+        history.replaceState(null, '', location.pathname + location.search);
+        return m[1];
+      }
+    } catch {}
+    try { return localStorage.getItem('corgi_token') || ''; } catch { return ''; }
+  })();
   const list = document.getElementById('list');
   const auth = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' };
   // Set in JS (not a static href) so the page source carries no external link;
@@ -1589,10 +1612,20 @@ const launcherPageHTML = `<!doctype html>
   const setShowBridges = on => { try { localStorage.setItem('corgi_show_bridges', on ? '1' : '0'); } catch {} };
 
   if (!token) {
-    list.className = 'empty';
-    list.innerHTML = '<h2>Pair this browser</h2><p>On the laptop run <code>corgi agent up</code> ' +
-      'and scan the QR it prints. Then this page lists that machine&#39;s repos and starts ' +
-      'sessions on them.</p>';
+    // The tabs have nothing to show without a token, and the message used to
+    // land in a pane that is hidden unless you happen to be on Stacks — which
+    // is how this page came to render as a blank screen.
+    document.getElementById('tabs').hidden = true;
+    for (const p of document.querySelectorAll('[data-pane]')) {
+      p.hidden = true;
+    }
+    const pair = document.createElement('div');
+    pair.className = 'empty';
+    pair.innerHTML = '<h2>Pair this browser</h2><p>This page needs a key before it can show ' +
+      'anything. On the laptop run <code>corgi agent up</code> and open the <b>pair:</b> link it ' +
+      'prints — in this browser for this machine, or by scanning the QR on a phone.</p>' +
+      '<p>The key is kept in this browser only, and pairing again replaces it.</p>';
+    document.querySelector('main').prepend(pair);
     document.getElementById('refresh').hidden = true;
   } else {
     initSettings();
@@ -3257,15 +3290,23 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		profile = ""
 	}
 	window := strings.TrimSpace(req.Window)
+	rep, boardErr := readBoard(dir)
 	if window != "" {
-		rep, err := readBoard(dir)
-		if err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		if boardErr != nil {
+			writeLaunchError(w, http.StatusInternalServerError, boardErr.Error())
 			return
 		}
 		if !windowConnected(rep, window) {
 			writeLaunchError(w, http.StatusNotFound, "that editor window is not connected any more")
 			return
+		}
+	}
+	// A ticket belongs in its own checkout. When an editor is already open on
+	// that workspace, the session opens there rather than wherever the phone
+	// happened to point; with none open, the caller's choice stands.
+	if boardErr == nil {
+		if own := windowOnWorkspace(rep, dir, events[0].Workspace); own != "" {
+			window = own
 		}
 	}
 	id, err := savePrompt(dir, prompt)
@@ -3293,6 +3334,65 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	args = append(args, "--prompt-id", id)
 	launchBoardCommand(w, command.Command{Action: command.ActionNew, WindowID: window,
 		Command: daemon.NewSessionCommand(args...), Source: "phone"})
+}
+
+// windowOnWorkspace is a connected editor window whose folder is inside the
+// workspace's checkout, or "" when none is.
+func windowOnWorkspace(rep boardReport, agentD, workspaceID string) string {
+	if strings.TrimSpace(workspaceID) == "" {
+		return ""
+	}
+	root, err := workspaceRoot(workspaceID)
+	if err != nil {
+		return ""
+	}
+	best, bestFocus := "", time.Time{}
+	for _, win := range rep.Windows {
+		for _, folder := range win.Folders {
+			if !underRoot(folder, root) {
+				continue
+			}
+			// Several windows on one repo: the one most recently in front.
+			if best == "" || win.FocusedAt.After(bestFocus) {
+				best, bestFocus = win.ID, win.FocusedAt
+			}
+			break
+		}
+	}
+	return best
+}
+
+// underRoot says a folder is the workspace's checkout or inside it. Both
+// forms of each path are compared, because EvalSymlinks only resolves what
+// exists — on macOS a temp root resolves to /private/var while a subfolder
+// that is not there yet does not, and the two would never match.
+func underRoot(folder, root string) bool {
+	for _, r := range pathForms(root) {
+		for _, f := range pathForms(folder) {
+			if f != "" && r != "" && (f == r || strings.HasPrefix(f, r+string(filepath.Separator))) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func pathForms(p string) []string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(expandTilde(p))
+	if err != nil {
+		return nil
+	}
+	forms := []string{filepath.Clean(abs)}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		if clean := filepath.Clean(real); clean != forms[0] {
+			forms = append(forms, clean)
+		}
+	}
+	return forms
 }
 
 func windowConnected(rep boardReport, window string) bool {

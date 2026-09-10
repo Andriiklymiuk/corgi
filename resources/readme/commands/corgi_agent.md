@@ -55,6 +55,7 @@ Getting started:
 * [corgi agent brief](corgi_agent_brief)	 - What the last supervised session was working on before it restarted
 * [corgi agent carry](corgi_agent_carry)	 - Continue a session under another account, conversation and all
 * [corgi agent claude](corgi_agent_claude)	 - Run Claude Code the way this folder's workspace is configured
+* [corgi agent dashboard](corgi_agent_dashboard)	 - Open the dashboard in this machine's browser
 * [corgi agent digest](corgi_agent_digest)	 - Today's one-message summary, as the daily digest would send it
 * [corgi agent dismiss](corgi_agent_dismiss)	 - Take a finished session off the board until its next event
 * [corgi agent doctor](corgi_agent_doctor)	 - Check whether agent mode can actually work here

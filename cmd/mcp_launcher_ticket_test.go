@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/watch"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
 // ticketHome writes an events log and a board cache under a temp agent dir.
@@ -178,5 +180,41 @@ func TestTicketRefusesWhatItCannotDo(t *testing.T) {
 	launchTicketHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/ticket", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET = %d", rec.Code)
+	}
+}
+
+// A ticket belongs in its own checkout: when an editor is already open there,
+// that is where the session goes, whatever window the phone was pointing at.
+func TestWorkOnPrefersTheWindowAlreadyOnThatWorkspace(t *testing.T) {
+	dir := ticketHome(t)
+	root := t.TempDir()
+	reg := &workspace.Registry{}
+	reg.Upsert(workspace.Workspace{ID: "api", AbsPath: root, ComposeFile: "corgi-compose.yml", Status: workspace.StatusOK})
+	if err := workspace.Save(agentRegistryPath(dir), reg); err != nil {
+		t.Fatal(err)
+	}
+	older := time.Now().Add(-time.Hour)
+	rep := boardReport{}
+	rep.Windows = []sessions.Window{
+		{ID: "win-elsewhere", Folders: []string{t.TempDir()}},
+		{ID: "win-api-old", Folders: []string{root}, FocusedAt: older},
+		{ID: "win-api", Folders: []string{filepath.Join(root, "services", "api")}, FocusedAt: time.Now()},
+	}
+
+	if got := windowOnWorkspace(rep, dir, "api"); got != "win-api" {
+		t.Fatalf("a folder inside the checkout counts, and the one last in front wins: %q", got)
+	}
+	if got := windowOnWorkspace(rep, dir, "nobody"); got != "" {
+		t.Fatalf("an unregistered workspace has no window: %q", got)
+	}
+	if got := windowOnWorkspace(rep, dir, ""); got != "" {
+		t.Fatalf("no workspace, no preference: %q", got)
+	}
+
+	// Nothing open on it: the caller's choice has to stand.
+	none := boardReport{}
+	none.Windows = []sessions.Window{{ID: "win-elsewhere", Folders: []string{t.TempDir()}}}
+	if got := windowOnWorkspace(none, dir, "api"); got != "" {
+		t.Fatalf("with no window on the workspace, do not invent one: %q", got)
 	}
 }
