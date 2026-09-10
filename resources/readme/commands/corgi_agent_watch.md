@@ -58,6 +58,7 @@ corgi agent watch [flags]
 * [corgi agent watch enable](corgi_agent_watch_enable)	 - Watch this workspace (run inside it)
 * [corgi agent watch hooks](corgi_agent_watch_hooks)	 - Webhook URLs and the shared secret, for instant events without polling
 * [corgi agent watch move](corgi_agent_watch_move)	 - Move a ticket to another column
+* [corgi agent watch replay](corgi_agent_watch_replay)	 - The week unattended mode would have had
 * [corgi agent watch run](corgi_agent_watch_run)	 - Poll every watched workspace once, right now, and print what is new
 * [corgi agent watch test](corgi_agent_watch_test)	 - Push one made-up event through the pipeline and print the claude run it would start, without starting it
 * [corgi agent watch undo](corgi_agent_watch_undo)	 - Put back what the last unattended run did

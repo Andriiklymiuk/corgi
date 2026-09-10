@@ -3057,7 +3057,13 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	// The events log keeps the column a ticket arrived in. A move made since
 	// then is the truth, so it wins.
 	moved := watch.LoadStateLog(dir)
-	for _, e := range watch.RecentEvents(dir, 25) {
+	// The inbox is what is still waiting. Seen is not the test — every
+	// delivered event is seen — so it is the dismissed ones that leave.
+	state := watch.LoadState(dir)
+	for _, e := range watch.RecentEvents(dir, 40) {
+		if state.IsIgnored(e.Key) {
+			continue
+		}
 		state := e.State
 		if now, ok := moved.Get(e.Key); ok {
 			state = now.Status
@@ -3128,7 +3134,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 	// Ignoring is ours alone: it takes the row out of the inbox and stops the
 	// unattended mode picking it up, and writes nothing to anyone's tracker.
 	if strings.TrimSpace(req.Do) == "ignore" {
-		watch.LoadState(dir).MarkSeen(event.Key)
+		_ = watch.LoadState(dir).Ignore(event.Key)
 		writeLaunchJSON(w, map[string]any{"done": "ignored " + firstNonEmptyString(event.Ref, event.Key)})
 		return
 	}

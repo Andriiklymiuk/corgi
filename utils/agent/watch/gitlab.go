@@ -31,8 +31,8 @@ var gitlabActions = map[string]Kind{
 	"mentioned":          KindPRComment,
 	"directly_addressed": KindPRComment,
 	"assigned":           KindPRComment,
-	"review_requested":   KindPRReview,
-	"approval_required":  KindPRReview,
+	"review_requested":   KindReviewRequested,
+	"approval_required":  KindReviewRequested,
 }
 
 type gitlabTodo struct {
@@ -110,8 +110,10 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Body:   gitlabTruncate(t.Body, 200),
 			URL:    t.TargetURL,
 			Author: t.Author.Username,
-			Mine:   true,
-			At:     at,
+			// A review request is on someone else's merge request; every
+			// other todo is on something of mine.
+			Mine: kind != KindReviewRequested,
+			At:   at,
 		})
 	}
 

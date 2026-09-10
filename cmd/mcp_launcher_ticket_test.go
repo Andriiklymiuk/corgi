@@ -92,8 +92,25 @@ func TestIgnoreTakesARowOutOfTheInboxWithoutTouchingTheTracker(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("ignore = %d: %s", rec.Code, rec.Body.String())
 	}
-	if !watch.LoadState(dir).IsSeen("jira:ABC-1") {
-		t.Fatal("ignoring must mark it seen, so the unattended mode leaves it alone too")
+	if !watch.LoadState(dir).IsIgnored("jira:ABC-1") {
+		t.Fatal("ignoring must record the dismissal, so the row leaves and auto mode skips it")
+	}
+
+	// And the row actually goes: this is what "Ignore does nothing" was.
+	rec = httptest.NewRecorder()
+	launchEventsHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/events", nil))
+	var listed struct {
+		Events []struct {
+			Key string `json:"key"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range listed.Events {
+		if e.Key == "jira:ABC-1" {
+			t.Fatal("a dismissed event must leave the inbox")
+		}
 	}
 }
 

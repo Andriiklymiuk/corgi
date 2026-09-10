@@ -13,7 +13,7 @@ corgi agent watch enable [flags]
 ```
       --action string      notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only
       --assignee string    me (default) or any
-      --auto               Shorthand for --action fix --prs --comments: work on what arrives without being asked, draft PRs only
+      --auto               Shorthand for --action fix --prs --comments (not --reviews: reviewing someone else's PR is a separate ask): work on what arrives without being asked, draft PRs only
       --auto-for string    With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything
       --ci                 Also builds that went red on something of mine — the one kind that brings its own test for done
       --comments           Also new comments on issues assigned to me
@@ -28,6 +28,7 @@ corgi agent watch enable [flags]
       --prs                Also reviews and comments on pull requests I opened
       --quiet string       Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens
       --repos string       GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)
+      --reviews            Also pull requests someone asked me to review — theirs, not mine
       --states string      Only issues in one of these states, e.g. Todo,Backlog
       --tracker string     linear or jira (default: whichever has a token)
       --workspace string   Workspace id to change; omitted means the one you are in

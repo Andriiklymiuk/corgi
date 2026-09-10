@@ -47,7 +47,7 @@ var githubReasons = map[string]struct {
 	kind Kind
 	mine bool
 }{
-	"review_requested": {KindPRReview, false},
+	"review_requested": {KindReviewRequested, false},
 	"mention":          {KindPRComment, true},
 	"author":           {KindPRComment, true},
 	"comment":          {KindPRComment, true},

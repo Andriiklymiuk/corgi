@@ -30,6 +30,11 @@ const (
 	KindIssueComment Kind = "issue.comment"
 	KindPRComment    Kind = "pr.comment"
 	KindPRReview     Kind = "pr.review"
+	// KindReviewRequested is someone asking me to review THEIR pull request.
+	// The opposite of KindPRReview, which is feedback on mine, and the two
+	// were one kind until an unattended run was told to "apply the valid
+	// comments" on a colleague's branch.
+	KindReviewRequested Kind = "review.requested"
 	// KindCIFailed is a build that went red on something of mine. It is the
 	// one kind that arrives with its own test for "done".
 	KindCIFailed Kind = "ci.failed"
@@ -65,6 +70,7 @@ type Rules struct {
 	Comments bool     // comments on issues assigned to me
 	PRs      bool     // reviews and comments on my pull requests
 	CI       bool     // builds that went red on something of mine
+	Reviews  bool     // pull requests someone asked me to review
 	// From narrows comments and reviews to these people, matched against the
 	// author's name or login. Half of what blocks a day is shaped like a
 	// person — the one review you are waiting on — not like a board.
@@ -88,10 +94,15 @@ func (r Rules) Why(e Event) string {
 			return "PR reviews and comments need --prs"
 		case KindCIFailed:
 			return "red builds need --ci"
+		case KindReviewRequested:
+			return "review requests need --reviews"
 		}
 		return "kind " + string(e.Kind) + " is not watched"
 	}
 	switch e.Kind {
+	case KindReviewRequested:
+		// Someone else's pull request, addressed to me by construction: the
+		// tracker only sends a review request to its reviewer.
 	case KindCIFailed:
 		if !e.Mine {
 			return "not on something of mine"
@@ -193,6 +204,8 @@ func (r Rules) matchesKind(k Kind) bool {
 		return false
 	}
 	switch k {
+	case KindReviewRequested:
+		return r.Reviews
 	case KindCIFailed:
 		return r.CI
 	case KindPRComment, KindPRReview:
@@ -214,8 +227,8 @@ func (r Rules) MatchesNothing() bool { return !r.Enabled }
 var sourceKinds = map[string][]Kind{
 	"linear": {KindIssueNew, KindIssueComment},
 	"jira":   {KindIssueNew, KindIssueComment},
-	"github": {KindPRComment, KindPRReview, KindCIFailed},
-	"gitlab": {KindPRComment, KindPRReview},
+	"github": {KindPRComment, KindPRReview, KindReviewRequested, KindCIFailed},
+	"gitlab": {KindPRComment, KindPRReview, KindReviewRequested},
 }
 
 // DeadSource says a source can emit nothing these rules take, so polling
@@ -289,6 +302,10 @@ type State struct {
 	Polled  map[string]string `json:"polled,omitempty"` // "<workspace>/<source>" → RFC3339
 	// Held is what quiet hours swallowed, waiting for the window to open.
 	Held []HeldNote `json:"held,omitempty"`
+	// Ignored is what a person dismissed from the inbox. Distinct from Seen,
+	// which every delivered event gets: seen means corgi told you, ignored
+	// means you said no thanks.
+	Ignored []string `json:"ignored,omitempty"`
 	// seen indexes Seen so a lookup does not walk the list.
 	seen map[string]struct{}
 	// roundRefs counts events per ref within one poll, so several comments
@@ -736,6 +753,9 @@ type FixRecord struct {
 	PRs        []string  `json:"prs,omitempty"`
 	Note       string    `json:"note,omitempty"`
 	Error      string    `json:"error,omitempty"`
+	// Failure is the shape of the error, so the next run can tell a wall it
+	// has already hit from a one-off.
+	Failure string `json:"failure,omitempty"`
 }
 
 // Done says the run ended, either way.
@@ -803,6 +823,8 @@ func (l *FixLog) StartFor(e Event, at time.Time) {
 
 // Finish writes the outcome onto the newest unfinished run for the key, so
 // what a fix opened outlives the notification that announced it.
+// Finish writes the outcome; failure is the error text, classified on the
+// way in so the next run can recognise a wall it has already hit.
 func (l *FixLog) Finish(key string, prs []string, note, failure string, at time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -814,6 +836,7 @@ func (l *FixLog) Finish(key string, prs []string, note, failure string, at time.
 		l.Started[i].PRs = prs
 		l.Started[i].Note = note
 		l.Started[i].Error = failure
+		l.Started[i].Failure = ClassifyFailure(failure, note)
 		_ = l.save()
 		return
 	}
@@ -1030,4 +1053,120 @@ func (s *State) NewRound() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.roundRefs = nil
+}
+
+// FailureKinds classify why a run ended badly, because the text of an error
+// is not something to match on twice. Only the blocking ones matter: a run
+// that failed on a missing credential will fail the same way in an hour.
+const (
+	FailureNone       = ""
+	FailureNoAuth     = "no-credential"
+	FailurePermission = "permission"
+	FailureTimeout    = "timeout"
+	FailureOther      = "other"
+)
+
+// ClassifyFailure names the shape of a failure from what the run said.
+func ClassifyFailure(reason, output string) string {
+	if strings.TrimSpace(reason) == "" {
+		return FailureNone
+	}
+	text := strings.ToLower(reason + " " + output)
+	switch {
+	case containsAny(text, "no credential", "not authenticated", "unauthorized", "401", "invalid token", "authentication failed", "please run /login"):
+		return FailureNoAuth
+	case containsAny(text, "permission denied", "403", "forbidden", "not permitted", "requires approval"):
+		return FailurePermission
+	case containsAny(text, "context deadline exceeded", "timed out", "timeout", "signal: killed"):
+		return FailureTimeout
+	}
+	return FailureOther
+}
+
+// Blocking says a failure of this shape will happen again until a person
+// changes something, so trying again only spends the budget.
+func Blocking(kind string) bool {
+	return kind == FailureNoAuth || kind == FailurePermission
+}
+
+func containsAny(text string, needles ...string) bool {
+	for _, n := range needles {
+		if strings.Contains(text, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// RecentBlocker is the blocking failure this workspace keeps hitting, with
+// how many runs in a row hit it, or "" when the last run was fine. Only a
+// run in the window counts: a credential fixed yesterday is not news.
+func (l *FixLog) RecentBlocker(workspace string, within time.Duration, now time.Time) (kind string, runs int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		r := l.Started[i]
+		if r.Workspace != workspace || !r.Done() {
+			continue
+		}
+		if now.Sub(r.FinishedAt) > within {
+			break
+		}
+		if !Blocking(r.Failure) {
+			return "", 0 // a run that got somewhere clears the record
+		}
+		if kind == "" {
+			kind = r.Failure
+		}
+		if r.Failure != kind {
+			break
+		}
+		runs++
+	}
+	return kind, runs
+}
+
+// Ignore drops an event from the inbox for good and stops the unattended
+// mode picking it up. A person's decision, never corgi's.
+func (s *State) Ignore(key string) error {
+	s.mu.Lock()
+	if key == "" || containsString(s.Ignored, key) {
+		s.mu.Unlock()
+		return nil
+	}
+	s.Ignored = append(s.Ignored, key)
+	if len(s.Ignored) > seenKeep {
+		s.Ignored = s.Ignored[len(s.Ignored)-seenKeep:]
+	}
+	s.mu.Unlock()
+	return s.save()
+}
+
+// Unignore puts it back, which is what undoing a run has to do.
+func (s *State) Unignore(key string) error {
+	s.mu.Lock()
+	kept := s.Ignored[:0]
+	for _, k := range s.Ignored {
+		if k != key {
+			kept = append(kept, k)
+		}
+	}
+	s.Ignored = kept
+	s.mu.Unlock()
+	return s.save()
+}
+
+func (s *State) IsIgnored(key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return containsString(s.Ignored, key)
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

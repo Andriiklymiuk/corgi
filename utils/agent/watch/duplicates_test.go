@@ -100,3 +100,36 @@ func TestACommentOnFinishedWorkIsNotWork(t *testing.T) {
 		t.Fatal("a PR's own state is not an issue column")
 	}
 }
+
+// Ignore is a person saying no thanks. Seen is corgi saying it told you —
+// every delivered event is seen, so the inbox cannot filter on that.
+func TestIgnoringIsNotTheSameAsHavingBeenSeen(t *testing.T) {
+	dir := t.TempDir()
+	s := LoadState(dir)
+
+	s.MarkSeen("jira:ABC-1")
+	if s.IsIgnored("jira:ABC-1") {
+		t.Fatal("delivering an event is not dismissing it — this is what emptied the inbox")
+	}
+
+	if err := s.Ignore("jira:ABC-1"); err != nil {
+		t.Fatal(err)
+	}
+	if !s.IsIgnored("jira:ABC-1") {
+		t.Fatal("a dismissed event stays dismissed")
+	}
+	if !LoadState(dir).IsIgnored("jira:ABC-1") {
+		t.Fatal("it has to survive a restart, or it comes back tomorrow")
+	}
+	if err := s.Ignore("jira:ABC-1"); err != nil {
+		t.Fatal("ignoring twice is not an error")
+	}
+
+	// Undoing a run puts it back in front of you.
+	if err := LoadState(dir).Unignore("jira:ABC-1"); err != nil {
+		t.Fatal(err)
+	}
+	if LoadState(dir).IsIgnored("jira:ABC-1") {
+		t.Fatal("undo has to put the event back in the inbox")
+	}
+}

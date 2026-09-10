@@ -76,7 +76,8 @@ func TestGitHubPoll(t *testing.T) {
 		t.Fatalf("events = %d, want 2: %+v", len(events), events)
 	}
 	review, comment := events[0], events[1]
-	if review.Kind != KindPRReview || review.Mine || review.Ref != "acme/api#12" ||
+	// review_requested is someone asking me to review THEIR pull request.
+	if review.Kind != KindReviewRequested || review.Mine || review.Ref != "acme/api#12" ||
 		review.Key != "github:acme/api#12:n1:2026-09-09T10:00:00Z" ||
 		review.URL != "https://github.com/acme/api/pull/12" || review.Title != "Add retries" ||
 		review.Source != "github" || review.At.IsZero() {
