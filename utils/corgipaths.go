@@ -213,6 +213,11 @@ func runningContainers(containers []string) []string {
 	return up
 }
 
+// retargetGitignore adds a rule for the new path beside each rule for the old
+// one, and keeps the old rule. Replacing it would un-ignore the folder for
+// everyone on the team still running a corgi that puts it there, who would
+// pull the commit and find the whole thing untracked. A repository already
+// ignoring .corgi/ needs nothing.
 func retargetGitignore(composeDir string) {
 	path := filepath.Join(composeDir, ".gitignore")
 	data, err := os.ReadFile(path)
@@ -221,22 +226,66 @@ func retargetGitignore(composeDir string) {
 	}
 	nested := CorgiDirName + "/" + CorgiServicesName
 	lines := strings.Split(string(data), "\n")
-	changed := false
-	for i, line := range lines {
-		bare := strings.TrimSpace(line)
-		negate := strings.HasPrefix(bare, "!")
-		bare = strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(bare, "!"), "/"), "./")
-		if bare != CorgiServicesName && !strings.HasPrefix(bare, CorgiServicesName+"/") {
-			continue
-		}
-		lines[i] = nested + strings.TrimPrefix(bare, CorgiServicesName)
-		if negate {
-			lines[i] = "!" + lines[i]
-		}
-		changed = true
-	}
-	if !changed {
+	if ignoresCorgiDir(lines) || hasRule(lines, nested) {
 		return
 	}
-	_ = os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+	out := make([]string, 0, len(lines)+2)
+	added := false
+	for _, line := range lines {
+		bare, negate, ok := legacyRule(line)
+		if !ok {
+			out = append(out, line)
+			continue
+		}
+		rule := nested + strings.TrimPrefix(bare, CorgiServicesName)
+		if negate {
+			rule = "!" + rule
+		}
+		if !hasRule(out, rule) {
+			out = append(out, rule)
+			added = true
+		}
+		out = append(out, line)
+	}
+	if !added {
+		return
+	}
+	_ = os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o644)
+}
+
+// legacyRule reads a line naming the old top-level folder: the bare path, and
+// whether the rule un-ignores rather than ignores.
+func legacyRule(line string) (bare string, negate bool, ok bool) {
+	bare = strings.TrimSpace(line)
+	negate = strings.HasPrefix(bare, "!")
+	bare = strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(bare, "!"), "/"), "./")
+	if bare != CorgiServicesName && !strings.HasPrefix(bare, CorgiServicesName+"/") {
+		return "", false, false
+	}
+	return bare, negate, true
+}
+
+// ignoresCorgiDir says the whole .corgi/ is already ignored, which covers the
+// folder wherever inside it corgi puts things.
+func ignoresCorgiDir(lines []string) bool {
+	for _, line := range lines {
+		bare := strings.TrimSpace(line)
+		if strings.HasPrefix(bare, "!") {
+			continue
+		}
+		bare = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(bare, "/"), "./"), "/")
+		if bare == CorgiDirName {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRule(lines []string, rule string) bool {
+	for _, line := range lines {
+		if strings.TrimSpace(line) == rule {
+			return true
+		}
+	}
+	return false
 }

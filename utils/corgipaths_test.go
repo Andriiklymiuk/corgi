@@ -60,7 +60,13 @@ func TestMigrateMovesTheFolderAndRetargetsGitignore(t *testing.T) {
 		t.Errorf("content did not come along: %v", err)
 	}
 	ignore, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"node_modules", ".corgi/corgi_services/*", "!.corgi/corgi_services/.gitignore"} {
+	// The old rules stay: dropping them un-ignores the folder for anyone on
+	// the team whose corgi still puts it there.
+	for _, want := range []string{
+		"node_modules",
+		".corgi/corgi_services/*", "corgi_services/*",
+		"!.corgi/corgi_services/.gitignore", "!corgi_services/.gitignore",
+	} {
 		if !strings.Contains(string(ignore), want) {
 			t.Errorf("missing %q in\n%s", want, ignore)
 		}
@@ -225,5 +231,40 @@ func TestMigrateRepairsMovedWorktrees(t *testing.T) {
 	want := filepath.Join(root, ".corgi", "corgi_services", ".worktrees", "api-feature-x")
 	if !strings.Contains(string(out), want) {
 		t.Errorf("the repo should point at the new path %q:\n%s", want, out)
+	}
+}
+
+func TestGitignoreGainsTheNewPathWithoutLosingTheOld(t *testing.T) {
+	migrateWith := func(t *testing.T, ignore string) string {
+		t.Helper()
+		dir := t.TempDir()
+		os.MkdirAll(filepath.Join(dir, "corgi_services"), 0o755)
+		os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(ignore), 0o644)
+		if _, err := MigrateCorgiServices(dir); err != nil {
+			t.Fatal(err)
+		}
+		out, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
+		return string(out)
+	}
+
+	got := migrateWith(t, "node_modules\ncorgi_services/*\n")
+	if want := "node_modules\n.corgi/corgi_services/*\ncorgi_services/*\n"; got != want {
+		t.Errorf("got:\n%q\nwant:\n%q", got, want)
+	}
+
+	// A repository already ignoring .corgi/ has the new path covered.
+	whole := "node_modules\ncorgi_services/*\n.corgi/\n"
+	if got := migrateWith(t, whole); got != whole {
+		t.Errorf("an ignored .corgi/ needs no rule, got:\n%q", got)
+	}
+
+	// Running twice must not stack duplicates.
+	twice := migrateWith(t, ".corgi/corgi_services/*\ncorgi_services/*\n")
+	if strings.Count(twice, ".corgi/corgi_services/*") != 1 {
+		t.Errorf("the rule was added again:\n%q", twice)
+	}
+
+	if got := migrateWith(t, "node_modules\n"); got != "node_modules\n" {
+		t.Errorf("a file naming neither path is left alone, got %q", got)
 	}
 }
