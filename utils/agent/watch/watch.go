@@ -205,6 +205,8 @@ type State struct {
 	Seen    []string          `json:"seen"`    // newest last
 	Errors  map[string]string `json:"errors,omitempty"`
 	Polled  map[string]string `json:"polled,omitempty"` // "<workspace>/<source>" → RFC3339
+	// Held is what quiet hours swallowed, waiting for the window to open.
+	Held []HeldNote `json:"held,omitempty"`
 	// seen indexes Seen so a lookup does not walk the list.
 	seen map[string]struct{}
 	// Fixes is the fix history beside it, its own file.
@@ -212,6 +214,16 @@ type State struct {
 }
 
 const seenKeep = 2000
+
+// HeldNote is a notification quiet hours swallowed, kept so the morning can
+// say what arrived rather than the night saying nothing and losing it.
+type HeldNote struct {
+	Workspace string    `json:"workspace"`
+	Body      string    `json:"body"`
+	At        time.Time `json:"at"`
+}
+
+const heldKeep = 100
 
 // LoadState reads <agentDir>/watch/state.json; a missing file is empty state.
 func LoadState(agentDir string) *State {
@@ -228,6 +240,36 @@ func LoadState(agentDir string) *State {
 	}
 	s.Fixes = LoadFixLog(agentDir)
 	return s
+}
+
+// Hold keeps a notification quiet hours must not deliver yet.
+func (s *State) Hold(workspace, body string, at time.Time) {
+	s.mu.Lock()
+	s.Held = append(s.Held, HeldNote{Workspace: workspace, Body: body, At: at})
+	if len(s.Held) > heldKeep {
+		s.Held = s.Held[len(s.Held)-heldKeep:]
+	}
+	s.mu.Unlock()
+	_ = s.save()
+}
+
+// TakeHeld returns and clears one workspace's held notes.
+func (s *State) TakeHeld(workspace string) []HeldNote {
+	s.mu.Lock()
+	var mine, rest []HeldNote
+	for _, n := range s.Held {
+		if n.Workspace == workspace {
+			mine = append(mine, n)
+		} else {
+			rest = append(rest, n)
+		}
+	}
+	s.Held = rest
+	s.mu.Unlock()
+	if len(mine) > 0 {
+		_ = s.save()
+	}
+	return mine
 }
 
 // IsSeen says a key was handled, without recording anything.
@@ -333,6 +375,9 @@ type Watch struct {
 	Sink      Sink
 	// Log receives one line per round that did something; nil is silent.
 	Log func(string)
+	// Round runs before each poll, for work the clock decides — releasing
+	// what quiet hours held back once the window opens.
+	Round func(now time.Time)
 }
 
 // Once polls every source one time and hands new matches to the sink.
@@ -389,6 +434,9 @@ func (w *Watch) Run(ctx context.Context) {
 	wait := interval
 	for {
 		now := time.Now()
+		if w.Round != nil {
+			w.Round(now)
+		}
 		w.Once(ctx, now)
 		if w.failing() {
 			wait = min(wait*2, interval*10)

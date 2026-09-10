@@ -187,7 +187,8 @@ func (d *Daemon) startWatches(ctx context.Context) {
 			utils.Infof("agent: watch %s: not polling %s — the rules take nothing they emit\n", spec.Workspace, strings.Join(dead, ", "))
 		}
 		w := &watch.Watch{Workspace: spec.Workspace, Rules: spec.Rules, Sources: live, Interval: spec.Interval,
-			State: d.watchState, Sink: d.watchSink(spec), Log: func(line string) { utils.Info("agent:", line) }}
+			State: d.watchState, Sink: d.watchSink(spec), Log: func(line string) { utils.Info("agent:", line) },
+			Round: func(now time.Time) { d.releaseHeld(spec, now) }}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = &sync.Mutex{}
 		if len(live) > 0 && spec.Interval > 0 {
@@ -241,8 +242,36 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 				body += " (" + note + ")"
 			}
 		}
+		// Quiet hours mean quiet: the event is recorded and the inbox shows
+		// it, but nothing buzzes until the window opens.
+		if quietNow(spec, time.Now()) {
+			d.watchState.Hold(spec.Workspace, body, time.Now())
+			return
+		}
 		go d.notifyAttentionAt("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL)
 	}
+}
+
+func quietNow(spec WatchSpec, now time.Time) bool {
+	q, err := ParseQuiet(spec.Quiet)
+	return err == nil && q.Contains(now)
+}
+
+// releaseHeld delivers, once, what quiet hours swallowed. One notification
+// for the lot: waking to nine separate buzzes is its own kind of noise.
+func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
+	if d.watchState == nil || quietNow(spec, now) {
+		return
+	}
+	held := d.watchState.TakeHeld(spec.Workspace)
+	if len(held) == 0 {
+		return
+	}
+	body := fmt.Sprintf("%d while you were away:", len(held))
+	for _, n := range held {
+		body += "\n  " + n.Body
+	}
+	go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
 }
 
 // startFix launches the fix, or says in one short note why not. A deferred
