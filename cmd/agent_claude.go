@@ -40,6 +40,7 @@ workspace it is plain claude. So one command replaces per-account aliases:
 the corgi VS Code extension's "+" key runs it in a new terminal.
 
   corgi agent claude                 # this folder's workspace
+  corgi agent claude --workspace api # that workspace, whatever folder you are in
   corgi agent claude --profile work  # under a corgi profile
   corgi agent claude --profile auto  # the listed account with most budget left
   corgi agent claude --show          # print the command instead of running it
@@ -49,9 +50,23 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		show, _ := cmd.Flags().GetBool("show")
 		model, _ := cmd.Flags().GetString("model")
 		promptID, _ := cmd.Flags().GetString("prompt-id")
+		wanted, _ := cmd.Flags().GetString("workspace")
 		cwd, err := os.Getwd()
 		if err != nil {
 			exitWithError("agent_claude", err, 1)
+		}
+		// A caller with no cwd of its own — the phone, a menu bar — names the
+		// workspace instead. Without this the session lands in whichever
+		// checkout the terminal happened to be in, under that one's account.
+		if id := strings.TrimSpace(wanted); id != "" {
+			root, err := workspaceRoot(id)
+			if err != nil {
+				exitWithError("agent_claude", err, 2)
+			}
+			if err := os.Chdir(root); err != nil {
+				exitWithError("agent_claude", err, 1)
+			}
+			cwd = root
 		}
 		if model != "" {
 			if !validModel(model) {
@@ -183,6 +198,26 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 	return launch, nil
 }
 
+// workspaceRoot is a registered workspace's checkout, by id.
+func workspaceRoot(id string) (string, error) {
+	registry, _, err := agentRegistry()
+	if err != nil {
+		return "", err
+	}
+	ws, ok := registry.Find(id)
+	if !ok {
+		return "", fmt.Errorf("%q is not a registered workspace — `corgi agent init` there first", id)
+	}
+	root := expandTilde(strings.TrimSpace(ws.AbsPath))
+	if root == "" {
+		return "", fmt.Errorf("workspace %q has no path on this machine", id)
+	}
+	if _, err := os.Stat(root); err != nil {
+		return "", fmt.Errorf("workspace %q is registered at %s, which is not there", id, root)
+	}
+	return root, nil
+}
+
 func cleanPath(p string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {
@@ -225,6 +260,7 @@ func shellQuote(s string) string {
 }
 
 func init() {
+	agentClaudeCmd.Flags().String("workspace", "", "Start in this registered workspace's checkout, under its account, whatever folder you are in")
 	agentClaudeCmd.Flags().String("profile", "", "Run under this corgi profile's account and settings")
 	agentClaudeCmd.Flags().String("model", "", "Pass --model to claude (opus, sonnet, haiku, or a model id)")
 	agentClaudeCmd.Flags().String("prompt-id", "", "Start with the prompt saved under this id by the phone launcher; the file is read once and removed")

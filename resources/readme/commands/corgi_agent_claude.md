@@ -13,6 +13,7 @@ workspace it is plain claude. So one command replaces per-account aliases:
 the corgi VS Code extension's "+" key runs it in a new terminal.
 
   corgi agent claude                 # this folder's workspace
+  corgi agent claude --workspace api # that workspace, whatever folder you are in
   corgi agent claude --profile work  # under a corgi profile
   corgi agent claude --profile auto  # the listed account with most budget left
   corgi agent claude --show          # print the command instead of running it
@@ -30,6 +31,7 @@ corgi agent claude [-- claude args] [flags]
       --profile string     Run under this corgi profile's account and settings
       --prompt-id string   Start with the prompt saved under this id by the phone launcher; the file is read once and removed
       --show               Print the resolved command and exit
+      --workspace string   Start in this registered workspace's checkout, under its account, whatever folder you are in
 ```
 
 ### Options inherited from parent commands
