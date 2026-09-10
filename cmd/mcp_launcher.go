@@ -1416,10 +1416,31 @@ const launcherPageHTML = `<!doctype html>
   .tip.copied .tip-copy{color:var(--green)}
   .tipnote{color:var(--dim2);font-size:.72rem;margin:var(--sp3) 0 0}
   /* In a tab of their own these are the page, not a card folded into the
-     bottom of one: same ground, same rhythm as every other pane. */
+     bottom of one. The rest of the app is cards; these were hairline rows
+     inside one big card, which is what read as a different app. */
   [data-pane="laptop"] details.tips, [data-pane="settings"] details.settings{
       margin:0;background:none;border:0;border-radius:0;padding:0}
   [data-pane="laptop"] details.tips>summary, [data-pane="settings"] details.settings>summary{display:none}
+  [data-pane="laptop"] .tip{
+      background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;
+      padding:.6rem .7rem;margin:.4rem 0;gap:.2rem}
+  [data-pane="laptop"] .tips > .tip:first-of-type{border-top:1px solid var(--hair);padding-top:.6rem}
+  [data-pane="laptop"] .tipnote{margin:.8rem .1rem 0;color:var(--dim2);font-size:.72rem}
+  /* Settings: each block is its own card, headed like a section elsewhere. */
+  [data-pane="settings"] details.settings h3{
+      margin:1.1rem .1rem .35rem;font-size:.64rem;letter-spacing:.08em;color:var(--dim2)}
+  [data-pane="settings"] details.settings h3:first-of-type{margin-top:.2rem}
+  [data-pane="settings"] details.settings p,
+  [data-pane="settings"] details.settings pre,
+  [data-pane="settings"] details.settings .chk,
+  [data-pane="settings"] details.settings .toggle,
+  [data-pane="settings"] #devices, [data-pane="settings"] #doctor{
+      background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;
+      padding:.55rem .7rem;margin:.35rem 0}
+  [data-pane="settings"] details.settings .chk{border-bottom:0}
+  [data-pane="settings"] details.settings button{
+      background:var(--card2);border:1px solid var(--line);border-radius:.6rem;
+      color:var(--text);padding:.5rem .8rem;margin:.35rem 0;font-size:.8rem}
   details.settings{margin:1.6rem 0 0;background:var(--card2);border:1px solid var(--line);
       border-radius:1rem;padding:.4rem 1rem}
   details.settings h3{font-size:.66rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
