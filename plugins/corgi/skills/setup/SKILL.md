@@ -330,9 +330,43 @@ corgi agent watch enable --action fix --auto-for ci
 - **ci** — needs `--ci` to arrive at all. A red build is the best unattended
   target there is: a precise signal and a pass condition nobody can argue with.
 - **tickets** — a blank page. Leave it reporting until the rest has earned trust.
+- **requests** — someone else's pull request. It needs `--reviews` to arrive at
+  all, and corgi posts a review rather than pushing to their branch. Almost
+  never belongs in `--auto-for`.
+
+Two more flags belong with a ticket workflow:
+
+- `--review-status "In Review"` moves the ticket again once a run opened a pull
+  request, and posts the link on it. Without it a board full of "In Progress"
+  is a board of finished work nobody has looked at.
+- `--lease` claims the ticket on the tracker first, so a second machine
+  watching the same board leaves it alone. Only worth it with two machines.
+
+Before turning any of it on, and after:
+
+```bash
+corgi agent watch replay --since 168h      # the week it would have had
+corgi agent watch replay --auto-for ci     # try a setting without saving it
+corgi agent while-away                     # the morning card
+corgi agent watch undo ABC-1 --dry-run     # close what it opened, ticket back
+```
 
 A kind that was not named is reported, not worked, and `corgi agent watch test`
 answers `notify` for it, so the split is visible before an event arrives.
+
+## Reaching the dashboard
+
+The phone pairs by scanning the QR `corgi agent up` prints. A browser on the
+machine running the daemon needs no code — anything that can run the command
+can already read the daemon's files:
+
+```bash
+corgi agent dashboard          # opens it and authorises this browser
+corgi agent dashboard --print  # the link, refused into a pipe or --json
+```
+
+It is a real device with a name: `corgi mcp devices list` shows it,
+`corgi mcp devices revoke this-laptop` takes it away.
 
 ## Noise
 

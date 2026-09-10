@@ -597,6 +597,9 @@ corgi agent watch enable --auto-for reviews,comments # work those unattended; a 
 corgi agent watch enable --ci                        # red builds too: the one kind with its own test for done
 corgi agent watch enable --from max                  # only the reviewer you are waiting on
 corgi agent watch undo [REF] [--dry-run]             # close what a run opened, put its ticket back
+corgi agent watch replay [--since 168h]              # the week unattended mode would have had
+corgi agent while-away                               # what corgi opened, could not do, is still running
+corgi agent dashboard                                # open the dashboard on this machine, paired
 corgi agent watch enable --pickup "In Progress"      # picking a story up moves it on the board
 corgi agent watch board [--refresh]                  # the tracker columns corgi knows
 corgi agent watch move ABC-123 "Ready for staging"  # move, assign, comment: writes as you
