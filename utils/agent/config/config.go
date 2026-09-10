@@ -247,6 +247,10 @@ type WatchConfig struct {
 	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts, e.g.
 	// "23:00-07:00"; empty means none.
 	Quiet string `yaml:"quiet,omitempty"`
+	// Lease claims a ticket on the tracker before working it, so a second
+	// machine watching the same board leaves it alone. Off by default: it
+	// posts a comment, which not every board wants.
+	Lease bool `yaml:"lease,omitempty"`
 	// Reviews reports pull requests someone asked me to review.
 	Reviews bool `yaml:"reviews,omitempty"`
 	// CI reports builds that went red on something of mine.

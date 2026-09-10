@@ -113,6 +113,9 @@ var agentWatchEnableCmd = &cobra.Command{
 				return fmt.Errorf("--max-per-day must be at least 1")
 			}
 		}
+		if flags.Changed("lease") {
+			wc.Lease, _ = flags.GetBool("lease")
+		}
 		if flags.Changed("reviews") {
 			wc.Reviews, _ = flags.GetBool("reviews")
 		}
@@ -641,7 +644,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds}
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
@@ -923,6 +926,7 @@ func init() {
 	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
 	f.String("quiet", "", "Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
+	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")

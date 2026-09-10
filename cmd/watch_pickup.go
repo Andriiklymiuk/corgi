@@ -63,3 +63,20 @@ func pickupStatusFor(agentD, workspaceID string) string {
 	}
 	return strings.TrimSpace(resolved.Watch.PickupStatus)
 }
+
+// claimTicket takes a ticket on the tracker for this machine, so a second
+// machine watching the same board leaves it alone. Wired from the daemon,
+// which cannot write to a tracker itself.
+func claimTicket(agentD, workspaceID string, e watch.Event) (bool, string, error) {
+	ref := strings.TrimSpace(e.Ref)
+	if ref == "" {
+		return true, "", nil // nothing to claim on
+	}
+	w, _, err := watchWriter(agentD, workspaceID)
+	if err != nil {
+		return false, "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pickupTimeout)
+	defer cancel()
+	return watch.Claim(ctx, w, ref, watch.MachineName(), time.Now())
+}

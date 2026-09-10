@@ -21,6 +21,7 @@ corgi agent watch enable [flags]
   -h, --help               help for enable
       --interval string    Poll interval, e.g. 3m; 0 means webhooks only
       --labels string      Only issues with one of these labels (comma-separated), e.g. bug,defect
+      --lease              Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone
       --max-per-day int    With --action fix: at most this many fixes a day (default 10)
       --max-per-hour int   With --action fix: at most this many fixes an hour (default 3); more are deferred
       --pickup string      Column a ticket moves to when it is picked up, e.g. "In Progress"; empty writes nothing

@@ -2026,10 +2026,7 @@ const launcherPageHTML = `<!doctype html>
     // The row had no way to open the session it names, which is the first
     // thing anyone taps it for.
     if (s.url && safeClaudeUrl(s.url)) {
-      const open = document.createElement('a');
-      open.href = s.url; open.target = '_blank'; open.rel = 'noopener';
-      open.textContent = 'Open \u2197';
-      box.appendChild(open);
+      box.appendChild(sessionOpener(s.label || s.display, s.url, 'Open \u2197', ''));
     } else if (s.id && (s.status === 'done' || s.status === 'stale')) {
       // No web link yet: corgi can ask the session for one. Only while it is
       // idle — typing into a session mid-turn lands in its own work.
@@ -2832,21 +2829,28 @@ const launcherPageHTML = `<!doctype html>
   // browser mode opens via JS, which keeps the session in this browser; chrome
   // mode forces Chrome via its URL scheme (right for a workspace signed into a
   // different Claude account than the app — e.g. work vs personal).
-  function openControl(ws) {
-    const mode = openMode(ws.id);
+  // Where a session link opens is a per-workspace choice, so every session
+  // link has to honour it — not only the one on the Stacks card, which is
+  // where the setting happens to live.
+  function sessionOpener(workspaceId, url, label, cls) {
+    const mode = openMode(workspaceId);
     if (mode === 'browser' || mode === 'chrome') {
       const b = document.createElement('button');
-      b.className = 'open'; b.textContent = 'Open';
+      b.className = cls; b.textContent = label;
       b.onclick = () => {
-        if (mode === 'chrome') { location.href = chromeUrl(ws.sessionUrl); }
-        else { window.open(ws.sessionUrl, '_blank', 'noopener'); }
+        if (mode === 'chrome') { location.href = chromeUrl(url); }
+        else { window.open(url, '_blank', 'noopener'); }
       };
       return b;
     }
     const a = document.createElement('a');
-    a.className = 'open'; a.href = ws.sessionUrl; a.textContent = 'Open';
+    a.className = cls; a.href = url; a.textContent = label;
     a.target = '_blank'; a.rel = 'noopener noreferrer';
     return a;
+  }
+
+  function openControl(ws) {
+    return sessionOpener(ws.id, ws.sessionUrl, 'Open', 'open');
   }
 
   function modeSwitch(id) {

@@ -24,6 +24,13 @@ type Identity struct {
 	Name string `json:"name,omitempty"`
 }
 
+// Comment is one comment on a ticket, as much of it as a lease needs.
+type Comment struct {
+	Author string
+	Body   string
+	At     time.Time
+}
+
 // Writer is a tracker corgi can change, not only read. Every method is a
 // deliberate act someone asked for: nothing here runs on a poll.
 type Writer interface {
@@ -31,6 +38,9 @@ type Writer interface {
 	Statuses(ctx context.Context) ([]Status, error)
 	Whoami(ctx context.Context) (Identity, error)
 	Move(ctx context.Context, ref, status string) error
+	// RecentComments is the newest comments on a ticket, which is where the
+	// claim that stops two machines working it lives.
+	RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error)
 	Assign(ctx context.Context, ref, userID string) error
 	Comment(ctx context.Context, ref, body string) error
 }
@@ -412,4 +422,59 @@ func MergePR(ctx context.Context, s Secrets, link string) error {
 		return doClose(req, link)
 	}
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
+}
+
+// RecentComments reads a Jira issue's newest comments.
+func (j *Jira) RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error) {
+	var page struct {
+		Comments []jiraComment `json:"comments"`
+	}
+	params := url.Values{}
+	params.Set("orderBy", "-created")
+	params.Set("maxResults", fmt.Sprint(limit))
+	if err := j.get(ctx, "/rest/api/3/issue/"+url.PathEscape(ref)+"/comment", params, &page); err != nil {
+		return nil, err
+	}
+	out := make([]Comment, 0, len(page.Comments))
+	for _, c := range page.Comments {
+		at, _ := time.Parse("2006-01-02T15:04:05.999-0700", c.Created)
+		out = append(out, Comment{Author: c.Author.DisplayName, Body: jiraText(c.Body), At: at})
+	}
+	return out, nil
+}
+
+// RecentComments reads a Linear issue's newest comments.
+func (l *Linear) RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error) {
+	document := fmt.Sprintf(
+		"query { issue(id: %s) { comments(last: %d) { nodes { body createdAt user { name } } } } }",
+		jsonString(ref), limit)
+	var out struct {
+		Issue *struct {
+			Comments struct {
+				Nodes []struct {
+					Body      string `json:"body"`
+					CreatedAt string `json:"createdAt"`
+					User      *struct {
+						Name string `json:"name"`
+					} `json:"user"`
+				} `json:"nodes"`
+			} `json:"comments"`
+		} `json:"issue"`
+	}
+	if err := l.query(ctx, document, &out); err != nil {
+		return nil, err
+	}
+	if out.Issue == nil {
+		return nil, fmt.Errorf("linear: no issue %s", ref)
+	}
+	list := out.Issue.Comments.Nodes
+	comments := make([]Comment, 0, len(list))
+	for _, n := range list {
+		c := Comment{Body: n.Body, At: trackerTime(n.CreatedAt)}
+		if n.User != nil {
+			c.Author = n.User.Name
+		}
+		comments = append(comments, c)
+	}
+	return comments, nil
 }
