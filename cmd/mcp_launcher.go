@@ -1776,6 +1776,7 @@ const launcherPageHTML = `<!doctype html>
       ta.rows = 2; ta.placeholder = 'New chat on the laptop: what should Claude do?'; ta.className = 'nprompt';
       const row = document.createElement('div'); row.className = 'nrow';
       const win = document.createElement('select'); win.className = 'nwin';
+      const ws = document.createElement('select'); ws.className = 'nws';
       const model = document.createElement('select'); model.className = 'nmodel';
       const prof = document.createElement('select'); prof.className = 'nprof';
       fillSelect(model, MODELS, false);
@@ -1787,7 +1788,7 @@ const launcherPageHTML = `<!doctype html>
         go.disabled = true;
         try {
           const r = await fetch('/launch/new', { method: 'POST', headers: auth,
-            body: JSON.stringify({ window: win.value, prompt, model: model.value, profile: prof.value }) });
+            body: JSON.stringify({ window: win.value, prompt, model: model.value, profile: prof.value, workspace: ws.value }) });
           const jj = await r.json().catch(() => ({}));
           if (!r.ok) { toast(jj.error || 'could not open a chat', true); return; }
           toast('opening a chat in ' + (win.selectedOptions[0] || {}).textContent + (prompt ? ' with your prompt' : ''));
@@ -1796,7 +1797,7 @@ const launcherPageHTML = `<!doctype html>
         } catch { toast('no connection', true); }
         finally { go.disabled = false; }
       };
-      row.appendChild(win); row.appendChild(model); row.appendChild(prof); row.appendChild(go);
+      row.appendChild(win); row.appendChild(ws); row.appendChild(model); row.appendChild(prof); row.appendChild(go);
       card.appendChild(ta); card.appendChild(row);
       sec.appendChild(card);
     }
@@ -1809,6 +1810,17 @@ const launcherPageHTML = `<!doctype html>
     const prof = card.querySelector('.nprof');
     fillSelect(prof, [['', 'default account'], ...profiles.map(p => [p, p])], true);
     prof.hidden = !profiles.length;
+    // Which checkout it opens in. A phone has no folder of its own, so
+    // without this the chat lands wherever that editor window happened to
+    // be — the wrong repo, under the wrong account.
+    const ws = card.querySelector('.nws');
+    const ids = lastWorkspaces.map(w => w.id).filter(Boolean);
+    fillSelect(ws, [['', 'window\u2019s folder'], ...ids.map(i => [i, i])], true);
+    if (!ws.value) {
+      try { const saved = localStorage.getItem('corgi.newchat.workspace'); if (saved && ids.includes(saved)) ws.value = saved; } catch {}
+    }
+    ws.onchange = () => { try { localStorage.setItem('corgi.newchat.workspace', ws.value); } catch {} };
+    ws.hidden = !ids.length;
     sec.hidden = false;
   }
 
@@ -2730,10 +2742,11 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Window  string `json:"window"`
-		Prompt  string `json:"prompt"`
-		Model   string `json:"model"`
-		Profile string `json:"profile"`
+		Window    string `json:"window"`
+		Prompt    string `json:"prompt"`
+		Model     string `json:"model"`
+		Profile   string `json:"profile"`
+		Workspace string `json:"workspace"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -2778,6 +2791,13 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	args := []string{}
+	if ws := strings.TrimSpace(req.Workspace); ws != "" {
+		if _, err := workspaceRoot(ws); err != nil {
+			writeLaunchError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		args = append(args, "--workspace", ws)
+	}
 	if profile != "" {
 		args = append(args, "--profile", profile)
 	}
@@ -2939,7 +2959,13 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// The event's workspace, not the terminal's: a phone has no cwd, so
+	// without this the session opens in whichever checkout the editor window
+	// was in — the wrong repo, under the wrong account.
 	args := []string{}
+	if ws := strings.TrimSpace(events[0].Workspace); ws != "" {
+		args = append(args, "--workspace", ws)
+	}
 	if profile != "" {
 		args = append(args, "--profile", profile)
 	}

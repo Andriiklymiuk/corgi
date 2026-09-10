@@ -1,7 +1,7 @@
 {
   "name": "corgi",
   "description": "Teach Claude the corgi CLI: author compose files, run a stack until healthy, debug local first, generate ci for the stack, plan with the tracker, build stories into draft PRs, review PRs, ship mobile apps, run a supervised autopilot, watch issues and reviews, draw showcase images, and setup the machine end to end. Daily skills: resume, standup, prep pr, budget.",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "author": {
     "name": "Andrii Klymiuk",
     "url": "https://github.com/Andriiklymiuk"
