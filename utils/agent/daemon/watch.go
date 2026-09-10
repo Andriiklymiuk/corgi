@@ -394,6 +394,28 @@ func reviewFeedbackPrompt(e watch.Event) string {
 // the same work the daemon would have started by itself.
 func FixPrompt(e watch.Event) string { return fixPrompt(e) }
 
+// BatchPrompt is one session for several new issues at once, which is what
+// the stories skill is built for: it specs them together, reuses what they
+// share and opens the PRs in one pass. Only issue.new batches — a review
+// comment is about one thread and has nothing to share with the next.
+func BatchPrompt(events []watch.Event) string {
+	if len(events) == 0 {
+		return ""
+	}
+	if len(events) == 1 {
+		return fixPrompt(events[0])
+	}
+	var refs []string
+	for _, e := range events {
+		if e.Kind != watch.KindIssueNew || e.Ref == "" {
+			return ""
+		}
+		refs = append(refs, e.Ref)
+	}
+	return "I approve all changes; ship them and open draft PRs, then watch CI to green. /corgi:stories " +
+		strings.Join(refs, " ")
+}
+
 // fixPrompt is the prompt for an event's kind; "" for a kind with no fix.
 func fixPrompt(e watch.Event) string {
 	if build := fixPrompts[e.Kind]; build != nil {

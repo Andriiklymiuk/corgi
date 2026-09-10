@@ -215,3 +215,51 @@ func TestWatchEventsAndWorkingOnOne(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkingOnSeveralIssuesAtOnce(t *testing.T) {
+	dir := phoneBoard(t, true)
+	os.MkdirAll(filepath.Join(dir, "watch"), 0o700)
+	events := []watch.Event{
+		{Key: "jira:ABC-1", Kind: watch.KindIssueNew, Ref: "ABC-1", Title: "one", Workspace: "api"},
+		{Key: "jira:ABC-2", Kind: watch.KindIssueNew, Ref: "ABC-2", Title: "two", Workspace: "api"},
+		{Key: "jira:ZZZ-9", Kind: watch.KindIssueNew, Ref: "ZZZ-9", Title: "elsewhere", Workspace: "web"},
+		{Key: "gitlab:acme/api!7", Kind: watch.KindPRReview, Ref: "acme/api!7", URL: "https://gitlab.com/acme/api/-/merge_requests/7", Workspace: "api"},
+	}
+	var buf bytes.Buffer
+	for _, e := range events {
+		data, _ := json.Marshal(e)
+		buf.Write(append(data, '\n'))
+	}
+	os.WriteFile(filepath.Join(dir, "watch", "events.jsonl"), buf.Bytes(), 0o600)
+
+	if rec := post(launchWorkOnHandler, "/launch/work-on", `{"keys":["jira:ABC-1","jira:ABC-2"]}`); rec.Code != 200 {
+		t.Fatalf("batch = %d: %s", rec.Code, rec.Body.String())
+	}
+	prompts, _ := os.ReadDir(filepath.Join(dir, "prompts"))
+	if len(prompts) != 1 {
+		t.Fatalf("one saved prompt, got %d", len(prompts))
+	}
+	saved, _ := os.ReadFile(filepath.Join(dir, "prompts", prompts[0].Name()))
+	if !strings.Contains(string(saved), "/corgi:stories ABC-1 ABC-2") {
+		t.Errorf("a batch is one stories run, got %q", saved)
+	}
+
+	for _, c := range []struct {
+		body, why string
+		want      int
+	}{
+		{`{"keys":["jira:ABC-1","jira:ZZZ-9"]}`, "two workspaces cannot share a checkout", 400},
+		{`{"keys":["jira:ABC-1","gitlab:acme/api!7"]}`, "a review comment does not batch", 409},
+		{`{"keys":[]}`, "nothing named", 400},
+		{`{"keys":["jira:ABC-1","jira:ABC-1","jira:ABC-1","jira:ABC-1","jira:ABC-1","jira:ABC-1","jira:ABC-1","jira:ABC-1","jira:ABC-1","jira:ABC-1","jira:ABC-1"]}`, "over the cap", 400},
+	} {
+		if rec := post(launchWorkOnHandler, "/launch/work-on", c.body); rec.Code != c.want {
+			t.Errorf("%s (%s): %d, want %d: %s", c.body, c.why, rec.Code, c.want, rec.Body.String())
+		}
+	}
+
+	// One key in the list is still the single-event prompt.
+	if rec := post(launchWorkOnHandler, "/launch/work-on", `{"keys":["gitlab:acme/api!7"]}`); rec.Code != 200 {
+		t.Fatalf("single review = %d: %s", rec.Code, rec.Body.String())
+	}
+}
