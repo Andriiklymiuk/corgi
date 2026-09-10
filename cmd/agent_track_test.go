@@ -246,12 +246,15 @@ func TestEnableTrackingMergesAndDisableStrips(t *testing.T) {
 		t.Fatalf("Stop gets an async emit and a sync tab title: %s", ours)
 	}
 	pre := marshalCompact(hooks["PreToolUse"])
-	if strings.Contains(pre, "agent hook tab") || strings.Contains(pre, "matcher") {
-		t.Fatalf("PreToolUse is emit only, every tool: %s", pre)
+	if strings.Contains(pre, "agent hook tab") || !strings.Contains(pre, `"matcher":"`+promptingTools+`"`) {
+		t.Fatalf("PreToolUse is emit only, for the tools that can prompt: %s", pre)
+	}
+	if post := marshalCompact(hooks["PostToolUse"]); strings.Contains(post, "matcher") {
+		t.Fatalf("PostToolUse stays unfiltered so an answered prompt clears: %s", post)
 	}
 	start := marshalCompact(hooks["SessionStart"])
-	if !strings.Contains(start, `"matcher":"startup|resume|clear|fork"`) {
-		t.Fatalf("SessionStart excludes compact: %s", start)
+	if !strings.Contains(start, `"matcher":"startup|resume|clear|fork"`) || !strings.Contains(start, "agent hook context") || !strings.Contains(start, `"timeout":5`) {
+		t.Fatalf("SessionStart excludes compact and adds the sync context hook: %s", start)
 	}
 	if !hasTrackingHooks(path) {
 		t.Fatal("hasTrackingHooks")

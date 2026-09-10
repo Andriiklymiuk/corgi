@@ -35,10 +35,16 @@ const (
 	flagConfigDir = "config-dir"
 	hookEmit      = "corgi agent hook emit"
 	hookTabTitle  = "corgi agent hook tab"
+	hookContext   = "corgi agent hook context"
 	// trackMarkers identify corgi's tracking hooks in a settings file, so
 	// enable and disable never touch anyone else's.
-	trackMarkerEmit = "agent hook emit"
-	trackMarkerTab  = "agent hook tab"
+	trackMarkerEmit    = "agent hook emit"
+	trackMarkerTab     = "agent hook tab"
+	trackMarkerContext = "agent hook context"
+	// promptingTools are the tools worth a PreToolUse event: the ones that
+	// can raise a permission prompt or a question. Reads and searches fire
+	// dozens of times a turn and change nothing a key shows.
+	promptingTools = "Bash|Edit|Write|MultiEdit|NotebookEdit|Task|WebFetch|WebSearch|AskUserQuestion"
 )
 
 var agentTrackCmd = &cobra.Command{
@@ -81,10 +87,13 @@ var trackedEvents = []struct {
 	Event   string
 	Matcher string
 	Title   bool
+	// Context adds the synchronous hook that hands the session what the
+	// daemon knows: other sessions here, the budget, the last brief.
+	Context bool
 }{
-	{Event: "SessionStart", Matcher: "startup|resume|clear|fork"},
+	{Event: "SessionStart", Matcher: "startup|resume|clear|fork", Context: true},
 	{Event: "UserPromptSubmit", Title: true},
-	{Event: "PreToolUse"},
+	{Event: "PreToolUse", Matcher: promptingTools},
 	{Event: "PostToolUse"},
 	{Event: "PostToolUseFailure"},
 	{Event: "PermissionRequest"},
@@ -273,6 +282,9 @@ func enableTrackingIn(path, bin string, tabTitle bool) error {
 		if ev.Title && tabTitle {
 			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookTabTitle)})
 		}
+		if ev.Context {
+			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookContext), "timeout": 5})
+		}
 		entry := map[string]any{"hooks": handlers}
 		if ev.Matcher != "" {
 			entry["matcher"] = ev.Matcher
@@ -321,7 +333,7 @@ func stripTrackingHooks(existing any) []any {
 	out := []any{}
 	for _, entry := range list {
 		text := marshalCompact(entry)
-		if strings.Contains(text, trackMarkerEmit) || strings.Contains(text, trackMarkerTab) {
+		if strings.Contains(text, trackMarkerEmit) || strings.Contains(text, trackMarkerTab) || strings.Contains(text, trackMarkerContext) {
 			continue
 		}
 		out = append(out, entry)
@@ -480,6 +492,15 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 		if wantTitle {
 			ev.Title = usage.TitleOf(in.TranscriptPath)
 		}
+		if in.Event == "Stop" {
+			if sum, ok := usage.SummaryOf(in.TranscriptPath); ok {
+				ev.Summary, ev.PR = sum.Line, sum.PR
+			}
+		}
+	}
+	switch in.Event {
+	case "SessionStart", "UserPromptSubmit", "Stop", "CwdChanged":
+		ev.Branch = sessions.Branch(in.Cwd)
 	}
 	chain := proc.Ancestors(parent)
 	if proc.HasCorgi(chain) {

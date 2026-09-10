@@ -112,6 +112,11 @@ type Slot struct {
 	Pending string `json:"pending,omitempty"`
 	Note    string `json:"note,omitempty"`
 	Stuck   bool   `json:"stuck,omitempty"`
+	Branch  string `json:"branch,omitempty"`
+	Summary string `json:"summary,omitempty"`
+	PR      string `json:"pr,omitempty"`
+	// TurnS is how long the current turn has been running, 0 unless working.
+	TurnS int `json:"turnS,omitempty"`
 }
 
 // New returns a registry persisted at path, with a board of size keys.
@@ -247,13 +252,13 @@ func (r *Registry) Apply(ev Event) bool {
 // visible is the part of a session a key draws, compared to decide whether
 // an event is worth publishing.
 type visible struct {
-	Label, Profile, Detail, Tool string
-	Status                       Status
-	Host                         Host
+	Label, Profile, Detail, Tool, Branch, Summary string
+	Status                                        Status
+	Host                                          Host
 }
 
 func (s *Session) visible() visible {
-	return visible{Label: s.Label, Profile: s.Profile, Detail: s.Detail, Tool: s.Tool, Status: s.Status, Host: s.Host}
+	return visible{Label: s.Label, Profile: s.Profile, Detail: s.Detail, Tool: s.Tool, Status: s.Status, Host: s.Host, Branch: s.Branch, Summary: s.Summary}
 }
 
 // transition is the status model: what each hook event means for a session.
@@ -263,6 +268,7 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 		r.applyStart(s, ev, now)
 	case "UserPromptSubmit":
 		s.Tool, s.Detail, s.Pending = "", "", nil
+		s.TurnStartedAt = now
 		r.setStatus(s, StatusWorking, now)
 	case "PreToolUse":
 		r.applyToolStart(s, ev, now)
@@ -468,6 +474,15 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	}
 	if ev.Title != "" {
 		s.Title = ev.Title
+	}
+	if ev.Branch != "" {
+		s.Branch = ev.Branch
+	}
+	if ev.Summary != "" {
+		s.Summary = ev.Summary
+	}
+	if ev.PR != "" {
+		s.PR = ev.PR
 	}
 	// Any event at all means the process is alive and talking.
 	s.Stuck = false
@@ -1021,7 +1036,7 @@ func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
 	case "deny":
 		return "\x1b", nil
 	case "allow", "always":
-		if s.Pending.Tool == "Bash" && riskyCommand.MatchString(s.Pending.Subject) {
+		if s.Pending.Risky() {
 			return "", fmt.Errorf("%s asks to run %q — look at it before allowing", r.displayLocked(s), s.Pending.Subject)
 		}
 		if answer == "always" {
@@ -1030,6 +1045,11 @@ func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
 		return "\r", nil
 	}
 	return "", fmt.Errorf("answer is allow, always or deny, not %q", answer)
+}
+
+// Risky says whether the prompt must not be approved unseen.
+func (p *Pending) Risky() bool {
+	return p != nil && p.Tool == "Bash" && riskyCommand.MatchString(p.Subject)
 }
 
 // riskyCommand is what an Allow button must not approve unseen. The subject
@@ -1199,6 +1219,10 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		sl.SessionID, sl.Label, sl.Profile, sl.Status = s.ID, r.displayLocked(s), s.Profile, s.Status
 		sl.Detail, sl.Host, sl.FocusError, sl.FocusAt = s.Detail, s.Host.Kind, s.FocusError, s.FocusAt
 		sl.Note, sl.Stuck = s.Note, s.Stuck
+		sl.Branch, sl.Summary, sl.PR = s.Branch, s.Summary, s.PR
+		if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
+			sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())
+		}
 		if s.Context != nil {
 			sl.Context = s.Context.Percent
 		}
