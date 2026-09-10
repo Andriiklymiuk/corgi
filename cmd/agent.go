@@ -212,6 +212,14 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Keep the machine awake while any tracked Claude is mid-turn, whoever
+	// started it — the per-workspace lock only ever covered corgi's own
+	// supervised processes, so a session started by hand in a terminal was
+	// cut off by the lid closing.
+	if supervisor.Supported() {
+		go d.HoldAwakeWhileWorking(ctx, supervisor.NewWakeLock(supervisor.WakeLockAlways))
+	}
+
 	telegramDone := make(<-chan struct{})
 	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil {
 		telegramDone = startTelegramControl(ctx, user.NotifyUrl, dir)

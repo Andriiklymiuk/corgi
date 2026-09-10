@@ -756,6 +756,12 @@ type FixRecord struct {
 	// Failure is the shape of the error, so the next run can tell a wall it
 	// has already hit from a one-off.
 	Failure string `json:"failure,omitempty"`
+	// Handover is what the run left for whoever continues the work.
+	Handover string `json:"handover,omitempty"`
+	// SpentPercent is how much of the account's five-hour window this run
+	// used, measured across it. Ten comment fixes and ten whole tickets are
+	// the same number of runs and nowhere near the same spend.
+	SpentPercent int `json:"spentPercent,omitempty"`
 }
 
 // Done says the run ended, either way.
@@ -1169,4 +1175,99 @@ func containsString(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// Handover is what a run leaves for whoever picks the work up next: the last
+// thing it said before it stopped. A run that ends — finished, failed, or
+// killed with the laptop lid — otherwise takes twenty minutes of context with
+// it, and the next one starts from the ticket again.
+const handoverMax = 700
+
+// SetHandover records what a run left behind, on the newest run for the key.
+func (l *FixLog) SetHandover(key, text string, at time.Time) {
+	text = strings.TrimSpace(text)
+	if key == "" || text == "" {
+		return
+	}
+	if len(text) > handoverMax {
+		text = "…" + text[len(text)-handoverMax:]
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].Handover = text
+			_ = l.save()
+			return
+		}
+	}
+}
+
+// LastHandover is what the newest earlier run on this ref left behind, so a
+// second attempt starts where the first stopped rather than at the ticket.
+func (l *FixLog) LastHandover(workspace, ref string) string {
+	if ref == "" {
+		return ""
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		r := l.Started[i]
+		if r.Workspace == workspace && r.Ref == ref && r.Done() && r.Handover != "" {
+			return r.Handover
+		}
+	}
+	return ""
+}
+
+// TailLines is the last n non-empty lines of a run's output, which is where
+// a claude session says what it did and what it could not do.
+func TailLines(out string, n int) string {
+	var kept []string
+	lines := strings.Split(out, "\n")
+	for i := len(lines) - 1; i >= 0 && len(kept) < n; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			kept = append([]string{line}, kept...)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+// SetSpent records what a run cost, as a share of the account's five-hour
+// window. Only a positive, believable figure is kept: the window resetting
+// mid-run reads as a negative, and a run that spanned a reset cannot be
+// measured this way at all.
+func (l *FixLog) SetSpent(key string, percent int) {
+	if key == "" || percent <= 0 || percent > 100 {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].SpentPercent = percent
+			_ = l.save()
+			return
+		}
+	}
+}
+
+// TypicalSpend is what a run in this workspace usually costs, as a share of
+// the five-hour window: the median of what has been measured, or 0 when
+// nothing has. The median rather than the mean, because one runaway run
+// should not make every later one look unaffordable.
+func (l *FixLog) TypicalSpend(workspace string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var seen []int
+	for _, r := range l.Started {
+		if r.Workspace == workspace && r.SpentPercent > 0 {
+			seen = append(seen, r.SpentPercent)
+		}
+	}
+	if len(seen) == 0 {
+		return 0
+	}
+	sort.Ints(seen)
+	return seen[len(seen)/2]
 }

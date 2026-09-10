@@ -520,34 +520,82 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 // ---- watch: the tracker and your PRs, handled while you are away --------------------
 {
 	const s = [
-		"{g}${/} {B}corgi agent watch enable --labels bug,defect --prs --action fix{/}",
-		"watching acme-stack — labels bug,defect · assigned to me · PR reviews and comments → fix",
+		"{g}${/} {B}corgi agent watch enable --prs --ci --action fix --auto-for reviews,comments,ci{/}",
+		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix",
 		"restart the daemon to pick it up: corgi agent restart",
 		"",
 		"{g}${/} {B}corgi agent watch{/}",
 		"Tokens",
-		"  linear 3f9a12c0 · jira none · github 8be1d4f7 · gitlab none · webhook secret a7c2e910",
+		"  machine-wide  linear 3f9a12c0 · jira none · github 8be1d4f7 · gitlab none · webhook secret a7c2e910",
 		"",
 		"Watched",
 		"  acme-stack           fix      every 3m0s linear, github",
+		"                       auto for pr.review, issue.comment, pr.comment, ci.failed · caps 3/h 10/day · quiet 23:00-07:00 · fixes today: 0",
 		"",
 		"Last polls",
 		"  acme-stack/github            2026-09-09T13:04:02Z",
 		"  acme-stack/linear            2026-09-09T13:04:02Z",
 		"",
-		"{g}${/} {B}corgi agent watch run{/}",
-		"nothing new",
-		"",
 		"{d}# 13:07 — a bug lands in Linear, assigned to you{/}",
 		"{y}🔔 corgi agent · acme-stack{/}  new issue ABC-7 — Login loops after password reset",
-		"{d}# 13:19 — the headless claude ran /corgi:stories ABC-7 in the workspace{/}",
+		"{d}# 13:19 — a headless claude ran /corgi:stories ABC-7, then reviewed its own diff{/}",
 		"{g}🔔 corgi agent · acme-stack{/}  fixed ABC-7 — https://github.com/acme/api/pull/412",
 		"{d}# 13:31 — a reviewer comments on your PR{/}",
 		"{y}🔔 corgi agent · acme-stack{/}  max commented on acme/api#412: please cover the empty-path case",
 		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#412 — https://github.com/acme/api/pull/412",
+		"{d}# 13:44 — CI goes red; the one kind that brings its own test for done{/}",
+		"{y}🔔 corgi agent · acme-stack{/}  red build in acme/api — e2e / checkout failed",
+		"{d}# 13:52 — a colleague wants YOUR review: reported, never worked on{/}",
+		"{y}🔔 corgi agent · acme-stack{/}  sam wants your review on acme/web!41 — Retry the upload on a 502",
 	];
-	scene("watch", grow(s, [1, 3, 5, 14, 17, 20, 22, 24, 25]).map((l, i) => page(term("corgi agent watch", l, { rows: s.length, cursor: i < 8 }))));
+	scene("watch", grow(s, [1, 3, 5, 15, 18, 20, 22, 24, 26, 28]).map((l, i) => page(term("corgi agent watch", l, { rows: s.length, cursor: i < 9 }))));
 }
+
+// ---- the two commands that make leaving it on a decision you can reverse ----
+{
+	const s = [
+		"{d}# before turning it on: the week it would have had{/}",
+		"{g}${/} {B}corgi agent watch replay --since 168h{/}",
+		"Since Thu 3 Sep 09:12, with the rules as they are now",
+		"",
+		"acme-stack — 4 worked on · 3 reported · 6 ignored",
+		"  worked on  pr.review      acme/api#412",
+		"  worked on  issue.comment  ABC-7",
+		"  worked on  ci.failed      acme/api",
+		"  worked on  pr.comment     acme/web!41",
+		"  reported   issue.new      ABC-9",
+		"  reported   issue.new      ABC-11",
+		"  reported   review.requested acme/web!41",
+		"  ignored    6 — run with --json to see each reason",
+		"",
+		"{d}# in the morning, one card instead of nine notifications{/}",
+		"{g}${/} {B}corgi agent while-away{/}",
+		"Since Wed 9 Sep 18:22",
+		"",
+		"corgi opened",
+		"  ABC-7                        opened 1 PR (acme-stack)",
+		"                               https://github.com/acme/api/pull/412",
+		"corgi could not",
+		"  acme/api                     the last runs failed on no-credential (acme-stack)",
+		"arrived",
+		"  acme/web!41                  review.requested (acme-stack)",
+		"",
+		"{d}# and put a run back the way it was{/}",
+		"{g}${/} {B}corgi agent watch undo ABC-7 --dry-run{/}",
+		"ABC-7 (acme-stack)",
+		"  would close https://github.com/acme/api/pull/412",
+		"  would move back to Ready",
+		"  the branch is left alone — the work is on it",
+		"",
+		"{g}${/} {B}corgi agent watch undo ABC-7{/}",
+		"ABC-7 (acme-stack)",
+		"  closed   https://github.com/acme/api/pull/412",
+		"  moved    back to Ready",
+		"  the branch is left alone — the work is on it",
+	];
+	scene("replay", grow(s, [2, 5, 9, 13, 15, 20, 24, 29, 38]).map((l, i) => page(term("corgi agent watch replay · while-away · undo", l, { rows: s.length, cursor: i < 8 }))));
+}
+
 
 writeFileSync(`${out}/scenes.json`, JSON.stringify(scenes));
 console.log("wrote", Object.entries(scenes).map(([k, v]) => `${k}:${v}`).join(" "));
