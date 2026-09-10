@@ -10,7 +10,7 @@ A scheduled **push** wrapper around `suggest`: on a cadence (owned by `/schedule
 ## Guardrails (non-negotiable)
 
 - **Reuse, don't duplicate.** Ranking + evidence + measurable-outcome rules are owned by `suggest`; issue creation goes through the `tracker` write gate + MCP preflight. Never re-implement either, never reinvent scheduling — `/schedule` owns it.
-- **One ticket per run, max.** Per-week cap (default 1, **hard ceiling 3**) enforced via `corgi_services/suggest-history.json` (`corgi suggest-history check/record`).
+- **One ticket per run, max.** Per-week cap (default 1, **hard ceiling 3**) enforced via `.corgi/corgi_services/suggest-history.json` (`corgi suggest-history check/record`).
 - **Default is propose+ask.** Auto-file requires the explicit `suggest.autoFileDrafts` flag in `~/.corgi/config.yml` and is **draft-only**: never assign, never move past draft/backlog, never trigger `stories`/a build, never open a PR.
 - **Dedupe before filing:** open tickets, the state file (`filed` always + `dismissed` within cooldown + `proposed` within cooldown), and [[workspace-memory]] (loose, best-effort — see `memory` skill).
 - **Headless = never silently file in `propose` mode.** No human to confirm → record `proposed`, notify, exit. The cron fires while the REPL is idle — treat it as headless.
@@ -22,7 +22,7 @@ A scheduled **push** wrapper around `suggest`: on a cadence (owned by `/schedule
 
 1. **Workspace.** Resolve the path from `$ARGUMENTS` (absolute) or cwd. `cd` there. Preflight per `../_shared/conventions.md`; absent → stop with the "open the workspace folder" message. The cron fires with no implied cwd, so the schedule prompt always names the absolute path (Phase 5).
 2. **Mode.** Read `corgi suggest-history config --json` → `{autoFileDrafts, maxPerWeek}` (fallback: read `~/.corgi/config.yml` directly; absent → propose, cap 1). Print the active mode line, e.g. `proactive suggest · mode=propose · cap=1/week`.
-3. **State.** Load history via `corgi suggest-history list --json` (fallback: read `corgi_services/suggest-history.json`; absent → empty). The helper is optional at runtime — if the binary predates it, read/append the JSON directly with the same shape.
+3. **State.** Load history via `corgi suggest-history list --json` (fallback: read `.corgi/corgi_services/suggest-history.json`; absent → empty). The helper is optional at runtime — if the binary predates it, read/append the JSON directly with the same shape.
 
 ## Phase 1 — Rank (reuse `suggest`)
 

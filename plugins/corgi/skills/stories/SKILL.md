@@ -778,7 +778,7 @@ risk 7/10 high · auto-approve: no — cross-service contract
 ### Then clean up the worktrees
 
 Phase 3's worktrees under `/tmp/corgi-wt/` are **yours**, not corgi's — `corgi worktree
-prune` only manages `corgi_services/.worktrees/` (the `--service-branch` ones) and will
+prune` only manages `.corgi/corgi_services/.worktrees/` (the `--service-branch` ones) and will
 not touch them. Nothing else removes them either, so they accumulate one per story per
 repo, each carrying a `node_modules` symlink and a checked-out branch.
 

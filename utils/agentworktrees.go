@@ -33,7 +33,7 @@ type WorktreeSet struct {
 // AgentWorktreeBase is where corgi puts agent worktrees. Kept under
 // corgi_services so the existing prune and gitignore handling applies.
 func AgentWorktreeBase(composeDir string) string {
-	return filepath.Join(composeDir, "corgi_services", ".worktrees")
+	return filepath.Join(CorgiServicesIn(composeDir), ".worktrees")
 }
 
 // MaterializeBranchAcrossRepos gives every named service's repository a
@@ -75,7 +75,7 @@ func MaterializeBranchAcrossRepos(corgi *CorgiCompose, composeDir, branch string
 // corgi_services/ is not wholly ignored, so each new thing under it must add
 // its own entry.
 func prepareWorktreeBase(composeDir string) error {
-	corgiServices := filepath.Join(composeDir, "corgi_services")
+	corgiServices := CorgiServicesIn(composeDir)
 	if err := os.MkdirAll(corgiServices, 0o755); err != nil {
 		return err
 	}

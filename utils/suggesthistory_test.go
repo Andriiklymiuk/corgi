@@ -42,7 +42,7 @@ func TestLoadSuggestHistory_MissingIsEmpty(t *testing.T) {
 
 func TestLoadSuggestHistory_ParsesFixtureInOrder(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "corgi_services"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".corgi", "corgi_services"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	fixture := `{
@@ -90,7 +90,7 @@ func TestAppendSuggestEntry_CreatesDirAndRoundTrips(t *testing.T) {
 	}
 
 	// corgi_services/ created with 0o755, file 0o644 (match SaveUserConfig).
-	di, err := os.Stat(filepath.Join(root, "corgi_services"))
+	di, err := os.Stat(filepath.Join(root, ".corgi", "corgi_services"))
 	if err != nil {
 		t.Fatalf("expected corgi_services/ created: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestAppendSuggestEntry_CreatesDirAndRoundTrips(t *testing.T) {
 
 	// Per-developer state must be gitignored (docs/skill promise it stays
 	// out of commits), via corgi_services/.gitignore.
-	gi, err := os.ReadFile(filepath.Join(root, "corgi_services", ".gitignore"))
+	gi, err := os.ReadFile(filepath.Join(root, ".corgi", "corgi_services", ".gitignore"))
 	if err != nil {
 		t.Fatalf("expected corgi_services/.gitignore: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestRateLimited(t *testing.T) {
 
 func TestSuggestHistoryPath(t *testing.T) {
 	root := "/abs/ws"
-	want := filepath.Join("/abs/ws", "corgi_services", "suggest-history.json")
+	want := filepath.Join("/abs/ws", ".corgi", "corgi_services", "suggest-history.json")
 	if got := SuggestHistoryPath(root); got != want {
 		t.Errorf("SuggestHistoryPath = %q, want %q", got, want)
 	}

@@ -57,7 +57,7 @@ func TestCachePathsCoversEachEcosystem(t *testing.T) {
 // The markers and the dependency directories must always travel together.
 func TestCachePathsAlwaysIncludesTheStepMarkers(t *testing.T) {
 	plan := planFor(t, nil)
-	want := filepath.Join("corgi_services", cacheDirName)
+	want := filepath.Join(".corgi", "corgi_services", cacheDirName)
 	if !containsPath(plan.Paths, want) {
 		t.Errorf("expected %q in %v", want, plan.Paths)
 	}
@@ -217,7 +217,7 @@ func TestCacheMarkersAreKeyedOnEveryLockfile(t *testing.T) {
 		if g.ID == "markers" {
 			continue
 		}
-		if containsPath(g.Paths, filepath.Join("corgi_services", cacheDirName)) {
+		if containsPath(g.Paths, filepath.Join(".corgi", "corgi_services", cacheDirName)) {
 			t.Errorf("group %s must not carry the step markers", g.ID)
 		}
 	}

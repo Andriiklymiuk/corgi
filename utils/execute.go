@@ -494,7 +494,7 @@ func GetPathToDbService(targetService string) (string, error) {
 	path := fmt.Sprintf(
 		servicePathFmt,
 		CorgiComposePathDir,
-		RootDbServicesFolder,
+		DbServicesRel(),
 		targetService,
 	)
 	return path, nil
@@ -504,7 +504,7 @@ func GetPathToService(targetService string) (string, error) {
 	path := fmt.Sprintf(
 		servicePathFmt,
 		CorgiComposePathDir,
-		RootServicesFolder,
+		ServicesRel(),
 		targetService,
 	)
 	return path, nil
@@ -515,7 +515,7 @@ func GetMakefileCommandsInDirectory(targetService string) ([]string, error) {
 		fmt.Sprintf(
 			servicePathFmt,
 			CorgiComposePathDir,
-			RootDbServicesFolder,
+			DbServicesRel(),
 			targetService,
 		),
 		"Makefile",

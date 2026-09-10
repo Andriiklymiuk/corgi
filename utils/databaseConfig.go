@@ -77,7 +77,7 @@ func ProcessAdditionalDatabaseConfig(db DatabaseService, serviceName string) (Ad
 }
 
 func copyDefinitionFileToServiceDirectory(definitionPath, serviceName string) error {
-	targetDir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, serviceName)
+	targetDir := filepath.Join(CorgiComposePathDir, DbServicesRel(), serviceName)
 
 	if err := os.MkdirAll(targetDir, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create target directory %s: %w", targetDir, err)

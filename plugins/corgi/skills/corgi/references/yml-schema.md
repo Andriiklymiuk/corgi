@@ -139,7 +139,7 @@ authUsers:                     # supabase: seed via Admin API on `up`
   - email:    string
     password: string
     metadata: object           # yaml map serialized to JSON for user_metadata
-configTomlPath: string         # supabase: optional path to a config.toml. When set, corgi copies it to corgi_services/db_services/<svc>/supabase/config.toml on every init and runs the supabase CLI from there. When unset, falls back to <projectRoot>/supabase/config.toml created by `supabase init` on first run.
+configTomlPath: string         # supabase: optional path to a config.toml. When set, corgi copies it to .corgi/corgi_services/db_services/<svc>/supabase/config.toml on every init and runs the supabase CLI from there. When unset, falls back to <projectRoot>/supabase/config.toml created by `supabase init` on first run.
 dbPort: int                    # supabase: override [db].port in config.toml (default 54322). Patched on every up.
 studioPort: int                # supabase: override [studio].port in config.toml (default 54323). Patched on every up.
 inbucketPort: int              # supabase: override [inbucket].port in config.toml (default 54324). Patched on every up.

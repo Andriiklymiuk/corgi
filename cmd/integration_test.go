@@ -58,7 +58,7 @@ db_services:
 `)
 	c := newRootedCmd()
 	runInit(c, nil)
-	dest := filepath.Join(dir, utils.RootDbServicesFolder, "pg", "docker-compose.yml")
+	dest := filepath.Join(dir, utils.DbServicesRel(), "pg", "docker-compose.yml")
 	if _, err := os.Stat(dest); err != nil {
 		t.Errorf("file not created: %v", err)
 	}

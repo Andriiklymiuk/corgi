@@ -89,7 +89,7 @@ func worktreeDest(service, branch string) string {
 }
 
 func worktreesBase() string {
-	return filepath.Join(CorgiComposePathDir, "corgi_services", ".worktrees")
+	return filepath.Join(CorgiServicesDir(), ".worktrees")
 }
 
 // isCorgiWorktreePath guards destructive cleanup: only paths corgi itself owns
@@ -623,7 +623,7 @@ func ApplyServiceWorkdirsWithFeature(corgi *CorgiCompose, dirPairs, branchPairs,
 
 // falling back to rm) and prunes the admin entries in each source repo.
 func CleanCorgiWorktrees(force bool) ([]string, error) {
-	base := filepath.Join(CorgiComposePathDir, "corgi_services", ".worktrees")
+	base := filepath.Join(CorgiServicesDir(), ".worktrees")
 	entries, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {

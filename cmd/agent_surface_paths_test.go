@@ -308,7 +308,7 @@ func TestLastExitCodeFor(t *testing.T) {
 
 func TestTailServiceLogKeepsTheLastLines(t *testing.T) {
 	dir := workspaceDir(t)
-	logDir := filepath.Join(dir, "corgi_services", ".logs", "api")
+	logDir := filepath.Join(dir, ".corgi", "corgi_services", ".logs", "api")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +480,7 @@ func TestEmitStackEventHumanForm(t *testing.T) {
 }
 
 func TestCheckpointsDirLivesUnderCorgiServices(t *testing.T) {
-	if got := utils.CheckpointsDir("/ws"); got != filepath.Join("/ws", "corgi_services", ".checkpoints") {
+	if got := utils.CheckpointsDir("/ws"); got != filepath.Join("/ws", ".corgi", "corgi_services", ".checkpoints") {
 		t.Errorf("CheckpointsDir = %q", got)
 	}
 }

@@ -109,7 +109,7 @@ db_services:
 
 | corgi action | Maps to |
 | --- | --- |
-| `corgi init` | Emit `corgi_services/db_services/<service>/{Makefile,docker-compose.yml}` |
+| `corgi init` | Emit `.corgi/corgi_services/db_services/<service>/{Makefile,docker-compose.yml}` |
 | `corgi run` (driver `up`) | `docker compose up -d` |
 | `corgi clean -i db` (driver `down`) | `docker compose down --volumes` |
 | `corgi status` | HTTP probe `healthCheck:` (or TCP `port:`) |

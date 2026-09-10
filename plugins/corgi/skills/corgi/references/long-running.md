@@ -24,7 +24,7 @@ corgi stop                  # tear it all down
 ### `corgi run --detach` / `-d`
 
 - Each service → its own detached process group that survives corgi exiting.
-- Persists run-state to `corgi_services/.state.json`, prints a startup summary (JSON with `--json`), and returns once `beforeStart` completes and services are spawned — immediate when warm, **minutes on a cold first run**. No streaming, no watch.
+- Persists run-state to `.corgi/corgi_services/.state.json`, prints a startup summary (JSON with `--json`), and returns once `beforeStart` completes and services are spawned — immediate when warm, **minutes on a cold first run**. No streaming, no watch.
 - `--tunnel` cannot combine with `--detach` (tunnels run in-process) — run `corgi tunnel` separately.
 
 Use this instead of `Bash(corgi run, run_in_background: true)` + KillShell.
@@ -68,7 +68,7 @@ corgi run --logs=false      # opt out of capture
 corgi logs                  # browse/follow afterwards (alias: log)
 ```
 
-- Capture is on by default and writes `corgi_services/.logs/<service>/<timestamp>.log`, keeps last 10 runs/service (older pruned).
+- Capture is on by default and writes `.corgi/corgi_services/.logs/<service>/<timestamp>.log`, keeps last 10 runs/service (older pruned).
 - `corgi logs`: interactive picker → follows like `tail -f`. Flags: `--service <name>`, `--all` (merge newest run of every service, timestamp-sorted), `--prune` (delete all `.logs/`), `--idle <dur>` (exit after dead-air; `0` = tail forever).
 
 ### Already-running guard

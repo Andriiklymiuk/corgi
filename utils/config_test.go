@@ -627,7 +627,7 @@ func TestCleanFromScratchEnabledWithDbs(t *testing.T) {
 	if err := c.Flags().Set("fromScratch", "true"); err != nil {
 		t.Fatal(err)
 	}
-	dbDir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "mydb")
+	dbDir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "mydb")
 	os.MkdirAll(dbDir, 0755)
 	os.WriteFile(filepath.Join(dbDir, "Makefile"), []byte("remove:\n\t@echo noop\n"), 0644)
 
@@ -969,16 +969,18 @@ func TestParseDatabaseServicesWithRabbitMQ(t *testing.T) {
 }
 
 func TestCleanCorgiServicesFolderWithData(t *testing.T) {
-	prev, _ := os.Getwd()
 	dir := t.TempDir()
-	os.Chdir(dir)
-	t.Cleanup(func() { os.Chdir(prev) })
+	t.Chdir(dir)
+	prevDir := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prevDir })
 
-	if err := os.MkdirAll(filepath.Join(dir, "corgi_services", "db_services", "pg"), 0755); err != nil {
+	services := filepath.Join(dir, ".corgi", "corgi_services")
+	if err := os.MkdirAll(filepath.Join(services, "db_services", "pg"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	CleanCorgiServicesFolder()
-	if _, err := os.Stat(filepath.Join(dir, "corgi_services")); !os.IsNotExist(err) {
+	if _, err := os.Stat(services); !os.IsNotExist(err) {
 		t.Error("expected corgi_services to be removed")
 	}
 }

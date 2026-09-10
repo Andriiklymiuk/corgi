@@ -86,7 +86,7 @@ func TestProcessAdditionalDatabaseConfigRabbitMQDefinition(t *testing.T) {
 		t.Errorf("DefinitionPath = %q, want ./definitions.json", add.DefinitionPath)
 	}
 
-	copied := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "rabbit-svc", "definitions.json")
+	copied := filepath.Join(CorgiComposePathDir, DbServicesRel(), "rabbit-svc", "definitions.json")
 	if _, err := os.Stat(copied); err != nil {
 		t.Errorf("expected file copied to %s: %v", copied, err)
 	}

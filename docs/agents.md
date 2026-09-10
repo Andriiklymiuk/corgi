@@ -67,7 +67,7 @@ The `code` is a stable string an agent can branch on (see [Error codes](#error-c
 ## Lifecycle (detached)
 
 `corgi run --detach` (`-d`) starts every service as a detached process group that
-survives corgi exiting, persists `corgi_services/.state.json`, and returns
+survives corgi exiting, persists `.corgi/corgi_services/.state.json`, and returns
 immediately. It forces logs on. Under `--json` it prints the run-state object:
 
 ```json
@@ -81,7 +81,7 @@ immediately. It forces logs on. Under `--json` it prints the run-state object:
       "pid": 76960,
       "pgid": 76960,
       "command": "sleep 60",
-      "logFile": "/path/corgi_services/.logs/api/2026-05-21T13-59-47.log",
+      "logFile": "/path/.corgi/corgi_services/.logs/api/2026-05-21T13-59-47.log",
       "status": "running",
       "startedAt": "2026-05-21T10:59:47Z",
       "statusChangedAt": "2026-05-21T10:59:47Z"
@@ -160,7 +160,7 @@ env generation, `beforeStart`/`afterStart`, and process all run there.
 - `--service-dir <name>=<path>` — run from an existing dir (e.g. a worktree you
   already made). The dir must exist.
 - `--service-branch <name>=<branch>` — run on a git branch via a **reused**
-  worktree under `corgi_services/.worktrees/<svc>-<branch>`. **Non-destructive**:
+  worktree under `.corgi/corgi_services/.worktrees/<svc>-<branch>`. **Non-destructive**:
   the main checkout is untouched. Re-runs reuse the worktree (deps + uncommitted
   work persist); the branch must exist (local or remote).
 - `--service-checkout <name>=<branch>` — `git checkout <branch>` in place in the
@@ -182,7 +182,7 @@ corgi test --service api --service-branch api=feature/login
 corgi exec api --service-branch api=feature/login --ensure-deps -- npm run migrate
 ```
 
-Worktrees accumulate one-per-branch under `corgi_services/.worktrees/`. Manage them:
+Worktrees accumulate one-per-branch under `.corgi/corgi_services/.worktrees/`. Manage them:
 
 ```bash
 corgi worktree list     # print created worktree paths
@@ -211,9 +211,9 @@ corgi checkout main --json
 ```json
 [
   { "name": "workspace", "path": "/ws", "branch": "main", "status": "up-to-date" },
-  { "name": "api", "path": "/ws/corgi_services/api", "branch": "main", "status": "updated" },
-  { "name": "web", "path": "/ws/corgi_services/web", "branch": "master", "status": "up-to-date", "usedDefaultBranch": true },
-  { "name": "mobile", "path": "/ws/corgi_services/mobile", "status": "skipped", "message": "uncommitted changes; commit or stash them, or pass --allow-dirty" }
+  { "name": "api", "path": "/ws/.corgi/corgi_services/api", "branch": "main", "status": "updated" },
+  { "name": "web", "path": "/ws/.corgi/corgi_services/web", "branch": "master", "status": "up-to-date", "usedDefaultBranch": true },
+  { "name": "mobile", "path": "/ws/.corgi/corgi_services/mobile", "status": "skipped", "message": "uncommitted changes; commit or stash them, or pass --allow-dirty" }
 ]
 ```
 
@@ -280,7 +280,7 @@ corgi leases                      # which lease holds which block
 corgi leases release agent-a
 ```
 
-The allocation is stored under `corgi_services/.leases/`, so the same name always
+The allocation is stored under `.corgi/corgi_services/.leases/`, so the same name always
 maps to the same ports. Without the flag nothing changes.
 
 ## Reacting instead of polling
@@ -615,7 +615,7 @@ corgi. Probe with `status`/`ps`, never by re-running `run` (a second
 # 1. preflight (exit 1 if a port is taken / docker down)
 corgi --json doctor
 
-# 2. launch detached (writes corgi_services/.state.json, returns immediately)
+# 2. launch detached (writes .corgi/corgi_services/.state.json, returns immediately)
 corgi --json run --detach
 
 # 3. block until every probed target is up (exit 1 on timeout)

@@ -434,14 +434,25 @@ type Secrets struct {
 	Me         string `json:"me,omitempty"` // tracker login/email when the API cannot tell us
 }
 
+// secretsFile is the machine-wide tokens plus a per-workspace override.
+type secretsFile struct {
+	Secrets
+	Workspaces map[string]Secrets `json:"workspaces,omitempty"`
+}
+
 func secretsPath(agentDir string) string { return filepath.Join(agentDir, "watch", "secrets.json") }
 
-// LoadSecrets merges the file with the environment; env wins.
-func LoadSecrets(agentDir string) Secrets {
-	var s Secrets
+func readSecretsFile(agentDir string) secretsFile {
+	var f secretsFile
 	if data, err := os.ReadFile(secretsPath(agentDir)); err == nil {
-		_ = json.Unmarshal(data, &s)
+		_ = json.Unmarshal(data, &f)
 	}
+	return f
+}
+
+// LoadSecrets is the machine-wide set; env wins over the file.
+func LoadSecrets(agentDir string) Secrets {
+	s := readSecretsFile(agentDir).Secrets
 	pick := func(dst *string, env string) {
 		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
 			*dst = v
@@ -457,6 +468,49 @@ func LoadSecrets(agentDir string) Secrets {
 	return s
 }
 
+// LoadSecretsFor is what a workspace polls with: machine-wide, then its own
+// tokens on top, so the most specific wins over the file and the env. The
+// webhook secret is never overridden; one endpoint verifies every payload.
+func LoadSecretsFor(agentDir, workspace string) Secrets {
+	return overlaySecrets(LoadSecrets(agentDir), WorkspaceSecrets(agentDir, workspace))
+}
+
+// WorkspaceSecrets is only what this workspace stored, no fallback, no env.
+func WorkspaceSecrets(agentDir, workspace string) Secrets {
+	return readSecretsFile(agentDir).Workspaces[workspace]
+}
+
+// WorkspacesWithSecrets lists the workspaces holding an override.
+func WorkspacesWithSecrets(agentDir string) []string {
+	var out []string
+	for id := range readSecretsFile(agentDir).Workspaces {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func overlaySecrets(base, over Secrets) Secrets {
+	pick := func(dst *string, v string) {
+		if v = strings.TrimSpace(v); v != "" {
+			*dst = v
+		}
+	}
+	pick(&base.Linear, over.Linear)
+	pick(&base.JiraURL, over.JiraURL)
+	pick(&base.JiraEmail, over.JiraEmail)
+	pick(&base.JiraToken, over.JiraToken)
+	pick(&base.GitHub, over.GitHub)
+	pick(&base.GitLab, over.GitLab)
+	pick(&base.GitLabURL, over.GitLabURL)
+	pick(&base.Me, over.Me)
+	return base
+}
+
+func (s Secrets) IsZero() bool {
+	return s == Secrets{}
+}
+
 // GitHubToken is the token a GitHub poll would use and where it comes from:
 // "saved" for the environment or the file, "gh-auth" for the gh CLI's,
 // "" for none. Saved wins, as in NewGitHub.
@@ -470,9 +524,29 @@ func GitHubToken(s Secrets) (token, source string) {
 	return "", ""
 }
 
-// SaveSecrets writes the file; the environment is never written.
+// SaveSecrets writes the machine-wide tokens, keeping every override.
 func SaveSecrets(agentDir string, s Secrets) error {
-	data, err := json.MarshalIndent(s, "", "  ")
+	f := readSecretsFile(agentDir)
+	f.Secrets = s
+	return writeSecretsFile(agentDir, f)
+}
+
+// SaveWorkspaceSecrets writes one override; a zero value drops it.
+func SaveWorkspaceSecrets(agentDir, workspace string, s Secrets) error {
+	f := readSecretsFile(agentDir)
+	if s.IsZero() {
+		delete(f.Workspaces, workspace)
+	} else {
+		if f.Workspaces == nil {
+			f.Workspaces = map[string]Secrets{}
+		}
+		f.Workspaces[workspace] = s
+	}
+	return writeSecretsFile(agentDir, f)
+}
+
+func writeSecretsFile(agentDir string, f secretsFile) error {
+	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
 	}

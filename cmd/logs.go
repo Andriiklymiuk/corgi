@@ -270,7 +270,7 @@ func logsBase() string {
 	if corgiDir == "" {
 		corgiDir = "."
 	}
-	return filepath.Join(corgiDir, "corgi_services")
+	return utils.CorgiServicesIn(corgiDir)
 }
 
 func pruneAllLogs(base string) {

@@ -71,4 +71,4 @@ Each scheduled run is a fresh agent session — the durable `corgi autopilot` st
 - `corgi autopilot stop` — kill switch; next iteration sees `stopped` and no-ops. (Cancelling the `/loop`/`/schedule` job also works; state stays consistent.)
 - `corgi autopilot pause` / `resume` — toggle without losing config.
 - `corgi autopilot status [--json]` — `mode` (`uninitialized` first run · `running` · `paused` · `stopped`), `lastHeartbeat` + age, last iteration summary. Heartbeat age > interval ⇒ a stalled loop a supervisor can flag.
-State lives in `corgi_services/.autopilot.json` (gitignored, per project). No daemon.
+State lives in `.corgi/corgi_services/.autopilot.json` (gitignored, per project). No daemon.

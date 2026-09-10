@@ -47,6 +47,12 @@ In the project directory:
   (autostart). `corgi agent init --config-dir ~/.claude-work` for a repo on
   another Claude account. `corgi agent scan ~/dev` registers every stack
   under a folder without enabling them.
+- Everything corgi generates lives in **`.corgi/corgi_services/`** beside
+  `.corgi/agent.yml`. A checkout with a top-level `.corgi/corgi_services/` is moved
+  there by any corgi command; `corgi migrate` does it out loud (`--dry-run`
+  to look first). Nothing moves while services are up — `corgi stop` first.
+  The move rewrites the matching `.gitignore` lines; commit that. Git
+  worktrees under it are repaired, so the source repo still points at them.
 
 ### 3. The daemon, the endpoint, the tunnel, the QR
 
@@ -136,15 +142,38 @@ they are away. Then, per service they use, get the token into the command
 | GitHub | `gh auth login` is enough (the watch reads the notifications feed through it); or a fine-grained PAT with Notifications read | nothing, or `corgi agent watch auth github --token ghp_…` / `GITHUB_TOKEN` |
 | GitLab | gitlab.com → Preferences → Access tokens → scope `read_api`; self-hosted needs the URL | `corgi agent watch auth gitlab --token glpat-… --url https://gitlab.example.com` or `GITLAB_TOKEN`, `GITLAB_URL` |
 
+Those are the machine-wide tokens: every watched workspace falls back to
+them. **A workspace at another company gets its own** — a second Jira site,
+a different Linear key, a self-hosted GitLab. Add `--local` inside it (or
+`--workspace <id>` from anywhere) and that token beats both the machine-wide
+one and the environment:
+
+```bash
+cd ~/dev/acme-api
+corgi agent watch auth jira --url https://acme.atlassian.net --email me@acme.com --token … --local
+corgi agent watch auth gitlab --token glpat-… --url https://gitlab.acme.com --local
+corgi agent watch auth linear --clear --local     # drop this workspace's override again
+```
+
+Tokens never go into the repository. `--local` writes to the user-level
+agent directory, mode 0600, beside the machine-wide ones. `corgi agent
+watch` prints one row per workspace holding an override.
+
 Then, in each workspace:
 
 ```bash
-corgi agent watch enable --labels bug,defect --prs --project ABC     # ABC = Linear team key or Jira project key
-corgi agent watch enable --labels bug --prs --project ABC --action fix   # also run the fix skill, draft PRs only
+corgi agent watch enable --tracker jira --project ABC --repos acme/api,acme/web --labels bug,defect --prs
+corgi agent watch enable --tracker linear --project ABC --prs --action fix   # also run the fix skill, draft PRs only
 corgi agent watch run --dry-run                                      # prove the tokens work: no bookmark moved
 corgi agent restart
-corgi agent watch                                                    # tokens present, watched workspaces, last polls
+corgi agent watch                                                    # tokens per workspace, watched workspaces, last polls
 ```
+
+**Always set `--project` and `--repos`.** They are what routes an event to a
+workspace — an issue by its key prefix, a PR by its repo. With neither, an
+event falls through to the first watched workspace that merely matches the
+rules, so a review on one client's PR can start an agent in another's
+checkout. `--tracker linear|jira` picks the tracker when both have tokens.
 
 `--action fix` runs unattended only after `corgi agent init
 --dangerously-skip-permissions`; say that before enabling it. The first

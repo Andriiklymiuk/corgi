@@ -47,7 +47,7 @@ func stepCacheDirName(service Service) string {
 }
 
 func stepCachePath(service Service, stepIndex int) string {
-	return filepath.Join(CorgiComposePathDir, "corgi_services", cacheDirName,
+	return filepath.Join(CorgiServicesDir(), cacheDirName,
 		stepCacheDirName(service), strconv.Itoa(stepIndex))
 }
 
@@ -63,7 +63,7 @@ func writeStepHash(path, hash string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	EnsureCorgiServicesIgnore(filepath.Join(CorgiComposePathDir, "corgi_services"), cacheDirName+"/")
+	EnsureCorgiServicesIgnore(CorgiServicesDir(), cacheDirName+"/")
 	return os.WriteFile(path, []byte(hash), 0o644)
 }
 

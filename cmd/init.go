@@ -89,7 +89,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 
 	filesToIgnore := []string{
 		"# Added by corgi cli",
-		"corgi_services/*",
+		utils.CorgiServicesRel() + "/*",
 		".env*",
 	}
 	filesToIgnore = getGitignoreServicePath(corgi.Services, filesToIgnore)
@@ -138,7 +138,7 @@ Provide them in corgi-compose.yml file`)
 				file.Name,
 				file.Template,
 				service.ServiceName,
-				utils.RootDbServicesFolder,
+				utils.DbServicesRel(),
 			)
 
 			if err != nil {
@@ -188,7 +188,7 @@ func applyDriverPostInit(service utils.DatabaseService) error {
 
 	destDir := filepath.Join(
 		utils.CorgiComposePathDir,
-		utils.RootDbServicesFolder,
+		utils.DbServicesRel(),
 		service.ServiceName,
 		"supabase",
 	)
@@ -257,7 +257,7 @@ func writeServiceFiles(service utils.Service, data utils.DockerServiceTemplateDa
 			file.Name,
 			file.Template,
 			service.ServiceName,
-			utils.RootServicesFolder,
+			utils.ServicesRel(),
 		)
 		if err != nil {
 			fmt.Printf(
@@ -330,12 +330,12 @@ func copyEnvFileWithSubstitutions(service utils.Service) error {
 
 	destPath := fmt.Sprintf("%s/%s/%s/.env",
 		utils.CorgiComposePathDir,
-		utils.RootServicesFolder,
+		utils.ServicesRel(),
 		service.ServiceName)
 
 	destDir := fmt.Sprintf("%s/%s/%s",
 		utils.CorgiComposePathDir,
-		utils.RootServicesFolder,
+		utils.ServicesRel(),
 		service.ServiceName)
 
 	if err := os.MkdirAll(destDir, os.ModePerm); err != nil {
