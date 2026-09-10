@@ -232,7 +232,7 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 				body += " (" + note + ")"
 			}
 		}
-		go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
+		go d.notifyAttentionAt("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL)
 	}
 }
 
@@ -389,6 +389,10 @@ func reviewFeedbackPrompt(e watch.Event) string {
 	return "Address the review feedback on my own PR " + e.URL + " — do not start a fresh review of it: " +
 		"apply the valid comments, push back on the wrong ones, reply and resolve the threads, push the fixes. /corgi:review " + e.URL
 }
+
+// FixPrompt is the prompt an event hands to a session, so the phone can start
+// the same work the daemon would have started by itself.
+func FixPrompt(e watch.Event) string { return fixPrompt(e) }
 
 // fixPrompt is the prompt for an event's kind; "" for a kind with no fix.
 func fixPrompt(e watch.Event) string {

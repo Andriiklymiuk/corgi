@@ -711,3 +711,37 @@ func (l *FixLog) dropDeferred(key string) {
 	}
 	l.Deferred = kept
 }
+
+// RecentEvents is the tail of the events log, newest first, at most limit.
+// A line that no longer parses is skipped rather than failing the read.
+func RecentEvents(agentDir string, limit int) []Event {
+	data, err := os.ReadFile(filepath.Join(agentDir, "watch", "events.jsonl"))
+	if err != nil {
+		return nil
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	out := make([]Event, 0, limit)
+	seen := map[string]struct{}{}
+	for i := len(lines) - 1; i >= 0 && len(out) < limit; i-- {
+		var e Event
+		if json.Unmarshal([]byte(lines[i]), &e) != nil || e.Key == "" {
+			continue
+		}
+		if _, dup := seen[e.Key]; dup {
+			continue
+		}
+		seen[e.Key] = struct{}{}
+		out = append(out, e)
+	}
+	return out
+}
+
+// FindEvent is one logged event by key, for acting on it later.
+func FindEvent(agentDir, key string) (Event, bool) {
+	for _, e := range RecentEvents(agentDir, 500) {
+		if e.Key == key {
+			return e, true
+		}
+	}
+	return Event{}, false
+}

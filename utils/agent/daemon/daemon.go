@@ -650,8 +650,14 @@ func (d *Daemon) repeatedAttention(workspaceID, detail string, now time.Time) bo
 }
 
 func (d *Daemon) notifyAttention(title, body, workspaceID string) {
-	link := ""
-	if d.LinkFor != nil {
+	d.notifyAttentionAt(title, body, workspaceID, "")
+}
+
+// notifyAttentionAt is notifyAttention with somewhere better to go than the
+// launcher: a tracker issue, a merge request. The launcher is the fallback,
+// because a notification about one ticket should open that ticket.
+func (d *Daemon) notifyAttentionAt(title, body, workspaceID, link string) {
+	if link == "" && d.LinkFor != nil {
 		link = d.LinkFor(workspaceID)
 	}
 	if link != "" && d.NotifyWithLink != nil {
