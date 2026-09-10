@@ -11,7 +11,8 @@ corgi agent watch disable [flags]
 ### Options
 
 ```
-  -h, --help   help for disable
+  -h, --help               help for disable
+      --workspace string   Workspace id to stop watching; omitted means the one you are in
 ```
 
 ### Options inherited from parent commands
