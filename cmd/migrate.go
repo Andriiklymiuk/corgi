@@ -23,10 +23,7 @@ past — this is the version that says what it did.
 Nothing moves while services are up. Stop them first: corgi stop`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		utils.SkipCorgiServicesMigration = true
-		if _, err := utils.GetCorgiServices(cmd); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			exitProcess(1)
-		}
+		mustLoadCorgiServices(cmd)
 		dir := utils.CorgiComposePathDir
 		legacy := filepath.Join(dir, utils.CorgiServicesName)
 		target := filepath.Join(dir, utils.CorgiDirName, utils.CorgiServicesName)
@@ -41,8 +38,8 @@ Nothing moves while services are up. Stop them first: corgi stop`,
 		}
 		moved, err := utils.MigrateCorgiServices(dir)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			exitProcess(1)
+			exitWithError("corgi_services_migrate", err, 1)
+			return
 		}
 		if !moved {
 			fmt.Printf("nothing to move — already at %s\n", target)

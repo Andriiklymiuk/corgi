@@ -526,3 +526,57 @@ func zeroFlag(f *pflag.Flag) string {
 	}
 	return ""
 }
+
+func TestWatchAuthClearsAnOverrideAndRefusesAnUnknownSource(t *testing.T) {
+	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true})
+	c := agentWatchAuthCmd
+	run := func(args ...string) error {
+		c.Flags().Visit(func(f *pflag.Flag) { _ = c.Flags().Set(f.Name, zeroFlag(f)) })
+		if err := c.Flags().Parse(args[1:]); err != nil {
+			t.Fatal(err)
+		}
+		return c.RunE(c, args[:1])
+	}
+
+	if err := run("gitlab", "--token", "glpat-x", "--url", "https://git.acme.io", "--workspace", "acme-stack"); err != nil {
+		t.Fatal(err)
+	}
+	if got := watch.WorkspaceSecrets(dir, "acme-stack"); got.GitLab != "glpat-x" || got.GitLabURL != "https://git.acme.io" {
+		t.Fatalf("stored = %+v", got)
+	}
+
+	if err := run("gitlab", "--clear", "--workspace", "acme-stack"); err != nil {
+		t.Fatal(err)
+	}
+	if got := watch.WorkspacesWithSecrets(dir); len(got) != 0 {
+		t.Fatalf("clearing the only token should drop the override, got %v", got)
+	}
+
+	if err := run("bitbucket", "--token", "x"); err == nil {
+		t.Error("an unknown source should be refused")
+	}
+	if err := run("linear", "--token", "x", "--workspace", "nope"); err != nil {
+		t.Errorf("an unregistered id is still a valid key: %v", err)
+	}
+}
+
+func TestWatchStatusPrintsARowPerWorkspaceOverride(t *testing.T) {
+	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true})
+	t.Setenv("LINEAR_API_KEY", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("JIRA_API_TOKEN", "")
+	t.Setenv("GITLAB_TOKEN", "")
+	if err := watch.SaveSecrets(dir, watch.Secrets{Linear: "global"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.SaveWorkspaceSecrets(dir, "acme-stack", watch.Secrets{JiraToken: "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() { runAgentWatchStatus(nil, nil) })
+	if !strings.Contains(out, "machine-wide") || !strings.Contains(out, "acme-stack  ") {
+		t.Fatalf("status should list both:\n%s", out)
+	}
+	if !strings.Contains(out, watch.Fingerprint("acme")) {
+		t.Errorf("the override's own token is missing:\n%s", out)
+	}
+}
