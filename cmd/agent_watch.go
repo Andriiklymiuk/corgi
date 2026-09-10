@@ -113,6 +113,10 @@ var agentWatchEnableCmd = &cobra.Command{
 				return fmt.Errorf("--max-per-day must be at least 1")
 			}
 		}
+		if flags.Changed("from") {
+			v, _ := flags.GetString("from")
+			wc.From = splitList(v)
+		}
 		if flags.Changed("auto-for") {
 			v, _ := flags.GetString("auto-for")
 			kinds, err := parseAutoFor(v)
@@ -513,7 +517,32 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			fixes = append(fixes, fixRow{firstNonEmptyString(r.Ref, r.Key), r.Workspace, r.Kind,
 				r.StartedAt, !r.Done(), r.PRs, r.Note, r.Error})
 		}
-		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes})
+		// The inbox itself, so a menu bar or an editor can show what arrived
+		// without reading the log file or asking the phone.
+		type eventRow struct {
+			Key       string    `json:"key"`
+			Ref       string    `json:"ref"`
+			Kind      string    `json:"kind"`
+			Workspace string    `json:"workspace,omitempty"`
+			Title     string    `json:"title,omitempty"`
+			URL       string    `json:"url,omitempty"`
+			State     string    `json:"state,omitempty"`
+			At        time.Time `json:"at"`
+		}
+		events := []eventRow{}
+		moved := watch.LoadStateLog(dir)
+		for _, e := range watch.RecentEvents(dir, 25) {
+			if state.IsSeen(e.Key) && e.Kind == watch.KindIssueNew {
+				continue // handled or ignored: not waiting on anyone
+			}
+			at := e.State
+			if now, ok := moved.Get(e.Key); ok {
+				at = now.Status
+			}
+			events = append(events, eventRow{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),
+				Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: at, At: e.At})
+		}
+		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events})
 		return
 	}
 	fmt.Println("Tokens")
@@ -538,6 +567,10 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		fmt.Println(line)
 		if s.Action == "fix" {
 			fmt.Printf("  %-20s %s\n", "", fixBudgetLine(s, state.Fixes, now))
+		} else if s.Quiet != "" {
+			// Quiet hours hold the notification too, so a reporting watch
+			// has to say when it goes quiet or it looks broken in the evening.
+			fmt.Printf("  %-20s quiet %s — held until the window opens\n", "", s.Quiet)
 		}
 	}
 	polls := state.Summaries()
@@ -600,7 +633,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		}
 		secrets := watch.LoadSecretsFor(dir, w.ID)
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
-			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs},
+			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
 			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds}
 		if wc.Action == "fix" {
@@ -882,8 +915,9 @@ func init() {
 	f.Bool("prs", false, "Also reviews and comments on pull requests I opened")
 	f.Int("max-per-hour", 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
 	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
-	f.String("quiet", "", "With --action fix: local hours in which no fix starts, e.g. 23:00-07:00")
+	f.String("quiet", "", "Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
+	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
 	f.String("auto-for", "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")
 	agentWatchRunCmd.Flags().Bool("dry-run", false, "Do not advance the saved cursors")
 	tf := agentWatchTestCmd.Flags()

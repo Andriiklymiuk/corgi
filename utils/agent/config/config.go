@@ -247,6 +247,8 @@ type WatchConfig struct {
 	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts, e.g.
 	// "23:00-07:00"; empty means none.
 	Quiet string `yaml:"quiet,omitempty"`
+	// From narrows comments and reviews to these people; empty is anyone.
+	From []string `yaml:"from,omitempty"`
 	// FixKinds narrows what action: fix runs on — "issue.new",
 	// "issue.comment", "pr.comment", "pr.review". Empty is every kind that
 	// matched, which is what fix has always meant.
@@ -282,6 +284,9 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	}
 	if len(merged.FixKinds) == 0 {
 		merged.FixKinds = base.FixKinds
+	}
+	if len(merged.From) == 0 {
+		merged.From = base.From
 	}
 	return &merged
 }

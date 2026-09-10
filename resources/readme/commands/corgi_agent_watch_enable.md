@@ -16,6 +16,7 @@ corgi agent watch enable [flags]
       --auto               Shorthand for --action fix --prs --comments: work on what arrives without being asked, draft PRs only
       --auto-for string    With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything
       --comments           Also new comments on issues assigned to me
+      --from string        Only comments and reviews from these people (comma separated); empty is anyone
   -h, --help               help for enable
       --interval string    Poll interval, e.g. 3m; 0 means webhooks only
       --labels string      Only issues with one of these labels (comma-separated), e.g. bug,defect
@@ -24,7 +25,7 @@ corgi agent watch enable [flags]
       --pickup string      Column a ticket moves to when it is picked up, e.g. "In Progress"; empty writes nothing
       --project string     Linear team key or Jira project key, e.g. ABC
       --prs                Also reviews and comments on pull requests I opened
-      --quiet string       With --action fix: local hours in which no fix starts, e.g. 23:00-07:00
+      --quiet string       Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens
       --repos string       GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)
       --states string      Only issues in one of these states, e.g. Todo,Backlog
       --tracker string     linear or jira (default: whichever has a token)
