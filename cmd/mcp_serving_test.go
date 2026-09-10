@@ -55,6 +55,7 @@ func TestRegisterMCPTools_ListsExpectedTools(t *testing.T) {
 		"corgi_validate", "corgi_plan", "corgi_status", "corgi_env", "corgi_ps",
 		"corgi_up", "corgi_down", "corgi_logs", "corgi_exec", "corgi_test",
 		"corgi_doctor", "corgi_restart", "corgi_db_query", "corgi_schema",
+		"corgi_db_snapshot", "corgi_db_restore",
 	} {
 		if !got[want] {
 			t.Errorf("tool %q not registered (registered: %v)", want, got)
