@@ -35,7 +35,8 @@ matching skill (draft PRs only, never a merge). Nothing runs an agent when
 nothing changed.
 
 Tokens: LINEAR_API_KEY; JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN; GITHUB_TOKEN
-(or gh auth); GITLAB_TOKEN. Or store them once: corgi agent watch auth.`,
+(or gh auth); GITLAB_TOKEN. Or store them once: corgi agent watch auth.
+Workspaces at different companies get their own: add --local to that.`,
 	Run: runAgentWatchStatus,
 }
 
@@ -381,15 +382,43 @@ var agentWatchHooksCmd = &cobra.Command{
 
 var agentWatchAuthCmd = &cobra.Command{
 	Use:   "auth <linear|jira|github|gitlab>",
-	Short: "Store a token for a source (environment variables take precedence)",
-	Args:  cobra.ExactArgs(1),
+	Short: "Store a token for a source, for the machine or for one workspace",
+	Long: `Without --local the token is the machine-wide one every watched
+workspace falls back to. With --local (run inside the workspace) or
+--workspace <id> it is stored for that workspace only and beats both the
+machine-wide token and the environment — one Jira per client, a second
+Linear key, a self-hosted GitLab.
+
+Tokens are never written into the repository. They live in the user-level
+agent directory, mode 0600, next to the machine-wide ones.
+
+  corgi agent watch auth jira --token xxx --url https://acme.atlassian.net --email me@acme.com --local
+  corgi agent watch auth linear --clear --local`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := mustAgentDir()
+		flags := cmd.Flags()
+		local, _ := flags.GetBool("local")
+		id, _ := flags.GetString("workspace")
+		drop, _ := flags.GetBool("clear")
+		if local && id == "" {
+			resolved, err := currentWorkspaceID(dir)
+			if err != nil {
+				return err
+			}
+			id = resolved
+		}
 		secrets := watch.LoadSecrets(dir)
-		token, _ := cmd.Flags().GetString("token")
-		url, _ := cmd.Flags().GetString("url")
-		email, _ := cmd.Flags().GetString("email")
-		me, _ := cmd.Flags().GetString("me")
+		if id != "" {
+			secrets = watch.WorkspaceSecrets(dir, id)
+		}
+		token, _ := flags.GetString("token")
+		url, _ := flags.GetString("url")
+		email, _ := flags.GetString("email")
+		me, _ := flags.GetString("me")
+		if drop {
+			token, url, email = "", "", ""
+		}
 		switch args[0] {
 		case "linear":
 			secrets.Linear = token
@@ -399,19 +428,30 @@ var agentWatchAuthCmd = &cobra.Command{
 			secrets.GitHub = token
 		case "gitlab":
 			secrets.GitLab = token
-			if url != "" {
+			if url != "" || drop {
 				secrets.GitLabURL = url
 			}
 		default:
 			return fmt.Errorf("unknown source %q", args[0])
 		}
-		if me != "" {
+		if me != "" || drop {
 			secrets.Me = me
 		}
-		if err := watch.SaveSecrets(dir, secrets); err != nil {
+		where := "machine-wide"
+		if id != "" {
+			if err := watch.SaveWorkspaceSecrets(dir, id, secrets); err != nil {
+				return err
+			}
+			where = id + " only"
+		} else if err := watch.SaveSecrets(dir, secrets); err != nil {
 			return err
 		}
-		utils.Infof("%s: token %s saved\n", args[0], watch.Fingerprint(token))
+		if drop {
+			utils.Infof("%s: token cleared (%s)\n", args[0], where)
+		} else {
+			utils.Infof("%s: token %s saved (%s)\n", args[0], watch.Fingerprint(token), where)
+		}
+		utils.Info("restart the daemon to pick it up: corgi agent restart")
 		return nil
 	},
 }
@@ -443,8 +483,10 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		return
 	}
 	fmt.Println("Tokens")
-	fmt.Printf("  linear %s · jira %s · github %s · gitlab %s · webhook secret %s\n",
-		watch.Fingerprint(secrets.Linear), watch.Fingerprint(secrets.JiraToken), githubTokenLabel(secrets), watch.Fingerprint(secrets.GitLab), watch.Fingerprint(secrets.HookSecret))
+	fmt.Printf("  machine-wide  %s · webhook secret %s\n", tokenLine(secrets), watch.Fingerprint(secrets.HookSecret))
+	for _, id := range watch.WorkspacesWithSecrets(dir) {
+		fmt.Printf("  %-13s %s\n", id, tokenLine(watch.LoadSecretsFor(dir, id)))
+	}
 	if len(specs) == 0 {
 		fmt.Println("\nNo watched workspaces. Inside one: corgi agent watch enable --labels bug --prs")
 		return
@@ -492,7 +534,6 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	secrets := watch.LoadSecrets(dir)
 	var out []daemon.WatchSpec
 	for _, w := range registry.Sorted() {
 		repo, _ := config.LoadRepo(w.AbsPath)
@@ -501,6 +542,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		if wc == nil || !wc.Enabled {
 			continue
 		}
+		secrets := watch.LoadSecretsFor(dir, w.ID)
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
@@ -548,6 +590,11 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		out = append(out, spec)
 	}
 	return out, nil
+}
+
+func tokenLine(s watch.Secrets) string {
+	return fmt.Sprintf("linear %s · jira %s · github %s · gitlab %s",
+		watch.Fingerprint(s.Linear), watch.Fingerprint(s.JiraToken), githubTokenLabel(s), watch.Fingerprint(s.GitLab))
 }
 
 // githubTokenLabel is the fingerprint, marked gh-auth when the gh CLI is
@@ -767,6 +814,9 @@ func init() {
 	a.String("url", "", "Jira site (https://you.atlassian.net) or self-hosted GitLab URL")
 	a.String("email", "", "Jira account email")
 	a.String("me", "", "Your login or id on the service, for webhooks before the first poll")
+	a.Bool("local", false, "Store for the workspace you are in, not the machine")
+	a.String("workspace", "", "Store for this workspace id, from anywhere")
+	a.Bool("clear", false, "Remove the token instead of setting one")
 	agentWatchCmd.AddCommand(agentWatchEnableCmd, agentWatchDisableCmd, agentWatchRunCmd, agentWatchTestCmd, agentWatchHooksCmd, agentWatchAuthCmd)
 	agentCmd.AddCommand(agentWatchCmd)
 }

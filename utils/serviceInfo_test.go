@@ -22,7 +22,7 @@ func TestGetServiceInfoEmptyCompose(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "db1")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "db1")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestGetServiceInfoPostgres(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "db1")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "db1")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestGetServiceInfoRabbitMQ(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "mq")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "mq")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestGetServiceInfoMongo(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "mongo")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "mongo")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestGetServiceInfoMySQL(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "mysql")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "mysql")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}

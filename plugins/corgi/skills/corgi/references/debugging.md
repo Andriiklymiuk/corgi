@@ -50,7 +50,7 @@ Corgi streams the service's own error. Read the lines above the crash for the ac
 - Port already bound inside the service (e.g. `nodemon` already running).
 - DB not ready yet and service didn't wait — solution: add `healthCheck:` to the db (not always supported per driver) or a retry loop in the service.
 
-If the crash output already scrolled off the terminal, `corgi run` has already persisted each service's stdout/stderr under `corgi_services/.logs/<name>/<timestamp>.log` (capture is on by default; only `--logs=false` turns it off). Read back with `corgi logs` (interactive picker) or `corgi logs --service <name>`. Logs are capped 50 MB per run and rotated (10 newest kept), so capture is cheap.
+If the crash output already scrolled off the terminal, `corgi run` has already persisted each service's stdout/stderr under `.corgi/corgi_services/.logs/<name>/<timestamp>.log` (capture is on by default; only `--logs=false` turns it off). Read back with `corgi logs` (interactive picker) or `corgi logs --service <name>`. Logs are capped 50 MB per run and rotated (10 newest kept), so capture is cheap.
 
 If a service crashed unattended, enable desktop notifications once with `corgi notifications on` — subsequent runs fire a system toast whenever a service exits non-zero (suppressed during corgi's own shutdown so Ctrl-C never alerts).
 
@@ -129,5 +129,5 @@ See repo-root `docs/tunnel.md` for full provider matrix + Quick Tunnel limitatio
 ## When you've tried everything
 
 - `corgi run --describe` — prints a parsed summary of the compose file. Useful to confirm corgi sees what you think it sees.
-- `corgi run --fromScratch` — wipes `corgi_services/` and rebuilds. Heavyweight but fixes drift between template and generated files.
+- `corgi run --fromScratch` — wipes `.corgi/corgi_services/` and rebuilds. Heavyweight but fixes drift between template and generated files.
 - Check the GitHub issues: https://github.com/Andriiklymiuk/corgi/issues

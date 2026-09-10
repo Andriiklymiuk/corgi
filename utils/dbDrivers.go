@@ -744,7 +744,7 @@ var DriverConfigs = map[string]DriverConfig{
 			// Path depends on configTomlPath: corgi-managed dir if set, root if not.
 			tomlSource := CorgiComposePathDir
 			if db.ConfigTomlPath != "" {
-				tomlSource = CorgiComposePathDir + "/" + RootDbServicesFolder + "/" + db.ServiceName + "/supabase/config.toml"
+				tomlSource = CorgiComposePathDir + "/" + DbServicesRel() + "/" + db.ServiceName + "/supabase/config.toml"
 			}
 			ports := templates.ReadSupabasePorts(tomlSource)
 			if db.Port != 0 {
@@ -849,7 +849,7 @@ func GetServiceInfo(targetService string) (string, error) {
 		fmt.Sprintf(
 			"%s/%s/%s/docker-compose.yml",
 			CorgiComposePathDir,
-			RootDbServicesFolder,
+			DbServicesRel(),
 			targetService,
 		),
 	)

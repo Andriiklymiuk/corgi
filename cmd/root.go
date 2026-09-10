@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var APP_VERSION = "1.21.60"
+var APP_VERSION = "1.22.0"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -73,7 +73,7 @@ func init() {
 		"fromScratch",
 		"",
 		false,
-		"Clean corgi_services folder before running",
+		"Clean the .corgi/corgi_services folder before running",
 	)
 	rootCmd.PersistentFlags().BoolP(
 		"describe",

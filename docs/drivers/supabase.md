@@ -104,7 +104,7 @@ What changes when set vs unset:
 
 | | Unset (legacy) | Set (recommended) |
 |---|---|---|
-| Generated config.toml lives at | `<projectRoot>/supabase/config.toml` | `corgi_services/db_services/<svc>/supabase/config.toml` |
+| Generated config.toml lives at | `<projectRoot>/supabase/config.toml` | `.corgi/corgi_services/db_services/<svc>/supabase/config.toml` |
 | Where supabase CLI runs from | project root | the corgi-managed service dir |
 | `supabase init` on first run | yes (creates root supabase/) | no (corgi writes the file directly) |
 
@@ -126,7 +126,7 @@ db_services:
 
 ## supabase/config.toml location
 
-Convention follows supabase CLI: `<cwd>/supabase/config.toml`. corgi runs the CLI from either project root (configTomlPath unset) or the service folder under `corgi_services/db_services/<svc>/` (configTomlPath set). The CLI auto-discovers from cwd in both modes.
+Convention follows supabase CLI: `<cwd>/supabase/config.toml`. corgi runs the CLI from either project root (configTomlPath unset) or the service folder under `.corgi/corgi_services/db_services/<svc>/` (configTomlPath set). The CLI auto-discovers from cwd in both modes.
 
 ### Missing file
 

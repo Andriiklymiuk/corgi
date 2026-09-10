@@ -32,7 +32,7 @@ type Lease struct {
 }
 
 func LeasesDir(composeDir string) string {
-	return filepath.Join(composeDir, "corgi_services", ".leases")
+	return filepath.Join(CorgiServicesIn(composeDir), ".leases")
 }
 
 func ApplyIsolationLease(c *CorgiCompose, name string) error {

@@ -62,7 +62,7 @@ Only emit subsection per DB if it has `version`, `healthCheck`, seed source, or 
 
 ### `<svc-name>` `:<port>`
 
-- **Source** `path: ./svc` *(or `cloneFrom: <url>@<branch>` → `corgi_services/services/<name>/`)*
+- **Source** `path: ./svc` *(or `cloneFrom: <url>@<branch>` → `.corgi/corgi_services/services/<name>/`)*
 - **Healthcheck** `http://localhost:<port><healthCheck>` *(only if `healthCheck:` set)*
 - **README** > <tagline ≤ 200 chars>. [Sonar: org_repo](https://sonarcloud.io/project/overview?id=org_repo). [Repo](https://github.com/org/repo).
 - **Flags** `manualRun`, `ignore_env`, `autoSourceEnv:false`, `runner:docker` *(only those actually set)*

@@ -45,7 +45,7 @@ and skips cloning.
 
 ```bash
 mkdir -p ci-logs
-for d in corgi_services/.logs/*/; do
+for d in .corgi/corgi_services/.logs/*/; do
   svc=$(basename "$d")
   newest=$(ls -1t "$d" | head -1)
   [ -n "$newest" ] && cp "$d$newest" "ci-logs/$svc.log"

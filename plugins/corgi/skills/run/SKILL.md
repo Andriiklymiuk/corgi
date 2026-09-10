@@ -123,7 +123,7 @@ missing → no fallback; use `git checkout <branch> && corgi run --services <svc
 
 - **Committed/pushed branch** — `--service-branch <svc>=<branch>`. corgi makes (or
   reuses) its **own non-destructive worktree** off that branch under
-  `corgi_services/.worktrees/`; main checkout untouched. Reviewer-facing shape
+  `.corgi/corgi_services/.worktrees/`; main checkout untouched. Reviewer-facing shape
   (the `stories` Phase 5 "Run line"). Branch must exist locally; source must be a git
   repo (clones first if needed). **Gotcha** — fails if that branch is currently
   checked out in the main repo (git one-branch-one-worktree) → switch the main repo

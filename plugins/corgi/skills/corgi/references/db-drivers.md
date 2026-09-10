@@ -5,7 +5,7 @@ description: Full list of supported corgi db_services drivers with default ports
 
 # `db_services` drivers
 
-Set the driver with `driver: <name>`. Corgi generates a `docker-compose.yml` and `Makefile` for each db under `corgi_services/db_services/<name>/`.
+Set the driver with `driver: <name>`. Corgi generates a `docker-compose.yml` and `Makefile` for each db under `.corgi/corgi_services/db_services/<name>/`.
 
 No hardcoded host-port default per driver — host port is whatever you set in `port:`. The port column below shows the conventional/container port (generateEnv.go falls back to the postgres `default` config for unknown drivers).
 
@@ -88,13 +88,13 @@ db_services:
         metadata:
           role: admin
     # jwtSecret: my-32-char-secret  # only if you customized auth.jwt_secret in config.toml
-    # configTomlPath: ./config/supabase.config.toml  # source of truth — copied to corgi_services/db_services/<svc>/supabase/config.toml on every init
+    # configTomlPath: ./config/supabase.config.toml  # source of truth — copied to .corgi/corgi_services/db_services/<svc>/supabase/config.toml on every init
 ```
 
 Compose ports always win: the Makefile awk-patches `[api/db/studio/inbucket].port` in config.toml before `supabase start`, so emitted env URLs and bind ports stay aligned. Unset yaml ports keep whatever `config.toml` says (stock defaults 54321/54322/54323/54324).
 
 `configTomlPath` controls where the canonical config.toml lives:
-- **set** → corgi copies the file to `corgi_services/db_services/<svc>/supabase/config.toml` and runs the CLI from that dir. Edit the source file (e.g. `config/supabase.config.toml`) only — destination is regenerated each init.
+- **set** → corgi copies the file to `.corgi/corgi_services/db_services/<svc>/supabase/config.toml` and runs the CLI from that dir. Edit the source file (e.g. `config/supabase.config.toml`) only — destination is regenerated each init.
 - **unset** → legacy behavior. `supabase init` writes `<projectRoot>/supabase/config.toml` on first run. Dev edits live there directly.
 
 Emitted env (with `envAlias: none`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_DB_URL`, `SUPABASE_DB_HOST`, `SUPABASE_DB_PORT`, `SUPABASE_STUDIO_URL`, `SUPABASE_INBUCKET_URL`, `SUPABASE_STORAGE_S3_URL`, `SUPABASE_S3_PROTOCOL_*`, `SUPABASE_BUCKET_<UPPER_NAME>`.

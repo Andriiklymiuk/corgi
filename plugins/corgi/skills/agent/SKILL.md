@@ -626,9 +626,10 @@ is at the desk, and optionally start the fix:
 
 ```bash
 cd ~/dev/acme-stack
-corgi agent watch enable --labels bug,defect --prs            # notify: new issues assigned to me, reviews on my PRs
+corgi agent watch enable --tracker linear --project ABC --repos acme/api --labels bug,defect --prs   # notify: new issues assigned to me, reviews on my PRs
 corgi agent watch enable --labels bug --prs --action fix      # and run the skill: /corgi:stories <id>, /corgi:review <pr>
-corgi agent watch auth linear --token lin_api_…               # or LINEAR_API_KEY / JIRA_URL+JIRA_EMAIL+JIRA_API_TOKEN / GITHUB_TOKEN (gh auth) / GITLAB_TOKEN
+corgi agent watch auth linear --token lin_api_…               # machine-wide; or LINEAR_API_KEY / JIRA_URL+JIRA_EMAIL+JIRA_API_TOKEN / GITHUB_TOKEN (gh auth) / GITLAB_TOKEN
+corgi agent watch auth jira --url https://acme.atlassian.net --email me@acme.com --token … --local   # this workspace only, beats the machine-wide token and the env
 corgi agent watch                                             # tokens, watched workspaces, last polls, events today, fix budget
 corgi agent watch run                                         # one poll now; hands deferred fixes back to the daemon
 corgi agent watch test issue.comment --body "still needed?"   # one made-up event through rules, dedupe, claim, caps; prints the prompt, runs nothing
@@ -657,6 +658,16 @@ back. A fix runs unattended only for a workspace enabled with
 config under `workspaces.<id>.watch` (`labels`, `states`, `assignee`,
 `comments`, `prs`, `repos`, `project`, `interval`, `action`,
 `maxFixesPerHour`, `maxFixesPerDay`, `quiet`).
+
+Routing and tokens across companies: `--project` (issue key prefix) and
+`--repos` (owner/name) are what assign an event to a workspace; without them
+it falls through to the first watched workspace whose rules merely match, so
+always set them. Tokens are machine-wide by default and per-workspace with
+`--local` / `--workspace <id>`, which beats both the machine-wide token and
+the environment — one Jira site per client, a second Linear key, a
+self-hosted GitLab. They are stored in the user-level agent directory at
+0600 and never in the repository; `corgi agent watch` prints a row per
+workspace holding an override. `--clear --local` drops one.
 
 When the user asks "can corgi listen to new Jira/Linear issues or PR
 comments and fix them", this is the answer: enable watch with `--action fix`,

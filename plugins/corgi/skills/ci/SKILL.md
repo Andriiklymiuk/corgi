@@ -112,7 +112,7 @@ the first request, thousands of lines from the cause.
 still lets the rest of the stack come up, but `corgi run --wait` returns the
 failure immediately instead of waiting out the readiness timeout, and a run
 without `--wait` now exits non-zero. Older pipelines carry a
-`grep -rh "aborting beforeStart" corgi_services/.logs/ && exit 1` step from
+`grep -rh "aborting beforeStart" .corgi/corgi_services/.logs/ && exit 1` step from
 when that was not true; it can never fire after `--wait` and should be deleted.
 Requires corgi ≥ 1.20.10 for the `--wait` half, ≥ 1.20.32 for the exit status.
 
@@ -181,7 +181,7 @@ own debug directory as a fallback, or run headed under a virtual display
 ## Caching
 
 Do not hand-write the path list — `corgi cache paths` derives it from the compose
-file (every `beforeStart` cacheKey's dependency dir + `corgi_services/.cache/`),
+file (every `beforeStart` cacheKey's dependency dir + `.corgi/corgi_services/.cache/`),
 so it cannot drift as services come and go. `--key` prints the matching cache key,
 `--json` splits the plan per ecosystem (`groups: [{id, key, paths, pathsText}]`)
 so one lockfile change doesn't evict every other language's packages. On GitHub
@@ -220,7 +220,7 @@ Both halves or neither:
 | restore | why |
 |---------|-----|
 | each service's dependency dir (`node_modules`, `.venv`, …) | the actual saving |
-| `corgi_services/.cache/` | corgi's `beforeStart` cacheKey markers |
+| `.corgi/corgi_services/.cache/` | corgi's `beforeStart` cacheKey markers |
 
 Markers without the dependency dir make corgi skip an install that is genuinely
 needed — a service then starts with nothing installed. Key both on the lockfiles.

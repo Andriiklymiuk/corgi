@@ -130,7 +130,7 @@ Default `GET /_localstack/health` — corgi auto-applies for `driver: localstack
 
 ## Bootstrap script
 
-corgi generates `corgi_services/db_services/<name>/bootstrap/bootstrap.sh`. Mounted into the container at `/etc/localstack/init/ready.d/`. Localstack auto-runs it after services are up. Logs visible via `docker logs localstack-<name>`.
+corgi generates `.corgi/corgi_services/db_services/<name>/bootstrap/bootstrap.sh`. Mounted into the container at `/etc/localstack/init/ready.d/`. Localstack auto-runs it after services are up. Logs visible via `docker logs localstack-<name>`.
 
 Idempotent — every `awslocal` call ends with `|| true` so re-runs don't fail on existing resources.
 

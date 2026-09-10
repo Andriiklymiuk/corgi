@@ -17,6 +17,8 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
+	"github.com/spf13/pflag"
+
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -478,4 +480,49 @@ func TestWatchHelpers(t *testing.T) {
 	if countWatchEventsToday(dir) != 1 {
 		t.Fatal("count")
 	}
+}
+
+func TestWatchAuthStoresPerWorkspaceTokensAndTheSpecUsesThem(t *testing.T) {
+	dir, ws := watchFixture(t, &config.WatchConfig{Enabled: true, Tracker: "jira", Project: "ACME"})
+	t.Setenv("LINEAR_API_KEY", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("JIRA_API_TOKEN", "")
+	t.Setenv("GITLAB_TOKEN", "")
+	t.Chdir(ws)
+
+	c := agentWatchAuthCmd
+	for _, args := range [][]string{
+		{"jira", "--token", "acme-jira", "--url", "https://acme.atlassian.net", "--email", "me@acme.com", "--local"},
+		{"linear", "--token", "global-linear"},
+	} {
+		c.Flags().Visit(func(f *pflag.Flag) { _ = c.Flags().Set(f.Name, zeroFlag(f)) })
+		if err := c.Flags().Parse(args[1:]); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.RunE(c, args[:1]); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+
+	if got := watch.LoadSecrets(dir); got.JiraToken != "" || got.Linear != "global-linear" {
+		t.Fatalf("--local must not touch the machine-wide tokens: %+v", got)
+	}
+	if got := watch.LoadSecretsFor(dir, "acme-stack"); got.JiraToken != "acme-jira" || got.Linear != "global-linear" {
+		t.Fatalf("workspace tokens = %+v", got)
+	}
+
+	specs, err := loadWatchSpecs(dir)
+	if err != nil || len(specs) != 1 {
+		t.Fatalf("specs = %+v, %v", specs, err)
+	}
+	if len(specs[0].Sources) != 1 || specs[0].Sources[0].Name() != "jira" {
+		t.Fatalf("the workspace should poll jira with its own token: %v", specs[0].Sources)
+	}
+}
+
+func zeroFlag(f *pflag.Flag) string {
+	if f.Value.Type() == "bool" {
+		return "false"
+	}
+	return ""
 }
