@@ -1225,6 +1225,14 @@ const launcherPageHTML = `<!doctype html>
   .opt:disabled{color:var(--dim2)}
   .opt.here{color:var(--accent);font-weight:600}
   .gcount{margin-left:auto;font-size:.66rem;color:var(--accent);font-weight:600}
+  /* The batch bar: only there once something is selected. */
+  .batch{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:.2rem 0 .4rem;
+    padding:.45rem .55rem;background:var(--card2);border:1px solid var(--line);border-radius:.6rem}
+  .batch .bcount{font-size:.74rem;color:var(--dim);margin-right:.2rem}
+  .batch button{font:inherit;font-size:.76rem;font-weight:500;padding:.4rem .7rem;border-radius:.45rem;
+    border:1px solid var(--line);background:transparent;color:var(--dim);min-height:2rem}
+  .batch button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .batch button:disabled{opacity:.5}
   .linkme{margin-left:.45rem;font:inherit;font-size:.68rem;padding:.1rem .45rem;border-radius:.4rem;
     border:1px solid var(--line);background:var(--card2);color:var(--dim)}
   .linkme:disabled{opacity:.6}
@@ -2050,21 +2058,21 @@ const launcherPageHTML = `<!doctype html>
   const EVENT_KIND = { 'issue.new': 'new issue', 'issue.comment': 'comment', 'pr.comment': 'PR comment', 'pr.review': 'PR review' };
 
   // One change to one ticket. Every call here is something someone tapped.
-  async function ticket(ev, body) {
+  async function ticket(ev, body, quiet) {
     try {
       const r = await fetch('/launch/ticket', { method: 'POST', headers: auth,
         body: JSON.stringify(Object.assign({ key: ev.key }, body)) });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) { toast(j.error || 'that did not go through', true); return false; }
-      toast(j.done || 'done');
-      setTimeout(loadInbox, 600);
+      if (!r.ok) { if (!quiet) toast(j.error || 'that did not go through', true); return false; }
+      // A batch says one thing at the end rather than a toast per row.
+      if (!quiet) { toast(j.done || 'done'); setTimeout(loadInbox, 600); }
       return true;
-    } catch { toast('no connection', true); return false; }
+    } catch { if (!quiet) toast('no connection', true); return false; }
   }
 
   // The columns as a sheet: a phone has no room for twelve buttons in a row,
   // and the list is the workspace's real board, not a guess.
-  function moveSheet(ev, columns) {
+  function moveSheet(ev, columns, onPick) {
     const scrim = document.createElement('div');
     scrim.className = 'scrim';
     const sheet = document.createElement('div');
@@ -2083,6 +2091,7 @@ const launcherPageHTML = `<!doctype html>
       b.disabled = here;
       b.onclick = async () => {
         b.disabled = true;
+        if (onPick) { close(); await onPick(name); return; }
         if (await ticket(ev, { do: 'move', status: name })) close(); else b.disabled = false;
       };
       sheet.appendChild(b);
@@ -2090,6 +2099,7 @@ const launcherPageHTML = `<!doctype html>
     const mine = document.createElement('button');
     mine.className = 'opt';
     mine.textContent = 'Assign to me';
+    mine.hidden = !!onPick; // assigning a batch is a different ask
     mine.onclick = async () => {
       mine.disabled = true;
       if (await ticket(ev, { do: 'assign' })) close(); else mine.disabled = false;
@@ -2143,23 +2153,77 @@ const launcherPageHTML = `<!doctype html>
 
     for (const [workspace, rows] of groups) {
       const picked = new Set();
+      // The group is one workspace, so its columns are the batch's columns.
+      const board = boards[workspace] || {};
       const head = document.createElement('div');
       head.className = 'evgroup';
       const name = document.createElement('span');
       name.className = 'gname';
       name.textContent = workspace || 'elsewhere';
+      // Selecting rows was only ever wired to one verb. Clearing a morning's
+      // worth of noise one Ignore at a time is the thing people actually do
+      // most, and it was the one thing the checkboxes could not do.
+      const bar = document.createElement('div');
+      bar.className = 'batch';
+      bar.hidden = true;
+      const count = document.createElement('span');
+      count.className = 'bcount';
       const batch = document.createElement('button');
-      batch.hidden = true;
-      head.append(name, batch);
+      batch.className = 'primary';
+      const moveMany = document.createElement('button');
+      moveMany.textContent = 'Move\u2026';
+      const ignoreMany = document.createElement('button');
+      ignoreMany.textContent = 'Ignore';
+      bar.append(count, batch, moveMany, ignoreMany);
+      head.append(name);
       box.appendChild(head);
+      box.appendChild(bar);
 
+      // Only new issues can be handed to one session together — a review
+      // comment is about its own thread — but anything can be moved or
+      // dismissed in a batch.
+      const workable = () => [...picked].filter((k) => {
+        const ev = rows.find((r) => r.key === k);
+        return ev && ev.actionable && ev.kind === 'issue.new';
+      });
       const refresh = () => {
-        batch.hidden = picked.size < 2;
-        batch.textContent = 'Ship ' + picked.size + ' together';
+        bar.hidden = picked.size === 0;
+        count.textContent = picked.size + ' selected';
+        const canShip = workable().length;
+        batch.hidden = canShip < 2;
+        batch.textContent = 'Ship ' + canShip + ' together';
+        moveMany.hidden = !(board.columns || []).length;
       };
       batch.onclick = () => {
         batch.disabled = true;
-        workOn({ keys: [...picked], ref: picked.size + ' issues' }).finally(() => { batch.disabled = false; });
+        const keys = workable();
+        workOn({ keys, ref: keys.length + ' issues' }).finally(() => { batch.disabled = false; });
+      };
+      ignoreMany.onclick = async () => {
+        const keys = [...picked];
+        if (!confirm('Ignore ' + keys.length + (keys.length === 1 ? ' row?' : ' rows?') +
+          '\nThey leave the inbox and the unattended mode skips them. Nothing is written to the tracker.')) return;
+        ignoreMany.disabled = true;
+        for (const key of keys) {
+          await ticket({ key }, { do: 'ignore' }, true);
+        }
+        picked.clear();
+        toast(keys.length + (keys.length === 1 ? ' row ignored' : ' rows ignored'));
+        ignoreMany.disabled = false;
+        loadInbox();
+      };
+      moveMany.onclick = () => {
+        const keys = [...picked];
+        moveSheet({ ref: keys.length + (keys.length === 1 ? ' ticket' : ' tickets'), keys },
+          board.columns, async (status) => {
+            let done = 0;
+            for (const key of keys) {
+              if (await ticket({ key }, { do: 'move', status }, true)) done++;
+            }
+            picked.clear();
+            toast(done + ' of ' + keys.length + ' moved to ' + status);
+            loadInbox();
+          });
       };
 
       for (const ev of rows) {
@@ -2170,8 +2234,9 @@ const launcherPageHTML = `<!doctype html>
         head2.style.display = 'flex';
         head2.style.alignItems = 'center';
         head2.style.gap = '.4rem';
-        // Only new issues batch — a review comment is about one thread.
-        if (ev.actionable && ev.kind === 'issue.new') {
+        // Anything can be selected: a batch can be moved or dismissed even
+        // when it cannot be handed to one session.
+        {
           const tick = document.createElement('input');
           tick.type = 'checkbox';
           tick.onchange = () => { tick.checked ? picked.add(ev.key) : picked.delete(ev.key); refresh(); };
@@ -2222,7 +2287,6 @@ const launcherPageHTML = `<!doctype html>
           };
           row.appendChild(go);
         }
-        const board = boards[ev.workspace] || {};
         if ((board.columns || []).length) {
           const mv = document.createElement('button');
           mv.textContent = 'Move…';
@@ -3210,6 +3274,16 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	state := watch.LoadState(dir)
 	for _, e := range watch.RecentEvents(dir, 40) {
 		if state.IsIgnored(e.Key) {
+			continue
+		}
+		// Merged, closed, done: the row is history, not work. The daemon
+		// refreshes these each round, so a merge request merged an hour after
+		// it was recorded stops being listed without anyone dismissing it.
+		current := e.State
+		if now, ok := moved.Get(e.Key); ok {
+			current = now.Status
+		}
+		if watch.FinishedState(current) != "" {
 			continue
 		}
 		state := e.State

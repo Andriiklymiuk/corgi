@@ -208,6 +208,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 			Round: func(now time.Time) {
 				d.watchState.NewRound()
 				d.releaseHeld(spec, now)
+				go d.refreshInboxStates(ctx, spec)
 			}}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = &sync.Mutex{}
@@ -786,4 +787,43 @@ func (s WatchSpec) FixesKind(kind watch.Kind) bool {
 		}
 	}
 	return false
+}
+
+// refreshInboxStates asks each source whether the things still sitting in the
+// inbox are still open. An event is recorded once and never revisited, so a
+// merge request merged an hour later, or a review someone has since given,
+// stayed on the phone looking like work. Cheap: only what is still listed,
+// only the pull-request kinds, once a round.
+func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
+	if d.watchState == nil {
+		return
+	}
+	states := watch.LoadStateLog(d.Dir)
+	for _, e := range watch.RecentEvents(d.Dir, 25) {
+		if e.Workspace != spec.Workspace || e.Ref == "" {
+			continue
+		}
+		switch e.Kind {
+		case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested,
+			watch.KindIssueNew, watch.KindIssueComment:
+		default:
+			continue
+		}
+		if d.watchState.IsIgnored(e.Key) {
+			continue
+		}
+		if known, ok := states.Get(e.Key); ok && watch.FinishedState(known.Status) != "" {
+			continue // already known to be over
+		}
+		for _, src := range spec.Sources {
+			asker, ok := src.(watch.StillOpen)
+			if !ok {
+				continue
+			}
+			if state := asker.RefState(ctx, e.Ref); state != "" {
+				_ = states.Set(e.Key, state, time.Now())
+				break
+			}
+		}
+	}
 }

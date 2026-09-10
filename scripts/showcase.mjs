@@ -611,6 +611,49 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		page(term("corgi agent watch — unattended", l, { rows: s.length, cursor: i < 10 }))));
 }
 
+// ---- the three things a teammate actually sees it do, in order ----
+{
+	const s = [
+		"{g}${/} {B}corgi agent watch enable --action fix \\{/}",
+		"    {B}--auto-for requests,reviews,comments,tickets \\{/}",
+		"    {B}--prs --reviews --pickup \"In Progress\" --review-status \"In Review\"{/}",
+		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix",
+		"",
+		"{m}━━ 1 ━━  someone asks for my review{/}",
+		"{y}🔔{/} sam wants your review on acme/api!318 — Reconcile the stale user rows on connect",
+		"{d}   corgi reads the diff. Their branch, so it comments — it never pushes.{/}",
+		"{g}🔔{/} reviewed acme/api!318 — 3 comments, 1 blocking",
+		"{d}   « the retry loop swallows a 429; it will look like success »{/}",
+		"",
+		"{m}━━ 2 ━━  someone comments on mine{/}",
+		"{y}🔔{/} max commented on acme/api!294: please cover the empty-path case",
+		"{d}   my branch, so it fixes it: applies, replies in the thread, pushes.{/}",
+		"{g}🔔{/} fixed acme/api!294 — https://gitlab.com/acme/api/-/merge_requests/294",
+		"",
+		"{m}━━ 3 ━━  a ticket lands in READY TO DEV, assigned to me{/}",
+		"{y}🔔{/} new issue ABC-142 — Send the image manifest with the bootstrap",
+		"{c}   claimed on the ticket   {/}{d}so the desktop leaves it alone{/}",
+		"{c}   READY TO DEV ▸ In Progress{/}",
+		"{d}   …works it in the checkout, then reviews its own diff{/}",
+		"{c}   draft MR opened      {/}{d}https://gitlab.com/acme/api/-/merge_requests/301{/}",
+		"{c}   In Progress ▸ In Review{/}{d}   and the link posted on ABC-142{/}",
+		"{g}🔔{/} fixed ABC-142 — https://gitlab.com/acme/api/-/merge_requests/301",
+		"",
+		"{d}# in the morning{/}",
+		"{g}${/} {B}corgi agent while-away{/}",
+		"Since Wed 9 Sep 23:00",
+		"",
+		"corgi opened",
+		"  acme/api!294                 opened 1 MR (acme-stack)",
+		"  ABC-142                      opened 1 MR (acme-stack)",
+		"arrived",
+		"  acme/api!318                 review.requested (acme-stack)",
+	];
+	// Slow, even beats: this one is shown to people who have not seen corgi.
+	scene("story", grow(s, [3, 4, 6, 8, 10, 11, 13, 15, 16, 18, 19, 20, 21, 22, 23, 24, 26, 28, 34])
+		.map((l, i) => page(term("corgi — while you were in a meeting", l, { rows: s.length, cursor: i < 18 }))));
+}
+
 // ---- the two commands that make leaving it on a decision you can reverse ----
 {
 	const s = [

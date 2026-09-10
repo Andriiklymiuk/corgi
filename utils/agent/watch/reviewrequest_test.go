@@ -7,7 +7,7 @@ import "testing"
 // colleague's branch. They are opposites.
 func TestAReviewRequestIsNotFeedbackOnMyOwnPR(t *testing.T) {
 	mine := Rules{Enabled: true, PRs: true}
-	request := Event{Kind: KindReviewRequested, Ref: "acme/api!9", Author: "camille", URL: "https://x/-/merge_requests/9"}
+	request := Event{Kind: KindReviewRequested, Ref: "acme/api!9", Author: "sam", URL: "https://x/-/merge_requests/9"}
 
 	if mine.Match(request) {
 		t.Fatal("--prs is about my pull requests; reviewing someone else's is a different job")
@@ -30,7 +30,7 @@ func TestAReviewRequestIsNotFeedbackOnMyOwnPR(t *testing.T) {
 	}
 
 	// Feedback on my own PR still needs --prs, not --reviews.
-	feedback := Event{Kind: KindPRReview, Ref: "acme/api!8", Mine: true, Author: "jarno"}
+	feedback := Event{Kind: KindPRReview, Ref: "acme/api!8", Mine: true, Author: "max"}
 	if asked.Match(feedback) {
 		t.Fatal("--reviews must not silently take feedback on my own PRs")
 	}

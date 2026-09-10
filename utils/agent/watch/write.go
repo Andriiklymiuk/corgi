@@ -478,3 +478,36 @@ func (l *Linear) RecentComments(ctx context.Context, ref string, limit int) ([]C
 	}
 	return comments, nil
 }
+
+// RefState is a Jira issue's current column, so a ticket someone finished
+// can leave the inbox.
+func (j *Jira) RefState(ctx context.Context, ref string) string {
+	var issue struct {
+		Fields struct {
+			Status struct {
+				Name string `json:"name"`
+			} `json:"status"`
+		} `json:"fields"`
+	}
+	params := url.Values{}
+	params.Set("fields", "status")
+	if err := j.get(ctx, "/rest/api/3/issue/"+url.PathEscape(ref), params, &issue); err != nil {
+		return ""
+	}
+	return issue.Fields.Status.Name
+}
+
+// RefState is a Linear issue's current state.
+func (l *Linear) RefState(ctx context.Context, ref string) string {
+	var out struct {
+		Issue *struct {
+			State struct {
+				Name string `json:"name"`
+			} `json:"state"`
+		} `json:"issue"`
+	}
+	if l.query(ctx, "query { issue(id: "+jsonString(ref)+") { state { name } } }", &out) != nil || out.Issue == nil {
+		return ""
+	}
+	return out.Issue.State.Name
+}
