@@ -1,6 +1,6 @@
 ---
 name: ci
-description: Use when the user wants the whole corgi stack running inside CI, or end-to-end tests that span several repos — "set up CI for this workspace", "add CI", "init the pipeline", "wire this up to GitHub Actions/GitLab CI", "run the stack in CI", "e2e across repos", "test the api + web branches together", "full-stack e2e on the PR", "why does each repo's CI pass but the combination break", "cross-repo integration test". Asking in chat is the whole interface: this scaffolds with `corgi ci init` and then does the workspace-specific wiring the generated file cannot know. Generates the pipeline (GitHub Actions or GitLab CI), wires per-repo PRs into one full-stack run via a shared branch name, gates on health, and always uploads logs + screenshots. NOT for authoring corgi-compose.yml (corgi skill), starting a stack locally (run skill), diagnosing an already-broken stack (debug skill), or reviewing PRs (review skill).
+description: Use when the user wants the corgi stack in CI or end-to-end tests across repos: "set up CI for this workspace", "wire this up to GitHub Actions/GitLab CI", "run the stack in CI", "full-stack e2e on the PR", "each repo's CI passes but the combination breaks". NOT for compose authoring, local runs, broken stacks, or PR review.
 ---
 
 # Corgi in CI

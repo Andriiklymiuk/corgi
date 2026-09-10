@@ -1,6 +1,6 @@
 ---
 name: memory
-description: The workspace memory convention for a corgi stack — a committed, shared `.corgi/memory/` store of decisions, incidents, domain facts, and recurring fixes that the suggest/debug/stories/review skills read before acting and append to after a notable outcome. Use when a skill needs to read prior workspace decisions/incidents, when recording why a choice was made or how an incident was fixed, or when a recurring fix should be PROPOSED as a learned skill/template. Read-before-act, confirm-before-write, never stores secrets, never auto-installs anything.
+description: The memory convention: a committed `.corgi/memory/` store of decisions, incidents, and recurring fixes that suggest, debug, stories, and review read before acting and append to afterwards. Use to read prior decisions, record a decision or an incident fix, or propose a recurring fix as a skill. Read before act, confirm before write, never secrets.
 ---
 
 # Corgi workspace memory
