@@ -58,6 +58,9 @@ them.
 | `corgi_workspaces` | — | registered stacks with `status` (`ok`/`unreachable`/`disabled`) | |
 | `corgi_workspace_resolve` | `query` | one workspace or candidates | never guesses |
 | `corgi_agent_status` | — | daemon health, per-workspace session, restarts, wake lock, account | answers "is it up" / "why did it die" |
+| `corgi_watch_status` | `workspace?` | per workspace: what is watched, which sources have a token (fingerprint only), last poll, `whatIsMissing[]` | read this BEFORE enabling — half the answer is usually already there |
+| `corgi_watch_enable` | `workspace?, tracker?, project?, repos[], states[], labels[], comments?, prs?, action?` | the saved rules + `whatIsMissing[]` | `project`/`repos` are what route an event to a workspace — derive them from the repos, never guess. **Takes no token**: tokens go through `corgi agent watch auth --local`, never a tool call. Needs `corgi agent restart` |
+| `corgi_watch_events` | `workspace?, limit?` | `[{key, kind, ref, title, url, workspace, at, canWorkOn}]` | answers "what came in?"; `canWorkOn` means a skill exists — issue → `/corgi:stories`, review → `/corgi:review` |
 | `corgi_session_start` | `workspace, profile?, name?` | `state: starting` | poll `corgi_agent_status` for `running` + `sessionUrl`; idempotent |
 | `corgi_session_stop` | `workspace` | `state: stopping` | stopping a non-running workspace is a no-op |
 | `corgi_session_events` | `workspace, limit?` | timeline, newest first | starts, exits with cause, session links; never session output |

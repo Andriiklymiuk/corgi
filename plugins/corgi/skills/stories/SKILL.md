@@ -1,6 +1,6 @@
 ---
 name: stories
-description: Use when the user wants to ship work across a corgi-compose workspace: a batch of tracker issues (Linear/Jira keys like ABC-123; "do these stories", "implement these tickets"), a free-text feature ("build a feature that ...", "add X across the services"), or "what should I work on", "grab some agent tickets". NOT for authoring or running compose, or one-line edits.
+description: Use when the user wants to ship work across a corgi-compose workspace: tracker issues named by key (ABC-123), by tracker LINK (linear.app/…/issue/…, …atlassian.net/browse/…), or by several links or keys at once — "do this story <link>", "do <link>, <link>", "do these stories", "implement these tickets"; a bare tracker link with no verb means this too. Also a free-text feature ("build a feature that ...", "add X across the services"), or "what should I work on", "grab some agent tickets". NOT for authoring or running compose, or one-line edits.
 ---
 
 # Corgi stories
@@ -159,6 +159,10 @@ agents, tracker MCP.
 **Route the intake first — what am I building?**
 
 - **Explicit tickets** (keys/links) or a **free-text feature** → continue below.
+  A link IS a ticket: `linear.app/<org>/issue/ABC-123/…` and
+  `<site>.atlassian.net/browse/ABC-123` both carry the key — take it from the URL
+  and carry on, never ask which ticket was meant. Several links or keys in one
+  message are **one batch**, not one run each: they get specced together.
 - **"Find/pick what to work on"**, nothing named → **don't guess tickets.** Resolve
   via the `tracker` skill's **pickup** — the `agent` queue (label `agent`, not In
   Progress/Done), drift-skipped — confirm picks, then build here. Same selection as

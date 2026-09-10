@@ -1541,6 +1541,51 @@ func registerMCPTools(s *server.MCPServer) {
 
 	registerAgentMCPTools(s)
 
+	s.AddTool(mcp.NewTool("corgi_watch_status",
+		mcp.WithDescription("What each registered workspace watches on the tracker and code host, and what it still needs before anything arrives. Returns one row per workspace: {workspace, dir, enabled, tracker, project, repos, states, prs, comments, action, hasOwnTokens, sources[], whatIsMissing[]}. sources says which of linear/jira/github/gitlab has a token (fingerprint only, never the token) and when each last polled. whatIsMissing is the ordered list of what to fix — read it before calling corgi_watch_enable. Read-only."),
+		mcp.WithString("workspace", mcp.Description("Only this workspace id")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpWatchStatus(watchStatusArgs{Workspace: r.GetString("workspace", "")})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_watch_enable",
+		mcp.WithDescription("Turn on the tracker and code-host watch for one workspace, and report what it still needs. Use when someone asks to watch a tracker or their reviews (\"watch the jira issues here\", \"tell me when someone comments on my MRs\"). project is the issue-key prefix and repos are owner/name — they are what route an event to this workspace, so derive them from the repos' own commit ids and remotes rather than guessing; a wrong key routes nothing and looks like a quiet week. states filters NEW ISSUES only, and stops a backlog arriving every poll. Tokens are NOT set here and must never be put in a tool call: run `corgi agent watch auth <source> --local` inside the workspace. Writes the user config; run corgi agent restart afterwards."),
+		mcp.WithString("workspace", mcp.Description("Workspace id; omitted means the one the cwd is in")),
+		mcp.WithString("tracker", mcp.Description("linear or jira; omitted keeps whichever token exists")),
+		mcp.WithString("project", mcp.Description("Issue key prefix, e.g. ABC for ABC-123 — read it off the repos, never guess")),
+		mcp.WithArray("repos", mcp.Description("owner/name of every repo whose reviews belong to this workspace"), mcp.WithStringItems()),
+		mcp.WithArray("states", mcp.Description("Tracker state names that a NEW issue must be in; use the tracker's real names"), mcp.WithStringItems()),
+		mcp.WithArray("labels", mcp.Description("Labels a new issue must carry"), mcp.WithStringItems()),
+		mcp.WithBoolean("comments", mcp.Description("Comments on issues assigned to me")),
+		mcp.WithBoolean("prs", mcp.Description("Reviews and comments on my pull requests")),
+		mcp.WithString("action", mcp.Description("notify (default) or fix — fix runs a headless agent, draft PRs only")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		args := watchEnableArgs{
+			Workspace: r.GetString("workspace", ""),
+			Tracker:   r.GetString("tracker", ""),
+			Project:   r.GetString("project", ""),
+			Repos:     r.GetStringSlice("repos", nil),
+			States:    r.GetStringSlice("states", nil),
+			Labels:    r.GetStringSlice("labels", nil),
+			Action:    r.GetString("action", ""),
+		}
+		args.Comments = optionalBool(r, "comments")
+		args.PRs = optionalBool(r, "prs")
+		return mcpWatchEnable(args)
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_watch_events",
+		mcp.WithDescription("What the watch has seen, newest first: {key, kind, ref, title, url, workspace, at, canWorkOn}. kind is issue.new | issue.comment | pr.comment | pr.review. canWorkOn says corgi knows a skill for it — a new issue hands to /corgi:stories, a review to /corgi:review in address mode. Use it to answer \"what came in?\" and to pick what to work on. Read-only."),
+		mcp.WithString("workspace", mcp.Description("Only this workspace's events")),
+		mcp.WithNumber("limit", mcp.Description("How many, newest first (default 25)")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		events, err := watchEventsForMCP(r.GetString("workspace", ""), int(r.GetFloat("limit", 25)))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"events": events}, nil
+	}))
+
 	s.AddTool(mcp.NewTool("corgi_validate",
 		mcp.WithDescription("Statically validate corgi-compose.yml (no side effects). Returns {ok, errors[], warnings[]}."),
 		composeOpt,
