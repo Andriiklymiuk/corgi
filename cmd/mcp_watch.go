@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -337,4 +338,70 @@ func watchEventsForMCP(workspaceID string, limit int) ([]map[string]any, error) 
 		})
 	}
 	return out, nil
+}
+
+// mcpWatchBoard is the tracker's real columns, so a caller offering a move
+// picks from what exists instead of guessing a column name.
+func mcpWatchBoard(workspaceID string, refresh bool) (map[string]any, error) {
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	if workspaceID == "" {
+		if workspaceID, err = currentWorkspaceID(dir); err != nil {
+			return nil, err
+		}
+	}
+	info := watch.LoadBoardCache(dir).Get(workspaceID)
+	if refresh || !info.Has() {
+		w, project, err := watchWriter(dir, workspaceID)
+		if err != nil && w == nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if info, err = watch.RefreshBoard(ctx, dir, workspaceID, w, project); err != nil {
+			return nil, err
+		}
+	}
+	names := make([]string, 0, len(info.Statuses))
+	for _, s := range info.Statuses {
+		names = append(names, s.Name)
+	}
+	out := map[string]any{"workspace": workspaceID, "tracker": info.Tracker, "project": info.Project, "columns": names}
+	if info.Me.Name != "" {
+		out["me"] = info.Me.Name
+	}
+	if info.Error != "" {
+		out["problem"] = info.Error
+	}
+	return out, nil
+}
+
+// mcpWatchMove moves one ticket. Deliberate by construction: nothing calls
+// this on a poll.
+func mcpWatchMove(workspaceID, ref, status string) (map[string]any, error) {
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	if workspaceID == "" {
+		if workspaceID, err = currentWorkspaceID(dir); err != nil {
+			return nil, err
+		}
+	}
+	ref, status = strings.TrimSpace(ref), strings.TrimSpace(status)
+	if ref == "" || status == "" {
+		return nil, fmt.Errorf("name the ticket and the column to move it to")
+	}
+	w, _, err := watchWriter(dir, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := w.Move(ctx, ref, status); err != nil {
+		return nil, err
+	}
+	return map[string]any{"workspace": workspaceID, "ref": ref, "done": ref + " → " + status}, nil
 }

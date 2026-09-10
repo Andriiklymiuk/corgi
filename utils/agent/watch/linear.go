@@ -69,7 +69,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
     nodes { id identifier title description url state { name } labels { nodes { name } } assignee { id name } createdAt updatedAt }
   }
   comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt) {
-    nodes { id body createdAt user { id name } issue { identifier url title } }
+    nodes { id body createdAt user { id name } issue { identifier url title state { name } } }
     pageInfo { hasNextPage endCursor }
   }
 }`, issueFilter, graphqlString(commentsSince), strconv.Quote(l.Me))
@@ -95,7 +95,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	for page := data.Comments; page.PageInfo.HasNextPage && len(comments) < 500; {
 		var more struct{ Comments linearComments }
 		q := fmt.Sprintf(`{ comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt, after: %s) {
-    nodes { id body createdAt user { id name } issue { identifier url title } }
+    nodes { id body createdAt user { id name } issue { identifier url title state { name } } }
     pageInfo { hasNextPage endCursor }
   } }`, graphqlString(commentsSince), strconv.Quote(l.Me), strconv.Quote(page.PageInfo.EndCursor))
 		if err := l.query(ctx, q, &more); err != nil {
@@ -147,8 +147,11 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Title:  n.Issue.Title,
 			Body:   clip(n.Body, bodyMax),
 			URL:    n.Issue.URL,
-			Mine:   true,
-			At:     created,
+			// The issue's column travels with its comments, so the rules can
+			// tell a live discussion from chatter on finished work.
+			State: n.Issue.State.Name,
+			Mine:  true,
+			At:    created,
 		}
 		if n.User != nil {
 			e.Author = n.User.Name
@@ -166,7 +169,10 @@ type linearComments struct {
 	Nodes []struct {
 		ID, Body, CreatedAt string
 		User                *struct{ ID, Name string }
-		Issue               struct{ Identifier, URL, Title string }
+		Issue               struct {
+			Identifier, URL, Title string
+			State                  struct{ Name string }
+		}
 	}
 	PageInfo struct {
 		HasNextPage bool

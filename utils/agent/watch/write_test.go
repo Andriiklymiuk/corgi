@@ -78,7 +78,7 @@ func jiraStub(t *testing.T, transitions string, record *string) *Jira {
 }
 
 func TestJiraMovePicksTheTransitionByTargetStatus(t *testing.T) {
-	const offered = `{"transitions":[{"id":"31","name":"Start work","to":{"name":"In Progress"}},{"id":"41","name":"Ship","to":{"name":"TO TEST STAGING"}}]}`
+	const offered = `{"transitions":[{"id":"31","name":"Start work","to":{"name":"In Progress"}},{"id":"41","name":"Ship","to":{"name":"Ready for staging"}}]}`
 	var posted string
 	j := jiraStub(t, offered, &posted)
 

@@ -64,3 +64,39 @@ func TestSeveralCommentsOnOnePRAreOneThingToLookAt(t *testing.T) {
 		t.Fatalf("a comment next round is news again: %d", n)
 	}
 }
+
+// The real case: a comment arrived on a ticket that was already Done, and
+// the rules had no way to know — comment events carried no column at all.
+func TestACommentOnFinishedWorkIsNotWork(t *testing.T) {
+	rules := Rules{Enabled: true, Comments: true}
+
+	for _, state := range []string{"Done", "done", "Closed", "Resolved", "Completed", "Duplicate", "Cancelled"} {
+		e := Event{Kind: KindIssueComment, Ref: "ABC-1", State: state, Mine: true, Author: "sam"}
+		if rules.Match(e) {
+			t.Errorf("a comment on a %q issue is chatter", state)
+		}
+		if why := rules.Why(e); why == "" {
+			t.Errorf("state %q must say why it stopped", state)
+		}
+	}
+
+	// Work still in flight is exactly what comments are for.
+	for _, state := range []string{"In Progress", "In Review", "Ready", ""} {
+		if !rules.Match(Event{Kind: KindIssueComment, Ref: "ABC-1", State: state, Mine: true}) {
+			t.Errorf("a comment on a %q issue is the point of --comments", state)
+		}
+	}
+
+	// Naming the column means you meant it, even a finished one.
+	asked := Rules{Enabled: true, Comments: true, States: []string{"Done"}}
+	if !asked.Match(Event{Kind: KindIssueComment, Ref: "ABC-1", State: "Done", Mine: true}) {
+		t.Fatal("--states Done is a deliberate ask")
+	}
+
+	// A review on a merged PR is still feedback on my code; only tracker
+	// comments carry an issue column.
+	pr := Rules{Enabled: true, PRs: true}
+	if !pr.Match(Event{Kind: KindPRReview, Ref: "acme/api#7", State: "merged", Mine: true}) {
+		t.Fatal("a PR's own state is not an issue column")
+	}
+}

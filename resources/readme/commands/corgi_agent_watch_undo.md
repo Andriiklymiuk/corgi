@@ -1,30 +1,30 @@
-# corgi agent watch move
+# corgi agent watch undo
 
-## corgi agent watch move
+## corgi agent watch undo
 
-Move a ticket to another column
+Put back what the last unattended run did
 
 ### Synopsis
 
-Moves one ticket on the tracker, as you.
+Closes the pull requests a run opened and moves its ticket back to the column
+it was in, so leaving unattended mode on is a decision you can reverse.
 
-  corgi agent watch move ABC-123 "In Progress"
-  corgi agent watch move ABC-123 "Ready for staging"
-  corgi agent watch move ABC-1 Done --workspace api
+  corgi agent watch undo                # the most recent finished run
+  corgi agent watch undo ABC-123        # that one
+  corgi agent watch undo --dry-run      # say what it would do and stop
 
-The column names are the ones `corgi agent watch board` prints. Jira decides
-which moves are legal from where the ticket is now; a refused move says what it
-could have gone to instead.
+The branch is left alone: it holds the work, and deleting it is the one part
+that cannot be undone in turn.
 
 ```
-corgi agent watch move <REF> <status> [flags]
+corgi agent watch undo [REF] [flags]
 ```
 
 ### Options
 
 ```
-  -h, --help               help for move
-      --workspace string   Workspace id; omitted means the one you are in
+      --dry-run   Say what it would do and change nothing
+  -h, --help      help for undo
 ```
 
 ### Options inherited from parent commands

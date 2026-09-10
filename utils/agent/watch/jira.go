@@ -175,8 +175,11 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 				Body:   clip(jiraText(c.Body), bodyMax),
 				URL:    strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
 				Author: c.Author.DisplayName,
-				Mine:   true,
-				At:     created,
+				// The issue's column travels with its comments, so the rules
+				// can tell a live discussion from chatter on finished work.
+				State: issue.Fields.Status.Name,
+				Mine:  true,
+				At:    created,
 			})
 		}
 	}

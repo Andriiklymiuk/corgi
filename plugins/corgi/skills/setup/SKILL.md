@@ -301,3 +301,46 @@ URL), and the manual checklist that is still open.
 - The user has the launcher link and, if they wanted it, got a test
   notification on the phone.
 - The remaining manual steps are listed, each with its command or click.
+
+## Writing to the tracker
+
+`corgi agent watch board --refresh` first, always. It reads the workspace's real
+columns once and caches them; a column name you guessed is refused, and Jira also
+decides which moves are legal from where the ticket currently sits, so a refused
+move names the ones that were.
+
+- `--pickup "In Progress"` moves a ticket when someone picks it up — from the
+  phone's **Work on it** and from an unattended run. Unset writes nothing, which
+  is the default: no existing setup starts changing a board it was not asked to.
+- `corgi agent watch undo [REF]` closes what a run opened and puts the ticket
+  back. `--dry-run` says what it would do. The branch is left alone: it holds the
+  work, and deleting it is the part that cannot be undone in turn.
+
+## Choosing what runs unattended
+
+`--action fix` alone means every kind the rules match, including a fresh ticket,
+which is the one with no test for "done". Split it:
+
+```bash
+corgi agent watch enable --action fix --auto-for reviews,comments
+corgi agent watch enable --action fix --auto-for ci
+```
+
+- **reviews / comments** — a known, already-scoped change. The safest to hand over.
+- **ci** — needs `--ci` to arrive at all. A red build is the best unattended
+  target there is: a precise signal and a pass condition nobody can argue with.
+- **tickets** — a blank page. Leave it reporting until the rest has earned trust.
+
+A kind that was not named is reported, not worked, and `corgi agent watch test`
+answers `notify` for it, so the split is visible before an event arrives.
+
+## Noise
+
+- `--from max` narrows comments and reviews to the people you are actually
+  waiting on, across every repo. The rules are otherwise shaped like a board.
+- Tickets closed as duplicate, cancelled, won't do, not planned, rejected or
+  obsolete are skipped with the reason said out loud — unless `--states` names
+  that column, because asking for it means you meant it.
+- Several comments on one pull request collapse to one per poll.
+- `--quiet 17:00-09:00` holds notifications as well as fixes, and delivers one
+  summary when the window opens. It applies to a reporting watch too.

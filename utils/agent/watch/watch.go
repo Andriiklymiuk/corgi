@@ -30,6 +30,9 @@ const (
 	KindIssueComment Kind = "issue.comment"
 	KindPRComment    Kind = "pr.comment"
 	KindPRReview     Kind = "pr.review"
+	// KindCIFailed is a build that went red on something of mine. It is the
+	// one kind that arrives with its own test for "done".
+	KindCIFailed Kind = "ci.failed"
 )
 
 // Event is one thing worth telling a person or an agent about.
@@ -61,6 +64,7 @@ type Rules struct {
 	Assignee string   // "me" (default) or "any"
 	Comments bool     // comments on issues assigned to me
 	PRs      bool     // reviews and comments on my pull requests
+	CI       bool     // builds that went red on something of mine
 	// From narrows comments and reviews to these people, matched against the
 	// author's name or login. Half of what blocks a day is shaped like a
 	// person — the one review you are waiting on — not like a board.
@@ -82,20 +86,33 @@ func (r Rules) Why(e Event) string {
 			return "issue comments need --comments"
 		case KindPRComment, KindPRReview:
 			return "PR reviews and comments need --prs"
+		case KindCIFailed:
+			return "red builds need --ci"
 		}
 		return "kind " + string(e.Kind) + " is not watched"
 	}
 	switch e.Kind {
+	case KindCIFailed:
+		if !e.Mine {
+			return "not on something of mine"
+		}
 	case KindPRComment, KindPRReview, KindIssueComment:
 		if !e.Mine {
 			return "not on something of mine"
+		}
+		// A comment on work that is already finished, duplicated or cancelled
+		// is chatter, not a thing to do. Explicit --states wins, as ever.
+		if e.Kind == KindIssueComment && len(r.States) == 0 {
+			if over := finishedState(e.State); over != "" {
+				return "the issue is " + over + " — the comment is not work"
+			}
 		}
 		if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
 			return fmt.Sprintf("it is from %s, and you are waiting on %s",
 				orNone([]string{e.Author}), strings.Join(r.From, ", "))
 		}
 	case KindIssueNew:
-		if dead := deadState(e.State); dead != "" {
+		if dead := finishedState(e.State); dead != "" {
 			// A ticket someone has already closed as a duplicate is the one
 			// piece of work guaranteed to be wasted. Explicit --states wins:
 			// asking for a column means you meant it.
@@ -128,10 +145,22 @@ var deadStates = map[string]string{
 	"rejected": "rejected",
 }
 
-// deadState names why a ticket in this state is not worth anyone's time,
-// or "" when the state is a normal one.
-func deadState(state string) string {
-	return deadStates[strings.ToLower(strings.TrimSpace(state))]
+// closedStates are the columns where the work is over. A comment arriving on
+// one of these is someone tidying up, not something to act on.
+var closedStates = map[string]string{
+	"done": "done", "closed": "closed", "resolved": "resolved",
+	"complete": "done", "completed": "done", "shipped": "shipped",
+	"released": "released", "merged": "merged", "to release": "waiting on a release",
+}
+
+// finishedState names why a ticket in this state is not worth anyone's time,
+// or "" when there is still work in it.
+func finishedState(state string) string {
+	key := strings.ToLower(strings.TrimSpace(state))
+	if why, ok := deadStates[key]; ok {
+		return why
+	}
+	return closedStates[key]
 }
 
 // matchesPerson says an author is one of the people being waited on. A
@@ -164,6 +193,8 @@ func (r Rules) matchesKind(k Kind) bool {
 		return false
 	}
 	switch k {
+	case KindCIFailed:
+		return r.CI
 	case KindPRComment, KindPRReview:
 		return r.PRs
 	case KindIssueComment:
@@ -183,7 +214,7 @@ func (r Rules) MatchesNothing() bool { return !r.Enabled }
 var sourceKinds = map[string][]Kind{
 	"linear": {KindIssueNew, KindIssueComment},
 	"jira":   {KindIssueNew, KindIssueComment},
-	"github": {KindPRComment, KindPRReview},
+	"github": {KindPRComment, KindPRReview, KindCIFailed},
 	"gitlab": {KindPRComment, KindPRReview},
 }
 

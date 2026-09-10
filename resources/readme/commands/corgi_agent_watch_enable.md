@@ -15,6 +15,7 @@ corgi agent watch enable [flags]
       --assignee string    me (default) or any
       --auto               Shorthand for --action fix --prs --comments: work on what arrives without being asked, draft PRs only
       --auto-for string    With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything
+      --ci                 Also builds that went red on something of mine — the one kind that brings its own test for done
       --comments           Also new comments on issues assigned to me
       --from string        Only comments and reviews from these people (comma separated); empty is anyone
   -h, --help               help for enable

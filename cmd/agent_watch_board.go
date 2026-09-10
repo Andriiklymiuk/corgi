@@ -123,8 +123,8 @@ var agentWatchMoveCmd = &cobra.Command{
 	Short: "Move a ticket to another column",
 	Long: `Moves one ticket on the tracker, as you.
 
-  corgi agent watch move IMP-13427 "In Progress"
-  corgi agent watch move IMP-13427 "TO TEST STAGING"
+  corgi agent watch move ABC-123 "In Progress"
+  corgi agent watch move ABC-123 "Ready for staging"
   corgi agent watch move ABC-1 Done --workspace api
 
 The column names are the ones ` + "`corgi agent watch board`" + ` prints. Jira decides
@@ -146,7 +146,7 @@ var agentWatchAssignCmd = &cobra.Command{
 	Short: "Assign a ticket to yourself",
 	Long: `Assigns one ticket to whoever the workspace's tracker token belongs to.
 
-  corgi agent watch assign IMP-13427`,
+  corgi agent watch assign ABC-123`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runTrackerWrite(cmd, "agent_watch_assign", args[0], func(ctx context.Context, w watch.Writer, ref string) (string, error) {
@@ -226,12 +226,14 @@ var autoForNames = map[string][]string{
 	"issues":   {"issue.new"},
 	"comments": {"issue.comment", "pr.comment"},
 	"reviews":  {"pr.review"},
+	"ci":       {"ci.failed"},
+	"builds":   {"ci.failed"},
 	"prs":      {"pr.review", "pr.comment"},
 	"all":      nil,
 }
 
 var knownWatchKinds = map[string]bool{
-	"issue.new": true, "issue.comment": true, "pr.comment": true, "pr.review": true,
+	"issue.new": true, "issue.comment": true, "pr.comment": true, "pr.review": true, "ci.failed": true,
 }
 
 // parseAutoFor turns "tickets,reviews" into the event kinds a fix may run
@@ -247,7 +249,7 @@ func parseAutoFor(raw string) ([]string, error) {
 		group, named := autoForNames[word]
 		if !named {
 			if !knownWatchKinds[word] {
-				return nil, fmt.Errorf("--auto-for %q: say tickets, comments, reviews, prs or all, or a kind like pr.review", part)
+				return nil, fmt.Errorf("--auto-for %q: say tickets, comments, reviews, prs, ci or all, or a kind like pr.review", part)
 			}
 			group = []string{word}
 		}

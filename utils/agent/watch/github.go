@@ -52,6 +52,10 @@ var githubReasons = map[string]struct {
 	"author":           {KindPRComment, true},
 	"comment":          {KindPRComment, true},
 	"team_mention":     {KindPRComment, false},
+	// GitHub's default for Actions is to notify only when a run you caused
+	// fails, so ci_activity on your own repo is a red build. It arrives as a
+	// CheckSuite, not a PullRequest, and is only polled when --ci asked.
+	"ci_activity": {KindCIFailed, true},
 }
 
 type githubThread struct {
@@ -122,11 +126,31 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 
 	var events []Event
 	for _, t := range threads {
-		if t.Subject.Type != "PullRequest" || !g.wantsRepo(t.Repository.FullName) {
+		if !g.wantsRepo(t.Repository.FullName) {
 			continue
 		}
 		r, ok := githubReasons[t.Reason]
 		if !ok {
+			continue
+		}
+		if r.kind == KindCIFailed {
+			if t.Subject.Type != "CheckSuite" {
+				continue
+			}
+			at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
+			events = append(events, Event{
+				Key:    "github:ci:" + t.Repository.FullName + ":" + t.ID + ":" + t.UpdatedAt,
+				Source: g.Name(),
+				Kind:   KindCIFailed,
+				Ref:    t.Repository.FullName,
+				Title:  firstNonEmptyText(t.Subject.Title, "a workflow run failed"),
+				URL:    "https://github.com/" + t.Repository.FullName + "/actions",
+				Mine:   true,
+				At:     at,
+			})
+			continue
+		}
+		if t.Subject.Type != "PullRequest" {
 			continue
 		}
 		number := t.Subject.URL[strings.LastIndex(t.Subject.URL, "/")+1:]
@@ -144,6 +168,13 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		})
 	}
 	return events, next, nil
+}
+
+func firstNonEmptyText(s, fallback string) string {
+	if strings.TrimSpace(s) == "" {
+		return fallback
+	}
+	return s
 }
 
 func (g *GitHub) wantsRepo(fullName string) bool {

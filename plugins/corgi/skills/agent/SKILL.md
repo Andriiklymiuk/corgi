@@ -594,9 +594,12 @@ corgi agent usage [--json|--watch]                   # every account: 5h and wee
 corgi agent carry <session> --profile work           # continue a limited session under another listed account
 corgi agent claude --profile auto                    # start under the listed account with the most budget
 corgi agent watch enable --auto-for reviews,comments # work those unattended; a fresh ticket only notifies
+corgi agent watch enable --ci                        # red builds too: the one kind with its own test for done
+corgi agent watch enable --from max                  # only the reviewer you are waiting on
+corgi agent watch undo [REF] [--dry-run]             # close what a run opened, put its ticket back
 corgi agent watch enable --pickup "In Progress"      # picking a story up moves it on the board
 corgi agent watch board [--refresh]                  # the tracker columns corgi knows
-corgi agent watch move IMP-1 "TO TEST STAGING"       # move, assign, comment: writes as you
+corgi agent watch move ABC-123 "Ready for staging"  # move, assign, comment: writes as you
 corgi agent today [--write]                          # today since midnight, the watch's own runs included
 corgi agent standup [--since 48h] [--write]          # a rolling window of the same
 corgi agent digest --send                            # the daily message (digestAt in the user config)

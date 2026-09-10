@@ -8,7 +8,7 @@ Assign a ticket to yourself
 
 Assigns one ticket to whoever the workspace's tracker token belongs to.
 
-  corgi agent watch assign IMP-13427
+  corgi agent watch assign ABC-123
 
 ```
 corgi agent watch assign <REF> [flags]
