@@ -226,6 +226,7 @@ var autoForNames = map[string][]string{
 	"issues":   {"issue.new"},
 	"comments": {"issue.comment", "pr.comment"},
 	"reviews":  {"pr.review"},
+	"requests": {"review.requested"},
 	"ci":       {"ci.failed"},
 	"builds":   {"ci.failed"},
 	"prs":      {"pr.review", "pr.comment"},
@@ -233,7 +234,7 @@ var autoForNames = map[string][]string{
 }
 
 var knownWatchKinds = map[string]bool{
-	"issue.new": true, "issue.comment": true, "pr.comment": true, "pr.review": true, "ci.failed": true,
+	"issue.new": true, "issue.comment": true, "pr.comment": true, "pr.review": true, "review.requested": true, "ci.failed": true,
 }
 
 // parseAutoFor turns "tickets,reviews" into the event kinds a fix may run
@@ -249,7 +250,7 @@ func parseAutoFor(raw string) ([]string, error) {
 		group, named := autoForNames[word]
 		if !named {
 			if !knownWatchKinds[word] {
-				return nil, fmt.Errorf("--auto-for %q: say tickets, comments, reviews, prs, ci or all, or a kind like pr.review", part)
+				return nil, fmt.Errorf("--auto-for %q: say tickets, comments, reviews, requests, prs, ci or all, or a kind like pr.review", part)
 			}
 			group = []string{word}
 		}

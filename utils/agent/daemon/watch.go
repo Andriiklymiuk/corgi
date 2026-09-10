@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,11 @@ type WatchSpec struct {
 	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts.
 	Quiet string
 }
+
+// blockerWindow is how long a blocking failure is believed. Long enough to
+// stop a run every three minutes, short enough that a credential fixed this
+// morning is forgotten by the afternoon.
+const blockerWindow = 2 * time.Hour
 
 const (
 	DefaultMaxFixesPerHour = 3
@@ -250,6 +256,10 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		if dup := d.watchState.SameRefThisRound(spec.Workspace, e); dup > 0 {
 			return
 		}
+		// Dismissed from the inbox means dismissed here too.
+		if d.watchState.IsIgnored(e.Key) {
+			return
+		}
 		body := watchBody(e)
 		if spec.FixesKind(e.Kind) {
 			if note := d.startFix(ctx, spec, e); note != "" {
@@ -408,6 +418,8 @@ func watchBody(e watch.Event) string {
 		return fmt.Sprintf("%s reviewed %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, firstNonEmpty(e.Body, e.State))
 	case watch.KindCIFailed:
 		return fmt.Sprintf("red build in %s — %s", e.Ref, e.Title)
+	case watch.KindReviewRequested:
+		return fmt.Sprintf("%s wants your review on %s — %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Title)
 	default:
 		return fmt.Sprintf("%s commented on %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Body)
 	}
@@ -437,6 +449,13 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	},
 	watch.KindPRComment: reviewFeedbackPrompt,
 	watch.KindPRReview:  reviewFeedbackPrompt,
+	watch.KindReviewRequested: func(e watch.Event) string {
+		// Someone else's branch. Read it, say what you think, change nothing.
+		return "Review this pull request, which " + firstNonEmpty(e.Author, "a colleague") +
+			" asked me to review: " + e.URL + ". It is THEIR branch — read the diff and post a review " +
+			"(a summary and inline comments). Do not push commits to it, do not resolve their threads, " +
+			"and do not approve it on my behalf. If it is good, say so and say why. /corgi:review " + e.URL
+	},
 	watch.KindCIFailed: func(e watch.Event) string {
 		// The one kind that brings its own test for "done": make it green.
 		return "A build went red in " + e.Ref + ": " + e.Title + ". " +
@@ -533,6 +552,17 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	defer logFile.Close()
 
+	// A wall this workspace has hit twice running is not worth a third run:
+	// a missing credential or a refused permission will still be missing in
+	// an hour. Deferred, so a manual run picks it up once it is fixed.
+	if kind, runs := d.watchState.Fixes.RecentBlocker(spec.Workspace, blockerWindow, time.Now()); runs >= 2 {
+		d.watchState.Fixes.Defer(e)
+		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: the last "+strconv.Itoa(runs)+" runs here failed on "+kind, time.Now())
+		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
+			"not working on "+e.Ref+": the last runs failed on "+kind+" — fix that and run corgi agent watch run",
+			spec.Workspace, e.URL)
+		return
+	}
 	if d.Pickup != nil {
 		d.Pickup(spec.Workspace, e)
 	}

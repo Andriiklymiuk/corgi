@@ -76,7 +76,9 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 		}
 	}
 	// The event goes back in the inbox: undoing a run means it was not done.
-	watch.LoadState(dir).Unsee(run.Key)
+	st := watch.LoadState(dir)
+	st.Unsee(run.Key)
+	_ = st.Unignore(run.Key)
 	reportUndo(plan, problems)
 }
 

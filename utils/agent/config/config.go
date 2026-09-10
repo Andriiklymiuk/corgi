@@ -247,6 +247,8 @@ type WatchConfig struct {
 	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts, e.g.
 	// "23:00-07:00"; empty means none.
 	Quiet string `yaml:"quiet,omitempty"`
+	// Reviews reports pull requests someone asked me to review.
+	Reviews bool `yaml:"reviews,omitempty"`
 	// CI reports builds that went red on something of mine.
 	CI bool `yaml:"ci,omitempty"`
 	// From narrows comments and reviews to these people; empty is anyone.

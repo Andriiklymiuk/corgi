@@ -113,6 +113,9 @@ var agentWatchEnableCmd = &cobra.Command{
 				return fmt.Errorf("--max-per-day must be at least 1")
 			}
 		}
+		if flags.Changed("reviews") {
+			wc.Reviews, _ = flags.GetBool("reviews")
+		}
 		if flags.Changed("ci") {
 			wc.CI, _ = flags.GetBool("ci")
 		}
@@ -535,8 +538,8 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		events := []eventRow{}
 		moved := watch.LoadStateLog(dir)
 		for _, e := range watch.RecentEvents(dir, 25) {
-			if state.IsSeen(e.Key) && e.Kind == watch.KindIssueNew {
-				continue // handled or ignored: not waiting on anyone
+			if state.IsIgnored(e.Key) {
+				continue // dismissed: not waiting on anyone
 			}
 			at := e.State
 			if now, ok := moved.Get(e.Key); ok {
@@ -636,7 +639,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		}
 		secrets := watch.LoadSecretsFor(dir, w.ID)
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
-			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, From: wc.From},
+			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
 			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds}
 		if wc.Action == "fix" {
@@ -913,13 +916,14 @@ func init() {
 	f.String("action", "", "notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only")
 	f.String("workspace", "", "Workspace id to change; omitted means the one you are in")
 	agentWatchDisableCmd.Flags().String("workspace", "", "Workspace id to stop watching; omitted means the one you are in")
-	f.Bool("auto", false, "Shorthand for --action fix --prs --comments: work on what arrives without being asked, draft PRs only")
+	f.Bool("auto", false, "Shorthand for --action fix --prs --comments (not --reviews: reviewing someone else's PR is a separate ask): work on what arrives without being asked, draft PRs only")
 	f.Bool("comments", false, "Also new comments on issues assigned to me")
 	f.Bool("prs", false, "Also reviews and comments on pull requests I opened")
 	f.Int("max-per-hour", 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
 	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
 	f.String("quiet", "", "Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
+	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
 	f.String("auto-for", "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")

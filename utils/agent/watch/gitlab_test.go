@@ -63,8 +63,10 @@ func TestGitLabPoll(t *testing.T) {
 		t.Fatalf("events = %d, want 2: %+v", len(events), events)
 	}
 	review, comment := events[0], events[1]
-	if review.Key != "gitlab:todo:9" || review.Kind != KindPRReview || review.Ref != "acme/api!12" ||
-		review.Title != "Add retries" || review.Author != "bob" || !review.Mine || review.Source != "gitlab" ||
+	// A review request is on someone else's merge request, so it is not mine;
+	// every other todo is.
+	if review.Key != "gitlab:todo:9" || review.Kind != KindReviewRequested || review.Ref != "acme/api!12" ||
+		review.Title != "Add retries" || review.Author != "bob" || review.Mine || review.Source != "gitlab" ||
 		review.URL != "https://gitlab.com/acme/api/-/merge_requests/12" || review.At.IsZero() {
 		t.Errorf("review event = %+v", review)
 	}
