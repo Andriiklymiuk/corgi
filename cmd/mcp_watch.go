@@ -282,6 +282,40 @@ func githubCLIToken() string {
 	return token
 }
 
+// watchFixesForMCP is what the unattended mode did: what it worked on, and
+// what it opened. The notification announcing a PR is gone in a second; this
+// outlives it.
+func watchFixesForMCP(workspaceID string, limit int) ([]map[string]any, error) {
+	dir, err := agentDir()
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	out := []map[string]any{}
+	for _, r := range watch.LoadFixLog(dir).RecentFixes(workspaceID, limit) {
+		row := map[string]any{
+			"key": r.Key, "ref": r.Ref, "kind": r.Kind, "workspace": r.Workspace,
+			"startedAt": r.StartedAt.Format(time.RFC3339), "running": !r.Done(),
+		}
+		if r.URL != "" {
+			row["issueUrl"] = r.URL
+		}
+		if len(r.PRs) > 0 {
+			row["prs"] = r.PRs
+		}
+		if r.Note != "" {
+			row["note"] = r.Note
+		}
+		if r.Error != "" {
+			row["error"] = r.Error
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
 // watchEventsForMCP is the recent watch events, so a caller can act on them.
 func watchEventsForMCP(workspaceID string, limit int) ([]map[string]any, error) {
 	dir, err := agentDir()

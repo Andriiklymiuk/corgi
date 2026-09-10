@@ -592,8 +592,20 @@ var ErrNoToken = errors.New("no token")
 type FixRecord struct {
 	Key       string    `json:"key"`
 	Workspace string    `json:"workspace"`
+	Ref       string    `json:"ref,omitempty"`
+	Kind      string    `json:"kind,omitempty"`
+	Title     string    `json:"title,omitempty"`
+	URL       string    `json:"url,omitempty"`
 	StartedAt time.Time `json:"startedAt"`
+	// The outcome, filled in when the run ends: what it opened, or why not.
+	FinishedAt time.Time `json:"finishedAt,omitempty"`
+	PRs        []string  `json:"prs,omitempty"`
+	Note       string    `json:"note,omitempty"`
+	Error      string    `json:"error,omitempty"`
 }
+
+// Done says the run ended, either way.
+func (r FixRecord) Done() bool { return !r.FinishedAt.IsZero() }
 
 // FixLog is <agentDir>/watch/fixes.json: the fixes started, newest last,
 // and the events whose fix a cap, quiet hours or a limit deferred — kept
@@ -640,11 +652,74 @@ func (l *FixLog) save() error {
 // Start records a fix starting and drops the event from the deferred list
 // if it was waiting there.
 func (l *FixLog) Start(workspace, key string, at time.Time) {
+	l.StartFor(Event{Key: key, Workspace: workspace}, at)
+}
+
+// StartFor records a fix with enough of the event to report it later.
+func (l *FixLog) StartFor(e Event, at time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.Started = append(l.Started, FixRecord{Key: key, Workspace: workspace, StartedAt: at})
-	l.dropDeferred(key)
+	l.Started = append(l.Started, FixRecord{
+		Key: e.Key, Workspace: e.Workspace, Ref: e.Ref, Kind: string(e.Kind),
+		Title: e.Title, URL: e.URL, StartedAt: at,
+	})
+	l.dropDeferred(e.Key)
 	_ = l.save()
+}
+
+// Finish writes the outcome onto the newest unfinished run for the key, so
+// what a fix opened outlives the notification that announced it.
+func (l *FixLog) Finish(key string, prs []string, note, failure string, at time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key != key || l.Started[i].Done() {
+			continue
+		}
+		l.Started[i].FinishedAt = at
+		l.Started[i].PRs = prs
+		l.Started[i].Note = note
+		l.Started[i].Error = failure
+		_ = l.save()
+		return
+	}
+}
+
+// Interrupted closes every run that never reported an outcome and returns
+// their events' keys. A daemon killed mid-fix — a crash, a reboot, a laptop
+// closed — otherwise leaves the record "running" for good, and the event is
+// already in the seen list, so nobody would ever hear about that issue again.
+func (l *FixLog) Interrupted(reason string, at time.Time) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var keys []string
+	for i := range l.Started {
+		if l.Started[i].Done() {
+			continue
+		}
+		l.Started[i].FinishedAt = at
+		l.Started[i].Error = reason
+		keys = append(keys, l.Started[i].Key)
+	}
+	if len(keys) > 0 {
+		_ = l.save()
+	}
+	return keys
+}
+
+// RecentFixes is the newest runs first, at most limit, optionally one
+// workspace's.
+func (l *FixLog) RecentFixes(workspace string, limit int) []FixRecord {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := []FixRecord{}
+	for i := len(l.Started) - 1; i >= 0 && len(out) < limit; i-- {
+		if workspace != "" && l.Started[i].Workspace != workspace {
+			continue
+		}
+		out = append(out, l.Started[i])
+	}
+	return out
 }
 
 // StartedSince counts the workspace's fixes started at or after since.

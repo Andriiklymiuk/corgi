@@ -85,6 +85,11 @@ var agentWatchEnableCmd = &cobra.Command{
 			}
 			wc.Interval = v
 		}
+		// --auto is the whole unattended mode in one flag: act on everything
+		// this workspace is told about, not just be told.
+		if auto, _ := flags.GetBool("auto"); auto {
+			wc.Action, wc.PRs, wc.Comments = "fix", true, true
+		}
 		if v, _ := flags.GetString("action"); v != "" {
 			if v != "notify" && v != "fix" {
 				return fmt.Errorf("--action must be notify or fix")
@@ -517,6 +522,28 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			fmt.Println(line)
 		}
 	}
+	if fixes := state.Fixes.RecentFixes("", 5); len(fixes) > 0 {
+		fmt.Println("\nLast fixes")
+		for _, r := range fixes {
+			what := r.Ref
+			if what == "" {
+				what = r.Key
+			}
+			line := fmt.Sprintf("  %-28s %s", what, roughAge(now.Sub(r.StartedAt))+" ago")
+			switch {
+			case r.Error != "":
+				line += " ✗ " + firstLineOf(r.Error)
+			case len(r.PRs) > 0:
+				line += " → " + strings.Join(r.PRs, " ")
+			case r.Done():
+				line += " → " + firstLineOf(r.Note)
+			default:
+				line += " · running"
+			}
+			fmt.Println(line)
+		}
+	}
+
 	if n := countWatchEventsToday(dir); n > 0 {
 		fmt.Printf("\n%d event(s) today — %s\n", n, filepath.Join(dir, "watch", "events.jsonl"))
 	}
@@ -797,6 +824,7 @@ func init() {
 	f.String("repos", "", "GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)")
 	f.String("interval", "", "Poll interval, e.g. 3m; 0 means webhooks only")
 	f.String("action", "", "notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only")
+	f.Bool("auto", false, "Shorthand for --action fix --prs --comments: work on what arrives without being asked, draft PRs only")
 	f.Bool("comments", false, "Also new comments on issues assigned to me")
 	f.Bool("prs", false, "Also reviews and comments on pull requests I opened")
 	f.Int("max-per-hour", 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")

@@ -1854,13 +1854,15 @@ const launcherPageHTML = `<!doctype html>
 
   async function loadInbox() {
     const box = document.getElementById('inbox');
-    let events = [];
+    let events = [], fixes = [];
     try {
       const r = await fetch('/launch/events', { headers: auth });
       if (!r.ok) { box.hidden = true; return; }
-      events = (await r.json()).events || [];
+      const j = await r.json();
+      events = j.events || [];
+      fixes = j.fixes || [];
     } catch { box.hidden = true; return; }
-    if (!events.length) { box.hidden = true; return; }
+    if (!events.length && !fixes.length) { box.hidden = true; return; }
 
     box.innerHTML = '';
     const sum = document.createElement('p');
@@ -1947,6 +1949,41 @@ const launcherPageHTML = `<!doctype html>
             workOn(ev).finally(() => { go.disabled = false; });
           };
           row.appendChild(go);
+        }
+        if (row.children.length) card.appendChild(row);
+        box.appendChild(card);
+      }
+    }
+
+    // What the unattended mode did while nobody watched, and what it opened.
+    if (fixes.length) {
+      const head = document.createElement('div');
+      head.className = 'evgroup';
+      const name = document.createElement('span');
+      name.className = 'gname';
+      name.textContent = 'worked on for you';
+      head.appendChild(name);
+      box.appendChild(head);
+      for (const fx of fixes) {
+        const card = document.createElement('div');
+        card.className = 'ev';
+        const ref = document.createElement('div');
+        ref.className = 'eref';
+        ref.textContent = fx.ref;
+        card.appendChild(ref);
+        const t = document.createElement('p');
+        t.className = 'etitle';
+        t.textContent = fx.running ? 'running…' : (fx.error ? 'failed: ' + fx.error : (fx.prs || []).length ? '' : 'done, nothing opened');
+        if (t.textContent) card.appendChild(t);
+        const row = document.createElement('div');
+        row.className = 'erow';
+        for (const pr of fx.prs || []) {
+          if (!/^https:\/\//.test(pr)) continue;
+          const a = document.createElement('a');
+          a.className = 'eopen';
+          a.href = pr; a.target = '_blank'; a.rel = 'noopener noreferrer';
+          a.textContent = pr.includes('/pull/') ? 'Open PR' : 'Open MR';
+          row.appendChild(a);
         }
         if (row.children.length) card.appendChild(row);
         box.appendChild(card);
@@ -2798,7 +2835,18 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		out = append(out, row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
 			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != ""})
 	}
-	writeLaunchJSON(w, map[string]any{"events": out})
+	fixes := []map[string]any{}
+	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 8) {
+		row := map[string]any{"ref": firstNonEmptyString(r.Ref, r.Key), "workspace": r.Workspace, "running": !r.Done()}
+		if len(r.PRs) > 0 {
+			row["prs"] = r.PRs
+		}
+		if r.Error != "" {
+			row["error"] = firstLineOf(r.Error)
+		}
+		fixes = append(fixes, row)
+	}
+	writeLaunchJSON(w, map[string]any{"events": out, "fixes": fixes})
 }
 
 // launchWorkOnHandler hands one watch event to a real session: the same

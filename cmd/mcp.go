@@ -1586,6 +1586,18 @@ func registerMCPTools(s *server.MCPServer) {
 		return map[string]any{"events": events}, nil
 	}))
 
+	s.AddTool(mcp.NewTool("corgi_watch_fixes",
+		mcp.WithDescription("What the unattended watch (action: fix) has worked on and what it opened: [{key, ref, kind, workspace, startedAt, running, issueUrl?, prs[], note?, error?}], newest first. A fix announces its pull request in a notification that is gone in a second — this outlives it, so it answers \"what did it do while I was away?\" and \"did it open anything?\". Read-only."),
+		mcp.WithString("workspace", mcp.Description("Only this workspace's fixes")),
+		mcp.WithNumber("limit", mcp.Description("How many, newest first (default 20)")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		fixes, err := watchFixesForMCP(r.GetString("workspace", ""), int(r.GetFloat("limit", 20)))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"fixes": fixes}, nil
+	}))
+
 	s.AddTool(mcp.NewTool("corgi_validate",
 		mcp.WithDescription("Statically validate corgi-compose.yml (no side effects). Returns {ok, errors[], warnings[]}."),
 		composeOpt,
