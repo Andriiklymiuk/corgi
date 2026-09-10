@@ -29,7 +29,7 @@ Only describe what is present. See `references/yml-schema.md` for unknown fields
 For each `services.<name>`, resolve working-copy dir:
 
 - `path:` set → `<path>`.
-- Else `cloneFrom:` set → `corgi_services/services/<name>/`.
+- Else `cloneFrom:` set → `.corgi/corgi_services/services/<name>/`.
 
 If dir exists, find first match (case-insensitive): `README.md`, `README.markdown`, `README.rst`, `README.txt`, `README`. Skip if > 4000 lines / 200 KB.
 

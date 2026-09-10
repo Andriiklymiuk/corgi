@@ -249,7 +249,7 @@ func ensureSeedDumpExists(targetService string) error {
 	dumpFileExists, err := utils.CheckIfFilesExistsInDirectory(
 		fmt.Sprintf("%s/%s/%s",
 			utils.CorgiComposePathDir,
-			utils.RootDbServicesFolder,
+			utils.DbServicesRel(),
 			targetService,
 		),
 		"dump.*",

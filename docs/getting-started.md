@@ -32,7 +32,7 @@ corgi clones with plain `git`, so your existing SSH keys or credential helper ar
 
 ## Secrets & env files
 
-corgi writes each service's `.env` for you — DB host/port/credentials, sibling-service URLs — and sources it before your commands run. On first init it also adds `.env*` and `corgi_services/*` to your project's `.gitignore`, so **generated env files and any secrets in them never get committed**.
+corgi writes each service's `.env` for you — DB host/port/credentials, sibling-service URLs — and sources it before your commands run. On first init it also adds `.env*` and `.corgi/corgi_services/*` to your project's `.gitignore`, so **generated env files and any secrets in them never get committed**.
 
 Your own secrets (API keys, tokens) go in a service's env or a tier file like `env/staging/web.env` — also gitignored, also staying on your machine. The `corgi-compose.yml` itself holds config, not secrets, so it's safe to commit and share.
 
@@ -40,7 +40,7 @@ Run `corgi env <service>` to see the exact, fully-resolved set a service will ge
 
 ## Low lock-in
 
-Your services stay ordinary git repos, your databases are standard Docker images (corgi even writes a plain `docker-compose.yml` per database under `corgi_services/db_services/`), and the wiring is just `.env` files. Stop using corgi and you keep all of it.
+Your services stay ordinary git repos, your databases are standard Docker images (corgi even writes a plain `docker-compose.yml` per database under `.corgi/corgi_services/db_services/`), and the wiring is just `.env` files. Stop using corgi and you keep all of it.
 
 ## Env tiers — local, staging, or a mix
 

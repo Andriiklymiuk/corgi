@@ -70,12 +70,12 @@ type PreviewStore struct {
 }
 
 func previewStorePath(composeDir string) string {
-	return filepath.Join(composeDir, "corgi_services", "previews.json")
+	return filepath.Join(CorgiServicesIn(composeDir), "previews.json")
 }
 
 // PreviewDir holds preview logs.
 func PreviewDir(composeDir string) string {
-	return filepath.Join(composeDir, "corgi_services", ".previews")
+	return filepath.Join(CorgiServicesIn(composeDir), ".previews")
 }
 
 // LoadPreviews reads the store, returning an empty one when absent.

@@ -28,7 +28,7 @@ func TestSeedDbMissingDump(t *testing.T) {
 	utils.CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-	dir := filepath.Join(utils.CorgiComposePathDir, utils.RootDbServicesFolder, "db1")
+	dir := filepath.Join(utils.CorgiComposePathDir, utils.DbServicesRel(), "db1")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestSeedDbReturnsOnUpFailure(t *testing.T) {
 	utils.CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-	dir := filepath.Join(utils.CorgiComposePathDir, utils.RootDbServicesFolder, "db1")
+	dir := filepath.Join(utils.CorgiComposePathDir, utils.DbServicesRel(), "db1")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

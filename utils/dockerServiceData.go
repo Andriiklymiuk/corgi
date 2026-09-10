@@ -39,7 +39,7 @@ func BuildDockerServiceData(s Service) (DockerServiceTemplateData, error) {
 		BuildArgs:  s.Runner.Args,
 		Command:    s.Runner.Command,
 		EnvFilePath: filepath.Join(
-			CorgiComposePathDir, RootServicesFolder, s.ServiceName, ".env",
+			CorgiComposePathDir, ServicesRel(), s.ServiceName, ".env",
 		),
 	}
 
@@ -64,7 +64,7 @@ func fillRepoComposeData(d *DockerServiceTemplateData, s Service) error {
 	}
 	if len(RepoComposeServiceNames(d.RepoComposeFile)) > 0 {
 		d.OverrideFile = filepath.Join(
-			CorgiComposePathDir, RootServicesFolder, s.ServiceName, "corgi.env.override.yml",
+			CorgiComposePathDir, ServicesRel(), s.ServiceName, "corgi.env.override.yml",
 		)
 	}
 	return nil

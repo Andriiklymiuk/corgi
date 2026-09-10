@@ -57,7 +57,7 @@ func TestGetFoldersListInDirectory(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dbDir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder)
+	dbDir := filepath.Join(CorgiComposePathDir, DbServicesRel())
 	if err := os.MkdirAll(filepath.Join(dbDir, "db1"), 0755); err != nil {
 		t.Fatal(err)
 	}

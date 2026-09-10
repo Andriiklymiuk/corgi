@@ -42,7 +42,7 @@ type AutopilotState struct {
 }
 
 func AutopilotStatePath(composeDir string) string {
-	return filepath.Join(composeDir, "corgi_services", ".autopilot.json")
+	return filepath.Join(CorgiServicesIn(composeDir), ".autopilot.json")
 }
 
 func WriteAutopilotState(path string, s AutopilotState) error {

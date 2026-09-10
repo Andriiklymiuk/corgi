@@ -21,8 +21,11 @@ const (
 	envURL          = "\n%sURL=%s"
 	envDashboardURL = "\n%sDASHBOARD_URL=%s\n"
 
-	urlHostPort    = "http://%s:%s"
-	urlHostPortInt = "http://%s:%d"
+	// Local container endpoints written into a service's .env. A database
+	// brought up by corgi on this machine serves plain HTTP; there is no
+	// certificate to speak TLS with.
+	urlHostPort    = "http://%s:%s" // NOSONAR — localhost container, no TLS to speak
+	urlHostPortInt = "http://%s:%d" // NOSONAR — localhost container, no TLS to speak
 
 	concat5 = "%s%s%s%s%s"
 	concat6 = "%s%s%s%s%s%s"
@@ -70,7 +73,7 @@ var DriverConfigs = map[string]DriverConfig{
 				fmt.Sprintf(awsRegionEnvFmt, templates.SqsRegion),
 				fmt.Sprintf("\n%sENDPOINT=http://%s:%d/000000000000/", serviceNameInEnv, db.Host, db.Port),
 				fmt.Sprintf("\n%sQUEUE_NAME=%s", serviceNameInEnv, db.DatabaseName),
-				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://%s:%d/000000000000/%s", db.Host, db.Port, db.DatabaseName)),
+				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://%s:%d/000000000000/%s", db.Host, db.Port, db.DatabaseName)), // NOSONAR — localstack on this machine, no TLS
 				"\nAWS_ACCESS_KEY_ID=test",
 				"\nAWS_SECRET_ACCESS_KEY=test",
 			)
@@ -464,7 +467,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			kibanaDashboardUrl := fmt.Sprintf("\n%sKIBANA_DASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:5601", db.Host))
+			kibanaDashboardUrl := fmt.Sprintf("\n%sKIBANA_DASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:5601", db.Host)) // NOSONAR — localhost container, no TLS
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, kibanaDashboardUrl)
 		},
@@ -499,7 +502,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf("http://%s:%d/_utils", db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf("http://%s:%d/_utils", db.Host, db.Port)) // NOSONAR — localhost container, no TLS
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
@@ -744,7 +747,7 @@ var DriverConfigs = map[string]DriverConfig{
 			// Path depends on configTomlPath: corgi-managed dir if set, root if not.
 			tomlSource := CorgiComposePathDir
 			if db.ConfigTomlPath != "" {
-				tomlSource = CorgiComposePathDir + "/" + RootDbServicesFolder + "/" + db.ServiceName + "/supabase/config.toml"
+				tomlSource = CorgiComposePathDir + "/" + DbServicesRel() + "/" + db.ServiceName + "/supabase/config.toml"
 			}
 			ports := templates.ReadSupabasePorts(tomlSource)
 			if db.Port != 0 {
@@ -849,7 +852,7 @@ func GetServiceInfo(targetService string) (string, error) {
 		fmt.Sprintf(
 			"%s/%s/%s/docker-compose.yml",
 			CorgiComposePathDir,
-			RootDbServicesFolder,
+			DbServicesRel(),
 			targetService,
 		),
 	)

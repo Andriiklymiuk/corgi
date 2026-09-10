@@ -145,7 +145,7 @@ sweep for one second, so polling costs one probe pass per second at most.
 
 `corgi_up` is **always detached**: it brings databases up, generates env, then
 spawns each service as a detached process group and writes
-`corgi_services/.state.json`, returning immediately. Use `corgi_down` to stop.
+`.corgi/corgi_services/.state.json`, returning immediately. Use `corgi_down` to stop.
 
 `serviceBranch` / `serviceDir` (on `corgi_up` / `corgi_exec` / `corgi_test`) run
 service(s) from a git branch (isolated reused worktree, non-destructive) or an

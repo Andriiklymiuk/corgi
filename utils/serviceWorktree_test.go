@@ -28,7 +28,7 @@ func TestWorktreeDest(t *testing.T) {
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
 	got := worktreeDest("api", "feature/x")
-	want := "/ws/corgi_services/.worktrees/api-feature-x"
+	want := "/ws/.corgi/corgi_services/.worktrees/api-feature-x"
 	if got != want {
 		t.Errorf("worktreeDest = %q, want %q", got, want)
 	}

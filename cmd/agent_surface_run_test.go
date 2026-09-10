@@ -259,7 +259,7 @@ services:
 
 func TestRunLogsWaitForMatchesAndTimesOut(t *testing.T) {
 	dir := chdirToTempCompose(t, agentSurfaceCompose)
-	logDir := filepath.Join(dir, "corgi_services", ".logs", "api")
+	logDir := filepath.Join(dir, ".corgi", "corgi_services", ".logs", "api")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestRunLogsWaitForMatchesAndTimesOut(t *testing.T) {
 
 func TestRunLogsSinceAndGrepNarrowTheStream(t *testing.T) {
 	dir := chdirToTempCompose(t, agentSurfaceCompose)
-	logDir := filepath.Join(dir, "corgi_services", ".logs", "api")
+	logDir := filepath.Join(dir, ".corgi", "corgi_services", ".logs", "api")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

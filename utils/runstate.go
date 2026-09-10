@@ -32,15 +32,15 @@ type RunState struct {
 }
 
 func RunStatePath(composeDir string) string {
-	return filepath.Join(composeDir, "corgi_services", ".state.json")
+	return filepath.Join(CorgiServicesIn(composeDir), ".state.json")
 }
 
 func RunStateLastPath(composeDir string) string {
-	return filepath.Join(composeDir, "corgi_services", ".state.last.json")
+	return filepath.Join(CorgiServicesIn(composeDir), ".state.last.json")
 }
 
 func EnsureRunStateGitignored(composeDir string) {
-	dir := filepath.Join(composeDir, "corgi_services")
+	dir := CorgiServicesIn(composeDir)
 	EnsureCorgiServicesIgnore(dir, ".state.json")
 	EnsureCorgiServicesIgnore(dir, ".state.last.json")
 }
@@ -49,7 +49,7 @@ func EnsureRunStateGitignored(composeDir string) {
 // stop --service) don't clobber each other. Returns an unlock func. A lock held
 // longer than the timeout is assumed stale and reclaimed.
 func LockRunState(composeDir string) (func(), error) {
-	lockPath := filepath.Join(composeDir, "corgi_services", ".state.lock")
+	lockPath := filepath.Join(CorgiServicesIn(composeDir), ".state.lock")
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func WriteRunState(path string, s RunState) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	EnsureRunStateGitignored(filepath.Dir(filepath.Dir(path)))
+	EnsureRunStateGitignored(ComposeDirOf(filepath.Dir(path)))
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

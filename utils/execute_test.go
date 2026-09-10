@@ -234,7 +234,7 @@ func TestGetMakefileCommandsInDirectoryNoMakefile(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "x")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "x")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestExecuteCommandRunMissing(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "x")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "x")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestExecuteServiceCommandRunMissing(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootServicesFolder, "x")
+	dir := filepath.Join(CorgiComposePathDir, ServicesRel(), "x")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestExecuteCommandRunEcho(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "x")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "x")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestExecuteMakeCommandFails(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "x")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "x")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -387,7 +387,7 @@ func TestGetMakefileCommandsInDirectoryWithMakefile(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "svc")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "svc")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +458,7 @@ func TestExecuteMakeCommandSuccess(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "svc")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "svc")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +479,7 @@ func TestExecuteSeedMakeCommandSuccess(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	dir := filepath.Join(CorgiComposePathDir, RootDbServicesFolder, "svc")
+	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "svc")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}

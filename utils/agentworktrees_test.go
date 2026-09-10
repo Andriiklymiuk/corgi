@@ -154,7 +154,7 @@ func TestMaterializeAddsItsOwnGitignoreEntry(t *testing.T) {
 
 	// corgi_services/ is not wholly ignored, so anything new under it must add
 	// its own entry or it shows up as untracked in the user's repo.
-	data, err := os.ReadFile(filepath.Join(dir, "corgi_services", ".gitignore"))
+	data, err := os.ReadFile(filepath.Join(dir, ".corgi", "corgi_services", ".gitignore"))
 	if err != nil {
 		t.Fatalf("no .gitignore written: %v", err)
 	}

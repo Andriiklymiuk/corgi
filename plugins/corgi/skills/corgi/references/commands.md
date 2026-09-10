@@ -17,7 +17,7 @@ description: All corgi CLI commands and global flags with aliases, key flags, an
 | `-g, --global` | Use a globally-registered compose path by name |
 | `--privateToken <token>` | Auth token for cloning private repos listed in `cloneFrom:` |
 | `--silent` | Suppress welcome / informational output |
-| `--fromScratch` | Wipe `corgi_services/` before running |
+| `--fromScratch` | Wipe `.corgi/corgi_services/` before running |
 | `--describe` | During parse, dump each db/service/required as indented JSON. Does **not** short-circuit — `corgi run --describe` prints then still runs. For a rendered, side-effect-free doc use `/corgi-describe`. |
 | `--dockerContext <ctx>` | `default`, `orbctl`, or `colima` |
 
@@ -42,7 +42,7 @@ Notable flags:
 - `--with-deps` — with `--services X`: also start X's transitive `depends_on` closure (upstream services + their db_services), instead of needing to list `--dbServices` manually. Narrows db_services to what the selected services need.
 - `--open` — open each service's URL in the browser when it passes its `healthCheck`, for services that declare `openOnReady` (replaces `sleep N && open <url>`).
 - `--tunnel` — open public HTTPS tunnels alongside the stack for every service with a `tunnel:` block. Equivalent to a parallel `corgi tunnel`, bundled into the one process.
-- `--logs` — persist stdout/stderr of every service and db_service to `corgi_services/.logs/<name>/<timestamp>.log`. **On by default**; pass `--logs=false` to opt out. Capped 50 MB per file, keeps 10 newest runs per service, older pruned automatically. A `.logs/` entry is auto-added to `corgi_services/.gitignore`. Read back with `corgi logs`.
+- `--logs` — persist stdout/stderr of every service and db_service to `.corgi/corgi_services/.logs/<name>/<timestamp>.log`. **On by default**; pass `--logs=false` to opt out. Capped 50 MB per file, keeps 10 newest runs per service, older pruned automatically. A `.logs/` entry is auto-added to `.corgi/corgi_services/.gitignore`. Read back with `corgi logs`.
 - `--ci` — CI mode: suppress spinners, banners, color output. Plain log lines only. Auto-enabled when any common CI environment variable is set: `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`, `BUILDKITE`, `JENKINS_URL`, `TEAMCITY_VERSION`, `TRAVIS`, `DRONE`, `BITBUCKET_BUILD_NUMBER`, `CODEBUILD_BUILD_ID`. Pair with `--runOnce` for pipelines.
 - `--notify` (default `true`) — send a desktop notification when a service exits non-zero (and corgi is not shutting down). Requires a one-time opt-in via `corgi doctor`; never fires on Ctrl-C. Duplicate notifications with the same title+body are throttled to one per 30 seconds so a crash-looping service can't spam the desktop. Pass `--notify=false` to silence per-run. macOS uses `osascript`, Linux `notify-send`, Windows PowerShell toast.
 - `--profile <name>` — run only services/db_services whose `profiles:` list contains `<name>`, plus their transitive `depends_on` closure. Accepts a comma-separated list for the union, e.g. `--profile backend,worker`. No `--profile` runs everything. Unknown profile runs nothing (warns); a partially-unknown list uses the matches. Composes with `--services`/`--omit`/`--dbServices` as an intersection.
@@ -50,7 +50,7 @@ Notable flags:
 - `--gate-deps` — gate startup on dependency readiness for every `depends_on` edge (default: only edges with `condition: ready|started` are gated; otherwise parallel start).
 - `--ready-timeout <dur>` — max wait for a db/dependency to become ready (default `15s`, non-fatal on timeout).
 - `--service-dir <name=path>` — run the named service from `path` instead of its compose `path:` (repeatable). Points run at an external checkout — e.g. a git worktree — so its env generation, `beforeStart`/`afterStart` and process all happen there; the rest of the stack is untouched. The dir must exist (unknown name or missing dir is a hard error). Opt-in; no flag = unchanged behaviour. Lets the `stories` skill run a worktree'd producer without committing it to the main checkout.
-- `--service-branch <name=branch>` — run the named service on a git branch via a **reused** worktree under `corgi_services/.worktrees/<svc>-<branch>` (repeatable). corgi prunes stale entries then reuses the worktree if healthy, or creates it (`git worktree add`) when missing — keeping installed deps and any uncommitted work across runs. **Non-destructive**: the service's main checkout is never touched. The rest of `--service-dir`'s behaviour applies (env/beforeStart/process from the worktree). Clean up with `corgi worktree prune` (keeps any worktree with uncommitted work; `--force` to drop those too). The branch must exist (local or remote).
+- `--service-branch <name=branch>` — run the named service on a git branch via a **reused** worktree under `.corgi/corgi_services/.worktrees/<svc>-<branch>` (repeatable). corgi prunes stale entries then reuses the worktree if healthy, or creates it (`git worktree add`) when missing — keeping installed deps and any uncommitted work across runs. **Non-destructive**: the service's main checkout is never touched. The rest of `--service-dir`'s behaviour applies (env/beforeStart/process from the worktree). Clean up with `corgi worktree prune` (keeps any worktree with uncommitted work; `--force` to drop those too). The branch must exist (local or remote).
 - `--service-checkout <name=branch>` — run the named service on a branch by checking it out **in place** in its compose `path:` (repeatable). **Refuses on a dirty tree** (commit/stash first, or use `--service-branch`). Leaves the repo on that branch afterwards. Use when you want the actual checkout switched, not an isolated worktree.
 
 A service may appear in only one of `--service-dir`/`--service-branch`/`--service-checkout`. All three funnel into the same working-dir override, so env, deps, `beforeStart`/`afterStart`, the process, and `corgi test`/`corgi exec` all operate there.
@@ -67,7 +67,7 @@ A service may appear in only one of `--service-dir`/`--service-branch`/`--servic
   # admin, worker, db_services → compose path:
   ```
 - **Compare two branches** of one service side by side: run on branch A in one terminal, point a second stack at branch B (different ports) — each isolated in its own worktree.
-- Worktrees accumulate one-per-branch under `corgi_services/.worktrees/`; `corgi worktree prune` clears them, keeping any with uncommitted work unless you pass `--force`. Re-running the same branch reuses the dir (fast, keeps `node_modules`).
+- Worktrees accumulate one-per-branch under `.corgi/corgi_services/.worktrees/`; `corgi worktree prune` clears them, keeping any with uncommitted work unless you pass `--force`. Re-running the same branch reuses the dir (fast, keeps `node_modules`).
 
 `depends_on_db`/`depends_on_services` entries take an optional `condition: ready` (wait for readiness probe) or `condition: started` (wait until launched). Empty = no gating unless `--gate-deps`.
 
@@ -172,7 +172,7 @@ Common patterns:
 ### `corgi ps` (alias: `processes`)
 
 Runtime snapshot of a detached run. Reads + reconciles + persists
-`corgi_services/.state.json`, falling back to a port probe where only a port is known.
+`.corgi/corgi_services/.state.json`, falling back to a port probe where only a port is known.
 
 - `--json` — array of rows: `{name, kind, port, status, url, startedAt}`. `port`,
   `url`, `startedAt` are `omitempty` (absent when zero). `startedAt` (RFC3339) gives
@@ -200,7 +200,7 @@ Full docs: [docs/tunnel.md](https://github.com/Andriiklymiuk/corgi/blob/main/doc
 
 ### `corgi init` (aliases: `initialize`, `clone`)
 
-One-shot setup: clone repos referenced by `cloneFrom:`, generate `corgi_services/db_services/<name>/docker-compose.yml` + `Makefile` per db, run `required:` installs. Idempotent — safe to re-run.
+One-shot setup: clone repos referenced by `cloneFrom:`, generate `.corgi/corgi_services/db_services/<name>/docker-compose.yml` + `Makefile` per db, run `required:` installs. Idempotent — safe to re-run.
 
 ### `corgi create` (aliases: `add`, `new`)
 
@@ -249,7 +249,7 @@ corgi db shell main-db      # open psql for db_services.main-db
 ```
 
 Errors:
-- `no interactive shell defined for driver "<x>"` — that driver isn't in the map. Connect manually with the generated env in `corgi_services/db_services/<name>/.env`.
+- `no interactive shell defined for driver "<x>"` — that driver isn't in the map. Connect manually with the generated env in `.corgi/corgi_services/db_services/<name>/.env`.
 - `container "<x>" is not running` — start it first: `corgi db --upAll` or `corgi run`.
 
 #### `corgi db snapshot [name] [service]`
@@ -257,7 +257,7 @@ Errors:
 Physical snapshot of a Postgres data dir — the *built* state (indexes, populated matviews) as on-disk files. Restore recomputes nothing (vs a logical `dump.sql` seed that rebuilds indexes + re-runs `REFRESH MATERIALIZED VIEW`). Multi-hour reseed → minutes.
 
 - Postgres family only: `postgres`, `postgis`, `pgvector`, `timescaledb`. Any other driver **fails first** (physical format is data-dir specific).
-- Writes 2 files to `corgi_services/db_services/<service>/snapshots/`: `<name>.tar.zst` + `<name>.meta.json` (pg version, arch, image, sha256) — both required to be valid. Gitignored; survives `corgi clean` unless `-i snapshots`.
+- Writes 2 files to `.corgi/corgi_services/db_services/<service>/snapshots/`: `<name>.tar.zst` + `<name>.meta.json` (pg version, arch, image, sha256) — both required to be valid. Gitignored; survives `corgi clean` unless `-i snapshots`.
 - `name` defaults to a timestamp. `service` optional when one postgres-family db, else required.
 - How: clean-stop container → `docker cp` data dir out → zstd in-process → restart. No external tools.
 
@@ -285,7 +285,7 @@ Flags:
 - `--service <name>` — skip the service picker, jump straight to the run picker for `<name>`.
 - `--all` — merge the newest run of every logged service into one timestamp-sorted stream. Lines are prefixed `[service]` so origin is clear. Best for crash forensics across services. Reads each file completely; for live multi-service tailing use separate terminals.
 - `--idle <duration>` — exit when the file has been idle this long (default `30s`). Pass `--idle 0` to tail forever. Useful for db_services that idle for long stretches between writes.
-- `--prune` — delete every captured log (`corgi_services/.logs/`).
+- `--prune` — delete every captured log (`.corgi/corgi_services/.logs/`).
 
 Run picker labels show outcome at a glance:
 - `2026-05-14T10-32-01.log  ✅ ok` — service exited cleanly
@@ -296,9 +296,9 @@ Each line written by a corgi-managed service is prefixed with an RFC3339 UTC tim
 
 `db_services` are captured differently: their containers run detached, so corgi follows `docker logs -f <driver>-<serviceName>` into the same file. Consequence — the file can include container output from before this `corgi run`, and db runs always show `⏳ in-progress` (the ✅/❌ status suffix tracks service-process exits, not followed containers).
 
-Layout on disk: `corgi_services/.logs/<service>/<ISO-timestamp>.log`. Filenames sort chronologically. Each file is capped at 50 MB; the 10 newest runs per service are kept. Older files are pruned automatically by `corgi run`.
+Layout on disk: `.corgi/corgi_services/.logs/<service>/<ISO-timestamp>.log`. Filenames sort chronologically. Each file is capped at 50 MB; the 10 newest runs per service are kept. Older files are pruned automatically by `corgi run`.
 
-The `.logs/` directory is auto-added to `corgi_services/.gitignore` on the first capturing run, so captures never get committed.
+The `.logs/` directory is auto-added to `.corgi/corgi_services/.gitignore` on the first capturing run, so captures never get committed.
 
 Examples:
 ```
@@ -315,27 +315,37 @@ Errors:
 - `no log directories found under …/.logs/` — run the stack first (`corgi run`), and check it wasn't started with `--logs=false`.
 - `no log files found for <service>` — the service is logged but hasn't produced a file yet (very early in boot), or the name doesn't match.
 
+### `corgi migrate`
+
+Moves a legacy top-level `corgi_services/` to `.corgi/corgi_services/` and
+rewrites the matching `.gitignore` lines. Any corgi command does it on the way
+past; this one says what it did. `--dry-run` prints the move and stops.
+Refuses while services are up, probing each row rather than trusting a
+status a crash left behind — `corgi stop` first. Git worktrees under the
+folder are repaired afterwards (git records their path absolutely), and the
+saved run state's log paths are rewritten. Idempotent.
+
 ### `corgi clean` (alias: `clear`)
 
 Required flag: `-i, --items <db|services|corgi_services|all>`.
 
 - `db` — stops + removes db containers
 - `services` — removes cloned service repos (**destructive** — can drop uncommitted work)
-- `corgi_services` — removes the generated `corgi_services/` folder
-- `snapshots` — removes saved db snapshots (`corgi_services/db_services/*/snapshots/`)
+- `corgi_services` — removes the generated `.corgi/corgi_services/` folder
+- `snapshots` — removes saved db snapshots (`.corgi/corgi_services/db_services/*/snapshots/`)
 - `all` — all of the above **except** `snapshots`
 
-`corgi_services` and `all` preserve `snapshots/` dirs by default (a db snapshot is expensive to rebuild) — delete them deliberately with `clean -i snapshots`.
+`.corgi/corgi_services` and `all` preserve `snapshots/` dirs by default (a db snapshot is expensive to rebuild) — delete them deliberately with `clean -i snapshots`.
 
 Confirm with the user before running `clean -i services`, `clean -i snapshots`, or `clean -i all`. It can delete cloned repos that have local changes. `clean` also `git worktree remove`s any worktrees corgi made for `--service-branch` (so source repos don't keep dangling entries).
 
 ### `corgi worktree` (alias: `wt`)
 
-Manage the worktrees corgi creates for `run/exec/test --service-branch` (under `corgi_services/.worktrees/`).
+Manage the worktrees corgi creates for `run/exec/test --service-branch` (under `.corgi/corgi_services/.worktrees/`).
 
 - `corgi worktree list` — print each corgi-created worktree path.
 - `corgi worktree prune` (alias `clean`) — `git worktree remove` each one and prune the source repos' admin entries. A worktree with **uncommitted or untracked changes is kept and named**, not removed; `--force` drops those too (discards the work). Safe to run anytime; recreated on next `--service-branch`. Prints `[n/total]` per worktree — deleting a big `node_modules` takes a while and the line is how you tell work from a hang.
-- Only covers `corgi_services/.worktrees/`. Worktrees you made yourself elsewhere (e.g. the `stories` skill's `/tmp/corgi-wt/`) are untouched — remove those with `git worktree remove` in the source repo.
+- Only covers `.corgi/corgi_services/.worktrees/`. Worktrees you made yourself elsewhere (e.g. the `stories` skill's `/tmp/corgi-wt/`) are untouched — remove those with `git worktree remove` in the source repo.
 
 ### `corgi context` (alias: `ctx`)
 
@@ -378,7 +388,7 @@ corgi leases                         # who holds which block
 corgi leases release agent-a
 ```
 
-The lease is stored under `corgi_services/.leases/` and reused, so the same name always maps to the same ports.
+The lease is stored under `.corgi/corgi_services/.leases/` and reused, so the same name always maps to the same ports.
 
 ### `corgi agent hooks enable`
 

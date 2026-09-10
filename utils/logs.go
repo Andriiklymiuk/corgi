@@ -439,10 +439,6 @@ var (
 	sessionLog   io.WriteCloser
 )
 
-func CorgiServicesDir() string {
-	return filepath.Join(CorgiComposePathDir, "corgi_services")
-}
-
 func StartSessionLog() {
 	sessionLogMu.Lock()
 	defer sessionLogMu.Unlock()

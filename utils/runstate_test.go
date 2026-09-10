@@ -86,7 +86,7 @@ func TestLockRunState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LockRunState: %v", err)
 	}
-	lockPath := filepath.Join(dir, "corgi_services", ".state.lock")
+	lockPath := filepath.Join(dir, ".corgi", "corgi_services", ".state.lock")
 	if _, err := os.Stat(lockPath); err != nil {
 		t.Error("lock file should exist while held")
 	}

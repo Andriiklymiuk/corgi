@@ -779,7 +779,7 @@ func TestSetupLogWriters_RegistersServicesAndDbServices(t *testing.T) {
 	}
 
 	// .gitignore should have been created with .logs/ entry.
-	data, err := os.ReadFile(filepath.Join(tmp, "corgi_services", ".gitignore"))
+	data, err := os.ReadFile(filepath.Join(tmp, ".corgi", "corgi_services", ".gitignore"))
 	if err != nil {
 		t.Fatalf("expected .gitignore, got error: %v", err)
 	}

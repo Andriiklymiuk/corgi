@@ -116,7 +116,7 @@ func TestGitLabCachePrefixesEveryPath(t *testing.T) {
 	if !strings.Contains(out, "workspace/api/node_modules") {
 		t.Errorf("expected the prefix on service paths:\n%s", out)
 	}
-	if !strings.Contains(out, "workspace/corgi_services/.cache") {
+	if !strings.Contains(out, "workspace/.corgi/corgi_services/.cache") {
 		t.Errorf("expected the prefix on the markers:\n%s", out)
 	}
 }

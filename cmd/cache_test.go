@@ -167,7 +167,7 @@ func TestCachePathsGitLabPathPrefix(t *testing.T) {
 	out := captureStdout(t, func() {
 		runRoot(t, "cache", "paths", "--gitlab", "--path-prefix", "workspace")
 	})
-	if !strings.Contains(out, "workspace/corgi_services/.cache") {
+	if !strings.Contains(out, "workspace/.corgi/corgi_services/.cache") {
 		t.Errorf("expected every path under the prefix:\n%s", out)
 	}
 }

@@ -282,7 +282,7 @@ func TestSavePreviewsAddsGitignoreEntries(t *testing.T) {
 
 	// corgi_services/ is not wholly ignored, so per-developer state under it
 	// must add its own entries or it shows up as untracked.
-	data, err := os.ReadFile(filepath.Join(dir, "corgi_services", ".gitignore"))
+	data, err := os.ReadFile(filepath.Join(dir, ".corgi", "corgi_services", ".gitignore"))
 	if err != nil {
 		t.Fatalf("no .gitignore written: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestSavePreviewsLeavesNoTempFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "corgi_services", "previews.json.tmp")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, ".corgi", "corgi_services", "previews.json.tmp")); !os.IsNotExist(err) {
 		t.Error("the temp file must be renamed away")
 	}
 }
@@ -425,7 +425,7 @@ func TestStopPreviewUnknownID(t *testing.T) {
 }
 
 func TestPreviewDirIsUnderCorgiServices(t *testing.T) {
-	if got := PreviewDir("/stack"); got != filepath.Join("/stack", "corgi_services", ".previews") {
+	if got := PreviewDir("/stack"); got != filepath.Join("/stack", ".corgi", "corgi_services", ".previews") {
 		t.Errorf("PreviewDir = %q", got)
 	}
 }

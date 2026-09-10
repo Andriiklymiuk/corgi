@@ -21,7 +21,7 @@ func TestCopyEnvFileCopiesExistingContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "api", ".env"))
+	raw, err := os.ReadFile(filepath.Join(utils.CorgiComposePathDir, utils.ServicesRel(), "api", ".env"))
 	if err != nil {
 		t.Fatal(err)
 	}

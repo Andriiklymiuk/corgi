@@ -29,8 +29,6 @@ var UseAwsVpnInConfig = "useAwsVpn"
 var NameInConfig = "name"
 var DescriptionInConfig = "description"
 
-var RootDbServicesFolder = "corgi_services/db_services"
-var RootServicesFolder = "corgi_services/services"
 var ServicesItemsFromFlag []string
 var DbServicesItemsFromFlag []string
 
@@ -451,6 +449,14 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 	CorgiComposePath = pathToCorgiComposeFile
 	CorgiComposePathDir = filepath.Dir(pathToCorgiComposeFile)
 
+	if !SkipCorgiServicesMigration {
+		if moved, err := MigrateCorgiServices(CorgiComposePathDir); moved {
+			Info("moved corgi_services into .corgi/corgi_services")
+		} else if err != nil {
+			Info("corgi_services move skipped: ", err)
+		}
+	}
+
 	file, err := os.ReadFile(pathToCorgiComposeFile)
 	if err != nil {
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read %s", pathToCorgiComposeFile)
@@ -851,7 +857,7 @@ func CleanCorgiServicesFolder() {
 			Infof("  %s\n", d)
 		}
 	}
-	root := "./corgi_services"
+	root := CorgiServicesDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -917,7 +923,7 @@ func removeChildrenExceptSnapshots(path string, entries []os.DirEntry) (bool, er
 }
 
 func CleanSnapshots() {
-	root := "./corgi_services/db_services"
+	root := DbServicesIn(CorgiComposePathDir)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return

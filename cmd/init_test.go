@@ -221,7 +221,7 @@ func TestApplyDriverPostInitSupabaseCopiesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	dest := filepath.Join(utils.CorgiComposePathDir, utils.RootDbServicesFolder, "supa", "supabase", "config.toml")
+	dest := filepath.Join(utils.CorgiComposePathDir, utils.DbServicesRel(), "supa", "supabase", "config.toml")
 	body, err := os.ReadFile(dest)
 	if err != nil {
 		t.Fatalf("dest missing: %v", err)
@@ -301,7 +301,7 @@ func TestCopyEnvFileWithSubstitutionsMissingWritesEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("missing source env must not error, got %v", err)
 	}
-	dest := filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "api", ".env")
+	dest := filepath.Join(utils.CorgiComposePathDir, utils.ServicesRel(), "api", ".env")
 	raw, err := os.ReadFile(dest)
 	if err != nil || len(raw) != 0 {
 		t.Errorf("expected empty .env at %s, err=%v len=%d", dest, err, len(raw))
@@ -384,7 +384,7 @@ func TestCreateDatabaseServicesAddsFiles(t *testing.T) {
 	CreateDatabaseServices([]utils.DatabaseService{
 		{ServiceName: "db1", Driver: "postgres", Host: "localhost", User: "u", Password: "p", DatabaseName: "d", Port: 5432},
 	})
-	dest := filepath.Join(utils.CorgiComposePathDir, utils.RootDbServicesFolder, "db1", "docker-compose.yml")
+	dest := filepath.Join(utils.CorgiComposePathDir, utils.DbServicesRel(), "db1", "docker-compose.yml")
 	if _, err := os.Stat(dest); err != nil {
 		t.Errorf("file not created: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestWriteServiceFilesUppercaseName(t *testing.T) {
 		t.Fatal("expected true")
 	}
 
-	compose := filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "MyApi", "docker-compose.yml")
+	compose := filepath.Join(utils.CorgiComposePathDir, utils.ServicesRel(), "MyApi", "docker-compose.yml")
 	raw, err := os.ReadFile(compose)
 	if err != nil {
 		t.Fatalf("read compose: %v", err)
@@ -484,7 +484,7 @@ func TestWriteServiceFilesQuotesPathsWithSpaces(t *testing.T) {
 	if !writeServiceFiles(svc, data) {
 		t.Fatal("expected write to succeed")
 	}
-	raw, err := os.ReadFile(filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "api", "docker-compose.yml"))
+	raw, err := os.ReadFile(filepath.Join(utils.CorgiComposePathDir, utils.ServicesRel(), "api", "docker-compose.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +523,7 @@ func TestWriteServiceFilesRepoComposeQuotesMakefilePaths(t *testing.T) {
 	if !writeServiceFiles(svc, data) {
 		t.Fatal("expected write to succeed")
 	}
-	raw, err := os.ReadFile(filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "api", "Makefile"))
+	raw, err := os.ReadFile(filepath.Join(utils.CorgiComposePathDir, utils.ServicesRel(), "api", "Makefile"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,7 +578,7 @@ func TestCopyEnvFileWithSubstitutionsEnvPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	dest := filepath.Join(utils.CorgiComposePathDir, utils.RootServicesFolder, "api", ".env")
+	dest := filepath.Join(utils.CorgiComposePathDir, utils.ServicesRel(), "api", ".env")
 	body, err := os.ReadFile(dest)
 	if err != nil {
 		t.Fatalf("dest file missing: %v", err)
@@ -664,7 +664,7 @@ func TestApplyDriverPostInitSupabaseRelativePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	dest := filepath.Join(utils.CorgiComposePathDir, utils.RootDbServicesFolder, "supa", "supabase", "config.toml")
+	dest := filepath.Join(utils.CorgiComposePathDir, utils.DbServicesRel(), "supa", "supabase", "config.toml")
 	if _, err := os.Stat(dest); err != nil {
 		t.Errorf("dest missing: %v", err)
 	}

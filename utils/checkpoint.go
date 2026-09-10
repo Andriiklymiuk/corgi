@@ -66,5 +66,5 @@ func checkpointRef(checkpoint, label string) string {
 }
 
 func CheckpointsDir(composeDir string) string {
-	return filepath.Join(composeDir, "corgi_services", ".checkpoints")
+	return filepath.Join(CorgiServicesIn(composeDir), ".checkpoints")
 }

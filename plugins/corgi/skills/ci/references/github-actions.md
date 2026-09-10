@@ -54,7 +54,7 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      # The plan covers each service's dependency dir + corgi_services/.cache
+      # The plan covers each service's dependency dir + .corgi/corgi_services/.cache
       # (the beforeStart skip markers). On a polyglot stack, prefer one
       # actions/cache step per slot (cache-1-key/paths/restore-keys …
       # cache-4-*) so one lockfile change doesn't evict every other language's

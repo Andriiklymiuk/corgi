@@ -43,7 +43,7 @@ type SuggestHistory struct {
 
 // SuggestHistoryPath returns <workspaceRoot>/corgi_services/suggest-history.json.
 func SuggestHistoryPath(workspaceRoot string) string {
-	return filepath.Join(workspaceRoot, "corgi_services", suggestHistoryFileName)
+	return filepath.Join(CorgiServicesIn(workspaceRoot), suggestHistoryFileName)
 }
 
 // LoadSuggestHistory reads the workspace suggest-history.json. A missing file

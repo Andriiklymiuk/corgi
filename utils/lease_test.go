@@ -122,7 +122,7 @@ func TestReleaseLease(t *testing.T) {
 }
 
 func TestLeasesDirLivesUnderCorgiServices(t *testing.T) {
-	if got := LeasesDir("/ws"); got != filepath.Join("/ws", "corgi_services", ".leases") {
+	if got := LeasesDir("/ws"); got != filepath.Join("/ws", ".corgi", "corgi_services", ".leases") {
 		t.Errorf("LeasesDir = %q", got)
 	}
 }

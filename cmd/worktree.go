@@ -24,7 +24,7 @@ var worktreeListCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, err)
 			exitProcess(1)
 		}
-		base := filepath.Join(utils.CorgiComposePathDir, "corgi_services", ".worktrees")
+		base := filepath.Join(utils.CorgiServicesDir(), ".worktrees")
 		entries, err := os.ReadDir(base)
 		if err != nil || len(entries) == 0 {
 			fmt.Println("no corgi worktrees")

@@ -46,5 +46,5 @@ CronDelete <id>                   # remove it
 `CronList` / `CronDelete` only see `CronCreate` jobs; a `/schedule` routine is managed
 through `/schedule` itself.
 
-Cancelling the job is safe at any time — the `corgi_services/suggest-history.json` state stays
+Cancelling the job is safe at any time — the `.corgi/corgi_services/suggest-history.json` state stays
 consistent (it's only appended to by the run itself).

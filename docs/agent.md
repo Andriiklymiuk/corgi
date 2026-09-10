@@ -1229,8 +1229,8 @@ gives it one worktree of *one* repository; a stack is several.
 {
   "branch": "feature/referral",
   "worktrees": [
-    {"service": "api", "dir": ".../corgi_services/.worktrees/api@feature-referral", "created": true},
-    {"service": "web", "dir": ".../corgi_services/.worktrees/web@feature-referral", "created": true}
+    {"service": "api", "dir": ".../.corgi/corgi_services/.worktrees/api@feature-referral", "created": true},
+    {"service": "web", "dir": ".../.corgi/corgi_services/.worktrees/web@feature-referral", "created": true}
   ]
 }
 ```
@@ -1271,7 +1271,7 @@ corgi_preview_state
   → { "state": "ready", "url": "https://kind-zebra-42.trycloudflare.com" }
 ```
 
-The tunnel runs **detached**, writing to `corgi_services/.previews/<id>.log`,
+The tunnel runs **detached**, writing to `.corgi/corgi_services/.previews/<id>.log`,
 which is the same shape corgi already uses for detached services. So a preview
 outlives the session that started it, and a later corgi run can still find it.
 

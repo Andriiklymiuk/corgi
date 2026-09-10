@@ -17,6 +17,8 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
+	"github.com/spf13/pflag"
+
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -477,5 +479,104 @@ func TestWatchHelpers(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "watch", "events.jsonl"), []byte(`{"at":"`+now+`"}`+"\n"+`{"at":"2001-01-01T00:00:00Z"}`+"\n"), 0o600)
 	if countWatchEventsToday(dir) != 1 {
 		t.Fatal("count")
+	}
+}
+
+func TestWatchAuthStoresPerWorkspaceTokensAndTheSpecUsesThem(t *testing.T) {
+	dir, ws := watchFixture(t, &config.WatchConfig{Enabled: true, Tracker: "jira", Project: "ACME"})
+	t.Setenv("LINEAR_API_KEY", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("JIRA_API_TOKEN", "")
+	t.Setenv("GITLAB_TOKEN", "")
+	t.Chdir(ws)
+
+	c := agentWatchAuthCmd
+	for _, args := range [][]string{
+		{"jira", "--token", "acme-jira", "--url", "https://acme.atlassian.net", "--email", "me@acme.com", "--local"},
+		{"linear", "--token", "global-linear"},
+	} {
+		c.Flags().Visit(func(f *pflag.Flag) { _ = c.Flags().Set(f.Name, zeroFlag(f)) })
+		if err := c.Flags().Parse(args[1:]); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.RunE(c, args[:1]); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+
+	if got := watch.LoadSecrets(dir); got.JiraToken != "" || got.Linear != "global-linear" {
+		t.Fatalf("--local must not touch the machine-wide tokens: %+v", got)
+	}
+	if got := watch.LoadSecretsFor(dir, "acme-stack"); got.JiraToken != "acme-jira" || got.Linear != "global-linear" {
+		t.Fatalf("workspace tokens = %+v", got)
+	}
+
+	specs, err := loadWatchSpecs(dir)
+	if err != nil || len(specs) != 1 {
+		t.Fatalf("specs = %+v, %v", specs, err)
+	}
+	if len(specs[0].Sources) != 1 || specs[0].Sources[0].Name() != "jira" {
+		t.Fatalf("the workspace should poll jira with its own token: %v", specs[0].Sources)
+	}
+}
+
+func zeroFlag(f *pflag.Flag) string {
+	if f.Value.Type() == "bool" {
+		return "false"
+	}
+	return ""
+}
+
+func TestWatchAuthClearsAnOverrideAndRefusesAnUnknownSource(t *testing.T) {
+	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true})
+	c := agentWatchAuthCmd
+	run := func(args ...string) error {
+		c.Flags().Visit(func(f *pflag.Flag) { _ = c.Flags().Set(f.Name, zeroFlag(f)) })
+		if err := c.Flags().Parse(args[1:]); err != nil {
+			t.Fatal(err)
+		}
+		return c.RunE(c, args[:1])
+	}
+
+	if err := run("gitlab", "--token", "glpat-x", "--url", "https://git.acme.io", "--workspace", "acme-stack"); err != nil {
+		t.Fatal(err)
+	}
+	if got := watch.WorkspaceSecrets(dir, "acme-stack"); got.GitLab != "glpat-x" || got.GitLabURL != "https://git.acme.io" {
+		t.Fatalf("stored = %+v", got)
+	}
+
+	if err := run("gitlab", "--clear", "--workspace", "acme-stack"); err != nil {
+		t.Fatal(err)
+	}
+	if got := watch.WorkspacesWithSecrets(dir); len(got) != 0 {
+		t.Fatalf("clearing the only token should drop the override, got %v", got)
+	}
+
+	if err := run("bitbucket", "--token", "x"); err == nil {
+		t.Error("an unknown source should be refused")
+	}
+	if err := run("linear", "--token", "x", "--workspace", "nope"); err != nil {
+		t.Errorf("an unregistered id is still a valid key: %v", err)
+	}
+}
+
+func TestWatchStatusPrintsARowPerWorkspaceOverride(t *testing.T) {
+	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true})
+	t.Setenv("LINEAR_API_KEY", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("JIRA_API_TOKEN", "")
+	t.Setenv("GITLAB_TOKEN", "")
+	if err := watch.SaveSecrets(dir, watch.Secrets{Linear: "global"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.SaveWorkspaceSecrets(dir, "acme-stack", watch.Secrets{JiraToken: "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() { runAgentWatchStatus(nil, nil) })
+	if !strings.Contains(out, "machine-wide") || !strings.Contains(out, "acme-stack  ") {
+		t.Fatalf("status should list both:\n%s", out)
+	}
+	if !strings.Contains(out, watch.Fingerprint("acme")) {
+		t.Errorf("the override's own token is missing:\n%s", out)
 	}
 }

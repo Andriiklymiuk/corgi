@@ -88,7 +88,7 @@ func CachePathsFor(corgi *CorgiCompose) CachePlan {
 	// skip an install whose output is missing, so they are keyed on every
 	// lockfile at once: any change and the markers stay behind while each
 	// unchanged ecosystem still restores its packages.
-	markers := filepath.Join("corgi_services", cacheDirName)
+	markers := filepath.Join(CorgiServicesRel(), cacheDirName)
 	acc.paths[markers] = true
 	if len(groups) > 0 {
 		groups = append(groups, CacheGroup{

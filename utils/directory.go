@@ -37,7 +37,7 @@ func GetFoldersListInDirectory() ([]string, error) {
 		fmt.Sprintf(
 			"%s/%s/",
 			CorgiComposePathDir,
-			RootDbServicesFolder,
+			DbServicesRel(),
 		),
 	)
 	if err != nil {

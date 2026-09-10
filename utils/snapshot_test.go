@@ -44,7 +44,7 @@ func TestSnapshotPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SnapshotPaths err: %v", err)
 	}
-	wantDir := filepath.Join(CorgiComposePathDir, "corgi_services", "db_services", "main", "snapshots")
+	wantDir := filepath.Join(CorgiComposePathDir, ".corgi", "corgi_services", "db_services", "main", "snapshots")
 	if filepath.Dir(arc) != wantDir {
 		t.Errorf("archive dir = %q, want %q", filepath.Dir(arc), wantDir)
 	}
@@ -291,9 +291,13 @@ func TestVerifyArchiveSHA(t *testing.T) {
 }
 
 func TestCleanSnapshots(t *testing.T) {
-	t.Chdir(t.TempDir())
+	dir := t.TempDir()
+	t.Chdir(dir)
+	prevDir := CorgiComposePathDir
+	CorgiComposePathDir = dir
+	t.Cleanup(func() { CorgiComposePathDir = prevDir })
 
-	root := filepath.Join("corgi_services", "db_services")
+	root := filepath.Join(dir, ".corgi", "corgi_services", "db_services")
 	for _, svc := range []string{"main", "other"} {
 		snapDir := filepath.Join(root, svc, "snapshots")
 		if err := os.MkdirAll(snapDir, 0o755); err != nil {
