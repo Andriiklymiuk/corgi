@@ -1212,6 +1212,9 @@ const launcherPageHTML = `<!doctype html>
   .opt:last-child{border-bottom:0}
   .opt:disabled{color:var(--dim2)}
   .opt.here{color:var(--accent);font-weight:600}
+  .linkme{margin-left:.45rem;font:inherit;font-size:.68rem;padding:.1rem .45rem;border-radius:.4rem;
+    border:1px solid var(--line);background:var(--card2);color:var(--dim)}
+  .linkme:disabled{opacity:.6}
   /* The column the ticket sits in, on the row that offers to change it. */
   .ev .estate{margin-left:auto;font-size:.64rem;letter-spacing:.04em;text-transform:uppercase;
     color:var(--dim);border:1px solid var(--line);border-radius:.5rem;padding:.1rem .4rem;white-space:nowrap}
@@ -2519,11 +2522,33 @@ const launcherPageHTML = `<!doctype html>
         '<span class="when">' + esc(o.when || '') + (o.past ? 'reopen' : 'open \u2197') + '</span>';
       box.appendChild(el);
     };
-    const renderLocal = (label, when) => {
+    const renderLocal = (label, when, sess) => {
       const el = document.createElement('div');
       el.className = 's';
       el.innerHTML = '<span><i class="sdot"></i><span class="tname">' + esc(label) +
         '</span></span><span class="when">' + esc(when) + ' \u00b7 local only</span>';
+      // corgi can type /remote-control into the session itself, which is the
+      // whole of what makes it reachable from here. Only while it is idle:
+      // typing into a session mid-turn lands in the middle of its own work.
+      if (sess && sess.id && (sess.status === 'done' || sess.status === 'stale')) {
+        const link = document.createElement('button');
+        link.className = 'linkme';
+        link.textContent = 'Link';
+        link.title = 'Type /remote-control in this session so it can be opened from here';
+        link.onclick = async (e) => {
+          e.stopPropagation();
+          link.disabled = true; link.textContent = 'Linking…';
+          try {
+            const r = await fetch('/launch/send', { method: 'POST', headers: auth,
+              body: JSON.stringify({ session: sess.id, text: '/remote-control' }) });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) { toast(j.error || 'could not reach that session', true); link.disabled = false; link.textContent = 'Link'; return; }
+            toast('asked ' + esc(label) + ' for a web link — it appears in a moment');
+            setTimeout(load, 6000);
+          } catch { toast('no connection', true); link.disabled = false; link.textContent = 'Link'; }
+        };
+        el.querySelector('.when').appendChild(link);
+      }
       box.appendChild(el);
     };
     const note = (text) => {
@@ -2573,7 +2598,7 @@ const launcherPageHTML = `<!doctype html>
           continue;
         }
         localOnly++;
-        renderLocal(shortSessionName(sess.name, ws.id) || 'session', when);
+        renderLocal(shortSessionName(sess.name, ws.id) || 'session', when, sess);
       }
       let bridgeRows = 0;
       let bridgeHidden = 0;
@@ -2584,7 +2609,7 @@ const launcherPageHTML = `<!doctype html>
         bridgeRows++;
         renderLink(url, { bridge: true });
       }
-      if (localOnly) note('local only = running on the laptop with no web link yet; type /remote-control in that session to reach it from here.');
+      if (localOnly) note('local only = running on the laptop with no web link yet. Link asks the session for one; a busy session has to be asked by hand with /remote-control.');
       if (bridgeRows) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
       if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
 

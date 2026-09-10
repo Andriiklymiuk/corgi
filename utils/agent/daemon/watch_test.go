@@ -314,9 +314,24 @@ func TestFixPromptPerKind(t *testing.T) {
 	if b := watchBody(watch.Event{Kind: watch.KindPRReview, Ref: "a/b#1", State: "approved"}); b != "someone reviewed a/b#1: approved" {
 		t.Fatal(b)
 	}
-	args := fixArgs(WatchSpec{}, watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-1"})
-	if strings.Join(args, " ") != "-p "+fixPrompt(watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-1"})+" --output-format text --permission-mode acceptEdits" {
-		t.Fatalf("args %q", args)
+	e := watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-1", URL: "https://x/browse/ABC-1"}
+	args := fixArgs(WatchSpec{Workspace: "api"}, e)
+	if args[0] != "-p" || !strings.HasPrefix(args[1], fixPrompt(e)) {
+		t.Fatalf("the kind's own prompt leads: %q", args)
+	}
+	if strings.Join(args[2:], " ") != "--output-format text --permission-mode acceptEdits" {
+		t.Fatalf("flags %q", args[2:])
+	}
+	// Nobody but the run has read this diff, and whoever finds the PR later
+	// needs to know where it came from.
+	for _, want := range []string{"review your own diff", "corgi watch · api · issue.new ABC-1", "https://x/browse/ABC-1"} {
+		if !strings.Contains(args[1], want) {
+			t.Errorf("an unattended prompt must carry %q:\n%s", want, args[1])
+		}
+	}
+	// A run someone started by hand is already being read; it gets none of it.
+	if strings.Contains(fixPrompt(e), "review your own diff") {
+		t.Error("the suffix belongs to unattended runs, not to the prompt the phone hands a session")
 	}
 }
 

@@ -61,6 +61,10 @@ type Rules struct {
 	Assignee string   // "me" (default) or "any"
 	Comments bool     // comments on issues assigned to me
 	PRs      bool     // reviews and comments on my pull requests
+	// From narrows comments and reviews to these people, matched against the
+	// author's name or login. Half of what blocks a day is shaped like a
+	// person — the one review you are waiting on — not like a board.
+	From []string
 }
 
 // Match says whether an event is one the rules asked for.
@@ -86,7 +90,19 @@ func (r Rules) Why(e Event) string {
 		if !e.Mine {
 			return "not on something of mine"
 		}
+		if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
+			return fmt.Sprintf("it is from %s, and you are waiting on %s",
+				orNone([]string{e.Author}), strings.Join(r.From, ", "))
+		}
 	case KindIssueNew:
+		if dead := deadState(e.State); dead != "" {
+			// A ticket someone has already closed as a duplicate is the one
+			// piece of work guaranteed to be wasted. Explicit --states wins:
+			// asking for a column means you meant it.
+			if len(r.States) == 0 {
+				return "it is " + dead + " — nobody is going to act on it"
+			}
+		}
 		if r.Assignee != "any" && !e.Mine {
 			return "not assigned to me (--assignee any takes every issue)"
 		}
@@ -98,6 +114,41 @@ func (r Rules) Why(e Event) string {
 		}
 	}
 	return ""
+}
+
+// deadStates are the columns every tracker uses for work that will not
+// happen: Linear's Duplicate and Canceled, Jira's Cancelled, GitHub's
+// "closed as duplicate". Named rather than inferred, so a board with a
+// column called "Duplicate detection" is not swept up with them.
+var deadStates = map[string]string{
+	"duplicate": "a duplicate", "duplicated": "a duplicate",
+	"canceled": "cancelled", "cancelled": "cancelled",
+	"won't do": "not being done", "wont do": "not being done",
+	"not planned": "not planned", "obsolete": "obsolete",
+	"rejected": "rejected",
+}
+
+// deadState names why a ticket in this state is not worth anyone's time,
+// or "" when the state is a normal one.
+func deadState(state string) string {
+	return deadStates[strings.ToLower(strings.TrimSpace(state))]
+}
+
+// matchesPerson says an author is one of the people being waited on. A
+// tracker spells the same human three ways — "Max Mustermann", "max", an
+// email — so a wanted name matching any part of the author counts.
+func matchesPerson(author string, wanted []string) bool {
+	who := strings.ToLower(strings.TrimSpace(author))
+	if who == "" {
+		return false
+	}
+	for _, w := range wanted {
+		w = strings.ToLower(strings.TrimSpace(w))
+		if w != "" && strings.Contains(who, w) {
+			return true
+		}
+	}
+	return false
 }
 
 func orNone(list []string) string {
@@ -209,6 +260,10 @@ type State struct {
 	Held []HeldNote `json:"held,omitempty"`
 	// seen indexes Seen so a lookup does not walk the list.
 	seen map[string]struct{}
+	// roundRefs counts events per ref within one poll, so several comments
+	// on one pull request collapse to one. Never persisted: it is about
+	// this round only.
+	roundRefs map[string]int
 	// Fixes is the fix history beside it, its own file.
 	Fixes *FixLog `json:"-"`
 }
@@ -914,4 +969,34 @@ func EventsSince(agentDir string, since time.Time) []Event {
 		out = append(out, e)
 	}
 	return out
+}
+
+// SameRefThisRound counts how many events about the same ref this workspace
+// has already taken in the current round, and records this one. A reviewer
+// leaving four comments on one pull request is one thing to look at, not
+// four notifications and certainly not four unattended runs.
+//
+// Reset by NewRound at the top of every poll, so a comment tomorrow is news
+// again even though the ref is the same.
+func (s *State) SameRefThisRound(workspace string, e Event) int {
+	if e.Ref == "" || e.Kind == KindIssueNew {
+		return 0 // a new issue is one event by construction
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.roundRefs == nil {
+		s.roundRefs = map[string]int{}
+	}
+	key := workspace + "\x00" + e.Ref
+	n := s.roundRefs[key]
+	s.roundRefs[key] = n + 1
+	return n
+}
+
+// NewRound forgets what the last poll saw, so the collapsing above is
+// per-round rather than for ever.
+func (s *State) NewRound() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.roundRefs = nil
 }

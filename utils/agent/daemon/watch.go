@@ -193,7 +193,10 @@ func (d *Daemon) startWatches(ctx context.Context) {
 		}
 		w := &watch.Watch{Workspace: spec.Workspace, Rules: spec.Rules, Sources: live, Interval: spec.Interval,
 			State: d.watchState, Sink: d.watchSink(spec), Log: func(line string) { utils.Info("agent:", line) },
-			Round: func(now time.Time) { d.releaseHeld(spec, now) }}
+			Round: func(now time.Time) {
+				d.watchState.NewRound()
+				d.releaseHeld(spec, now)
+			}}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = &sync.Mutex{}
 		if len(live) > 0 && spec.Interval > 0 {
@@ -240,6 +243,12 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		d.appendWatchEvent(e)
 		if d.Events != nil {
 			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "watch", Reason: string(e.Kind) + " " + e.Ref, URL: e.URL})
+		}
+		// Three comments on one pull request are one thing to look at. The
+		// seen index dedupes a comment against itself; this dedupes the
+		// second comment against the first, within a round.
+		if dup := d.watchState.SameRefThisRound(spec.Workspace, e); dup > 0 {
+			return
 		}
 		body := watchBody(e)
 		if spec.FixesKind(e.Kind) {
@@ -467,9 +476,25 @@ func fixPrompt(e watch.Event) string {
 	return ""
 }
 
+// unattendedSuffix is what an unattended run owes the person who finds its
+// work later: a trail on the pull request, and a pass over its own diff
+// before it claims anyone's attention. A run someone started by hand does
+// not get this — they are already reading it.
+func unattendedSuffix(spec WatchSpec, e watch.Event) string {
+	trail := "corgi watch · " + spec.Workspace + " · " + string(e.Kind) + " " + e.Ref
+	if e.URL != "" {
+		trail += " · " + e.URL
+	}
+	return "\n\nBefore you finish: review your own diff the way you would review someone else's, " +
+		"and fix what you find — nobody has looked at this but you. " +
+		"Put this line at the end of the pull request body so whoever reviews it knows where it came from: " +
+		trail + "\n" +
+		"Say plainly at the end what you changed and what your own review found."
+}
+
 // fixArgs is claude's argv for one event.
 func fixArgs(spec WatchSpec, e watch.Event) []string {
-	args := []string{"-p", fixPrompt(e), "--output-format", "text"}
+	args := []string{"-p", fixPrompt(e) + unattendedSuffix(spec, e), "--output-format", "text"}
 	if spec.SkipPermissions {
 		return append(args, "--dangerously-skip-permissions")
 	}
