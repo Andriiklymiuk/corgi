@@ -322,6 +322,43 @@ hooks`) make it instant. Details in
 
 <p align="center"><img src="docs/media/watch.gif" width="760" alt="corgi agent watch: enable, status, a new bug notification, the fix with draft PR links, a review comment addressed"></p>
 
+**An agent that works while you do not.** `--auto-for` decides what it takes
+on its own, and the point is that it is a choice per kind rather than all or
+nothing:
+
+```bash
+corgi agent watch enable --action fix --auto-for tickets,reviews,comments,ci \
+  --prs --ci --reviews --lease --quiet 23:00-07:00 \
+  --pickup "In Progress" --review-status "In Review"
+```
+
+A ticket assigned to you moves itself twice: to **In Progress** when a run
+takes it, and to **In Review** once that run has opened a pull request, with
+the link posted on the ticket. Each finished run also reaches wherever
+`notifyUrl` points — Telegram, Slack, ntfy — with the pull request as the link,
+and is kept in `corgi agent while-away` for the morning.
+
+- **review comments** and **red builds** are the safest to hand over: both are
+  already scoped, and a build brings its own test for "done".
+- **a fresh ticket** is a blank page — leave it reporting until the rest has
+  earned trust. It waits in the inbox with a *Work on it* button that hands it
+  to a session you can watch.
+- **someone else's pull request** needs `--reviews` to reach you at all and is
+  never worked on unattended: corgi reads it and posts a review, and will not
+  push to their branch.
+
+Every unattended run reviews its own diff before it reports, stamps the pull
+request with where it came from, and is capped by what a run on that workspace
+usually costs rather than by a count. What it will not do is as deliberate: a
+comment on a ticket that is already done, a ticket closed as a duplicate, four
+comments on one pull request, or a ticket another machine has claimed
+(`--lease`). `corgi agent watch replay` shows the week it *would* have had
+before you turn it on, and `corgi agent watch undo` puts a run back.
+
+<p align="center"><img src="docs/media/autofix.gif" width="760" alt="corgi agent watch unattended: a review comment fixed and pushed, a red build fixed, a fresh ticket only reported, a review request left alone, comments on finished work skipped, a duplicate skipped, a ticket another machine claimed, a cap and a budget deferral, then the morning summary"></p>
+
+<p align="center"><img src="docs/media/replay.gif" width="760" alt="corgi agent watch replay, while-away and undo: the week unattended mode would have had, the morning card, and a run put back"></p>
+
 ## The rest of the commands
 
 Beyond the ones above, these are the ones that come up in a normal week:

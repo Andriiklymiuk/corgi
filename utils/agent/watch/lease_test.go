@@ -64,11 +64,11 @@ type leaseTracker struct {
 	readErr  error
 }
 
-func (f *leaseTracker) Name() string                                       { return "fake" }
-func (f *leaseTracker) Statuses(context.Context) ([]Status, error)         { return nil, nil }
-func (f *leaseTracker) Whoami(context.Context) (Identity, error)           { return Identity{}, nil }
-func (f *leaseTracker) Move(context.Context, string, string) error         { return nil }
-func (f *leaseTracker) Assign(context.Context, string, string) error       { return nil }
+func (f *leaseTracker) Name() string                                 { return "fake" }
+func (f *leaseTracker) Statuses(context.Context) ([]Status, error)   { return nil, nil }
+func (f *leaseTracker) Whoami(context.Context) (Identity, error)     { return Identity{}, nil }
+func (f *leaseTracker) Move(context.Context, string, string) error   { return nil }
+func (f *leaseTracker) Assign(context.Context, string, string) error { return nil }
 func (f *leaseTracker) Comment(_ context.Context, _, body string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

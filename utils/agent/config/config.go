@@ -261,6 +261,10 @@ type WatchConfig struct {
 	// "issue.comment", "pr.comment", "pr.review". Empty is every kind that
 	// matched, which is what fix has always meant.
 	FixKinds []string `yaml:"fixKinds,omitempty"`
+	// ReviewStatus is the column a ticket moves to once a run has opened a
+	// pull request for it: the work is done, it is waiting on a reviewer.
+	// Empty writes nothing.
+	ReviewStatus string `yaml:"reviewStatus,omitempty"`
 	// PickupStatus is the column a ticket moves to when someone picks it up
 	// — "In Progress", say. Empty writes nothing: a tracker corgi has not
 	// been told to move tickets on is left alone.
@@ -289,6 +293,9 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	}
 	if merged.PickupStatus == "" {
 		merged.PickupStatus = base.PickupStatus
+	}
+	if merged.ReviewStatus == "" {
+		merged.ReviewStatus = base.ReviewStatus
 	}
 	if len(merged.FixKinds) == 0 {
 		merged.FixKinds = base.FixKinds

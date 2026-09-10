@@ -80,3 +80,36 @@ func claimTicket(agentD, workspaceID string, e watch.Event) (bool, string, error
 	defer cancel()
 	return watch.Claim(ctx, w, ref, watch.MachineName(), time.Now())
 }
+
+// markDelivered moves a ticket on once a run opened a pull request for it.
+// A different column from the pickup one: the work is finished and waiting
+// on a person, which is not the same as being worked on.
+func markDelivered(agentD, workspaceID string, e watch.Event, prs []string) {
+	if len(prs) == 0 || strings.TrimSpace(e.Ref) == "" {
+		return
+	}
+	resolved, err := resolveWorkspaceConfig(agentD, workspaceID)
+	if err != nil || resolved.Watch == nil {
+		return
+	}
+	status := strings.TrimSpace(resolved.Watch.ReviewStatus)
+	if status == "" || strings.EqualFold(status, e.State) {
+		return
+	}
+	w, _, err := watchWriter(agentD, workspaceID)
+	if err != nil {
+		utils.Infof("corgi: %s stayed where it was: %v\n", e.Ref, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pickupTimeout)
+	defer cancel()
+	if err := w.Move(ctx, e.Ref, status); err != nil {
+		utils.Infof("corgi: %s stayed where it was: %v\n", e.Ref, err)
+		return
+	}
+	_ = watch.LoadStateLog(agentD).Set(e.Key, status, time.Now())
+	// Say what it opened, on the ticket, so the board is not the only place
+	// the link exists.
+	_ = w.Comment(ctx, e.Ref, "corgi opened "+strings.Join(prs, " ")+" for this.")
+	utils.Infof("corgi: %s → %s\n", e.Ref, status)
+}

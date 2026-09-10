@@ -1,6 +1,6 @@
 ---
 name: agent
-description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking ("which sessions are waiting on me", "answer that permission from my phone"). Also whenever someone asks to be told about tracker or review activity — "watch the jira issues here", "watch my linear tickets", "tell me when someone comments on my MRs", "notify me about new bugs", "what came in?", "stop watching this" — or asks why the watch did or did not fire. NOT for compose authoring (corgi), starting (run), or debugging (debug).
+description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking ("which sessions are waiting on me", "answer that permission from my phone"). Also whenever someone asks to be told about tracker or review activity — "watch the jira issues here", "watch my linear tickets", "tell me when someone comments on my MRs", "notify me about new bugs", "what came in?", "stop watching this" — or asks what is being tracked at all ("what do we watch?", "what is corgi tracking?", "should we track anything else?"), or asks why the watch did or did not fire. NOT for compose authoring (corgi), starting (run), or debugging (debug).
 ---
 
 # Corgi agent mode
@@ -657,6 +657,41 @@ the notification: `corgi agent watch` lists the last fixes with their PRs,
 `corgi_watch_fixes` returns them, and the phone shows them under "worked on
 for you". It needs `corgi agent init --dangerously-skip-permissions` to run
 without stalling on a prompt — say that before turning it on.
+
+**Asked what is tracked?** ("what do we watch?", "what is corgi tracking?".)
+Read it, say it plainly, then say what is missing — that second half is the
+part people are actually asking for.
+
+1. `corgi_watch_status` (MCP), or `corgi agent watch`, for every workspace: the
+   sources with a token, what each is watching, notify or fix, which kinds run
+   unattended, the caps, quiet hours, and the last poll.
+2. Say it per workspace in one line each — tracker and project, what reaches
+   them, and whether corgi acts or only reports. Name what is **not** watched
+   as plainly as what is: a workspace with no watch at all is the most useful
+   thing in the answer.
+3. **Then suggest, concretely.** Read `whatIsMissing[]` first — it is the
+   ordered list of what that workspace still needs. Beyond it, the suggestions
+   worth making, in this order:
+   - a registered workspace with **no watch** and a tracker key in its commits
+   - `--prs` off, when the person opens pull requests in those repos
+   - `--ci` off — a red build is the safest thing to hand over, since it comes
+     with its own test for "done"
+   - `--reviews` off, when other people request their review
+   - `--action fix --auto-for reviews,comments` on a workspace that only
+     notifies and has been quiet enough to trust
+   - `--from <person>` when they keep saying they are waiting on someone
+   - `--pickup "In Progress"` so a picked-up ticket moves itself
+   - `--lease` when more than one machine watches the same board
+4. **Offer the smaller version first.** Watching a portion is a real answer:
+   one project key, one label (`--labels bug`), a few repos, a handful of
+   states (`--states "Ready,In Progress"`), or one person. Say so — people
+   refuse "watch everything" and accept "watch the bugs assigned to you".
+5. Anything unattended: point at `corgi agent watch replay` before turning it
+   on, and `corgi agent watch undo` for after. Neither is a detail; they are
+   what make it reversible.
+
+Never turn any of this on unasked. Say what you would run, and run it when
+they say yes.
 
 **Asked to watch something?** ("watch the jira issues here", "tell me when
 someone comments on my MRs".) Never guess the settings — read them, then act:

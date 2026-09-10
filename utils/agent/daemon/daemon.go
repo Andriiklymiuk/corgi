@@ -98,7 +98,11 @@ type Daemon struct {
 	// ClaimTicket takes the ticket on the tracker for this machine, or names
 	// the machine that already has it. Injected for the same reason.
 	ClaimTicket func(workspace string, e watch.Event) (ok bool, holder string, err error)
-	Events      *events.Log
+	// Delivered moves a ticket on once a run has opened a pull request for
+	// it: the work is done and it is waiting on a reviewer, which is a
+	// different column from the one it was picked up into.
+	Delivered func(workspace string, e watch.Event, prs []string)
+	Events    *events.Log
 	// CaptureBrief probes what an ending session left on disk. Injected because
 	// enumerating a stack's repositories means parsing a compose file, which the
 	// daemon has no business knowing about. Nil disables briefs entirely.

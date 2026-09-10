@@ -113,6 +113,10 @@ var agentWatchEnableCmd = &cobra.Command{
 				return fmt.Errorf("--max-per-day must be at least 1")
 			}
 		}
+		if flags.Changed("review-status") {
+			v, _ := flags.GetString("review-status")
+			wc.ReviewStatus = strings.TrimSpace(v)
+		}
 		if flags.Changed("lease") {
 			wc.Lease, _ = flags.GetBool("lease")
 		}
@@ -260,7 +264,7 @@ func handBackDeferred(dir string, fixes *watch.FixLog) {
 }
 
 var agentWatchTestCmd = &cobra.Command{
-	Use:   "test <issue.new|issue.comment|pr.comment|pr.review>",
+	Use:   "test <issue.new|issue.comment|pr.comment|pr.review|review.requested|ci.failed>",
 	Short: "Push one made-up event through the pipeline and print the claude run it would start, without starting it",
 	Long: `Walks a synthesized event the way a webhook's would go: routing to a
 workspace, the rules, the seen list, the fix claim and the caps, quiet hours
@@ -349,7 +353,7 @@ func synthesizeWatchEvent(kind watch.Kind, specs []daemon.WatchSpec, ref, url, b
 		if kind == watch.KindIssueComment && e.Body == "" {
 			e.Body = "could you also cover the empty state?"
 		}
-	case watch.KindPRComment, watch.KindPRReview:
+	case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested:
 		e.Source = "github"
 		if e.Ref == "" {
 			repo := "acme/api"
@@ -359,8 +363,10 @@ func synthesizeWatchEvent(kind watch.Kind, specs []daemon.WatchSpec, ref, url, b
 			e.Ref = repo + "#1"
 		}
 		if e.URL == "" {
-			repo, num, _ := strings.Cut(e.Ref, "#")
-			e.URL = "https://github.com/" + repo + "/pull/" + firstNonEmptyString(num, "1")
+			e.URL = prRefURL(e.Ref)
+			if strings.Contains(e.Ref, "!") {
+				e.Source = "gitlab"
+			}
 		}
 		if e.Body == "" {
 			e.Body = "nit: this name reads wrong"
@@ -368,8 +374,27 @@ func synthesizeWatchEvent(kind watch.Kind, specs []daemon.WatchSpec, ref, url, b
 		if kind == watch.KindPRReview {
 			e.State = "changes_requested"
 		}
+		if kind == watch.KindReviewRequested {
+			// Someone else's pull request: not mine, which is the whole
+			// difference between reviewing it and fixing my own.
+			e.Mine = false
+			e.Author = "a colleague"
+			e.Title = "Retry the upload on a 502"
+		}
+	case watch.KindCIFailed:
+		e.Source = "github"
+		if e.Ref == "" {
+			e.Ref = "acme/api"
+			if len(first.Repos) > 0 {
+				e.Ref = first.Repos[0]
+			}
+		}
+		if e.URL == "" {
+			e.URL = "https://github.com/" + e.Ref + "/actions"
+		}
+		e.Title = "e2e / checkout failed"
 	default:
-		return e, fmt.Errorf("kind %q — want issue.new, issue.comment, pr.comment or pr.review", kind)
+		return e, fmt.Errorf("kind %q — want issue.new, issue.comment, pr.comment, pr.review, review.requested or ci.failed", kind)
 	}
 	e.Key = "test:" + string(kind) + ":" + e.Ref
 	return e, nil
@@ -644,7 +669,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease}
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, ReviewStatus: wc.ReviewStatus}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
@@ -788,6 +813,18 @@ func watchIdentity(dir, source string, secrets watch.Secrets) string {
 
 // watchTargetWorkspace is --workspace when given, else the one the cwd is
 // in. A menu bar or a Stream Deck has no cwd to speak of.
+// prRefURL turns a ref back into the link that ref shape implies: acme/api#7
+// is a GitHub pull request, acme/api!7 a GitLab merge request. The dry run
+// prints the prompt a real event would carry, so a GitHub URL built from a
+// GitLab ref would preview a link that does not exist.
+func prRefURL(ref string) string {
+	if repo, num, ok := strings.Cut(ref, "!"); ok {
+		return "https://gitlab.com/" + repo + "/-/merge_requests/" + firstNonEmptyString(num, "1")
+	}
+	repo, num, _ := strings.Cut(ref, "#")
+	return "https://github.com/" + repo + "/pull/" + firstNonEmptyString(num, "1")
+}
+
 func watchTargetWorkspace(dir string, flags *pflag.FlagSet) (string, error) {
 	id, _ := flags.GetString("workspace")
 	if id = strings.TrimSpace(id); id == "" {
@@ -926,6 +963,7 @@ func init() {
 	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
 	f.String("quiet", "", "Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
+	f.String("review-status", "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")

@@ -551,6 +551,62 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	scene("watch", grow(s, [1, 3, 5, 15, 18, 20, 22, 24, 26, 28]).map((l, i) => page(term("corgi agent watch", l, { rows: s.length, cursor: i < 9 }))));
 }
 
+// ---- unattended: every kind that arrives, and every reason one is skipped ----
+{
+	const s = [
+		"{g}${/} {B}corgi agent watch enable --action fix --auto-for reviews,comments,ci \\{/}",
+		"    {B}--prs --ci --reviews --pickup \"In Progress\" --lease --quiet 23:00-07:00{/}",
+		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix",
+		"restart the daemon to pick it up: corgi agent restart",
+		"",
+		"{d}# 09:04 — a reviewer leaves feedback on my PR. Worked on: it is scoped.{/}",
+		"{y}🔔{/} max commented on acme/api#412: please cover the empty-path case",
+		"{c}   → claimed acme/api#412 · reviewed its own diff · pushed{/}",
+		"{g}🔔{/} fixed acme/api#412 — https://github.com/acme/api/pull/412",
+		"",
+		"{d}# 09:31 — CI goes red. The one kind that brings its own test for done.{/}",
+		"{y}🔔{/} red build in acme/api — e2e / checkout failed",
+		"{g}🔔{/} fixed acme/api — https://github.com/acme/api/pull/418",
+		"",
+		"{d}# 10:02 — a fresh ticket. Reported only: --auto-for never named tickets.{/}",
+		"{y}🔔{/} new issue ABC-7 — Login loops after password reset",
+		"{d}   → in the inbox; Work on it hands it to a session you can watch{/}",
+		"",
+		"{d}# 10:15 — a colleague wants MY review. Never worked on unattended.{/}",
+		"{y}🔔{/} sam wants your review on acme/web!41 — Retry the upload on a 502",
+		"",
+		"{d}# 10:40 — a comment on a ticket closed last week{/}",
+		"{d}   → skipped: it is done — the comment is not work{/}",
+		"{d}# 10:41 — three more comments on acme/api#412 in one poll{/}",
+		"{d}   → one notification, not three{/}",
+		"{d}# 10:52 — ABC-9, already closed as a duplicate{/}",
+		"{d}   → skipped: it is a duplicate — nobody is going to act on it{/}",
+		"",
+		"{d}# 11:20 — the desktop got to this one first{/}",
+		"{d}   → ABC-8 is already claimed by andrii-desktop{/}",
+		"{d}# 11:48 — four fixes this hour{/}",
+		"{y}🔔{/} new issue ABC-11 — Retry the webhook (3/h cap)",
+		"{d}# 12:05 — a run here costs about 12% and 88% of the window is used{/}",
+		"{d}   → deferred; corgi agent watch run picks it up{/}",
+		"",
+		"{g}${/} {B}corgi agent while-away{/}",
+		"Since Wed 9 Sep 23:00",
+		"",
+		"corgi opened",
+		"  acme/api#412                 opened 1 PR (acme-stack)",
+		"  acme/api                     opened 1 PR (acme-stack)",
+		"arrived",
+		"  ABC-7                        issue.new (acme-stack)",
+		"  acme/web!41                  review.requested (acme-stack)",
+		"",
+		"waiting for a free slot",
+		"  ABC-11",
+		"  a cap or quiet hours held these; corgi agent watch run picks them up",
+	];
+	scene("autofix", grow(s, [2, 4, 9, 13, 17, 20, 27, 34, 40, 47]).map((l, i) =>
+		page(term("corgi agent watch — unattended", l, { rows: s.length, cursor: i < 9 }))));
+}
+
 // ---- the two commands that make leaving it on a decision you can reverse ----
 {
 	const s = [
