@@ -593,7 +593,8 @@ corgi agent note <session> "waiting on PR"           # a line of yours under the
 corgi agent usage [--json|--watch]                   # every account: 5h and week windows, forecast, when a reached limit lifts
 corgi agent carry <session> --profile work           # continue a limited session under another listed account
 corgi agent claude --profile auto                    # start under the listed account with the most budget
-corgi agent standup [--write]                        # yesterday from sessions and git
+corgi agent today [--write]                          # today since midnight, the watch's own runs included
+corgi agent standup [--since 48h] [--write]          # a rolling window of the same
 corgi agent digest --send                            # the daily message (digestAt in the user config)
 corgi agent workspaces pause|resume <id>             # stop supervising one (autostart: false), or resume
 ```

@@ -61,6 +61,7 @@ them.
 | `corgi_watch_status` | `workspace?` | per workspace: what is watched, which sources have a token (fingerprint only), last poll, `whatIsMissing[]` | read this BEFORE enabling — half the answer is usually already there |
 | `corgi_watch_enable` | `workspace?, tracker?, project?, repos[], states[], labels[], comments?, prs?, action?` | the saved rules + `whatIsMissing[]` | `project`/`repos` are what route an event to a workspace — derive them from the repos, never guess. **Takes no token**: tokens go through `corgi agent watch auth --local`, never a tool call. Needs `corgi agent restart` |
 | `corgi_watch_fixes` | `workspace?, limit?` | `[{key, ref, kind, workspace, startedAt, running, issueUrl?, prs[], note?, error?}]` | what the unattended mode did and what it opened — outlives the notification that announced it |
+| `corgi_today` | `since?` | `{since, headline, totals, workspaces[]}` | "what have I done today?" in one call: commits, prompts, and the unattended runs with their PRs. Midnight unless `since` is a duration |
 | `corgi_watch_events` | `workspace?, limit?` | `[{key, kind, ref, title, url, workspace, at, canWorkOn}]` | answers "what came in?"; `canWorkOn` means a skill exists — issue → `/corgi:stories`, review → `/corgi:review` |
 | `corgi_session_start` | `workspace, profile?, name?` | `state: starting` | poll `corgi_agent_status` for `running` + `sessionUrl`; idempotent |
 | `corgi_session_stop` | `workspace` | `state: stopping` | stopping a non-running workspace is a no-op |

@@ -1598,6 +1598,13 @@ func registerMCPTools(s *server.MCPServer) {
 		return map[string]any{"fixes": fixes}, nil
 	}))
 
+	s.AddTool(mcp.NewTool("corgi_today",
+		mcp.WithDescription("What has been done today, per workspace: {since, headline, totals, workspaces[{workspace, dir, commits[], prompts[], fixes[], arrived[], deferred[]}]}. Answers \"what have I done today?\" in one call — the commits that landed, what Claude was asked, and what the unattended watch did on its own with the pull requests it opened. The window is since midnight unless `since` asks for a rolling one. Read-only."),
+		mcp.WithString("since", mcp.Description("A rolling window like 8h or 72h; omitted means since midnight")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return todayForMCP(r.GetString("since", ""), time.Now())
+	}))
+
 	s.AddTool(mcp.NewTool("corgi_validate",
 		mcp.WithDescription("Statically validate corgi-compose.yml (no side effects). Returns {ok, errors[], warnings[]}."),
 		composeOpt,
