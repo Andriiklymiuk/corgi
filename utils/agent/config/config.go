@@ -247,6 +247,10 @@ type WatchConfig struct {
 	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts, e.g.
 	// "23:00-07:00"; empty means none.
 	Quiet string `yaml:"quiet,omitempty"`
+	// FixKinds narrows what action: fix runs on — "issue.new",
+	// "issue.comment", "pr.comment", "pr.review". Empty is every kind that
+	// matched, which is what fix has always meant.
+	FixKinds []string `yaml:"fixKinds,omitempty"`
 	// PickupStatus is the column a ticket moves to when someone picks it up
 	// — "In Progress", say. Empty writes nothing: a tracker corgi has not
 	// been told to move tickets on is left alone.
@@ -275,6 +279,9 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	}
 	if merged.PickupStatus == "" {
 		merged.PickupStatus = base.PickupStatus
+	}
+	if len(merged.FixKinds) == 0 {
+		merged.FixKinds = base.FixKinds
 	}
 	return &merged
 }

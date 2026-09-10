@@ -113,6 +113,14 @@ var agentWatchEnableCmd = &cobra.Command{
 				return fmt.Errorf("--max-per-day must be at least 1")
 			}
 		}
+		if flags.Changed("auto-for") {
+			v, _ := flags.GetString("auto-for")
+			kinds, err := parseAutoFor(v)
+			if err != nil {
+				return err
+			}
+			wc.FixKinds = kinds
+		}
 		if flags.Changed("pickup") {
 			v, _ := flags.GetString("pickup")
 			wc.PickupStatus = strings.TrimSpace(v)
@@ -481,6 +489,7 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			Sources   []string         `json:"sources"`
 			Skipped   []string         `json:"skipped,omitempty"`
 			Action    string           `json:"action"`
+			AutoFor   []string         `json:"autoFor,omitempty"`
 			Interval  string           `json:"interval"`
 			Quiet     string           `json:"quiet,omitempty"`
 			Fixes     daemon.FixBudget `json:"fixes"`
@@ -497,7 +506,7 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		}
 		var out []spec
 		for _, s := range specs {
-			out = append(out, spec{s.Workspace, sourceNames(s), s.Skipped, s.Action, s.Interval.String(), s.Quiet, daemon.BudgetFor(s, state.Fixes, now)})
+			out = append(out, spec{s.Workspace, sourceNames(s), s.Skipped, s.Action, s.FixKinds, s.Interval.String(), s.Quiet, daemon.BudgetFor(s, state.Fixes, now)})
 		}
 		fixes := []fixRow{}
 		for _, r := range state.Fixes.RecentFixes("", 20) {
@@ -593,7 +602,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet}
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
@@ -666,6 +675,9 @@ func sourceNames(s daemon.WatchSpec) []string {
 func fixBudgetLine(s daemon.WatchSpec, fixes *watch.FixLog, now time.Time) string {
 	b := daemon.BudgetFor(s, fixes, now)
 	line := fmt.Sprintf("caps %d/h %d/day · quiet %s · fixes today: %d", b.PerHour, b.PerDay, firstNonEmptyString(s.Quiet, "none"), b.Today)
+	if len(s.FixKinds) > 0 {
+		line = "auto for " + strings.Join(s.FixKinds, ", ") + " · " + line
+	}
 	if !b.Last.IsZero() {
 		line += " (last " + b.Last.Local().Format("15:04") + ")"
 	}
@@ -872,6 +884,7 @@ func init() {
 	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
 	f.String("quiet", "", "With --action fix: local hours in which no fix starts, e.g. 23:00-07:00")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
+	f.String("auto-for", "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")
 	agentWatchRunCmd.Flags().Bool("dry-run", false, "Do not advance the saved cursors")
 	tf := agentWatchTestCmd.Flags()
 	tf.String("ref", "", "Issue key (ABC-12) or PR (owner/repo#12); default: one shaped for the first watched workspace")
