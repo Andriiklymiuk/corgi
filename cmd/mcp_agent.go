@@ -18,6 +18,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+const workspaceArgDescription = "Workspace id, alias, or human name"
+
 // Tools a Remote Control session calls from a phone: find the right stack,
 // materialize a branch across every repository, read the whole change at once.
 //
@@ -93,7 +95,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 				"running and (best-effort) a sessionUrl; opening that URL joins the conversation. Idempotent: an "+
 				"already-running workspace returns state \"running\" with its URL. The optional profile picks a "+
 				"named entry from the trusted agent config (a different Claude account, e.g. \"work\")."),
-		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
+		mcp.WithString("workspace", mcp.Required(), mcp.Description(workspaceArgDescription)),
 		mcp.WithString("profile", mcp.Description("Profile name from the agent config's profiles: section")),
 		mcp.WithString("name", mcp.Description("Session name shown in claude.ai/code, e.g. \"fix login redirect\". Defaults to the workspace, its branch and the start time — pass one whenever the task is known, it reads better in the list.")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -104,7 +106,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithDescription(
 			"Stop the supervised session in a workspace. Returns immediately with state \"stopping\"; "+
 				"poll corgi_agent_status to confirm. Stopping a workspace that is not running is a clean no-op."),
-		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
+		mcp.WithString("workspace", mcp.Required(), mcp.Description(workspaceArgDescription)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpSessionStop(r.GetString("workspace", ""))
 	}))
@@ -114,7 +116,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 			"A workspace's session timeline, newest first: starts, exits with their classified cause and reason, "+
 				"disables, and captured claude.ai session links. Use it to answer why a session died or restarted. "+
 				"It never contains session output."),
-		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id, alias, or human name")),
+		mcp.WithString("workspace", mcp.Required(), mcp.Description(workspaceArgDescription)),
 		mcp.WithNumber("limit", mcp.Description("Max events to return, newest first (default 30, 0 = all kept)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpSessionEvents(r.GetString("workspace", ""), r.GetInt("limit", 30))

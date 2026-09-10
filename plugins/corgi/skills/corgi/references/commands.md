@@ -315,6 +315,27 @@ Errors:
 - `no log directories found under …/.logs/` — run the stack first (`corgi run`), and check it wasn't started with `--logs=false`.
 - `no log files found for <service>` — the service is logged but hasn't produced a file yet (very early in boot), or the name doesn't match.
 
+### `corgi agent watch enable --auto`
+
+The unattended mode in one flag: `--action fix --prs --comments`. It works on
+what arrives — a new issue becomes `/corgi:stories`, a review comment becomes
+`/corgi:review` in address mode — instead of only reporting it.
+
+Draft PRs only, never a merge. Nothing is done twice: an event key is handled
+once across polls and webhooks, and a second event for a ticket already being
+worked on is refused. At most 3/hour and 10/day (`--max-per-hour`,
+`--max-per-day`), nothing above 95% of a usage window, and nothing at all in
+`--quiet HH:MM-HH:MM` — that window stops the fix **and** the notification;
+what arrived is recorded, shows in the inbox, and arrives as one summary when
+the window opens. A run interrupted by a daemon restart is closed on the next
+start and its event offered again.
+
+Needs `corgi agent init --dangerously-skip-permissions` for that workspace,
+or a fix stalls on the first prompt. Back to quiet with `--action notify`.
+
+`corgi agent watch` lists the last fixes and the pull requests they opened;
+so do the phone dashboard and the VS Code status bar.
+
 ### `corgi migrate`
 
 Moves a legacy top-level `corgi_services/` to `.corgi/corgi_services/` and

@@ -54,7 +54,7 @@ func localLauncherURL() string {
 	if addr == "" || !mcpListening(addr) {
 		return ""
 	}
-	return "http://" + addr + "/app"
+	return "http://" + addr + "/app" // NOSONAR — this machine's own launcher, no TLS to speak
 }
 
 // loopbackAddr turns a listen address into one this machine can dial.

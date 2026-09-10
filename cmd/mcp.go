@@ -373,7 +373,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	announceMCPAuth(token, deviceStore)
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
-	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token)
+	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token) // NOSONAR — the local endpoint; the public one is the tunnel, which is https
 	if pairSession != nil {
 		announcePairing(pairSession.Code(), addr)
 	}
