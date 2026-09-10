@@ -55,6 +55,26 @@ func TestRulesMatch(t *testing.T) {
 	}
 }
 
+func TestRulesWhySaysWhatStopsAnEvent(t *testing.T) {
+	r := Rules{Enabled: true, Labels: []string{"bug"}, States: []string{"Todo"}}
+	cases := map[string]Event{
+		"issue comments need --comments":                        {Kind: KindIssueComment, Mine: true},
+		"PR reviews and comments need --prs":                    {Kind: KindPRReview, Mine: true},
+		"not assigned to me (--assignee any takes every issue)": {Kind: KindIssueNew, Labels: []string{"bug"}},
+		"none of the labels bug is on it (it has feature)":      {Kind: KindIssueNew, Mine: true, Labels: []string{"feature"}},
+		`state "Done" is not one of Todo`:                       {Kind: KindIssueNew, Mine: true, Labels: []string{"Bug"}, State: "Done"},
+		"":                                                      {Kind: KindIssueNew, Mine: true, Labels: []string{"Bug"}, State: "todo"},
+	}
+	for want, e := range cases {
+		if got := r.Why(e); got != want {
+			t.Errorf("%+v: %q, want %q", e, got, want)
+		}
+	}
+	if got := (Rules{}).Why(Event{Kind: KindIssueNew, Mine: true}); got != "watch is off here" {
+		t.Errorf("disabled: %q", got)
+	}
+}
+
 func TestOnceDedupesAndSavesCursors(t *testing.T) {
 	dir := t.TempDir()
 	src := &fakeSource{name: "fake", events: []Event{
