@@ -26,6 +26,7 @@ corgi agent watch enable [flags]
       --repos string       GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)
       --states string      Only issues in one of these states, e.g. Todo,Backlog
       --tracker string     linear or jira (default: whichever has a token)
+      --workspace string   Workspace id to change; omitted means the one you are in
 ```
 
 ### Options inherited from parent commands

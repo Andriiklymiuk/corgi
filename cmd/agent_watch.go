@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
@@ -45,7 +46,8 @@ var agentWatchEnableCmd = &cobra.Command{
 	Short: "Watch this workspace (run inside it)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		dir := mustAgentDir()
-		id, err := currentWorkspaceID(dir)
+		flags := cmd.Flags()
+		id, err := watchTargetWorkspace(dir, flags)
 		if err != nil {
 			return err
 		}
@@ -60,7 +62,6 @@ var agentWatchEnableCmd = &cobra.Command{
 			wc = &config.WatchConfig{}
 		}
 		wc.Enabled = true
-		flags := cmd.Flags()
 		if v, _ := flags.GetString("labels"); v != "" {
 			wc.Labels = splitList(v)
 		}
@@ -136,9 +137,9 @@ var agentWatchEnableCmd = &cobra.Command{
 var agentWatchDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Stop watching this workspace",
-	RunE: func(_ *cobra.Command, _ []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		dir := mustAgentDir()
-		id, err := currentWorkspaceID(dir)
+		id, err := watchTargetWorkspace(dir, cmd.Flags())
 		if err != nil {
 			return err
 		}
@@ -480,11 +481,26 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			Quiet     string           `json:"quiet,omitempty"`
 			Fixes     daemon.FixBudget `json:"fixes"`
 		}
+		type fixRow struct {
+			Ref       string    `json:"ref"`
+			Workspace string    `json:"workspace"`
+			Kind      string    `json:"kind,omitempty"`
+			StartedAt time.Time `json:"startedAt"`
+			Running   bool      `json:"running"`
+			PRs       []string  `json:"prs,omitempty"`
+			Note      string    `json:"note,omitempty"`
+			Error     string    `json:"error,omitempty"`
+		}
 		var out []spec
 		for _, s := range specs {
 			out = append(out, spec{s.Workspace, sourceNames(s), s.Skipped, s.Action, s.Interval.String(), s.Quiet, daemon.BudgetFor(s, state.Fixes, now)})
 		}
-		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries()})
+		fixes := []fixRow{}
+		for _, r := range state.Fixes.RecentFixes("", 20) {
+			fixes = append(fixes, fixRow{firstNonEmptyString(r.Ref, r.Key), r.Workspace, r.Kind,
+				r.StartedAt, !r.Done(), r.PRs, r.Note, r.Error})
+		}
+		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes})
 		return
 	}
 	fmt.Println("Tokens")
@@ -712,6 +728,25 @@ func watchIdentity(dir, source string, secrets watch.Secrets) string {
 	return secrets.Me
 }
 
+// watchTargetWorkspace is --workspace when given, else the one the cwd is
+// in. A menu bar or a Stream Deck has no cwd to speak of.
+func watchTargetWorkspace(dir string, flags *pflag.FlagSet) (string, error) {
+	id, _ := flags.GetString("workspace")
+	if id = strings.TrimSpace(id); id == "" {
+		return currentWorkspaceID(dir)
+	}
+	registry, err := workspace.Load(agentRegistryPath(dir))
+	if err != nil {
+		return "", err
+	}
+	for _, w := range registry.Sorted() {
+		if w.ID == id {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("%q is not a registered workspace — `corgi agent init` there first", id)
+}
+
 func currentWorkspaceID(dir string) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -824,6 +859,8 @@ func init() {
 	f.String("repos", "", "GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)")
 	f.String("interval", "", "Poll interval, e.g. 3m; 0 means webhooks only")
 	f.String("action", "", "notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only")
+	f.String("workspace", "", "Workspace id to change; omitted means the one you are in")
+	agentWatchDisableCmd.Flags().String("workspace", "", "Workspace id to stop watching; omitted means the one you are in")
 	f.Bool("auto", false, "Shorthand for --action fix --prs --comments: work on what arrives without being asked, draft PRs only")
 	f.Bool("comments", false, "Also new comments on issues assigned to me")
 	f.Bool("prs", false, "Also reviews and comments on pull requests I opened")
