@@ -2112,11 +2112,13 @@ const launcherPageHTML = `<!doctype html>
         head.appendChild(openControl(ws));
       } else {
         const b = document.createElement('button');
-        // A device with no session is online, not busy: Start on it opens
-        // the session the daemon deliberately did not pre-create.
-        const ready = ws.state === 'ready';
-        b.textContent = ready ? 'Start' : ws.running ? 'Starting…' : (ws.note ? 'Retry' : 'Start');
-        b.disabled = ws.running && !ready;
+        // Follow the state word the daemon computed. Deriving the label from
+        // the running flag instead left a workspace with live local sessions
+        // but no link to open stuck on a disabled "Starting…" for good: it is
+        // running, it is not ready, and nothing was ever pending.
+        const pending = ws.state === 'starting';
+        b.textContent = pending ? 'Starting…' : (ws.note && !ws.running ? 'Retry' : 'Start');
+        b.disabled = pending;
         b.onclick = () => startSession(ws.id, b);
         head.appendChild(b);
       }

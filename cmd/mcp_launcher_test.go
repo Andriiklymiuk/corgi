@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
@@ -366,5 +367,35 @@ func TestLaunchBoardServesTheSessionBoard(t *testing.T) {
 	}
 	if !strings.Contains(launcherPageHTML, "/launch/board") || !strings.Contains(launcherPageHTML, "waiting on you") {
 		t.Fatal("the page must fetch and show the board")
+	}
+}
+
+// A workspace supervised as a device opens no session of its own, so its
+// link is cleared and the card must offer Start. When you had started
+// sessions there by hand, Live won the state and the phone showed a disabled
+// "Starting…" that never resolved — nothing was pending, so nothing cleared it.
+func TestDeviceWorkspaceWithLocalSessionsIsNotPending(t *testing.T) {
+	now := time.Now()
+	live := launchWorkspace{Running: true, DeviceOnly: true, Live: 2, StartedAt: now.Add(-41 * time.Minute).UnixMilli()}
+	if got := launchStateAt(live, now); got != "live" {
+		t.Fatalf("sessions you started yourself are live: got %q", got)
+	}
+	if live.SessionURL != "" {
+		t.Fatal("a device with no session of its own has no link to open")
+	}
+
+	idle := launchWorkspace{Running: true, DeviceOnly: true, StartedAt: now.Add(-time.Minute).UnixMilli()}
+	if got := launchStateAt(idle, now); got != "ready" {
+		t.Fatalf("online with nothing running is ready, not pending: got %q", got)
+	}
+
+	fresh := launchWorkspace{Running: true, DeviceOnly: true, StartedAt: now.Add(-2 * time.Second).UnixMilli()}
+	if got := launchStateAt(fresh, now); got != "starting" {
+		t.Fatalf("only the first seconds of a start are pending: got %q", got)
+	}
+
+	stopped := launchWorkspace{Note: "compose file is missing"}
+	if got := launchStateAt(stopped, now); got != "blocked" {
+		t.Fatalf("a refused start says why: got %q", got)
 	}
 }
