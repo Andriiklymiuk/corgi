@@ -352,8 +352,14 @@ request with where it came from, and is capped by what a run on that workspace
 usually costs rather than by a count. What it will not do is as deliberate: a
 comment on a ticket that is already done, a ticket closed as a duplicate, four
 comments on one pull request, or a ticket another machine has claimed
-(`--lease`). `corgi agent watch replay` shows the week it *would* have had
-before you turn it on, and `corgi agent watch undo` puts a run back.
+(`--lease`). [`corgi agent watch replay`](docs/agent.md#a-dry-run-you-can-read) shows the
+week it *would* have had before you turn it on, and
+[`corgi agent watch undo`](docs/agent.md#after-the-fact) puts a run back.
+
+Full setup — every flag, what it refuses to do and why — in
+[docs/agent.md](docs/agent.md#choosing-what-it-does-on-its-own). In a chat with
+the corgi plugin, `/corgi:setup` walks it, and asking *"what do we track?"*
+answers from the live config and suggests what is missing.
 
 <p align="center"><img src="docs/media/autofix.gif" width="760" alt="a ticket assigned to you claimed, moved to In Progress, worked, a draft PR opened and the ticket moved to In Review; a review comment fixed and pushed; a red CI build fixed; a ticket outside the state filter stopped; someone else’s review request left alone; comments on finished work and a duplicate skipped; a ticket another machine claimed; a cap and a budget deferral; then the morning summary"></p>
 

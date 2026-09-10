@@ -968,6 +968,111 @@ workspaces:
 `defaults: watch:` to give every watched workspace one budget; a
 workspace's own value wins.
 
+### Choosing what it does on its own
+
+`--action fix` alone means every kind the rules matched. That is rarely what
+anyone wants, because the kinds are not the same risk. `--auto-for` names the
+ones it may take:
+
+```bash
+corgi agent watch enable --action fix --auto-for reviews,comments   # the safe two
+corgi agent watch enable --action fix --auto-for ci                 # red builds
+corgi agent watch enable --action fix --auto-for tickets            # the blank page
+corgi agent watch enable --action fix --auto-for all                # what fix used to mean
+```
+
+| word | kinds | why |
+| --- | --- | --- |
+| `comments` | `issue.comment`, `pr.comment` | someone said what to change |
+| `reviews` | `pr.review` | the threads are the checklist |
+| `prs` | both PR kinds | |
+| `ci` | `ci.failed` | brings its own test for "done" — the safest to hand over |
+| `tickets` | `issue.new` | a blank page; leave it reporting longest |
+| `requests` | `review.requested` | someone else's PR. Rarely what you want |
+| `all` | everything | |
+
+A kind not named is reported, not worked on, and
+[`corgi agent watch test`](#a-dry-run-you-can-read) says `notify` for it, so
+the split is visible before an event arrives.
+
+Two kinds need a flag to reach you at all, because neither is about your own
+work: `--ci` for red builds and `--reviews` for a pull request someone asked
+you to review. A review request is never worked on unattended even with
+`--auto-for requests`-shaped settings unless you name it: corgi reads the diff
+and posts a review, and will not push to somebody else's branch.
+
+### Moving the ticket as the work moves
+
+```bash
+corgi agent watch enable --pickup "In Progress" --review-status "In Review"
+```
+
+- `--pickup` moves a ticket when a run takes it on, and when you tap **Work on
+  it** on the phone.
+- `--review-status` moves it again once that run has opened a pull request, and
+  posts the link on the ticket. Without it a board full of "In Progress" is
+  really a board of finished work nobody has looked at.
+
+Both are empty by default, so no existing setup starts writing to a board it
+was not asked to. `corgi agent watch board --refresh` prints the real column
+names; a name that is not on that list is refused, and Jira also decides which
+moves are legal from where the ticket currently sits.
+
+### Two machines, one board
+
+`--lease` claims the ticket on the tracker before working it, as a comment
+naming the machine and the time. Without it a laptop and a desktop watching
+one board both take the same ticket and open two pull requests for it: the
+seen index, the active-fix claim and the caps all live on one machine's disk.
+A claim lapses after ninety minutes, so a machine that died mid-run frees the
+ticket the same morning.
+
+### What it refuses to do
+
+Worth knowing, because these look like the watch being broken:
+
+- a comment on a ticket already **done, closed or resolved**, or on a pull
+  request already **merged** — chatter, not work. `--states` naming that
+  column overrides it.
+- a ticket closed as a **duplicate**, cancelled, won't-do or rejected.
+- **several comments on one pull request** in one poll — one notification.
+- a ticket **another machine has claimed** (`--lease`).
+- anything, once the same wall — a missing credential, a refused permission —
+  has failed **twice in two hours**.
+- a run that would cost more of the five-hour window than is left. Each run
+  records what it spent, and the cap is the median of those rather than a
+  count: ten comment fixes and ten whole tickets are the same number and
+  nowhere near the same money.
+
+Every unattended run also reviews its own diff before it reports, and stamps
+the pull request with the workspace, the kind and the ticket it came from.
+
+### A dry run you can read
+
+```bash
+corgi agent watch test pr.review --ref acme/api#7   # one event, every gate, no claude
+corgi agent watch replay --since 168h               # the week it WOULD have had
+corgi agent watch replay --auto-for tickets         # try a setting without saving it
+```
+
+`test` answers for one event: which workspace it routes to, whether the rules
+take it, whether it would be worked or only reported, and the exact `claude`
+command. `replay` answers for a week of real recorded events, which is the
+question actually being asked before turning any of this on.
+
+### After the fact
+
+```bash
+corgi agent while-away              # what corgi opened, could not do, and is still running
+corgi agent today                   # the same for the day, with your own commits
+corgi agent watch undo ABC-1 --dry-run
+corgi agent watch undo ABC-1        # close what it opened, put the ticket back
+```
+
+`undo` leaves the branch alone: the work is on it, and deleting it is the part
+that cannot be undone in turn. The event goes back in the inbox, because
+undoing a run means it was not done.
+
 ## Wake lock
 
 A machine that sleeps mid-session kills the session, the stack, and any tunnel.
