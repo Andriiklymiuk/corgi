@@ -340,7 +340,9 @@ func closeGitHubPR(ctx context.Context, s Secrets, link string) error {
 	return doClose(req, link)
 }
 
-var gitlabMRPath = regexp.MustCompile(`^(https://[^/]+)/(.+)/-/merge_requests/(\d+)`)
+// http as well as https: a self-hosted GitLab on a private network is a real
+// thing, and refusing it here would look like a broken link.
+var gitlabMRPath = regexp.MustCompile(`^(https?://[^/]+)/(.+)/-/merge_requests/(\d+)`)
 
 func closeGitLabMR(ctx context.Context, s Secrets, link string) error {
 	m := gitlabMRPath.FindStringSubmatch(link)
@@ -370,4 +372,44 @@ func doClose(req *http.Request, link string) error {
 		return fmt.Errorf("closing %s: HTTP %d: %s", link, resp.StatusCode, clip(string(answer), bodyMax))
 	}
 	return nil
+}
+
+// MergePR merges a pull request or merge request corgi opened. Never
+// automatic: this is only ever reached from something a person tapped.
+func MergePR(ctx context.Context, s Secrets, link string) error {
+	switch {
+	case strings.Contains(link, "github.com/"):
+		m := githubPRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a repo and number out of %s", link)
+		}
+		if s.GitHub == "" {
+			return ErrNoToken
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut,
+			"https://api.github.com/repos/"+m[1]+"/pulls/"+m[2]+"/merge", strings.NewReader(`{}`))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+s.GitHub)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Content-Type", "application/json")
+		return doClose(req, link)
+	case strings.Contains(link, "/-/merge_requests/"):
+		m := gitlabMRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a project and number out of %s", link)
+		}
+		if s.GitLab == "" {
+			return ErrNoToken
+		}
+		endpoint := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3] + "/merge"
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		return doClose(req, link)
+	}
+	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }

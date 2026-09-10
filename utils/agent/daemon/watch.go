@@ -329,8 +329,17 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	if q, err := ParseQuiet(spec.Quiet); err == nil && q.Contains(now) {
 		return "quiet hours"
 	}
-	if pct, ok := limitUsed(spec.ConfigDir, now); ok && pct >= limitRefusePercent {
-		return fmt.Sprintf("limit %d%%", pct)
+	if pct, ok := limitUsed(spec.ConfigDir, now); ok {
+		if pct >= limitRefusePercent {
+			return fmt.Sprintf("limit %d%%", pct)
+		}
+		// What a run here usually costs, against what is left. Ten comment
+		// fixes and ten whole tickets are the same number of runs and nowhere
+		// near the same spend, so a count is the wrong unit to stop on. Only
+		// once there is something measured to go on.
+		if typical := log.TypicalSpend(spec.Workspace); typical > 0 && pct+typical > limitRefusePercent {
+			return fmt.Sprintf("a run here costs about %d%% and %d%% is used", typical, pct)
+		}
 	}
 	return ""
 }
@@ -523,7 +532,18 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 
 // fixArgs is claude's argv for one event.
 func fixArgs(spec WatchSpec, e watch.Event) []string {
-	args := []string{"-p", fixPrompt(e) + unattendedSuffix(spec, e), "--output-format", "text"}
+	return fixArgsWith(spec, e, "")
+}
+
+// fixArgsWith adds what an earlier run on the same ref left behind, so a
+// second attempt continues rather than starting at the ticket again.
+func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
+	prompt := fixPrompt(e) + unattendedSuffix(spec, e)
+	if handover = strings.TrimSpace(handover); handover != "" {
+		prompt += "\n\nAn earlier run on this stopped part-way. This is the last thing it said — " +
+			"treat it as notes, not as truth, and check anything it claims before building on it:\n" + handover
+	}
+	args := []string{"-p", prompt, "--output-format", "text"}
 	if spec.SkipPermissions {
 		return append(args, "--dangerously-skip-permissions")
 	}
@@ -571,13 +591,19 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		env = append(env, "CLAUDE_CONFIG_DIR="+spec.ConfigDir)
 	}
 	fmt.Fprintf(logFile, "=== %s %s %s\n", time.Now().Format(time.RFC3339), e.Kind, e.Ref)
-	cmd := claudeCommand(ctx, spec.Dir, env, fixArgs(spec, e)...)
+	// What the window was at before the run, so the receipt is the difference.
+	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
+	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
+	cmd := claudeCommand(ctx, spec.Dir, env, fixArgsWith(spec, e, handover)...)
 	cmd.Stdin = nil
 	out, runErr := cmd.Output()
 	logFile.Write(out)
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
 		d.watchState.Fixes.Finish(e.Key, nil, "", runErr.Error(), time.Now())
+		// What it managed to say before it stopped is worth more than the
+		// error on its own: the next attempt starts from there.
+		d.watchState.Fixes.SetHandover(e.Key, watch.TailLines(string(out), 6), time.Now())
 		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
 			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
@@ -592,6 +618,10 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		body += " — " + note
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
+	d.watchState.Fixes.SetHandover(e.Key, watch.TailLines(string(out), 6), time.Now())
+	if after, ok := usage.ReadLimits(spec.ConfigDir); ok && hadBefore {
+		d.watchState.Fixes.SetSpent(e.Key, after.FiveHour.Percent-before.FiveHour.Percent)
+	}
 	// The pull request it opened is where to go, if it opened one.
 	target := e.URL
 	if len(links) > 0 {

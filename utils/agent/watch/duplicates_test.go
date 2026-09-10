@@ -1,6 +1,10 @@
 package watch
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+)
 
 // A ticket already closed as a duplicate is the one piece of work that is
 // certainly wasted, whichever tracker it came from.
@@ -131,5 +135,68 @@ func TestIgnoringIsNotTheSameAsHavingBeenSeen(t *testing.T) {
 	}
 	if LoadState(dir).IsIgnored("jira:ABC-1") {
 		t.Fatal("undo has to put the event back in the inbox")
+	}
+}
+
+// A run that stops takes its context with it unless it writes something down.
+func TestARunLeavesSomethingForTheNextOne(t *testing.T) {
+	dir := t.TempDir()
+	log := LoadFixLog(dir)
+	e := Event{Key: "jira:ABC-1", Workspace: "api", Ref: "ABC-1"}
+	now := time.Now()
+
+	log.StartFor(e, now.Add(-time.Hour))
+	log.Finish("jira:ABC-1", nil, "", "timed out", now.Add(-30*time.Minute))
+	log.SetHandover("jira:ABC-1", "Found it in registry.go; the fix needs the migration first.", now)
+
+	if got := log.LastHandover("api", "ABC-1"); !strings.Contains(got, "registry.go") {
+		t.Fatalf("the next attempt starts from here: %q", got)
+	}
+	if got := log.LastHandover("api", "OTHER-1"); got != "" {
+		t.Fatalf("notes belong to their own ticket: %q", got)
+	}
+	if got := log.LastHandover("web", "ABC-1"); got != "" {
+		t.Fatalf("and to their own workspace: %q", got)
+	}
+	if !strings.Contains(LoadFixLog(dir).LastHandover("api", "ABC-1"), "registry.go") {
+		t.Fatal("it has to survive the daemon that wrote it")
+	}
+
+	// The tail is what a session says at the end, blank lines dropped.
+	if got := TailLines("start\n\nmiddle\n\n  last  \n\n", 2); got != "middle\nlast" {
+		t.Fatalf("tail = %q", got)
+	}
+	if TailLines("", 3) != "" {
+		t.Fatal("no output, nothing to hand over")
+	}
+}
+
+// Ten comment fixes and ten whole tickets are the same count and nowhere near
+// the same spend, so the cap has to be able to talk about spend.
+func TestWhatARunCostsIsRemembered(t *testing.T) {
+	dir := t.TempDir()
+	log := LoadFixLog(dir)
+	now := time.Now()
+	for i, pct := range []int{2, 30, 4} {
+		key := "k" + string(rune('a'+i))
+		log.StartFor(Event{Key: key, Workspace: "api", Ref: key}, now)
+		log.Finish(key, nil, "", "", now)
+		log.SetSpent(key, pct)
+	}
+	// The median, so one runaway run does not make every later one look
+	// unaffordable.
+	if got := log.TypicalSpend("api"); got != 4 {
+		t.Fatalf("typical spend = %d, want the median 4", got)
+	}
+	if got := log.TypicalSpend("web"); got != 0 {
+		t.Fatalf("a workspace with nothing measured has no figure: %d", got)
+	}
+
+	// A window that reset mid-run reads as a negative; that is not a receipt.
+	log.StartFor(Event{Key: "kz", Workspace: "web", Ref: "kz"}, now)
+	log.Finish("kz", nil, "", "", now)
+	log.SetSpent("kz", -40)
+	if got := log.TypicalSpend("web"); got != 0 {
+		t.Fatalf("a nonsense figure must not be kept: %d", got)
 	}
 }

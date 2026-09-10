@@ -161,14 +161,16 @@ func TestWatchEventsAndWorkingOnOne(t *testing.T) {
 	}
 	json.Unmarshal(rec.Body.Bytes(), &listed)
 	if len(listed.Events) != 2 {
-		t.Fatalf("newest first, deduped by key, bad lines skipped: %+v", listed.Events)
+		t.Fatalf("deduped by key, bad lines skipped: %+v", listed.Events)
 	}
-	// The last line wins for a repeated key, and it is the newest.
-	if listed.Events[0].Key != "jira:ABC-1" || listed.Events[1].Key != "gitlab:acme/api!7" {
-		t.Errorf("newest first, got %q then %q", listed.Events[0].Key, listed.Events[1].Key)
+	// One queue, ordered by who is stuck: someone replying on a pull request
+	// of mine outranks a fresh ticket that blocks nobody yet, whatever
+	// arrived most recently.
+	if listed.Events[0].Key != "gitlab:acme/api!7" || listed.Events[1].Key != "jira:ABC-1" {
+		t.Errorf("whoever is blocked leads, got %q then %q", listed.Events[0].Key, listed.Events[1].Key)
 	}
-	if listed.Events[0].Title != "Login loops" {
-		t.Errorf("the title is one line, got %q", listed.Events[0].Title)
+	if listed.Events[1].Title != "Login loops" {
+		t.Errorf("the title is one line, got %q", listed.Events[1].Title)
 	}
 	if !listed.Events[0].Actionable || !listed.Events[1].Actionable {
 		t.Error("both kinds have a prompt, so both are actionable")

@@ -1124,3 +1124,64 @@ func (d *Daemon) sendDigestIfDue(now time.Time) {
 	}
 	d.Notify("corgi agent · today", body)
 }
+
+// awakeGrace is how long the machine stays awake after the last session
+// stopped working. Long enough that a pause between turns, or a build that
+// prints nothing for a minute, does not drop the lock mid-task.
+const awakeGrace = 5 * time.Minute
+
+// anyoneWorking says a tracked Claude is mid-turn right now — any of them,
+// not only the ones corgi started. A session someone opened in a terminal
+// keeps the laptop awake exactly as much as a supervised one.
+func (d *Daemon) anyoneWorking() bool {
+	if d.Sessions == nil {
+		return false
+	}
+	return anyWorking(d.Sessions.Sessions())
+}
+
+// anyWorking is the test itself: mid-turn, not merely open. A session waiting
+// on a person is not work, and letting it hold the lock is how a laptop ends
+// up awake all night.
+func anyWorking(list []sessions.Session) bool {
+	for _, s := range list {
+		if s.Status == sessions.StatusWorking {
+			return true
+		}
+	}
+	return false
+}
+
+// holdAwakeWhileWorking keeps the machine from sleeping while any tracked
+// session is working, and lets it sleep once they have all been quiet for
+// awakeGrace. The per-workspace lock only ever covered corgi's own supervised
+// processes, so a session started by hand in a terminal would be cut off
+// mid-turn by the lid closing — which is why people ran caffeinate themselves.
+// HoldAwakeWhileWorking is holdAwakeWhileWorking, exported for the command
+// layer that owns the lock.
+func (d *Daemon) HoldAwakeWhileWorking(ctx context.Context, lock *supervisor.WakeLock) {
+	if lock == nil {
+		return
+	}
+	defer lock.Release()
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	lastBusy := time.Time{}
+	for {
+		if d.anyoneWorking() {
+			lastBusy = time.Now()
+			if !lock.Held() {
+				if err := lock.Acquire(os.Getpid()); err != nil {
+					utils.Infof("agent: could not hold the machine awake: %v\n", err)
+				}
+			}
+		} else if lock.Held() && !lastBusy.IsZero() && time.Since(lastBusy) > awakeGrace {
+			lock.Release()
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}

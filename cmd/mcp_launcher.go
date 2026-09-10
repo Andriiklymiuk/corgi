@@ -2206,6 +2206,26 @@ const launcherPageHTML = `<!doctype html>
           a.href = pr; a.target = '_blank'; a.rel = 'noopener noreferrer';
           a.textContent = pr.includes('/pull/') ? 'Open PR' : 'Open MR';
           row.appendChild(a);
+          // Finishing corgi's own work without leaving the row. One tap,
+          // and only on what corgi opened.
+          const merge = document.createElement('button');
+          merge.className = 'primary';
+          merge.textContent = 'Merge';
+          merge.onclick = () => {
+            if (!confirm('Merge ' + fx.ref + '?\n' + pr)) return;
+            merge.disabled = true;
+            ticket({ key: fx.key, ref: fx.ref }, { do: 'merge' }).finally(() => { merge.disabled = false; });
+          };
+          row.appendChild(merge);
+          const shut = document.createElement('button');
+          shut.textContent = 'Close';
+          shut.onclick = () => {
+            if (!confirm('Close ' + fx.ref + ' without merging?\n' + pr)) return;
+            shut.disabled = true;
+            ticket({ key: fx.key, ref: fx.ref }, { do: 'close' }).finally(() => { shut.disabled = false; });
+          };
+          row.appendChild(shut);
+          break;
         }
         if (row.children.length) card.appendChild(row);
         box.appendChild(card);
@@ -3106,7 +3126,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fixes := []map[string]any{}
 	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 8) {
-		row := map[string]any{"ref": firstNonEmptyString(r.Ref, r.Key), "workspace": r.Workspace, "running": !r.Done()}
+		row := map[string]any{"key": r.Key, "ref": firstNonEmptyString(r.Ref, r.Key), "workspace": r.Workspace, "running": !r.Done()}
 		if len(r.PRs) > 0 {
 			row["prs"] = r.PRs
 		}
@@ -3133,6 +3153,16 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			boards[e.Workspace] = map[string]any{"columns": names, "me": info.Me.Name}
 		}
 	}
+	// One queue, not one per repo. A review someone is waiting on outranks
+	// your own backlog ticket whatever repo it came from, and within a rank
+	// the one that has waited longest goes first.
+	sort.SliceStable(out, func(i, j int) bool {
+		ri, rj := waitingRank(out[i].Kind), waitingRank(out[j].Kind)
+		if ri != rj {
+			return ri < rj
+		}
+		return out[i].At.Before(out[j].At)
+	})
 	writeLaunchJSON(w, map[string]any{"events": out, "fixes": fixes, "boards": boards})
 }
 
@@ -3196,6 +3226,26 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = watch.LoadStateLog(dir).SetFrom(event.Key, status, event.State, time.Now())
 		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status, "state": status})
+	case "merge", "close":
+		// Only what corgi opened: this is for finishing its own work, not a
+		// button that can close anything a link points at.
+		link := prCorgiOpened(dir, event.Key)
+		if link == "" {
+			writeLaunchError(w, http.StatusBadRequest, "corgi did not open a pull request for this")
+			return
+		}
+		secrets := watch.LoadSecretsFor(dir, event.Workspace)
+		var err error
+		if strings.TrimSpace(req.Do) == "merge" {
+			err = watch.MergePR(ctx, secrets, link)
+		} else {
+			err = watch.ClosePR(ctx, secrets, link)
+		}
+		if err != nil {
+			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"done": strings.TrimSpace(req.Do) + "d " + link, "url": link})
 	case "assign":
 		me := watch.LoadBoardCache(dir).Get(event.Workspace).Me
 		if me.ID == "" {
@@ -3212,8 +3262,38 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLaunchJSON(w, map[string]any{"done": ref + " is yours"})
 	default:
-		writeLaunchError(w, http.StatusBadRequest, "do is move, assign or ignore")
+		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close or ignore")
 	}
+}
+
+// waitingRank orders the inbox by who is stuck. Someone waiting on you comes
+// first, then a build nobody can merge past, then a conversation, then work
+// that is only waiting on you starting it.
+func waitingRank(kind string) int {
+	switch kind {
+	case "review.requested":
+		return 0 // a person is blocked on you
+	case "ci.failed":
+		return 1 // the branch is blocked
+	case "pr.review", "pr.comment":
+		return 2 // your own PR, someone replied
+	case "issue.comment":
+		return 3
+	default:
+		return 4 // a fresh ticket blocks nobody yet
+	}
+}
+
+// prCorgiOpened is the pull request corgi's own run opened for this event,
+// or "" when it opened none. The merge button never acts on a link that did
+// not come from a run corgi made.
+func prCorgiOpened(agentD, key string) string {
+	for _, r := range watch.LoadFixLog(agentD).RecentFixes("", 50) {
+		if r.Key == key && len(r.PRs) > 0 {
+			return r.PRs[0]
+		}
+	}
+	return ""
 }
 
 // launchWorkOnHandler hands one watch event to a real session: the same
