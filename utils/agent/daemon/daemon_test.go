@@ -795,3 +795,42 @@ func TestDigestDue(t *testing.T) {
 		t.Fatal("no or bad time means no digest")
 	}
 }
+
+func TestStatusIsNotRewrittenWhenUnchanged(t *testing.T) {
+	d := dynDaemon(t)
+	d.IdleTick = 10 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+	waitFor(t, func() bool { _, err := os.Stat(d.StatusPath()); return err == nil })
+
+	before, err := os.Stat(d.StatusPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	after, err := os.Stat(d.StatusPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) || !before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("status.json was rewritten although nothing changed")
+	}
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
+	d.Nudge()
+	waitFor(t, func() bool {
+		s, err := ReadStatus(d.Dir)
+		return err == nil && s != nil && len(s.Workspaces) == 1 && s.Workspaces[0].Running
+	})
+	changed, err := os.Stat(d.StatusPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if os.SameFile(before, changed) && before.ModTime().Equal(changed.ModTime()) {
+		t.Fatal("a state change must reach status.json")
+	}
+
+	cancel()
+	<-done
+}
