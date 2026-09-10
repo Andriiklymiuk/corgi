@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.10.0">
 <title data-rh="true">Getting started | Corgi docs 🐶</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://andriiklymiuk.github.io/corgi/img/corgi-social-card.png"><meta data-rh="true" name="twitter:image" content="https://andriiklymiuk.github.io/corgi/img/corgi-social-card.png"><meta data-rh="true" property="og:url" content="https://andriiklymiuk.github.io/corgi/docs/intro"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Getting started | Corgi docs 🐶"><meta data-rh="true" name="description" content="Let&#x27;s discover Corgi in less than 10 minutes."><meta data-rh="true" property="og:description" content="Let&#x27;s discover Corgi in less than 10 minutes."><link data-rh="true" rel="icon" href="/corgi/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://andriiklymiuk.github.io/corgi/docs/intro"><link data-rh="true" rel="alternate" href="https://andriiklymiuk.github.io/corgi/docs/intro" hreflang="en"><link data-rh="true" rel="alternate" href="https://andriiklymiuk.github.io/corgi/docs/intro" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Getting started","item":"https://andriiklymiuk.github.io/corgi/docs/intro"}]}</script><link rel="alternate" type="application/rss+xml" href="/corgi/blog/rss.xml" title="Corgi docs 🐶 RSS Feed">
 <link rel="alternate" type="application/atom+xml" href="/corgi/blog/atom.xml" title="Corgi docs 🐶 Atom Feed"><link rel="stylesheet" href="/corgi/assets/css/styles.d43d84bd.css">
-<script src="/corgi/assets/js/runtime~main.30689c79.js" defer="defer"></script>
+<script src="/corgi/assets/js/runtime~main.13d4cccb.js" defer="defer"></script>
 <script src="/corgi/assets/js/main.8206a842.js" defer="defer"></script>
 </head>
 <body>
@@ -160,7 +160,7 @@ commands you put in the file.</p>
 <p><strong>Private repos just work.</strong> corgi clones with plain <code>git</code>, so your existing SSH
 keys / credential helper are used as-is. No corgi-specific auth to set up.</p>
 <p><strong>Secrets stay local.</strong> corgi writes each service&#x27;s <code>.env</code> (db credentials, ports,
-sibling URLs) and gitignores <code>.env*</code> + <code>corgi_services/*</code> on init, so secrets never
+sibling URLs) and gitignores <code>.env*</code> + <code>.corgi/corgi_services/*</code> on init, so secrets never
 get committed. Put your own keys in a service&#x27;s env or a tier file like
 <code>env/staging/web.env</code> — also gitignored.</p>
 <p><strong>When a run fails.</strong> Port busy → <code>corgi doctor</code> names the holder, <code>corgi run --kill-port</code> frees it. Missing tool or Docker down → <code>corgi doctor --fix</code>. Clone
@@ -172,7 +172,7 @@ machine, not staging/production or deploys. A <code>corgi-compose.yml</code> run
 bearer token), and <code>corgi tunnel</code> URLs are public — shut them down when done.</p>
 <p><strong>Low lock-in.</strong> Your services stay ordinary git repos, your databases are standard
 Docker (corgi writes a plain <code>docker-compose.yml</code> per database under
-<code>corgi_services/db_services/</code>), and the wiring is just <code>.env</code> files. Stop using
+<code>.corgi/corgi_services/db_services/</code>), and the wiring is just <code>.env</code> files. Stop using
 corgi and you keep all of it.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="next-steps">Next steps<a href="#next-steps" class="hash-link" aria-label="Direct link to Next steps" title="Direct link to Next steps" translate="no">​</a></h2>
 <ul>
