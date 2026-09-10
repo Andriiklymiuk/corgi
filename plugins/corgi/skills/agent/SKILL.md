@@ -640,7 +640,7 @@ corgi agent restart
 **Unattended.** `corgi agent watch enable --auto` is `--action fix --prs
 --comments`: it works on what arrives instead of only telling you. Draft PRs
 only, never a merge, one run at a time per ticket, at most 3/hour and 10/day,
-none in `--quiet` hours, none above 95% of a usage window. Nothing is done
+nothing in `--quiet` hours — no fix starts and nothing buzzes; what arrived is recorded, shown in the inbox, and delivered as one summary when the window opens — none above 95% of a usage window. Nothing is done
 twice — an event key is handled once across polls and webhooks, and a second
 event for a ticket already being worked on is refused. A run the daemon was
 killed in the middle of is closed on the next start and its event offered

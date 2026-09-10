@@ -350,3 +350,61 @@ func TestProbeEvent(t *testing.T) {
 		t.Fatal("a probe records nothing")
 	}
 }
+
+func TestQuietHoursHoldTheNotificationAndReleaseItLater(t *testing.T) {
+	d := testDaemon(t)
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	fakeClaude(t)
+	// A window that is open now would defeat the test, so cover the whole day.
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Project: "ABC",
+		Rules: watch.Rules{Enabled: true}, Action: "notify", Quiet: "00:00-23:59"}
+	d.Watches = []WatchSpec{spec}
+	d.startWatches(context.Background())
+
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:ABC-1", Kind: watch.KindIssueNew, Ref: "ABC-1", Title: "one", Mine: true})
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:ABC-2", Kind: watch.KindIssueNew, Ref: "ABC-2", Title: "two", Mine: true})
+
+	select {
+	case body := <-notes:
+		t.Fatalf("quiet hours must not notify, got %q", body)
+	case <-time.After(300 * time.Millisecond):
+	}
+	// The events are still recorded — the inbox shows them, nothing is lost.
+	if data, _ := os.ReadFile(filepath.Join(d.Dir, "watch", "events.jsonl")); strings.Count(string(data), "\n") != 2 {
+		t.Fatalf("both events should be logged: %q", data)
+	}
+
+	// The window opens: one notification for the lot, not one each.
+	open := spec
+	open.Quiet = ""
+	d.releaseHeld(open, time.Now())
+	got := collectNotes(t, notes, "while you were away")
+	var summary string
+	for body := range got {
+		if strings.Contains(body, "while you were away") {
+			summary = body
+		}
+	}
+	if !strings.Contains(summary, "2 while you were away") ||
+		!strings.Contains(summary, "ABC-1") || !strings.Contains(summary, "ABC-2") {
+		t.Fatalf("summary = %q", summary)
+	}
+
+	// Released once: a second round says nothing.
+	d.releaseHeld(open, time.Now())
+	select {
+	case body := <-notes:
+		t.Fatalf("held notes are delivered once, got %q", body)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// Still quiet? Nothing is released.
+	d.watchState.Hold("acme", "later", time.Now())
+	d.releaseHeld(spec, time.Now())
+	select {
+	case body := <-notes:
+		t.Fatalf("still quiet, got %q", body)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
