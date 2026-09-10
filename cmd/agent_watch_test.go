@@ -580,3 +580,38 @@ func TestWatchStatusPrintsARowPerWorkspaceOverride(t *testing.T) {
 		t.Errorf("the override's own token is missing:\n%s", out)
 	}
 }
+
+func TestAutoForTakesWordsAndKinds(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", nil},
+		{"all", nil},
+		{"tickets", []string{"issue.new"}},
+		{"issues", []string{"issue.new"}},
+		{"reviews", []string{"pr.review"}},
+		{"comments", []string{"issue.comment", "pr.comment"}},
+		{"prs", []string{"pr.review", "pr.comment"}},
+		{"pr.review", []string{"pr.review"}},
+		{" Reviews , tickets ", []string{"pr.review", "issue.new"}},
+		{"reviews,reviews", []string{"pr.review"}},
+	}
+	for _, c := range cases {
+		got, err := parseAutoFor(c.in)
+		if err != nil {
+			t.Fatalf("%q: %v", c.in, err)
+		}
+		if len(got) != len(c.want) {
+			t.Fatalf("%q: got %v want %v", c.in, got, c.want)
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Fatalf("%q: got %v want %v", c.in, got, c.want)
+			}
+		}
+	}
+	if _, err := parseAutoFor("everything"); err == nil {
+		t.Fatal("a word nobody defined must say what the words are")
+	}
+}

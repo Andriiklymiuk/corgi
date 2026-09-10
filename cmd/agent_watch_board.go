@@ -218,3 +218,48 @@ func init() {
 	agentWatchBoardCmd.Flags().Bool("refresh", false, "Read the columns from the tracker again")
 	agentWatchCmd.AddCommand(agentWatchBoardCmd, agentWatchMoveCmd, agentWatchAssignCmd, agentWatchCommentCmd)
 }
+
+// autoForNames are the words someone types for a group of event kinds. The
+// kinds themselves are accepted too, so a config written by hand still works.
+var autoForNames = map[string][]string{
+	"tickets":  {"issue.new"},
+	"issues":   {"issue.new"},
+	"comments": {"issue.comment", "pr.comment"},
+	"reviews":  {"pr.review"},
+	"prs":      {"pr.review", "pr.comment"},
+	"all":      nil,
+}
+
+var knownWatchKinds = map[string]bool{
+	"issue.new": true, "issue.comment": true, "pr.comment": true, "pr.review": true,
+}
+
+// parseAutoFor turns "tickets,reviews" into the event kinds a fix may run
+// on. Empty, or "all", means every kind the rules matched.
+func parseAutoFor(raw string) ([]string, error) {
+	var kinds []string
+	seen := map[string]bool{}
+	for _, part := range strings.Split(raw, ",") {
+		word := strings.ToLower(strings.TrimSpace(part))
+		if word == "" {
+			continue
+		}
+		group, named := autoForNames[word]
+		if !named {
+			if !knownWatchKinds[word] {
+				return nil, fmt.Errorf("--auto-for %q: say tickets, comments, reviews, prs or all, or a kind like pr.review", part)
+			}
+			group = []string{word}
+		}
+		if word == "all" {
+			return nil, nil
+		}
+		for _, k := range group {
+			if !seen[k] {
+				seen[k] = true
+				kinds = append(kinds, k)
+			}
+		}
+	}
+	return kinds, nil
+}

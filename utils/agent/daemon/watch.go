@@ -33,6 +33,11 @@ type WatchSpec struct {
 	Interval time.Duration
 	// Action is notify or fix.
 	Action string
+	// FixKinds narrows what "fix" actually runs on: empty means every kind
+	// the rules matched, which is what action: fix always meant. Naming
+	// kinds lets a workspace work review comments unattended while still
+	// only being told about a fresh ticket.
+	FixKinds []string
 	// SkipPermissions lets the fix run unattended; without it claude stops
 	// at the first permission prompt and the run times out.
 	SkipPermissions bool
@@ -237,7 +242,7 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "watch", Reason: string(e.Kind) + " " + e.Ref, URL: e.URL})
 		}
 		body := watchBody(e)
-		if spec.Action == "fix" {
+		if spec.FixesKind(e.Kind) {
 			if note := d.startFix(ctx, spec, e); note != "" {
 				body += " (" + note + ")"
 			}
@@ -569,8 +574,11 @@ func (d *Daemon) ProbeEvent(e watch.Event, now time.Time) (Probe, bool) {
 		return Probe{}, false
 	}
 	p := Probe{Workspace: spec.Workspace, Why: spec.Rules.Why(e), Seen: d.watchState.IsSeen(e.Key), Action: spec.Action}
+	if p.Matched && spec.Action == "fix" && !spec.FixesKind(e.Kind) {
+		p.Action = "notify"
+	}
 	p.Matched = p.Why == ""
-	if !p.Matched || spec.Action != "fix" {
+	if !p.Matched || p.Action != "fix" {
 		return p, true
 	}
 	p.Deferred = fixDeferral(*spec, d.watchState.Fixes, now)
@@ -636,4 +644,21 @@ func uniqueStrings(in []string) []string {
 		}
 	}
 	return out
+}
+
+// FixesKind says an arriving event is one this workspace works on its own,
+// rather than one it only reports.
+func (s WatchSpec) FixesKind(kind watch.Kind) bool {
+	if s.Action != "fix" {
+		return false
+	}
+	if len(s.FixKinds) == 0 {
+		return true
+	}
+	for _, want := range s.FixKinds {
+		if strings.EqualFold(strings.TrimSpace(want), string(kind)) {
+			return true
+		}
+	}
+	return false
 }

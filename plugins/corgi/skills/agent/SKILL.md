@@ -593,6 +593,10 @@ corgi agent note <session> "waiting on PR"           # a line of yours under the
 corgi agent usage [--json|--watch]                   # every account: 5h and week windows, forecast, when a reached limit lifts
 corgi agent carry <session> --profile work           # continue a limited session under another listed account
 corgi agent claude --profile auto                    # start under the listed account with the most budget
+corgi agent watch enable --auto-for reviews,comments # work those unattended; a fresh ticket only notifies
+corgi agent watch enable --pickup "In Progress"      # picking a story up moves it on the board
+corgi agent watch board [--refresh]                  # the tracker columns corgi knows
+corgi agent watch move IMP-1 "TO TEST STAGING"       # move, assign, comment: writes as you
 corgi agent today [--write]                          # today since midnight, the watch's own runs included
 corgi agent standup [--since 48h] [--write]          # a rolling window of the same
 corgi agent digest --send                            # the daily message (digestAt in the user config)
