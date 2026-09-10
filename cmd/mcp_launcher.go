@@ -1218,6 +1218,12 @@ const launcherPageHTML = `<!doctype html>
   .ev button{font:inherit;font-size:.76rem;font-weight:600;padding:.3rem .7rem;border-radius:.45rem;
     border:1px solid var(--green);background:transparent;color:var(--green)}
   .ev button:disabled{opacity:.5}
+  .evgroup{margin:.5rem 0 .2rem;display:flex;align-items:center;gap:.5rem}
+  .evgroup .gname{font-size:.74rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;opacity:.65}
+  .evgroup button{font:inherit;font-size:.74rem;font-weight:600;padding:.26rem .6rem;border-radius:.45rem;
+    border:1px solid var(--green);background:transparent;color:var(--green);margin-left:auto}
+  .evgroup button[hidden]{display:none}
+  .ev input[type=checkbox]{width:1rem;height:1rem;accent-color:var(--green);margin-right:.1rem}
   .sess{flex-wrap:wrap}
   .sess .ssum{flex-basis:100%;color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem}
   .sess .sact{flex-basis:100%;display:flex;gap:.4rem;align-items:center;margin-top:.35rem}
@@ -1862,49 +1868,89 @@ const launcherPageHTML = `<!doctype html>
     sum.textContent = 'From the tracker and your pull requests';
     box.appendChild(sum);
 
-    for (const ev of events.slice(0, 8)) {
-      const card = document.createElement('div');
-      card.className = 'ev';
+    // One heading per workspace: a batch is shipped against one checkout.
+    const groups = new Map();
+    for (const ev of events.slice(0, 12)) {
+      const key = ev.workspace || '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(ev);
+    }
 
+    for (const [workspace, rows] of groups) {
+      const picked = new Set();
       const head = document.createElement('div');
-      const ref = document.createElement('span');
-      ref.className = 'eref';
-      ref.textContent = ev.ref || ev.key;
-      const kind = document.createElement('span');
-      kind.className = 'ekind';
-      kind.textContent = EVENT_KIND[ev.kind] || ev.kind;
-      head.append(ref, kind);
-      card.appendChild(head);
+      head.className = 'evgroup';
+      const name = document.createElement('span');
+      name.className = 'gname';
+      name.textContent = workspace || 'elsewhere';
+      const batch = document.createElement('button');
+      batch.hidden = true;
+      head.append(name, batch);
+      box.appendChild(head);
 
-      if (ev.title) {
-        const t = document.createElement('p');
-        t.className = 'etitle';
-        t.textContent = ev.title;
-        card.appendChild(t);
-      }
+      const refresh = () => {
+        batch.hidden = picked.size < 2;
+        batch.textContent = 'Ship ' + picked.size + ' together';
+      };
+      batch.onclick = () => {
+        batch.disabled = true;
+        workOn({ keys: [...picked], ref: picked.size + ' issues' }).finally(() => { batch.disabled = false; });
+      };
 
-      const row = document.createElement('div');
-      row.className = 'erow';
-      if (ev.url && /^https:\/\//.test(ev.url)) {
-        const a = document.createElement('a');
-        a.className = 'eopen';
-        a.href = ev.url;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.textContent = ev.kind && ev.kind.startsWith('pr.') ? 'Open PR' : 'Open issue';
-        row.appendChild(a);
+      for (const ev of rows) {
+        const card = document.createElement('div');
+        card.className = 'ev';
+
+        const head2 = document.createElement('div');
+        head2.style.display = 'flex';
+        head2.style.alignItems = 'center';
+        head2.style.gap = '.4rem';
+        // Only new issues batch — a review comment is about one thread.
+        if (ev.actionable && ev.kind === 'issue.new') {
+          const tick = document.createElement('input');
+          tick.type = 'checkbox';
+          tick.onchange = () => { tick.checked ? picked.add(ev.key) : picked.delete(ev.key); refresh(); };
+          head2.appendChild(tick);
+        }
+        const ref = document.createElement('span');
+        ref.className = 'eref';
+        ref.textContent = ev.ref || ev.key;
+        const kind = document.createElement('span');
+        kind.className = 'ekind';
+        kind.textContent = EVENT_KIND[ev.kind] || ev.kind;
+        head2.append(ref, kind);
+        card.appendChild(head2);
+
+        if (ev.title) {
+          const t = document.createElement('p');
+          t.className = 'etitle';
+          t.textContent = ev.title;
+          card.appendChild(t);
+        }
+
+        const row = document.createElement('div');
+        row.className = 'erow';
+        if (ev.url && /^https:\/\//.test(ev.url)) {
+          const a = document.createElement('a');
+          a.className = 'eopen';
+          a.href = ev.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = ev.kind && ev.kind.startsWith('pr.') ? 'Open PR' : 'Open issue';
+          row.appendChild(a);
+        }
+        if (ev.actionable) {
+          const go = document.createElement('button');
+          go.textContent = 'Work on it';
+          go.onclick = () => {
+            go.disabled = true;
+            workOn(ev).finally(() => { go.disabled = false; });
+          };
+          row.appendChild(go);
+        }
+        if (row.children.length) card.appendChild(row);
+        box.appendChild(card);
       }
-      if (ev.actionable) {
-        const go = document.createElement('button');
-        go.textContent = 'Work on it';
-        go.onclick = () => {
-          go.disabled = true;
-          workOn(ev).finally(() => { go.disabled = false; });
-        };
-        row.appendChild(go);
-      }
-      if (row.children.length) card.appendChild(row);
-      box.appendChild(card);
     }
     box.hidden = false;
   }
@@ -1912,7 +1958,7 @@ const launcherPageHTML = `<!doctype html>
   async function workOn(ev) {
     // Reuse whatever the new-chat box is set to, so a window, model and
     // account picked once apply here too.
-    const body = { key: ev.key };
+    const body = ev.keys ? { keys: ev.keys } : { key: ev.key };
     const pick = (cls) => {
       const el = document.querySelector('#newchat .' + cls);
       return el && el.value ? el.value : '';
@@ -2721,6 +2767,9 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
+// watchBatchMax is how many issues one session is asked to ship at once.
+const watchBatchMax = 10
+
 // launchEventsHandler lists what the watch has seen, newest first, so the
 // phone can show the tracker issues and reviews waiting for a decision.
 func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
@@ -2762,10 +2811,11 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Key     string `json:"key"`
-		Window  string `json:"window"`
-		Model   string `json:"model"`
-		Profile string `json:"profile"`
+		Key     string   `json:"key"`
+		Keys    []string `json:"keys"`
+		Window  string   `json:"window"`
+		Model   string   `json:"model"`
+		Profile string   `json:"profile"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -2776,14 +2826,38 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	event, ok := watch.FindEvent(dir, strings.TrimSpace(req.Key))
-	if !ok {
-		writeLaunchError(w, http.StatusNotFound, "no such watch event")
+	keys := req.Keys
+	if len(keys) == 0 && strings.TrimSpace(req.Key) != "" {
+		keys = []string{req.Key}
+	}
+	if len(keys) == 0 {
+		writeLaunchError(w, http.StatusBadRequest, "name the event to work on")
 		return
 	}
-	prompt := daemon.FixPrompt(event)
+	if len(keys) > watchBatchMax {
+		writeLaunchError(w, http.StatusBadRequest, "too many at once")
+		return
+	}
+	var events []watch.Event
+	for _, key := range keys {
+		event, ok := watch.FindEvent(dir, strings.TrimSpace(key))
+		if !ok {
+			writeLaunchError(w, http.StatusNotFound, "no such watch event")
+			return
+		}
+		events = append(events, event)
+	}
+	// A batch is one workspace's issues: the skill specs them together
+	// against that checkout, and two checkouts have nothing to share.
+	for _, e := range events[1:] {
+		if e.Workspace != events[0].Workspace {
+			writeLaunchError(w, http.StatusBadRequest, "those are in different workspaces — take one workspace at a time")
+			return
+		}
+	}
+	prompt := daemon.BatchPrompt(events)
 	if prompt == "" {
-		writeLaunchError(w, http.StatusConflict, "nothing to work on for this kind of event")
+		writeLaunchError(w, http.StatusConflict, "only new issues can be worked on together")
 		return
 	}
 	model := strings.TrimSpace(req.Model)
