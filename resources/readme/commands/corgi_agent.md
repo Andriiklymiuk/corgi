@@ -81,6 +81,7 @@ Getting started:
 * [corgi agent standup](corgi_agent_standup)	 - What you and Claude did, per workspace, since yesterday
 * [corgi agent status](corgi_agent_status)	 - Show what agent mode is running, and under which account
 * [corgi agent stop](corgi_agent_stop)	 - Stop the agent daemon
+* [corgi agent today](corgi_agent_today)	 - What has been done today — yours and the watch's
 * [corgi agent track](corgi_agent_track)	 - Track every Claude Code session on this machine for a Stream Deck or the CLI
 * [corgi agent tunnel](corgi_agent_tunnel)	 - Set up the permanent launcher URL
 * [corgi agent uninstall](corgi_agent_uninstall)	 - Stop starting agent mode at login

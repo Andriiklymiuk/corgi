@@ -868,3 +868,50 @@ func FindEvent(agentDir, key string) (Event, bool) {
 	}
 	return Event{}, false
 }
+
+// Outcome is one phrase for what a run ended up doing, so every reader of the
+// log says the same thing about the same run instead of inventing wording.
+func (r FixRecord) Outcome() string {
+	switch {
+	case !r.Done():
+		return "running"
+	case r.Error != "":
+		return r.Error
+	case len(r.PRs) == 1:
+		return "opened 1 PR"
+	case len(r.PRs) > 1:
+		return fmt.Sprintf("opened %d PRs", len(r.PRs))
+	case r.Note != "":
+		return r.Note
+	default:
+		return "nothing opened"
+	}
+}
+
+// FixesSince is every run started at or after since, newest first, across
+// workspaces.
+func (l *FixLog) FixesSince(since time.Time) []FixRecord {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := []FixRecord{}
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].StartedAt.Before(since) {
+			continue
+		}
+		out = append(out, l.Started[i])
+	}
+	return out
+}
+
+// EventsSince is what the watch saw at or after since, newest first. The log
+// is capped, so scan is bounded whatever the window asks for.
+func EventsSince(agentDir string, since time.Time) []Event {
+	out := []Event{}
+	for _, e := range RecentEvents(agentDir, 2000) {
+		if e.At.Before(since) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
