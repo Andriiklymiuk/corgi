@@ -30,19 +30,36 @@ func fakeClaude(t *testing.T) *[]string {
 	return &ran
 }
 
-// collectNotes gathers notification bodies until one contains want.
-func collectNotes(t *testing.T, notes <-chan string, want string) map[string]bool {
+// collectNotes gathers notification bodies until every want has been seen.
+// A fix notifies from its own goroutine, so waiting on one string alone
+// returns whenever that one happens to win the race.
+func collectNotes(t *testing.T, notes <-chan string, wants ...string) map[string]bool {
 	t.Helper()
 	got := map[string]bool{}
+	seen := func() bool {
+		for _, want := range wants {
+			found := false
+			for body := range got {
+				if strings.Contains(body, want) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		return true
+	}
 	for {
 		select {
 		case b := <-notes:
 			got[b] = true
-			if strings.Contains(b, want) {
+			if seen() {
 				return got
 			}
 		case <-time.After(3 * time.Second):
-			t.Fatalf("waiting for %q, have %v", want, got)
+			t.Fatalf("waiting for %q, have %v", wants, got)
 		}
 	}
 }
@@ -89,7 +106,7 @@ func TestDeferredFixIsNotRunAndNotRetried(t *testing.T) {
 	second := watch.Event{Key: "linear:ABC-2", Kind: watch.KindIssueNew, Ref: "ABC-2", Title: "two", Mine: true}
 	d.handleWatchEvent(context.Background(), first)
 	d.handleWatchEvent(context.Background(), second)
-	got := collectNotes(t, notes, "fixed ABC-1")
+	got := collectNotes(t, notes, "fixed ABC-1", "fix deferred")
 	if !got["new issue ABC-2 — two (fix deferred: 1/h cap)"] {
 		t.Fatalf("notices %v", got)
 	}
