@@ -45,3 +45,6 @@ corgi_examples/
 
 corgi-bar/
 corgi-agent-deck/
+
+# Agent worktrees: local scratch checkouts, never part of the repo
+.claude/worktrees/
