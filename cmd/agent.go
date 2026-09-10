@@ -212,12 +212,20 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	telegramDone := make(<-chan struct{})
 	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil {
-		startTelegramControl(ctx, user.NotifyUrl, dir)
+		telegramDone = startTelegramControl(ctx, user.NotifyUrl, dir)
 	}
 
-	if err := d.Run(ctx, configs); err != nil && !errors.Is(err, context.Canceled) {
-		exitWithError("agent_serve", err, 1)
+	runErr := d.Run(ctx, configs)
+	// Wait for the chat loop to finish rather than exiting under it. Bounded,
+	// because a stuck request must not hold up a stop the person asked for.
+	select {
+	case <-telegramDone:
+	case <-time.After(3 * time.Second):
+	}
+	if runErr != nil && !errors.Is(runErr, context.Canceled) {
+		exitWithError("agent_serve", runErr, 1)
 	}
 	utils.Info(art.BlueColor, "corgi agent stopped", art.WhiteColor)
 }
