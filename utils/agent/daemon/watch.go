@@ -14,6 +14,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/events"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
@@ -26,12 +27,40 @@ type WatchSpec struct {
 	Repos     []string // owner/repo
 	Rules     watch.Rules
 	Sources   []watch.Source
-	Interval  time.Duration
+	// Skipped names the sources the rules can never use, so status can say
+	// why they are not polled.
+	Skipped  []string
+	Interval time.Duration
 	// Action is notify or fix.
 	Action string
 	// SkipPermissions lets the fix run unattended; without it claude stops
 	// at the first permission prompt and the run times out.
 	SkipPermissions bool
+	// MaxFixesPerHour and MaxFixesPerDay cap fix starts; 0 is the default.
+	MaxFixesPerHour int
+	MaxFixesPerDay  int
+	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts.
+	Quiet string
+}
+
+const (
+	DefaultMaxFixesPerHour = 3
+	DefaultMaxFixesPerDay  = 10
+	// limitRefusePercent: a fix started this close to a limit would only
+	// finish the account off for everything else.
+	limitRefusePercent = 95
+)
+
+// FixCaps is the workspace's per-hour and per-day fix caps, defaults applied.
+func (s WatchSpec) FixCaps() (perHour, perDay int) {
+	perHour, perDay = s.MaxFixesPerHour, s.MaxFixesPerDay
+	if perHour <= 0 {
+		perHour = DefaultMaxFixesPerHour
+	}
+	if perDay <= 0 {
+		perDay = DefaultMaxFixesPerDay
+	}
+	return perHour, perDay
 }
 
 // owns says an event is this workspace's by project key or repo.
@@ -53,6 +82,68 @@ func (s WatchSpec) owns(e watch.Event) bool {
 	return false
 }
 
+// liveSources splits the sources into the ones worth polling and the
+// names of the ones the rules can never match.
+func (s WatchSpec) liveSources() (live []watch.Source, dead []string) {
+	for _, src := range s.Sources {
+		if s.Rules.DeadSource(src.Name()) {
+			dead = append(dead, src.Name())
+		} else {
+			live = append(live, src)
+		}
+	}
+	return live, dead
+}
+
+// QuietHours is a daily local-time window, possibly across midnight.
+type QuietHours struct {
+	start, end int // minutes since midnight
+}
+
+// ParseQuiet reads "HH:MM-HH:MM"; "" is no window.
+func ParseQuiet(s string) (QuietHours, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return QuietHours{}, nil
+	}
+	from, to, ok := strings.Cut(s, "-")
+	if !ok {
+		return QuietHours{}, fmt.Errorf("quiet hours %q: want HH:MM-HH:MM", s)
+	}
+	start, err := parseClock(from)
+	if err != nil {
+		return QuietHours{}, fmt.Errorf("quiet hours %q: %w", s, err)
+	}
+	end, err := parseClock(to)
+	if err != nil {
+		return QuietHours{}, fmt.Errorf("quiet hours %q: %w", s, err)
+	}
+	if start == end {
+		return QuietHours{}, fmt.Errorf("quiet hours %q: start and end are the same", s)
+	}
+	return QuietHours{start: start, end: end}, nil
+}
+
+func parseClock(s string) (int, error) {
+	t, err := time.Parse("15:04", strings.TrimSpace(s))
+	if err != nil {
+		return 0, fmt.Errorf("%q is not HH:MM", s)
+	}
+	return t.Hour()*60 + t.Minute(), nil
+}
+
+// Contains says t's local time of day falls in the window.
+func (q QuietHours) Contains(t time.Time) bool {
+	if q.start == q.end {
+		return false
+	}
+	m := t.Local().Hour()*60 + t.Local().Minute()
+	if q.start < q.end {
+		return m >= q.start && m < q.end
+	}
+	return m >= q.start || m < q.end
+}
+
 // fixTimeout bounds one unattended claude run.
 const fixTimeout = 30 * time.Minute
 
@@ -67,20 +158,30 @@ var claudeCommand = func(ctx context.Context, dir string, env []string, args ...
 	return cmd
 }
 
+func (d *Daemon) loadWatchFiles() {
+	if d.watchState == nil {
+		d.watchState = watch.LoadState(d.Dir)
+	}
+}
+
 func (d *Daemon) startWatches(ctx context.Context) {
 	if len(d.Watches) == 0 {
 		return
 	}
-	d.watchState = watch.LoadState(d.Dir)
+	d.loadWatchFiles()
 	d.watchers = map[string]*watch.Watch{}
 	d.fixBusy = map[string]*sync.Mutex{}
 	for _, spec := range d.Watches {
 		spec := spec
-		w := &watch.Watch{Workspace: spec.Workspace, Rules: spec.Rules, Sources: spec.Sources, Interval: spec.Interval,
+		live, dead := spec.liveSources()
+		if len(dead) > 0 {
+			utils.Infof("agent: watch %s: not polling %s — the rules take nothing they emit\n", spec.Workspace, strings.Join(dead, ", "))
+		}
+		w := &watch.Watch{Workspace: spec.Workspace, Rules: spec.Rules, Sources: live, Interval: spec.Interval,
 			State: d.watchState, Sink: d.watchSink(spec), Log: func(line string) { utils.Info("agent:", line) }}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = &sync.Mutex{}
-		if len(spec.Sources) > 0 && spec.Interval > 0 {
+		if len(live) > 0 && spec.Interval > 0 {
 			go w.Run(ctx)
 		}
 	}
@@ -127,14 +228,94 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		}
 		body := watchBody(e)
 		if spec.Action == "fix" {
-			if d.claimFix(spec.Workspace, e.Ref) {
-				go d.runFix(ctx, spec, e)
-			} else {
-				body += " (a fix for it is already running)"
+			if note := d.startFix(ctx, spec, e); note != "" {
+				body += " (" + note + ")"
 			}
 		}
 		go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
 	}
+}
+
+// startFix launches the fix, or says in one short note why not. A deferred
+// event leaves the seen list and waits in the fix log for a manual
+// `corgi agent watch run`; the daemon never retries it by itself.
+func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) string {
+	now := time.Now()
+	if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
+		d.watchState.Fixes.Defer(e)
+		d.watchState.Unsee(e.Key)
+		utils.Infof("agent: watch %s: fix for %s deferred: %s\n", spec.Workspace, e.Ref, reason)
+		return "fix deferred: " + reason
+	}
+	if !d.claimFix(spec.Workspace, e.Ref) {
+		return "a fix for it is already running"
+	}
+	d.watchState.Fixes.Start(spec.Workspace, e.Key, now)
+	go d.runFix(ctx, spec, e)
+	return ""
+}
+
+// fixDeferral says why a fix must not start now; "" means go ahead.
+func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
+	perHour, perDay := spec.FixCaps()
+	if log.StartedSince(spec.Workspace, now.Add(-time.Hour)) >= perHour {
+		return fmt.Sprintf("%d/h cap", perHour)
+	}
+	if log.StartedSince(spec.Workspace, now.Add(-24*time.Hour)) >= perDay {
+		return fmt.Sprintf("%d/day cap", perDay)
+	}
+	if q, err := ParseQuiet(spec.Quiet); err == nil && q.Contains(now) {
+		return "quiet hours"
+	}
+	if pct, ok := limitUsed(spec.ConfigDir, now); ok && pct >= limitRefusePercent {
+		return fmt.Sprintf("limit %d%%", pct)
+	}
+	return ""
+}
+
+// FixBudget is a workspace's fix count against its caps.
+type FixBudget struct {
+	Hour     int       `json:"hour"`
+	PerHour  int       `json:"perHour"`
+	Day      int       `json:"day"`
+	PerDay   int       `json:"perDay"`
+	Today    int       `json:"today"`
+	Last     time.Time `json:"last,omitempty"`
+	Deferred int       `json:"deferred"`
+}
+
+// BudgetFor reads the workspace's fix history against its caps.
+func BudgetFor(spec WatchSpec, log *watch.FixLog, now time.Time) FixBudget {
+	b := FixBudget{Deferred: log.DeferredCount(spec.Workspace)}
+	b.PerHour, b.PerDay = spec.FixCaps()
+	b.Hour = log.StartedSince(spec.Workspace, now.Add(-time.Hour))
+	b.Day = log.StartedSince(spec.Workspace, now.Add(-24*time.Hour))
+	local := now.Local()
+	b.Today = log.StartedSince(spec.Workspace, time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, local.Location()))
+	b.Last, _ = log.LastStarted(spec.Workspace)
+	return b
+}
+
+// String is "2/3 this hour · 5/10 today".
+func (b FixBudget) String() string {
+	return fmt.Sprintf("%d/%d this hour · %d/%d today", b.Hour, b.PerHour, b.Day, b.PerDay)
+}
+
+// limitUsed is the fuller of the account's two windows; one that has
+// already reset since the snapshot no longer counts.
+func limitUsed(configDir string, now time.Time) (int, bool) {
+	l, ok := usage.ReadLimits(configDir)
+	if !ok {
+		return 0, false
+	}
+	pct := 0
+	for _, w := range []usage.Window{l.FiveHour, l.SevenDay} {
+		if !w.ResetsAt.IsZero() && w.ResetsAt.Before(now) {
+			continue
+		}
+		pct = max(pct, w.Percent)
+	}
+	return pct, true
 }
 
 // claimFix keeps one fix per issue or PR in flight: a second event on the
@@ -159,6 +340,12 @@ func (d *Daemon) releaseFix(workspace, ref string) {
 	d.attentionMu.Unlock()
 }
 
+func (d *Daemon) fixActiveFor(workspace, ref string) bool {
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	return d.fixActive[workspace+"/"+ref]
+}
+
 func watchBody(e watch.Event) string {
 	switch e.Kind {
 	case watch.KindIssueNew:
@@ -179,17 +366,45 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-// fixPrompt is what the headless claude gets. The skills carry the rules:
-// one spec gate collapsed by the approval, draft PRs only, never merge.
-func fixPrompt(e watch.Event) string {
-	switch e.Kind {
-	case watch.KindIssueNew:
+// fixPrompts is what the headless claude gets, per kind. The skills carry
+// the rules: one spec gate collapsed by the approval, draft PRs only,
+// never merge.
+var fixPrompts = map[watch.Kind]func(e watch.Event) string{
+	watch.KindIssueNew: func(e watch.Event) string {
 		return "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + e.Ref
-	case watch.KindIssueComment:
-		return fmt.Sprintf("A new comment on %s from %s says: %q. Act on it: I approve all changes; ship it and open draft PRs. /corgi:stories %s", e.Ref, firstNonEmpty(e.Author, "someone"), e.Body, e.Ref)
-	default:
-		return "Address the review feedback on my PR " + e.URL + ": apply the valid comments, push back on the wrong ones, reply and resolve the threads, push the fixes. /corgi:review " + e.URL
+	},
+	watch.KindIssueComment: func(e watch.Event) string {
+		return fmt.Sprintf("A new comment on %s from %s says: %q. Read it and decide. "+
+			"If it asks a question or for information, answer it as a comment on %s through the tracker "+
+			"(the Linear or Jira MCP tools, or the REST API with the saved token) and do NOT open a PR. "+
+			"If it asks for a change, apply it on the existing branch for %s — find it by the ticket key in the branch names — "+
+			"and when there is no such branch run /corgi:stories %s. I approve all changes; draft PRs only.",
+			e.Ref, firstNonEmpty(e.Author, "someone"), e.Body, e.Ref, e.Ref, e.Ref)
+	},
+	watch.KindPRComment: reviewFeedbackPrompt,
+	watch.KindPRReview:  reviewFeedbackPrompt,
+}
+
+func reviewFeedbackPrompt(e watch.Event) string {
+	return "Address the review feedback on my own PR " + e.URL + " — do not start a fresh review of it: " +
+		"apply the valid comments, push back on the wrong ones, reply and resolve the threads, push the fixes. /corgi:review " + e.URL
+}
+
+// fixPrompt is the prompt for an event's kind; "" for a kind with no fix.
+func fixPrompt(e watch.Event) string {
+	if build := fixPrompts[e.Kind]; build != nil {
+		return build(e)
 	}
+	return ""
+}
+
+// fixArgs is claude's argv for one event.
+func fixArgs(spec WatchSpec, e watch.Event) []string {
+	args := []string{"-p", fixPrompt(e), "--output-format", "text"}
+	if spec.SkipPermissions {
+		return append(args, "--dangerously-skip-permissions")
+	}
+	return append(args, "--permission-mode", "acceptEdits")
 }
 
 var prLink = regexp.MustCompile(`https://(?:github\.com/[^\s)]+/pull/\d+|[^\s)]+/-/merge_requests/\d+)`)
@@ -214,18 +429,12 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	defer logFile.Close()
 
-	args := []string{"-p", fixPrompt(e), "--output-format", "text"}
-	if spec.SkipPermissions {
-		args = append(args, "--dangerously-skip-permissions")
-	} else {
-		args = append(args, "--permission-mode", "acceptEdits")
-	}
 	var env []string
 	if spec.ConfigDir != "" {
 		env = append(env, "CLAUDE_CONFIG_DIR="+spec.ConfigDir)
 	}
 	fmt.Fprintf(logFile, "=== %s %s %s\n", time.Now().Format(time.RFC3339), e.Kind, e.Ref)
-	cmd := claudeCommand(ctx, spec.Dir, env, args...)
+	cmd := claudeCommand(ctx, spec.Dir, env, fixArgs(spec, e)...)
 	cmd.Stdin = nil
 	out, runErr := cmd.Output()
 	logFile.Write(out)
@@ -241,6 +450,55 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		body += " — " + clipText(last, 160)
 	}
 	go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
+}
+
+// Probe is one synthesized event's walk through the pipeline, for
+// `corgi agent watch test`: every gate a real event passes, and the claude
+// run it would start, without starting it or recording anything.
+type Probe struct {
+	Workspace string    `json:"workspace"`
+	Matched   bool      `json:"matched"`
+	Seen      bool      `json:"seen"`
+	Action    string    `json:"action"`
+	Busy      bool      `json:"busy,omitempty"`
+	Deferred  string    `json:"deferred,omitempty"`
+	Budget    FixBudget `json:"budget"`
+	Prompt    string    `json:"prompt,omitempty"`
+	Args      []string  `json:"args,omitempty"`
+}
+
+// ProbeEvent routes e the way handleWatchEvent does and reports each gate.
+// ok is false when no watched workspace takes the event.
+func (d *Daemon) ProbeEvent(e watch.Event, now time.Time) (Probe, bool) {
+	d.loadWatchFiles()
+	var spec *WatchSpec
+	for i := range d.Watches {
+		if d.Watches[i].owns(e) {
+			spec = &d.Watches[i]
+			break
+		}
+	}
+	if spec == nil {
+		for i := range d.Watches {
+			if d.Watches[i].Rules.Match(e) {
+				spec = &d.Watches[i]
+				break
+			}
+		}
+	}
+	if spec == nil {
+		return Probe{}, false
+	}
+	p := Probe{Workspace: spec.Workspace, Matched: spec.Rules.Match(e), Seen: d.watchState.IsSeen(e.Key), Action: spec.Action}
+	if !p.Matched || spec.Action != "fix" {
+		return p, true
+	}
+	p.Deferred = fixDeferral(*spec, d.watchState.Fixes, now)
+	p.Budget = BudgetFor(*spec, d.watchState.Fixes, now)
+	p.Busy = d.fixActiveFor(spec.Workspace, e.Ref)
+	p.Prompt = fixPrompt(e)
+	p.Args = fixArgs(*spec, e)
+	return p, true
 }
 
 func (d *Daemon) appendWatchEvent(e watch.Event) {

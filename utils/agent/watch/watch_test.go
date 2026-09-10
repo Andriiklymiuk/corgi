@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -102,10 +103,100 @@ func TestErrorsAreRememberedAndBackOff(t *testing.T) {
 func TestSeenListIsBounded(t *testing.T) {
 	s := LoadState(t.TempDir())
 	for i := 0; i < seenKeep+50; i++ {
-		s.MarkSeen("k" + string(rune(i)))
+		s.MarkSeen(fmt.Sprintf("k%d", i))
 	}
-	if len(s.Seen) > seenKeep {
-		t.Fatalf("seen grew to %d", len(s.Seen))
+	if len(s.Seen) > seenKeep || len(s.seen) != len(s.Seen) {
+		t.Fatalf("seen grew to %d, index %d", len(s.Seen), len(s.seen))
+	}
+	if !s.IsSeen("k2049") || s.IsSeen("k0") {
+		t.Fatal("the index must follow the trim")
+	}
+	if s.MarkSeen("k2049") {
+		t.Fatal("a kept key is still seen")
+	}
+}
+
+func TestSeenIndexSurvivesReloadAndUnsee(t *testing.T) {
+	dir := t.TempDir()
+	s := LoadState(dir)
+	s.MarkSeen("a")
+	s.MarkSeen("b")
+	s.Unsee("a")
+	s.Unsee("missing")
+	if s.IsSeen("a") || !s.IsSeen("b") || len(s.Seen) != 1 {
+		t.Fatalf("%v", s.Seen)
+	}
+	reloaded := LoadState(dir)
+	if !reloaded.IsSeen("b") || reloaded.IsSeen("a") || !reloaded.MarkSeen("a") || reloaded.MarkSeen("b") {
+		t.Fatalf("reloaded %v", reloaded.Seen)
+	}
+	if reloaded.Fixes == nil {
+		t.Fatal("the fix log rides along")
+	}
+}
+
+func TestRulesDeadSources(t *testing.T) {
+	cases := []struct {
+		name string
+		r    Rules
+		dead []string
+	}{
+		{"disabled", Rules{}, []string{"github", "gitlab", "jira", "linear"}},
+		{"issues only", Rules{Enabled: true}, []string{"github", "gitlab"}},
+		{"comments too", Rules{Enabled: true, Comments: true}, []string{"github", "gitlab"}},
+		{"prs", Rules{Enabled: true, PRs: true}, nil},
+	}
+	for _, tc := range cases {
+		if got := tc.r.DeadSources(); strings.Join(got, ",") != strings.Join(tc.dead, ",") {
+			t.Errorf("%s: %v", tc.name, got)
+		}
+	}
+	on, off := Rules{Enabled: true}, Rules{}
+	if on.DeadSource("bitbucket") || !off.DeadSource("bitbucket") {
+		t.Fatal("an unknown source is live while the rules are on")
+	}
+	if !off.MatchesNothing() || on.MatchesNothing() {
+		t.Fatal("only Enabled closes every kind")
+	}
+}
+
+func TestFixLog(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	l := LoadFixLog(dir)
+	l.Defer(Event{Key: "k1", Workspace: "acme", Ref: "ABC-1"})
+	l.Defer(Event{Key: "k1", Workspace: "acme", Ref: "ABC-1"})
+	l.Defer(Event{Key: "k2", Workspace: "web", Ref: "acme/web#2"})
+	if l.DeferredCount("") != 2 || l.DeferredCount("acme") != 1 {
+		t.Fatalf("deferred once per key: %+v", l.Deferred)
+	}
+	l.Start("acme", "k1", now)
+	l.Start("acme", "k3", now.Add(-2*time.Hour))
+	l.Start("web", "k4", now)
+	if l.DeferredCount("acme") != 0 || l.DeferredCount("web") != 1 {
+		t.Fatal("a started fix leaves the deferred list")
+	}
+	if n := l.StartedSince("acme", now.Add(-time.Hour)); n != 1 {
+		t.Fatalf("last hour: %d", n)
+	}
+	if last, ok := l.LastStarted("acme"); !ok || !last.Equal(now) {
+		t.Fatalf("last %v %v", last, ok)
+	}
+	if _, ok := l.LastStarted("nobody"); ok {
+		t.Fatal("no fixes, no last")
+	}
+	reloaded := LoadFixLog(dir)
+	if reloaded.StartedSince("acme", time.Time{}) != 2 || len(reloaded.DeferredEvents()) != 1 || reloaded.DeferredEvents()[0].Ref != "acme/web#2" {
+		t.Fatalf("reloaded %+v", reloaded)
+	}
+	for i := 0; i < fixKeep+20; i++ {
+		l.Start("acme", fmt.Sprintf("s%d", i), now)
+	}
+	for i := 0; i < deferredKeep+20; i++ {
+		l.Defer(Event{Key: fmt.Sprintf("d%d", i)})
+	}
+	if len(l.Started) != fixKeep || len(l.Deferred) != deferredKeep {
+		t.Fatalf("bounds: %d started, %d deferred", len(l.Started), len(l.Deferred))
 	}
 }
 
