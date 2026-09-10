@@ -13,7 +13,7 @@ and argv it would use are printed, so the pipeline can be proven without a
 real event.
 
 ```
-corgi agent watch test <issue.new|issue.comment|pr.comment|pr.review> [flags]
+corgi agent watch test <issue.new|issue.comment|pr.comment|pr.review|review.requested|ci.failed> [flags]
 ```
 
 ### Options

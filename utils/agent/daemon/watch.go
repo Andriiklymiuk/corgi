@@ -37,6 +37,9 @@ type WatchSpec struct {
 	// Lease claims the ticket on the tracker before working it, so two
 	// machines watching one board do not both take it.
 	Lease bool
+	// ReviewStatus is the column a ticket moves to once a run opened a pull
+	// request for it.
+	ReviewStatus string
 	// FixKinds narrows what "fix" actually runs on: empty means every kind
 	// the rules matched, which is what action: fix always meant. Naming
 	// kinds lets a workspace work review comments unattended while still
@@ -636,6 +639,12 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	d.watchState.Fixes.SetHandover(e.Key, watch.TailLines(string(out), 6), time.Now())
+	// It opened something, so the ticket is no longer being worked on — it is
+	// waiting on a reviewer, and the board should say so without anyone
+	// dragging it.
+	if len(links) > 0 && d.Delivered != nil {
+		d.Delivered(spec.Workspace, e, links)
+	}
 	if after, ok := usage.ReadLimits(spec.ConfigDir); ok && hadBefore {
 		d.watchState.Fixes.SetSpent(e.Key, after.FiveHour.Percent-before.FiveHour.Percent)
 	}
@@ -686,10 +695,14 @@ func (d *Daemon) ProbeEvent(e watch.Event, now time.Time) (Probe, bool) {
 		return Probe{}, false
 	}
 	p := Probe{Workspace: spec.Workspace, Why: spec.Rules.Why(e), Seen: d.watchState.IsSeen(e.Key), Action: spec.Action}
+	p.Matched = p.Why == ""
+	// A kind --auto-for did not name is reported, not worked on. This read
+	// p.Matched before it was set, so the dry run always echoed the
+	// workspace's action and said "fix" for a kind the daemon would only
+	// have told you about — wrong in exactly the tool people use to check.
 	if p.Matched && spec.Action == "fix" && !spec.FixesKind(e.Kind) {
 		p.Action = "notify"
 	}
-	p.Matched = p.Why == ""
 	if !p.Matched || p.Action != "fix" {
 		return p, true
 	}

@@ -66,3 +66,27 @@ func TestUndoPicksTheRunAndSaysWhatItWouldDo(t *testing.T) {
 		t.Errorf("a failure has to surface:\n%s", bad)
 	}
 }
+
+// The ticket has two moves, not one: In Progress when a run takes it, and
+// In Review once that run has opened something. Without the second, a board
+// full of "In Progress" tickets is really a board of finished work.
+func TestTheTicketMovesOnWhenTheRunOpensSomething(t *testing.T) {
+	dir := todayAgentDir(t)
+	e := watch.Event{Key: "jira:ABC-1", Workspace: "api", Ref: "ABC-1", State: "READY TO DEV"}
+
+	// No workspace config, so nothing is written and nothing panics.
+	markDelivered(dir, "api", e, []string{"https://x/pull/1"})
+	if st, ok := watch.LoadStateLog(dir).Get(e.Key); ok {
+		t.Fatalf("with no review column configured nothing moves: %+v", st)
+	}
+	// A run that opened nothing has not delivered anything.
+	markDelivered(dir, "api", e, nil)
+	if _, ok := watch.LoadStateLog(dir).Get(e.Key); ok {
+		t.Fatal("a run that opened nothing leaves the ticket where it is")
+	}
+	// An event with no ticket cannot move one.
+	markDelivered(dir, "api", watch.Event{Key: "k", Workspace: "api"}, []string{"https://x/pull/1"})
+	if _, ok := watch.LoadStateLog(dir).Get("k"); ok {
+		t.Fatal("a pull request comment is not a ticket to move")
+	}
+}

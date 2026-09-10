@@ -11,28 +11,29 @@ corgi agent watch enable [flags]
 ### Options
 
 ```
-      --action string      notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only
-      --assignee string    me (default) or any
-      --auto               Shorthand for --action fix --prs --comments (not --reviews: reviewing someone else's PR is a separate ask): work on what arrives without being asked, draft PRs only
-      --auto-for string    With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything
-      --ci                 Also builds that went red on something of mine — the one kind that brings its own test for done
-      --comments           Also new comments on issues assigned to me
-      --from string        Only comments and reviews from these people (comma separated); empty is anyone
-  -h, --help               help for enable
-      --interval string    Poll interval, e.g. 3m; 0 means webhooks only
-      --labels string      Only issues with one of these labels (comma-separated), e.g. bug,defect
-      --lease              Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone
-      --max-per-day int    With --action fix: at most this many fixes a day (default 10)
-      --max-per-hour int   With --action fix: at most this many fixes an hour (default 3); more are deferred
-      --pickup string      Column a ticket moves to when it is picked up, e.g. "In Progress"; empty writes nothing
-      --project string     Linear team key or Jira project key, e.g. ABC
-      --prs                Also reviews and comments on pull requests I opened
-      --quiet string       Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens
-      --repos string       GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)
-      --reviews            Also pull requests someone asked me to review — theirs, not mine
-      --states string      Only issues in one of these states, e.g. Todo,Backlog
-      --tracker string     linear or jira (default: whichever has a token)
-      --workspace string   Workspace id to change; omitted means the one you are in
+      --action string          notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only
+      --assignee string        me (default) or any
+      --auto                   Shorthand for --action fix --prs --comments (not --reviews: reviewing someone else's PR is a separate ask): work on what arrives without being asked, draft PRs only
+      --auto-for string        With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything
+      --ci                     Also builds that went red on something of mine — the one kind that brings its own test for done
+      --comments               Also new comments on issues assigned to me
+      --from string            Only comments and reviews from these people (comma separated); empty is anyone
+  -h, --help                   help for enable
+      --interval string        Poll interval, e.g. 3m; 0 means webhooks only
+      --labels string          Only issues with one of these labels (comma-separated), e.g. bug,defect
+      --lease                  Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone
+      --max-per-day int        With --action fix: at most this many fixes a day (default 10)
+      --max-per-hour int       With --action fix: at most this many fixes an hour (default 3); more are deferred
+      --pickup string          Column a ticket moves to when it is picked up, e.g. "In Progress"; empty writes nothing
+      --project string         Linear team key or Jira project key, e.g. ABC
+      --prs                    Also reviews and comments on pull requests I opened
+      --quiet string           Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens
+      --repos string           GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)
+      --review-status string   Column a ticket moves to once a run opened a pull request for it, e.g. "In Review"
+      --reviews                Also pull requests someone asked me to review — theirs, not mine
+      --states string          Only issues in one of these states, e.g. Todo,Backlog
+      --tracker string         linear or jira (default: whichever has a token)
+      --workspace string       Workspace id to change; omitted means the one you are in
 ```
 
 ### Options inherited from parent commands
