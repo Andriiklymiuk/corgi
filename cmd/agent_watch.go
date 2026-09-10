@@ -569,12 +569,18 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			if state.IsIgnored(e.Key) {
 				continue // dismissed: not waiting on anyone
 			}
-			at := e.State
+			// Merged, closed, done: history rather than work. The same test
+			// the phone's inbox uses, so the menu bar and the editor do not
+			// disagree with it about what is waiting.
+			current := e.State
 			if now, ok := moved.Get(e.Key); ok {
-				at = now.Status
+				current = now.Status
+			}
+			if watch.FinishedState(current) != "" {
+				continue
 			}
 			events = append(events, eventRow{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),
-				Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: at, At: e.At})
+				Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: current, At: e.At})
 		}
 		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events})
 		return
