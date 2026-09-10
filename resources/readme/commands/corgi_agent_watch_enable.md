@@ -20,6 +20,7 @@ corgi agent watch enable [flags]
       --labels string      Only issues with one of these labels (comma-separated), e.g. bug,defect
       --max-per-day int    With --action fix: at most this many fixes a day (default 10)
       --max-per-hour int   With --action fix: at most this many fixes an hour (default 3); more are deferred
+      --pickup string      Column a ticket moves to when it is picked up, e.g. "In Progress"; empty writes nothing
       --project string     Linear team key or Jira project key, e.g. ABC
       --prs                Also reviews and comments on pull requests I opened
       --quiet string       With --action fix: local hours in which no fix starts, e.g. 23:00-07:00

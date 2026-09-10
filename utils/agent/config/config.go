@@ -247,6 +247,10 @@ type WatchConfig struct {
 	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts, e.g.
 	// "23:00-07:00"; empty means none.
 	Quiet string `yaml:"quiet,omitempty"`
+	// PickupStatus is the column a ticket moves to when someone picks it up
+	// — "In Progress", say. Empty writes nothing: a tracker corgi has not
+	// been told to move tickets on is left alone.
+	PickupStatus string `yaml:"pickupStatus,omitempty"`
 }
 
 // overlayWatch replaces base with over, keeping base's caps and quiet
@@ -268,6 +272,9 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	}
 	if merged.Quiet == "" {
 		merged.Quiet = base.Quiet
+	}
+	if merged.PickupStatus == "" {
+		merged.PickupStatus = base.PickupStatus
 	}
 	return &merged
 }

@@ -50,10 +50,14 @@ corgi agent watch [flags]
 ### SEE ALSO
 
 * [corgi agent](corgi_agent)	 - Keep Claude Code Remote Control running for your corgi workspaces
+* [corgi agent watch assign](corgi_agent_watch_assign)	 - Assign a ticket to yourself
 * [corgi agent watch auth](corgi_agent_watch_auth)	 - Store a token for a source, for the machine or for one workspace
+* [corgi agent watch board](corgi_agent_watch_board)	 - The tracker columns corgi knows, and who your token is
+* [corgi agent watch comment](corgi_agent_watch_comment)	 - Post a comment on a ticket
 * [corgi agent watch disable](corgi_agent_watch_disable)	 - Stop watching this workspace
 * [corgi agent watch enable](corgi_agent_watch_enable)	 - Watch this workspace (run inside it)
 * [corgi agent watch hooks](corgi_agent_watch_hooks)	 - Webhook URLs and the shared secret, for instant events without polling
+* [corgi agent watch move](corgi_agent_watch_move)	 - Move a ticket to another column
 * [corgi agent watch run](corgi_agent_watch_run)	 - Poll every watched workspace once, right now, and print what is new
 * [corgi agent watch test](corgi_agent_watch_test)	 - Push one made-up event through the pipeline and print the claude run it would start, without starting it
 

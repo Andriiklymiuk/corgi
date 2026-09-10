@@ -21,6 +21,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
+	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 	"andriiklymiuk/corgi/utils/art"
 
@@ -162,6 +163,9 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		d.Watches = specs
 	} else {
 		utils.Infof("agent: watch config: %v\n", werr)
+	}
+	d.Pickup = func(workspaceID string, e watch.Event) {
+		markPickedUp(d.Dir, []watch.Event{e})
 	}
 	d.LinkFor = func(workspaceID string) string {
 		if url := d.SessionURLFor(workspaceID); url != "" {

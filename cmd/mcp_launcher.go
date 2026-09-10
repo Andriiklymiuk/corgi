@@ -2964,6 +2964,10 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	// The event's workspace, not the terminal's: a phone has no cwd, so
 	// without this the session opens in whichever checkout the editor window
 	// was in — the wrong repo, under the wrong account.
+	// Picking a story up is a board move as much as a session: the column
+	// says someone has it. Off unless the workspace names a pickup status,
+	// and never allowed to hold up the session it belongs to.
+	go markPickedUp(dir, events)
 	args := []string{}
 	if ws := strings.TrimSpace(events[0].Workspace); ws != "" {
 		args = append(args, "--workspace", ws)

@@ -91,7 +91,11 @@ type Daemon struct {
 	Notify         func(title, body string)
 	NotifyWithLink func(title, body, link string)
 	LinkFor        func(workspaceID string) string
-	Events         *events.Log
+	// Pickup moves a ticket to its workspace's pickup column when an
+	// unattended fix takes it on, so the board shows it is being worked on.
+	// Injected because writing to a tracker belongs to the command layer.
+	Pickup func(workspace string, e watch.Event)
+	Events *events.Log
 	// CaptureBrief probes what an ending session left on disk. Injected because
 	// enumerating a stack's repositories means parsing a compose file, which the
 	// daemon has no business knowing about. Nil disables briefs entirely.
