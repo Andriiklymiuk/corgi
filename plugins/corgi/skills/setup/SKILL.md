@@ -80,7 +80,9 @@ corgi agent board --slots 6       # 6 for a Stream Deck Mini, 15 for an MK.2
 ```
 
 Sessions started before this report on their next event; `corgi agent
-rescan` picks up running ones.
+rescan` picks up running ones. Run `track enable` again after every `corgi
+upd`: a new version can add hooks, and `corgi agent doctor` flags the old
+set as "from an older corgi".
 
 ### 5. Notifications on the phone
 

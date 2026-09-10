@@ -443,3 +443,52 @@ func TestEmitHookSkipsAClaudeTheDaemonSupervises(t *testing.T) {
 		t.Fatal("a remote-control server under the daemon is not a session on a screen")
 	}
 }
+
+func TestTrackingHooksStaleSpotsAnOlderHookSet(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	if err := enableTrackingIn(path, "/opt/homebrew/bin/corgi", true); err != nil {
+		t.Fatal(err)
+	}
+	if trackingHooksStale(path) {
+		t.Fatal("what this version just wrote is not stale")
+	}
+
+	// The 1.21.58 shape: no context hook, PreToolUse on every tool.
+	settings, _ := readUserSettings(path)
+	hooks, _ := settings["hooks"].(map[string]any)
+	hooks["SessionStart"] = []any{map[string]any{
+		"matcher": "startup|resume|clear|fork",
+		"hooks":   []any{map[string]any{"type": "command", "command": "/opt/homebrew/bin/corgi agent hook emit", "async": true}},
+	}}
+	if err := writeJSONObject(path, settings); err != nil {
+		t.Fatal(err)
+	}
+	if !trackingHooksStale(path) {
+		t.Fatal("a SessionStart without the context hook is stale")
+	}
+	if !hasTrackingHooks(path) {
+		t.Fatal("it is still corgi's")
+	}
+
+	settings, _ = readUserSettings(path)
+	hooks, _ = settings["hooks"].(map[string]any)
+	hooks["SessionStart"] = []any{map[string]any{
+		"matcher": "startup|resume|clear|fork",
+		"hooks": []any{
+			map[string]any{"type": "command", "command": "/opt/homebrew/bin/corgi agent hook emit", "async": true},
+			map[string]any{"type": "command", "command": "/opt/homebrew/bin/corgi agent hook context", "timeout": 5},
+		},
+	}}
+	hooks["PreToolUse"] = []any{map[string]any{
+		"hooks": []any{map[string]any{"type": "command", "command": "/opt/homebrew/bin/corgi agent hook emit", "async": true}},
+	}}
+	writeJSONObject(path, settings)
+	if !trackingHooksStale(path) {
+		t.Fatal("a PreToolUse without this version's matcher is stale")
+	}
+
+	if trackingHooksStale(filepath.Join(dir, "nothing.json")) {
+		t.Fatal("a file with no hooks at all is not stale, just absent")
+	}
+}

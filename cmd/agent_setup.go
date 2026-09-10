@@ -458,11 +458,16 @@ func collectAgentChecks() []agentCheck {
 // any tracked session whose window corgi could not identify.
 func checkSessionTracking(dir string) []agentCheck {
 	var checks []agentCheck
-	hooked := 0
+	hooked, stale := 0, 0
 	dirs := trackConfigDirs(dir, nil)
 	for _, cfgDir := range dirs {
-		if hasTrackingHooks(claudeUserSettingsPath(cfgDir)) {
-			hooked++
+		path := claudeUserSettingsPath(cfgDir)
+		if !hasTrackingHooks(path) {
+			continue
+		}
+		hooked++
+		if trackingHooksStale(path) {
+			stale++
 		}
 	}
 	c := agentCheck{Name: "session tracking", OK: true, Detail: fmt.Sprintf("hooks in %d of %d Claude config dir(s)", hooked, len(dirs))}
@@ -474,6 +479,11 @@ func checkSessionTracking(dir string) []agentCheck {
 	}
 	if hooked < len(dirs) {
 		c.Fix = "`corgi agent track enable` covers every profile's config dir"
+	}
+	if stale > 0 {
+		c.OK = false
+		c.Detail = fmt.Sprintf("hooks in %d of %d Claude config dir(s) — %d from an older corgi", hooked, len(dirs), stale)
+		c.Fix = "`corgi agent track enable` again: this version adds hooks the old set does not have"
 	}
 	checks = append(checks, c)
 	rep, err := readBoard(dir)

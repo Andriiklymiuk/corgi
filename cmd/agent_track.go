@@ -350,6 +350,50 @@ func hasTrackingHooks(path string) bool {
 	return strings.Contains(marshalCompact(settings["hooks"]), trackMarkerEmit)
 }
 
+// trackingHooksStale says the file has corgi's hooks, but not the set this
+// corgi installs: an upgrade added an event, a matcher or the context hook,
+// and the settings file still holds the old shape. Doctor turns this into
+// one line, because a session that starts without the context hook loses a
+// feature silently.
+func trackingHooksStale(path string) bool {
+	settings, err := readUserSettings(path)
+	if err != nil {
+		return false
+	}
+	hooks, _ := settings["hooks"].(map[string]any)
+	if hooks == nil {
+		return false
+	}
+	tab := strings.Contains(marshalCompact(hooks), trackMarkerTab)
+	for _, ev := range trackedEvents {
+		if !eventHookCurrent(hooks[ev.Event], ev.Matcher, ev.Context, ev.Title && tab) {
+			return true
+		}
+	}
+	return false
+}
+
+// eventHookCurrent checks one event's corgi entry: the matcher this version
+// uses, and the extra handlers it now installs.
+func eventHookCurrent(existing any, matcher string, wantContext, wantTab bool) bool {
+	list, _ := existing.([]any)
+	for _, entry := range list {
+		text := marshalCompact(entry)
+		if !strings.Contains(text, trackMarkerEmit) {
+			continue
+		}
+		obj, _ := entry.(map[string]any)
+		if got, _ := obj["matcher"].(string); got != matcher {
+			return false
+		}
+		if wantContext != strings.Contains(text, trackMarkerContext) {
+			return false
+		}
+		return wantTab == strings.Contains(text, trackMarkerTab)
+	}
+	return false
+}
+
 func readUserSettings(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {

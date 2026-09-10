@@ -628,6 +628,11 @@ that can raise a prompt (Bash, Edit, Write, Task, the web tools, a question);
 a Read or a Grep costs nothing. `PostToolUse` stays on every tool, because a
 finished tool is what clears an answered prompt.
 
+An upgrade that adds a hook does not rewrite your settings: run `corgi agent
+track enable` again after `corgi upd`, and `corgi agent doctor` says so
+itself when the installed set is older than the binary ("N from an older
+corgi").
+
 One hook talks back. On `SessionStart` the synchronous `corgi agent hook
 context` hands the new session, as a few lines of context, what the daemon
 already knows and it does not: the other sessions in the same workspace with
