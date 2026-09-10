@@ -48,3 +48,6 @@ corgi-agent-deck/
 
 # Agent worktrees: local scratch checkouts, never part of the repo
 .claude/worktrees/
+
+# showcase frames are intermediates; the gifs and stills are what ships
+docs/media/frames/

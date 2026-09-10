@@ -97,6 +97,49 @@ func TestIgnoreTakesARowOutOfTheInboxWithoutTouchingTheTracker(t *testing.T) {
 	}
 }
 
+// The events log keeps the column a ticket arrived in and never changes, so
+// a move made from the phone has to be remembered separately or the row goes
+// on showing the old column for good.
+func TestAMovedTicketShowsItsNewColumn(t *testing.T) {
+	dir := ticketHome(t)
+
+	read := func() string {
+		rec := httptest.NewRecorder()
+		launchEventsHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/events", nil))
+		var got struct {
+			Events []struct {
+				Key   string `json:"key"`
+				State string `json:"state"`
+			} `json:"events"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range got.Events {
+			if e.Key == "jira:ABC-1" {
+				return e.State
+			}
+		}
+		t.Fatal("the event went missing")
+		return ""
+	}
+
+	if got := read(); got != "" {
+		t.Fatalf("nothing has moved it yet: %q", got)
+	}
+	if err := watch.LoadStateLog(dir).Set("jira:ABC-1", "In Progress", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(); got != "In Progress" {
+		t.Fatalf("the row must show where it went: %q", got)
+	}
+
+	// It survives a reload, so the column is still right after a refresh.
+	if s, ok := watch.LoadStateLog(dir).Get("jira:ABC-1"); !ok || s.Status != "In Progress" {
+		t.Fatalf("the move must outlive the request that made it: %+v", s)
+	}
+}
+
 func TestTicketRefusesWhatItCannotDo(t *testing.T) {
 	ticketHome(t)
 	cases := []struct {
