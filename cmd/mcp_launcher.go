@@ -1224,6 +1224,7 @@ const launcherPageHTML = `<!doctype html>
   .opt:last-child{border-bottom:0}
   .opt:disabled{color:var(--dim2)}
   .opt.here{color:var(--accent);font-weight:600}
+  .gcount{margin-left:auto;font-size:.66rem;color:var(--accent);font-weight:600}
   .linkme{margin-left:.45rem;font:inherit;font-size:.68rem;padding:.1rem .45rem;border-radius:.4rem;
     border:1px solid var(--line);background:var(--card2);color:var(--dim)}
   .linkme:disabled{opacity:.6}
@@ -2113,6 +2114,20 @@ const launcherPageHTML = `<!doctype html>
     if (!events.length && !fixes.length) { box.hidden = true; return; }
 
     box.innerHTML = '';
+    // One line before the list: what is waiting, and what corgi did about it.
+    // The phone is unlocked to read exactly this.
+    const tally = document.createElement('p');
+    tally.className = 'sum hot';
+    const running = fixes.filter((f) => f.running).length;
+    const toReview = fixes.filter((f) => !f.running && (f.prs || []).length).length;
+    const bits = [];
+    if (events.length) bits.push(events.length + (events.length === 1 ? ' thing waiting on you' : ' things waiting on you'));
+    if (toReview) bits.push(toReview + (toReview === 1 ? ' pull request corgi opened' : ' pull requests corgi opened'));
+    if (running) bits.push(running + ' still running');
+    if (bits.length) {
+      tally.textContent = bits.join(' \u00b7 ');
+      box.appendChild(tally);
+    }
     const sum = document.createElement('p');
     sum.className = 'sum';
     sum.textContent = 'From the tracker and your pull requests';
@@ -2227,13 +2242,37 @@ const launcherPageHTML = `<!doctype html>
     }
 
     // What the unattended mode did while nobody watched, and what it opened.
-    if (fixes.length) {
+    // Grouped by day, because "corgi opened this while you slept" and "corgi
+    // opened this last week" are not the same news.
+    const dayOf = (iso) => {
+      const t = Date.parse(iso || '');
+      if (Number.isNaN(t)) return 'earlier';
+      const d = new Date(t), now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      if (t >= midnight) return 'today';
+      if (t >= midnight - 86400000) return 'yesterday';
+      return 'earlier';
+    };
+    for (const bucket of ['today', 'yesterday', 'earlier']) {
+      const group = fixes.filter((f) => dayOf(f.startedAt) === bucket);
+      if (!group.length) continue;
+      renderFixGroup(bucket, group);
+    }
+    function renderFixGroup(bucket, fixes) {
       const head = document.createElement('div');
       head.className = 'evgroup';
       const name = document.createElement('span');
       name.className = 'gname';
-      name.textContent = 'worked on for you';
+      const opened = fixes.filter((f) => (f.prs || []).length).length;
+      name.textContent = bucket === 'today' ? 'corgi did today' :
+        bucket === 'yesterday' ? 'corgi did yesterday' : 'corgi did earlier';
       head.appendChild(name);
+      if (opened) {
+        const n = document.createElement('span');
+        n.className = 'gcount';
+        n.textContent = opened + (opened === 1 ? ' waiting on your review' : ' waiting on your review');
+        head.appendChild(n);
+      }
       box.appendChild(head);
       for (const fx of fixes) {
         const card = document.createElement('div');
@@ -3181,8 +3220,9 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: state})
 	}
 	fixes := []map[string]any{}
-	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 8) {
-		row := map[string]any{"key": r.Key, "ref": firstNonEmptyString(r.Ref, r.Key), "workspace": r.Workspace, "running": !r.Done()}
+	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 25) {
+		row := map[string]any{"key": r.Key, "ref": firstNonEmptyString(r.Ref, r.Key), "workspace": r.Workspace,
+			"running": !r.Done(), "startedAt": r.StartedAt, "outcome": r.Outcome()}
 		if len(r.PRs) > 0 {
 			row["prs"] = r.PRs
 		}

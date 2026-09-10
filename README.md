@@ -355,7 +355,7 @@ comments on one pull request, or a ticket another machine has claimed
 (`--lease`). `corgi agent watch replay` shows the week it *would* have had
 before you turn it on, and `corgi agent watch undo` puts a run back.
 
-<p align="center"><img src="docs/media/autofix.gif" width="760" alt="corgi agent watch unattended: a review comment fixed and pushed, a red build fixed, a fresh ticket only reported, a review request left alone, comments on finished work skipped, a duplicate skipped, a ticket another machine claimed, a cap and a budget deferral, then the morning summary"></p>
+<p align="center"><img src="docs/media/autofix.gif" width="760" alt="a ticket assigned to you claimed, moved to In Progress, worked, a draft PR opened and the ticket moved to In Review; a review comment fixed and pushed; a red CI build fixed; a ticket outside the state filter stopped; someone else’s review request left alone; comments on finished work and a duplicate skipped; a ticket another machine claimed; a cap and a budget deferral; then the morning summary"></p>
 
 <p align="center"><img src="docs/media/replay.gif" width="760" alt="corgi agent watch replay, while-away and undo: the week unattended mode would have had, the morning card, and a run put back"></p>
 
