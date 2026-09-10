@@ -617,8 +617,24 @@ reduced on the spot before anything is written: the tool input becomes one
 safe word (`registry.go`, `git push`, `api.github.com` — the file's name, the
 program and its subcommand, a host; never a path, a flag or a value), and on
 Stop the transcript's newest assistant turn becomes a context number (see
-below) and the chat's title. It also records
+below), the chat's title, and one line of what Claude said. It also records
 the `claude` process's pid and parent chain, which is what makes the rest work:
+
+Tool events are the frequent ones, so `PreToolUse` fires only for the tools
+that can raise a prompt (Bash, Edit, Write, Task, the web tools, a question);
+a Read or a Grep costs nothing. `PostToolUse` stays on every tool, because a
+finished tool is what clears an answered prompt.
+
+One hook talks back. On `SessionStart` the synchronous `corgi agent hook
+context` hands the new session, as a few lines of context, what the daemon
+already knows and it does not: the other sessions in the same workspace with
+their branch and what they are doing, the account's two limits and where the
+pace is heading, the handover brief from the last supervised session here,
+and how many facts the workspace memory holds. Five lines, sixty tokens, and
+two chats no longer edit one file without knowing of each other, nor start a
+long turn into a limit that lifts in ten minutes. It reads files the daemon
+already wrote and nothing else, so it is done in milliseconds; with no daemon
+and no board it says nothing.
 
 | status | when | key |
 |---|---|---|
@@ -729,6 +745,12 @@ Every session on the board carries, when known:
 - `note` — yours, from `corgi agent note`.
 - `stuck` — working, but no hook event for twelve minutes. Probably
   spinning or waiting on a call that died; a key shows SLOW.
+- `branch` — the checkout the cwd is on, read from `.git` at each prompt.
+- `summary` — the first prose line of what Claude last said, and `pr` the
+  last pull request link it mentioned, both from the transcript on Stop.
+  What a phone row shows under the label, and what a PR button opens.
+- `turnStartedAt` — when the current turn began; slots carry `turnS`, so a
+  surface can say a turn has run fourteen minutes before `stuck` does.
 
 And the board carries `accounts[]`: every account the sessions run under (and
 every profile in the config, whether in use or not) with the /usage picture
@@ -759,6 +781,13 @@ falls back to its own keystrokes after the focus it already got.
 allow, `2` then Return for always, Escape for deny. It refuses to allow a
 Bash command whose subject the board recognises as risky — `rm`, `sudo`,
 `--force`, `--hard`, `drop` and the like: those you look at.
+
+The phone launcher does both from its session rows: **Allow**, **Always**
+and **Deny** under a session that needs you, **Send…** under any live one,
+and a **PR** link when the session mentioned one. They go through
+`POST /launch/answer` and `POST /launch/send` on the same endpoint, with the
+same refusals as the commands: a risky prompt answers with 403 and the row
+says to look at the laptop.
 
 ### Waits, and what they cost
 

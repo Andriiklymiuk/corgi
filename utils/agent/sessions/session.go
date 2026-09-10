@@ -116,6 +116,12 @@ type Event struct {
 	// Title is the chat's name as its panel tab shows it, read from the
 	// transcript on Stop and SessionStart.
 	Title string `json:"title,omitempty"`
+	// Branch is the cwd's checked-out branch; Summary the first line of what
+	// Claude last said and PR the last pull request link it mentioned, both
+	// read from the transcript on Stop.
+	Branch  string `json:"branch,omitempty"`
+	Summary string `json:"summary,omitempty"`
+	PR      string `json:"pr,omitempty"`
 	// Window is CORGI_VSCODE_WINDOW, injected by the corgi VS Code extension
 	// into every integrated terminal of its window.
 	Window string `json:"window,omitempty"`
@@ -211,6 +217,13 @@ type Session struct {
 	// Stuck is a working session that has produced no event for StuckAfter:
 	// probably spinning, or waiting on a call that will not return.
 	Stuck bool `json:"stuck,omitempty"`
+	// Branch is the cwd's branch as of the last prompt; Summary what Claude
+	// last said; PR the last pull request it linked; TurnStartedAt when the
+	// current or last turn began.
+	Branch        string    `json:"branch,omitempty"`
+	Summary       string    `json:"summary,omitempty"`
+	PR            string    `json:"pr,omitempty"`
+	TurnStartedAt time.Time `json:"turnStartedAt,omitempty"`
 }
 
 // Pending is one permission prompt: the tool and the safe word about its

@@ -17,10 +17,12 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/pairing"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -1196,6 +1198,14 @@ const launcherPageHTML = `<!doctype html>
   .sess .sdetail{color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
   .sess .sbadge{font-size:.6rem;font-weight:700;color:var(--dim);border:1px solid var(--line);border-radius:.3rem;
       padding:.05rem .3rem;flex:0 0 auto;text-transform:uppercase;letter-spacing:.04em}
+  .sess{flex-wrap:wrap}
+  .sess .ssum{flex-basis:100%;color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem}
+  .sess .sact{flex-basis:100%;display:flex;gap:.4rem;align-items:center;margin-top:.35rem}
+  .sess .sact button{font:inherit;font-size:.74rem;font-weight:600;padding:.28rem .7rem;border-radius:.45rem;border:1px solid var(--line);
+      background:var(--card);color:var(--fg);cursor:pointer}
+  .sess .sact button.ok{background:var(--green);border-color:var(--green);color:#0b0b0d}
+  .sess .sact button.bad{color:var(--red);border-color:var(--red)}
+  .sess .sact a{margin-left:auto;font-size:.74rem;color:var(--blue,#5B8DEF)}
   .ws{background:var(--card);border:1px solid var(--line);border-radius:.75rem;
       padding:var(--sp3) var(--sp3) var(--sp2);margin:var(--sp2) 0}
   .head{display:flex;align-items:center;gap:.7rem}
@@ -1696,10 +1706,66 @@ const launcherPageHTML = `<!doctype html>
           b.className = 'sbadge'; b.textContent = s.profile;
           row.appendChild(b);
         }
+        const sum = sessionSummary(s);
+        if (sum) {
+          const l = document.createElement('div');
+          l.className = 'ssum'; l.textContent = sum;
+          row.appendChild(l);
+        }
+        const act = sessionActions(s);
+        if (act) row.appendChild(act);
         box.appendChild(row);
       }
       box.hidden = false;
     } catch { box.hidden = true; }
+  }
+
+  function sessionSummary(s) {
+    const bits = [];
+    if (s.branch) bits.push(s.branch);
+    if (s.status === 'working' && s.turnStartedAt) {
+      const m = Math.floor((Date.now() - Date.parse(s.turnStartedAt)) / 60000);
+      if (m >= 1) bits.push('turn ' + m + 'm');
+    }
+    if (s.summary) bits.push(s.summary);
+    return bits.join(' \u00b7 ');
+  }
+
+  function sessionActions(s) {
+    const box = document.createElement('div');
+    box.className = 'sact';
+    const name = s.display || s.label || 'the session';
+    const button = (text, cls, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = cls; b.textContent = text; b.onclick = fn;
+      box.appendChild(b);
+    };
+    if (s.status === 'needs_input' && s.pending) {
+      button('Allow', 'ok', () => boardAction('answer', { session: s.id, answer: 'allow' }));
+      button('Always', '', () => boardAction('answer', { session: s.id, answer: 'always' }));
+      button('Deny', 'bad', () => boardAction('answer', { session: s.id, answer: 'deny' }));
+    } else if (s.status !== 'gone') {
+      button('Send\u2026', '', () => {
+        const text = window.prompt('Type into ' + name);
+        if (text && text.trim()) boardAction('send', { session: s.id, text: text.trim() });
+      });
+    }
+    if (s.pr) {
+      const a = document.createElement('a');
+      a.href = s.pr; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'PR';
+      box.appendChild(a);
+    }
+    return box.childElementCount ? box : null;
+  }
+
+  async function boardAction(kind, body) {
+    try {
+      const r = await fetch('/launch/' + kind, { method: 'POST', headers: auth, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error || 'could not reach the daemon', true); return; }
+      toast(kind === 'answer' ? 'answered ' + body.answer : 'sent');
+      setTimeout(loadBoard, 1500);
+    } catch { toast('no connection', true); }
   }
 
   async function loadInfo() {
@@ -2282,3 +2348,115 @@ const launcherPageHTML = `<!doctype html>
   }
 </script>
 `
+
+// The phone can answer a permission prompt and type into a session, the
+// same two things a deck key does. A risky Bash prompt is refused here, so
+// the person hears why on the phone rather than finding a notice later.
+
+func launchAnswerHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {session, answer} to answer a prompt")
+		return
+	}
+	var req struct {
+		Session string `json:"session"`
+		Answer  string `json:"answer"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the answer")
+		return
+	}
+	answer := strings.ToLower(strings.TrimSpace(req.Answer))
+	if answer != "allow" && answer != "always" && answer != "deny" {
+		writeLaunchError(w, http.StatusBadRequest, "answer is allow, always or deny")
+		return
+	}
+	session, code, msg := launchSessionFor(req.Session)
+	if code != 0 {
+		writeLaunchError(w, code, msg)
+		return
+	}
+	if session.Status != sessions.StatusNeedsInput || session.Pending == nil {
+		writeLaunchError(w, http.StatusConflict, "nothing is waiting for an answer there")
+		return
+	}
+	if session.Pending.Risky() && answer != "deny" {
+		writeLaunchError(w, http.StatusForbidden, "that command is one to look at first: answer it on the laptop")
+		return
+	}
+	launchBoardCommand(w, command.Command{Action: command.ActionAnswer, SessionID: session.ID, Answer: answer, Source: "phone"})
+}
+
+func launchSendHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {session, text} to type into a session")
+		return
+	}
+	var req struct {
+		Session string `json:"session"`
+		Text    string `json:"text"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the text")
+		return
+	}
+	text := strings.TrimSpace(req.Text)
+	if text == "" {
+		writeLaunchError(w, http.StatusBadRequest, "nothing to type")
+		return
+	}
+	session, code, msg := launchSessionFor(req.Session)
+	if code != 0 {
+		writeLaunchError(w, code, msg)
+		return
+	}
+	if session.Status == sessions.StatusGone {
+		writeLaunchError(w, http.StatusConflict, "that session is closed")
+		return
+	}
+	launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: session.ID, Text: text, Enter: true, Source: "phone"})
+}
+
+// launchSessionFor finds a board session by id or display name. A non-zero
+// code is the HTTP status to answer with.
+func launchSessionFor(ref string) (sessions.Session, int, string) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return sessions.Session{}, http.StatusBadRequest, "a session is required"
+	}
+	dir, err := agentDir()
+	if err != nil {
+		return sessions.Session{}, http.StatusInternalServerError, err.Error()
+	}
+	rep, err := readBoard(dir)
+	if err != nil {
+		return sessions.Session{}, http.StatusInternalServerError, err.Error()
+	}
+	for _, s := range rep.Sessions {
+		if s.ID == ref || s.Display == ref {
+			return s, 0, ""
+		}
+	}
+	return sessions.Session{}, http.StatusNotFound, "no such session on the board"
+}
+
+func launchBoardCommand(w http.ResponseWriter, c command.Command) {
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil || info == nil {
+		writeLaunchError(w, http.StatusServiceUnavailable, "the corgi daemon is not running on that machine")
+		return
+	}
+	if _, err := command.Write(dir, c); err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	daemon.Nudge(info)
+	writeLaunchJSON(w, map[string]any{"ok": true, "action": c.Action})
+}

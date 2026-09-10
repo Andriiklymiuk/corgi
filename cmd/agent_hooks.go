@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
@@ -350,6 +351,9 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 		if ev, ok := runEmitHook(os.Stdin, os.Getenv, os.Getppid()); ok {
 			deliverEvent(ev)
 		}
+		return
+	case "context":
+		runContextHook(os.Stdin, os.Stdout, os.Getenv, time.Now())
 		return
 	case "tab":
 		registry, _ := workspace.Load(agentRegistryPath(agentDirOrEmpty()))
