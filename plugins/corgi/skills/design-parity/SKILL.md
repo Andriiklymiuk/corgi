@@ -1,6 +1,6 @@
 ---
 name: design-parity
-description: Use when a change has a design behind it and someone must prove the build matches — "compare it with the design", "does this match Figma", "check it against the mockup", "download the designs", "side-by-side with the design", "design review of this screen", "did we build what was designed", "pixel check", "the designer says it's off". NOT the device-driving loop itself (the `mobile` skill) or store marketing screenshots (`mobile-screenshots`).
+description: Use when a change has a design behind it and someone must prove the build matches: "compare it with the design", "does this match Figma", "check it against the mockup", "side-by-side with the design", "pixel check", "the designer says it's off". NOT the device-driving loop (mobile skill) or store screenshots (mobile-screenshots).
 ---
 
 # Prove the build matches the design
@@ -137,7 +137,7 @@ The strings in the mockup are the spec — verify them the same way, and ship th
 - **The verification switch never lands in the branch** — revert + grep before commit.
 - **Never post a partial pass as "matches design"** — say which screens/states you compared
   and which you could not reach, and why.
-- **No AI attribution** anywhere the work surfaces — MR body, comments, commit messages.
+- Read `../_shared/conventions.md` first (attribution).
 
 ## Red flags — stop
 - "Implemented from the design" and no design file on disk → pull the frames first.

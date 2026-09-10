@@ -1,11 +1,13 @@
 ---
 name: review
-description: Use when the user wants a code review of one or more EXISTING pull/merge requests — any phrasing of "review this PR/MR" with GitHub PR or GitLab MR links/numbers ("review these MRs <link>", "code review <link>", "check the api + web MRs for ABC-123", or a bare link with "thoughts?"). Reviews against the repo's own standards (CLAUDE.md/AGENTS.md, lint config), pulls intent from any linked Linear/Jira ticket, runs a cross-service contract check when the set spans services, then posts a summary comment + inline suggestions behind a preview gate. ALSO use to address review feedback on your OWN PR/MR — "fix the comments on this MR", "address the feedback for story ABC-123" — reads the reviewer threads, applies the valid ones (pushes back on the wrong ones), replies + resolves, and pushes the fixes. Resolve the target from a link, a bare number, or a tracker story-id. NOT for creating PRs from issues/feature text (stories skill) or reviewing the local uncommitted diff (built-in /code-review).
+description: Use when the user wants a code review of EXISTING pull/merge requests: "review this PR/MR", "code review <link>", "check the api + web MRs for ABC-123", a bare link with "thoughts?". Also to address feedback on your OWN PR: "fix the comments on this MR", "address the feedback for ABC-123". NOT for creating PRs (stories) or the local diff (/code-review).
 ---
 
 # Corgi review
 
 Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR — all behind a preview gate before anything goes public. Services, dirs, and forges resolve from `corgi-compose.yml`.
+
+Read `../_shared/conventions.md` first.
 
 ## Two modes — route from the verb
 
@@ -60,14 +62,14 @@ saving.
 a `corgi-compose.yml` is in cwd, resolve each other (non-`manualRun`) service's
 repo (the P2 mapping) and enumerate same-branch PRs/MRs there:
 `gh pr list --head <branch> --repo <o>/<r>` / `glab mr list --source-branch <branch> -R <repo>`
-(commands in `references/github-gitlab-commands.md` §1). stories opens sibling PRs
+(commands in `../_shared/forge-commands.md` §1). stories opens sibling PRs
 with the same branch name, so this finds the rest of a story's set. Found → confirm
 the expanded set with the user before reviewing. **Never auto-expand silently.**
 
 ## Phase 1 — Fetch (no checkout)
 
 Per PR/MR, fetch **without checking out the branch** (non-destructive — never touch
-the user's working tree). Exact commands live in `references/github-gitlab-commands.md` §1; pick
+the user's working tree). Exact commands live in `../_shared/forge-commands.md` §1; pick
 the `gh` or `glab` column that matches the ref's forge.
 
 Fetch per PR/MR — **metadata + anchoring SHAs + commits in one call**, diff
@@ -84,7 +86,7 @@ separately (don't make a second call just for a SHA):
   a **green** pipeline contradicts any "this fails to build/test" finding, so verify
   before posting. And a pipeline that reads green **only because a failed job is
   `allow_failure`** ("passed with warnings") hides a real red job — list the jobs
-  (`references/github-gitlab-commands.md` §1) and see which finding it confirms.
+  (`../_shared/forge-commands.md` §1) and see which finding it confirms.
 
 **rtk:** metadata, status, and list calls go through rtk automatically (the Claude
 Code hook rewrites `git`/`gh`/`glab`). Fetch the **reviewable diff raw** to avoid
@@ -93,7 +95,7 @@ truncation degrading review quality:
 rtk proxy gh pr diff <n> --repo <owner>/<repo> --patch
 rtk proxy glab mr diff <n> --repo <host>/<group>/<proj> --color=never
 ```
-See `references/github-gitlab-commands.md` §0 for the rule of thumb: rtk-filtered for
+See `../_shared/forge-commands.md` §0 for the rule of thumb: rtk-filtered for
 everything except the diff content (and any file body read in full).
 
 **State.** Read the PR/MR state on fetch.
@@ -110,7 +112,7 @@ tree you didn't fetch). Can't isolate cleanly → review the full diff and note 
 double-review. State the stacking in the report.
 
 **Existing discussion.** List the PR/MR's current review threads/comments on fetch
-(`references/github-gitlab-commands.md` §5 read commands work for Mode A too — read
+(`../_shared/forge-commands.md` §5 read commands work for Mode A too — read
 only, no reply). You need them twice: to **dedup** (P5 marker skip) and, more
 importantly, to **stay relevant** — a point a human already raised, the author
 already answered, or anything on a **resolved** thread is not a fresh finding. Carry
@@ -321,7 +323,7 @@ orchestrator **resolves every `line` by matching `anchorText` against the fetche
 diff hunks** (new-file number for a `RIGHT` line, old-file number for `LEFT`) — so
 the preview already shows the line that will actually be posted, not a guess. A
 finding whose `anchorText` matches no diffed line has no anchor → goes in the
-summary (P5). See `references/github-gitlab-commands.md` §2.
+summary (P5). See `../_shared/forge-commands.md` §2.
 
 Plus a **2–4 sentence human summary per PR** written above the findings list.
 
@@ -404,7 +406,7 @@ and let the observed result, not the assumed behavior, decide. A finding that
 **contradicts CI** is the loudest tell: claims a spec/build fails but the pipeline is
 green → one of them is wrong, verify before posting. Conversely a "passed with
 warnings" pipeline (a failed `allow_failure` job) often hides the real red job a
-finding points at — pull that job's log (`references/github-gitlab-commands.md` §1)
+finding points at — pull that job's log (`../_shared/forge-commands.md` §1)
 to confirm. State how each contradiction resolved in the report.
 
 **Prune against existing discussion.** Drop any finding a human already raised, the
@@ -485,7 +487,7 @@ post-then-address; don't re-read threads — findings already in hand. Pushed-ba
 
 ## Phase 5 — Post
 
-Exact commands live in `references/github-gitlab-commands.md` §2–4; use the forge from P0.
+Exact commands live in `../_shared/forge-commands.md` §2–4; use the forge from P0.
 
 **GitHub** — one review call (`event=COMMENT`): `body` = the PR's human summary
 (tagged `<!-- corgi-review -->`), `comments[]` = all inline findings, each
@@ -502,12 +504,9 @@ missing or erroring, post via the raw `discussions` + `position` API in §3b.) O
 bracket fields, which post unanchored with a misleading 201 — then **verify each
 inline note anchored** (`position != null`) and delete+repost any that didn't (§3b/§4).
 
-**Human voice — no bot / AI attribution.** The posted summary and every inline comment
-read as a human reviewer: plain, kind, first-person where natural, matching the repo's
-comment density. Never add "reviewed by AI / Claude / corgi", a bot signature, a
-"generated by" footer, or an emoji badge to any posted body. The only machine marker is
-the invisible `<!-- corgi-review -->` HTML comment used for idempotent updates — it does
-not render, so it is not attribution.
+**Human voice.** The posted summary and every inline comment read as a human reviewer:
+plain, kind, first-person where natural, matching the repo's comment density. Attribution
+rule (and the one allowed `<!-- corgi-review -->` marker): `../_shared/conventions.md`.
 
 **Applicable suggestions are the useful part — supply them on both forges.** A
 finding with a concrete fix (a changed line or a small range) posts as a suggestion
@@ -712,7 +711,6 @@ A posted **summary body** is plain prose — a few short sentences, at most a co
 bullets, the way a person types into the PR box. Not a structured document: no `##`
 section headers, no long numbered-question lists, no pasted spec / code-map dumps.
 That report shape belongs in the terminal output (P6), never in the comment.
-**Never touch `manualRun` services** when mapping via `corgi-compose.yml`.
 **Never suggest adding a comment to the code.** The reviewer's job is to remove
 the ones that do not earn their place, not to plant more — if a line needs
 explaining, the fix in the suggestion is a clearer name or a smaller function.

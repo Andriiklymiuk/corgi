@@ -1,6 +1,6 @@
 ---
 name: risk
-description: Use when someone needs to know how much human review a change deserves — "risk assessment for this PR/MR", "how risky is this story", "can this be auto-approved", "score this diff", "who should review this", "add a risk score to the description", "which of these PRs need a second reviewer" — or as the gate the stories, review and autopilot skills run on every change they produce. Scores a change (a PR/MR, a branch, the local diff) or a not-yet-built story 1–10 from evidence in the diff and the repo — blast radius, reversibility, data and auth, verification strength, cross-service contract, operations, mobile/native surface, novelty — and writes a short risk card into the PR/MR description saying what a reviewer must check, what they can skip, and whether the change qualifies for auto-approval. NOT for finding bugs (review skill), measuring complexity (complexity skill), or building the change (stories skill).
+description: Use when someone asks how much human review a change deserves: "risk assessment for this PR/MR", "how risky is this story", "can this be auto-approved", "score this diff", "who should review this", or as the gate stories, review, and autopilot run. Scores 1 to 10 and writes a risk card. NOT for finding bugs (review), complexity, or building (stories).
 ---
 
 # Risk assessment

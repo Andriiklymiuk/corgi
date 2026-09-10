@@ -1,6 +1,6 @@
 ---
 name: complexity
-description: Use when changed code must get simpler, not only work — "reduce complexity", "this function is a jungle", "simplify this", "refactor for readability", "god function", "deeply nested", "check the complexity of this PR", "is this AI slop", "does this branch too much" — or as the gate the stories and review skills run on a diff. Measures the cyclomatic (and cognitive) complexity of every touched function against the repo's own threshold, refactors the worst first, proves behaviour unchanged, and reports before/after. NOT for performance work (debug skill) or style-only lint fixes.
+description: Use when changed code must get simpler: "reduce complexity", "this function is a jungle", "simplify this", "god function", "check the complexity of this PR", "is this AI slop", or as the gate stories and review run on a diff. Measures cyclomatic and cognitive complexity, refactors the worst first, proves behaviour unchanged. NOT for performance work or lint-only fixes.
 ---
 
 # Reduce complexity
@@ -115,8 +115,9 @@ The cognitive-complexity check (above) catches most of these mechanically; a nam
 got vaguer catches the rest.
 
 ## Preserve behaviour
-- Tests before and after, through corgi so the env resolves: `corgi test --service <svc>`
-  (or the discovered runner). Green both times, same count.
+- Tests before and after, through corgi so the env resolves: `corgi test --changed
+  --base <base>` (each changed repo's whole suite); `corgi test --service <svc>` only
+  when `--changed` finds nothing, else the discovered runner. Green both times, same count.
 - **No test covers the function → write a characterization test first**: pin the
   current output for a handful of inputs, including the edge that the deepest branch
   handles. Then refactor. A refactor with no test is a rewrite.
@@ -148,17 +149,16 @@ threshold: 10 (.golangci.yml gocyclo.min-complexity)
 | applyDiscounts  | 9         | 9        | 11 → 11 (untouched body) |
 
 extracted: validateHeader, resolveDiscount
-behaviour verified: corgi test --service api — 212 passed before and after
+behaviour verified: corgi test --changed --base main — api: 212 passed before and after
 ```
 
 Numbers and the diff do the talking; keep prose to what the table cannot say.
 
 ## Guardrails
 - `report` and `gate` never edit.
-- Never touch a `manualRun` service; never widen past the touched functions unless the
-  user named a wider scope.
+- Read `../_shared/conventions.md` first (attribution, `manualRun`).
+- Never widen past the touched functions unless the user named a wider scope.
 - No suppression annotations without a same-line reason.
-- No AI attribution in commits, PR bodies, or comments.
 - Preview a refactor's diff before committing when the user did not pre-authorise it.
 
 ## Red flags — stop

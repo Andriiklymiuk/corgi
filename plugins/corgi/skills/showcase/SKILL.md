@@ -1,6 +1,6 @@
 ---
 name: showcase
-description: Use when the user wants README pictures, store screenshots, or animated demos of a CLI, app, or extension — "make screenshots for the README", "showcase gif", "animated demo of the feature", "marketplace media", "hero image". Draws the UI as HTML from the product's own strings, screenshots it with headless Chrome at 2x, and joins frames into GIFs, so pictures never drift from what the code prints. NOT for app-store phone screenshots of a mobile app (mobile-screenshots skill) or a one-off screenshot of a running app (mobile skill).
+description: Use when the user wants README pictures, store screenshots, or animated demos of a CLI, app, or extension: "make screenshots for the README", "showcase gif", "animated demo of the feature", "marketplace media", "hero image". Draws the UI as HTML from the product's own strings, so pictures match the code. NOT for phone store screenshots (mobile-screenshots) or a running app (mobile).
 ---
 
 # Showcase: README pictures and GIFs from HTML

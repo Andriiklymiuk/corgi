@@ -1,6 +1,6 @@
 ---
 name: mobile
-description: Use when verifying a mobile (Expo / React Native) change on a real device — "test on the emulator", "run it on the simulator", "screenshot the app", "drive it with Maestro", "does this screen render", "check it on Android/iOS", "tap through the app", "is the animation right" — or when a local iOS/Android build + TestFlight/Play ship needs driving. NOT for writing the app code (normal edits) or authoring corgi-compose (corgi skill).
+description: Use when verifying a mobile (Expo / React Native) change on a real device: "test on the emulator", "run it on the simulator", "screenshot the app", "drive it with Maestro", "does this screen render", "tap through the app", or when a local iOS/Android build plus TestFlight/Play ship needs driving. NOT for writing app code or authoring corgi-compose.
 ---
 
 # Verify mobile change on device
