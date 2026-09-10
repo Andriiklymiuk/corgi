@@ -1,6 +1,6 @@
 ---
 name: agent
-description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking ("which sessions are waiting on me", "answer that permission from my phone"), and `corgi agent watch`. NOT for compose authoring (corgi), starting (run), or debugging (debug).
+description: Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking ("which sessions are waiting on me", "answer that permission from my phone"). Also whenever someone asks to be told about tracker or review activity — "watch the jira issues here", "watch my linear tickets", "tell me when someone comments on my MRs", "notify me about new bugs", "what came in?", "stop watching this" — or asks why the watch did or did not fire. NOT for compose authoring (corgi), starting (run), or debugging (debug).
 ---
 
 # Corgi agent mode
@@ -636,6 +636,31 @@ corgi agent watch test issue.comment --body "still needed?"   # one made-up even
 corgi agent watch hooks                                       # webhook URLs on the tunnel + the shared secret; --interval 0 for webhooks only
 corgi agent restart
 ```
+
+**Asked to watch something?** ("watch the jira issues here", "tell me when
+someone comments on my MRs".) Never guess the settings — read them, then act:
+
+1. `corgi_watch_status` (MCP) or `corgi agent watch` says what this workspace
+   already has and what it is missing. Do that first; half the answer is
+   usually already configured.
+2. **Derive the key and the repo list, never invent them.** A key one letter
+   off routes nothing, silently, and looks exactly like a quiet week:
+   ```bash
+   for d in */; do git -C "$d" log --oneline -30; git -C "$d" branch -a; done 2>/dev/null \
+     | grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b' | sort | uniq -c | sort -rn | head
+   for d in */; do git -C "$d" remote get-url origin 2>/dev/null; done \
+     | sed -E 's#.*[:/](.+)\.git#\1#' | sort -u | paste -sd, -
+   ```
+3. Missing a token? Print the command for the person to run — **never put a
+   token in a tool call or in chat.** Jira wants the plain API token (Basic
+   auth), GitLab a legacy one scoped `read_api`; both are a coin flip in their
+   UIs. `--local` keeps it to this workspace.
+4. `corgi_watch_enable`, or `corgi agent watch enable`, then
+   `corgi agent restart`. Say that the first tracker round looks 24 hours back,
+   so a day of tickets arrives once — otherwise it reads as a bug.
+5. Backlog noise → `--states` with the tracker's **real** status names.
+   `corgi_watch_events` answers "what came in?"; `corgi agent watch test
+   <kind> --ref <KEY>` answers "why did that fire?" and runs nothing.
 
 How it stays cheap: a saved cursor per source (Linear/Jira `updated >`,
 GitHub notifications with `If-Modified-Since` → 304, GitLab todos by id), a
