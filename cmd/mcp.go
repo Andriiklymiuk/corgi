@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -581,6 +583,7 @@ func loadComposeCtx(composePath string) (composeContext, error) {
 	// determineCorgiComposePath reads --global off the command directly, not Root.
 	tmp.Flags().Bool("global", false, "")
 	tmp.Flags().Bool("seed", false, "")
+	tmp.Flags().String("artifacts-dir", "", "")
 
 	cleanup := func() {
 		// Reset on rootCmd directly: after RemoveCommand, tmp.Root() is tmp, not
@@ -595,12 +598,30 @@ func loadComposeCtx(composePath string) (composeContext, error) {
 			return composeContext{}, err
 		}
 	}
-	corgi, err := utils.GetCorgiServices(tmp)
+	corgi, err := loadComposeCached(tmp, composePath)
 	if err != nil {
 		cleanup()
 		return composeContext{}, err
 	}
 	return composeContext{corgi: corgi, cmd: tmp, cleanup: cleanup}, nil
+}
+
+// loadComposeCached serves repeat tool calls from the parsed-compose cache,
+// falling back to a real parse when the file changed or was never seen.
+func loadComposeCached(cmd *cobra.Command, composePath string) (*utils.CorgiCompose, error) {
+	cwd, _ := os.Getwd()
+	key := composeLookup{arg: composePath, cwd: cwd, tier: utils.EnvTierFromFlag}
+	if corgi, ok := mcpCache.lookupCompose(key); ok {
+		utils.CorgiComposeFileContent = corgi
+		utils.SetContainerScope(corgi)
+		return corgi, nil
+	}
+	corgi, err := utils.GetCorgiServices(cmd)
+	if err != nil {
+		return nil, err
+	}
+	mcpCache.storeCompose(key, corgi)
+	return corgi, nil
 }
 
 // loadComposeForMCP loads just the parsed compose.
@@ -663,11 +684,67 @@ type statusEntry struct {
 	Detail  string `json:"detail"`
 }
 
-func mcpStatus(args validateArgs) ([]statusEntry, error) {
+type statusArgs struct {
+	ComposePath   string `json:"composePath"`
+	Service       string `json:"service"`
+	UnhealthyOnly bool   `json:"unhealthyOnly"`
+}
+
+func mcpStatus(args statusArgs) ([]statusEntry, error) {
 	corgi, err := loadComposeForMCP(args.ComposePath)
 	if err != nil {
 		return nil, composeLoadError(err)
 	}
+	if args.Service != "" && !composeDeclares(corgi, args.Service) {
+		return nil, fmt.Errorf("%s: %q is not a declared service or db_service", utils.ErrServiceNotFound, args.Service)
+	}
+	entries, ok := mcpCache.cachedStatus(utils.CorgiComposePath)
+	if !ok {
+		entries = probeStatusEntries(corgi)
+		mcpCache.storeStatus(utils.CorgiComposePath, entries)
+	}
+	return filterStatusEntries(entries, args.Service, args.UnhealthyOnly), nil
+}
+
+func composeDeclares(corgi *utils.CorgiCompose, name string) bool {
+	for _, s := range corgi.Services {
+		if s.ServiceName == name {
+			return true
+		}
+	}
+	for _, db := range corgi.DatabaseServices {
+		if db.ServiceName == name {
+			return true
+		}
+	}
+	return false
+}
+
+func filterStatusEntries(entries []statusEntry, service string, unhealthyOnly bool) []statusEntry {
+	out := make([]statusEntry, 0, len(entries))
+	for _, e := range entries {
+		if service != "" && statusEntryName(e.Label) != service {
+			continue
+		}
+		if unhealthyOnly && e.Healthy {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// statusEntryName recovers the declared name from a status label such as
+// "db_services.pg (postgres)" or "services.api".
+func statusEntryName(label string) string {
+	name := strings.TrimPrefix(strings.TrimPrefix(label, "db_services."), "services.")
+	if i := strings.Index(name, " ("); i >= 0 {
+		name = name[:i]
+	}
+	return name
+}
+
+func probeStatusEntries(corgi *utils.CorgiCompose) []statusEntry {
 	rows := collectStatusRows(corgi)
 	up, down := probeAll(rows)
 	out := make([]statusEntry, 0, len(up)+len(down))
@@ -681,11 +758,25 @@ func mcpStatus(args validateArgs) ([]statusEntry, error) {
 			Detail:  pr.Detail,
 		})
 	}
-	return out, nil
+	return out
 }
 
+type envArgs struct {
+	ComposePath string `json:"composePath"`
+	Service     string `json:"service"`
+	Key         string `json:"key"`
+}
+
+// An unfiltered corgi_env keeps this many vars per service; the rest hide
+// behind a marker entry so the whole stack's env never floods the context.
+const (
+	mcpEnvVarCap      = 40
+	envTruncatedKey   = "_truncated"
+	envTruncatedLabel = "corgi_env"
+)
+
 // mcpEnv resolves environment per service into the shared keyed shape.
-func mcpEnv(args validateArgs) (map[string]map[string]envEntry, error) {
+func mcpEnv(args envArgs) (map[string]map[string]envEntry, error) {
 	corgi, err := loadComposeForMCP(args.ComposePath)
 	if err != nil {
 		return nil, composeLoadError(err)
@@ -694,12 +785,59 @@ func mcpEnv(args validateArgs) (map[string]map[string]envEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+	if args.Service != "" {
+		vars, ok := all[args.Service]
+		if !ok {
+			return nil, fmt.Errorf("%s: service %q not found; valid services: %s",
+				utils.ErrServiceNotFound, args.Service, strings.Join(serviceNames(corgi), ", "))
+		}
+		all = map[string][]utils.EnvVar{args.Service: vars}
+	}
 	order := make([]string, 0, len(all))
 	for name := range all {
 		order = append(order, name)
 	}
 	sort.Strings(order) // deterministic output
-	return envKeyedMap(all, order), nil
+	doc := envKeyedMap(all, order)
+	if args.Key != "" {
+		for name, vars := range doc {
+			e, ok := vars[args.Key]
+			if !ok {
+				delete(doc, name)
+				continue
+			}
+			doc[name] = map[string]envEntry{args.Key: e}
+		}
+		return doc, nil
+	}
+	if args.Service == "" {
+		capEnvDoc(doc, mcpEnvVarCap)
+	}
+	return doc, nil
+}
+
+// capEnvDoc keeps the first limit keys (sorted) of any oversized service and
+// adds a marker entry saying how to fetch the rest.
+func capEnvDoc(doc map[string]map[string]envEntry, limit int) {
+	for name, vars := range doc {
+		if len(vars) <= limit {
+			continue
+		}
+		keys := make([]string, 0, len(vars))
+		for k := range vars {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		kept := make(map[string]envEntry, limit+1)
+		for _, k := range keys[:limit] {
+			kept[k] = vars[k]
+		}
+		kept[envTruncatedKey] = envEntry{
+			Value:  fmt.Sprintf("%d more vars hidden; call again with service=%q for all of them or key=<KEY> for one", len(vars)-limit, name),
+			Source: envTruncatedLabel,
+		}
+		doc[name] = kept
+	}
 }
 
 func mcpPs(args validateArgs) ([]psRow, error) {
@@ -787,6 +925,7 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 	if envErr != nil {
 		return utils.RunState{}, fmt.Errorf(errFmt, utils.ErrExecFailed, envErr)
 	}
+	mcpCache.invalidateStatus()
 	if err := utils.WriteRunState(statePath, state); err != nil {
 		return state, fmt.Errorf("%s: could not write run-state: %v", utils.ErrExecFailed, err)
 	}
@@ -847,6 +986,7 @@ func mcpDown(args validateArgs) (stopSummary, error) {
 			utils.ExecuteForEachService("down")
 		}
 	})
+	mcpCache.invalidateStatus()
 	os.Remove(statePath)
 	return summary, nil
 }
@@ -855,16 +995,62 @@ type logsArgs struct {
 	ComposePath string `json:"composePath"`
 	Service     string `json:"service"`
 	Lines       int    `json:"lines"`
+	Grep        string `json:"grep"`
+	Since       string `json:"since"`
+	ErrorsOnly  bool   `json:"errorsOnly"`
 }
 
 type logsResult struct {
-	Service string   `json:"service"`
-	Lines   []string `json:"lines"`
+	Service   string   `json:"service"`
+	Lines     []string `json:"lines"`
+	Truncated bool     `json:"truncated,omitempty"`
+}
+
+// mcpLogFilter is the CLI's --grep/--since matcher plus the errorsOnly level
+// gate; all of it runs before the tail so `lines` counts matches, not raw lines.
+type mcpLogFilter struct {
+	stream     logStreamFilter
+	errorsOnly bool
+}
+
+func buildMCPLogFilter(args logsArgs) (mcpLogFilter, error) {
+	f := mcpLogFilter{errorsOnly: args.ErrorsOnly}
+	if args.Since != "" {
+		since, err := parseSince(args.Since)
+		if err != nil {
+			return f, err
+		}
+		f.stream.since = since
+	}
+	if args.Grep != "" {
+		f.stream.grep = compileLogGrep(args.Grep)
+	}
+	return f, nil
+}
+
+// compileLogGrep takes a regexp, or a literal substring when the pattern does
+// not compile (an agent grepping for "foo(" should not have to escape it).
+func compileLogGrep(pattern string) *regexp.Regexp {
+	if re, err := regexp.Compile(pattern); err == nil {
+		return re
+	}
+	return regexp.MustCompile(regexp.QuoteMeta(pattern))
+}
+
+func (f mcpLogFilter) allows(ts, content string) bool {
+	if f.errorsOnly && detectLevel(content) != "error" {
+		return false
+	}
+	return f.stream.allows(ts, content)
 }
 
 func mcpLogs(args logsArgs) (logsResult, error) {
 	if strings.TrimSpace(args.Service) == "" {
 		return logsResult{}, fmt.Errorf("%s: service is required", utils.ErrUsage)
+	}
+	filter, err := buildMCPLogFilter(args)
+	if err != nil {
+		return logsResult{}, fmt.Errorf(errFmt, utils.ErrUsage, err)
 	}
 	// Load compose only to resolve CorgiComposePathDir for the log base.
 	if _, err := loadComposeForMCP(args.ComposePath); err != nil {
@@ -879,36 +1065,43 @@ func mcpLogs(args logsArgs) (logsResult, error) {
 	if err != nil || len(runs) == 0 {
 		return logsResult{}, fmt.Errorf("%s: no logs found for %q (start it with corgi run; capture is on unless --logs=false)", utils.ErrServiceNotFound, args.Service)
 	}
-	lines, err := tailLogFile(runs[0], n)
+	lines, truncated, err := readLogLines(runs[0], n, filter)
 	if err != nil {
 		return logsResult{}, fmt.Errorf(errFmt, utils.ErrExecFailed, err)
 	}
-	return logsResult{Service: args.Service, Lines: lines}, nil
+	return logsResult{Service: args.Service, Lines: lines, Truncated: truncated}, nil
 }
 
 // tailLogFile returns the last n lines of a log file, stripping the timestamp prefix.
 func tailLogFile(path string, n int) ([]string, error) {
+	lines, _, err := readLogLines(path, n, mcpLogFilter{})
+	return lines, err
+}
+
+// readLogLines applies the filter to every line, then keeps the last n. The
+// bool reports that more lines matched than were returned.
+func readLogLines(path string, n int, filter mcpLogFilter) ([]string, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	stripPrefix := looksLikeStampedLog(path)
 	raw := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	if len(raw) == 1 && raw[0] == "" {
-		return []string{}, nil
+		return []string{}, false, nil
 	}
-	if len(raw) > n {
-		raw = raw[len(raw)-n:]
-	}
-	out := make([]string, len(raw))
-	for i, line := range raw {
-		if stripPrefix && len(line) >= utils.LogTimestampLen {
-			out[i] = line[utils.LogTimestampLen:]
-		} else {
-			out[i] = line
+	out := make([]string, 0, len(raw))
+	for _, line := range raw {
+		ts, content := splitLogLine(line, stripPrefix)
+		if filter.allows(ts, content) {
+			out = append(out, content)
 		}
 	}
-	return out, nil
+	truncated := len(out) > n
+	if truncated {
+		out = out[len(out)-n:]
+	}
+	return out, truncated, nil
 }
 
 type execArgs struct {
@@ -995,20 +1188,29 @@ type testArgs struct {
 	EnsureDeps    bool   `json:"ensureDeps"`
 	ServiceBranch string `json:"serviceBranch"`
 	ServiceDir    string `json:"serviceDir"`
+	Changed       bool   `json:"changed"`
+	Base          string `json:"base"`
+	E2E           bool   `json:"e2e"`
 }
 
 type testRunResult struct {
 	Services []testResult `json:"services"`
 	Passed   bool         `json:"passed"`
+	Note     string       `json:"note,omitempty"`
 }
 
 // mcpTest runs each selected service's test script, mirroring `corgi test`.
 // Test scripts execute commands; their child stdout is routed to stderr so the
 // JSON-RPC channel stays clean.
 func mcpTest(args testArgs) (testRunResult, error) {
-	corgi, err := loadComposeForMCP(args.ComposePath)
+	ctx, err := loadComposeCtx(args.ComposePath)
 	if err != nil {
 		return testRunResult{}, composeLoadError(err)
+	}
+	defer ctx.cleanup()
+	corgi := ctx.corgi
+	if args.E2E {
+		return mcpE2E(ctx.cmd, corgi)
 	}
 	var overrideErr error
 	withStdoutToStderr(func() {
@@ -1021,6 +1223,20 @@ func mcpTest(args testArgs) (testRunResult, error) {
 	if err != nil {
 		return testRunResult{}, fmt.Errorf(errFmt, utils.ErrServiceNotFound, err)
 	}
+	if args.Changed {
+		base := args.Base
+		if base == "" {
+			base = "main"
+		}
+		withStdoutToStderr(func() { sel = narrowToChangedServices(sel, base) })
+		if len(sel.services) == 0 {
+			return testRunResult{
+				Services: []testResult{},
+				Passed:   true,
+				Note:     fmt.Sprintf("no service repo differs from %s — nothing to test", base),
+			}, nil
+		}
+	}
 	var (
 		results []testResult
 		passed  bool
@@ -1029,6 +1245,44 @@ func mcpTest(args testArgs) (testRunResult, error) {
 		results, passed = runTests(corgi, sel, args.EnsureDeps, defaultReadyTimeout)
 	})
 	return testRunResult{Services: results, Passed: passed}, nil
+}
+
+// mcpE2E runs the stack's e2e block against the already-running stack with
+// its output captured, the way `corgi test --e2e` does on a terminal.
+func mcpE2E(cmd *cobra.Command, corgi *utils.CorgiCompose) (testRunResult, error) {
+	suite := corgi.E2E
+	if suite == nil || suite.Run == "" {
+		return testRunResult{}, fmt.Errorf("%s: no e2e: block in corgi-compose.yml — declare one with workdir/install/run, or drop e2e to run each service's test script", utils.ErrConfig)
+	}
+	workdir := filepath.Join(utils.CorgiComposePathDir, suite.Workdir)
+	if info, statErr := os.Stat(workdir); statErr != nil || !info.IsDir() {
+		return testRunResult{}, fmt.Errorf("%s: e2e workdir %q does not exist", utils.ErrConfig, workdir)
+	}
+	var buf bytes.Buffer
+	start := time.Now()
+	code, err := runE2ECommands(suite, workdir, &buf)
+	if err != nil {
+		return testRunResult{}, fmt.Errorf("%s: e2e: %v", utils.ErrExecFailed, err)
+	}
+	result := testResult{Name: "e2e", ExitCode: code, DurationMs: time.Since(start).Milliseconds(), Passed: code == 0}
+	result.Message, _ = capMCPOutput(buf.String(), mcpMaxOutputLines, mcpMaxOutputBytes)
+	withStdoutToStderr(func() { collectE2EArtifacts(cmd, suite, workdir) })
+	return testRunResult{Services: []testResult{result}, Passed: result.Passed}, nil
+}
+
+// runE2ECommands runs install then run; `set -e` stops a multi-line block at
+// its first failing line, matching the CLI's line-by-line runner.
+func runE2ECommands(suite *utils.E2ESuite, workdir string, out io.Writer) (int, error) {
+	for _, step := range []string{suite.Install, suite.Run} {
+		if step == "" {
+			continue
+		}
+		code, err := utils.RunServiceCommandExitCode("set -e\n"+step, workdir, false, out, out, utils.SkipAutoSourceEnv)
+		if err != nil || code != 0 {
+			return code, err
+		}
+	}
+	return 0, nil
 }
 
 func mcpDoctor(args validateArgs) (doctorResult, error) {
@@ -1085,6 +1339,122 @@ func mcpDBQuery(args dbQueryArgs) (dbQueryResult, error) {
 		return dbQueryResult{Service: args.Service, Output: capped, Truncated: truncated}, fmt.Errorf(errFmt, utils.ErrExecFailed, err)
 	}
 	return dbQueryResult{Service: args.Service, Output: capped, Truncated: truncated}, nil
+}
+
+type dbSnapshotArgs struct {
+	ComposePath string `json:"composePath"`
+	Service     string `json:"service"`
+	Name        string `json:"name"`
+	Force       bool   `json:"force"`
+}
+
+type dbSnapshotResult struct {
+	Service        string `json:"service"`
+	Name           string `json:"name"`
+	Archive        string `json:"archive"`
+	SizeBytes      int64  `json:"sizeBytes"`
+	PgVersionMajor string `json:"pgVersionMajor"`
+	Image          string `json:"image"`
+	Arch           string `json:"arch"`
+}
+
+// mcpDBSnapshot mirrors `corgi db snapshot`: a physical copy of a
+// postgres-family data dir, restartable later with mcpDBRestore.
+func mcpDBSnapshot(args dbSnapshotArgs) (dbSnapshotResult, error) {
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return dbSnapshotResult{}, composeLoadError(err)
+	}
+	svc, err := resolvePostgresService(args.Service, corgi.DatabaseServices)
+	if err != nil {
+		return dbSnapshotResult{}, fmt.Errorf(errFmt, utils.ErrServiceNotFound, err)
+	}
+	name := args.Name
+	if name == "" {
+		name = utils.DefaultSnapshotName(time.Now())
+	}
+	name, err = utils.SanitizeSnapshotName(name)
+	if err != nil {
+		return dbSnapshotResult{}, fmt.Errorf(errFmt, utils.ErrUsage, err)
+	}
+	if err := refuseWhileSupervised(); err != nil {
+		return dbSnapshotResult{}, err
+	}
+	container := utils.ContainerName(svc.Driver, svc.ServiceName)
+	wasRunning, _ := utils.IsServiceRunning(container)
+	var meta utils.SnapshotMeta
+	withStdoutToStderr(func() {
+		meta, err = utils.RunSnapshot(utils.SnapshotRequest{
+			Service: svc.ServiceName, Driver: svc.Driver,
+			Stack: filepath.Base(utils.CorgiComposePathDir),
+			Name:  name, Force: args.Force, WasRunning: wasRunning,
+		}, time.Now())
+	})
+	mcpCache.invalidateStatus()
+	if err != nil {
+		return dbSnapshotResult{}, fmt.Errorf("%s: snapshot failed: %v", utils.ErrExecFailed, err)
+	}
+	archive, _, _ := utils.SnapshotPaths(svc.ServiceName, name)
+	return dbSnapshotResult{
+		Service: svc.ServiceName, Name: name, Archive: archive,
+		SizeBytes: meta.SizeBytes, PgVersionMajor: meta.PgVersionMajor, Image: meta.Image, Arch: meta.Arch,
+	}, nil
+}
+
+type dbRestoreArgs struct {
+	ComposePath string `json:"composePath"`
+	Service     string `json:"service"`
+	Name        string `json:"name"`
+	Force       bool   `json:"force"`
+}
+
+type dbRestoreResult struct {
+	Service string `json:"service"`
+	Archive string `json:"archive"`
+}
+
+// mcpDBRestore mirrors `corgi db restore --yes`: wipes the db's data volume and
+// puts the snapshot in its place. No prompt — the tool description carries the warning.
+func mcpDBRestore(args dbRestoreArgs) (dbRestoreResult, error) {
+	if strings.TrimSpace(args.Name) == "" {
+		return dbRestoreResult{}, fmt.Errorf("%s: name (a snapshot name or an archive path) is required", utils.ErrUsage)
+	}
+	corgi, err := loadComposeForMCP(args.ComposePath)
+	if err != nil {
+		return dbRestoreResult{}, composeLoadError(err)
+	}
+	svc, err := resolvePostgresService(args.Service, corgi.DatabaseServices)
+	if err != nil {
+		return dbRestoreResult{}, fmt.Errorf(errFmt, utils.ErrServiceNotFound, err)
+	}
+	if err := refuseWhileSupervised(); err != nil {
+		return dbRestoreResult{}, err
+	}
+	archive, metaPath, fromPath, err := resolveRestoreSource(svc.ServiceName, args.Name)
+	if err != nil {
+		return dbRestoreResult{}, fmt.Errorf(errFmt, utils.ErrUsage, err)
+	}
+	withStdoutToStderr(func() {
+		err = utils.RunRestore(utils.RestoreRequest{
+			Service: svc.ServiceName, Driver: svc.Driver,
+			ArchivePath: archive, MetaPath: metaPath,
+			FromPath: fromPath, Force: args.Force,
+		})
+	})
+	mcpCache.invalidateStatus()
+	if err != nil {
+		return dbRestoreResult{}, fmt.Errorf("%s: restore failed: %v", utils.ErrExecFailed, err)
+	}
+	return dbRestoreResult{Service: svc.ServiceName, Archive: archive}, nil
+}
+
+// refuseWhileSupervised keeps the CLI's rule: a snapshot stops the db container,
+// which would yank it from under services a detached run is supervising.
+func refuseWhileSupervised() error {
+	if utils.IsStackSupervised(utils.CorgiComposePathDir) {
+		return fmt.Errorf("%s: a detached run is supervising this stack's services — call corgi_down first (databases alone may stay up)", utils.ErrAlreadyRunning)
+	}
+	return nil
 }
 
 func mcpSchema() string { return utils.ComposeJSONSchema() }
@@ -1184,17 +1554,29 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_status",
-		mcp.WithDescription("Live health of every declared service and db_service, probed right now (TCP, or HTTP when a healthCheck path is declared). Returns one entry per target: {label, kind, port, url, healthy, detail}. This is the liveness truth — corgi_ps only says whether a pid or container exists. Targets with no declared port are not probed and do not appear, so an empty list is not a healthy stack. Read-only."),
+		mcp.WithDescription("Live health of declared services and db_services (TCP, or HTTP when a healthCheck path is declared). Returns one entry per target: {label, kind, port, url, healthy, detail}. This is the liveness truth — corgi_ps only says whether a pid or container exists. Targets with no declared port are not probed and do not appear, so an empty list is not a healthy stack. Pass service to get one target, unhealthyOnly to get only what is down (empty = all healthy). Probe results are reused for 1s across calls. Read-only."),
 		composeOpt,
+		mcp.WithString("service", mcp.Description("Only this service or db_service (declared name)")),
+		mcp.WithBoolean("unhealthyOnly", mcp.Description("Only targets that failed the probe")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
-		return mcpStatus(validateArgs{ComposePath: r.GetString("composePath", "")})
+		return mcpStatus(statusArgs{
+			ComposePath:   r.GetString("composePath", ""),
+			Service:       r.GetString("service", ""),
+			UnhealthyOnly: r.GetBool("unhealthyOnly", false),
+		})
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_env",
-		mcp.WithDescription("Resolved environment per service with source attribution. Returns {service: {KEY: {value, source}}}. Read-only, real values."),
+		mcp.WithDescription("Resolved environment per service with source attribution. Returns {service: {KEY: {value, source}}}, real values. Prefer service (one service, every var) or key (one var across services): without either, each service is capped at 40 vars and a \"_truncated\" entry says how many were hidden. Read-only."),
 		composeOpt,
+		mcp.WithString("service", mcp.Description("Only this service's vars (uncapped)")),
+		mcp.WithString("key", mcp.Description("Only this var, in every service that has it")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
-		return mcpEnv(validateArgs{ComposePath: r.GetString("composePath", "")})
+		return mcpEnv(envArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Service:     r.GetString("service", ""),
+			Key:         r.GetString("key", ""),
+		})
 	}))
 
 	registerAgentSurfaceTools(s, composeOpt)
@@ -1233,15 +1615,21 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_logs",
-		mcp.WithDescription("Read the last N lines of a service's newest captured log run (capture is on by default for detached runs). Returns {service, lines[]}. Needs a prior corgi_up; a service that never spawned has no log. To wait for a specific line use corgi_wait_for_log instead of polling this. Read-only."),
+		mcp.WithDescription("Read the last N lines of a service's newest captured log run (capture is on by default for detached runs). Returns {service, lines[], truncated}. Filters (grep, since, errorsOnly) apply before the tail, so lines counts matching lines — use errorsOnly or grep first and read the whole log only when they come back empty. Needs a prior corgi_up; a service that never spawned has no log. To wait for a specific line use corgi_wait_for_log instead of polling this. Read-only."),
 		composeOpt,
 		serviceOpt,
-		mcp.WithNumber("lines", mcp.Description("Number of trailing lines (default 200)")),
+		mcp.WithNumber("lines", mcp.Description("Number of trailing (matching) lines (default 200)")),
+		mcp.WithString("grep", mcp.Description("Only lines matching this regexp (a pattern that does not compile is matched as a literal substring)")),
+		mcp.WithString("since", mcp.Description("Only lines newer than this: a duration like 10m, or an RFC3339 timestamp")),
+		mcp.WithBoolean("errorsOnly", mcp.Description("Only lines that look like errors (error, panic, fatal — the same heuristic corgi logs --json uses for level)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpLogs(logsArgs{
 			ComposePath: r.GetString("composePath", ""),
 			Service:     r.GetString("service", ""),
 			Lines:       r.GetInt("lines", 0),
+			Grep:        r.GetString("grep", ""),
+			Since:       r.GetString("since", ""),
+			ErrorsOnly:  r.GetBool("errorsOnly", false),
 		})
 	}))
 
@@ -1268,11 +1656,14 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_test",
-		mcp.WithDescription("Run each selected service's `test` script in its resolved env. Returns {services[], passed}. Does not start databases/services."),
+		mcp.WithDescription("Run each selected service's `test` script in its resolved env. Returns {services[], passed, note?}. Does not start databases/services. changed narrows to services whose repo differs from base (uncommitted work counts) — the cheap default after editing a few repos. e2e runs the stack's e2e: block against the already-running stack instead, returning one \"e2e\" entry with the captured output in message."),
 		composeOpt,
 		mcp.WithString("service", mcp.Description("Only test this service")),
 		mcp.WithString("profile", mcp.Description(profileDesc)),
 		mcp.WithBoolean("ensureDeps", mcp.Description("Wait for depends_on_db/services to be ready first")),
+		mcp.WithBoolean("changed", mcp.Description("Only services whose repo differs from base (same as corgi test --changed)")),
+		mcp.WithString("base", mcp.Description("Branch to compare against for changed (default main; falls back to origin/<base>)")),
+		mcp.WithBoolean("e2e", mcp.Description("Run the compose file's e2e: block against the running stack instead of per-service test scripts")),
 		mcp.WithString("serviceBranch", mcp.Description(serviceBranchDesc)),
 		mcp.WithString("serviceDir", mcp.Description(serviceDirDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -1283,6 +1674,9 @@ func registerMCPTools(s *server.MCPServer) {
 			EnsureDeps:    r.GetBool("ensureDeps", false),
 			ServiceBranch: r.GetString("serviceBranch", ""),
 			ServiceDir:    r.GetString("serviceDir", ""),
+			Changed:       r.GetBool("changed", false),
+			Base:          r.GetString("base", ""),
+			E2E:           r.GetBool("e2e", false),
 		})
 	}))
 
@@ -1305,7 +1699,7 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_db_query",
-		mcp.WithDescription("Run one non-interactive query inside a running db_service container through its driver's own client (psql, redis-cli, mongosh, …); write the query in that client's syntax. Returns {service, output, truncated}. The db_service must already be up (corgi_up). Writes are not blocked — a mutating statement runs. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
+		mcp.WithDescription("Run one non-interactive query inside a running db_service container through its driver's own client (psql, redis-cli, mongosh, …); write the query in that client's syntax. Returns {service, output, truncated}. The db_service must already be up (corgi_up). Writes are not blocked — a mutating statement runs, so call corgi_db_snapshot first and corgi_db_restore to undo. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
 		composeOpt,
 		serviceOpt,
 		mcp.WithString("query", mcp.Required(), mcp.Description("Query/command to run (e.g. SQL for psql)")),
@@ -1317,6 +1711,39 @@ func registerMCPTools(s *server.MCPServer) {
 			ComposePath: r.GetString("composePath", ""),
 			Service:     r.GetString("service", ""),
 			Query:       r.GetString("query", ""),
+		})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_db_snapshot",
+		mcp.WithDescription("Physical snapshot of a postgres-family db_service's data (postgres, postgis, pgvector, timescaledb), the same as corgi db snapshot. Take one BEFORE a corgi_db_query that mutates data (UPDATE/DELETE/DROP/migrations) so corgi_db_restore can undo it. Returns {service, name, archive, sizeBytes, pgVersionMajor, image, arch}. Stops the db container briefly and restarts it if it was running; refused with E_ALREADY_RUNNING while a detached run is supervising service processes (bring only the databases up, or corgi_down first)."),
+		composeOpt,
+		mcp.WithString("service", mcp.Description("db_service name (optional when the stack has exactly one postgres-family db)")),
+		mcp.WithString("name", mcp.Description("Snapshot name (default: UTC timestamp like 2026-09-10-1530)")),
+		mcp.WithBoolean("force", mcp.Description("Overwrite a snapshot with the same name")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpDBSnapshot(dbSnapshotArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Service:     r.GetString("service", ""),
+			Name:        r.GetString("name", ""),
+			Force:       r.GetBool("force", false),
+		})
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_db_restore",
+		mcp.WithDescription("DESTRUCTIVE: wipe a postgres-family db_service's data volume and restore a snapshot taken by corgi_db_snapshot (or an archive path), the same as corgi db restore --yes. No confirmation — the undo for a mutating corgi_db_query. Returns {service, archive}. Same E_ALREADY_RUNNING rule as corgi_db_snapshot. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
+		composeOpt,
+		mcp.WithString("name", mcp.Required(), mcp.Description("Snapshot name from corgi_db_snapshot, or a path to a .tar.zst archive")),
+		mcp.WithString("service", mcp.Description("db_service name (optional when the stack has exactly one postgres-family db)")),
+		mcp.WithBoolean("force", mcp.Description("Restore even when the snapshot's pg major/arch differ from the running image")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return nil, fmt.Errorf("%s", dangerousToolBlockedMsg)
+		}
+		return mcpDBRestore(dbRestoreArgs{
+			ComposePath: r.GetString("composePath", ""),
+			Service:     r.GetString("service", ""),
+			Name:        r.GetString("name", ""),
+			Force:       r.GetBool("force", false),
 		})
 	}))
 
@@ -1403,7 +1830,7 @@ func registerMCPResources(s *server.MCPServer) {
 		func(_ context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			mcpHandlerMu.Lock()
 			defer mcpHandlerMu.Unlock()
-			out, err := mcpStatus(validateArgs{})
+			out, err := mcpStatus(statusArgs{})
 			if err != nil {
 				return nil, err
 			}

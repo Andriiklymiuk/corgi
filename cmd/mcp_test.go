@@ -92,7 +92,7 @@ func TestMCPValidateReportsError(t *testing.T) {
 // (utils.EnvVar drops Key, so a naive marshal would lose them).
 func TestMCPEnv(t *testing.T) {
 	chdirToTempCompose(t, mcpComposeFixture)
-	got, err := mcpEnv(validateArgs{})
+	got, err := mcpEnv(envArgs{})
 	if err != nil {
 		t.Fatalf("mcpEnv: %v", err)
 	}

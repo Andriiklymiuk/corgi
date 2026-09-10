@@ -80,6 +80,13 @@ func canShowWelcomeMessages() bool {
 			arg == "status" ||
 			arg == "health" ||
 			arg == "healthcheck" ||
+			arg == "ps" ||
+			arg == "logs" ||
+			arg == "env" ||
+			arg == "why" ||
+			arg == "context" ||
+			arg == "exec" ||
+			arg == "open" ||
 			arg == "completion" ||
 			arg == "version" ||
 			arg == "cache" ||
@@ -148,6 +155,13 @@ func ClearTerminal() {
 			arg == "status" ||
 			arg == "health" ||
 			arg == "healthcheck" ||
+			arg == "ps" ||
+			arg == "logs" ||
+			arg == "env" ||
+			arg == "why" ||
+			arg == "context" ||
+			arg == "exec" ||
+			arg == "open" ||
 			arg == "docs" ||
 			arg == "completion" ||
 			arg == "version" ||
