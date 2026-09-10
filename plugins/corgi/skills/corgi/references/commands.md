@@ -320,7 +320,10 @@ Errors:
 Moves a legacy top-level `corgi_services/` to `.corgi/corgi_services/` and
 rewrites the matching `.gitignore` lines. Any corgi command does it on the way
 past; this one says what it did. `--dry-run` prints the move and stops.
-Refuses while services are up — `corgi stop` first. Idempotent.
+Refuses while services are up, probing each row rather than trusting a
+status a crash left behind — `corgi stop` first. Git worktrees under the
+folder are repaired afterwards (git records their path absolutely), and the
+saved run state's log paths are rewritten. Idempotent.
 
 ### `corgi clean` (alias: `clear`)
 

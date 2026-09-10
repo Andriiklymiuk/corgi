@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -85,21 +86,90 @@ func MigrateCorgiServices(composeDir string) (bool, error) {
 		return false, fmt.Errorf("couldn't move %s to %s: %w", legacy, target, err)
 	}
 	retargetGitignore(composeDir)
+	retargetRunState(legacy, target)
+	repairWorktrees(target)
 	return true, nil
 }
 
+// repairWorktrees re-points each source repo at the worktree's new path. Git
+// records it absolutely, so without this `git worktree list` calls the moved
+// checkout prunable and the next prune drops the branch's admin files.
+func repairWorktrees(target string) {
+	entries, err := os.ReadDir(filepath.Join(target, ".worktrees"))
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(target, ".worktrees", e.Name())
+		c := exec.Command("git", "worktree", "repair")
+		c.Dir = dir
+		_ = c.Run()
+	}
+}
+
+// retargetRunState rewrites the absolute paths the last run recorded, so a
+// log file the board still points at is found where the folder now is.
+func retargetRunState(legacy, target string) {
+	for _, name := range []string{".state.json", ".state.last.json"} {
+		path := filepath.Join(target, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		moved := strings.ReplaceAll(string(data), legacy+string(filepath.Separator), target+string(filepath.Separator))
+		if moved == string(data) {
+			continue
+		}
+		_ = os.WriteFile(path, []byte(moved), 0o644)
+	}
+}
+
+// runningIn is what would lose its paths if the folder moved. A "running"
+// row left behind by a crash or a reboot is not one of them, so every row is
+// probed: a service by its pid, a db service by its container.
 func runningIn(corgiServicesPath string) []string {
 	state, err := ReadRunState(filepath.Join(corgiServicesPath, ".state.json"))
 	if err != nil {
 		return nil
 	}
 	var names []string
-	for _, e := range append(append([]RunStateEntry{}, state.Services...), state.DBServices...) {
-		if e.Status == "running" {
+	for _, e := range state.Services {
+		if e.Status != "running" {
+			continue
+		}
+		// pid==0 is container-managed; its container is the truth.
+		if e.PID == 0 {
+			if containerRunning(e.Container) {
+				names = append(names, e.Name)
+			}
+			continue
+		}
+		if PidAlive(e.PID, e.Command) {
+			names = append(names, e.Name)
+		}
+	}
+	for _, e := range state.DBServices {
+		if e.Status == "running" && containerRunning(e.Container) {
 			names = append(names, e.Name)
 		}
 	}
 	return names
+}
+
+// containerRunning asks docker, and says no when docker cannot answer: a
+// stopped daemon holds nothing that a moved folder could break.
+func containerRunning(container string) bool {
+	if strings.TrimSpace(container) == "" {
+		return false
+	}
+	out, err := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", container).Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
 }
 
 func retargetGitignore(composeDir string) {

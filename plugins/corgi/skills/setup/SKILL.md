@@ -51,7 +51,8 @@ In the project directory:
   `.corgi/agent.yml`. A checkout with a top-level `.corgi/corgi_services/` is moved
   there by any corgi command; `corgi migrate` does it out loud (`--dry-run`
   to look first). Nothing moves while services are up — `corgi stop` first.
-  The move rewrites the matching `.gitignore` lines; commit that.
+  The move rewrites the matching `.gitignore` lines; commit that. Git
+  worktrees under it are repaired, so the source repo still points at them.
 
 ### 3. The daemon, the endpoint, the tunnel, the QR
 
