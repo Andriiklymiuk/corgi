@@ -298,13 +298,13 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 }
 
 
-// ---- the launcher on the phone, after pairing: board, accounts, sessions, doctor ----
+// ---- the launcher on the phone: three tabs, and a ticket moved from its row ----
 {
 	const qr = readFileSync("scripts/showcase-qr.txt", "utf8").trimEnd().split("\n");
 	const up = [
 		"{g}${/} {B}corgi agent up{/}",
 		"",
-		"  ✓ workspace acme-stack (registered)",
+		"  ✓ workspace acme-api (registered)",
 		"  ✓ agent daemon running (pid 41902)",
 		"  ✓ starts at login (launchd) — survives a reboot",
 		"  ✓ public endpoint: https://blue-fox-42.trycloudflare.com/mcp",
@@ -315,43 +315,131 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"",
 		"    or open: https://blue-fox-42.trycloudflare.com/pair#A7K2M9",
 		"",
-		"  after scanning, the phone opens the launcher — tap a repo to start:",
+		"  the phone opens on the inbox — what the watch has seen:",
 		"    https://blue-fox-42.trycloudflare.com/app",
 	];
+
+	// Every string below is one the page prints: cmd/mcp_launcher.go.
+	const tabs = (on, n = { inbox: 3, sessions: 3, stacks: 2, laptop: 0, settings: 0 }) => `<div class="tabs">` +
+		[["inbox", "Inbox"], ["sessions", "Sessions"], ["stacks", "Stacks"], ["laptop", "Laptop"], ["settings", "Settings"]]
+			.map(([k, label]) => `<span class="tab${on === k ? " sel" : ""}${on === "→" + k ? " tap" : ""}">${label}${n[k] ? `<i>${n[k]}</i>` : ""}</span>`)
+			.join("") + `</div>`;
+
+	const ev = ({ ref, kind, title, acts, box, aim }) => `<div class="ev">
+		<div class="ehead">${box ? `<i class="box"></i>` : ""}<span class="eref">${ref}</span><span class="ekind">${kind}</span></div>
+		<div class="etitle">${title}</div>
+		<div class="erow">${acts.map((a) => a === "Work on it"
+			? `<span class="eb pri">${a}</span>`
+			: `<span class="eb${aim && a === "Move…" ? " tapme" : ""}">${a}</span>`).join("")}</div></div>`;
+
+	const inbox = (state, aim) => `
+		<p class="sum">From the tracker and your pull requests</p>
+		<div class="grp">acme-api</div>
+		${ev({ ref: "ABC-123", kind: "NEW ISSUE", box: 1, aim, acts: ["Open issue", "Work on it", "Move…", "Ignore"],
+			title: state === "moved" ? "Login redirect loops after SSO <span class=\"col\">In Progress</span>" : "Login redirect loops after SSO" })}
+		${ev({ ref: "ABC-128", kind: "NEW ISSUE", box: 1, acts: ["Open issue", "Work on it", "Move…", "Ignore"],
+			title: "Cache the workspace registry between polls" })}
+		${ev({ ref: "acme/web!41", kind: "PR REVIEW", acts: ["Open PR", "Work on it", "Ignore"],
+			title: "Draft: retry the upload on a 502" })}
+		<div class="grp">worked on for you</div>
+		<div class="ev done"><div class="ehead"><span class="eref">acme/web!38</span><span class="pill">1 PR</span></div>
+			<div class="etitle">opened merge_requests/44 · 6m</div></div>`;
+
+	const sheet = (picked) => `<div class="scrim"><div class="sheet"><div class="grab"></div>
+		<div class="sh3">Move ABC-123 to</div>
+		${["Backlog", "Ready", "In Progress", "In Review", "Staging", "Done", "Assign to me"]
+			.map((n) => `<div class="opt${picked === n ? " tap" : ""}">${n}</div>`).join("")}</div></div>`;
+
 	const sess = (dot, label, detail, badge) => `<div class="sess"><span class="sdot ${dot}"></span><span class="slabel">${label}</span><span class="sdetail">${detail}</span>${badge ? `<span class="sbadge">${badge}</span>` : ""}</div>`;
-	const board = `<div class="board"><div class="sum hot">Claude sessions on this machine · 1 waiting on you · 2 working</div>
-		${sess("needs", "acme-api", "permission: Bash go test · ctx 72%", "work")}${sess("working", "Fix the login redirect", "Edit registry.go · ctx 43%")}${sess("working", "web", "Bash npm test · ctx 58%")}
-		<div class="acct"><span><b>default</b><i class="bar"><i style="width:55%"></i></i>55% · resets 5:10pm</span><span><b>work</b><i class="bar hot"><i style="width:100%"></i></i>100% · resets 1:10pm</span></div></div>`;
-	const card = ({ name, path, branch, dot, meta, usage, btn, tap, session, open }) => `<div class="ws"><div class="head"><span class="dot ${dot}"></span><span class="name">${name}</span></div><div class="path">${path} <span style="color:#8f94a3">${branch}</span></div><div class="meta">${meta}</div>${usage ? `<div class="usage">${usage}</div>` : ""}<div class="actions"><span class="go${tap ? " tap" : ""}">${btn}</span><span class="chip">${open ? "sessions ⌃" : "sessions ⌄"}</span><span class="chip">open in <b>app</b> ▾</span>${btn === "Open" ? `<span class="chip">Stop</span>` : `<span class="chip">options ⌄</span>`}</div>${session ? `<div class="top"><span><i class="sdot"></i>${session}</span><span class="when">vscode · 12s ago · open ↗</span></div>` : ""}${open ? panel : ""}</div>`;
-	const panel = `<div class="panel"><div class="grp">live now</div><div class="s"><span><i class="sdot"></i>brave-otter</span><span class="when">remote · 12s ago · open ↗</span></div>
-		<div class="grp">earlier · not running</div><div class="s past"><span><i class="sdot off"></i>quiet-heron</span><span class="when">2h ago · reopen</span></div>
-		<div class="grp">activity</div><div class="evrow"><b>started · phone</b><span>12s ago</span></div><div class="evrow"><b>exited · network timeout — restarted</b><span>2h ago</span></div>
-		<div class="grp">this workspace</div><div class="kv"><span>checkout</span><span>main · clean</span></div><div class="kv"><span>account</span><span>default</span></div><div class="kv"><span>supervised</span><span>for 3d · started with the daemon</span></div><div class="kv"><span>restarts</span><span>1 · last network timeout</span></div><div class="kv"><span>wake lock</span><span>the machine is held awake while this runs</span></div></div>`;
-	const launcher = (t) => `<div class="app"><div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 1.21.53 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
-	${t >= 1 ? board : ""}
-	${card({ name: "acme-stack", path: "…/dev/acme-stack", branch: "· main", dot: "live", meta: '<span class="live">1 live</span><span>up 2h</span><span>default account</span>', usage: "1.2M today · 8.4M this week", btn: "Open", session: "brave-otter", open: t === 2 })}
-	${t === 2 ? "" : card({ name: "recipe-app", path: "…/dev/recipe-app", branch: "· feat/search*", dot: "live", meta: '<span class="live">1 live</span><span class="warn">waiting: allow or deny the edit</span><span>default account</span>', usage: "640k today · 3.1M this week", btn: "Open", session: "search index" })}
-	${t === 2 ? "" : card({ name: "client-app", path: "…/work/client-app", branch: "· main", dot: "ready", meta: '<span class="live">online · no session</span><span>up 2h</span><span>work account</span>', btn: "Start" })}
-	${t === 3 ? doctor : ""}
-	</div>`;
-	const doctor = `<div class="settings"><div class="grp">Settings</div><div class="h3">If something will not start</div><div class="chk"><span class="mark">✓</span><span><b>claude binary</b> — /opt/homebrew/bin/claude</span></div><div class="chk"><span class="mark">✓</span><span><b>daemon</b> — running, pid 41902</span></div><div class="chk"><span class="mark">✓</span><span><b>start at login</b> — launchd</span></div><div class="chk bad"><span class="mark">✗</span><span><b>trust · client-app</b> — Claude has not trusted ~/work/client-app under ~/.claude-work<span class="fix">fix: run \`claude\` there once, accept the trust dialog</span></span></div><div class="chk"><span class="mark">✓</span><span><b>session tracking</b> — hooks in 2 of 2 Claude config dirs</span></div></div>`;
-	const phone = (screen) => `<div class="phone"><div class="notch"></div><div class="screen">${screen}</div></div>`;
+	const sessions = `<p class="sum hot">Claude sessions on this machine · 1 waiting on you · 2 working</p>
+		${sess("needs", "acme-api", "permission: Bash go test · ctx 72%", "work")}
+		${sess("working", "ABC-123 login redirect", "Edit registry.go · ctx 43%")}
+		${sess("working", "web", "Bash npm test · ctx 58%")}
+		<div class="acct"><span><b>default</b><i class="bar"><i style="width:55%"></i></i>55% · resets 5:10pm</span><span><b>work</b><i class="bar hot"><i style="width:100%"></i></i>100% · resets 1:10pm</span></div>`;
+
+	const card = ({ name, path, branch, dot, meta, usage, btn }) => `<div class="ws">
+		<div class="head"><span class="dot ${dot}"></span><span class="name">${name}</span></div>
+		<div class="path">${path} <span style="color:#8a8f98">${branch}</span></div>
+		<div class="meta">${meta}</div>${usage ? `<div class="usage">${usage}</div>` : ""}
+		<div class="actions"><span class="go">${btn}</span><span class="chip">sessions ⌄</span><span class="chip">open in <b>app</b> ▾</span><span class="chip">Stop</span></div></div>`;
+	const stacks = `
+		${card({ name: "acme-api", path: "…/dev/acme-api", branch: "· main", dot: "live", meta: '<span class="live">2 live</span><span>up 2h</span><span>default account</span>', usage: "1.2M today · 8.4M this week", btn: "Open" })}
+		${card({ name: "web", path: "…/dev/web", branch: "· feat/search*", dot: "ready", meta: '<span class="live">online · no session</span><span>up 2h</span><span>work account</span>', btn: "Start" })}`;
+
+	const app = (tab, extra = "") => `<div class="app">
+		<div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 2.9.1 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
+		${tabs(tab.replace("→", ""))}
+		<div class="pane">${tab.endsWith("inbox") ? inbox(extra === "moved" ? "moved" : "", extra === "aim") : tab.endsWith("sessions") ? sessions : stacks}</div>
+		</div>`;
+
+	const withTap = (tab, extra) => app(tab, extra);
+	const phone = (screen, over = "") => `<div class="phone"><div class="notch"></div><div class="screen">${screen}${over}</div></div>`;
+
 	const extraCss = `<style>
-	  .board{margin:2px 0 8px}.sum{color:#8f94a3;font-size:10.5px;margin:0 0 5px 2px}.sum.hot{color:#ff7b72;font-weight:600}
-	  .sess{display:flex;align-items:center;gap:7px;background:#0f1013;border:1px solid #1a1c22;border-radius:8px;padding:6px 8px;margin:4px 0;font-size:11px}
-	  .sdot{width:7px;height:7px;border-radius:50%;background:#6ee787;flex:none;display:inline-block;margin-right:6px}.sdot.needs{background:#ff7b72}.sdot.working{background:#ffa657}.sdot.off{background:#3a4152}
-	  .sess .sdot{margin:0}.slabel{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sdetail{color:#8f94a3;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48%}
-	  .sbadge{font-size:8px;font-weight:700;color:#8f94a3;border:1px solid #22242b;border-radius:4px;padding:1px 4px;text-transform:uppercase}
-	  .acct{display:flex;gap:10px;font-size:9.5px;color:#8f94a3;margin:2px 0 0 2px}.acct b{color:#eceef2}.acct .bar{display:inline-block;width:38px;height:5px;border-radius:3px;background:#1a1c22;vertical-align:middle;margin:0 4px;overflow:hidden}.acct .bar i{display:block;height:100%;background:#6ee787}.acct .bar.hot i{background:#ff7b72}
-	  .usage{font-size:9.5px;color:#63677a;margin:3px 0 0 17px}
-	  .panel{margin-top:8px;border-top:1px solid #1a1c22;padding-top:4px}.grp{color:#63677a;font-size:9px;text-transform:uppercase;letter-spacing:.04em;margin:8px 0 3px}
-	  .s{display:flex;justify-content:space-between;font-size:11px;padding:3px 0}.s.past{opacity:.6}.s .when{color:#63677a;font-size:9.5px}
-	  .evrow{display:flex;justify-content:space-between;font-size:10px;color:#8f94a3;padding:2px 0}.evrow b{color:#c9cfda;font-weight:600}
-	  .kv{display:flex;justify-content:space-between;gap:8px;font-size:10px;padding:2px 0}.kv span:first-child{color:#63677a}.kv span:last-child{text-align:right;color:#c9cfda}
-	  .settings{background:#141519;border:1px solid #22242b;border-radius:11px;padding:8px 11px;margin:8px 0}.h3{font-size:11px;font-weight:600;margin:2px 0 4px}
-	  .chk{display:flex;gap:6px;font-size:10px;padding:4px 0;border-bottom:1px solid #22242b;line-height:1.4}.chk:last-child{border-bottom:0}.chk .mark{color:#6ee787}.chk.bad .mark{color:#ff7b72}.chk .fix{display:block;color:#8f94a3;font-size:9px}
+	  .app{background:#08090a}
+	  .brand small{color:#8a8f98}
+	  .tabs{display:flex;gap:2px;padding:6px 0 8px;border-bottom:1px solid #212327;margin-bottom:8px}
+	  .tab{font-size:11.5px;color:#8a8f98;padding:4px 8px;border-radius:6px;display:flex;align-items:center;gap:5px}
+	  .tab.sel{color:#eceef1;background:#16181b}
+	  .tab.tap{box-shadow:0 0 0 3px rgba(94,106,210,.45)}
+	  .tab i{font-style:normal;font-size:9px;color:#5c6169;background:#1e2024;border-radius:9px;padding:1px 5px}
+	  .tab.sel i{color:#eceef1}
+	  .sum{color:#8a8f98;font-size:10.5px;margin:0 0 6px 2px}.sum.hot{color:#f85149;font-weight:600}
+	  .grp{color:#5c6169;font-size:9px;text-transform:uppercase;letter-spacing:.06em;margin:9px 0 4px 2px}
+	  .ev{background:#101113;border:1px solid #212327;border-radius:9px;padding:8px 9px;margin:5px 0}
+	  .ehead{display:flex;align-items:center;gap:6px}
+	  .box{width:11px;height:11px;border:1.5px solid #3a3f47;border-radius:3px;display:inline-block;flex:none}
+	  .eref{font-weight:600;font-size:11.5px}
+	  .ekind{font-size:8.5px;text-transform:uppercase;letter-spacing:.05em;color:#5c6169}
+	  .etitle{font-size:10.5px;color:#8a8f98;margin:3px 0 6px;line-height:1.35}
+	  .col{color:#5e6ad2;font-weight:600}
+	  .erow{display:flex;flex-wrap:wrap;gap:4px}
+	  .eb{font-size:9.5px;font-weight:500;color:#8a8f98;border:1px solid #212327;border-radius:6px;padding:4px 8px}
+	  .eb.pri{background:#5e6ad2;border-color:#5e6ad2;color:#fff}
+	  .eb.tapme{box-shadow:0 0 0 3px rgba(94,106,210,.4)}
+	  .ev.done .etitle{margin-bottom:0}
+	  .pill{font-size:8.5px;color:#3fb950;border:1px solid #1c3a24;background:#0f1f14;border-radius:10px;padding:1px 6px}
+	  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-end}
+	  .sheet{width:100%;background:#101113;border-top:1px solid #212327;border-radius:14px 14px 0 0;padding:6px 0 12px}
+	  .grab{width:34px;height:4px;border-radius:3px;background:#2a2d33;margin:5px auto 8px}
+	  .sh3{font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:#5c6169;margin:4px 14px 4px;font-weight:600}
+	  .opt{padding:9px 14px;font-size:11.5px;border-bottom:1px solid #1a1c1f}
+	  .opt:last-child{border-bottom:0}
+	  .opt.tap{background:#16181b;color:#5e6ad2;font-weight:600}
+	  .sess{display:flex;align-items:center;gap:7px;background:#101113;border:1px solid #212327;border-radius:8px;padding:6px 8px;margin:4px 0;font-size:11px}
+	  .sdot{width:7px;height:7px;border-radius:50%;background:#3fb950;flex:none;display:inline-block}
+	  .sdot.needs{background:#f85149}.sdot.working{background:#d29922}
+	  .slabel{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	  .sdetail{color:#8a8f98;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
+	  .sbadge{font-size:8px;font-weight:700;color:#8a8f98;border:1px solid #212327;border-radius:4px;padding:1px 4px;text-transform:uppercase}
+	  .acct{display:flex;gap:10px;font-size:9.5px;color:#8a8f98;margin:6px 0 0 2px}.acct b{color:#eceef1}
+	  .acct .bar{display:inline-block;width:38px;height:5px;border-radius:3px;background:#1e2024;vertical-align:middle;margin:0 4px;overflow:hidden}
+	  .acct .bar i{display:block;height:100%;background:#3fb950}.acct .bar.hot i{background:#f85149}
+	  .ws{background:#101113;border:1px solid #212327}
+	  .usage{font-size:9.5px;color:#5c6169;margin:3px 0 0 17px}
+	  .go{background:#5e6ad2;color:#fff;font-weight:600}
+	  .toast{position:absolute;left:14px;right:14px;bottom:18px;background:#16181b;border:1px solid #212327;border-radius:9px;padding:8px 11px;font-size:10.5px;color:#eceef1;z-index:5}
 	</style>`;
-	const frames = [0, 1, 2, 3].map((t) => page(extraCss + term("corgi agent up", up, { rows: up.length, extra: phone(launcher(t)) }), 1290));
+
+	// The story: the inbox, a ticket moved from its row, then the other two tabs.
+	const shots = [
+		["inbox", "", ""],
+		["inbox", "", "aim"],                               // the finger is on Move…
+		["inbox", sheet(""), ""],
+		["inbox", sheet("In Progress"), ""],
+		["inbox", "", "moved"],
+		["→sessions", "", ""],
+		["sessions", "", ""],
+		["→stacks", "", ""],
+		["stacks", "", ""],
+		["inbox", "", "moved"],
+	];
+	const frames = shots.map(([tab, over, extra], i) => {
+		let screen = withTap(tab, extra);
+		if (i === 1) screen = screen.replace('class="eb tapme"', 'class="eb tapme"'); // the ring is already on Move…
+		const toast = extra === "moved" && !over ? `<div class="toast">ABC-123 → In Progress</div>` : "";
+		return page(extraCss + term("corgi agent up", up, { rows: up.length, extra: phone(screen, over + toast) }), 1290);
+	});
 	scene("dashboard", frames);
 }
 

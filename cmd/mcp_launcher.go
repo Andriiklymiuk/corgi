@@ -1174,7 +1174,8 @@ const launcherPageHTML = `<!doctype html>
   .chip.refresh{flex:0 0 auto;width:2rem;height:2rem;padding:0;display:flex;align-items:center;
       justify-content:center;font-size:.85rem;color:var(--dim)}
   .chip.refresh:active{color:var(--text)}
-  .chip.refresh.spin{animation:spin .7s linear infinite}
+  .chip.refresh i{display:block;font-style:normal;line-height:1}
+  .chip.refresh.spin i{animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .logo{width:1.9rem;height:1.9rem;border-radius:.6rem;background:var(--card2);
       border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1rem;flex:0 0 auto}
@@ -1186,7 +1187,9 @@ const launcherPageHTML = `<!doctype html>
 
   /* Tabs. The page answers three questions and they are not equally urgent:
      what wants me, what is running, what could run. One at a time. */
-  .tabs{display:flex;gap:.15rem;padding:.5rem 0 .45rem}
+  .tabs{display:flex;gap:.15rem;padding:.5rem 0 .45rem;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex:0 0 auto}
   .tabs button{padding:.35rem .6rem;border-radius:.4rem;border:0;background:none;
       color:var(--dim);font-size:.82rem;font-weight:500}
   .tabs button[aria-selected=true]{color:var(--text);background:var(--card2)}
@@ -1208,6 +1211,10 @@ const launcherPageHTML = `<!doctype html>
       border-bottom:1px solid var(--hair);color:var(--text);font:inherit;font-size:.88rem}
   .opt:last-child{border-bottom:0}
   .opt:disabled{color:var(--dim2)}
+  .opt.here{color:var(--accent);font-weight:600}
+  /* The column the ticket sits in, on the row that offers to change it. */
+  .ev .estate{margin-left:auto;font-size:.64rem;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--dim);border:1px solid var(--line);border-radius:.5rem;padding:.1rem .4rem;white-space:nowrap}
 
   /* The session board: what every Claude on the machine is doing, the ones
      waiting on a person first. Hidden until tracking reports anything. */
@@ -1412,20 +1419,22 @@ const launcherPageHTML = `<!doctype html>
       box-shadow:0 .5rem 1.4rem rgba(0,0,0,.55)}
   .toast.on{opacity:1;transform:translate(-50%,0)}
   .toast.bad{background:var(--red);color:#1a0503}
-  @media (prefers-reduced-motion:reduce){.toast,.skel,.dot.starting,.chip.refresh.spin{animation:none;transition:none}}
+  @media (prefers-reduced-motion:reduce){.toast,.skel,.dot.starting,.chip.refresh.spin i{animation:none}}
   .foot{text-align:center;margin-top:1.6rem;font-size:.85rem}
   .foot a{color:var(--green);text-decoration:none}
 </style>
 <header>
   <div class="brand"><span class="logo">🐕</span>
     <div class="who"><h1>corgi</h1><small id="host">your machine</small></div>
-    <button class="chip refresh" id="refresh" aria-label="Refresh" title="Refresh">&#x21bb;</button>
+    <button class="chip refresh" id="refresh" aria-label="Refresh" title="Refresh"><i>&#x21bb;</i></button>
   </div>
   <p id="hostnote" class="hostnote" hidden></p>
   <div class="tabs" id="tabs" role="tablist">
     <button role="tab" data-tab="inbox" aria-selected="true">Inbox<span class="n" id="n-inbox"></span></button>
     <button role="tab" data-tab="sessions" aria-selected="false">Sessions<span class="n" id="n-sessions"></span></button>
     <button role="tab" data-tab="stacks" aria-selected="false">Stacks<span class="n" id="n-stacks"></span></button>
+    <button role="tab" data-tab="laptop" aria-selected="false">Laptop</button>
+    <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </div>
 </header>
 <main>
@@ -1438,6 +1447,8 @@ const launcherPageHTML = `<!doctype html>
   </div>
   <div data-pane="stacks" hidden>
     <div id="list" class="msg">Loading…</div>
+  </div>
+  <div data-pane="laptop" hidden>
   <details class="tips" id="tips" hidden>
     <summary><span>On the laptop</span><span class="tips-hint">setup commands</span></summary>
     <button class="tip" data-copy="/corgi-remote">
@@ -1473,6 +1484,8 @@ const launcherPageHTML = `<!doctype html>
     <p class="tipnote" id="tipmsg">Tap a row to copy its command.</p>
   </details>
 
+  </div>
+  <div data-pane="settings" hidden>
   <details class="settings" id="settings" hidden>
     <summary>Settings</summary>
 
@@ -1623,6 +1636,7 @@ const launcherPageHTML = `<!doctype html>
       url: location.origin + '/mcp', headers: { Authorization: 'Bearer ' + token } } } }, null, 2);
     document.getElementById('cfg').textContent = connector;
     s.hidden = false;
+    s.open = true;
     document.getElementById('copycfg').onclick = async (e) => {
       const msg = document.getElementById('copymsg');
       try { await navigator.clipboard.writeText(connector); msg.textContent = '✓ Copied'; }
@@ -1639,10 +1653,7 @@ const launcherPageHTML = `<!doctype html>
   function initTips() {
     const box = document.getElementById('tips');
     box.hidden = false;
-    try { box.open = localStorage.getItem('corgi_tips_open') === '1'; } catch {}
-    box.addEventListener('toggle', () => {
-      try { localStorage.setItem('corgi_tips_open', box.open ? '1' : '0'); } catch {}
-    });
+    box.open = true;
     const msg = document.getElementById('tipmsg');
     for (const tip of box.querySelectorAll('.tip')) {
       tip.onclick = async () => {
@@ -1793,7 +1804,12 @@ const launcherPageHTML = `<!doctype html>
       if (rest) parts.push(rest + ' idle');
       sum.textContent = 'Claude sessions on this machine · ' + parts.join(' · ');
       box.appendChild(sum);
-      const shown = hot.length ? hot : sessions.filter(s => s.status === 'working').slice(0, 3);
+      // All of them, the ones wanting a person first. This was a three-row
+      // teaser when the board was squeezed above the workspace list; it has a
+      // tab of its own now, and a tab that counts five must show five.
+      const rank = { needs_input: 0, working: 1, limited: 2, done: 3, stale: 4, unknown: 5 };
+      const shown = sessions.slice().sort((a, b) =>
+        (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
       for (const s of shown) {
         const row = document.createElement('div');
         row.className = 'sess';
@@ -1975,8 +1991,10 @@ const launcherPageHTML = `<!doctype html>
     sheet.append(grab, h);
     for (const name of columns) {
       const b = document.createElement('button');
-      b.className = 'opt';
-      b.textContent = name;
+      const here = ev.state && name.toLowerCase() === String(ev.state).toLowerCase();
+      b.className = 'opt' + (here ? ' here' : '');
+      b.textContent = here ? name + ' · it is here' : name;
+      b.disabled = here;
       b.onclick = async () => {
         b.disabled = true;
         if (await ticket(ev, { do: 'move', status: name })) close(); else b.disabled = false;
@@ -2066,6 +2084,14 @@ const launcherPageHTML = `<!doctype html>
         kind.className = 'ekind';
         kind.textContent = EVENT_KIND[ev.kind] || ev.kind;
         head2.append(ref, kind);
+        // Which column it sits in. Without it a move you just made looks
+        // like it did nothing.
+        if (ev.state) {
+          const st = document.createElement('span');
+          st.className = 'estate';
+          st.textContent = ev.state;
+          head2.appendChild(st);
+        }
         card.appendChild(head2);
 
         if (ev.title) {
@@ -3000,11 +3026,19 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		Workspace  string    `json:"workspace,omitempty"`
 		At         time.Time `json:"at"`
 		Actionable bool      `json:"actionable"`
+		State      string    `json:"state,omitempty"`
 	}
 	out := []row{}
+	// The events log keeps the column a ticket arrived in. A move made since
+	// then is the truth, so it wins.
+	moved := watch.LoadStateLog(dir)
 	for _, e := range watch.RecentEvents(dir, 25) {
+		state := e.State
+		if now, ok := moved.Get(e.Key); ok {
+			state = now.Status
+		}
 		out = append(out, row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
-			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != ""})
+			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: state})
 	}
 	fixes := []map[string]any{}
 	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 8) {
@@ -3096,7 +3130,8 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
 			return
 		}
-		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status})
+		_ = watch.LoadStateLog(dir).Set(event.Key, status, time.Now())
+		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status, "state": status})
 	case "assign":
 		me := watch.LoadBoardCache(dir).Get(event.Workspace).Me
 		if me.ID == "" {
