@@ -694,14 +694,14 @@ func currentWorkspaceID(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if real, err := filepath.EvalSymlinks(cwd); err == nil {
-		cwd = real
+	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
+		cwd = resolved
 	}
 	best, bestLen := "", 0
 	for _, w := range registry.Sorted() {
 		path := w.AbsPath
-		if real, err := filepath.EvalSymlinks(path); err == nil {
-			path = real
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			path = resolved
 		}
 		if path != "" && (cwd == path || strings.HasPrefix(cwd, path+string(os.PathSeparator))) && len(path) > bestLen {
 			best, bestLen = w.ID, len(path)
