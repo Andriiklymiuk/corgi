@@ -125,6 +125,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 
 	var events []Event
+	states := map[string]string{} // one lookup per pull request per round
 	for _, t := range threads {
 		if !g.wantsRepo(t.Repository.FullName) {
 			continue
@@ -156,6 +157,10 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		number := t.Subject.URL[strings.LastIndex(t.Subject.URL, "/")+1:]
 		ref := t.Repository.FullName + "#" + number
 		at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
+		// A notification says nothing about whether the pull request is still
+		// open, so a comment on one merged last week reads exactly like one on
+		// live work. One lookup per pull request in a round settles it.
+		state := g.pullState(ctx, states, t.Subject.URL)
 		events = append(events, Event{
 			Key:    "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt,
 			Source: g.Name(),
@@ -164,10 +169,47 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Title:  t.Subject.Title,
 			URL:    "https://github.com/" + t.Repository.FullName + "/pull/" + number,
 			Mine:   r.mine,
+			State:  state,
 			At:     at,
 		})
 	}
 	return events, next, nil
+}
+
+// pullState is "open", "merged" or "closed" for one pull request, cached for
+// the round so several notifications about the same one cost a single call.
+// An unreadable answer is "", which the rules treat as still open: guessing a
+// pull request closed would silently swallow real feedback.
+func (g *GitHub) pullState(ctx context.Context, cache map[string]string, apiURL string) string {
+	if apiURL == "" {
+		return ""
+	}
+	if state, ok := cache[apiURL]; ok {
+		return state
+	}
+	cache[apiURL] = ""
+	path := strings.TrimPrefix(apiURL, "https://api.github.com")
+	if path == apiURL {
+		return ""
+	}
+	resp, err := g.get(ctx, path, "")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var pr struct {
+		State  string `json:"state"`
+		Merged bool   `json:"merged"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&pr) != nil {
+		return ""
+	}
+	state := pr.State
+	if pr.Merged {
+		state = "merged"
+	}
+	cache[apiURL] = state
+	return state
 }
 
 func firstNonEmptyText(s, fallback string) string {

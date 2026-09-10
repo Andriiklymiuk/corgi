@@ -97,11 +97,11 @@ func TestACommentOnFinishedWorkIsNotWork(t *testing.T) {
 		t.Fatal("--states Done is a deliberate ask")
 	}
 
-	// A review on a merged PR is still feedback on my code; only tracker
-	// comments carry an issue column.
+	// A pull request carries its own state, and merged is finished there too:
+	// see TestACommentOnAMergedPullRequestIsNotWork.
 	pr := Rules{Enabled: true, PRs: true}
-	if !pr.Match(Event{Kind: KindPRReview, Ref: "acme/api#7", State: "merged", Mine: true}) {
-		t.Fatal("a PR's own state is not an issue column")
+	if !pr.Match(Event{Kind: KindPRReview, Ref: "acme/api#7", State: "open", Mine: true}) {
+		t.Fatal("an open pull request is live work")
 	}
 }
 
@@ -198,5 +198,43 @@ func TestWhatARunCostsIsRemembered(t *testing.T) {
 	log.SetSpent("kz", -40)
 	if got := log.TypicalSpend("web"); got != 0 {
 		t.Fatalf("a nonsense figure must not be kept: %d", got)
+	}
+}
+
+// A comment on a pull request that is already merged reads exactly like one
+// on live work, because a notification says nothing about the state.
+func TestACommentOnAMergedPullRequestIsNotWork(t *testing.T) {
+	rules := Rules{Enabled: true, PRs: true, Reviews: true}
+
+	for _, state := range []string{"merged", "closed", "Merged", "locked"} {
+		e := Event{Kind: KindPRComment, Ref: "acme/api#7", Mine: true, State: state, Author: "sam"}
+		if rules.Match(e) {
+			t.Errorf("a comment on a %q pull request is chatter", state)
+		}
+		if why := rules.Why(e); !strings.Contains(why, "not work") {
+			t.Errorf("state %q must say why: %q", state, why)
+		}
+		// Nobody needs to review something already merged either.
+		req := Event{Kind: KindReviewRequested, Ref: "acme/api#7", State: state}
+		if rules.Match(req) {
+			t.Errorf("a review request on a %q pull request is nothing to do", state)
+		}
+	}
+
+	// Live work is exactly what these are for. An empty state means the
+	// source could not say, and guessing it closed would swallow real
+	// feedback.
+	for _, state := range []string{"open", "opened", "draft", ""} {
+		if !rules.Match(Event{Kind: KindPRComment, Ref: "acme/api#7", Mine: true, State: state}) {
+			t.Errorf("a comment on a %q pull request is the point of --prs", state)
+		}
+		if !rules.Match(Event{Kind: KindReviewRequested, Ref: "acme/api#7", State: state}) {
+			t.Errorf("a review request on a %q pull request is a real ask", state)
+		}
+	}
+
+	// A review on my own merged PR is also over.
+	if rules.Match(Event{Kind: KindPRReview, Ref: "acme/api#7", Mine: true, State: "merged"}) {
+		t.Fatal("feedback arrives after a merge; acting on it unattended does not")
 	}
 }

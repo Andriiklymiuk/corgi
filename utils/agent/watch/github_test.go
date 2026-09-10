@@ -89,7 +89,9 @@ func TestGitHubPoll(t *testing.T) {
 	if cursor["me"] != "andrii" || cursor["lastModified"] != "Wed, 09 Sep 2026 10:00:00 GMT" || cursor["pollInterval"] != "60" {
 		t.Errorf("cursor = %v", cursor)
 	}
-	if g.Me != "andrii" || f.users.Load() != 1 || f.requests.Load() != 2 {
+	// /user, the notifications list, and one lookup per pull request to find
+	// out whether it is still open — a notification does not say.
+	if g.Me != "andrii" || f.users.Load() != 1 || f.requests.Load() != 4 {
 		t.Errorf("me = %q, /user calls = %d, requests = %d", g.Me, f.users.Load(), f.requests.Load())
 	}
 
@@ -98,7 +100,7 @@ func TestGitHubPoll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if events != nil || f.requests.Load() != 3 || f.users.Load() != 1 {
+	if events != nil || f.requests.Load() != 5 || f.users.Load() != 1 {
 		t.Errorf("304 round: events = %v, requests = %d, /user calls = %d", events, f.requests.Load(), f.users.Load())
 	}
 	if next["lastModified"] != cursor["lastModified"] || next["me"] != "andrii" {

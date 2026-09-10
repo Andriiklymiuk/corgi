@@ -48,6 +48,9 @@ type gitlabTodo struct {
 	Target struct {
 		IID   int64  `json:"iid"`
 		Title string `json:"title"`
+		// State is opened, merged, closed or locked. A comment on a merge
+		// request that is already merged is not work.
+		State string `json:"state"`
 	} `json:"target"`
 	Author struct {
 		Username string `json:"username"`
@@ -112,8 +115,9 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Author: t.Author.Username,
 			// A review request is on someone else's merge request; every
 			// other todo is on something of mine.
-			Mine: kind != KindReviewRequested,
-			At:   at,
+			Mine:  kind != KindReviewRequested,
+			State: t.Target.State,
+			At:    at,
 		})
 	}
 
