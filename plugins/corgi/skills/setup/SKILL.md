@@ -48,11 +48,14 @@ In the project directory:
   another Claude account. `corgi agent scan ~/dev` registers every stack
   under a folder without enabling them.
 - Everything corgi generates lives in **`.corgi/corgi_services/`** beside
-  `.corgi/agent.yml`. A checkout with a top-level `.corgi/corgi_services/` is moved
+  `.corgi/agent.yml`. A checkout with a top-level `corgi_services/` is moved
   there by any corgi command; `corgi migrate` does it out loud (`--dry-run`
   to look first). Nothing moves while services are up — `corgi stop` first.
-  The move rewrites the matching `.gitignore` lines; commit that. Git
-  worktrees under it are repaired, so the source repo still points at them.
+  Git worktrees under it are repaired, so the source repo still points at
+  them. The move also touches `.gitignore` — before committing that, run
+  `git check-ignore -v .corgi/corgi_services` — a broader rule already in
+  the file (a repo that ignores all of `.corgi/`) covers the new path, and
+  the commit would be pure noise.
 
 ### 3. The daemon, the endpoint, the tunnel, the QR
 
@@ -138,9 +141,9 @@ they are away. Then, per service they use, get the token into the command
 | service | where the token comes from | command |
 |---|---|---|
 | Linear | linear.app → Settings → Security & access → Personal API keys → New key (read is enough) | `corgi agent watch auth linear --token lin_api_…` or `LINEAR_API_KEY` |
-| Jira Cloud | id.atlassian.com → Security → API tokens → Create; plus the site URL and the login email | `corgi agent watch auth jira --url https://you.atlassian.net --email me@x.io --token …` or `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
+| Jira Cloud | id.atlassian.com → Security → API tokens → **Create API token**, the plain one. Not "create with scopes": corgi authenticates with Basic auth (email + token), which a scoped bearer token is not. Plus the site URL and the login email | `corgi agent watch auth jira --url https://you.atlassian.net --email me@x.io --token …` or `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
 | GitHub | `gh auth login` is enough (the watch reads the notifications feed through it); or a fine-grained PAT with Notifications read | nothing, or `corgi agent watch auth github --token ghp_…` / `GITHUB_TOKEN` |
-| GitLab | gitlab.com → Preferences → Access tokens → scope `read_api`; self-hosted needs the URL | `corgi agent watch auth gitlab --token glpat-… --url https://gitlab.example.com` or `GITLAB_TOKEN`, `GITLAB_URL` |
+| GitLab | Preferences → Access tokens → **legacy** token, scope `read_api` only. A fine-grained token is scoped to groups and projects; corgi reads `/api/v4/todos`, which belongs to the user and sits outside that scoping. Self-hosted needs the URL | `corgi agent watch auth gitlab --token glpat-… --url https://gitlab.example.com` or `GITLAB_TOKEN`, `GITLAB_URL` |
 
 Those are the machine-wide tokens: every watched workspace falls back to
 them. **A workspace at another company gets its own** — a second Jira site,
@@ -175,9 +178,49 @@ event falls through to the first watched workspace that merely matches the
 rules, so a review on one client's PR can start an agent in another's
 checkout. `--tracker linear|jira` picks the tracker when both have tokens.
 
+**Never guess either one — read them off the repos.** A key that is one
+letter off routes nothing, silently, and looks exactly like a quiet week:
+
+```bash
+# the tracker key, from the ids the team already writes
+for d in */; do git -C "$d" log --oneline -30; git -C "$d" branch -a; done 2>/dev/null \
+  | grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b' | sort | uniq -c | sort -rn | head
+# the repo list, from the remotes
+for d in */; do git -C "$d" remote get-url origin 2>/dev/null; done \
+  | sed -E 's#.*[:/](.+)\.git#\1#' | sort -u | paste -sd, -
+```
+
+**What the first round actually does depends on the source.** GitHub sends
+`If-Modified-Since` and starts from now. Linear and Jira start from
+**24 hours ago** on an empty cursor, so the first poll reports a day of
+tickets. Say so before enabling, or the first notification looks like a bug.
+
+**Filter new issues by state, or the backlog arrives every time.** Ask the
+tracker for its real status names instead of inventing them — a state that
+does not exist matches nothing:
+
+```bash
+# Jira: the project's own statuses (Basic auth, same token)
+curl -su "$EMAIL:$TOKEN" "$JIRA_URL/rest/api/3/project/<KEY>/statuses" \
+  | python3 -c 'import json,sys;print(sorted({s["name"] for t in json.load(sys.stdin) for s in t["statuses"]}))'
+
+corgi agent watch enable --states "Ready for dev,In Progress,In Review"
+```
+
+The state filter applies to **new issues only**. Comments on your issues and
+reviews on your PRs come through whatever the state is — those are already
+about you.
+
+**When something fires that should not have, or does not fire at all**, ask
+rather than theorise. It walks routing, rules, dedupe, caps and quiet hours
+and prints the gate that stopped it. Nothing runs:
+
+```bash
+corgi agent watch test issue.new --ref <KEY>-123
+```
+
 `--action fix` runs unattended only after `corgi agent init
---dangerously-skip-permissions`; say that before enabling it. The first
-round only sets the bookmark, so nothing old gets run.
+--dangerously-skip-permissions`; say that before enabling it.
 
 **Webhooks** (instant instead of every three minutes): `corgi agent watch
 hooks` prints one URL per service and a shared secret. A named tunnel
