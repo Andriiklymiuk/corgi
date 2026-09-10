@@ -637,6 +637,19 @@ corgi agent watch hooks                                       # webhook URLs on 
 corgi agent restart
 ```
 
+**Unattended.** `corgi agent watch enable --auto` is `--action fix --prs
+--comments`: it works on what arrives instead of only telling you. Draft PRs
+only, never a merge, one run at a time per ticket, at most 3/hour and 10/day,
+none in `--quiet` hours, none above 95% of a usage window. Nothing is done
+twice — an event key is handled once across polls and webhooks, and a second
+event for a ticket already being worked on is refused. A run the daemon was
+killed in the middle of is closed on the next start and its event offered
+again, so a reboot loses nothing and repeats nothing. What it opened outlives
+the notification: `corgi agent watch` lists the last fixes with their PRs,
+`corgi_watch_fixes` returns them, and the phone shows them under "worked on
+for you". It needs `corgi agent init --dangerously-skip-permissions` to run
+without stalling on a prompt — say that before turning it on.
+
 **Asked to watch something?** ("watch the jira issues here", "tell me when
 someone comments on my MRs".) Never guess the settings — read them, then act:
 

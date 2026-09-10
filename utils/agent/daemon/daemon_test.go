@@ -46,6 +46,9 @@ func testDaemon(t *testing.T) *Daemon {
 	d := New("test", t.TempDir())
 	d.Start = blockingStarter()
 	d.Notify = func(string, string) {}
+	// New() wires the real notifier to NotifyWithLink, and a body with a link
+	// prefers it — so a test that overrides only Notify would lose the call.
+	d.NotifyWithLink = func(title, body, _ string) { d.Notify(title, body) }
 	return d
 }
 

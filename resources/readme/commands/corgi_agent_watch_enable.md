@@ -13,6 +13,7 @@ corgi agent watch enable [flags]
 ```
       --action string      notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only
       --assignee string    me (default) or any
+      --auto               Shorthand for --action fix --prs --comments: work on what arrives without being asked, draft PRs only
       --comments           Also new comments on issues assigned to me
   -h, --help               help for enable
       --interval string    Poll interval, e.g. 3m; 0 means webhooks only

@@ -161,6 +161,15 @@ var claudeCommand = func(ctx context.Context, dir string, env []string, args ...
 func (d *Daemon) loadWatchFiles() {
 	if d.watchState == nil {
 		d.watchState = watch.LoadState(d.Dir)
+		// A fix that never reported an outcome was interrupted, not finished.
+		// Close it, and forget its event so the next poll offers it again —
+		// the caps still decide whether anything actually runs.
+		if keys := d.watchState.Fixes.Interrupted("interrupted — the daemon stopped mid-run", time.Now()); len(keys) > 0 {
+			for _, key := range keys {
+				d.watchState.Unsee(key)
+			}
+			utils.Infof("agent: watch: %d fix(es) were interrupted; their events will be offered again\n", len(keys))
+		}
 	}
 }
 
@@ -250,7 +259,7 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 	if !d.claimFix(spec.Workspace, e.Ref) {
 		return "a fix for it is already running"
 	}
-	d.watchState.Fixes.Start(spec.Workspace, e.Key, now)
+	d.watchState.Fixes.StartFor(e, now)
 	go d.runFix(ctx, spec, e)
 	return ""
 }
@@ -466,16 +475,27 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	logFile.Write(out)
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
-		go d.notifyAttention("corgi agent · "+spec.Workspace, fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace)
+		d.watchState.Fixes.Finish(e.Key, nil, "", runErr.Error(), time.Now())
+		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
+			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
 	}
+	links := uniqueStrings(prLink.FindAllString(string(out), -1))
+	note := ""
 	body := "fixed " + e.Ref
-	if links := prLink.FindAllString(string(out), -1); len(links) > 0 {
-		body += " — " + strings.Join(uniqueStrings(links), " ")
+	if len(links) > 0 {
+		body += " — " + strings.Join(links, " ")
 	} else if last := lastLine(string(out)); last != "" {
-		body += " — " + clipText(last, 160)
+		note = clipText(last, 160)
+		body += " — " + note
 	}
-	go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
+	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
+	// The pull request it opened is where to go, if it opened one.
+	target := e.URL
+	if len(links) > 0 {
+		target = links[0]
+	}
+	go d.notifyAttentionAt("corgi agent · "+spec.Workspace, body, spec.Workspace, target)
 }
 
 // Probe is one synthesized event's walk through the pipeline, for

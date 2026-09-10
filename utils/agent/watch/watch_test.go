@@ -319,3 +319,47 @@ func TestParseHooks(t *testing.T) {
 		t.Fatal("other actions are ignored")
 	}
 }
+
+func TestFixLogRecordsTheOutcomeAndHealsAnInterruptedRun(t *testing.T) {
+	dir := t.TempDir()
+	log := LoadFixLog(dir)
+	now := time.Now()
+
+	log.StartFor(Event{Key: "jira:ABC-1", Workspace: "api", Ref: "ABC-1", Kind: KindIssueNew,
+		Title: "one", URL: "https://tracker/ABC-1"}, now)
+	log.StartFor(Event{Key: "jira:ABC-2", Workspace: "api", Ref: "ABC-2", Kind: KindIssueNew}, now)
+
+	log.Finish("jira:ABC-1", []string{"https://github.com/acme/api/pull/7"}, "", "", now.Add(time.Minute))
+
+	got := log.RecentFixes("api", 10)
+	if len(got) != 2 || got[0].Ref != "ABC-2" {
+		t.Fatalf("newest first: %+v", got)
+	}
+	done := got[1]
+	if !done.Done() || len(done.PRs) != 1 || done.PRs[0] != "https://github.com/acme/api/pull/7" {
+		t.Fatalf("outcome not recorded: %+v", done)
+	}
+	if done.URL != "https://tracker/ABC-1" || done.Kind != string(KindIssueNew) {
+		t.Errorf("the event details should survive: %+v", done)
+	}
+	if got[0].Done() {
+		t.Error("the second run is still open")
+	}
+
+	// A run that never reported is interrupted, not finished; its event comes back.
+	reopened := LoadFixLog(dir)
+	keys := reopened.Interrupted("stopped mid-run", now.Add(time.Hour))
+	if len(keys) != 1 || keys[0] != "jira:ABC-2" {
+		t.Fatalf("only the open run is interrupted, got %v", keys)
+	}
+	after := reopened.RecentFixes("", 10)
+	if !after[0].Done() || after[0].Error != "stopped mid-run" {
+		t.Errorf("interrupted run: %+v", after[0])
+	}
+	if again := reopened.Interrupted("x", now); len(again) != 0 {
+		t.Errorf("nothing is left to heal, got %v", again)
+	}
+	if other := reopened.RecentFixes("nobody", 10); len(other) != 0 {
+		t.Errorf("another workspace sees nothing: %v", other)
+	}
+}
