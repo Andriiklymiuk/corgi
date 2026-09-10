@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -137,4 +138,46 @@ func gitlabTruncate(s string, n int) string {
 		return s
 	}
 	return string(r[:n])
+}
+
+// RefState is the merge request's state for acme/api!7 — opened, merged,
+// closed or locked — so a row already merged can leave the inbox.
+func (g *GitLab) RefState(ctx context.Context, ref string) string {
+	project, num, ok := strings.Cut(ref, "!")
+	if !ok || g.Token == "" {
+		return ""
+	}
+	base := g.URL
+	if base == "" {
+		base = "https://gitlab.com"
+	}
+	var mr struct {
+		State string `json:"state"`
+	}
+	if err := g.getInto(ctx, base+"/api/v4/projects/"+url.PathEscape(project)+"/merge_requests/"+num, &mr); err != nil {
+		return ""
+	}
+	return mr.State
+}
+
+// getInto is one authenticated GET decoded into out.
+func (g *GitLab) getInto(ctx context.Context, endpoint string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("PRIVATE-TOKEN", g.Token)
+	client := g.Client
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("gitlab: HTTP %d", resp.StatusCode)
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(out)
 }

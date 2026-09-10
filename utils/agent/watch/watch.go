@@ -172,6 +172,9 @@ var closedStates = map[string]string{
 	"locked": "locked",
 }
 
+// FinishedState is finishedState for callers outside this package.
+func FinishedState(state string) string { return finishedState(state) }
+
 // finishedState names why a ticket in this state is not worth anyone's time,
 // or "" when there is still work in it.
 func finishedState(state string) string {

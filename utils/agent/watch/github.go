@@ -265,3 +265,13 @@ func githubDecode(resp *http.Response, v any) error {
 	}
 	return nil
 }
+
+// RefState is "open", "merged" or "closed" for acme/api#7, so a row already
+// merged can leave the inbox. "" when it cannot be read.
+func (g *GitHub) RefState(ctx context.Context, ref string) string {
+	repo, num, ok := strings.Cut(ref, "#")
+	if !ok || g.Token == "" {
+		return ""
+	}
+	return g.pullState(ctx, map[string]string{}, "https://api.github.com/repos/"+repo+"/pulls/"+num)
+}

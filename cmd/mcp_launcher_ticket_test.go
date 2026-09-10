@@ -218,3 +218,53 @@ func TestWorkOnPrefersTheWindowAlreadyOnThatWorkspace(t *testing.T) {
 		t.Fatalf("with no window on the workspace, do not invent one: %q", got)
 	}
 }
+
+// An event is recorded once. A merge request merged an hour later, or a
+// ticket someone finished, stayed on the phone looking like work.
+func TestFinishedWorkLeavesTheInboxWithoutBeingDismissed(t *testing.T) {
+	dir := ticketHome(t)
+
+	list := func() []string {
+		rec := httptest.NewRecorder()
+		launchEventsHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/events", nil))
+		var got struct {
+			Events []struct {
+				Key string `json:"key"`
+			} `json:"events"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		keys := make([]string, 0, len(got.Events))
+		for _, e := range got.Events {
+			keys = append(keys, e.Key)
+		}
+		return keys
+	}
+
+	if len(list()) != 2 {
+		t.Fatalf("both events start in the inbox: %v", list())
+	}
+	// The daemon learned it was merged since; nobody dismissed anything.
+	if err := watch.LoadStateLog(dir).Set("jira:ABC-1", "merged", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range list() {
+		if k == "jira:ABC-1" {
+			t.Fatal("merged work is history, not something waiting on you")
+		}
+	}
+	// A state that is still live keeps the row.
+	if err := watch.LoadStateLog(dir).Set("jira:ORPHAN-1", "In Progress", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, k := range list() {
+		if k == "jira:ORPHAN-1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("work still in flight stays in the inbox")
+	}
+}

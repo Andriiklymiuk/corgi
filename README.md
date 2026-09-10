@@ -361,6 +361,8 @@ Full setup — every flag, what it refuses to do and why — in
 the corgi plugin, `/corgi:setup` walks it, and asking *"what do we track?"*
 answers from the live config and suggests what is missing.
 
+<p align="center"><img src="docs/media/story.gif" width="760" alt="Three things in a row: a colleague asks for a review and corgi comments on their branch without pushing to it; a reviewer comments on your own pull request and corgi applies it, replies in the thread and pushes; a ticket assigned to you is claimed, moved to In Progress, worked, opened as a draft pull request and moved to In Review with the link posted on the ticket; then the morning card."></p>
+
 <p align="center"><img src="docs/media/autofix.gif" width="760" alt="a ticket assigned to you claimed, moved to In Progress, worked, a draft PR opened and the ticket moved to In Review; a review comment fixed and pushed; a red CI build fixed; a ticket outside the state filter stopped; someone else’s review request left alone; comments on finished work and a duplicate skipped; a ticket another machine claimed; a cap and a budget deferral; then the morning summary"></p>
 
 <p align="center"><img src="docs/media/replay.gif" width="760" alt="corgi agent watch replay, while-away and undo: the week unattended mode would have had, the morning card, and a run put back"></p>
