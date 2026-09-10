@@ -1,6 +1,6 @@
 ---
 name: corgi
-description: Author and explain corgi-compose.yml files and the corgi CLI. Use when writing or editing a corgi-compose.yml, picking db drivers / healthchecks / tunnels, or explaining corgi concepts, commands, and flags. Corgi is a Go CLI (`brew install andriiklymiuk/homebrew-tools/corgi`) that spins up databases, services, and required tools from one yml file — think docker-compose for services plus databases plus tool checks. NOT for starting a stack (use the run skill) or diagnosing a broken one (use the debug skill).
+description: Author and explain corgi-compose.yml files and the corgi CLI. Use when writing or editing a corgi-compose.yml, picking db drivers, healthchecks or tunnels, or explaining corgi concepts, commands, and flags. Corgi is a Go CLI that starts databases, services, and required tools from one yml file. NOT for starting a stack (run skill) or diagnosing a broken one (debug skill).
 ---
 
 # Corgi
@@ -58,7 +58,7 @@ Load only what the task needs. Do not read every reference every time.
 
 **Existing repo with `corgi-compose.yml`:** this file is the single source of truth for how services start. Do not invent `npm run dev`, `docker compose up`, or per-service shell commands — use `corgi run`. Look at `db_services:` to know what databases exist and at `services:` to know what service repos are expected.
 
-**User says "start the project" / "run the backend":** check for `corgi-compose.yml` first (`ls corgi-compose.yml` or `ls *.corgi-compose.yml`). If present, corgi is the answer.
+**User says "start the project" / "run the backend":** check for `corgi-compose.yml` first (preflight in `../_shared/conventions.md`). If present, corgi is the answer.
 
 ## Quick command cheatsheet
 

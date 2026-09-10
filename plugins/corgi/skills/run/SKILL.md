@@ -1,6 +1,6 @@
 ---
 name: run
-description: Use when the user wants to bring up a corgi-compose stack — start, launch, run, spin up, or boot the whole stack or a slice (e.g. "run the stack", "run with tunnel and logs", "run web + mobile against the remote backend", "run just the api", "run for the android emulator"). Boots detached, waits until healthy with a timeout, flags anything stuck, reports URLs + how to stop. NOT for authoring corgi-compose.yml (use the corgi skill), shipping tickets/features (stories), or diagnosing an already-broken stack (use the debug skill).
+description: Use when the user wants to bring up a corgi-compose stack: "run the stack", "run with tunnel and logs", "run web + mobile against the remote backend", "run just the api", "run for the android emulator". Boots detached, waits until healthy, reports URLs and how to stop. NOT for authoring compose, shipping tickets, or a broken stack.
 ---
 
 # Corgi run
@@ -24,8 +24,7 @@ never company-specific.
 
 ## Phase 0 — Locate + first-run preflight
 
-cwd must hold `corgi-compose.yml` (`ls corgi-compose.yml *.corgi-compose.yml`). None
-→ tell the user to open the stack folder; don't guess a layout. Read only needed
+Preflight per `../_shared/conventions.md`. Read only needed
 keys — `services.<name>.{path,cloneFrom,depends_on_services,depends_on_db,start,port,
 tunnel,manualRun,runner}`, `db_services`, `envTiers`, `useAwsVpn`, `useDocker`,
 `init`, `required` (schema: `../corgi/references/yml-schema.md`).

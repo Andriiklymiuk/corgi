@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Use when shipping an Expo / React Native app to the stores via the repo's LOCAL build targets — "ship it", "make ship", "build and submit to TestFlight / Play", "push a release to the App Store", "cut a build", "release the app", "upload the binary". Drives a local prod build → IPA/AAB → eas submit to TestFlight + Google Play, with the shell/locale rules, the no-double-bump rule, background+poll (no completion event), ground-truth verification (not the exit code), DRAFT-on-Play behavior, and a stopShip escape hatch. Gates on the `mobile` skill's on-device render before submitting. NOT for verifying a change on a device (mobile skill), IAP / store metadata (purchases skill), or remote EAS cloud builds.
+description: Use when shipping an Expo/React Native app to the stores via the repo's LOCAL build targets: "ship it", "make ship", "build and submit to TestFlight/Play", "push a release to the App Store", "cut a build", "release the app", "upload the binary". Gates on the mobile skill's render first. NOT for device verification, IAP metadata (purchases), or remote EAS cloud builds.
 ---
 
 # Ship a local build to the stores
