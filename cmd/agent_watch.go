@@ -248,9 +248,15 @@ real event.`,
 		ref, _ := cmd.Flags().GetString("ref")
 		url, _ := cmd.Flags().GetString("url")
 		body, _ := cmd.Flags().GetString("body")
+		labels, _ := cmd.Flags().GetStringSlice("labels")
 		e, err := synthesizeWatchEvent(watch.Kind(args[0]), specs, ref, url, body)
 		if err != nil {
 			return err
+		}
+		if len(labels) > 0 {
+			e.Labels = labels
+		} else if e.Kind == watch.KindIssueNew {
+			e.Labels = specs[0].Rules.Labels
 		}
 		d := &daemon.Daemon{Dir: dir, Watches: specs}
 		probe, routed := d.ProbeEvent(e, time.Now())
@@ -265,7 +271,7 @@ real event.`,
 		}
 		fmt.Printf("workspace  %s\n", probe.Workspace)
 		if !probe.Matched {
-			fmt.Println("rules      no match — the workspace that owns it does not watch this kind")
+			fmt.Printf("rules      no match — %s\n", probe.Why)
 			return nil
 		}
 		fmt.Println("rules      match")
@@ -754,6 +760,7 @@ func init() {
 	tf.String("ref", "", "Issue key (ABC-12) or PR (owner/repo#12); default: one shaped for the first watched workspace")
 	tf.String("url", "", "PR URL, for pr.* kinds")
 	tf.String("body", "", "Comment or review text")
+	tf.StringSlice("labels", nil, "Labels on the made-up issue (default: the workspace's own, so the rules take it)")
 	agentWatchHooksCmd.Flags().Bool("rotate", false, "Make a new secret")
 	a := agentWatchAuthCmd.Flags()
 	a.String("token", "", "API token")

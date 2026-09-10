@@ -458,6 +458,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 type Probe struct {
 	Workspace string    `json:"workspace"`
 	Matched   bool      `json:"matched"`
+	Why       string    `json:"why,omitempty"`
 	Seen      bool      `json:"seen"`
 	Action    string    `json:"action"`
 	Busy      bool      `json:"busy,omitempty"`
@@ -489,7 +490,8 @@ func (d *Daemon) ProbeEvent(e watch.Event, now time.Time) (Probe, bool) {
 	if spec == nil {
 		return Probe{}, false
 	}
-	p := Probe{Workspace: spec.Workspace, Matched: spec.Rules.Match(e), Seen: d.watchState.IsSeen(e.Key), Action: spec.Action}
+	p := Probe{Workspace: spec.Workspace, Why: spec.Rules.Why(e), Seen: d.watchState.IsSeen(e.Key), Action: spec.Action}
+	p.Matched = p.Why == ""
 	if !p.Matched || spec.Action != "fix" {
 		return p, true
 	}

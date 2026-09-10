@@ -64,26 +64,47 @@ type Rules struct {
 }
 
 // Match says whether an event is one the rules asked for.
-func (r Rules) Match(e Event) bool {
+func (r Rules) Match(e Event) bool { return r.Why(e) == "" }
+
+// Why is what stops an event, in the words a person can act on; "" when
+// the rules take it.
+func (r Rules) Why(e Event) string {
+	if !r.Enabled {
+		return "watch is off here"
+	}
 	if !r.matchesKind(e.Kind) {
-		return false
+		switch e.Kind {
+		case KindIssueComment:
+			return "issue comments need --comments"
+		case KindPRComment, KindPRReview:
+			return "PR reviews and comments need --prs"
+		}
+		return "kind " + string(e.Kind) + " is not watched"
 	}
 	switch e.Kind {
 	case KindPRComment, KindPRReview, KindIssueComment:
-		return e.Mine
+		if !e.Mine {
+			return "not on something of mine"
+		}
 	case KindIssueNew:
 		if r.Assignee != "any" && !e.Mine {
-			return false
+			return "not assigned to me (--assignee any takes every issue)"
 		}
 		if len(r.Labels) > 0 && !anyFold(e.Labels, r.Labels) {
-			return false
+			return fmt.Sprintf("none of the labels %s is on it (it has %s)", strings.Join(r.Labels, ", "), orNone(e.Labels))
 		}
 		if len(r.States) > 0 && !containsFold(r.States, e.State) {
-			return false
+			return fmt.Sprintf("state %q is not one of %s", e.State, strings.Join(r.States, ", "))
 		}
-		return true
 	}
-	return false
+	return ""
+}
+
+func orNone(list []string) string {
+	if len(list) == 0 {
+		return "none"
+	}
+	return strings.Join(list, ", ")
 }
 
 // matchesKind says whether any event of this kind could pass the rules.
