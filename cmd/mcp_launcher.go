@@ -26,6 +26,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
+	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
@@ -1208,6 +1209,15 @@ const launcherPageHTML = `<!doctype html>
   .newchat button{font:inherit;font-size:.76rem;font-weight:600;padding:.34rem .8rem;border-radius:.45rem;border:1px solid var(--green);
       background:var(--green);color:#0b0b0d;cursor:pointer;flex:0 0 auto}
   .newchat button:disabled{opacity:.5}
+  .ev{background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;padding:.5rem .65rem;margin:.3rem 0}
+  .ev .eref{font-weight:600;font-size:.82rem}
+  .ev .ekind{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin-left:.35rem}
+  .ev .etitle{font-size:.78rem;opacity:.85;margin:.15rem 0 .4rem;overflow-wrap:anywhere}
+  .ev .erow{display:flex;gap:.4rem;align-items:center}
+  .ev a.eopen{font-size:.76rem;text-decoration:none;padding:.28rem .6rem;border-radius:.45rem;border:1px solid var(--line);color:inherit}
+  .ev button{font:inherit;font-size:.76rem;font-weight:600;padding:.3rem .7rem;border-radius:.45rem;
+    border:1px solid var(--green);background:transparent;color:var(--green)}
+  .ev button:disabled{opacity:.5}
   .sess{flex-wrap:wrap}
   .sess .ssum{flex-basis:100%;color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem}
   .sess .sact{flex-basis:100%;display:flex;gap:.4rem;align-items:center;margin-top:.35rem}
@@ -1368,6 +1378,7 @@ const launcherPageHTML = `<!doctype html>
 </header>
 <main>
   <section id="newchat" class="board" hidden></section>
+  <section id="inbox" class="board" hidden></section>
   <section id="board" class="board" hidden></section>
   <div id="list" class="msg">Loading…</div>
   <details class="tips" id="tips" hidden>
@@ -1682,6 +1693,7 @@ const launcherPageHTML = `<!doctype html>
       if (!r.ok) { box.hidden = true; return; }
       const j = await r.json();
       renderNewChat(j);
+      loadInbox();
       const sessions = (j.sessions || []).filter(s => s.status !== 'gone');
       if (!sessions.length) { box.hidden = true; return; }
       box.innerHTML = '';
@@ -1830,6 +1842,92 @@ const launcherPageHTML = `<!doctype html>
       box.appendChild(a);
     }
     return box.childElementCount ? box : null;
+  }
+
+  const EVENT_KIND = { 'issue.new': 'new issue', 'issue.comment': 'comment', 'pr.comment': 'PR comment', 'pr.review': 'PR review' };
+
+  async function loadInbox() {
+    const box = document.getElementById('inbox');
+    let events = [];
+    try {
+      const r = await fetch('/launch/events', { headers: auth });
+      if (!r.ok) { box.hidden = true; return; }
+      events = (await r.json()).events || [];
+    } catch { box.hidden = true; return; }
+    if (!events.length) { box.hidden = true; return; }
+
+    box.innerHTML = '';
+    const sum = document.createElement('p');
+    sum.className = 'sum';
+    sum.textContent = 'From the tracker and your pull requests';
+    box.appendChild(sum);
+
+    for (const ev of events.slice(0, 8)) {
+      const card = document.createElement('div');
+      card.className = 'ev';
+
+      const head = document.createElement('div');
+      const ref = document.createElement('span');
+      ref.className = 'eref';
+      ref.textContent = ev.ref || ev.key;
+      const kind = document.createElement('span');
+      kind.className = 'ekind';
+      kind.textContent = EVENT_KIND[ev.kind] || ev.kind;
+      head.append(ref, kind);
+      card.appendChild(head);
+
+      if (ev.title) {
+        const t = document.createElement('p');
+        t.className = 'etitle';
+        t.textContent = ev.title;
+        card.appendChild(t);
+      }
+
+      const row = document.createElement('div');
+      row.className = 'erow';
+      if (ev.url && /^https:\/\//.test(ev.url)) {
+        const a = document.createElement('a');
+        a.className = 'eopen';
+        a.href = ev.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = ev.kind && ev.kind.startsWith('pr.') ? 'Open PR' : 'Open issue';
+        row.appendChild(a);
+      }
+      if (ev.actionable) {
+        const go = document.createElement('button');
+        go.textContent = 'Work on it';
+        go.onclick = () => {
+          go.disabled = true;
+          workOn(ev).finally(() => { go.disabled = false; });
+        };
+        row.appendChild(go);
+      }
+      if (row.children.length) card.appendChild(row);
+      box.appendChild(card);
+    }
+    box.hidden = false;
+  }
+
+  async function workOn(ev) {
+    // Reuse whatever the new-chat box is set to, so a window, model and
+    // account picked once apply here too.
+    const body = { key: ev.key };
+    const pick = (cls) => {
+      const el = document.querySelector('#newchat .' + cls);
+      return el && el.value ? el.value : '';
+    };
+    const win = pick('nwin'), model = pick('nmodel'), profile = pick('nprof');
+    if (win) body.window = win;
+    if (model) body.model = model;
+    if (profile) body.profile = profile;
+    try {
+      const r = await fetch('/launch/work-on', { method: 'POST', headers: auth, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error || 'could not start it', true); return; }
+      toast('working on ' + (ev.ref || 'it'));
+      setTimeout(loadBoard, 1500);
+    } catch { toast('no connection', true); }
   }
 
   async function boardAction(kind, body) {
@@ -2617,6 +2715,123 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 func containsString(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// launchEventsHandler lists what the watch has seen, newest first, so the
+// phone can show the tracker issues and reviews waiting for a decision.
+func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodGet {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET to list watch events")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	type row struct {
+		Key        string    `json:"key"`
+		Kind       string    `json:"kind"`
+		Ref        string    `json:"ref"`
+		Title      string    `json:"title"`
+		URL        string    `json:"url,omitempty"`
+		Workspace  string    `json:"workspace,omitempty"`
+		At         time.Time `json:"at"`
+		Actionable bool      `json:"actionable"`
+	}
+	out := []row{}
+	for _, e := range watch.RecentEvents(dir, 25) {
+		out = append(out, row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
+			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != ""})
+	}
+	writeLaunchJSON(w, map[string]any{"events": out})
+}
+
+// launchWorkOnHandler hands one watch event to a real session: the same
+// prompt the daemon's own fix would have used, opened as a chat someone can
+// watch and steer. The prompt travels by id, never on the command line.
+func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {key, window, model, profile} to work on a watch event")
+		return
+	}
+	var req struct {
+		Key     string `json:"key"`
+		Window  string `json:"window"`
+		Model   string `json:"model"`
+		Profile string `json:"profile"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	event, ok := watch.FindEvent(dir, strings.TrimSpace(req.Key))
+	if !ok {
+		writeLaunchError(w, http.StatusNotFound, "no such watch event")
+		return
+	}
+	prompt := daemon.FixPrompt(event)
+	if prompt == "" {
+		writeLaunchError(w, http.StatusConflict, "nothing to work on for this kind of event")
+		return
+	}
+	model := strings.TrimSpace(req.Model)
+	if model != "" && !validModel(model) {
+		writeLaunchError(w, http.StatusBadRequest, "model: letters, digits, dots and dashes only")
+		return
+	}
+	profile := strings.TrimSpace(req.Profile)
+	if profile != "" && profile != "default" {
+		if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
+			writeLaunchError(w, http.StatusBadRequest, "no such profile")
+			return
+		}
+	} else {
+		profile = ""
+	}
+	window := strings.TrimSpace(req.Window)
+	if window != "" {
+		rep, err := readBoard(dir)
+		if err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !windowConnected(rep, window) {
+			writeLaunchError(w, http.StatusNotFound, "that editor window is not connected any more")
+			return
+		}
+	}
+	id, err := savePrompt(dir, prompt)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	args := []string{}
+	if profile != "" {
+		args = append(args, "--profile", profile)
+	}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	args = append(args, "--prompt-id", id)
+	launchBoardCommand(w, command.Command{Action: command.ActionNew, WindowID: window,
+		Command: daemon.NewSessionCommand(args...), Source: "phone"})
+}
+
+func windowConnected(rep boardReport, window string) bool {
+	for _, win := range rep.Windows {
+		if win.ID == window {
 			return true
 		}
 	}

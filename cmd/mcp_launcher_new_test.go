@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,7 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 func TestSavePromptIsReadOnceAndExpires(t *testing.T) {
@@ -123,4 +126,92 @@ func TestLaunchNewKeepsThePromptOutOfTheShellLine(t *testing.T) {
 func strconvQuote(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+func TestWatchEventsAndWorkingOnOne(t *testing.T) {
+	dir := phoneBoard(t, true)
+	st := sessions.State{Windows: []sessions.Window{{ID: "win-1", Folders: []string{"/home/me/acme-api"}}}}
+	raw, _ := json.Marshal(st)
+	os.WriteFile(daemon.SessionsPath(dir), raw, 0o600)
+
+	os.MkdirAll(filepath.Join(dir, "watch"), 0o700)
+	lines := []watch.Event{
+		{Key: "jira:ABC-1", Kind: watch.KindIssueNew, Ref: "ABC-1", Title: "Login loops\nsecond line", URL: "https://acme.atlassian.net/browse/ABC-1", Workspace: "api"},
+		{Key: "gitlab:acme/api!7", Kind: watch.KindPRReview, Ref: "acme/api!7", Title: "cover the nil case", URL: "https://gitlab.com/acme/api/-/merge_requests/7"},
+		{Key: "jira:ABC-1", Kind: watch.KindIssueNew, Ref: "ABC-1", Title: "Login loops", URL: "https://acme.atlassian.net/browse/ABC-1"},
+	}
+	var buf bytes.Buffer
+	for _, e := range lines {
+		data, _ := json.Marshal(e)
+		buf.Write(append(data, '\n'))
+	}
+	buf.WriteString("{ not json\n")
+	os.WriteFile(filepath.Join(dir, "watch", "events.jsonl"), buf.Bytes(), 0o600)
+
+	rec := httptest.NewRecorder()
+	launchEventsHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/events", nil))
+	if rec.Code != 200 {
+		t.Fatalf("events = %d: %s", rec.Code, rec.Body.String())
+	}
+	var listed struct {
+		Events []struct {
+			Key, Kind, Ref, Title, URL string
+			Actionable                 bool
+		} `json:"events"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &listed)
+	if len(listed.Events) != 2 {
+		t.Fatalf("newest first, deduped by key, bad lines skipped: %+v", listed.Events)
+	}
+	// The last line wins for a repeated key, and it is the newest.
+	if listed.Events[0].Key != "jira:ABC-1" || listed.Events[1].Key != "gitlab:acme/api!7" {
+		t.Errorf("newest first, got %q then %q", listed.Events[0].Key, listed.Events[1].Key)
+	}
+	if listed.Events[0].Title != "Login loops" {
+		t.Errorf("the title is one line, got %q", listed.Events[0].Title)
+	}
+	if !listed.Events[0].Actionable || !listed.Events[1].Actionable {
+		t.Error("both kinds have a prompt, so both are actionable")
+	}
+
+	rec = httptest.NewRecorder()
+	launchEventsHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/events", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST = %d", rec.Code)
+	}
+
+	if rec := post(launchWorkOnHandler, "/launch/work-on", `{"key":"jira:ABC-1","window":"win-1","model":"opus"}`); rec.Code != 200 {
+		t.Fatalf("work-on = %d: %s", rec.Code, rec.Body.String())
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "commands"))
+	if len(entries) != 1 {
+		t.Fatalf("spool has %d entries", len(entries))
+	}
+	spooled, _ := os.ReadFile(filepath.Join(dir, "commands", entries[0].Name()))
+	line := string(spooled)
+	if strings.Contains(line, "corgi:stories") || strings.Contains(line, "ABC-1") {
+		t.Fatalf("the prompt must travel by id, not in the command: %s", line)
+	}
+	if !strings.Contains(line, "--model opus --prompt-id ") {
+		t.Fatalf("command line: %s", line)
+	}
+	prompts, _ := os.ReadDir(filepath.Join(dir, "prompts"))
+	saved, _ := os.ReadFile(filepath.Join(dir, "prompts", prompts[0].Name()))
+	if !strings.Contains(string(saved), "/corgi:stories ABC-1") {
+		t.Errorf("a new issue hands off to the stories skill, got %q", saved)
+	}
+
+	for _, c := range []struct {
+		body string
+		want int
+	}{
+		{`{"key":"nope"}`, 404},
+		{`{"key":"jira:ABC-1","window":"win-9"}`, 404},
+		{`{"key":"jira:ABC-1","model":"opus; ls"}`, 400},
+		{`{"key":"jira:ABC-1","profile":"nope"}`, 400},
+	} {
+		if rec := post(launchWorkOnHandler, "/launch/work-on", c.body); rec.Code != c.want {
+			t.Errorf("%s: %d, want %d: %s", c.body, rec.Code, c.want, rec.Body.String())
+		}
+	}
 }
