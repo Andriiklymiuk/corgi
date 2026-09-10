@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:corgi}/corgi-bar",
+      "name": "Debug corgi-bar (corgi-bar)",
+      "target": "corgi-bar",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug corgi-bar (corgi-bar)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:corgi}/corgi-bar",
+      "name": "Release corgi-bar (corgi-bar)",
+      "target": "corgi-bar",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release corgi-bar (corgi-bar)"
+    }
+  ]
+}
