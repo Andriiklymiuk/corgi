@@ -569,13 +569,26 @@ func run(ctx context.Context, name string, args ...string) error {
 // newSessionCommand is what the "+" terminal runs: this corgi's `agent
 // claude`, which picks the folder's workspace account and settings. The
 // path is absolute so the terminal's PATH does not matter.
-func newSessionCommand() string {
+func newSessionCommand() string { return NewSessionCommand() }
+
+// NewSessionCommand is the shell line a fresh terminal runs: this corgi
+// binary, `agent claude`, and the given flags. Every argument is quoted, so
+// a caller must still keep user text out of it: a prompt travels by id.
+func NewSessionCommand(args ...string) string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "corgi agent claude"
+		exe = "corgi"
 	}
-	if strings.ContainsAny(exe, " \t'\"") {
-		exe = "'" + strings.ReplaceAll(exe, "'", `'\''`) + "'"
+	parts := []string{shellQuote(exe), "agent", "claude"}
+	for _, a := range args {
+		parts = append(parts, shellQuote(a))
 	}
-	return exe + " agent claude"
+	return strings.Join(parts, " ")
+}
+
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"$`\\!*?[](){}<>|;&#~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

@@ -437,3 +437,13 @@ func TestReaperSkipsProbingAnEmptyBoard(t *testing.T) {
 	cancel()
 	<-done
 }
+
+func TestNewSessionCommandQuotesEveryArgument(t *testing.T) {
+	line := NewSessionCommand("--profile", "work", "--prompt-id", "abc123", "--model", "it's; rm")
+	if !strings.HasSuffix(line, ` agent claude --profile work --prompt-id abc123 --model 'it'\''s; rm'`) {
+		t.Fatalf("line = %s", line)
+	}
+	if !strings.HasSuffix(newSessionCommand(), " agent claude") {
+		t.Fatalf("plain = %s", newSessionCommand())
+	}
+}

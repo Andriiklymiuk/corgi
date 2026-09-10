@@ -608,7 +608,9 @@ type into it; `/sessions`, `/usage`, `/send`, `/allow`, `/always`, `/deny`,
 `/focus`). "limit lifted — back to work" arrives once a limited session
 finishes a turn again. The **phone launcher** has the same under each
 session row: Allow, Always, Deny when it needs you, Send… for any live one,
-and a PR link when the session mentioned one.
+and a PR link when the session mentioned one; its **New chat** box opens a
+session in a chosen editor window with a first prompt, a model and an
+account (the prompt travels by id in a 0600 file, never in the shell line).
 
 The board also feeds back into sessions: with tracking on, every new session
 starts with a few lines from `corgi agent hook context` (the other sessions
