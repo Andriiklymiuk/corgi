@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"andriiklymiuk/corgi/utils/atomicfile"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -103,6 +104,9 @@ type Daemon struct {
 	// CommandTick is the spool poll interval; the SIGUSR1 nudge only shortens
 	// the wait. Zero means statusPublishInterval. Test seam.
 	CommandTick time.Duration
+	// IdleTick replaces every poll interval while nothing is tracked or
+	// supervised. Zero means idleInterval. Test seam.
+	IdleTick time.Duration
 
 	// Sessions is the registry of interactive Claude Code sessions, fed by
 	// hooks and published as sessions.json. Nil turns tracking off.
@@ -155,6 +159,8 @@ type Daemon struct {
 	// publishSignal is nudged whenever a supervisor's state changes, so
 	// `corgi agent status` in another process is not up to five seconds stale.
 	publishSignal chan struct{}
+	// reapSignal re-arms the reaper's ticker when the daemon goes idle or busy.
+	reapSignal chan struct{}
 }
 
 // New returns a Daemon writing state under dir.
@@ -170,6 +176,7 @@ func New(version, dir string) *Daemon {
 		ListProcesses:  proc.List,
 		Cwd:            proc.Cwd,
 		publishSignal:  make(chan struct{}, 1),
+		reapSignal:     make(chan struct{}, 1),
 		nudge:          make(chan struct{}, 1),
 	}
 }
@@ -224,10 +231,18 @@ func (d *Daemon) InfoPath() string { return filepath.Join(d.Dir, "daemon.json") 
 // StatusPath is where the daemon publishes its state for other processes.
 func (d *Daemon) StatusPath() string { return filepath.Join(d.Dir, "status.json") }
 
-// statusPublishInterval is how often the running daemon republishes its state.
-// `corgi agent status` runs in a different process, so a file is the simplest
-// thing that works — no socket, no port, nothing to secure.
-const statusPublishInterval = 5 * time.Second
+// The daemon talks to other corgi processes through files — no socket, no
+// port, nothing to secure — so it polls. Variables so tests can shrink them.
+var (
+	// statusPublishInterval is how often the running daemon republishes its
+	// state and drains the spool while something is tracked or supervised.
+	statusPublishInterval = 5 * time.Second
+	// idleInterval is the cadence of every poll while nothing is; a nudge or
+	// a new session event brings the fast one back at once.
+	idleInterval = time.Minute
+	// digestCheckInterval bounds how often the digest marker is read.
+	digestCheckInterval = time.Minute
+)
 
 // requestPublish nudges the publisher. Non-blocking, and coalescing: a burst
 // of state changes produces one write, not one per change.
@@ -241,18 +256,72 @@ func (d *Daemon) requestPublish() {
 	}
 }
 
+// idle is true when the daemon has nothing to watch: no session on the board
+// (a gone one on a pinned key does not count) and no supervised process up.
+func (d *Daemon) idle() bool {
+	if d.Sessions != nil {
+		for _, s := range d.Sessions.Sessions() {
+			if s.Status != sessions.StatusGone {
+				return false
+			}
+		}
+	}
+	for _, r := range d.Runners() {
+		if r.Supervising() && r.State().Running {
+			return false
+		}
+	}
+	return true
+}
+
+// pollInterval picks the cadence for the publish, drain and reap loops: fast
+// while busy, idleInterval otherwise.
+func (d *Daemon) pollInterval(fast time.Duration) time.Duration {
+	if fast == 0 {
+		fast = statusPublishInterval
+	}
+	if !d.idle() {
+		return fast
+	}
+	if d.IdleTick != 0 {
+		return d.IdleTick
+	}
+	return idleInterval
+}
+
+// wakeLoops re-arms the publisher and the reaper so an idle-to-busy change
+// takes effect now rather than at the end of a long tick.
+func (d *Daemon) wakeLoops() {
+	d.requestPublish()
+	select {
+	case d.reapSignal <- struct{}{}:
+	default:
+	}
+}
+
 // publishStatus keeps status.json fresh until ctx ends. It republishes on every
 // state change, with a slow tick as a safety net for anything that changes
-// without notifying (the wake lock, for instance).
+// without notifying (the wake lock, for instance). Unchanged state is not
+// rewritten, so an idle daemon leaves the disk alone.
 func (d *Daemon) publishStatus(ctx context.Context) {
 	if d.publishStopped != nil {
 		defer d.publishStopped()
 	}
-	ticker := time.NewTicker(statusPublishInterval)
+	ticker := time.NewTicker(d.pollInterval(0))
 	defer ticker.Stop()
+	var last []byte
+	var digestChecked time.Time
 	for {
-		_ = writeJSONAtomic(d.StatusPath(), d.Status())
-		d.sendDigestIfDue(time.Now())
+		if data, err := json.MarshalIndent(d.Status(), "", "  "); err == nil && !bytes.Equal(data, last) {
+			if writeAtomic(d.StatusPath(), data) == nil {
+				last = data
+			}
+		}
+		if now := time.Now(); now.Sub(digestChecked) >= digestCheckInterval {
+			digestChecked = now
+			d.sendDigestIfDue(now)
+		}
+		ticker.Reset(d.pollInterval(0))
 		select {
 		case <-ctx.Done():
 			return
@@ -350,15 +419,17 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	go func() { defer close(reapDone); d.reapSessions(ctx) }()
 	defer func() { <-reapDone }()
 
-	tick := d.CommandTick
-	if tick == 0 {
-		tick = statusPublishInterval
-	}
-	ticker := time.NewTicker(tick)
+	ticker := time.NewTicker(d.pollInterval(d.CommandTick))
 	defer ticker.Stop()
 
+	idle := d.idle()
 	for ctx.Err() == nil {
 		d.drainCommands(ctx, launch)
+		if now := d.idle(); now != idle {
+			idle = now
+			d.wakeLoops()
+		}
+		ticker.Reset(d.pollInterval(d.CommandTick))
 		select {
 		case <-ctx.Done():
 		case <-d.nudge:
@@ -987,13 +1058,17 @@ func processAlive(pid int) bool {
 func itoa(n int) string { return fmt.Sprint(n) }
 
 func writeJSONAtomic(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeAtomic(path, data)
+}
+
+func writeAtomic(path string, data []byte) error {
 	// 0700/0600: status.json now carries each session's claude.ai URL, and
 	// daemon.json the daemon's pid and paths — owner-only, like the spool.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
 		return err
 	}
 	return atomicfile.Write(path, data, 0o600)

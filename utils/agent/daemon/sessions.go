@@ -24,17 +24,18 @@ import (
 // to editor windows, and publishes sessions.json for whatever draws the
 // board. See utils/agent/sessions.
 
-const (
+var (
 	// reapInterval is how often every session's pid is probed. SessionEnd
 	// does not fire for a force-quit window; this is what frees its key.
 	reapInterval = 5 * time.Second
-	// sweepEvery is how many reap ticks pass between stale sweeps (one
-	// minute at the default interval).
-	sweepEvery = 12
-	// focusBudget bounds the OS-level part of a focus. A key press never
-	// waits on it; the outcome comes back on the next state push.
-	focusBudget = 1500 * time.Millisecond
+	// sweepInterval is how often stale sessions are swept and every
+	// account's usage sampled, whatever the tick.
+	sweepInterval = time.Minute
 )
+
+// focusBudget bounds the OS-level part of a focus. A key press never
+// waits on it; the outcome comes back on the next state push.
+const focusBudget = 1500 * time.Millisecond
 
 // SessionsPath is where the daemon publishes the board.
 func SessionsPath(dir string) string { return filepath.Join(dir, "sessions.json") }
@@ -314,21 +315,28 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 	if d.Sessions == nil {
 		return
 	}
-	interval := d.ReapTick
-	if interval == 0 {
-		interval = reapInterval
+	fast := d.ReapTick
+	if fast == 0 {
+		fast = reapInterval
 	}
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(d.pollInterval(fast))
 	defer ticker.Stop()
-	for tick := 1; ; tick++ {
+	nextSweep := time.Now().Add(sweepInterval)
+	for {
+		ticker.Reset(d.pollInterval(fast))
 		select {
 		case <-ctx.Done():
 			return
+		case <-d.reapSignal:
+			continue
 		case <-ticker.C:
 		}
 		now := time.Now()
-		d.Sessions.Reap(d.alive, now)
-		if tick%sweepEvery == 0 {
+		if len(d.Sessions.Sessions()) > 0 {
+			d.Sessions.Reap(d.alive, now)
+		}
+		if !now.Before(nextSweep) {
+			nextSweep = now.Add(sweepInterval)
 			d.Sessions.Sweep(now)
 			d.sampleAccounts(now)
 		}
