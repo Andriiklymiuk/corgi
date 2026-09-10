@@ -680,8 +680,9 @@ cd ~/dev/acme-stack
 corgi agent watch enable --labels bug,defect --prs            # notify: new issues assigned to me, reviews on my PRs
 corgi agent watch enable --labels bug --prs --action fix      # and run the skill: /corgi:stories <id>, /corgi:review <pr>
 corgi agent watch auth linear --token lin_api_…               # or LINEAR_API_KEY / JIRA_URL+JIRA_EMAIL+JIRA_API_TOKEN / GITHUB_TOKEN (gh auth) / GITLAB_TOKEN
-corgi agent watch                                             # tokens, watched workspaces, last polls, events today
-corgi agent watch run                                         # one poll now
+corgi agent watch                                             # tokens, watched workspaces, last polls, events today, fix budget
+corgi agent watch run                                         # one poll now; hands deferred fixes back to the daemon
+corgi agent watch test issue.comment --body "still needed?"   # one made-up event through rules, dedupe, claim, caps; prints the prompt, runs nothing
 corgi agent watch hooks                                       # webhook URLs on the tunnel + the shared secret; --interval 0 for webhooks only
 corgi agent restart
 ```
@@ -689,13 +690,24 @@ corgi agent restart
 How it stays cheap: a saved cursor per source (Linear/Jira `updated >`,
 GitHub notifications with `If-Modified-Since` → 304, GitLab todos by id), a
 seen list across polls and webhooks, the first round only sets the bookmark,
-a failing token backs off. Nothing spends agent tokens unless a new event
-matched the rules; with `fix`, one headless `claude -p` per issue or PR at
-a time, thirty minutes at most, the process group killed at the deadline,
-draft PRs only. A fix runs unattended only for a workspace enabled with
+a failing token backs off, and a source the rules take nothing from (GitHub
+or GitLab with `prs` off) is not polled at all. Nothing spends agent tokens
+unless a new event matched the rules; with `fix`, one headless `claude -p`
+per issue or PR at a time, thirty minutes at most, the process group killed
+at the deadline, draft PRs only. Per kind: a new issue runs
+`/corgi:stories <key>`; a comment on your issue is read and either answered
+on the ticket through the tracker (no PR) or applied on the ticket's
+existing branch (else `/corgi:stories`); a review or comment on your PR
+runs `/corgi:review <url>` in address-feedback mode, never a fresh review.
+Budget: at most 3 fixes an hour and 10 a day (`--max-per-hour`,
+`--max-per-day`), none in `--quiet 23:00-07:00`, none at 95 % of a usage
+window; a fix past that is deferred with the reason in the notification,
+never retried by the daemon on its own — `corgi agent watch run` hands it
+back. A fix runs unattended only for a workspace enabled with
 `corgi agent init --dangerously-skip-permissions`. Rules live in the user
 config under `workspaces.<id>.watch` (`labels`, `states`, `assignee`,
-`comments`, `prs`, `repos`, `project`, `interval`, `action`).
+`comments`, `prs`, `repos`, `project`, `interval`, `action`,
+`maxFixesPerHour`, `maxFixesPerDay`, `quiet`).
 
 When the user asks "can corgi listen to new Jira/Linear issues or PR
 comments and fix them", this is the answer: enable watch with `--action fix`,

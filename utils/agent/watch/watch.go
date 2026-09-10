@@ -65,14 +65,12 @@ type Rules struct {
 
 // Match says whether an event is one the rules asked for.
 func (r Rules) Match(e Event) bool {
-	if !r.Enabled {
+	if !r.matchesKind(e.Kind) {
 		return false
 	}
 	switch e.Kind {
-	case KindPRComment, KindPRReview:
-		return r.PRs && e.Mine
-	case KindIssueComment:
-		return r.Comments && e.Mine
+	case KindPRComment, KindPRReview, KindIssueComment:
+		return e.Mine
 	case KindIssueNew:
 		if r.Assignee != "any" && !e.Mine {
 			return false
@@ -86,6 +84,62 @@ func (r Rules) Match(e Event) bool {
 		return true
 	}
 	return false
+}
+
+// matchesKind says whether any event of this kind could pass the rules.
+func (r Rules) matchesKind(k Kind) bool {
+	if !r.Enabled {
+		return false
+	}
+	switch k {
+	case KindPRComment, KindPRReview:
+		return r.PRs
+	case KindIssueComment:
+		return r.Comments
+	case KindIssueNew:
+		return true
+	}
+	return false
+}
+
+// MatchesNothing says no event can ever pass. Only Enabled closes every
+// kind — issue.new is possible whenever the rules are on — so this is the
+// whole test; per-source dead ends are DeadSource's.
+func (r Rules) MatchesNothing() bool { return !r.Enabled }
+
+// sourceKinds is everything each source can emit.
+var sourceKinds = map[string][]Kind{
+	"linear": {KindIssueNew, KindIssueComment},
+	"jira":   {KindIssueNew, KindIssueComment},
+	"github": {KindPRComment, KindPRReview},
+	"gitlab": {KindPRComment, KindPRReview},
+}
+
+// DeadSource says a source can emit nothing these rules take, so polling
+// it would only spend requests. A source not in the table is assumed live.
+func (r Rules) DeadSource(source string) bool {
+	kinds, ok := sourceKinds[source]
+	if !ok {
+		return r.MatchesNothing()
+	}
+	for _, k := range kinds {
+		if r.matchesKind(k) {
+			return false
+		}
+	}
+	return true
+}
+
+// DeadSources lists the known sources these rules can never use, sorted.
+func (r Rules) DeadSources() []string {
+	var out []string
+	for name := range sourceKinds {
+		if r.DeadSource(name) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func containsFold(list []string, s string) bool {
@@ -130,6 +184,10 @@ type State struct {
 	Seen    []string          `json:"seen"`    // newest last
 	Errors  map[string]string `json:"errors,omitempty"`
 	Polled  map[string]string `json:"polled,omitempty"` // "<workspace>/<source>" → RFC3339
+	// seen indexes Seen so a lookup does not walk the list.
+	seen map[string]struct{}
+	// Fixes is the fix history beside it, its own file.
+	Fixes *FixLog `json:"-"`
 }
 
 const seenKeep = 2000
@@ -143,13 +201,29 @@ func LoadState(agentDir string) *State {
 	if s.Cursors == nil {
 		s.Cursors = map[string]Cursor{}
 	}
+	s.seen = make(map[string]struct{}, len(s.Seen))
+	for _, k := range s.Seen {
+		s.seen[k] = struct{}{}
+	}
+	s.Fixes = LoadFixLog(agentDir)
 	return s
+}
+
+// IsSeen says a key was handled, without recording anything.
+func (s *State) IsSeen(key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.seen[key]
+	return ok
 }
 
 func (s *State) save() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.Seen) > seenKeep {
+		for _, k := range s.Seen[:len(s.Seen)-seenKeep] {
+			delete(s.seen, k)
+		}
 		s.Seen = s.Seen[len(s.Seen)-seenKeep:]
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
@@ -165,16 +239,35 @@ func (s *State) save() error {
 // MarkSeen records a key; false when it was already there.
 func (s *State) MarkSeen(key string) bool {
 	s.mu.Lock()
-	for _, k := range s.Seen {
-		if k == key {
-			s.mu.Unlock()
-			return false
-		}
+	if _, ok := s.seen[key]; ok {
+		s.mu.Unlock()
+		return false
 	}
+	s.seen[key] = struct{}{}
 	s.Seen = append(s.Seen, key)
 	s.mu.Unlock()
 	_ = s.save()
 	return true
+}
+
+// Unsee forgets a key so the event can be handled again — a fix that was
+// deferred, not done.
+func (s *State) Unsee(key string) {
+	s.mu.Lock()
+	if _, ok := s.seen[key]; !ok {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.seen, key)
+	kept := s.Seen[:0]
+	for _, k := range s.Seen {
+		if k != key {
+			kept = append(kept, k)
+		}
+	}
+	s.Seen = kept
+	s.mu.Unlock()
+	_ = s.save()
 }
 
 func (s *State) cursor(ws, source string) Cursor {
@@ -343,6 +436,19 @@ func LoadSecrets(agentDir string) Secrets {
 	return s
 }
 
+// GitHubToken is the token a GitHub poll would use and where it comes from:
+// "saved" for the environment or the file, "gh-auth" for the gh CLI's,
+// "" for none. Saved wins, as in NewGitHub.
+func GitHubToken(s Secrets) (token, source string) {
+	if t := strings.TrimSpace(s.GitHub); t != "" {
+		return t, "saved"
+	}
+	if t := strings.TrimSpace(githubAuthToken()); t != "" {
+		return t, "gh-auth"
+	}
+	return "", ""
+}
+
 // SaveSecrets writes the file; the environment is never written.
 func SaveSecrets(agentDir string, s Secrets) error {
 	data, err := json.MarshalIndent(s, "", "  ")
@@ -385,3 +491,128 @@ func (s *State) Summaries() []Summary {
 
 // ErrNoToken is what a source returns when it has nothing to authenticate with.
 var ErrNoToken = errors.New("no token")
+
+// FixRecord is one fix the daemon started, kept so the caps hold across
+// restarts.
+type FixRecord struct {
+	Key       string    `json:"key"`
+	Workspace string    `json:"workspace"`
+	StartedAt time.Time `json:"startedAt"`
+}
+
+// FixLog is <agentDir>/watch/fixes.json: the fixes started, newest last,
+// and the events whose fix a cap, quiet hours or a limit deferred — kept
+// aside for a manual `corgi agent watch run`, never retried by the daemon
+// on its own.
+type FixLog struct {
+	mu       sync.Mutex
+	path     string
+	Started  []FixRecord `json:"started"`
+	Deferred []Event     `json:"deferred,omitempty"`
+}
+
+const (
+	fixKeep      = 200
+	deferredKeep = 100
+)
+
+// LoadFixLog reads the file; a missing file is an empty log.
+func LoadFixLog(agentDir string) *FixLog {
+	l := &FixLog{path: filepath.Join(agentDir, "watch", "fixes.json")}
+	if data, err := os.ReadFile(l.path); err == nil {
+		_ = json.Unmarshal(data, l)
+	}
+	return l
+}
+
+func (l *FixLog) save() error {
+	if len(l.Started) > fixKeep {
+		l.Started = l.Started[len(l.Started)-fixKeep:]
+	}
+	if len(l.Deferred) > deferredKeep {
+		l.Deferred = l.Deferred[len(l.Deferred)-deferredKeep:]
+	}
+	data, err := json.MarshalIndent(l, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
+		return err
+	}
+	return atomicfile.Write(l.path, data, 0o600)
+}
+
+// Start records a fix starting and drops the event from the deferred list
+// if it was waiting there.
+func (l *FixLog) Start(workspace, key string, at time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.Started = append(l.Started, FixRecord{Key: key, Workspace: workspace, StartedAt: at})
+	l.dropDeferred(key)
+	_ = l.save()
+}
+
+// StartedSince counts the workspace's fixes started at or after since.
+func (l *FixLog) StartedSince(workspace string, since time.Time) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, r := range l.Started {
+		if r.Workspace == workspace && !r.StartedAt.Before(since) {
+			n++
+		}
+	}
+	return n
+}
+
+// LastStarted is the workspace's most recent fix start.
+func (l *FixLog) LastStarted(workspace string) (last time.Time, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, r := range l.Started {
+		if r.Workspace == workspace && r.StartedAt.After(last) {
+			last, ok = r.StartedAt, true
+		}
+	}
+	return last, ok
+}
+
+// Defer keeps an event whose fix did not start; one entry per key.
+func (l *FixLog) Defer(e Event) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.dropDeferred(e.Key)
+	l.Deferred = append(l.Deferred, e)
+	_ = l.save()
+}
+
+// DeferredEvents is a copy of what waits for a fix. Only the daemon
+// writes the file: an event leaves the list when its fix starts.
+func (l *FixLog) DeferredEvents() []Event {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]Event(nil), l.Deferred...)
+}
+
+// DeferredCount is how many events wait for a fix in a workspace ("" is all).
+func (l *FixLog) DeferredCount(workspace string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, e := range l.Deferred {
+		if workspace == "" || e.Workspace == workspace {
+			n++
+		}
+	}
+	return n
+}
+
+func (l *FixLog) dropDeferred(key string) {
+	kept := l.Deferred[:0]
+	for _, e := range l.Deferred {
+		if e.Key != key {
+			kept = append(kept, e)
+		}
+	}
+	l.Deferred = kept
+}

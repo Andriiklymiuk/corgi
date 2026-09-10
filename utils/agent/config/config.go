@@ -240,6 +240,36 @@ type WatchConfig struct {
 	// Action is notify (default) or fix: fix runs `claude -p` in the
 	// workspace with the matching skill and opens draft PRs.
 	Action string `yaml:"action"`
+	// MaxFixesPerHour and MaxFixesPerDay cap how many fixes start; 0 is
+	// the default (3 and 10). A fix past the cap is deferred, not dropped.
+	MaxFixesPerHour int `yaml:"maxFixesPerHour,omitempty"`
+	MaxFixesPerDay  int `yaml:"maxFixesPerDay,omitempty"`
+	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts, e.g.
+	// "23:00-07:00"; empty means none.
+	Quiet string `yaml:"quiet,omitempty"`
+}
+
+// overlayWatch replaces base with over, keeping base's caps and quiet
+// hours where over left them unset, so defaults: can carry a budget for
+// every watched workspace.
+func overlayWatch(base, over *WatchConfig) *WatchConfig {
+	if over == nil {
+		return base
+	}
+	if base == nil {
+		return over
+	}
+	merged := *over
+	if merged.MaxFixesPerHour == 0 {
+		merged.MaxFixesPerHour = base.MaxFixesPerHour
+	}
+	if merged.MaxFixesPerDay == 0 {
+		merged.MaxFixesPerDay = base.MaxFixesPerDay
+	}
+	if merged.Quiet == "" {
+		merged.Quiet = base.Quiet
+	}
+	return &merged
 }
 
 // overlay applies the non-empty fields of over onto base.
@@ -286,9 +316,7 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.WakeLock != "" {
 		base.WakeLock = over.WakeLock
 	}
-	if over.Watch != nil {
-		base.Watch = over.Watch
-	}
+	base.Watch = overlayWatch(base.Watch, over.Watch)
 	// Booleans that grant capability are OR-ed rather than overwritten, so a
 	// per-workspace entry cannot silently turn off a default the user set.
 	base.InheritAPIKey = base.InheritAPIKey || over.InheritAPIKey
