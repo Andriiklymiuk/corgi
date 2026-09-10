@@ -1162,7 +1162,10 @@ const launcherPageHTML = `<!doctype html>
      toggles controls with .hidden. */
   [hidden]{display:none!important}
   html{-webkit-text-size-adjust:100%}
-  button,a,summary,label,input,.chip,.ws,.top,.s{touch-action:manipulation}
+  /* Once for the page: a per-element list meant every row added since then
+     double-tap-zoomed instead of registering the second tap. */
+  html{touch-action:manipulation}
+  button,a,summary,label,input,select,textarea{touch-action:manipulation}
   body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
       padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased;
       overscroll-behavior-y:none}
@@ -1412,6 +1415,11 @@ const launcherPageHTML = `<!doctype html>
   .tip-copy{font-size:.66rem;font-weight:600;color:var(--dim2);flex:0 0 auto;letter-spacing:.02em}
   .tip.copied .tip-copy{color:var(--green)}
   .tipnote{color:var(--dim2);font-size:.72rem;margin:var(--sp3) 0 0}
+  /* In a tab of their own these are the page, not a card folded into the
+     bottom of one: same ground, same rhythm as every other pane. */
+  [data-pane="laptop"] details.tips, [data-pane="settings"] details.settings{
+      margin:0;background:none;border:0;border-radius:0;padding:0}
+  [data-pane="laptop"] details.tips>summary, [data-pane="settings"] details.settings>summary{display:none}
   details.settings{margin:1.6rem 0 0;background:var(--card2);border:1px solid var(--line);
       border-radius:1rem;padding:.4rem 1rem}
   details.settings h3{font-size:.66rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
@@ -1993,6 +2001,29 @@ const launcherPageHTML = `<!doctype html>
       const a = document.createElement('a');
       a.href = s.pr; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'PR';
       box.appendChild(a);
+    }
+    // The row had no way to open the session it names, which is the first
+    // thing anyone taps it for.
+    if (s.url && safeClaudeUrl(s.url)) {
+      const open = document.createElement('a');
+      open.href = s.url; open.target = '_blank'; open.rel = 'noopener';
+      open.textContent = 'Open \u2197';
+      box.appendChild(open);
+    } else if (s.id && (s.status === 'done' || s.status === 'stale')) {
+      // No web link yet: corgi can ask the session for one. Only while it is
+      // idle — typing into a session mid-turn lands in its own work.
+      button('Link', '', async (e) => {
+        const b = e.currentTarget;
+        b.disabled = true; b.textContent = 'Linking\u2026';
+        try {
+          const r = await fetch('/launch/send', { method: 'POST', headers: auth,
+            body: JSON.stringify({ session: s.id, text: '/remote-control' }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) { toast(j.error || 'could not reach that session', true); b.disabled = false; b.textContent = 'Link'; return; }
+          toast('asked ' + name + ' for a web link — it appears in a moment');
+          setTimeout(loadBoard, 6000);
+        } catch { toast('no connection', true); b.disabled = false; b.textContent = 'Link'; }
+      });
     }
     return box.childElementCount ? box : null;
   }

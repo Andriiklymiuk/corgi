@@ -102,7 +102,13 @@ func (r Rules) Why(e Event) string {
 	switch e.Kind {
 	case KindReviewRequested:
 		// Someone else's pull request, addressed to me by construction: the
-		// tracker only sends a review request to its reviewer.
+		// tracker only sends a review request to its reviewer. One already
+		// merged needs no review.
+		if len(r.States) == 0 {
+			if over := finishedState(e.State); over != "" {
+				return "it is " + over + " — there is nothing to review"
+			}
+		}
 	case KindCIFailed:
 		if !e.Mine {
 			return "not on something of mine"
@@ -112,10 +118,11 @@ func (r Rules) Why(e Event) string {
 			return "not on something of mine"
 		}
 		// A comment on work that is already finished, duplicated or cancelled
-		// is chatter, not a thing to do. Explicit --states wins, as ever.
-		if e.Kind == KindIssueComment && len(r.States) == 0 {
+		// is chatter, not a thing to do — on a ticket or on a pull request
+		// that has already been merged. Explicit --states wins, as ever.
+		if len(r.States) == 0 {
 			if over := finishedState(e.State); over != "" {
-				return "the issue is " + over + " — the comment is not work"
+				return "it is " + over + " — the comment is not work"
 			}
 		}
 		if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
@@ -162,6 +169,7 @@ var closedStates = map[string]string{
 	"done": "done", "closed": "closed", "resolved": "resolved",
 	"complete": "done", "completed": "done", "shipped": "shipped",
 	"released": "released", "merged": "merged", "to release": "waiting on a release",
+	"locked": "locked",
 }
 
 // finishedState names why a ticket in this state is not worth anyone's time,
