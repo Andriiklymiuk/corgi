@@ -568,9 +568,13 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{y}🔔{/} red build in acme/api — e2e / checkout failed",
 		"{g}🔔{/} fixed acme/api — https://github.com/acme/api/pull/418",
 		"",
-		"{d}# 10:02 — a fresh ticket. Reported only: --auto-for never named tickets.{/}",
+		"{d}# 10:02 — a ticket assigned to me, in a state the rules allow{/}",
 		"{y}🔔{/} new issue ABC-7 — Login loops after password reset",
-		"{d}   → in the inbox; Work on it hands it to a session you can watch{/}",
+		"{c}   → claimed · Ready ▸ In Progress · worked · draft PR · ▸ In Review{/}",
+		"{g}🔔{/} fixed ABC-7 — https://github.com/acme/api/pull/415",
+		"",
+		"{d}# 10:09 — a ticket in Backlog. The state filter stops it.{/}",
+		"{d}   → no match — state \"Backlog\" is not one of Ready, In Progress{/}",
 		"",
 		"{d}# 10:15 — a colleague wants MY review. Never worked on unattended.{/}",
 		"{y}🔔{/} sam wants your review on acme/web!41 — Retry the upload on a 502",
@@ -595,16 +599,16 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"corgi opened",
 		"  acme/api#412                 opened 1 PR (acme-stack)",
 		"  acme/api                     opened 1 PR (acme-stack)",
+		"  ABC-7                        opened 1 PR (acme-stack)",
 		"arrived",
-		"  ABC-7                        issue.new (acme-stack)",
 		"  acme/web!41                  review.requested (acme-stack)",
 		"",
 		"waiting for a free slot",
 		"  ABC-11",
 		"  a cap or quiet hours held these; corgi agent watch run picks them up",
 	];
-	scene("autofix", grow(s, [2, 4, 9, 13, 17, 20, 27, 34, 40, 47]).map((l, i) =>
-		page(term("corgi agent watch — unattended", l, { rows: s.length, cursor: i < 9 }))));
+	scene("autofix", grow(s, [2, 4, 9, 13, 18, 21, 24, 31, 38, 44, 51]).map((l, i) =>
+		page(term("corgi agent watch — unattended", l, { rows: s.length, cursor: i < 10 }))));
 }
 
 // ---- the two commands that make leaving it on a decision you can reverse ----
