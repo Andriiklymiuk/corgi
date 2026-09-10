@@ -40,7 +40,7 @@ func ticketHome(t *testing.T) string {
 	}
 	if err := watch.LoadBoardCache(dir).Set("api", watch.BoardInfo{
 		Tracker: "jira", Project: "ABC", FetchedAt: time.Now(),
-		Statuses: []watch.Status{{ID: "1", Name: "In Progress"}, {ID: "2", Name: "TO TEST STAGING"}},
+		Statuses: []watch.Status{{ID: "1", Name: "In Progress"}, {ID: "2", Name: "Ready for staging"}},
 		Me:       watch.Identity{ID: "u1", Name: "Andrii"},
 	}); err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestInboxCarriesTheCachedColumns(t *testing.T) {
 	if !ok {
 		t.Fatalf("the watched workspace's columns must travel with its events: %+v", got.Boards)
 	}
-	if len(api.Columns) != 2 || api.Columns[1] != "TO TEST STAGING" {
+	if len(api.Columns) != 2 || api.Columns[1] != "Ready for staging" {
 		t.Fatalf("the real column names, in order: %+v", api.Columns)
 	}
 	if api.Me != "Andrii" {

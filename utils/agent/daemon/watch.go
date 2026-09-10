@@ -406,6 +406,8 @@ func watchBody(e watch.Event) string {
 		return fmt.Sprintf("%s commented on %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Body)
 	case watch.KindPRReview:
 		return fmt.Sprintf("%s reviewed %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, firstNonEmpty(e.Body, e.State))
+	case watch.KindCIFailed:
+		return fmt.Sprintf("red build in %s — %s", e.Ref, e.Title)
 	default:
 		return fmt.Sprintf("%s commented on %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Body)
 	}
@@ -435,6 +437,14 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	},
 	watch.KindPRComment: reviewFeedbackPrompt,
 	watch.KindPRReview:  reviewFeedbackPrompt,
+	watch.KindCIFailed: func(e watch.Event) string {
+		// The one kind that brings its own test for "done": make it green.
+		return "A build went red in " + e.Ref + ": " + e.Title + ". " +
+			"Find the failing run (gh run list --repo " + e.Ref + " --status failure --limit 5, then gh run view --log-failed), " +
+			"read what actually failed, and fix the cause on the branch it failed on — not by weakening the test or skipping it. " +
+			"Push, then watch the run to green. If it is a flake or an outage rather than our bug, say so and change nothing. " +
+			"I approve all changes."
+	},
 }
 
 func reviewFeedbackPrompt(e watch.Event) string {

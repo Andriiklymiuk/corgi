@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -302,4 +304,70 @@ func jsonString(s string) string {
 		return `""`
 	}
 	return string(raw)
+}
+
+// ClosePR closes a pull request or merge request corgi opened, by its web
+// URL. Only the two hosts corgi watches; anything else is refused rather
+// than guessed at.
+func ClosePR(ctx context.Context, s Secrets, link string) error {
+	switch {
+	case strings.Contains(link, "github.com/"):
+		return closeGitHubPR(ctx, s, link)
+	case strings.Contains(link, "/-/merge_requests/"):
+		return closeGitLabMR(ctx, s, link)
+	}
+	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
+}
+
+var githubPRPath = regexp.MustCompile(`github\.com/([^/]+/[^/]+)/pull/(\d+)`)
+
+func closeGitHubPR(ctx context.Context, s Secrets, link string) error {
+	m := githubPRPath.FindStringSubmatch(link)
+	if m == nil {
+		return fmt.Errorf("cannot read a repo and number out of %s", link)
+	}
+	if s.GitHub == "" {
+		return ErrNoToken
+	}
+	body, _ := json.Marshal(map[string]string{"state": "closed"})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
+		"https://api.github.com/repos/"+m[1]+"/pulls/"+m[2], strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.GitHub)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	return doClose(req, link)
+}
+
+var gitlabMRPath = regexp.MustCompile(`^(https://[^/]+)/(.+)/-/merge_requests/(\d+)`)
+
+func closeGitLabMR(ctx context.Context, s Secrets, link string) error {
+	m := gitlabMRPath.FindStringSubmatch(link)
+	if m == nil {
+		return fmt.Errorf("cannot read a project and number out of %s", link)
+	}
+	if s.GitLab == "" {
+		return ErrNoToken
+	}
+	endpoint := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3] + "?state_event=close"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+	return doClose(req, link)
+}
+
+func doClose(req *http.Request, link string) error {
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return fmt.Errorf("closing %s: %w", link, err)
+	}
+	defer resp.Body.Close()
+	answer, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("closing %s: HTTP %d: %s", link, resp.StatusCode, clip(string(answer), bodyMax))
+	}
+	return nil
 }

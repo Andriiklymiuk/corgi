@@ -3155,7 +3155,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
 			return
 		}
-		_ = watch.LoadStateLog(dir).Set(event.Key, status, time.Now())
+		_ = watch.LoadStateLog(dir).SetFrom(event.Key, status, event.State, time.Now())
 		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status, "state": status})
 	case "assign":
 		me := watch.LoadBoardCache(dir).Get(event.Workspace).Me

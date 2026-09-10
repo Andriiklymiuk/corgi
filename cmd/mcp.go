@@ -1599,6 +1599,23 @@ func registerMCPTools(s *server.MCPServer) {
 		return map[string]any{"fixes": fixes}, nil
 	}))
 
+	s.AddTool(mcp.NewTool("corgi_watch_board",
+		mcp.WithDescription("The tracker columns a workspace can move a ticket to, and who its token belongs to: {workspace, tracker, project, columns[], me}. Read once and cached, so this is cheap. Read it BEFORE offering or making a move — a column name that is not on this list will be refused. Read-only."),
+		mcp.WithString("workspace", mcp.Description("Which workspace; omitted means the one you are in")),
+		mcp.WithBoolean("refresh", mcp.Description("Read the columns from the tracker again instead of the cache")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpWatchBoard(r.GetString("workspace", ""), r.GetBool("refresh", false))
+	}))
+
+	s.AddTool(mcp.NewTool("corgi_watch_move",
+		mcp.WithDescription("Move one ticket to another column, as the user. `status` must be one corgi_watch_board lists; Jira also decides which moves are legal from where the ticket is now, and a refused move names the ones that were. This writes to a real board someone else reads — do it when asked, never to tidy up."),
+		mcp.WithString("ref", mcp.Required(), mcp.Description("The ticket, e.g. ABC-123")),
+		mcp.WithString("status", mcp.Required(), mcp.Description("The column to move it to, from corgi_watch_board")),
+		mcp.WithString("workspace", mcp.Description("Which workspace; omitted means the one you are in")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpWatchMove(r.GetString("workspace", ""), r.GetString("ref", ""), r.GetString("status", ""))
+	}))
+
 	s.AddTool(mcp.NewTool("corgi_today",
 		mcp.WithDescription("What has been done today, per workspace: {since, headline, totals, workspaces[{workspace, dir, commits[], prompts[], fixes[], arrived[], deferred[]}]}. Answers \"what have I done today?\" in one call — the commits that landed, what Claude was asked, and what the unattended watch did on its own with the pull requests it opened. The window is since midnight unless `since` asks for a rolling one. Read-only."),
 		mcp.WithString("since", mcp.Description("A rolling window like 8h or 72h; omitted means since midnight")),

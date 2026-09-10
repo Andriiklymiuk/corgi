@@ -8,8 +8,8 @@ Move a ticket to another column
 
 Moves one ticket on the tracker, as you.
 
-  corgi agent watch move IMP-13427 "In Progress"
-  corgi agent watch move IMP-13427 "TO TEST STAGING"
+  corgi agent watch move ABC-123 "In Progress"
+  corgi agent watch move ABC-123 "Ready for staging"
   corgi agent watch move ABC-1 Done --workspace api
 
 The column names are the ones `corgi agent watch board` prints. Jira decides

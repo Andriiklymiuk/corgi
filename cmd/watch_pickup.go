@@ -48,6 +48,8 @@ func markPickedUp(agentD string, events []watch.Event) {
 			utils.Infof("corgi: %s stayed where it was: %v\n", ref, err)
 			continue
 		}
+		// Where it came from, so the move can be undone.
+		_ = watch.LoadStateLog(agentD).SetFrom(e.Key, status, e.State, time.Now())
 		utils.Infof("corgi: %s → %s\n", ref, status)
 	}
 }

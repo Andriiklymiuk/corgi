@@ -334,13 +334,13 @@ func TestTrackConfigDirsCoversAccountProfilesWorkspacesAndExtras(t *testing.T) {
 	if user.Workspaces == nil {
 		user.Workspaces = map[string]config.WorkspaceConfig{}
 	}
-	user.Workspaces["onboarding"] = config.WorkspaceConfig{ConfigDir: "~/.claude-skp"}
+	user.Workspaces["api"] = config.WorkspaceConfig{ConfigDir: "~/.claude-client"}
 	user.Workspaces["plain"] = config.WorkspaceConfig{Bin: "claude"}
 	if err := writeUserConfig(agentUserConfigPath(agentD), user); err != nil {
 		t.Fatal(err)
 	}
 	dirs := trackConfigDirs(agentD, []string{"~/.claude-work", filepath.Join(home, "other"), " "})
-	want := []string{filepath.Join(home, ".claude"), filepath.Join(home, ".claude-work"), filepath.Join(home, ".claude-skp"), filepath.Join(home, "other")}
+	want := []string{filepath.Join(home, ".claude"), filepath.Join(home, ".claude-work"), filepath.Join(home, ".claude-client"), filepath.Join(home, "other")}
 	if strings.Join(dirs, ",") != strings.Join(want, ",") {
 		t.Fatalf("dirs = %v, want %v", dirs, want)
 	}
