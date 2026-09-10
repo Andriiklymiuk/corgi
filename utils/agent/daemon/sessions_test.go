@@ -6,9 +6,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -374,4 +376,64 @@ func TestLimitLiftedWaitsForAFinishedTurn(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("a finished turn after the limit is the lift")
 	}
+}
+
+func TestIdleDaemonBacksOffUntilASessionArrives(t *testing.T) {
+	d := trackingDaemon(t)
+	d.IdleTick = time.Hour
+	var probes atomic.Int64
+	d.Alive = func(int) bool { probes.Add(1); return true }
+	goroutines := runtime.NumGoroutine()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionResize, Size: 8})
+	d.Nudge()
+	waitFor(t, func() bool { return readBoard(t, d).Size == 8 })
+
+	// Nothing tracked: the spool is left alone until the next nudge.
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionResize, Size: 5})
+	time.Sleep(100 * time.Millisecond)
+	if st := readBoard(t, d); st.Size != 8 {
+		t.Fatalf("an idle daemon drained without a nudge: size %d", st.Size)
+	}
+
+	ev := sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/acme-api", ClaudePID: 4242, At: time.Now()}
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionSession, Event: &ev})
+	d.Nudge()
+	waitFor(t, func() bool { st := readBoard(t, d); return len(st.Sessions) == 1 && st.Size == 5 })
+
+	// Busy now: the fast tick drains without a nudge and the reaper probes.
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionResize, Size: 4})
+	waitFor(t, func() bool { return readBoard(t, d).Size == 4 })
+	waitFor(t, func() bool { return probes.Load() > 0 })
+
+	cancel()
+	<-done
+	waitFor(t, func() bool { return runtime.NumGoroutine() <= goroutines })
+}
+
+func TestReaperSkipsProbingAnEmptyBoard(t *testing.T) {
+	d := trackingDaemon(t)
+	d.IdleTick = 10 * time.Millisecond
+	var probes atomic.Int64
+	d.Alive = func(int) bool { probes.Add(1); return true }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+	waitFor(t, func() bool { _, err := os.Stat(SessionsPath(d.Dir)); return err == nil })
+
+	time.Sleep(100 * time.Millisecond)
+	if n := probes.Load(); n != 0 {
+		t.Fatalf("probed %d pids with nobody on the board", n)
+	}
+
+	ev := sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/acme-api", ClaudePID: 4242, At: time.Now()}
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionSession, Event: &ev})
+	d.Nudge()
+	waitFor(t, func() bool { return probes.Load() > 0 })
+
+	cancel()
+	<-done
 }
