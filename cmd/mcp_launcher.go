@@ -1150,8 +1150,12 @@ const launcherPageHTML = `<!doctype html>
 <meta name="theme-color" content="#0b0d12">
 <title>corgi</title>
 <style>
-  :root{--bg:#0a0b0e;--card:#141519;--card2:#0f1013;--line:#22242b;--hair:#1a1c22;
-      --text:#eceef2;--dim:#8f94a3;--dim2:#63677a;--green:#6ee787;--amber:#ffa657;--red:#ff7b72;
+  /* One palette, read by everything below: dark like the trackers this page
+     sits next to, one accent, and lines you notice only when you look. */
+  :root{--bg:#08090a;--card:#101113;--card2:#16181b;--line:#212327;--hair:#1a1c1f;
+      --text:#eceef1;--fg:#eceef1;--dim:#8a8f98;--dim2:#5c6169;
+      --accent:#5e6ad2;--accent-soft:#171a2e;--accent-line:#33376b;
+      --green:#3fb950;--amber:#d29922;--red:#f85149;
       --sp1:.25rem;--sp2:.5rem;--sp3:.75rem;--sp4:1rem;--r:.5rem}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   /* Flex and grid beat the hidden attribute on specificity, and this page
@@ -1161,7 +1165,10 @@ const launcherPageHTML = `<!doctype html>
   button,a,summary,label,input,.chip,.ws,.top,.s{touch-action:manipulation}
   body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
       padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased}
-  header{padding:calc(1.2rem + env(safe-area-inset-top)) 1.2rem .3rem;max-width:34rem;margin:0 auto}
+  header{position:sticky;top:0;z-index:30;background:rgba(8,9,10,.88);backdrop-filter:blur(14px);
+      -webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);
+      padding:calc(.7rem + env(safe-area-inset-top)) 1.2rem 0}
+  header>*{max-width:34rem;margin-left:auto;margin-right:auto}
   .brand{display:flex;align-items:center;gap:.7rem}
   .brand .who{min-width:0;flex:1}
   .chip.refresh{flex:0 0 auto;width:2rem;height:2rem;padding:0;display:flex;align-items:center;
@@ -1169,13 +1176,39 @@ const launcherPageHTML = `<!doctype html>
   .chip.refresh:active{color:var(--text)}
   .chip.refresh.spin{animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .logo{width:2.6rem;height:2.6rem;border-radius:.9rem;background:linear-gradient(135deg,#1e2634,#131824);
-      border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.35rem;flex:0 0 auto}
-  h1{font-size:1.25rem;margin:0;letter-spacing:.01em}
+  .logo{width:1.9rem;height:1.9rem;border-radius:.6rem;background:var(--card2);
+      border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1rem;flex:0 0 auto}
+  h1{font-size:1rem;margin:0;letter-spacing:-.01em;font-weight:600}
   header small{display:block;color:var(--dim);font-size:.78rem;font-weight:400;margin-top:.1rem}
   header small .what{color:var(--dim);border-bottom:1px dotted var(--line-soft,#3a4152);cursor:pointer}
   .hostnote{color:var(--dim);font-size:.74rem;line-height:1.5;margin:.45rem 0 0;max-width:30rem}
-  main{padding:.4rem 1.2rem 2.2rem;max-width:34rem;margin:0 auto}
+  main{padding:.7rem 1.2rem 2.6rem;max-width:34rem;margin:0 auto}
+
+  /* Tabs. The page answers three questions and they are not equally urgent:
+     what wants me, what is running, what could run. One at a time. */
+  .tabs{display:flex;gap:.15rem;padding:.5rem 0 .45rem}
+  .tabs button{padding:.35rem .6rem;border-radius:.4rem;border:0;background:none;
+      color:var(--dim);font-size:.82rem;font-weight:500}
+  .tabs button[aria-selected=true]{color:var(--text);background:var(--card2)}
+  .tabs .n{margin-left:.35rem;font-size:.68rem;color:var(--dim2);background:#1e2024;
+      border-radius:1rem;padding:.05rem .35rem}
+  .tabs button[aria-selected=true] .n{color:var(--text)}
+  .tabs .n:empty{display:none}
+
+  /* A sheet, because twelve tracker columns do not fit in a row of buttons
+     on a phone and a dropdown on iOS is worse than either. */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;display:flex;align-items:flex-end}
+  .sheet{width:100%;background:var(--card);border-top-left-radius:.9rem;border-top-right-radius:.9rem;
+      border-top:1px solid var(--line);max-height:76vh;overflow:auto;
+      padding:.5rem 0 calc(.6rem + env(safe-area-inset-bottom))}
+  .grab{width:2.2rem;height:.25rem;border-radius:.2rem;background:#2a2d33;margin:.35rem auto .6rem}
+  .sheet h3{font-size:.68rem;letter-spacing:.07em;text-transform:uppercase;color:var(--dim2);
+      margin:.4rem 1rem .4rem;font-weight:600}
+  .opt{display:block;width:100%;text-align:left;padding:.8rem 1rem;background:none;border:0;
+      border-bottom:1px solid var(--hair);color:var(--text);font:inherit;font-size:.88rem}
+  .opt:last-child{border-bottom:0}
+  .opt:disabled{color:var(--dim2)}
+
   /* The session board: what every Claude on the machine is doing, the ones
      waiting on a person first. Hidden until tracking reports anything. */
   .board{margin:var(--sp2) 0 var(--sp3)}
@@ -1203,11 +1236,15 @@ const launcherPageHTML = `<!doctype html>
   .newchat{background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;padding:.55rem .7rem;margin:.3rem 0 .5rem}
   .newchat textarea{width:100%;box-sizing:border-box;font:inherit;font-size:.82rem;padding:.45rem .55rem;border-radius:.45rem;
       border:1px solid var(--line);background:var(--card);color:var(--fg);resize:vertical;min-height:2.6rem}
-  .newchat .nrow{display:flex;gap:.4rem;margin-top:.4rem;align-items:center}
+  /* Four pickers do not fit across a phone; let them wrap and keep the
+     button on its own end so it never ends up half a word wide. */
+  .newchat .nrow{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem;align-items:center}
+  .newchat .nrow select{flex:1 1 7rem;min-width:6.5rem;max-width:none}
+  .newchat .nrow button{margin-left:auto}
   .newchat select{font:inherit;font-size:.74rem;flex:1;min-width:0;padding:.3rem .4rem;border-radius:.45rem;border:1px solid var(--line);
       background:var(--card);color:var(--fg)}
-  .newchat button{font:inherit;font-size:.76rem;font-weight:600;padding:.34rem .8rem;border-radius:.45rem;border:1px solid var(--green);
-      background:var(--green);color:#0b0b0d;cursor:pointer;flex:0 0 auto}
+  .newchat button{font:inherit;font-size:.76rem;font-weight:500;padding:.34rem .8rem;border-radius:.45rem;border:1px solid var(--accent);
+      background:var(--accent);color:#fff;cursor:pointer;flex:0 0 auto}
   .newchat button:disabled{opacity:.5}
   .ev{background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;padding:.5rem .65rem;margin:.3rem 0}
   .ev .eref{font-weight:600;font-size:.82rem}
@@ -1215,21 +1252,25 @@ const launcherPageHTML = `<!doctype html>
   .ev .etitle{font-size:.78rem;opacity:.85;margin:.15rem 0 .4rem;overflow-wrap:anywhere}
   .ev .erow{display:flex;gap:.4rem;align-items:center}
   .ev a.eopen{font-size:.76rem;text-decoration:none;padding:.28rem .6rem;border-radius:.45rem;border:1px solid var(--line);color:inherit}
-  .ev button{font:inherit;font-size:.76rem;font-weight:600;padding:.3rem .7rem;border-radius:.45rem;
-    border:1px solid var(--green);background:transparent;color:var(--green)}
+  .ev button{font:inherit;font-size:.76rem;font-weight:500;padding:.3rem .7rem;border-radius:.45rem;
+    border:1px solid var(--line);background:transparent;color:var(--dim)}
   .ev button:disabled{opacity:.5}
+  /* One action leads; the rest are there when you want them. Four equally
+     loud buttons on a row is the same as none. */
+  .ev .erow button.primary{border-color:var(--accent);background:var(--accent);color:#fff;font-weight:500}
+  .ev .erow{flex-wrap:wrap}
   .evgroup{margin:.5rem 0 .2rem;display:flex;align-items:center;gap:.5rem}
   .evgroup .gname{font-size:.74rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;opacity:.65}
   .evgroup button{font:inherit;font-size:.74rem;font-weight:600;padding:.26rem .6rem;border-radius:.45rem;
-    border:1px solid var(--green);background:transparent;color:var(--green);margin-left:auto}
+    border:1px solid var(--accent);background:var(--accent);color:#fff;margin-left:auto}
   .evgroup button[hidden]{display:none}
-  .ev input[type=checkbox]{width:1rem;height:1rem;accent-color:var(--green);margin-right:.1rem}
+  .ev input[type=checkbox]{width:1rem;height:1rem;accent-color:var(--accent);margin-right:.1rem}
   .sess{flex-wrap:wrap}
   .sess .ssum{flex-basis:100%;color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem}
   .sess .sact{flex-basis:100%;display:flex;gap:.4rem;align-items:center;margin-top:.35rem}
   .sess .sact button{font:inherit;font-size:.74rem;font-weight:600;padding:.28rem .7rem;border-radius:.45rem;border:1px solid var(--line);
       background:var(--card);color:var(--fg);cursor:pointer}
-  .sess .sact button.ok{background:var(--green);border-color:var(--green);color:#0b0b0d}
+  .sess .sact button.ok{background:var(--accent);border-color:var(--accent);color:#fff}
   .sess .sact button.bad{color:var(--red);border-color:var(--red)}
   .sess .sact a{margin-left:auto;font-size:.74rem;color:var(--blue,#5B8DEF)}
   .ws{background:var(--card);border:1px solid var(--line);border-radius:.75rem;
@@ -1381,12 +1422,22 @@ const launcherPageHTML = `<!doctype html>
     <button class="chip refresh" id="refresh" aria-label="Refresh" title="Refresh">&#x21bb;</button>
   </div>
   <p id="hostnote" class="hostnote" hidden></p>
+  <div class="tabs" id="tabs" role="tablist">
+    <button role="tab" data-tab="inbox" aria-selected="true">Inbox<span class="n" id="n-inbox"></span></button>
+    <button role="tab" data-tab="sessions" aria-selected="false">Sessions<span class="n" id="n-sessions"></span></button>
+    <button role="tab" data-tab="stacks" aria-selected="false">Stacks<span class="n" id="n-stacks"></span></button>
+  </div>
 </header>
 <main>
-  <section id="newchat" class="board" hidden></section>
-  <section id="inbox" class="board" hidden></section>
-  <section id="board" class="board" hidden></section>
-  <div id="list" class="msg">Loading…</div>
+  <div data-pane="inbox">
+    <section id="inbox" class="board" hidden></section>
+    <section id="newchat" class="board" hidden></section>
+  </div>
+  <div data-pane="sessions" hidden>
+    <section id="board" class="board" hidden></section>
+  </div>
+  <div data-pane="stacks" hidden>
+    <div id="list" class="msg">Loading…</div>
   <details class="tips" id="tips" hidden>
     <summary><span>On the laptop</span><span class="tips-hint">setup commands</span></summary>
     <button class="tip" data-copy="/corgi-remote">
@@ -1450,9 +1501,35 @@ const launcherPageHTML = `<!doctype html>
   <p class="foot">
     <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
   </p>
+  </div>
 </main>
 <div class="toast" id="toast" hidden></div>
 <script>
+  // Tabs. The pane you left is the pane you come back to, because the phone
+  // is usually unlocked to check one thing.
+  function showTab(name) {
+    for (const b of document.querySelectorAll('#tabs button')) {
+      b.setAttribute('aria-selected', String(b.dataset.tab === name));
+    }
+    for (const p of document.querySelectorAll('[data-pane]')) {
+      p.hidden = p.dataset.pane !== name;
+    }
+    try { localStorage.setItem('corgi.tab', name); } catch {}
+  }
+  for (const b of document.querySelectorAll('#tabs button')) {
+    b.onclick = () => showTab(b.dataset.tab);
+  }
+  try {
+    const saved = localStorage.getItem('corgi.tab');
+    if (saved && document.querySelector('[data-pane="' + saved + '"]')) showTab(saved);
+  } catch {}
+
+  // A count only earns its place when it is not zero.
+  function tabCount(name, n) {
+    const el = document.getElementById('n-' + name);
+    if (el) el.textContent = n > 0 ? String(n) : '';
+  }
+
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   // The session URL is scanned from process output; only ever click through to
@@ -1701,6 +1778,7 @@ const launcherPageHTML = `<!doctype html>
       renderNewChat(j);
       loadInbox();
       const sessions = (j.sessions || []).filter(s => s.status !== 'gone');
+      tabCount('sessions', sessions.length);
       if (!sessions.length) { box.hidden = true; return; }
       box.innerHTML = '';
       renderAccounts(j.accounts, box);
@@ -1814,7 +1892,12 @@ const launcherPageHTML = `<!doctype html>
     // without this the chat lands wherever that editor window happened to
     // be — the wrong repo, under the wrong account.
     const ws = card.querySelector('.nws');
-    const ids = lastWorkspaces.map(w => w.id).filter(Boolean);
+    let ids = lastWorkspaces.map(w => w.id).filter(Boolean);
+    if (!ids.length) {
+      // The board arrives before the workspace list on a cold load; the
+      // sessions name their workspaces, which is enough to choose one.
+      ids = [...new Set((j.sessions || []).map(s => s.workspace || s.display).filter(Boolean))];
+    }
     fillSelect(ws, [['', 'window\u2019s folder'], ...ids.map(i => [i, i])], true);
     if (!ws.value) {
       try { const saved = localStorage.getItem('corgi.newchat.workspace'); if (saved && ids.includes(saved)) ws.value = saved; } catch {}
@@ -1864,16 +1947,66 @@ const launcherPageHTML = `<!doctype html>
 
   const EVENT_KIND = { 'issue.new': 'new issue', 'issue.comment': 'comment', 'pr.comment': 'PR comment', 'pr.review': 'PR review' };
 
+  // One change to one ticket. Every call here is something someone tapped.
+  async function ticket(ev, body) {
+    try {
+      const r = await fetch('/launch/ticket', { method: 'POST', headers: auth,
+        body: JSON.stringify(Object.assign({ key: ev.key }, body)) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error || 'that did not go through', true); return false; }
+      toast(j.done || 'done');
+      setTimeout(loadInbox, 600);
+      return true;
+    } catch { toast('no connection', true); return false; }
+  }
+
+  // The columns as a sheet: a phone has no room for twelve buttons in a row,
+  // and the list is the workspace's real board, not a guess.
+  function moveSheet(ev, columns) {
+    const scrim = document.createElement('div');
+    scrim.className = 'scrim';
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    const close = () => scrim.remove();
+    scrim.onclick = e => { if (e.target === scrim) close(); };
+    const grab = document.createElement('div'); grab.className = 'grab';
+    const h = document.createElement('h3');
+    h.textContent = 'Move ' + (ev.ref || ev.key) + ' to';
+    sheet.append(grab, h);
+    for (const name of columns) {
+      const b = document.createElement('button');
+      b.className = 'opt';
+      b.textContent = name;
+      b.onclick = async () => {
+        b.disabled = true;
+        if (await ticket(ev, { do: 'move', status: name })) close(); else b.disabled = false;
+      };
+      sheet.appendChild(b);
+    }
+    const mine = document.createElement('button');
+    mine.className = 'opt';
+    mine.textContent = 'Assign to me';
+    mine.onclick = async () => {
+      mine.disabled = true;
+      if (await ticket(ev, { do: 'assign' })) close(); else mine.disabled = false;
+    };
+    sheet.appendChild(mine);
+    scrim.appendChild(sheet);
+    document.body.appendChild(scrim);
+  }
+
   async function loadInbox() {
     const box = document.getElementById('inbox');
-    let events = [], fixes = [];
+    let events = [], fixes = [], boards = {};
     try {
       const r = await fetch('/launch/events', { headers: auth });
       if (!r.ok) { box.hidden = true; return; }
       const j = await r.json();
       events = j.events || [];
       fixes = j.fixes || [];
-    } catch { box.hidden = true; return; }
+      boards = j.boards || {};
+    } catch { box.hidden = true; tabCount('inbox', 0); return; }
+    tabCount('inbox', events.length);
     if (!events.length && !fixes.length) { box.hidden = true; return; }
 
     box.innerHTML = '';
@@ -1955,6 +2088,7 @@ const launcherPageHTML = `<!doctype html>
         }
         if (ev.actionable) {
           const go = document.createElement('button');
+          go.className = 'primary';
           go.textContent = 'Work on it';
           go.onclick = () => {
             go.disabled = true;
@@ -1962,6 +2096,20 @@ const launcherPageHTML = `<!doctype html>
           };
           row.appendChild(go);
         }
+        const board = boards[ev.workspace] || {};
+        if ((board.columns || []).length) {
+          const mv = document.createElement('button');
+          mv.textContent = 'Move…';
+          mv.onclick = () => moveSheet(ev, board.columns);
+          row.appendChild(mv);
+        }
+        const ig = document.createElement('button');
+        ig.textContent = 'Ignore';
+        ig.onclick = () => {
+          ig.disabled = true;
+          ticket(ev, { do: 'ignore' }).finally(() => { ig.disabled = false; });
+        };
+        row.appendChild(ig);
         if (row.children.length) card.appendChild(row);
         box.appendChild(card);
       }
@@ -2073,6 +2221,7 @@ const launcherPageHTML = `<!doctype html>
 
   function render(workspaces) {
     lastWorkspaces = workspaces;
+    tabCount('stacks', workspaces.length);
     if (!workspaces.length) {
       list.className = 'empty';
       list.innerHTML = '<h2>No repos yet</h2><p>On the laptop run <code>corgi agent scan ~/dev</code> ' +
@@ -2868,7 +3017,104 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		fixes = append(fixes, row)
 	}
-	writeLaunchJSON(w, map[string]any{"events": out, "fixes": fixes})
+	// The columns each workspace can move a ticket to, read from the cache
+	// so a menu on the phone draws without a round trip to the tracker.
+	boards := map[string]any{}
+	cache := watch.LoadBoardCache(dir)
+	seen := map[string]bool{}
+	for _, e := range out {
+		if e.Workspace == "" || seen[e.Workspace] {
+			continue
+		}
+		seen[e.Workspace] = true
+		if info := cache.Get(e.Workspace); info.Has() {
+			names := make([]string, 0, len(info.Statuses))
+			for _, st := range info.Statuses {
+				names = append(names, st.Name)
+			}
+			boards[e.Workspace] = map[string]any{"columns": names, "me": info.Me.Name}
+		}
+	}
+	writeLaunchJSON(w, map[string]any{"events": out, "fixes": fixes, "boards": boards})
+}
+
+// launchTicketHandler is the phone changing one ticket: move it to a column,
+// assign it, or drop it out of the inbox. Each is something someone tapped;
+// nothing here happens on a poll.
+func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {key, do, status} to change a ticket")
+		return
+	}
+	var req struct {
+		Key    string `json:"key"`
+		Do     string `json:"do"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	event, ok := watch.FindEvent(dir, strings.TrimSpace(req.Key))
+	if !ok {
+		writeLaunchError(w, http.StatusNotFound, "no such watch event")
+		return
+	}
+	// Ignoring is ours alone: it takes the row out of the inbox and stops the
+	// unattended mode picking it up, and writes nothing to anyone's tracker.
+	if strings.TrimSpace(req.Do) == "ignore" {
+		watch.LoadState(dir).MarkSeen(event.Key)
+		writeLaunchJSON(w, map[string]any{"done": "ignored " + firstNonEmptyString(event.Ref, event.Key)})
+		return
+	}
+	if event.Workspace == "" {
+		writeLaunchError(w, http.StatusBadRequest, "that event belongs to no workspace")
+		return
+	}
+	writer, _, err := watchWriter(dir, event.Workspace)
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	ref := strings.TrimSpace(event.Ref)
+	switch strings.TrimSpace(req.Do) {
+	case "move":
+		status := strings.TrimSpace(req.Status)
+		if status == "" {
+			writeLaunchError(w, http.StatusBadRequest, "name the column to move it to")
+			return
+		}
+		if err := writer.Move(ctx, ref, status); err != nil {
+			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status})
+	case "assign":
+		me := watch.LoadBoardCache(dir).Get(event.Workspace).Me
+		if me.ID == "" {
+			got, err := writer.Whoami(ctx)
+			if err != nil {
+				writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
+				return
+			}
+			me = got
+		}
+		if err := writer.Assign(ctx, ref, me.ID); err != nil {
+			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"done": ref + " is yours"})
+	default:
+		writeLaunchError(w, http.StatusBadRequest, "do is move, assign or ignore")
+	}
 }
 
 // launchWorkOnHandler hands one watch event to a real session: the same
