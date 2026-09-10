@@ -55,10 +55,16 @@ func telegramControlFrom(notifyURL, agentDir string) *telegramControl {
 }
 
 func (t *telegramControl) run(ctx context.Context) {
+	// A daemon that is already shutting down has nothing to say. Checked
+	// before the greeting, which is a network call: without this, stopping
+	// the daemon in its first moment still posts into the chat.
+	if ctx.Err() != nil {
+		return
+	}
 	// Once per chat, not on every daemon restart: the greeting is for a
 	// chat that just got wired up, and a restart is not news.
 	if t.firstTimeInChat() {
-		t.send("corgi is listening here. /help for what it can do.")
+		t.sendCtx(ctx, "corgi is listening here. /help for what it can do.")
 	}
 	for {
 		if ctx.Err() != nil {
@@ -382,14 +388,18 @@ func matchesAlias(ws workspace.Workspace, want string) bool {
 	return false
 }
 
-func (t *telegramControl) send(text string) {
+func (t *telegramControl) send(text string) { t.sendCtx(context.Background(), text) }
+
+// sendCtx posts one message. It takes a context so a daemon shutting down
+// does not sit in a ten-second POST nobody is waiting for any more.
+func (t *telegramControl) sendCtx(ctx context.Context, text string) {
 	payload, err := json.Marshal(map[string]any{
 		"chat_id": t.chatID, "text": text, "disable_web_page_preview": true,
 	})
 	if err != nil {
 		return
 	}
-	req, err := http.NewRequest(http.MethodPost,
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIBase, t.token),
 		strings.NewReader(string(payload)))
 	if err != nil {
@@ -403,13 +413,22 @@ func (t *telegramControl) send(text string) {
 	_ = resp.Body.Close()
 }
 
-func startTelegramControl(ctx context.Context, notifyURL, agentDir string) {
+// startTelegramControl runs the chat loop until ctx ends. The returned
+// channel closes when the loop has actually stopped, so shutdown can wait
+// for it instead of leaving a goroutine mid-request.
+func startTelegramControl(ctx context.Context, notifyURL, agentDir string) <-chan struct{} {
+	done := make(chan struct{})
 	control := telegramControlFrom(notifyURL, agentDir)
 	if control == nil {
-		return
+		close(done)
+		return done
 	}
 	utils.Info("📨 telegram control on — /help in the chat")
-	go control.run(ctx)
+	go func() {
+		defer close(done)
+		control.run(ctx)
+	}()
+	return done
 }
 
 // firstTimeInChat reports whether this chat has been greeted, and marks it.

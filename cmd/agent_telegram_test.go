@@ -474,11 +474,39 @@ func TestTelegramFirstTimeInChat(t *testing.T) {
 	}
 }
 
-func TestStartTelegramControl(t *testing.T) {
+// A cancelled context must stop the control loop before it greets, because
+// the greeting is a network call. The test used to assert nothing and leak
+// the goroutine that made it, which is what failed a release on CI.
+func TestStartTelegramControlStopsBeforeItSaysAnything(t *testing.T) {
 	c, dir := telegramUnderTest(t)
-	c.firstTimeInChat() // greeted, so the goroutine has nothing to send
+	c.firstTimeInChat() // greeted, so this chat has nothing to send anyway
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	startTelegramControl(ctx, "https://ntfy.sh/topic", dir)
-	startTelegramControl(ctx, "https://api.telegram.org/bot1:x/sendMessage?chat_id=99", dir)
+
+	// Not a telegram URL: no control at all, and a channel already closed so
+	// a caller waiting on it is never held up.
+	notTelegram := startTelegramControl(ctx, "https://ntfy.sh/topic", dir)
+	select {
+	case <-notTelegram:
+	case <-time.After(time.Second):
+		t.Fatal("a URL with no chat behind it must not leave the caller waiting")
+	}
+
+	// A chat nobody has greeted yet, so the marker can only appear if the
+	// cancelled loop went ahead and greeted it.
+	done := startTelegramControl(ctx, "https://api.telegram.org/bot1:x/sendMessage?chat_id=100", dir)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the chat loop must be joinable: a cancelled context has to end it")
+	}
+
+	marker := filepath.Join(dir, "telegram", "greeted-100")
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(marker); err == nil {
+			t.Fatal("a cancelled daemon greeted the chat anyway — that is a network call on the way out")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
