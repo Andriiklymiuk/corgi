@@ -1,11 +1,14 @@
 package utils
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // SkipCorgiServicesMigration lets `corgi migrate` do the move itself.
@@ -111,19 +114,40 @@ func repairWorktrees(target string) {
 }
 
 // retargetRunState rewrites the absolute paths the last run recorded, so a
-// log file the board still points at is found where the folder now is.
+// log file the board still points at is found where the folder now is. The
+// state is parsed rather than string-replaced: a separator is escaped inside
+// JSON, so a raw replace would silently miss every Windows path.
 func retargetRunState(legacy, target string) {
+	prefix := legacy + string(filepath.Separator)
+	move := func(path string) string {
+		if strings.HasPrefix(path, prefix) {
+			return filepath.Join(target, strings.TrimPrefix(path, prefix))
+		}
+		return path
+	}
 	for _, name := range []string{".state.json", ".state.last.json"} {
 		path := filepath.Join(target, name)
-		data, err := os.ReadFile(path)
+		state, err := ReadRunState(path)
 		if err != nil {
 			continue
 		}
-		moved := strings.ReplaceAll(string(data), legacy+string(filepath.Separator), target+string(filepath.Separator))
-		if moved == string(data) {
+		changed := false
+		for _, rows := range [][]RunStateEntry{state.Services, state.DBServices} {
+			for i := range rows {
+				if moved := move(rows[i].LogFile); moved != rows[i].LogFile {
+					rows[i].LogFile = moved
+					changed = true
+				}
+			}
+		}
+		if !changed {
 			continue
 		}
-		_ = os.WriteFile(path, []byte(moved), 0o644)
+		data, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			continue
+		}
+		_ = os.WriteFile(path, data, 0o644)
 	}
 }
 
@@ -136,40 +160,57 @@ func runningIn(corgiServicesPath string) []string {
 		return nil
 	}
 	var names []string
-	for _, e := range state.Services {
-		if e.Status != "running" {
-			continue
-		}
-		// pid==0 is container-managed; its container is the truth.
-		if e.PID == 0 {
-			if containerRunning(e.Container) {
-				names = append(names, e.Name)
+	var ask []string
+	byContainer := map[string]string{}
+	for _, rows := range [][]RunStateEntry{state.Services, state.DBServices} {
+		for _, e := range rows {
+			if e.Status != "running" {
+				continue
 			}
-			continue
-		}
-		if PidAlive(e.PID, e.Command) {
-			names = append(names, e.Name)
+			// A service with a pid of its own is probed by pid; anything else
+			// is container-managed, and its container is the truth.
+			if e.PID > 0 {
+				if PidAlive(e.PID, e.Command) {
+					names = append(names, e.Name)
+				}
+				continue
+			}
+			if c := strings.TrimSpace(e.Container); c != "" {
+				ask = append(ask, c)
+				byContainer[c] = e.Name
+			}
 		}
 	}
-	for _, e := range state.DBServices {
-		if e.Status == "running" && containerRunning(e.Container) {
-			names = append(names, e.Name)
-		}
+	for _, c := range runningContainers(ask) {
+		names = append(names, byContainer[c])
 	}
 	return names
 }
 
-// containerRunning asks docker, and says no when docker cannot answer: a
-// stopped daemon holds nothing that a moved folder could break.
-func containerRunning(container string) bool {
-	if strings.TrimSpace(container) == "" {
-		return false
+// runningContainers is the subset docker says is up, asked in one call with a
+// deadline: this runs before every command in a workspace that has not moved
+// yet, and a docker daemon that is starting can block for a long time. A
+// docker that cannot answer holds nothing a moved folder could break.
+func runningContainers(containers []string) []string {
+	if len(containers) == 0 {
+		return nil
 	}
-	out, err := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", container).Output()
-	if err != nil {
-		return false
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	args := append([]string{"inspect", "-f", "{{.Name}} {{.State.Running}}"}, containers...)
+	out, err := exec.CommandContext(ctx, "docker", args...).Output()
+	if err != nil && len(out) == 0 {
+		return nil
 	}
-	return strings.TrimSpace(string(out)) == "true"
+	var up []string
+	for _, line := range strings.Split(string(out), "\n") {
+		name, state, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok || state != "true" {
+			continue
+		}
+		up = append(up, strings.TrimPrefix(name, "/"))
+	}
+	return up
 }
 
 func retargetGitignore(composeDir string) {

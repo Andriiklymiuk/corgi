@@ -10,6 +10,7 @@ import (
 )
 
 func TestMigrateCommandMovesTheFolderAndSaysSo(t *testing.T) {
+	restoreMigrateFlags(t)
 	dir := chdirToCompose(t)
 	legacy := filepath.Join(dir, "corgi_services")
 	if err := os.MkdirAll(filepath.Join(legacy, ".logs", "api"), 0o755); err != nil {
@@ -49,10 +50,10 @@ func TestMigrateCommandMovesTheFolderAndSaysSo(t *testing.T) {
 }
 
 func TestMigrateCommandLeavesTheAutoMigrationAlone(t *testing.T) {
+	restoreMigrateFlags(t)
 	dir := chdirToCompose(t)
 	os.MkdirAll(filepath.Join(dir, "corgi_services"), 0o755)
 	migrateDryRun = true
-	t.Cleanup(func() { migrateDryRun = false })
 
 	captureStdout(t, func() { runRoot(t, "migrate", "--dry-run") })
 	if _, err := os.Stat(filepath.Join(dir, "corgi_services")); err != nil {
@@ -61,7 +62,14 @@ func TestMigrateCommandLeavesTheAutoMigrationAlone(t *testing.T) {
 	if !utils.SkipCorgiServicesMigration {
 		t.Error("the command should have taken the move into its own hands")
 	}
-	utils.SkipCorgiServicesMigration = false
+}
+
+// The migrate command turns the automatic move off for its own process. In a
+// test binary that process is shared, so every other cmd test would inherit it.
+func restoreMigrateFlags(t *testing.T) {
+	t.Helper()
+	dryRun, skip := migrateDryRun, utils.SkipCorgiServicesMigration
+	t.Cleanup(func() { migrateDryRun, utils.SkipCorgiServicesMigration = dryRun, skip })
 }
 
 func TestServicesInSitsBesideDbServices(t *testing.T) {
@@ -75,6 +83,7 @@ func TestServicesInSitsBesideDbServices(t *testing.T) {
 }
 
 func TestMigrateCommandReportsWhyItRefused(t *testing.T) {
+	restoreMigrateFlags(t)
 	dir := chdirToCompose(t)
 	legacy := filepath.Join(dir, "corgi_services")
 	os.MkdirAll(legacy, 0o755)

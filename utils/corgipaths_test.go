@@ -135,6 +135,44 @@ func TestMigrateIgnoresARunningRowWhoseProcessIsGone(t *testing.T) {
 	}
 }
 
+// A separator is escaped inside JSON, so rewriting the saved paths as raw
+// text silently misses every Windows one. Assert on the parsed state.
+func TestMigrateRewritesLogPathsThroughTheParsedState(t *testing.T) {
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "corgi_services")
+	os.MkdirAll(filepath.Join(legacy, ".logs", "api"), 0o755)
+	logFile := filepath.Join(legacy, ".logs", "api", "boot.log")
+	os.WriteFile(logFile, []byte("up"), 0o644)
+
+	elsewhere := filepath.Join(dir, "somewhere-else.log")
+	state, _ := json.Marshal(RunState{
+		Services:   []RunStateEntry{{Name: "api", Status: "stopped", LogFile: logFile}},
+		DBServices: []RunStateEntry{{Name: "pg", Status: "stopped", LogFile: elsewhere}},
+	})
+	for _, name := range []string{".state.json", ".state.last.json"} {
+		os.WriteFile(filepath.Join(legacy, name), state, 0o600)
+	}
+
+	if moved, err := MigrateCorgiServices(dir); err != nil || !moved {
+		t.Fatalf("migrate = %v, %v", moved, err)
+	}
+
+	target := filepath.Join(dir, ".corgi", "corgi_services")
+	want := filepath.Join(target, ".logs", "api", "boot.log")
+	for _, name := range []string{".state.json", ".state.last.json"} {
+		after, err := ReadRunState(filepath.Join(target, name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if after.Services[0].LogFile != want {
+			t.Errorf("%s: logFile = %q, want %q", name, after.Services[0].LogFile, want)
+		}
+		if after.DBServices[0].LogFile != elsewhere {
+			t.Errorf("%s: a path outside the folder must be left alone, got %q", name, after.DBServices[0].LogFile)
+		}
+	}
+}
+
 // deadPID is a pid nothing owns: claimed, then reaped.
 func deadPID(t *testing.T) int {
 	t.Helper()
