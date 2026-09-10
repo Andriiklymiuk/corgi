@@ -103,17 +103,19 @@ still bind to `localhost` or front it with an authenticated proxy.
 |------|-------------|---------|-------|
 | `corgi_validate` | `{composePath?}` | `{ok, errors[], warnings[]}` | `utils.ValidateCompose` |
 | `corgi_plan` | `{composePath?, profile?}` | dry-run plan (`order`, `databases`, `services`, `warnings`) | `computeDryRunPlan` |
-| `corgi_status` | `{composePath?}` | `[{label, port, kind, url, healthy, detail}]` | `collectStatusRows` + `probeAll` |
-| `corgi_env` | `{composePath?}` | `{service: {KEY: {value, source}}}` | `utils.ResolveAllEnv` |
+| `corgi_status` | `{composePath?, service?, unhealthyOnly?}` | `[{label, port, kind, url, healthy, detail}]` — `service` picks one target, `unhealthyOnly` drops the healthy ones; probe results are reused for 1s | `collectStatusRows` + `probeAll` |
+| `corgi_env` | `{composePath?, service?, key?}` | `{service: {KEY: {value, source}}}` — `service` = one service uncapped, `key` = one var across services; with neither, each service is capped at 40 vars plus a `_truncated` marker entry | `utils.ResolveAllEnv` |
 | `corgi_ps` | `{composePath?}` | `[{name, kind, port, status, url, startedAt}]` — `status` is process/container state, not health | `buildPsRows` |
 | `corgi_up` | `{composePath?, profile?, seed?, serviceBranch?, serviceDir?}` | run-state (`services[]`, `dbServices[]`) — **always detached** | run prelude + `runDetached` machinery |
 | `corgi_down` | `{composePath?}` | `{stopped[], failed[]}` | stop machinery (`stopProcessGroup`) |
-| `corgi_logs` | `{composePath?, service, lines?}` | `{service, lines[]}` | newest captured log run |
+| `corgi_logs` | `{composePath?, service, lines?, grep?, since?, errorsOnly?}` | `{service, lines[], truncated}` — filters run before the tail (`grep` regexp or literal, `since` = `10m` or RFC3339, `errorsOnly` = the `corgi logs --json` level heuristic) | newest captured log run, same matcher as `corgi logs --grep/--since` |
 | `corgi_exec` | `{composePath?, service, command, ensureDeps?, serviceBranch?, serviceDir?}` | `{exitCode, output, truncated, durationMs}` | `RunServiceCommandExitCode` (output captured) |
-| `corgi_test` | `{composePath?, service?, profile?, ensureDeps?, serviceBranch?, serviceDir?}` | `{services[], passed}` | `runTests` (does not start db/services) |
+| `corgi_test` | `{composePath?, service?, profile?, ensureDeps?, changed?, base?, e2e?, serviceBranch?, serviceDir?}` | `{services[], passed, note?}` — `changed` keeps only repos that differ from `base` (default `main`), `e2e` runs the compose `e2e:` block with output captured in `message` | `runTests` / e2e suite (does not start db/services) |
 | `corgi_doctor` | `{composePath?}` | `{ok, checks[]}` | `buildDoctorResult` (required tools, Docker, ports) |
 | `corgi_restart` | `{composePath?, profile?}` | run-state — **always detached** | `corgi_down` then `corgi_up` |
 | `corgi_db_query` | `{composePath?, service, query}` | `{service, output, truncated}` | `utils.ExecDBQueryCapture` (non-interactive) |
+| `corgi_db_snapshot` | `{composePath?, service?, name?, force?}` | `{service, name, archive, sizeBytes, pgVersionMajor, image, arch}` | `utils.RunSnapshot` — postgres-family only, same as `corgi db snapshot` |
+| `corgi_db_restore` | `{composePath?, name, service?, force?}` | `{service, archive}` — **wipes the data volume**, no prompt | `utils.RunRestore`, same as `corgi db restore --yes` |
 | `corgi_schema` | `{}` | the JSON Schema (draft-07) as text | `utils.ComposeJSONSchema` |
 | `corgi_context` | `{composePath?, noGit?}` | topology + status + per-repo git state + tier/profiles + validation | `buildContextReport` |
 | `corgi_why` | `{composePath?, service, logLines?}` | `{verdict, detail, dependencies[], port, lastExitCode, env, logTail[], nextStep}` | `diagnoseService` |
@@ -129,6 +131,17 @@ rather than prose. `corgi_wait_for_log` blocks on purpose: use it instead of pol
 `corgi_logs`. `corgi_checkpoint` / `corgi_restore` make a cross-repo change
 reversible; the restore captures whatever is dirty first and names that safety
 checkpoint in its result.
+
+`corgi_db_snapshot` before a mutating `corgi_db_query` makes it reversible with
+`corgi_db_restore`. Both keep the CLI's rule and answer `E_ALREADY_RUNNING`
+while a detached run is supervising service processes (the snapshot stops the
+db container for a moment); a stack with only its databases up is fine.
+
+The cheap way to read a stack: `corgi_status` with `unhealthyOnly`, `corgi_logs`
+with `errorsOnly` or `grep`, `corgi_env` with `service` or `key`, `corgi_test`
+with `changed`. Each call reuses the parsed compose (invalidated when
+`corgi-compose.yml` or its sibling `.env` changes on disk) and the last status
+sweep for one second, so polling costs one probe pass per second at most.
 
 `corgi_up` is **always detached**: it brings databases up, generates env, then
 spawns each service as a detached process group and writes
