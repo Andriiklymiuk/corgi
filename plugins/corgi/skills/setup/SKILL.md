@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Use when the user wants corgi set up end to end on this machine — "set up corgi for me", "setup corgi", "install corgi and everything", "make corgi work here", "I just installed corgi, what now", "get corgi agent running", "run corgi agent and give me the link", "connect my phone / Telegram / menu bar / Stream Deck", "connect Jira / Linear / GitHub / GitLab to corgi", "watch my tickets and PRs", "onboard me to corgi", "corgi onboarding". Installs the CLI, the VS Code extension and corgi-bar, registers the workspace, starts the daemon at login with a tunnel and the pairing QR, wires notifications, session tracking and the tracker watch, and hands over the link. Does every step a program can do and prints the short list of steps only a person can (permission dialogs, BotFather, browser logins, scanning the QR). NOT for authoring corgi-compose.yml (corgi skill, or /corgi-new) or running the stack (run skill).
+description: Use when the user wants corgi set up end to end: "set up corgi for me", "I just installed corgi, what now", "get corgi agent running", "connect my phone, Telegram, menu bar", "connect Jira, Linear, GitHub to corgi", "onboard me to corgi". Runs every step a program can; lists the manual clicks. NOT for authoring compose or running the stack.
 ---
 
 # Set corgi up, end to end

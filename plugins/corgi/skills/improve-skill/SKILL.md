@@ -1,6 +1,6 @@
 ---
 name: improve-skill
-description: Use when the user wants to refine OR create an agent skill from what happened this conversation — "improve my <X> skill", "update the skill so next time it does Y", "the skill should've caught Z", "fix the stories/review/debug skill", "make a skill for <workflow we just did>", or hands you a SKILL.md / skill folder to sharpen. Lived failure or friction (or a workflow you just drove) in this session is the evidence. If the path points at a skill that does NOT exist yet, it SCAFFOLDS a new one there from the same evidence (a big or discipline-enforcing skill defers to superpowers:writing-skills). NOT for corgi-compose (corgi skill) or normal code edits.
+description: Use when the user wants to refine or create an agent skill from this conversation: "improve my <X> skill", "the skill should've caught Z", "fix the stories skill", "make a skill for <workflow we just did>". Friction in this session is the evidence; a missing path scaffolds a new skill. NOT for corgi-compose (corgi skill) or normal code edits.
 ---
 
 # Improve or scaffold a skill
