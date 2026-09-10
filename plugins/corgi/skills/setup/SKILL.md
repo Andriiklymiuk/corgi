@@ -219,8 +219,31 @@ and prints the gate that stopped it. Nothing runs:
 corgi agent watch test issue.new --ref <KEY>-123
 ```
 
-`--action fix` runs unattended only after `corgi agent init
---dangerously-skip-permissions`; say that before enabling it.
+**Unattended.** `corgi agent watch enable --auto` is `--action fix --prs
+--comments`: it works on what arrives instead of only telling you. Say what
+that means before turning it on — it opens draft pull requests on their real
+repositories without being asked:
+
+```bash
+corgi agent watch enable --auto --quiet 18:00-09:00
+```
+
+Draft PRs only, never a merge. One run at a time per ticket, nothing done
+twice (an event key is handled once across polls and webhooks), at most
+3/hour and 10/day, and nothing above 95% of a usage window. `--quiet
+HH:MM-HH:MM` closes a window completely: no fix starts **and nothing
+buzzes** — what arrived is recorded, shows in the inbox, and is delivered as
+one summary when the window opens. A run the daemon was killed in the middle
+of is closed on the next start and its event offered again, so a reboot
+loses nothing and repeats nothing.
+
+What it did outlives the notification: `corgi agent watch` lists the last
+fixes with their pull requests, and so do the phone ("worked on for you")
+and the VS Code status bar.
+
+`--action fix` (and so `--auto`) runs unattended only after `corgi agent init
+--dangerously-skip-permissions`; say that before enabling it. Suggest quiet
+hours at the same time — an unattended agent with no window acts at 3am.
 
 **Webhooks** (instant instead of every three minutes): `corgi agent watch
 hooks` prints one URL per service and a shared secret. A named tunnel

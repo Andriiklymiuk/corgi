@@ -25,6 +25,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	flagTunnelName     = "tunnel-name"
+	flagTunnelHostname = "tunnel-hostname"
+)
+
 // defaultMCPAddr is where `corgi agent up` serves MCP when no --http is given,
 // so nobody has to remember a port.
 const defaultMCPAddr = "127.0.0.1:8765"
@@ -282,8 +287,8 @@ func upSettingsFromFlags(cmd *cobra.Command) upSettings {
 	var s upSettings
 	s.HTTP, _ = cmd.Flags().GetString("http")
 	s.Provider, _ = cmd.Flags().GetString("provider")
-	s.TunnelName, _ = cmd.Flags().GetString("tunnel-name")
-	s.TunnelHostname, _ = cmd.Flags().GetString("tunnel-hostname")
+	s.TunnelName, _ = cmd.Flags().GetString(flagTunnelName)
+	s.TunnelHostname, _ = cmd.Flags().GetString(flagTunnelHostname)
 	return s
 }
 
@@ -305,8 +310,8 @@ func mergeUpSettings(cur upSettings, changed func(string) bool, saved upSettings
 	}
 	pick("http", &cur.HTTP, saved.HTTP)
 	pick("provider", &cur.Provider, saved.Provider)
-	pick("tunnel-name", &cur.TunnelName, saved.TunnelName)
-	pick("tunnel-hostname", &cur.TunnelHostname, saved.TunnelHostname)
+	pick(flagTunnelName, &cur.TunnelName, saved.TunnelName)
+	pick(flagTunnelHostname, &cur.TunnelHostname, saved.TunnelHostname)
 	return cur, strings.Join(reused, " ")
 }
 
@@ -674,7 +679,7 @@ func lanLauncherURL(addr, code string) string {
 	if ip == "" {
 		return ""
 	}
-	base := "http://" + net.JoinHostPort(ip, port)
+	base := "http://" + net.JoinHostPort(ip, port) // NOSONAR — a LAN address on your own Wi-Fi, no certificate exists for it
 	out := "  🏠 on the same Wi-Fi, skip the tunnel entirely:\n"
 	if code != "" {
 		out += "    pair:     " + base + "/pair#" + code + "\n"
@@ -867,8 +872,8 @@ func readAgentPidFile(path string) (int, bool) {
 func addAgentUpFlags(c *cobra.Command) {
 	c.Flags().String("http", defaultMCPAddr, "Local MCP address. Use 0.0.0.0:8765 to also serve phones on the same Wi-Fi, which needs no tunnel at all")
 	c.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
-	c.Flags().String("tunnel-name", "", "cloudflared named-tunnel name — a stable public URL you can bookmark, and a phone that stays paired (needs a one-time `cloudflared tunnel create` and --tunnel-hostname; see docs/agent.md)")
-	c.Flags().String("tunnel-hostname", "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass \"\" to go back to a quick tunnel")
+	c.Flags().String(flagTunnelName, "", "cloudflared named-tunnel name — a stable public URL you can bookmark, and a phone that stays paired (needs a one-time `cloudflared tunnel create` and --tunnel-hostname; see docs/agent.md)")
+	c.Flags().String(flagTunnelHostname, "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass \"\" to go back to a quick tunnel")
 	c.Flags().Bool(atLoginFlag, false, "Also start corgi agent at login, so the daemon, this endpoint and this tunnel come back after a reboot (--at-login=false turns it off again)")
 	c.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
 }
