@@ -5,7 +5,7 @@ description: Use when the user wants a code review of EXISTING pull/merge reques
 
 # Corgi review
 
-Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR — all behind a preview gate before anything goes public. Services, dirs, and forges resolve from `corgi-compose.yml`.
+Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR. Someone else's PR is posted to without asking; your own is fixed and pushed instead. Services, dirs, and forges resolve from `corgi-compose.yml`.
 
 Read `../_shared/conventions.md` first.
 
@@ -419,7 +419,24 @@ duplicate comment.
 Nits skip the blocker-verify pass (lower stakes) but still get pruned against
 existing discussion.
 
-## Phase 4 — Preview + confirm (the gate)
+## Phase 4 — Preview, then act
+
+**Authorship decides what happens; you never ask "post or not".** Resolve the
+PR/MR author against the current forge user (`gh api user -q .login` /
+`glab api user -q .username`; author from P1's `gh pr view --json author` /
+`glab mr view`) and act:
+
+| whose PR | what you do |
+|---|---|
+| someone else's | print the preview, then **post** it. No question, no "shall I?", no waiting. |
+| your own | apply the valid findings on its branch and push (Fix path below). No comment on your own work. |
+| a mix in one batch | post on theirs, fix-and-push yours. Still no per-PR prompt. |
+| the current user cannot be resolved, or the intent is unclear | one prompt for the whole set: post / fix / edit / cancel |
+
+The preview is what you print on the way to acting, not a yes/no question. The
+only overrides are the user's own words in this conversation: "don't post",
+"review only", "just comment on mine". A user who pasted someone else's PR and
+asked for a review has already asked for the review to be posted.
 
 Print to terminal, per PR in the set:
 
@@ -455,35 +472,28 @@ options ("this is what's failing the pipeline: …") and let the team assign
 severity; a public "blocking" tag from a reviewer-bot reads as a verdict, not
 a review.
 
-**Route by authorship — don't ask "post or not" every time.** Resolve the PR/MR author
-vs the current forge user (`gh api user -q .login` / `glab api user -q .username`; author
-from P1's `gh pr view --json author` / `glab mr view`). Authorship sets the default
-action; the preview above is what you _show_, not a yes/no question.
-
-- **Your own PR/MR** → **fix, don't post.** Apply the valid findings on its branch and
-  push (Fix path below); no summary comment, no inline suggestions on your own work.
-  Don't ask. (Override only if the user explicitly says "just comment on mine".)
-- **Someone else's PR/MR** → **post.** The summary + inline suggestions are the
-  deliverable. Show the preview, then post — don't ask a separate "should I post?".
-  (Override only if the user said review-only / don't post.)
-- **Mixed authorship in one batch** (some yours, some not) → apply-and-push yours, post
-  on the rest; still no per-PR prompt.
-- **Genuinely ambiguous** (can't resolve the current user, or intent unclear) → one
-  prompt for the set: **post** / **fix** (own) / **edit** / **cancel**.
-
-*Edit* (offered, not required) = interactive pruning — present each finding; user keeps,
-drops, or rewrites it; re-preview before proceeding. Not every finding has to go up. When
-a PR already has a corgi summary from a prior run, **update the existing summary** rather
-than post a new one (default). Zero findings → just post the clean summary (or, on your
-own PR, say so and stop).
+*Edit* is something the user can ask for after seeing the preview, never
+something you offer as a question first: present each finding, they keep, drop
+or rewrite it, re-preview, then post. When a PR already has a corgi summary from
+a prior run, **update the existing summary** rather than post a new one. Zero
+findings → post the clean summary (or, on your own PR, say so and stop).
 
 *Fix path* (own PR — you can push): take Mode B's apply path on the **in-hand** findings
 (checkout the PR's own branch, minimum-diff fix each valid one, re-gate, push). Don't
 post-then-address; don't re-read threads — findings already in hand. Pushed-back finding
 → skip, note why.
 
-- The preview still prints (you see what will post / what you'll fix) — but the
-  **decision is authorship, not a recurring question.** `--yes` skips even the preview.
+`--yes` skips printing the preview too. Nothing else changes: the action was
+never waiting on an answer.
+
+**Red flags — you are about to get this wrong:**
+
+| thought | reality |
+|---|---|
+| "It is someone else's repo, I should check first" | Their repo is exactly the case that posts. That is what a review is. |
+| "Posting is public, so it needs confirmation" | The user asked for a review of a PR they linked. That was the confirmation. |
+| "I will show the findings and let them decide" | Print the preview and post in the same turn. |
+| "I will ask once, just to be safe" | Asking once per PR is the behaviour this section exists to stop. |
 
 ## Phase 5 — Post
 
