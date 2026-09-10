@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
@@ -84,6 +86,33 @@ func TestLoadWatchSpecsFromConfigAndTokens(t *testing.T) {
 	}
 }
 
+func TestLoadWatchSpecsSkipsDeadSourcesAndCarriesDefaults(t *testing.T) {
+	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true, Action: "fix", MaxFixesPerDay: 4})
+	user, _ := config.LoadUser(agentUserConfigPath(dir))
+	user.Defaults.Watch = &config.WatchConfig{MaxFixesPerHour: 5, MaxFixesPerDay: 20, Quiet: "22:00-06:00"}
+	if err := writeUserConfig(agentUserConfigPath(dir), user); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LINEAR_API_KEY", "lin_x")
+	t.Setenv("GITHUB_TOKEN", "gh_x")
+	t.Setenv("GITLAB_TOKEN", "gl_x")
+	t.Setenv("JIRA_API_TOKEN", "")
+	specs, err := loadWatchSpecs(dir)
+	if err != nil || len(specs) != 1 {
+		t.Fatalf("%v %+v", err, specs)
+	}
+	s := specs[0]
+	if len(s.Sources) != 1 || s.Sources[0].Name() != "linear" || strings.Join(s.Skipped, ",") != "github,gitlab" {
+		t.Fatalf("sources %v skipped %v", s.Sources, s.Skipped)
+	}
+	if s.MaxFixesPerHour != 5 || s.MaxFixesPerDay != 4 || s.Quiet != "22:00-06:00" {
+		t.Fatalf("caps %+v", s)
+	}
+	if h, d := s.FixCaps(); h != 5 || d != 4 {
+		t.Fatalf("caps %d %d", h, d)
+	}
+}
+
 func TestWatchEnableDisableWriteTheConfig(t *testing.T) {
 	dir, ws := watchFixture(t, nil)
 	wd, _ := os.Getwd()
@@ -98,9 +127,15 @@ func TestWatchEnableDisableWriteTheConfig(t *testing.T) {
 	_ = f.Set("action", "fix")
 	_ = f.Set("interval", "2m")
 	_ = f.Set("project", "ABC")
+	_ = f.Set("max-per-hour", "2")
+	_ = f.Set("quiet", "23:00-07:00")
 	defer func() {
-		for _, name := range []string{"labels", "prs", "action", "interval", "project"} {
+		for _, name := range []string{"labels", "prs", "action", "interval", "project", "quiet"} {
 			_ = f.Set(name, "")
+			f.Lookup(name).Changed = false
+		}
+		for _, name := range []string{"max-per-hour", "max-per-day"} {
+			_ = f.Set(name, "0")
 			f.Lookup(name).Changed = false
 		}
 	}()
@@ -109,13 +144,16 @@ func TestWatchEnableDisableWriteTheConfig(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if !strings.Contains(out, "watching acme-stack") || !strings.Contains(out, "labels bug,defect") || !strings.Contains(out, "→ fix") {
+	if !strings.Contains(out, "watching acme-stack") || !strings.Contains(out, "labels bug,defect") || !strings.Contains(out, "→ fix, at most 2/h 10/day, quiet 23:00-07:00") {
 		t.Fatalf("enable said: %s", out)
 	}
 	user, _ := config.LoadUser(agentUserConfigPath(dir))
 	wc := user.Workspaces["acme-stack"].Watch
 	if wc == nil || !wc.Enabled || wc.Interval != "2m" || wc.Project != "ABC" || !wc.PRs || len(wc.Labels) != 2 {
 		t.Fatalf("config %+v", wc)
+	}
+	if wc.MaxFixesPerHour != 2 || wc.MaxFixesPerDay != 0 || wc.Quiet != "23:00-07:00" {
+		t.Fatalf("caps %+v", wc)
 	}
 	_ = f.Set("action", "merge")
 	if err := agentWatchEnableCmd.RunE(agentWatchEnableCmd, nil); err == nil {
@@ -126,6 +164,17 @@ func TestWatchEnableDisableWriteTheConfig(t *testing.T) {
 	if err := agentWatchEnableCmd.RunE(agentWatchEnableCmd, nil); err == nil {
 		t.Fatal("a bad interval must be refused")
 	}
+	_ = f.Set("interval", "")
+	_ = f.Set("quiet", "bedtime")
+	if err := agentWatchEnableCmd.RunE(agentWatchEnableCmd, nil); err == nil {
+		t.Fatal("bad quiet hours must be refused")
+	}
+	_ = f.Set("quiet", "")
+	_ = f.Set("max-per-day", "0")
+	if err := agentWatchEnableCmd.RunE(agentWatchEnableCmd, nil); err == nil {
+		t.Fatal("a zero cap must be refused")
+	}
+	_ = f.Set("max-per-day", "1")
 
 	if err := agentWatchDisableCmd.RunE(agentWatchDisableCmd, nil); err != nil {
 		t.Fatal(err)
@@ -202,6 +251,157 @@ func TestWatchStatusRunAndHooks(t *testing.T) {
 	}
 }
 
+func TestWatchStatusShowsFixBudgetAndSkippedSources(t *testing.T) {
+	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true, Action: "fix", Quiet: "23:00-07:00"})
+	t.Setenv("LINEAR_API_KEY", "lin_x")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("PATH", "")
+	fixes := watch.LoadFixLog(dir)
+	fixes.Start("acme-stack", "linear:ABC-1", time.Now().Add(-time.Minute))
+	fixes.Defer(watch.Event{Key: "linear:ABC-2", Workspace: "acme-stack", Kind: watch.KindIssueNew, Ref: "ABC-2", Title: "waiting"})
+	out := captureStdout(t, func() { runAgentWatchStatus(nil, nil) })
+	want := "caps 3/h 10/day · quiet 23:00-07:00 · fixes today: 1 (last " + time.Now().Add(-time.Minute).Format("15:04") + ") · 1 deferred"
+	if !strings.Contains(out, want) || !strings.Contains(out, "(github, gitlab skipped: --prs off)") {
+		t.Fatalf("status: %s", out)
+	}
+	utils.JSONOutput = true
+	out = captureStdout(t, func() { runAgentWatchStatus(nil, nil) })
+	utils.JSONOutput = false
+	var rep struct {
+		Workspaces []struct {
+			Skipped []string
+			Quiet   string
+			Fixes   struct{ Today, Deferred, PerHour int }
+		}
+	}
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || len(rep.Workspaces) != 1 {
+		t.Fatalf("json: %v %s", err, out)
+	}
+	if w := rep.Workspaces[0]; len(w.Skipped) != 2 || w.Quiet != "23:00-07:00" || w.Fixes.Today != 1 || w.Fixes.Deferred != 1 || w.Fixes.PerHour != 3 {
+		t.Fatalf("json: %+v", w)
+	}
+
+	// Without a daemon, `run` lists what waits rather than handing it anywhere.
+	out = captureStdout(t, func() {
+		if err := agentWatchRunCmd.RunE(agentWatchRunCmd, nil); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "1 deferred fix(es), no daemon") || !strings.Contains(out, "ABC-2 — waiting") {
+		t.Fatalf("run: %s", out)
+	}
+	if watch.LoadFixLog(dir).DeferredCount("") != 1 {
+		t.Fatal("run must not touch the fix log")
+	}
+}
+
+func TestWatchTestWalksThePipeline(t *testing.T) {
+	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true, Comments: true, Action: "fix", Project: "ABC"})
+	t.Setenv("LINEAR_API_KEY", "lin_x")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("PATH", "")
+	tf := agentWatchTestCmd.Flags()
+	_ = tf.Set("body", "is this still needed?")
+	defer func() { _ = tf.Set("body", ""); _ = tf.Set("ref", "") }()
+	out := captureStdout(t, func() {
+		if err := agentWatchTestCmd.RunE(agentWatchTestCmd, []string{"issue.comment"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, want := range []string{"event      issue.comment ABC-1 — key test:issue.comment:ABC-1", "workspace  acme-stack", "rules      match", "seen       no", "fix        would start (0/3 this hour · 0/10 today)", `"is this still needed?"`, "/corgi:stories ABC-1", "--permission-mode acceptEdits"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	if watch.LoadFixLog(dir).StartedSince("acme-stack", time.Time{}) != 0 || watch.LoadState(dir).IsSeen("test:issue.comment:ABC-1") {
+		t.Fatal("a test run records nothing")
+	}
+
+	_ = tf.Set("ref", "acme/api#7")
+	out = captureStdout(t, func() {
+		if err := agentWatchTestCmd.RunE(agentWatchTestCmd, []string{"pr.review"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "workspace  none") {
+		t.Fatalf("nobody watches PRs: %s", out)
+	}
+	if err := agentWatchTestCmd.RunE(agentWatchTestCmd, []string{"issue.closed"}); err == nil {
+		t.Fatal("an unknown kind must be refused")
+	}
+
+	utils.JSONOutput = true
+	out = captureStdout(t, func() { _ = agentWatchTestCmd.RunE(agentWatchTestCmd, []string{"issue.new"}) })
+	utils.JSONOutput = false
+	var rep struct {
+		Routed bool
+		Probe  struct {
+			Workspace string
+			Prompt    string
+		}
+	}
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || !rep.Routed || rep.Probe.Workspace != "acme-stack" || !strings.Contains(rep.Probe.Prompt, "/corgi:stories acme/api#7") {
+		t.Fatalf("json: %v %s", err, out)
+	}
+}
+
+// fakeGH puts a gh on PATH whose `auth token` prints token, and nothing else.
+func fakeGH(t *testing.T, token string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for gh")
+	}
+	bin := t.TempDir()
+	script := "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = token ]; then echo " + token + "; fi\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+}
+
+func TestWatchStatusSeesTheGhCLIToken(t *testing.T) {
+	watchFixture(t, &config.WatchConfig{Enabled: true, PRs: true})
+	t.Setenv("LINEAR_API_KEY", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	fakeGH(t, "ghp_from_cli")
+	out := captureStdout(t, func() { runAgentWatchStatus(nil, nil) })
+	if !strings.Contains(out, "github gh-auth "+watch.Fingerprint("ghp_from_cli")) || !strings.Contains(out, "every 3m0s github") {
+		t.Fatalf("status: %s", out)
+	}
+	// A saved token wins over the CLI's.
+	t.Setenv("GITHUB_TOKEN", "ghp_env")
+	out = captureStdout(t, func() { runAgentWatchStatus(nil, nil) })
+	if !strings.Contains(out, "github "+watch.Fingerprint("ghp_env")+" ·") || strings.Contains(out, "gh-auth") {
+		t.Fatalf("status: %s", out)
+	}
+	if token, source := watch.GitHubToken(watch.Secrets{}); token != "ghp_from_cli" || source != "gh-auth" {
+		t.Fatalf("%q %q", token, source)
+	}
+	t.Setenv("PATH", "")
+	if token, source := watch.GitHubToken(watch.Secrets{}); token != "" || source != "" {
+		t.Fatalf("%q %q", token, source)
+	}
+}
+
+func TestSynthesizeWatchEvent(t *testing.T) {
+	specs := []daemon.WatchSpec{{Workspace: "acme", Project: "ABC", Repos: []string{"acme/web"}}}
+	e, err := synthesizeWatchEvent(watch.KindPRComment, specs, "", "", "")
+	if err != nil || e.Ref != "acme/web#1" || e.URL != "https://github.com/acme/web/pull/1" || e.Body == "" || !e.Mine || e.Key != "test:pr.comment:acme/web#1" {
+		t.Fatalf("%+v %v", e, err)
+	}
+	e, _ = synthesizeWatchEvent(watch.KindPRReview, specs, "acme/api#12", "", "")
+	if e.URL != "https://github.com/acme/api/pull/12" || e.State != "changes_requested" {
+		t.Fatalf("%+v", e)
+	}
+	e, _ = synthesizeWatchEvent(watch.KindIssueNew, specs, "", "", "")
+	if e.Ref != "ABC-1" || e.Source != "linear" || e.Body != "" {
+		t.Fatalf("%+v", e)
+	}
+	if _, err := synthesizeWatchEvent("nope", specs, "", "", ""); err == nil {
+		t.Fatal("unknown kind")
+	}
+}
+
 func TestWatchHookHandlerQueuesForTheDaemon(t *testing.T) {
 	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true})
 	if err := watch.SaveSecrets(dir, watch.Secrets{HookSecret: "s3cret", Me: "u1"}); err != nil {
@@ -260,6 +460,9 @@ func TestWatchHelpers(t *testing.T) {
 		t.Fatal("firstLineOf")
 	}
 	if d := describeWatch(&config.WatchConfig{Assignee: "any", Comments: true}); d != "any assignee · issue comments → notify" {
+		t.Fatal(d)
+	}
+	if d := describeWatch(&config.WatchConfig{Action: "fix", MaxFixesPerDay: 4}); d != "assigned to me → fix, at most 3/h 4/day" {
 		t.Fatal(d)
 	}
 	if len(randomSecret()) < 30 {

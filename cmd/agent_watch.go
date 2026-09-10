@@ -96,6 +96,23 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("prs") {
 			wc.PRs, _ = flags.GetBool("prs")
 		}
+		if flags.Changed("max-per-hour") {
+			if wc.MaxFixesPerHour, _ = flags.GetInt("max-per-hour"); wc.MaxFixesPerHour < 1 {
+				return fmt.Errorf("--max-per-hour must be at least 1")
+			}
+		}
+		if flags.Changed("max-per-day") {
+			if wc.MaxFixesPerDay, _ = flags.GetInt("max-per-day"); wc.MaxFixesPerDay < 1 {
+				return fmt.Errorf("--max-per-day must be at least 1")
+			}
+		}
+		if flags.Changed("quiet") {
+			v, _ := flags.GetString("quiet")
+			if _, err := daemon.ParseQuiet(v); err != nil {
+				return fmt.Errorf("--quiet: %w", err)
+			}
+			wc.Quiet = strings.TrimSpace(v)
+		}
 		entry.Watch = wc
 		user.Workspaces[id] = entry
 		if err := writeUserConfig(path, user); err != nil {
@@ -165,6 +182,9 @@ var agentWatchRunCmd = &cobra.Command{
 				Log:  func(line string) { utils.Info(line) }}
 			w.Once(ctx, time.Now())
 		}
+		if !dryRun {
+			handBackDeferred(dir, state.Fixes)
+		}
 		if utils.JSONOutput {
 			utils.PrintJSON(found)
 			return nil
@@ -178,6 +198,150 @@ var agentWatchRunCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+// handBackDeferred gives the daemon the fixes it deferred, from a person's
+// hand: it decides again against the caps of the moment. Without a daemon
+// they are listed, so the person can run the skill instead.
+func handBackDeferred(dir string, fixes *watch.FixLog) {
+	deferred := fixes.DeferredEvents()
+	if len(deferred) == 0 {
+		return
+	}
+	info, _ := daemon.ReadInfo(dir)
+	if info == nil || !info.Commands {
+		utils.Infof("%d deferred fix(es), no daemon to hand them to:\n", len(deferred))
+		for _, e := range deferred {
+			utils.Infof("  %-14s %-8s %s — %s\n", e.Kind, e.Workspace, e.Ref, firstLineOf(e.Title))
+		}
+		return
+	}
+	queued := 0
+	for i := range deferred {
+		e := deferred[i]
+		if _, err := command.Write(dir, command.Command{Action: command.ActionWatch, Source: "watch run", WatchEvent: &e}); err == nil {
+			queued++
+		}
+	}
+	daemon.Nudge(info)
+	utils.Infof("%d deferred fix(es) handed back to the daemon\n", queued)
+}
+
+var agentWatchTestCmd = &cobra.Command{
+	Use:   "test <issue.new|issue.comment|pr.comment|pr.review>",
+	Short: "Push one made-up event through the pipeline and print the claude run it would start, without starting it",
+	Long: `Walks a synthesized event the way a webhook's would go: routing to a
+workspace, the rules, the seen list, the fix claim and the caps, quiet hours
+and the account's limits. Nothing is recorded and no claude runs; the prompt
+and argv it would use are printed, so the pipeline can be proven without a
+real event.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dir := mustAgentDir()
+		specs, err := loadWatchSpecs(dir)
+		if err != nil {
+			return err
+		}
+		if len(specs) == 0 {
+			return fmt.Errorf("no watched workspaces — `corgi agent watch enable` inside one")
+		}
+		ref, _ := cmd.Flags().GetString("ref")
+		url, _ := cmd.Flags().GetString("url")
+		body, _ := cmd.Flags().GetString("body")
+		e, err := synthesizeWatchEvent(watch.Kind(args[0]), specs, ref, url, body)
+		if err != nil {
+			return err
+		}
+		d := &daemon.Daemon{Dir: dir, Watches: specs}
+		probe, routed := d.ProbeEvent(e, time.Now())
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"event": e, "routed": routed, "probe": probe})
+			return nil
+		}
+		fmt.Printf("event      %s %s — key %s\n", e.Kind, e.Ref, e.Key)
+		if !routed {
+			fmt.Println("workspace  none — no watched workspace owns it and no rules take it")
+			return nil
+		}
+		fmt.Printf("workspace  %s\n", probe.Workspace)
+		if !probe.Matched {
+			fmt.Println("rules      no match — the workspace that owns it does not watch this kind")
+			return nil
+		}
+		fmt.Println("rules      match")
+		if probe.Seen {
+			fmt.Println("seen       yes — a duplicate, dropped before the sink")
+		} else {
+			fmt.Println("seen       no")
+		}
+		fmt.Printf("action     %s\n", probe.Action)
+		if probe.Action != "fix" {
+			return nil
+		}
+		switch {
+		case probe.Deferred != "":
+			fmt.Printf("fix        deferred: %s (%s)\n", probe.Deferred, probe.Budget)
+		case probe.Busy:
+			fmt.Println("fix        a fix for this ref is already running")
+		default:
+			fmt.Printf("fix        would start (%s)\n", probe.Budget)
+		}
+		fmt.Printf("prompt     %s\n", probe.Prompt)
+		fmt.Printf("claude     %s\n", strings.Join(probe.Args, " "))
+		return nil
+	},
+}
+
+// synthesizeWatchEvent is a believable event of one kind, shaped for the
+// first watched workspace unless flags say otherwise.
+func synthesizeWatchEvent(kind watch.Kind, specs []daemon.WatchSpec, ref, url, body string) (watch.Event, error) {
+	first := specs[0]
+	e := watch.Event{Kind: kind, Ref: ref, URL: url, Body: body, Title: "watch test", Author: "watch test", Mine: true, At: time.Now()}
+	switch kind {
+	case watch.KindIssueNew, watch.KindIssueComment:
+		e.Source = "linear"
+		for _, src := range first.Sources {
+			if src.Name() == "jira" {
+				e.Source = "jira"
+			}
+		}
+		if e.Ref == "" {
+			e.Ref = firstNonEmptyString(first.Project, "TEST") + "-1"
+		}
+		if kind == watch.KindIssueComment && e.Body == "" {
+			e.Body = "could you also cover the empty state?"
+		}
+	case watch.KindPRComment, watch.KindPRReview:
+		e.Source = "github"
+		if e.Ref == "" {
+			repo := "acme/api"
+			if len(first.Repos) > 0 {
+				repo = first.Repos[0]
+			}
+			e.Ref = repo + "#1"
+		}
+		if e.URL == "" {
+			repo, num, _ := strings.Cut(e.Ref, "#")
+			e.URL = "https://github.com/" + repo + "/pull/" + firstNonEmptyString(num, "1")
+		}
+		if e.Body == "" {
+			e.Body = "nit: this name reads wrong"
+		}
+		if kind == watch.KindPRReview {
+			e.State = "changes_requested"
+		}
+	default:
+		return e, fmt.Errorf("kind %q — want issue.new, issue.comment, pr.comment or pr.review", kind)
+	}
+	e.Key = "test:" + string(kind) + ":" + e.Ref
+	return e, nil
+}
+
+func firstNonEmptyString(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 var agentWatchHooksCmd = &cobra.Command{
@@ -254,41 +418,45 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 	}
 	secrets := watch.LoadSecrets(dir)
 	state := watch.LoadState(dir)
+	now := time.Now()
 	if utils.JSONOutput {
 		type spec struct {
-			Workspace string   `json:"workspace"`
-			Sources   []string `json:"sources"`
-			Action    string   `json:"action"`
-			Interval  string   `json:"interval"`
+			Workspace string           `json:"workspace"`
+			Sources   []string         `json:"sources"`
+			Skipped   []string         `json:"skipped,omitempty"`
+			Action    string           `json:"action"`
+			Interval  string           `json:"interval"`
+			Quiet     string           `json:"quiet,omitempty"`
+			Fixes     daemon.FixBudget `json:"fixes"`
 		}
 		var out []spec
 		for _, s := range specs {
-			var names []string
-			for _, src := range s.Sources {
-				names = append(names, src.Name())
-			}
-			out = append(out, spec{s.Workspace, names, s.Action, s.Interval.String()})
+			out = append(out, spec{s.Workspace, sourceNames(s), s.Skipped, s.Action, s.Interval.String(), s.Quiet, daemon.BudgetFor(s, state.Fixes, now)})
 		}
 		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries()})
 		return
 	}
 	fmt.Println("Tokens")
 	fmt.Printf("  linear %s · jira %s · github %s · gitlab %s · webhook secret %s\n",
-		watch.Fingerprint(secrets.Linear), watch.Fingerprint(secrets.JiraToken), watch.Fingerprint(secrets.GitHub), watch.Fingerprint(secrets.GitLab), watch.Fingerprint(secrets.HookSecret))
+		watch.Fingerprint(secrets.Linear), watch.Fingerprint(secrets.JiraToken), githubTokenLabel(secrets), watch.Fingerprint(secrets.GitLab), watch.Fingerprint(secrets.HookSecret))
 	if len(specs) == 0 {
 		fmt.Println("\nNo watched workspaces. Inside one: corgi agent watch enable --labels bug --prs")
 		return
 	}
 	fmt.Println("\nWatched")
 	for _, s := range specs {
-		var names []string
-		for _, src := range s.Sources {
-			names = append(names, src.Name())
-		}
+		names := sourceNames(s)
 		if len(names) == 0 {
 			names = []string{"no source with a token"}
 		}
-		fmt.Printf("  %-20s %-8s every %-4s %s\n", s.Workspace, s.Action, s.Interval, strings.Join(names, ", "))
+		line := fmt.Sprintf("  %-20s %-8s every %-4s %s", s.Workspace, s.Action, s.Interval, strings.Join(names, ", "))
+		if len(s.Skipped) > 0 {
+			line += fmt.Sprintf(" (%s skipped: --prs off)", strings.Join(s.Skipped, ", "))
+		}
+		fmt.Println(line)
+		if s.Action == "fix" {
+			fmt.Printf("  %-20s %s\n", "", fixBudgetLine(s, state.Fixes, now))
+		}
 	}
 	polls := state.Summaries()
 	if len(polls) > 0 {
@@ -329,10 +497,14 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		}
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs},
-			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions}
+			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
+		// A source the rules take nothing from is not built: polling it would
+		// only spend requests.
+		spec.Skipped = spec.Rules.DeadSources()
 		if wc.Interval != "" {
 			if d, err := time.ParseDuration(wc.Interval); err == nil {
 				spec.Interval = d
@@ -359,17 +531,48 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 				spec.Sources = append(spec.Sources, watch.NewJira(secrets, wc.Project))
 			}
 		}
-		if wc.PRs {
+		if !spec.Rules.DeadSource("github") {
 			if gh := watch.NewGitHub(secrets, wc.Repos); gh.Token != "" {
 				spec.Sources = append(spec.Sources, gh)
 			}
-			if secrets.GitLab != "" {
-				spec.Sources = append(spec.Sources, watch.NewGitLab(secrets))
-			}
+		}
+		if !spec.Rules.DeadSource("gitlab") && secrets.GitLab != "" {
+			spec.Sources = append(spec.Sources, watch.NewGitLab(secrets))
 		}
 		out = append(out, spec)
 	}
 	return out, nil
+}
+
+// githubTokenLabel is the fingerprint, marked gh-auth when the gh CLI is
+// the only place a token comes from.
+func githubTokenLabel(secrets watch.Secrets) string {
+	token, source := watch.GitHubToken(secrets)
+	if source == "gh-auth" {
+		return "gh-auth " + watch.Fingerprint(token)
+	}
+	return watch.Fingerprint(token)
+}
+
+func sourceNames(s daemon.WatchSpec) []string {
+	var names []string
+	for _, src := range s.Sources {
+		names = append(names, src.Name())
+	}
+	return names
+}
+
+// fixBudgetLine is "caps 3/h 10/day · quiet 23:00-07:00 · fixes today: 2 (last 14:05) · 1 deferred".
+func fixBudgetLine(s daemon.WatchSpec, fixes *watch.FixLog, now time.Time) string {
+	b := daemon.BudgetFor(s, fixes, now)
+	line := fmt.Sprintf("caps %d/h %d/day · quiet %s · fixes today: %d", b.PerHour, b.PerDay, firstNonEmptyString(s.Quiet, "none"), b.Today)
+	if !b.Last.IsZero() {
+		line += " (last " + b.Last.Local().Format("15:04") + ")"
+	}
+	if b.Deferred > 0 {
+		line += fmt.Sprintf(" · %d deferred", b.Deferred)
+	}
+	return line
 }
 
 // watchHookHandler receives one service's webhook, checks its signature
@@ -477,7 +680,15 @@ func describeWatch(wc *config.WatchConfig) string {
 	if action == "" {
 		action = "notify"
 	}
-	return strings.Join(parts, " · ") + " → " + action
+	out := strings.Join(parts, " · ") + " → " + action
+	if action == "fix" {
+		perHour, perDay := daemon.WatchSpec{MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay}.FixCaps()
+		out += fmt.Sprintf(", at most %d/h %d/day", perHour, perDay)
+		if wc.Quiet != "" {
+			out += ", quiet " + wc.Quiet
+		}
+	}
+	return out
 }
 
 func splitList(s string) []string {
@@ -535,13 +746,20 @@ func init() {
 	f.String("action", "", "notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only")
 	f.Bool("comments", false, "Also new comments on issues assigned to me")
 	f.Bool("prs", false, "Also reviews and comments on pull requests I opened")
+	f.Int("max-per-hour", 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
+	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
+	f.String("quiet", "", "With --action fix: local hours in which no fix starts, e.g. 23:00-07:00")
 	agentWatchRunCmd.Flags().Bool("dry-run", false, "Do not advance the saved cursors")
+	tf := agentWatchTestCmd.Flags()
+	tf.String("ref", "", "Issue key (ABC-12) or PR (owner/repo#12); default: one shaped for the first watched workspace")
+	tf.String("url", "", "PR URL, for pr.* kinds")
+	tf.String("body", "", "Comment or review text")
 	agentWatchHooksCmd.Flags().Bool("rotate", false, "Make a new secret")
 	a := agentWatchAuthCmd.Flags()
 	a.String("token", "", "API token")
 	a.String("url", "", "Jira site (https://you.atlassian.net) or self-hosted GitLab URL")
 	a.String("email", "", "Jira account email")
 	a.String("me", "", "Your login or id on the service, for webhooks before the first poll")
-	agentWatchCmd.AddCommand(agentWatchEnableCmd, agentWatchDisableCmd, agentWatchRunCmd, agentWatchHooksCmd, agentWatchAuthCmd)
+	agentWatchCmd.AddCommand(agentWatchEnableCmd, agentWatchDisableCmd, agentWatchRunCmd, agentWatchTestCmd, agentWatchHooksCmd, agentWatchAuthCmd)
 	agentCmd.AddCommand(agentWatchCmd)
 }

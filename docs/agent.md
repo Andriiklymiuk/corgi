@@ -854,8 +854,9 @@ corgi agent watch enable --labels bug,defect --prs           # tell me
 corgi agent watch enable --labels bug --prs --action fix     # and fix it
 corgi agent watch auth linear --token lin_api_…               # or LINEAR_API_KEY in the env
 corgi agent watch auth jira --url https://acme.atlassian.net --email me@acme.io --token …
-corgi agent watch                                            # tokens, watched workspaces, last polls
-corgi agent watch run                                        # poll once, now
+corgi agent watch                                            # tokens, watched workspaces, last polls, fix budget
+corgi agent watch run                                        # poll once, now; hands deferred fixes back to the daemon
+corgi agent watch test issue.comment --body "still needed?"  # one made-up event through the pipeline, no claude run
 corgi agent restart
 ```
 
@@ -890,6 +891,39 @@ ends. A fix runs unattended only for a workspace enabled with
 `corgi agent init --dangerously-skip-permissions`; otherwise it runs with
 `acceptEdits` and a Bash step that needs approval stalls until the timeout.
 
+**What each kind gets.** A new issue assigned to you: `/corgi:stories
+<key>`, draft PRs, CI watched to green. A comment on an issue assigned to
+you: claude reads it and decides — a question or a request for information
+is answered as a comment on the ticket through the tracker, with no PR; a
+request for a change is applied on the ticket's existing branch (found by
+the key in branch names), or through `/corgi:stories <key>` when there is
+none. A review or comment on your PR: `/corgi:review <url>` in its
+address-feedback mode — apply the valid comments, push back on the wrong
+ones, reply and resolve the threads, push — never a fresh review of your
+own PR.
+
+**Budget.** A fix costs tokens, so a workspace starts at most three an hour
+and ten a day (`--max-per-hour`, `--max-per-day`), none during `--quiet
+23:00-07:00` (local time, may cross midnight), and none while the account's
+five-hour or seven-day window is at 95 % or more, as Claude Code last
+cached it. An event past one of those is **deferred**: the notification
+carries the reason (`fix deferred: 3/h cap`, `quiet hours`, `limit 97%`),
+the event leaves the seen list and waits in `<agent dir>/watch/fixes.json`,
+and the daemon never retries it by itself. `corgi agent watch run` hands the
+deferred events back to a running daemon, which decides again with the caps
+of that moment; without a daemon it lists them. `corgi agent watch` shows
+the caps, the quiet hours, `fixes today: N (last HH:MM)` and how many wait.
+
+**Proving the pipeline.** `corgi agent watch test <kind>` (`issue.new`,
+`issue.comment`, `pr.comment`, `pr.review`; `--ref`, `--url`, `--body`)
+synthesizes one event and walks it through routing, the rules, the seen
+list, the fix claim and the budget, then prints the prompt and argv the fix
+would run — without running it or recording anything.
+
+**Dead polls.** A source the rules take nothing from is not polled: with
+`prs` off, GitHub and GitLab only ever emit PR kinds, so they are skipped
+and `corgi agent watch` says so.
+
 Rules per workspace, in the trusted user config:
 
 ```yaml
@@ -905,7 +939,14 @@ workspaces:
       project: ABC              # Linear team key or Jira project; routes webhooks
       interval: 3m              # 0 = webhooks only
       action: fix               # or notify
+      maxFixesPerHour: 3        # fixes past this are deferred, not dropped
+      maxFixesPerDay: 10
+      quiet: "23:00-07:00"      # local time; no fix starts in this window
 ```
+
+`maxFixesPerHour`, `maxFixesPerDay` and `quiet` may also sit under
+`defaults: watch:` to give every watched workspace one budget; a
+workspace's own value wins.
 
 ## Wake lock
 
