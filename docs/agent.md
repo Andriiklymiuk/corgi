@@ -113,7 +113,10 @@ the phone paired across restarts; the quick tunnel does not.
 
 One card per repo: a dot, the repo, the checkout under it, what it is doing,
 what it has cost, and the running session on its own row — tap that row and
-the conversation opens. The green button on the right is **Open** when a
+the conversation opens. Above the cards, when the machine has editor windows
+open: the session board with a **New chat** box (prompt, window, model,
+account) and every live session with Allow / Deny / Send under it (see
+"Typing into a session from elsewhere"). The green button on the right is **Open** when a
 session is up and **Start** when it is not. Under it sit the controls that
 change something: `sessions` (the full list, the timeline, and everything the
 daemon knows about that workspace), `open in` (app / browser / chrome),
@@ -788,6 +791,18 @@ and a **PR** link when the session mentioned one. They go through
 `POST /launch/answer` and `POST /launch/send` on the same endpoint, with the
 same refusals as the commands: a risky prompt answers with 403 and the row
 says to look at the laptop.
+
+Above the sessions sits **New chat**: a prompt, the editor window to open it
+in (the one in front is preselected), the model (default, Opus, Sonnet,
+Haiku) and the account. **Start chat** opens a fresh integrated terminal in
+that window running `corgi agent claude --model … --prompt-id …`, the same
+thing the "+" key does, and the new session takes the prompt as its first
+message. The prompt never enters that shell line: it is saved under the
+agent dir as a 0600 file with a random name, the new session reads it once
+and deletes it, and a prompt nobody picked up is swept after ten minutes.
+The model and profile are validated against a pattern and the configured
+profile names before the command is built; the window against the connected
+ones. `POST /launch/new`, behind the same device token as everything else.
 
 ### Waits, and what they cost
 

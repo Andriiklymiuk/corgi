@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -1198,6 +1199,15 @@ const launcherPageHTML = `<!doctype html>
   .sess .sdetail{color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
   .sess .sbadge{font-size:.6rem;font-weight:700;color:var(--dim);border:1px solid var(--line);border-radius:.3rem;
       padding:.05rem .3rem;flex:0 0 auto;text-transform:uppercase;letter-spacing:.04em}
+  .newchat{background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;padding:.55rem .7rem;margin:.3rem 0 .5rem}
+  .newchat textarea{width:100%;box-sizing:border-box;font:inherit;font-size:.82rem;padding:.45rem .55rem;border-radius:.45rem;
+      border:1px solid var(--line);background:var(--card);color:var(--fg);resize:vertical;min-height:2.6rem}
+  .newchat .nrow{display:flex;gap:.4rem;margin-top:.4rem;align-items:center}
+  .newchat select{font:inherit;font-size:.74rem;flex:1;min-width:0;padding:.3rem .4rem;border-radius:.45rem;border:1px solid var(--line);
+      background:var(--card);color:var(--fg)}
+  .newchat button{font:inherit;font-size:.76rem;font-weight:600;padding:.34rem .8rem;border-radius:.45rem;border:1px solid var(--green);
+      background:var(--green);color:#0b0b0d;cursor:pointer;flex:0 0 auto}
+  .newchat button:disabled{opacity:.5}
   .sess{flex-wrap:wrap}
   .sess .ssum{flex-basis:100%;color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem}
   .sess .sact{flex-basis:100%;display:flex;gap:.4rem;align-items:center;margin-top:.35rem}
@@ -1357,6 +1367,7 @@ const launcherPageHTML = `<!doctype html>
   <p id="hostnote" class="hostnote" hidden></p>
 </header>
 <main>
+  <section id="newchat" class="board" hidden></section>
   <section id="board" class="board" hidden></section>
   <div id="list" class="msg">Loading…</div>
   <details class="tips" id="tips" hidden>
@@ -1670,6 +1681,7 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/board', { headers: auth });
       if (!r.ok) { box.hidden = true; return; }
       const j = await r.json();
+      renderNewChat(j);
       const sessions = (j.sessions || []).filter(s => s.status !== 'gone');
       if (!sessions.length) { box.hidden = true; return; }
       box.innerHTML = '';
@@ -1718,6 +1730,68 @@ const launcherPageHTML = `<!doctype html>
       }
       box.hidden = false;
     } catch { box.hidden = true; }
+  }
+
+  // The new-chat card is built once and only its choices refresh, so a
+  // prompt being typed survives the board's periodic reload.
+  const MODELS = [['', 'default model'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']];
+  function windowLabel(w) {
+    const f = (w.folders || [])[0];
+    return f ? f.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : (w.app || w.id);
+  }
+  function fillSelect(sel, options, keep) {
+    const current = keep ? sel.value : '';
+    sel.innerHTML = '';
+    for (const [v, t] of options) {
+      const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o);
+    }
+    if (keep && options.some(([v]) => v === current)) sel.value = current;
+  }
+  function renderNewChat(j) {
+    const sec = document.getElementById('newchat');
+    const windows = j.windows || [];
+    if (!windows.length) { sec.hidden = true; return; }
+    let card = sec.querySelector('.newchat');
+    if (!card) {
+      card = document.createElement('div'); card.className = 'newchat';
+      const ta = document.createElement('textarea');
+      ta.rows = 2; ta.placeholder = 'New chat on the laptop: what should Claude do?'; ta.className = 'nprompt';
+      const row = document.createElement('div'); row.className = 'nrow';
+      const win = document.createElement('select'); win.className = 'nwin';
+      const model = document.createElement('select'); model.className = 'nmodel';
+      const prof = document.createElement('select'); prof.className = 'nprof';
+      fillSelect(model, MODELS, false);
+      try { const m = localStorage.getItem('corgi.newchat.model'); if (m !== null) model.value = m; } catch {}
+      model.onchange = () => { try { localStorage.setItem('corgi.newchat.model', model.value); } catch {} };
+      const go = document.createElement('button'); go.type = 'button'; go.className = 'ok'; go.textContent = 'Start chat';
+      go.onclick = async () => {
+        const prompt = ta.value.trim();
+        go.disabled = true;
+        try {
+          const r = await fetch('/launch/new', { method: 'POST', headers: auth,
+            body: JSON.stringify({ window: win.value, prompt, model: model.value, profile: prof.value }) });
+          const jj = await r.json().catch(() => ({}));
+          if (!r.ok) { toast(jj.error || 'could not open a chat', true); return; }
+          toast('opening a chat in ' + (win.selectedOptions[0] || {}).textContent + (prompt ? ' with your prompt' : ''));
+          ta.value = '';
+          setTimeout(loadBoard, 4000);
+        } catch { toast('no connection', true); }
+        finally { go.disabled = false; }
+      };
+      row.appendChild(win); row.appendChild(model); row.appendChild(prof); row.appendChild(go);
+      card.appendChild(ta); card.appendChild(row);
+      sec.appendChild(card);
+    }
+    const front = j.frontWindow || j.lastFocusWindow || '';
+    const win = card.querySelector('.nwin');
+    const had = win.options.length > 0;
+    fillSelect(win, windows.map(w => [w.id, windowLabel(w)]), had);
+    if (!had && front && windows.some(w => w.id === front)) win.value = front;
+    const profiles = (j.accounts || []).map(a => a.profile).filter(p => p && p !== 'default');
+    const prof = card.querySelector('.nprof');
+    fillSelect(prof, [['', 'default account'], ...profiles.map(p => [p, p])], true);
+    prof.hidden = !profiles.length;
+    sec.hidden = false;
   }
 
   function sessionSummary(s) {
@@ -2459,4 +2533,92 @@ func launchBoardCommand(w http.ResponseWriter, c command.Command) {
 	}
 	daemon.Nudge(info)
 	writeLaunchJSON(w, map[string]any{"ok": true, "action": c.Action})
+}
+
+// A new chat from the phone: a window, a prompt, a model, a profile. The
+// shell line the editor runs carries this binary and validated flags only;
+// the prompt goes by id (see savePrompt) and is read once by the new
+// session.
+
+var profileNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+
+func launchNewHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {window, prompt, model, profile} to open a chat")
+		return
+	}
+	var req struct {
+		Window  string `json:"window"`
+		Prompt  string `json:"prompt"`
+		Model   string `json:"model"`
+		Profile string `json:"profile"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	model := strings.TrimSpace(req.Model)
+	if model != "" && !validModel(model) {
+		writeLaunchError(w, http.StatusBadRequest, "model: letters, digits, dots and dashes only")
+		return
+	}
+	profile := strings.TrimSpace(req.Profile)
+	if profile != "" && profile != "default" {
+		if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
+			writeLaunchError(w, http.StatusBadRequest, "no such profile")
+			return
+		}
+	} else {
+		profile = ""
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	window := strings.TrimSpace(req.Window)
+	if window != "" {
+		rep, err := readBoard(dir)
+		if err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		known := false
+		for _, win := range rep.Windows {
+			if win.ID == window {
+				known = true
+				break
+			}
+		}
+		if !known {
+			writeLaunchError(w, http.StatusNotFound, "that editor window is not connected any more")
+			return
+		}
+	}
+	args := []string{}
+	if profile != "" {
+		args = append(args, "--profile", profile)
+	}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
+		id, err := savePrompt(dir, prompt)
+		if err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		args = append(args, "--prompt-id", id)
+	}
+	launchBoardCommand(w, command.Command{Action: command.ActionNew, WindowID: window, Command: daemon.NewSessionCommand(args...), Source: "phone"})
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

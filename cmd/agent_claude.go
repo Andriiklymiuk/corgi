@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -43,9 +47,28 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 	Run: func(cmd *cobra.Command, args []string) {
 		profile, _ := cmd.Flags().GetString("profile")
 		show, _ := cmd.Flags().GetBool("show")
+		model, _ := cmd.Flags().GetString("model")
+		promptID, _ := cmd.Flags().GetString("prompt-id")
 		cwd, err := os.Getwd()
 		if err != nil {
 			exitWithError("agent_claude", err, 1)
+		}
+		if model != "" {
+			if !validModel(model) {
+				exitWithError("agent_claude", fmt.Errorf("model %q: letters, digits, dots and dashes only", model), 2)
+			}
+			args = append([]string{"--model", model}, args...)
+		}
+		if promptID != "" {
+			dir, err := agentDir()
+			if err != nil {
+				exitWithError("agent_claude", err, 1)
+			}
+			text, err := takePrompt(dir, promptID)
+			if err != nil {
+				exitWithError("agent_claude", err, 2)
+			}
+			args = append(args, text)
 		}
 		launch, err := resolveClaudeLaunch(cwd, profile, args)
 		if err != nil {
@@ -203,6 +226,8 @@ func shellQuote(s string) string {
 
 func init() {
 	agentClaudeCmd.Flags().String("profile", "", "Run under this corgi profile's account and settings")
+	agentClaudeCmd.Flags().String("model", "", "Pass --model to claude (opus, sonnet, haiku, or a model id)")
+	agentClaudeCmd.Flags().String("prompt-id", "", "Start with the prompt saved under this id by the phone launcher; the file is read once and removed")
 	agentClaudeCmd.Flags().Bool("show", false, "Print the resolved command and exit")
 	agentCmd.AddCommand(agentClaudeCmd)
 }
@@ -238,4 +263,67 @@ func pickAccountProfile(user *config.UserConfig, resolved config.Resolved) strin
 		return ""
 	}
 	return best
+}
+
+// A prompt typed on the phone reaches the new terminal by id, never inside
+// the shell line: the launcher writes it under prompts/ with 0600, the new
+// session reads it once and removes it. Ids are random and short-lived.
+
+var (
+	promptIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
+	modelPattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`)
+)
+
+const promptMaxAge = 10 * time.Minute
+
+func validModel(model string) bool { return modelPattern.MatchString(model) }
+
+func promptsDir(agentDir string) string { return filepath.Join(agentDir, "prompts") }
+
+// savePrompt stores text for a new session and returns its id. Files older
+// than promptMaxAge are removed on the way, so a prompt nobody picked up
+// does not linger.
+func savePrompt(agentDir, text string) (string, error) {
+	dir := promptsDir(agentDir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > promptMaxAge {
+				_ = os.Remove(filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	id := hex.EncodeToString(raw[:])
+	if err := os.WriteFile(filepath.Join(dir, id), []byte(text), 0o600); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// takePrompt reads a saved prompt and removes it.
+func takePrompt(agentDir, id string) (string, error) {
+	if !promptIDPattern.MatchString(id) {
+		return "", fmt.Errorf("prompt id %q is not one the launcher makes", id)
+	}
+	path := filepath.Join(promptsDir(agentDir), id)
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("no saved prompt %s: it was already used or expired", id)
+	}
+	if time.Since(info.ModTime()) > promptMaxAge {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("saved prompt %s expired", id)
+	}
+	data, err := os.ReadFile(path)
+	_ = os.Remove(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }
