@@ -113,6 +113,10 @@ var agentWatchEnableCmd = &cobra.Command{
 				return fmt.Errorf("--max-per-day must be at least 1")
 			}
 		}
+		if flags.Changed("pickup") {
+			v, _ := flags.GetString("pickup")
+			wc.PickupStatus = strings.TrimSpace(v)
+		}
 		if flags.Changed("quiet") {
 			v, _ := flags.GetString("quiet")
 			if _, err := daemon.ParseQuiet(v); err != nil {
@@ -867,6 +871,7 @@ func init() {
 	f.Int("max-per-hour", 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
 	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
 	f.String("quiet", "", "With --action fix: local hours in which no fix starts, e.g. 23:00-07:00")
+	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
 	agentWatchRunCmd.Flags().Bool("dry-run", false, "Do not advance the saved cursors")
 	tf := agentWatchTestCmd.Flags()
 	tf.String("ref", "", "Issue key (ABC-12) or PR (owner/repo#12); default: one shaped for the first watched workspace")

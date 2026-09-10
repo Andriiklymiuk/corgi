@@ -493,6 +493,9 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	defer logFile.Close()
 
+	if d.Pickup != nil {
+		d.Pickup(spec.Workspace, e)
+	}
 	var env []string
 	if spec.ConfigDir != "" {
 		env = append(env, "CLAUDE_CONFIG_DIR="+spec.ConfigDir)
