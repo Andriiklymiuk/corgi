@@ -34,6 +34,9 @@ type WatchSpec struct {
 	Interval time.Duration
 	// Action is notify or fix.
 	Action string
+	// Lease claims the ticket on the tracker before working it, so two
+	// machines watching one board do not both take it.
+	Lease bool
 	// FixKinds narrows what "fix" actually runs on: empty means every kind
 	// the rules matched, which is what action: fix always meant. Naming
 	// kinds lets a workspace work review comments unattended while still
@@ -582,6 +585,20 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 			"not working on "+e.Ref+": the last runs failed on "+kind+" — fix that and run corgi agent watch run",
 			spec.Workspace, e.URL)
 		return
+	}
+	// Two machines watching one board would otherwise both take this ticket.
+	// A tracker that cannot be read leaves the claim unknown: the run goes
+	// ahead, because refusing to work when the tracker is down is worse than
+	// the duplicate it guards against.
+	if spec.Lease && d.ClaimTicket != nil && e.Ref != "" {
+		switch ok, holder, err := d.ClaimTicket(spec.Workspace, e); {
+		case err != nil:
+			utils.Infof("agent: could not claim %s, going ahead: %v\n", e.Ref, err)
+		case !ok:
+			d.watchState.Fixes.Finish(e.Key, nil, "", "not started: "+holder+" is already on it", time.Now())
+			utils.Infof("agent: %s is already claimed by %s\n", e.Ref, holder)
+			return
+		}
 	}
 	if d.Pickup != nil {
 		d.Pickup(spec.Workspace, e)

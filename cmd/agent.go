@@ -167,6 +167,9 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.Pickup = func(workspaceID string, e watch.Event) {
 		markPickedUp(d.Dir, []watch.Event{e})
 	}
+	d.ClaimTicket = func(workspaceID string, e watch.Event) (bool, string, error) {
+		return claimTicket(d.Dir, workspaceID, e)
+	}
 	d.LinkFor = func(workspaceID string) string {
 		if url := d.SessionURLFor(workspaceID); url != "" {
 			return url
