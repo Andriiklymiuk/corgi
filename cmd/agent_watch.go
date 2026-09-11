@@ -539,9 +539,11 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			Fixes     daemon.FixBudget `json:"fixes"`
 		}
 		type fixRow struct {
+			Key       string    `json:"key,omitempty"`
 			Ref       string    `json:"ref"`
 			Workspace string    `json:"workspace"`
 			Kind      string    `json:"kind,omitempty"`
+			URL       string    `json:"url,omitempty"`
 			StartedAt time.Time `json:"startedAt"`
 			Running   bool      `json:"running"`
 			PRs       []string  `json:"prs,omitempty"`
@@ -552,10 +554,16 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		for _, s := range specs {
 			out = append(out, spec{s.Workspace, sourceNames(s), s.Skipped, s.Action, s.FixKinds, s.Interval.String(), s.Quiet, daemon.BudgetFor(s, state.Fixes, now)})
 		}
+		// A run's row links to its ticket, so a menu bar can open what the
+		// run was about, not only the pull request it opened.
 		fixes := []fixRow{}
 		for _, r := range state.Fixes.RecentFixes("", 20) {
-			fixes = append(fixes, fixRow{firstNonEmptyString(r.Ref, r.Key), r.Workspace, r.Kind,
-				r.StartedAt, !r.Done(), r.PRs, r.Note, r.Error})
+			row := fixRow{Key: r.Key, Ref: firstNonEmptyString(r.Ref, r.Key), Workspace: r.Workspace, Kind: r.Kind,
+				StartedAt: r.StartedAt, Running: !r.Done(), PRs: r.PRs, Note: r.Note, Error: r.Error}
+			if e, ok := watch.FindEvent(dir, r.Key); ok {
+				row.URL = e.URL
+			}
+			fixes = append(fixes, row)
 		}
 		// The inbox itself, so a menu bar or an editor can show what arrived
 		// without reading the log file or asking the phone.

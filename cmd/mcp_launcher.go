@@ -3695,6 +3695,9 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if r.Error != "" {
 			row["error"] = firstLineOf(r.Error)
 		}
+		if e, ok := watch.FindEvent(dir, r.Key); ok && e.URL != "" {
+			row["url"] = e.URL
+		}
 		fixes = append(fixes, row)
 	}
 	// The columns each workspace can move a ticket to, read from the cache
@@ -3903,20 +3906,36 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	if len(keys) == 0 && strings.TrimSpace(req.Key) != "" {
 		keys = []string{req.Key}
 	}
-	if len(keys) == 0 {
-		writeLaunchError(w, http.StatusBadRequest, "name the event to work on")
+	c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: req.Window, Model: req.Model, Profile: req.Profile, Source: "phone"})
+	if status != 0 {
+		writeLaunchError(w, status, msg)
 		return
 	}
+	launchBoardCommand(w, c)
+}
+
+// workOnOptions is where and how a session for a ticket opens: an editor
+// window, a model, a profile, and who asked.
+type workOnOptions struct {
+	Window, Model, Profile, Source string
+}
+
+// workOnCommand is the new-session command that hands watch events to a
+// real chat — the daemon's own fix prompt, in the ticket's own checkout. The
+// page, the phone and the editor all come through here. A refusal is an
+// HTTP status and a sentence; 0 means the command is ready to spool.
+func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Command, int, string) {
+	if len(keys) == 0 {
+		return command.Command{}, http.StatusBadRequest, "name the event to work on"
+	}
 	if len(keys) > watchBatchMax {
-		writeLaunchError(w, http.StatusBadRequest, "too many at once")
-		return
+		return command.Command{}, http.StatusBadRequest, "too many at once"
 	}
 	var events []watch.Event
 	for _, key := range keys {
 		event, ok := watch.FindEvent(dir, strings.TrimSpace(key))
 		if !ok {
-			writeLaunchError(w, http.StatusNotFound, "no such watch event")
-			return
+			return command.Command{}, http.StatusNotFound, "no such watch event"
 		}
 		events = append(events, event)
 	}
@@ -3924,39 +3943,33 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	// against that checkout, and two checkouts have nothing to share.
 	for _, e := range events[1:] {
 		if e.Workspace != events[0].Workspace {
-			writeLaunchError(w, http.StatusBadRequest, "those are in different workspaces — take one workspace at a time")
-			return
+			return command.Command{}, http.StatusBadRequest, "those are in different workspaces — take one workspace at a time"
 		}
 	}
 	prompt := daemon.BatchPrompt(events)
 	if prompt == "" {
-		writeLaunchError(w, http.StatusConflict, "only new issues can be worked on together")
-		return
+		return command.Command{}, http.StatusConflict, "only new issues can be worked on together"
 	}
-	model := strings.TrimSpace(req.Model)
+	model := strings.TrimSpace(opt.Model)
 	if model != "" && !validModel(model) {
-		writeLaunchError(w, http.StatusBadRequest, "model: letters, digits, dots and dashes only")
-		return
+		return command.Command{}, http.StatusBadRequest, "model: letters, digits, dots and dashes only"
 	}
-	profile := strings.TrimSpace(req.Profile)
+	profile := strings.TrimSpace(opt.Profile)
 	if profile != "" && profile != "default" {
 		if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
-			writeLaunchError(w, http.StatusBadRequest, "no such profile")
-			return
+			return command.Command{}, http.StatusBadRequest, "no such profile"
 		}
 	} else {
 		profile = ""
 	}
-	window := strings.TrimSpace(req.Window)
+	window := strings.TrimSpace(opt.Window)
 	rep, boardErr := readBoard(dir)
 	if window != "" {
 		if boardErr != nil {
-			writeLaunchError(w, http.StatusInternalServerError, boardErr.Error())
-			return
+			return command.Command{}, http.StatusInternalServerError, boardErr.Error()
 		}
 		if !windowConnected(rep, window) {
-			writeLaunchError(w, http.StatusNotFound, "that editor window is not connected any more")
-			return
+			return command.Command{}, http.StatusNotFound, "that editor window is not connected any more"
 		}
 	}
 	// A ticket belongs in its own checkout. When an editor is already open on
@@ -3969,8 +3982,7 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := savePrompt(dir, prompt)
 	if err != nil {
-		writeLaunchError(w, http.StatusInternalServerError, err.Error())
-		return
+		return command.Command{}, http.StatusInternalServerError, err.Error()
 	}
 	// The event's workspace, not the terminal's: a phone has no cwd, so
 	// without this the session opens in whichever checkout the editor window
@@ -3990,8 +4002,8 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "--model", model)
 	}
 	args = append(args, "--prompt-id", id)
-	launchBoardCommand(w, command.Command{Action: command.ActionNew, WindowID: window,
-		Command: daemon.NewSessionCommand(args...), Source: "phone"})
+	return command.Command{Action: command.ActionNew, WindowID: window,
+		Command: daemon.NewSessionCommand(args...), Source: opt.Source}, 0, ""
 }
 
 // windowOnWorkspace is a connected editor window whose folder is inside the
