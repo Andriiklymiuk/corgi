@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/brief"
+	"andriiklymiuk/corgi/utils/agent/handoff"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
@@ -92,10 +93,38 @@ func sessionContext(dir string, in contextHookInput, configDir string, now time.
 	if path, facts := memoryIndex(in.Cwd, root); facts > 0 {
 		lines = append(lines, fmt.Sprintf("workspace memory: %d facts in %s — read it before changing code", facts, path))
 	}
+	if line := handoffLine(root, sessions.Branch(in.Cwd), now); line != "" {
+		lines = append(lines, line)
+	}
 	if len(lines) == 0 {
 		return ""
 	}
 	return head + "\n" + strings.Join(lines, "\n")
+}
+
+// handoffLine points a new session at the packet an earlier run left for
+// this branch's ticket, with how far the code moved since. The packet is
+// the first thing to read; the hook only says it is there.
+func handoffLine(root, branch string, now time.Time) string {
+	if root == "" {
+		return ""
+	}
+	p, ok := handoff.ForBranch(root, branch)
+	if !ok || now.Sub(p.WrittenAt) > handoff.MaxAge {
+		return ""
+	}
+	line := fmt.Sprintf("handoff for %s (%s, %s ago): read %s first", p.Ref, p.State, roughAge(now.Sub(p.WrittenAt)), handoff.MarkdownPath(root, p.Ref))
+	dir := root
+	if p.Where.Worktree != "" {
+		dir = filepath.Join(root, p.Where.Worktree)
+	}
+	if n, err := handoff.CommitsSince(dir, p.Where.Head); err == nil && n > 0 {
+		line += fmt.Sprintf(" — %d commit(s) since, so check its done list against the diff", n)
+	}
+	if p.Verification != nil {
+		line += fmt.Sprintf("; `corgi agent handoff verify %s` re-runs its check", p.Ref)
+	}
+	return line
 }
 
 // otherSessionsHere names the live sessions in the same workspace, so two
