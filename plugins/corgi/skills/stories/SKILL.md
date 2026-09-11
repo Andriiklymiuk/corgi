@@ -710,6 +710,13 @@ issue link.
   **draft** PR as _in progress_ and revert this move — the review state only sticks once
   the PR is marked _ready_. Set it once; don't fight a revert.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
+- **Changed surface at the top of the body.** `corgi surface --branch <branch>`
+  (or `corgi_diff` with `surface: true`) prints the `## Changed surface` block:
+  exported symbols, routes, contracts, migrations and config this PR changed,
+  removals and signature changes marked breaking. Paste it first — it is what a
+  reviewer reads before the diff, and a breaking line with no caller updated in
+  the same batch is a bug you should have caught here. Re-run after every push
+  in the Phase 5.5 loop.
 - **Evidence in the body, always.** A reviewer who did not watch the run needs
   four things to trust it, and they never appear on their own: a `## Evidence`
   section with (1) **changed files with a reason each** — one line per file or

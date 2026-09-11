@@ -224,6 +224,18 @@ Hand a review subagent: that PR's diff + title/body + the repo's standards note
 + (if any) the intent note from P1.5. Scope **strictly to the diff** — don't
 review untouched code.
 
+**Surface first, then the diff.** Before a line of implementation, read the
+changed surface — the PR body's `## Changed surface` section when the author
+left one, else make it: `corgi surface --base <base>` from the checkout (or
+`corgi_diff` with `surface: true` over the stack). It lists the exported
+symbols, routes, contracts, migrations and config that changed, removals and
+signature changes marked breaking. Every breaking line is a question the
+review must answer — who calls it, is the caller in this PR or another, does
+the ticket ask for it — before the diff is opened. A change whose surface is
+"nothing public changed" is reviewed for behaviour and tests only. Say in the
+summary comment what the surface was; a reviewer who reads only that line
+should know whether to look closer.
+
 **Hunt for:**
 - Correctness bugs.
 - Missing or weak tests.
