@@ -59,6 +59,7 @@ func upgradeRun(cmd *cobra.Command, args []string) {
 			fmt.Printf("Failed to upgrade via Homebrew: %s\n", err)
 		} else {
 			fmt.Println("Upgrade successful!")
+			refreshDaemonAfterUpgrade(exePath)
 		}
 	case installMethodScript:
 		fmt.Printf("Detected script install at %s. Re-running install script...\n", exeDir)
@@ -66,6 +67,7 @@ func upgradeRun(cmd *cobra.Command, args []string) {
 			fmt.Printf("Failed to upgrade via install script: %s\n", err)
 		} else {
 			fmt.Println("Upgrade successful!")
+			refreshDaemonAfterUpgrade(exePath)
 		}
 	case installMethodWindows:
 		// We can't safely overwrite the running corgi.exe from inside corgi.exe.
@@ -281,4 +283,32 @@ func tagFromReleaseLocation(location string) string {
 		tag = tag[:j]
 	}
 	return strings.TrimSpace(tag)
+}
+
+// refreshDaemonAfterUpgrade hands the login service the corgi that was just
+// installed. The daemon runs from its own copy (see agent_install_stable.go),
+// and that copy is only refreshed by `agent install` — which has to be the
+// new binary, not this process, so the copy is the new version.
+func refreshDaemonAfterUpgrade(exePath string) {
+	if !daemonRunsFromStableCopy() || !loginServiceInstalled() {
+		return
+	}
+	if installedDaemonBinary() != mustStableDaemonBinary() {
+		// Older installs point launchd straight at Homebrew's path, which is
+		// what brings the macOS file prompt back after every update.
+		fmt.Println("The daemon still starts from Homebrew's path — run `corgi agent install` once to stop macOS asking about Documents after every update.")
+		return
+	}
+	out, err := exec.Command(exePath, "agent", "install").CombinedOutput()
+	if err != nil {
+		fmt.Printf("Could not refresh the daemon's copy of corgi: %s\n%s", err, out)
+		fmt.Println("Run `corgi agent install` yourself.")
+		return
+	}
+	fmt.Println("Daemon restarted from the new corgi.")
+}
+
+func mustStableDaemonBinary() string {
+	p, _ := stableDaemonBinary()
+	return p
 }
