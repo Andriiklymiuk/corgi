@@ -46,3 +46,28 @@ func TestARunReadsAndLeavesAHandoffPacket(t *testing.T) {
 		t.Fatalf("a packet written during the run is the handover: %q", got)
 	}
 }
+
+// With isolate on, a run gets worktrees on a branch named after the ticket
+// and is told to work only there; the branch is on the fix record so undo
+// can release it. Without the callback, nothing changes.
+func TestAnIsolatedRunIsToldWhereToWork(t *testing.T) {
+	if got := FixBranch("acme/api#42"); got != "corgi/acme-api-42" {
+		t.Fatalf("branch: %s", got)
+	}
+	if got := FixBranch("ABC-7"); got != "corgi/abc-7" {
+		t.Fatalf("branch: %s", got)
+	}
+	note := isolationNote("corgi/abc-7", []string{"/w/api", "/w/web"})
+	for _, want := range []string{"corgi/abc-7", "/w/api", "/w/web", "do not create another branch"} {
+		if !strings.Contains(note, want) {
+			t.Fatalf("note lacks %q: %s", want, note)
+		}
+	}
+	dir := t.TempDir()
+	l := watch.LoadFixLog(dir)
+	l.StartFor(watch.Event{Key: "k1", Ref: "ABC-7"}, time.Now())
+	l.SetBranch("k1", "corgi/abc-7")
+	if got := watch.LoadFixLog(dir).RecentFixes("", 1); len(got) != 1 || got[0].Branch != "corgi/abc-7" {
+		t.Fatalf("branch on the record: %+v", got)
+	}
+}

@@ -10,6 +10,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/watch"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
 var agentWatchUndoCmd = &cobra.Command{
@@ -75,6 +76,20 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 			_ = watch.LoadStateLog(dir).Set(run.Key, back, time.Now())
 		}
 	}
+	// An isolated run's worktrees go too, unless they hold uncommitted work.
+	if run.Branch != "" {
+		if registry, err := workspace.Load(agentRegistryPath(dir)); err == nil {
+			ws, _ := registry.Find(run.Workspace)
+			removed, kept, err := releaseFixWorktrees(ws.AbsPath, run.Branch)
+			if err != nil {
+				problems = append(problems, firstLineOf(err.Error()))
+			}
+			plan.WorktreesRemoved = removed
+			for _, k := range kept {
+				problems = append(problems, "kept "+k+": it has uncommitted work")
+			}
+		}
+	}
 	// The event goes back in the inbox: undoing a run means it was not done.
 	st := watch.LoadState(dir)
 	st.Unsee(run.Key)
@@ -89,6 +104,8 @@ type undoPlan struct {
 	Closed    []string `json:"closed,omitempty"`
 	MoveBack  string   `json:"moveBack,omitempty"`
 	Moved     bool     `json:"moved,omitempty"`
+	// WorktreesRemoved is what an isolated run left that undo cleaned up.
+	WorktreesRemoved []string `json:"worktreesRemoved,omitempty"`
 }
 
 func reportUndo(p undoPlan, problems []string) {
