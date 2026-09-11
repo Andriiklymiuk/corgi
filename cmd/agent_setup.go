@@ -438,7 +438,7 @@ func anyCheckFailed(checks []agentCheck) bool {
 func collectAgentChecks() []agentCheck {
 	var checks []agentCheck
 
-	checks = append(checks, checkClaudeBinary(), checkAmbientAPIKey(), checkWakeLockSupport(), checkInstallSupport(), checkDaemonBinaryPath())
+	checks = append(checks, checkClaudeBinary(), checkAmbientAPIKey(), checkWakeLockSupport(), checkInstallSupport(), checkDaemonBinaryPath(), checkMenuBarApp())
 
 	dir, err := agentDir()
 	if err != nil {

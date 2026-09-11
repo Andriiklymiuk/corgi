@@ -81,6 +81,7 @@ func enableAtLogin(dir string, settings *upSettings) {
 	}
 	setAtLogin(dir, settings, true)
 	utils.Info("✓ starts at login — after a reboot the daemon, the MCP endpoint and this tunnel come back on their own")
+	startMenuBarIfInstalled(func(s string) { utils.Info(s) })
 	// Coming back at login is only half of being reachable: a sleeping laptop
 	// answers nothing, and between sessions nothing holds it awake.
 	if !stayAwakeEnabled(dir) {
