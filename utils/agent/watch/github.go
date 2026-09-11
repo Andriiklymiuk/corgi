@@ -216,7 +216,7 @@ func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL strin
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&c) != nil {
 		return "", "", false
 	}
-	bot = strings.EqualFold(c.User.Type, "Bot") || strings.HasSuffix(c.User.Login, "[bot]")
+	bot = githubBot(c.User.Login, c.User.Type)
 	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax), bot
 }
 

@@ -305,6 +305,17 @@ func TestParseHooks(t *testing.T) {
 		t.Fatalf("github %+v", events)
 	}
 
+	// A bot's comment on my pull request — Linear's link, a coverage
+	// report — is not a person waiting: the webhook drops it like the poller.
+	botComment := `{"action":"created","repository":{"full_name":"acme/api"},"issue":{"number":12,"title":"Referrals","html_url":"https://github.com/acme/api/pull/12","user":{"login":"andrii"},"pull_request":{}},"comment":{"id":77,"body":"HUM-1470 Meta add tracker app","created_at":"2026-09-09T10:00:00Z","user":{"login":"linear-code[bot]","type":"Bot"}}}`
+	r.Header.Set("X-GitHub-Event", "issue_comment")
+	if events, _ := ParseHook("github", r, []byte(botComment), "andrii"); len(events) != 0 {
+		t.Fatalf("a bot's comment is not news: %+v", events)
+	}
+	if events, _ := ParseHook("github", r, []byte(strings.Replace(botComment, `"login":"linear-code[bot]","type":"Bot"`, `"login":"max","type":"User"`, 1)), "andrii"); len(events) != 1 || events[0].Author != "max" {
+		t.Fatalf("a person's comment is: %+v", events)
+	}
+
 	gl := `{"object_kind":"note","user":{"username":"max"},"project":{"path_with_namespace":"acme/web"},"object_attributes":{"id":44,"note":"looks wrong","noteable_type":"MergeRequest","created_at":"2026-09-09 10:00:00 UTC","url":"https://gitlab.com/acme/web/-/merge_requests/3#note_44"},"merge_request":{"iid":3,"title":"Search"}}`
 	events, _ = ParseHook("gitlab", r, []byte(gl), "andrii")
 	if len(events) != 1 || events[0].Ref != "acme/web!3" || events[0].Kind != KindPRComment {

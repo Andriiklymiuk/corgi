@@ -409,6 +409,139 @@ func doClose(req *http.Request, link string) error {
 	return nil
 }
 
+// ReadyPR takes a draft pull request or merge request out of draft — the
+// "mark as ready for review" button, from wherever the person is. GitHub
+// has it only in GraphQL; GitLab keeps draft in the title.
+func ReadyPR(ctx context.Context, s Secrets, link string) error {
+	switch {
+	case strings.Contains(link, "github.com/"):
+		m := githubPRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a repo and number out of %s", link)
+		}
+		if s.GitHub == "" {
+			return ErrNoToken
+		}
+		// The node id first: GraphQL addresses the pull request by it.
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+m[1]+"/pulls/"+m[2], nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+s.GitHub)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", link, err)
+		}
+		var pr struct {
+			NodeID string `json:"node_id"`
+			Draft  bool   `json:"draft"`
+			State  string `json:"state"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&pr)
+		resp.Body.Close()
+		if err != nil || pr.NodeID == "" {
+			return fmt.Errorf("reading %s: no pull request there", link)
+		}
+		if !pr.Draft {
+			return nil // already ready: nothing to do is not an error
+		}
+		q, _ := json.Marshal(map[string]any{
+			"query":     "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { isDraft } } }",
+			"variables": map[string]string{"id": pr.NodeID},
+		})
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, "https://api.github.com/graphql", strings.NewReader(string(q)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+s.GitHub)
+		req.Header.Set("Content-Type", "application/json")
+		return doGraphQL(req, link)
+	case strings.Contains(link, "/-/merge_requests/"):
+		m := gitlabMRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a project and number out of %s", link)
+		}
+		if s.GitLab == "" {
+			return ErrNoToken
+		}
+		base := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3]
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", link, err)
+		}
+		var mr struct {
+			Title string `json:"title"`
+			Draft bool   `json:"draft"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&mr)
+		resp.Body.Close()
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", link, err)
+		}
+		title := undraftTitle(mr.Title)
+		if !mr.Draft && title == mr.Title {
+			return nil
+		}
+		body, _ := json.Marshal(map[string]string{"title": title})
+		req, err = http.NewRequestWithContext(ctx, http.MethodPut, base, strings.NewReader(string(body)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		req.Header.Set("Content-Type", "application/json")
+		return doClose(req, link)
+	}
+	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
+}
+
+// undraftTitle drops every draft marker GitLab knows from a title.
+func undraftTitle(title string) string {
+	t := strings.TrimSpace(title)
+	for {
+		lower := strings.ToLower(t)
+		trimmed := t
+		for _, p := range []string{"draft:", "draft: ", "[draft]", "(draft)", "wip:", "wip: ", "[wip]", "(wip)"} {
+			if strings.HasPrefix(lower, p) {
+				trimmed = strings.TrimSpace(t[len(p):])
+				break
+			}
+		}
+		if trimmed == t {
+			return t
+		}
+		t = trimmed
+	}
+}
+
+// doGraphQL runs one GitHub GraphQL mutation; an error in the answer body
+// is an error, whatever the status.
+func doGraphQL(req *http.Request, link string) error {
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return fmt.Errorf("changing %s: %w", link, err)
+	}
+	defer resp.Body.Close()
+	answer, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("changing %s: HTTP %d: %s", link, resp.StatusCode, clip(string(answer), bodyMax))
+	}
+	var out struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if json.Unmarshal(answer, &out) == nil && len(out.Errors) > 0 {
+		return fmt.Errorf("changing %s: %s", link, out.Errors[0].Message)
+	}
+	return nil
+}
+
 // MergePR merges a pull request or merge request corgi opened. Never
 // automatic: this is only ever reached from something a person tapped.
 func MergePR(ctx context.Context, s Secrets, link string) error {

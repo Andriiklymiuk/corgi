@@ -2137,6 +2137,34 @@ const launcherPageHTML = `<!doctype html>
   };
   const sessionLine = (s) => s ? 'session ' + s.label + ' \u00b7 ' + (STATUS_WORD[s.status] || s.status) : '';
 
+  // The three things a person does to a pull request of theirs from a
+  // row: out of draft, merged, closed. Only where corgi says it is theirs.
+  function prButtons(row, ev, link) {
+    if (!link || !/^https:\/\//.test(link)) return;
+    const ready = document.createElement('button');
+    ready.textContent = 'Ready for review';
+    ready.title = 'Take the draft out of draft';
+    ready.onclick = () => { ready.disabled = true; ticket(ev, { do: 'ready' }).finally(() => { ready.disabled = false; }); };
+    row.appendChild(ready);
+    const merge = document.createElement('button');
+    merge.className = 'primary';
+    merge.textContent = 'Merge';
+    merge.onclick = () => {
+      if (!confirm('Merge ' + (ev.ref || ev.key) + '?\n' + link)) return;
+      merge.disabled = true;
+      ticket(ev, { do: 'merge' }).finally(() => { merge.disabled = false; });
+    };
+    row.appendChild(merge);
+    const shut = document.createElement('button');
+    shut.textContent = 'Close PR';
+    shut.onclick = () => {
+      if (!confirm('Close ' + (ev.ref || ev.key) + ' without merging?\n' + link)) return;
+      shut.disabled = true;
+      ticket(ev, { do: 'close' }).finally(() => { shut.disabled = false; });
+    };
+    row.appendChild(shut);
+  }
+
   // A task of your own: a title, a description, the workspace it is for.
   // Lands in Todo like a ticket; Work on it opens a session on it.
   function taskSheet(after) {
@@ -2333,8 +2361,10 @@ const launcherPageHTML = `<!doctype html>
         if (c.url && /^https:\/\//.test(c.url)) {
           const a = document.createElement('a'); a.className = 'eopen'; a.href = c.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open'; row.appendChild(a);
         }
-        if (c.fix && (c.fix.prs || []).length) {
-          const a = document.createElement('a'); a.className = 'eopen'; a.href = c.fix.prs[0]; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open PR'; row.appendChild(a);
+        const cardPR = (c.fix && (c.fix.prs || [])[0]) || (c.session && c.session.pr) || '';
+        if (cardPR && /^https:\/\//.test(cardPR)) {
+          const a = document.createElement('a'); a.className = 'eopen'; a.href = cardPR; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open PR'; row.appendChild(a);
+          if (c.key && col !== 'Done') prButtons(row, ev, cardPR);
         }
         if (col === 'Blocked' && c.key) {
           const ub = document.createElement('button'); ub.className = 'primary'; ub.textContent = 'Unblock';
@@ -2578,6 +2608,7 @@ const launcherPageHTML = `<!doctype html>
           };
           row.appendChild(go);
         }
+        if (ev.pr) prButtons(row, ev, ev.pr);
         const cols = ev.columns || board.columns || [];
         if (cols.length) {
           const mv = document.createElement('button');
@@ -2661,23 +2692,7 @@ const launcherPageHTML = `<!doctype html>
           row.appendChild(a);
           // Finishing corgi's own work without leaving the row. One tap,
           // and only on what corgi opened.
-          const merge = document.createElement('button');
-          merge.className = 'primary';
-          merge.textContent = 'Merge';
-          merge.onclick = () => {
-            if (!confirm('Merge ' + fx.ref + '?\n' + pr)) return;
-            merge.disabled = true;
-            ticket({ key: fx.key, ref: fx.ref }, { do: 'merge' }).finally(() => { merge.disabled = false; });
-          };
-          row.appendChild(merge);
-          const shut = document.createElement('button');
-          shut.textContent = 'Close';
-          shut.onclick = () => {
-            if (!confirm('Close ' + fx.ref + ' without merging?\n' + pr)) return;
-            shut.disabled = true;
-            ticket({ key: fx.key, ref: fx.ref }, { do: 'close' }).finally(() => { shut.disabled = false; });
-          };
-          row.appendChild(shut);
+          prButtons(row, { key: fx.key, ref: fx.ref }, pr);
           break;
         }
         if (row.children.length) card.appendChild(row);
@@ -3749,6 +3764,9 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		// Columns is where a task can be moved; a tracker ticket's columns
 		// are under boards, by workspace.
 		Columns []string `json:"columns,omitempty"`
+		// PR is the pull request of mine a person may mark ready, merge or
+		// close from this row.
+		PR string `json:"pr,omitempty"`
 	}
 	out := []row{}
 	onTicket := sessionsOnTickets(dir)
@@ -3789,6 +3807,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if e.Kind == watch.KindTask {
 			r.Columns = watch.TaskColumns
 		}
+		r.PR = prLinkFor(dir, e, onTicket)
 		out = append(out, r)
 	}
 	fixes := []map[string]any{}
@@ -3959,26 +3978,31 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = watch.LoadStateLog(dir).SetFrom(event.Key, status, event.State, time.Now())
 		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status, "state": status})
-	case "merge", "close":
-		// Only what corgi opened: this is for finishing its own work, not a
-		// button that can close anything a link points at.
-		link := prCorgiOpened(dir, event.Key)
+	case "merge", "close", "ready":
+		// Only a pull request of mine: one corgi opened, one a session on
+		// the ticket opened, or the one this row is about when it is mine —
+		// not a button that can close anything a link points at.
+		link := prLinkFor(dir, event, nil)
 		if link == "" {
-			writeLaunchError(w, http.StatusBadRequest, "corgi did not open a pull request for this")
+			writeLaunchError(w, http.StatusBadRequest, "no pull request of yours on this")
 			return
 		}
 		secrets := watch.LoadSecretsFor(dir, event.Workspace)
 		var err error
-		if strings.TrimSpace(req.Do) == "merge" {
-			err = watch.MergePR(ctx, secrets, link)
-		} else {
-			err = watch.ClosePR(ctx, secrets, link)
+		var did string
+		switch strings.TrimSpace(req.Do) {
+		case "merge":
+			err, did = watch.MergePR(ctx, secrets, link), "merged "
+		case "ready":
+			err, did = watch.ReadyPR(ctx, secrets, link), "ready for review: "
+		default:
+			err, did = watch.ClosePR(ctx, secrets, link), "closed "
 		}
 		if err != nil {
 			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
 			return
 		}
-		writeLaunchJSON(w, map[string]any{"done": strings.TrimSpace(req.Do) + "d " + link, "url": link})
+		writeLaunchJSON(w, map[string]any{"done": did + link, "url": link})
 	case "assign":
 		me := watch.LoadBoardCache(dir).Get(event.Workspace).Me
 		if me.ID == "" {
@@ -3995,8 +4019,34 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLaunchJSON(w, map[string]any{"done": ref + " is yours"})
 	default:
-		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close, ignore or unblock")
+		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close, ready, ignore or unblock")
 	}
+}
+
+// prLinkFor is the pull request a person may act on from a ticket's row:
+// the one corgi's run opened, else the one a session on the ticket opened,
+// else — for a row about my own pull request — that pull request. "" when
+// there is none of mine.
+func prLinkFor(dir string, e watch.Event, onTicket map[string]*CardSess) string {
+	if link := prCorgiOpened(dir, e.Key); link != "" {
+		return link
+	}
+	if onTicket == nil {
+		onTicket = sessionsOnTickets(dir)
+	}
+	if s := onTicket[strings.ToLower(e.Ref)]; s != nil && s.PR != "" {
+		return s.PR
+	}
+	if e.Mine && (strings.HasPrefix(string(e.Kind), "pr.") || e.Kind == watch.KindCIFailed) {
+		link := e.URL
+		if i := strings.Index(link, "#"); i > 0 {
+			link = link[:i]
+		}
+		if strings.Contains(link, "/pull/") || strings.Contains(link, "/-/merge_requests/") {
+			return link
+		}
+	}
+	return ""
 }
 
 // waitingRank orders the inbox by who is stuck. Someone waiting on you comes

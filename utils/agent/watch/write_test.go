@@ -179,3 +179,16 @@ func TestWriterForNeedsATokenForThatTracker(t *testing.T) {
 		t.Fatal("only trackers with columns are writers")
 	}
 }
+
+func TestUndraftTitleDropsEveryDraftMarker(t *testing.T) {
+	for in, want := range map[string]string{
+		"Draft: Search":         "Search",
+		"WIP: [Draft] Search":   "Search",
+		"Search":                "Search",
+		"  draft: (wip) Search": "Search",
+	} {
+		if got := undraftTitle(in); got != want {
+			t.Errorf("undraftTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

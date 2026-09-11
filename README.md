@@ -405,6 +405,13 @@ leaves the inbox when it is Done or Canceled. Nothing about it reaches a
 tracker. The same goes for a tracker ticket you press Work on it on: the card
 says who picked it and names the session on it from the first event.
 
+A pull request of yours — one corgi's run opened, one a session on the ticket
+opened, or the one an inbox row is about — can be taken out of draft, merged
+or closed from the same row, on every surface: `corgi agent watch pr
+ready|merge|close ABC-123`. A comment from a bot on your pull request (a
+tracker's link, a coverage report) never reaches the inbox, whether it came
+by polling or by webhook.
+
 The same release taught the agent a few habits: a **scope** per ticket that
 the hooks hold it to (a write outside the agreed paths is refused with the way
 to widen, a diff over budget is reported once), a **drift** flag on the key
