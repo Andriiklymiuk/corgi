@@ -34,11 +34,13 @@ type WatchSpec struct {
 	NoRetry bool
 	// Models picks the model per event kind, and the one to step up to
 	// after a failed run.
-	Models  *config.ModelPolicy
-	Project string   // tracker key prefix: ABC-123 belongs to ABC
-	Repos   []string // owner/repo
-	Rules   watch.Rules
-	Sources []watch.Source
+	Models *config.ModelPolicy
+	// Routines run on a clock in this workspace; see routines.go.
+	Routines []config.Routine
+	Project  string   // tracker key prefix: ABC-123 belongs to ABC
+	Repos    []string // owner/repo
+	Rules    watch.Rules
+	Sources  []watch.Source
 	// Skipped names the sources the rules can never use, so status can say
 	// why they are not polled.
 	Skipped  []string
@@ -235,6 +237,26 @@ func (d *Daemon) startWatches(ctx context.Context) {
 // else to the first one whose rules take it; the seen list keeps it single.
 func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 	if d.watchers == nil {
+		return
+	}
+	// A routine handed in by `corgi agent routine run` names its workspace
+	// and skips the rules: someone asked for it now.
+	if e.Kind == watch.KindRoutine {
+		for _, spec := range d.Watches {
+			if spec.Workspace != e.Workspace || d.watchState == nil {
+				continue
+			}
+			if reason := fixDeferral(spec, d.watchState.Fixes, time.Now()); reason != "" {
+				utils.Infof("agent: routine %s waits: %s\n", e.Title, reason)
+				return
+			}
+			if !d.claimFix(spec.Workspace, e.Ref) {
+				return
+			}
+			d.watchState.Fixes.StartFor(e, time.Now())
+			d.spawnFix(ctx, spec, e)
+			return
+		}
 		return
 	}
 	for _, spec := range d.Watches {
@@ -510,6 +532,9 @@ func firstNonEmpty(a, b string) string {
 // the rules: one spec gate collapsed by the approval, draft PRs only,
 // never merge.
 var fixPrompts = map[watch.Kind]func(e watch.Event) string{
+	watch.KindRoutine: func(e watch.Event) string {
+		return e.Body
+	},
 	watch.KindIssueNew: func(e watch.Event) string {
 		return "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + e.Ref + storyMode(e)
 	},
@@ -729,6 +754,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 		d.mirrorHandoff(spec, e.Ref, started)
 		d.tripBreaker(spec, e, runErr.Error())
+		d.routineReport(spec, e, string(out), runErr)
 		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
 			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
@@ -746,6 +772,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 	d.mirrorHandoff(spec, e.Ref, started)
 	d.blockIfRunSaidSo(spec, e, started)
+	d.routineReport(spec, e, string(out), nil)
 	// It opened something, so the ticket is no longer being worked on — it is
 	// waiting on a reviewer, and the board should say so without anyone
 	// dragging it.
