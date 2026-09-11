@@ -255,6 +255,10 @@ type WatchConfig struct {
 	// machine watching the same board leaves it alone. Off by default: it
 	// posts a comment, which not every board wants.
 	Lease bool `yaml:"lease,omitempty"`
+	// NoRetry stops the daemon from starting a deferred fix on its own once
+	// the cap, the quiet hours or the budget that stopped it has passed.
+	// Off by default: a fix that waited for budget runs when budget returns.
+	NoRetry bool `yaml:"noRetry,omitempty"`
 	// Isolate gives every unattended run its own git worktrees, one per
 	// repository, on a branch named after the ticket — so a run never
 	// touches your checkout and two runs on one repo do not collide. Off by

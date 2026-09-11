@@ -3500,6 +3500,8 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		// Blocked is why unattended runs leave this ticket alone, when they do.
 		Blocked   string `json:"blocked,omitempty"`
 		BlockedBy string `json:"blockedBy,omitempty"`
+		// Priority is 0 urgent, 1 high, 2 the rest, from the ticket's labels.
+		Priority int `json:"priority"`
 	}
 	out := []row{}
 	// The events log keeps the column a ticket arrived in. A move made since
@@ -3524,7 +3526,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		r := row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
-			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current}
+			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current, Priority: watch.Priority(e)}
 		if b, ok := fixLog.Blocked(e.Workspace, e.Ref); ok {
 			r.Blocked, r.BlockedBy = b.Reason, b.By
 		}
@@ -3564,6 +3566,9 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	// your own backlog ticket whatever repo it came from, and within a rank
 	// the one that has waited longest goes first.
 	sort.SliceStable(out, func(i, j int) bool {
+		if pi, pj := out[i].Priority, out[j].Priority; pi != pj {
+			return pi < pj
+		}
 		ri, rj := waitingRank(out[i].Kind), waitingRank(out[j].Kind)
 		if ri != rj {
 			return ri < rj

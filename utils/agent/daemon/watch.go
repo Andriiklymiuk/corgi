@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,8 @@ type WatchSpec struct {
 	ConfigDir string
 	// Isolate runs each fix in its own worktrees; see Daemon.Isolate.
 	Isolate bool
+	// NoRetry leaves deferred fixes to a manual run.
+	NoRetry bool
 	Project string   // tracker key prefix: ABC-123 belongs to ABC
 	Repos   []string // owner/repo
 	Rules   watch.Rules
@@ -211,6 +214,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 			Round: func(now time.Time) {
 				d.watchState.NewRound()
 				d.releaseHeld(spec, now)
+				d.retryDeferred(ctx, spec, now)
 				go d.refreshInboxStates(ctx, spec)
 			}}
 		d.watchers[spec.Workspace] = w
@@ -308,9 +312,47 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 	go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
 }
 
+// retryDeferred starts the most urgent deferred fix for a workspace once
+// whatever stopped it — a cap, quiet hours, the budget — has passed. One
+// per round, so a backlog drains at the pace the caps allow rather than
+// all at once the minute the window resets.
+func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Time) {
+	if spec.NoRetry || spec.Action != "fix" || d.watchState == nil {
+		return
+	}
+	var queue []watch.Event
+	for _, e := range d.watchState.Fixes.DeferredEvents() {
+		if e.Workspace != spec.Workspace {
+			continue
+		}
+		if _, blocked := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); blocked {
+			continue
+		}
+		if d.watchState.IsIgnored(e.Key) {
+			continue
+		}
+		queue = append(queue, e)
+	}
+	if len(queue) == 0 {
+		return
+	}
+	if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
+		return
+	}
+	sort.SliceStable(queue, func(i, j int) bool { return watch.Less(queue[i], queue[j]) })
+	e := queue[0]
+	if !d.claimFix(spec.Workspace, e.Ref) {
+		return
+	}
+	d.watchState.MarkSeen(e.Key)
+	d.watchState.Fixes.StartFor(e, now)
+	utils.Infof("agent: watch %s: deferred fix for %s starts now (%d more waiting)\n", spec.Workspace, e.Ref, len(queue)-1)
+	d.spawnFix(ctx, spec, e)
+}
+
 // startFix launches the fix, or says in one short note why not. A deferred
-// event leaves the seen list and waits in the fix log for a manual
-// `corgi agent watch run`; the daemon never retries it by itself.
+// event leaves the seen list and waits in the fix log until the daemon can
+// start it (retryDeferred) or someone runs `corgi agent watch run`.
 func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) string {
 	now := time.Now()
 	if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
@@ -323,8 +365,16 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 		return "a fix for it is already running"
 	}
 	d.watchState.Fixes.StartFor(e, now)
-	go d.runFix(ctx, spec, e)
+	d.spawnFix(ctx, spec, e)
 	return ""
+}
+
+func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
+	d.runs.Add(1)
+	go func() {
+		defer d.runs.Done()
+		d.runFix(ctx, spec, e)
+	}()
 }
 
 // fixDeferral says why a fix must not start now; "" means go ahead.

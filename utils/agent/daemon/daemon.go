@@ -174,6 +174,9 @@ type Daemon struct {
 	// waits for the runners: a swap that launches after the runner wait has
 	// begun would add to a WaitGroup already being waited on.
 	swaps sync.WaitGroup
+	// runs counts unattended fixes in flight, so a test or a shutdown can
+	// wait for the last one to write its record.
+	runs sync.WaitGroup
 
 	// nudge wakes the command loop; the cross-process doorbell is SIGUSR1.
 	nudge chan struct{}
