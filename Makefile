@@ -81,6 +81,9 @@ coverage-by-pkg: test
 test\:cov:
 	go test ./... -timeout 30s -coverprofile=/tmp/coverage.out -covermode=atomic 2>&1 | tail -10 && go tool cover -func=/tmp/coverage.out | tail -1
 
+skill-evals: ## does the right corgi skill fire on its own (needs a Claude login)
+	scripts/skill-activation.sh
+
 fmt-check:
 	@unformatted=$$(gofmt -l .); \
 	if [ -n "$$unformatted" ]; then \

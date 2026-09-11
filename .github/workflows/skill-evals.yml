@@ -1,0 +1,54 @@
+name: Skill evals
+
+# The plugin's skills are prompts; a change to one is a change to what the
+# agent does. Two checks, both needing a Claude login (CLAUDE_CODE_OAUTH_TOKEN
+# or ANTHROPIC_API_KEY in secrets): does the right skill fire on its own, and
+# do the eval cases still score. Skipped when no credential is set.
+
+on:
+  pull_request:
+    paths:
+      - "plugins/corgi/**"
+      - "scripts/skill-activation.sh"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Plugin manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: claude plugin validate plugins/corgi
+
+  activation:
+    name: Skill activation
+    runs-on: ubuntu-latest
+    if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY != '' }}
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: scripts/skill-activation.sh
+
+  evals:
+    name: Eval cases
+    runs-on: ubuntu-latest
+    if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY != '' }}
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - run: npm install -g @anthropic-ai/claude-code
+      # Early access: when the command is not available on this account the
+      # step says so and passes; the activation job above still gates.
+      - run: |
+          set +e
+          out=$(claude plugin eval plugins/corgi --threshold 0.8 --max-cost-usd 5 --no-publish 2>&1)
+          code=$?
+          echo "$out"
+          if echo "$out" | grep -qi "early access"; then echo "plugin eval not available on this account yet"; exit 0; fi
+          exit $code
