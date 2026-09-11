@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -41,6 +42,10 @@ func TestTokensAreKeptPerDeviceAndDroppedWhenGone(t *testing.T) {
 	}
 	if len(sent) != 2 || sent[0]["categoryId"] != "permission" || sent[0]["channelId"] != "permission" || sent[0]["threadId"] != "s1" {
 		t.Fatalf("sent: %+v", sent)
+	}
+	host, _ := os.Hostname()
+	if data, _ := sent[0]["data"].(map[string]any); data["session"] != "s1" || data["laptop"] != host {
+		t.Fatalf("the phone needs the session and which laptop asked: %+v", sent[0]["data"])
 	}
 	if got := Load(dir).List(); len(got) != 1 || got[0].Device != "phone" {
 		t.Fatalf("the unregistered device is dropped: %+v", got)
