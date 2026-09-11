@@ -789,6 +789,9 @@ type FixRecord struct {
 	// Branch is the worktree branch an isolated run worked on, so undo can
 	// release it and a row can say where the code is.
 	Branch string `json:"branch,omitempty"`
+	// Forgiven marks a failed run an unblock has put behind it, so it no
+	// longer counts toward the breaker.
+	Forgiven bool `json:"forgiven,omitempty"`
 	// SpentPercent is how much of the account's five-hour window this run
 	// used, measured across it. Ten comment fixes and ten whole tickets are
 	// the same number of runs and nowhere near the same spend.
@@ -807,6 +810,91 @@ type FixLog struct {
 	path     string
 	Started  []FixRecord `json:"started"`
 	Deferred []Event     `json:"deferred,omitempty"`
+	// Blocks are refs taken out of unattended runs: by the breaker after
+	// two failures in a row, by a run that said it was blocked, or by a
+	// person. Keyed "<workspace>/<ref>". A person unblocks.
+	Blocks map[string]Block `json:"blocks,omitempty"`
+}
+
+// Block is why a ref is not being worked on, and who said so.
+type Block struct {
+	Reason string    `json:"reason"`
+	By     string    `json:"by"` // breaker, run, person
+	At     time.Time `json:"at"`
+}
+
+const (
+	BlockedByBreaker = "breaker"
+	BlockedByRun     = "run"
+	BlockedByPerson  = "person"
+	// BreakerAfter is how many failed runs in a row on one ref trip it.
+	BreakerAfter = 2
+)
+
+func blockKey(workspace, ref string) string { return workspace + "/" + strings.TrimSpace(ref) }
+
+// Block takes a ref out of unattended runs until someone unblocks it.
+func (l *FixLog) Block(workspace, ref, reason, by string, now time.Time) {
+	if strings.TrimSpace(ref) == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.Blocks == nil {
+		l.Blocks = map[string]Block{}
+	}
+	l.Blocks[blockKey(workspace, ref)] = Block{Reason: strings.TrimSpace(reason), By: by, At: now}
+	_ = l.save()
+}
+
+// Unblock lets runs on the ref start again. The failures that tripped the
+// breaker are forgotten by time: only runs after now count toward the next.
+func (l *FixLog) Unblock(workspace, ref string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	key := blockKey(workspace, ref)
+	if _, ok := l.Blocks[key]; !ok {
+		return false
+	}
+	delete(l.Blocks, key)
+	for i := range l.Started {
+		if l.Started[i].Workspace == workspace && l.Started[i].Ref == ref && l.Started[i].Done() {
+			l.Started[i].Forgiven = true
+		}
+	}
+	_ = l.save()
+	return true
+}
+
+// Blocked says whether a ref is out, and why.
+func (l *FixLog) Blocked(workspace, ref string) (Block, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b, ok := l.Blocks[blockKey(workspace, ref)]
+	return b, ok
+}
+
+// FailedInARow is how many of the newest finished runs on a ref ended in
+// an error, stopping at the first that did not. A run that was not started
+// (deferred, refused) does not count: it did not try.
+func (l *FixLog) FailedInARow(workspace, ref string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		r := l.Started[i]
+		if r.Workspace != workspace || r.Ref != ref || !r.Done() {
+			continue
+		}
+		if strings.HasPrefix(r.Error, "not started") {
+			continue
+		}
+		if r.Error == "" || r.Forgiven {
+			break
+		}
+		n++
+	}
+	return n
 }
 
 const (
