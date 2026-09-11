@@ -126,6 +126,8 @@ type Slot struct {
 	// will continue it on its own, so the key can say "continues 14:02".
 	Limit    LimitKind `json:"limit,omitempty"`
 	ResumeAt time.Time `json:"resumeAt,omitempty"`
+	// Drift is the first reason the daemon thinks a person should look.
+	Drift string `json:"drift,omitempty"`
 }
 
 // New returns a registry persisted at path, with a board of size keys.
@@ -288,6 +290,15 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 		if strings.HasPrefix(s.Detail, ev.Tool) || s.Status == StatusNeedsInput {
 			s.Detail = ""
 		}
+		subject := ev.Tool + " " + ev.Subject
+		if ev.Name == "PostToolUseFailure" && subject == s.failSubject {
+			s.FailStreak++
+		} else if ev.Name == "PostToolUseFailure" {
+			s.FailStreak, s.failSubject = 1, subject
+		} else if subject == s.failSubject {
+			// The same thing succeeded: whatever was looping is over.
+			s.FailStreak, s.failSubject = 0, ""
+		}
 		r.setStatus(s, StatusWorking, now)
 	case "PermissionRequest":
 		s.Tool = ev.Tool
@@ -298,6 +309,7 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 		r.applyNotification(s, ev, now)
 	case "Stop":
 		s.Tool, s.Detail, s.Pending = "", "", nil
+		s.FailStreak, s.failSubject = 0, ""
 		r.setStatus(s, StatusDone, now)
 	case "StopFailure":
 		s.Tool, s.Pending = "", nil
@@ -868,6 +880,24 @@ func (r *Registry) SetNote(ref, note string) error {
 	return nil
 }
 
+// SetDrift records what the daemon concluded about a session; true when
+// the reasons changed, and whether drift just began (worth one notice).
+func (r *Registry) SetDrift(id string, reasons []string) (changed, began bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[id]
+	if !ok {
+		return false, false
+	}
+	if strings.Join(s.Drift, "|") == strings.Join(reasons, "|") {
+		return false, false
+	}
+	began = len(s.Drift) == 0 && len(reasons) > 0
+	s.Drift = reasons
+	r.touch()
+	return true, began
+}
+
 // PlanResume records when the daemon will continue a limited session; a
 // zero time clears the plan. Nothing else changes, so no transition fires.
 func (r *Registry) PlanResume(id string, at time.Time) bool {
@@ -1268,6 +1298,9 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		sl.Detail, sl.Host, sl.FocusError, sl.FocusAt = s.Detail, s.Host.Kind, s.FocusError, s.FocusAt
 		sl.Note, sl.Stuck = s.Note, s.Stuck
 		sl.Limit, sl.ResumeAt = s.Limit, s.ResumeAt
+		if len(s.Drift) > 0 {
+			sl.Drift = s.Drift[0]
+		}
 		sl.Branch, sl.Summary, sl.PR = s.Branch, s.Summary, s.PR
 		if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
 			sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())
