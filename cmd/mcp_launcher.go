@@ -1914,6 +1914,7 @@ const launcherPageHTML = `<!doctype html>
         row.appendChild(dot); row.appendChild(label);
         let detail = s.detail || STATUS_WORD[s.status] || '';
         if (s.status === 'limited' && s.limit === 'overload') detail = 'API overloaded';
+        if (s.drift && s.drift.length) detail = 'drifting: ' + s.drift[0];
         if (s.resumeAt) detail += (detail ? ' · ' : '') + 'continues ' + clock(s.resumeAt);
         if (s.context && s.context.percent >= 50) detail += (detail ? ' · ' : '') + 'ctx ' + s.context.percent + '%';
         if (detail) {
@@ -2047,6 +2048,20 @@ const launcherPageHTML = `<!doctype html>
       button('Send\u2026', '', () => {
         const text = window.prompt('Type into ' + name);
         if (text && text.trim()) boardAction('send', { session: s.id, text: text.trim() });
+      });
+    }
+    // A drifting session gets the one way out the phone can offer: a clean
+    // restart from a handoff, same account, same worktree.
+    if (s.drift && s.drift.length && s.status !== 'gone') {
+      button('Fresh', 'bad', async (e) => {
+        if (!confirm('Restart ' + name + ' clean from a handoff?\n' + s.drift.join('\n'))) return;
+        const b = e.currentTarget; b.disabled = true;
+        try {
+          const r = await fetch('/launch/fresh', { method: 'POST', headers: auth, body: JSON.stringify({ session: s.id }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) { toast(j.error || 'could not restart it', true); b.disabled = false; return; }
+          toast(j.done || 'restarting'); setTimeout(loadBoard, 4000);
+        } catch { toast('no connection', true); b.disabled = false; }
       });
     }
     if (s.pr) {
@@ -3236,6 +3251,39 @@ func launchAnswerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	launchBoardCommand(w, command.Command{Action: command.ActionAnswer, SessionID: session.ID, Answer: answer, Source: "phone"})
+}
+
+// launchFreshHandler restarts a drifting session clean, under the same
+// account, from a handoff: `corgi agent carry <id> --fresh` run as itself,
+// so the phone and the CLI do exactly the same thing.
+func launchFreshHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {session} to restart it clean from a handoff")
+		return
+	}
+	var req struct {
+		Session string `json:"session"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	session, code, msg := launchSessionFor(req.Session)
+	if code != 0 {
+		writeLaunchError(w, code, msg)
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		exe = "corgi"
+	}
+	out, err := exec.Command(exe, "agent", "carry", session.ID, "--fresh", "--json").CombinedOutput()
+	if err != nil {
+		writeLaunchError(w, http.StatusBadGateway, firstLineOf(strings.TrimSpace(string(out))+" "+err.Error()))
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"done": "restarting " + firstNonEmpty(session.Display, session.Label) + " clean, from a handoff"})
 }
 
 func launchSendHandler(w http.ResponseWriter, r *http.Request) {

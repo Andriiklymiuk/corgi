@@ -297,12 +297,18 @@ func formatSlot(sl sessions.Slot) string {
 	if sl.Status == sessions.StatusLimited && sl.Limit == sessions.LimitOverload {
 		word = "OVERLOAD"
 	}
+	if sl.Drift != "" && sl.Status == sessions.StatusWorking {
+		word = "DRIFT"
+	}
 	line := fmt.Sprintf("%s %s %s %-18s %-10s", key, pin, statusGlyph(sl.Status), clipTitle(sl.Label, 18), word)
 	if detail := firstNonEmpty(sl.Note, sl.Detail); detail != "" {
 		line += " " + clipTitle(detail, 24)
 	}
 	if !sl.ResumeAt.IsZero() {
 		line += " · continues " + sl.ResumeAt.Local().Format("15:04")
+	}
+	if sl.Drift != "" {
+		line += " · " + clipTitle(sl.Drift, 48)
 	}
 	line += "  " + sl.Profile + " · " + string(sl.Host)
 	if sl.Context > 0 {
