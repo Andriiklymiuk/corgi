@@ -3653,8 +3653,12 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		// the line a person reads before deciding, without opening the tracker.
 		Author string `json:"author,omitempty"`
 		Body   string `json:"body,omitempty"`
+		// Session is the live Claude session on this ticket, when one is:
+		// opened for it by "Work on it", or on a branch named after it.
+		Session *CardSess `json:"session,omitempty"`
 	}
 	out := []row{}
+	onTicket := sessionsOnTickets(dir)
 	// The events log keeps the column a ticket arrived in. A move made since
 	// then is the truth, so it wins.
 	moved := watch.LoadStateLog(dir)
@@ -3683,6 +3687,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if b, ok := fixLog.Blocked(e.Workspace, e.Ref); ok {
 			r.Blocked, r.BlockedBy = b.Reason, b.By
 		}
+		r.Session = onTicket[strings.ToLower(e.Ref)]
 		out = append(out, r)
 	}
 	fixes := []map[string]any{}
@@ -3914,6 +3919,11 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	launchBoardCommand(w, c)
 }
 
+// ticketRefPattern is what a ref may look like on a command line: a key,
+// an owner/repo#1 or !1 — never a space, a quote or a shell character.
+var ticketRefPattern = regexp.MustCompile(`^[A-Za-z0-9_./#!-]{1,120}$`)
+var ticketKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_.:/#!@-]{1,200}$`)
+
 // workOnOptions is where and how a session for a ticket opens: an editor
 // window, a model, a profile, and who asked.
 type workOnOptions struct {
@@ -4001,6 +4011,15 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	var refs []string
+	for _, e := range events {
+		if ref := strings.TrimSpace(e.Ref); ref != "" && ticketRefPattern.MatchString(ref) {
+			refs = append(refs, ref)
+		}
+	}
+	if len(refs) > 0 && ticketKeyPattern.MatchString(events[0].Key) {
+		args = append(args, "--ticket", strings.Join(refs, ","), "--ticket-key", events[0].Key)
+	}
 	args = append(args, "--prompt-id", id)
 	return command.Command{Action: command.ActionNew, WindowID: window,
 		Command: daemon.NewSessionCommand(args...), Source: opt.Source}, 0, ""
@@ -4072,4 +4091,29 @@ func windowConnected(rep boardReport, window string) bool {
 		}
 	}
 	return false
+}
+
+// sessionsOnTickets is the live session on each ticket, by lower-cased ref:
+// what "Work on it" opened, or a session on the ticket's branch. So an
+// inbox row can say a session is on it the moment the session's first
+// event lands, on every surface alike.
+func sessionsOnTickets(dir string) map[string]*CardSess {
+	out := map[string]*CardSess{}
+	rep, err := readBoard(dir)
+	if err != nil {
+		return out
+	}
+	for _, s := range rep.Sessions {
+		if s.Status == sessions.StatusGone || s.Status == sessions.StatusStale {
+			continue
+		}
+		for _, ref := range sessionTicketRefs(s) {
+			key := strings.ToLower(ref)
+			if _, taken := out[key]; taken {
+				continue
+			}
+			out[key] = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status)}
+		}
+	}
+	return out
 }

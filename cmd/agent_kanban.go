@@ -188,17 +188,21 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 		}
 	}
 
-	// A live session on the ticket's branch is a person or an agent at work.
+	// A live session on the ticket is a person or an agent at work: one
+	// opened for it by "Work on it" (the ticket rides in its environment),
+	// or one on a branch named after it.
 	for _, s := range in.sessions {
-		ref := handoff.RefFromBranch(s.Branch)
-		if ref == "" || s.Status == sessions.StatusGone || s.Status == sessions.StatusStale {
+		if s.Status == sessions.StatusGone || s.Status == sessions.StatusStale {
 			continue
 		}
-		for id, c := range byRef {
-			if !strings.EqualFold(c.Ref, ref) {
+		refs := sessionTicketRefs(s)
+		if len(refs) == 0 {
+			continue
+		}
+		for _, c := range byRef {
+			if !containsFold(refs, c.Ref) {
 				continue
 			}
-			_ = id
 			c.Session = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status)}
 			c.Branch = s.Branch
 			if in.sessionTokens != nil {
@@ -211,7 +215,11 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 				}
 			}
 			if c.Column == ColInbox || c.Column == ColReady {
-				c.Column, c.Why = ColRunning, "session "+c.Session.Label+" is on "+s.Branch
+				where := s.Branch
+				if where == "" || !strings.EqualFold(handoff.RefFromBranch(where), c.Ref) {
+					where = "it"
+				}
+				c.Column, c.Why = ColRunning, "session "+c.Session.Label+" is on "+where
 			}
 		}
 	}
@@ -403,4 +411,28 @@ func humanTokens(n int64) string {
 		return fmt.Sprintf("%.0fk", float64(n)/1_000)
 	}
 	return fmt.Sprint(n)
+}
+
+// sessionTicketRefs is every ticket a session is on: the refs "Work on it"
+// put in its environment, and the one its branch is named after.
+func sessionTicketRefs(s sessions.Session) []string {
+	var refs []string
+	for _, r := range strings.Split(s.Ticket, ",") {
+		if r = strings.TrimSpace(r); r != "" {
+			refs = append(refs, r)
+		}
+	}
+	if ref := handoff.RefFromBranch(s.Branch); ref != "" {
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+func containsFold(list []string, want string) bool {
+	for _, s := range list {
+		if strings.EqualFold(s, want) {
+			return true
+		}
+	}
+	return false
 }
