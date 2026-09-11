@@ -59,3 +59,68 @@ func TestDeferredFixesComeBackOnTheirOwn(t *testing.T) {
 	}
 	d.runs.Wait()
 }
+
+// A "thanks, test is ok" that was queued during quiet hours — before the
+// rules learned to refuse thank-yous, or on a ticket that has since been
+// closed — is dropped in the morning, not started. Starting it would have
+// moved a Done ticket back to In Progress.
+func TestADeferredFixOnFinishedWorkIsDroppedInTheMorning(t *testing.T) {
+	d := dynDaemon(t)
+	d.loadWatchFiles()
+	d.fixBusy = map[string]*sync.Mutex{"api": {}}
+	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), Action: "fix", Interval: time.Minute,
+		Rules: watch.Rules{Enabled: true, Comments: true}}
+	now := time.Now()
+	thanks := watch.Event{Key: "k-thanks", Ref: "ABC-1", Workspace: "api", Kind: watch.KindIssueComment,
+		Body: "Thanks ! test is ok", Mine: true, At: now.Add(-9 * time.Hour)}
+	closed := watch.Event{Key: "k-closed", Ref: "ABC-2", Workspace: "api", Kind: watch.KindIssueComment,
+		Body: "can you also handle the empty list case?", Mine: true, State: "In Review", At: now.Add(-8 * time.Hour)}
+	live := watch.Event{Key: "k-live", Ref: "ABC-3", Workspace: "api", Kind: watch.KindIssueComment,
+		Body: "please retry with the new token", Mine: true, State: "In Review", At: now.Add(-7 * time.Hour)}
+	for _, e := range []watch.Event{thanks, closed, live} {
+		d.watchState.Fixes.Defer(e)
+	}
+	// Overnight someone closed ABC-2; the daemon saw it.
+	if err := watch.LoadStateLog(d.Dir).Set("k-closed", "Done", now); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	d.retryDeferred(ctx, spec, now)
+
+	var started []string
+	for _, r := range d.watchState.Fixes.RecentFixes("api", 10) {
+		started = append(started, r.Ref)
+	}
+	if len(started) != 1 || started[0] != "ABC-3" {
+		t.Fatalf("only the live request starts: %v", started)
+	}
+	if left := d.watchState.Fixes.DeferredEvents(); len(left) != 0 {
+		t.Fatalf("the thank-you and the closed one leave the queue for good, got %d left", len(left))
+	}
+	d.runs.Wait()
+}
+
+// The same check guards a fix that is about to start fresh: what the poll
+// saw a minute ago may be Done by now.
+func TestAFixDoesNotStartOnATicketThatIsDoneNow(t *testing.T) {
+	d := dynDaemon(t)
+	d.loadWatchFiles()
+	d.fixBusy = map[string]*sync.Mutex{"api": {}}
+	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), Action: "fix", Interval: time.Minute,
+		Rules: watch.Rules{Enabled: true, Comments: true}}
+	e := watch.Event{Key: "k-1", Ref: "ABC-1", Workspace: "api", Kind: watch.KindIssueComment,
+		Body: "one more thing: the label", Mine: true, State: "In Review", At: time.Now()}
+	if err := watch.LoadStateLog(d.Dir).Set("k-1", "Done", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got := d.startFix(ctx, spec, e); got != "not started: it is done" {
+		t.Fatalf("got %q", got)
+	}
+	if n := len(d.watchState.Fixes.RecentFixes("api", 10)); n != 0 {
+		t.Fatalf("nothing ran, got %d", n)
+	}
+}

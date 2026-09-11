@@ -1098,6 +1098,14 @@ func (l *FixLog) DeferredCount(workspace string) int {
 	return n
 }
 
+// DropDeferred forgets a waiting event: its fix is no longer worth starting.
+func (l *FixLog) DropDeferred(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.dropDeferred(key)
+	_ = l.save()
+}
+
 func (l *FixLog) dropDeferred(key string) {
 	kept := l.Deferred[:0]
 	for _, e := range l.Deferred {

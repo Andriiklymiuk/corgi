@@ -388,14 +388,66 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 		return
 	}
 	sort.SliceStable(queue, func(i, j int) bool { return watch.Less(queue[i], queue[j]) })
-	e := queue[0]
-	if !d.claimFix(spec.Workspace, e.Ref) {
+	// An event waited hours in the queue; the rules may have changed, and so
+	// may the ticket. One that is over now is dropped, not started: the
+	// morning is not the moment to move a finished ticket back to In Progress.
+	for i, e := range queue {
+		if why := d.stillWorthFixing(ctx, spec, e); why != "" {
+			d.watchState.Fixes.DropDeferred(e.Key)
+			utils.Infof("agent: watch %s: deferred fix for %s dropped: %s\n", spec.Workspace, e.Ref, why)
+			continue
+		}
+		if !d.claimFix(spec.Workspace, e.Ref) {
+			return
+		}
+		d.watchState.MarkSeen(e.Key)
+		d.watchState.Fixes.StartFor(e, now)
+		utils.Infof("agent: watch %s: deferred fix for %s starts now (%d more waiting)\n", spec.Workspace, e.Ref, len(queue)-i-1)
+		d.spawnFix(ctx, spec, e)
 		return
 	}
-	d.watchState.MarkSeen(e.Key)
-	d.watchState.Fixes.StartFor(e, now)
-	utils.Infof("agent: watch %s: deferred fix for %s starts now (%d more waiting)\n", spec.Workspace, e.Ref, len(queue)-1)
-	d.spawnFix(ctx, spec, e)
+}
+
+// stillWorthFixing says why an event that once earned a fix no longer does,
+// or "" while it still does. The rules first: what they refuse today they
+// refuse for an event queued yesterday. Then the ticket's column, from what
+// the daemon last saw and, for the tracker kinds, from the tracker itself.
+func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.Event) string {
+	if spec.Rules.Enabled {
+		if why := spec.Rules.Why(e); why != "" {
+			return why
+		}
+	}
+	if e.Ref == "" {
+		return ""
+	}
+	states := watch.LoadStateLog(d.Dir)
+	if known, ok := states.Get(e.Key); ok {
+		if over := watch.Settled(e, known.Status); over != "" {
+			return "it is " + over
+		}
+	}
+	switch e.Kind {
+	case watch.KindIssueNew, watch.KindIssueComment, watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested:
+	default:
+		return ""
+	}
+	for _, src := range spec.Sources {
+		asker, ok := src.(watch.StillOpen)
+		if !ok {
+			continue
+		}
+		state := asker.RefState(ctx, e.Ref)
+		if state == "" {
+			continue
+		}
+		_ = states.Set(e.Key, state, time.Now())
+		if over := watch.Settled(e, state); over != "" {
+			return "it is " + over
+		}
+		break
+	}
+	return ""
 }
 
 // startFix launches the fix, or says in one short note why not. A deferred
@@ -403,6 +455,10 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 // start it (retryDeferred) or someone runs `corgi agent watch run`.
 func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) string {
 	now := time.Now()
+	if why := d.stillWorthFixing(ctx, spec, e); why != "" {
+		utils.Infof("agent: watch %s: not fixing %s: %s\n", spec.Workspace, e.Ref, why)
+		return "not started: " + why
+	}
 	if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
 		d.watchState.Fixes.Defer(e)
 		d.watchState.Unsee(e.Key)
