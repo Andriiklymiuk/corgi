@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +27,16 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 		{Key: "k-ignored", Ref: "ABC-6", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
 		{Key: "k-session", Ref: "ABC-7", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
 		{Key: "k-worked", Ref: "ABC-9", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
+		// Tasks of your own: the column is the state; a pick or a session moves it.
+		{Key: "task:1", Ref: "TASK-1", Workspace: "api", Kind: watch.KindTask, State: "Todo", Title: "write the thing", Body: "how", At: now},
+		{Key: "task:2", Ref: "TASK-2", Workspace: "api", Kind: watch.KindTask, State: "Doing", At: now},
+		{Key: "task:3", Ref: "TASK-3", Workspace: "api", Kind: watch.KindTask, State: "Review", At: now},
+		{Key: "task:4", Ref: "TASK-4", Workspace: "api", Kind: watch.KindTask, State: "Done", At: now},
+		{Key: "task:5", Ref: "TASK-5", Workspace: "api", Kind: watch.KindTask, State: "Todo", At: now},
 	}
+	picks := watch.LoadPicks(dir)
+	picks.Set("task:5", "phone", now.Add(-2*time.Minute))
+	picks.Set("k-inbox", "page", now.Add(-time.Hour))
 	fixes.StartFor(events[1], now.Add(-time.Minute))
 	fixes.StartFor(events[2], now.Add(-time.Hour))
 	// A run that happened on the ignored event, finished with nothing to
@@ -46,13 +56,14 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	}
 
 	cards := buildKanban(kanbanInputs{events: events, ignored: func(k string) bool { return k == "k-ignored" },
-		moved: moved, fixes: fixes, sessions: sess, packets: packets, now: now})
+		moved: moved, fixes: fixes, sessions: sess, packets: packets, picks: picks, now: now})
 
 	got := map[string]KanbanCard{}
 	for _, c := range cards {
 		got[c.Ref] = c
 	}
-	want := map[string]string{"ABC-1": ColInbox, "ABC-2": ColRunning, "ABC-3": ColReview, "ABC-4": ColBlocked, "ABC-5": ColDone, "ABC-7": ColRunning, "ABC-8": ColReady, "ABC-9": ColRunning}
+	want := map[string]string{"ABC-1": ColInbox, "ABC-2": ColRunning, "ABC-3": ColReview, "ABC-4": ColBlocked, "ABC-5": ColDone, "ABC-7": ColRunning, "ABC-8": ColReady, "ABC-9": ColRunning,
+		"TASK-1": ColInbox, "TASK-2": ColRunning, "TASK-3": ColReview, "TASK-4": ColDone, "TASK-5": ColRunning}
 	for ref, col := range want {
 		if got[ref].Column != col {
 			t.Errorf("%s: %s (%s), want %s", ref, got[ref].Column, got[ref].Why, col)
@@ -64,8 +75,17 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	if got["ABC-7"].Session == nil || got["ABC-7"].Branch != "feature/ABC-7/thing" {
 		t.Error("the session and its branch are on the card")
 	}
-	if got["ABC-9"].Session == nil || got["ABC-9"].Session.ID != "s2" || got["ABC-9"].Why != "session api 2 is on it" {
+	if got["ABC-9"].Session == nil || got["ABC-9"].Session.ID != "s2" || got["ABC-9"].Why != "session api 2 is working on it" {
 		t.Errorf("a session opened for the ticket is on its card before any branch is: %+v %q", got["ABC-9"].Session, got["ABC-9"].Why)
+	}
+	if got["TASK-1"].Body != "how" || len(got["TASK-1"].Columns) != 5 || got["TASK-1"].Why != "waiting in the inbox" {
+		t.Errorf("a task card carries its description and its columns: %+v", got["TASK-1"])
+	}
+	if got["TASK-5"].Picked == nil || got["TASK-5"].Picked.By != "phone" || !strings.Contains(got["TASK-5"].Why, "waiting for a session") {
+		t.Errorf("a fresh pick with no session yet says so: %+v %q", got["TASK-5"].Picked, got["TASK-5"].Why)
+	}
+	if got["ABC-1"].Column != ColInbox || got["ABC-1"].Picked == nil {
+		t.Errorf("an old pick is history, not a column: %s %+v", got["ABC-1"].Column, got["ABC-1"].Picked)
 	}
 	if got["ABC-3"].Fix == nil || len(got["ABC-3"].Fix.PRs) != 1 {
 		t.Error("the run's pull request is on the card")

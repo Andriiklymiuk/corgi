@@ -632,6 +632,23 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	watch.KindRoutine: func(e watch.Event) string {
 		return e.Body
 	},
+	// A task of your own: no tracker, so the session keeps the board honest
+	// itself with the task commands.
+	watch.KindTask: func(e watch.Event) string {
+		body := strings.TrimSpace(e.Body)
+		if body == "" {
+			body = "(no description — use your judgement and ask if it is unclear)"
+		}
+		return fmt.Sprintf("You are picking up %s from the corgi board — a task written by the person you work with, not a tracker ticket.\n\n"+
+			"Title: %s\n\n%s\n\n"+
+			"Do the work in this checkout on a branch named after %s. I approve all changes; when code changed, push and open a draft pull request. "+
+			"Keep the board honest as you go, from the shell:\n"+
+			"- the moment a draft pull request is up: corgi agent task move %s Review\n"+
+			"- when there is nothing left to do and no PR was needed: corgi agent task done %s\n"+
+			"- if it cannot or should not be done, say why and run: corgi agent task move %s Canceled\n"+
+			"End by saying in two lines what you did and what is left.",
+			e.Ref, strings.TrimSpace(e.Title), body, e.Ref, e.Ref, e.Ref, e.Ref)
+	},
 	watch.KindIssueNew: func(e watch.Event) string {
 		return "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + e.Ref + storyMode(e)
 	},

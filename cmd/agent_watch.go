@@ -578,9 +578,12 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			At        time.Time `json:"at"`
 			Blocked   string    `json:"blocked,omitempty"`
 			Session   *CardSess `json:"session,omitempty"`
+			Picked    *CardPick `json:"picked,omitempty"`
+			Columns   []string  `json:"columns,omitempty"`
 		}
 		events := []eventRow{}
 		onTicket := sessionsOnTickets(dir)
+		picks := watch.LoadPicks(dir)
 		moved := watch.LoadStateLog(dir)
 		keeper := watch.NewInboxKeeper(now)
 		for _, e := range watch.RecentEvents(dir, 25) {
@@ -603,6 +606,12 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 				er.Blocked = b.Reason
 			}
 			er.Session = onTicket[strings.ToLower(e.Ref)]
+			if p, ok := picks.Get(e.Key); ok && now.Sub(p.At) <= watch.PickFresh {
+				er.Picked = &CardPick{At: p.At, By: p.By}
+			}
+			if e.Kind == watch.KindTask {
+				er.Columns = watch.TaskColumns
+			}
 			events = append(events, er)
 		}
 		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events})
