@@ -82,23 +82,8 @@ homebrew_casks:
         run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{" }}staged_path{{ "}}" }}/corgi"], must_succeed: false
       end
     caveats: |
-      Shell tab-completion installed for bash, zsh, fish:
-        corgi run --services <TAB>      # services from corgi-compose.yml
-        corgi run --dbServices <TAB>    # db_services
-        corgi script -n <TAB>           # script names per service
-        corgi tunnel <TAB>              # tunnelable services
-
-      zsh users — if `<TAB>` shows files instead of names, your shell
-      isn't loading brew's site-functions. Add this to ~/.zshrc BEFORE
-      `compinit` (one-time, fixes all brew-installed completions):
-
-        FPATH="#{HOMEBREW_PREFIX}/share/zsh/site-functions:$FPATH"
-        autoload -Uz compinit && compinit
-
-      Then: `rm -f ~/.zcompdump* && exec zsh`
-
-      What's new:
-        https://github.com/Andriiklymiuk/corgi/releases/tag/v#{version}
+      What's new: https://github.com/Andriiklymiuk/corgi/releases/tag/v#{version}
+      Tab completion installed for bash, zsh, fish — if <TAB> shows files: corgi completion zsh --help
 
 # Linux packages, attached to the release: `sudo dpkg -i corgi_*.deb`,
 # `sudo rpm -i corgi_*.rpm`, `apk add --allow-untrusted corgi_*.apk`.
