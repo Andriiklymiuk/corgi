@@ -792,6 +792,10 @@ type FixRecord struct {
 	// Forgiven marks a failed run an unblock has put behind it, so it no
 	// longer counts toward the breaker.
 	Forgiven bool `json:"forgiven,omitempty"`
+	// CostUSD and Tokens are what the run said it cost, from claude's own
+	// receipt; zero when the run did not say.
+	CostUSD float64 `json:"costUSD,omitempty"`
+	Tokens  int64   `json:"tokens,omitempty"`
 	// SpentPercent is how much of the account's five-hour window this run
 	// used, measured across it. Ten comment fixes and ten whole tickets are
 	// the same number of runs and nowhere near the same spend.
@@ -1333,6 +1337,45 @@ func TailLines(out string, n int) string {
 // window. Only a positive, believable figure is kept: the window resetting
 // mid-run reads as a negative, and a run that spanned a reset cannot be
 // measured this way at all.
+// SetCost records claude's receipt on the newest run for the key.
+func (l *FixLog) SetCost(key string, usd float64, tokens int64) {
+	if key == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].CostUSD, l.Started[i].Tokens = usd, tokens
+			_ = l.save()
+			return
+		}
+	}
+}
+
+// Cost is what every run on a ticket cost, added up.
+type Cost struct {
+	USD    float64 `json:"usd"`
+	Tokens int64   `json:"tokens"`
+	Runs   int     `json:"runs"`
+}
+
+// CostFor adds up the runs on a ref.
+func (l *FixLog) CostFor(workspace, ref string) Cost {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var c Cost
+	for _, r := range l.Started {
+		if r.Workspace != workspace || r.Ref != ref || strings.HasPrefix(r.Error, "not started") {
+			continue
+		}
+		c.Runs++
+		c.USD += r.CostUSD
+		c.Tokens += r.Tokens
+	}
+	return c
+}
+
 func (l *FixLog) SetSpent(key string, percent int) {
 	if key == "" || percent <= 0 || percent > 100 {
 		return
