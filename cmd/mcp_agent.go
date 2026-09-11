@@ -245,7 +245,11 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithString("base", mcp.Description("Base branch to compare against (default: main)")),
 		mcp.WithString("branch", mcp.Description("Diff the existing worktrees of this branch instead of the main checkouts. Does not create anything — run corgi_worktrees_materialize first.")),
 		mcp.WithBoolean("includePatch", mcp.Description("Include the unified diff per file (default true)")),
+		mcp.WithBoolean("surface", mcp.Description("Only the changed surface: exported symbols, routes, contracts, migrations and config that changed, per repository, with removals and signature changes marked breaking. Read this before the diff. Returns {repos, markdown}.")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if r.GetBool("surface", false) {
+			return mcpSurface(r.GetString("composePath", ""), r.GetString("base", ""), r.GetString("branch", ""))
+		}
 		return mcpDiff(
 			r.GetString("composePath", ""),
 			r.GetString("base", ""),
@@ -253,6 +257,24 @@ func registerAgentMCPTools(s *server.MCPServer) {
 			r.GetBool("includePatch", true),
 		)
 	}))
+}
+
+// mcpSurface is corgi_diff with surface: the public slice of the change,
+// as a list and as the Markdown block a pull request body carries.
+func mcpSurface(composePath, base, branch string) (any, error) {
+	out, err := mcpDiff(composePath, base, branch, true)
+	if err != nil {
+		return nil, err
+	}
+	stack, ok := out.(*utils.StackDiff)
+	if !ok {
+		return nil, fmt.Errorf("unexpected diff shape")
+	}
+	repos := make([]utils.RepoSurface, 0, len(stack.Repos))
+	for _, rd := range stack.Repos {
+		repos = append(repos, utils.SurfaceOf(rd))
+	}
+	return map[string]any{"base": stack.Base, "repos": repos, "markdown": utils.SurfaceMarkdown(repos)}, nil
 }
 
 func mcpAgentStatus() (any, error) {
