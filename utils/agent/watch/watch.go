@@ -321,17 +321,17 @@ type Sink func(ctx context.Context, e Event)
 // State is what survives restarts: cursors per workspace and source, and
 // the keys already handled. One file under the agent dir.
 type State struct {
-	mu      sync.Mutex
-	path    string
-	Cursors map[string]Cursor `json:"cursors"` // "<workspace>/<source>"
-	Seen    []string          `json:"seen"`    // newest last
-	Errors  map[string]string `json:"errors,omitempty"`
-	Polled  map[string]string `json:"polled,omitempty"` // "<workspace>/<source>" → RFC3339
+	mu       sync.Mutex
+	path     string
+	agentDir string
+	Cursors  map[string]Cursor `json:"cursors"` // "<workspace>/<source>"
+	Seen     []string          `json:"seen"`    // newest last
+	Errors   map[string]string `json:"errors,omitempty"`
+	Polled   map[string]string `json:"polled,omitempty"` // "<workspace>/<source>" → RFC3339
 	// Held is what quiet hours swallowed, waiting for the window to open.
 	Held []HeldNote `json:"held,omitempty"`
-	// Ignored is what a person dismissed from the inbox. Distinct from Seen,
-	// which every delivered event gets: seen means corgi told you, ignored
-	// means you said no thanks.
+	// Ignored is only read, from a state.json an older corgi wrote; the list
+	// now lives in ignored.json (see ignored.go) and this is cleared on load.
 	Ignored []string `json:"ignored,omitempty"`
 	// seen indexes Seen so a lookup does not walk the list.
 	seen map[string]struct{}
@@ -357,10 +357,11 @@ const heldKeep = 100
 
 // LoadState reads <agentDir>/watch/state.json; a missing file is empty state.
 func LoadState(agentDir string) *State {
-	s := &State{path: filepath.Join(agentDir, "watch", "state.json"), Cursors: map[string]Cursor{}}
+	s := &State{path: filepath.Join(agentDir, "watch", "state.json"), agentDir: agentDir, Cursors: map[string]Cursor{}}
 	if data, err := os.ReadFile(s.path); err == nil {
 		_ = json.Unmarshal(data, s)
 	}
+	s.moveIgnoredOut()
 	if s.Cursors == nil {
 		s.Cursors = map[string]Cursor{}
 	}
@@ -1157,42 +1158,6 @@ func (l *FixLog) RecentBlocker(workspace string, within time.Duration, now time.
 		runs++
 	}
 	return kind, runs
-}
-
-// Ignore drops an event from the inbox for good and stops the unattended
-// mode picking it up. A person's decision, never corgi's.
-func (s *State) Ignore(key string) error {
-	s.mu.Lock()
-	if key == "" || containsString(s.Ignored, key) {
-		s.mu.Unlock()
-		return nil
-	}
-	s.Ignored = append(s.Ignored, key)
-	if len(s.Ignored) > seenKeep {
-		s.Ignored = s.Ignored[len(s.Ignored)-seenKeep:]
-	}
-	s.mu.Unlock()
-	return s.save()
-}
-
-// Unignore puts it back, which is what undoing a run has to do.
-func (s *State) Unignore(key string) error {
-	s.mu.Lock()
-	kept := s.Ignored[:0]
-	for _, k := range s.Ignored {
-		if k != key {
-			kept = append(kept, k)
-		}
-	}
-	s.Ignored = kept
-	s.mu.Unlock()
-	return s.save()
-}
-
-func (s *State) IsIgnored(key string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return containsString(s.Ignored, key)
 }
 
 func containsString(list []string, s string) bool {
