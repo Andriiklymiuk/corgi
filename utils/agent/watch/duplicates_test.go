@@ -331,3 +331,36 @@ func TestTheBreakerCountsFailuresPerTicket(t *testing.T) {
 		t.Fatal("a run that opened a PR clears the count")
 	}
 }
+
+// "Thanks! test is ok" is the end of the work, not more of it: no buzz, no
+// fix. A question, a request or a complaint in the same length still is.
+func TestAThankYouIsNotWork(t *testing.T) {
+	for body, ack := range map[string]bool{
+		"Thanks   ! test is ok":                 true,
+		"LGTM 👍":                                true,
+		"works on staging, thank you":           true,
+		"✅":                                     true,
+		"Thanks! But the banner is still wrong": false,
+		"Thanks, could you also add the docs?":  false,
+		"test is ok on staging, fails on prod":  false,
+		"":                                      false,
+		"any update on this?":                   false,
+	} {
+		if IsAcknowledgement(body) != ack {
+			t.Errorf("%q: ack=%v, want %v", body, IsAcknowledgement(body), ack)
+		}
+	}
+	rules := Rules{Enabled: true, Comments: true}
+	e := Event{Kind: KindIssueComment, Ref: "ABC-1", Mine: true, State: "In QA", Body: "Thanks! test is ok"}
+	if why := rules.Why(e); !strings.Contains(why, "thank-you") {
+		t.Fatalf("a sign-off is refused with the reason: %q", why)
+	}
+	e.Body = "the banner is still wrong on mobile"
+	if why := rules.Why(e); why != "" {
+		t.Fatalf("a complaint is work: %q", why)
+	}
+	e.State = "Verified"
+	if why := rules.Why(e); !strings.Contains(why, "verified") {
+		t.Fatalf("a comment on a verified ticket is not work: %q", why)
+	}
+}

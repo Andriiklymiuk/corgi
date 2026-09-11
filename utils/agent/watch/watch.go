@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -125,6 +126,11 @@ func (r Rules) Why(e Event) string {
 				return "it is " + over + " — the comment is not work"
 			}
 		}
+		// "Thanks, test is ok" asks for nothing. A thank-you, a sign-off, a
+		// thumbs-up is the end of the work, not more of it.
+		if e.Kind != KindPRReview && IsAcknowledgement(e.Body) {
+			return "it is a thank-you or a sign-off, not a request"
+		}
 		if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
 			return fmt.Sprintf("it is from %s, and you are waiting on %s",
 				orNone([]string{e.Author}), strings.Join(r.From, ", "))
@@ -170,6 +176,27 @@ var closedStates = map[string]string{
 	"complete": "done", "completed": "done", "shipped": "shipped",
 	"released": "released", "merged": "merged", "to release": "waiting on a release",
 	"locked": "locked",
+	// Past QA and out the door: a comment here is a sign-off, not work.
+	"verified": "verified", "deployed": "deployed", "in production": "in production",
+	"on production": "in production", "live": "live", "qa passed": "past QA", "tested": "tested",
+}
+
+var (
+	ackWords = regexp.MustCompile(`(?i)\b(thanks?|thank you|thx|ty|ok|okay|lgtm|works?|working|good|great|perfect|nice|awesome|approved?|merged|done|confirmed|verified|passed|passing|green|fixed|resolved|all good|looks good)\b|👍|✅|🙏|🎉|👌`)
+	askWords = regexp.MustCompile(`(?i)\?|\b(could|can|would|please|pls|should|need|needs|must|why|how|what|when|where|fix|change|update|add|remove|revert|still|but|however|not|doesn't|does not|isn't|is not|broken|fails?|failing|error|bug|wrong|missing)\b`)
+)
+
+// IsAcknowledgement says a comment asks for nothing: short, made of thanks
+// or sign-off words, with no question and no request in it.
+func IsAcknowledgement(body string) bool {
+	text := strings.TrimSpace(body)
+	if text == "" || len(text) > 160 {
+		return false
+	}
+	if askWords.MatchString(text) {
+		return false
+	}
+	return ackWords.MatchString(text)
 }
 
 // FinishedState is finishedState for callers outside this package.
@@ -351,6 +378,9 @@ type HeldNote struct {
 	Workspace string    `json:"workspace"`
 	Body      string    `json:"body"`
 	At        time.Time `json:"at"`
+	// Key names the event, so the morning can check it is still worth
+	// saying before it says it.
+	Key string `json:"key,omitempty"`
 }
 
 const heldKeep = 100
@@ -375,8 +405,13 @@ func LoadState(agentDir string) *State {
 
 // Hold keeps a notification quiet hours must not deliver yet.
 func (s *State) Hold(workspace, body string, at time.Time) {
+	s.HoldEvent(workspace, "", body, at)
+}
+
+// HoldEvent is Hold with the event's key, for the re-check at release.
+func (s *State) HoldEvent(workspace, key, body string, at time.Time) {
 	s.mu.Lock()
-	s.Held = append(s.Held, HeldNote{Workspace: workspace, Body: body, At: at})
+	s.Held = append(s.Held, HeldNote{Workspace: workspace, Key: key, Body: body, At: at})
 	if len(s.Held) > heldKeep {
 		s.Held = s.Held[len(s.Held)-heldKeep:]
 	}
