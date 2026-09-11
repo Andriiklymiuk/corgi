@@ -700,5 +700,58 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 }
 
 
+// ---- a handoff: one session stops, the next one picks the work up ----------------
+{
+	const s = [
+		"{d}# 4:52pm — the account hits its limit half-way through ABC-7{/}",
+		"{g}${/} {B}corgi agent handoff{/} --done \"POST /limits returns 429 with Retry-After\" \\",
+		"    --done \"regression test in api/limits_test.go\" --remaining \"web: banner on 429\" \\",
+		"    --decision \"5h sliding window, not fixed\" --uncertain \"retry on the phone?\" \\",
+		"    --next \"web banner, then open the web PR\" --verify \"corgi test --changed\"",
+		"{g}✓{/} handoff for ABC-7: input-required · 2 done · 1 remaining · next: web banner, then open the web PR",
+		"  .corgi/corgi_services/handoffs/ABC-7.md",
+		"",
+		"{d}# the ticket's workpad comment gets the same, so the other machine sees it too{/}",
+		"",
+		"{d}# 9:10am, a new session on the branch — corgi speaks first{/}",
+		"{c}corgi · acme-stack on feature/ABC-7/limits{/}",
+		"{c}budget: 5h 3% (resets 14:02) · week 41% (resets Tue 08:59){/}",
+		"{c}handoff for ABC-7 (input-required, 16h ago): read .corgi/corgi_services/handoffs/ABC-7.md first{/}",
+		"{c}  — 2 commit(s) since, so check its done list against the diff; `corgi agent handoff verify ABC-7` re-runs its check{/}",
+		"{c}scope for ABC-7: api/limits/**, web/src/limits/** · ≤ 400 lines · ≤ 2 new test files — a write outside is refused{/}",
+		"",
+		"{g}${/} {B}corgi agent handoff verify ABC-7{/}",
+		"{g}✓{/} ABC-7: `corgi test --changed` passes at e77d10c — the packet can be trusted as written",
+	];
+	scene("handoff", grow(s, [1, 5, 7, 9, 11, 16, 18, 19]).map((l, i) => page(term("corgi agent handoff — the next session starts where this one stopped", l, { rows: s.length, cursor: i < 7 }))));
+}
+
+// ---- the board: one card per ticket, the column worked out -------------------------
+{
+	const s = [
+		"{g}${/} {B}corgi agent kanban{/}",
+		"Inbox (2)",
+		"  ABC-11          waiting in the inbox · urgent",
+		"  acme/web#98     review someone asked for",
+		"Ready (2)",
+		"  ABC-7           handoff: input-required · 2 done · 1 remaining · next: web banner",
+		"  ABC-9           deferred: waits for budget or a manual run",
+		"Running (2)",
+		"  ABC-12          a run started 6m ago · 310k tok · $0.41 · 1 run",
+		"  ABC-4           session acme-stack is on feature/ABC-4/search · 1.2M tok · 2 sessions",
+		"Blocked (1)",
+		"  ABC-3           no GITLAB_TOKEN for the web repo — corgi agent watch unblock ABC-3",
+		"Review (2)",
+		"  ABC-2           opened 1 PR · https://github.com/acme/api/pull/412 · $0.84 · 2 runs",
+		"  ABC-5           opened 2 PRs · $1.10 · 1 run",
+		"Done (1)",
+		"  ABC-1           merged",
+		"",
+		"{d}# the phone's Board tab draws the same columns; Move… moves the ticket on the tracker{/}",
+	];
+	scene("kanban", grow(s, [1, 4, 7, 10, 12, 15, 17, 19]).map((l, i) => page(term("corgi agent kanban — nobody drags a card into Running", l, { rows: s.length, cursor: i < 7 }))));
+}
+
+
 writeFileSync(`${out}/scenes.json`, JSON.stringify(scenes));
 console.log("wrote", Object.entries(scenes).map(([k, v]) => `${k}:${v}`).join(" "));

@@ -367,6 +367,33 @@ Full setup — every flag, what it refuses to do and why — in
 the corgi plugin, `/corgi:setup` walks it, and asking *"what do we track?"*
 answers from the live config and suggests what is missing.
 
+**Work hands itself off.** A session that stops half-way — a usage limit, the
+end of the day, a carry to another account — leaves a **handoff**: a typed
+packet, never a transcript, with what is done, what is not, what was decided,
+what to ask, where the code is, and the check that was run. The next run
+re-runs that check at the current head before it trusts a word; a new session
+on the branch is told to read it first; the ticket carries the same in one
+corgi comment that grows instead of a trail of them.
+
+<p align="center"><img src="docs/media/handoff.gif" width="760" alt="corgi agent handoff: the session leaves a typed packet; the next session on the branch is told to read it first, and re-runs its check"></p>
+
+**One card per ticket, in a column corgi works out.** `corgi agent kanban`
+(and the phone's Board tab) puts each ticket where the facts put it: Running
+because a run or a session is on it, Review because a pull request is open,
+Blocked because two runs failed in a row or a run said it needs a credential,
+Ready because a handoff or a deferred run is waiting — with the branch, the
+pull requests and what it has cost so far.
+
+<p align="center"><img src="docs/media/kanban.gif" width="760" alt="corgi agent kanban: Inbox, Ready, Running, Blocked, Review, Done — with the session, the handoff, the pull requests and the cost on each card"></p>
+
+The same release taught the agent a few habits: a **scope** per ticket that
+the hooks hold it to (a write outside the agreed paths is refused with the way
+to widen, a diff over budget is reported once), a **drift** flag on the key
+when the numbers say a session has gone off the rails, **routines** on a clock
+(`corgi agent routine add digest`), the **changed surface** at the top of every
+pull request, and `corgi agent harden` for the safe defaults. All in
+[docs/agent.md](docs/agent.md).
+
 
 ## The rest of the commands
 
