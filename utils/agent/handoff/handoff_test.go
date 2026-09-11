@@ -11,15 +11,15 @@ import (
 func sample() Packet {
 	return Packet{
 		Ref: "ABC-123", Tracker: "https://linear.app/x/issue/ABC-123", State: StateInputRequired,
-		Where:     Where{Branch: "feature/ABC-123/rate-limit", Head: "e77d10c0000", Base: "9f1c2ab0000", Dirty: nil},
-		Done:      []string{"POST /limits returns 429 with Retry-After", "regression test in api/limits_test.go"},
-		Remaining: []string{"web: banner on 429"},
-		Decisions: []string{"5h sliding window, not fixed"},
-		Uncertain: []string{"should the phone retry on its own?"},
+		Where:        Where{Branch: "feature/ABC-123/rate-limit", Head: "e77d10c0000", Base: "9f1c2ab0000", Dirty: nil},
+		Done:         []string{"POST /limits returns 429 with Retry-After", "regression test in api/limits_test.go"},
+		Remaining:    []string{"web: banner on 429"},
+		Decisions:    []string{"5h sliding window, not fixed"},
+		Uncertain:    []string{"should the phone retry on its own?"},
 		Verification: &Verification{Cmd: "corgi test --changed", Exit: 0, At: "e77d10c0000"},
-		Next:      "web banner, then open the web PR",
-		From:      From{Harness: "claude", Model: "opus", Account: "work", Session: "b2d4"},
-		Budget:    Budget{Context: 62, FiveHour: 91, SevenDay: 58},
+		Next:         "web banner, then open the web PR",
+		From:         From{Harness: "claude", Model: "opus", Account: "work", Session: "b2d4"},
+		Budget:       Budget{Context: 62, FiveHour: 91, SevenDay: 58},
 	}
 }
 
