@@ -632,7 +632,9 @@ func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
 			info["daemonPid"] = d.PID
 		}
 	}
-	if latest := cachedLatestVersion(); latest != "" && latest != APP_VERSION {
+	// A release the cache has not seen yet is not "out": the phone would tell
+	// a 2.19.7 laptop that 2.19.6 is available.
+	if latest := cachedLatestVersion(); latest != "" && versionNewer(latest, APP_VERSION) {
 		info["latest"] = latest
 	}
 	writeLaunchJSON(w, info)
@@ -668,6 +670,26 @@ var latestVersion struct {
 }
 
 // Refreshed off the request path: the page must never wait on GitHub.
+// versionNewer says whether a is a later dotted version than b; anything
+// that is not three numbers compares as text, which is how it was before.
+func versionNewer(a, b string) bool {
+	pa, pb := strings.Split(strings.TrimPrefix(a, "v"), "."), strings.Split(strings.TrimPrefix(b, "v"), ".")
+	if len(pa) != 3 || len(pb) != 3 {
+		return a != b
+	}
+	for i := range pa {
+		x, errA := strconv.Atoi(pa[i])
+		y, errB := strconv.Atoi(pb[i])
+		if errA != nil || errB != nil {
+			return a != b
+		}
+		if x != y {
+			return x > y
+		}
+	}
+	return false
+}
+
 func cachedLatestVersion() string {
 	latestVersion.mu.Lock()
 	defer latestVersion.mu.Unlock()
