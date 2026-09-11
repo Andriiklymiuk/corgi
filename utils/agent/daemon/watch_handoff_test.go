@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/handoff"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
@@ -98,5 +99,21 @@ func TestARunsReceiptIsRecorded(t *testing.T) {
 	c := watch.LoadFixLog(dir).CostFor("api", "ABC-1")
 	if c.Runs != 2 || c.Tokens != 32000 || c.USD < 0.53 || c.USD > 0.54 {
 		t.Fatalf("cost per ticket adds the runs that ran: %+v", c)
+	}
+}
+
+// A fresh ticket is planned on the strong model, a red build fixed on the
+// cheap one, and a ticket whose last run failed steps up.
+func TestTheRunnerPicksAModelByKindAndSteppsUpAfterAFailure(t *testing.T) {
+	spec := WatchSpec{}
+	if fixModel(spec, watch.Event{Kind: watch.KindIssueNew}, 0) != "opus" || fixModel(spec, watch.Event{Kind: watch.KindCIFailed}, 0) != "sonnet" {
+		t.Fatal("defaults by kind")
+	}
+	if fixModel(spec, watch.Event{Kind: watch.KindCIFailed}, 1) != "opus" {
+		t.Fatal("a failed run steps up")
+	}
+	spec.Models = &config.ModelPolicy{Execute: "haiku", Escalate: "sonnet", Kinds: map[string]string{"ci.failed": "sonnet[1m]"}}
+	if fixModel(spec, watch.Event{Kind: watch.KindCIFailed}, 0) != "sonnet[1m]" || fixModel(spec, watch.Event{Kind: watch.KindPRComment}, 0) != "haiku" || fixModel(spec, watch.Event{Kind: watch.KindPRComment}, 2) != "sonnet" {
+		t.Fatal("the policy wins")
 	}
 }
