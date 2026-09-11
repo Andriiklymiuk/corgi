@@ -586,7 +586,7 @@ func watchBody(e watch.Event) string {
 	case watch.KindIssueNew:
 		return fmt.Sprintf("new issue %s — %s", e.Ref, e.Title)
 	case watch.KindIssueComment:
-		return fmt.Sprintf("%s commented on %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Body)
+		return commentLine(e)
 	case watch.KindPRReview:
 		return fmt.Sprintf("%s reviewed %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, firstNonEmpty(e.Body, e.State))
 	case watch.KindCIFailed:
@@ -594,8 +594,18 @@ func watchBody(e watch.Event) string {
 	case watch.KindReviewRequested:
 		return fmt.Sprintf("%s wants your review on %s — %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Title)
 	default:
-		return fmt.Sprintf("%s commented on %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Body)
+		return commentLine(e)
 	}
+}
+
+// commentLine says who said what on which ticket; with no text to show, it
+// says what the ticket is rather than ending in a colon and nothing.
+func commentLine(e watch.Event) string {
+	who := firstNonEmpty(e.Author, "someone")
+	if strings.TrimSpace(e.Body) == "" {
+		return fmt.Sprintf("%s commented on %s — %s", who, e.Ref, e.Title)
+	}
+	return fmt.Sprintf("%s commented on %s: %s", who, e.Ref, e.Body)
 }
 
 func firstNonEmpty(a, b string) string {

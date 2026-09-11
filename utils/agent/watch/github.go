@@ -63,9 +63,10 @@ type githubThread struct {
 	Reason    string `json:"reason"`
 	UpdatedAt string `json:"updated_at"`
 	Subject   struct {
-		Title string `json:"title"`
-		URL   string `json:"url"`
-		Type  string `json:"type"`
+		Title            string `json:"title"`
+		URL              string `json:"url"`
+		Type             string `json:"type"`
+		LatestCommentURL string `json:"latest_comment_url"`
 	} `json:"subject"`
 	Repository struct {
 		FullName string `json:"full_name"`
@@ -161,19 +162,53 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		// open, so a comment on one merged last week reads exactly like one on
 		// live work. One lookup per pull request in a round settles it.
 		state := g.pullState(ctx, states, t.Subject.URL)
+		// The notification names the pull request, not what was said on it;
+		// the comment itself is one more call, and the difference between
+		// "someone commented" and a line a person can act on.
+		author, body := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
 		events = append(events, Event{
 			Key:    "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt,
 			Source: g.Name(),
 			Kind:   r.kind,
 			Ref:    ref,
 			Title:  t.Subject.Title,
+			Body:   body,
 			URL:    "https://github.com/" + t.Repository.FullName + "/pull/" + number,
+			Author: author,
 			Mine:   r.mine,
 			State:  state,
 			At:     at,
 		})
 	}
 	return events, next, nil
+}
+
+// latestComment is who wrote the newest comment on a thread and what they
+// wrote, or nothing when the thread points at the pull request itself (a
+// review request, an opened pull request) or the comment cannot be read.
+func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL string) (author, body string) {
+	if commentURL == "" || commentURL == subjectURL {
+		return "", ""
+	}
+	path := strings.TrimPrefix(commentURL, "https://api.github.com")
+	if path == commentURL {
+		return "", ""
+	}
+	resp, err := g.get(ctx, path, "")
+	if err != nil {
+		return "", ""
+	}
+	defer resp.Body.Close()
+	var c struct {
+		Body string `json:"body"`
+		User struct {
+			Login string `json:"login"`
+		} `json:"user"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&c) != nil {
+		return "", ""
+	}
+	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax)
 }
 
 // pullState is "open", "merged" or "closed" for one pull request, cached for
