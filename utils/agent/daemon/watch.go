@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/handoff"
 	"andriiklymiuk/corgi/utils/agent/usage"
@@ -31,6 +32,9 @@ type WatchSpec struct {
 	Isolate bool
 	// NoRetry leaves deferred fixes to a manual run.
 	NoRetry bool
+	// Models picks the model per event kind, and the one to step up to
+	// after a failed run.
+	Models  *config.ModelPolicy
 	Project string   // tracker key prefix: ABC-123 belongs to ABC
 	Repos   []string // owner/repo
 	Rules   watch.Rules
@@ -685,6 +689,10 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
 	started := time.Now()
 	args := fixArgsWith(spec, e, handover)
+	if model := fixModel(spec, e, d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref)); model != "" {
+		args = append(args, "--model", model)
+		fmt.Fprintf(logFile, "=== model: %s\n", model)
+	}
 	if spec.Isolate && d.Isolate != nil {
 		branch := FixBranch(e.Ref)
 		trees, err := d.Isolate(spec.Dir, branch)
@@ -1095,4 +1103,14 @@ func unwrapResult(raw []byte) ([]byte, runReceipt) {
 	u := env.Usage
 	return []byte(env.Result), runReceipt{ok: true, costUSD: env.CostUSD, turns: env.NumTurns,
 		tokens: u.Input + u.Output + u.CacheRead + u.CacheWrite}
+}
+
+// fixModel is the model for one run: the policy's choice for the kind, or
+// the escalation after a failed run on the same ticket — a harder problem
+// gets the stronger model rather than another try with the same one.
+func fixModel(spec WatchSpec, e watch.Event, failedBefore int) string {
+	if failedBefore > 0 {
+		return spec.Models.ForEscalation()
+	}
+	return spec.Models.ForKind(string(e.Kind))
 }

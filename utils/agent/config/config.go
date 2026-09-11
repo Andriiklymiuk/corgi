@@ -112,6 +112,9 @@ type WorkspaceConfig struct {
 	// Watch asks the daemon to poll the tracker and code host for this
 	// workspace and act on new issues and review comments.
 	Watch *WatchConfig `yaml:"watch"`
+	// Models is which model does which kind of work, so a plan is thought
+	// through on the strong one and a red build fixed on the cheap one.
+	Models *ModelPolicy `yaml:"models"`
 	// DangerouslySkipPermissions runs the session with permission prompts off,
 	// removing the main defence against it acting on instructions injected into
 	// a file it read. Trusted config only by construction — RepoConfig has no
@@ -284,6 +287,106 @@ type WatchConfig struct {
 	PickupStatus string `yaml:"pickupStatus,omitempty"`
 }
 
+// ModelPolicy names a model per phase of work. Empty fields take the
+// defaults; Kinds overrides the unattended runner per event kind.
+type ModelPolicy struct {
+	// Auto is what `corgi agent claude --model auto` starts with; opusplan
+	// (Opus to plan, Sonnet to execute) unless told otherwise.
+	Auto string `yaml:"auto,omitempty"`
+	// Plan, Execute, Review and Triage are the phases a run goes through.
+	Plan    string `yaml:"plan,omitempty"`
+	Execute string `yaml:"execute,omitempty"`
+	Review  string `yaml:"review,omitempty"`
+	Triage  string `yaml:"triage,omitempty"`
+	// Escalate is what the next run uses after a failed one on the same
+	// ticket: a harder problem gets the stronger model, not another try.
+	Escalate string `yaml:"escalate,omitempty"`
+	// Kinds maps an unattended event kind (issue.new, ci.failed, …) to a
+	// model, beating the phase defaults.
+	Kinds map[string]string `yaml:"kinds,omitempty"`
+}
+
+// Defaults for the policy: plan and review on the strong model, execution
+// and triage on the cheap one.
+const (
+	ModelAutoDefault     = "opusplan"
+	ModelPlanDefault     = "opus"
+	ModelExecuteDefault  = "sonnet"
+	ModelReviewDefault   = "opus"
+	ModelTriageDefault   = "haiku"
+	ModelEscalateDefault = "opus"
+)
+
+// ForAuto is the interactive default.
+func (m *ModelPolicy) ForAuto() string {
+	return pick(m, func(p ModelPolicy) string { return p.Auto }, ModelAutoDefault)
+}
+
+// ForKind is the runner's model for one event kind: the kind's own entry,
+// else the phase it belongs to. A fresh ticket is planned; a red build, a
+// comment or a review reply is executed; a review someone asked for is
+// reviewed.
+func (m *ModelPolicy) ForKind(kind string) string {
+	if m != nil && m.Kinds != nil {
+		if v := strings.TrimSpace(m.Kinds[kind]); v != "" {
+			return v
+		}
+	}
+	switch kind {
+	case "issue.new":
+		return pick(m, func(p ModelPolicy) string { return p.Plan }, ModelPlanDefault)
+	case "review.requested":
+		return pick(m, func(p ModelPolicy) string { return p.Review }, ModelReviewDefault)
+	default:
+		return pick(m, func(p ModelPolicy) string { return p.Execute }, ModelExecuteDefault)
+	}
+}
+
+// ForEscalation is the model after a failed run.
+func (m *ModelPolicy) ForEscalation() string {
+	return pick(m, func(p ModelPolicy) string { return p.Escalate }, ModelEscalateDefault)
+}
+
+func pick(m *ModelPolicy, get func(ModelPolicy) string, def string) string {
+	if m != nil {
+		if v := strings.TrimSpace(get(*m)); v != "" {
+			return v
+		}
+	}
+	return def
+}
+
+func overlayModels(base, over *ModelPolicy) *ModelPolicy {
+	if over == nil {
+		return base
+	}
+	if base == nil {
+		return over
+	}
+	merged := *base
+	for _, f := range []struct {
+		dst *string
+		src string
+	}{
+		{&merged.Auto, over.Auto}, {&merged.Plan, over.Plan}, {&merged.Execute, over.Execute},
+		{&merged.Review, over.Review}, {&merged.Triage, over.Triage}, {&merged.Escalate, over.Escalate},
+	} {
+		if strings.TrimSpace(f.src) != "" {
+			*f.dst = f.src
+		}
+	}
+	if len(over.Kinds) > 0 {
+		merged.Kinds = map[string]string{}
+		for k, v := range base.Kinds {
+			merged.Kinds[k] = v
+		}
+		for k, v := range over.Kinds {
+			merged.Kinds[k] = v
+		}
+	}
+	return &merged
+}
+
 // overlayWatch replaces base with over, keeping base's caps and quiet
 // hours where over left them unset, so defaults: can carry a budget for
 // every watched workspace.
@@ -364,6 +467,7 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 		base.WakeLock = over.WakeLock
 	}
 	base.Watch = overlayWatch(base.Watch, over.Watch)
+	base.Models = overlayModels(base.Models, over.Models)
 	// Booleans that grant capability are OR-ed rather than overwritten, so a
 	// per-workspace entry cannot silently turn off a default the user set.
 	base.InheritAPIKey = base.InheritAPIKey || over.InheritAPIKey

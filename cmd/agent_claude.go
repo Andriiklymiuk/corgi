@@ -19,6 +19,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
 // claudeLaunch is the command line `corgi agent claude` runs: the binary,
@@ -43,6 +44,7 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
   corgi agent claude --workspace api # that workspace, whatever folder you are in
   corgi agent claude --profile work  # under a corgi profile
   corgi agent claude --profile auto  # the listed account with most budget left
+  corgi agent claude --model auto    # the workspace's models: policy, else opusplan
   corgi agent claude --show          # print the command instead of running it
   corgi agent claude -- --resume     # arguments after -- go to claude`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -67,6 +69,9 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 				exitWithError("agent_claude", err, 1)
 			}
 			cwd = root
+		}
+		if strings.EqualFold(strings.TrimSpace(model), "auto") {
+			model = autoModelFor(cwd)
 		}
 		if model != "" {
 			if !validModel(model) {
@@ -299,6 +304,25 @@ func pickAccountProfile(user *config.UserConfig, resolved config.Resolved) strin
 		return ""
 	}
 	return best
+}
+
+// autoModelFor is --model auto: the workspace's policy, else opusplan —
+// Opus to plan, Sonnet to execute, in one session.
+func autoModelFor(cwd string) string {
+	dir := agentDirOrEmpty()
+	if dir == "" {
+		return config.ModelAutoDefault
+	}
+	registry, err := workspace.Load(agentRegistryPath(dir))
+	if err != nil {
+		return config.ModelAutoDefault
+	}
+	id, _ := workspaceLabel(registry, cwd)
+	resolved, err := resolveWorkspaceConfig(dir, id)
+	if err != nil {
+		return config.ModelAutoDefault
+	}
+	return resolved.Models.ForAuto()
 }
 
 // autoSwitchAt is the reading past which --profile auto leaves the account
