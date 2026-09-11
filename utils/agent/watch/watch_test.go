@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"sync/atomic"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -385,4 +386,50 @@ func TestSettled(t *testing.T) {
 			t.Errorf("%s: settled=%v, want %v (%q)", c.name, got, c.over, Settled(c.e, c.current))
 		}
 	}
+}
+
+// A nudge polls now instead of at the next tick, and two nudges before the
+// loop gets to it are one poll.
+func TestANudgeWakesTheWatch(t *testing.T) {
+	src := &countingSource{gate: make(chan struct{})}
+	w := &Watch{Workspace: "api", Sources: []Source{src}, Interval: time.Hour, State: LoadState(t.TempDir())}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.Run(ctx)
+	// The first poll is in flight; three nudges land while it is.
+	src.gate <- struct{}{}
+	w.Nudge()
+	w.Nudge()
+	w.Nudge()
+	// The loop wakes once for them, not three times.
+	select {
+	case src.gate <- struct{}{}:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the nudge did not wake the watch")
+	}
+	select {
+	case src.gate <- struct{}{}:
+		t.Fatal("a third poll: nudges were not folded into one")
+	case <-time.After(150 * time.Millisecond):
+	}
+	if got := src.polls.Load(); got != 2 {
+		t.Fatalf("polls = %d, want 2", got)
+	}
+}
+
+// countingSource counts polls; each one waits on gate so a test can hold
+// the watch mid-poll.
+type countingSource struct {
+	polls atomic.Int32
+	gate  chan struct{}
+}
+
+func (c *countingSource) Name() string { return "counting" }
+func (c *countingSource) Poll(ctx context.Context, _ Cursor) ([]Event, Cursor, error) {
+	c.polls.Add(1)
+	select {
+	case <-c.gate:
+	case <-ctx.Done():
+	}
+	return nil, Cursor{}, nil
 }

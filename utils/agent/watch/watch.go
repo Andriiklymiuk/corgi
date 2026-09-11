@@ -541,6 +541,9 @@ type Watch struct {
 	Sink      Sink
 	// Log receives one line per round that did something; nil is silent.
 	Log func(string)
+	// wake is the channel Nudge pokes: a poll now, not at the next tick.
+	wake     chan struct{}
+	wakeOnce sync.Once
 	// Round runs before each poll, for work the clock decides — releasing
 	// what quiet hours held back once the window opens.
 	Round func(now time.Time)
@@ -613,8 +616,22 @@ func (w *Watch) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(wait):
+		case <-w.wakeChan():
 		}
 	}
+}
+
+// Nudge asks for a poll now; a nudge while one is pending is the same nudge.
+func (w *Watch) Nudge() {
+	select {
+	case w.wakeChan() <- struct{}{}:
+	default:
+	}
+}
+
+func (w *Watch) wakeChan() chan struct{} {
+	w.wakeOnce.Do(func() { w.wake = make(chan struct{}, 1) })
+	return w.wake
 }
 
 func (w *Watch) failing() bool {
