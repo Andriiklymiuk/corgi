@@ -34,6 +34,8 @@ them.
 | `corgi_env` | `composePath?, service?, key?` | `{service: {KEY: {value, source}}}` | real values — never echo into a transcript. Pass `service` or `key`; unfiltered output is capped at 40 vars per service |
 | `corgi_exec` | `service, command, ensureDeps?, serviceBranch?, serviceDir?` | `{exitCode, output, truncated, durationMs}` | one-off command in the service's resolved env; **tunnel-gated** |
 | `corgi_test` | `service?, profile?, ensureDeps?, changed?, base?, e2e?, serviceBranch?, serviceDir?` | `{services[], passed, note?}` | runs each `test` script; starts nothing. `changed: true` (with `base`, default `main`) is the smallest set for this diff; `e2e: true` runs the compose `e2e:` block |
+| `corgi_http` | `service, path, method?, body?, headers?` | `{status, headers, body, truncated, ms}` | one request to a running service by name on 127.0.0.1; JSON body sent as JSON; body capped at 64 KB. The way to check a route as a client would |
+| `corgi_explain` | `service, query, analyze?` | `{service, plan, truncated, hint}` | EXPLAIN (or EXPLAIN ANALYZE, which runs the query) on a postgres-family db; the hint names the sequential scan or spilled sort; **tunnel-gated** |
 | `corgi_db_query` | `service, query` | `{service, output, truncated}` | driver's own client syntax; writes are not blocked; **tunnel-gated**. Take a `corgi_db_snapshot` before a mutating query |
 | `corgi_db_snapshot` | `service?, name?, force?` | `{service, name, archive, sizeBytes}` | postgres-family only; refused while `corgi_up` services run (databases-only or after `corgi_down`) |
 | `corgi_db_restore` | `name, service?, force?` | `{service, archive}` | **wipes the data volume**; **tunnel-gated** |
