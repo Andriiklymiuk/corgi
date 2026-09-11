@@ -3610,6 +3610,10 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		BlockedBy string `json:"blockedBy,omitempty"`
 		// Priority is 0 urgent, 1 high, 2 the rest, from the ticket's labels.
 		Priority int `json:"priority"`
+		// Author and Body are who said what, for a comment or a review —
+		// the line a person reads before deciding, without opening the tracker.
+		Author string `json:"author,omitempty"`
+		Body   string `json:"body,omitempty"`
 	}
 	out := []row{}
 	// The events log keeps the column a ticket arrived in. A move made since
@@ -3635,7 +3639,8 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		r := row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
-			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current, Priority: watch.Priority(e)}
+			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current, Priority: watch.Priority(e),
+			Author: e.Author, Body: e.Body}
 		if b, ok := fixLog.Blocked(e.Workspace, e.Ref); ok {
 			r.Blocked, r.BlockedBy = b.Reason, b.By
 		}
