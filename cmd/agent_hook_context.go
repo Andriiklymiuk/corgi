@@ -12,6 +12,7 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/handoff"
+	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
@@ -94,6 +95,9 @@ func sessionContext(dir string, in contextHookInput, configDir string, now time.
 		lines = append(lines, fmt.Sprintf("workspace memory: %d facts in %s — read it before changing code", facts, path))
 	}
 	if line := handoffLine(root, sessions.Branch(in.Cwd), now); line != "" {
+		lines = append(lines, line)
+	}
+	if line := scopeLineFor(root, sessions.Branch(in.Cwd)); line != "" {
 		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
@@ -241,4 +245,17 @@ func memoryIndex(cwd, root string) (string, int) {
 		dir = parent
 	}
 	return "", 0
+}
+
+// scopeLineFor tells a session what its branch's ticket agreed to: the
+// paths it may touch and the budget, so the hooks are no surprise.
+func scopeLineFor(root, branch string) string {
+	if root == "" {
+		return ""
+	}
+	s, ok := scope.ForBranch(root, branch)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("scope for %s: %s — a write outside is refused; widen with `corgi agent scope add %s --path …` and say why", s.Ref, scopeLine(s), s.Ref)
 }
