@@ -807,6 +807,45 @@ counts as a failure.
 worktrees on `corgi/<ref>`, one per repository, so a run never touches the
 checkout; `watch undo` releases them (keeping any with uncommitted work).
 
+### Scope, drift, models, routines, hardening
+
+**Scope** is the contract a ticket's change stays inside, written after the
+spec is agreed (the stories skill does it): `corgi agent scope set ABC-123
+--path "api/limits/**" --lines 400 --tests 2 --done "…"`. Two hooks
+`corgi agent track enable` installs hold the session to it: a write outside
+the paths is refused with the way to widen (`corgi agent scope add ABC-123
+--path …` — do it when the change needs it, and say why in the PR), and a
+diff over budget is reported once when the turn ends (trim it, or raise the
+budget on the record). Both are silent on a branch with no scope.
+
+**Drift** is what the daemon concludes from the numbers on a live session:
+context ≥ 85 %, the same tool failing three times running, a diff twice the
+scope's budget (or past 800 lines with none), files outside the scope. The
+key says `DRIFT` with the first reason; the phone offers **Fresh** — a clean
+restart from a handoff under the same account (`corgi agent carry <session>
+--fresh`). The other ways out are `/compact`, `/rewind`, or splitting the
+branch by plan task.
+
+**Models** are a policy per phase in the user config (`models:` under a
+workspace or `defaults:`): `plan` and `review` on opus, `execute` and
+`triage` on sonnet/haiku, `escalate` after a failed run, `kinds:` per event.
+`corgi agent claude --model auto` starts on the policy's `auto` (opusplan by
+default); the unattended runner picks per kind and steps up after a failure.
+
+**Routines** are runs on a clock through the same runner: `corgi agent
+routine add digest` (daily 08:30), `babysit-pr` (every 2h), `deps`,
+`release-notes`, `flaky`, `doc-drift`, or `--prompt "…" --schedule "daily
+03:00"`. Each report is one inbox row with the log behind it; `routine run
+<name>` runs one now. Caps, quiet hours and budget apply.
+
+**Hardening**: `corgi agent harden` writes deny rules for secrets and
+destruction plus a hook that refuses to write a credential into a file, into
+the workspace's `.claude/settings.local.json`; `corgi agent doctor
+--security` says what is still loose. `corgi surface` is the changed public
+surface of the stack's diff (first section of every PR body, first thing a
+review reads); `corgi docs check` the docs that name what changed and the
+CLAUDE.md pointers that no longer land.
+
 `corgi agent kanban [--workspace X] [--json]` is one card per ticket in a
 column corgi works out — Inbox, Ready (deferred, or a handoff waiting),
 Running (a run or a session on the branch), Blocked, Review (a PR is open),
