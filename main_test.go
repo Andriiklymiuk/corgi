@@ -55,7 +55,7 @@ func TestCanShowWelcomeMessages(t *testing.T) {
 		t.Error("expected welcome for plain run command")
 	}
 
-	for _, suppress := range []string{"status", "doctor", "--json", "--version", "completion"} {
+	for _, suppress := range []string{"status", "doctor", "--json", "--version", "completion", "upd", "upgrade"} {
 		withArgs(t, "corgi", suppress)
 		if canShowWelcomeMessages() {
 			t.Errorf("arg %q should suppress welcome", suppress)

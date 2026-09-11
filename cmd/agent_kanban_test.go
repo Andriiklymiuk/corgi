@@ -28,6 +28,10 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	}
 	fixes.StartFor(events[1], now.Add(-time.Minute))
 	fixes.StartFor(events[2], now.Add(-time.Hour))
+	// A run that happened on the ignored event, finished with nothing to
+	// show: ignoring the ticket takes the run's card with it.
+	fixes.StartFor(events[5], now.Add(-2*time.Hour))
+	fixes.Finish("k-ignored", nil, "", "", now.Add(-90*time.Minute))
 	fixes.Finish("k-review", []string{"https://github.com/a/b/pull/3"}, "", "", now.Add(-30*time.Minute))
 	fixes.Block("api", "ABC-4", "no token", watch.BlockedByBreaker, now)
 	packets := map[string][]handoff.Packet{"api": {
@@ -50,7 +54,7 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 		}
 	}
 	if _, ok := got["ABC-6"]; ok {
-		t.Error("an ignored ticket has no card")
+		t.Error("an ignored ticket has no card, not even for the run that happened on it")
 	}
 	if got["ABC-7"].Session == nil || got["ABC-7"].Branch != "feature/ABC-7/thing" {
 		t.Error("the session and its branch are on the card")
