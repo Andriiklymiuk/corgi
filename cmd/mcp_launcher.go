@@ -1281,6 +1281,7 @@ const launcherPageHTML = `<!doctype html>
   .ev .eref{font-weight:600;font-size:.82rem}
   .ev .ekind{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin-left:.35rem}
   .ev .etitle{font-size:.78rem;opacity:.85;margin:.15rem 0 .4rem;overflow-wrap:anywhere}
+  .eblocked{margin:6px 0 0;font-size:13px;color:#E4695B}
   .ev .erow{display:flex;gap:.4rem;align-items:center}
   .ev a.eopen{font-size:.76rem;text-decoration:none;padding:.45rem .75rem;border-radius:.45rem;
     border:1px solid var(--line);color:inherit;min-height:2rem;display:inline-flex;align-items:center}
@@ -2267,9 +2268,27 @@ const launcherPageHTML = `<!doctype html>
           t.textContent = ev.title;
           card.appendChild(t);
         }
+        // Blocked is a column of its own: the reason, and the one button
+        // that puts the ticket back in front of the unattended mode.
+        if (ev.blocked) {
+          const b = document.createElement('p');
+          b.className = 'eblocked';
+          b.textContent = 'Blocked' + (ev.blockedBy === 'breaker' ? ' after repeated failures' : ev.blockedBy === 'run' ? ' by the run' : '') + ': ' + ev.blocked;
+          card.appendChild(b);
+        }
 
         const row = document.createElement('div');
         row.className = 'erow';
+        if (ev.blocked) {
+          const ub = document.createElement('button');
+          ub.className = 'primary';
+          ub.textContent = 'Unblock';
+          ub.onclick = () => {
+            ub.disabled = true;
+            ticket(ev, { do: 'unblock' }).finally(() => { ub.disabled = false; });
+          };
+          row.appendChild(ub);
+        }
         if (ev.url && /^https:\/\//.test(ev.url)) {
           const a = document.createElement('a');
           a.className = 'eopen';
@@ -2279,7 +2298,7 @@ const launcherPageHTML = `<!doctype html>
           a.textContent = ev.kind && ev.kind.startsWith('pr.') ? 'Open PR' : 'Open issue';
           row.appendChild(a);
         }
-        if (ev.actionable) {
+        if (ev.actionable && !ev.blocked) {
           const go = document.createElement('button');
           go.className = 'primary';
           go.textContent = 'Work on it';
@@ -3266,6 +3285,9 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		At         time.Time `json:"at"`
 		Actionable bool      `json:"actionable"`
 		State      string    `json:"state,omitempty"`
+		// Blocked is why unattended runs leave this ticket alone, when they do.
+		Blocked   string `json:"blocked,omitempty"`
+		BlockedBy string `json:"blockedBy,omitempty"`
 	}
 	out := []row{}
 	// The events log keeps the column a ticket arrived in. A move made since
@@ -3274,6 +3296,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	// The inbox is what is still waiting. Seen is not the test — every
 	// delivered event is seen — so it is the dismissed ones that leave.
 	state := watch.LoadState(dir)
+	fixLog := watch.LoadFixLog(dir)
 	for _, e := range watch.RecentEvents(dir, 40) {
 		if state.IsIgnored(e.Key) {
 			continue
@@ -3288,11 +3311,15 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if watch.Settled(e, current) != "" {
 			continue
 		}
-		out = append(out, row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
-			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current})
+		r := row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
+			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current}
+		if b, ok := fixLog.Blocked(e.Workspace, e.Ref); ok {
+			r.Blocked, r.BlockedBy = b.Reason, b.By
+		}
+		out = append(out, r)
 	}
 	fixes := []map[string]any{}
-	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 25) {
+	for _, r := range fixLog.RecentFixes("", 25) {
 		row := map[string]any{"key": r.Key, "ref": firstNonEmptyString(r.Ref, r.Key), "workspace": r.Workspace,
 			"running": !r.Done(), "startedAt": r.StartedAt, "outcome": r.Outcome()}
 		if len(r.PRs) > 0 {
@@ -3369,6 +3396,19 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchJSON(w, map[string]any{"done": "ignored " + firstNonEmptyString(event.Ref, event.Key)})
 		return
 	}
+	// Unblocking is a person's call too: it lets the unattended mode back on
+	// the ticket and clears the reason from the workpad.
+	if strings.TrimSpace(req.Do) == "unblock" {
+		if !watch.LoadFixLog(dir).Unblock(event.Workspace, event.Ref) {
+			writeLaunchError(w, http.StatusBadRequest, event.Ref+" is not blocked")
+			return
+		}
+		if _, _, err := watchWriter(dir, event.Workspace); err == nil {
+			go writeWorkpad(dir, event.Workspace, event.Ref, "Blocked", "")
+		}
+		writeLaunchJSON(w, map[string]any{"done": "unblocked " + event.Ref})
+		return
+	}
 	if event.Workspace == "" {
 		writeLaunchError(w, http.StatusBadRequest, "that event belongs to no workspace")
 		return
@@ -3430,7 +3470,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLaunchJSON(w, map[string]any{"done": ref + " is yours"})
 	default:
-		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close or ignore")
+		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close, ignore or unblock")
 	}
 }
 
