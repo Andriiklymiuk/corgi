@@ -153,9 +153,14 @@ func (s Schedule) String() string {
 // RoutineReportTTL is how long a routine's report stays in the inbox.
 const RoutineReportTTL = 24 * time.Hour
 
-// InboxKeeper decides, row by row and newest first, whether a routine
-// report still belongs in the inbox: the newest per routine, for a day.
-// Every other kind passes through.
+// InboxKeeper decides, row by row and newest first, whether an event still
+// belongs in the inbox: one row per thread — the pull request, the ticket,
+// the routine — and that the newest. A thread updated twice is logged twice,
+// once per poll that noticed it, and the inbox is not a log. Routine reports
+// also age out after a day.
+//
+// Feed it every row, dismissed ones included, before testing anything else:
+// dismissing the newest row of a thread must not surface the older one.
 type InboxKeeper struct {
 	seen map[string]bool
 	now  time.Time
@@ -166,12 +171,16 @@ func NewInboxKeeper(now time.Time) *InboxKeeper {
 }
 
 func (k *InboxKeeper) Keep(e Event) bool {
-	if e.Kind != KindRoutine {
-		return true
-	}
-	if k.now.Sub(e.At) > RoutineReportTTL || k.seen[e.Ref] {
+	if e.Kind == KindRoutine && k.now.Sub(e.At) > RoutineReportTTL {
 		return false
 	}
-	k.seen[e.Ref] = true
+	thread := e.Ref
+	if thread == "" {
+		thread = e.Key
+	}
+	if k.seen[thread] {
+		return false
+	}
+	k.seen[thread] = true
 	return true
 }

@@ -3781,7 +3781,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	fixLog := watch.LoadFixLog(dir)
 	keeper := watch.NewInboxKeeper(time.Now())
 	for _, e := range watch.RecentEvents(dir, 40) {
-		if state.IsIgnored(e.Key) || !keeper.Keep(e) {
+		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
 			continue
 		}
 		// Merged, closed, done: the row is history, not work. The daemon

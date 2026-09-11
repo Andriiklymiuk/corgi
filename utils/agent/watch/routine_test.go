@@ -59,3 +59,17 @@ func TestRoutineReportsAgeOutOfTheInbox(t *testing.T) {
 		t.Fatal("newest per routine within a day; issues always")
 	}
 }
+
+// A thread that was updated twice — a pull request commented on at ten and
+// again at noon — is one row, the newest, not one per poll that noticed it.
+// Dismissing that newest row must not surface the older one underneath.
+func TestOneInboxRowPerThread(t *testing.T) {
+	now := time.Now()
+	k := NewInboxKeeper(now)
+	noon := Event{Key: "github:o/r#1:t1:noon", Kind: KindPRComment, Ref: "o/r#1", At: now.Add(-time.Hour)}
+	ten := Event{Key: "github:o/r#1:t1:ten", Kind: KindPRComment, Ref: "o/r#1", At: now.Add(-3 * time.Hour)}
+	other := Event{Key: "github:o/r#2:t2:ten", Kind: KindPRComment, Ref: "o/r#2", At: now.Add(-3 * time.Hour)}
+	if !k.Keep(noon) || k.Keep(ten) || !k.Keep(other) {
+		t.Fatal("newest per thread, every thread once")
+	}
+}
