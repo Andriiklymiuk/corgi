@@ -149,3 +149,29 @@ func (s Schedule) String() string {
 	}
 	return ""
 }
+
+// RoutineReportTTL is how long a routine's report stays in the inbox.
+const RoutineReportTTL = 24 * time.Hour
+
+// InboxKeeper decides, row by row and newest first, whether a routine
+// report still belongs in the inbox: the newest per routine, for a day.
+// Every other kind passes through.
+type InboxKeeper struct {
+	seen map[string]bool
+	now  time.Time
+}
+
+func NewInboxKeeper(now time.Time) *InboxKeeper {
+	return &InboxKeeper{seen: map[string]bool{}, now: now}
+}
+
+func (k *InboxKeeper) Keep(e Event) bool {
+	if e.Kind != KindRoutine {
+		return true
+	}
+	if k.now.Sub(e.At) > RoutineReportTTL || k.seen[e.Ref] {
+		return false
+	}
+	k.seen[e.Ref] = true
+	return true
+}

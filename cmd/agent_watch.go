@@ -572,9 +572,10 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		}
 		events := []eventRow{}
 		moved := watch.LoadStateLog(dir)
+		keeper := watch.NewInboxKeeper(now)
 		for _, e := range watch.RecentEvents(dir, 25) {
-			if state.IsIgnored(e.Key) {
-				continue // dismissed: not waiting on anyone
+			if state.IsIgnored(e.Key) || !keeper.Keep(e) {
+				continue // dismissed, or an old routine report: not waiting on anyone
 			}
 			// Merged, closed, done: history rather than work. The same test
 			// the phone's inbox uses, so the menu bar and the editor do not

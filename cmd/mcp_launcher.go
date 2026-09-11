@@ -3278,7 +3278,9 @@ func launchFreshHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		exe = "corgi"
 	}
-	out, err := exec.Command(exe, "agent", "carry", session.ID, "--fresh", "--json").CombinedOutput()
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, exe, "agent", "carry", session.ID, "--fresh", "--json").CombinedOutput()
 	if err != nil {
 		writeLaunchError(w, http.StatusBadGateway, firstLineOf(strings.TrimSpace(string(out))+" "+err.Error()))
 		return
@@ -3577,8 +3579,9 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	// delivered event is seen — so it is the dismissed ones that leave.
 	state := watch.LoadState(dir)
 	fixLog := watch.LoadFixLog(dir)
+	keeper := watch.NewInboxKeeper(time.Now())
 	for _, e := range watch.RecentEvents(dir, 40) {
-		if state.IsIgnored(e.Key) {
+		if state.IsIgnored(e.Key) || !keeper.Keep(e) {
 			continue
 		}
 		// Merged, closed, done: the row is history, not work. The daemon

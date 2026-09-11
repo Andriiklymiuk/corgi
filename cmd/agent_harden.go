@@ -36,10 +36,8 @@ var hardenDeny = []string{
 	"Bash(git push -f*)",
 	"Bash(git reset --hard*)",
 	"Bash(git clean -fd*)",
-	"Bash(* --no-verify*)",
-	"Bash(curl * | sh)",
-	"Bash(curl * | bash)",
-	"Bash(wget * | sh)",
+	"Bash(git push --no-verify*)",
+	"Bash(git commit --no-verify*)",
 }
 
 const (
@@ -52,7 +50,7 @@ var agentHardenCmd = &cobra.Command{
 	Short: "Write the safe defaults into this workspace's Claude settings",
 	Long: `Adds to .claude/settings.local.json in the workspace: deny rules for reading
 secrets (.env, keys, ~/.ssh, ~/.aws) and for destructive shell and git
-(rm -rf, sudo, force push, reset --hard, --no-verify, curl | sh), and a hook
+(rm -rf, sudo, force push, reset --hard, --no-verify), and a hook
 that refuses to write a credential into a file. Nothing is removed; a rule
 already there is left alone.
 
