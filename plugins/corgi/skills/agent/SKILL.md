@@ -592,6 +592,8 @@ corgi agent answer <session> allow|always|deny       # its permission prompt; ri
 corgi agent note <session> "waiting on PR"           # a line of yours under the session
 corgi agent usage [--json|--watch]                   # every account: 5h and week windows, forecast, when a reached limit lifts
 corgi agent carry <session> --profile work           # continue a limited session under another listed account
+corgi agent continue on                              # daemon types "continue" into a limited session once its window resets (off by default)
+corgi agent watch ignore <REF|key>                   # a ticket out of the inbox everywhere, for good; unignore puts it back
 corgi agent claude --profile auto                    # start under the listed account with the most budget
 corgi agent watch enable --auto-for reviews,comments # work those unattended; a fresh ticket only notifies
 corgi agent watch enable --ci                        # red builds too: the one kind with its own test for done
@@ -617,7 +619,11 @@ window in front, a hold picks another open window), and the **Telegram bot**
 (`corgi agent notify telegram --token …`: reply to a "needs you" message to
 type into it; `/sessions`, `/usage`, `/send`, `/allow`, `/always`, `/deny`,
 `/focus`). "limit lifted — back to work" arrives once a limited session
-finishes a turn again. The **phone launcher** has the same under each
+finishes a turn again. A limited key says which kind: **quota** (the
+account's window is spent; `resets 2pm`, carry or wait) or **overload**
+(the API said try later; minutes). With `corgi agent continue on` the daemon
+plans the resume itself — the key shows `continues 14:02` — and gives up after
+three tries when the limit comes straight back. The **phone launcher** has the same under each
 session row: Allow, Always, Deny when it needs you, Send… for any live one,
 and a PR link when the session mentioned one; its **New chat** box opens a
 session in a chosen editor window with a first prompt, a model and an
