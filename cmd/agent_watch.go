@@ -155,6 +155,17 @@ var agentWatchEnableCmd = &cobra.Command{
 			}
 			wc.Quiet = strings.TrimSpace(v)
 		}
+		if flags.Changed("days-off") {
+			v, _ := flags.GetString("days-off")
+			days, err := daemon.ParseDaysOff([]string{v})
+			if err != nil {
+				return fmt.Errorf("--days-off: %w", err)
+			}
+			wc.DaysOff = nil
+			for _, d := range days {
+				wc.DaysOff = append(wc.DaysOff, strings.ToLower(d.String()[:3]))
+			}
+		}
 		entry.Watch = wc
 		user.Workspaces[id] = entry
 		if err := writeUserConfig(path, user); err != nil {
@@ -536,6 +547,8 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			AutoFor   []string         `json:"autoFor,omitempty"`
 			Interval  string           `json:"interval"`
 			Quiet     string           `json:"quiet,omitempty"`
+			DaysOff   []string         `json:"daysOff,omitempty"`
+			Asleep    bool             `json:"asleep,omitempty"`
 			Fixes     daemon.FixBudget `json:"fixes"`
 		}
 		type fixRow struct {
@@ -552,7 +565,12 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		}
 		var out []spec
 		for _, s := range specs {
-			out = append(out, spec{s.Workspace, sourceNames(s), s.Skipped, s.Action, s.FixKinds, s.Interval.String(), s.Quiet, daemon.BudgetFor(s, state.Fixes, now)})
+			row := spec{Workspace: s.Workspace, Sources: sourceNames(s), Skipped: s.Skipped, Action: s.Action, AutoFor: s.FixKinds, Interval: s.Interval.String(), Quiet: s.Quiet, Fixes: daemon.BudgetFor(s, state.Fixes, now)}
+			for _, d := range s.DaysOff {
+				row.DaysOff = append(row.DaysOff, strings.ToLower(d.String()[:3]))
+			}
+			row.Asleep = daemon.DayOff(s, now)
+			out = append(out, row)
 		}
 		// A run's row links to its ticket, so a menu bar can open what the
 		// run was about, not only the pull request it opened.
@@ -636,6 +654,9 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		if len(s.Skipped) > 0 {
 			line += fmt.Sprintf(" (%s skipped: --prs off)", strings.Join(s.Skipped, ", "))
 		}
+		if len(s.DaysOff) > 0 {
+			line += " · off " + daemon.DaysOffWords(s.DaysOff)
+		}
 		fmt.Println(line)
 		if s.Action == "fix" {
 			fmt.Printf("  %-20s %s\n", "", fixBudgetLine(s, state.Fixes, now))
@@ -716,6 +737,13 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, Isolate: wc.Isolate, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Models: resolved.Models, Routines: resolved.Routines}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
+		}
+		// A bad day name in the file is ignored, not fatal: the watch runs
+		// every day rather than not at all.
+		if days, err := daemon.ParseDaysOff(wc.DaysOff); err == nil {
+			spec.DaysOff = days
+		} else {
+			utils.Infof("agent: watch %s: daysOff ignored: %v\n", w.ID, err)
 		}
 		// A source the rules take nothing from is not built: polling it would
 		// only spend requests.
@@ -938,6 +966,9 @@ func describeWatch(wc *config.WatchConfig) string {
 	if action == "fix" {
 		perHour, perDay := daemon.WatchSpec{MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay}.FixCaps()
 		out += fmt.Sprintf(", at most %d/h %d/day", perHour, perDay)
+		if len(wc.DaysOff) > 0 {
+			out += ", off " + strings.Join(wc.DaysOff, "/")
+		}
 		if wc.Quiet != "" {
 			out += ", quiet " + wc.Quiet
 		}
@@ -1006,6 +1037,7 @@ func init() {
 	f.Int("max-per-hour", 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
 	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
 	f.String("quiet", "", "Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens")
+	f.String("days-off", "", "Days the watch sleeps through — weekends, or sat,sun, or mon,fri: no polling, no fix, nothing rings until the next working day (none clears)")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
 	f.String("review-status", "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")

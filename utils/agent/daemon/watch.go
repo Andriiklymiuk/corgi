@@ -66,6 +66,75 @@ type WatchSpec struct {
 	MaxFixesPerDay  int
 	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts.
 	Quiet string
+	// DaysOff are the weekdays the watch sleeps through: no polling, no
+	// fix, nothing rings; what arrived is in the inbox and rings once the
+	// next working day starts.
+	DaysOff []time.Weekday
+}
+
+// ParseDaysOff reads day names — "sat,sun", "saturday", "weekends" — into
+// weekdays. "" or "none" is no day off.
+func ParseDaysOff(list []string) ([]time.Weekday, error) {
+	names := map[string]time.Weekday{
+		"sun": time.Sunday, "sunday": time.Sunday, "mon": time.Monday, "monday": time.Monday,
+		"tue": time.Tuesday, "tues": time.Tuesday, "tuesday": time.Tuesday, "wed": time.Wednesday, "wednesday": time.Wednesday,
+		"thu": time.Thursday, "thur": time.Thursday, "thurs": time.Thursday, "thursday": time.Thursday,
+		"fri": time.Friday, "friday": time.Friday, "sat": time.Saturday, "saturday": time.Saturday,
+	}
+	seen := map[time.Weekday]bool{}
+	var out []time.Weekday
+	add := func(d time.Weekday) {
+		if !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	for _, raw := range list {
+		for _, part := range strings.Split(raw, ",") {
+			key := strings.ToLower(strings.TrimSpace(part))
+			switch key {
+			case "", "none", "off":
+				continue
+			case "weekend", "weekends":
+				add(time.Saturday)
+				add(time.Sunday)
+				continue
+			}
+			d, ok := names[key]
+			if !ok {
+				return nil, fmt.Errorf("day %q: want mon…sun, or weekends", part)
+			}
+			add(d)
+		}
+	}
+	if len(out) == 7 {
+		return nil, fmt.Errorf("every day off is no watch at all — corgi agent watch disable")
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
+}
+
+// DaysOffWords is the list as the status prints it: "sat, sun".
+func DaysOffWords(days []time.Weekday) string {
+	var w []string
+	for _, d := range days {
+		w = append(w, strings.ToLower(d.String()[:3]))
+	}
+	return strings.Join(w, ", ")
+}
+
+// DayOff is dayOff for callers outside this package.
+func DayOff(spec WatchSpec, now time.Time) bool { return dayOff(spec, now) }
+
+// dayOff says now falls on one of the spec's days off, in local time.
+func dayOff(spec WatchSpec, now time.Time) bool {
+	wd := now.Local().Weekday()
+	for _, d := range spec.DaysOff {
+		if d == wd {
+			return true
+		}
+	}
+	return false
 }
 
 // blockerWindow is how long a blocking failure is believed. Long enough to
@@ -223,7 +292,9 @@ func (d *Daemon) startWatches(ctx context.Context) {
 				d.releaseHeld(spec, now)
 				d.retryDeferred(ctx, spec, now)
 				go d.refreshInboxStates(ctx, spec)
-			}}
+			},
+			// A day off is a day off: the tracker is not even asked.
+			Asleep: func(now time.Time) bool { return dayOff(spec, now) }}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = &sync.Mutex{}
 		if len(live) > 0 && spec.Interval > 0 {
@@ -327,7 +398,11 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 	}
 }
 
+// quietNow is a quiet hour or a day off: nothing rings, nothing starts.
 func quietNow(spec WatchSpec, now time.Time) bool {
+	if dayOff(spec, now) {
+		return true
+	}
 	q, err := ParseQuiet(spec.Quiet)
 	return err == nil && q.Contains(now)
 }
@@ -499,6 +574,9 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	}
 	if log.StartedSince(spec.Workspace, now.Add(-24*time.Hour)) >= perDay {
 		return fmt.Sprintf("%d/day cap", perDay)
+	}
+	if dayOff(spec, now) {
+		return "day off"
 	}
 	if q, err := ParseQuiet(spec.Quiet); err == nil && q.Contains(now) {
 		return "quiet hours"

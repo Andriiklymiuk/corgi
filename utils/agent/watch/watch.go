@@ -547,6 +547,9 @@ type Watch struct {
 	// Round runs before each poll, for work the clock decides — releasing
 	// what quiet hours held back once the window opens.
 	Round func(now time.Time)
+	// Asleep says the watch is off for now — a day off — so no poll is made
+	// until it wakes; a nudge (the reload button) still polls once.
+	Asleep func(now time.Time) bool
 }
 
 // Once polls every source one time and hands new matches to the sink.
@@ -601,12 +604,16 @@ func (w *Watch) Run(ctx context.Context) {
 		interval = 3 * time.Minute
 	}
 	wait := interval
+	nudged := false
 	for {
 		now := time.Now()
 		if w.Round != nil {
 			w.Round(now)
 		}
-		w.Once(ctx, now)
+		if nudged || w.Asleep == nil || !w.Asleep(now) {
+			w.Once(ctx, now)
+		}
+		nudged = false
 		if w.failing() {
 			wait = min(wait*2, interval*10)
 		} else {
@@ -617,6 +624,7 @@ func (w *Watch) Run(ctx context.Context) {
 			return
 		case <-time.After(wait):
 		case <-w.wakeChan():
+			nudged = true
 		}
 	}
 }
