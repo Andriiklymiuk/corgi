@@ -9,6 +9,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/handoff"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 	"github.com/spf13/cobra"
@@ -47,7 +48,17 @@ type KanbanCard struct {
 	Session   *CardSess `json:"session,omitempty"`
 	Fix       *CardFix  `json:"fix,omitempty"`
 	Handoff   *CardHand `json:"handoff,omitempty"`
+	// Cost is what the ticket has cost so far: the unattended runs (with
+	// claude's own receipt) plus every session that sat on its branch.
+	Cost      *CardCost `json:"cost,omitempty"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type CardCost struct {
+	USD      float64 `json:"usd,omitempty"`
+	Tokens   int64   `json:"tokens"`
+	Runs     int     `json:"runs"`
+	Sessions int     `json:"sessions"`
 }
 
 type CardSess struct {
@@ -81,6 +92,8 @@ type kanbanInputs struct {
 	sessions []sessions.Session
 	packets  map[string][]handoff.Packet // by workspace id
 	now      time.Time
+	// sessionTokens is a seam: what one session has spent, from its transcript.
+	sessionTokens func(s sessions.Session) (int64, bool)
 }
 
 func buildKanban(in kanbanInputs) []KanbanCard {
@@ -176,6 +189,15 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 			_ = id
 			c.Session = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status)}
 			c.Branch = s.Branch
+			if in.sessionTokens != nil {
+				if tok, ok := in.sessionTokens(s); ok {
+					if c.Cost == nil {
+						c.Cost = &CardCost{}
+					}
+					c.Cost.Tokens += tok
+					c.Cost.Sessions++
+				}
+			}
 			if c.Column == ColInbox || c.Column == ColReady {
 				c.Column, c.Why = ColRunning, "session "+c.Session.Label+" is on "+s.Branch
 			}
@@ -206,11 +228,20 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 		}
 	}
 
-	// Blocked wins over everything but Done: a wall is a wall.
+	// Blocked wins over everything but Done: a wall is a wall. And every
+	// card says what it has cost so far.
 	if in.fixes != nil {
 		for _, c := range byRef {
 			if b, ok := in.fixes.Blocked(c.Workspace, c.Ref); ok && c.Column != ColDone {
 				c.Column, c.Why, c.Blocked, c.BlockedBy = ColBlocked, b.Reason, b.Reason, b.By
+			}
+			if cost := in.fixes.CostFor(c.Workspace, c.Ref); cost.Runs > 0 {
+				if c.Cost == nil {
+					c.Cost = &CardCost{}
+				}
+				c.Cost.USD += cost.USD
+				c.Cost.Tokens += cost.Tokens
+				c.Cost.Runs = cost.Runs
 			}
 		}
 	}
@@ -247,6 +278,13 @@ func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 	}
 	if rep, err := readBoard(dir); err == nil {
 		in.sessions = rep.State.Sessions
+	}
+	in.sessionTokens = func(s sessions.Session) (int64, bool) {
+		if s.Cwd == "" || sessions.Placeholder(s.ID) {
+			return 0, false
+		}
+		t, ok := usage.ForSession(s.ConfigDir, s.Cwd, s.ID)
+		return t.Total(), ok
 	}
 	if registry, err := workspace.Load(agentRegistryPath(dir)); err == nil {
 		for _, ws := range registry.Workspaces {
@@ -315,6 +353,9 @@ moving a ticket moves it on the tracker (corgi agent watch move).
 				if c.Fix != nil && len(c.Fix.PRs) > 0 {
 					line += " · " + c.Fix.PRs[0]
 				}
+				if c.Cost != nil {
+					line += " · " + costLine(*c.Cost)
+				}
 				fmt.Println(line)
 			}
 		}
@@ -324,4 +365,30 @@ moving a ticket moves it on the tracker (corgi agent watch move).
 func init() {
 	agentKanbanCmd.Flags().String("workspace", "", "only this workspace's cards")
 	agentCmd.AddCommand(agentKanbanCmd)
+}
+
+// costLine is "1.2M tok · $0.84 · 3 runs" — the tokens always, the money
+// when a run reported it.
+func costLine(c CardCost) string {
+	parts := []string{humanTokens(c.Tokens) + " tok"}
+	if c.USD > 0 {
+		parts = append(parts, fmt.Sprintf("$%.2f", c.USD))
+	}
+	if c.Runs > 0 {
+		parts = append(parts, plural(c.Runs, "run", "runs"))
+	}
+	if c.Sessions > 0 {
+		parts = append(parts, plural(c.Sessions, "session", "sessions"))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func humanTokens(n int64) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%.0fk", float64(n)/1_000)
+	}
+	return fmt.Sprint(n)
 }

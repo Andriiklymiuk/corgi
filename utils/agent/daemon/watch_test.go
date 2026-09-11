@@ -319,7 +319,7 @@ func TestFixPromptPerKind(t *testing.T) {
 	if args[0] != "-p" || !strings.HasPrefix(args[1], fixPrompt(e)) {
 		t.Fatalf("the kind's own prompt leads: %q", args)
 	}
-	if strings.Join(args[2:], " ") != "--output-format text --permission-mode acceptEdits" {
+	if strings.Join(args[2:], " ") != "--output-format json --permission-mode acceptEdits" {
 		t.Fatalf("flags %q", args[2:])
 	}
 	// Nobody but the run has read this diff, and whoever finds the PR later

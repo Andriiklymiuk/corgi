@@ -2133,6 +2133,13 @@ const launcherPageHTML = `<!doctype html>
 
   // What a run said, on the phone: the tail of its log, the handoff it left,
   // what it opened and what it cost. The one screen for "what happened".
+  function humanTokens(n) {
+    n = Number(n) || 0;
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return Math.round(n / 1e3) + 'k';
+    return String(n);
+  }
+
   async function runSheet(fx) {
     const scrim = document.createElement('div');
     scrim.className = 'scrim';
@@ -2157,6 +2164,7 @@ const launcherPageHTML = `<!doctype html>
       meta.className = 'etitle';
       const bits = [];
       if (j.outcome) bits.push(j.outcome);
+      if (j.tokens) bits.push(humanTokens(j.tokens) + ' tok' + (j.costUSD ? ' · $' + j.costUSD.toFixed(2) : ''));
       if (j.spentPercent) bits.push(j.spentPercent + '% of the 5h window');
       if (j.handover) bits.push(j.handover);
       meta.textContent = bits.join(' · ');
@@ -2210,6 +2218,13 @@ const launcherPageHTML = `<!doctype html>
         if (c.session) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'session ' + c.session.label + ' · ' + (STATUS_WORD[c.session.status] || c.session.status); card.appendChild(m); }
         if (c.branch) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = c.branch; card.appendChild(m); }
         if (c.handoff && c.handoff.next) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'next: ' + c.handoff.next; card.appendChild(m); }
+        if (c.cost) {
+          const bits = [humanTokens(c.cost.tokens) + ' tok'];
+          if (c.cost.usd) bits.push('$' + c.cost.usd.toFixed(2));
+          if (c.cost.runs) bits.push(c.cost.runs + (c.cost.runs === 1 ? ' run' : ' runs'));
+          if (c.cost.sessions) bits.push(c.cost.sessions + (c.cost.sessions === 1 ? ' session' : ' sessions'));
+          const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = bits.join(' · '); card.appendChild(m);
+        }
         const row = document.createElement('div'); row.className = 'erow';
         const ev = { key: c.key, ref: c.ref, workspace: c.workspace, kind: c.kind, url: c.url };
         if (c.url && /^https:\/\//.test(c.url)) {
@@ -3432,6 +3447,9 @@ func launchRunHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if rec.SpentPercent > 0 {
 			out["spentPercent"] = rec.SpentPercent
+		}
+		if rec.Tokens > 0 {
+			out["tokens"], out["costUSD"] = rec.Tokens, rec.CostUSD
 		}
 		if rec.Branch != "" {
 			out["branch"] = rec.Branch

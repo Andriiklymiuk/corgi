@@ -71,3 +71,32 @@ func TestAnIsolatedRunIsToldWhereToWork(t *testing.T) {
 		t.Fatalf("branch on the record: %+v", got)
 	}
 }
+
+// The run's JSON envelope is taken apart: words to the log and the PR scan,
+// numbers to the record. Output that is not the envelope is used as it came.
+func TestARunsReceiptIsRecorded(t *testing.T) {
+	raw := []byte(`{"type":"result","subtype":"success","result":"opened https://github.com/a/b/pull/9\nall green","total_cost_usd":0.4321,"num_turns":7,"usage":{"input_tokens":1000,"output_tokens":200,"cache_read_input_tokens":30000,"cache_creation_input_tokens":500}}`)
+	out, r := unwrapResult(raw)
+	if !r.ok || r.costUSD != 0.4321 || r.tokens != 31700 || r.turns != 7 {
+		t.Fatalf("receipt: %+v", r)
+	}
+	if !strings.HasPrefix(string(out), "opened https://github.com/a/b/pull/9") {
+		t.Fatalf("words: %s", out)
+	}
+	plain := []byte("just text from an older claude")
+	if out, r := unwrapResult(plain); r.ok || string(out) != string(plain) {
+		t.Fatal("plain output passes through")
+	}
+	dir := t.TempDir()
+	l := watch.LoadFixLog(dir)
+	l.StartFor(watch.Event{Key: "k1", Ref: "ABC-1", Workspace: "api"}, time.Now())
+	l.SetCost("k1", 0.4321, 31700)
+	l.StartFor(watch.Event{Key: "k2", Ref: "ABC-1", Workspace: "api"}, time.Now())
+	l.SetCost("k2", 0.1, 300)
+	l.StartFor(watch.Event{Key: "k3", Ref: "ABC-1", Workspace: "api"}, time.Now())
+	l.Finish("k3", nil, "", "not started: 3/h cap", time.Now())
+	c := watch.LoadFixLog(dir).CostFor("api", "ABC-1")
+	if c.Runs != 2 || c.Tokens != 32000 || c.USD < 0.53 || c.USD > 0.54 {
+		t.Fatalf("cost per ticket adds the runs that ran: %+v", c)
+	}
+}

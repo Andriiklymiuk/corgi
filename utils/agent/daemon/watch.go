@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -609,7 +610,7 @@ func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 		prompt += "\n\nAn earlier run on this stopped part-way. This is the last thing it said — " +
 			"treat it as notes, not as truth, and check anything it claims before building on it:\n" + handover
 	}
-	args := []string{"-p", prompt, "--output-format", "text"}
+	args := []string{"-p", prompt, "--output-format", "json"}
 	if spec.SkipPermissions {
 		return append(args, "--dangerously-skip-permissions")
 	}
@@ -700,8 +701,16 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	cmd := claudeCommand(ctx, spec.Dir, env, args...)
 	cmd.Stdin = nil
-	out, runErr := cmd.Output()
+	raw, runErr := cmd.Output()
+	// json output carries what the run said plus what it cost; the log keeps
+	// the words, the record keeps the numbers. Output that is not the JSON
+	// envelope (an older claude, a crash mid-line) is used as it came.
+	out, receipt := unwrapResult(raw)
 	logFile.Write(out)
+	if receipt.ok {
+		fmt.Fprintf(logFile, "\n=== cost: $%.4f · %d tokens · %d turns\n", receipt.costUSD, receipt.tokens, receipt.turns)
+		d.watchState.Fixes.SetCost(e.Key, receipt.costUSD, receipt.tokens)
+	}
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
 		d.watchState.Fixes.Finish(e.Key, nil, "", runErr.Error(), time.Now())
@@ -1050,4 +1059,40 @@ func RunLog(agentDir, key string, n int) string {
 		return ""
 	}
 	return watch.TailLines(string(data), n)
+}
+
+// runReceipt is what `claude -p --output-format json` says about a run
+// beyond its words.
+type runReceipt struct {
+	ok      bool
+	costUSD float64
+	tokens  int64
+	turns   int
+}
+
+// unwrapResult takes the JSON envelope apart: the result text for the log
+// and the PR scan, the cost for the record. Anything else passes through.
+func unwrapResult(raw []byte) ([]byte, runReceipt) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return raw, runReceipt{}
+	}
+	var env struct {
+		Type     string  `json:"type"`
+		Result   string  `json:"result"`
+		CostUSD  float64 `json:"total_cost_usd"`
+		NumTurns int     `json:"num_turns"`
+		Usage    struct {
+			Input      int64 `json:"input_tokens"`
+			Output     int64 `json:"output_tokens"`
+			CacheRead  int64 `json:"cache_read_input_tokens"`
+			CacheWrite int64 `json:"cache_creation_input_tokens"`
+		} `json:"usage"`
+	}
+	if json.Unmarshal(trimmed, &env) != nil || env.Type != "result" {
+		return raw, runReceipt{}
+	}
+	u := env.Usage
+	return []byte(env.Result), runReceipt{ok: true, costUSD: env.CostUSD, turns: env.NumTurns,
+		tokens: u.Input + u.Output + u.CacheRead + u.CacheWrite}
 }
