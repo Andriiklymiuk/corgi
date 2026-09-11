@@ -143,6 +143,15 @@ func keyIndex(arg string) (int, error) {
 
 // sendBoardCommand drops one command in the spool and nudges the daemon,
 // which must be running: without it nothing would read the request.
+var agentRefreshCmd = &cobra.Command{
+	Use:   "refresh",
+	Short: "Reload everything now: rescan sessions, poll every tracker, publish",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		sendBoardCommand(command.Command{Action: command.ActionRefresh, Source: "cli"}, "refresh requested — every surface reads the new picture in a moment")
+	},
+}
+
 func sendBoardCommand(c command.Command, done string) {
 	dir := mustAgentDir()
 	info, err := daemon.ReadInfo(dir)
@@ -396,7 +405,7 @@ func init() {
 	agentSessionsCmd.Flags().Bool("watch", false, "Redraw the board whenever it changes")
 	agentPinCmd.Flags().Bool("off", false, "Release the key instead")
 	agentNewCmd.Flags().String("window", "", "Editor window id, as `corgi agent windows` lists them (default: the one in front)")
-	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentDismissCmd, agentPageCmd, agentRescanCmd, agentWindowsCmd, agentNewCmd)
+	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentDismissCmd, agentPageCmd, agentRescanCmd, agentRefreshCmd, agentWindowsCmd, agentNewCmd)
 }
 
 var agentBoardCmd = &cobra.Command{

@@ -1730,9 +1730,14 @@ const launcherPageHTML = `<!doctype html>
   // re-rendering would collapse it.
   function initRefresh() {
     const btn = document.getElementById('refresh');
+    // The button is a real reload: the daemon rescans and polls every tracker
+    // now, and this page — with the phone and the menu bar — re-reads once
+    // it has had a moment to publish.
     btn.onclick = () => {
       btn.classList.add('spin');
-      Promise.all([load(), loadInfo(), loadBoard()]).finally(() => setTimeout(() => btn.classList.remove('spin'), 400));
+      fetch('/launch/refresh', { method: 'POST', headers: auth }).catch(() => {});
+      const reread = () => Promise.all([load(), loadInfo(), loadBoard()]);
+      reread().then(() => setTimeout(reread, 1500)).finally(() => setTimeout(() => btn.classList.remove('spin'), 1900));
     };
     setInterval(autoRefresh, REFRESH_MS);
     addEventListener('visibilitychange', () => {
@@ -3276,6 +3281,18 @@ func launchAnswerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	launchBoardCommand(w, command.Command{Action: command.ActionAnswer, SessionID: session.ID, Answer: answer, Source: "phone"})
+}
+
+// launchRefreshHandler is the reload button: the daemon looks at the
+// process table again and polls every tracker now, then publishes — the
+// caller re-reads a moment later, and so does everything else.
+func launchRefreshHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST to refresh everything now")
+		return
+	}
+	launchBoardCommand(w, command.Command{Action: command.ActionRefresh, Source: "phone"})
 }
 
 // launchFreshHandler restarts a drifting session clean, under the same

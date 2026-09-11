@@ -36,6 +36,10 @@ const (
 	ActionPin    = "pin"
 	ActionPage   = "page"
 	ActionRescan = "rescan"
+	// ActionRefresh is a reload button pressed somewhere: look at the
+	// process table again, poll every tracker now, publish — so the phone,
+	// the menu bar and the page all see the same fresh picture.
+	ActionRefresh = "refresh"
 	// ActionResize changes the number of keys on the board in place.
 	ActionResize = "resize"
 	// ActionNew opens a fresh Claude Code session in an editor window: the

@@ -233,6 +233,16 @@ func (d *Daemon) startWatches(ctx context.Context) {
 	utils.Infof("agent: watching %d workspace(s) — tracker and review events\n", len(d.Watches))
 }
 
+// refresh is the reload button, wherever it was pressed: the process table
+// again, every tracker polled now, the inbox's columns re-read — then the
+// board published, so every surface reads the same fresh picture.
+func (d *Daemon) refresh() {
+	d.rescan()
+	for _, w := range d.watchers {
+		w.Nudge()
+	}
+}
+
 // handleWatchEvent routes a webhook's event to the workspace it belongs to,
 // else to the first one whose rules take it; the seen list keeps it single.
 func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
