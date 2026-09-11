@@ -717,6 +717,12 @@ issue link.
   reviewer reads before the diff, and a breaking line with no caller updated in
   the same batch is a bug you should have caught here. Re-run after every push
   in the Phase 5.5 loop.
+- **Docs that name what changed.** `corgi docs check --branch <branch>` lists
+  every Markdown file that mentions a symbol or route the batch changed, and
+  every `file:line` pointer in CLAUDE.md or `.claude/rules` that no longer
+  lands. Fix the ones the change made wrong in the same PR; list the rest under
+  `Deferred` with the file name. A stale doc is a bug the reviewer cannot see
+  in the diff.
 - **Evidence in the body, always.** A reviewer who did not watch the run needs
   four things to trust it, and they never appear on their own: a `## Evidence`
   section with (1) **changed files with a reason each** — one line per file or
