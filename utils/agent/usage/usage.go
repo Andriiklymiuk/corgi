@@ -129,3 +129,36 @@ func (u rawUsage) totals() Totals {
 		Turns: 1,
 	}
 }
+
+// ProjectDirName is how Claude Code names a project directory under
+// projects/: the path with every separator and dot turned into a dash.
+func ProjectDirName(dir string) string {
+	return strings.NewReplacer("/", "-", ".", "-", "\\", "-", ":", "-").Replace(dir)
+}
+
+// TranscriptPath is one session's transcript under an account.
+func TranscriptPath(configDir, cwd, sessionID string) string {
+	base := configDir
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		base = filepath.Join(home, ".claude")
+	}
+	return filepath.Join(base, "projects", ProjectDirName(cwd), sessionID+".jsonl")
+}
+
+// ForSession is everything one session has spent, all time. ok is false
+// when there is no transcript to read.
+func ForSession(configDir, cwd, sessionID string) (Totals, bool) {
+	path := TranscriptPath(configDir, cwd, sessionID)
+	if path == "" {
+		return Totals{}, false
+	}
+	if _, err := os.Stat(path); err != nil {
+		return Totals{}, false
+	}
+	_, all := sumFile(path, time.Time{}, time.Time{})
+	return all, true
+}
