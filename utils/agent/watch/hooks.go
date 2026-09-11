@@ -147,17 +147,23 @@ func parseGitHubHook(event string, body []byte, me string) ([]Event, error) {
 			PR      *struct{}              `json:"pull_request"`
 		} `json:"issue"`
 		Comment *struct {
-			ID        int64                  `json:"id"`
-			Body      string                 `json:"body"`
-			CreatedAt string                 `json:"created_at"`
-			User      struct{ Login string } `json:"user"`
+			ID        int64  `json:"id"`
+			Body      string `json:"body"`
+			CreatedAt string `json:"created_at"`
+			User      struct {
+				Login string `json:"login"`
+				Type  string `json:"type"`
+			} `json:"user"`
 		} `json:"comment"`
 		Review *struct {
-			ID          int64                  `json:"id"`
-			Body        string                 `json:"body"`
-			State       string                 `json:"state"`
-			SubmittedAt string                 `json:"submitted_at"`
-			User        struct{ Login string } `json:"user"`
+			ID          int64  `json:"id"`
+			Body        string `json:"body"`
+			State       string `json:"state"`
+			SubmittedAt string `json:"submitted_at"`
+			User        struct {
+				Login string `json:"login"`
+				Type  string `json:"type"`
+			} `json:"user"`
 		} `json:"review"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -180,14 +186,17 @@ func parseGitHubHook(event string, body []byte, me string) ([]Event, error) {
 	mine := isMe(me, owner)
 	switch event {
 	case "pull_request_review":
-		if p.Review == nil || isMe(me, p.Review.User.Login) {
+		if p.Review == nil || isMe(me, p.Review.User.Login) || githubBot(p.Review.User.Login, p.Review.User.Type) {
 			return nil, nil
 		}
 		return []Event{{Key: fmt.Sprintf("github:%s:r%d", ref, p.Review.ID), Source: "github", Kind: KindPRReview, Ref: ref,
 			Title: title, URL: url, Body: clip(p.Review.Body, 200), Author: p.Review.User.Login, State: p.Review.State,
 			Mine: mine, At: hookTime(p.Review.SubmittedAt)}}, nil
 	case "pull_request_review_comment", "issue_comment":
-		if p.Comment == nil || isMe(me, p.Comment.User.Login) {
+		// My own comment is not news; a bot's — a tracker link, a coverage
+		// report — is not a person waiting. The poller skips both; the
+		// webhook has to as well, or the same comment rings this way.
+		if p.Comment == nil || isMe(me, p.Comment.User.Login) || githubBot(p.Comment.User.Login, p.Comment.User.Type) {
 			return nil, nil
 		}
 		return []Event{{Key: fmt.Sprintf("github:%s:c%d", ref, p.Comment.ID), Source: "github", Kind: KindPRComment, Ref: ref,
@@ -220,7 +229,7 @@ func parseGitLabHook(body []byte, me string) ([]Event, error) {
 	if err := json.Unmarshal(body, &p); err != nil {
 		return nil, err
 	}
-	if p.ObjectKind != "note" || p.Attrs.NoteableType != "MergeRequest" || p.MR == nil || isMe(me, p.User.Username) {
+	if p.ObjectKind != "note" || p.Attrs.NoteableType != "MergeRequest" || p.MR == nil || isMe(me, p.User.Username) || gitlabBot(p.User.Username, false) {
 		return nil, nil
 	}
 	ref := fmt.Sprintf("%s!%d", p.Project.PathWithNamespace, p.MR.IID)
@@ -348,3 +357,9 @@ func clip(s string, n int) string {
 }
 
 func parseTime(s string) time.Time { return hookTime(s) }
+
+// githubBot says a GitHub account is an app, not a person: the API says
+// type Bot, and the login ends in [bot].
+func githubBot(login, kind string) bool {
+	return strings.EqualFold(kind, "Bot") || strings.HasSuffix(strings.ToLower(login), "[bot]")
+}
