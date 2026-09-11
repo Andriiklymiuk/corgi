@@ -423,3 +423,35 @@ func TestQuietHoursHoldTheNotificationAndReleaseItLater(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+// A note held through the night about a ticket that finished, or a row
+// someone dismissed, is not news in the morning.
+func TestTheMorningDropsHeldNotesThatSettledOvernight(t *testing.T) {
+	d := dynDaemon(t)
+	d.loadWatchFiles()
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir()}
+	done := watch.Event{Key: "k-done", Ref: "ABC-1", Workspace: "acme", Kind: watch.KindIssueComment, State: "In QA", At: time.Now()}
+	live := watch.Event{Key: "k-live", Ref: "ABC-2", Workspace: "acme", Kind: watch.KindIssueComment, State: "In Progress", At: time.Now()}
+	gone := watch.Event{Key: "k-gone", Ref: "ABC-3", Workspace: "acme", Kind: watch.KindIssueComment, State: "In Progress", At: time.Now()}
+	for _, e := range []watch.Event{done, live, gone} {
+		d.appendWatchEvent(e)
+	}
+	d.watchState.HoldEvent("acme", done.Key, "Nadia commented on ABC-1: thanks", time.Now())
+	d.watchState.HoldEvent("acme", live.Key, "Sam commented on ABC-2: still broken", time.Now())
+	d.watchState.HoldEvent("acme", gone.Key, "Kim commented on ABC-3: hm", time.Now())
+	// Overnight: ABC-1 moved to Done, ABC-3 was dismissed from the phone.
+	_ = watch.LoadStateLog(d.Dir).Set(done.Key, "Done", time.Now())
+	_ = d.watchState.Ignore(gone.Key)
+
+	d.releaseHeld(spec, time.Now())
+	select {
+	case body := <-notes:
+		if !strings.Contains(body, "1 while you were away") || !strings.Contains(body, "ABC-2") || strings.Contains(body, "ABC-1") || strings.Contains(body, "ABC-3") {
+			t.Fatalf("only the live one: %q", body)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the live note is still delivered")
+	}
+}

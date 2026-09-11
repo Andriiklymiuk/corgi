@@ -310,7 +310,7 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		// Quiet hours mean quiet: the event is recorded and the inbox shows
 		// it, but nothing buzzes until the window opens.
 		if quietNow(spec, time.Now()) {
-			d.watchState.Hold(spec.Workspace, body, time.Now())
+			d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
 			return
 		}
 		go d.notifyAttentionAt("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL)
@@ -329,11 +329,32 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 		return
 	}
 	held := d.watchState.TakeHeld(spec.Workspace)
-	if len(held) == 0 {
+	// The night moved things on: a ticket finished, a row dismissed, is not
+	// news in the morning.
+	moved := watch.LoadStateLog(d.Dir)
+	kept := held[:0]
+	for _, n := range held {
+		if n.Key != "" {
+			if d.watchState.IsIgnored(n.Key) {
+				continue
+			}
+			if e, ok := watch.FindEvent(d.Dir, n.Key); ok {
+				current := e.State
+				if st, ok := moved.Get(n.Key); ok {
+					current = st.Status
+				}
+				if watch.Settled(e, current) != "" {
+					continue
+				}
+			}
+		}
+		kept = append(kept, n)
+	}
+	if len(kept) == 0 {
 		return
 	}
-	body := fmt.Sprintf("%d while you were away:", len(held))
-	for _, n := range held {
+	body := fmt.Sprintf("%d while you were away:", len(kept))
+	for _, n := range kept {
 		body += "\n  " + n.Body
 	}
 	go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
