@@ -39,8 +39,9 @@ func newLinearFake(t *testing.T) *linearFake {
   ]},
   "comments":{"nodes":[
     {"id":"9","body":"Can you check staging?","createdAt":%q,"user":{"id":"u-2","name":"Bob"},"issue":{"identifier":"ABC-1","url":"https://linear.app/acme/issue/ABC-1","title":"Login breaks"}},
-    {"id":"10","body":"On it","createdAt":%q,"user":{"id":"me-1","name":"Andrii"},"issue":{"identifier":"ABC-1","url":"https://linear.app/acme/issue/ABC-1","title":"Login breaks"}}
-  ]}}}`, stamp(-2*time.Hour), stamp(-time.Hour), stamp(-72*time.Hour), stamp(-30*time.Minute), stamp(-20*time.Minute), stamp(-10*time.Minute))
+    {"id":"10","body":"On it","createdAt":%q,"user":{"id":"me-1","name":"Andrii"},"issue":{"identifier":"ABC-1","url":"https://linear.app/acme/issue/ABC-1","title":"Login breaks"}},
+    {"id":"11","body":"Linked pull request #254","createdAt":%q,"user":null,"botActor":{"name":"GitHub"},"issue":{"identifier":"ABC-1","url":"https://linear.app/acme/issue/ABC-1","title":"Login breaks"}}
+  ]}}}`, stamp(-2*time.Hour), stamp(-time.Hour), stamp(-72*time.Hour), stamp(-30*time.Minute), stamp(-20*time.Minute), stamp(-10*time.Minute), stamp(-5*time.Minute))
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.calls.Add(1)
 		if r.Header.Get("Authorization") != "lin_api_tok" {
@@ -134,7 +135,8 @@ func TestLinearPoll(t *testing.T) {
 			if want := f.now.Add(-30 * time.Minute).Format(time.RFC3339Nano); next["issues"] != want {
 				t.Errorf("issues cursor = %q, want %q", next["issues"], want)
 			}
-			if want := f.now.Add(-10 * time.Minute).Format(time.RFC3339Nano); next["comments"] != want {
+			// The cursor passes the bot's comment too: skipped, but seen.
+			if want := f.now.Add(-5 * time.Minute).Format(time.RFC3339Nano); next["comments"] != want {
 				t.Errorf("comments cursor = %q, want %q", next["comments"], want)
 			}
 

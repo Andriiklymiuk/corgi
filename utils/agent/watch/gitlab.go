@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -55,7 +56,17 @@ type gitlabTodo struct {
 	} `json:"target"`
 	Author struct {
 		Username string `json:"username"`
+		Bot      bool   `json:"bot"`
 	} `json:"author"`
+}
+
+// gitlabBot says a todo was raised by a bot rather than a person: the API's
+// own flag when it sends one, else the names GitLab gives its bots — project
+// and group access tokens, the ghost user, the built-in service bots.
+var gitlabBotName = regexp.MustCompile(`(?i)^(project|group)_\d+_bot|[_-]bot$|^(ghost|support-bot|alert-bot|security-bot|gitlab-bot)$`)
+
+func gitlabBot(username string, flagged bool) bool {
+	return flagged || gitlabBotName.MatchString(strings.TrimSpace(username))
 }
 
 // Poll returns merge-request todos newer than cursor["lastId"]; the cursor
@@ -102,6 +113,10 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		}
 		kind, ok := gitlabActions[t.ActionName]
 		if !ok {
+			continue
+		}
+		// A bot's comment is not a person waiting, and my own is not news.
+		if kind == KindPRComment && (gitlabBot(t.Author.Username, t.Author.Bot) || isMe(g.Me, t.Author.Username)) {
 			continue
 		}
 		at, _ := time.Parse(time.RFC3339, t.CreatedAt)
