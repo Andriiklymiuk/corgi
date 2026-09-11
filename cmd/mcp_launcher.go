@@ -1893,6 +1893,8 @@ const launcherPageHTML = `<!doctype html>
         label.className = 'slabel'; label.textContent = s.display || s.label || '?';
         row.appendChild(dot); row.appendChild(label);
         let detail = s.detail || STATUS_WORD[s.status] || '';
+        if (s.status === 'limited' && s.limit === 'overload') detail = 'API overloaded';
+        if (s.resumeAt) detail += (detail ? ' · ' : '') + 'continues ' + clock(s.resumeAt);
         if (s.context && s.context.percent >= 50) detail += (detail ? ' · ' : '') + 'ctx ' + s.context.percent + '%';
         if (detail) {
           const d = document.createElement('span');

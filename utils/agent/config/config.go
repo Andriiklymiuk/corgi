@@ -53,6 +53,10 @@ type UserConfig struct {
 	// state agent mode exists to avoid. Off by default: a machine that never
 	// sleeps is a flat battery, and that must be the owner's choice.
 	StayAwake bool `yaml:"stayAwake"`
+	// AutoContinue lets the daemon type "continue" into a session that hit
+	// a limit once the window resets (quota) or after a short wait
+	// (overload). Off by default: it types into your terminal.
+	AutoContinue bool `yaml:"autoContinue"`
 	// Profiles are named setting bundles pickable at session-start time —
 	// "work", "personal" — for running one workspace under different Claude
 	// accounts. Trusted like everything else here: a remote caller sends only
