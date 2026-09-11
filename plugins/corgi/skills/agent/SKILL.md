@@ -742,8 +742,10 @@ runs `/corgi:review <url>` in address-feedback mode, never a fresh review.
 Budget: at most 3 fixes an hour and 10 a day (`--max-per-hour`,
 `--max-per-day`), none in `--quiet 23:00-07:00`, none at 95 % of a usage
 window; a fix past that is deferred with the reason in the notification,
-never retried by the daemon on its own — `corgi agent watch run` hands it
-back. A fix runs unattended only for a workspace enabled with
+and starts on its own once the cap, the quiet hours or the budget has
+passed — most urgent first (labels `urgent`, `p0`, `p1`, `critical`, then
+`high`, `p2`), one per poll round; `--no-retry` leaves them to
+`corgi agent watch run`. A fix runs unattended only for a workspace enabled with
 `corgi agent init --dangerously-skip-permissions`. Rules live in the user
 config under `workspaces.<id>.watch` (`labels`, `states`, `assignee`,
 `comments`, `prs`, `repos`, `project`, `interval`, `action`,
@@ -762,6 +764,56 @@ workspace holding an override. `--clear --local` drops one.
 When the user asks "can corgi listen to new Jira/Linear issues or PR
 comments and fix them", this is the answer: enable watch with `--action fix`,
 add tokens, restart the daemon; webhooks for instant reaction.
+
+### Handoffs, the workpad, blocked, the kanban
+
+A run that stops part-way leaves a **handoff**: a typed packet, never a
+transcript, at `.corgi/corgi_services/handoffs/<ref>.json` with a Markdown
+twin. Write one yourself when you stop with work remaining, before a carry,
+or when you are blocked:
+
+```bash
+corgi agent handoff --ref ABC-123 --done "api returns 429" --remaining "web banner" \
+  --decision "5h sliding window" --uncertain "retry on the phone?" --next "web banner" \
+  --verify "corgi test --changed"        # runs it now, records exit + head
+corgi agent handoff show ABC-123         # the packet; says how many commits since
+corgi agent handoff verify ABC-123       # re-runs its check at the current head
+corgi agent handoff --ref ABC-123 --blocked "no GITLAB_TOKEN for the web repo"
+```
+
+The ref defaults to the ticket key in the branch name. A packet with a
+secret or a TODO is refused. The next run — unattended, or a new session on
+the branch (the SessionStart context says "handoff for ABC-123: read … first")
+— re-runs the packet's check at the current head before trusting its done
+list; a check that fails, or a branch that moved, means start from the
+ticket and the diff. `corgi agent carry` writes a draft packet before it
+moves a session, and past 85 % context (or `--fresh`) starts the new session
+clean with the packet as its first prompt.
+
+The **workpad** is the one corgi comment on a ticket, sections rewritten in
+place: `Spec`, `Pull requests`, `Handoff`, `Blocked`. Post the spec there
+(`corgi agent watch workpad ABC-123 Spec - < docs/stories/ABC-123.md`); corgi
+adds the PRs a run opened, the handoff it left, the reason it is blocked.
+The first line of the comment is `corgi · workpad`; never write a second.
+
+**Blocked** is a column: two failed runs in a row on one ticket trip the
+breaker; a handoff in state `blocked` or `auth-required` blocks it; a person
+can too (`corgi agent watch block ABC-123 "needs the sandbox key"`). A
+blocked ticket takes no budget and no run until `corgi agent watch unblock
+ABC-123` (also on the phone). A quota hit or a missing credential never
+counts as a failure.
+
+`corgi agent watch enable --isolate` gives every unattended run its own
+worktrees on `corgi/<ref>`, one per repository, so a run never touches the
+checkout; `watch undo` releases them (keeping any with uncommitted work).
+
+`corgi agent kanban [--workspace X] [--json]` is one card per ticket in a
+column corgi works out — Inbox, Ready (deferred, or a handoff waiting),
+Running (a run or a session on the branch), Blocked, Review (a PR is open),
+Done — with the session, the branch, the PRs, the handoff's next step and
+what the ticket has cost (runs keep claude's own receipt; sessions on the
+branch add their transcripts). The phone's Board tab draws the same. Moving a
+card is `watch move`; nobody drags one into Running.
 
 ## Things not to do
 
