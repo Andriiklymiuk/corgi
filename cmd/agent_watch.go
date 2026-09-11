@@ -117,6 +117,9 @@ var agentWatchEnableCmd = &cobra.Command{
 			v, _ := flags.GetString("review-status")
 			wc.ReviewStatus = strings.TrimSpace(v)
 		}
+		if flags.Changed("isolate") {
+			wc.Isolate, _ = flags.GetBool("isolate")
+		}
 		if flags.Changed("lease") {
 			wc.Lease, _ = flags.GetBool("lease")
 		}
@@ -675,7 +678,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, ReviewStatus: wc.ReviewStatus}
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, Isolate: wc.Isolate, ReviewStatus: wc.ReviewStatus}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
@@ -971,6 +974,7 @@ func init() {
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
 	f.String("review-status", "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
+	f.Bool("isolate", false, "Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")

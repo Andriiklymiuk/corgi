@@ -174,6 +174,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.ClaimTicket = func(workspaceID string, e watch.Event) (bool, string, error) {
 		return claimTicket(d.Dir, workspaceID, e)
 	}
+	d.Isolate = isolateFixWorktrees
 	d.Workpad = func(workspaceID, ref, section, text string) {
 		writeWorkpad(d.Dir, workspaceID, ref, section, text)
 	}
