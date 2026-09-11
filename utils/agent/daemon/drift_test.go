@@ -40,12 +40,39 @@ func TestDriftIsReadFromTheNumbers(t *testing.T) {
 	}
 	// No scope: only the floor applies.
 	noScope := sessions.Session{Cwd: root, Branch: "main"}
-	driftDiff = func(string) (int, []string, bool) { return 500, []string{"x"}, true }
+	driftDiff = func(string) (int, []string, bool) { return 1200, []string{"x"}, true }
 	if r := driftReasons(noScope); len(r) != 0 {
-		t.Fatalf("500 lines with no scope is under the floor: %v", r)
+		t.Fatalf("1200 lines with no scope is a feature, not drift: %v", r)
 	}
-	driftDiff = func(string) (int, []string, bool) { return 900, []string{"x"}, true }
-	if r := driftReasons(noScope); len(r) != 1 || !strings.Contains(r[0], "far past the usual size") {
+	driftDiff = func(string) (int, []string, bool) { return 5000, []string{"x"}, true }
+	r = driftReasons(noScope)
+	if len(r) != 1 || !strings.Contains(r[0], "far past the usual size") {
 		t.Fatalf("over the floor: %v", r)
+	}
+	// A guess about size shows on the board and never rings; a budget the
+	// person set, or a full context, does.
+	if driftAlert(r) != "" {
+		t.Errorf("a big diff with no budget is not worth a notification: %q", driftAlert(r))
+	}
+	if got := driftAlert([]string{r[0], "context 91% full"}); got != "context 91% full" {
+		t.Errorf("the loud reason is the one that rings: %q", got)
+	}
+	if got := driftAlert([]string{"diff is 500 lines, twice the 200-line budget"}); got == "" {
+		t.Errorf("a budget breach rings")
+	}
+}
+
+// A lock file or a bundle is nobody's work: it counts for scope, never for
+// the size of the diff.
+func TestGeneratedFilesDoNotCountAsDiffSize(t *testing.T) {
+	for _, p := range []string{"package-lock.json", "app/yarn.lock", "web/dist/app.js", "api/__snapshots__/a.snap", "pkg/x.pb.go", "site/main.min.js"} {
+		if !generatedDiffPath(p) {
+			t.Errorf("%s should not count", p)
+		}
+	}
+	for _, p := range []string{"src/app/pair.tsx", "cmd/root.go", "Makefile", "docs/build.md"} {
+		if generatedDiffPath(p) {
+			t.Errorf("%s is real work", p)
+		}
 	}
 }

@@ -23,8 +23,32 @@ const (
 	driftFailsAt   = 3
 	// driftLinesFloor is the diff at which a branch with no scope is worth
 	// a look; a scope's own budget, doubled, is the line when there is one.
-	driftLinesFloor = 800
+	// A thousand lines is a feature; five thousand is the number to ask about.
+	driftLinesFloor = 3000
 )
+
+// generatedDiffPath says whether a file's lines are nobody's work: a lock
+// file, a snapshot, a bundle. They still count for scope, never for size —
+// one `npm install` is a thousand lines of package-lock.json.
+func generatedDiffPath(path string) bool {
+	base := strings.ToLower(filepath.Base(path))
+	switch base {
+	case "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb", "go.sum", "cargo.lock",
+		"gemfile.lock", "podfile.lock", "poetry.lock", "uv.lock", "composer.lock", "flake.lock", "mix.lock":
+		return true
+	}
+	for _, suffix := range []string{".snap", ".min.js", ".min.css", ".pb.go", ".pb.ts", ".generated.ts", ".generated.go", ".g.dart", ".map"} {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+	for _, dir := range []string{"dist/", "build/", "node_modules/", "vendor/", "__generated__/", "__snapshots__/"} {
+		if strings.HasPrefix(path, dir) || strings.Contains(path, "/"+dir) {
+			return true
+		}
+	}
+	return false
+}
 
 // driftDiff is a seam: the diff's size and the files it touches.
 var driftDiff = gitDriftDiff
@@ -50,10 +74,13 @@ func gitDriftDiff(dir string) (lines int, files []string, ok bool) {
 		if len(f) < 3 {
 			continue
 		}
+		files = append(files, f[2])
+		if generatedDiffPath(f[2]) {
+			continue
+		}
 		a, _ := strconv.Atoi(f[0])
 		d, _ := strconv.Atoi(f[1])
 		lines += a + d
-		files = append(files, f[2])
 	}
 	return lines, files, true
 }
@@ -88,7 +115,7 @@ func driftReasons(s sessions.Session) []string {
 		limit = 2 * sc.Lines
 	}
 	if lines > limit {
-		what := "far past the usual size"
+		what := quietDriftSize
 		if hasScope && sc.Lines > 0 {
 			what = fmt.Sprintf("twice the %d-line budget", sc.Lines)
 		}
@@ -121,8 +148,24 @@ func driftReasons(s sessions.Session) []string {
 	return reasons
 }
 
+// quietDriftSize marks the one drift reason that is a guess, not a number
+// the person set: a big diff on a branch with no scope budget. It shows on
+// the board and never rings — a thousand lines is often just the feature.
+const quietDriftSize = "far past the usual size"
+
+// driftAlert is the reason worth a notification, or "" when every reason
+// is a quiet one.
+func driftAlert(reasons []string) string {
+	for _, r := range reasons {
+		if !strings.Contains(r, quietDriftSize) {
+			return r
+		}
+	}
+	return ""
+}
+
 // checkDrift runs on the minute sweep over live sessions, and notifies
-// once when a session starts drifting.
+// once when a session starts drifting for a reason worth ringing about.
 func (d *Daemon) checkDrift(now time.Time) {
 	if d.Sessions == nil {
 		return
@@ -133,11 +176,15 @@ func (d *Daemon) checkDrift(now time.Time) {
 		}
 		reasons := driftReasons(s)
 		if _, began := d.Sessions.SetDrift(s.ID, reasons); began {
+			alert := driftAlert(reasons)
+			if alert == "" {
+				continue
+			}
 			label := s.Display
 			if label == "" {
 				label = s.Label
 			}
-			go d.notifyAttention("corgi agent · "+label, "drifting: "+reasons[0], s.Folder)
+			go d.notifyAttention("corgi agent · "+label, "drifting: "+alert, s.Folder)
 		}
 	}
 }
