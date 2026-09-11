@@ -1,6 +1,8 @@
 package watch
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -236,5 +238,53 @@ func TestACommentOnAMergedPullRequestIsNotWork(t *testing.T) {
 	// A review on my own merged PR is also over.
 	if rules.Match(Event{Kind: KindPRReview, Ref: "acme/api#7", Mine: true, State: "merged"}) {
 		t.Fatal("feedback arrives after a merge; acting on it unattended does not")
+	}
+}
+
+// The daemon keeps its State in memory from start; the phone loads a fresh
+// one to ignore a row. Both write the same file whole, so the daemon's next
+// save used to bring the row back — and the daemon never learned it was
+// ignored, so the unattended mode could still pick it up.
+func TestAnIgnoreFromAnotherProcessSurvivesTheDaemonsNextSave(t *testing.T) {
+	dir := t.TempDir()
+	daemon := LoadState(dir)
+	phone := LoadState(dir)
+
+	if err := phone.Ignore("jira:ABC-1"); err != nil {
+		t.Fatal(err)
+	}
+	daemon.MarkSeen("jira:XYZ-9") // any save from the stale copy
+
+	if !LoadState(dir).IsIgnored("jira:ABC-1") {
+		t.Fatal("the daemon's save clobbered the phone's ignore")
+	}
+	if !daemon.IsIgnored("jira:ABC-1") {
+		t.Fatal("the daemon has to see an ignore it did not make, or it fixes the ticket anyway")
+	}
+}
+
+// An ignored list written by an older corgi lives inside state.json; it has
+// to move to its own file, once, and not come back.
+func TestOldIgnoredListMovesOutOfStateJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "watch"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"cursors":{},"seen":["jira:ABC-1"],"ignored":["jira:ABC-1"]}`
+	if err := os.WriteFile(filepath.Join(dir, "watch", "state.json"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := LoadState(dir)
+	if !s.IsIgnored("jira:ABC-1") {
+		t.Fatal("an ignore from before the move still counts")
+	}
+	s.MarkSeen("jira:XYZ-9")
+	data, _ := os.ReadFile(filepath.Join(dir, "watch", "state.json"))
+	if strings.Contains(string(data), "ignored") {
+		t.Fatalf("state.json still carries the list, so a stale copy can clobber it: %s", data)
+	}
+	if !LoadState(dir).IsIgnored("jira:ABC-1") {
+		t.Fatal("the move lost the ignore")
 	}
 }
