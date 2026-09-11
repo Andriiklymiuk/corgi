@@ -259,6 +259,13 @@ type Session struct {
 	Limit    LimitKind `json:"limit,omitempty"`
 	ResumeAt time.Time `json:"resumeAt,omitempty"`
 	Resumes  int       `json:"resumes,omitempty"`
+	// FailStreak counts the same tool failing on the same subject in a row
+	// — a test that keeps going red, a command that keeps refusing. Drift is
+	// what the daemon concluded from that, the context fill and the diff:
+	// reasons a person should look, empty when there are none.
+	FailStreak  int `json:"failStreak,omitempty"`
+	failSubject string
+	Drift       []string `json:"drift,omitempty"`
 }
 
 // Pending is one permission prompt: the tool and the safe word about its

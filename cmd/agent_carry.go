@@ -41,9 +41,7 @@ the new one is up; its process is left alone.`,
 func runAgentCarry(cmd *cobra.Command, args []string) {
 	profile, _ := cmd.Flags().GetString("profile")
 	profile = strings.TrimSpace(profile)
-	if profile == "" {
-		exitWithError("agent_carry", fmt.Errorf("--profile is required: which account to carry to"), 2)
-	}
+	fresh, _ := cmd.Flags().GetBool("fresh")
 	dir := mustAgentDir()
 	board, err := readBoard(dir)
 	if err != nil {
@@ -53,12 +51,18 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 	if err != nil {
 		exitWithError("agent_carry", err, 1)
 	}
-	fresh, _ := cmd.Flags().GetBool("fresh")
+	// A fresh start needs no other account: the same one, a clean context.
+	if profile == "" && fresh {
+		profile = firstNonEmpty(s.Profile, "default")
+	}
+	if profile == "" {
+		exitWithError("agent_carry", fmt.Errorf("--profile is required: which account to carry to (or --fresh to restart under the same one)"), 2)
+	}
 	if !fresh && s.Context != nil && s.Context.Percent >= carryFreshAt {
 		fresh = true
 		utils.Infof("context is %d%% full — starting the new session clean, from the handoff\n", s.Context.Percent)
 	}
-	plan, err := planCarry(dir, s, profile)
+	plan, err := planCarry(dir, s, profile, fresh)
 	if err != nil {
 		exitWithError("agent_carry", err, 1)
 	}
@@ -163,7 +167,7 @@ func carryPrompt(p handoff.Packet, path string) string {
 // planCarry checks the move is allowed and works out the paths. It reads
 // the workspace's accounts list from the trusted user config: a committed
 // file can never widen where a conversation may go.
-func planCarry(agentD string, s sessions.Session, profile string) (carryPlan, error) {
+func planCarry(agentD string, s sessions.Session, profile string, fresh bool) (carryPlan, error) {
 	if s.Cwd == "" {
 		return carryPlan{}, fmt.Errorf("%s has no working directory on record", s.Display)
 	}
@@ -191,24 +195,27 @@ func planCarry(agentD string, s sessions.Session, profile string) (carryPlan, er
 	}
 	repo, _ := config.LoadRepo(ws.AbsPath)
 	resolved := config.Resolve(launch.Workspace, repo, user)
-	if !accountAllowed(resolved.Accounts, profile) {
+	sameAccount := strings.EqualFold(profile, firstNonEmpty(s.Profile, "default"))
+	if !sameAccount && !accountAllowed(resolved.Accounts, profile) {
 		if len(resolved.Accounts) == 0 {
 			return carryPlan{}, fmt.Errorf("workspace %s lists no accounts: add `accounts: [default, %s]` under it in %s", launch.Workspace, profile, agentUserConfigPath(agentD))
 		}
 		return carryPlan{}, fmt.Errorf("workspace %s may run under %s, not %s", launch.Workspace, strings.Join(resolved.Accounts, ", "), profile)
 	}
-	target, err := config.ApplyProfile(resolved, user, profile)
-	if err != nil {
-		return carryPlan{}, err
+	target := resolved
+	if !sameAccount || profile != "default" {
+		if target, err = config.ApplyProfile(resolved, user, profile); err != nil {
+			return carryPlan{}, err
+		}
 	}
 	fromDir := claudeConfigDir(s.ConfigDir)
 	toDir := claudeConfigDir(expandTilde(target.ConfigDir))
-	if samePath(fromDir, toDir) {
-		return carryPlan{}, fmt.Errorf("%s already runs under %s", s.Display, profile)
+	if samePath(fromDir, toDir) && !fresh {
+		return carryPlan{}, fmt.Errorf("%s already runs under %s — --fresh restarts it there from a handoff", s.Display, profile)
 	}
 	rel := filepath.Join("projects", mungeClaudeProjectDir(s.Cwd), s.ID+".jsonl")
 	plan := carryPlan{From: filepath.Join(fromDir, rel), To: filepath.Join(toDir, rel)}
-	if _, err := os.Stat(plan.From); err != nil {
+	if _, err := os.Stat(plan.From); err != nil && !fresh {
 		return carryPlan{}, fmt.Errorf("no transcript for %s at %s", s.Display, plan.From)
 	}
 	exe, err := os.Executable()
@@ -271,6 +278,6 @@ func findBoardSession(st sessions.State, ref string) (sessions.Session, error) {
 
 func init() {
 	agentCarryCmd.Flags().String("profile", "", "The account (corgi profile) to continue under")
-	agentCarryCmd.Flags().Bool("fresh", false, "Start clean from the handoff instead of resuming the transcript (automatic past 85% context)")
+	agentCarryCmd.Flags().Bool("fresh", false, "Start clean from the handoff instead of resuming the transcript (automatic past 85% context); without --profile, the same account")
 	agentCmd.AddCommand(agentCarryCmd)
 }
