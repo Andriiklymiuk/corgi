@@ -9,7 +9,7 @@ import (
 
 func TestDaysOffAreParsedAndSleptThrough(t *testing.T) {
 	days, err := ParseDaysOff([]string{"weekends"})
-	if err != nil || DaysOffWords(days) != "sun, sat" {
+	if err != nil || DaysOffWords(days) != "sat, sun" {
 		t.Fatalf("weekends = %v %v", days, err)
 	}
 	days, err = ParseDaysOff([]string{"Mon, fri", "sat"})

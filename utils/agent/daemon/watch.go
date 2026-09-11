@@ -110,7 +110,8 @@ func ParseDaysOff(list []string) ([]time.Weekday, error) {
 	if len(out) == 7 {
 		return nil, fmt.Errorf("every day off is no watch at all — corgi agent watch disable")
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	// Monday first: "sat, sun" reads as a weekend, "sun, sat" as a typo.
+	sort.Slice(out, func(i, j int) bool { return (out[i]+6)%7 < (out[j]+6)%7 })
 	return out, nil
 }
 
