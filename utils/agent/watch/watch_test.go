@@ -408,10 +408,10 @@ func TestANudgeWakesTheWatch(t *testing.T) {
 	defer cancel()
 	go w.Run(ctx)
 	// The first poll is in flight; three nudges land while it is.
+	w.Nudge()
+	w.Nudge()
+	w.Nudge()
 	src.gate <- struct{}{}
-	w.Nudge()
-	w.Nudge()
-	w.Nudge()
 	// The loop wakes once for them, not three times.
 	select {
 	case src.gate <- struct{}{}:

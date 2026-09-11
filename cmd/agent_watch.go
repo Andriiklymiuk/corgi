@@ -605,7 +605,7 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		moved := watch.LoadStateLog(dir)
 		keeper := watch.NewInboxKeeper(now)
 		for _, e := range watch.RecentEvents(dir, 25) {
-			if state.IsIgnored(e.Key) || !keeper.Keep(e) {
+			if !keeper.Keep(e) || state.IsIgnored(e.Key) {
 				continue // dismissed, or an old routine report: not waiting on anyone
 			}
 			// Merged, closed, done: history rather than work. The same test
