@@ -49,16 +49,13 @@ func TestDriftIsReadFromTheNumbers(t *testing.T) {
 	if len(r) != 1 || !strings.Contains(r[0], "far past the usual size") {
 		t.Fatalf("over the floor: %v", r)
 	}
-	// A guess about size shows on the board and never rings; a budget the
-	// person set, or a full context, does.
-	if driftAlert(r) != "" {
-		t.Errorf("a big diff with no budget is not worth a notification: %q", driftAlert(r))
+	// What the diff says shows on the board and never rings; a full context
+	// or a tool failing on repeat does.
+	if l, q := driftReasonsSplit(noScope); len(l) != 0 || len(q) != 1 {
+		t.Errorf("a big diff is quiet: loud=%v quiet=%v", l, q)
 	}
-	if got := driftAlert([]string{r[0], "context 91% full"}); got != "context 91% full" {
-		t.Errorf("the loud reason is the one that rings: %q", got)
-	}
-	if got := driftAlert([]string{"diff is 500 lines, twice the 200-line budget"}); got == "" {
-		t.Errorf("a budget breach rings")
+	if l, q := driftReasonsSplit(loud); len(l) != 2 || len(q) != 2 || !strings.Contains(l[0], "context 91%") {
+		t.Errorf("context and the fail streak ring, the diff does not: loud=%v quiet=%v", l, q)
 	}
 }
 

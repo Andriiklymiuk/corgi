@@ -89,18 +89,26 @@ func gitDriftDiff(dir string) (lines int, files []string, ok bool) {
 var workspaceRootOf = func(cwd string) string { return sessions.RepoRoot(cwd) }
 
 // driftReasons is what is wrong with a session right now, in the order a
-// person would want to hear it.
+// person would want to hear it: the loud ones first — a context nearly
+// full, a tool failing on repeat — then what the diff says. The diff is a
+// number about the branch, not the session; it shows on the board and
+// never rings.
 func driftReasons(s sessions.Session) []string {
-	var reasons []string
+	loud, quiet := driftReasonsSplit(s)
+	return append(loud, quiet...)
+}
+
+func driftReasonsSplit(s sessions.Session) (loud, quiet []string) {
 	if s.Context != nil && s.Context.Percent >= driftContextAt {
-		reasons = append(reasons, fmt.Sprintf("context %d%% full — /compact, or fresh from a handoff", s.Context.Percent))
+		loud = append(loud, fmt.Sprintf("context %d%% full — /compact, or fresh from a handoff", s.Context.Percent))
 	}
 	if s.FailStreak >= driftFailsAt {
-		reasons = append(reasons, fmt.Sprintf("the same tool failed %d times running — step in, or /rewind to before the loop", s.FailStreak))
+		loud = append(loud, fmt.Sprintf("the same tool failed %d times running — step in, or /rewind to before the loop", s.FailStreak))
 	}
 	if s.Cwd == "" {
-		return reasons
+		return loud, nil
 	}
+	reasons := quiet
 	root := workspaceRootOf(s.Cwd)
 	sc, hasScope := scope.Scope{}, false
 	if root != "" {
@@ -108,14 +116,14 @@ func driftReasons(s sessions.Session) []string {
 	}
 	lines, files, ok := driftDiff(s.Cwd)
 	if !ok {
-		return reasons
+		return loud, nil
 	}
 	limit := driftLinesFloor
 	if hasScope && sc.Lines > 0 {
 		limit = 2 * sc.Lines
 	}
 	if lines > limit {
-		what := quietDriftSize
+		what := "far past the usual size"
 		if hasScope && sc.Lines > 0 {
 			what = fmt.Sprintf("twice the %d-line budget", sc.Lines)
 		}
@@ -145,23 +153,7 @@ func driftReasons(s sessions.Session) []string {
 			reasons = append(reasons, fmt.Sprintf("%d file(s) outside the scope for %s: %s", len(outside), sc.Ref, strings.Join(shown, ", ")))
 		}
 	}
-	return reasons
-}
-
-// quietDriftSize marks the one drift reason that is a guess, not a number
-// the person set: a big diff on a branch with no scope budget. It shows on
-// the board and never rings — a thousand lines is often just the feature.
-const quietDriftSize = "far past the usual size"
-
-// driftAlert is the reason worth a notification, or "" when every reason
-// is a quiet one.
-func driftAlert(reasons []string) string {
-	for _, r := range reasons {
-		if !strings.Contains(r, quietDriftSize) {
-			return r
-		}
-	}
-	return ""
+	return loud, reasons
 }
 
 // checkDrift runs on the minute sweep over live sessions, and notifies
@@ -174,17 +166,13 @@ func (d *Daemon) checkDrift(now time.Time) {
 		if s.Status != sessions.StatusWorking && s.Status != sessions.StatusNeedsInput && s.Status != sessions.StatusDone {
 			continue
 		}
-		reasons := driftReasons(s)
-		if _, began := d.Sessions.SetDrift(s.ID, reasons); began {
-			alert := driftAlert(reasons)
-			if alert == "" {
-				continue
-			}
+		loud, quiet := driftReasonsSplit(s)
+		if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 {
 			label := s.Display
 			if label == "" {
 				label = s.Label
 			}
-			go d.notifyAttention("corgi agent · "+label, "drifting: "+alert, s.Folder)
+			go d.notifyAttention("corgi agent · "+label, "drifting: "+loud[0], s.Folder)
 		}
 	}
 }
