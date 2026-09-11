@@ -3283,15 +3283,11 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if now, ok := moved.Get(e.Key); ok {
 			current = now.Status
 		}
-		if watch.FinishedState(current) != "" {
+		if watch.Settled(e, current) != "" {
 			continue
 		}
-		state := e.State
-		if now, ok := moved.Get(e.Key); ok {
-			state = now.Status
-		}
 		out = append(out, row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
-			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: state})
+			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current})
 	}
 	fixes := []map[string]any{}
 	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 25) {

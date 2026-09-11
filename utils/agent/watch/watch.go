@@ -175,6 +175,22 @@ var closedStates = map[string]string{
 // FinishedState is finishedState for callers outside this package.
 func FinishedState(state string) string { return finishedState(state) }
 
+// Settled names why an event needs nobody any more, given the column its
+// ticket is in now, or "" while it is still waiting. A finished column ends
+// every kind. A new issue is also over once it has left the column it was
+// found in: someone picked it up, and the inbox was only ever announcing
+// that it was there for the taking.
+func Settled(e Event, current string) string {
+	if over := finishedState(current); over != "" {
+		return over
+	}
+	was, now := strings.TrimSpace(e.State), strings.TrimSpace(current)
+	if e.Kind == KindIssueNew && was != "" && now != "" && !strings.EqualFold(was, now) {
+		return "picked up, it is in " + now + " now"
+	}
+	return ""
+}
+
 // finishedState names why a ticket in this state is not worth anyone's time,
 // or "" when there is still work in it.
 func finishedState(state string) string {

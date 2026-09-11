@@ -363,3 +363,26 @@ func TestFixLogRecordsTheOutcomeAndHealsAnInterruptedRun(t *testing.T) {
 		t.Errorf("another workspace sees nothing: %v", other)
 	}
 }
+
+func TestSettled(t *testing.T) {
+	newIssue := Event{Kind: KindIssueNew, State: "Ready to dev"}
+	cases := []struct {
+		name    string
+		e       Event
+		current string
+		over    bool
+	}{
+		{"new issue still where it was found", newIssue, "Ready to dev", false},
+		{"new issue, same column spelled differently", newIssue, " ready TO dev ", false},
+		{"new issue someone moved on", newIssue, "To test staging", true},
+		{"new issue done", newIssue, "Done", true},
+		{"new issue with no recorded column", Event{Kind: KindIssueNew}, "In Progress", false},
+		{"comment on a ticket in progress", Event{Kind: KindIssueComment, State: "Ready to dev"}, "In Progress", false},
+		{"comment on a merged PR", Event{Kind: KindPRComment, State: "open"}, "merged", true},
+	}
+	for _, c := range cases {
+		if got := Settled(c.e, c.current) != ""; got != c.over {
+			t.Errorf("%s: settled=%v, want %v (%q)", c.name, got, c.over, Settled(c.e, c.current))
+		}
+	}
+}
