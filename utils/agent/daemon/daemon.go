@@ -21,6 +21,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/proc"
+	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/watch"
@@ -106,6 +107,10 @@ type Daemon struct {
 	// a run left, the reason it is blocked. Nil when the workspace has no
 	// tracker token.
 	Workpad func(workspace, ref, section, text string)
+	// Push reaches the paired phones: every attention notification, and a
+	// permission prompt with the session id so the phone can answer it from
+	// the lock screen. Nil when nothing is paired.
+	Push func(m push.Message)
 	// Isolate gives a workspace's repositories worktrees on a branch and
 	// returns their directories, for a watch with isolate on. Nil means
 	// runs happen in the checkout.
@@ -686,6 +691,13 @@ func (d *Daemon) notifyAttention(title, body, workspaceID string) {
 func (d *Daemon) notifyAttentionAt(title, body, workspaceID, link string) {
 	if link == "" && d.LinkFor != nil {
 		link = d.LinkFor(workspaceID)
+	}
+	if d.Push != nil {
+		data := map[string]string{}
+		if link != "" {
+			data["url"] = link
+		}
+		go d.Push(push.Message{Title: title, Body: body, Category: "inbox", Data: data, Thread: workspaceID})
 	}
 	if link != "" && d.NotifyWithLink != nil {
 		d.NotifyWithLink(title, body, link)

@@ -23,6 +23,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/pairing"
+	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
@@ -735,6 +736,8 @@ func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusInternalServerError, "could not save the paired devices")
 			return
 		}
+		// A revoked phone hears nothing more either.
+		_ = push.Load(dir).Remove(name)
 		writeLaunchJSON(w, map[string]any{"revoked": name})
 	default:
 		writeLaunchError(w, http.StatusMethodNotAllowed, "GET to list, DELETE to revoke")
@@ -3513,6 +3516,43 @@ func launchRunHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	out["log"] = log
 	writeLaunchJSON(w, out)
+}
+
+// launchPushHandler registers the calling phone's Expo push token, so the
+// laptop can reach it when a session needs a person; DELETE forgets it.
+func launchPushHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, "could not resolve the agent data directory")
+		return
+	}
+	device, ok := authorizedDevice(pairing.StorePath(dir), r.Header.Get("Authorization"))
+	if !ok || device == "" {
+		writeLaunchError(w, http.StatusForbidden, "push tokens belong to a paired device; pair the phone first")
+		return
+	}
+	store := push.Load(dir)
+	switch r.Method {
+	case http.MethodPost:
+		var req struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+			writeLaunchError(w, http.StatusBadRequest, "could not read the token")
+			return
+		}
+		if err := store.Set(device, req.Token); err != nil {
+			writeLaunchError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"done": "this phone gets notified", "device": device})
+	case http.MethodDelete:
+		_ = store.Remove(device)
+		writeLaunchJSON(w, map[string]any{"done": "this phone is quiet", "device": device})
+	default:
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {token} to register, DELETE to stop")
+	}
 }
 
 // launchKanbanHandler is the derived board: one card per ticket with its
