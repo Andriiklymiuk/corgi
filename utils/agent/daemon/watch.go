@@ -633,6 +633,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		// What it managed to say before it stopped is worth more than the
 		// error on its own: the next attempt starts from there.
 		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
+		d.mirrorHandoff(spec, e.Ref, started)
 		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
 			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
@@ -648,6 +649,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
+	d.mirrorHandoff(spec, e.Ref, started)
 	// It opened something, so the ticket is no longer being worked on — it is
 	// waiting on a reviewer, and the board should say so without anyone
 	// dragging it.
@@ -896,4 +898,17 @@ func shortSHA(s string) string {
 		return s[:7]
 	}
 	return s
+}
+
+// mirrorHandoff puts the packet a run wrote onto the ticket's workpad, so a
+// machine or account without this checkout can still pick the work up.
+func (d *Daemon) mirrorHandoff(spec WatchSpec, ref string, started time.Time) {
+	if d.Workpad == nil {
+		return
+	}
+	p, err := handoff.Read(spec.Dir, ref)
+	if err != nil || p.WrittenAt.Before(started) {
+		return
+	}
+	go d.Workpad(spec.Workspace, ref, "Handoff", p.Markdown())
 }
