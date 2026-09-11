@@ -156,6 +156,11 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 				continue // the newest run on a ref is the one that counts
 			}
 			c.Fix = &CardFix{Running: !r.Done(), StartedAt: r.StartedAt, Outcome: r.Outcome(), PRs: r.PRs, Branch: r.Branch}
+			// A card the run brought in still needs a key: it is what Move,
+			// Ignore and the log are addressed to.
+			if c.Key == "" {
+				c.Key, c.Kind = r.Key, string(r.Kind)
+			}
 			if c.Title == "" {
 				c.Title = firstLineOf(r.Title)
 			}
