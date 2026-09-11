@@ -26,6 +26,7 @@ type Identity struct {
 
 // Comment is one comment on a ticket, as much of it as a lease needs.
 type Comment struct {
+	ID     string
 	Author string
 	Body   string
 	At     time.Time
@@ -43,6 +44,9 @@ type Writer interface {
 	RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error)
 	Assign(ctx context.Context, ref, userID string) error
 	Comment(ctx context.Context, ref, body string) error
+	// UpdateComment rewrites one comment corgi wrote earlier, so the ticket
+	// carries one corgi comment that grows rather than a trail of them.
+	UpdateComment(ctx context.Context, ref, id, body string) error
 }
 
 // WriterFor is the tracker a workspace writes to, or nil when it has no
@@ -142,6 +146,10 @@ func (j *Jira) Assign(ctx context.Context, ref, userID string) error {
 
 func (j *Jira) Comment(ctx context.Context, ref, body string) error {
 	return j.send(ctx, http.MethodPost, "/rest/api/3/issue/"+ref+"/comment", map[string]any{"body": adf(body)})
+}
+
+func (j *Jira) UpdateComment(ctx context.Context, ref, id, body string) error {
+	return j.send(ctx, http.MethodPut, "/rest/api/3/issue/"+ref+"/comment/"+url.PathEscape(id), map[string]any{"body": adf(body)})
 }
 
 // adf is Jira Cloud's Atlassian Document Format: plain text is not accepted
@@ -265,6 +273,23 @@ func (l *Linear) Comment(ctx context.Context, ref, body string) error {
 	}
 	if !out.CommentCreate.Success {
 		return fmt.Errorf("linear: the comment on %s was refused", ref)
+	}
+	return nil
+}
+
+func (l *Linear) UpdateComment(ctx context.Context, _, id, body string) error {
+	document := fmt.Sprintf("mutation { commentUpdate(id: %s, input: {body: %s}) { success } }",
+		jsonString(id), jsonString(body))
+	var out struct {
+		CommentUpdate struct {
+			Success bool `json:"success"`
+		} `json:"commentUpdate"`
+	}
+	if err := l.query(ctx, document, &out); err != nil {
+		return err
+	}
+	if !out.CommentUpdate.Success {
+		return fmt.Errorf("linear: the comment update was refused")
 	}
 	return nil
 }
@@ -438,7 +463,7 @@ func (j *Jira) RecentComments(ctx context.Context, ref string, limit int) ([]Com
 	out := make([]Comment, 0, len(page.Comments))
 	for _, c := range page.Comments {
 		at, _ := time.Parse("2006-01-02T15:04:05.999-0700", c.Created)
-		out = append(out, Comment{Author: c.Author.DisplayName, Body: jiraText(c.Body), At: at})
+		out = append(out, Comment{ID: c.ID, Author: c.Author.DisplayName, Body: jiraText(c.Body), At: at})
 	}
 	return out, nil
 }
@@ -446,12 +471,13 @@ func (j *Jira) RecentComments(ctx context.Context, ref string, limit int) ([]Com
 // RecentComments reads a Linear issue's newest comments.
 func (l *Linear) RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error) {
 	document := fmt.Sprintf(
-		"query { issue(id: %s) { comments(last: %d) { nodes { body createdAt user { name } } } } }",
+		"query { issue(id: %s) { comments(last: %d) { nodes { id body createdAt user { name } } } } }",
 		jsonString(ref), limit)
 	var out struct {
 		Issue *struct {
 			Comments struct {
 				Nodes []struct {
+					ID        string `json:"id"`
 					Body      string `json:"body"`
 					CreatedAt string `json:"createdAt"`
 					User      *struct {
@@ -470,7 +496,7 @@ func (l *Linear) RecentComments(ctx context.Context, ref string, limit int) ([]C
 	list := out.Issue.Comments.Nodes
 	comments := make([]Comment, 0, len(list))
 	for _, n := range list {
-		c := Comment{Body: n.Body, At: trackerTime(n.CreatedAt)}
+		c := Comment{ID: n.ID, Body: n.Body, At: trackerTime(n.CreatedAt)}
 		if n.User != nil {
 			c.Author = n.User.Name
 		}

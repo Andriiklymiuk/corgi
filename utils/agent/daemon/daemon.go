@@ -102,7 +102,11 @@ type Daemon struct {
 	// it: the work is done and it is waiting on a reviewer, which is a
 	// different column from the one it was picked up into.
 	Delivered func(workspace string, e watch.Event, prs []string)
-	Events    *events.Log
+	// Workpad writes one section of the ticket's corgi comment: the handoff
+	// a run left, the reason it is blocked. Nil when the workspace has no
+	// tracker token.
+	Workpad func(workspace, ref, section, text string)
+	Events  *events.Log
 	// CaptureBrief probes what an ending session left on disk. Injected because
 	// enumerating a stack's repositories means parsing a compose file, which the
 	// daemon has no business knowing about. Nil disables briefs entirely.

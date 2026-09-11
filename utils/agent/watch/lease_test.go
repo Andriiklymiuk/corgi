@@ -2,6 +2,8 @@ package watch
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -58,6 +60,8 @@ func TestHeldByIgnoresMyOwnAndExpiredClaims(t *testing.T) {
 
 // leaseTracker is a tracker two machines can both post to, so the race can
 // actually be run rather than reasoned about.
+var errNoSuchComment = errors.New("no such comment")
+
 type leaseTracker struct {
 	mu       sync.Mutex
 	comments []Comment
@@ -72,8 +76,19 @@ func (f *leaseTracker) Assign(context.Context, string, string) error { return ni
 func (f *leaseTracker) Comment(_ context.Context, _, body string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.comments = append(f.comments, Comment{Body: body})
+	f.comments = append(f.comments, Comment{ID: fmt.Sprint(len(f.comments) + 1), Body: body})
 	return nil
+}
+func (f *leaseTracker) UpdateComment(_ context.Context, _, id, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.comments {
+		if f.comments[i].ID == id {
+			f.comments[i].Body = body
+			return nil
+		}
+	}
+	return errNoSuchComment
 }
 func (f *leaseTracker) RecentComments(context.Context, string, int) ([]Comment, error) {
 	f.mu.Lock()

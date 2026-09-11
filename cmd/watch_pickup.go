@@ -109,7 +109,24 @@ func markDelivered(agentD, workspaceID string, e watch.Event, prs []string) {
 	}
 	_ = watch.LoadStateLog(agentD).Set(e.Key, status, time.Now())
 	// Say what it opened, on the ticket, so the board is not the only place
-	// the link exists.
-	_ = w.Comment(ctx, e.Ref, "corgi opened "+strings.Join(prs, " ")+" for this.")
+	// the link exists — in the one corgi comment, not a new one each time.
+	_ = watch.UpsertWorkpad(ctx, w, e.Ref, "Pull requests", strings.Join(prs, "\n"))
 	utils.Infof("corgi: %s → %s\n", e.Ref, status)
+}
+
+// writeWorkpad sets one section of a ticket's workpad comment from the
+// daemon, for the runner to leave the handoff or a blocker on the ticket.
+func writeWorkpad(agentD, workspaceID, ref, section, text string) {
+	if strings.TrimSpace(ref) == "" {
+		return
+	}
+	w, _, err := watchWriter(agentD, workspaceID)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pickupTimeout)
+	defer cancel()
+	if err := watch.UpsertWorkpad(ctx, w, ref, section, text); err != nil {
+		utils.Infof("corgi: workpad on %s: %v\n", ref, err)
+	}
 }
