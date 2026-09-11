@@ -136,6 +136,9 @@ type Daemon struct {
 	// cmd. TypeText is the emulator typing seam.
 	AccountDirs func() []string
 	TypeText    func(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error
+	// AutoContinue types "continue" into limited sessions when their limit
+	// should be over; see autocontinue.go.
+	AutoContinue bool
 	// DigestAt is the local HH:MM for the daily digest; Digest builds its
 	// text. Both injected by cmd; either empty means no digest.
 	DigestAt string

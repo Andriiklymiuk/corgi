@@ -42,21 +42,50 @@ const (
 )
 
 var (
-	limitText  = regexp.MustCompile(`(?i)\b(session|usage|rate|weekly|daily) limit\b|\brate.?limited?\b`)
-	limitReset = regexp.MustCompile(`(?i)\bresets?\s+(?:at\s+)?([^\n"}\\]+?)\s*(?:$|["}\\])`)
+	limitText    = regexp.MustCompile(`(?i)\b(session|usage|rate|weekly|daily) limit\b|\brate.?limited?\b`)
+	limitReset   = regexp.MustCompile(`(?i)\bresets?\s+(?:at\s+)?([^\n"}\\]+?)\s*(?:$|["}\\])`)
+	overloadText = regexp.MustCompile(`(?i)\boverloaded?\b|\b529\b|\bcapacity\b|\btry again (later|in)\b|\btemporarily unavailable\b`)
+	quotaText    = regexp.MustCompile(`(?i)\b(session|usage|weekly|daily) limit\b|\bresets?\s`)
 )
 
-// LimitReset says whether a StopFailure or notification is the account's
-// usage limit rather than something to answer, and when it resets ("12:10pm
-// (Europe/Kiev)") when the text says.
-func LimitReset(errorType, message string) (bool, string) {
-	if errorType != "rate_limit" && !limitText.MatchString(message) {
-		return false, ""
+// LimitKind is why a session cannot go on, because the two reasons want
+// opposite reactions: a used-up window is hours and a clock, an overloaded
+// API is minutes and a retry.
+type LimitKind string
+
+const (
+	// LimitQuota: the account's usage window is spent. Comes back at a
+	// known time; carry to another account or wait for the reset.
+	LimitQuota LimitKind = "quota"
+	// LimitOverload: the API asked to try later. Nothing to do with the
+	// account; wait a few minutes and try again.
+	LimitOverload LimitKind = "overload"
+)
+
+// ClassifyLimit says whether a StopFailure or notification is a limit rather
+// than something to answer, which kind, and when it resets ("12:10pm
+// (Europe/Kiev)") when the text says. An error typed rate_limit with no
+// reset time and overload wording is an overload: Claude Code uses the
+// same type for both.
+func ClassifyLimit(errorType, message string) (LimitKind, string, bool) {
+	if errorType != "rate_limit" && !limitText.MatchString(message) && !overloadText.MatchString(message) {
+		return "", "", false
 	}
+	reset := ""
 	if m := limitReset.FindStringSubmatch(message); m != nil {
-		return true, strings.TrimSpace(m[1])
+		reset = strings.TrimRight(strings.TrimSpace(m[1]), ".")
 	}
-	return true, ""
+	if reset == "" && !quotaText.MatchString(message) && overloadText.MatchString(message) {
+		return LimitOverload, "", true
+	}
+	return LimitQuota, reset, true
+}
+
+// LimitReset is ClassifyLimit without the kind, for callers that only need
+// to know a limit was hit.
+func LimitReset(errorType, message string) (bool, string) {
+	_, reset, ok := ClassifyLimit(errorType, message)
+	return ok, reset
 }
 
 // StaleAfter is how long a working or done session may sit without an event
@@ -224,6 +253,12 @@ type Session struct {
 	Summary       string    `json:"summary,omitempty"`
 	PR            string    `json:"pr,omitempty"`
 	TurnStartedAt time.Time `json:"turnStartedAt,omitempty"`
+	// Limit says which kind of limit a limited session hit; ResumeAt when
+	// the daemon plans to type "continue" into it, Resumes how many times
+	// it has this episode. Cleared when the session moves on.
+	Limit    LimitKind `json:"limit,omitempty"`
+	ResumeAt time.Time `json:"resumeAt,omitempty"`
+	Resumes  int       `json:"resumes,omitempty"`
 }
 
 // Pending is one permission prompt: the tool and the safe word about its
