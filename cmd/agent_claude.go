@@ -169,7 +169,7 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 	repo, _ := config.LoadRepo(best)
 	resolved := config.Resolve(id, repo, user)
 	if strings.EqualFold(strings.TrimSpace(profile), "auto") {
-		profile = pickAccountProfile(user, resolved)
+		profile = pickAccountProfileSticky(agentD, user, resolved)
 	}
 	if p := strings.TrimSpace(profile); p != "" {
 		withProfile, err := config.ApplyProfile(resolved, user, p)
@@ -299,6 +299,43 @@ func pickAccountProfile(user *config.UserConfig, resolved config.Resolved) strin
 		return ""
 	}
 	return best
+}
+
+// autoSwitchAt is the reading past which --profile auto leaves the account
+// it has been using. Not sooner: a session pinned to an account with room
+// left should stay there, and bouncing between accounts on every small
+// difference is how two windows end up limited at once.
+const autoSwitchAt = 98
+
+func autoProfilePath(agentDir string) string { return filepath.Join(agentDir, "auto-profile") }
+
+// pickAccountProfileSticky is --profile auto with a memory: the account it
+// picked last time stays picked until its window is nearly spent, then the
+// one with the most room takes over and stays even when the first recovers.
+func pickAccountProfileSticky(agentDir string, user *config.UserConfig, resolved config.Resolved) string {
+	if user == nil || len(resolved.Accounts) == 0 {
+		return ""
+	}
+	if last, err := os.ReadFile(autoProfilePath(agentDir)); err == nil {
+		name := strings.TrimSpace(string(last))
+		if name != "" && accountAllowed(resolved.Accounts, name) {
+			if p, ok := user.Profiles[name]; ok || name == "default" {
+				if l, ok := usage.ReadLimits(expandTilde(p.ConfigDir)); !ok || l.FiveHour.Percent < autoSwitchAt {
+					if name == "default" {
+						return ""
+					}
+					return name
+				}
+			}
+		}
+	}
+	pick := pickAccountProfile(user, resolved)
+	remember := pick
+	if remember == "" {
+		remember = "default"
+	}
+	_ = os.WriteFile(autoProfilePath(agentDir), []byte(remember+"\n"), 0o600)
+	return pick
 }
 
 // A prompt typed on the phone reaches the new terminal by id, never inside
