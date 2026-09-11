@@ -588,6 +588,14 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	defer logFile.Close()
 
+	// A ticket that is blocked — by the breaker, by a run that said so, or
+	// by a person — waits for a person. Nothing is deferred and no budget is
+	// spent; the inbox shows why.
+	if b, ok := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); ok && e.Ref != "" {
+		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: blocked ("+b.By+"): "+b.Reason, time.Now())
+		utils.Infof("agent: watch: %s is blocked (%s): %s — corgi agent watch unblock %s\n", e.Ref, b.By, b.Reason, e.Ref)
+		return
+	}
 	// A wall this workspace has hit twice running is not worth a third run:
 	// a missing credential or a refused permission will still be missing in
 	// an hour. Deferred, so a manual run picks it up once it is fixed.
@@ -651,6 +659,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		// error on its own: the next attempt starts from there.
 		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 		d.mirrorHandoff(spec, e.Ref, started)
+		d.tripBreaker(spec, e, runErr.Error())
 		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
 			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
@@ -667,6 +676,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 	d.mirrorHandoff(spec, e.Ref, started)
+	d.blockIfRunSaidSo(spec, e, started)
 	// It opened something, so the ticket is no longer being worked on — it is
 	// waiting on a reviewer, and the board should say so without anyone
 	// dragging it.
@@ -944,4 +954,40 @@ func isolationNote(branch string, trees []string) string {
 	return "\n\nThis run is isolated: every repository already has a worktree on branch `" + branch +
 		"`, created off its current HEAD. Work only in these directories and open the pull requests from this branch; " +
 		"do not create another branch and do not edit the main checkouts:\n- " + strings.Join(trees, "\n- ")
+}
+
+// tripBreaker blocks a ticket after BreakerAfter failed runs in a row. A
+// third try at a wall costs a run and buys nothing; a person looks instead.
+func (d *Daemon) tripBreaker(spec WatchSpec, e watch.Event, lastErr string) {
+	if e.Ref == "" || d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref) < watch.BreakerAfter {
+		return
+	}
+	reason := fmt.Sprintf("%d runs failed in a row; last: %s", watch.BreakerAfter, clipText(lastErr, 120))
+	d.watchState.Fixes.Block(spec.Workspace, e.Ref, reason, watch.BlockedByBreaker, time.Now())
+	if d.Workpad != nil {
+		go d.Workpad(spec.Workspace, e.Ref, "Blocked", reason+"\n\n`corgi agent watch unblock "+e.Ref+"` once it is fixed.")
+	}
+	go d.notifyAttentionAt("corgi agent · "+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
+}
+
+// blockIfRunSaidSo honours a run's own handoff: a packet in state blocked
+// or auth-required names a missing tool, credential or secret, and no run
+// can supply that. The reason goes on the ticket for whoever can.
+func (d *Daemon) blockIfRunSaidSo(spec WatchSpec, e watch.Event, started time.Time) {
+	if e.Ref == "" {
+		return
+	}
+	p, err := handoff.Read(spec.Dir, e.Ref)
+	if err != nil || p.WrittenAt.Before(started) || (p.State != handoff.StateBlocked && p.State != handoff.StateAuthRequired) {
+		return
+	}
+	reason := p.Blocked
+	if reason == "" {
+		reason = "the run needs a credential it does not have"
+	}
+	d.watchState.Fixes.Block(spec.Workspace, e.Ref, reason, watch.BlockedByRun, time.Now())
+	if d.Workpad != nil {
+		go d.Workpad(spec.Workspace, e.Ref, "Blocked", reason+"\n\n`corgi agent watch unblock "+e.Ref+"` once it is fixed.")
+	}
+	go d.notifyAttentionAt("corgi agent · "+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
 }
