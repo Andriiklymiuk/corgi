@@ -158,6 +158,9 @@ func checkDaemonBinaryPath() agentCheck {
 	if err != nil {
 		return agentCheck{Name: checkDaemonBinary, Detail: err.Error()}
 	}
+	if program == "" {
+		return agentCheck{Name: checkDaemonBinary, Detail: "could not read the login service file", Fix: "`corgi agent install` rewrites it"}
+	}
 	if program != stable {
 		return agentCheck{
 			Name:   checkDaemonBinary,

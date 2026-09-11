@@ -45,3 +45,17 @@ func TestSchedulesParseAndComeDue(t *testing.T) {
 		t.Fatal("catalog lookup is case-insensitive")
 	}
 }
+
+// A routine's report is the newest one per routine, for a day; other rows
+// are untouched.
+func TestRoutineReportsAgeOutOfTheInbox(t *testing.T) {
+	now := time.Now()
+	k := NewInboxKeeper(now)
+	newest := Event{Kind: KindRoutine, Ref: "routine/digest", At: now.Add(-time.Hour)}
+	older := Event{Kind: KindRoutine, Ref: "routine/digest", At: now.Add(-3 * time.Hour)}
+	stale := Event{Kind: KindRoutine, Ref: "routine/deps", At: now.Add(-30 * time.Hour)}
+	issue := Event{Kind: KindIssueNew, Ref: "ABC-1", At: now.Add(-100 * time.Hour)}
+	if !k.Keep(newest) || k.Keep(older) || k.Keep(stale) || !k.Keep(issue) {
+		t.Fatal("newest per routine within a day; issues always")
+	}
+}

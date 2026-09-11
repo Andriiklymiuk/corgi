@@ -65,6 +65,15 @@ func (d *Daemon) autoContinue(ctx context.Context, now time.Time) {
 		if s.Resumes >= maxResumes(s.Limit) {
 			continue
 		}
+		if target, err := d.Sessions.Focus(s.ID); err != nil || target.Kind == sessions.HostVSCodePanel {
+			// Nowhere to type: the panel takes text only from the keyboard.
+			// Leave the plan cleared so the key stops promising a continue.
+			d.Sessions.PlanResume(s.ID, time.Time{})
+			if err == nil {
+				utils.Infof("agent: %s: limit should be over, but it runs in the Claude Code panel — continue it by hand\n", s.Display)
+			}
+			continue
+		}
 		if _, ok := d.Sessions.MarkResumed(s.ID); !ok {
 			continue
 		}

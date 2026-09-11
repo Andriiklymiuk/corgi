@@ -1024,9 +1024,17 @@ func worktreeOf(dir string, p handoff.Packet) string {
 	return dir
 }
 
+// verifyTimeout bounds a packet's verification command: a check that hangs
+// must not hold the runner before claude has even started.
+const verifyTimeout = 5 * time.Minute
+
 func runShellQuiet(dir, command string) (int, error) {
-	c := exec.Command("sh", "-c", command)
+	ctx, cancel := context.WithTimeout(context.Background(), verifyTimeout)
+	defer cancel()
+	c := exec.CommandContext(ctx, "sh", "-c", command)
 	c.Dir = dir
+	killProcessGroup(c)
+	c.WaitDelay = 10 * time.Second
 	err := c.Run()
 	if err == nil {
 		return 0, nil

@@ -42,6 +42,28 @@ func TestScopeRoundTripsAndMatches(t *testing.T) {
 	if s, err := Widen(dir, "ABC-1", "web/package.json", "run"); err != nil || !s.Allows("web/package.json") || len(s.Widenings) != 1 {
 		t.Fatalf("widen: %+v %v", s, err)
 	}
+	inWorktree := Scope{Ref: "X", Paths: []string{"api/limits/**", "shared/**"}}
+	for rel, want := range map[string]bool{
+		".corgi/corgi_services/.worktrees/api-3f2a1b@feature-x/limits/h.go": true,  // a worktree of the api repo, seen from the root
+		".corgi/corgi_services/.worktrees/web-3f2a1b@feature-x/limits/h.go": false, // a worktree of another repo
+		"api/limits/h.go":        true,  // a monorepo, from the root
+		"web/limits/h.go":        false, // a different repo
+		"services/shared/x.ts":   true,  // the glob was written from inside the repo; the first segment is forgiven
+		"other/shared/deep/x.ts": true,
+	} {
+		if inWorktree.Allows(rel) != want {
+			t.Errorf("%s: allowed=%v, want %v", rel, inWorktree.Allows(rel), want)
+		}
+	}
+	if got := InRepo("/ws", "/ws/api", "/ws/api/limits/h.go"); got != "api/limits/h.go" {
+		t.Errorf("in a sub-repo: %s", got)
+	}
+	if got := InRepo("/ws", "/ws/.corgi/corgi_services/.worktrees/api-3f2a1b@feature-x", "/ws/.corgi/corgi_services/.worktrees/api-3f2a1b@feature-x/limits/h.go"); got != "api/limits/h.go" {
+		t.Errorf("in a worktree: %s", got)
+	}
+	if got := InRepo("/ws", "/ws", "/ws/api/limits/h.go"); got != "api/limits/h.go" {
+		t.Errorf("in a monorepo: %s", got)
+	}
 	if (Scope{}).Allows("anything/at/all.go") != true {
 		t.Fatal("no paths means anywhere")
 	}

@@ -30,7 +30,7 @@ type httpArgs struct {
 
 func addStackTools(s *server.MCPServer, composeOpt, serviceOpt mcp.ToolOption) {
 	s.AddTool(mcp.NewTool("corgi_http",
-		mcp.WithDescription("Send one HTTP request to a running service of the stack by its name — corgi knows the port — and return {status, headers, body, truncated, ms}. For checking a route the way a client would: GET /health, POST /limits with a JSON body. Body is capped at 64 KB. The service must be up (corgi_up); the request goes to 127.0.0.1, never over a tunnel."),
+		mcp.WithDescription("Send one HTTP request to a running service of the stack by its name — corgi knows the port — and return {status, headers, body, truncated, ms}. For checking a route the way a client would: GET /health, POST /limits with a JSON body. Body is capped at 64 KB. The service must be up (corgi_up); the request goes to 127.0.0.1. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1, like exec and the database tools."),
 		composeOpt,
 		serviceOpt,
 		mcp.WithString("path", mcp.Required(), mcp.Description("Path with query, e.g. /api/limits?user=1")),
@@ -38,6 +38,9 @@ func addStackTools(s *server.MCPServer, composeOpt, serviceOpt mcp.ToolOption) {
 		mcp.WithString("body", mcp.Description("Request body; JSON is sent as application/json unless headers say otherwise")),
 		mcp.WithObject("headers", mcp.Description("Extra headers, e.g. {\"Authorization\": \"Bearer …\"}")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return nil, fmt.Errorf("%s", dangerousToolBlockedMsg)
+		}
 		headers := map[string]string{}
 		if raw, ok := r.GetArguments()["headers"].(map[string]any); ok {
 			for k, v := range raw {

@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -94,10 +95,19 @@ func driftReasons(s sessions.Session) []string {
 		reasons = append(reasons, fmt.Sprintf("diff is %d lines, %s — split it, or trim to the spec", lines, what))
 	}
 	if hasScope && len(sc.Paths) > 0 {
+		// Diff paths are relative to the repository; name them the way the
+		// scope was written when the session sits in a sub-repo or worktree.
+		repoRoot := sessions.RepoRoot(s.Cwd)
 		var outside []string
 		for _, f := range files {
-			if !sc.Allows(f) {
-				outside = append(outside, f)
+			named := f
+			if repoRoot != "" {
+				if n := scope.InRepo(root, repoRoot, filepath.Join(repoRoot, f)); n != "" {
+					named = n
+				}
+			}
+			if !sc.Allows(named) {
+				outside = append(outside, named)
 			}
 		}
 		if len(outside) > 0 {

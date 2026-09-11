@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
@@ -79,6 +80,13 @@ func runScopeHook(stdin io.Reader, stdout io.Writer) {
 	rel, err := filepath.Rel(root, abs)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		rel = abs
+	}
+	// Named the way the scope was written: "<repo>/<inside>" for a file in
+	// a service repository or a worktree, plain for a monorepo.
+	if repoRoot := sessions.RepoRoot(filepath.Dir(abs)); repoRoot != "" {
+		if named := scope.InRepo(root, repoRoot, abs); named != "" {
+			rel = named
+		}
 	}
 	if s.Allows(rel) {
 		return
@@ -167,8 +175,26 @@ func runBudgetHook(stdin io.Reader, stdout io.Writer) {
 	if _, err := os.Stat(marker); err == nil {
 		return
 	}
+	sweepOldMarkers(scope.Dir(root))
 	_ = os.WriteFile(marker, []byte("reported\n"), 0o600)
 	reason := fmt.Sprintf("Before you stop: %s for %s. Trim the change to what the spec asked for, or — if this size is right — say why in one line in the PR body and raise the budget on the record: `corgi agent scope set %s --lines %d --tests %d`.",
 		strings.Join(over, "; "), s.Ref, s.Ref, lines, tests)
 	_ = json.NewEncoder(stdout).Encode(map[string]any{"decision": "block", "reason": reason})
+}
+
+// sweepOldMarkers drops reported-markers older than a week, so the scope
+// directory does not fill with one file per session forever.
+func sweepOldMarkers(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".reported") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > 7*24*time.Hour {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }

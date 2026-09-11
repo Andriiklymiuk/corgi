@@ -140,18 +140,62 @@ func Widen(composeDir, ref, glob, by string) (Scope, error) {
 }
 
 // Allows says whether a workspace-relative path is inside the scope. No
-// paths means everywhere is.
+// paths means everywhere is. A path inside a worktree corgi made
+// (.corgi/corgi_services/.worktrees/<dir>/…) is judged by what it is inside
+// the worktree, and a path is also tried without its first segment — so a
+// scope written as "api/limits/**" holds whether the file is seen from the
+// workspace root or from inside the api repository.
 func (s Scope) Allows(rel string) bool {
 	if len(s.Paths) == 0 {
 		return true
 	}
-	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
-	for _, p := range s.Paths {
-		if Match(p, rel) {
-			return true
+	for _, candidate := range Candidates(rel) {
+		for _, p := range s.Paths {
+			if Match(p, candidate) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// worktreeDir is the name corgi gives a worktree directory: "<repo>-<hash>@<branch>".
+var worktreeDir = regexp.MustCompile(`^(?:\.corgi/corgi_services/\.worktrees|\.corgi/\.worktrees)/([^/@]+)-[0-9a-f]{6}@[^/]+/`)
+
+// Candidates are the spellings of a path a scope glob may have meant: as
+// given; a worktree path rewritten to "<repo>/<inside>"; and, so a glob
+// written from the workspace root also holds for a file named from inside
+// a repository, the path with its first segment dropped.
+func Candidates(rel string) []string {
+	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
+	out := []string{rel}
+	if m := worktreeDir.FindStringSubmatch(rel); m != nil {
+		rewritten := m[1] + "/" + rel[len(m[0]):]
+		out = append(out, rewritten)
+		rel = rewritten
+	}
+	if i := strings.Index(rel, "/"); i > 0 {
+		out = append(out, rel[i+1:])
+	}
+	return out
+}
+
+// InRepo names a file the way a scope written from the workspace root
+// would: "<repo dir name>/<path inside the repo>". For a file in a worktree
+// corgi made, the repo is the one the worktree was cut from.
+func InRepo(workspaceRoot, repoRoot, abs string) string {
+	rel, err := filepath.Rel(repoRoot, abs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	name := filepath.Base(repoRoot)
+	if m := regexp.MustCompile(`^([^@]+)-[0-9a-f]{6}@`).FindStringSubmatch(name); m != nil {
+		name = m[1]
+	}
+	if workspaceRoot != "" && filepath.Clean(repoRoot) == filepath.Clean(workspaceRoot) {
+		return filepath.ToSlash(rel)
+	}
+	return name + "/" + filepath.ToSlash(rel)
 }
 
 // Match is a glob with ** for any number of directories, * for a segment
