@@ -20,6 +20,12 @@ var gitlabTodos = `[
   {"id":7,"action_name":"mentioned","target_type":"MergeRequest","target_url":"https://gitlab.com/acme/web/-/merge_requests/7",
    "body":"` + strings.Repeat("x", 250) + `","created_at":"2026-09-09T08:00:00Z","project":{"path_with_namespace":"acme/web"},
    "target":{"iid":7,"title":"Fix login"},"author":{"username":"ann"}},
+  {"id":6,"action_name":"mentioned","target_type":"MergeRequest","target_url":"https://gitlab.com/acme/web/-/merge_requests/7",
+   "body":"Pipeline passed","created_at":"2026-09-09T07:30:00Z","project":{"path_with_namespace":"acme/web"},
+   "target":{"iid":7,"title":"Fix login"},"author":{"username":"project_42_bot_9f","bot":true}},
+  {"id":5,"action_name":"mentioned","target_type":"MergeRequest","target_url":"https://gitlab.com/acme/web/-/merge_requests/7",
+   "body":"rebased","created_at":"2026-09-09T07:20:00Z","project":{"path_with_namespace":"acme/web"},
+   "target":{"iid":7,"title":"Fix login"},"author":{"username":"me"}},
   {"id":4,"action_name":"mentioned","target_type":"Issue","target_url":"https://gitlab.com/acme/api/-/issues/3",
    "body":"issue","created_at":"2026-09-09T07:00:00Z","project":{"path_with_namespace":"acme/api"},
    "target":{"iid":3,"title":"Bug"},"author":{"username":"ann"}}
@@ -54,7 +60,10 @@ func newGitLabFake(t *testing.T) *gitlabFake {
 func TestGitLabPoll(t *testing.T) {
 	f := newGitLabFake(t)
 	g := NewGitLab(Secrets{GitLab: "tok", GitLabURL: f.srv.URL})
+	g.Me = "me"
 
+	// Todo 6 is a project bot, todo 5 is my own comment: neither is a person
+	// waiting on me, and both still move the cursor.
 	events, cursor, err := g.Poll(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)

@@ -69,7 +69,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
     nodes { id identifier title description url state { name } labels { nodes { name } } assignee { id name } createdAt updatedAt }
   }
   comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt) {
-    nodes { id body createdAt user { id name } issue { identifier url title state { name } } }
+    nodes { id body createdAt user { id name } botActor { name } issue { identifier url title state { name } } }
     pageInfo { hasNextPage endCursor }
   }
 }`, issueFilter, graphqlString(commentsSince), strconv.Quote(l.Me))
@@ -95,7 +95,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	for page := data.Comments; page.PageInfo.HasNextPage && len(comments) < 500; {
 		var more struct{ Comments linearComments }
 		q := fmt.Sprintf(`{ comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt, after: %s) {
-    nodes { id body createdAt user { id name } issue { identifier url title state { name } } }
+    nodes { id body createdAt user { id name } botActor { name } issue { identifier url title state { name } } }
     pageInfo { hasNextPage endCursor }
   } }`, graphqlString(commentsSince), strconv.Quote(l.Me), strconv.Quote(page.PageInfo.EndCursor))
 		if err := l.query(ctx, q, &more); err != nil {
@@ -139,6 +139,11 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		if !created.After(commentsSince) || (n.User != nil && isMe(l.Me, n.User.ID)) {
 			continue
 		}
+		// An integration's comment — GitHub, Slack, an agent — has no user
+		// behind it; nobody is waiting on an answer.
+		if n.User == nil || n.BotActor != nil {
+			continue
+		}
 		e := Event{
 			Key:    "linear:" + n.Issue.Identifier + ":c" + n.ID,
 			Source: "linear",
@@ -169,6 +174,7 @@ type linearComments struct {
 	Nodes []struct {
 		ID, Body, CreatedAt string
 		User                *struct{ ID, Name string }
+		BotActor            *struct{ Name string }
 		Issue               struct {
 			Identifier, URL, Title string
 			State                  struct{ Name string }
