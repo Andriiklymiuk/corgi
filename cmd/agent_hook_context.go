@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/workspace"
+	"gopkg.in/yaml.v3"
 )
 
 // The SessionStart context hook: the one synchronous hook, and the one that
@@ -98,6 +100,9 @@ func sessionContext(dir string, in contextHookInput, configDir string, now time.
 		lines = append(lines, line)
 	}
 	if line := scopeLineFor(root, sessions.Branch(in.Cwd)); line != "" {
+		lines = append(lines, line)
+	}
+	if line := stackLine(root); line != "" {
 		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
@@ -258,4 +263,66 @@ func scopeLineFor(root, branch string) string {
 		return ""
 	}
 	return fmt.Sprintf("scope for %s: %s — a write outside is refused; widen with `corgi agent scope add %s --path …` and say why", s.Ref, scopeLine(s), s.Ref)
+}
+
+// stackLine names the services of the stack a session sits in and how to
+// reach them, so the tools that make this machine different from any other
+// are the first thing the session knows about.
+func stackLine(root string) string {
+	if root == "" {
+		return ""
+	}
+	path := ""
+	for _, name := range []string{"corgi-compose.yml", "corgi-compose.yaml"} {
+		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
+			path = filepath.Join(root, name)
+			break
+		}
+	}
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var y struct {
+		Services map[string]struct {
+			Port int `yaml:"port"`
+		} `yaml:"services"`
+		DBs map[string]struct {
+			Driver string `yaml:"driver"`
+		} `yaml:"db_services"`
+	}
+	if yaml.Unmarshal(data, &y) != nil || (len(y.Services) == 0 && len(y.DBs) == 0) {
+		return ""
+	}
+	var parts []string
+	for _, name := range composeNames(y.Services) {
+		if p := y.Services[name].Port; p > 0 {
+			parts = append(parts, fmt.Sprintf("%s :%d", name, p))
+		} else {
+			parts = append(parts, name)
+		}
+	}
+	for _, name := range composeNames(y.DBs) {
+		if d := y.DBs[name].Driver; d != "" {
+			parts = append(parts, name+" ("+d+")")
+		} else {
+			parts = append(parts, name)
+		}
+	}
+	if len(parts) > 8 {
+		parts = append(parts[:8], fmt.Sprintf("+%d more", len(parts)-8))
+	}
+	return "stack: " + strings.Join(parts, " · ") + " — corgi_http, corgi_logs, corgi_db_query and corgi_explain reach them once corgi run is up"
+}
+
+func composeNames[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
