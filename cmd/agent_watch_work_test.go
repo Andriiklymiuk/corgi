@@ -39,7 +39,7 @@ func TestWorkOnCommandFromARef(t *testing.T) {
 	if status != 0 {
 		t.Fatalf("refused: %d %s", status, msg)
 	}
-	if c.Source != "cli" || !strings.Contains(c.Command, "--workspace api") || !strings.Contains(c.Command, "--model opus --prompt-id ") {
+	if c.Source != "cli" || !strings.Contains(c.Command, "--workspace api") || !strings.Contains(c.Command, "--model opus --ticket ABC-1 --ticket-key linear:ABC-1 --prompt-id ") {
 		t.Fatalf("command: %+v", c)
 	}
 	if strings.Contains(c.Command, "Login loops") {

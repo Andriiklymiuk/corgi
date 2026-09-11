@@ -38,6 +38,7 @@ func TestEmitHookBuildsAnEventFromStdinAndTheProcessTree(t *testing.T) {
 	env := fakeEnv(map[string]string{
 		"CLAUDE_CONFIG_DIR": "/home/me/.claude-work", "CORGI_VSCODE_WINDOW": "win-1",
 		"TERM_PROGRAM": "vscode", "TERM_SESSION_ID": "t-9",
+		"CORGI_TICKET": "ABC-1", "CORGI_TICKET_KEY": "linear:ABC-1",
 	})
 	ev, ok := runEmitHook(stdin, env, 50)
 	if !ok {
@@ -51,6 +52,9 @@ func TestEmitHookBuildsAnEventFromStdinAndTheProcessTree(t *testing.T) {
 	}
 	if ev.Window != "win-1" || ev.ConfigDir != "/home/me/.claude-work" || ev.TermProgram != "vscode" || ev.TermSession != "t-9" {
 		t.Fatalf("env: %+v", ev)
+	}
+	if ev.Ticket != "ABC-1" || ev.TicketKey != "linear:ABC-1" {
+		t.Fatalf("the ticket the launcher put in the environment rides along: %+v", ev)
 	}
 	if ev.At.IsZero() {
 		t.Fatal("stamped")

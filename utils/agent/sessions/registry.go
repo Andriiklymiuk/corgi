@@ -120,6 +120,7 @@ type Slot struct {
 	Branch  string `json:"branch,omitempty"`
 	Summary string `json:"summary,omitempty"`
 	PR      string `json:"pr,omitempty"`
+	Ticket  string `json:"ticket,omitempty"`
 	// TurnS is how long the current turn has been running, 0 unless working.
 	TurnS int `json:"turnS,omitempty"`
 	// Limit is quota or overload on a limited key; ResumeAt when the daemon
@@ -502,6 +503,9 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	}
 	if ev.Branch != "" {
 		s.Branch = ev.Branch
+	}
+	if ev.Ticket != "" {
+		s.Ticket, s.TicketKey = ev.Ticket, ev.TicketKey
 	}
 	if ev.Summary != "" {
 		s.Summary = ev.Summary
@@ -1301,7 +1305,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		if len(s.Drift) > 0 {
 			sl.Drift = s.Drift[0]
 		}
-		sl.Branch, sl.Summary, sl.PR = s.Branch, s.Summary, s.PR
+		sl.Branch, sl.Summary, sl.PR, sl.Ticket = s.Branch, s.Summary, s.PR, s.Ticket
 		if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
 			sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())
 		}

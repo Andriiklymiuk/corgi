@@ -191,10 +191,12 @@ func TestWatchEventsAndWorkingOnOne(t *testing.T) {
 	}
 	spooled, _ := os.ReadFile(filepath.Join(dir, "commands", entries[0].Name()))
 	line := string(spooled)
-	if strings.Contains(line, "corgi:stories") || strings.Contains(line, "ABC-1") {
+	if strings.Contains(line, "corgi:stories") || strings.Contains(line, "Login loops") {
 		t.Fatalf("the prompt must travel by id, not in the command: %s", line)
 	}
-	if !strings.Contains(line, "--model opus --prompt-id ") {
+	// The ref itself does ride along, so the board can put the session on
+	// the ticket from its first event.
+	if !strings.Contains(line, "--model opus --ticket ABC-1 --ticket-key jira:ABC-1 --prompt-id ") {
 		t.Fatalf("command line: %s", line)
 	}
 	prompts, _ := os.ReadDir(filepath.Join(dir, "prompts"))

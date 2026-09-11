@@ -154,6 +154,11 @@ type Event struct {
 	// Window is CORGI_VSCODE_WINDOW, injected by the corgi VS Code extension
 	// into every integrated terminal of its window.
 	Window string `json:"window,omitempty"`
+	// Ticket and TicketKey are CORGI_TICKET and CORGI_TICKET_KEY: the
+	// tracker ref(s) and inbox key a session was opened for by "Work on it",
+	// so the board can say a session is on the ticket before any branch is.
+	Ticket    string `json:"ticket,omitempty"`
+	TicketKey string `json:"ticketKey,omitempty"`
 	// TermProgram and TermSession are TERM_PROGRAM and the emulator's own
 	// session id, for sessions outside an editor.
 	TermProgram string `json:"termProgram,omitempty"`
@@ -246,6 +251,10 @@ type Session struct {
 	// Stuck is a working session that has produced no event for StuckAfter:
 	// probably spinning, or waiting on a call that will not return.
 	Stuck bool `json:"stuck,omitempty"`
+	// Ticket is the tracker ref(s) the session was opened for ("ABC-1" or
+	// "ABC-1,ABC-2"), TicketKey the inbox key; from the launcher's env.
+	Ticket    string `json:"ticket,omitempty"`
+	TicketKey string `json:"ticketKey,omitempty"`
 	// Branch is the cwd's branch as of the last prompt; Summary what Claude
 	// last said; PR the last pull request it linked; TurnStartedAt when the
 	// current or last turn began.

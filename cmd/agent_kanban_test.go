@@ -25,6 +25,7 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 		{Key: "k-done", Ref: "ABC-5", Workspace: "api", Kind: watch.KindIssueNew, State: "Done", At: now},
 		{Key: "k-ignored", Ref: "ABC-6", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
 		{Key: "k-session", Ref: "ABC-7", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
+		{Key: "k-worked", Ref: "ABC-9", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
 	}
 	fixes.StartFor(events[1], now.Add(-time.Minute))
 	fixes.StartFor(events[2], now.Add(-time.Hour))
@@ -38,7 +39,11 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 		{Ref: "ABC-8", State: handoff.StateInputRequired, Next: "web side", WrittenAt: now},
 		{Ref: "ABC-4", State: handoff.StateInputRequired, Next: "x", WrittenAt: now},
 	}}
-	sess := []sessions.Session{{ID: "s1", Label: "api", Display: "api", Status: sessions.StatusWorking, Branch: "feature/ABC-7/thing"}}
+	sess := []sessions.Session{
+		{ID: "s1", Label: "api", Display: "api", Status: sessions.StatusWorking, Branch: "feature/ABC-7/thing"},
+		// Opened by "Work on it": on main still, the ticket in its environment.
+		{ID: "s2", Label: "api", Display: "api 2", Status: sessions.StatusWorking, Branch: "main", Ticket: "abc-9"},
+	}
 
 	cards := buildKanban(kanbanInputs{events: events, ignored: func(k string) bool { return k == "k-ignored" },
 		moved: moved, fixes: fixes, sessions: sess, packets: packets, now: now})
@@ -47,7 +52,7 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	for _, c := range cards {
 		got[c.Ref] = c
 	}
-	want := map[string]string{"ABC-1": ColInbox, "ABC-2": ColRunning, "ABC-3": ColReview, "ABC-4": ColBlocked, "ABC-5": ColDone, "ABC-7": ColRunning, "ABC-8": ColReady}
+	want := map[string]string{"ABC-1": ColInbox, "ABC-2": ColRunning, "ABC-3": ColReview, "ABC-4": ColBlocked, "ABC-5": ColDone, "ABC-7": ColRunning, "ABC-8": ColReady, "ABC-9": ColRunning}
 	for ref, col := range want {
 		if got[ref].Column != col {
 			t.Errorf("%s: %s (%s), want %s", ref, got[ref].Column, got[ref].Why, col)
@@ -58,6 +63,9 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	}
 	if got["ABC-7"].Session == nil || got["ABC-7"].Branch != "feature/ABC-7/thing" {
 		t.Error("the session and its branch are on the card")
+	}
+	if got["ABC-9"].Session == nil || got["ABC-9"].Session.ID != "s2" || got["ABC-9"].Why != "session api 2 is on it" {
+		t.Errorf("a session opened for the ticket is on its card before any branch is: %+v %q", got["ABC-9"].Session, got["ABC-9"].Why)
 	}
 	if got["ABC-3"].Fix == nil || len(got["ABC-3"].Fix.PRs) != 1 {
 		t.Error("the run's pull request is on the card")

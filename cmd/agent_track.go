@@ -557,6 +557,7 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 		ConfigDir: getenv("CLAUDE_CONFIG_DIR"), Source: in.Source, Reason: in.Reason,
 		Tool: in.Tool, Notification: in.NotificationType, Message: truncateLine(in.errorMessage(), 160),
 		Error: in.errorType(), Window: getenv("CORGI_VSCODE_WINDOW"),
+		Ticket: getenv("CORGI_TICKET"), TicketKey: getenv("CORGI_TICKET_KEY"),
 		TermProgram: getenv("TERM_PROGRAM"),
 		TermSession: firstNonEmpty(getenv("ITERM_SESSION_ID"), getenv("TERM_SESSION_ID")),
 		Subject:     subjectOf(in.Tool, in.ToolInput),

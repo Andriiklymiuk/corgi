@@ -52,6 +52,8 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		show, _ := cmd.Flags().GetBool("show")
 		model, _ := cmd.Flags().GetString("model")
 		promptID, _ := cmd.Flags().GetString("prompt-id")
+		ticket, _ := cmd.Flags().GetString("ticket")
+		ticketKey, _ := cmd.Flags().GetString("ticket-key")
 		wanted, _ := cmd.Flags().GetString("workspace")
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -104,6 +106,15 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		env := os.Environ()
 		for k, v := range launch.Env {
 			env = append(env, k+"="+v)
+		}
+		// The ticket rides in the environment: the tracking hook, a child of
+		// claude, reads it and the board shows a session on the ticket from
+		// its first event — before any branch is named after it.
+		if t := strings.TrimSpace(ticket); t != "" {
+			env = append(env, "CORGI_TICKET="+t)
+			if k := strings.TrimSpace(ticketKey); k != "" {
+				env = append(env, "CORGI_TICKET_KEY="+k)
+			}
 		}
 		if err := runClaudeInPlace(launch.Bin, launch.Args, env); err != nil {
 			if exit, ok := err.(*exec.ExitError); ok {
@@ -269,6 +280,8 @@ func init() {
 	agentClaudeCmd.Flags().String("profile", "", "Run under this corgi profile's account and settings")
 	agentClaudeCmd.Flags().String("model", "", "Pass --model to claude (opus, sonnet, haiku, or a model id)")
 	agentClaudeCmd.Flags().String("prompt-id", "", "Start with the prompt saved under this id by the phone launcher; the file is read once and removed")
+	agentClaudeCmd.Flags().String("ticket", "", "The tracker ref(s) this session works on (ABC-1 or ABC-1,ABC-2): the board shows it on the ticket")
+	agentClaudeCmd.Flags().String("ticket-key", "", "The inbox key of that ticket, with --ticket")
 	agentClaudeCmd.Flags().Bool("show", false, "Print the resolved command and exit")
 	agentCmd.AddCommand(agentClaudeCmd)
 }
