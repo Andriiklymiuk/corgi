@@ -9,7 +9,16 @@ import { mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 const c = { g: "#3fb950", r: "#ff7b72", y: "#e3b341", b: "#79c0ff", c: "#56d4dd", d: "#8b949e", w: "#e6edf3", m: "#d2a8ff" };
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 /** {g}green{/} {r}red{/} {y}yellow{/} {b}blue{/} {c}cyan{/} {d}dim{/} {m}magenta{/} {B}bold{/} */
-const mark = (s) => esc(s).replace(/\{([grybcdmB])\}/g, (_, k) => (k === "B" ? `<b>` : `<span style="color:${c[k]}">`)).replace(/\{\/\}/g, "</span>").replace(/<\/span>(?=[^<]*<\/b>)/g, "</b>");
+const mark = (s) => {
+	// {/} closes whatever opened last, so a {B} is a <b> that really ends —
+	// an unclosed <b> would wrap the rest of the page, phone included.
+	const open = [];
+	return esc(s).replace(/\{([grybcdmB]|\/)\}/g, (_, k) => {
+		if (k === "/") return open.pop() ?? "";
+		open.push(k === "B" ? "</b>" : "</span>");
+		return k === "B" ? "<b>" : `<span style="color:${c[k]}">`;
+	}) + open.reverse().join("");
+};
 const line = (s) => s.startsWith("{Q}") ? `<div class="qr">${esc(s.slice(3))}</div>` : `<div class="l">${s === "" ? "&nbsp;" : mark(s)}</div>`;
 
 const css = `
@@ -256,13 +265,13 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	scene("stories", grow(s, [1, 4, 6, 8, 10, 12, 14, 16, 20, 21]).map((l, i) => page(term("Claude Code — stack", l, { rows: s.length, cursor: i < 9 }))));
 }
 
-// ---- the phone: agent up, scan, tap a repo -----------------------------------------------
+// ---- the phone: agent up, scan, then the app — every tab, and what each one does -----
 {
 	const qr = readFileSync("scripts/showcase-qr.txt", "utf8").trimEnd().split("\n");
 	const up = [
 		"{g}${/} {B}corgi agent up{/}",
 		"",
-		"  ✓ workspace acme-stack (registered)",
+		"  ✓ workspace acme-api (registered)",
 		"  ✓ agent daemon running (pid 41902)",
 		"  ✓ starts at login (launchd) — survives a reboot",
 		"  ✓ public endpoint: https://blue-fox-42.trycloudflare.com/mcp",
@@ -273,28 +282,204 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"",
 		"    or open: https://blue-fox-42.trycloudflare.com/pair#A7K2M9",
 		"",
-		"  after scanning, the phone opens the launcher — tap a repo to start:",
+		"  the phone opens on the inbox — what the watch has seen:",
 		"    https://blue-fox-42.trycloudflare.com/app",
 	];
-	const card = ({ name, path, branch, dot, meta, btn, tap, session }) => `<div class="ws"><div class="head"><span class="dot ${dot}"></span><span class="name">${name}</span></div><div class="path">${path} <span style="color:#8f94a3">${branch}</span></div><div class="meta">${meta}</div><div class="actions"><span class="go${tap ? " tap" : ""}">${btn}</span><span class="chip">sessions</span><span class="chip">open in <b>app</b></span><span class="chip">options</span></div>${session ? `<div class="top"><span>${session}</span><span class="when">13:04</span></div>` : ""}</div>`;
-	const launcher = (t) => `<div class="app"><div class="brand"><div class="logo">🐶</div><div><h1>corgi</h1><small>andrii-mbp · 3 workspaces</small></div></div>
-	<div class="sum${t < 2 ? " hot" : ""}">${t < 2 ? "1 session needs you" : "2 live · 1 needs you"}</div>
-	${card({ name: "acme-stack", path: "~/dev/acme-stack", branch: "main", dot: t === 0 ? "" : t === 1 ? "starting" : "live", meta: t === 0 ? "<span>nothing running</span><span>default</span>" : t === 1 ? '<span class="live">starting</span><span>default</span>' : '<span class="live">1 live</span><span>12s</span><span>default</span>', btn: t === 0 ? "Start" : "Open", tap: t === 1, session: t >= 2 ? "acme-stack · main" : "" })}
-	${card({ name: "recipe-app", path: "~/dev/recipe-app", branch: "feat/search*", dot: "live", meta: '<span class="live">1 live</span><span>2h 10m</span><span>default</span>', btn: "Open", session: "recipe-app · search index" })}
-	${card({ name: "client-app", path: "~/work/client-app", branch: "main", dot: "attention", meta: '<span class="warn">needs you</span><span class="why">waiting: allow or deny the edit</span><span>work</span>', btn: "Open", session: "client-app · onboarding copy" })}
-	</div>`;
+
+	// The native app (corgi-mobile-app): Linear's grammar — rows, glyphs,
+	// pills, one accent — on the system tab bar. Every string is one the
+	// app prints.
+	const nativeCss = `<style>
+	  .na{position:absolute;inset:0;background:#0f1011;color:#f2f3f5;font-family:-apple-system,system-ui,sans-serif;font-size:13px;overflow:hidden}
+	  .na .hd{padding:54px 16px 6px}
+	  .na .hd .row1{display:flex;align-items:center;justify-content:space-between}
+	  .na h1{font-size:26px;font-weight:600;letter-spacing:-.4px;margin:0}
+	  .na .cap{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#8a8f98;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);border-radius:999px;padding:3px 9px;backdrop-filter:blur(8px)}
+	  .na .cap b{width:6px;height:6px;border-radius:50%;background:#4cc38a;display:inline-block}
+	  .na .ic{width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:16px;color:#f2f3f5}
+	  .na .sub{color:#8a8f98;font-size:12px;margin-top:2px}
+	  .na .seg{display:flex;gap:6px;padding:8px 16px 4px}
+	  .na .seg span{font-size:12px;color:#8a8f98;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);border-radius:999px;padding:5px 11px;white-space:nowrap}
+	  .na .seg span.on{color:#f2f3f5;background:rgba(94,106,210,.22);border-color:rgba(94,106,210,.5)}
+	  .na .sec{padding:12px 0 0}
+	  .na .sh{display:flex;justify-content:space-between;padding:0 16px 4px;font-size:12px;font-weight:500;color:#8a8f98}
+	  .na .sh i{font-style:normal;color:#62666e}
+	  .na .grp{display:flex;align-items:center;gap:8px;padding:10px 16px 4px;font-size:13px;font-weight:600}
+	  .na .grp i{font-style:normal;color:#62666e;font-weight:400;font-size:12px}
+	  .na .grp .chev{margin-left:auto;color:#62666e;font-size:11px}
+	  .na .r{display:flex;align-items:center;gap:10px;padding:9px 16px;min-height:44px;border-bottom:1px solid rgba(255,255,255,.06);margin-left:0}
+	  .na .r .g{width:14px;height:14px;border-radius:50%;flex:none;border:1.5px solid #8a8f98;position:relative}
+	  .na .r .g.needs{border-color:#eb5757;background:#eb5757}
+	  .na .r .g.work{border-color:#e0a52b;background:linear-gradient(90deg,#e0a52b 50%,transparent 50%)}
+	  .na .r .g.done{border-color:#5e6ad2;background:#5e6ad2}
+	  .na .r .g.review{border-color:#4cc38a;box-shadow:inset 0 0 0 3px #0f1011,inset 0 0 0 8px #4cc38a}
+	  .na .r .g.block{border-color:#eb5757;color:#eb5757;font-size:10px;font-weight:700;text-align:center;line-height:11px}
+	  .na .r .g.back{border-style:dashed;border-color:#62666e}
+	  .na .r .t{flex:1;min-width:0}
+	  .na .r .t .ti{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	  .na .r .t .su{font-size:12px;color:#8a8f98;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+	  .na .r .t .su code{font-family:Menlo,ui-monospace,monospace;font-size:11px;color:#62666e}
+	  .na .r .m{font-size:12px;color:#62666e;flex:none}
+	  .na .r .pri{color:#8a8f98;font-size:10px;font-weight:700;border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:1px 4px}
+	  .na .r.tap{background:rgba(255,255,255,.06)}
+	  .na .btn{font-size:12px;font-weight:500;border-radius:8px;padding:6px 11px;border:1px solid rgba(255,255,255,.12);color:#f2f3f5;background:#1b1d20;white-space:nowrap}
+	  .na .btn.p{background:#5e6ad2;border-color:#5e6ad2;color:#fff}
+	  .na .btn.d{color:#f17c7c;border-color:rgba(235,87,87,.32)}
+	  .na .btn.tap{box-shadow:0 0 0 4px rgba(94,106,210,.4)}
+	  .na .ask{display:flex;gap:6px;margin-top:7px}
+	  .na .pills{display:flex;flex-wrap:wrap;gap:6px;padding:4px 16px 8px}
+	  .na .pill{font-size:11px;color:#8a8f98;border:1px solid rgba(255,255,255,.1);border-radius:999px;padding:3px 8px;display:inline-flex;gap:4px;align-items:center}
+	  .na .pill.acc{color:#a1a8f5;border-color:rgba(94,106,210,.5);background:rgba(94,106,210,.16)}
+	  .na .pill.red{color:#f17c7c;border-color:rgba(235,87,87,.32);background:rgba(235,87,87,.12)}
+	  .na .note{margin:6px 16px;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 11px;background:#151618}
+	  .na .note.warn{border-color:rgba(224,165,43,.4);background:rgba(224,165,43,.08)}
+	  .na .note b{display:block;font-size:12px;margin-bottom:2px}
+	  .na .note p{margin:0;font-size:12px;color:#8a8f98}
+	  .na .acts{display:flex;gap:6px;padding:6px 16px;flex-wrap:wrap}
+	  .na .kv{display:flex;justify-content:space-between;padding:9px 16px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px}
+	  .na .kv span{color:#8a8f98}.na .kv b{font-weight:500}
+	  .na .fine{font-size:11px;color:#62666e;padding:6px 16px;line-height:1.4}
+	  .na .empty{color:#62666e;font-size:12px;padding:10px 16px}
+	  /* the system tab bar: a glass capsule at the bottom */
+	  .na .tabs{position:absolute;left:14px;right:14px;bottom:18px;height:56px;border-radius:30px;background:rgba(28,29,33,.78);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(18px);display:flex;align-items:center;justify-content:space-around;padding:0 6px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+	  .na .tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;color:#8a8f98;width:48px;height:44px;justify-content:center;border-radius:22px;position:relative}
+	  .na .tab b{font-size:15px;line-height:1}
+	  .na .tab.on{color:#a1a8f5;background:rgba(94,106,210,.16)}
+	  .na .tab.tap{box-shadow:0 0 0 4px rgba(94,106,210,.45)}
+	  .na .tab i{position:absolute;top:2px;right:6px;font-style:normal;background:#eb5757;color:#fff;font-size:8px;font-weight:700;border-radius:8px;padding:1px 4px}
+	  .na .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+	  .na .sheet{position:absolute;left:0;right:0;bottom:0;top:96px;background:#151618;border-radius:16px 16px 0 0;border-top:1px solid rgba(255,255,255,.1)}
+	  .na .grab{width:36px;height:5px;border-radius:3px;background:#3a3d44;margin:8px auto 4px}
+	  .na .sheet h2{font-size:17px;font-weight:600;margin:0;padding:6px 16px 0}
+	  .na .sheet .id{font-family:Menlo,ui-monospace,monospace;font-size:11px;color:#62666e;padding:0 16px 4px}
+	  .na .swipe{display:flex;align-items:stretch;border-bottom:1px solid rgba(255,255,255,.06)}
+	  .na .swipe .under{width:96px;background:#5e6ad2;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:600;gap:2px}
+	  .na .swipe .under b{font-size:16px}
+	  .na .swipe .r{flex:1;border-bottom:0}
+	  /* the lock screen with the widget and a Live Activity */
+	  .lk{position:absolute;inset:0;background:linear-gradient(160deg,#1a2352,#4b2a6e 60%,#a04a4a);color:#fff;font-family:-apple-system,system-ui,sans-serif}
+	  .lk .clock{margin-top:70px}
+	  .lk .la{position:absolute;left:14px;right:14px;top:300px;background:rgba(15,16,17,.92);border-radius:22px;padding:14px;display:flex;gap:12px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+	  .lk .la .dog{font-size:26px}
+	  .lk .la .t{flex:1;min-width:0}
+	  .lk .la .n{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lk .la .n small{font-weight:400;color:#8a8f98;font-size:11px;margin-left:6px}
+	  .lk .la .s{font-size:13px;color:#f17c7c;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	  .lk .la .el{font-size:14px;color:#8a8f98;font-variant-numeric:tabular-nums}
+	  .lk .wg{position:absolute;left:14px;top:395px;width:130px;height:130px;background:#0f1011;border-radius:22px;padding:12px;display:flex;flex-direction:column}
+	  .lk .wg .h{display:flex;gap:5px;align-items:center;font-size:11px;font-weight:600;color:#8a8f98}
+	  .lk .wg .big{margin-top:auto;font-size:18px;font-weight:700;color:#eb5757;line-height:1.1;white-space:nowrap}
+	  .lk .wg .l2{font-size:11px;color:#8a8f98;margin-top:2px}
+	  .lk .wg2{position:absolute;left:156px;top:395px;width:130px;height:130px;background:#0f1011;border-radius:22px;padding:12px;font-size:11px;color:#8a8f98}
+	  .lk .wg2 .h{font-weight:600;margin-bottom:8px}
+	  .lk .wg2 .s{display:flex;gap:5px;align-items:center;margin:5px 0;color:#f2f3f5;font-size:11px}
+	  .lk .wg2 .s i{width:7px;height:7px;border-radius:50%;flex:none}
+	  .lk .wg2 .s em{font-style:normal;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	  .lk .wg2 .s span{margin-left:auto;color:#8a8f98;flex:none}
+	</style>`;
+
+	const tabs = (on, tap) => `<div class="tabs">` +
+		[["inbox", "Inbox", "▤", 3], ["board", "Board", "▥", 0], ["sessions", "Sessions", "▮", 1], ["stacks", "Stacks", "❒", 0], ["settings", "Settings", "⚙", 0]]
+			.map(([k, label, icon, n]) => `<div class="tab${on === k ? " on" : ""}${tap === k ? " tap" : ""}"><b>${icon}</b>${label}${n ? `<i>${n}</i>` : ""}</div>`)
+			.join("") + `</div>`;
+	const head = (title, sub, { plus = true, seg = "" } = {}) => `<div class="hd"><div class="row1"><h1>${title}</h1><div style="display:flex;gap:8px;align-items:center"><span class="cap"><b></b>andrii-mbp ▾</span>${plus ? `<span class="ic">+</span>` : `<span class="ic">↻</span>`}</div></div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>${seg}`;
+	const row = ({ g, ti, su, m, pri, tap, right }) => `<div class="r${tap ? " tap" : ""}"><span class="g ${g}">${g === "block" ? "!" : ""}</span>${pri ? `<span class="pri">${pri}</span>` : ""}<div class="t"><div class="ti">${ti}</div>${su ? `<div class="su">${su}</div>` : ""}</div>${right ?? (m ? `<span class="m">${m}</span>` : "")}</div>`;
+	const app = (tab, body, { tap, over = "" } = {}) => `<div class="na">${body}${tabs(tab, tap)}${over}</div>`;
+
+	// Inbox: waiting on a person, grouped by workspace; a row is the ticket.
+	const inbox = ({ tapRow, swipe, moved } = {}) => head("Inbox", "", { seg: `<div class="seg"><span class="on">Waiting ${moved ? 2 : 3}</span><span>Today 2</span></div>` }) +
+		`<div class="sec"><div class="sh">acme-api <i>2</i></div>` +
+		(swipe
+			? `<div class="swipe"><div class="under"><b>▶</b>Work on it</div>${row({ g: "todo", pri: "P2", ti: "Login redirect loops after SSO", su: "<code>ABC-123</code> · new issue · Backlog", m: "12m" })}</div>`
+			: row({ g: moved ? "work" : "todo", pri: "P2", ti: "Login redirect loops after SSO", su: `<code>ABC-123</code> · new issue · ${moved ? "In Progress" : "Backlog"}`, m: "12m", tap: tapRow })) +
+		row({ g: "todo", pri: "P3", ti: "Cache the workspace registry between polls", su: "<code>ABC-128</code> · new issue · Backlog", m: "1h" }) +
+		`<div class="sh" style="padding-top:12px">acme-web <i>1</i></div>` +
+		row({ g: "review", ti: "Draft: retry the upload on a 502", su: "<code>acme/web!41</code> · mara: the nil case is still open", m: "3h" }) +
+		`</div>`;
+
+	// The ticket's sheet: pills, the ask, every action.
+	const ticketSheet = (tapWork) => `<div class="scrim"></div><div class="sheet"><div class="grab"></div><h2>Login redirect loops after SSO</h2><div class="id">ABC-123 · acme-api</div>
+		<div class="pills"><span class="pill">○ Backlog</span><span class="pill">P2</span><span class="pill">↳ new issue</span><span class="pill">🕓 12m</span></div>
+		<div class="note"><b>mara</b><p>After SSO the app bounces between /login and /home until the token refresh lands.</p></div>
+		<div class="acts"><span class="btn p${tapWork ? " tap" : ""}">▶ Work on it</span><span class="btn">↗ Open</span><span class="btn">Move…</span><span class="btn">Assign to me</span><span class="btn d">Ignore</span></div>
+		<div class="fine">Work on it opens a Claude session in acme-api's checkout with the prompt an unattended run would get — on the laptop, watchable from here.</div>
+		<div class="sec"><div class="sh">corgi</div><div class="kv"><span>Column</span><b>Backlog</b></div><div class="kv"><span>Runs</span><b>none yet</b></div><div class="kv"><span>Opens in</span><b>Claude app</b></div></div></div>`;
+
+	// Board: one list, grouped by column; Done folded.
+	const board = ({ started } = {}) => head("Board", "4 open · 12 done", { seg: `<div class="seg"><span class="on">All</span><span>Inbox 2</span><span>Ready 1</span><span>Running ${started ? 2 : 1}</span><span>Review 1</span></div>` }) +
+		`<div class="grp"><span class="g" style="width:12px;height:12px;border-radius:50%;border:1.5px solid #8a8f98;display:inline-block"></span>Inbox <i>2</i><span class="chev">⌄</span></div>` +
+		row({ g: "todo", ti: "Cache the workspace registry between polls", su: "<code>ABC-128</code> · new issue", m: "1h" }) +
+		(started ? "" : row({ g: "todo", ti: "Login redirect loops after SSO", su: "<code>ABC-123</code> · new issue", m: "12m" })) +
+		`<div class="grp"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:1.5px solid #e0a52b;background:linear-gradient(90deg,#e0a52b 50%,transparent 50%)"></span>Running <i>${started ? 2 : 1}</i><span class="chev">⌄</span></div>` +
+		(started ? row({ g: "work", ti: "Login redirect loops after SSO", su: "<code>ABC-123</code> · session acme-api · main", m: "running 1m" }) : "") +
+		row({ g: "work", ti: "Retry the upload on a 502", su: "<code>WEB-77</code> · session web · feat/upload", m: "running 18m" }) +
+		`<div class="grp"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:1.5px solid #4cc38a;box-shadow:inset 0 0 0 2px #0f1011,inset 0 0 0 6px #4cc38a"></span>Review <i>1</i><span class="chev">⌄</span></div>` +
+		row({ g: "review", ti: "Draft: retry the upload on a 502", su: "<code>acme/web!41</code> · opened 1 PR", m: "3h" }) +
+		`<div class="grp"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#5e6ad2"></span>Done <i>12</i><span class="chev">›</span></div>`;
+
+	// Sessions: every Claude session on the laptop; a permission answered from the row.
+	const sessions = ({ answered, tapAllow } = {}) => head("Sessions", answered ? "3 working" : "1 needs you · 2 working", { plus: true }) +
+		`<div class="sec"><div class="sh">acme-api <i>2</i></div>` +
+		(answered
+			? row({ g: "work", ti: "Login redirect loops after SSO", su: "Bash go test ./... · ctx 44%", m: "turn 2m" })
+			: `<div class="r"><span class="g needs"></span><div class="t"><div class="ti">Login redirect loops after SSO</div><div class="su">needs you · Bash go test ./... · ctx 44%</div><div class="ask"><span class="btn p${tapAllow ? " tap" : ""}">Allow</span><span class="btn">Always</span><span class="btn d">Deny</span></div></div></div>`) +
+		row({ g: "work", ti: "acme-api · main", su: "Edit registry.go · ctx 72%", m: "turn 9m" }) +
+		`<div class="sh" style="padding-top:12px">acme-web <i>1</i></div>` +
+		row({ g: "work", ti: "web · upload", su: "Bash npm test · ctx 58%", m: "turn 1m" }) +
+		`<div class="fine">Swipe a row right to allow, left to deny. Tap for its sheet: open in the Claude app, send text, pin it to the lock screen.</div></div>`;
+
+	// Stacks: one row per registered workspace; Start / Stop on the right.
+	const stacks = ({ tapStart, started } = {}) => head("Stacks", "3 workspaces", { plus: false }) +
+		`<div class="sec">` +
+		row({ g: "work", ti: "acme-api", su: "acme-api · main · 2 live · default", right: `<span class="btn">Stop</span>` }) +
+		row({ g: started ? "work" : "todo", ti: "acme-web", su: started ? "starting · feat/upload* · work" : "online · no session · feat/upload* · work", right: started ? `<span class="btn">Stop</span>` : `<span class="btn p${tapStart ? " tap" : ""}">Start</span>` }) +
+		row({ g: "back", ti: "recipe-app", su: "off · main · default", right: `<span class="btn p">Start</span>` }) +
+		`<div class="fine">Start opens a session the Claude app and this phone can reach; Face ID first. Tap a row for every session in it and where its link opens.</div></div>`;
+
+	// Settings: tab order, hidden workspaces, laptops.
+	const settings = () => head("Settings", "", { plus: false }) +
+		`<div class="sec"><div class="sh">Laptops</div>` +
+		row({ g: "done", ti: "andrii-mbp", su: "blue-fox-42.trycloudflare.com · paired 2m ago", m: "active" }) +
+		row({ g: "back", ti: "Add a laptop", su: "on it: corgi agent up --fresh, then scan", m: "›" }) +
+		`<div class="sh" style="padding-top:12px">Tabs</div>` +
+		`<div class="kv"><span>Inbox</span><b>▲ ▼ · start here</b></div><div class="kv"><span>Board</span><b>▲ ▼</b></div><div class="kv"><span>Sessions</span><b>▲ ▼</b></div>` +
+		`<div class="sh" style="padding-top:12px">Hidden workspaces</div>` +
+		`<div class="kv"><span>client-app</span><b style="color:#a1a8f5">hidden on this phone</b></div>` +
+		`<div class="sh" style="padding-top:12px">This phone</div>` +
+		`<div class="kv"><span>Approve from the lock screen</span><b style="color:#4cc38a">on</b></div><div class="kv"><span>Live Activity when a session waits</span><b style="color:#4cc38a">on</b></div></div>`;
+
+	// The lock screen: the Live Activity for the session that waits, and the widget.
+	const lockLive = `<div class="lk"><div class="clock">13:04</div><div class="date">Tuesday 9 September</div>
+		<div class="la"><span class="dog">🐕</span><div class="t"><div class="n">Login redirect loops<small>andrii-mbp</small></div><div class="s">needs you · Bash go test ./...</div></div><span class="el">02:14</span></div>
+		<div class="wg"><div class="h">🐕 andrii-mbp</div><div class="big">1 needs you</div><div class="l2">2 working · 3 in the inbox</div></div>
+		<div class="wg2"><div class="h">sessions</div><div class="s"><i style="background:#eb5757"></i><em>Login redirect</em><span>needs you</span></div><div class="s"><i style="background:#e0a52b"></i><em>acme-api</em><span>working</span></div><div class="s"><i style="background:#e0a52b"></i><em>web</em><span>working</span></div></div></div>`;
+
 	const phone = (screen) => `<div class="phone"><div class="notch"></div><div class="screen">${screen}</div></div>`;
 	const lock = `<div class="lock" style="position:absolute;inset:0"><div class="clock">13:04</div><div class="date">Tuesday 9 September</div></div>`;
-	const cam = `<div class="cam" style="position:absolute;inset:0"><div class="view"><div class="qr">${esc(qr.join("\n"))}</div></div><div class="frame"></div><div class="pill">Open “blue-fox-42.trycloudflare.com”</div><div class="shutter"></div></div>`;
+	const cam = `<div class="cam" style="position:absolute;inset:0"><div class="view"><div class="qr">${esc(qr.join("\n"))}</div></div><div class="frame"></div><div class="pill">Open in corgi</div><div class="shutter"></div></div>`;
+
+	// The story: scan, the inbox, a ticket worked on, the board, a session
+	// allowed, a stack started, settings, and what the lock screen shows.
 	const frames = [
 		[grow(up, [1])[0], lock, true],
 		[up, lock, false],
 		[up, cam, false],
-		[up, launcher(0), false],
-		[up, launcher(1), false],
-		[up, launcher(2), false],
+		[up, app("inbox", inbox()), false],
+		[up, app("inbox", inbox({ tapRow: true })), false],
+		[up, app("inbox", inbox(), { over: ticketSheet(false) }), false],
+		[up, app("inbox", inbox(), { over: ticketSheet(true) }), false],
+		[up, app("inbox", inbox({ moved: true }), { tap: "board" }), false],
+		[up, app("board", board({ started: true })), false],
+		[up, app("board", board({ started: true }), { tap: "sessions" }), false],
+		[up, app("sessions", sessions({})), false],
+		[up, app("sessions", sessions({ tapAllow: true })), false],
+		[up, app("sessions", sessions({ answered: true }), { tap: "stacks" }), false],
+		[up, app("stacks", stacks({})), false],
+		[up, app("stacks", stacks({ tapStart: true })), false],
+		[up, app("stacks", stacks({ started: true }), { tap: "settings" }), false],
+		[up, app("settings", settings()), false],
+		[up, lockLive, false],
 	];
-	scene("phone", frames.map(([l, screen, cur]) => page(term("corgi agent up", l, { rows: up.length, cursor: cur, extra: phone(screen) }), 1290)));
+	scene("phone", frames.map(([l, screen, cur]) => page(nativeCss + term("corgi agent up", l, { rows: up.length, cursor: cur, extra: phone(screen) }), 1290)));
 }
 
 

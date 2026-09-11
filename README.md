@@ -28,7 +28,7 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
 
 <p align="center"><img src="docs/media/stories.gif" width="760" alt="An agent takes a ticket across three repos and opens three draft PRs"></p>
 
-<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and starts a session"></p>
+<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and opens on the inbox — a ticket worked on from its sheet, the board, a session's permission allowed from its row, a stack started, settings, and the lock screen with the widget and the Live Activity"></p>
 
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
