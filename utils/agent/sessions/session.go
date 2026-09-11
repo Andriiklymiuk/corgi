@@ -257,7 +257,7 @@ type Session struct {
 	// the daemon plans to type "continue" into it, Resumes how many times
 	// it has this episode. Cleared when the session moves on.
 	Limit    LimitKind `json:"limit,omitempty"`
-	ResumeAt time.Time `json:"resumeAt,omitempty"`
+	ResumeAt time.Time `json:"resumeAt,omitzero"`
 	Resumes  int       `json:"resumes,omitempty"`
 	// FailStreak counts the same tool failing on the same subject in a row
 	// — a test that keeps going red, a command that keeps refusing. Drift is

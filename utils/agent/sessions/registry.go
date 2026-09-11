@@ -125,7 +125,7 @@ type Slot struct {
 	// Limit is quota or overload on a limited key; ResumeAt when the daemon
 	// will continue it on its own, so the key can say "continues 14:02".
 	Limit    LimitKind `json:"limit,omitempty"`
-	ResumeAt time.Time `json:"resumeAt,omitempty"`
+	ResumeAt time.Time `json:"resumeAt,omitzero"`
 	// Drift is the first reason the daemon thinks a person should look.
 	Drift string `json:"drift,omitempty"`
 }
