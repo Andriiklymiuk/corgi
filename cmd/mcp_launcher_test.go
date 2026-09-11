@@ -399,3 +399,16 @@ func TestDeviceWorkspaceWithLocalSessionsIsNotPending(t *testing.T) {
 		t.Fatalf("a refused start says why: got %q", got)
 	}
 }
+
+// The phone hears about a newer release, never about an older one the
+// cache still remembers.
+func TestVersionNewer(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"2.19.7", "2.19.6", true}, {"2.19.6", "2.19.7", false}, {"2.20.0", "2.19.9", true}, {"2.19.7", "2.19.7", false}, {"v2.19.8", "2.19.7", true}, {"main", "2.19.7", true}} {
+		if got := versionNewer(c.a, c.b); got != c.want {
+			t.Errorf("versionNewer(%q, %q) = %v", c.a, c.b, got)
+		}
+	}
+}
