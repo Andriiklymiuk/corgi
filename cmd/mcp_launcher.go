@@ -1277,6 +1277,19 @@ const launcherPageHTML = `<!doctype html>
   .newchat button{font:inherit;font-size:.76rem;font-weight:500;padding:.34rem .8rem;border-radius:.45rem;border:1px solid var(--accent);
       background:var(--accent);color:#fff;cursor:pointer;flex:0 0 auto}
   .newchat button:disabled{opacity:.5}
+  .kb{display:flex;gap:.6rem;overflow-x:auto;padding-bottom:.5rem;scroll-snap-type:x mandatory}
+  .kb .kcol{flex:0 0 78vw;max-width:340px;scroll-snap-align:start;background:var(--card);border:1px solid var(--hair);border-radius:.7rem;padding:.5rem}
+  .kb .kcol h3{margin:0 0 .4rem;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;opacity:.75;display:flex;justify-content:space-between}
+  .kb .kcol h3 span{opacity:.7}
+  .kb .kcard{background:var(--card2);border:1px solid var(--hair);border-radius:.55rem;padding:.45rem .55rem;margin:.3rem 0}
+  .kb .kcard .kref{font-weight:600;font-size:.85rem}
+  .kb .kcard .kws{font-size:.7rem;opacity:.6;margin-left:.4rem}
+  .kb .kcard .kwhy{font-size:.75rem;opacity:.85;margin:.15rem 0}
+  .kb .kcard .ktitle{font-size:.78rem;opacity:.7;margin:0 0 .3rem;overflow-wrap:anywhere}
+  .kb .kcard .kmeta{font-size:.7rem;opacity:.7;margin:.1rem 0}
+  .kb .kcard.blocked{border-color:#E4695B}
+  .kb .kcard.running{border-color:#5B8DEF}
+  .kb .empty{font-size:.75rem;opacity:.5;padding:.4rem .2rem}
   .ev{background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;padding:.5rem .65rem;margin:.3rem 0}
   .ev .eref{font-weight:600;font-size:.82rem}
   .ev .ekind{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin-left:.35rem}
@@ -1483,6 +1496,7 @@ const launcherPageHTML = `<!doctype html>
   <p id="hostnote" class="hostnote" hidden></p>
   <div class="tabs" id="tabs" role="tablist">
     <button role="tab" data-tab="inbox" aria-selected="true">Inbox<span class="n" id="n-inbox"></span></button>
+    <button role="tab" data-tab="kanban" aria-selected="false">Board<span class="n" id="n-kanban"></span></button>
     <button role="tab" data-tab="sessions" aria-selected="false">Sessions<span class="n" id="n-sessions"></span></button>
     <button role="tab" data-tab="stacks" aria-selected="false">Stacks<span class="n" id="n-stacks"></span></button>
     <button role="tab" data-tab="laptop" aria-selected="false">Laptop</button>
@@ -1493,6 +1507,9 @@ const launcherPageHTML = `<!doctype html>
   <div data-pane="inbox">
     <section id="inbox" class="board" hidden></section>
     <section id="newchat" class="board" hidden></section>
+  </div>
+  <div data-pane="kanban" hidden>
+    <section id="kanban" class="board" hidden></section>
   </div>
   <div data-pane="sessions" hidden>
     <section id="board" class="board" hidden></section>
@@ -1863,6 +1880,7 @@ const launcherPageHTML = `<!doctype html>
       const j = await r.json();
       renderNewChat(j);
       loadInbox();
+      loadKanban();
       const sessions = (j.sessions || []).filter(s => s.status !== 'gone');
       tabCount('sessions', sessions.length);
       if (!sessions.length) { box.hidden = true; return; }
@@ -2068,7 +2086,7 @@ const launcherPageHTML = `<!doctype html>
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { if (!quiet) toast(j.error || 'that did not go through', true); return false; }
       // A batch says one thing at the end rather than a toast per row.
-      if (!quiet) { toast(j.done || 'done'); setTimeout(loadInbox, 600); }
+      if (!quiet) { toast(j.done || 'done'); setTimeout(() => { loadInbox(); loadKanban(); }, 600); }
       return true;
     } catch { if (!quiet) toast('no connection', true); return false; }
   }
@@ -2110,6 +2128,81 @@ const launcherPageHTML = `<!doctype html>
     sheet.appendChild(mine);
     scrim.appendChild(sheet);
     document.body.appendChild(scrim);
+  }
+
+  // The kanban: one card per ticket, column worked out by corgi. A card is
+  // moved on the tracker, worked on, or unblocked — the column follows.
+  async function loadKanban() {
+    const box = document.getElementById('kanban');
+    let cards = [], columns = [], boards = {};
+    try {
+      const r = await fetch('/launch/kanban', { headers: auth });
+      if (!r.ok) { box.hidden = true; return; }
+      const j = await r.json();
+      cards = j.cards || []; columns = j.columns || []; boards = j.boards || {};
+    } catch { box.hidden = true; tabCount('kanban', 0); return; }
+    const live = cards.filter(c => c.column !== 'Done').length;
+    tabCount('kanban', live);
+    if (!cards.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'kb';
+    for (const col of columns) {
+      const rows = cards.filter(c => c.column === col);
+      const kc = document.createElement('div');
+      kc.className = 'kcol';
+      const h = document.createElement('h3');
+      h.textContent = col;
+      const n = document.createElement('span'); n.textContent = String(rows.length);
+      h.appendChild(n);
+      kc.appendChild(h);
+      if (!rows.length) {
+        const e = document.createElement('div'); e.className = 'empty'; e.textContent = '—';
+        kc.appendChild(e);
+      }
+      for (const c of rows) {
+        const card = document.createElement('div');
+        card.className = 'kcard' + (col === 'Blocked' ? ' blocked' : col === 'Running' ? ' running' : '');
+        const head = document.createElement('div');
+        const ref = document.createElement('span'); ref.className = 'kref'; ref.textContent = c.ref;
+        head.appendChild(ref);
+        if (c.workspace) { const w = document.createElement('span'); w.className = 'kws'; w.textContent = c.workspace; head.appendChild(w); }
+        card.appendChild(head);
+        if (c.title) { const t = document.createElement('p'); t.className = 'ktitle'; t.textContent = c.title; card.appendChild(t); }
+        const why = document.createElement('p'); why.className = 'kwhy'; why.textContent = c.why || ''; card.appendChild(why);
+        if (c.session) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'session ' + c.session.label + ' · ' + (STATUS_WORD[c.session.status] || c.session.status); card.appendChild(m); }
+        if (c.branch) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = c.branch; card.appendChild(m); }
+        if (c.handoff && c.handoff.next) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'next: ' + c.handoff.next; card.appendChild(m); }
+        const row = document.createElement('div'); row.className = 'erow';
+        const ev = { key: c.key, ref: c.ref, workspace: c.workspace, kind: c.kind, url: c.url };
+        if (c.url && /^https:\/\//.test(c.url)) {
+          const a = document.createElement('a'); a.className = 'eopen'; a.href = c.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open'; row.appendChild(a);
+        }
+        if (c.fix && (c.fix.prs || []).length) {
+          const a = document.createElement('a'); a.className = 'eopen'; a.href = c.fix.prs[0]; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open PR'; row.appendChild(a);
+        }
+        if (col === 'Blocked' && c.key) {
+          const ub = document.createElement('button'); ub.className = 'primary'; ub.textContent = 'Unblock';
+          ub.onclick = () => { ub.disabled = true; ticket(ev, { do: 'unblock' }).finally(() => { ub.disabled = false; loadKanban(); }); };
+          row.appendChild(ub);
+        } else if ((col === 'Inbox' || col === 'Ready') && c.key && c.kind && c.kind.startsWith('issue.')) {
+          const go = document.createElement('button'); go.className = 'primary'; go.textContent = 'Work on it';
+          go.onclick = () => { go.disabled = true; workOn(ev).finally(() => { go.disabled = false; loadKanban(); }); };
+          row.appendChild(go);
+        }
+        const board = boards[c.workspace] || {};
+        if ((board.columns || []).length && c.key) {
+          const mv = document.createElement('button'); mv.textContent = 'Move…';
+          mv.onclick = () => moveSheet(ev, board.columns);
+          row.appendChild(mv);
+        }
+        if (row.children.length) card.appendChild(row);
+        kc.appendChild(card);
+      }
+      wrap.appendChild(kc);
+    }
+    box.appendChild(wrap);
   }
 
   async function loadInbox() {
@@ -3264,6 +3357,35 @@ const watchBatchMax = 10
 
 // launchEventsHandler lists what the watch has seen, newest first, so the
 // phone can show the tracker issues and reviews waiting for a decision.
+// launchKanbanHandler is the derived board: one card per ticket with its
+// column and why, plus the columns each tracker can move a ticket to.
+func launchKanbanHandler(w http.ResponseWriter, r *http.Request) {
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	cards := gatherKanban(dir, strings.TrimSpace(r.URL.Query().Get("workspace")), time.Now())
+	boards := map[string]any{}
+	cache := watch.LoadBoardCache(dir)
+	for _, c := range cards {
+		if c.Workspace == "" {
+			continue
+		}
+		if _, seen := boards[c.Workspace]; seen {
+			continue
+		}
+		if info := cache.Get(c.Workspace); info.Has() {
+			names := make([]string, 0, len(info.Statuses))
+			for _, st := range info.Statuses {
+				names = append(names, st.Name)
+			}
+			boards[c.Workspace] = map[string]any{"columns": names, "me": info.Me.Name}
+		}
+	}
+	writeLaunchJSON(w, map[string]any{"columns": kanbanColumns, "cards": cards, "boards": boards})
+}
+
 func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
