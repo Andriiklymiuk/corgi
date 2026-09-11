@@ -386,6 +386,20 @@ pull requests and what it has cost so far.
 
 <p align="center"><img src="docs/media/kanban.gif" width="760" alt="corgi agent kanban: Inbox, Ready, Running, Blocked, Review, Done — with the session, the handoff, the pull requests and the cost on each card"></p>
 
+**Tasks of your own, on the same board.** Not everything comes from a
+tracker. `corgi agent task add "Meta SDK on iOS" --workspace app --body "…"`
+— or **+ Task for later** on the phone and the page — puts a ticket you wrote
+in the inbox and the Inbox column, with a description and the workspace it is
+for. **Work on it** opens a session in that checkout with the description as
+its prompt; the task moves to Doing at once and the card says *picked from
+the phone 1m ago · waiting for a session*, then *session X is working on it*
+from the session's first event. The session keeps the board honest as it
+goes (`corgi agent task move TASK-3 Review` when the draft PR is up,
+`corgi agent task done TASK-3` when there is nothing left), and a task only
+leaves the inbox when it is Done or Canceled. Nothing about it reaches a
+tracker. The same goes for a tracker ticket you press Work on it on: the card
+says who picked it and names the session on it from the first event.
+
 The same release taught the agent a few habits: a **scope** per ticket that
 the hooks hold it to (a write outside the agreed paths is refused with the way
 to widen, a diff over budget is reported once), a **drift** flag on the key

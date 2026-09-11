@@ -1320,6 +1320,11 @@ const launcherPageHTML = `<!doctype html>
   .ev .eref{font-weight:600;font-size:.82rem}
   .ev .ekind{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin-left:.35rem}
   .ev .etitle{font-size:.78rem;opacity:.85;margin:.15rem 0 .4rem;overflow-wrap:anywhere}
+  .ev .emeta,.kcard .emeta{font-size:.72rem;color:#e0a52b;margin:0 0 .4rem}
+  .kbody{white-space:pre-wrap;opacity:.7;max-height:6.5rem;overflow:hidden}
+  .tin{display:block;width:calc(100% - 2rem);margin:.5rem 1rem;padding:.6rem .7rem;background:var(--bg);color:inherit;border:1px solid var(--line);border-radius:.5rem;font:inherit;font-size:.9rem}
+  .sheet .primary{margin:.5rem 1rem 1rem}
+  .sum button{margin-left:.4rem;font-size:.72rem;padding:.25rem .55rem}
   .eblocked{margin:6px 0 0;font-size:13px;color:#E4695B}
   .ev .erow{display:flex;gap:.4rem;align-items:center}
   .ev a.eopen{font-size:.76rem;text-decoration:none;padding:.45rem .75rem;border-radius:.45rem;
@@ -1859,6 +1864,7 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/workspaces', { headers: auth });
       if (r.status === 401) throw new Error('This device is not authorized. Re-pair from corgi agent up.');
       const j = await r.json();
+      window.__workspaces = (j.workspaces || []).map(w => w.id);
       render(j.workspaces || []);
     } catch (e) {
       list.className = 'msg err'; list.textContent = '✗ ' + e.message;
@@ -2122,7 +2128,47 @@ const launcherPageHTML = `<!doctype html>
     return box.childElementCount ? box : null;
   }
 
-  const EVENT_KIND = { 'issue.new': 'new issue', 'issue.comment': 'comment', 'pr.comment': 'PR comment', 'pr.review': 'PR review' };
+  const EVENT_KIND = { 'issue.new': 'new issue', 'issue.comment': 'comment', 'pr.comment': 'PR comment', 'pr.review': 'PR review', 'task': 'task' };
+  // What a card says under its title while a session is on it or on its way.
+  const pickedLine = (p) => {
+    if (!p) return '';
+    const m = Math.max(0, Math.round((Date.now() - Date.parse(p.at)) / 60000));
+    return 'picked from the ' + (p.by === 'cli' ? 'command line' : p.by || 'board') + ' ' + (m ? m + 'm ago' : 'just now') + ' \u00b7 waiting for a session to open';
+  };
+  const sessionLine = (s) => s ? 'session ' + s.label + ' \u00b7 ' + (STATUS_WORD[s.status] || s.status) : '';
+
+  // A task of your own: a title, a description, the workspace it is for.
+  // Lands in Todo like a ticket; Work on it opens a session on it.
+  function taskSheet(after) {
+    const scrim = document.createElement('div');
+    scrim.className = 'scrim';
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    const close = () => scrim.remove();
+    scrim.onclick = e => { if (e.target === scrim) close(); };
+    const grab = document.createElement('div'); grab.className = 'grab';
+    const h = document.createElement('h3'); h.textContent = 'A task for later';
+    const title = document.createElement('input'); title.className = 'tin'; title.placeholder = 'Title'; title.maxLength = 200;
+    const body = document.createElement('textarea'); body.className = 'tin'; body.rows = 5; body.placeholder = 'What to do, and how you will know it is done';
+    const ws = document.createElement('select'); ws.className = 'tin';
+    const none = document.createElement('option'); none.value = ''; none.textContent = 'any workspace'; ws.appendChild(none);
+    for (const w of (window.__workspaces || [])) { const o = document.createElement('option'); o.value = w; o.textContent = w; ws.appendChild(o); }
+    const add = document.createElement('button'); add.className = 'primary'; add.textContent = 'Add to the board';
+    add.onclick = async () => {
+      if (!title.value.trim()) { title.focus(); return; }
+      add.disabled = true;
+      try {
+        const r = await fetch('/launch/task', { method: 'POST', headers: auth, body: JSON.stringify({ title: title.value, body: body.value, workspace: ws.value }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { toast(j.error || 'that did not go through', true); add.disabled = false; return; }
+        toast(j.done || 'on the board'); close(); if (after) after();
+      } catch { toast('no connection', true); add.disabled = false; }
+    };
+    sheet.append(grab, h, title, body, ws, add);
+    scrim.appendChild(sheet);
+    document.body.appendChild(scrim);
+    title.focus();
+  }
 
   // One change to one ticket. Every call here is something someone tapped.
   async function ticket(ev, body, quiet) {
@@ -2232,9 +2278,20 @@ const launcherPageHTML = `<!doctype html>
     } catch { box.hidden = true; tabCount('kanban', 0); return; }
     const live = cards.filter(c => c.column !== 'Done').length;
     tabCount('kanban', live);
-    if (!cards.length) { box.hidden = true; return; }
+    if (!cards.length) {
+      box.hidden = false; box.innerHTML = '';
+      const e = document.createElement('p'); e.className = 'sum'; e.textContent = 'No cards yet. ';
+      const b = document.createElement('button'); b.textContent = '+ Task for later'; b.onclick = () => taskSheet(() => { loadKanban(); loadInbox(); });
+      e.appendChild(b); box.appendChild(e);
+      return;
+    }
     box.hidden = false;
     box.innerHTML = '';
+    const addBar = document.createElement('p'); addBar.className = 'sum';
+    const addBtn = document.createElement('button'); addBtn.textContent = '+ Task for later';
+    addBtn.onclick = () => taskSheet(() => { loadKanban(); loadInbox(); });
+    addBar.appendChild(addBtn);
+    box.appendChild(addBar);
     const wrap = document.createElement('div');
     wrap.className = 'kb';
     for (const col of columns) {
@@ -2260,7 +2317,8 @@ const launcherPageHTML = `<!doctype html>
         card.appendChild(head);
         if (c.title) { const t = document.createElement('p'); t.className = 'ktitle'; t.textContent = c.title; card.appendChild(t); }
         const why = document.createElement('p'); why.className = 'kwhy'; why.textContent = c.why || ''; card.appendChild(why);
-        if (c.session) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'session ' + c.session.label + ' · ' + (STATUS_WORD[c.session.status] || c.session.status); card.appendChild(m); }
+        if (c.body) { const d = document.createElement('p'); d.className = 'kmeta kbody'; d.textContent = c.body; card.appendChild(d); }
+        if (c.session) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = sessionLine(c.session); card.appendChild(m); }
         if (c.branch) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = c.branch; card.appendChild(m); }
         if (c.handoff && c.handoff.next) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'next: ' + c.handoff.next; card.appendChild(m); }
         if (c.cost) {
@@ -2282,16 +2340,22 @@ const launcherPageHTML = `<!doctype html>
           const ub = document.createElement('button'); ub.className = 'primary'; ub.textContent = 'Unblock';
           ub.onclick = () => { ub.disabled = true; ticket(ev, { do: 'unblock' }).finally(() => { ub.disabled = false; loadKanban(); }); };
           row.appendChild(ub);
-        } else if ((col === 'Inbox' || col === 'Ready') && c.key && c.kind && c.kind.startsWith('issue.')) {
-          const go = document.createElement('button'); go.className = 'primary'; go.textContent = 'Work on it';
+        } else if ((col === 'Inbox' || col === 'Ready' || (c.kind === 'task' && col === 'Running' && !c.session)) && c.key && c.kind && (c.kind.startsWith('issue.') || c.kind === 'task')) {
+          const go = document.createElement('button'); go.className = 'primary'; go.textContent = c.picked && !c.session ? 'Work on it again' : 'Work on it';
           go.onclick = () => { go.disabled = true; workOn(ev).finally(() => { go.disabled = false; loadKanban(); }); };
           row.appendChild(go);
         }
         const board = boards[c.workspace] || {};
-        if ((board.columns || []).length && c.key) {
+        const cols = c.columns || board.columns || [];
+        if (cols.length && c.key) {
           const mv = document.createElement('button'); mv.textContent = 'Move…';
-          mv.onclick = () => moveSheet(ev, board.columns);
+          mv.onclick = () => moveSheet(Object.assign({ state: c.state }, ev), cols);
           row.appendChild(mv);
+        }
+        if (c.kind === 'task' && c.key && col !== 'Done') {
+          const dn = document.createElement('button'); dn.textContent = 'Done';
+          dn.onclick = () => { dn.disabled = true; ticket(ev, { do: 'close' }).finally(() => { dn.disabled = false; }); };
+          row.appendChild(dn);
         }
         if (row.children.length) card.appendChild(row);
         kc.appendChild(card);
@@ -2313,7 +2377,13 @@ const launcherPageHTML = `<!doctype html>
       boards = j.boards || {};
     } catch { box.hidden = true; tabCount('inbox', 0); return; }
     tabCount('inbox', events.length);
-    if (!events.length && !fixes.length) { box.hidden = true; return; }
+    if (!events.length && !fixes.length) {
+      box.hidden = false; box.innerHTML = '';
+      const e = document.createElement('p'); e.className = 'sum'; e.textContent = 'Nothing is waiting on you. ';
+      const b = document.createElement('button'); b.textContent = '+ Task for later'; b.onclick = () => taskSheet(() => { loadInbox(); loadKanban(); });
+      e.appendChild(b); box.appendChild(e);
+      return;
+    }
 
     box.innerHTML = '';
     // One line before the list: what is waiting, and what corgi did about it.
@@ -2332,7 +2402,10 @@ const launcherPageHTML = `<!doctype html>
     }
     const sum = document.createElement('p');
     sum.className = 'sum';
-    sum.textContent = 'From the tracker and your pull requests';
+    sum.textContent = 'From the tracker, your pull requests, and your own tasks \u00b7 ';
+    const addTask = document.createElement('button'); addTask.textContent = '+ Task for later';
+    addTask.onclick = () => taskSheet(() => { loadInbox(); loadKanban(); });
+    sum.appendChild(addTask);
     box.appendChild(sum);
 
     // One heading per workspace: a batch is shipped against one checkout.
@@ -2457,6 +2530,14 @@ const launcherPageHTML = `<!doctype html>
           t.textContent = ev.title;
           card.appendChild(t);
         }
+        if (ev.kind === 'task' && ev.body) {
+          const d = document.createElement('p'); d.className = 'etitle kbody'; d.textContent = ev.body; card.appendChild(d);
+        }
+        // A session on it, or one on its way: the row says so instead of
+        // sitting there as if Work on it did nothing.
+        if (ev.session || ev.picked) {
+          const m = document.createElement('p'); m.className = 'emeta'; m.textContent = ev.session ? sessionLine(ev.session) : pickedLine(ev.picked); card.appendChild(m);
+        }
         // Blocked is a column of its own: the reason, and the one button
         // that puts the ticket back in front of the unattended mode.
         if (ev.blocked) {
@@ -2487,21 +2568,27 @@ const launcherPageHTML = `<!doctype html>
           a.textContent = ev.kind && ev.kind.startsWith('pr.') ? 'Open PR' : 'Open issue';
           row.appendChild(a);
         }
-        if (ev.actionable && !ev.blocked) {
+        if (ev.actionable && !ev.blocked && !ev.session) {
           const go = document.createElement('button');
           go.className = 'primary';
-          go.textContent = 'Work on it';
+          go.textContent = ev.picked ? 'Work on it again' : 'Work on it';
           go.onclick = () => {
             go.disabled = true;
-            workOn(ev).finally(() => { go.disabled = false; });
+            workOn(ev).finally(() => { go.disabled = false; setTimeout(loadInbox, 1500); });
           };
           row.appendChild(go);
         }
-        if ((board.columns || []).length) {
+        const cols = ev.columns || board.columns || [];
+        if (cols.length) {
           const mv = document.createElement('button');
           mv.textContent = 'Move…';
-          mv.onclick = () => moveSheet(ev, board.columns);
+          mv.onclick = () => moveSheet(ev, cols);
           row.appendChild(mv);
+        }
+        if (ev.kind === 'task') {
+          const dn = document.createElement('button'); dn.textContent = 'Done';
+          dn.onclick = () => { dn.disabled = true; ticket(ev, { do: 'close' }).finally(() => { dn.disabled = false; }); };
+          row.appendChild(dn);
         }
         const ig = document.createElement('button');
         ig.textContent = 'Ignore';
@@ -2613,6 +2700,7 @@ const launcherPageHTML = `<!doctype html>
     if (model) body.model = model;
     if (profile) body.profile = profile;
     try {
+      body.from = 'page';
       const r = await fetch('/launch/work-on', { method: 'POST', headers: auth, body: JSON.stringify(body) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { toast(j.error || 'could not start it', true); return; }
@@ -3656,9 +3744,16 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		// Session is the live Claude session on this ticket, when one is:
 		// opened for it by "Work on it", or on a branch named after it.
 		Session *CardSess `json:"session,omitempty"`
+		// Picked is Work on it pressed, and by whom, while fresh.
+		Picked *CardPick `json:"picked,omitempty"`
+		// Columns is where a task can be moved; a tracker ticket's columns
+		// are under boards, by workspace.
+		Columns []string `json:"columns,omitempty"`
 	}
 	out := []row{}
 	onTicket := sessionsOnTickets(dir)
+	picks := watch.LoadPicks(dir)
+	now := time.Now()
 	// The events log keeps the column a ticket arrived in. A move made since
 	// then is the truth, so it wins.
 	moved := watch.LoadStateLog(dir)
@@ -3688,6 +3783,12 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			r.Blocked, r.BlockedBy = b.Reason, b.By
 		}
 		r.Session = onTicket[strings.ToLower(e.Ref)]
+		if p, ok := picks.Get(e.Key); ok && now.Sub(p.At) <= watch.PickFresh {
+			r.Picked = &CardPick{At: p.At, By: p.By}
+		}
+		if e.Kind == watch.KindTask {
+			r.Columns = watch.TaskColumns
+		}
 		out = append(out, r)
 	}
 	fixes := []map[string]any{}
@@ -3752,8 +3853,12 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		Key    string `json:"key"`
 		Do     string `json:"do"`
 		Status string `json:"status"`
+		// For a task's edit: what changes; an empty field keeps what it had.
+		Title     string `json:"title"`
+		Body      string `json:"body"`
+		Workspace string `json:"workspace"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
 		return
 	}
@@ -3785,6 +3890,48 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 			go writeWorkpad(dir, event.Workspace, event.Ref, "Blocked", "")
 		}
 		writeLaunchJSON(w, map[string]any{"done": "unblocked " + event.Ref})
+		return
+	}
+	// A task of your own has no tracker: a move is a move of the file, close
+	// is Done, and it can be edited or removed outright.
+	if event.Kind == watch.KindTask {
+		tasks := watch.LoadTasks(dir)
+		now := time.Now()
+		switch strings.TrimSpace(req.Do) {
+		case "move":
+			t, err := tasks.Move(event.Key, req.Status, now)
+			if err != nil {
+				writeLaunchError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeLaunchJSON(w, map[string]any{"done": t.Ref() + " → " + t.State, "state": t.State})
+		case "close":
+			t, err := tasks.Move(event.Key, "Done", now)
+			if err != nil {
+				writeLaunchError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeLaunchJSON(w, map[string]any{"done": t.Ref() + " done", "state": t.State})
+		case "edit":
+			t, err := tasks.Edit(event.Key, req.Title, req.Body, req.Workspace, now)
+			if err != nil {
+				writeLaunchError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeLaunchJSON(w, map[string]any{"done": t.Ref() + " changed"})
+		case "remove":
+			t, err := tasks.Remove(event.Key)
+			if err != nil {
+				writeLaunchError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			_ = watch.LoadState(dir).Ignore(event.Key)
+			writeLaunchJSON(w, map[string]any{"done": t.Ref() + " removed"})
+		case "assign":
+			writeLaunchJSON(w, map[string]any{"done": event.Ref + " is yours already"})
+		default:
+			writeLaunchError(w, http.StatusBadRequest, "a task takes move, close, edit, remove or ignore")
+		}
 		return
 	}
 	if event.Workspace == "" {
@@ -3897,6 +4044,7 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		Window  string   `json:"window"`
 		Model   string   `json:"model"`
 		Profile string   `json:"profile"`
+		From    string   `json:"from"` // phone (default) or page
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -3911,7 +4059,11 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	if len(keys) == 0 && strings.TrimSpace(req.Key) != "" {
 		keys = []string{req.Key}
 	}
-	c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: req.Window, Model: req.Model, Profile: req.Profile, Source: "phone"})
+	source := "phone"
+	if strings.TrimSpace(req.From) == "page" {
+		source = "page"
+	}
+	c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: req.Window, Model: req.Model, Profile: req.Profile, Source: source})
 	if status != 0 {
 		writeLaunchError(w, status, msg)
 		return
@@ -4001,6 +4153,17 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 	// says someone has it. Off unless the workspace names a pickup status,
 	// and never allowed to hold up the session it belongs to.
 	go markPickedUp(dir, events)
+	// The board says who asked and that a session is on its way; a task of
+	// your own moves to Doing at once.
+	now := time.Now()
+	picks := watch.LoadPicks(dir)
+	tasks := watch.LoadTasks(dir)
+	for _, e := range events {
+		_ = picks.Set(e.Key, opt.Source, now)
+		if e.Kind == watch.KindTask {
+			_, _ = tasks.Move(e.Key, "Doing", now)
+		}
+	}
 	args := []string{}
 	if ws := strings.TrimSpace(events[0].Workspace); ws != "" {
 		args = append(args, "--workspace", ws)
@@ -4116,4 +4279,46 @@ func sessionsOnTickets(dir string) map[string]*CardSess {
 		}
 	}
 	return out
+}
+
+// launchTaskHandler writes a task of your own onto the board: a title, a
+// description, the workspace it is for. It lands in the inbox and the Inbox
+// column like a ticket, and "Work on it" opens a session with the
+// description as the prompt.
+func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		tasks := watch.LoadTasks(dir).Events(time.Now())
+		writeLaunchJSON(w, map[string]any{"tasks": tasks, "columns": watch.TaskColumns})
+	case http.MethodPost:
+		var req struct {
+			Title     string `json:"title"`
+			Body      string `json:"body"`
+			Workspace string `json:"workspace"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+			return
+		}
+		if ws := strings.TrimSpace(req.Workspace); ws != "" {
+			if _, err := workspaceRoot(ws); err != nil {
+				writeLaunchError(w, http.StatusBadRequest, "no such workspace: "+ws)
+				return
+			}
+		}
+		t, err := watch.LoadTasks(dir).Add(req.Title, req.Body, req.Workspace, "phone", time.Now())
+		if err != nil {
+			writeLaunchError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"done": t.Ref() + " on the board", "key": t.Key(), "ref": t.Ref(), "task": t})
+	default:
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the tasks, or POST {title, body, workspace} to add one")
+	}
 }

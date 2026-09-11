@@ -1133,16 +1133,24 @@ func (l *FixLog) dropDeferred(key string) {
 	l.Deferred = kept
 }
 
-// RecentEvents is the tail of the events log, newest first, at most limit.
-// A line that no longer parses is skipped rather than failing the read.
+// RecentEvents is the tail of the events log, newest first, at most limit,
+// with your own tasks ahead of it: they are on the board until finished,
+// however much else has arrived since. A line that no longer parses is
+// skipped rather than failing the read.
 func RecentEvents(agentDir string, limit int) []Event {
+	out := TaskEvents(agentDir, time.Now())
+	if len(out) > limit {
+		out = out[:limit]
+	}
 	data, err := os.ReadFile(filepath.Join(agentDir, "watch", "events.jsonl"))
 	if err != nil {
-		return nil
+		return out
 	}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	out := make([]Event, 0, limit)
 	seen := map[string]struct{}{}
+	for _, e := range out {
+		seen[e.Key] = struct{}{}
+	}
 	for i := len(lines) - 1; i >= 0 && len(out) < limit; i-- {
 		var e Event
 		if json.Unmarshal([]byte(lines[i]), &e) != nil || e.Key == "" {

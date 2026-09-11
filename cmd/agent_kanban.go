@@ -48,6 +48,15 @@ type KanbanCard struct {
 	Session   *CardSess `json:"session,omitempty"`
 	Fix       *CardFix  `json:"fix,omitempty"`
 	Handoff   *CardHand `json:"handoff,omitempty"`
+	// Picked is "Work on it" pressed and by whom — kept on the card while
+	// the session it asked for is still on its way, and after, as history.
+	Picked *CardPick `json:"picked,omitempty"`
+	// Columns is where this card can be moved: a task's own five; a tracker
+	// ticket's come from the board cache, keyed by workspace.
+	Columns []string `json:"columns,omitempty"`
+	// Body is the description, for a task — a tracker ticket's lives on the
+	// tracker.
+	Body string `json:"body,omitempty"`
 	// Cost is what the ticket has cost so far: the unattended runs (with
 	// claude's own receipt) plus every session that sat on its branch.
 	Cost      *CardCost `json:"cost,omitempty"`
@@ -65,6 +74,12 @@ type CardSess struct {
 	ID     string `json:"id"`
 	Label  string `json:"label"`
 	Status string `json:"status"`
+	PR     string `json:"pr,omitempty"`
+}
+
+type CardPick struct {
+	At time.Time `json:"at"`
+	By string    `json:"by,omitempty"`
 }
 
 type CardFix struct {
@@ -91,6 +106,7 @@ type kanbanInputs struct {
 	fixes    *watch.FixLog
 	sessions []sessions.Session
 	packets  map[string][]handoff.Packet // by workspace id
+	picks    *watch.PickLog
 	now      time.Time
 	// sessionTokens is a seam: what one session has spent, from its transcript.
 	sessionTokens func(s sessions.Session) (int64, bool)
@@ -122,6 +138,26 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 		c := card(e.Workspace, e.Ref)
 		if c.Key == "" {
 			c.Key, c.Title, c.URL, c.Kind, c.State, c.UpdatedAt = e.Key, firstLineOf(e.Title), e.URL, string(e.Kind), current, e.At
+		}
+		// A task of your own sits where you put it: its column is its state.
+		// A session or a run on it still moves it along below.
+		if e.Kind == watch.KindTask {
+			c.Body, c.Columns = e.Body, watch.TaskColumns
+			switch watch.TaskColumn(current) {
+			case "Doing":
+				c.Column, c.Why = ColRunning, "picked up"
+			case "Review":
+				c.Column, c.Why = ColReview, "in review"
+			case "Done", "Canceled":
+				if in.now.Sub(e.At) > 7*24*time.Hour {
+					delete(byRef, e.Workspace+"/"+e.Ref)
+					continue
+				}
+				c.Column, c.Why = ColDone, strings.ToLower(watch.TaskColumn(current))
+			default:
+				c.Why = "waiting in the inbox"
+			}
+			continue
 		}
 		if over := watch.Settled(e, current); over != "" && strings.HasPrefix(over, "picked up") {
 			c.Column, c.Why = ColReady, over
@@ -203,8 +239,10 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 			if !containsFold(refs, c.Ref) {
 				continue
 			}
-			c.Session = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status)}
-			c.Branch = s.Branch
+			c.Session = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status), PR: s.PR}
+			if s.Branch != "" {
+				c.Branch = s.Branch
+			}
 			if in.sessionTokens != nil {
 				if tok, ok := in.sessionTokens(s); ok {
 					if c.Cost == nil {
@@ -214,12 +252,33 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 					c.Cost.Sessions++
 				}
 			}
-			if c.Column == ColInbox || c.Column == ColReady {
-				where := s.Branch
-				if where == "" || !strings.EqualFold(handoff.RefFromBranch(where), c.Ref) {
-					where = "it"
-				}
-				c.Column, c.Why = ColRunning, "session "+c.Session.Label+" is on "+where
+			if c.Column == ColInbox || c.Column == ColReady || c.Column == ColRunning {
+				c.Column, c.Why = ColRunning, sessionWhy(c.Session, s)
+			}
+			// A pull request from the session is the ticket in review.
+			if s.PR != "" && (c.Column == ColRunning || c.Column == ColInbox || c.Column == ColReady) {
+				c.Column, c.Why = ColReview, "session "+c.Session.Label+" opened a pull request"
+			}
+		}
+	}
+
+	// "Work on it" pressed, no session yet: the card says so, and by whom,
+	// instead of sitting in the inbox as if nothing happened. A pick with a
+	// session on the card is just history.
+	if in.picks != nil {
+		for _, c := range byRef {
+			p, ok := in.picks.Get(c.Key)
+			if !ok {
+				continue
+			}
+			c.Picked = &CardPick{At: p.At, By: p.By}
+			if c.Session != nil || c.Column == ColDone || c.Column == ColReview {
+				continue
+			}
+			if in.now.Sub(p.At) <= watch.PickFresh {
+				c.Column, c.Why = ColRunning, "picked from the "+pickedFrom(p.By)+" "+roughAge(in.now.Sub(p.At))+" ago · waiting for a session to open"
+			} else if c.Column == ColRunning && c.Kind == string(watch.KindTask) {
+				c.Why = "picked from the " + pickedFrom(p.By) + " " + roughAge(in.now.Sub(p.At)) + " ago · no session came — Work on it again"
 			}
 		}
 	}
@@ -294,6 +353,7 @@ func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 		moved:   watch.LoadStateLog(dir),
 		fixes:   state.Fixes,
 		packets: map[string][]handoff.Packet{},
+		picks:   watch.LoadPicks(dir),
 		now:     now,
 	}
 	if rep, err := readBoard(dir); err == nil {
@@ -435,4 +495,34 @@ func containsFold(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// sessionWhy is the one line a card says while a session is on it.
+func sessionWhy(c *CardSess, s sessions.Session) string {
+	switch s.Status {
+	case sessions.StatusNeedsInput:
+		return "session " + c.Label + " needs you"
+	case sessions.StatusWorking:
+		return "session " + c.Label + " is working on it"
+	case sessions.StatusDone:
+		return "session " + c.Label + " finished a turn — check it, then move the card"
+	case sessions.StatusLimited:
+		return "session " + c.Label + " is limited; continues later"
+	}
+	return "session " + c.Label + " is on it"
+}
+
+// pickedFrom is the surface that pressed Work on it, in the words a card uses.
+func pickedFrom(by string) string {
+	switch by {
+	case "phone":
+		return "phone"
+	case "cli":
+		return "command line"
+	case "editor":
+		return "editor"
+	case "page", "dashboard":
+		return "page"
+	}
+	return "board"
 }
