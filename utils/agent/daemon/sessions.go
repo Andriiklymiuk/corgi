@@ -339,6 +339,7 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 			nextSweep = now.Add(sweepInterval)
 			d.Sessions.Sweep(now)
 			d.sampleAccounts(now)
+			d.autoContinue(ctx, now)
 		}
 		d.flushSessions()
 	}

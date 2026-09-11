@@ -50,6 +50,8 @@ type Registry struct {
 	notice   string
 	noticeAt time.Time
 	accounts []Account
+	// AutoContinue is copied onto every snapshot; the daemon sets it.
+	AutoContinue bool
 	// OnTransition, when set, is told about every status change after it
 	// happened. The daemon turns some into notifications and metrics.
 	OnTransition func(s Session, from, to Status, now time.Time)
@@ -79,10 +81,13 @@ type State struct {
 	FrontSession string `json:"frontSession,omitempty"`
 	// Notice is the last board-level failure — a `new` with no window to
 	// open in, say — with its time, for a key to flash once.
-	Notice   string    `json:"notice,omitempty"`
-	NoticeAt time.Time `json:"noticeAt,omitempty"`
-	Sessions []Session `json:"sessions"`
-	Windows  []Window  `json:"windows,omitempty"`
+	// AutoContinue says the daemon types "continue" into limited sessions
+	// itself, so an editor with the same feature can stand down.
+	AutoContinue bool      `json:"autoContinue,omitempty"`
+	Notice       string    `json:"notice,omitempty"`
+	NoticeAt     time.Time `json:"noticeAt,omitempty"`
+	Sessions     []Session `json:"sessions"`
+	Windows      []Window  `json:"windows,omitempty"`
 	// Accounts is every account the sessions run under, with its limits.
 	Accounts []Account `json:"accounts,omitempty"`
 }
@@ -117,6 +122,10 @@ type Slot struct {
 	PR      string `json:"pr,omitempty"`
 	// TurnS is how long the current turn has been running, 0 unless working.
 	TurnS int `json:"turnS,omitempty"`
+	// Limit is quota or overload on a limited key; ResumeAt when the daemon
+	// will continue it on its own, so the key can say "continues 14:02".
+	Limit    LimitKind `json:"limit,omitempty"`
+	ResumeAt time.Time `json:"resumeAt,omitempty"`
 }
 
 // New returns a registry persisted at path, with a board of size keys.
@@ -292,8 +301,8 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 		r.setStatus(s, StatusDone, now)
 	case "StopFailure":
 		s.Tool, s.Pending = "", nil
-		if limited, reset := LimitReset(ev.Error, ev.Message); limited {
-			r.applyLimit(s, reset, now)
+		if kind, reset, limited := ClassifyLimit(ev.Error, ev.Message); limited {
+			r.applyLimit(s, kind, reset, now)
 			return
 		}
 		s.Detail = firstNonEmpty(ev.Error, "api error")
@@ -356,17 +365,21 @@ func (r *Registry) applyEnd(s *Session, ev Event, now time.Time) {
 
 // applyLimit: the account is out of quota. Not a question, so not
 // needs_input; the key says when to come back instead.
-func (r *Registry) applyLimit(s *Session, reset string, now time.Time) {
+func (r *Registry) applyLimit(s *Session, kind LimitKind, reset string, now time.Time) {
 	s.Detail = "limit reached"
+	if kind == LimitOverload {
+		s.Detail = "API overloaded"
+	}
 	if reset != "" {
 		s.Detail = "resets " + reset
 	}
+	s.Limit, s.ResumeAt = kind, time.Time{}
 	r.setStatus(s, StatusLimited, now)
 }
 
 func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
-	if limited, reset := LimitReset("", ev.Message); limited {
-		r.applyLimit(s, reset, now)
+	if kind, reset, limited := ClassifyLimit("", ev.Message); limited {
+		r.applyLimit(s, kind, reset, now)
 		return
 	}
 	switch ev.Notification {
@@ -517,6 +530,14 @@ func (r *Registry) setStatus(s *Session, st Status, now time.Time) {
 	from := s.Status
 	s.Status = st
 	s.StatusSince = now
+	if st != StatusLimited {
+		s.Limit, s.ResumeAt = "", time.Time{}
+	}
+	// A turn that finished or asked something is real progress; the count
+	// of continues is for one limit episode, not the session's life.
+	if st == StatusDone || st == StatusNeedsInput {
+		s.Resumes = 0
+	}
 	if r.OnTransition != nil {
 		r.OnTransition(*s, from, st, now)
 	}
@@ -845,6 +866,33 @@ func (r *Registry) SetNote(ref, note string) error {
 	s.Note = note
 	r.touch()
 	return nil
+}
+
+// PlanResume records when the daemon will continue a limited session; a
+// zero time clears the plan. Nothing else changes, so no transition fires.
+func (r *Registry) PlanResume(id string, at time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[id]
+	if !ok || s.Status != StatusLimited || s.ResumeAt.Equal(at) {
+		return false
+	}
+	s.ResumeAt = at
+	return true
+}
+
+// MarkResumed counts one continue typed into a limited session and clears
+// the plan; the next hook event decides whether it worked.
+func (r *Registry) MarkResumed(id string) (Session, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[id]
+	if !ok {
+		return Session{}, false
+	}
+	s.Resumes++
+	s.ResumeAt = time.Time{}
+	return *s, true
 }
 
 // SetAccounts replaces the accounts block. Sessions per account are counted
@@ -1198,7 +1246,7 @@ func (r *Registry) Snapshot(now time.Time) State {
 
 func (r *Registry) snapshotLocked(now time.Time) State {
 	st := State{UpdatedAt: r.updatedAt, Size: r.board.Size, Overflow: r.board.Hidden(),
-		LastFocusWindow: r.lastFocus.WindowID, Notice: r.notice, NoticeAt: r.noticeAt}
+		LastFocusWindow: r.lastFocus.WindowID, Notice: r.notice, NoticeAt: r.noticeAt, AutoContinue: r.AutoContinue}
 	if st.UpdatedAt.IsZero() {
 		st.UpdatedAt = now
 	}
@@ -1219,6 +1267,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		sl.SessionID, sl.Label, sl.Profile, sl.Status = s.ID, r.displayLocked(s), s.Profile, s.Status
 		sl.Detail, sl.Host, sl.FocusError, sl.FocusAt = s.Detail, s.Host.Kind, s.FocusError, s.FocusAt
 		sl.Note, sl.Stuck = s.Note, s.Stuck
+		sl.Limit, sl.ResumeAt = s.Limit, s.ResumeAt
 		sl.Branch, sl.Summary, sl.PR = s.Branch, s.Summary, s.PR
 		if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
 			sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())
