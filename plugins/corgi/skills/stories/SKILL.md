@@ -672,6 +672,17 @@ issue link.
   **draft** PR as _in progress_ and revert this move — the review state only sticks once
   the PR is marked _ready_. Set it once; don't fight a revert.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
+- **Evidence in the body, always.** A reviewer who did not watch the run needs
+  four things to trust it, and they never appear on their own: a `## Evidence`
+  section with (1) **changed files with a reason each** — one line per file or
+  group, why it changed, not what; (2) **commands run and their results** — the
+  test, build and check commands verbatim with pass/fail, so a reviewer can
+  re-run exactly that; (3) **tests → acceptance criteria** — each new or changed
+  test mapped to the criterion it protects, core flow first; a criterion with no
+  test says so; (4) **known limitations and residual risk** — what was left out,
+  what could still go wrong, in one line each. Facts only, no adjectives; skip
+  nothing you did, invent nothing you did not. Multi-repo → per PR, its own
+  files. Before the `Deferred` list and the risk card.
 - **Run-locally line in the body** — the same one-paste
   `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report) so a
   reviewer spins the branch up without hunting.
