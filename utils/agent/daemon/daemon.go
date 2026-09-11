@@ -106,6 +106,10 @@ type Daemon struct {
 	// a run left, the reason it is blocked. Nil when the workspace has no
 	// tracker token.
 	Workpad func(workspace, ref, section, text string)
+	// Isolate gives a workspace's repositories worktrees on a branch and
+	// returns their directories, for a watch with isolate on. Nil means
+	// runs happen in the checkout.
+	Isolate func(dir, branch string) ([]string, error)
 	Events  *events.Log
 	// CaptureBrief probes what an ending session left on disk. Injected because
 	// enumerating a stack's repositories means parsing a compose file, which the
