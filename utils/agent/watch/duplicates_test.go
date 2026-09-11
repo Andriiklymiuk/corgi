@@ -288,3 +288,46 @@ func TestOldIgnoredListMovesOutOfStateJSON(t *testing.T) {
 		t.Fatal("the move lost the ignore")
 	}
 }
+
+// Two failed runs in a row on one ticket trip the breaker; a person
+// unblocks, and the runs before that no longer count toward the next trip.
+func TestTheBreakerCountsFailuresPerTicket(t *testing.T) {
+	dir := t.TempDir()
+	l := LoadFixLog(dir)
+	now := time.Now()
+	e := Event{Key: "k1", Ref: "ABC-1", Workspace: "api"}
+	l.StartFor(e, now)
+	l.Finish("k1", nil, "", "build failed", now)
+	if l.FailedInARow("api", "ABC-1") != 1 {
+		t.Fatal("one failure")
+	}
+	l.StartFor(Event{Key: "k1b", Ref: "ABC-1", Workspace: "api"}, now)
+	l.Finish("k1b", nil, "", "not started: 3/h cap", now)
+	if l.FailedInARow("api", "ABC-1") != 1 {
+		t.Fatal("a run that did not start is not a failure")
+	}
+	l.StartFor(Event{Key: "k1c", Ref: "ABC-1", Workspace: "api"}, now)
+	l.Finish("k1c", nil, "", "tests red", now)
+	if l.FailedInARow("api", "ABC-1") != BreakerAfter {
+		t.Fatalf("two: %d", l.FailedInARow("api", "ABC-1"))
+	}
+	if l.FailedInARow("api", "ABC-2") != 0 {
+		t.Fatal("another ticket is untouched")
+	}
+	l.Block("api", "ABC-1", "tests red", BlockedByBreaker, now)
+	if b, ok := LoadFixLog(dir).Blocked("api", "ABC-1"); !ok || b.By != BlockedByBreaker || b.Reason != "tests red" {
+		t.Fatalf("blocked survives a restart: %+v %v", b, ok)
+	}
+	if !LoadFixLog(dir).Unblock("api", "ABC-1") {
+		t.Fatal("unblocked")
+	}
+	l = LoadFixLog(dir)
+	if _, ok := l.Blocked("api", "ABC-1"); ok || l.FailedInARow("api", "ABC-1") != 0 {
+		t.Fatal("an unblock forgives the runs before it")
+	}
+	l.StartFor(Event{Key: "k1d", Ref: "ABC-1", Workspace: "api"}, now)
+	l.Finish("k1d", []string{"https://github.com/a/b/pull/1"}, "", "", now)
+	if l.FailedInARow("api", "ABC-1") != 0 {
+		t.Fatal("a run that opened a PR clears the count")
+	}
+}

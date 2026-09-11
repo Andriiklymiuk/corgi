@@ -565,6 +565,7 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			URL       string    `json:"url,omitempty"`
 			State     string    `json:"state,omitempty"`
 			At        time.Time `json:"at"`
+			Blocked   string    `json:"blocked,omitempty"`
 		}
 		events := []eventRow{}
 		moved := watch.LoadStateLog(dir)
@@ -582,8 +583,12 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			if watch.Settled(e, current) != "" {
 				continue
 			}
-			events = append(events, eventRow{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),
-				Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: current, At: e.At})
+			er := eventRow{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),
+				Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: current, At: e.At}
+			if b, ok := state.Fixes.Blocked(e.Workspace, e.Ref); ok {
+				er.Blocked = b.Reason
+			}
+			events = append(events, er)
 		}
 		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events})
 		return
