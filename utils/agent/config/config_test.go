@@ -375,3 +375,22 @@ func TestApplyProfileEmptyNameIsANoOp(t *testing.T) {
 		t.Fatalf("empty profile must pass through, got %+v, %v", got, err)
 	}
 }
+
+// The model policy: strong model to plan and review, cheap one to execute,
+// a kind's own entry beats the phase, and a workspace overlays defaults
+// field by field.
+func TestModelPolicyPicksByPhaseAndKind(t *testing.T) {
+	var none *ModelPolicy
+	if none.ForAuto() != ModelAutoDefault || none.ForKind("issue.new") != ModelPlanDefault || none.ForKind("ci.failed") != ModelExecuteDefault || none.ForKind("review.requested") != ModelReviewDefault || none.ForEscalation() != ModelEscalateDefault {
+		t.Fatal("nil policy is the defaults")
+	}
+	base := &ModelPolicy{Execute: "sonnet[1m]", Kinds: map[string]string{"ci.failed": "haiku"}}
+	over := &ModelPolicy{Plan: "fable", Kinds: map[string]string{"issue.comment": "haiku"}}
+	m := overlayModels(base, over)
+	if m.ForKind("issue.new") != "fable" || m.ForKind("pr.comment") != "sonnet[1m]" || m.ForKind("ci.failed") != "haiku" || m.ForKind("issue.comment") != "haiku" {
+		t.Fatalf("overlay: %+v", m)
+	}
+	if base.Kinds["issue.comment"] != "" {
+		t.Fatal("overlay must not write into the base map")
+	}
+}
