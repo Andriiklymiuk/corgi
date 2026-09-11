@@ -15,6 +15,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/events"
+	"andriiklymiuk/corgi/utils/agent/handoff"
 	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
@@ -534,7 +535,10 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 		"and fix what you find — nobody has looked at this but you. " +
 		"Put this line at the end of the pull request body so whoever reviews it knows where it came from: " +
 		trail + "\n" +
-		"Say plainly at the end what you changed and what your own review found."
+		"Say plainly at the end what you changed and what your own review found.\n" +
+		"If you stop with work remaining, blocked, or unsure, leave a handoff for the next run before you end: " +
+		"`corgi agent handoff --ref " + e.Ref + " --done … --remaining … --decision … --uncertain … --next … --verify \"<the check you ran>\"` " +
+		"(one flag per item; short sentences; no secrets)."
 }
 
 // fixArgs is claude's argv for one event.
@@ -546,7 +550,10 @@ func fixArgs(spec WatchSpec, e watch.Event) []string {
 // second attempt continues rather than starting at the ticket again.
 func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 	prompt := fixPrompt(e) + unattendedSuffix(spec, e)
-	if handover = strings.TrimSpace(handover); handover != "" {
+	if p, ok := packetFor(spec.Dir, e.Ref); ok {
+		prompt += "\n\nAn earlier run left a handoff for this ticket. Read it first; it is typed state, not a transcript. " +
+			"Its verification was re-run at the current head: " + packetTrust(spec.Dir, p) + "\n" + p.Markdown()
+	} else if handover = strings.TrimSpace(handover); handover != "" {
 		prompt += "\n\nAn earlier run on this stopped part-way. This is the last thing it said — " +
 			"treat it as notes, not as truth, and check anything it claims before building on it:\n" + handover
 	}
@@ -615,6 +622,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	// What the window was at before the run, so the receipt is the difference.
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
 	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
+	started := time.Now()
 	cmd := claudeCommand(ctx, spec.Dir, env, fixArgsWith(spec, e, handover)...)
 	cmd.Stdin = nil
 	out, runErr := cmd.Output()
@@ -624,7 +632,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.watchState.Fixes.Finish(e.Key, nil, "", runErr.Error(), time.Now())
 		// What it managed to say before it stopped is worth more than the
 		// error on its own: the next attempt starts from there.
-		d.watchState.Fixes.SetHandover(e.Key, watch.TailLines(string(out), 6), time.Now())
+		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
 			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
@@ -639,7 +647,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		body += " — " + note
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
-	d.watchState.Fixes.SetHandover(e.Key, watch.TailLines(string(out), 6), time.Now())
+	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 	// It opened something, so the ticket is no longer being worked on — it is
 	// waiting on a reviewer, and the board should say so without anyone
 	// dragging it.
@@ -826,4 +834,66 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 			}
 		}
 	}
+}
+
+// packetFor is the handoff an earlier run left for a ticket, if it is
+// recent enough to still describe the code.
+func packetFor(dir, ref string) (handoff.Packet, bool) {
+	p, err := handoff.Read(dir, ref)
+	if err != nil || time.Since(p.WrittenAt) > handoff.MaxAge {
+		return handoff.Packet{}, false
+	}
+	return p, true
+}
+
+// packetTrust re-runs the packet's own check so the next run knows whether
+// to build on it or to start from the ticket and the diff.
+func packetTrust(dir string, p handoff.Packet) string {
+	if p.Verification == nil {
+		return "it recorded no check, so trust nothing in it you have not confirmed."
+	}
+	v, ok := handoff.Verify(worktreeOf(dir, p), p, runShellQuiet)
+	if ok {
+		return fmt.Sprintf("`%s` passes at %s, so its done list can be trusted.", v.Cmd, shortSHA(v.At))
+	}
+	if n, err := handoff.CommitsSince(worktreeOf(dir, p), p.Where.Head); err == nil && n > 0 {
+		return fmt.Sprintf("`%s` exits %d and the branch moved %d commit(s) since — start from the ticket and the diff, not the packet.", v.Cmd, v.Exit, n)
+	}
+	return fmt.Sprintf("`%s` exits %d now — start from the ticket and the diff, not the packet.", v.Cmd, v.Exit)
+}
+
+// runHandover is what a run leaves for the next one: the packet it wrote
+// during the run when it wrote one, else the last lines it said.
+func runHandover(dir, ref string, started time.Time, out string) string {
+	if p, err := handoff.Read(dir, ref); err == nil && !p.WrittenAt.Before(started) {
+		return "handoff: " + p.Summary() + " — " + handoff.MarkdownPath(dir, ref)
+	}
+	return watch.TailLines(out, 6)
+}
+
+func worktreeOf(dir string, p handoff.Packet) string {
+	if p.Where.Worktree != "" {
+		return filepath.Join(dir, p.Where.Worktree)
+	}
+	return dir
+}
+
+func runShellQuiet(dir, command string) (int, error) {
+	c := exec.Command("sh", "-c", command)
+	c.Dir = dir
+	err := c.Run()
+	if err == nil {
+		return 0, nil
+	}
+	if ee, ok := err.(*exec.ExitError); ok {
+		return ee.ExitCode(), err
+	}
+	return 1, err
+}
+
+func shortSHA(s string) string {
+	if len(s) > 7 {
+		return s[:7]
+	}
+	return s
 }

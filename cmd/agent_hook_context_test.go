@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/handoff"
 	"bytes"
 	"encoding/json"
 	"os"
@@ -90,5 +91,26 @@ func TestRoughAge(t *testing.T) {
 		if got := roughAge(d); got != want {
 			t.Errorf("%v = %q, want %q", d, got, want)
 		}
+	}
+}
+
+// A session that starts on a branch with a handoff is told to read it
+// first, and how far the code has moved since it was written.
+func TestSessionStartPointsAtTheHandoffForTheBranch(t *testing.T) {
+	root := t.TempDir()
+	if err := handoff.Write(root, handoff.Packet{Ref: "ABC-5", State: handoff.StateInputRequired, Next: "web side",
+		Where: handoff.Where{Branch: "feature/ABC-5/x", Head: "deadbeef"}, Verification: &handoff.Verification{Cmd: "true"}}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	line := handoffLine(root, "feature/ABC-5/x", now)
+	if !strings.Contains(line, "handoff for ABC-5") || !strings.Contains(line, "read ") || !strings.Contains(line, "verify ABC-5") {
+		t.Fatalf("line: %q", line)
+	}
+	if handoffLine(root, "main", now) != "" {
+		t.Fatal("no packet for main")
+	}
+	if handoffLine(root, "feature/ABC-5/x", now.Add(8*24*time.Hour)) != "" {
+		t.Fatal("a week-old packet is not offered")
 	}
 }
