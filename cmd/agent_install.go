@@ -141,10 +141,16 @@ func installLoginService() error {
 	if err != nil {
 		return err
 	}
-	// Deliberately NOT EvalSymlinks. Homebrew installs corgi as a symlink into
-	// a versioned Cellar directory; resolving it would bake that version into
-	// the service file, and the next `brew upgrade corgi` would delete the path
-	// and agent mode would silently stop starting at login.
+	// Deliberately NOT EvalSymlinks on Linux. Homebrew installs corgi as a
+	// symlink into a versioned directory; resolving it would bake that version
+	// into the service file, and the next upgrade would delete the path and
+	// agent mode would silently stop starting at login. macOS goes further and
+	// runs its own copy, see agent_install_stable.go.
+	if daemonRunsFromStableCopy() {
+		if binary, err = refreshStableDaemonBinary(binary); err != nil {
+			return fmt.Errorf("copy corgi for the daemon: %w", err)
+		}
+	}
 
 	logDir, err := agentDir()
 	if err != nil {
