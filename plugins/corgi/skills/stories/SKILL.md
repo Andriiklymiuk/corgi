@@ -40,6 +40,25 @@ superpowers checkpoints.
 **Tier ≠ span.** Complexity axis vs single/multi-service (Phase 4). Multi-service
 adjustment is still an adjustment. Most stories = adjustments → fastest path.
 
+**How the tier is picked.** `--mode bug|feature|adjustment` in the invocation
+wins. Else the ticket's own words: type or labels `bug`, `defect`, `regression`,
+`incident`, `hotfix` → **Bug**; `feature`, `story`, `epic`, `design` → **Feature**;
+anything else → **Adjustment** until Phase 1 proves otherwise. If the diff fits
+one sentence, it is an adjustment whatever the label says.
+
+**Risk lane — always a plan, whatever the size.** A change that touches
+migrations, auth, sessions, permissions, payments, billing, secrets or a
+cross-service contract gets Feature rigor even when it is three lines: the
+interface or schema change is written and confirmed first (Phase 2 gate never
+collapses for it), and the spec names the rollback. The workspace may extend
+the list with `riskPaths:` under its entry in the user agent config.
+
+**Bug lane — logs first, theories second.** Before a hypothesis: reproduce
+against the running stack (`corgi run`, `corgi logs <svc> --errors-only`,
+`corgi_wait_for_log`), quote the failing line or request, then write the
+regression test that fails on `<base>`, then the smallest fix. No plan file, no
+subagent fan-out: a bug is a straight line from the log to the test.
+
 **Express lane — small-surface adjustment.** Reuses the Phase 2 fast-path's _tier +
 span_ bar — **adjustment/bug, single service, no cross-service contract** — but NOT
 its "one item / one sentence / no open question" half: that gates the approval

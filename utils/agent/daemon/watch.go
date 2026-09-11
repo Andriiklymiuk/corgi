@@ -511,7 +511,7 @@ func firstNonEmpty(a, b string) string {
 // never merge.
 var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	watch.KindIssueNew: func(e watch.Event) string {
-		return "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + e.Ref
+		return "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + e.Ref + storyMode(e)
 	},
 	watch.KindIssueComment: func(e watch.Event) string {
 		return fmt.Sprintf("A new comment on %s from %s says: %q. Read it and decide. "+
@@ -1115,4 +1115,19 @@ func fixModel(spec WatchSpec, e watch.Event, failedBefore int) string {
 		return spec.Models.ForEscalation()
 	}
 	return spec.Models.ForKind(string(e.Kind))
+}
+
+// storyMode tells the stories skill which lane the ticket's own labels put
+// it in, so a bug goes logs-first and a feature gets a plan; nothing when
+// the labels say nothing.
+func storyMode(e watch.Event) string {
+	for _, l := range e.Labels {
+		switch strings.ToLower(strings.TrimSpace(l)) {
+		case "bug", "defect", "regression", "incident", "hotfix":
+			return " --mode bug"
+		case "feature", "story", "epic", "design":
+			return " --mode feature"
+		}
+	}
+	return ""
 }
