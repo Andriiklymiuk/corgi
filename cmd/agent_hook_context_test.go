@@ -114,3 +114,19 @@ func TestSessionStartPointsAtTheHandoffForTheBranch(t *testing.T) {
 		t.Fatal("a week-old packet is not offered")
 	}
 }
+
+func TestSessionStartNamesTheStack(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "corgi-compose.yml"), []byte("services:\n  api:\n    port: 8080\n  web:\n    port: 3000\ndb_services:\n  db:\n    driver: postgres\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	line := stackLine(root)
+	for _, want := range []string{"stack: api :8080", "web :3000", "db (postgres)", "corgi_http"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("line lacks %q: %s", want, line)
+		}
+	}
+	if stackLine(t.TempDir()) != "" {
+		t.Fatal("no compose, no line")
+	}
+}
