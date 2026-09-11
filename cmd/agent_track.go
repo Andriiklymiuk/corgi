@@ -36,11 +36,18 @@ const (
 	hookEmit      = "corgi agent hook emit"
 	hookTabTitle  = "corgi agent hook tab"
 	hookContext   = "corgi agent hook context"
+	hookScope     = "corgi agent hook scope"
+	hookBudget    = "corgi agent hook budget"
 	// trackMarkers identify corgi's tracking hooks in a settings file, so
 	// enable and disable never touch anyone else's.
 	trackMarkerEmit    = "agent hook emit"
 	trackMarkerTab     = "agent hook tab"
 	trackMarkerContext = "agent hook context"
+	trackMarkerScope   = "agent hook scope"
+	trackMarkerBudget  = "agent hook budget"
+	// writingTools are the tools a scope can refuse: the ones that change a
+	// file.
+	writingTools = "Edit|Write|MultiEdit|NotebookEdit"
 	// promptingTools are the tools worth a PreToolUse event: the ones that
 	// can raise a permission prompt or a question. Reads and searches fire
 	// dozens of times a turn and change nothing a key shows.
@@ -90,15 +97,22 @@ var trackedEvents = []struct {
 	// Context adds the synchronous hook that hands the session what the
 	// daemon knows: other sessions here, the budget, the last brief.
 	Context bool
+	// Scope and Budget add the hooks that keep a session inside the scope
+	// its ticket agreed (see agent_hook_scope.go); silent without one.
+	Scope  bool
+	Budget bool
+	// NoEmit is an entry that exists only for its extra hook.
+	NoEmit bool
 }{
 	{Event: "SessionStart", Matcher: "startup|resume|clear|fork", Context: true},
 	{Event: "UserPromptSubmit", Title: true},
 	{Event: "PreToolUse", Matcher: promptingTools},
+	{Event: "PreToolUse", Matcher: writingTools, Scope: true, NoEmit: true},
 	{Event: "PostToolUse"},
 	{Event: "PostToolUseFailure"},
 	{Event: "PermissionRequest"},
 	{Event: "Notification", Matcher: "permission_prompt|idle_prompt|agent_needs_input|elicitation_dialog|elicitation_url_dialog", Title: true},
-	{Event: "Stop", Title: true},
+	{Event: "Stop", Title: true, Budget: true},
 	{Event: "StopFailure", Title: true},
 	{Event: "SessionEnd"},
 	{Event: "CwdChanged"},
@@ -276,14 +290,30 @@ func enableTrackingIn(path, bin string, tabTitle bool) error {
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
+	seen := map[string]bool{}
 	for _, ev := range trackedEvents {
-		entries := stripTrackingHooks(hooks[ev.Event])
-		handlers := []any{map[string]any{"type": "command", "command": hookCommand(bin, hookEmit), "async": true}}
+		var entries []any
+		if !seen[ev.Event] {
+			entries = stripTrackingHooks(hooks[ev.Event])
+			seen[ev.Event] = true
+		} else {
+			entries, _ = hooks[ev.Event].([]any)
+		}
+		var handlers []any
+		if !ev.NoEmit {
+			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookEmit), "async": true})
+		}
 		if ev.Title && tabTitle {
 			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookTabTitle)})
 		}
 		if ev.Context {
 			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookContext), "timeout": 5})
+		}
+		if ev.Scope {
+			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookScope), "timeout": 5})
+		}
+		if ev.Budget {
+			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookBudget), "timeout": 15})
 		}
 		entry := map[string]any{"hooks": handlers}
 		if ev.Matcher != "" {
@@ -333,7 +363,7 @@ func stripTrackingHooks(existing any) []any {
 	out := []any{}
 	for _, entry := range list {
 		text := marshalCompact(entry)
-		if strings.Contains(text, trackMarkerEmit) || strings.Contains(text, trackMarkerTab) || strings.Contains(text, trackMarkerContext) {
+		if strings.Contains(text, trackMarkerEmit) || strings.Contains(text, trackMarkerTab) || strings.Contains(text, trackMarkerContext) || strings.Contains(text, trackMarkerScope) || strings.Contains(text, trackMarkerBudget) {
 			continue
 		}
 		out = append(out, entry)
@@ -366,27 +396,32 @@ func trackingHooksStale(path string) bool {
 	}
 	tab := strings.Contains(marshalCompact(hooks), trackMarkerTab)
 	for _, ev := range trackedEvents {
-		if !eventHookCurrent(hooks[ev.Event], ev.Matcher, ev.Context, ev.Title && tab) {
+		if !eventHookCurrent(hooks[ev.Event], ev.Matcher, ev.Context, ev.Title && tab, ev.Scope, ev.Budget, ev.NoEmit) {
 			return true
 		}
 	}
 	return false
 }
 
-// eventHookCurrent checks one event's corgi entry: the matcher this version
-// uses, and the extra handlers it now installs.
-func eventHookCurrent(existing any, matcher string, wantContext, wantTab bool) bool {
+// eventHookCurrent checks one event's corgi entry with the given matcher:
+// the extra handlers this version installs are there, and nothing else.
+func eventHookCurrent(existing any, matcher string, wantContext, wantTab, wantScope, wantBudget, noEmit bool) bool {
 	list, _ := existing.([]any)
 	for _, entry := range list {
 		text := marshalCompact(entry)
-		if !strings.Contains(text, trackMarkerEmit) {
+		obj, _ := entry.(map[string]any)
+		got, _ := obj["matcher"].(string)
+		mine := strings.Contains(text, trackMarkerEmit) || strings.Contains(text, trackMarkerScope) || strings.Contains(text, trackMarkerBudget)
+		if !mine || got != matcher {
 			continue
 		}
-		obj, _ := entry.(map[string]any)
-		if got, _ := obj["matcher"].(string); got != matcher {
+		if noEmit == strings.Contains(text, trackMarkerEmit) {
 			return false
 		}
 		if wantContext != strings.Contains(text, trackMarkerContext) {
+			return false
+		}
+		if wantScope != strings.Contains(text, trackMarkerScope) || wantBudget != strings.Contains(text, trackMarkerBudget) {
 			return false
 		}
 		return wantTab == strings.Contains(text, trackMarkerTab)
