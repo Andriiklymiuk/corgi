@@ -593,6 +593,8 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 		"Put this line at the end of the pull request body so whoever reviews it knows where it came from: " +
 		trail + "\n" +
 		"Say plainly at the end what you changed and what your own review found.\n" +
+		"The pull request body carries a `## Evidence` section — changed files with a reason each; the commands you ran with their results; " +
+		"each test mapped to the acceptance criterion it protects; known limitations and residual risk — facts, one line each.\n" +
 		"If you stop with work remaining, blocked, or unsure, leave a handoff for the next run before you end: " +
 		"`corgi agent handoff --ref " + e.Ref + " --done … --remaining … --decision … --uncertain … --next … --verify \"<the check you ran>\"` " +
 		"(one flag per item; short sentences; no secrets)."
