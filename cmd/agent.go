@@ -18,6 +18,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
@@ -175,6 +176,14 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		return claimTicket(d.Dir, workspaceID, e)
 	}
 	d.Isolate = isolateFixWorktrees
+	// Phones that registered a push token hear what the desktop hears, and a
+	// permission prompt with its session id.
+	pushStore := push.Load(dir)
+	d.Push = func(m push.Message) {
+		if err := pushStore.Send(context.Background(), m); err != nil {
+			utils.Infof("agent: push: %v\n", err)
+		}
+	}
 	d.Workpad = func(workspaceID, ref, section, text string) {
 		writeWorkpad(d.Dir, workspaceID, ref, section, text)
 	}

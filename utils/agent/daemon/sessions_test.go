@@ -16,6 +16,7 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/proc"
+	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
@@ -445,5 +446,41 @@ func TestNewSessionCommandQuotesEveryArgument(t *testing.T) {
 	}
 	if !strings.HasSuffix(newSessionCommand(), " agent claude") {
 		t.Fatalf("plain = %s", newSessionCommand())
+	}
+}
+
+// A permission prompt reaches the phones with the session id and the
+// "permission" category, so the lock screen can answer it; a risky command
+// is marked, so the app shows only Deny.
+func TestAPermissionPromptIsPushedWithItsSessionID(t *testing.T) {
+	d := trackingDaemon(t)
+	d.Sessions.Load()
+	d.Sessions.OnTransition = d.onSessionTransition
+	var mu sync.Mutex
+	var got []push.Message
+	d.Push = func(m push.Message) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, m)
+	}
+	now := time.Now()
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 1, At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "go test", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Bash", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "rm -rf", At: now})
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(got) == 2 })
+	mu.Lock()
+	defer mu.Unlock()
+	// Two goroutines, either order.
+	byBody := map[string]push.Message{}
+	for _, m := range got {
+		byBody[m.Body] = m
+	}
+	safe, risky := byBody["permission: Bash go test"], byBody["permission: Bash rm -rf"]
+	if safe.Category != "permission" || safe.Data["session"] != "s1" || safe.Data["risky"] != "" {
+		t.Fatalf("safe: %+v", safe)
+	}
+	if risky.Data["risky"] != "1" || risky.Data["session"] != "s1" {
+		t.Fatalf("rm -rf is marked risky: %+v", risky)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/proc"
+	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
@@ -134,6 +135,20 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		if secs := int(now.Sub(s.StatusSince).Seconds()); secs > 0 {
 			_ = usage.RecordWait(d.Dir, usage.Wait{At: now.UTC(), Kind: kind, Label: label, Profile: s.Profile, Seconds: secs})
 		}
+	}
+	// A permission prompt is the one notification a phone can answer from
+	// the lock screen: it carries the session id, and the Allow / Deny
+	// buttons the app registered for this category.
+	if to == sessions.StatusNeedsInput && s.Pending != nil && d.Push != nil {
+		body := "permission: " + s.Pending.Tool
+		if s.Pending.Subject != "" {
+			body += " " + s.Pending.Subject
+		}
+		data := map[string]string{"session": s.ID, "tool": s.Pending.Tool}
+		if s.Pending.Risky() {
+			data["risky"] = "1"
+		}
+		go d.Push(push.Message{Title: "corgi agent · " + label, Body: body, Category: "permission", Data: data, Thread: s.ID})
 	}
 	d.attentionMu.Lock()
 	if d.limitWatch == nil {
