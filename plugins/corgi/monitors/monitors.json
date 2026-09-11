@@ -1,0 +1,9 @@
+{
+  "monitors": [
+    {
+      "command": "corgi logs --all --idle 0 --grep '(?i)\\b(error|panic|fatal|exception|traceback|5[0-9]{2} )\\b' --silent",
+      "when": "on-skill-invoke:debug",
+      "description": "error lines from every running service of the stack, while the debug skill works"
+    }
+  ]
+}

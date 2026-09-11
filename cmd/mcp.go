@@ -631,8 +631,9 @@ func loadComposeCached(cmd *cobra.Command, composePath string) (*utils.CorgiComp
 	return corgi, nil
 }
 
-// loadComposeForMCP loads just the parsed compose.
-func loadComposeForMCP(composePath string) (*utils.CorgiCompose, error) {
+// loadComposeForMCP loads just the parsed compose. A variable so a tool
+// test can hand it a stack without a file.
+var loadComposeForMCP = func(composePath string) (*utils.CorgiCompose, error) {
 	ctx, err := loadComposeCtx(composePath)
 	if err != nil {
 		return nil, err
@@ -1785,6 +1786,8 @@ func registerMCPTools(s *server.MCPServer) {
 			Profile:     r.GetString("profile", ""),
 		})
 	}))
+
+	addStackTools(s, composeOpt, serviceOpt)
 
 	s.AddTool(mcp.NewTool("corgi_db_query",
 		mcp.WithDescription("Run one non-interactive query inside a running db_service container through its driver's own client (psql, redis-cli, mongosh, …); write the query in that client's syntax. Returns {service, output, truncated}. The db_service must already be up (corgi_up). Writes are not blocked — a mutating statement runs, so call corgi_db_snapshot first and corgi_db_restore to undo. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
