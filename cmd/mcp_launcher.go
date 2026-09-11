@@ -1277,6 +1277,7 @@ const launcherPageHTML = `<!doctype html>
   .newchat button{font:inherit;font-size:.76rem;font-weight:500;padding:.34rem .8rem;border-radius:.45rem;border:1px solid var(--accent);
       background:var(--accent);color:#fff;cursor:pointer;flex:0 0 auto}
   .newchat button:disabled{opacity:.5}
+  .runlog{font:.68rem/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:60vh;overflow:auto;background:var(--card2);border:1px solid var(--hair);border-radius:.5rem;padding:.5rem;margin:.4rem 0 0}
   .kb{display:flex;gap:.6rem;overflow-x:auto;padding-bottom:.5rem;scroll-snap-type:x mandatory}
   .kb .kcol{flex:0 0 78vw;max-width:340px;scroll-snap-align:start;background:var(--card);border:1px solid var(--hair);border-radius:.7rem;padding:.5rem}
   .kb .kcol h3{margin:0 0 .4rem;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;opacity:.75;display:flex;justify-content:space-between}
@@ -2130,6 +2131,41 @@ const launcherPageHTML = `<!doctype html>
     document.body.appendChild(scrim);
   }
 
+  // What a run said, on the phone: the tail of its log, the handoff it left,
+  // what it opened and what it cost. The one screen for "what happened".
+  async function runSheet(fx) {
+    const scrim = document.createElement('div');
+    scrim.className = 'scrim';
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    const close = () => scrim.remove();
+    scrim.onclick = e => { if (e.target === scrim) close(); };
+    const grab = document.createElement('div'); grab.className = 'grab';
+    const h = document.createElement('h3');
+    h.textContent = fx.ref + (fx.running ? ' · running' : '');
+    const pre = document.createElement('pre');
+    pre.className = 'runlog';
+    pre.textContent = 'loading…';
+    sheet.append(grab, h, pre);
+    scrim.appendChild(sheet);
+    document.body.appendChild(scrim);
+    try {
+      const r = await fetch('/launch/run?key=' + encodeURIComponent(fx.key) + '&tail=200', { headers: auth });
+      const j = await r.json();
+      if (!r.ok) { pre.textContent = j.error || 'no log'; return; }
+      const meta = document.createElement('p');
+      meta.className = 'etitle';
+      const bits = [];
+      if (j.outcome) bits.push(j.outcome);
+      if (j.spentPercent) bits.push(j.spentPercent + '% of the 5h window');
+      if (j.handover) bits.push(j.handover);
+      meta.textContent = bits.join(' · ');
+      sheet.insertBefore(meta, pre);
+      pre.textContent = j.log || '(the log is empty)';
+      pre.scrollTop = pre.scrollHeight;
+    } catch { pre.textContent = 'no connection'; }
+  }
+
   // The kanban: one card per ticket, column worked out by corgi. A card is
   // moved on the tracker, worked on, or unblocked — the column follows.
   async function loadKanban() {
@@ -2465,6 +2501,10 @@ const launcherPageHTML = `<!doctype html>
         if (t.textContent) card.appendChild(t);
         const row = document.createElement('div');
         row.className = 'erow';
+        const log = document.createElement('button');
+        log.textContent = 'Log';
+        log.onclick = () => runSheet(fx);
+        row.appendChild(log);
         for (const pr of fx.prs || []) {
           if (!/^https:\/\//.test(pr)) continue;
           const a = document.createElement('a');
@@ -3357,6 +3397,56 @@ const watchBatchMax = 10
 
 // launchEventsHandler lists what the watch has seen, newest first, so the
 // phone can show the tracker issues and reviews waiting for a decision.
+// launchRunHandler is one unattended run's log tail and record, for the
+// phone: what it did, what it left, what it cost.
+func launchRunHandler(w http.ResponseWriter, r *http.Request) {
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	key := strings.TrimSpace(r.URL.Query().Get("key"))
+	if key == "" {
+		writeLaunchError(w, http.StatusBadRequest, "key is required")
+		return
+	}
+	tail := 200
+	if n, err := strconv.Atoi(r.URL.Query().Get("tail")); err == nil && n > 0 && n <= 2000 {
+		tail = n
+	}
+	out := map[string]any{"key": key}
+	for _, rec := range watch.LoadFixLog(dir).RecentFixes("", 200) {
+		if rec.Key != key {
+			continue
+		}
+		out["ref"] = firstNonEmptyString(rec.Ref, rec.Key)
+		out["workspace"] = rec.Workspace
+		out["running"] = !rec.Done()
+		out["startedAt"] = rec.StartedAt
+		out["outcome"] = rec.Outcome()
+		if len(rec.PRs) > 0 {
+			out["prs"] = rec.PRs
+		}
+		if rec.Handover != "" {
+			out["handover"] = rec.Handover
+		}
+		if rec.SpentPercent > 0 {
+			out["spentPercent"] = rec.SpentPercent
+		}
+		if rec.Branch != "" {
+			out["branch"] = rec.Branch
+		}
+		break
+	}
+	log := daemon.RunLog(dir, key, tail)
+	if _, known := out["ref"]; !known && log == "" {
+		writeLaunchError(w, http.StatusNotFound, "no run for that key")
+		return
+	}
+	out["log"] = log
+	writeLaunchJSON(w, out)
+}
+
 // launchKanbanHandler is the derived board: one card per ticket with its
 // column and why, plus the columns each tracker can move a ticket to.
 func launchKanbanHandler(w http.ResponseWriter, r *http.Request) {

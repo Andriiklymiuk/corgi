@@ -991,3 +991,13 @@ func (d *Daemon) blockIfRunSaidSo(spec WatchSpec, e watch.Event, started time.Ti
 	}
 	go d.notifyAttentionAt("corgi agent · "+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
 }
+
+// RunLog is the last n lines of a run's log, for a surface that cannot open
+// the file. "" when there is no log.
+func RunLog(agentDir, key string, n int) string {
+	data, err := os.ReadFile(filepath.Join(agentDir, "watch", "runs", safeName(key)+".log"))
+	if err != nil {
+		return ""
+	}
+	return watch.TailLines(string(data), n)
+}
