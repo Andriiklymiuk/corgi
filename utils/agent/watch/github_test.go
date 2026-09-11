@@ -22,6 +22,14 @@ const githubNotifications = `[
   {"id":"n3","reason":"mention","updated_at":"2026-09-09T08:00:00Z",
    "subject":{"title":"Bug: crash","url":"https://api.github.com/repos/acme/api/issues/3","type":"Issue"},
    "repository":{"full_name":"acme/api"}},
+  {"id":"n5","reason":"author","updated_at":"2026-09-09T06:30:00Z",
+   "subject":{"title":"Android icon","url":"https://api.github.com/repos/acme/app/pulls/254","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/app/issues/comments/500"},
+   "repository":{"full_name":"acme/app"}},
+  {"id":"n6","reason":"author","updated_at":"2026-09-09T06:00:00Z",
+   "subject":{"title":"Android icon","url":"https://api.github.com/repos/acme/app/pulls/254","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/app/issues/comments/501"},
+   "repository":{"full_name":"acme/app"}},
   {"id":"n4","reason":"subscribed","updated_at":"2026-09-09T07:00:00Z",
    "subject":{"title":"Noise","url":"https://api.github.com/repos/acme/api/pulls/5","type":"PullRequest"},
    "repository":{"full_name":"acme/api"}}
@@ -59,7 +67,11 @@ func newGitHubFake(t *testing.T) *githubFake {
 			w.Header().Set("X-Poll-Interval", "60")
 			_, _ = w.Write([]byte(githubNotifications))
 		case "/repos/acme/web/issues/comments/99":
-			_, _ = w.Write([]byte(`{"body":"can you add a test for the empty case?","user":{"login":"maria"}}`))
+			_, _ = w.Write([]byte(`{"body":"can you add a test for the empty case?","user":{"login":"maria","type":"User"}}`))
+		case "/repos/acme/app/issues/comments/500":
+			_, _ = w.Write([]byte(`{"body":"HUM-1 Android app icon\nReview in Linear","user":{"login":"linear-code[bot]","type":"Bot"}}`))
+		case "/repos/acme/app/issues/comments/501":
+			_, _ = w.Write([]byte(`{"body":"rebased","user":{"login":"andrii","type":"User"}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -76,6 +88,8 @@ func TestGitHubPoll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// n5 is a bot linking the ticket and n6 is my own comment: GitHub tells
+	// the thread's author about both, neither is a person waiting on me.
 	if len(events) != 2 {
 		t.Fatalf("events = %d, want 2: %+v", len(events), events)
 	}
@@ -103,7 +117,7 @@ func TestGitHubPoll(t *testing.T) {
 	// /user, the notifications list, one lookup per pull request to find
 	// out whether it is still open — a notification does not say — and the
 	// one comment worth reading.
-	if g.Me != "andrii" || f.users.Load() != 1 || f.requests.Load() != 5 {
+	if g.Me != "andrii" || f.users.Load() != 1 || f.requests.Load() != 8 {
 		t.Errorf("me = %q, /user calls = %d, requests = %d", g.Me, f.users.Load(), f.requests.Load())
 	}
 
@@ -112,7 +126,7 @@ func TestGitHubPoll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if events != nil || f.requests.Load() != 6 || f.users.Load() != 1 {
+	if events != nil || f.requests.Load() != 9 || f.users.Load() != 1 {
 		t.Errorf("304 round: events = %v, requests = %d, /user calls = %d", events, f.requests.Load(), f.users.Load())
 	}
 	if next["lastModified"] != cursor["lastModified"] || next["me"] != "andrii" {

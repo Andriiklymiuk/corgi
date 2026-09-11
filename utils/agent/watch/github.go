@@ -165,7 +165,13 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		// The notification names the pull request, not what was said on it;
 		// the comment itself is one more call, and the difference between
 		// "someone commented" and a line a person can act on.
-		author, body := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
+		author, body, bot := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
+		// My own comment is not news to me, and a bot's — a tracker link, a
+		// coverage report — is not a person waiting. GitHub still notifies
+		// the author of the thread about both.
+		if r.kind == KindPRComment && (bot || (author != "" && strings.EqualFold(author, g.Me))) {
+			continue
+		}
 		events = append(events, Event{
 			Key:    "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt,
 			Source: g.Name(),
@@ -183,32 +189,35 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	return events, next, nil
 }
 
-// latestComment is who wrote the newest comment on a thread and what they
-// wrote, or nothing when the thread points at the pull request itself (a
-// review request, an opened pull request) or the comment cannot be read.
-func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL string) (author, body string) {
+// latestComment is who wrote the newest comment on a thread, what they
+// wrote, and whether they are a bot; nothing when the thread points at the
+// pull request itself (a review request, an opened pull request) or the
+// comment cannot be read.
+func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL string) (author, body string, bot bool) {
 	if commentURL == "" || commentURL == subjectURL {
-		return "", ""
+		return "", "", false
 	}
 	path := strings.TrimPrefix(commentURL, "https://api.github.com")
 	if path == commentURL {
-		return "", ""
+		return "", "", false
 	}
 	resp, err := g.get(ctx, path, "")
 	if err != nil {
-		return "", ""
+		return "", "", false
 	}
 	defer resp.Body.Close()
 	var c struct {
 		Body string `json:"body"`
 		User struct {
 			Login string `json:"login"`
+			Type  string `json:"type"`
 		} `json:"user"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&c) != nil {
-		return "", ""
+		return "", "", false
 	}
-	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax)
+	bot = strings.EqualFold(c.User.Type, "Bot") || strings.HasSuffix(c.User.Login, "[bot]")
+	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax), bot
 }
 
 // pullState is "open", "merged" or "closed" for one pull request, cached for
