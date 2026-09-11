@@ -115,6 +115,9 @@ type WorkspaceConfig struct {
 	// Models is which model does which kind of work, so a plan is thought
 	// through on the strong one and a red build fixed on the cheap one.
 	Models *ModelPolicy `yaml:"models"`
+	// Routines are runs on a clock: the morning digest, the PR babysitter.
+	// Each is a catalog kind or a prompt, and a schedule.
+	Routines []Routine `yaml:"routines,omitempty"`
 	// DangerouslySkipPermissions runs the session with permission prompts off,
 	// removing the main defence against it acting on instructions injected into
 	// a file it read. Trusted config only by construction — RepoConfig has no
@@ -285,6 +288,18 @@ type WatchConfig struct {
 	// — "In Progress", say. Empty writes nothing: a tracker corgi has not
 	// been told to move tickets on is left alone.
 	PickupStatus string `yaml:"pickupStatus,omitempty"`
+}
+
+// Routine is one scheduled run. Kind names a catalog entry (digest,
+// babysit-pr, deps, release-notes, flaky, doc-drift); Prompt is a run of
+// the user's own; Schedule is "daily HH:MM", "every 6h" or "weekly Mon HH:MM".
+type Routine struct {
+	Name     string `yaml:"name"`
+	Kind     string `yaml:"kind,omitempty"`
+	Prompt   string `yaml:"prompt,omitempty"`
+	Schedule string `yaml:"schedule"`
+	Model    string `yaml:"model,omitempty"`
+	Off      bool   `yaml:"off,omitempty"`
 }
 
 // ModelPolicy names a model per phase of work. Empty fields take the
@@ -468,6 +483,9 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	}
 	base.Watch = overlayWatch(base.Watch, over.Watch)
 	base.Models = overlayModels(base.Models, over.Models)
+	if len(over.Routines) > 0 {
+		base.Routines = over.Routines
+	}
 	// Booleans that grant capability are OR-ed rather than overwritten, so a
 	// per-workspace entry cannot silently turn off a default the user set.
 	base.InheritAPIKey = base.InheritAPIKey || over.InheritAPIKey
