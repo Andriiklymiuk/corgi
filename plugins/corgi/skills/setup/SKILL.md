@@ -120,8 +120,14 @@ open -a corgi-bar
 
 Then the person: reload each VS Code window once (`Developer: Reload
 Window`), grant corgi-bar **Accessibility** (Talk and typed prompts press
-keys) and **Notifications** when macOS asks, turn on Launch at login in its
-Settings.
+keys) and **Notifications** when macOS asks. corgi-bar turns Launch at login
+on by itself the first time it runs from /Applications (its Settings › App
+toggle turns it off); `corgi agent up --at-login` opens it once for that.
+
+Two macOS traps `corgi agent doctor` checks: the daemon must run from its own
+copy of the binary (`corgi agent install` does this; an older install that
+ran Homebrew's path makes macOS ask "corgi wants access to Documents" after
+every update), and the menu bar must be running for its login item to exist.
 
 Stream Deck: `gh release download -R Andriiklymiuk/corgi-agent-deck -p
 '*.streamDeckPlugin' -D /tmp && open /tmp/*.streamDeckPlugin` installs the
