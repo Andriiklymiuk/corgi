@@ -154,10 +154,21 @@ func (s *Store) Send(ctx context.Context, m Message) error {
 	if len(tokens) == 0 {
 		return nil
 	}
+	// A phone paired with two laptops answers the one that asked: the
+	// hostname is what pairing told it this laptop is called.
+	data := make(map[string]string, len(m.Data)+1)
+	for k, v := range m.Data {
+		data[k] = v
+	}
+	if _, ok := data["laptop"]; !ok {
+		if host, err := os.Hostname(); err == nil && host != "" {
+			data["laptop"] = host
+		}
+	}
 	msgs := make([]expoMessage, 0, len(tokens))
 	for _, t := range tokens {
 		msgs = append(msgs, expoMessage{To: t.Token, Title: m.Title, Body: m.Body, Sound: "default", Priority: "high",
-			CategoryID: m.Category, Data: m.Data, ThreadID: m.Thread, ChannelID: channelFor(m.Category)})
+			CategoryID: m.Category, Data: data, ThreadID: m.Thread, ChannelID: channelFor(m.Category)})
 	}
 	raw, err := json.Marshal(msgs)
 	if err != nil {
