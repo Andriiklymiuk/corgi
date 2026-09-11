@@ -144,6 +144,13 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 			if r.Ref == "" || strings.HasPrefix(r.Ref, "routine/") {
 				continue
 			}
+			// Ignored means out of the inbox everywhere: a run that
+			// happened on an ignored event brings no card back on its own.
+			if in.ignored != nil && in.ignored(r.Key) {
+				if _, kept := byRef[r.Workspace+"/"+r.Ref]; !kept {
+					continue
+				}
+			}
 			c := card(r.Workspace, r.Ref)
 			if c.Fix != nil && !c.Fix.Running {
 				continue // the newest run on a ref is the one that counts
