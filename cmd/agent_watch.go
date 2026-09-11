@@ -576,7 +576,7 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			if now, ok := moved.Get(e.Key); ok {
 				current = now.Status
 			}
-			if watch.FinishedState(current) != "" {
+			if watch.Settled(e, current) != "" {
 				continue
 			}
 			events = append(events, eventRow{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),

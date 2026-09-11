@@ -812,7 +812,7 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 		if d.watchState.IsIgnored(e.Key) {
 			continue
 		}
-		if known, ok := states.Get(e.Key); ok && watch.FinishedState(known.Status) != "" {
+		if known, ok := states.Get(e.Key); ok && watch.Settled(e, known.Status) != "" {
 			continue // already known to be over
 		}
 		for _, src := range spec.Sources {
