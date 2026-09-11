@@ -12,10 +12,12 @@ import (
 
 const githubNotifications = `[
   {"id":"n1","reason":"review_requested","updated_at":"2026-09-09T10:00:00Z",
-   "subject":{"title":"Add retries","url":"https://api.github.com/repos/acme/api/pulls/12","type":"PullRequest"},
+   "subject":{"title":"Add retries","url":"https://api.github.com/repos/acme/api/pulls/12","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/api/pulls/12"},
    "repository":{"full_name":"acme/api"}},
   {"id":"n2","reason":"mention","updated_at":"2026-09-09T09:00:00Z",
-   "subject":{"title":"Fix login","url":"https://api.github.com/repos/acme/web/pulls/7","type":"PullRequest"},
+   "subject":{"title":"Fix login","url":"https://api.github.com/repos/acme/web/pulls/7","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/web/issues/comments/99"},
    "repository":{"full_name":"acme/web"}},
   {"id":"n3","reason":"mention","updated_at":"2026-09-09T08:00:00Z",
    "subject":{"title":"Bug: crash","url":"https://api.github.com/repos/acme/api/issues/3","type":"Issue"},
@@ -56,6 +58,8 @@ func newGitHubFake(t *testing.T) *githubFake {
 			w.Header().Set("Last-Modified", "Wed, 09 Sep 2026 10:00:00 GMT")
 			w.Header().Set("X-Poll-Interval", "60")
 			_, _ = w.Write([]byte(githubNotifications))
+		case "/repos/acme/web/issues/comments/99":
+			_, _ = w.Write([]byte(`{"body":"can you add a test for the empty case?","user":{"login":"maria"}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -83,15 +87,23 @@ func TestGitHubPoll(t *testing.T) {
 		review.Source != "github" || review.At.IsZero() {
 		t.Errorf("review event = %+v", review)
 	}
-	if comment.Kind != KindPRComment || !comment.Mine || comment.Ref != "acme/web#7" {
+	// The notification names the pull request; the comment itself — who,
+	// what — is one more call, so the line a person reads is not "someone
+	// commented on acme/web#7:" and nothing.
+	if comment.Kind != KindPRComment || !comment.Mine || comment.Ref != "acme/web#7" ||
+		comment.Author != "maria" || comment.Body != "can you add a test for the empty case?" {
 		t.Errorf("comment event = %+v", comment)
+	}
+	if review.Author != "" || review.Body != "" {
+		t.Errorf("a review request points at the pull request itself, not a comment: %+v", review)
 	}
 	if cursor["me"] != "andrii" || cursor["lastModified"] != "Wed, 09 Sep 2026 10:00:00 GMT" || cursor["pollInterval"] != "60" {
 		t.Errorf("cursor = %v", cursor)
 	}
-	// /user, the notifications list, and one lookup per pull request to find
-	// out whether it is still open — a notification does not say.
-	if g.Me != "andrii" || f.users.Load() != 1 || f.requests.Load() != 4 {
+	// /user, the notifications list, one lookup per pull request to find
+	// out whether it is still open — a notification does not say — and the
+	// one comment worth reading.
+	if g.Me != "andrii" || f.users.Load() != 1 || f.requests.Load() != 5 {
 		t.Errorf("me = %q, /user calls = %d, requests = %d", g.Me, f.users.Load(), f.requests.Load())
 	}
 
@@ -100,7 +112,7 @@ func TestGitHubPoll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if events != nil || f.requests.Load() != 5 || f.users.Load() != 1 {
+	if events != nil || f.requests.Load() != 6 || f.users.Load() != 1 {
 		t.Errorf("304 round: events = %v, requests = %d, /user calls = %d", events, f.requests.Load(), f.users.Load())
 	}
 	if next["lastModified"] != cursor["lastModified"] || next["me"] != "andrii" {
