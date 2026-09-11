@@ -44,6 +44,16 @@ func markPickedUp(agentD string, events []watch.Event) {
 		if ref == "" || strings.EqualFold(strings.TrimSpace(e.State), status) {
 			continue // already there: a needless write is still a write
 		}
+		// A finished ticket stays finished. Moving it back would also clear
+		// its resolution, and nobody asked for that.
+		current := e.State
+		if known, ok := watch.LoadStateLog(agentD).Get(e.Key); ok && known.Status != "" {
+			current = known.Status
+		}
+		if over := watch.FinishedState(current); over != "" {
+			utils.Infof("corgi: %s is %s — not moving it to %s\n", ref, over, status)
+			continue
+		}
 		if err := w.Move(ctx, ref, status); err != nil {
 			utils.Infof("corgi: %s stayed where it was: %v\n", ref, err)
 			continue
