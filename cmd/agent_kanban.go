@@ -112,7 +112,7 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 
 	// Inbox events, newest first: the first one on a ref names the card.
 	for _, e := range in.events {
-		if e.Ref == "" || (in.ignored != nil && in.ignored(e.Key)) {
+		if e.Ref == "" || e.Kind == watch.KindRoutine || (in.ignored != nil && in.ignored(e.Key)) {
 			continue
 		}
 		current := e.State
@@ -141,7 +141,7 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 	// outcome on the card.
 	if in.fixes != nil {
 		for _, r := range in.fixes.RecentFixes("", 100) {
-			if r.Ref == "" {
+			if r.Ref == "" || strings.HasPrefix(r.Ref, "routine/") {
 				continue
 			}
 			c := card(r.Workspace, r.Ref)

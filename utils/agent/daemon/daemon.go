@@ -177,6 +177,8 @@ type Daemon struct {
 	// runs counts unattended fixes in flight, so a test or a shutdown can
 	// wait for the last one to write its record.
 	runs sync.WaitGroup
+	// routines remembers when each scheduled run last started.
+	routines *routineState
 
 	// nudge wakes the command loop; the cross-process doorbell is SIGUSR1.
 	nudge chan struct{}
