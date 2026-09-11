@@ -400,8 +400,13 @@ type agentCheck struct {
 	Fix    string `json:"fix,omitempty"`
 }
 
-func runAgentDoctor(_ *cobra.Command, _ []string) {
-	checks := collectAgentChecks()
+func runAgentDoctor(cmd *cobra.Command, _ []string) {
+	var checks []agentCheck
+	if only, _ := cmd.Flags().GetBool("security"); only {
+		checks = checkSecurity()
+	} else {
+		checks = append(collectAgentChecks(), checkSecurity()...)
+	}
 
 	if utils.JSONOutput {
 		utils.PrintJSON(checks)
@@ -689,5 +694,6 @@ func init() {
 
 	agentScanCmd.Flags().Bool("dry-run", false, "Show what would be registered without changing anything")
 
+	agentDoctorCmd.Flags().Bool("security", false, "only the security checks: deny rules, the secrets hook, permissions, isolation, tunnel exposure")
 	agentCmd.AddCommand(agentInitCmd, agentScanCmd, agentDoctorCmd)
 }

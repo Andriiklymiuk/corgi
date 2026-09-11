@@ -361,6 +361,9 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	case "budget":
 		runBudgetHook(os.Stdin, os.Stdout)
 		return
+	case "secrets":
+		runSecretsHook(os.Stdin, os.Stdout)
+		return
 	case "tab":
 		registry, _ := workspace.Load(agentRegistryPath(agentDirOrEmpty()))
 		runTabTitleHook(os.Stdin, os.Stdout, func(cwd string) string {
