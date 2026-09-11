@@ -257,6 +257,9 @@ type WatchConfig struct {
 	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts, e.g.
 	// "23:00-07:00"; empty means none.
 	Quiet string `yaml:"quiet,omitempty"`
+	// DaysOff are weekdays the watch sleeps through — "sat", "sun" — no
+	// polling, no fix, nothing rings until the next working day.
+	DaysOff []string `yaml:"daysOff,omitempty"`
 	// Lease claims a ticket on the tracker before working it, so a second
 	// machine watching the same board leaves it alone. Off by default: it
 	// posts a comment, which not every board wants.
@@ -421,6 +424,9 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	}
 	if merged.Quiet == "" {
 		merged.Quiet = base.Quiet
+	}
+	if len(merged.DaysOff) == 0 {
+		merged.DaysOff = base.DaysOff
 	}
 	if merged.PickupStatus == "" {
 		merged.PickupStatus = base.PickupStatus

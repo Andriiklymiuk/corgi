@@ -328,9 +328,14 @@ nothing:
 
 ```bash
 corgi agent watch enable --action fix --auto-for tickets,reviews,comments,ci \
-  --prs --ci --reviews --lease --quiet 23:00-07:00 \
+  --prs --ci --reviews --lease --quiet 23:00-07:00 --days-off weekends \
   --pickup "In Progress" --review-status "In Review"
 ```
+
+`--quiet` is the night: nothing starts and nothing rings, one summary when it
+opens. `--days-off weekends` (or any days: `sat,sun`, `mon,fri`) is the
+weekend: the watch sleeps through the day — the tracker is not even polled —
+and what arrived is in the inbox and rings once on the next working day.
 
 <p align="center"><img src="docs/media/story.gif" width="760" alt="Three things in a row: a colleague asks for a review and corgi comments on their branch without pushing to it; a reviewer comments on your own pull request and corgi applies it, replies in the thread and pushes; a ticket assigned to you is claimed, moved to In Progress, worked, opened as a draft pull request and moved to In Review with the link posted on the ticket; then the morning card."></p>
 

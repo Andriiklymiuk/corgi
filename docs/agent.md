@@ -924,7 +924,10 @@ own PR.
 
 **Budget.** A fix costs tokens, so a workspace starts at most three an hour
 and ten a day (`--max-per-hour`, `--max-per-day`), none during `--quiet
-23:00-07:00` (local time, may cross midnight), and none while the account's
+23:00-07:00` (local time, may cross midnight), none on a `--days-off`
+day (`weekends`, or `sat,sun`, or any days — the watch sleeps through the
+whole day: no polling, no run, nothing rings; the reload button still polls
+once), and none while the account's
 five-hour or seven-day window is at 95 % or more, as Claude Code last
 cached it. An event past one of those is **deferred**: the notification
 carries the reason (`fix deferred: 3/h cap`, `quiet hours`, `limit 97%`),

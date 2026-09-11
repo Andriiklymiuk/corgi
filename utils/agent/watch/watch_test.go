@@ -433,3 +433,28 @@ func (c *countingSource) Poll(ctx context.Context, _ Cursor) ([]Event, Cursor, e
 	}
 	return nil, Cursor{}, nil
 }
+
+// A watch asleep for the day does not ask the tracker; a nudge — the reload
+// button — still polls once.
+func TestAnAsleepWatchDoesNotPollUntilNudged(t *testing.T) {
+	src := &countingSource{gate: make(chan struct{})}
+	close(src.gate) // never blocks: the poll returns at once
+	w := &Watch{Workspace: "api", Rules: Rules{Enabled: true}, Sources: []Source{src}, Interval: 20 * time.Millisecond,
+		State: LoadState(t.TempDir()), Asleep: func(time.Time) bool { return true }}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.Run(ctx)
+	time.Sleep(90 * time.Millisecond)
+	if n := src.polls.Load(); n != 0 {
+		t.Fatalf("asleep, yet polled %d times", n)
+	}
+	w.Nudge()
+	deadline := time.Now().Add(2 * time.Second)
+	for src.polls.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(60 * time.Millisecond)
+	if n := src.polls.Load(); n != 1 {
+		t.Fatalf("a nudge polls once, got %d", n)
+	}
+}
