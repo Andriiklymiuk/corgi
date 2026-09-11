@@ -25,10 +25,12 @@ type WatchSpec struct {
 	Workspace string
 	Dir       string
 	ConfigDir string
-	Project   string   // tracker key prefix: ABC-123 belongs to ABC
-	Repos     []string // owner/repo
-	Rules     watch.Rules
-	Sources   []watch.Source
+	// Isolate runs each fix in its own worktrees; see Daemon.Isolate.
+	Isolate bool
+	Project string   // tracker key prefix: ABC-123 belongs to ABC
+	Repos   []string // owner/repo
+	Rules   watch.Rules
+	Sources []watch.Source
 	// Skipped names the sources the rules can never use, so status can say
 	// why they are not polled.
 	Skipped  []string
@@ -623,7 +625,22 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
 	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
 	started := time.Now()
-	cmd := claudeCommand(ctx, spec.Dir, env, fixArgsWith(spec, e, handover)...)
+	args := fixArgsWith(spec, e, handover)
+	if spec.Isolate && d.Isolate != nil {
+		branch := FixBranch(e.Ref)
+		trees, err := d.Isolate(spec.Dir, branch)
+		if err != nil {
+			fmt.Fprintf(logFile, "\n=== could not isolate: %v\n", err)
+			d.watchState.Fixes.Finish(e.Key, nil, "", "could not create worktrees: "+err.Error(), time.Now())
+			go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
+				fmt.Sprintf("fix for %s did not start: could not create worktrees: %v", e.Ref, err), spec.Workspace, e.URL)
+			return
+		}
+		d.watchState.Fixes.SetBranch(e.Key, branch)
+		args[1] += isolationNote(branch, trees)
+		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
+	}
+	cmd := claudeCommand(ctx, spec.Dir, env, args...)
 	cmd.Stdin = nil
 	out, runErr := cmd.Output()
 	logFile.Write(out)
@@ -911,4 +928,20 @@ func (d *Daemon) mirrorHandoff(spec WatchSpec, ref string, started time.Time) {
 		return
 	}
 	go d.Workpad(spec.Workspace, ref, "Handoff", p.Markdown())
+}
+
+// FixBranch is the branch an isolated run works on: one per ticket, so a
+// second attempt lands in the same worktrees and undo knows what to remove.
+func FixBranch(ref string) string {
+	ref = strings.ToLower(strings.TrimSpace(ref))
+	ref = strings.NewReplacer("/", "-", "#", "-", " ", "-", ":", "-").Replace(ref)
+	return "corgi/" + ref
+}
+
+// isolationNote tells the run where to work. The stories skill would make
+// its own branch and worktrees; here they exist already.
+func isolationNote(branch string, trees []string) string {
+	return "\n\nThis run is isolated: every repository already has a worktree on branch `" + branch +
+		"`, created off its current HEAD. Work only in these directories and open the pull requests from this branch; " +
+		"do not create another branch and do not edit the main checkouts:\n- " + strings.Join(trees, "\n- ")
 }

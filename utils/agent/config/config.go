@@ -255,6 +255,11 @@ type WatchConfig struct {
 	// machine watching the same board leaves it alone. Off by default: it
 	// posts a comment, which not every board wants.
 	Lease bool `yaml:"lease,omitempty"`
+	// Isolate gives every unattended run its own git worktrees, one per
+	// repository, on a branch named after the ticket — so a run never
+	// touches your checkout and two runs on one repo do not collide. Off by
+	// default: it takes disk and a branch per ticket.
+	Isolate bool `yaml:"isolate,omitempty"`
 	// Reviews reports pull requests someone asked me to review.
 	Reviews bool `yaml:"reviews,omitempty"`
 	// CI reports builds that went red on something of mine.

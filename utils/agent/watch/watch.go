@@ -786,6 +786,9 @@ type FixRecord struct {
 	Failure string `json:"failure,omitempty"`
 	// Handover is what the run left for whoever continues the work.
 	Handover string `json:"handover,omitempty"`
+	// Branch is the worktree branch an isolated run worked on, so undo can
+	// release it and a row can say where the code is.
+	Branch string `json:"branch,omitempty"`
 	// SpentPercent is how much of the account's five-hour window this run
 	// used, measured across it. Ten comment fixes and ten whole tickets are
 	// the same number of runs and nowhere near the same spend.
@@ -1174,6 +1177,19 @@ func containsString(list []string, s string) bool {
 // killed with the laptop lid — otherwise takes twenty minutes of context with
 // it, and the next one starts from the ticket again.
 const handoverMax = 700
+
+// SetBranch records the worktree branch an isolated run works on.
+func (l *FixLog) SetBranch(key, branch string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].Branch = branch
+			_ = l.save()
+			return
+		}
+	}
+}
 
 // SetHandover records what a run left behind, on the newest run for the key.
 func (l *FixLog) SetHandover(key, text string, at time.Time) {
