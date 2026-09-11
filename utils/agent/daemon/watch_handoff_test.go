@@ -117,3 +117,15 @@ func TestTheRunnerPicksAModelByKindAndSteppsUpAfterAFailure(t *testing.T) {
 		t.Fatal("the policy wins")
 	}
 }
+
+func TestAFreshTicketTellsStoriesItsLane(t *testing.T) {
+	if got := fixPrompt(watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-1", Labels: []string{"Bug"}}); !strings.HasSuffix(got, "/corgi:stories ABC-1 --mode bug") {
+		t.Fatalf("bug lane: %s", got)
+	}
+	if got := fixPrompt(watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-2", Labels: []string{"api", "Feature"}}); !strings.HasSuffix(got, "--mode feature") {
+		t.Fatalf("feature lane: %s", got)
+	}
+	if got := fixPrompt(watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-3"}); !strings.HasSuffix(got, "/corgi:stories ABC-3") {
+		t.Fatalf("no label, no mode: %s", got)
+	}
+}
