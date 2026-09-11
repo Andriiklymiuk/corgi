@@ -383,6 +383,25 @@ record, and a visual/QA defect is what a human must re-verify.
 
 Branch: `feature/<issue-key>/<kebab-slug>`, same name in every affected repo.
 
+**Write the scope before the first edit.** The spec named the files or areas
+that change and what done means; put that on the record so the hooks hold you
+to it while you work:
+
+```bash
+corgi agent scope set <issue-key> --path "api/limits/**" --path "web/src/limits/**" \
+  --lines <diff budget> --tests <new test files> --done "<criterion>" --done "…"
+```
+
+Paths are workspace-relative globs (`**` crosses directories; a directory
+covers what is in it). The line budget is the spec's honest guess at the diff
+(adjustment ≈ 60, bug ≈ 150, feature ≈ 400 per service) and the test budget one
+file per acceptance criterion, core flow first. From then on a write outside the
+paths is refused with the way to widen — `corgi agent scope add <key> --path …`
+— and widening is fine when the change needs it; say why in the PR. A diff over
+budget is reported once when the turn ends: trim it, or raise the budget on the
+record (`scope set --lines N`) with one line in the PR saying why. Never widen
+silently, never disable the hook.
+
 **Get `<issue-key>` from the tracker, don't invent it** (auto-link token):
 
 - **Linear** — `get_issue` → `identifier` (`ABC-123`) + suggested `gitBranchName`.

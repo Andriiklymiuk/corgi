@@ -355,6 +355,12 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	case "context":
 		runContextHook(os.Stdin, os.Stdout, os.Getenv, time.Now())
 		return
+	case "scope":
+		runScopeHook(os.Stdin, os.Stdout)
+		return
+	case "budget":
+		runBudgetHook(os.Stdin, os.Stdout)
+		return
 	case "tab":
 		registry, _ := workspace.Load(agentRegistryPath(agentDirOrEmpty()))
 		runTabTitleHook(os.Stdin, os.Stdout, func(cwd string) string {
