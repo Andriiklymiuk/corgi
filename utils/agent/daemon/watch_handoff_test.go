@@ -58,7 +58,7 @@ func TestAnIsolatedRunIsToldWhereToWork(t *testing.T) {
 	if got := FixBranch("ABC-7"); got != "corgi/abc-7" {
 		t.Fatalf("branch: %s", got)
 	}
-	note := isolationNote("corgi/abc-7", []string{"/w/api", "/w/web"})
+	note := IsolationNote("corgi/abc-7", []string{"/w/api", "/w/web"})
 	for _, want := range []string{"corgi/abc-7", "/w/api", "/w/web", "do not create another branch"} {
 		if !strings.Contains(note, want) {
 			t.Fatalf("note lacks %q: %s", want, note)

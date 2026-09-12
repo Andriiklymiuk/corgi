@@ -121,7 +121,12 @@ the one the last focus landed in, else the most recently connected. The new
 session takes the lowest free key within a second. The "+" key on a deck.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		window, _ := cmd.Flags().GetString("window")
-		sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: window, Source: "cli"},
+		isolate, _ := cmd.Flags().GetBool("isolate")
+		var run string
+		if isolate {
+			run = daemon.NewSessionCommand("--isolate")
+		}
+		sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: window, Command: run, Source: "cli"},
 			"asked the editor for a new Claude session — `corgi agent sessions` in a moment")
 	},
 }
@@ -414,6 +419,7 @@ func init() {
 	agentSessionsCmd.Flags().Bool("watch", false, "Redraw the board whenever it changes")
 	agentPinCmd.Flags().Bool("off", false, "Release the key instead")
 	agentNewCmd.Flags().String("window", "", "Editor window id, as `corgi agent windows` lists them (default: the one in front)")
+	agentNewCmd.Flags().Bool("isolate", false, "Start it in a worktree of its own, on a corgi/session-<time> branch, so it never touches the checkout the window is on")
 	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentDismissCmd, agentPageCmd, agentRescanCmd, agentRefreshCmd, agentWindowsCmd, agentNewCmd)
 }
 

@@ -45,6 +45,13 @@ func TestWorkOnCommandFromARef(t *testing.T) {
 	if strings.Contains(c.Command, "Login loops") {
 		t.Fatalf("the prompt must travel by id: %s", c.Command)
 	}
+	if strings.Contains(c.Command, "--isolate") {
+		t.Fatalf("a worktree of its own is asked for, never assumed: %s", c.Command)
+	}
+	c, status, _ = workOnCommand(dir, []string{"linear:ABC-1"}, workOnOptions{Source: "phone", Isolate: true})
+	if status != 0 || !strings.Contains(c.Command, " --isolate") {
+		t.Fatalf("isolate reaches the session's command line: %d %s", status, c.Command)
+	}
 
 	for _, tc := range []struct {
 		keys []string

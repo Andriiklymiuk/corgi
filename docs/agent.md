@@ -290,9 +290,10 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent focus <session>` | bring that session's window to the front and reveal its terminal tab |
 | `corgi agent pin <key> [--off]` / `page` / `rescan` / `windows` | reserve a key, turn the overflow page, adopt untracked sessions, list connected editor windows |
 | `corgi agent board [--slots N]` | the board's size, or set it — applied to a running daemon at once |
-| `corgi agent new [--window ID]` | open a new Claude session in the editor window in front (the "+" key); the terminal runs `corgi agent claude` |
+| `corgi agent new [--window ID] [--isolate]` | open a new Claude session in the editor window in front (the "+" key); the terminal runs `corgi agent claude` |
 | `corgi agent status --json` | the daemon's status plus `usage[]` (tokens today / this week per workspace, with its `configDir`), `accounts[]` (per Claude account, the /usage picture Claude Code last cached: 5-hour and 7-day percent used and reset times) and `dashboardUrl` — what corgi-bar and the deck read |
-| `corgi agent claude [--profile P] [-- args]` | run Claude Code for this folder's workspace: its account (`configDir`), binary and permission mode; plain `claude` outside every workspace |
+| `corgi agent claude [--profile P] [--isolate] [-- args]` | run Claude Code for this folder's workspace: its account (`configDir`), binary and permission mode; plain `claude` outside every workspace. `--isolate` first gives it a worktree of its own |
+| `corgi agent watch work <ref> [--isolate]` | what **Work on it** on the phone runs: a session on that ticket, in the window in front |
 | `corgi agent dismiss <session>` | take a done, idle or closed session off the board until its next event (a closed chat whose process lingers) |
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
@@ -1035,6 +1036,27 @@ Both are empty by default, so no existing setup starts writing to a board it
 was not asked to. `corgi agent watch board --refresh` prints the real column
 names; a name that is not on that list is refused, and Jira also decides which
 moves are legal from where the ticket currently sits.
+
+### A worktree of its own
+
+```bash
+corgi agent new --isolate                # the "+" key, in a fresh worktree
+corgi agent watch work ABC-12 --isolate  # Work on it, in a fresh worktree
+corgi agent claude --isolate             # this folder, in a fresh worktree
+```
+
+Two sessions in one checkout edit one working tree: a `git stash` in one
+takes the other's half-written file with it, and the board's `overlap`
+says `same checkout`. `--isolate` starts the session on `corgi/<ticket>`
+(or `corgi/session-MMDD-HHMM` without a ticket) in a worktree under
+`corgi_services/.worktrees/`, the same place the unattended runs use, so
+one `corgi worktree prune` clears them all (it keeps uncommitted work). A compose stack gets one
+worktree per repository, all on that branch, and the session starts in the
+first. The session is told where it is and that the branch is its own; the
+main checkout does not move. The phone's **Work on it** and **New chat**
+send `isolate: true` for the same thing (a switch in Settings, off by
+default), and the same worktree is reused when the ticket is picked up
+again.
 
 ### Two machines, one board
 

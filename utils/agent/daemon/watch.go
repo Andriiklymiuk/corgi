@@ -924,7 +924,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 			return
 		}
 		d.watchState.Fixes.SetBranch(e.Key, branch)
-		args[1] += isolationNote(branch, trees)
+		args[1] += IsolationNote(branch, trees)
 		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
 	}
 	cmd := claudeCommand(ctx, spec.Dir, env, args...)
@@ -1247,7 +1247,7 @@ func FixBranch(ref string) string {
 
 // isolationNote tells the run where to work. The stories skill would make
 // its own branch and worktrees; here they exist already.
-func isolationNote(branch string, trees []string) string {
+func IsolationNote(branch string, trees []string) string {
 	return "\n\nThis run is isolated: every repository already has a worktree on branch `" + branch +
 		"`, created off its current HEAD. Work only in these directories and open the pull requests from this branch; " +
 		"do not create another branch and do not edit the main checkouts:\n- " + strings.Join(trees, "\n- ")

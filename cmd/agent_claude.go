@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/daemon"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -55,6 +56,7 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		ticket, _ := cmd.Flags().GetString("ticket")
 		ticketKey, _ := cmd.Flags().GetString("ticket-key")
 		wanted, _ := cmd.Flags().GetString("workspace")
+		isolate, _ := cmd.Flags().GetBool("isolate")
 		cwd, err := os.Getwd()
 		if err != nil {
 			exitWithError("agent_claude", err, 1)
@@ -71,6 +73,24 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 				exitWithError("agent_claude", err, 1)
 			}
 			cwd = root
+		}
+		// Its own worktree: one session, one branch, one checkout nobody
+		// else is in. The ticket names the branch; without one, the minute
+		// does. Every repository of the stack gets one, and the session
+		// starts in the workspace's own.
+		var isolation string
+		if isolate {
+			branch := daemon.FixBranch(isolationRef(ticket, time.Now()))
+			trees, start, err := isolateWorkspace(cwd, branch)
+			if err != nil {
+				exitWithError("agent_claude", fmt.Errorf("could not isolate: %v", err), 2)
+			}
+			if err := os.Chdir(start); err != nil {
+				exitWithError("agent_claude", err, 1)
+			}
+			cwd = start
+			isolation = daemon.IsolationNote(branch, trees)
+			utils.Info(fmt.Sprintf("corgi: isolated on %s in %s", branch, start))
 		}
 		if strings.EqualFold(strings.TrimSpace(model), "auto") {
 			model = autoModelFor(cwd)
@@ -90,7 +110,7 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 			if err != nil {
 				exitWithError("agent_claude", err, 2)
 			}
-			args = append(args, text)
+			args = append(args, text+isolation)
 		}
 		launch, err := resolveClaudeLaunch(cwd, profile, args)
 		if err != nil {
@@ -115,6 +135,9 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 			if k := strings.TrimSpace(ticketKey); k != "" {
 				env = append(env, "CORGI_TICKET_KEY="+k)
 			}
+		}
+		if isolate {
+			env = append(env, "CORGI_ISOLATED=1")
 		}
 		if err := runClaudeInPlace(launch.Bin, launch.Args, env); err != nil {
 			if exit, ok := err.(*exec.ExitError); ok {
@@ -282,6 +305,7 @@ func init() {
 	agentClaudeCmd.Flags().String("prompt-id", "", "Start with the prompt saved under this id by the phone launcher; the file is read once and removed")
 	agentClaudeCmd.Flags().String("ticket", "", "The tracker ref(s) this session works on (ABC-1 or ABC-1,ABC-2): the board shows it on the ticket")
 	agentClaudeCmd.Flags().String("ticket-key", "", "The inbox key of that ticket, with --ticket")
+	agentClaudeCmd.Flags().Bool("isolate", false, "Start in a worktree of its own on a corgi/<ticket> branch — every repository of the stack gets one — so this session never touches your checkout")
 	agentClaudeCmd.Flags().Bool("show", false, "Print the resolved command and exit")
 	agentCmd.AddCommand(agentClaudeCmd)
 }
@@ -436,4 +460,50 @@ func takePrompt(agentDir, id string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(data)), nil
+}
+
+// isolationRef is what names an isolated session's branch: the first
+// ticket it works on, else the minute it started.
+func isolationRef(ticket string, now time.Time) string {
+	if first := strings.TrimSpace(strings.Split(ticket, ",")[0]); first != "" {
+		return first
+	}
+	return "session-" + now.Format("0102-1504")
+}
+
+// isolateWorkspace gives the workspace at root a worktree per repository on
+// branch, and picks the one to start in: the repository root itself when it
+// is one, else the first. A workspace with a corgi-compose.yml gets one per
+// service repository; a bare checkout gets its own.
+func isolateWorkspace(root, branch string) (trees []string, start string, err error) {
+	hasCompose := false
+	for _, name := range []string{utils.CorgiComposeDefaultName, "corgi-compose.yaml"} {
+		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
+			hasCompose = true
+			break
+		}
+	}
+	if hasCompose {
+		trees, err = isolateFixWorktrees(root, branch)
+		if err == nil && len(trees) > 0 {
+			// The stack's own repository, when the compose file sits in one,
+			// is where the session should start; a service's otherwise.
+			start = trees[0]
+			if repo, ok := utils.RepoRootOf(root); ok && repo != "" {
+				prefix := utils.WorktreeDirPrefix(repo) + "@"
+				for _, t := range trees {
+					if strings.HasPrefix(filepath.Base(t), prefix) {
+						start = t
+						break
+					}
+				}
+			}
+		}
+		return trees, start, err
+	}
+	dir, err := utils.MaterializeBranchInRepo(root, branch)
+	if err != nil {
+		return nil, "", err
+	}
+	return []string{dir}, dir, nil
 }

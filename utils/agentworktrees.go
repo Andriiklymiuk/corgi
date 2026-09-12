@@ -190,6 +190,29 @@ func ensureWorkBranchWorktree(repo, branch, dest string) (dir string, created bo
 	return dest, true, nil
 }
 
+// MaterializeBranchInRepo gives one repository — a workspace with no
+// corgi-compose.yml, a single checkout — a worktree on branch, under the
+// same base MaterializeBranchAcrossRepos uses, so `corgi worktree prune`
+// finds it too. Returns the worktree's directory.
+func MaterializeBranchInRepo(repo, branch string) (string, error) {
+	if strings.TrimSpace(branch) == "" {
+		return "", fmt.Errorf("branch is required")
+	}
+	if err := validateBranchName(branch); err != nil {
+		return "", err
+	}
+	root := repo
+	if r, ok := RepoRootOf(repo); ok && r != "" {
+		root = r
+	}
+	if err := prepareWorktreeBase(root); err != nil {
+		return "", err
+	}
+	dest := filepath.Join(AgentWorktreeBase(root), worktreeDirName(root, branch))
+	dir, _, err := ensureWorkBranchWorktree(root, branch, dest)
+	return dir, err
+}
+
 // ExistingBranchWorktrees reports the worktrees a branch already has, without
 // creating anything and without touching the network.
 //
