@@ -2133,7 +2133,7 @@ const launcherPageHTML = `<!doctype html>
   const pickedLine = (p) => {
     if (!p) return '';
     const m = Math.max(0, Math.round((Date.now() - Date.parse(p.at)) / 60000));
-    return 'picked from the ' + (p.by === 'cli' ? 'command line' : p.by || 'board') + ' ' + (m ? m + 'm ago' : 'just now') + ' \u00b7 waiting for a session to open';
+    return 'picked from the ' + (p.by === 'cli' ? 'command line' : p.by === 'bar' ? 'menu bar' : p.by || 'board') + ' ' + (m ? m + 'm ago' : 'just now') + ' \u00b7 waiting for a session to open';
   };
   const sessionLine = (s) => s ? 'session ' + s.label + ' \u00b7 ' + (STATUS_WORD[s.status] || s.status) : '';
 
