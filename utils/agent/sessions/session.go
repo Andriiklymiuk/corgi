@@ -257,6 +257,9 @@ type Session struct {
 	// "ABC-1,ABC-2"), TicketKey the inbox key; from the launcher's env.
 	Ticket    string `json:"ticket,omitempty"`
 	TicketKey string `json:"ticketKey,omitempty"`
+	// Home is the directory the session started in: Claude Code names
+	// its transcript folder after it, whatever the session has cd'd to since.
+	Home string `json:"home,omitempty"`
 	// ReadAt is when a phone last read this session's conversation
 	// (POST /launch/transcript): the row shows an eye while it is recent,
 	// so the laptop always knows.
