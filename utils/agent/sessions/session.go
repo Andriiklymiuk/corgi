@@ -257,6 +257,10 @@ type Session struct {
 	// "ABC-1,ABC-2"), TicketKey the inbox key; from the launcher's env.
 	Ticket    string `json:"ticket,omitempty"`
 	TicketKey string `json:"ticketKey,omitempty"`
+	// ReadAt is when a phone last read this session's conversation
+	// (POST /launch/transcript): the row shows an eye while it is recent,
+	// so the laptop always knows.
+	ReadAt time.Time `json:"readAt,omitzero"`
 	// Bot is the named bot this session runs as (corgi agent bot): the
 	// surfaces draw it with the bot's title and colour, and the daemon
 	// remembers the conversation as the one to resume.

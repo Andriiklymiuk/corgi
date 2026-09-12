@@ -60,6 +60,9 @@ const (
 	// ActionInterrupt presses Escape in a working session: Claude Code
 	// stops the turn and waits, nothing is closed.
 	ActionInterrupt = "interrupt"
+	// ActionRead says a phone is reading a session's conversation; the
+	// row shows an eye for a minute.
+	ActionRead = "read"
 	// ActionWatch delivers a tracker or code-host event a webhook received.
 	ActionWatch = "watch"
 )
@@ -78,6 +81,7 @@ var known = map[string]bool{
 	ActionNote:      true,
 	ActionCap:       true,
 	ActionInterrupt: true,
+	ActionRead:      true,
 }
 
 // TTL is how long a written command stays valid. A start that sat in the spool
@@ -144,7 +148,7 @@ func (c Command) validate() error {
 		if c.Event == nil || c.Event.SessionID == "" || c.Event.Name == "" {
 			return fmt.Errorf("a session command needs an event with a session id and a name")
 		}
-	case ActionFocus, ActionInterrupt:
+	case ActionFocus, ActionInterrupt, ActionRead:
 		if strings.TrimSpace(c.SessionID) == "" {
 			return fmt.Errorf("%s needs a session", c.Action)
 		}

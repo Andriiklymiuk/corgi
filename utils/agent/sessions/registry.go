@@ -140,6 +140,8 @@ type Slot struct {
 	// it passed the budget it was given.
 	Spend   string `json:"spend,omitempty"`
 	OverCap bool   `json:"overCap,omitempty"`
+	// Reading says a phone read this conversation in the last minute.
+	Reading bool `json:"reading,omitempty"`
 }
 
 // SpendLine is a token count as the board says it: "52M", "980k", "412".
@@ -1328,6 +1330,24 @@ func (r *Registry) InterruptKeys(ref string) (string, error) {
 	return "\x1b", nil
 }
 
+// ReadBy records that a phone read the conversation now. Called by the
+// launcher's process, which holds its own copy of the board; the daemon
+// picks the mark up through the command spool (ActionRead).
+func (r *Registry) ReadBy(ref string, now time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return err
+	}
+	if now.Sub(s.ReadAt) < 20*time.Second {
+		return nil
+	}
+	s.ReadAt = now
+	r.touch()
+	return nil
+}
+
 // Interrupted marks a working session stopped by Escape: done, with the
 // row saying so. Claude Code fires no hook for it, so the board would
 // otherwise say working until the next message. A session that had already
@@ -1524,6 +1544,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		}
 		sl.Changes, sl.Tests, sl.Overlap = ChangesLine(s.Changes), TestsLine(s.Tests), OverlapLine(s.Overlap)
 		sl.Spend, sl.OverCap = SpendLine(s.Spend), s.OverCap
+		sl.Reading = !s.ReadAt.IsZero() && now.Sub(s.ReadAt) < time.Minute
 		sl.Branch, sl.Summary, sl.PR, sl.Ticket = s.Branch, s.Summary, s.PR, s.Ticket
 		if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
 			sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())

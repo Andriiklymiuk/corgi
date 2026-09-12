@@ -69,6 +69,24 @@ type UserConfig struct {
 	// daemon rings once when one passes it and the row says so. Zero is
 	// no budget. `corgi agent cap 50M` sets it.
 	SessionCap int64 `yaml:"sessionCap,omitempty"`
+	// Stream lists the workspaces whose sessions a paired phone may read
+	// as a conversation (`corgi agent stream enable --workspace api`), or
+	// "*" for all. Empty: no transcript leaves this machine. The list is
+	// here, in the trusted config, never in a repository.
+	Stream []string `yaml:"stream,omitempty"`
+}
+
+// StreamAllowed says whether a session in workspace may be read by a phone.
+func (u *UserConfig) StreamAllowed(workspace string) bool {
+	if u == nil {
+		return false
+	}
+	for _, w := range u.Stream {
+		if w == "*" || (w != "" && w == workspace) {
+			return true
+		}
+	}
+	return false
 }
 
 // WorkspaceConfig is everything that grants capability. Trusted sources only.
