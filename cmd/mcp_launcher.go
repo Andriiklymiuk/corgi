@@ -731,7 +731,7 @@ func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 		list := make([]map[string]any, 0, len(store.Devices))
 		for _, d := range store.Devices {
 			list = append(list, map[string]any{
-				"name": d.Name, "pairedAt": d.CreatedAt.UnixMilli(), "current": d.Name == me,
+				"name": d.Name, "pairedAt": d.CreatedAt.UnixMilli(), "current": d.Name == me, "encrypted": d.Encrypted(),
 			})
 		}
 		writeLaunchJSON(w, map[string]any{"devices": list})

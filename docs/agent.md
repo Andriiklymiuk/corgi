@@ -1530,6 +1530,25 @@ its own revocable token. `corgi mcp devices revoke <name>` kills exactly one
 device without disturbing the others — which is the whole reason not to share
 one token. Full detail: [docs/mcp.md](mcp.md).
 
+### End-to-end encrypted, phone to machine
+
+A token proves who is asking; it does not hide what is said. On a LAN the
+launcher speaks plain HTTP, and through a tunnel the provider terminates
+TLS and could read every board and every prompt. So the phone app (1.0.7+)
+pairs with a public key: `POST /pair {code, device, pubKey}` answers with
+the machine's `serverPubKey` (a static X25519 key minted once, `agent/e2e.key`,
+`0600`), both sides derive one AES-256 key (X25519 → HKDF-SHA256, machine
+key then device key in the info), and from then on every request and
+response body on `/launch/*` is an envelope `{v, t, n, c}` — AES-GCM with
+the method, path and timestamp bound as associated data, header
+`X-Corgi-E2E: 1`. A sealed *allow* cannot be replayed as a *deny*, nor two
+minutes later. A device with a key is refused plaintext, so a token sniffed
+off the Wi-Fi is not enough on its own; the web page and an older app,
+which pair without a key, keep talking as before. `corgi mcp devices list`
+says which is which. What stays in the clear: the path and its query
+(`?workspace=api`), the status code, and the token in the `Authorization`
+header — the token alone opens nothing.
+
 ## When corgi cannot find its data directory
 
 corgi keeps its registry beside its other state. On macOS that is the Homebrew
@@ -1600,6 +1619,9 @@ the whole fix.
 - Supervised output is not mirrored to the daemon's log unless you pass
   `--foreground`; a session's output can contain env values and tokens.
 - Mutating MCP tools are blocked over a public tunnel by default.
+- A phone that paired with a key talks end-to-end encrypted (X25519 + HKDF +
+  AES-256-GCM, bound to method, path and time) and is refused plaintext; the
+  tunnel provider and the Wi-Fi see envelopes.
 - **Prompt injection is a real exposure, not a solved problem.** A session reads
   repository files, issue text, and dependency READMEs, and corgi's tools can
   materialize branches. The permission prompts you answer from your phone are

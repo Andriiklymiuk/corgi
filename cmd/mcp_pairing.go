@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,6 +25,10 @@ import (
 type pairRequest struct {
 	Code   string `json:"code"`
 	Device string `json:"device"`
+	// PubKey is the device's X25519 public key: offered, every body between
+	// the two is sealed from now on (pairing.Seal). Absent for the web page
+	// and older apps, which keep talking plainly.
+	PubKey string `json:"pubKey,omitempty"`
 }
 
 type pairResponse struct {
@@ -31,6 +36,9 @@ type pairResponse struct {
 	Daemon  string `json:"daemon"`
 	Device  string `json:"device"`
 	Version string `json:"version"`
+	// ServerPubKey answers a PubKey: the machine's static X25519 key, the
+	// other half of the shared secret.
+	ServerPubKey string `json:"serverPubKey,omitempty"`
 }
 
 // maxPairBodyBytes bounds the request body. The payload is two short strings;
@@ -85,7 +93,17 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 			return
 		}
 
-		token, err := pairing.Pair(storePath, session, req.Code, req.Device)
+		serverPub := ""
+		if strings.TrimSpace(req.PubKey) != "" {
+			server, kerr := pairing.LoadOrCreateServerKey(pairing.ServerKeyPath(filepath.Dir(storePath)))
+			if kerr != nil {
+				utils.Infof("pairing: e2e key: %v\n", kerr)
+				writePairError(w, http.StatusInternalServerError, "pairing failed on the machine — check its output")
+				return
+			}
+			serverPub = pairing.PublicKeyString(server.PublicKey())
+		}
+		token, err := pairing.PairWithKey(storePath, session, req.Code, req.Device, req.PubKey)
 		if err != nil {
 			// Only errors about the caller's own input go back verbatim.
 			// Anything else — a permission problem, a corrupt store — would
@@ -103,10 +121,11 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 		host, _ := os.Hostname()
 		utils.Infof("paired device %q\n", strings.TrimSpace(req.Device))
 		_ = json.NewEncoder(w).Encode(pairResponse{
-			Token:   token,
-			Daemon:  host,
-			Device:  strings.TrimSpace(req.Device),
-			Version: APP_VERSION,
+			Token:        token,
+			Daemon:       host,
+			Device:       strings.TrimSpace(req.Device),
+			Version:      APP_VERSION,
+			ServerPubKey: serverPub,
 		})
 	})
 }
@@ -266,10 +285,11 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 		type row struct {
 			Name      string    `json:"name"`
 			CreatedAt time.Time `json:"createdAt"`
+			Encrypted bool      `json:"encrypted"`
 		}
 		rows := make([]row, 0, len(store.Devices))
 		for _, d := range store.Devices {
-			rows = append(rows, row{Name: d.Name, CreatedAt: d.CreatedAt})
+			rows = append(rows, row{Name: d.Name, CreatedAt: d.CreatedAt, Encrypted: d.Encrypted()})
 		}
 		utils.PrintJSON(rows)
 		return
@@ -280,7 +300,11 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 		return
 	}
 	for _, d := range store.Devices {
-		fmt.Printf("%-24s paired %s\n", d.Name, d.CreatedAt.Local().Format("2006-01-02 15:04"))
+		how := "plain — pair again from the app for end-to-end encryption"
+		if d.Encrypted() {
+			how = "end-to-end encrypted"
+		}
+		fmt.Printf("%-24s paired %s · %s\n", d.Name, d.CreatedAt.Local().Format("2006-01-02 15:04"), how)
 	}
 }
 

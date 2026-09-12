@@ -59,7 +59,13 @@ type Device struct {
 	Name      string    `json:"name"`
 	TokenHash string    `json:"tokenHash"`
 	CreatedAt time.Time `json:"createdAt"`
+	// PubKey is the device's X25519 public key when it paired end-to-end
+	// encrypted (see e2e.go); empty for a device that talks plainly.
+	PubKey string `json:"pubKey,omitempty"`
 }
+
+// Encrypted says whether the device pairs end-to-end encrypted.
+func (d Device) Encrypted() bool { return strings.TrimSpace(d.PubKey) != "" }
 
 // Store is the set of paired devices.
 type Store struct {
@@ -182,17 +188,25 @@ func (s *Store) Revoke(name string) bool {
 // Every stored hash is compared even after a match, so the time taken does not
 // reveal how far down the list a token sits.
 func (s *Store) Authorize(token string) (string, bool) {
+	d, ok := s.AuthorizeDevice(token)
+	return d.Name, ok
+}
+
+// AuthorizeDevice is Authorize with the whole device, for the encryption
+// layer that needs its key.
+func (s *Store) AuthorizeDevice(token string) (Device, bool) {
 	if token == "" {
-		return "", false
+		return Device{}, false
 	}
 	want := HashToken(token)
-	matched := ""
+	var matched Device
+	found := false
 	for _, d := range s.Devices {
 		if subtle.ConstantTimeCompare([]byte(d.TokenHash), []byte(want)) == 1 {
-			matched = d.Name
+			matched, found = d, true
 		}
 	}
-	return matched, matched != ""
+	return matched, found
 }
 
 // HashToken is what the store holds. A readable store is then not a usable
@@ -320,6 +334,12 @@ func (s *Session) Close() {
 // Pair validates the code and records a new device, returning its token.
 // The token is returned once and never stored in the clear.
 func Pair(storePath string, session *Session, code, deviceName string) (string, error) {
+	return PairWithKey(storePath, session, code, deviceName, "")
+}
+
+// PairWithKey is Pair for a device that also offers its X25519 public key:
+// from then on it talks end-to-end encrypted, and only that way.
+func PairWithKey(storePath string, session *Session, code, deviceName, pubKey string) (string, error) {
 	deviceName = strings.TrimSpace(deviceName)
 	if deviceName == "" {
 		return "", fmt.Errorf("%w: a device name is required", ErrBadRequest)
@@ -335,6 +355,10 @@ func Pair(storePath string, session *Session, code, deviceName string) (string, 
 		if r == '\t' || !unicode.IsGraphic(r) {
 			return "", fmt.Errorf("%w: device name must be printable text", ErrBadRequest)
 		}
+	}
+	pk, err := ParsePublicKey(pubKey)
+	if err != nil {
+		return "", err
 	}
 	if err := session.Redeem(code); err != nil {
 		return "", err
@@ -352,11 +376,15 @@ func Pair(storePath string, session *Session, code, deviceName string) (string, 
 	// what someone reinstalling the app expects — and it invalidates the old
 	// one, which is what they want if the phone was lost.
 	store.Revoke(deviceName)
-	store.Devices = append(store.Devices, Device{
+	d := Device{
 		Name:      deviceName,
 		TokenHash: HashToken(token),
 		CreatedAt: time.Now().UTC(),
-	})
+	}
+	if pk != nil {
+		d.PubKey = PublicKeyString(pk)
+	}
+	store.Devices = append(store.Devices, d)
 	if err := Save(storePath, store); err != nil {
 		return "", err
 	}
