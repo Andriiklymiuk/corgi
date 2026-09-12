@@ -298,6 +298,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent interrupt <session>` | Escape into a working session, as you would press it: the turn stops, the session waits; nothing is closed. The phone's and the bar's **Interrupt** (`POST /launch/interrupt`) |
 | `corgi agent cap [<session>] <tokens\|off>` | a token budget every session runs under (`cap 50M`), or one session's own (`cap <session> 20M`); passing it rings once and the row says *over budget* — nothing is stopped |
 | `corgi agent usage [--json\|--watch]` | every account's 5-hour and 7-day windows, the pace and when they run out, today's tokens by model, how long sessions waited on you |
 | `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
@@ -817,10 +818,12 @@ Bash command whose subject the board recognises as risky — `rm`, `sudo`,
 
 The phone launcher does both from its session rows: **Allow**, **Always**
 and **Deny** under a session that needs you, **Send…** under any live one,
-and a **PR** link when the session mentioned one. They go through
-`POST /launch/answer` and `POST /launch/send` on the same endpoint, with the
-same refusals as the commands: a risky prompt answers with 403 and the row
-says to look at the laptop.
+**Interrupt** under a working one (Escape: the turn stops, the session
+waits), and a **PR** link when the session mentioned one. They go through
+`POST /launch/answer`, `POST /launch/send` and `POST /launch/interrupt` on
+the same endpoint, with the same refusals as the commands: a risky prompt
+answers with 403 and the row says to look at the laptop; nothing to
+interrupt is a 409.
 
 Above the sessions sits **New chat**: a prompt, the editor window to open it
 in (the one in front is preselected), the model (default, Opus, Sonnet,

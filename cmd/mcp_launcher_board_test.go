@@ -69,6 +69,32 @@ func TestLaunchAnswerRefusesWhatShouldNotBeAnsweredBlind(t *testing.T) {
 	}
 }
 
+// Interrupt is Escape into a working session and nothing else: a session
+// waiting on a prompt or done has no turn to stop.
+func TestLaunchInterruptOnlyAWorkingSession(t *testing.T) {
+	dir := phoneBoard(t, true,
+		sessions.Session{ID: "w1", Display: "api", Status: sessions.StatusWorking},
+		sessions.Session{ID: "p1", Display: "web", Status: sessions.StatusNeedsInput, Pending: &sessions.Pending{Tool: "Bash", Subject: "ls"}},
+		sessions.Session{ID: "d1", Display: "idle", Status: sessions.StatusDone},
+	)
+	for body, want := range map[string]int{
+		`{"session":"w1"}`:   200,
+		`{"session":"api"}`:  200,
+		`{"session":"p1"}`:   409,
+		`{"session":"d1"}`:   409,
+		`{"session":"nope"}`: 404,
+		`{"session":""}`:     400,
+	} {
+		if rec := post(launchInterruptHandler, "/launch/interrupt", body); rec.Code != want {
+			t.Errorf("%s: %d, want %d: %s", body, rec.Code, want, rec.Body.String())
+		}
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "commands"))
+	if len(entries) != 2 {
+		t.Fatalf("two interrupts reached the spool, got %d", len(entries))
+	}
+}
+
 func TestLaunchSendTypesIntoALiveSessionOnly(t *testing.T) {
 	dir := phoneBoard(t, true,
 		sessions.Session{ID: "s1", Display: "api", Status: sessions.StatusDone},
