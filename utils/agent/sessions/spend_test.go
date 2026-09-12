@@ -64,3 +64,20 @@ func TestSpendCrossesABudgetOnce(t *testing.T) {
 		t.Fatalf("the key says what it spent: %+v", slots)
 	}
 }
+
+// Escape stops a working session's turn; a session at rest is left alone.
+func TestInterruptIsEscapeIntoAWorkingSessionOnly(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Apply(ev("UserPromptSubmit", "s1", 0))
+	keys, err := r.InterruptKeys("s1")
+	if err != nil || keys != "\x1b" {
+		t.Fatalf("working: %q %v", keys, err)
+	}
+	r.Apply(ev("Stop", "s1", time.Minute))
+	if _, err := r.InterruptKeys("s1"); err == nil {
+		t.Fatal("nothing to interrupt once it stopped")
+	}
+	if _, err := r.InterruptKeys("nope"); err == nil {
+		t.Fatal("unknown session")
+	}
+}

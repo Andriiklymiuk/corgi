@@ -1309,6 +1309,22 @@ func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
 	return "", fmt.Errorf("answer is allow, always or deny, not %q", answer)
 }
 
+// InterruptKeys is what stops a session's turn — Escape — and an error
+// when there is no turn to stop: Claude Code takes Escape at rest as
+// nothing, but a key pressed into a session for no reason is a surprise.
+func (r *Registry) InterruptKeys(ref string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return "", err
+	}
+	if s.Status != StatusWorking {
+		return "", fmt.Errorf("%s is not working on anything to interrupt", r.displayLocked(s))
+	}
+	return "\x1b", nil
+}
+
 // Risky says whether the prompt must not be approved unseen.
 func (p *Pending) Risky() bool {
 	return p != nil && p.Tool == "Bash" && riskyCommand.MatchString(p.Subject)

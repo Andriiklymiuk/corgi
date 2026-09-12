@@ -57,6 +57,9 @@ const (
 	// ActionCap gives a session a token budget of its own, or with no
 	// session sets the daemon's default; zero tokens takes it away.
 	ActionCap = "cap"
+	// ActionInterrupt presses Escape in a working session: Claude Code
+	// stops the turn and waits, nothing is closed.
+	ActionInterrupt = "interrupt"
 	// ActionWatch delivers a tracker or code-host event a webhook received.
 	ActionWatch = "watch"
 )
@@ -68,12 +71,13 @@ var needsWorkspace = map[string]bool{ActionStart: true, ActionStop: true, Action
 var known = map[string]bool{
 	ActionStart: true, ActionStop: true, ActionAttention: true, ActionSession: true,
 	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true, ActionNew: true,
-	ActionDismiss: true,
-	ActionWatch:   true,
-	ActionSend:    true,
-	ActionAnswer:  true,
-	ActionNote:    true,
-	ActionCap:     true,
+	ActionDismiss:   true,
+	ActionWatch:     true,
+	ActionSend:      true,
+	ActionAnswer:    true,
+	ActionNote:      true,
+	ActionCap:       true,
+	ActionInterrupt: true,
 }
 
 // TTL is how long a written command stays valid. A start that sat in the spool
@@ -140,9 +144,9 @@ func (c Command) validate() error {
 		if c.Event == nil || c.Event.SessionID == "" || c.Event.Name == "" {
 			return fmt.Errorf("a session command needs an event with a session id and a name")
 		}
-	case ActionFocus:
+	case ActionFocus, ActionInterrupt:
 		if strings.TrimSpace(c.SessionID) == "" {
-			return fmt.Errorf("focus needs a session")
+			return fmt.Errorf("%s needs a session", c.Action)
 		}
 	case ActionPage:
 		if c.Direction == 0 {

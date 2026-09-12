@@ -3386,6 +3386,34 @@ func launchAnswerHandler(w http.ResponseWriter, r *http.Request) {
 	launchBoardCommand(w, command.Command{Action: command.ActionAnswer, SessionID: session.ID, Answer: answer, Source: "phone"})
 }
 
+// launchInterruptHandler is the phone's Interrupt button: Escape into a
+// working session, which stops the turn and waits. Nothing to stop is a
+// 409, like an answer with nothing pending.
+func launchInterruptHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {session} to interrupt a working session")
+		return
+	}
+	var req struct {
+		Session string `json:"session"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	session, code, msg := launchSessionFor(req.Session)
+	if code != 0 {
+		writeLaunchError(w, code, msg)
+		return
+	}
+	if session.Status != sessions.StatusWorking {
+		writeLaunchError(w, http.StatusConflict, "that session is not working on anything to interrupt")
+		return
+	}
+	launchBoardCommand(w, command.Command{Action: command.ActionInterrupt, SessionID: session.ID, Source: "phone"})
+}
+
 // launchRefreshHandler is the reload button: the daemon looks at the
 // process table again and polls every tracker now, then publishes — the
 // caller re-reads a moment later, and so does everything else.

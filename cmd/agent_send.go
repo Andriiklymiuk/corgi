@@ -82,6 +82,21 @@ var agentNoteCmd = &cobra.Command{
 	},
 }
 
+var agentInterruptCmd = &cobra.Command{
+	Use:   "interrupt <session>",
+	Short: "Stop what a session is doing — Escape, as you would press it",
+	Long: `Presses Escape in a working session, the way you would to stop a turn
+that is going the wrong way: Claude Code stops and waits for the next
+message; nothing is closed and nothing is lost. A session that is not
+working is left alone. The phone's Interrupt button, and the bar's, do
+the same through POST /launch/interrupt.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		sendBoardCommand(command.Command{Action: command.ActionInterrupt, SessionID: args[0], Source: "cli"},
+			fmt.Sprintf("asked the daemon to interrupt %s", args[0]))
+	},
+}
+
 var agentCapCmd = &cobra.Command{
 	Use:   "cap [<session>] <tokens|off>",
 	Short: "A token budget for every session, or for one",
@@ -159,5 +174,5 @@ is stopped. "off" takes a budget away. No argument prints the default.`,
 func init() {
 	agentSendCmd.Flags().Bool("enter", false, "Press Enter after the text")
 	agentNoteCmd.Flags().Bool("clear", false, "Remove the note")
-	agentCmd.AddCommand(agentSendCmd, agentAnswerCmd, agentNoteCmd, agentCapCmd)
+	agentCmd.AddCommand(agentSendCmd, agentAnswerCmd, agentNoteCmd, agentCapCmd, agentInterruptCmd)
 }

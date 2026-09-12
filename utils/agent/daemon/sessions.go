@@ -95,6 +95,14 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 			return true
 		}
 		d.sendToSession(ctx, c.SessionID, keys, false)
+	case command.ActionInterrupt:
+		keys, err := d.Sessions.InterruptKeys(c.SessionID)
+		if err != nil {
+			utils.Infof("agent: interrupt %s: %v\n", c.SessionID, err)
+			d.Sessions.SetNotice(err)
+			return true
+		}
+		d.sendToSession(ctx, c.SessionID, keys, false)
 	default:
 		return false
 	}
