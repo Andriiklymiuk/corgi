@@ -606,6 +606,9 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.Branch != "" {
 		s.Branch = ev.Branch
 	}
+	if ev.Bot != "" {
+		s.Bot = ev.Bot
+	}
 	if ev.Ticket != "" {
 		s.Ticket, s.TicketKey = ev.Ticket, ev.TicketKey
 	}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/bots"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"crypto/rand"
 	"encoding/hex"
@@ -57,9 +58,34 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		ticketKey, _ := cmd.Flags().GetString("ticket-key")
 		wanted, _ := cmd.Flags().GetString("workspace")
 		isolate, _ := cmd.Flags().GetBool("isolate")
+		botName, _ := cmd.Flags().GetString("bot")
 		cwd, err := os.Getwd()
 		if err != nil {
 			exitWithError("agent_claude", err, 1)
+		}
+		// A bot is the defaults in one word: its workspace, account, model,
+		// worktree, and the persona appended to the system prompt. A flag
+		// given beside it still wins. Its last conversation is resumed when
+		// the transcript is still there.
+		var bot *bots.Bot
+		if botName != "" {
+			b, err := loadBot(botName)
+			if err != nil {
+				exitWithError("agent_claude", err, 2)
+			}
+			bot = &b
+			if wanted == "" {
+				wanted = b.Workspace
+			}
+			if profile == "" {
+				profile = b.Profile
+			}
+			if model == "" {
+				model = b.Model
+			}
+			if !cmd.Flags().Changed("isolate") {
+				isolate = b.Isolate
+			}
 		}
 		// A caller with no cwd of its own — the phone, a menu bar — names the
 		// workspace instead. Without this the session lands in whichever
@@ -112,9 +138,20 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 			}
 			args = append(args, text+isolation)
 		}
+		if bot != nil {
+			if soul := strings.TrimSpace(bot.Soul); soul != "" {
+				args = append([]string{"--append-system-prompt", soul}, args...)
+			}
+		}
 		launch, err := resolveClaudeLaunch(cwd, profile, args)
 		if err != nil {
 			exitWithError("agent_claude", err, 2)
+		}
+		if bot != nil && bot.LastSession != "" && !hasFlag(launch.Args, "--resume") && !hasFlag(launch.Args, "--continue") {
+			if transcriptExists(launch.Env, cwd, bot.LastSession) {
+				launch.Args = append([]string{"--resume", bot.LastSession}, launch.Args...)
+				utils.Info(fmt.Sprintf("corgi: %s picks up where it left off", bot.Display()))
+			}
 		}
 		if show {
 			fmt.Println(launch.String())
@@ -139,6 +176,9 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		if isolate {
 			env = append(env, "CORGI_ISOLATED=1")
 		}
+		if bot != nil {
+			env = append(env, "CORGI_BOT="+bot.Name)
+		}
 		if err := runClaudeInPlace(launch.Bin, launch.Args, env); err != nil {
 			if exit, ok := err.(*exec.ExitError); ok {
 				os.Exit(exit.ExitCode())
@@ -146,6 +186,43 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 			exitWithError("agent_claude", err, 1)
 		}
 	},
+}
+
+// loadBot finds a bot by name on this machine.
+func loadBot(name string) (bots.Bot, error) {
+	dir, err := agentDir()
+	if err != nil {
+		return bots.Bot{}, err
+	}
+	store, err := bots.Load(bots.Path(dir))
+	if err != nil {
+		return bots.Bot{}, err
+	}
+	b, ok := store.Find(name)
+	if !ok {
+		return bots.Bot{}, fmt.Errorf("no bot named %q — corgi agent bot list", name)
+	}
+	return b, nil
+}
+
+func hasFlag(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+// transcriptExists says whether Claude Code still has the conversation to
+// resume, under the account the launch runs as.
+func transcriptExists(env map[string]string, cwd, sessionID string) bool {
+	path := usage.TranscriptPath(env["CLAUDE_CONFIG_DIR"], cwd, sessionID)
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // execProcess is syscall.Exec, swappable so tests can watch the exec path.
@@ -306,6 +383,7 @@ func init() {
 	agentClaudeCmd.Flags().String("ticket", "", "The tracker ref(s) this session works on (ABC-1 or ABC-1,ABC-2): the board shows it on the ticket")
 	agentClaudeCmd.Flags().String("ticket-key", "", "The inbox key of that ticket, with --ticket")
 	agentClaudeCmd.Flags().Bool("isolate", false, "Start in a worktree of its own on a corgi/<ticket> branch — every repository of the stack gets one — so this session never touches your checkout")
+	agentClaudeCmd.Flags().String("bot", "", "Open as this bot (corgi agent bot list): its workspace, account, model and persona, resuming its last conversation")
 	agentClaudeCmd.Flags().Bool("show", false, "Print the resolved command and exit")
 	agentCmd.AddCommand(agentClaudeCmd)
 }

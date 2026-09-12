@@ -193,6 +193,22 @@ func (t *telegramControl) handle(text, replyTo string) {
 		t.sendToSession(arg, strings.Join(fields[2:], " "))
 	case "focus":
 		t.board(command.Command{Action: command.ActionFocus, SessionID: arg}, "focusing "+arg)
+	case "ask":
+		if len(fields) < 2 {
+			t.send("/ask <question about the board>")
+			return
+		}
+		// The chief runs a short claude; the answer follows in a moment,
+		// and the poll loop is not held while it thinks.
+		question := strings.Join(fields[1:], " ")
+		go func() {
+			answer, err := askBoard(context.Background(), t.agentIn, question)
+			if err != nil {
+				t.send("could not ask: " + err.Error())
+				return
+			}
+			t.send(answer)
+		}()
 	default:
 		t.send("unknown command. /help")
 	}
@@ -312,6 +328,7 @@ const telegramHelp = `corgi commands:
 /send <s> <text>   type into a session (reply to its notification does the same)
 /allow /always /deny <s>  answer its permission prompt
 /focus <s>         bring its window to the front
+/ask <question>    the chief: what to look at first, what is blocked, who is on what
 /help              this`
 
 func (t *telegramControl) statusText() string {

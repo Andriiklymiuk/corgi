@@ -298,6 +298,8 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent bot add\|list\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own — and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them |
+| `corgi agent ask "<question>"` | the chief: one question about the board — what to look at first, what is blocked, who is on what — answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
 | `corgi agent interrupt <session>` | Escape into a working session, as you would press it: the turn stops, the session waits; nothing is closed. The phone's and the bar's **Interrupt** (`POST /launch/interrupt`) |
 | `corgi agent cap [<session>] <tokens\|off>` | a token budget every session runs under (`cap 50M`), or one session's own (`cap <session> 20M`); passing it rings once and the row says *over budget* — nothing is stopped |
 | `corgi agent usage [--json\|--watch]` | every account's 5-hour and 7-day windows, the pace and when they run out, today's tokens by model, how long sessions waited on you |
@@ -1069,6 +1071,37 @@ main checkout does not move. The phone's **Work on it** and **New chat**
 send `isolate: true` for the same thing (a switch in Settings, off by
 default), and the same worktree is reused when the ticket is picked up
 again.
+
+### Bots: who you talk to
+
+```bash
+corgi agent bot add reviewer --workspace api --title "Code Reviewer" \
+    --soul "You review pull requests. Read the diff, run the tests, be brief." \
+    --model opus --profile work --color orange
+corgi agent bot open reviewer      # the "+" key, as the reviewer
+corgi agent claude --bot reviewer  # in this terminal
+```
+
+A session is a process; a bot is who you come back to. A bot is a
+workspace, a persona (its *soul*, passed to Claude Code as
+`--append-system-prompt`), a model, an account, and whether it always gets a
+worktree of its own — under one name, in `agent/bots.json` (`0600`: a soul
+can say what a repository should not). Opening it starts Claude Code there,
+as that, and when its last conversation is still on disk, `--resume`s it —
+so *Code Reviewer* on the phone is the same chat as on the desk. The daemon
+records the thread from the session's first event (`CORGI_BOT` in the
+environment, `bot` on the session row). `GET /launch/bots` lists them
+without the souls; `POST /launch/new {bot}` opens one.
+
+### The chief
+
+`corgi agent ask "what should I look at first?"` — and the Ask box on the
+phone, `/ask` on Telegram. The board (sessions with what they are doing,
+their ticket, diff, tests, cost, overlaps; the inbox; the kanban; the
+workspace names) goes to one short `claude -p` run on this machine, on the
+cheap model, with a chief-of-staff system prompt, and the answer comes
+back in a few lines. Souls, prompts and transcripts never go in. It runs
+as corgi's child, so the tracking hook keeps it off the board.
 
 ### Two machines, one board
 
