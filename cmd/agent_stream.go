@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -158,10 +160,27 @@ var transcriptPathFor = func(s sessions.Session) string {
 	if home == "" {
 		home = s.Cwd
 	}
-	if home == "" {
+	if home != "" {
+		if p := usage.TranscriptPath(s.ConfigDir, home, s.ID); transcript.Exists(p) {
+			return p
+		}
+	}
+	// A session the daemon met after it had moved: the id is unique, find
+	// it under whichever project folder Claude Code filed it.
+	base := s.ConfigDir
+	if base == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			base = filepath.Join(h, ".claude")
+		}
+	}
+	if base == "" {
 		return ""
 	}
-	return usage.TranscriptPath(s.ConfigDir, home, s.ID)
+	matches, _ := filepath.Glob(filepath.Join(base, "projects", "*", s.ID+".jsonl"))
+	if len(matches) > 0 {
+		return matches[0]
+	}
+	return ""
 }
 
 // maxStreamWait bounds the long-poll: the phone asks again after.
