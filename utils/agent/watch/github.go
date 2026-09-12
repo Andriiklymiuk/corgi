@@ -220,7 +220,7 @@ func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL strin
 	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax), bot
 }
 
-// pullState is "open", "merged" or "closed" for one pull request, cached for
+// pullState is "draft", "open", "merged" or "closed" for one pull request, cached for
 // the round so several notifications about the same one cost a single call.
 // An unreadable answer is "", which the rules treat as still open: guessing a
 // pull request closed would silently swallow real feedback.
@@ -244,13 +244,18 @@ func (g *GitHub) pullState(ctx context.Context, cache map[string]string, apiURL 
 	var pr struct {
 		State  string `json:"state"`
 		Merged bool   `json:"merged"`
+		Draft  bool   `json:"draft"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&pr) != nil {
 		return ""
 	}
+	// GitHub keeps draft out of state: a draft is "open" with draft: true.
+	// Folded in here, so every surface reads one word.
 	state := pr.State
 	if pr.Merged {
 		state = "merged"
+	} else if pr.Draft && state == "open" {
+		state = "draft"
 	}
 	cache[apiURL] = state
 	return state
@@ -310,7 +315,7 @@ func githubDecode(resp *http.Response, v any) error {
 	return nil
 }
 
-// RefState is "open", "merged" or "closed" for acme/api#7, so a row already
+// RefState is "draft", "open", "merged" or "closed" for acme/api#7, so a row already
 // merged can leave the inbox. "" when it cannot be read.
 func (g *GitHub) RefState(ctx context.Context, ref string) string {
 	repo, num, ok := strings.Cut(ref, "#")
