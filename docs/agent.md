@@ -298,6 +298,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent cap [<session>] <tokens\|off>` | a token budget every session runs under (`cap 50M`), or one session's own (`cap <session> 20M`); passing it rings once and the row says *over budget* — nothing is stopped |
 | `corgi agent usage [--json\|--watch]` | every account's 5-hour and 7-day windows, the pace and when they run out, today's tokens by model, how long sessions waited on you |
 | `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
 | `corgi agent carry <session> --profile P` | continue a session under another listed account, conversation included (copies the transcript, resumes it in a new terminal) |
@@ -775,6 +776,14 @@ Every session on the board carries, when known:
 - `tests` — the last test command the session ran and how it went:
   `{ok, at, cmd}` from the Bash hook (`go test`, `bun test`, `pytest`,
   `make check`, a `test` script…). Slots say *tests ✓* or *tests ✗ go test*.
+- `spend` — what the session has cost so far: `{tokens, turns, at}`, every
+  usage row Claude Code wrote in its transcript (cache reads included, as
+  the account is billed), summed on the sweep from where the last one
+  stopped. `cap` is the budget it runs under and `overCap` says it passed
+  it. Slots carry *52.3M*, and *over budget* when it is. The budget stops
+  nothing: the daemon rings once and the row keeps saying so, which is the
+  point — a session burning a window is seen from the phone, not from the
+  invoice.
 
 And the board carries `accounts[]`: every account the sessions run under (and
 every profile in the config, whether in use or not) with the /usage picture

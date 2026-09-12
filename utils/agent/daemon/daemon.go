@@ -152,6 +152,12 @@ type Daemon struct {
 	// AutoContinue types "continue" into limited sessions when their limit
 	// should be over; see autocontinue.go.
 	AutoContinue bool
+	// SessionCap is the token budget every session runs under unless it
+	// has one of its own; zero means none. Read on the sweep, so a change
+	// by command takes at once. Spend is read from each transcript from
+	// where the last sweep stopped; see spend.go.
+	SessionCap int64
+	spent      map[string]spendMark
 	// DigestAt is the local HH:MM for the daily digest; Digest builds its
 	// text. Both injected by cmd; either empty means no digest.
 	DigestAt string
