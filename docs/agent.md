@@ -1111,6 +1111,14 @@ later `after` continues, `wait` holds the answer up to 25 s until a line
 lands). Send, Allow / Deny and Interrupt sit under it, so the phone is a
 seat at the session, not only a remote.
 
+A picture goes too — a screenshot of the bug, a photo of the whiteboard:
+the phone's **+** sends it sealed (`POST /launch/upload {session, name,
+data}` → `{path}`), the laptop keeps it under its own agent folder
+(`uploads/<session>/`, never in the repository, gone after seven days,
+pictures only, 8 MB at most), and the message the phone types names the
+path, so Claude reads the file the way it would one dragged into the
+terminal.
+
 What keeps it safe: the allowlist lives in the trusted user config, never a
 repository; nothing is pushed — the phone pulls only while its Chat sheet
 is open, and the session's row shows *👁 phone reading* for a minute after

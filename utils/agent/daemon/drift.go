@@ -247,7 +247,18 @@ func gitWorkingTreeOf(dir string) string {
 // board should say before a merge does.
 func crossings(live []sessions.Session, measured map[string]measure) map[string][]sessions.Overlap {
 	out := map[string][]sessions.Overlap{}
+	// The other session by the name a person knows it by: its title, its
+	// bot, and only then the label·id the board made up.
 	name := func(s sessions.Session) string {
+		if t := strings.TrimSpace(s.Title); t != "" {
+			if len(t) > 32 {
+				t = t[:32] + "…"
+			}
+			return t
+		}
+		if s.Bot != "" {
+			return s.Bot
+		}
 		if s.Display != "" {
 			return s.Display
 		}
