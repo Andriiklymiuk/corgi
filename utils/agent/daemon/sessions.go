@@ -103,6 +103,8 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 			return true
 		}
 		d.sendToSession(ctx, c.SessionID, keys, false)
+	case command.ActionRead:
+		_ = d.Sessions.ReadBy(c.SessionID, time.Now())
 	case command.ActionInterrupt:
 		keys, err := d.Sessions.InterruptKeys(c.SessionID)
 		if err != nil {

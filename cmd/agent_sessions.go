@@ -330,6 +330,9 @@ func formatSlot(sl sessions.Slot) string {
 	if sl.Tests != "" {
 		line += " · " + clipTitle(sl.Tests, 28)
 	}
+	if sl.Reading {
+		line += " · 👁 phone reading"
+	}
 	if sl.Spend != "" {
 		line += " · " + sl.Spend
 		if sl.OverCap {

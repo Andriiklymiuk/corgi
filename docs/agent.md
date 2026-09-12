@@ -300,6 +300,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
 | `corgi agent bot add\|list\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own — and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them |
 | `corgi agent ask "<question>"` | the chief: one question about the board — what to look at first, what is blocked, who is on what — answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
+| `corgi agent stream [enable\|disable] [--workspace X\|--all]` | which workspaces a paired phone may read as a conversation (off by default); the phone's Chat sheet, `POST /launch/transcript` |
 | `corgi agent interrupt <session>` | Escape into a working session, as you would press it: the turn stops, the session waits; nothing is closed. The phone's and the bar's **Interrupt** (`POST /launch/interrupt`) |
 | `corgi agent cap [<session>] <tokens\|off>` | a token budget every session runs under (`cap 50M`), or one session's own (`cap <session> 20M`); passing it rings once and the row says *over budget* — nothing is stopped |
 | `corgi agent usage [--json\|--watch]` | every account's 5-hour and 7-day windows, the pace and when they run out, today's tokens by model, how long sessions waited on you |
@@ -1092,6 +1093,35 @@ so *Code Reviewer* on the phone is the same chat as on the desk. The daemon
 records the thread from the session's first event (`CORGI_BOT` in the
 environment, `bot` on the session row). `GET /launch/bots` lists them
 without the souls; `POST /launch/new {bot}` opens one.
+
+### A session as a chat, on the phone
+
+```bash
+corgi agent stream enable --workspace api   # this workspace's sessions may be read
+corgi agent stream enable --all
+corgi agent stream                          # what is allowed
+```
+
+Off until this machine says so. Then a session's sheet on the phone has
+**Chat**: your prompts, Claude's words, each tool call with its subject
+(*Edit auth/session.go*, *Bash go test*), each result folded — read from
+the transcript Claude Code writes, tailed (`POST /launch/transcript
+{session, after, wait}`: `after` 0 opens at the newest 200 entries, a
+later `after` continues, `wait` holds the answer up to 25 s until a line
+lands). Send, Allow / Deny and Interrupt sit under it, so the phone is a
+seat at the session, not only a remote.
+
+What keeps it safe: the allowlist lives in the trusted user config, never a
+repository; nothing is pushed — the phone pulls only while its Chat sheet
+is open, and the session's row shows *👁 phone reading* for a minute after
+each read, so the laptop always knows; what looks like a credential in a
+message or a tool result (`sk-…`, `ghp_…`, `AKIA…`, `Bearer …`,
+`password=`, private keys, JWTs) is replaced with `•••` before it leaves;
+each entry is cut at 2 000 characters; thinking, side chains and Claude
+Code's own reminders never go; every body is end-to-end encrypted; and
+the phone keeps the conversation in memory only — nothing of it in its
+offline cache. A scrubber cannot catch every secret a `cat .env` prints:
+the workspace list is the real control.
 
 ### The chief
 
