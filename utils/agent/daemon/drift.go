@@ -99,6 +99,15 @@ func driftReasons(s sessions.Session) []string {
 }
 
 func driftReasonsSplit(s sessions.Session) (loud, quiet []string) {
+	lines, files, ok := 0, []string(nil), false
+	if s.Cwd != "" {
+		lines, files, ok = driftDiff(s.Cwd)
+	}
+	return driftReasonsFrom(s, lines, files, ok)
+}
+
+// driftReasonsFrom is driftReasonsSplit given a diff already measured.
+func driftReasonsFrom(s sessions.Session, lines int, files []string, ok bool) (loud, quiet []string) {
 	if s.Context != nil && s.Context.Percent >= driftContextAt {
 		loud = append(loud, fmt.Sprintf("context %d%% full — /compact, or fresh from a handoff", s.Context.Percent))
 	}
@@ -114,7 +123,6 @@ func driftReasonsSplit(s sessions.Session) (loud, quiet []string) {
 	if root != "" {
 		sc, hasScope = scope.ForBranch(root, s.Branch)
 	}
-	lines, files, ok := driftDiff(s.Cwd)
 	if !ok {
 		return loud, nil
 	}
@@ -162,11 +170,42 @@ func (d *Daemon) checkDrift(now time.Time) {
 	if d.Sessions == nil {
 		return
 	}
+	live := []sessions.Session{}
 	for _, s := range d.Sessions.Sessions() {
 		if s.Status != sessions.StatusWorking && s.Status != sessions.StatusNeedsInput && s.Status != sessions.StatusDone {
 			continue
 		}
-		loud, quiet := driftReasonsSplit(s)
+		live = append(live, s)
+	}
+	// One git diff per session, used for everything: the numbers on the
+	// board, who else is on the same files, and whether it is drifting.
+	measured := map[string]measure{}
+	for _, s := range live {
+		if s.Cwd == "" {
+			continue
+		}
+		lines, files, ok := driftDiff(s.Cwd)
+		measured[s.ID] = measure{lines: lines, files: files, ok: ok, repo: workspaceRootOf(s.Cwd), tree: workingTreeOf(s.Cwd)}
+	}
+	overlaps := crossings(live, measured)
+	for _, s := range live {
+		m := measured[s.ID]
+		var c *sessions.Changes
+		if m.ok {
+			touched := m.files
+			if len(touched) > sessions.TouchedMax {
+				touched = touched[:sessions.TouchedMax]
+			}
+			c = &sessions.Changes{Files: len(m.files), Lines: m.lines, Touched: touched, At: now}
+		}
+		if _, crossed := d.Sessions.SetChanges(s.ID, c, overlaps[s.ID]); crossed {
+			label := s.Display
+			if label == "" {
+				label = s.Label
+			}
+			go d.notifyAttention("corgi agent · "+label, "crossing streams: "+sessions.OverlapLine(overlaps[s.ID]), s.Folder)
+		}
+		loud, quiet := driftReasonsFrom(s, m.lines, m.files, m.ok)
 		if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 {
 			label := s.Display
 			if label == "" {
@@ -175,4 +214,82 @@ func (d *Daemon) checkDrift(now time.Time) {
 			go d.notifyAttention("corgi agent · "+label, "drifting: "+loud[0], s.Folder)
 		}
 	}
+}
+
+// measure is one session's diff, and where it lives: the repository (so
+// only sessions in the same one are compared) and the working tree (two
+// sessions in one tree share every file, whatever the diff says).
+type measure struct {
+	lines int
+	files []string
+	ok    bool
+	repo  string
+	tree  string
+}
+
+// worktreeOf is a seam: the working tree a directory belongs to. The
+// repository root is the common one; a worktree made with git worktree add
+// is its own.
+var workingTreeOf = gitWorkingTreeOf
+
+func gitWorkingTreeOf(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// crossings is, for every live session, the other sessions in the same
+// repository that touch the same files — or sit in the same working tree,
+// which is every file at once. Work crossing streams is the thing the
+// board should say before a merge does.
+func crossings(live []sessions.Session, measured map[string]measure) map[string][]sessions.Overlap {
+	out := map[string][]sessions.Overlap{}
+	name := func(s sessions.Session) string {
+		if s.Display != "" {
+			return s.Display
+		}
+		return s.Label
+	}
+	for i, a := range live {
+		ma, ok := measured[a.ID]
+		if !ok || ma.repo == "" {
+			continue
+		}
+		for j, b := range live {
+			if i == j {
+				continue
+			}
+			mb, ok := measured[b.ID]
+			if !ok || mb.repo != ma.repo {
+				continue
+			}
+			if ma.tree != "" && ma.tree == mb.tree {
+				out[a.ID] = append(out[a.ID], sessions.Overlap{ID: b.ID, Session: name(b), SameCheckout: true})
+				continue
+			}
+			if !ma.ok || !mb.ok {
+				continue
+			}
+			theirs := map[string]bool{}
+			for _, f := range mb.files {
+				theirs[f] = true
+			}
+			var shared []string
+			for _, f := range ma.files {
+				if theirs[f] && !generatedDiffPath(f) {
+					shared = append(shared, f)
+				}
+			}
+			if len(shared) == 0 {
+				continue
+			}
+			if len(shared) > sessions.TouchedMax {
+				shared = shared[:sessions.TouchedMax]
+			}
+			out[a.ID] = append(out[a.ID], sessions.Overlap{ID: b.ID, Session: name(b), Files: shared})
+		}
+	}
+	return out
 }

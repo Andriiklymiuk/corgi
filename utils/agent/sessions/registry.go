@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -129,6 +130,56 @@ type Slot struct {
 	ResumeAt time.Time `json:"resumeAt,omitzero"`
 	// Drift is the first reason the daemon thinks a person should look.
 	Drift string `json:"drift,omitempty"`
+	// Changes is the branch in one line — "4 files · 120 lines"; Tests the
+	// last test run — "tests ✓" or "tests ✗ go test"; Overlap the first
+	// other session on the same files — "api·2 on registry.go".
+	Changes string `json:"changes,omitempty"`
+	Tests   string `json:"tests,omitempty"`
+	Overlap string `json:"overlap,omitempty"`
+}
+
+// ChangesLine is the board's one line for a branch: files and lines that
+// are somebody's work.
+func ChangesLine(c *Changes) string {
+	if c == nil || (c.Files == 0 && c.Lines == 0) {
+		return ""
+	}
+	return fmt.Sprintf("%d file%s · %d line%s", c.Files, plural(c.Files), c.Lines, plural(c.Lines))
+}
+
+// TestsLine says how the last test run went, in three characters.
+func TestsLine(t *TestRun) string {
+	if t == nil {
+		return ""
+	}
+	if t.OK {
+		return "tests ✓"
+	}
+	return "tests ✗ " + t.Cmd
+}
+
+// OverlapLine names the first session on the same files, or the same
+// checkout.
+func OverlapLine(o []Overlap) string {
+	if len(o) == 0 {
+		return ""
+	}
+	first := o[0]
+	if first.SameCheckout {
+		return "same checkout as " + first.Session
+	}
+	files := first.Files
+	if len(files) > 2 {
+		files = append(files[:2], "…")
+	}
+	return first.Session + " on " + strings.Join(files, ", ")
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // New returns a registry persisted at path, with a board of size keys.
@@ -292,6 +343,9 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 			s.Detail = ""
 		}
 		subject := ev.Tool + " " + ev.Subject
+		if ev.Tool == "Bash" && IsTestCommand(ev.Subject) {
+			s.Tests = &TestRun{OK: ev.Name == "PostToolUse", At: now, Cmd: ev.Subject}
+		}
 		if ev.Name == "PostToolUseFailure" && subject == s.failSubject {
 			s.FailStreak++
 		} else if ev.Name == "PostToolUseFailure" {
@@ -902,6 +956,39 @@ func (r *Registry) SetDrift(id string, reasons []string) (changed, began bool) {
 	return true, began
 }
 
+// SetChanges records what the sweep measured on a session's branch and who
+// else is on the same files. Reported as changed only when the numbers or
+// the names moved, so a quiet board is not rewritten every minute.
+func (r *Registry) SetChanges(id string, c *Changes, overlap []Overlap) (changed, crossed bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[id]
+	if !ok {
+		return false, false
+	}
+	same := (s.Changes == nil) == (c == nil) && overlapKey(s.Overlap) == overlapKey(overlap)
+	if same && c != nil {
+		same = s.Changes.Files == c.Files && s.Changes.Lines == c.Lines && strings.Join(s.Changes.Touched, "|") == strings.Join(c.Touched, "|")
+	}
+	if same {
+		return false, false
+	}
+	// crossed: this session's work just started meeting somebody else's on
+	// a file — said once, the moment it happens.
+	crossed = len(overlap) > 0 && !overlap[0].SameCheckout && len(s.Overlap) == 0
+	s.Changes, s.Overlap = c, overlap
+	r.touch()
+	return true, crossed
+}
+
+func overlapKey(o []Overlap) string {
+	parts := make([]string, 0, len(o))
+	for _, x := range o {
+		parts = append(parts, x.ID+":"+strings.Join(x.Files, ",")+":"+strconv.FormatBool(x.SameCheckout))
+	}
+	return strings.Join(parts, "|")
+}
+
 // PlanResume records when the daemon will continue a limited session; a
 // zero time clears the plan. Nothing else changes, so no transition fires.
 func (r *Registry) PlanResume(id string, at time.Time) bool {
@@ -1305,6 +1392,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		if len(s.Drift) > 0 {
 			sl.Drift = s.Drift[0]
 		}
+		sl.Changes, sl.Tests, sl.Overlap = ChangesLine(s.Changes), TestsLine(s.Tests), OverlapLine(s.Overlap)
 		sl.Branch, sl.Summary, sl.PR, sl.Ticket = s.Branch, s.Summary, s.PR, s.Ticket
 		if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
 			sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())
