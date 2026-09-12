@@ -28,7 +28,8 @@ func TestSessionContextTellsTheSessionWhatTheDaemonKnows(t *testing.T) {
 	st := sessions.State{
 		Sessions: []sessions.Session{
 			{ID: "me", Cwd: root, Folder: root, Status: sessions.StatusDone},
-			{ID: "s2", Cwd: root, Folder: root, Title: "Referrals", Status: sessions.StatusWorking, Detail: "Bash go test", Branch: "fix/login", StatusSince: now.Add(-3 * time.Minute)},
+			{ID: "s2", Cwd: root, Folder: root, Title: "Referrals", Status: sessions.StatusWorking, Detail: "Bash go test", Branch: "fix/login", StatusSince: now.Add(-3 * time.Minute),
+				Changes: &sessions.Changes{Files: 2, Lines: 40, Touched: []string{"api/login.go", "api/login_test.go"}}},
 			{ID: "s3", Cwd: "/elsewhere", Folder: "/elsewhere", Status: sessions.StatusWorking},
 			{ID: "s4", Cwd: root, Folder: root, Status: sessions.StatusGone},
 		},
@@ -46,7 +47,7 @@ func TestSessionContextTellsTheSessionWhatTheDaemonKnows(t *testing.T) {
 	got := sessionContext(dir, contextHookInput{SessionID: "me", Cwd: root, Source: "startup"}, "", now)
 	for _, want := range []string{
 		"corgi · acme-api on feat/x",
-		`another session in this workspace: ● "Referrals" working on fix/login (Bash go test) 3m`,
+		`another session in this workspace: ● "Referrals" working on fix/login (Bash go test) 3m, touching api/login.go, api/login_test.go`,
 		"budget: 5h 57% (resets 12:00) · week 41% — at this pace the 5h window runs out at 11:00",
 		"last session here ended 2h ago: was on feat/x · 1 repo has uncommitted changes",
 		"workspace memory: 2 facts in .corgi/memory/index.md",

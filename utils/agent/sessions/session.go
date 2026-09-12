@@ -275,6 +275,73 @@ type Session struct {
 	FailStreak  int `json:"failStreak,omitempty"`
 	failSubject string
 	Drift       []string `json:"drift,omitempty"`
+	// Changes is what the branch has built up since it left main, measured
+	// on the minute sweep: the one line an operator reads before the diff.
+	// Overlap names the other live sessions in the same repository touching
+	// the same files — work crossing streams, which nobody should learn
+	// about at merge time. Tests is the last test command the session ran
+	// and how it went.
+	Changes *Changes  `json:"changes,omitempty"`
+	Overlap []Overlap `json:"overlap,omitempty"`
+	Tests   *TestRun  `json:"tests,omitempty"`
+}
+
+// Changes is a branch's diff against main: files touched, lines that are
+// somebody's work (lock files and bundles never count), and the paths, a
+// few of them, repository-relative.
+type Changes struct {
+	Files   int       `json:"files"`
+	Lines   int       `json:"lines"`
+	Touched []string  `json:"touched,omitempty"`
+	At      time.Time `json:"at"`
+}
+
+// Overlap is another session on the same files. Files is empty when the
+// two simply share one checkout — every file is then the same file.
+type Overlap struct {
+	ID      string   `json:"id"`
+	Session string   `json:"session"`
+	Files   []string `json:"files,omitempty"`
+	// SameCheckout: not two worktrees touching one path, but one working
+	// tree with two sessions in it.
+	SameCheckout bool `json:"sameCheckout,omitempty"`
+}
+
+// TestRun is the last test command a session ran, from the Bash hook.
+type TestRun struct {
+	OK  bool      `json:"ok"`
+	At  time.Time `json:"at"`
+	Cmd string    `json:"cmd"`
+}
+
+// TouchedMax is how many changed paths a session carries on the board.
+const TouchedMax = 8
+
+// IsTestCommand says whether a Bash subject — the program and subcommand
+// words the hook keeps — is a test run: what a person would look at first
+// when a session says it is done.
+func IsTestCommand(subject string) bool {
+	f := strings.Fields(strings.ToLower(subject))
+	if len(f) == 0 {
+		return false
+	}
+	switch f[0] {
+	case "jest", "vitest", "pytest", "mocha", "ava", "rspec", "phpunit", "gotestsum", "playwright", "cypress", "maestro":
+		return true
+	}
+	if len(f) < 2 {
+		return false
+	}
+	switch f[0] + " " + f[1] {
+	case "go test", "npm test", "npm t", "yarn test", "pnpm test", "bun test", "cargo test", "make test", "make check", "mix test", "dotnet test", "swift test", "gradle test", "flutter test", "deno test":
+		return true
+	case "bunx jest", "npx jest", "bunx vitest", "npx vitest", "bunx playwright", "npx playwright", "bunx maestro", "npx maestro":
+		return true
+	case "bun run", "npm run", "pnpm run", "yarn run":
+		// A script named test, or test:anything, or check.
+		return len(f) >= 3 && (f[2] == "test" || f[2] == "check" || strings.HasPrefix(f[2], "test:"))
+	}
+	return false
 }
 
 // Pending is one permission prompt: the tool and the safe word about its

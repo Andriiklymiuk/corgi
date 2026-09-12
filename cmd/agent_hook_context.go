@@ -161,6 +161,16 @@ func otherSessionsHere(st sessions.State, self, root string, now time.Time) stri
 		if !s.StatusSince.IsZero() {
 			part += " " + roughAge(now.Sub(s.StatusSince))
 		}
+		// What it has touched, so this session can stay off those files or
+		// talk to whoever is on them — the one thing two chats in one
+		// repository most need to know about each other.
+		if s.Changes != nil && len(s.Changes.Touched) > 0 {
+			touched := s.Changes.Touched
+			if len(touched) > 4 {
+				touched = append(touched[:4], fmt.Sprintf("+%d more", s.Changes.Files-4))
+			}
+			part += ", touching " + strings.Join(touched, ", ")
+		}
 		parts = append(parts, part)
 		if len(parts) == 4 {
 			break

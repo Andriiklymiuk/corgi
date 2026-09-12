@@ -319,6 +319,15 @@ func formatSlot(sl sessions.Slot) string {
 	if sl.Drift != "" {
 		line += " · " + clipTitle(sl.Drift, 48)
 	}
+	if sl.Changes != "" {
+		line += " · " + sl.Changes
+	}
+	if sl.Tests != "" {
+		line += " · " + clipTitle(sl.Tests, 28)
+	}
+	if sl.Overlap != "" {
+		line += " · ⚠ " + clipTitle(sl.Overlap, 40)
+	}
 	line += "  " + sl.Profile + " · " + string(sl.Host)
 	if sl.Context > 0 {
 		line += fmt.Sprintf(" · ctx %d%%", sl.Context)

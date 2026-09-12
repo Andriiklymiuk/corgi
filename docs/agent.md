@@ -759,6 +759,21 @@ Every session on the board carries, when known:
   What a phone row shows under the label, and what a PR button opens.
 - `turnStartedAt` — when the current turn began; slots carry `turnS`, so a
   surface can say a turn has run fourteen minutes before `stuck` does.
+- `changes` — what its branch has built up since it left main: `{files,
+  lines, touched[]}`, measured once a minute (`git diff` against the
+  merge-base; lock files and bundles never count as lines). Slots carry it
+  as one line, *4 files · 120 lines* — the number an operator reads before
+  opening the diff.
+- `overlap` — the other live sessions in the same repository touching the
+  same files, `[{id, session, files}]`, or `{sameCheckout: true}` when two
+  sessions simply share one working tree. Work crossing streams, said on
+  the board the minute it starts (and rung once) rather than found at merge
+  time. Slots carry *api·2 on registry.go*. A session starting in a
+  workspace is told what its siblings touch, in the same line that names
+  them.
+- `tests` — the last test command the session ran and how it went:
+  `{ok, at, cmd}` from the Bash hook (`go test`, `bun test`, `pytest`,
+  `make check`, a `test` script…). Slots say *tests ✓* or *tests ✗ go test*.
 
 And the board carries `accounts[]`: every account the sessions run under (and
 every profile in the config, whether in use or not) with the /usage picture
