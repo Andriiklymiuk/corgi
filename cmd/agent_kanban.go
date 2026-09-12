@@ -326,8 +326,12 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 	}
 
 	out := make([]KanbanCard, 0, len(byRef))
+	// A ref can enter order twice: an old settled event drops its card,
+	// then a newer event on the same ref makes it again. One card per ref.
+	emitted := map[string]bool{}
 	for _, id := range order {
-		if c, ok := byRef[id]; ok {
+		if c, ok := byRef[id]; ok && !emitted[id] {
+			emitted[id] = true
 			out = append(out, *c)
 		}
 	}

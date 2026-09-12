@@ -97,3 +97,25 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 		t.Errorf("columns in order: %s … %s", cards[0].Column, cards[len(cards)-1].Column)
 	}
 }
+
+// A ticket commented on twice: the older comment settled a day ago and
+// dropped its card, the newer one made it again — and the board showed the
+// ticket twice, which the phone flagged as two rows with one key.
+func TestOneCardPerRefWhenAnOlderEventOnItSettled(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	events := []watch.Event{
+		{Key: "k-old", Ref: "IMP-1", Workspace: "api", Kind: watch.KindIssueComment, State: "Done", At: now.Add(-48 * time.Hour)},
+		{Key: "k-new", Ref: "IMP-1", Workspace: "api", Kind: watch.KindIssueComment, State: "Todo", At: now},
+	}
+	cards := buildKanban(kanbanInputs{events: events, moved: watch.LoadStateLog(dir), fixes: watch.LoadFixLog(dir), picks: watch.LoadPicks(dir), now: now})
+	n := 0
+	for _, c := range cards {
+		if c.Ref == "IMP-1" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("IMP-1 is on the board %d times, want once", n)
+	}
+}
