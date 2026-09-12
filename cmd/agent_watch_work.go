@@ -37,10 +37,11 @@ prints. A ref names its newest row. The daemon must be running.`,
 		model, _ := cmd.Flags().GetString("model")
 		profile, _ := cmd.Flags().GetString("profile")
 		from, _ := cmd.Flags().GetString("from")
+		isolate, _ := cmd.Flags().GetBool("isolate")
 		if from != "editor" {
 			from = "cli"
 		}
-		c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: window, Model: model, Profile: profile, Source: from})
+		c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: window, Model: model, Profile: profile, Source: from, Isolate: isolate})
 		if status != 0 {
 			exitWithError("agent_watch_work", fmt.Errorf("%s", msg), 1)
 		}
@@ -66,6 +67,7 @@ func init() {
 	agentWatchWorkCmd.Flags().String("model", "", "claude model for the session")
 	agentWatchWorkCmd.Flags().String("profile", "", "corgi profile (account) for the session")
 	agentWatchWorkCmd.Flags().String("from", "", "who pressed it, for the board: editor")
+	agentWatchWorkCmd.Flags().Bool("isolate", false, "a worktree of the session's own on corgi/<ref>, one per repository — it never touches your checkout")
 	_ = agentWatchWorkCmd.Flags().MarkHidden("from")
 	agentWatchCmd.AddCommand(agentWatchWorkCmd)
 }

@@ -13,18 +13,32 @@ import (
 var worktreeCmd = &cobra.Command{
 	Use:     "worktree",
 	Aliases: []string{"wt"},
-	Short:   "Manage worktrees corgi created for --service-branch",
+	Short:   "Manage worktrees corgi created for --service-branch and isolated sessions",
+}
+
+// worktreeBaseHere is where this folder's corgi worktrees live: under the
+// compose file's corgi_services, or a bare repository's own when a session
+// was isolated without a stack.
+func worktreeBaseHere(cmd *cobra.Command) (string, error) {
+	if _, err := utils.GetCorgiServices(cmd); err == nil {
+		return filepath.Join(utils.CorgiServicesDir(), ".worktrees"), nil
+	}
+	cwd, _ := os.Getwd()
+	if root, ok := utils.RepoRootOf(cwd); ok && root != "" {
+		return utils.AgentWorktreeBase(root), nil
+	}
+	return "", fmt.Errorf("no corgi-compose.yml here and not inside a git repository")
 }
 
 var worktreeListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List corgi-created service worktrees",
 	Run: func(cmd *cobra.Command, _ []string) {
-		if _, err := utils.GetCorgiServices(cmd); err != nil {
+		base, err := worktreeBaseHere(cmd)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			exitProcess(1)
 		}
-		base := filepath.Join(utils.CorgiServicesDir(), ".worktrees")
 		entries, err := os.ReadDir(base)
 		if err != nil || len(entries) == 0 {
 			fmt.Println("no corgi worktrees")
@@ -43,11 +57,12 @@ var worktreePruneCmd = &cobra.Command{
 	Aliases: []string{"clean"},
 	Short:   "Remove corgi-created service worktrees (keeps ones with uncommitted work)",
 	Run: func(cmd *cobra.Command, _ []string) {
-		if _, err := utils.GetCorgiServices(cmd); err != nil {
+		base, err := worktreeBaseHere(cmd)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			exitProcess(1)
 		}
-		skipped, err := utils.CleanCorgiWorktrees(worktreePruneForce)
+		skipped, err := utils.CleanWorktreesUnder(base, worktreePruneForce)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "couldn't prune worktrees:", err)
 			exitProcess(1)

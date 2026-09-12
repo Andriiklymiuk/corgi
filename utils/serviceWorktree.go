@@ -623,7 +623,12 @@ func ApplyServiceWorkdirsWithFeature(corgi *CorgiCompose, dirPairs, branchPairs,
 
 // falling back to rm) and prunes the admin entries in each source repo.
 func CleanCorgiWorktrees(force bool) ([]string, error) {
-	base := filepath.Join(CorgiServicesDir(), ".worktrees")
+	return CleanWorktreesUnder(filepath.Join(CorgiServicesDir(), ".worktrees"), force)
+}
+
+// CleanWorktreesUnder removes every worktree in base, keeping the ones with
+// uncommitted work unless forced, and returns the ones kept.
+func CleanWorktreesUnder(base string, force bool) ([]string, error) {
 	entries, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -3525,6 +3525,7 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		Model     string `json:"model"`
 		Profile   string `json:"profile"`
 		Workspace string `json:"workspace"`
+		Isolate   bool   `json:"isolate"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -3581,6 +3582,9 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if model != "" {
 		args = append(args, "--model", model)
+	}
+	if req.Isolate {
+		args = append(args, "--isolate")
 	}
 	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
 		id, err := savePrompt(dir, prompt)
@@ -4104,6 +4108,8 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		Model   string   `json:"model"`
 		Profile string   `json:"profile"`
 		From    string   `json:"from"` // phone (default) or page
+		// Isolate asks for a worktree of the session's own.
+		Isolate bool `json:"isolate"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -4122,7 +4128,7 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.From) == "page" {
 		source = "page"
 	}
-	c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: req.Window, Model: req.Model, Profile: req.Profile, Source: source})
+	c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: req.Window, Model: req.Model, Profile: req.Profile, Source: source, Isolate: req.Isolate})
 	if status != 0 {
 		writeLaunchError(w, status, msg)
 		return
@@ -4139,6 +4145,8 @@ var ticketKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_.:/#!@-]{1,200}$`)
 // window, a model, a profile, and who asked.
 type workOnOptions struct {
 	Window, Model, Profile, Source string
+	// Isolate: the session gets a worktree of its own on corgi/<ref>.
+	Isolate bool
 }
 
 // workOnCommand is the new-session command that hands watch events to a
@@ -4241,6 +4249,9 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 	}
 	if len(refs) > 0 && ticketKeyPattern.MatchString(events[0].Key) {
 		args = append(args, "--ticket", strings.Join(refs, ","), "--ticket-key", events[0].Key)
+	}
+	if opt.Isolate {
+		args = append(args, "--isolate")
 	}
 	args = append(args, "--prompt-id", id)
 	return command.Command{Action: command.ActionNew, WindowID: window,
