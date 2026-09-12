@@ -525,6 +525,8 @@ func pickedFrom(by string) string {
 		return "command line"
 	case "editor":
 		return "editor"
+	case "bar":
+		return "menu bar"
 	case "page", "dashboard":
 		return "page"
 	}
