@@ -97,13 +97,22 @@ func e2eKeyFor(storePath string, d pairing.Device) ([]byte, error) {
 	return key, nil
 }
 
+// sealedBodyLimit is how much sealed request a path may carry: a picture
+// for a session is the one big thing a phone sends.
+func sealedBodyLimit(path string) int64 {
+	if path == "/launch/upload" {
+		return maxUploadSealed
+	}
+	return 1 << 20
+}
+
 // serveSealed opens the request body, runs the handler against a buffer,
 // and seals what it wrote. Errors the handler wrote travel sealed too: a
 // sniffer learns the status code and nothing else.
 func serveSealed(w http.ResponseWriter, r *http.Request, next http.Handler, key []byte) {
 	method, path := r.Method, r.URL.Path
 	if r.Body != nil && r.ContentLength != 0 {
-		raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		raw, err := io.ReadAll(io.LimitReader(r.Body, sealedBodyLimit(path)))
 		if err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
 			return

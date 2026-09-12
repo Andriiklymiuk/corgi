@@ -151,7 +151,8 @@ type block struct {
 }
 
 // parse turns one JSONL line into the entries a person reads. Thinking,
-// images, system rows, hook chatter and sub-agent side chains stay out.
+// system rows, hook chatter and sub-agent side chains stay out; a pasted
+// image is named, not carried.
 func parse(line []byte) []Entry {
 	if len(line) > maxLine {
 		return nil
@@ -196,6 +197,12 @@ func parse(line []byte) []Entry {
 		case "tool_result":
 			t, truncated := clip(Scrub(resultText(b.Content)))
 			out = append(out, Entry{ID: id, Kind: "result", At: r.Timestamp, Text: t, ToolID: b.ToolUse, Truncated: truncated})
+		case "image":
+			// A picture pasted at the desk: the phone learns one was there,
+			// never its bytes.
+			if r.Type == "user" {
+				out = append(out, Entry{ID: id, Kind: "user", At: r.Timestamp, Text: "🖼 image"})
+			}
 		}
 	}
 	return out
