@@ -354,6 +354,60 @@ func TestSendAnswerAndNoteReachTheSession(t *testing.T) {
 	<-done
 }
 
+// Interrupt is Escape typed into a working session, and the row says
+// interrupted at once, because Claude Code fires no hook for it. A session
+// at rest is left alone.
+func TestInterruptTypesEscapeAndMarksTheRow(t *testing.T) {
+	d := trackingDaemon(t)
+	var mu sync.Mutex
+	var typed []string
+	d.Raise = func(context.Context, sessions.FocusTarget) error { return nil }
+	d.TypeText = func(_ context.Context, target sessions.FocusTarget, text string, enter bool) error {
+		mu.Lock()
+		defer mu.Unlock()
+		typed = append(typed, target.SessionID+":"+text)
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+
+	working := sessions.Event{Name: "PreToolUse", Tool: "Bash", Subject: "sleep", SessionID: "s1", Cwd: "/tmp/acme-api", ClaudePID: 100, TermProgram: "iTerm.app", TTY: 5, At: time.Now()}
+	resting := sessions.Event{Name: "Stop", SessionID: "s2", Cwd: "/tmp/other", ClaudePID: 200, TermProgram: "iTerm.app", TTY: 6, At: time.Now()}
+	for _, ev := range []sessions.Event{working, resting} {
+		ev := ev
+		_, _ = command.Write(d.Dir, command.Command{Action: command.ActionSession, Event: &ev})
+	}
+	d.Nudge()
+	waitFor(t, func() bool { return len(readBoard(t, d).Sessions) == 2 })
+
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionInterrupt, SessionID: "s1"})
+	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionInterrupt, SessionID: "s2"})
+	d.Nudge()
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(typed) == 1
+	})
+	mu.Lock()
+	if typed[0] != "s1:\x1b" {
+		t.Fatalf("typed = %v", typed)
+	}
+	mu.Unlock()
+	waitFor(t, func() bool {
+		b := readBoard(t, d)
+		var s1 sessions.Session
+		for _, s := range b.Sessions {
+			if s.ID == "s1" {
+				s1 = s
+			}
+		}
+		return s1.Status == sessions.StatusDone && s1.Detail == "interrupted" && strings.Contains(b.Notice, "not working")
+	})
+	cancel()
+	<-done
+}
+
 func TestLimitLiftedWaitsForAFinishedTurn(t *testing.T) {
 	d := testDaemon(t)
 	got := make(chan string, 4)

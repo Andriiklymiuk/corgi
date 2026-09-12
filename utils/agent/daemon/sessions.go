@@ -102,7 +102,8 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 			d.Sessions.SetNotice(err)
 			return true
 		}
-		d.sendToSession(ctx, c.SessionID, keys, false)
+		id := c.SessionID
+		d.sendKeys(ctx, id, keys, false, func() { d.Sessions.Interrupted(id, time.Now()) })
 	default:
 		return false
 	}
@@ -235,6 +236,13 @@ func (d *Daemon) sampleAccounts(now time.Time) {
 // from here — its input is a web view — so the outcome says so and a key
 // falls back to its own keystrokes.
 func (d *Daemon) sendToSession(ctx context.Context, ref, text string, enter bool) {
+	d.sendKeys(ctx, ref, text, enter, nil)
+}
+
+// sendKeys types into a session and, once the keys are on their way, runs
+// delivered — the interrupt marks the session interrupted then, because
+// Claude Code fires no hook when a person presses Escape.
+func (d *Daemon) sendKeys(ctx context.Context, ref, text string, enter bool, delivered func()) {
 	target, err := d.Sessions.Focus(ref)
 	if err != nil {
 		utils.Infof("agent: send to %q: %v\n", ref, err)
@@ -256,6 +264,8 @@ func (d *Daemon) sendToSession(ctx context.Context, ref, text string, enter bool
 		}
 		if err != nil {
 			utils.Infof("agent: send to %s: %v\n", target.SessionID, err)
+		} else if delivered != nil {
+			delivered()
 		}
 		d.Sessions.RecordFocus(target.SessionID, err)
 		d.flushSessions()

@@ -1325,6 +1325,24 @@ func (r *Registry) InterruptKeys(ref string) (string, error) {
 	return "\x1b", nil
 }
 
+// Interrupted marks a working session stopped by Escape: done, with the
+// row saying so. Claude Code fires no hook for it, so the board would
+// otherwise say working until the next message. A session that had already
+// moved on is left as it is, and its next event corrects the row either way.
+func (r *Registry) Interrupted(ref string, now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil || s.Status != StatusWorking {
+		return false
+	}
+	s.Tool, s.Pending = "", nil
+	s.Detail = "interrupted"
+	r.setStatus(s, StatusDone, now)
+	r.touch()
+	return true
+}
+
 // Risky says whether the prompt must not be approved unseen.
 func (p *Pending) Risky() bool {
 	return p != nil && p.Tool == "Bash" && riskyCommand.MatchString(p.Subject)
