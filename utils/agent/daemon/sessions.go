@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"andriiklymiuk/corgi/utils/agent/bots"
 	"context"
 	"errors"
 	"fmt"
@@ -51,6 +52,13 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 	case command.ActionSession:
 		if c.Event != nil {
 			d.Sessions.Apply(*c.Event)
+			// A session opened as a bot is that bot's thread from now on:
+			// the next open resumes it.
+			if c.Event.Bot != "" && c.Event.SessionID != "" && !sessions.Placeholder(c.Event.SessionID) {
+				if err := bots.RecordSession(bots.Path(d.Dir), c.Event.Bot, c.Event.SessionID, c.Event.At); err != nil {
+					utils.Infof("agent: bot %s: %v\n", c.Event.Bot, err)
+				}
+			}
 		}
 	case command.ActionFocus:
 		d.focusSession(ctx, c.SessionID)

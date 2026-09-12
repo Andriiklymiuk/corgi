@@ -159,6 +159,8 @@ type Event struct {
 	// so the board can say a session is on the ticket before any branch is.
 	Ticket    string `json:"ticket,omitempty"`
 	TicketKey string `json:"ticketKey,omitempty"`
+	// Bot is CORGI_BOT: the named bot this session was opened as.
+	Bot string `json:"bot,omitempty"`
 	// TermProgram and TermSession are TERM_PROGRAM and the emulator's own
 	// session id, for sessions outside an editor.
 	TermProgram string `json:"termProgram,omitempty"`
@@ -255,6 +257,10 @@ type Session struct {
 	// "ABC-1,ABC-2"), TicketKey the inbox key; from the launcher's env.
 	Ticket    string `json:"ticket,omitempty"`
 	TicketKey string `json:"ticketKey,omitempty"`
+	// Bot is the named bot this session runs as (corgi agent bot): the
+	// surfaces draw it with the bot's title and colour, and the daemon
+	// remembers the conversation as the one to resume.
+	Bot string `json:"bot,omitempty"`
 	// Branch is the cwd's branch as of the last prompt; Summary what Claude
 	// last said; PR the last pull request it linked; TurnStartedAt when the
 	// current or last turn began.

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/bots"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
@@ -3554,6 +3555,10 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		Profile   string `json:"profile"`
 		Workspace string `json:"workspace"`
 		Isolate   bool   `json:"isolate"`
+		// Bot opens the chat as a named bot: its workspace, account, model
+		// and persona, resuming its last conversation. The other fields
+		// still override.
+		Bot string `json:"bot"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -3598,6 +3603,17 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	args := []string{}
+	if bot := strings.TrimSpace(req.Bot); bot != "" {
+		if !bots.ValidName(bot) {
+			writeLaunchError(w, http.StatusBadRequest, "not a bot name")
+			return
+		}
+		if _, err := loadBot(bot); err != nil {
+			writeLaunchError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		args = append(args, "--bot", bot)
+	}
 	if ws := strings.TrimSpace(req.Workspace); ws != "" {
 		if _, err := workspaceRoot(ws); err != nil {
 			writeLaunchError(w, http.StatusNotFound, err.Error())
