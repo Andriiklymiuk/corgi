@@ -122,7 +122,7 @@ var agentBotListCmd = &cobra.Command{
 		for _, b := range store.Bots {
 			thread := "no conversation yet"
 			if b.LastSession != "" {
-				thread = "last talked " + roughAge(time.Since(b.LastSeen)) + " ago"
+				thread = "last talked " + agoWord(time.Since(b.LastSeen))
 			}
 			extra := []string{b.Workspace}
 			if b.Model != "" {
@@ -171,6 +171,15 @@ var agentBotOpenCmd = &cobra.Command{
 		sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: window, Command: daemon.NewSessionCommand("--bot", args[0]), Source: "cli"},
 			fmt.Sprintf("asked the editor to open %s", args[0]))
 	},
+}
+
+// agoWord is roughAge as a sentence ends: "3m ago", or "just now".
+func agoWord(d time.Duration) string {
+	w := roughAge(d)
+	if w == "just now" {
+		return w
+	}
+	return w + " ago"
 }
 
 func mustCwd() string {
