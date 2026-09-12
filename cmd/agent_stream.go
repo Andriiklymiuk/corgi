@@ -235,6 +235,9 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusInternalServerError, "could not read the conversation")
 			return
 		}
+		if entries == nil {
+			entries = []transcript.Entry{}
+		}
 		writeLaunchJSON(w, map[string]any{"entries": entries, "offset": offset})
 		return
 	}
@@ -250,6 +253,9 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(entries) > 0 || offset != req.After || wait == 0 || time.Now().After(deadline) {
+			if entries == nil {
+				entries = []transcript.Entry{}
+			}
 			writeLaunchJSON(w, map[string]any{"entries": entries, "offset": offset})
 			return
 		}
