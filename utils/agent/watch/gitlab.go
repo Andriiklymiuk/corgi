@@ -155,8 +155,8 @@ func gitlabTruncate(s string, n int) string {
 	return string(r[:n])
 }
 
-// RefState is the merge request's state for acme/api!7 — opened, merged,
-// closed or locked — so a row already merged can leave the inbox.
+// RefState is the merge request's state for acme/api!7 — draft, opened,
+// merged, closed or locked — so a row already merged can leave the inbox.
 func (g *GitLab) RefState(ctx context.Context, ref string) string {
 	project, num, ok := strings.Cut(ref, "!")
 	if !ok || g.Token == "" {
@@ -168,9 +168,13 @@ func (g *GitLab) RefState(ctx context.Context, ref string) string {
 	}
 	var mr struct {
 		State string `json:"state"`
+		Draft bool   `json:"draft"`
 	}
 	if err := g.getInto(ctx, base+"/api/v4/projects/"+url.PathEscape(project)+"/merge_requests/"+num, &mr); err != nil {
 		return ""
+	}
+	if mr.Draft && mr.State == "opened" {
+		return "draft"
 	}
 	return mr.State
 }

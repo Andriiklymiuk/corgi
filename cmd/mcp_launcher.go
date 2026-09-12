@@ -3978,7 +3978,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = watch.LoadStateLog(dir).SetFrom(event.Key, status, event.State, time.Now())
 		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status, "state": status})
-	case "merge", "close", "ready":
+	case "merge", "close", "ready", "draft", "reopen":
 		// Only a pull request of mine: one corgi opened, one a session on
 		// the ticket opened, or the one this row is about when it is mine —
 		// not a button that can close anything a link points at.
@@ -3989,20 +3989,29 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		secrets := watch.LoadSecretsFor(dir, event.Workspace)
 		var err error
-		var did string
+		var did, state string
 		switch strings.TrimSpace(req.Do) {
 		case "merge":
-			err, did = watch.MergePR(ctx, secrets, link), "merged "
+			err, did, state = watch.MergePR(ctx, secrets, link), "merged ", "merged"
 		case "ready":
-			err, did = watch.ReadyPR(ctx, secrets, link), "ready for review: "
+			err, did, state = watch.ReadyPR(ctx, secrets, link), "ready for review: ", "open"
+		case "draft":
+			err, did, state = watch.DraftPR(ctx, secrets, link), "back to draft: ", "draft"
+		case "reopen":
+			err, did, state = watch.ReopenPR(ctx, secrets, link), "reopened ", "open"
 		default:
-			err, did = watch.ClosePR(ctx, secrets, link), "closed "
+			err, did, state = watch.ClosePR(ctx, secrets, link), "closed ", "closed"
 		}
 		if err != nil {
 			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
 			return
 		}
-		writeLaunchJSON(w, map[string]any{"done": did + link, "url": link})
+		// The row says so at once; the daemon's next round reads the forge
+		// and agrees, or corrects it.
+		if strings.HasPrefix(string(event.Kind), "pr.") || event.Kind == watch.KindCIFailed || event.Kind == watch.KindReviewRequested {
+			_ = watch.LoadStateLog(dir).SetFrom(event.Key, state, event.State, time.Now())
+		}
+		writeLaunchJSON(w, map[string]any{"done": did + link, "url": link, "state": state})
 	case "assign":
 		me := watch.LoadBoardCache(dir).Get(event.Workspace).Me
 		if me.ID == "" {
@@ -4019,7 +4028,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLaunchJSON(w, map[string]any{"done": ref + " is yours"})
 	default:
-		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close, ready, ignore or unblock")
+		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close, ready, draft, reopen, ignore or unblock")
 	}
 }
 

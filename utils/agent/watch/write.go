@@ -500,6 +500,149 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }
 
+// DraftPR puts a pull request or merge request back into draft — the
+// opposite of ReadyPR, for a review that was asked for too early. GitHub
+// has it only in GraphQL; on GitLab draft is a title prefix.
+func DraftPR(ctx context.Context, s Secrets, link string) error {
+	switch {
+	case strings.Contains(link, "github.com/"):
+		m := githubPRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a repo and number out of %s", link)
+		}
+		if s.GitHub == "" {
+			return ErrNoToken
+		}
+		pr, err := readGitHubPR(ctx, s, m[1], m[2], link)
+		if err != nil {
+			return err
+		}
+		if pr.Draft {
+			return nil
+		}
+		q, _ := json.Marshal(map[string]any{
+			"query":     "mutation($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { pullRequest { isDraft } } }",
+			"variables": map[string]string{"id": pr.NodeID},
+		})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.github.com/graphql", strings.NewReader(string(q)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+s.GitHub)
+		req.Header.Set("Content-Type", "application/json")
+		return doGraphQL(req, link)
+	case strings.Contains(link, "/-/merge_requests/"):
+		m := gitlabMRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a project and number out of %s", link)
+		}
+		if s.GitLab == "" {
+			return ErrNoToken
+		}
+		base := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3]
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", link, err)
+		}
+		var mr struct {
+			Title string `json:"title"`
+			Draft bool   `json:"draft"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&mr)
+		resp.Body.Close()
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", link, err)
+		}
+		if mr.Draft {
+			return nil
+		}
+		body, _ := json.Marshal(map[string]string{"title": "Draft: " + undraftTitle(mr.Title)})
+		req, err = http.NewRequestWithContext(ctx, http.MethodPut, base, strings.NewReader(string(body)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		req.Header.Set("Content-Type", "application/json")
+		return doClose(req, link)
+	}
+	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
+}
+
+// ReopenPR opens a closed pull request or merge request again. A merged one
+// cannot be reopened anywhere, and the forge says so.
+func ReopenPR(ctx context.Context, s Secrets, link string) error {
+	switch {
+	case strings.Contains(link, "github.com/"):
+		m := githubPRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a repo and number out of %s", link)
+		}
+		if s.GitHub == "" {
+			return ErrNoToken
+		}
+		body, _ := json.Marshal(map[string]string{"state": "open"})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
+			"https://api.github.com/repos/"+m[1]+"/pulls/"+m[2], strings.NewReader(string(body)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+s.GitHub)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		return doClose(req, link)
+	case strings.Contains(link, "/-/merge_requests/"):
+		m := gitlabMRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a project and number out of %s", link)
+		}
+		if s.GitLab == "" {
+			return ErrNoToken
+		}
+		endpoint := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3] + "?state_event=reopen"
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		return doClose(req, link)
+	}
+	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
+}
+
+// readGitHubPR is the node id and draft flag of one pull request, which
+// the GraphQL mutations need.
+func readGitHubPR(ctx context.Context, s Secrets, repo, num, link string) (struct {
+	NodeID string `json:"node_id"`
+	Draft  bool   `json:"draft"`
+	State  string `json:"state"`
+}, error) {
+	var pr struct {
+		NodeID string `json:"node_id"`
+		Draft  bool   `json:"draft"`
+		State  string `json:"state"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+repo+"/pulls/"+num, nil)
+	if err != nil {
+		return pr, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.GitHub)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return pr, fmt.Errorf("reading %s: %w", link, err)
+	}
+	err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&pr)
+	resp.Body.Close()
+	if err != nil || pr.NodeID == "" {
+		return pr, fmt.Errorf("reading %s: no pull request there", link)
+	}
+	return pr, nil
+}
+
 // undraftTitle drops every draft marker GitLab knows from a title.
 func undraftTitle(title string) string {
 	t := strings.TrimSpace(title)
