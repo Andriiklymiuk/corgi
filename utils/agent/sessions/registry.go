@@ -611,6 +611,9 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.Bot != "" {
 		s.Bot = ev.Bot
 	}
+	if s.Home == "" && ev.Cwd != "" {
+		s.Home = ev.Cwd
+	}
 	if ev.Ticket != "" {
 		s.Ticket, s.TicketKey = ev.Ticket, ev.TicketKey
 	}

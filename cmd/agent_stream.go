@@ -149,10 +149,19 @@ var streamAllowedFor = func(workspace string) bool {
 
 // transcriptPathFor is the seam: where a session's conversation is.
 var transcriptPathFor = func(s sessions.Session) string {
-	if s.Cwd == "" || sessions.Placeholder(s.ID) {
+	if sessions.Placeholder(s.ID) {
 		return ""
 	}
-	return usage.TranscriptPath(s.ConfigDir, s.Cwd, s.ID)
+	// The folder is named after where the session started; a session that
+	// has cd'd since still writes to the file it began with.
+	home := s.Home
+	if home == "" {
+		home = s.Cwd
+	}
+	if home == "" {
+		return ""
+	}
+	return usage.TranscriptPath(s.ConfigDir, home, s.ID)
 }
 
 // maxStreamWait bounds the long-poll: the phone asks again after.
