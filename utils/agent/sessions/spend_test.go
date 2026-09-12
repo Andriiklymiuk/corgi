@@ -73,6 +73,21 @@ func TestInterruptIsEscapeIntoAWorkingSessionOnly(t *testing.T) {
 	if err != nil || keys != "\x1b" {
 		t.Fatalf("working: %q %v", keys, err)
 	}
+	if !r.Interrupted("s1", t0.Add(30*time.Second)) {
+		t.Fatal("Escape sent: the row says interrupted, done")
+	}
+	s, _ := r.Lookup("s1")
+	if s.Status != StatusDone || s.Detail != "interrupted" {
+		t.Fatalf("after Escape: %s %q", s.Status, s.Detail)
+	}
+	if r.Interrupted("s1", t0.Add(31*time.Second)) {
+		t.Fatal("once")
+	}
+	// Its next event says what it is really doing.
+	r.Apply(ev("PreToolUse", "s1", 40*time.Second))
+	if s, _ := r.Lookup("s1"); s.Status != StatusWorking {
+		t.Fatalf("a tool after Escape means it kept going: %s", s.Status)
+	}
 	r.Apply(ev("Stop", "s1", time.Minute))
 	if _, err := r.InterruptKeys("s1"); err == nil {
 		t.Fatal("nothing to interrupt once it stopped")
