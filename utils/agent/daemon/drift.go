@@ -188,6 +188,7 @@ func (d *Daemon) checkDrift(now time.Time) {
 		measured[s.ID] = measure{lines: lines, files: files, ok: ok, repo: workspaceRootOf(s.Cwd), tree: workingTreeOf(s.Cwd)}
 	}
 	overlaps := crossings(live, measured)
+	d.checkSpend(live, now)
 	for _, s := range live {
 		m := measured[s.ID]
 		var c *sessions.Changes

@@ -284,6 +284,21 @@ type Session struct {
 	Changes *Changes  `json:"changes,omitempty"`
 	Overlap []Overlap `json:"overlap,omitempty"`
 	Tests   *TestRun  `json:"tests,omitempty"`
+	// Spend is what the session has cost so far: every token count Claude
+	// Code wrote in its transcript, summed on the sweep. Cap is the budget
+	// it runs under — its own, else the daemon's default — and OverCap says
+	// it went past it. The budget stops nothing by itself; it rings once
+	// and stays on the row.
+	Spend   *Spend `json:"spend,omitempty"`
+	Cap     int64  `json:"cap,omitempty"`
+	OverCap bool   `json:"overCap,omitempty"`
+}
+
+// Spend is a session's running total, in tokens and turns.
+type Spend struct {
+	Tokens int64     `json:"tokens"`
+	Turns  int       `json:"turns,omitempty"`
+	At     time.Time `json:"at"`
 }
 
 // Changes is a branch's diff against main: files touched, lines that are

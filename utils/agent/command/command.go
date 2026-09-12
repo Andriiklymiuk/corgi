@@ -54,6 +54,9 @@ const (
 	ActionAnswer = "answer"
 	// ActionNote sets or clears a session's note.
 	ActionNote = "note"
+	// ActionCap gives a session a token budget of its own, or with no
+	// session sets the daemon's default; zero tokens takes it away.
+	ActionCap = "cap"
 	// ActionWatch delivers a tracker or code-host event a webhook received.
 	ActionWatch = "watch"
 )
@@ -70,6 +73,7 @@ var known = map[string]bool{
 	ActionSend:    true,
 	ActionAnswer:  true,
 	ActionNote:    true,
+	ActionCap:     true,
 }
 
 // TTL is how long a written command stays valid. A start that sat in the spool
@@ -111,6 +115,8 @@ type Command struct {
 	Enter  bool   `json:"enter,omitempty"`
 	Note   string `json:"note,omitempty"`
 	Answer string `json:"answer,omitempty"`
+	// Tokens is ActionCap's budget.
+	Tokens int64 `json:"tokens,omitempty"`
 	// WatchEvent is ActionWatch's payload.
 	WatchEvent *watch.Event `json:"watchEvent,omitempty"`
 	// Command is what ActionNew's terminal runs when the caller has a

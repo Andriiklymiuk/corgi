@@ -6,7 +6,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
+	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
 var agentSendCmd = &cobra.Command{
@@ -78,8 +82,82 @@ var agentNoteCmd = &cobra.Command{
 	},
 }
 
+var agentCapCmd = &cobra.Command{
+	Use:   "cap [<session>] <tokens|off>",
+	Short: "A token budget for every session, or for one",
+	Long: `Every session carries what it has spent — the token counts Claude Code
+writes in its transcript, summed on the daemon's sweep — and a budget.
+"corgi agent cap 50M" is the budget every session runs under; "corgi agent
+cap <session> 20M" gives one session its own. The daemon rings once when a
+session passes it and the row says "over budget" on every board; nothing
+is stopped. "off" takes a budget away. No argument prints the default.`,
+	Args: cobra.MaximumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		path := agentUserConfigPath(dir)
+		if len(args) == 0 {
+			user, err := config.LoadUser(path)
+			if err != nil {
+				exitWithError("agent_cap", err, 1)
+			}
+			if utils.JSONOutput {
+				utils.PrintJSON(map[string]any{"tokens": user.SessionCap})
+				return
+			}
+			if user.SessionCap == 0 {
+				fmt.Println("no budget: corgi agent cap 50M")
+				return
+			}
+			fmt.Printf("every session runs under %s tokens\n", sessions.Tokens(user.SessionCap))
+			return
+		}
+		session, raw := "", args[0]
+		if len(args) == 2 {
+			session, raw = args[0], args[1]
+		}
+		var tokens int64
+		if raw != "off" && raw != "0" {
+			n, err := sessions.ParseTokens(raw)
+			if err != nil {
+				exitWithError("agent_cap", err, 2)
+			}
+			tokens = n
+		}
+		if session != "" {
+			done := fmt.Sprintf("%s runs under %s tokens", session, sessions.Tokens(tokens))
+			if tokens == 0 {
+				done = fmt.Sprintf("%s runs under the default budget again", session)
+			}
+			sendBoardCommand(command.Command{Action: command.ActionCap, SessionID: session, Tokens: tokens, Source: "cli"}, done)
+			return
+		}
+		user, err := config.LoadUser(path)
+		if err != nil {
+			exitWithError("agent_cap", err, 1)
+		}
+		user.SessionCap = tokens
+		if err := writeUserConfig(path, user); err != nil {
+			exitWithError("agent_cap", err, 1)
+		}
+		if info, err := daemon.ReadInfo(dir); err == nil && info != nil && info.Commands {
+			if _, err := command.Write(dir, command.Command{Action: command.ActionCap, Tokens: tokens, Source: "cli"}); err == nil {
+				daemon.Nudge(info)
+			}
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"ok": true, "tokens": tokens})
+			return
+		}
+		if tokens == 0 {
+			utils.Info("✓ no budget")
+			return
+		}
+		utils.Infof("✓ every session runs under %s tokens\n", sessions.Tokens(tokens))
+	},
+}
+
 func init() {
 	agentSendCmd.Flags().Bool("enter", false, "Press Enter after the text")
 	agentNoteCmd.Flags().Bool("clear", false, "Remove the note")
-	agentCmd.AddCommand(agentSendCmd, agentAnswerCmd, agentNoteCmd)
+	agentCmd.AddCommand(agentSendCmd, agentAnswerCmd, agentNoteCmd, agentCapCmd)
 }

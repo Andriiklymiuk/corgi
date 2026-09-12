@@ -136,6 +136,54 @@ type Slot struct {
 	Changes string `json:"changes,omitempty"`
 	Tests   string `json:"tests,omitempty"`
 	Overlap string `json:"overlap,omitempty"`
+	// Spend is the running total in one word — "52M" — and OverCap says
+	// it passed the budget it was given.
+	Spend   string `json:"spend,omitempty"`
+	OverCap bool   `json:"overCap,omitempty"`
+}
+
+// SpendLine is a token count as the board says it: "52M", "980k", "412".
+func SpendLine(sp *Spend) string {
+	if sp == nil || sp.Tokens == 0 {
+		return ""
+	}
+	return Tokens(sp.Tokens)
+}
+
+// Tokens is a count in one word.
+func Tokens(n int64) string {
+	switch {
+	case n >= 1_000_000_000:
+		return fmt.Sprintf("%.1fB", float64(n)/1e9)
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	case n >= 1_000:
+		return fmt.Sprintf("%dk", n/1_000)
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+// ParseTokens reads a budget the way a person types it: 50M, 800k, 2B, or
+// a plain number.
+func ParseTokens(s string) (int64, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return 0, fmt.Errorf("a token count is required, like 50M")
+	}
+	mult := int64(1)
+	switch s[len(s)-1] {
+	case 'k':
+		mult, s = 1_000, s[:len(s)-1]
+	case 'm':
+		mult, s = 1_000_000, s[:len(s)-1]
+	case 'b':
+		mult, s = 1_000_000_000, s[:len(s)-1]
+	}
+	n, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("not a token count: %q (try 50M, 800k)", s)
+	}
+	return int64(n * float64(mult)), nil
 }
 
 // ChangesLine is the board's one line for a branch: files and lines that
@@ -981,6 +1029,51 @@ func (r *Registry) SetChanges(id string, c *Changes, overlap []Overlap) (changed
 	return true, crossed
 }
 
+// SetSpend records what a session has cost and whether that passed its
+// budget (its own cap, else fallback). crossed is true the moment it does,
+// so the daemon rings once.
+func (r *Registry) SetSpend(id string, sp Spend, fallback int64) (changed, crossed bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[id]
+	if !ok {
+		return false, false
+	}
+	limit := s.Cap
+	if limit == 0 {
+		limit = fallback
+	}
+	over := limit > 0 && sp.Tokens > limit
+	if s.Spend != nil && s.Spend.Tokens == sp.Tokens && s.OverCap == over {
+		return false, false
+	}
+	crossed = over && !s.OverCap
+	sp2 := sp
+	s.Spend, s.OverCap = &sp2, over
+	r.touch()
+	return true, crossed
+}
+
+// SetCap gives one session its own budget; zero takes it away, and the
+// daemon's default applies again on the next sweep.
+func (r *Registry) SetCap(ref string, tokens int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return err
+	}
+	if s.Cap == tokens {
+		return nil
+	}
+	s.Cap = tokens
+	if tokens > 0 && s.Spend != nil {
+		s.OverCap = s.Spend.Tokens > tokens
+	}
+	r.touch()
+	return nil
+}
+
 func overlapKey(o []Overlap) string {
 	parts := make([]string, 0, len(o))
 	for _, x := range o {
@@ -1393,6 +1486,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 			sl.Drift = s.Drift[0]
 		}
 		sl.Changes, sl.Tests, sl.Overlap = ChangesLine(s.Changes), TestsLine(s.Tests), OverlapLine(s.Overlap)
+		sl.Spend, sl.OverCap = SpendLine(s.Spend), s.OverCap
 		sl.Branch, sl.Summary, sl.PR, sl.Ticket = s.Branch, s.Summary, s.PR, s.Ticket
 		if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
 			sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())

@@ -75,6 +75,12 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		if err := d.Sessions.SetNote(c.SessionID, c.Note); err != nil {
 			d.Sessions.SetNotice(err)
 		}
+	case command.ActionCap:
+		if strings.TrimSpace(c.SessionID) == "" {
+			d.SessionCap = c.Tokens
+		} else if err := d.Sessions.SetCap(c.SessionID, c.Tokens); err != nil {
+			d.Sessions.SetNotice(err)
+		}
 	case command.ActionSend:
 		d.sendToSession(ctx, c.SessionID, c.Text, c.Enter)
 	case command.ActionWatch:

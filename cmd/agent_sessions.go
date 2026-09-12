@@ -330,6 +330,12 @@ func formatSlot(sl sessions.Slot) string {
 	if sl.Tests != "" {
 		line += " · " + clipTitle(sl.Tests, 28)
 	}
+	if sl.Spend != "" {
+		line += " · " + sl.Spend
+		if sl.OverCap {
+			line += " over budget"
+		}
+	}
 	if sl.Overlap != "" {
 		line += " · ⚠ " + clipTitle(sl.Overlap, 40)
 	}

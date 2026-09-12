@@ -65,6 +65,10 @@ type UserConfig struct {
 	// TrackSlots is how many keys the session board has — the size of the
 	// Stream Deck it is drawn on. Zero means the default (a Mini's six).
 	TrackSlots int `yaml:"trackSlots,omitempty"`
+	// SessionCap is the token budget every session runs under — the
+	// daemon rings once when one passes it and the row says so. Zero is
+	// no budget. `corgi agent cap 50M` sets it.
+	SessionCap int64 `yaml:"sessionCap,omitempty"`
 }
 
 // WorkspaceConfig is everything that grants capability. Trusted sources only.

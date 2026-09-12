@@ -146,6 +146,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		}
 		d.AutoContinue = user.AutoContinue
 		d.Sessions.AutoContinue = user.AutoContinue
+		d.SessionCap = user.SessionCap
 	}
 	d.AccountDirs = func() []string {
 		profiles, err := loadProfiles(dir)

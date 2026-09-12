@@ -6,6 +6,7 @@ package usage
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,12 @@ type Totals struct {
 // Total is what a person means by "how much did this cost": everything that
 // counts against the window, cache reads included.
 func (t Totals) Total() int64 { return t.Input + t.Output + t.CacheRead + t.CacheWrite }
+
+// Plus is t and o together.
+func (t Totals) Plus(o Totals) Totals {
+	t.add(o)
+	return t
+}
 
 func (t *Totals) add(o Totals) {
 	t.Input += o.Input
@@ -147,6 +154,49 @@ func TranscriptPath(configDir, cwd, sessionID string) string {
 		base = filepath.Join(home, ".claude")
 	}
 	return filepath.Join(base, "projects", ProjectDirName(cwd), sessionID+".jsonl")
+}
+
+// SumFrom adds up the usage rows written to a transcript after offset,
+// and returns where it stopped: the byte after the last complete line. The
+// daemon calls it every sweep, so a session's spend costs one read of what
+// is new, never the whole file again.
+func SumFrom(path string, offset int64) (Totals, int64) {
+	f, err := os.Open(path)
+	if err != nil {
+		return Totals{}, offset
+	}
+	defer f.Close()
+	if offset > 0 {
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			return Totals{}, offset
+		}
+	}
+	var t Totals
+	r := bufio.NewReaderSize(f, 64<<10)
+	for {
+		line, err := r.ReadBytes('\n')
+		if err != nil {
+			// A line still being written is read next time, whole.
+			return t, offset
+		}
+		offset += int64(len(line))
+		var row struct {
+			Message struct {
+				Usage *rawUsage `json:"usage"`
+			} `json:"message"`
+			Usage *rawUsage `json:"usage"`
+		}
+		if json.Unmarshal(line, &row) != nil {
+			continue
+		}
+		u := row.Message.Usage
+		if u == nil {
+			u = row.Usage
+		}
+		if u != nil {
+			t.add(u.totals())
+		}
+	}
 }
 
 // ForSession is everything one session has spent, all time. ok is false
