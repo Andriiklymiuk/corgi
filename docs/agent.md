@@ -299,6 +299,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent event <start\|prompt\|tool\|done\|fail\|permission\|stop\|end>` | one event from an agent that is not Claude Code — Codex, Gemini CLI, your own — so its session sits on the board with the agent's name, its tool's risk word and its host (2.22) |
 | `corgi agent lesson add\|list` | what the workspace learned the hard way, one line each, outside the repo; `watch enable --lessons` has the daemon write reviews on your PRs, red done-when checks and failed bot runs; the context hook points every new session at the file (2.22) |
 | `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own — and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief` fills a bot from a ready-made one (2.21). A run that fails gets one more try a model up — haiku → sonnet → opus — and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
 | `corgi agent ask "<question>"` | the chief: one question about the board — what to look at first, what is blocked, who is on what — answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
@@ -1378,6 +1379,35 @@ rather than merely convenient:
   is a `configDir` with no `configDirEnv` to put it in — silently ignoring the
   last one would leave the workspace on the default account, which looks exactly
   like being on the right one.
+
+### Its sessions on the board
+
+Supervision keeps another agent alive; the board — the keys, the phone, the
+bar — only knows what an agent tells it, and only Claude Code has hooks corgi
+writes for it. Any agent CLI that can run a command on an event joins the
+same board through `corgi agent event`, one call per event:
+
+```bash
+corgi agent event start --agent codex --session $ID
+corgi agent event prompt --agent codex --session $ID
+corgi agent event tool --agent codex --session $ID --tool shell --input '{"command":"go test ./..."}'
+corgi agent event permission --agent codex --session $ID --tool shell --input '{"command":"rm -rf build"}'
+corgi agent event stop --agent codex --session $ID
+corgi agent event end --agent codex --session $ID
+```
+
+The words are `start`, `prompt`, `tool`, `done`, `fail`, `permission`,
+`stop`, `end`; each is the same event a Claude Code hook would deliver,
+with the same subject and risk words read off the tool's input, the same
+process chain for the host (so Focus lands on the right tab), and the
+agent's name on the session (`agent: codex`) for every surface to show.
+`--stdin` reads `{session_id, cwd, tool_name, tool_input}` instead of
+flags, the shape Claude Code's hooks use, for CLIs that copied it. Without
+`--session` the id is the calling process — fine for one conversation per
+process. It never prints and never fails: the agent is unaffected whatever
+corgi's state is. Answering a permission from a key or the phone works when
+the agent takes Enter/Escape at its prompt the way Claude Code does; where
+it does not, the row still says what it waits on.
 
 ## Running more than one Claude account
 
