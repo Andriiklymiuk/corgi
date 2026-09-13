@@ -1571,6 +1571,7 @@ func registerMCPTools(s *server.MCPServer) {
 	serviceOpt := mcp.WithString("service", mcp.Required(), mcp.Description("Service name"))
 
 	registerAgentMCPTools(s)
+	registerPolicyMCPTools(s)
 
 	s.AddTool(mcp.NewTool("corgi_watch_status",
 		mcp.WithDescription("What each registered workspace watches on the tracker and code host, and what it still needs before anything arrives. Returns one row per workspace: {workspace, dir, enabled, tracker, project, repos, states, prs, comments, action, hasOwnTokens, sources[], whatIsMissing[]}. sources says which of linear/jira/github/gitlab has a token (fingerprint only, never the token) and when each last polled. whatIsMissing is the ordered list of what to fix — read it before calling corgi_watch_enable. Read-only."),
