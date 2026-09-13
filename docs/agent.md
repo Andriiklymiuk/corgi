@@ -307,7 +307,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
 | `corgi agent carry <session> --profile P` | continue a session under another listed account, conversation included (copies the transcript, resumes it in a new terminal) |
 | `corgi agent digest [--send]` | today's one-message summary; with `digestAt: "20:00"` in the agent config the daemon sends it once a day where notifications go |
-| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself; `--done-when "go test ./..."` runs the workspace's checks when a session stops and types a red one back (2.22) |
+| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself; `--done-when "go test ./..."` runs the workspace's checks when a session stops and types a red one back; `--compact-at 85` sends /compact to a full session when it stops (2.22) |
 | `corgi agent standup [--since 24h] [--write]` | what you asked Claude and what got committed, per workspace; `--write` has `claude -p` turn it into three sentences |
 | `corgi agent stop` | stop the daemon |
 
@@ -622,6 +622,19 @@ run as `gate` (`ok`, `cmd`, `fails`) and the tests line shows ✗ with the
 command. After three reds in a row the daemon stops arguing with a model and
 rings you instead. An interrupted session is never gated: you stopped it.
 Also a phone switch on the repo's sheet; takes at the next stop.
+
+#### Compact before it forgets
+
+The board goes red at 85% context; the drift line says `/compact`. A
+workspace can have the daemon do it:
+
+```bash
+corgi agent watch enable --compact-at 85
+```
+
+A session past that fill is sent `/compact` the next time it stops — never
+mid-turn — once per episode (ten minutes between two), and the row counts
+it (`compacted`, `compactedAt`). 0 turns it off. Also a phone switch.
 
 ### Sessions on a Stream Deck
 

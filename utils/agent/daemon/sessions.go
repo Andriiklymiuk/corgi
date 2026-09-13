@@ -165,7 +165,14 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 	}
 	// A stop with work on the branch is checked against the workspace's
 	// done-when before anyone is told it is done.
+	// (The registry is locked here: anything that reads it back runs on
+	// its own goroutine.)
 	if to == sessions.StatusDone && from == sessions.StatusWorking {
+		d.swaps.Add(1)
+		go func() {
+			defer d.swaps.Done()
+			d.compactIfFull(s)
+		}()
 		d.gateDone(s)
 	}
 	// A prompt the workspace's policy answers is answered here and never

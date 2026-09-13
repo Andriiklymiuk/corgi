@@ -29,12 +29,15 @@ import (
 //   doneWhen   a session that stops with changes on its branch has the
 //              workspace's own checks run; a red one is typed back as the
 //              next message, so "done" means the tests say so.
+//   compactAt  a session past that much context is told to /compact the
+//              next time it stops, before it forgets.
 
 // Policy is the part of a workspace's watch config that concerns a live
 // session rather than the tracker.
 type Policy struct {
 	AutoAllow string
 	DoneWhen  []string
+	CompactAt int
 }
 
 // automation is the two switches for a workspace, as the config says now.
@@ -277,3 +280,28 @@ const (
 	gateTries  = 3
 	gateTail   = 12
 )
+
+// compactIfFull types /compact into a session that stopped past the
+// workspace's context threshold — once per episode: a compact takes a
+// while to show in the transcript, and typing two is worse than none.
+func (d *Daemon) compactIfFull(s sessions.Session) {
+	if d.Policy == nil || s.Context == nil || d.Sessions == nil {
+		return
+	}
+	at := d.Policy(s).CompactAt
+	if at <= 0 || s.Context.Percent < at || s.Detail == "interrupted" {
+		return
+	}
+	if !s.CompactedAt.IsZero() && time.Since(s.CompactedAt) < compactCooldown {
+		return
+	}
+	label := s.Display
+	if label == "" {
+		label = s.Label
+	}
+	utils.Infof("agent: %s is %d%% full — /compact\n", label, s.Context.Percent)
+	d.Sessions.Compacted(s.ID, time.Now())
+	d.sendToSession(context.Background(), s.ID, "/compact", true)
+}
+
+const compactCooldown = 10 * time.Minute

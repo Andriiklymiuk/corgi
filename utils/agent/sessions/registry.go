@@ -1064,6 +1064,19 @@ func (r *Registry) SetGate(id string, ok bool, cmd string, now time.Time) int {
 	return fails
 }
 
+// Compacted notes a /compact the daemon typed.
+func (r *Registry) Compacted(id string, now time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[id]
+	if !ok {
+		return
+	}
+	s.Compacted++
+	s.CompactedAt = now
+	r.touch()
+}
+
 // SetSpend records what a session has cost and whether that passed its
 // budget (its own cap, else fallback). crossed is true the moment it does,
 // so the daemon rings once.

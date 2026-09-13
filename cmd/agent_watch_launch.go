@@ -36,6 +36,8 @@ type WatchSwitches struct {
 	AutoAllow string `json:"autoAllow"`
 	// DoneWhen is what finished means: commands, empty when a stop is a stop.
 	DoneWhen []string `json:"doneWhen"`
+	// CompactAt is the context percent past which a stop gets /compact; 0 is off.
+	CompactAt int `json:"compactAt"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -57,6 +59,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	if wc.DoneWhen != nil {
 		out.DoneWhen = wc.DoneWhen
 	}
+	out.CompactAt = wc.CompactAt
 	return out
 }
 
@@ -102,6 +105,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			HandOver  *bool     `json:"handOver"`
 			AutoAllow *string   `json:"autoAllow"`
 			DoneWhen  *[]string `json:"doneWhen"`
+			CompactAt *int      `json:"compactAt"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -186,6 +190,13 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			wc.AutoAllow = policy
+		}
+		if req.CompactAt != nil {
+			if *req.CompactAt < 0 || *req.CompactAt > 100 {
+				writeLaunchError(w, http.StatusBadRequest, "compactAt is a percent, 0 to 100")
+				return
+			}
+			wc.CompactAt = *req.CompactAt
 		}
 		if req.DoneWhen != nil {
 			wc.DoneWhen = nil

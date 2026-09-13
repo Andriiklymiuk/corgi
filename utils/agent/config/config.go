@@ -332,6 +332,11 @@ type WatchConfig struct {
 	// the failure back as the next message; the session is not done. Empty
 	// means a stop is a stop.
 	DoneWhen []string `yaml:"doneWhen,omitempty"`
+	// CompactAt is the context fill, in percent, past which the daemon
+	// types /compact into a session the next time it stops — before it
+	// forgets what it was doing. 0 is off; 85 is the number the board
+	// already goes red at.
+	CompactAt int `yaml:"compactAt,omitempty"`
 }
 
 // AutoAllowReads is the one permission policy a workspace can hold.
