@@ -14,8 +14,8 @@ import (
 // A pull request of mine, changed from wherever I am: out of draft, merged,
 // closed. The same three the phone and the page offer on a row.
 var agentWatchPRCmd = &cobra.Command{
-	Use:   "pr <ready|merge|close> <REF|key|url>",
-	Short: "Mark a pull request of yours ready for review, merge it, or close it",
+	Use:   "pr <ready|merge|close|approve|request|comment> <REF|key|url> [words]",
+	Short: "Mark a pull request of yours ready for review, merge or close it; approve, ask for changes on, or comment on any",
 	Long: `Acts on a pull request of yours: the one corgi's run opened for a ticket, the
 one a session on the ticket opened, or the one an inbox row is about. A link
 works too.
@@ -24,15 +24,23 @@ works too.
   corgi agent watch pr merge ABC-123
   corgi agent watch pr close acme/api#42
   corgi agent watch pr ready https://github.com/acme/api/pull/42
+  corgi agent watch pr approve acme/api#42 "nice"
+  corgi agent watch pr request acme/api#42 cap the retries
+  corgi agent watch pr comment https://github.com/acme/api/pull/42 "one question…"
 
-Never automatic: this is a person's call, and it is refused on a pull request
-that is not yours.`,
-	Args: cobra.ExactArgs(2),
+Never automatic: this is a person's call. ready, merge and close are refused
+on a pull request that is not yours; approve, request and comment go on any
+the inbox knows — the one somebody asked you to review first of all.`,
+	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		verb := strings.ToLower(strings.TrimSpace(args[0]))
-		if verb != "ready" && verb != "merge" && verb != "close" {
-			exitWithError("agent_watch_pr", fmt.Errorf("the verb is ready, merge or close, not %q", args[0]), 2)
+		switch verb {
+		case "ready", "merge", "close", "approve", "request", "comment":
+		default:
+			exitWithError("agent_watch_pr", fmt.Errorf("the verb is ready, merge, close, approve, request or comment, not %q", args[0]), 2)
 		}
+		review := verb == "approve" || verb == "request" || verb == "comment"
+		words := strings.TrimSpace(strings.Join(args[2:], " "))
 		dir := mustAgentDir()
 		workspace, _ := cmd.Flags().GetString("workspace")
 		link, ws := "", workspace
@@ -49,7 +57,12 @@ that is not yours.`,
 				if !ok {
 					continue
 				}
-				if link = prLinkFor(dir, e, nil); link != "" {
+				if review && watch.PullRef(e.URL) != "" {
+					link = e.URL
+				} else {
+					link = prLinkFor(dir, e, nil)
+				}
+				if link != "" {
 					if ws == "" {
 						ws = e.Workspace
 					}
@@ -69,6 +82,8 @@ that is not yours.`,
 			err = watch.ReadyPR(ctx, secrets, link)
 		case "merge":
 			err = watch.MergePR(ctx, secrets, link)
+		case "approve", "request", "comment":
+			err = watch.ReviewPR(ctx, secrets, link, verb, words)
 		default:
 			err = watch.ClosePR(ctx, secrets, link)
 		}
@@ -79,7 +94,7 @@ that is not yours.`,
 			utils.PrintJSON(map[string]any{"url": link, "did": verb})
 			return
 		}
-		fmt.Printf("%s: %s\n", map[string]string{"ready": "ready for review", "merge": "merged", "close": "closed"}[verb], link)
+		fmt.Printf("%s: %s\n", map[string]string{"ready": "ready for review", "merge": "merged", "close": "closed", "approve": "approved", "request": "changes requested", "comment": "commented"}[verb], link)
 	},
 }
 

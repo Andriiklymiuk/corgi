@@ -4156,6 +4156,27 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 			_ = watch.LoadStateLog(dir).SetFrom(event.Key, state, event.State, time.Now())
 		}
 		writeLaunchJSON(w, map[string]any{"done": did + link, "url": link, "state": state})
+	case "approve", "request", "comment":
+		// A review, on whatever pull request the row is about — somebody
+		// else's that asked for one, or a session's own — with the
+		// workspace's token: the person's name goes on it.
+		link := event.URL
+		if watch.PullRef(link) == "" {
+			link = prLinkFor(dir, event, nil)
+		}
+		if link == "" {
+			writeLaunchError(w, http.StatusBadRequest, "no pull request on this row")
+			return
+		}
+		if err := watch.ReviewPR(ctx, watch.LoadSecretsFor(dir, event.Workspace), link, req.Do, req.Body); err != nil {
+			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
+			return
+		}
+		did := map[string]string{"approve": "approved ", "request": "changes requested on ", "comment": "commented on "}[strings.TrimSpace(req.Do)]
+		if event.Kind == watch.KindReviewRequested && req.Do != "comment" {
+			_ = watch.LoadStateLog(dir).SetFrom(event.Key, "reviewed", event.State, time.Now())
+		}
+		writeLaunchJSON(w, map[string]any{"done": did + link, "url": link})
 	case "assign":
 		me := watch.LoadBoardCache(dir).Get(event.Workspace).Me
 		if me.ID == "" {
@@ -4172,7 +4193,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLaunchJSON(w, map[string]any{"done": ref + " is yours"})
 	default:
-		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close, ready, draft, reopen, ignore or unblock")
+		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close, ready, draft, reopen, approve, request, comment, ignore or unblock")
 	}
 }
 

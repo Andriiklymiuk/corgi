@@ -192,3 +192,43 @@ func TestUndraftTitleDropsEveryDraftMarker(t *testing.T) {
 		}
 	}
 }
+
+// A review from the phone or the CLI: GitHub takes it as one review call
+// with the verdict; GitLab as a note (changes requested say so) and an
+// approve or unapprove. A request without words is refused before any call.
+func TestReviewPRSpeaksBothForges(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		calls = append(calls, r.Method+" "+r.URL.Path+" "+string(body))
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	s := Secrets{GitLab: "glpat"}
+	link := srv.URL + "/group/proj/-/merge_requests/7"
+	if err := ReviewPR(ctx, s, link, ReviewApprove, "nice"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReviewPR(ctx, s, link, ReviewRequest, "cap the retries"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		`POST /api/v4/projects/group/proj/merge_requests/7/notes {"body":"nice"}`,
+		`POST /api/v4/projects/group/proj/merge_requests/7/approve `,
+		`POST /api/v4/projects/group/proj/merge_requests/7/notes {"body":"Changes requested: cap the retries"}`,
+		`POST /api/v4/projects/group/proj/merge_requests/7/unapprove `,
+	}
+	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("gitlab calls:\n%s", strings.Join(calls, "\n"))
+	}
+	if err := ReviewPR(ctx, s, link, ReviewRequest, "  "); err == nil || !strings.Contains(err.Error(), "say what to change") {
+		t.Fatalf("a request needs words: %v", err)
+	}
+	if err := ReviewPR(ctx, s, link, "ship", "x"); err == nil {
+		t.Fatal("unknown verdict")
+	}
+	if err := ReviewPR(ctx, Secrets{}, "https://github.com/acme/api/pull/7", ReviewApprove, ""); err != ErrNoToken {
+		t.Fatalf("github without a token: %v", err)
+	}
+}

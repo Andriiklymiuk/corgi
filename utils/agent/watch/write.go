@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -812,4 +813,92 @@ func (l *Linear) RefState(ctx context.Context, ref string) string {
 		return ""
 	}
 	return out.Issue.State.Name
+}
+
+// Verdicts a review can carry, from wherever the person is.
+const (
+	ReviewApprove = "approve"
+	ReviewRequest = "request"
+	ReviewComment = "comment"
+)
+
+// ReviewPR posts a review on a pull request or merge request: approve it,
+// ask for changes, or just say something. It is a person's call — the
+// phone's row and the CLI offer it; nothing does it on its own. GitLab has
+// no "request changes": that lands as a note and takes the approval back.
+func ReviewPR(ctx context.Context, s Secrets, link, verdict, body string) error {
+	verdict = strings.ToLower(strings.TrimSpace(verdict))
+	body = strings.TrimSpace(body)
+	switch verdict {
+	case ReviewApprove, ReviewRequest, ReviewComment:
+	default:
+		return fmt.Errorf("a review is approve, request or comment, not %q", verdict)
+	}
+	if verdict != ReviewApprove && body == "" {
+		return fmt.Errorf("say what to change")
+	}
+	switch {
+	case strings.Contains(link, "github.com/"):
+		m := githubPRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a repo and number out of %s", link)
+		}
+		if s.GitHub == "" {
+			return ErrNoToken
+		}
+		event := map[string]string{ReviewApprove: "APPROVE", ReviewRequest: "REQUEST_CHANGES", ReviewComment: "COMMENT"}[verdict]
+		payload, _ := json.Marshal(map[string]string{"event": event, "body": body})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			"https://api.github.com/repos/"+m[1]+"/pulls/"+m[2]+"/reviews", bytes.NewReader(payload))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+s.GitHub)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Content-Type", "application/json")
+		return doClose(req, link)
+	case strings.Contains(link, "/-/merge_requests/"):
+		m := gitlabMRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a project and number out of %s", link)
+		}
+		if s.GitLab == "" {
+			return ErrNoToken
+		}
+		base := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3]
+		post := func(endpoint string, payload []byte) error {
+			var rd io.Reader
+			if payload != nil {
+				rd = bytes.NewReader(payload)
+			}
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, rd)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+			if payload != nil {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			return doClose(req, link)
+		}
+		if body != "" {
+			note := body
+			if verdict == ReviewRequest {
+				note = "Changes requested: " + body
+			}
+			payload, _ := json.Marshal(map[string]string{"body": note})
+			if err := post(base+"/notes", payload); err != nil {
+				return err
+			}
+		}
+		switch verdict {
+		case ReviewApprove:
+			return post(base+"/approve", nil)
+		case ReviewRequest:
+			// Taking an approval back that was never given is not an error.
+			_ = post(base+"/unapprove", nil)
+		}
+		return nil
+	}
+	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }
