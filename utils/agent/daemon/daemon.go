@@ -82,6 +82,8 @@ type Daemon struct {
 	watchers   map[string]*watch.Watch
 	fixBusy    map[string]*sync.Mutex
 	fixActive  map[string]bool
+	gateMu     sync.Mutex
+	gating     map[string]bool
 
 	Version string
 	// Dir is the agent data directory holding daemon.json and registry.json.
@@ -138,10 +140,12 @@ type Daemon struct {
 	// MergePull merges a pull request of mine at the forge (the workspace's
 	// autoMerge); nil means the daemon never merges.
 	MergePull func(ctx context.Context, workspace, link string) error
-	// AllowPolicy is the permission policy for the workspace a session is
-	// in — config.AutoAllowReads, or "" — read live, so a switch flipped on
-	// the phone counts for the next prompt. Nil means no policy anywhere.
-	AllowPolicy func(s sessions.Session) string
+	// Policy is what the workspace a session sits in wants done on its
+	// own — read live, so a switch flipped on the phone counts for the
+	// next prompt or the next stop. Nil means no policy anywhere.
+	Policy func(s sessions.Session) Policy
+	// Shell runs one done-when command in a directory; nil runs sh -c.
+	Shell func(ctx context.Context, dir, cmd string) ([]byte, error)
 	// Raise brings a session's window to the front; nil means the platform
 	// default. Alive, ListProcesses and Cwd are the process probes the
 	// reaper and rescan use. All test seams.

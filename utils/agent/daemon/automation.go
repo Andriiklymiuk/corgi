@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"context"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +26,16 @@ import (
 //              green, approved — is merged, and the inbox says so.
 //   autoAllow  a permission prompt for a tool that only reads is answered
 //              by the daemon, and the session's row counts it.
+//   doneWhen   a session that stops with changes on its branch has the
+//              workspace's own checks run; a red one is typed back as the
+//              next message, so "done" means the tests say so.
+
+// Policy is the part of a workspace's watch config that concerns a live
+// session rather than the tracker.
+type Policy struct {
+	AutoAllow string
+	DoneWhen  []string
+}
 
 // automation is the two switches for a workspace, as the config says now.
 func (d *Daemon) automation(spec WatchSpec) (handOver, autoMerge bool) {
@@ -130,13 +142,13 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 // is never a read here, whatever it says; elsewhere the prompt rings as
 // it always did.
 func (d *Daemon) allowsByPolicy(s sessions.Session) bool {
-	if d.AllowPolicy == nil || s.Pending == nil || s.Pending.Risk != config.AutoAllowReads || s.Pending.Tool == "Bash" {
+	if d.Policy == nil || s.Pending == nil || s.Pending.Risk != config.AutoAllowReads || s.Pending.Tool == "Bash" {
 		return false
 	}
 	if s.Host.Kind != sessions.HostITerm {
 		return false
 	}
-	return d.AllowPolicy(s) == config.AutoAllowReads
+	return d.Policy(s).AutoAllow == config.AutoAllowReads
 }
 
 // autoAllow presses Enter into the session for the prompt it raised, a
@@ -173,3 +185,95 @@ func (d *Daemon) autoAllow(s sessions.Session) {
 // autoAllowDelay is how long after the prompt appears the Enter lands:
 // enough for Claude Code to draw it, short enough that nobody notices.
 var autoAllowDelay = 400 * time.Millisecond
+
+// gateDone runs the workspace's done-when commands for a session that
+// just stopped with work on its branch. All green: the row says so. One
+// red: its tail is typed into the session as the next message and the
+// session is working again — up to gateTries times in a row, after which
+// the daemon rings a person instead of arguing with a model.
+func (d *Daemon) gateDone(s sessions.Session) {
+	if d.Policy == nil || s.Cwd == "" || d.Sessions == nil {
+		return
+	}
+	cmds := d.Policy(s).DoneWhen
+	if len(cmds) == 0 || !hasWork(s) || s.Detail == "interrupted" {
+		return
+	}
+	d.gateMu.Lock()
+	if d.gating == nil {
+		d.gating = map[string]bool{}
+	}
+	if d.gating[s.ID] {
+		d.gateMu.Unlock()
+		return
+	}
+	d.gating[s.ID] = true
+	d.gateMu.Unlock()
+	d.runs.Add(1)
+	go func() {
+		defer d.runs.Done()
+		defer func() {
+			d.gateMu.Lock()
+			delete(d.gating, s.ID)
+			d.gateMu.Unlock()
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), gateBudget)
+		defer cancel()
+		label := s.Display
+		if label == "" {
+			label = s.Label
+		}
+		for _, cmd := range cmds {
+			out, err := d.shell(ctx, s.Cwd, cmd)
+			if err == nil {
+				continue
+			}
+			fails := d.Sessions.SetGate(s.ID, false, cmd, time.Now())
+			d.flushSessions()
+			utils.Infof("agent: %s stopped, but %q failed (%d in a row)\n", label, cmd, fails)
+			if fails > gateTries {
+				go d.notifyAttentionAt("corgi agent · "+label, "not done: "+cmd+" still red after "+strconv.Itoa(fails)+" tries", s.Label, "")
+				return
+			}
+			d.sendToSession(ctx, s.ID, gateMessage(cmd, string(out), err), true)
+			return
+		}
+		d.Sessions.SetGate(s.ID, true, "", time.Now())
+		d.flushSessions()
+	}()
+}
+
+// hasWork says the session has something on its branch worth checking:
+// the minute sweep saw changed files, or it ran tests itself.
+func hasWork(s sessions.Session) bool {
+	return (s.Changes != nil && s.Changes.Files > 0) || s.Tests != nil
+}
+
+func (d *Daemon) shell(ctx context.Context, dir, cmd string) ([]byte, error) {
+	if d.Shell != nil {
+		return d.Shell(ctx, dir, cmd)
+	}
+	c := exec.CommandContext(ctx, "sh", "-c", cmd)
+	c.Dir = dir
+	return c.CombinedOutput()
+}
+
+// gateMessage is what the session reads next: the command, the last lines
+// it printed, and what to do — the same words a reviewer would use.
+func gateMessage(cmd, out string, err error) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) > gateTail {
+		lines = lines[len(lines)-gateTail:]
+	}
+	tail := strings.TrimSpace(strings.Join(lines, "\n"))
+	if tail == "" {
+		tail = err.Error()
+	}
+	return "Not done yet: `" + cmd + "` failed after you stopped.\n\n" + tail + "\n\nFix it, run `" + cmd + "` again, and stop when it is green."
+}
+
+const (
+	gateBudget = 10 * time.Minute
+	gateTries  = 3
+	gateTail   = 12
+)

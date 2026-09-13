@@ -63,10 +63,10 @@ func TestWatchSwitchesFromThePhone(t *testing.T) {
 	if rec.Code != 200 || saved.Watch.AutoAllow != "reads" || saved.Restart {
 		t.Fatalf("reads policy: %d %s", rec.Code, rec.Body)
 	}
-	if got := allowPolicyFor(dir, wsPath.AbsPath+"/.worktrees/t1"); got != config.AutoAllowReads {
+	if got := policyFor(dir, wsPath.AbsPath+"/.worktrees/t1").AutoAllow; got != config.AutoAllowReads {
 		t.Fatalf("a worktree under the workspace: %q", got)
 	}
-	if got := allowPolicyFor(dir, "/somewhere/else"); got != "" {
+	if got := policyFor(dir, "/somewhere/else").AutoAllow; got != "" {
 		t.Fatalf("outside: %q", got)
 	}
 	if rec := post(launchWatchHandler, "/launch/watch", `{"workspace":"api","autoAllow":"everything"}`); rec.Code != 400 {
@@ -74,7 +74,16 @@ func TestWatchSwitchesFromThePhone(t *testing.T) {
 	}
 	rec = post(launchWatchHandler, "/launch/watch", `{"workspace":"api","autoAllow":"off"}`)
 	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
-	if saved.Watch.AutoAllow != "" || allowPolicyFor(dir, wsPath.AbsPath) != "" {
+	if saved.Watch.AutoAllow != "" || policyFor(dir, wsPath.AbsPath).AutoAllow != "" {
 		t.Fatalf("off: %s", rec.Body)
+	}
+	// Done-when is a list of commands, also live.
+	rec = post(launchWatchHandler, "/launch/watch", `{"workspace":"api","doneWhen":["go test ./...","  ",""]}`)
+	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
+	if rec.Code != 200 || saved.Restart || len(saved.Watch.DoneWhen) != 1 || saved.Watch.DoneWhen[0] != "go test ./..." {
+		t.Fatalf("done-when: %d %s", rec.Code, rec.Body)
+	}
+	if got := policyFor(dir, wsPath.AbsPath).DoneWhen; len(got) != 1 || got[0] != "go test ./..." {
+		t.Fatalf("policy carries it: %v", got)
 	}
 }

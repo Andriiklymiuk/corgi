@@ -34,10 +34,12 @@ type WatchSwitches struct {
 	HandOver  bool     `json:"handOver"`
 	// AutoAllow is "reads" or "" — the one permission policy.
 	AutoAllow string `json:"autoAllow"`
+	// DoneWhen is what finished means: commands, empty when a stop is a stop.
+	DoneWhen []string `json:"doneWhen"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
-	out := WatchSwitches{Workspace: id, Action: "notify", Labels: []string{}, DaysOff: []string{}}
+	out := WatchSwitches{Workspace: id, Action: "notify", Labels: []string{}, DaysOff: []string{}, DoneWhen: []string{}}
 	if wc == nil {
 		return out
 	}
@@ -51,6 +53,9 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	}
 	if wc.DaysOff != nil {
 		out.DaysOff = wc.DaysOff
+	}
+	if wc.DoneWhen != nil {
+		out.DoneWhen = wc.DoneWhen
 	}
 	return out
 }
@@ -96,6 +101,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			AutoMerge *bool     `json:"autoMerge"`
 			HandOver  *bool     `json:"handOver"`
 			AutoAllow *string   `json:"autoAllow"`
+			DoneWhen  *[]string `json:"doneWhen"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -180,6 +186,14 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			wc.AutoAllow = policy
+		}
+		if req.DoneWhen != nil {
+			wc.DoneWhen = nil
+			for _, c := range *req.DoneWhen {
+				if c = strings.TrimSpace(c); c != "" {
+					wc.DoneWhen = append(wc.DoneWhen, c)
+				}
+			}
 		}
 		entry.Watch = wc
 		user.Workspaces[ws.ID] = entry

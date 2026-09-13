@@ -326,6 +326,12 @@ type WatchConfig struct {
 	// `ls`. "reads" is the one value; anything that writes, and every Bash
 	// command, still waits for a person. Off by default.
 	AutoAllow string `yaml:"autoAllow,omitempty"`
+	// DoneWhen is what finished means for a session in this workspace:
+	// commands run in its directory when it stops with changes on its
+	// branch — `go test ./...`, `pnpm lint`. One red and the daemon types
+	// the failure back as the next message; the session is not done. Empty
+	// means a stop is a stop.
+	DoneWhen []string `yaml:"doneWhen,omitempty"`
 }
 
 // AutoAllowReads is the one permission policy a workspace can hold.

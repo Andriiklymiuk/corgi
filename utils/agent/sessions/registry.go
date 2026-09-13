@@ -1039,6 +1039,31 @@ func (r *Registry) SetChanges(id string, c *Changes, overlap []Overlap) (changed
 	return true, crossed
 }
 
+// SetGate records a done-when run: green resets the streak, red counts
+// it. The tests line shows it too — it is the last test run, whoever ran
+// it — so a key says "tests ✗ go test" without a new field.
+func (r *Registry) SetGate(id string, ok bool, cmd string, now time.Time) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, exists := r.sessions[id]
+	if !exists {
+		return 0
+	}
+	fails := 0
+	if !ok {
+		if s.Gate != nil {
+			fails = s.Gate.Fails
+		}
+		fails++
+	}
+	s.Gate = &GateRun{OK: ok, At: now, Cmd: cmd, Fails: fails}
+	if cmd != "" {
+		s.Tests = &TestRun{OK: ok, At: now, Cmd: cmd}
+	}
+	r.touch()
+	return fails
+}
+
 // SetSpend records what a session has cost and whether that passed its
 // budget (its own cap, else fallback). crossed is true the moment it does,
 // so the daemon rings once.

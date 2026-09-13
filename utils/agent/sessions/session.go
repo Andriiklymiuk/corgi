@@ -306,6 +306,9 @@ type Session struct {
 	Changes *Changes  `json:"changes,omitempty"`
 	Overlap []Overlap `json:"overlap,omitempty"`
 	Tests   *TestRun  `json:"tests,omitempty"`
+	// Gate is the last done-when run the daemon made for this session —
+	// the workspace's own definition of finished, checked when it stopped.
+	Gate *GateRun `json:"gate,omitempty"`
 	// Spend is what the session has cost so far: every token count Claude
 	// Code wrote in its transcript, summed on the sweep. Cap is the budget
 	// it runs under — its own, else the daemon's default — and OverCap says
@@ -349,6 +352,17 @@ type TestRun struct {
 	OK  bool      `json:"ok"`
 	At  time.Time `json:"at"`
 	Cmd string    `json:"cmd"`
+}
+
+// GateRun is one pass over a workspace's done-when commands. Cmd is the
+// first that failed, empty when all passed; Fails counts red runs in a row,
+// so the daemon stops typing the failure back after a few and rings
+// instead.
+type GateRun struct {
+	OK    bool      `json:"ok"`
+	At    time.Time `json:"at"`
+	Cmd   string    `json:"cmd,omitempty"`
+	Fails int       `json:"fails,omitempty"`
 }
 
 // TouchedMax is how many changed paths a session carries on the board.
