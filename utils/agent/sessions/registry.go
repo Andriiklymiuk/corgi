@@ -86,14 +86,14 @@ type State struct {
 	// open in, say — with its time, for a key to flash once.
 	// AutoContinue says the daemon types "continue" into limited sessions
 	// itself, so an editor with the same feature can stand down.
-	AutoContinue bool      `json:"autoContinue,omitempty"`
+	AutoContinue bool `json:"autoContinue,omitempty"`
 	// MutedUntil is set while nothing rings — no toast, no push — and says
 	// until when, so a key or a bar can show a bell with a line through it.
 	MutedUntil time.Time `json:"mutedUntil,omitzero"`
 	Notice     string    `json:"notice,omitempty"`
-	NoticeAt     time.Time `json:"noticeAt,omitempty"`
-	Sessions     []Session `json:"sessions"`
-	Windows      []Window  `json:"windows,omitempty"`
+	NoticeAt   time.Time `json:"noticeAt,omitempty"`
+	Sessions   []Session `json:"sessions"`
+	Windows    []Window  `json:"windows,omitempty"`
 	// Accounts is every account the sessions run under, with its limits.
 	Accounts []Account `json:"accounts,omitempty"`
 }
