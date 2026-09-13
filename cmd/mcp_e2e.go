@@ -160,11 +160,16 @@ func (s *sealedWriter) Header() http.Header         { return s.header }
 func (s *sealedWriter) WriteHeader(code int)        { s.status = code }
 func (s *sealedWriter) Write(b []byte) (int, error) { return s.body.Write(b) }
 
-// viewerMay is what a read-only device gets: every GET but a conversation
-// — the board, the inbox, the diff, the brief — and no button at all.
+// viewerMay is what a read-only device gets: every GET but the ones that
+// are the laptop's own business — a conversation, the doctor's report, the
+// workspace session links — and no button at all.
 func viewerMay(method, path string) bool {
 	if method != http.MethodGet {
 		return false
 	}
-	return path != "/launch/transcript"
+	switch path {
+	case "/launch/transcript", "/launch/doctor", "/launch/sessions":
+		return false
+	}
+	return true
 }
