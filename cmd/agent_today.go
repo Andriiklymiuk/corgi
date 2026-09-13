@@ -106,7 +106,8 @@ func runAgentToday(cmd *cobra.Command, _ []string) {
 	entries := collectStandup(since)
 	totals := countToday(entries)
 	if utils.JSONOutput && !write {
-		utils.PrintJSON(map[string]any{"since": since, "totals": totals, "workspaces": entries})
+		waits, days := cardNumbers(mustAgentDir(), time.Now())
+		utils.PrintJSON(map[string]any{"since": since, "totals": totals, "workspaces": entries, "waits": waits, "days": days})
 		return
 	}
 	text := formatToday(entries, totals, since)
@@ -152,10 +153,14 @@ func todayForMCP(since string, now time.Time) (map[string]any, error) {
 	}
 	entries := collectStandup(from)
 	totals := countToday(entries)
-	return map[string]any{
+	out := map[string]any{
 		"since":      from,
 		"totals":     totals,
 		"headline":   totals.headline(),
 		"workspaces": entries,
-	}, nil
+	}
+	if dir, err := agentDir(); err == nil {
+		out["waits"], out["days"] = cardNumbers(dir, now)
+	}
+	return out, nil
 }

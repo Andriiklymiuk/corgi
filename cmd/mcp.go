@@ -352,6 +352,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/diff", launchAuth(token, http.HandlerFunc(launchDiffHandler), deviceStore))
 		mux.Handle("/launch/watch", launchAuth(token, http.HandlerFunc(launchWatchHandler), deviceStore))
 		mux.Handle("/launch/brief", launchAuth(token, http.HandlerFunc(launchBriefHandler), deviceStore))
+		mux.Handle("/launch/card", launchAuth(token, http.HandlerFunc(launchCardHandler), deviceStore))
 		mux.Handle("/launch/attempts", launchAuth(token, http.HandlerFunc(launchAttemptsHandler), deviceStore))
 		mux.Handle("/launch/mute", launchAuth(token, http.HandlerFunc(launchMuteHandler), deviceStore))
 		mux.Handle("/launch/stack", launchAuth(token, http.HandlerFunc(launchStackHandler), deviceStore))
@@ -1648,7 +1649,7 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(mcp.NewTool("corgi_today",
-		mcp.WithDescription("What has been done today, per workspace: {since, headline, totals, workspaces[{workspace, dir, commits[], prompts[], fixes[], arrived[], deferred[]}]}. Answers \"what have I done today?\" in one call — the commits that landed, what Claude was asked, and what the unattended watch did on its own with the pull requests it opened. The window is since midnight unless `since` asks for a rolling one. Read-only."),
+		mcp.WithDescription("What has been done today, per workspace: {since, headline, totals, workspaces[{workspace, dir, commits[], prompts[], fixes[], arrived[], deferred[]}], waits{count, medianS, longestS}, days[{date, sessions, messages, toolCalls}]}. Answers \"what have I done today?\" in one call — the commits that landed, what Claude was asked, and what the unattended watch did on its own with the pull requests it opened; `waits` is how often sessions waited on a person today, `days` a fortnight of activity per day across every account (the numbers the phone's share card draws; 2.22.6). The window is since midnight unless `since` asks for a rolling one. Read-only."),
 		mcp.WithString("since", mcp.Description("A rolling window like 8h or 72h; omitted means since midnight")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return todayForMCP(r.GetString("since", ""), time.Now())

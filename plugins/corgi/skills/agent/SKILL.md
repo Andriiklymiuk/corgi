@@ -606,6 +606,7 @@ corgi agent watch enable --pickup "In Progress"      # picking a story up moves 
 corgi agent watch board [--refresh]                  # the tracker columns corgi knows
 corgi agent watch move ABC-123 "Ready for staging"  # move, assign, comment: writes as you
 corgi agent today [--write]                          # today since midnight, the watch's own runs included
+corgi agent today --json                             # + waits{count, medianS} and days[14] — the phone's share card numbers (2.22.6)
 corgi agent standup [--since 48h] [--write]          # a rolling window of the same
 corgi agent digest --send                            # the daily message (digestAt in the user config)
 corgi agent workspaces pause|resume <id>             # stop supervising one (autostart: false), or resume
@@ -845,6 +846,16 @@ the workspace's `.claude/settings.local.json`; `corgi agent doctor
 surface of the stack's diff (first section of every PR body, first thing a
 review reads); `corgi docs check` the docs that name what changed and the
 CLAUDE.md pointers that no longer land.
+
+**Own tickets**: `corgi agent task add "Meta SDK on iOS" --workspace app
+--body "…"` is a ticket the person writes themselves, kept on this machine
+and shown on the same board as the tracker's — Todo, Doing, Review, Done —
+and never sent to a tracker. `corgi agent watch work TASK-3` (or the phone's
+**Work on it**) starts a session on it with the body as the prompt; the
+session runs `corgi agent task move TASK-3 Review` when its draft PR is up
+and `task done TASK-3` when nothing is left. `corgi agent refresh` reloads
+everything now — sessions rescanned, every tracker polled, the board
+published — when a person says the board looks stale.
 
 `corgi agent kanban [--workspace X] [--json]` is one card per ticket in a
 column corgi works out — Inbox, Ready (deferred, or a handoff waiting),

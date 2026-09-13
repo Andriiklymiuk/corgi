@@ -176,6 +176,17 @@ Seven. Anything beyond these is scope creep.
 5. **Logs** — `corgi_logs` with a service picker and follow toggle. Polled.
 6. **Settings** — paired daemons, rename, revoke, re-pair.
 
+### The share card
+
+**Today** (the brief) has a **Share** button: a story-sized card the phone
+draws itself — a fortnight of activity as bars, today's sessions, tool
+calls, commits, pull requests, how often the laptop waited on you — and
+hands to the share sheet as a PNG (Instagram, X, Messages, Save Image). It
+reads `GET /launch/card`, which carries numbers and nothing else: no
+workspace, no ticket, no prompt, no session title, no account — nothing a
+person could regret posting. `corgi agent today --json` prints the same
+numbers.
+
 ## Stack
 
 Expo + TypeScript, `expo-router`, TanStack Query, `@modelcontextprotocol/sdk`,

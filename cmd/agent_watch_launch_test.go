@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
@@ -104,6 +107,32 @@ func TestTheBriefAnswersThePhone(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 	if rec := post(launchBriefHandler, "/launch/brief", `{}`); rec.Code != 405 {
+		t.Fatalf("GET only: %d", rec.Code)
+	}
+}
+
+// The card is the day in numbers with nothing of anyone's in it: a fortnight
+// of days, today's totals, the waits — and never a label.
+func TestTheCardCarriesNumbersAndNoNames(t *testing.T) {
+	dir := phoneBoard(t, true)
+	if err := usage.RecordWait(dir, usage.Wait{At: time.Now(), Kind: "wait", Seconds: 90, Label: "secret-ws · fix login"}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	launchCardHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/card", nil))
+	var got struct {
+		Days  []map[string]any `json:"days"`
+		Waits map[string]any   `json:"waits"`
+		Today map[string]any   `json:"today"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if rec.Code != 200 || len(got.Days) != cardDays || got.Today["date"] != usage.Today(time.Now()) {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if got.Waits["count"] != float64(1) || strings.Contains(rec.Body.String(), "secret-ws") {
+		t.Fatalf("waits counted, label dropped: %s", rec.Body)
+	}
+	if rec := post(launchCardHandler, "/launch/card", `{}`); rec.Code != 405 {
 		t.Fatalf("GET only: %d", rec.Code)
 	}
 }

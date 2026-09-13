@@ -24,37 +24,69 @@ type DayStats struct {
 	Models    []ModelTokens `json:"models,omitempty"`
 }
 
-// ReadDayStats reads <configDir>/stats-cache.json for the given local day
-// ("2026-09-08"). ok is false when the account has no cache or no entry for
-// that day. The cache is Claude Code's, recomputed when it feels like it,
-// so the numbers lag the transcripts by hours.
-func ReadDayStats(configDir, date string) (DayStats, bool) {
+// statsFile is the shape of Claude Code's stats-cache.json, as far as corgi
+// reads it.
+type statsFile struct {
+	Daily []struct {
+		Date      string `json:"date"`
+		Messages  int    `json:"messageCount"`
+		Sessions  int    `json:"sessionCount"`
+		ToolCalls int    `json:"toolCallCount"`
+	} `json:"dailyActivity"`
+	Tokens []struct {
+		Date   string           `json:"date"`
+		Models map[string]int64 `json:"tokensByModel"`
+	} `json:"dailyModelTokens"`
+}
+
+func readStatsFile(configDir string) (statsFile, bool) {
 	if configDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return DayStats{}, false
+			return statsFile{}, false
 		}
 		configDir = filepath.Join(home, ".claude")
 	}
 	data, err := os.ReadFile(filepath.Join(configDir, "stats-cache.json"))
 	if err != nil {
-		return DayStats{}, false
+		return statsFile{}, false
 	}
-	var file struct {
-		Daily []struct {
-			Date      string `json:"date"`
-			Messages  int    `json:"messageCount"`
-			Sessions  int    `json:"sessionCount"`
-			ToolCalls int    `json:"toolCallCount"`
-		} `json:"dailyActivity"`
-		Tokens []struct {
-			Date   string           `json:"date"`
-			Models map[string]int64 `json:"tokensByModel"`
-		} `json:"dailyModelTokens"`
-	}
+	var file statsFile
 	if json.Unmarshal(data, &file) != nil {
+		return statsFile{}, false
+	}
+	return file, true
+}
+
+// ReadDayStats reads <configDir>/stats-cache.json for the given local day
+// ("2026-09-08"). ok is false when the account has no cache or no entry for
+// that day. The cache is Claude Code's, recomputed when it feels like it,
+// so the numbers lag the transcripts by hours.
+func ReadDayStats(configDir, date string) (DayStats, bool) {
+	file, ok := readStatsFile(configDir)
+	if !ok {
 		return DayStats{}, false
 	}
+	return file.day(date)
+}
+
+// ReadDaysStats reads one account's cache once and answers for every date
+// asked, so a fortnight costs one parse. Dates with no entry are left out.
+func ReadDaysStats(configDir string, dates []string) map[string]DayStats {
+	out := map[string]DayStats{}
+	file, ok := readStatsFile(configDir)
+	if !ok {
+		return out
+	}
+	for _, date := range dates {
+		if day, found := file.day(date); found {
+			out[date] = day
+		}
+	}
+	return out
+}
+
+func (file statsFile) day(date string) (DayStats, bool) {
 	out := DayStats{Date: date}
 	found := false
 	for _, d := range file.Daily {

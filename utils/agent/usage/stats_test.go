@@ -87,3 +87,21 @@ func TestTodayIsTheLocalDate(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestReadDaysStatsAnswersManyDatesFromOneParse(t *testing.T) {
+	dir := t.TempDir()
+	cache := `{"dailyActivity":[{"date":"2026-09-01","messageCount":3,"sessionCount":1,"toolCallCount":9},{"date":"2026-09-03","messageCount":8,"sessionCount":2,"toolCallCount":40}]}`
+	if err := os.WriteFile(filepath.Join(dir, "stats-cache.json"), []byte(cache), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ReadDaysStats(dir, []string{"2026-09-01", "2026-09-02", "2026-09-03"})
+	if len(got) != 2 || got["2026-09-01"].ToolCalls != 9 || got["2026-09-03"].Sessions != 2 {
+		t.Fatalf("got %+v", got)
+	}
+	if _, quiet := got["2026-09-02"]; quiet {
+		t.Fatal("a day with no entry is left out, not zeroed")
+	}
+	if len(ReadDaysStats(filepath.Join(dir, "nowhere"), []string{"2026-09-01"})) != 0 {
+		t.Fatal("no cache, no days")
+	}
+}
