@@ -118,6 +118,12 @@ func TestTheCardCarriesNumbersAndNoNames(t *testing.T) {
 	if err := usage.RecordWait(dir, usage.Wait{At: time.Now(), Kind: "wait", Seconds: 90, Label: "secret-ws · fix login"}); err != nil {
 		t.Fatal(err)
 	}
+	ledger := usage.OpenLedger(dir)
+	ledger.Note("UserPromptSubmit", "s1", time.Now())
+	ledger.Note("PostToolUse", "s1", time.Now())
+	if err := ledger.Flush(); err != nil {
+		t.Fatal(err)
+	}
 	rec := httptest.NewRecorder()
 	launchCardHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/card", nil))
 	var got struct {
@@ -128,6 +134,13 @@ func TestTheCardCarriesNumbersAndNoNames(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &got)
 	if rec.Code != 200 || len(got.Days) != cardDays || got.Today["date"] != usage.Today(time.Now()) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	// At least: this machine's own Claude cache may add to today.
+	if s, _ := got.Today["sessions"].(float64); s < 1 {
+		t.Fatalf("the daemon's own ledger counts: %v", got.Today)
+	}
+	if c, _ := got.Today["toolCalls"].(float64); c < 1 {
+		t.Fatalf("the daemon's own ledger counts: %v", got.Today)
 	}
 	if got.Waits["count"] != float64(1) || strings.Contains(rec.Body.String(), "secret-ws") {
 		t.Fatalf("waits counted, label dropped: %s", rec.Body)

@@ -18,6 +18,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/proc"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
 func trackingDaemon(t *testing.T) *Daemon {
@@ -536,5 +537,34 @@ func TestAPermissionPromptIsPushedWithItsSessionID(t *testing.T) {
 	}
 	if risky.Data["risky"] != "1" || risky.Data["session"] != "s1" {
 		t.Fatalf("rm -rf is marked risky: %+v", risky)
+	}
+}
+
+// Every hook event counts toward the day: the ledger the card reads is the
+// daemon's own, written when the daemon leaves.
+func TestDaemonKeepsADayLedgerFromHookEvents(t *testing.T) {
+	d := trackingDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = d.Run(ctx, nil) }()
+	now := time.Now()
+	for _, ev := range []sessions.Event{
+		{Name: "SessionStart", SessionID: "s1", Cwd: "/tmp/acme-api", ClaudePID: 4242, At: now},
+		{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/acme-api", ClaudePID: 4242, At: now},
+		{Name: "PostToolUse", SessionID: "s1", Tool: "Read", Cwd: "/tmp/acme-api", ClaudePID: 4242, At: now},
+		{Name: "PostToolUse", SessionID: "s1", Tool: "Edit", Cwd: "/tmp/acme-api", ClaudePID: 4242, At: now},
+	} {
+		e := ev
+		if _, err := command.Write(d.Dir, command.Command{Action: command.ActionSession, Event: &e}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d.Nudge()
+	waitFor(t, func() bool { return d.Ledger.Day(usage.Today(now)).ToolCalls == 2 })
+	cancel()
+	<-done
+	got := usage.ReadLedgerDays(d.Dir, []string{usage.Today(now)})[usage.Today(now)]
+	if got.Sessions != 1 || got.Messages != 1 || got.ToolCalls != 2 {
+		t.Fatalf("days.json says %+v", got)
 	}
 }

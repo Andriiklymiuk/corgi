@@ -24,6 +24,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
@@ -137,6 +138,9 @@ type Daemon struct {
 	// Sessions is the registry of interactive Claude Code sessions, fed by
 	// hooks and published as sessions.json. Nil turns tracking off.
 	Sessions *sessions.Registry
+	// Ledger counts the day by the hooks' events — sessions, prompts, tool
+	// calls — for the card; opened with the registry, written on the sweep.
+	Ledger *usage.Ledger
 	// MergePull merges a pull request of mine at the forge (the workspace's
 	// autoMerge); nil means the daemon never merges.
 	MergePull func(ctx context.Context, workspace, link string) error
@@ -463,6 +467,7 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	}
 
 	d.startSessionTracking()
+	d.backfillLedger(ctx)
 	d.startWatches(ctx)
 	reapDone := make(chan struct{})
 	go func() { defer close(reapDone); d.reapSessions(ctx) }()
@@ -1091,6 +1096,7 @@ func (d *Daemon) writeInfoIDs(ids []string) error {
 // cleanup removes the daemon's published files so a stopped daemon never
 // looks like a running one.
 func (d *Daemon) cleanup() {
+	_ = d.Ledger.Flush()
 	_ = os.Remove(d.InfoPath())
 	_ = os.Remove(d.StatusPath())
 }
