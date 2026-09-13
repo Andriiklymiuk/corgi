@@ -27,6 +27,8 @@ func writeWatchConfig(t *testing.T, d *Daemon, workspace, yaml string) {
 
 func TestAReviewIsHandedToTheSessionOnItsBranch(t *testing.T) {
 	d := trackingDaemon(t)
+	// The send finishes with a board write; the temp dir must outlive it.
+	t.Cleanup(d.swaps.Wait)
 	var mu sync.Mutex
 	var typed []string
 	d.Raise = func(context.Context, sessions.FocusTarget) error { return nil }
