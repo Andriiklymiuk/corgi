@@ -87,3 +87,23 @@ func TestWatchSwitchesFromThePhone(t *testing.T) {
 		t.Fatalf("policy carries it: %v", got)
 	}
 }
+
+// The brief is the digest and the standup in one answer for the phone.
+func TestTheBriefAnswersThePhone(t *testing.T) {
+	phoneBoard(t, true)
+	rec := httptest.NewRecorder()
+	launchBriefHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/brief?hours=48", nil))
+	var got struct {
+		Digest     string           `json:"digest"`
+		Standup    string           `json:"standup"`
+		Workspaces []map[string]any `json:"workspaces"`
+		Since      string           `json:"since"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if rec.Code != 200 || got.Workspaces == nil || got.Since == "" {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if rec := post(launchBriefHandler, "/launch/brief", `{}`); rec.Code != 405 {
+		t.Fatalf("GET only: %d", rec.Code)
+	}
+}
