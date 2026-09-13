@@ -88,4 +88,10 @@ func TestDiffListsFilesThenOnePatch(t *testing.T) {
 	if rec := get("session=s1&file=../etc/passwd"); rec.Code != http.StatusBadRequest {
 		t.Fatalf("a path outside the checkout: %d", rec.Code)
 	}
+	// Everything at once: every real file's patch in one body, the
+	// generated one left out.
+	rec = get("session=s1&all=1")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "+// a grace window") || strings.Contains(rec.Body.String(), "go.sum") {
+		t.Fatalf("all: %d %s", rec.Code, rec.Body)
+	}
 }
