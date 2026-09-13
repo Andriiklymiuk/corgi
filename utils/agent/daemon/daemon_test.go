@@ -43,6 +43,9 @@ func blockingStarter() supervisor.Starter {
 
 func testDaemon(t *testing.T) *Daemon {
 	t.Helper()
+	// A home of its own: the day ledger's first run reads ~/.claude/projects,
+	// and a test must never read the transcripts of whoever runs it.
+	t.Setenv("HOME", t.TempDir())
 	d := New("test", t.TempDir())
 	d.Start = blockingStarter()
 	d.Notify = func(string, string) {}

@@ -606,7 +606,7 @@ corgi agent watch enable --pickup "In Progress"      # picking a story up moves 
 corgi agent watch board [--refresh]                  # the tracker columns corgi knows
 corgi agent watch move ABC-123 "Ready for staging"  # move, assign, comment: writes as you
 corgi agent today [--write]                          # today since midnight, the watch's own runs included
-corgi agent today --json                             # + waits{count, medianS} and days[14] — the phone's share card numbers (2.22.6)
+corgi agent today --json                             # + waits{count, medianS} and days[14] from the daemon's own ledger — the phone's share card numbers (2.22.6)
 corgi agent standup [--since 48h] [--write]          # a rolling window of the same
 corgi agent digest --send                            # the daily message (digestAt in the user config)
 corgi agent workspaces pause|resume <id>             # stop supervising one (autostart: false), or resume

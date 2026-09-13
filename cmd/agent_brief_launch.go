@@ -75,7 +75,8 @@ func buildDayCard(dir string, now time.Time) dayCard {
 }
 
 // cardNumbers is the part of the card that costs no git log: today's waits
-// (label dropped) and a fortnight of days, every account summed.
+// (label dropped) and a fortnight of days — every account's stats cache
+// summed, then the daemon's own ledger where it counted more.
 func cardNumbers(dir string, now time.Time) (usage.WaitSummary, []cardDay) {
 	waits := usage.Summarize(usage.LoadWaits(dir, startOfDay(now)), "wait")
 	waits.LongestLabel = ""
@@ -102,6 +103,14 @@ func cardNumbers(dir string, now time.Time) (usage.WaitSummary, []cardDay) {
 			d.Messages += day.Messages
 			d.ToolCalls += day.ToolCalls
 		}
+	}
+	// The daemon's own count wins where it is higher: Claude Code's cache
+	// lags by hours and stops for months, and never sees an editor's session.
+	for date, day := range usage.ReadLedgerDays(dir, dates) {
+		d := byDate[date]
+		d.Sessions = max(d.Sessions, day.Sessions)
+		d.Messages = max(d.Messages, day.Messages)
+		d.ToolCalls = max(d.ToolCalls, day.ToolCalls)
 	}
 	days := make([]cardDay, 0, cardDays)
 	for _, date := range dates {

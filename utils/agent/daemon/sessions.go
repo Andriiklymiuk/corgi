@@ -51,6 +51,7 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 	switch c.Action {
 	case command.ActionSession:
 		if c.Event != nil {
+			d.Ledger.Note(c.Event.Name, c.Event.SessionID, c.Event.At)
 			d.Sessions.Apply(*c.Event)
 			// A session opened as a bot is that bot's thread from now on:
 			// the next open resumes it.
@@ -138,11 +139,63 @@ func (d *Daemon) startSessionTracking() {
 		return
 	}
 	d.Sessions.OnTransition = d.onSessionTransition
+	if d.Ledger == nil {
+		d.Ledger = usage.OpenLedger(d.Dir)
+	}
 	d.Sessions.Load()
 	d.rescan()
 	d.syncWindows()
 	d.sampleAccounts(time.Now())
 	d.flushSessions()
+}
+
+// configDirs is every Claude config dir the daemon knows an account by:
+// the default, the ones it was told, and the ones live sessions run under.
+func (d *Daemon) configDirs() []string {
+	seen := map[string]bool{}
+	var dirs []string
+	add := func(dir string) {
+		if !seen[dir] {
+			seen[dir] = true
+			dirs = append(dirs, dir)
+		}
+	}
+	add("")
+	if d.AccountDirs != nil {
+		for _, dir := range d.AccountDirs() {
+			add(dir)
+		}
+	}
+	if d.Sessions != nil {
+		for _, s := range d.Sessions.Sessions() {
+			add(s.ConfigDir)
+		}
+	}
+	return dirs
+}
+
+// backfillLedger fills a brand-new day ledger from a fortnight of
+// transcripts, once, off the main loop: the card would otherwise show
+// thirteen empty days after an upgrade. Lines after this moment are the
+// hooks' to count.
+func (d *Daemon) backfillLedger(ctx context.Context) {
+	if d.Ledger == nil || !d.Ledger.NeedsBackfill() {
+		return
+	}
+	opened := time.Now()
+	dirs := d.configDirs()
+	d.swaps.Add(1)
+	go func() {
+		defer d.swaps.Done()
+		n := d.Ledger.Backfill(ctx, dirs, opened)
+		if err := d.Ledger.Flush(); err != nil {
+			utils.Infof("agent: days ledger: %v\n", err)
+			return
+		}
+		if n > 0 {
+			utils.Infof("agent: counted %d transcripts into the day ledger\n", n)
+		}
+	}()
 }
 
 // onSessionTransition runs under the registry lock, so it only records and
@@ -225,23 +278,7 @@ func (d *Daemon) sampleAccounts(now time.Time) {
 	if d.Sessions == nil {
 		return
 	}
-	seen := map[string]bool{}
-	var dirs []string
-	add := func(dir string) {
-		if !seen[dir] {
-			seen[dir] = true
-			dirs = append(dirs, dir)
-		}
-	}
-	add("")
-	if d.AccountDirs != nil {
-		for _, dir := range d.AccountDirs() {
-			add(dir)
-		}
-	}
-	for _, s := range d.Sessions.Sessions() {
-		add(s.ConfigDir)
-	}
+	dirs := d.configDirs()
 	var accounts []sessions.Account
 	for _, dir := range dirs {
 		a := sessions.Account{ConfigDir: dir, Profile: sessions.DefaultProfile(dir)}
@@ -412,6 +449,9 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 		if !now.Before(nextSweep) {
 			nextSweep = now.Add(sweepInterval)
 			d.Sessions.Sweep(now)
+			if err := d.Ledger.Flush(); err != nil {
+				utils.Infof("agent: days ledger: %v\n", err)
+			}
 			d.sampleAccounts(now)
 			d.autoContinue(ctx, now)
 			d.checkDrift(now)
