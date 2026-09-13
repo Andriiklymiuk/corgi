@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -42,6 +43,10 @@ type pairResponse struct {
 	// Role is "viewer" for a device this window pairs read-only; absent
 	// for one that may do everything.
 	Role string `json:"role,omitempty"`
+	// PublicURL is the tunnel address, for a device that paired over the
+	// local network or nearby (2.22.4): what it reaches the laptop at from
+	// anywhere else. Absent without a tunnel.
+	PublicURL string `json:"publicUrl,omitempty"`
 }
 
 // maxPairBodyBytes bounds the request body. The payload is two short strings;
@@ -57,7 +62,39 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 // pairingHandlerWithRole is pairingHandler for a window whose devices get
 // a role the machine chose — viewer, for a teammate's phone.
 func pairingHandlerWithRole(session *pairing.Session, storePath, role string) http.Handler {
+	w := &pairWindow{}
+	w.set(session, role)
+	return pairingHandlerFor(w, storePath)
+}
+
+// pairWindow is the pairing window as it is now: the session a fresh
+// `corgi agent pair` opened, or the one the server started with. The
+// handler reads it per request, so a window can be reopened without a
+// restart — for a second phone, or an AirDrop from the bar.
+type pairWindow struct {
+	mu      sync.Mutex
+	session *pairing.Session
+	role    string
+}
+
+func (p *pairWindow) set(s *pairing.Session, role string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.session != nil && p.session != s {
+		p.session.Close()
+	}
+	p.session, p.role = s, role
+}
+
+func (p *pairWindow) get() (*pairing.Session, string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.session, p.role
+}
+
+func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, role := window.get()
 		// The POST response carries a device token and the GET page carries the
 		// copy-paste connector: keep both out of any intermediary cache, and
 		// stop content sniffing. Defense in depth — the default cloudflared
@@ -140,6 +177,7 @@ func pairingHandlerWithRole(session *pairing.Session, storePath, role string) ht
 			Version:      APP_VERSION,
 			ServerPubKey: serverPub,
 			Role:         role,
+			PublicURL:    strings.TrimSuffix(launcherURL(), "/app"),
 		})
 	})
 }
@@ -344,4 +382,50 @@ func runMCPDevicesRevoke(_ *cobra.Command, args []string) {
 func init() {
 	mcpDevicesCmd.AddCommand(mcpDevicesListCmd, mcpDevicesRevokeCmd)
 	mcpCmd.AddCommand(mcpDevicesCmd)
+}
+
+// pairRequestName and pairAnswerName are how `corgi agent pair` reopens a
+// window without a restart: it writes the request (the role wanted), the
+// server opens a fresh session and writes the answer — the code, its
+// expiry, the public address — and removes the request. Both files are
+// the user's own, 0600, in the agent dir; nothing travels over the network.
+const (
+	pairRequestName = "pair.request"
+	pairAnswerName  = "pair.json"
+)
+
+// pairAnswer is what `corgi agent pair` reads back.
+type pairAnswer struct {
+	Code      string    `json:"code"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	Role      string    `json:"role,omitempty"`
+	PublicURL string    `json:"publicUrl,omitempty"`
+	LocalURL  string    `json:"localUrl,omitempty"`
+	Daemon    string    `json:"daemon"`
+}
+
+func watchPairRequests(dir string, window *pairWindow) {
+	req := filepath.Join(dir, pairRequestName)
+	for {
+		time.Sleep(time.Second)
+		raw, err := os.ReadFile(req)
+		if err != nil {
+			continue
+		}
+		_ = os.Remove(req)
+		role := strings.TrimSpace(string(raw))
+		if role != pairing.RoleViewer {
+			role = ""
+		}
+		session, code, err := pairing.NewSession()
+		if err != nil {
+			continue
+		}
+		window.set(session, role)
+		host, _ := os.Hostname()
+		ans := pairAnswer{Code: code, ExpiresAt: time.Now().Add(pairing.CodeTTL), Role: role, PublicURL: strings.TrimSuffix(launcherURL(), "/app"), LocalURL: strings.TrimSuffix(localLauncherURL(), "/app"), Daemon: host}
+		data, _ := json.Marshal(ans)
+		_ = os.WriteFile(filepath.Join(dir, pairAnswerName), data, 0o600)
+		utils.Infof("pairing: a new window opened for %s\n", firstNonEmpty(role, "a phone"))
+	}
 }
