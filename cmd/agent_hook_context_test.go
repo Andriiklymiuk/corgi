@@ -31,8 +31,8 @@ func TestSessionContextTellsTheSessionWhatTheDaemonKnows(t *testing.T) {
 			{ID: "me", Cwd: root, Folder: root, Status: sessions.StatusDone},
 			{ID: "s2", Cwd: root, Folder: root, Title: "Referrals", Status: sessions.StatusWorking, Detail: "Bash go test", Branch: "fix/login", StatusSince: now.Add(-3 * time.Minute),
 				Changes: &sessions.Changes{Files: 2, Lines: 40, Touched: []string{"api/login.go", "api/login_test.go"}}},
-			{ID: "s3", Cwd: "/elsewhere", Folder: "/elsewhere", Status: sessions.StatusWorking},
-			{ID: "s4", Cwd: root, Folder: root, Status: sessions.StatusGone},
+			{ID: "s3", Cwd: "/elsewhere", Folder: "/elsewhere", Title: "Faraway", Status: sessions.StatusWorking},
+			{ID: "s4", Cwd: root, Folder: root, Title: "Ghost", Status: sessions.StatusGone},
 		},
 		Accounts: []sessions.Account{{ConfigDir: "", Limits: &usage.Limits{
 			FiveHour: usage.Window{Percent: 57, ResetsAt: now.Add(2 * time.Hour)},
@@ -60,7 +60,7 @@ func TestSessionContextTellsTheSessionWhatTheDaemonKnows(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "elsewhere") || strings.Contains(got, "s4") {
+	if strings.Contains(got, "Faraway") || strings.Contains(got, "Ghost") {
 		t.Fatalf("other workspaces and gone sessions stay out:\n%s", got)
 	}
 
