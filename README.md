@@ -387,7 +387,10 @@ corgi comment that grows instead of a trail of them.
 because a run or a session is on it, Review because a pull request is open,
 Blocked because two runs failed in a row or a run said it needs a credential,
 Ready because a handoff or a deferred run is waiting — with the branch, the
-pull requests and what it has cost so far.
+pull requests and what it has cost so far. A card in Review says how its
+pull request stands — checks green, approved — and *ready to merge* once
+nothing is left between it and the button (`pull` on the card, the inbox
+row and `corgi agent watch --json`; read from GitHub or GitLab once a round).
 
 <p align="center"><img src="docs/media/kanban.gif" width="760" alt="corgi agent kanban: Inbox, Ready, Running, Blocked, Review, Done — with the session, the handoff, the pull requests and the cost on each card"></p>
 

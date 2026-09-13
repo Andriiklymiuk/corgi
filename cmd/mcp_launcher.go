@@ -3815,10 +3815,13 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		// PR is the pull request of mine a person may mark ready, merge or
 		// close from this row.
 		PR string `json:"pr,omitempty"`
+		// Pull is how that pull request stands: checks, approval.
+		Pull *watch.PullStatus `json:"pull,omitempty"`
 	}
 	out := []row{}
 	onTicket := sessionsOnTickets(dir)
 	picks := watch.LoadPicks(dir)
+	pulls := watch.LoadPullLog(dir)
 	now := time.Now()
 	// The events log keeps the column a ticket arrived in. A move made since
 	// then is the truth, so it wins.
@@ -3856,6 +3859,10 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			r.Columns = watch.TaskColumns
 		}
 		r.PR = prLinkFor(dir, e, onTicket)
+		if st, ok := pulls.Get(firstNonEmptyString(r.PR, e.Ref)); ok {
+			p := st
+			r.Pull = &p
+		}
 		out = append(out, r)
 	}
 	fixes := []map[string]any{}

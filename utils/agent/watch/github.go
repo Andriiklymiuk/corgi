@@ -324,3 +324,106 @@ func (g *GitHub) RefState(ctx context.Context, ref string) string {
 	}
 	return g.pullState(ctx, map[string]string{}, "https://api.github.com/repos/"+repo+"/pulls/"+num)
 }
+
+// PullStatus is how acme/api#7 stands: its state, whether the checks on
+// its head pass, and whether a review approved it. Three reads, the head
+// commit's check runs and legacy statuses both — a repo protected by
+// either. Unreadable is "not known", never a guess.
+func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) {
+	repo, num, ok := strings.Cut(ref, "#")
+	if !ok || g.Token == "" {
+		return PullStatus{}, false
+	}
+	var pr struct {
+		State  string `json:"state"`
+		Merged bool   `json:"merged"`
+		Draft  bool   `json:"draft"`
+		Head   struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
+		RequestedReviewers []struct {
+			Login string `json:"login"`
+		} `json:"requested_reviewers"`
+	}
+	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num, "")
+	if err != nil || githubDecode(resp, &pr) != nil {
+		return PullStatus{}, false
+	}
+	out := PullStatus{State: pr.State, At: time.Now()}
+	if pr.Merged {
+		out.State = "merged"
+	} else if pr.Draft && pr.State == "open" {
+		out.State = "draft"
+	}
+	if out.State != "open" && out.State != "draft" {
+		return out, true
+	}
+
+	// Reviews: the last word from each reviewer counts; a comment is not a
+	// verdict. Any "changes requested" still standing wins; else an
+	// approval; else pending while someone is asked.
+	var reviews []struct {
+		State string `json:"state"`
+		User  struct {
+			Login string `json:"login"`
+		} `json:"user"`
+	}
+	if resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num+"/reviews?per_page=100", ""); err == nil && githubDecode(resp, &reviews) == nil {
+		last := map[string]string{}
+		for _, r := range reviews {
+			switch r.State {
+			case "APPROVED", "CHANGES_REQUESTED", "DISMISSED":
+				last[r.User.Login] = r.State
+			}
+		}
+		out.Review = "none"
+		for _, st := range last {
+			if st == "APPROVED" && out.Review != "changes" {
+				out.Review = "approved"
+			}
+			if st == "CHANGES_REQUESTED" {
+				out.Review = "changes"
+			}
+		}
+		if out.Review == "none" && len(pr.RequestedReviewers) > 0 {
+			out.Review = "pending"
+		}
+	}
+
+	// Checks: check runs (Actions and apps) and the older commit statuses.
+	var conclusions []string
+	running := 0
+	if pr.Head.SHA != "" {
+		var runs struct {
+			CheckRuns []struct {
+				Status     string `json:"status"`
+				Conclusion string `json:"conclusion"`
+			} `json:"check_runs"`
+		}
+		if resp, err := g.get(ctx, "/repos/"+repo+"/commits/"+pr.Head.SHA+"/check-runs?per_page=100", ""); err == nil && githubDecode(resp, &runs) == nil {
+			for _, r := range runs.CheckRuns {
+				if r.Status != "completed" {
+					running++
+					continue
+				}
+				conclusions = append(conclusions, r.Conclusion)
+			}
+		}
+		var combined struct {
+			Statuses []struct {
+				State string `json:"state"`
+			} `json:"statuses"`
+		}
+		if resp, err := g.get(ctx, "/repos/"+repo+"/commits/"+pr.Head.SHA+"/status", ""); err == nil && githubDecode(resp, &combined) == nil {
+			for _, s := range combined.Statuses {
+				if s.State == "pending" {
+					running++
+					continue
+				}
+				conclusions = append(conclusions, s.State)
+			}
+		}
+	}
+	out.Checks = checksVerdict(conclusions, running)
+	return out, true
+}

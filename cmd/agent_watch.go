@@ -598,10 +598,15 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			Session   *CardSess `json:"session,omitempty"`
 			Picked    *CardPick `json:"picked,omitempty"`
 			Columns   []string  `json:"columns,omitempty"`
+			// PR and Pull: the pull request this row is about or has, and
+			// how it stands — checks, approval, ready to merge.
+			PR   string            `json:"pr,omitempty"`
+			Pull *watch.PullStatus `json:"pull,omitempty"`
 		}
 		events := []eventRow{}
 		onTicket := sessionsOnTickets(dir)
 		picks := watch.LoadPicks(dir)
+		pulls := watch.LoadPullLog(dir)
 		moved := watch.LoadStateLog(dir)
 		keeper := watch.NewInboxKeeper(now)
 		for _, e := range watch.RecentEvents(dir, 25) {
@@ -629,6 +634,11 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			}
 			if e.Kind == watch.KindTask {
 				er.Columns = watch.TaskColumns
+			}
+			er.PR = prLinkFor(dir, e, onTicket)
+			if st, ok := pulls.Get(firstNonEmptyString(er.PR, e.Ref)); ok {
+				p := st
+				er.Pull = &p
 			}
 			events = append(events, er)
 		}
