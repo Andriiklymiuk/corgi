@@ -356,3 +356,44 @@ func TestTheDailyDigestIsPushedToThePhone(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+// While muted nothing rings — no toast, no push, not even a permission —
+// and the board says until when; when it passes, everything rings again.
+func TestAMuteHoldsEveryRing(t *testing.T) {
+	d := trackingDaemon(t)
+	d.Sessions.Load()
+	d.Sessions.OnTransition = d.onSessionTransition
+	var mu sync.Mutex
+	var rang []string
+	d.Notify = func(title, body string) { mu.Lock(); rang = append(rang, "toast "+body); mu.Unlock() }
+	d.Push = func(m push.Message) { mu.Lock(); rang = append(rang, "push "+m.Body); mu.Unlock() }
+	if err := SetMute(d.Dir, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	d.notifyAttentionAt("corgi agent · acme", "a new bug", "acme", "")
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 1, At: time.Now()})
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "go test", At: time.Now()})
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	if len(rang) != 0 {
+		t.Fatalf("muted, yet: %v", rang)
+	}
+	mu.Unlock()
+	if st := d.Sessions.Snapshot(time.Now()); st.MutedUntil.IsZero() {
+		t.Fatal("the board says muted")
+	}
+	// Off: the next attention rings, and the board clears.
+	if err := SetMute(d.Dir, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	d.notifyAttentionAt("corgi agent · acme", "another bug", "acme", "")
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(rang) == 2 })
+	if st := d.Sessions.Snapshot(time.Now()); !st.MutedUntil.IsZero() {
+		t.Fatal("the board rings again")
+	}
+	// A mute in the past is no mute.
+	_ = SetMute(d.Dir, time.Now().Add(-time.Minute))
+	if !MutedUntil(d.Dir).IsZero() {
+		t.Fatal("passed")
+	}
+}
