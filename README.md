@@ -367,6 +367,21 @@ week it *would* have had before you turn it on, and
 
 <p align="center"><img src="docs/media/replay.gif" width="760" alt="corgi agent watch replay, while-away and undo: the week unattended mode would have had, the morning card, and a run put back"></p>
 
+**A workspace says what it wants done on its own.** Switches, each off until
+you flip it, each taking effect on the daemon's next round — from the CLI or
+the phone: `--auto-allow reads` answers a Read/Grep/Glob prompt itself (never
+Bash, never a write); `--done-when "go test ./..."` runs the checks when a
+session stops with changes and types a red one back — *done* means the tests
+say so; `--compact-at 85` sends `/compact` to a full session when it stops;
+`--rebase` rebases a stopped session's clean branch when main moved (a branch
+that would conflict is told which files under `--hand-over`); `--lessons`
+writes down reviews on your PRs, red checks and failed bots for every new
+session to read. `watch work --attempts 3 --models opus,sonnet` tries a
+ticket three ways in three worktrees; `corgi agent attempts` compares and
+picks. A bot run that fails retries a model up; `bot show` sums its ledger.
+Another agent's CLI joins the board through `corgi agent event`; a
+teammate's phone pairs read-only with `corgi agent up --viewer`.
+
 Full setup — every flag, what it refuses to do and why — in
 [docs/agent.md](docs/agent.md#choosing-what-it-does-on-its-own). In a chat with
 the corgi plugin, `/corgi:setup` walks it, and asking *"what do we track?"*
