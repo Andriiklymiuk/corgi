@@ -390,8 +390,13 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		if opts.viewer {
 			role = pairing.RoleViewer
 		}
-		mux.Handle("/pair", pairingHandlerWithRole(session, deviceStore, role))
+		window := &pairWindow{}
+		window.set(session, role)
+		mux.Handle("/pair", pairingHandlerFor(window, deviceStore))
 		defer session.Close()
+		// `corgi agent pair` asks for a fresh window while this runs: a
+		// request file in the agent dir, answered with the code in another.
+		go watchPairRequests(filepath.Dir(deviceStore), window)
 	}
 
 	srv := &http.Server{Addr: addr, Handler: mux}

@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -169,5 +171,43 @@ func TestAViewerDeviceOnlyReadsTheBoard(t *testing.T) {
 	devices, _ := pairing.Load(store)
 	if len(devices.Devices) != 1 || !devices.Devices[0].Viewer() {
 		t.Fatalf("the store says viewer: %+v", devices.Devices)
+	}
+}
+
+// A window reopens on request while the server runs: the request file is
+// answered with a fresh code, the old window closes, and the new code
+// pairs — for a viewer when asked.
+func TestAPairingWindowReopensOnRequest(t *testing.T) {
+	session, oldCode, store := pairingFixture(t)
+	dir := filepath.Dir(store)
+	window := &pairWindow{}
+	window.set(session, "")
+	mux := http.NewServeMux()
+	mux.Handle("/pair", pairingHandlerFor(window, store))
+	go watchPairRequests(dir, window)
+	ans, err := requestPairWindow(dir, true, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ans.Code == "" || ans.Code == oldCode || ans.Role != "viewer" || ans.Daemon == "" || ans.ExpiresAt.Before(time.Now()) {
+		t.Fatalf("%+v", ans)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/pair", strings.NewReader(`{"code":"`+oldCode+`","device":"late"}`)))
+	if rec.Code == 200 {
+		t.Fatal("the old code died with its window")
+	}
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/pair", strings.NewReader(`{"code":"`+ans.Code+`","device":"teammate"}`)))
+	var paired struct {
+		Token string `json:"token"`
+		Role  string `json:"role"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &paired)
+	if rec.Code != 200 || paired.Token == "" || paired.Role != "viewer" {
+		t.Fatalf("the new code pairs a viewer: %d %s", rec.Code, rec.Body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, pairRequestName)); err == nil {
+		t.Fatal("the request is gone once answered")
 	}
 }
