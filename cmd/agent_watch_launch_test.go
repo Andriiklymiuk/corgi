@@ -119,8 +119,8 @@ func TestTheCardCarriesNumbersAndNoNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	ledger := usage.OpenLedger(dir)
-	ledger.Note("UserPromptSubmit", "s1", time.Now())
-	ledger.Note("PostToolUse", "s1", time.Now())
+	ledger.Note("UserPromptSubmit", "s1", false, time.Now())
+	ledger.Note("PostToolUse", "s1", false, time.Now())
 	if err := ledger.Flush(); err != nil {
 		t.Fatal(err)
 	}

@@ -114,14 +114,14 @@ func (l *Ledger) countTranscript(path string, since, until time.Time) {
 			// A prompt is what a person typed: a string, or text blocks — a
 			// tool_result array is the tool answering, not a person.
 			if row.IsMeta || len(row.Message.Content) == 0 || bytes.Contains(row.Message.Content, []byte(`"tool_result"`)) {
-				l.Note("", row.SessionID, at)
+				l.Note("", row.SessionID, false, at)
 				continue
 			}
-			l.Note("UserPromptSubmit", row.SessionID, at)
+			l.Note("UserPromptSubmit", row.SessionID, false, at)
 		case "assistant":
-			l.Note("", row.SessionID, at)
+			l.Note("", row.SessionID, false, at)
 			for range bytes.Count(row.Message.Content, toolUseMark) {
-				l.Note("PostToolUse", row.SessionID, at)
+				l.Note("PostToolUse", row.SessionID, false, at)
 			}
 		}
 	}
