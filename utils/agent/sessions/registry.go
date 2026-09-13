@@ -53,6 +53,8 @@ type Registry struct {
 	accounts []Account
 	// AutoContinue is copied onto every snapshot; the daemon sets it.
 	AutoContinue bool
+	// MutedUntil mirrors the daemon's mute for the board; zero when it rings.
+	mutedUntil time.Time
 	// OnTransition, when set, is told about every status change after it
 	// happened. The daemon turns some into notifications and metrics.
 	OnTransition func(s Session, from, to Status, now time.Time)
@@ -85,7 +87,10 @@ type State struct {
 	// AutoContinue says the daemon types "continue" into limited sessions
 	// itself, so an editor with the same feature can stand down.
 	AutoContinue bool      `json:"autoContinue,omitempty"`
-	Notice       string    `json:"notice,omitempty"`
+	// MutedUntil is set while nothing rings — no toast, no push — and says
+	// until when, so a key or a bar can show a bell with a line through it.
+	MutedUntil time.Time `json:"mutedUntil,omitzero"`
+	Notice     string    `json:"notice,omitempty"`
 	NoticeAt     time.Time `json:"noticeAt,omitempty"`
 	Sessions     []Session `json:"sessions"`
 	Windows      []Window  `json:"windows,omitempty"`
@@ -1531,6 +1536,19 @@ func (r *Registry) RecordFocus(id string, err error) {
 }
 
 // SetNotice records a board-level failure for the next publish.
+// SetMuted records until when nothing rings; the board says so. Reports
+// whether that changed.
+func (r *Registry) SetMuted(until time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mutedUntil.Equal(until) {
+		return false
+	}
+	r.mutedUntil = until
+	r.touch()
+	return true
+}
+
 func (r *Registry) SetNotice(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1648,7 +1666,7 @@ func (r *Registry) Snapshot(now time.Time) State {
 
 func (r *Registry) snapshotLocked(now time.Time) State {
 	st := State{UpdatedAt: r.updatedAt, Size: r.board.Size, Overflow: r.board.Hidden(),
-		LastFocusWindow: r.lastFocus.WindowID, Notice: r.notice, NoticeAt: r.noticeAt, AutoContinue: r.AutoContinue}
+		LastFocusWindow: r.lastFocus.WindowID, Notice: r.notice, NoticeAt: r.noticeAt, AutoContinue: r.AutoContinue, MutedUntil: r.mutedUntil}
 	if st.UpdatedAt.IsZero() {
 		st.UpdatedAt = now
 	}

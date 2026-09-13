@@ -299,6 +299,8 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent mute [1h\|30m\|off]` | nothing rings for a while — no toast, no push, no permission ping; the inbox and the board go on, and `sessions.json` carries `mutedUntil` so a key or a bar shows the bell crossed out (2.22) |
+| `corgi agent transcript <session> [--after N]` | a session's conversation from the command line, the way the phone's chat reads it — what an editor panel polls (2.22) |
 | `corgi agent attempts [ref] [pick <ref> <n>]` | the sessions a fan-out opened on a ticket (`watch work --attempts 3 --models opus,sonnet`), side by side — status, changes, tests, done-when, cost, PR — and keep one (2.22) |
 | `corgi agent event <start\|prompt\|tool\|done\|fail\|permission\|stop\|end>` | one event from an agent that is not Claude Code — Codex, Gemini CLI, your own — so its session sits on the board with the agent's name, its tool's risk word and its host (2.22) |
 | `corgi agent lesson add\|list` | what the workspace learned the hard way, one line each, outside the repo; `watch enable --lessons` has the daemon write reviews on your PRs, red done-when checks and failed bot runs; the context hook points every new session at the file (2.22) |

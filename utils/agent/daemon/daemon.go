@@ -719,6 +719,10 @@ func (d *Daemon) notifyAttention(title, body, workspaceID string) {
 // launcher: a tracker issue, a merge request. The launcher is the fallback,
 // because a notification about one ticket should open that ticket.
 func (d *Daemon) notifyAttentionAt(title, body, workspaceID, link string) {
+	if d.muted() {
+		utils.Infof("agent: (muted) %s: %s\n", title, body)
+		return
+	}
 	if link == "" && d.LinkFor != nil {
 		link = d.LinkFor(workspaceID)
 	}

@@ -185,7 +185,7 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 	// A permission prompt is the one notification a phone can answer from
 	// the lock screen: it carries the session id, and the Allow / Deny
 	// buttons the app registered for this category.
-	if to == sessions.StatusNeedsInput && s.Pending != nil && d.Push != nil {
+	if to == sessions.StatusNeedsInput && s.Pending != nil && d.Push != nil && MutedUntil(d.Dir).IsZero() {
 		body := "permission: " + s.Pending.Tool
 		if s.Pending.Subject != "" {
 			body += " " + s.Pending.Subject
@@ -408,6 +408,7 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 		if len(d.Sessions.Sessions()) > 0 {
 			d.Sessions.Reap(d.alive, now)
 		}
+		d.Sessions.SetMuted(MutedUntil(d.Dir))
 		if !now.Before(nextSweep) {
 			nextSweep = now.Add(sweepInterval)
 			d.Sessions.Sweep(now)
