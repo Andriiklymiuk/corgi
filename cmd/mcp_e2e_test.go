@@ -131,3 +131,43 @@ func TestLaunchAuthLeavesAKeylessDevicePlain(t *testing.T) {
 		t.Fatalf("envelopes from a keyless device: %d", rec.Code)
 	}
 }
+
+// A window opened with --viewer pairs a device that only reads: the board
+// answers, a transcript and every POST are refused, and the pairing answer
+// says so, so the app hides its buttons.
+func TestAViewerDeviceOnlyReadsTheBoard(t *testing.T) {
+	session, code, store := pairingFixture(t)
+	mux := http.NewServeMux()
+	mux.Handle("/pair", pairingHandlerWithRole(session, store, pairing.RoleViewer))
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"ok":true}`)) })
+	for _, p := range []string{"/launch/board", "/launch/transcript", "/launch/answer"} {
+		mux.Handle(p, launchAuth("", ok, store))
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/pair", strings.NewReader(`{"code":"`+code+`","device":"teammate"}`)))
+	var paired struct {
+		Token string `json:"token"`
+		Role  string `json:"role"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &paired)
+	if paired.Token == "" || paired.Role != "viewer" {
+		t.Fatalf("paired as a viewer: %s", rec.Body)
+	}
+	try := func(method, path string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(method, path, strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer "+paired.Token)
+		mux.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if try(http.MethodGet, "/launch/board") != 200 {
+		t.Fatal("the board reads")
+	}
+	if try(http.MethodGet, "/launch/transcript") != 403 || try(http.MethodPost, "/launch/answer") != 403 {
+		t.Fatal("a transcript and a button are refused")
+	}
+	devices, _ := pairing.Load(store)
+	if len(devices.Devices) != 1 || !devices.Devices[0].Viewer() {
+		t.Fatalf("the store says viewer: %+v", devices.Devices)
+	}
+}

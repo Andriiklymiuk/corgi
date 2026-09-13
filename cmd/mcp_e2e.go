@@ -36,6 +36,10 @@ func launchAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
 			return
 		}
+		if device.Viewer() && !viewerMay(r.Method, r.URL.Path) {
+			writeLaunchError(w, http.StatusForbidden, "this device only reads the board")
+			return
+		}
 		if !device.Encrypted() {
 			if r.Header.Get(pairing.E2EHeader) != "" {
 				writeLaunchError(w, http.StatusBadRequest, "this device did not pair with a key; pair again to talk encrypted")
@@ -155,3 +159,12 @@ type sealedWriter struct {
 func (s *sealedWriter) Header() http.Header         { return s.header }
 func (s *sealedWriter) WriteHeader(code int)        { s.status = code }
 func (s *sealedWriter) Write(b []byte) (int, error) { return s.body.Write(b) }
+
+// viewerMay is what a read-only device gets: every GET but a conversation
+// — the board, the inbox, the diff, the brief — and no button at all.
+func viewerMay(method, path string) bool {
+	if method != http.MethodGet {
+		return false
+	}
+	return path != "/launch/transcript"
+}

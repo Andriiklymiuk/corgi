@@ -53,6 +53,7 @@ func init() {
 	mcpCmd.Flags().String("token", "", "Bearer token for HTTP auth (auto-generated when --tunnel is set).")
 	mcpCmd.Flags().Bool("insecure", false, "Disable bearer-token auth on the HTTP endpoint.")
 	mcpCmd.Flags().Bool("pair", false, "Open a single-use pairing window so a device can claim its own revocable token (requires --http).")
+	mcpCmd.Flags().Bool("viewer", false, "The device that pairs in this window only reads: the board, the inbox, the brief — never a transcript, never a button (with --pair).")
 	rootCmd.AddCommand(mcpCmd)
 }
 
@@ -146,6 +147,7 @@ type mcpHTTPOpts struct {
 	token          string
 	insecure       bool
 	pair           bool
+	viewer         bool
 }
 
 func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
@@ -157,6 +159,7 @@ func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
 	o.token, _ = cmd.Flags().GetString("token")
 	o.insecure, _ = cmd.Flags().GetBool("insecure")
 	o.pair, _ = cmd.Flags().GetBool("pair")
+	o.viewer, _ = cmd.Flags().GetBool("viewer")
 	return o
 }
 
@@ -380,7 +383,11 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 			exitProcess(1)
 		}
 		pairSession = session
-		mux.Handle("/pair", pairingHandler(session, deviceStore))
+		role := ""
+		if opts.viewer {
+			role = pairing.RoleViewer
+		}
+		mux.Handle("/pair", pairingHandlerWithRole(session, deviceStore, role))
 		defer session.Close()
 	}
 

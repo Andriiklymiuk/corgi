@@ -1730,6 +1730,21 @@ its own revocable token. `corgi mcp devices revoke <name>` kills exactly one
 device without disturbing the others — which is the whole reason not to share
 one token. Full detail: [docs/mcp.md](mcp.md).
 
+### A teammate's phone, read-only
+
+```bash
+corgi agent up --fresh --viewer     # or: corgi mcp --http … --pair --viewer
+```
+
+opens a pairing window whose token only reads. The device that scans it
+sees what yours sees — the board, the inbox, the diffs, the brief — and can
+do nothing: every POST is refused (`this device only reads the board`), and
+so is a transcript, which is the one read that can hold a secret. The role
+is the machine's choice, never the device's, and the pairing answer carries
+it (`role: viewer`) so the app hides its buttons. `corgi mcp devices list`
+says *reads only* beside such a device; revoke it like any other. Your own
+phones keep their tokens through the `--fresh`.
+
 ### End-to-end encrypted, phone to machine
 
 A token proves who is asking; it does not hide what is said. On a LAN the
