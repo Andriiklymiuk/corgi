@@ -171,9 +171,12 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		if s.Pending.Subject != "" {
 			body += " " + s.Pending.Subject
 		}
-		data := map[string]string{"session": s.ID, "tool": s.Pending.Tool}
+		data := map[string]string{"session": s.ID, "tool": s.Pending.Tool, "workspace": s.Label, "needs": "1"}
 		if s.Pending.Risky() {
 			data["risky"] = "1"
+		}
+		if s.Pending.Risk != "" {
+			data["risk"] = s.Pending.Risk
 		}
 		go d.Push(push.Message{Title: "corgi agent · " + label, Body: body, Category: "permission", Data: data, Thread: s.ID})
 	}

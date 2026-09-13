@@ -852,6 +852,9 @@ type FixRecord struct {
 	// Forgiven marks a failed run an unblock has put behind it, so it no
 	// longer counts toward the breaker.
 	Forgiven bool `json:"forgiven,omitempty"`
+	// Bot is the bot this run ran as, when a bot ran on the event rather
+	// than the workspace's fix.
+	Bot string `json:"bot,omitempty"`
 	// CostUSD and Tokens are what the run said it cost, from claude's own
 	// receipt; zero when the run did not say.
 	CostUSD float64 `json:"costUSD,omitempty"`
@@ -1409,10 +1412,19 @@ func TailLines(out string, n int) string {
 	return strings.Join(kept, "\n")
 }
 
-// SetSpent records what a run cost, as a share of the account's five-hour
-// window. Only a positive, believable figure is kept: the window resetting
-// mid-run reads as a negative, and a run that spanned a reset cannot be
-// measured this way at all.
+// SetBot names the bot a run ran as.
+func (l *FixLog) SetBot(key, bot string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].Bot = bot
+			_ = l.save()
+			return
+		}
+	}
+}
+
 // SetCost records claude's receipt on the newest run for the key.
 func (l *FixLog) SetCost(key string, usd float64, tokens int64) {
 	if key == "" {
@@ -1452,6 +1464,10 @@ func (l *FixLog) CostFor(workspace, ref string) Cost {
 	return c
 }
 
+// SetSpent records what a run cost, as a share of the account's five-hour
+// window. Only a positive, believable figure is kept: the window resetting
+// mid-run reads as a negative, and a run that spanned a reset cannot be
+// measured this way at all.
 func (l *FixLog) SetSpent(key string, percent int) {
 	if key == "" || percent <= 0 || percent > 100 {
 		return

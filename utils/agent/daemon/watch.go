@@ -28,6 +28,9 @@ type WatchSpec struct {
 	Workspace string
 	Dir       string
 	ConfigDir string
+	// AgentDir is where the daemon keeps its files (bots, config); the
+	// daemon fills it in for runs that need to look beside the spec.
+	AgentDir string
 	// Isolate runs each fix in its own worktrees; see Daemon.Isolate.
 	Isolate bool
 	// NoRetry leaves deferred fixes to a manual run.
@@ -282,6 +285,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 	d.fixBusy = map[string]*sync.Mutex{}
 	for _, spec := range d.Watches {
 		spec := spec
+		spec.AgentDir = d.Dir
 		live, dead := spec.liveSources()
 		if len(dead) > 0 {
 			utils.Infof("agent: watch %s: not polling %s — the rules take nothing they emit\n", spec.Workspace, strings.Join(dead, ", "))
@@ -388,6 +392,13 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			if note := d.startFix(ctx, spec, e); note != "" {
 				body += " (" + note + ")"
 			}
+		}
+		// The bots that act on this kind run beside the fix, as themselves.
+		d.startBots(ctx, spec, e)
+		// And the session already on that branch hears about it, when the
+		// workspace closes the loop on its own.
+		if d.handOverEvent(ctx, spec, e) {
+			body += " (handed to the session on it)"
 		}
 		// Quiet hours mean quiet: the event is recorded and the inbox shows
 		// it, but nothing buzzes until the window opens.
@@ -1166,9 +1177,16 @@ const pullFresh = 2 * time.Minute
 // linked. Once a round, and only what has not been read for a while.
 func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 	refs := map[string]bool{}
+	// links is the pull request page for each ref, when a link is known —
+	// what a merge is addressed to.
+	links := map[string]string{}
 	add := func(link string) {
 		if ref := watch.PullRef(link); ref != "" {
 			refs[ref] = true
+			if i := strings.Index(link, "#"); i > 0 {
+				link = link[:i]
+			}
+			links[ref] = link
 		}
 	}
 	for _, e := range watch.RecentEvents(d.Dir, 40) {
@@ -1204,7 +1222,12 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 	pulls := watch.LoadPullLog(d.Dir)
 	now := time.Now()
 	for ref := range refs {
-		if known, ok := pulls.Get(ref); ok && now.Sub(known.At) < pullFresh {
+		was, known := pulls.Get(ref)
+		if known && now.Sub(was.At) < pullFresh {
+			continue
+		}
+		// A pull request already merged or closed is history: not asked again.
+		if known && (was.State == "merged" || was.State == "closed") {
 			continue
 		}
 		for _, src := range spec.Sources {
@@ -1214,6 +1237,7 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 			}
 			if st, ok := asker.PullStatus(ctx, ref); ok {
 				_ = pulls.Set(ref, st)
+				d.pullChanged(ctx, spec, ref, links[ref], was, st, known)
 				break
 			}
 		}

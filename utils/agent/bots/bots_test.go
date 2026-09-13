@@ -48,3 +48,32 @@ func TestABotKeepsItsThread(t *testing.T) {
 		t.Fatal("no file is an empty store")
 	}
 }
+
+// A bot may act on its own: the kinds it runs on are checked on the way
+// in, said back in words, and a template fills a whole bot from a name.
+func TestTriggersAndTemplates(t *testing.T) {
+	on, err := ParseTriggers([]string{"pr.review, ci.failed", "PR.REVIEW", "", "none"})
+	if err != nil || len(on) != 2 || on[0] != "pr.review" || on[1] != "ci.failed" {
+		t.Fatalf("parse: %v %v", on, err)
+	}
+	if _, err := ParseTriggers([]string{"pr.merged"}); err == nil {
+		t.Fatal("an unknown kind must be refused")
+	}
+	if w := TriggerWords(on); w != "a review lands on a pull request or a build goes red" {
+		t.Fatalf("words: %q", w)
+	}
+	b := Bot{On: on}
+	if !b.RunsOn("ci.failed") || b.RunsOn("issue.new") {
+		t.Fatal("RunsOn")
+	}
+	tpl, ok := Template("reviewer")
+	if !ok || tpl.Soul == "" || len(tpl.On) == 0 || tpl.Title != "Code Reviewer" {
+		t.Fatalf("template: %+v %v", tpl, ok)
+	}
+	for _, name := range TemplateNames() {
+		tt, _ := Template(name)
+		if _, err := ParseTriggers(tt.On); err != nil {
+			t.Fatalf("template %s has a bad trigger: %v", name, err)
+		}
+	}
+}

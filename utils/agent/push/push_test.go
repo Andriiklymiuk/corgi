@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 // Tokens are kept per device, replaced on re-register, dropped when Expo
@@ -55,5 +57,43 @@ func TestTokensAreKeptPerDeviceAndDroppedWhenGone(t *testing.T) {
 	}
 	if err := s.Send(context.Background(), Message{Title: "x"}); err != nil {
 		t.Fatal("no tokens, nothing sent, no error")
+	}
+}
+
+// A phone says what it wants to hear: a permission always gets through;
+// in quiet hours only what needs a person does; with "only needs" the
+// rest never does.
+func TestAPhoneHearsWhatItAskedFor(t *testing.T) {
+	q, err := ParseQuiet("23:00-07:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(h int) time.Time { return time.Date(2026, 9, 13, h, 30, 0, 0, time.Local) }
+	if !q.Contains(at(23)) || !q.Contains(at(2)) || q.Contains(at(9)) {
+		t.Fatal("a window across midnight")
+	}
+	if _, err := ParseQuiet("25:00-07:00"); err == nil {
+		t.Fatal("a bad hour is refused")
+	}
+	night := Token{Quiet: "23:00-07:00"}
+	perm := Message{Category: "permission"}
+	news := Message{Category: "inbox", Body: "merged https://x", Data: map[string]string{}}
+	needs := Message{Category: "inbox", Body: "build went red", Data: map[string]string{"needs": "1"}}
+	if !night.wants(perm, at(2)) || night.wants(news, at(2)) || !night.wants(needs, at(2)) || !night.wants(news, at(10)) {
+		t.Fatal("quiet hours")
+	}
+	only := Token{Only: "needs"}
+	if !only.wants(perm, at(10)) || only.wants(news, at(10)) || !only.wants(needs, at(10)) {
+		t.Fatal("only what needs me")
+	}
+	s := &Store{path: filepath.Join(t.TempDir(), "push.json")}
+	if err := s.SetWith("iPhone", "ExponentPushToken[abc]", Prefs{Quiet: "22:00-06:00", Only: "needs"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetWith("iPhone", "ExponentPushToken[abc]", Prefs{Only: "everything"}); err == nil {
+		t.Fatal("only takes needs or nothing")
+	}
+	if got := s.List(); len(got) != 1 || got[0].Quiet != "22:00-06:00" || got[0].Only != "needs" {
+		t.Fatalf("kept: %+v", got)
 	}
 }

@@ -25,11 +25,24 @@ import (
 // local server.
 var ExpoEndpoint = "https://exp.host/--/api/v2/push/send"
 
-// Token is one phone's push token, by the device name pairing gave it.
+// Token is one phone's push token, by the device name pairing gave it,
+// with what that phone asked to hear and when.
 type Token struct {
 	Device string    `json:"device"`
 	Token  string    `json:"token"`
 	At     time.Time `json:"at"`
+	// Quiet is a local "HH:MM-HH:MM" window in which only a permission —
+	// the one thing a phone is for at night — gets through; "" is none.
+	Quiet string `json:"quiet,omitempty"`
+	// Only is "needs": only what needs a person (a permission, a red
+	// build, a review asked for); the rest waits for the app. "" is all.
+	Only string `json:"only,omitempty"`
+}
+
+// Prefs is what a phone asks to hear.
+type Prefs struct {
+	Quiet string
+	Only  string
 }
 
 // Store is the token file: <agentDir>/push.json, 0600.
@@ -60,9 +73,22 @@ func (s *Store) save() error {
 
 // Set records a device's token, replacing an older one for the same device.
 func (s *Store) Set(device, token string) error {
+	return s.SetWith(device, token, Prefs{})
+}
+
+// SetWith records the token and what the phone asked to hear.
+func (s *Store) SetWith(device, token string, p Prefs) error {
 	token = strings.TrimSpace(token)
 	if !strings.HasPrefix(token, "ExponentPushToken[") && !strings.HasPrefix(token, "ExpoPushToken[") {
 		return errors.New("that is not an Expo push token")
+	}
+	if p.Quiet != "" {
+		if _, err := ParseQuiet(p.Quiet); err != nil {
+			return err
+		}
+	}
+	if p.Only != "" && p.Only != "needs" {
+		return errors.New("only is \"needs\" or empty")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -72,8 +98,63 @@ func (s *Store) Set(device, token string) error {
 			kept = append(kept, t)
 		}
 	}
-	s.Tokens = append(kept, Token{Device: device, Token: token, At: time.Now()})
+	s.Tokens = append(kept, Token{Device: device, Token: token, At: time.Now(), Quiet: p.Quiet, Only: p.Only})
 	return s.save()
+}
+
+// Quiet is a local window, "HH:MM-HH:MM", that may cross midnight.
+type Quiet struct{ from, to int }
+
+// ParseQuiet reads "23:00-07:00".
+func ParseQuiet(s string) (Quiet, error) {
+	parts := strings.Split(strings.TrimSpace(s), "-")
+	if len(parts) != 2 {
+		return Quiet{}, fmt.Errorf("quiet hours are HH:MM-HH:MM, not %q", s)
+	}
+	minutes := func(hm string) (int, error) {
+		var h, m int
+		if _, err := fmt.Sscanf(strings.TrimSpace(hm), "%d:%d", &h, &m); err != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+			return 0, fmt.Errorf("quiet hours are HH:MM-HH:MM, not %q", s)
+		}
+		return h*60 + m, nil
+	}
+	from, err := minutes(parts[0])
+	if err != nil {
+		return Quiet{}, err
+	}
+	to, err := minutes(parts[1])
+	if err != nil {
+		return Quiet{}, err
+	}
+	return Quiet{from: from, to: to}, nil
+}
+
+// Contains says whether now falls in the window.
+func (q Quiet) Contains(now time.Time) bool {
+	m := now.Hour()*60 + now.Minute()
+	if q.from <= q.to {
+		return m >= q.from && m < q.to
+	}
+	return m >= q.from || m < q.to
+}
+
+// wants says whether this phone hears this message now: a permission
+// always; the rest not in quiet hours and not when it asked for only what
+// needs it — unless the message says it does (Data["needs"]).
+func (t Token) wants(m Message, now time.Time) bool {
+	if m.Category == "permission" {
+		return true
+	}
+	needs := m.Data["needs"] == "1"
+	if t.Only == "needs" && !needs {
+		return false
+	}
+	if t.Quiet != "" {
+		if q, err := ParseQuiet(t.Quiet); err == nil && q.Contains(now) && !needs {
+			return false
+		}
+	}
+	return true
 }
 
 // Remove drops a device's token: on revoke, or when Expo says the device
@@ -166,9 +247,19 @@ func (s *Store) Send(ctx context.Context, m Message) error {
 		}
 	}
 	msgs := make([]expoMessage, 0, len(tokens))
+	now := time.Now()
+	sent := tokens[:0]
 	for _, t := range tokens {
+		if !t.wants(m, now) {
+			continue
+		}
+		sent = append(sent, t)
 		msgs = append(msgs, expoMessage{To: t.Token, Title: m.Title, Body: m.Body, Sound: "default", Priority: "high",
 			CategoryID: m.Category, Data: data, ThreadID: m.Thread, ChannelID: channelFor(m.Category)})
+	}
+	tokens = sent
+	if len(msgs) == 0 {
+		return nil
 	}
 	raw, err := json.Marshal(msgs)
 	if err != nil {

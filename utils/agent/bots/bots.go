@@ -31,6 +31,10 @@ type Bot struct {
 	Isolate bool   `json:"isolate,omitempty"`
 	// Color is a hue name the surfaces draw the avatar in.
 	Color string `json:"color,omitempty"`
+	// On is what this bot does on its own: the watch event kinds it runs
+	// on when they arrive in its workspace — a review comment, a red
+	// build, a new issue. Empty is a bot you only ever open yourself.
+	On []string `json:"on,omitempty"`
 	// LastSession is the conversation to resume, and when it was last seen
 	// — the daemon records it from the session's first event.
 	LastSession string    `json:"lastSession,omitempty"`
@@ -62,6 +66,107 @@ func ValidName(name string) bool { return namePattern.MatchString(name) }
 
 // Colors are the hues a surface may draw; the first is the default.
 var Colors = []string{"indigo", "orange", "teal", "pink", "green", "amber", "blue", "red"}
+
+// Triggers are the event kinds a bot may run on, in the words the watch
+// uses; the map says what each means for a person.
+var Triggers = map[string]string{
+	"pr.review":        "a review lands on a pull request",
+	"pr.comment":       "someone comments on a pull request",
+	"review.requested": "someone asks for a review",
+	"ci.failed":        "a build goes red",
+	"issue.new":        "a new issue arrives",
+	"issue.comment":    "someone comments on an issue",
+	"task":             "a task of your own lands",
+}
+
+// ValidTrigger says whether kind is one a bot can run on.
+func ValidTrigger(kind string) bool { _, ok := Triggers[kind]; return ok }
+
+// TriggerKinds is every kind a bot can run on, in a fixed order.
+func TriggerKinds() []string {
+	return []string{"review.requested", "pr.review", "pr.comment", "ci.failed", "issue.new", "issue.comment", "task"}
+}
+
+// ParseTriggers reads kinds off a flag or a phone: trimmed, lower-case,
+// each one known, duplicates dropped; "" and "none" are no trigger.
+func ParseTriggers(list []string) ([]string, error) {
+	var out []string
+	seen := map[string]bool{}
+	for _, raw := range list {
+		for _, k := range strings.Split(raw, ",") {
+			k = strings.ToLower(strings.TrimSpace(k))
+			if k == "" || k == "none" || seen[k] {
+				continue
+			}
+			if !ValidTrigger(k) {
+				return nil, fmt.Errorf("a bot cannot run on %q — one of %s", k, strings.Join(TriggerKinds(), ", "))
+			}
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	return out, nil
+}
+
+// TriggerWords says the triggers as a person would: "a review lands on a
+// pull request or a build goes red".
+func TriggerWords(on []string) string {
+	var words []string
+	for _, k := range on {
+		if w, ok := Triggers[k]; ok {
+			words = append(words, w)
+		}
+	}
+	switch len(words) {
+	case 0:
+		return ""
+	case 1:
+		return words[0]
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " or " + words[len(words)-1]
+}
+
+// Template is one of the ready-made bots by name.
+func Template(name string) (Bot, bool) {
+	for _, t := range Templates {
+		if t.Name == name {
+			return t, true
+		}
+	}
+	return Bot{}, false
+}
+
+// TemplateNames lists the templates.
+func TemplateNames() []string {
+	out := make([]string, 0, len(Templates))
+	for _, t := range Templates {
+		out = append(out, t.Name)
+	}
+	return out
+}
+
+// RunsOn says whether the bot acts on this kind.
+func (b Bot) RunsOn(kind string) bool {
+	for _, k := range b.On {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// Templates are the bots most people want, ready to add: a name, a
+// title, a soul and what they run on. The workspace is the person's.
+var Templates = []Bot{
+	{Name: "reviewer", Title: "Code Reviewer", Color: "orange", Model: "sonnet", On: []string{"review.requested", "pr.review"},
+		Soul: "You review pull requests in this repository. Read the diff, run the tests, be brief: what is wrong, what is risky, what is fine. Post your findings as one review comment on the pull request. Never merge, never push."},
+	{Name: "fixer", Title: "Build Fixer", Color: "red", Model: "sonnet", On: []string{"ci.failed"},
+		Soul: "A build went red on a branch. Read the failing job, find the cause, fix it on that branch with the smallest change, run the tests, push, and say in one line what it was."},
+	{Name: "shipper", Title: "Shipper", Color: "teal", Model: "opus", Isolate: true,
+		Soul: "You take a ticket from spec to pull request: read the ticket, plan in three lines, implement in a worktree of your own, run the tests, open a draft pull request, and hand off what is left."},
+	{Name: "chief", Title: "Chief", Color: "pink", Model: "haiku",
+		Soul: "You are the person's chief of staff for this repository: you answer what to look at first, what is blocked and why, who is on what — in a few lines, from the board. You never change code."},
+}
 
 var mu sync.Mutex
 
