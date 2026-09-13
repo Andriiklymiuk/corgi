@@ -330,3 +330,29 @@ func TestAReviewOnMyPullRequestBecomesALesson(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// The daily digest reaches the phones too: the first lines as a push in
+// the "brief" category, once a day.
+func TestTheDailyDigestIsPushedToThePhone(t *testing.T) {
+	d := testDaemon(t)
+	d.DigestAt = "00:00"
+	d.Digest = func(time.Time) string { return "one\ntwo\nthree\nfour\nfive" }
+	d.Notify = func(_, _ string) {}
+	got := make(chan push.Message, 2)
+	d.Push = func(m push.Message) { got <- m }
+	d.sendDigestIfDue(time.Now())
+	select {
+	case m := <-got:
+		if m.Category != "brief" || m.Body != "one\ntwo\nthree\n…" || m.Data["brief"] != "1" {
+			t.Fatalf("%+v", m)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no push")
+	}
+	d.sendDigestIfDue(time.Now())
+	select {
+	case m := <-got:
+		t.Fatalf("twice: %+v", m)
+	case <-time.After(200 * time.Millisecond):
+	}
+}

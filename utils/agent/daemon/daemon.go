@@ -1193,6 +1193,14 @@ func (d *Daemon) sendDigestIfDue(now time.Time) {
 		return
 	}
 	d.Notify("corgi agent · today", body)
+	// The phone gets the first lines and opens the brief for the rest.
+	if d.Push != nil {
+		lines := strings.Split(body, "\n")
+		if len(lines) > 3 {
+			lines = append(lines[:3], "…")
+		}
+		go d.Push(push.Message{Title: "corgi agent · today", Body: strings.Join(lines, "\n"), Category: "brief", Data: map[string]string{"brief": "1"}, Thread: "brief"})
+	}
 }
 
 // awakeGrace is how long the machine stays awake after the last session
