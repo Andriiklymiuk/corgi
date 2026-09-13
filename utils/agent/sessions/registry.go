@@ -114,8 +114,10 @@ type Slot struct {
 	FocusAt    time.Time `json:"focusAt,omitempty"`
 	// Context is the context-window fill in percent, 0 when unknown.
 	Context int `json:"context,omitempty"`
-	// Pending names the tool of a permission prompt the key could answer.
+	// Pending names the tool of a permission prompt the key could answer;
+	// Risk is its word — reads, writes, destructive — so a key can colour it.
 	Pending string `json:"pending,omitempty"`
+	Risk    string `json:"risk,omitempty"`
 	Note    string `json:"note,omitempty"`
 	Stuck   bool   `json:"stuck,omitempty"`
 	Branch  string `json:"branch,omitempty"`
@@ -1563,7 +1565,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 			sl.Context = s.Context.Percent
 		}
 		if s.Pending != nil {
-			sl.Pending = s.Pending.Tool
+			sl.Pending, sl.Risk = s.Pending.Tool, s.Pending.Risk
 		}
 		if !s.StatusSince.IsZero() && now.After(s.StatusSince) {
 			sl.ElapsedS = int(now.Sub(s.StatusSince).Seconds())
