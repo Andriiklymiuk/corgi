@@ -11,6 +11,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/events"
+	"andriiklymiuk/corgi/utils/agent/lessons"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
@@ -38,6 +39,8 @@ import (
 // Policy is the part of a workspace's watch config that concerns a live
 // session rather than the tracker.
 type Policy struct {
+	// Workspace is the registered id the session was matched to.
+	Workspace string
 	AutoAllow string
 	DoneWhen  []string
 	CompactAt int
@@ -45,24 +48,42 @@ type Policy struct {
 	// stops: the conflicts typed in, or a rebase where it sits.
 	HandOver bool
 	Rebase   bool
+	// Lessons says a red gate is written down for the next session.
+	Lessons bool
 }
 
 // automation is the two switches for a workspace, as the config says now.
 func (d *Daemon) automation(spec WatchSpec) (handOver, autoMerge bool) {
+	wc := d.watchConfig(spec)
+	if wc == nil {
+		return false, false
+	}
+	return wc.HandOver, wc.AutoMerge
+}
+
+// watchConfig is the workspace's watch as the config says now, nil when
+// there is none.
+func (d *Daemon) watchConfig(spec WatchSpec) *config.WatchConfig {
 	dir := spec.AgentDir
 	if dir == "" {
 		dir = d.Dir
 	}
 	user, err := config.LoadUser(filepath.Join(dir, "config.yml"))
 	if err != nil || user == nil {
-		return false, false
+		return nil
 	}
 	repo, _ := config.LoadRepo(spec.Dir)
-	wc := config.Resolve(spec.Workspace, repo, user).Watch
-	if wc == nil {
-		return false, false
+	return config.Resolve(spec.Workspace, repo, user).Watch
+}
+
+// learn writes one lesson for a workspace, when it asked for them.
+func (d *Daemon) learn(spec WatchSpec, source, text string) {
+	if wc := d.watchConfig(spec); wc == nil || !wc.Lessons {
+		return
 	}
-	return wc.HandOver, wc.AutoMerge
+	if err := lessons.Add(d.Dir, spec.Workspace, lessons.Lesson{At: time.Now(), Source: source, Text: text}); err != nil {
+		utils.Infof("agent: lesson for %s: %v\n", spec.Workspace, err)
+	}
 }
 
 // sessionOnPull is the live session whose pull request this is.
@@ -243,6 +264,13 @@ func (d *Daemon) gateDone(s sessions.Session) {
 			utils.Infof("agent: %s stopped, but %q failed (%d in a row)\n", label, cmd, fails)
 			if fails > gateTries {
 				go d.notifyAttentionAt("corgi agent · "+label, "not done: "+cmd+" still red after "+strconv.Itoa(fails)+" tries", s.Label, "")
+				if p := d.Policy(s); p.Lessons && p.Workspace != "" {
+					where := s.Branch
+					if where == "" {
+						where = label
+					}
+					_ = lessons.Add(d.Dir, p.Workspace, lessons.Lesson{At: time.Now(), Source: "done-when", Text: "`" + cmd + "` stayed red after " + strconv.Itoa(fails) + " tries on " + where + " — " + lastLine(string(out))})
+				}
 				return
 			}
 			d.sendToSession(ctx, s.ID, gateMessage(cmd, string(out), err), true)

@@ -40,6 +40,8 @@ type WatchSwitches struct {
 	CompactAt int `json:"compactAt"`
 	// Rebase rebases a stopped session's clean branch onto main when main moved.
 	Rebase bool `json:"rebase"`
+	// Lessons writes reviews, red gates and failed bots down for the next session.
+	Lessons bool `json:"lessons"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -61,7 +63,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	if wc.DoneWhen != nil {
 		out.DoneWhen = wc.DoneWhen
 	}
-	out.CompactAt, out.Rebase = wc.CompactAt, wc.Rebase
+	out.CompactAt, out.Rebase, out.Lessons = wc.CompactAt, wc.Rebase, wc.Lessons
 	return out
 }
 
@@ -109,6 +111,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			DoneWhen  *[]string `json:"doneWhen"`
 			CompactAt *int      `json:"compactAt"`
 			Rebase    *bool     `json:"rebase"`
+			Lessons   *bool     `json:"lessons"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -196,6 +199,9 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Rebase != nil {
 			wc.Rebase = *req.Rebase
+		}
+		if req.Lessons != nil {
+			wc.Lessons = *req.Lessons
 		}
 		if req.CompactAt != nil {
 			if *req.CompactAt < 0 || *req.CompactAt > 100 {
