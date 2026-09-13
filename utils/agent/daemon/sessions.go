@@ -163,6 +163,11 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 			_ = usage.RecordWait(d.Dir, usage.Wait{At: now.UTC(), Kind: kind, Label: label, Profile: s.Profile, Seconds: secs})
 		}
 	}
+	// A stop with work on the branch is checked against the workspace's
+	// done-when before anyone is told it is done.
+	if to == sessions.StatusDone && from == sessions.StatusWorking {
+		d.gateDone(s)
+	}
 	// A prompt the workspace's policy answers is answered here and never
 	// rings: a read is a read.
 	if to == sessions.StatusNeedsInput && s.Pending != nil && d.allowsByPolicy(s) {

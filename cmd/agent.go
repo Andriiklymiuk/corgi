@@ -185,8 +185,8 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	// A permission prompt is answered by the daemon when the workspace the
 	// session sits in says reads are allowed — read live, so the switch
 	// takes at the next prompt.
-	d.AllowPolicy = func(s sessions.Session) string {
-		return allowPolicyFor(dir, s.Cwd)
+	d.Policy = func(s sessions.Session) daemon.Policy {
+		return policyFor(dir, s.Cwd)
 	}
 	// Phones that registered a push token hear what the desktop hears, and a
 	// permission prompt with its session id.
@@ -1073,20 +1073,20 @@ func agoText(d time.Duration) string {
 	}
 }
 
-// allowPolicyFor is the permission policy of the workspace a directory
-// belongs to — the registered workspace whose path contains it, longest
-// first, so a worktree under a workspace counts as that workspace.
-func allowPolicyFor(dir, cwd string) string {
+// policyFor is what the workspace a directory belongs to wants done on its
+// own — the registered workspace whose path contains it, longest first,
+// so a worktree under a workspace counts as that workspace.
+func policyFor(dir, cwd string) daemon.Policy {
 	if cwd == "" {
-		return ""
+		return daemon.Policy{}
 	}
 	registry, err := workspace.Load(agentRegistryPath(dir))
 	if err != nil {
-		return ""
+		return daemon.Policy{}
 	}
 	user, err := config.LoadUser(agentUserConfigPath(dir))
 	if err != nil || user == nil {
-		return ""
+		return daemon.Policy{}
 	}
 	var best workspace.Workspace
 	for _, w := range registry.Sorted() {
@@ -1098,13 +1098,13 @@ func allowPolicyFor(dir, cwd string) string {
 		}
 	}
 	if best.ID == "" {
-		return ""
+		return daemon.Policy{}
 	}
 	repo, _ := config.LoadRepo(best.AbsPath)
 	if wc := config.Resolve(best.ID, repo, user).Watch; wc != nil {
-		return wc.AutoAllow
+		return daemon.Policy{AutoAllow: wc.AutoAllow, DoneWhen: wc.DoneWhen}
 	}
-	return ""
+	return daemon.Policy{}
 }
 
 // pathWithin says whether p is dir or sits under it.

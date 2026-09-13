@@ -133,11 +133,11 @@ func TestAReadIsAllowedByTheWorkspacePolicy(t *testing.T) {
 		defer mu.Unlock()
 		pushed = append(pushed, m.Body)
 	}
-	d.AllowPolicy = func(s sessions.Session) string {
+	d.Policy = func(s sessions.Session) Policy {
 		if s.Cwd == "/tmp/acme" {
-			return config.AutoAllowReads
+			return Policy{AutoAllow: config.AutoAllowReads}
 		}
-		return ""
+		return Policy{}
 	}
 	now := time.Now()
 	iterm := sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/acme", ClaudePID: 1, TermProgram: "iTerm.app", TTY: 5, At: now}
@@ -167,5 +167,84 @@ func TestAReadIsAllowedByTheWorkspacePolicy(t *testing.T) {
 	defer mu.Unlock()
 	if len(typed) != 1 {
 		t.Fatalf("only the one read was answered: %v", typed)
+	}
+}
+
+// A session that stops with changes on its branch is not done until the
+// workspace's done-when says so: a red command is typed back with its
+// tail, the row shows tests ✗ and the streak; green clears it. After
+// three reds in a row the daemon rings instead of typing.
+func TestAStopIsGatedByTheWorkspacesDoneWhen(t *testing.T) {
+	d := trackingDaemon(t)
+	d.Sessions.Load()
+	d.Sessions.OnTransition = d.onSessionTransition
+	d.Raise = func(context.Context, sessions.FocusTarget) error { return nil }
+	t.Cleanup(func() { d.runs.Wait(); d.swaps.Wait() })
+	var mu sync.Mutex
+	var typed []string
+	d.TypeText = func(_ context.Context, target sessions.FocusTarget, text string, enter bool) error {
+		mu.Lock()
+		defer mu.Unlock()
+		typed = append(typed, text)
+		return nil
+	}
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	var policy Policy
+	d.Policy = func(sessions.Session) Policy { return policy }
+	policy = Policy{DoneWhen: []string{"echo ok", "echo boom; echo bang; exit 1"}}
+	now := time.Now()
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: t.TempDir(), ClaudePID: 1, TermProgram: "iTerm.app", TTY: 5, At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PreToolUse", SessionID: "s1", Tool: "Edit", Subject: "main.go", At: now})
+	// A stop with nothing on the branch is a stop.
+	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
+	d.runs.Wait()
+	if s, _ := d.Sessions.Lookup("s1"); s.Gate != nil {
+		t.Fatalf("no work, no gate: %+v", s.Gate)
+	}
+	d.Sessions.SetChanges("s1", &sessions.Changes{Files: 2, Lines: 40, At: now}, nil)
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(typed) == 1 })
+	mu.Lock()
+	msg := typed[0]
+	mu.Unlock()
+	if !strings.HasPrefix(msg, "Not done yet: `echo boom; echo bang; exit 1` failed") || !strings.Contains(msg, "boom\nbang") || !strings.Contains(msg, "stop when it is green") {
+		t.Fatalf("typed back: %q", msg)
+	}
+	s, _ := d.Sessions.Lookup("s1")
+	if s.Gate == nil || s.Gate.OK || s.Gate.Fails != 1 || s.Tests == nil || s.Tests.OK || s.Tests.Cmd != "echo boom; echo bang; exit 1" {
+		t.Fatalf("the row says red: gate %+v tests %+v", s.Gate, s.Tests)
+	}
+	// Green clears it, and nothing is typed.
+	policy = Policy{DoneWhen: []string{"true"}}
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
+	d.runs.Wait()
+	s, _ = d.Sessions.Lookup("s1")
+	if s.Gate == nil || !s.Gate.OK || s.Gate.Fails != 0 {
+		t.Fatalf("green: %+v", s.Gate)
+	}
+	mu.Lock()
+	n := len(typed)
+	mu.Unlock()
+	if n != 1 {
+		t.Fatalf("green types nothing: %v", typed)
+	}
+	// Past three reds in a row the daemon rings a person.
+	policy = Policy{DoneWhen: []string{"exit 1"}}
+	for i := 0; i < 4; i++ {
+		d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
+		d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
+		d.runs.Wait()
+	}
+	got := collectNotes(t, notes, "still red after 4 tries")
+	if len(got) == 0 {
+		t.Fatal("the fourth red rings")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(typed) != 4 {
+		t.Fatalf("three typed back, the fourth rang: %d", len(typed))
 	}
 }

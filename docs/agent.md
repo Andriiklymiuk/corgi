@@ -307,7 +307,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
 | `corgi agent carry <session> --profile P` | continue a session under another listed account, conversation included (copies the transcript, resumes it in a new terminal) |
 | `corgi agent digest [--send]` | today's one-message summary; with `digestAt: "20:00"` in the agent config the daemon sends it once a day where notifications go |
-| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself (2.22) |
+| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself; `--done-when "go test ./..."` runs the workspace's checks when a session stops and types a red one back (2.22) |
 | `corgi agent standup [--since 24h] [--write]` | what you asked Claude and what got committed, per workspace; `--write` has `claude -p` turn it into three sentences |
 | `corgi agent stop` | stop the daemon |
 
@@ -601,6 +601,27 @@ session in iTerm2 is answered, because it is the one host corgi can type into
 without bringing a window forward — in VS Code or Terminal.app the prompt
 rings as before. The switch flips from the phone too, on the repo's sheet,
 and takes at the next prompt.
+
+#### Done means the checks say so
+
+A session that stops is *done* on the board the moment Claude stops typing —
+whether or not the tests pass. A workspace can say what finished means:
+
+```bash
+corgi agent watch enable --done-when "go test ./...,pnpm lint"
+```
+
+When a session in that workspace stops with changes on its branch (the
+minute sweep saw files, or it ran tests itself), the daemon runs those
+commands in the session's directory, in order. All green: the row's tests
+line says ✓ and the session is done. One red: the last twelve lines it
+printed are typed into the session as the next message — *Not done yet:
+`go test ./...` failed after you stopped … fix it, run it again, and stop
+when it is green* — and the session is working again. The row carries the
+run as `gate` (`ok`, `cmd`, `fails`) and the tests line shows ✗ with the
+command. After three reds in a row the daemon stops arguing with a model and
+rings you instead. An interrupted session is never gated: you stopped it.
+Also a phone switch on the repo's sheet; takes at the next stop.
 
 ### Sessions on a Stream Deck
 
