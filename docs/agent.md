@@ -309,6 +309,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent pair [--viewer] [--file]` | a fresh pairing window on the running server — the QR again, a read-only one, or a `.corgipair` to AirDrop to the phone (2.22.4) |
 | `corgi agent mute [1h\|30m\|off]` | nothing rings for a while — no toast, no push, no permission ping; the inbox and the board go on, and `sessions.json` carries `mutedUntil` so a key or a bar shows the bell crossed out (2.22) |
 | `corgi agent transcript <session> [--after N]` | a session's conversation from the command line, the way the phone's chat reads it — what an editor panel polls (2.22) |
 | `corgi agent attempts [ref] [pick <ref> <n>]` | the sessions a fan-out opened on a ticket (`watch work --attempts 3 --models opus,sonnet`), side by side — status, changes, tests, done-when, cost, PR — and keep one (2.22) |
@@ -1761,6 +1762,36 @@ prints a single-use code, valid ten minutes, which a client exchanges once for
 its own revocable token. `corgi mcp devices revoke <name>` kills exactly one
 device without disturbing the others — which is the whole reason not to share
 one token. Full detail: [docs/mcp.md](mcp.md).
+
+### Next to the Mac: no tunnel, no QR
+
+With corgi-bar 0.22 running, the Mac is findable by a phone beside it the
+way AirDrop finds it — Bonjour over Bluetooth, peer-to-peer Wi-Fi and the
+local network (Apple's Network framework, `includePeerToPeer`) — and the
+bar relays every byte to the daemon's launcher endpoint on localhost. The
+app links to it by itself when it is near and goes back to the tunnel when
+it is not; the token and the sealed bodies are the same either way, and a
+laptop with no tunnel at all is a *nearby* laptop the phone still reaches.
+
+Pairing loses its QR too:
+
+```bash
+corgi agent pair            # a fresh window on the running server: a new QR and code
+corgi agent pair --viewer   # a read-only window, for a teammate
+corgi agent pair --file     # ~/Desktop/<laptop>.corgipair — AirDrop it to the phone
+```
+
+The phone opens the file with corgi and is paired: the code inside is
+single-use and dies in ten minutes, the phone's own token is minted on the
+laptop as always, and AirDrop carries the file end-to-end encrypted between
+your own devices. The bar's footer does the same in one click. On the pair
+screen a laptop nearby is listed by name — tap it, type the code, done.
+
+**Handoff**: the session in front on the Mac (the bar publishes it as an
+`NSUserActivity`) shows corgi's icon on the iPhone's lock screen and in its
+app switcher; a tap opens that chat. Same iCloud account, Bluetooth on, and
+the bar signed by the same team as the app — the released bar, not one from
+`make app`.
 
 ### A teammate's phone, read-only
 
