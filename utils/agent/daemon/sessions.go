@@ -51,7 +51,7 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 	switch c.Action {
 	case command.ActionSession:
 		if c.Event != nil {
-			d.Ledger.Note(c.Event.Name, c.Event.SessionID, c.Event.At)
+			d.Ledger.Note(c.Event.Name, c.Event.SessionID, c.Event.Agent != "", c.Event.At)
 			d.Sessions.Apply(*c.Event)
 			// A session opened as a bot is that bot's thread from now on:
 			// the next open resumes it.

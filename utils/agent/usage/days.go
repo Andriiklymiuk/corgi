@@ -47,8 +47,10 @@ func OpenLedger(agentDir string) *Ledger {
 }
 
 // Note counts one hook event. A placeholder id (a rescan's pid:N) is not a
-// session anyone prompted; it counts nothing.
-func (l *Ledger) Note(event, sessionID string, at time.Time) {
+// session anyone prompted; it counts nothing. Claude Code reports a tool
+// after the fact (PostToolUse); an agent that is not Claude Code, through
+// `corgi agent event tool`, reports it before — foreign says which.
+func (l *Ledger) Note(event, sessionID string, foreign bool, at time.Time) {
 	if l == nil || sessionID == "" || len(sessionID) > 4 && sessionID[:4] == "pid:" {
 		return
 	}
@@ -81,6 +83,11 @@ func (l *Ledger) Note(event, sessionID string, at time.Time) {
 	case "PostToolUse", "PostToolUseFailure":
 		d.ToolCalls++
 		l.dirty = true
+	case "PreToolUse":
+		if foreign {
+			d.ToolCalls++
+			l.dirty = true
+		}
 	}
 }
 

@@ -9,13 +9,13 @@ func TestLedgerCountsSessionsOncePromptsAndToolCalls(t *testing.T) {
 	dir := t.TempDir()
 	l := OpenLedger(dir)
 	at := time.Date(2026, 9, 13, 10, 0, 0, 0, time.Local)
-	l.Note("SessionStart", "s1", at)
-	l.Note("UserPromptSubmit", "s1", at)
-	l.Note("PostToolUse", "s1", at.Add(time.Minute))
-	l.Note("PostToolUse", "s1", at.Add(2*time.Minute))
-	l.Note("UserPromptSubmit", "s2", at.Add(time.Hour))
-	l.Note("PostToolUse", "pid:42", at)
-	l.Note("Stop", "", at)
+	l.Note("SessionStart", "s1", false, at)
+	l.Note("UserPromptSubmit", "s1", false, at)
+	l.Note("PostToolUse", "s1", false, at.Add(time.Minute))
+	l.Note("PostToolUse", "s1", false, at.Add(2*time.Minute))
+	l.Note("UserPromptSubmit", "s2", false, at.Add(time.Hour))
+	l.Note("PostToolUse", "pid:42", false, at)
+	l.Note("Stop", "", false, at)
 	day := l.Day("2026-09-13")
 	if day.Sessions != 2 || day.Messages != 2 || day.ToolCalls != 2 {
 		t.Fatalf("got %+v", day)
@@ -28,8 +28,10 @@ func TestLedgerCountsSessionsOncePromptsAndToolCalls(t *testing.T) {
 	}
 	// A later daemon picks up where this one stopped, ids included.
 	again := OpenLedger(dir)
-	again.Note("PostToolUse", "s1", at.Add(3*time.Minute))
-	if day := again.Day("2026-09-13"); day.Sessions != 2 || day.ToolCalls != 3 {
+	again.Note("PostToolUse", "s1", false, at.Add(3*time.Minute))
+	again.Note("PreToolUse", "s1", false, at.Add(3*time.Minute))
+	again.Note("PreToolUse", "codex-1", true, at.Add(3*time.Minute))
+	if day := again.Day("2026-09-13"); day.Sessions != 3 || day.ToolCalls != 4 {
 		t.Fatalf("after reopen %+v", day)
 	}
 	if err := again.Flush(); err != nil {
