@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/push"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -70,11 +72,15 @@ type agentUpResult struct {
 	MCPAddr    string `json:"mcpAddr"`
 	MCPStarted bool   `json:"mcpStarted"`
 	PublicURL  string `json:"publicUrl,omitempty"`
-	PairCode   string `json:"pairingCode,omitempty"`
-	PairURL    string `json:"pairingUrl,omitempty"`
-	LogPath    string `json:"mcpLog,omitempty"`
-	AtLogin    bool   `json:"atLogin"`
-	Hint       string `json:"hint,omitempty"`
+	// TunnelHostname is the configured hostname — the one thing that keeps
+	// the public URL the same across restarts; empty for a quick tunnel.
+	TunnelHostname string `json:"tunnelHostname,omitempty"`
+	QuickTunnel    bool   `json:"quickTunnel,omitempty"`
+	PairCode       string `json:"pairingCode,omitempty"`
+	PairURL        string `json:"pairingUrl,omitempty"`
+	LogPath        string `json:"mcpLog,omitempty"`
+	AtLogin        bool   `json:"atLogin"`
+	Hint           string `json:"hint,omitempty"`
 }
 
 func runAgentUp(cmd *cobra.Command, _ []string) {
@@ -121,6 +127,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	defer release()
 
 	var res agentUpResult
+	res.TunnelHostname = strings.TrimSpace(settings.TunnelHostname)
 	res.MCPAddr = addr
 
 	res.Workspace, res.Registered = registerCwdWorkspace()
@@ -193,9 +200,18 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_up_mcp", fmt.Errorf("%w — see %s", err, res.LogPath), 1)
 	}
-	_ = saveUpSettings(dir, settings)
 	res.PublicURL = parsed.publicURL
 	res.PairCode = parsed.pairCode
+	// A quick tunnel came back on a new address: every paired phone hears
+	// it and relinks itself — its token and key are still good, only the
+	// address moved. Without this a reboot silently loses the phone.
+	if res.PublicURL != "" && settings.LastPublicURL != "" && settings.LastPublicURL != res.PublicURL {
+		announceNewAddress(dir, res.PublicURL)
+	}
+	if res.PublicURL != "" {
+		settings.LastPublicURL = res.PublicURL
+	}
+	_ = saveUpSettings(dir, settings)
 	if res.PublicURL != "" && res.PairCode != "" {
 		// The code rides in the fragment: it never reaches the server or its
 		// logs, only the pair page's own JS.
@@ -284,6 +300,9 @@ type upSettings struct {
 	// reboot. AtLoginAsked stops a declined offer being made every morning.
 	AtLogin      bool `json:"atLogin,omitempty"`
 	AtLoginAsked bool `json:"atLoginAsked,omitempty"`
+	// LastPublicURL is the address the phones were last told about, so a
+	// tunnel that came back on another one can send them the new one.
+	LastPublicURL string `json:"lastPublicUrl,omitempty"`
 }
 
 const upSettingsName = "up.json"
@@ -612,6 +631,9 @@ func awaitMCPLog(path string, timeout time.Duration) (mcpLogInfo, error) {
 }
 
 func printAgentUp(res agentUpResult) {
+	// Said in the summary and in --json alike: a quick tunnel's address
+	// does not survive a restart.
+	res.QuickTunnel = res.PublicURL != "" && res.TunnelHostname == ""
 	if utils.JSONOutput {
 		utils.PrintJSON(res)
 		return
@@ -648,6 +670,10 @@ func printAgentUp(res agentUpResult) {
 	}
 	if res.PublicURL != "" {
 		fmt.Printf("  after scanning, the phone opens the launcher — tap a repo to start:\n    %s/app\n", res.PublicURL)
+		if hint := quickTunnelWarning(res); hint != "" {
+			fmt.Println()
+			fmt.Print(hint)
+		}
 		if hint := sharedTunnelHint(res.PublicURL); hint != "" {
 			fmt.Println()
 			fmt.Print(hint)
@@ -727,6 +753,22 @@ func lanAddressOf(ifaces []net.Interface) string {
 		}
 	}
 	return ""
+}
+
+// quickTunnelWarning says, once and plainly, what a quick tunnel costs: the
+// address dies with the process, and a phone paired to it is lost at the
+// next reboot until someone scans a new QR. A configured hostname is the
+// one thing that makes the address stable, whatever the provider.
+func quickTunnelWarning(res agentUpResult) string {
+	if res.PublicURL == "" || res.TunnelHostname != "" {
+		return ""
+	}
+	return "  \u26a0 this address is a quick tunnel: it changes every time the tunnel restarts\n" +
+		"    (a reboot, corgi agent restart). A phone paired to it loses this laptop then,\n" +
+		"    and needs the new QR. For an address that never changes:\n" +
+		"      corgi agent tunnel setup corgi.yourdomain.com      (cloudflared, your DNS; one-time)\n" +
+		"      corgi agent up --provider ngrok --tunnel-hostname <yours>.ngrok-free.dev   (ngrok's free dev domain)\n" +
+		"    docs/agent.md#a-launcher-url-that-never-changes\n"
 }
 
 func sharedTunnelHint(publicURL string) string {
@@ -888,4 +930,24 @@ func init() {
 	addAgentUpFlags(agentUpCmd)
 	addAgentUpFlags(agentRestartCmd)
 	agentCmd.AddCommand(agentUpCmd, agentRestartCmd)
+}
+
+// announceNewAddress pushes the laptop's new public address to every
+// paired phone. The app moves the laptop to it and keeps its token: no QR,
+// no pairing, the board is back on the next read.
+func announceNewAddress(dir, url string) {
+	host, _ := os.Hostname()
+	store := push.Load(dir)
+	msg := push.Message{
+		Title:    "corgi agent · " + host,
+		Body:     "back on a new address — the app relinks itself",
+		Category: "relink",
+		Data:     map[string]string{"relink": "1", "url": url, "daemon": host},
+		Thread:   "relink",
+	}
+	if err := store.Send(context.Background(), msg); err != nil {
+		utils.Infof("agent: could not tell the phones the new address: %v\n", err)
+		return
+	}
+	fmt.Printf("  ✓ paired phones told the new address (they relink on their own)\n")
 }

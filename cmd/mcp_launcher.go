@@ -639,7 +639,9 @@ func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
 		// The tunnel the phone comes in through, so "why can't I reach it"
 		// has somewhere to start: the provider and the host.
 		if up := loadUpSettings(dir); up.Provider != "" || up.TunnelHostname != "" {
-			info["tunnel"] = map[string]string{"provider": up.Provider, "host": up.TunnelHostname}
+			// stable: a configured hostname, the one thing that keeps the
+			// address across restarts; a quick tunnel's dies with the process.
+			info["tunnel"] = map[string]any{"provider": up.Provider, "host": up.TunnelHostname, "stable": strings.TrimSpace(up.TunnelHostname) != ""}
 		}
 	}
 	// A release the cache has not seen yet is not "out": the phone would tell

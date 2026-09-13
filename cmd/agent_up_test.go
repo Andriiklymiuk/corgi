@@ -414,3 +414,21 @@ func TestOutboundIPIsPrivateAndRoutable(t *testing.T) {
 		t.Errorf("loopback is not reachable from a phone, got %q", ip)
 	}
 }
+
+// A quick tunnel's address dies with the process: the summary says so, in
+// words a person can act on, and --json carries quickTunnel; a configured
+// hostname says nothing, because nothing is lost.
+func TestAQuickTunnelIsWarnedAbout(t *testing.T) {
+	quick := quickTunnelWarning(agentUpResult{PublicURL: "https://kind-zebra-42.trycloudflare.com"})
+	for _, want := range []string{"changes every time the tunnel restarts", "corgi agent tunnel setup", "ngrok-free.dev", "loses this laptop"} {
+		if !strings.Contains(quick, want) {
+			t.Fatalf("missing %q in:\n%s", want, quick)
+		}
+	}
+	if quickTunnelWarning(agentUpResult{PublicURL: "https://corgi.example.com", TunnelHostname: "corgi.example.com"}) != "" {
+		t.Fatal("a hostname is stable")
+	}
+	if quickTunnelWarning(agentUpResult{}) != "" {
+		t.Fatal("no tunnel, nothing to warn about")
+	}
+}
