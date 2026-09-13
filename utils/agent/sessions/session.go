@@ -164,6 +164,9 @@ type Event struct {
 	TicketKey string `json:"ticketKey,omitempty"`
 	// Bot is CORGI_BOT: the named bot this session was opened as.
 	Bot string `json:"bot,omitempty"`
+	// Agent names the CLI the event came from when it is not Claude Code
+	// — "codex", "gemini" — reported through corgi agent event.
+	Agent string `json:"agent,omitempty"`
 	// TermProgram and TermSession are TERM_PROGRAM and the emulator's own
 	// session id, for sessions outside an editor.
 	TermProgram string `json:"termProgram,omitempty"`
@@ -274,6 +277,9 @@ type Session struct {
 	// surfaces draw it with the bot's title and colour, and the daemon
 	// remembers the conversation as the one to resume.
 	Bot string `json:"bot,omitempty"`
+	// Agent is the CLI this session runs — empty for Claude Code, else the
+	// name its events reported ("codex", "gemini"), so a surface can say.
+	Agent string `json:"agent,omitempty"`
 	// Branch is the cwd's branch as of the last prompt; Summary what Claude
 	// last said; PR the last pull request it linked; TurnStartedAt when the
 	// current or last turn began.
