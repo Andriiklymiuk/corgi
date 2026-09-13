@@ -175,6 +175,16 @@ phone stays paired across restarts.
 `corgi agent restart` keeps the named tunnel. Pass the flags again to change
 them; `--tunnel-hostname ""` goes back to a quick tunnel.
 
+Two things soften a quick tunnel (2.22.3). `agent up` says out loud, under
+the QR, that the address changes on every restart and how to get one that
+does not — the same words `--json` carries as `quickTunnel: true`, and the
+phone's connection sheet repeats them for an address it recognises as a
+free shared domain. And when the address *does* change — a reboot with
+`--at-login`, an `agent restart` — the daemon pushes the new one to every
+paired phone (`category: relink`), and the app moves the laptop to it,
+keeping its token and its key: no QR, no pairing, the board is back on the
+next read. A phone that had no push token registered still needs the new QR.
+
 No domain on Cloudflare? ngrok's free tier already gave your account one static
 `*.ngrok-free.dev` **dev domain** and needs no DNS work. You cannot choose its
 name — picking one is a paid feature — but the assigned one never changes:
@@ -1878,6 +1888,37 @@ stack the way the keyboard would, in the workspace's directory: `run`
 push and a toast when they end. Service names are letters, digits, dots and
 dashes; anything else is refused before anything runs. Also `all=1` on
 `/launch/diff` for the whole branch in one body (2.22.3).
+
+### Why a corgi-compose.yml, and what works without one
+
+Agent mode needs no compose file: the sessions, the inbox, the board, the
+bots and every switch above work in any registered repository. What a
+`corgi-compose.yml` adds is the **stack** — the thing a session, a run and a
+person all need before the code can be tried:
+
+- **One declaration, every runner.** Services, databases, ports, env, the
+  `test` and `e2e` scripts, what depends on what — written once. A session
+  opened from the phone, an unattended run in a worktree, a teammate's
+  fresh clone and you at the keyboard all start the same stack the same
+  way (`corgi run`), with the same env. No README of commands to remember,
+  no "works on my machine".
+- **The phone sees and steers it.** The repo sheet lists what runs at a
+  glance and starts, stops, restarts or tests it — some services or all —
+  because the daemon can read the declaration; without one there is nothing
+  to read, so the section stays away.
+- **Done means the stack said so.** `--done-when "corgi test"` or
+  `--done-when "corgi test --e2e"` turns the compose's own scripts into the
+  workspace's definition of finished; a run's handoff and a bot's review
+  run against the same stack.
+- **Databases come with it.** `db_services` are started, seeded
+  (`corgi run --seed`) and reachable by name in every service's env; a
+  session never has to be told a connection string.
+
+Setting one up is `corgi create` in the repository (it asks what runs and
+writes the file) or a hand-written `corgi-compose.yml` — a `services:` map
+with a `path` and a `start` script each, `db_services:` with an image and a
+port — then `corgi init` clones what is missing and `corgi run` starts it.
+[docs/getting-started.md](getting-started.md) walks the file.
 
 ## A phone app
 
