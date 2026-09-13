@@ -854,6 +854,74 @@ what the ticket has cost (runs keep claude's own receipt; sessions on the
 branch add their transcripts). The phone's Board tab draws the same. Moving a
 card is `watch move`; nobody drags one into Running.
 
+### What a workspace does on its own (corgi 2.22)
+
+Switches per workspace, each off until flipped, each read live — from the
+CLI or the phone's repo sheet, no restart:
+
+- `corgi agent watch enable --auto-allow reads` — the daemon answers a Read,
+  Grep, Glob or web-search prompt itself in an iTerm2 session; never Bash,
+  never a write. The row counts them (`autoAllowed`).
+- `--done-when "go test ./...,pnpm lint"` — when a session stops with
+  changes on its branch, the commands run in its directory; a red one is
+  typed back as the next message (*Not done yet: … fix it, run it again,
+  stop when green*), the row shows `gate` and *tests ✗*; three reds in a row
+  ring a person instead. **Done means the checks say so.**
+- `--compact-at 85` — `/compact` sent to a full session the next time it
+  stops, once per episode.
+- `--rebase` — a stopped session's clean branch is rebased onto main where
+  it sits when main moved; with `--hand-over`, one that would conflict is
+  told which files. The sweep measures `behind` (`main moved 12 · conflicts
+  in api.go`) on every live branch.
+- `--lessons` — reviews on the user's PRs, checks that stayed red and failed
+  bot runs are written one line each to `<agentDir>/lessons/<workspace>.md`;
+  `corgi agent lesson add|list`; the SessionStart hook tells you how many
+  and the last one. **Read them before changing code.**
+- `--hand-over`, `--auto-merge` (2.21): feedback typed into the session on
+  the branch; a ready pull request merged.
+
+**Several tries at once**: `corgi agent watch work ABC-123 --attempts 3
+--models opus,sonnet` opens three sessions in worktrees of their own on
+`corgi/ABC-123-N`; `corgi agent attempts ABC-123` compares them (status,
+changes, tests, done-when, cost, PR) and `attempts pick ABC-123 2` keeps
+one. The phone's "Try 3 ways" does the same.
+
+**Bots** (`corgi agent bot add reviewer --template reviewer --on
+pr.review`) act on their own when their kind arrives; a failed run retries
+once a model up (haiku → sonnet → opus); `bot show` sums a ledger — runs,
+failed, retried, PRs and how many merged, the bill.
+
+**Reviews from anywhere**: `corgi agent watch pr approve|request|comment
+<ref> [words]` posts on the pull request the row is about, the user's name
+on it. **Mute**: `corgi agent mute [1h|off]` — nothing rings, the board goes
+on; the phone, the bar and a deck key flip it. **Transcript**: `corgi agent
+transcript <session> --json` reads a conversation the way the phone does.
+**Any agent on the board**: `corgi agent event start|prompt|tool|done|fail|
+permission|stop|end --agent codex --session $ID` from another CLI's hooks.
+**A read-only phone**: `corgi agent up --viewer` (or `corgi agent pair
+--viewer`) pairs a teammate who can look but press nothing.
+
+**Pairing without a QR** (2.22.4): `corgi agent pair` opens a fresh window
+on the running server; `--file` writes `~/Desktop/<laptop>.corgipair` to
+AirDrop to the phone, which opens it with corgi and is paired. With
+corgi-bar 0.22 the Mac is findable by a phone beside it the AirDrop way
+(Bonjour over Bluetooth / peer-to-peer Wi-Fi / LAN, relayed to the daemon),
+no tunnel needed nearby; Handoff shows the session in front on the iPhone's
+lock screen. A quick tunnel's address dies with a restart: `agent up` warns,
+pushes the new address to paired phones (they relink themselves), and
+`corgi agent tunnel setup <host>` makes one that never changes.
+
+From an MCP client: `corgi_watch_switches` reads all of the above per
+workspace, `corgi_watch_set` flips the live ones (autoAllow, doneWhen,
+compactAt, rebase, lessons, handOver, autoMerge — when the user asks for the
+behaviour), `corgi_agent_mute`, `corgi_agent_attempts` (with `pick`),
+`corgi_agent_lessons` (with `add`).
+
+**The stack from the phone**: with a `corgi-compose.yml` the repo sheet
+lists the services at a glance and starts, stops, restarts or tests them
+(`/launch/stack`); without one the section stays away. **The whole diff**:
+`/launch/diff?all=1`.
+
 ## Things not to do
 
 - **Do not weaken permissions on your own.** A `permissionMode: bypassPermissions`
