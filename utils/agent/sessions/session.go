@@ -309,6 +309,11 @@ type Session struct {
 	// Gate is the last done-when run the daemon made for this session —
 	// the workspace's own definition of finished, checked when it stopped.
 	Gate *GateRun `json:"gate,omitempty"`
+	// Compacted counts the /compact the daemon typed for this session under
+	// the workspace's compactAt; CompactedAt is the last, so one is enough
+	// per episode.
+	Compacted   int       `json:"compacted,omitempty"`
+	CompactedAt time.Time `json:"compactedAt,omitzero"`
 	// Spend is what the session has cost so far: every token count Claude
 	// Code wrote in its transcript, summed on the sweep. Cap is the budget
 	// it runs under — its own, else the daemon's default — and OverCap says

@@ -12,6 +12,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
@@ -246,5 +247,61 @@ func TestAStopIsGatedByTheWorkspacesDoneWhen(t *testing.T) {
 	defer mu.Unlock()
 	if len(typed) != 4 {
 		t.Fatalf("three typed back, the fourth rang: %d", len(typed))
+	}
+}
+
+// A session that stops past the workspace's context threshold is told to
+// /compact, once per episode; under it, nothing.
+func TestAFullSessionIsCompactedWhenItStops(t *testing.T) {
+	d := trackingDaemon(t)
+	d.Sessions.Load()
+	d.Sessions.OnTransition = d.onSessionTransition
+	d.Raise = func(context.Context, sessions.FocusTarget) error { return nil }
+	t.Cleanup(d.swaps.Wait)
+	var mu sync.Mutex
+	var typed []string
+	d.TypeText = func(_ context.Context, _ sessions.FocusTarget, text string, enter bool) error {
+		mu.Lock()
+		defer mu.Unlock()
+		typed = append(typed, text)
+		return nil
+	}
+	d.Policy = func(sessions.Session) Policy { return Policy{CompactAt: 85} }
+	now := time.Now()
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/acme", ClaudePID: 1, TermProgram: "iTerm.app", TTY: 5, At: now})
+	post := sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Read", At: now}
+	post.Context = &usage.Context{Tokens: 120_000, Window: 200_000, Percent: 60}
+	d.Sessions.Apply(post)
+	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
+	d.swaps.Wait()
+	mu.Lock()
+	n := len(typed)
+	mu.Unlock()
+	if n != 0 {
+		t.Fatalf("60%% is fine: %v", typed)
+	}
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
+	post.Context = &usage.Context{Tokens: 180_000, Window: 200_000, Percent: 90}
+	d.Sessions.Apply(post)
+	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(typed) == 1 })
+	mu.Lock()
+	first := typed[0]
+	mu.Unlock()
+	if first != "/compact" {
+		t.Fatalf("typed %q", first)
+	}
+	if s, _ := d.Sessions.Lookup("s1"); s.Compacted != 1 || s.CompactedAt.IsZero() {
+		t.Fatalf("counted: %+v", s)
+	}
+	// Still 90% a moment later (the compact has not landed yet): not again.
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
+	d.Sessions.Apply(post)
+	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
+	d.swaps.Wait()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(typed) != 1 {
+		t.Fatalf("once per episode: %v", typed)
 	}
 }
