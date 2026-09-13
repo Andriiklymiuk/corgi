@@ -55,8 +55,12 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 		{ID: "s2", Label: "api", Display: "api 2", Status: sessions.StatusWorking, Branch: "main", Ticket: "abc-9"},
 	}
 
+	// The daemon read the run's pull request: checks green, approved.
+	pulls := watch.LoadPullLog(dir)
+	_ = pulls.Set("a/b#3", watch.PullStatus{State: "open", Checks: "passing", Review: "approved", At: now})
+
 	cards := buildKanban(kanbanInputs{events: events, ignored: func(k string) bool { return k == "k-ignored" },
-		moved: moved, fixes: fixes, sessions: sess, packets: packets, picks: picks, now: now})
+		moved: moved, fixes: fixes, sessions: sess, packets: packets, picks: picks, pulls: pulls, now: now})
 
 	got := map[string]KanbanCard{}
 	for _, c := range cards {
@@ -64,6 +68,11 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	}
 	want := map[string]string{"ABC-1": ColInbox, "ABC-2": ColRunning, "ABC-3": ColReview, "ABC-4": ColBlocked, "ABC-5": ColDone, "ABC-7": ColRunning, "ABC-8": ColReady, "ABC-9": ColRunning,
 		"TASK-1": ColInbox, "TASK-2": ColRunning, "TASK-3": ColReview, "TASK-4": ColDone, "TASK-5": ColRunning}
+	// A card in Review with a green, approved pull request says so — the
+	// difference between "a pull request exists" and "press Merge".
+	if c := got["ABC-3"]; c.Pull == nil || !c.Pull.Ready() || c.Why != "ready to merge · checks ✓ · approved" {
+		t.Fatalf("ABC-3: pull %+v why %q", c.Pull, c.Why)
+	}
 	for ref, col := range want {
 		if got[ref].Column != col {
 			t.Errorf("%s: %s (%s), want %s", ref, got[ref].Column, got[ref].Why, col)

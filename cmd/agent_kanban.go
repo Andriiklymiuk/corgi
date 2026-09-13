@@ -59,8 +59,12 @@ type KanbanCard struct {
 	Body string `json:"body,omitempty"`
 	// Cost is what the ticket has cost so far: the unattended runs (with
 	// claude's own receipt) plus every session that sat on its branch.
-	Cost      *CardCost `json:"cost,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Cost *CardCost `json:"cost,omitempty"`
+	// Pull is how the pull request on this card stands — checks, approval
+	// — for the one the row is about, the one a run opened, or the one its
+	// session linked. Ready to merge is Pull.Ready().
+	Pull      *watch.PullStatus `json:"pull,omitempty"`
+	UpdatedAt time.Time         `json:"updatedAt"`
 }
 
 type CardCost struct {
@@ -107,6 +111,7 @@ type kanbanInputs struct {
 	sessions []sessions.Session
 	packets  map[string][]handoff.Packet // by workspace id
 	picks    *watch.PickLog
+	pulls    *watch.PullLog
 	now      time.Time
 	// sessionTokens is a seam: what one session has spent, from its transcript.
 	sessionTokens func(s sessions.Session) (int64, bool)
@@ -325,6 +330,21 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 		}
 	}
 
+	// The pull request's own standing, once the daemon has read it: a card
+	// in Review says ready to merge when the checks pass and someone
+	// approved, instead of only that a pull request exists.
+	if in.pulls != nil {
+		for _, c := range byRef {
+			if st, ok := in.pulls.Get(cardPullLink(c)); ok {
+				p := st
+				c.Pull = &p
+				if c.Column == ColReview && st.Line() != "" {
+					c.Why = st.Line()
+				}
+			}
+		}
+	}
+
 	out := make([]KanbanCard, 0, len(byRef))
 	// A ref can enter order twice: an old settled event drops its card,
 	// then a newer event on the same ref makes it again. One card per ref.
@@ -348,6 +368,24 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 	return out
 }
 
+// cardPullLink is the pull request a card is about, or has: a run's, its
+// session's, or — for a row about a pull request — the row's own.
+func cardPullLink(c *KanbanCard) string {
+	if c.Fix != nil && len(c.Fix.PRs) > 0 {
+		return c.Fix.PRs[0]
+	}
+	if c.Session != nil && c.Session.PR != "" {
+		return c.Session.PR
+	}
+	if strings.HasPrefix(c.Kind, "pr.") || c.Kind == string(watch.KindCIFailed) || c.Kind == string(watch.KindReviewRequested) {
+		if ref := watch.PullRef(c.URL); ref != "" {
+			return ref
+		}
+		return c.Ref
+	}
+	return ""
+}
+
 // gatherKanban reads everything the board needs from the agent dir.
 func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 	state := watch.LoadState(dir)
@@ -358,6 +396,7 @@ func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 		fixes:   state.Fixes,
 		packets: map[string][]handoff.Packet{},
 		picks:   watch.LoadPicks(dir),
+		pulls:   watch.LoadPullLog(dir),
 		now:     now,
 	}
 	if rep, err := readBoard(dir); err == nil {

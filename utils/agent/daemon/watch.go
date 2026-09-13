@@ -1152,6 +1152,72 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 			}
 		}
 	}
+	d.refreshPulls(ctx, spec)
+}
+
+// pullFresh is how long a pull request's checks and approval are taken as
+// read before the forge is asked again.
+const pullFresh = 2 * time.Minute
+
+// refreshPulls reads how every pull request the inbox or the board
+// mentions stands — do its checks pass, is it approved — so a row can say
+// "ready to merge" instead of only "in review". The pull requests: the
+// ones rows are about, the ones corgi's runs opened, the ones sessions
+// linked. Once a round, and only what has not been read for a while.
+func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
+	refs := map[string]bool{}
+	add := func(link string) {
+		if ref := watch.PullRef(link); ref != "" {
+			refs[ref] = true
+		}
+	}
+	for _, e := range watch.RecentEvents(d.Dir, 40) {
+		if e.Workspace != spec.Workspace || d.watchState.IsIgnored(e.Key) {
+			continue
+		}
+		switch e.Kind {
+		case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested, watch.KindCIFailed:
+			if e.Ref != "" {
+				refs[e.Ref] = true
+			}
+			add(e.URL)
+		}
+	}
+	for _, r := range watch.LoadFixLog(d.Dir).RecentFixes("", 50) {
+		if r.Workspace != spec.Workspace {
+			continue
+		}
+		for _, link := range r.PRs {
+			add(link)
+		}
+	}
+	if d.Sessions != nil {
+		for _, s := range d.Sessions.Sessions() {
+			if s.PR != "" && (s.Label == spec.Workspace || filepath.Base(s.Folder) == spec.Workspace) {
+				add(s.PR)
+			}
+		}
+	}
+	if len(refs) == 0 {
+		return
+	}
+	pulls := watch.LoadPullLog(d.Dir)
+	now := time.Now()
+	for ref := range refs {
+		if known, ok := pulls.Get(ref); ok && now.Sub(known.At) < pullFresh {
+			continue
+		}
+		for _, src := range spec.Sources {
+			asker, ok := src.(watch.PullAsker)
+			if !ok {
+				continue
+			}
+			if st, ok := asker.PullStatus(ctx, ref); ok {
+				_ = pulls.Set(ref, st)
+				break
+			}
+		}
+	}
 }
 
 // packetFor is the handoff an earlier run left for a ticket, if it is

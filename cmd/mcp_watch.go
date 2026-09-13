@@ -327,15 +327,23 @@ func watchEventsForMCP(workspaceID string, limit int) ([]map[string]any, error) 
 		limit = 25
 	}
 	out := []map[string]any{}
+	pulls := watch.LoadPullLog(dir)
 	for _, e := range watch.RecentEvents(dir, limit) {
 		if workspaceID != "" && e.Workspace != workspaceID {
 			continue
 		}
-		out = append(out, map[string]any{
+		row := map[string]any{
 			"key": e.Key, "kind": string(e.Kind), "ref": e.Ref, "title": firstLineOf(e.Title),
 			"url": e.URL, "workspace": e.Workspace, "at": e.At.Format(time.RFC3339),
 			"canWorkOn": daemon.FixPrompt(e) != "",
-		})
+		}
+		// How the pull request stands, when the row is about one: an agent
+		// asked "what can I merge" answers from this.
+		if st, ok := pulls.Get(firstNonEmptyString(watch.PullRef(e.URL), e.Ref)); ok {
+			row["pull"] = st
+			row["readyToMerge"] = st.Ready()
+		}
+		out = append(out, row)
 	}
 	return out, nil
 }

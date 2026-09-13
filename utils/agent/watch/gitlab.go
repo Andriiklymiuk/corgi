@@ -200,3 +200,64 @@ func (g *GitLab) getInto(ctx context.Context, endpoint string, out any) error {
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(out)
 }
+
+// PullStatus is how group/project!7 stands: its state, its head pipeline,
+// and whether it is approved. Unreadable is "not known".
+func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) {
+	project, num, ok := strings.Cut(ref, "!")
+	if !ok || g.Token == "" {
+		return PullStatus{}, false
+	}
+	base := g.URL
+	if base == "" {
+		base = "https://gitlab.com"
+	}
+	var mr struct {
+		State        string `json:"state"`
+		Draft        bool   `json:"draft"`
+		HeadPipeline *struct {
+			Status string `json:"status"`
+		} `json:"head_pipeline"`
+	}
+	endpoint := base + "/api/v4/projects/" + url.PathEscape(project) + "/merge_requests/" + num
+	if err := g.getInto(ctx, endpoint, &mr); err != nil {
+		return PullStatus{}, false
+	}
+	out := PullStatus{State: mr.State, At: time.Now()}
+	if mr.State == "opened" {
+		out.State = "open"
+	}
+	if mr.Draft && out.State == "open" {
+		out.State = "draft"
+	}
+	if out.State != "open" && out.State != "draft" {
+		return out, true
+	}
+	out.Checks = "none"
+	if mr.HeadPipeline != nil {
+		switch mr.HeadPipeline.Status {
+		case "success":
+			out.Checks = "passing"
+		case "failed":
+			out.Checks = "failing"
+		case "running", "pending", "created", "waiting_for_resource", "preparing", "scheduled":
+			out.Checks = "pending"
+		}
+	}
+	var approvals struct {
+		Approved   bool `json:"approved"`
+		ApprovedBy []struct {
+			User struct {
+				Username string `json:"username"`
+			} `json:"user"`
+		} `json:"approved_by"`
+	}
+	if err := g.getInto(ctx, endpoint+"/approvals", &approvals); err == nil {
+		if approvals.Approved || len(approvals.ApprovedBy) > 0 {
+			out.Review = "approved"
+		} else {
+			out.Review = "pending"
+		}
+	}
+	return out, true
+}
