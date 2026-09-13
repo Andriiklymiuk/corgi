@@ -176,6 +176,17 @@ Seven. Anything beyond these is scope creep.
 5. **Logs** — `corgi_logs` with a service picker and follow toggle. Polled.
 6. **Settings** — paired daemons, rename, revoke, re-pair.
 
+### Send to
+
+Something shared into corgi from another app (the **Send to corgi** share
+extension, once its App Group is assigned) lands in the composer and the
+**Send to** sheet asks where it goes, the way Telegram asks which chat: a
+grid of the sessions (the ones that need you first), the bots, a new chat
+in each workspace, the chief. A tap aims the composer and hands it over
+with the words and pictures already in the field. The dock's target menu
+opens the same grid under **Everyone…** when the menu's eight are not
+enough.
+
 ### The share card
 
 **Today** (the brief) has a **Share** button: a story-sized card the phone
