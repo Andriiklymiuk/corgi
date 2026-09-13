@@ -754,8 +754,11 @@ Every session on the board carries, when known:
   71%`).
 - `title` — the chat's name as its Claude Code panel tab shows it, so a
   window with several chats open reveals the right one on focus.
-- `pending` — the permission prompt it is waiting on: `{tool, subject}`.
-  What `corgi agent answer` answers, and what an Allow button shows first.
+- `pending` — the permission prompt it is waiting on: `{tool, subject,
+  risk}`. What `corgi agent answer` answers, and what an Allow button shows
+  first. `risk` is one word about what the tool would do — `reads`,
+  `writes`, `destructive` — so a surface colours Allow by it; slots carry
+  it as `risk` beside `pending`.
 - `note` — yours, from `corgi agent note`.
 - `stuck` — working, but no hook event for twelve minutes. Probably
   spinning or waiting on a call that died; a key shows SLOW.

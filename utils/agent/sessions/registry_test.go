@@ -956,14 +956,14 @@ func TestToolSubjectPendingAndContext(t *testing.T) {
 		t.Fatalf("tool line carries the subject, got %+v", s)
 	}
 	perm := ev("PermissionRequest", "s1", 2*time.Second)
-	perm.Tool, perm.Subject = "Bash", "go test"
+	perm.Tool, perm.Subject, perm.Risk = "Bash", "go test", "reads"
 	r.Apply(perm)
 	s, _ := r.Lookup("s1")
 	if s.Pending == nil || s.Pending.Tool != "Bash" || s.Pending.Subject != "go test" || s.Detail != "permission: Bash go test" {
 		t.Fatalf("permission sets pending, got %+v", s)
 	}
-	if st := r.Snapshot(t0.Add(3 * time.Second)); st.Slots[0].Pending != "Bash" {
-		t.Fatalf("slot names the pending tool, got %+v", st.Slots[0])
+	if st := r.Snapshot(t0.Add(3 * time.Second)); st.Slots[0].Pending != "Bash" || st.Slots[0].Risk != "reads" {
+		t.Fatalf("slot names the pending tool and its risk, got %+v", st.Slots[0])
 	}
 	post := ev("PostToolUse", "s1", 3*time.Second)
 	post.Tool = "Bash"
