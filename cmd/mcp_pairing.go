@@ -39,6 +39,9 @@ type pairResponse struct {
 	// ServerPubKey answers a PubKey: the machine's static X25519 key, the
 	// other half of the shared secret.
 	ServerPubKey string `json:"serverPubKey,omitempty"`
+	// Role is "viewer" for a device this window pairs read-only; absent
+	// for one that may do everything.
+	Role string `json:"role,omitempty"`
 }
 
 // maxPairBodyBytes bounds the request body. The payload is two short strings;
@@ -48,6 +51,12 @@ const maxPairBodyBytes = 4 << 10
 // pairingHandler serves /pair while a pairing window is open: GET renders the
 // scan-to-pair page, POST performs the pairing.
 func pairingHandler(session *pairing.Session, storePath string) http.Handler {
+	return pairingHandlerWithRole(session, storePath, "")
+}
+
+// pairingHandlerWithRole is pairingHandler for a window whose devices get
+// a role the machine chose — viewer, for a teammate's phone.
+func pairingHandlerWithRole(session *pairing.Session, storePath, role string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The POST response carries a device token and the GET page carries the
 		// copy-paste connector: keep both out of any intermediary cache, and
@@ -103,7 +112,7 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 			}
 			serverPub = pairing.PublicKeyString(server.PublicKey())
 		}
-		token, err := pairing.PairWithKey(storePath, session, req.Code, req.Device, req.PubKey)
+		token, err := pairing.PairWithRole(storePath, session, req.Code, req.Device, req.PubKey, role)
 		if err != nil {
 			// Only errors about the caller's own input go back verbatim.
 			// Anything else — a permission problem, a corrupt store — would
@@ -119,13 +128,18 @@ func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 		}
 
 		host, _ := os.Hostname()
-		utils.Infof("paired device %q\n", strings.TrimSpace(req.Device))
+		if role != "" {
+			utils.Infof("paired device %q as %s\n", strings.TrimSpace(req.Device), role)
+		} else {
+			utils.Infof("paired device %q\n", strings.TrimSpace(req.Device))
+		}
 		_ = json.NewEncoder(w).Encode(pairResponse{
 			Token:        token,
 			Daemon:       host,
 			Device:       strings.TrimSpace(req.Device),
 			Version:      APP_VERSION,
 			ServerPubKey: serverPub,
+			Role:         role,
 		})
 	})
 }
@@ -286,10 +300,11 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 			Name      string    `json:"name"`
 			CreatedAt time.Time `json:"createdAt"`
 			Encrypted bool      `json:"encrypted"`
+			Role      string    `json:"role,omitempty"`
 		}
 		rows := make([]row, 0, len(store.Devices))
 		for _, d := range store.Devices {
-			rows = append(rows, row{Name: d.Name, CreatedAt: d.CreatedAt, Encrypted: d.Encrypted()})
+			rows = append(rows, row{Name: d.Name, CreatedAt: d.CreatedAt, Encrypted: d.Encrypted(), Role: d.Role})
 		}
 		utils.PrintJSON(rows)
 		return
@@ -303,6 +318,9 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 		how := "plain — pair again from the app for end-to-end encryption"
 		if d.Encrypted() {
 			how = "end-to-end encrypted"
+		}
+		if d.Viewer() {
+			how += " · reads only"
 		}
 		fmt.Printf("%-24s paired %s · %s\n", d.Name, d.CreatedAt.Local().Format("2006-01-02 15:04"), how)
 	}

@@ -98,6 +98,11 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	}
 
 	tunnel, err := tunnelArgs(settings.Provider, settings.TunnelName, settings.TunnelHostname)
+	if viewer, _ := cmd.Flags().GetBool("viewer"); viewer && err == nil {
+		// The pairing window this up opens hands out a read-only token: a
+		// teammate scans it and sees the board, never a button.
+		tunnel = append(tunnel, "--viewer")
+	}
 	if err != nil {
 		exitWithError("agent_up_tunnel", err, 2)
 	}
@@ -876,6 +881,7 @@ func addAgentUpFlags(c *cobra.Command) {
 	c.Flags().String(flagTunnelHostname, "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass \"\" to go back to a quick tunnel")
 	c.Flags().Bool(atLoginFlag, false, "Also start corgi agent at login, so the daemon, this endpoint and this tunnel come back after a reboot (--at-login=false turns it off again)")
 	c.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
+	c.Flags().Bool("viewer", false, "The pairing window this opens hands out a read-only token: a teammate's phone sees the board, the inbox and the brief, never a transcript, never a button (with --fresh to reopen a window)")
 }
 
 func init() {

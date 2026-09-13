@@ -62,10 +62,19 @@ type Device struct {
 	// PubKey is the device's X25519 public key when it paired end-to-end
 	// encrypted (see e2e.go); empty for a device that talks plainly.
 	PubKey string `json:"pubKey,omitempty"`
+	// Role is "" for a device that may do everything, or RoleViewer for
+	// one that only reads — a teammate's phone on your board.
+	Role string `json:"role,omitempty"`
 }
+
+// RoleViewer is the read-only role: every GET but the transcript, no POST.
+const RoleViewer = "viewer"
 
 // Encrypted says whether the device pairs end-to-end encrypted.
 func (d Device) Encrypted() bool { return strings.TrimSpace(d.PubKey) != "" }
+
+// Viewer says whether the device only reads.
+func (d Device) Viewer() bool { return d.Role == RoleViewer }
 
 // Store is the set of paired devices.
 type Store struct {
@@ -340,6 +349,15 @@ func Pair(storePath string, session *Session, code, deviceName string) (string, 
 // PairWithKey is Pair for a device that also offers its X25519 public key:
 // from then on it talks end-to-end encrypted, and only that way.
 func PairWithKey(storePath string, session *Session, code, deviceName, pubKey string) (string, error) {
+	return PairWithRole(storePath, session, code, deviceName, pubKey, "")
+}
+
+// PairWithRole is PairWithKey with the role the machine chose for this
+// window — the device never picks its own.
+func PairWithRole(storePath string, session *Session, code, deviceName, pubKey, role string) (string, error) {
+	if role != "" && role != RoleViewer {
+		return "", fmt.Errorf("%w: role is viewer or nothing", ErrBadRequest)
+	}
 	deviceName = strings.TrimSpace(deviceName)
 	if deviceName == "" {
 		return "", fmt.Errorf("%w: a device name is required", ErrBadRequest)
@@ -384,6 +402,7 @@ func PairWithKey(storePath string, session *Session, code, deviceName, pubKey st
 	if pk != nil {
 		d.PubKey = PublicKeyString(pk)
 	}
+	d.Role = role
 	store.Devices = append(store.Devices, d)
 	if err := Save(storePath, store); err != nil {
 		return "", err
