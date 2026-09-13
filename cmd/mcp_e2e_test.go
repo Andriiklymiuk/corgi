@@ -140,7 +140,7 @@ func TestAViewerDeviceOnlyReadsTheBoard(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/pair", pairingHandlerWithRole(session, store, pairing.RoleViewer))
 	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"ok":true}`)) })
-	for _, p := range []string{"/launch/board", "/launch/transcript", "/launch/answer"} {
+	for _, p := range []string{"/launch/board", "/launch/transcript", "/launch/answer", "/launch/doctor", "/launch/sessions"} {
 		mux.Handle(p, launchAuth("", ok, store))
 	}
 	rec := httptest.NewRecorder()
@@ -163,8 +163,8 @@ func TestAViewerDeviceOnlyReadsTheBoard(t *testing.T) {
 	if try(http.MethodGet, "/launch/board") != 200 {
 		t.Fatal("the board reads")
 	}
-	if try(http.MethodGet, "/launch/transcript") != 403 || try(http.MethodPost, "/launch/answer") != 403 {
-		t.Fatal("a transcript and a button are refused")
+	if try(http.MethodGet, "/launch/transcript") != 403 || try(http.MethodPost, "/launch/answer") != 403 || try(http.MethodGet, "/launch/doctor") != 403 || try(http.MethodGet, "/launch/sessions") != 403 {
+		t.Fatal("a transcript, the doctor, the session links and a button are refused")
 	}
 	devices, _ := pairing.Load(store)
 	if len(devices.Devices) != 1 || !devices.Devices[0].Viewer() {

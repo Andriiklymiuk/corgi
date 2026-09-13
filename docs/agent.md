@@ -1759,7 +1759,8 @@ corgi agent up --fresh --viewer     # or: corgi mcp --http … --pair --viewer
 opens a pairing window whose token only reads. The device that scans it
 sees what yours sees — the board, the inbox, the diffs, the brief — and can
 do nothing: every POST is refused (`this device only reads the board`), and
-so is a transcript, which is the one read that can hold a secret. The role
+so are the reads that are the laptop's own business — a transcript (which
+can hold a secret), the doctor's report, the workspace session links. The role
 is the machine's choice, never the device's, and the pairing answer carries
 it (`role: viewer`) so the app hides its buttons. `corgi mcp devices list`
 says *reads only* beside such a device; revoke it like any other. Your own
