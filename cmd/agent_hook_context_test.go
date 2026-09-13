@@ -12,6 +12,7 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/lessons"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
@@ -43,6 +44,8 @@ func TestSessionContextTellsTheSessionWhatTheDaemonKnows(t *testing.T) {
 	if err := brief.Write(dir, brief.Brief{WorkspaceID: "acme-api", EndedAt: now.Add(-2 * time.Hour), Repos: []brief.RepoState{{Service: "api", Branch: "feat/x", Dirty: true}}}); err != nil {
 		t.Fatal(err)
 	}
+	_ = lessons.Add(dir, "acme-api", lessons.Lesson{At: now, Source: "review acme/api#7 (dan)", Text: "retries need a cap"})
+	_ = lessons.Add(dir, "acme-api", lessons.Lesson{At: now, Source: "you", Text: "never mock the database"})
 
 	got := sessionContext(dir, contextHookInput{SessionID: "me", Cwd: root, Source: "startup"}, "", now)
 	for _, want := range []string{
@@ -51,6 +54,7 @@ func TestSessionContextTellsTheSessionWhatTheDaemonKnows(t *testing.T) {
 		"budget: 5h 57% (resets 12:00) · week 41% — at this pace the 5h window runs out at 11:00",
 		"last session here ended 2h ago: was on feat/x · 1 repo has uncommitted changes",
 		"workspace memory: 2 facts in .corgi/memory/index.md",
+		"2 lesson(s) this workspace learned the hard way in " + lessons.Path(dir, "acme-api") + " — read them first; the last: never mock the database",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)

@@ -128,6 +128,7 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
 		d.watchState.Fixes.Finish(key, nil, "", runErr.Error(), time.Now())
+		d.learn(spec, "bot "+b.Name, "failed on "+e.Ref+": "+lastLine(string(out))+" ("+runErr.Error()+")")
 		go d.notifyAttentionAt("corgi agent · "+b.Display(), fmt.Sprintf("%s on %s failed: %v — log: %s", b.Display(), e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
 	}

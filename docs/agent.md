@@ -298,6 +298,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent lesson add\|list` | what the workspace learned the hard way, one line each, outside the repo; `watch enable --lessons` has the daemon write reviews on your PRs, red done-when checks and failed bot runs; the context hook points every new session at the file (2.22) |
 | `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own — and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief` fills a bot from a ready-made one (2.21). A run that fails gets one more try a model up — haiku → sonnet → opus — and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
 | `corgi agent ask "<question>"` | the chief: one question about the board — what to look at first, what is blocked, who is on what — answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
 | `corgi agent stream [enable\|disable] [--workspace X\|--all]` | which workspaces a paired phone may read as a conversation (off by default); the phone's Chat sheet, `POST /launch/transcript` |
@@ -655,6 +656,25 @@ Each acts once per state; when main moves again the numbers change and it
 may act again. The rebase aborts itself on any failure and leaves the tree
 as it was. It never fetches: main is as fresh as the last `git fetch`
 anything on the machine made.
+
+#### Lessons
+
+What a workspace learned the hard way, one line each, in
+`<agentDir>/lessons/<workspace>.md` — outside the repository, so nothing
+shows in `git status`:
+
+```bash
+corgi agent lesson add "never mock the database in api tests"
+corgi agent lesson list
+corgi agent watch enable --lessons
+```
+
+With the switch on the daemon writes its own: a review or a comment on a
+pull request of yours (`pr.review acme/api#7 (dan): retries need a cap`), a
+done-when check that stayed red three times, a bot run that failed. A line
+is never written twice. The SessionStart context hook tells every new
+session in the workspace how many there are, where, and the last one — so
+the same thing is not learned twice by two sessions.
 
 ### Sessions on a Stream Deck
 

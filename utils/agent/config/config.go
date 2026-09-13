@@ -342,6 +342,11 @@ type WatchConfig struct {
 	// default: it rewrites a branch. (A branch that would conflict is
 	// typed into the session instead, under handOver.)
 	Rebase bool `yaml:"rebase,omitempty"`
+	// Lessons writes what the workspace learned the hard way — a review
+	// that asked for changes, a check that stayed red, a bot that fell
+	// over — one line each to <agentDir>/lessons/<workspace>.md, which the
+	// context hook points every new session at. Off by default.
+	Lessons bool `yaml:"lessons,omitempty"`
 }
 
 // AutoAllowReads is the one permission policy a workspace can hold.

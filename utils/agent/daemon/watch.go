@@ -393,6 +393,15 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 				body += " (" + note + ")"
 			}
 		}
+		// A review or a comment on a pull request of mine is something the
+		// next session should not need telling again.
+		if e.Mine && (e.Kind == watch.KindPRReview || e.Kind == watch.KindPRComment) && strings.TrimSpace(e.Body) != "" {
+			who := e.Author
+			if who == "" {
+				who = "someone"
+			}
+			d.learn(spec, string(e.Kind)+" "+e.Ref+" ("+who+")", e.Body)
+		}
 		// The bots that act on this kind run beside the fix, as themselves.
 		d.startBots(ctx, spec, e)
 		// And the session already on that branch hears about it, when the

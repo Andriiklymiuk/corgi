@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/lessons"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/usage"
@@ -303,5 +304,29 @@ func TestAFullSessionIsCompactedWhenItStops(t *testing.T) {
 	defer mu.Unlock()
 	if len(typed) != 1 {
 		t.Fatalf("once per episode: %v", typed)
+	}
+}
+
+// With lessons on, a review on a pull request of mine is written down for
+// the next session, once; a workspace without the switch learns nothing.
+func TestAReviewOnMyPullRequestBecomesALesson(t *testing.T) {
+	d := trackingDaemon(t)
+	d.Notify = func(_, _ string) {}
+	writeWatchConfig(t, d, "acme", "      lessons: true\n")
+	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir, Repos: []string{"acme/api"}, Rules: watch.Rules{Enabled: true, PRs: true}, Action: "notify"}}
+	d.startWatches(context.Background())
+	e := watch.Event{Key: "github:acme/api#7:r1", Source: "github", Kind: watch.KindPRReview, Ref: "acme/api#7", Title: "Add retries", Author: "dan", Body: "retries need a cap\nand a jitter", URL: "https://github.com/acme/api/pull/7", Mine: true, At: time.Now()}
+	d.handleWatchEvent(context.Background(), e)
+	d.handleWatchEvent(context.Background(), e)
+	got := lessons.List(d.Dir, "acme")
+	if len(got) != 1 || got[0].Source != "pr.review acme/api#7 (dan)" || got[0].Text != "retries need a cap" {
+		t.Fatalf("%+v", got)
+	}
+	// Somebody else's pull request is not my lesson.
+	theirs := e
+	theirs.Key, theirs.Mine, theirs.Body = "github:acme/api#8:r1", false, "use a queue"
+	d.handleWatchEvent(context.Background(), theirs)
+	if got := lessons.List(d.Dir, "acme"); len(got) != 1 {
+		t.Fatalf("%+v", got)
 	}
 }

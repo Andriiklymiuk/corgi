@@ -13,6 +13,7 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/brief"
 	"andriiklymiuk/corgi/utils/agent/handoff"
+	"andriiklymiuk/corgi/utils/agent/lessons"
 	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -95,6 +96,10 @@ func sessionContext(dir string, in contextHookInput, configDir string, now time.
 	}
 	if path, facts := memoryIndex(in.Cwd, root); facts > 0 {
 		lines = append(lines, fmt.Sprintf("workspace memory: %d facts in %s — read it before changing code", facts, path))
+	}
+	if learned := lessons.List(dir, wsID); len(learned) > 0 {
+		last := learned[len(learned)-1]
+		lines = append(lines, fmt.Sprintf("%d lesson(s) this workspace learned the hard way in %s — read them first; the last: %s", len(learned), lessons.Path(dir, wsID), last.Text))
 	}
 	if line := handoffLine(root, sessions.Branch(in.Cwd), now); line != "" {
 		lines = append(lines, line)
