@@ -191,6 +191,8 @@ var agentBotShowCmd = &cobra.Command{
 		}
 		if len(detail.Runs) == 0 {
 			fmt.Println("  no runs yet")
+		} else {
+			fmt.Println("  " + detail.ROI.Line())
 		}
 		for _, r := range detail.Runs {
 			when := agoWord(time.Since(r.StartedAt))
@@ -203,21 +205,93 @@ var agentBotShowCmd = &cobra.Command{
 	},
 }
 
-// BotDetail is a bot with what it has done: its runs, newest first.
+// BotDetail is a bot with what it has done: its runs, newest first, and
+// the sum of them — what it cost and what came of it — so a person can
+// say whether the reviewer earns its keep.
 type BotDetail struct {
 	bots.Bot
 	Runs []watch.FixRecord `json:"runs"`
+	ROI  BotROI            `json:"roi"`
 }
 
-// botDetail reads the bot's runs out of the fix log.
+// BotROI is a bot's ledger over every run on record: how many ran, how
+// many failed (a retry that landed does not count), the pull requests it
+// opened and how many of those merged, and the bill.
+type BotROI struct {
+	Runs    int     `json:"runs"`
+	Failed  int     `json:"failed"`
+	Retried int     `json:"retried"`
+	PRs     int     `json:"prs"`
+	Merged  int     `json:"merged"`
+	CostUSD float64 `json:"costUSD"`
+	Tokens  int64   `json:"tokens"`
+	// Since is the oldest run counted; empty with no runs.
+	Since time.Time `json:"since,omitzero"`
+}
+
+// Line is the ledger in one line: "14 runs · 2 failed · 5 PRs, 3 merged · $12.40".
+func (r BotROI) Line() string {
+	if r.Runs == 0 {
+		return "no runs yet"
+	}
+	parts := []string{fmt.Sprintf("%d runs", r.Runs)}
+	if r.Failed > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", r.Failed))
+	}
+	if r.Retried > 0 {
+		parts = append(parts, fmt.Sprintf("%d retried", r.Retried))
+	}
+	if r.PRs > 0 {
+		parts = append(parts, fmt.Sprintf("%d PRs, %d merged", r.PRs, r.Merged))
+	}
+	if r.CostUSD > 0 {
+		parts = append(parts, fmt.Sprintf("$%.2f", r.CostUSD))
+	} else if r.Tokens > 0 {
+		parts = append(parts, fmt.Sprintf("%s tokens", tokenWord(r.Tokens)))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func tokenWord(n int64) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	case n >= 1_000:
+		return fmt.Sprintf("%dk", n/1000)
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+// botDetail reads the bot's runs out of the fix log: the newest twelve to
+// show, every one for the ledger. A merged PR is one the pull log saw
+// merged.
 func botDetail(dir string, b bots.Bot) BotDetail {
 	d := BotDetail{Bot: b, Runs: []watch.FixRecord{}}
-	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 200) {
-		if r.Bot == b.Name {
+	pulls := watch.LoadPullLog(dir)
+	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 2000) {
+		if r.Bot != b.Name {
+			continue
+		}
+		if len(d.Runs) < 12 {
 			d.Runs = append(d.Runs, r)
 		}
-		if len(d.Runs) == 12 {
-			break
+		d.ROI.Runs++
+		if r.Error != "" {
+			d.ROI.Failed++
+		}
+		if r.Retry != "" {
+			d.ROI.Retried++
+		}
+		d.ROI.CostUSD += r.CostUSD
+		d.ROI.Tokens += r.Tokens
+		for _, link := range r.PRs {
+			d.ROI.PRs++
+			if p, ok := pulls.Get(link); ok && p.State == "merged" {
+				d.ROI.Merged++
+			}
+		}
+		if d.ROI.Since.IsZero() || r.StartedAt.Before(d.ROI.Since) {
+			d.ROI.Since = r.StartedAt
 		}
 	}
 	return d

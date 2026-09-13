@@ -96,37 +96,34 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 	if configDir := botConfigDir(spec, b); configDir != "" {
 		env = append(env, "CLAUDE_CONFIG_DIR="+configDir)
 	}
-	args := []string{"-p", BotRunPrompt(b, e), "--output-format", "json"}
-	if soul := strings.TrimSpace(b.Soul); soul != "" {
-		args = append(args, "--append-system-prompt", soul)
-	}
-	if b.Model != "" {
-		args = append(args, "--model", b.Model)
-	}
-	if spec.SkipPermissions {
-		args = append(args, "--dangerously-skip-permissions")
-	} else {
-		args = append(args, "--permission-mode", "acceptEdits")
-	}
+	prompt := BotRunPrompt(b, e)
 	dir := spec.Dir
 	if b.Isolate && d.Isolate != nil {
 		branch := FixBranch(e.Ref)
 		if trees, err := d.Isolate(spec.Dir, branch); err == nil {
 			d.watchState.Fixes.SetBranch(key, branch)
-			args[1] += IsolationNote(branch, trees)
+			prompt += IsolationNote(branch, trees)
 			fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
 		} else {
 			fmt.Fprintf(logFile, "=== could not isolate, running in place: %v\n", err)
 		}
 	}
-	cmd := claudeCommand(ctx, dir, env, args...)
-	cmd.Stdin = nil
-	raw, runErr := cmd.Output()
-	out, receipt := unwrapResult(raw)
-	logFile.Write(out)
-	if receipt.ok {
-		fmt.Fprintf(logFile, "\n=== cost: $%.4f · %d tokens · %d turns\n", receipt.costUSD, receipt.tokens, receipt.turns)
-		d.watchState.Fixes.SetCost(key, receipt.costUSD, receipt.tokens)
+	out, receipt, runErr := d.botAttempt(ctx, spec, b, b.Model, prompt, dir, env, logFile)
+	cost, tokens := receipt.costUSD, receipt.tokens
+	// One failure gets one more try, a rung up the ladder: the model that
+	// looped or fell over is often the model that was too small for it.
+	if runErr != nil && ctx.Err() == nil {
+		if next := nextModel(b.Model); next != "" {
+			fmt.Fprintf(logFile, "\n=== failed: %v — trying again on %s\n", runErr, next)
+			d.watchState.Fixes.SetRetry(key, next)
+			var again runReceipt
+			out, again, runErr = d.botAttempt(ctx, spec, b, next, prompt, dir, env, logFile)
+			cost, tokens = cost+again.costUSD, tokens+again.tokens
+		}
+	}
+	if cost > 0 || tokens > 0 {
+		fmt.Fprintf(logFile, "\n=== cost: $%.4f · %d tokens\n", cost, tokens)
+		d.watchState.Fixes.SetCost(key, cost, tokens)
 	}
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
@@ -146,6 +143,51 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 		target = links[0]
 	}
 	go d.notifyAttentionAt("corgi agent · "+b.Display(), body, spec.Workspace, target)
+}
+
+// botAttempt is one `claude -p` under the bot's soul on one model; what
+// it printed goes to the log as it comes.
+func (d *Daemon) botAttempt(ctx context.Context, spec WatchSpec, b bots.Bot, model, prompt, dir string, env []string, logFile *os.File) ([]byte, runReceipt, error) {
+	args := []string{"-p", prompt, "--output-format", "json"}
+	if soul := strings.TrimSpace(b.Soul); soul != "" {
+		args = append(args, "--append-system-prompt", soul)
+	}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	if spec.SkipPermissions {
+		args = append(args, "--dangerously-skip-permissions")
+	} else {
+		args = append(args, "--permission-mode", "acceptEdits")
+	}
+	cmd := claudeCommand(ctx, dir, env, args...)
+	cmd.Stdin = nil
+	raw, err := cmd.Output()
+	out, rc := unwrapResult(raw)
+	logFile.Write(out)
+	if rc.ok {
+		fmt.Fprintf(logFile, "\n=== attempt on %s: $%.4f · %d tokens · %d turns\n", modelWord(model), rc.costUSD, rc.tokens, rc.turns)
+	}
+	return out, rc, err
+}
+
+// nextModel is the rung above: the retry after a failed run. Past opus
+// there is nowhere to go; a bot on the default model retries on opus.
+func nextModel(model string) string {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "haiku":
+		return "sonnet"
+	case "sonnet", "":
+		return "opus"
+	}
+	return ""
+}
+
+func modelWord(model string) string {
+	if model == "" {
+		return "the default model"
+	}
+	return model
 }
 
 // botConfigDir is the account a bot runs under: its own profile applied

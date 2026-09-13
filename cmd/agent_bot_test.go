@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils/agent/bots"
+	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
@@ -100,5 +102,46 @@ func TestResumeOnlyWhenTheTranscriptExists(t *testing.T) {
 	_ = os.WriteFile(p, []byte("{}\n"), 0o600)
 	if !transcriptExists(map[string]string{"CLAUDE_CONFIG_DIR": cfg}, cwd, "sess-1") {
 		t.Fatal("the transcript is there")
+	}
+}
+
+// A bot's detail sums its runs into a ledger: runs, failures, retries,
+// the pull requests it opened and how many merged, and the bill.
+func TestABotsDetailCarriesItsLedger(t *testing.T) {
+	dir := phoneBoard(t, true)
+	fixes := watch.LoadFixLog(dir)
+	now := time.Now()
+	start := func(key, ref string, at time.Time) {
+		fixes.StartFor(watch.Event{Key: key, Ref: ref, Kind: watch.KindPRReview, Title: "t"}, at)
+		fixes.SetBot(key, "reviewer")
+	}
+	start("bot:reviewer:e1", "acme/api#1", now.Add(-3*time.Hour))
+	fixes.SetCost("bot:reviewer:e1", 1.25, 40_000)
+	fixes.Finish("bot:reviewer:e1", []string{"https://github.com/acme/api/pull/10"}, "two findings", "", now.Add(-3*time.Hour))
+	start("bot:reviewer:e2", "acme/api#2", now.Add(-2*time.Hour))
+	fixes.SetRetry("bot:reviewer:e2", "opus")
+	fixes.SetCost("bot:reviewer:e2", 2.00, 60_000)
+	fixes.Finish("bot:reviewer:e2", []string{"https://github.com/acme/api/pull/11"}, "ok", "", now.Add(-2*time.Hour))
+	start("bot:reviewer:e3", "acme/api#3", now.Add(-time.Hour))
+	fixes.Finish("bot:reviewer:e3", nil, "", "api error", now.Add(-time.Hour))
+	start("fix:e4", "acme/api#4", now)
+	fixes.SetBot("fix:e4", "other")
+	pulls := watch.LoadPullLog(dir)
+	_ = pulls.Set("acme/api#10", watch.PullStatus{State: "merged", At: now})
+	_ = pulls.Set("acme/api#11", watch.PullStatus{State: "open", At: now})
+
+	d := botDetail(dir, bots.Bot{Name: "reviewer", Title: "Code Reviewer", Workspace: "api"})
+	r := d.ROI
+	if r.Runs != 3 || r.Failed != 1 || r.Retried != 1 || r.PRs != 2 || r.Merged != 1 || r.CostUSD != 3.25 || r.Tokens != 100_000 {
+		t.Fatalf("ledger: %+v", r)
+	}
+	if r.Since.IsZero() || !r.Since.Before(now.Add(-2*time.Hour)) {
+		t.Fatalf("since the oldest run: %v", r.Since)
+	}
+	if got := r.Line(); got != "3 runs · 1 failed · 1 retried · 2 PRs, 1 merged · $3.25" {
+		t.Fatalf("line: %q", got)
+	}
+	if (BotROI{}).Line() != "no runs yet" || (BotROI{Runs: 1, Tokens: 12_500}).Line() != "1 runs · 12k tokens" {
+		t.Fatal("the empty and the token-only lines")
 	}
 }
