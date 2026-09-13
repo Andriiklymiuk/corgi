@@ -138,6 +138,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("hand-over") {
 			wc.HandOver, _ = flags.GetBool("hand-over")
 		}
+		if flags.Changed("rebase") {
+			wc.Rebase, _ = flags.GetBool("rebase")
+		}
 		if flags.Changed("compact-at") {
 			v, _ := flags.GetInt("compact-at")
 			if v < 0 || v > 100 {
@@ -1014,6 +1017,9 @@ func describeWatch(wc *config.WatchConfig) string {
 	if wc.CompactAt > 0 {
 		parts = append(parts, fmt.Sprintf("/compact past %d%%", wc.CompactAt))
 	}
+	if wc.Rebase {
+		parts = append(parts, "rebased when main moves")
+	}
 	action := wc.Action
 	if action == "" {
 		action = "notify"
@@ -1102,6 +1108,7 @@ func init() {
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
+	f.Bool("rebase", false, "Rebase a session's branch onto main where it sits when the session stops behind main with a clean tree and no conflicts (a branch that would conflict is typed into the session under --hand-over)")
 	f.Int("compact-at", 0, "Type /compact into a session past this much context the next time it stops — 85 is where the board goes red; 0 is off")
 	f.String("done-when", "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes — `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
 	f.String("auto-allow", "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 sessions only)")

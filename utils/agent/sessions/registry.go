@@ -138,6 +138,9 @@ type Slot struct {
 	Changes string `json:"changes,omitempty"`
 	Tests   string `json:"tests,omitempty"`
 	Overlap string `json:"overlap,omitempty"`
+	// Behind is main having moved, in one line — "main moved 12 · conflicts
+	// in api.go".
+	Behind string `json:"behind,omitempty"`
 	// Spend is the running total in one word — "52M" — and OverCap says
 	// it passed the budget it was given.
 	Spend   string `json:"spend,omitempty"`
@@ -208,6 +211,19 @@ func TestsLine(t *TestRun) string {
 		return "tests ✓"
 	}
 	return "tests ✗ " + t.Cmd
+}
+
+// BehindLine is main having moved, for a key: "main moved 12 · conflicts
+// in api.go, db.go".
+func BehindLine(b *Behind) string {
+	if b == nil || b.Commits == 0 {
+		return ""
+	}
+	line := "main moved " + strconv.Itoa(b.Commits)
+	if len(b.Conflicts) > 0 {
+		line += " · conflicts in " + JoinFiles(b.Conflicts, 3)
+	}
+	return line
 }
 
 // OverlapLine names the first session on the same files, or the same
@@ -1039,6 +1055,51 @@ func (r *Registry) SetChanges(id string, c *Changes, overlap []Overlap) (changed
 	return true, crossed
 }
 
+// SetBehind records what the sweep measured against main. A change in the
+// numbers is a new state: Told clears, so the daemon may act once more.
+func (r *Registry) SetBehind(id string, b *Behind) (changed bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[id]
+	if !ok {
+		return false
+	}
+	if (s.Behind == nil) != (b == nil) {
+		if b != nil && s.Behind != nil {
+			b.Rebased = s.Behind.Rebased
+		}
+		s.Behind = b
+		r.touch()
+		return true
+	}
+	if b == nil {
+		return false
+	}
+	if s.Behind.Commits == b.Commits && strings.Join(s.Behind.Conflicts, "|") == strings.Join(b.Conflicts, "|") {
+		return false
+	}
+	b.Rebased = s.Behind.Rebased
+	s.Behind = b
+	r.touch()
+	return true
+}
+
+// MainMovedTold marks the daemon's one move on the current behind state;
+// rebased says it was a rebase, which the row counts.
+func (r *Registry) MainMovedTold(id string, rebased bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[id]
+	if !ok || s.Behind == nil {
+		return
+	}
+	s.Behind.Told = true
+	if rebased {
+		s.Behind.Rebased++
+	}
+	r.touch()
+}
+
 // SetGate records a done-when run: green resets the streak, red counts
 // it. The tests line shows it too — it is the last test run, whoever ran
 // it — so a key says "tests ✗ go test" without a new field.
@@ -1606,7 +1667,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		if len(s.Drift) > 0 {
 			sl.Drift = s.Drift[0]
 		}
-		sl.Changes, sl.Tests, sl.Overlap = ChangesLine(s.Changes), TestsLine(s.Tests), OverlapLine(s.Overlap)
+		sl.Changes, sl.Tests, sl.Overlap, sl.Behind = ChangesLine(s.Changes), TestsLine(s.Tests), OverlapLine(s.Overlap), BehindLine(s.Behind)
 		sl.Spend, sl.OverCap = SpendLine(s.Spend), s.OverCap
 		sl.Reading = !s.ReadAt.IsZero() && now.Sub(s.ReadAt) < time.Minute
 		sl.Branch, sl.Summary, sl.PR, sl.Ticket = s.Branch, s.Summary, s.PR, s.Ticket

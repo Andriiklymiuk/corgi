@@ -38,6 +38,8 @@ type WatchSwitches struct {
 	DoneWhen []string `json:"doneWhen"`
 	// CompactAt is the context percent past which a stop gets /compact; 0 is off.
 	CompactAt int `json:"compactAt"`
+	// Rebase rebases a stopped session's clean branch onto main when main moved.
+	Rebase bool `json:"rebase"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -59,7 +61,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	if wc.DoneWhen != nil {
 		out.DoneWhen = wc.DoneWhen
 	}
-	out.CompactAt = wc.CompactAt
+	out.CompactAt, out.Rebase = wc.CompactAt, wc.Rebase
 	return out
 }
 
@@ -106,6 +108,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			AutoAllow *string   `json:"autoAllow"`
 			DoneWhen  *[]string `json:"doneWhen"`
 			CompactAt *int      `json:"compactAt"`
+			Rebase    *bool     `json:"rebase"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -190,6 +193,9 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			wc.AutoAllow = policy
+		}
+		if req.Rebase != nil {
+			wc.Rebase = *req.Rebase
 		}
 		if req.CompactAt != nil {
 			if *req.CompactAt < 0 || *req.CompactAt > 100 {

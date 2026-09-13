@@ -307,7 +307,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
 | `corgi agent carry <session> --profile P` | continue a session under another listed account, conversation included (copies the transcript, resumes it in a new terminal) |
 | `corgi agent digest [--send]` | today's one-message summary; with `digestAt: "20:00"` in the agent config the daemon sends it once a day where notifications go |
-| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself; `--done-when "go test ./..."` runs the workspace's checks when a session stops and types a red one back; `--compact-at 85` sends /compact to a full session when it stops (2.22) |
+| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself; `--done-when "go test ./..."` runs the workspace's checks when a session stops and types a red one back; `--compact-at 85` sends /compact to a full session when it stops; `--rebase` rebases a stopped session's clean branch when main moved (2.22) |
 | `corgi agent standup [--since 24h] [--write]` | what you asked Claude and what got committed, per workspace; `--write` has `claude -p` turn it into three sentences |
 | `corgi agent stop` | stop the daemon |
 
@@ -635,6 +635,26 @@ corgi agent watch enable --compact-at 85
 A session past that fill is sent `/compact` the next time it stops — never
 mid-turn — once per episode (ten minutes between two), and the row counts
 it (`compacted`, `compactedAt`). 0 turns it off. Also a phone switch.
+
+#### When main moves
+
+The minute sweep also measures every live branch against its base
+(`origin/main`, or `main`): how many commits main gained since the branch
+left it, and — from `git merge-tree`, without touching the tree — which
+files a rebase would stop on. The session carries it as `behind`
+(`{commits, conflicts, upstream}`), a key shows *main moved 12 · conflicts
+in api.go*, and a conflict is a drift reason. Two switches act on it when
+the session stops:
+
+```bash
+corgi agent watch enable --hand-over   # would conflict: the files are typed into the session — rebase, resolve, test, stop
+corgi agent watch enable --rebase      # no conflict, clean tree: rebased onto main where it sits
+```
+
+Each acts once per state; when main moves again the numbers change and it
+may act again. The rebase aborts itself on any failure and leaves the tree
+as it was. It never fetches: main is as fresh as the last `git fetch`
+anything on the machine made.
 
 ### Sessions on a Stream Deck
 
