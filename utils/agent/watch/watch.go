@@ -859,6 +859,9 @@ type FixRecord struct {
 	// receipt; zero when the run did not say.
 	CostUSD float64 `json:"costUSD,omitempty"`
 	Tokens  int64   `json:"tokens,omitempty"`
+	// Retry is the model a bot's second attempt ran on after the first
+	// failed — the ladder is haiku → sonnet → opus; empty when it ran once.
+	Retry string `json:"retry,omitempty"`
 	// SpentPercent is how much of the account's five-hour window this run
 	// used, measured across it. Ten comment fixes and ten whole tickets are
 	// the same number of runs and nowhere near the same spend.
@@ -1426,6 +1429,19 @@ func (l *FixLog) SetBot(key, bot string) {
 }
 
 // SetCost records claude's receipt on the newest run for the key.
+// SetRetry notes the model a bot's second attempt ran on.
+func (l *FixLog) SetRetry(key, model string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].Retry = model
+			_ = l.save()
+			return
+		}
+	}
+}
+
 func (l *FixLog) SetCost(key string, usd float64, tokens int64) {
 	if key == "" {
 		return
