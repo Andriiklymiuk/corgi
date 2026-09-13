@@ -14,6 +14,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
@@ -209,9 +210,79 @@ func (t *telegramControl) handle(text, replyTo string) {
 			}
 			t.send(answer)
 		}()
+	case "mute":
+		t.mute(arg)
 	default:
+		if claudeSlashWords[verb] {
+			// Telegram made "/compact" in a notification tappable, and the tap
+			// lands here: it is Claude Code's word, not corgi's. Say where it
+			// goes, with the session filled in when the board knows which.
+			t.send(claudeSlashTip(verb, t.driftingSession()))
+			return
+		}
 		t.send("unknown command. /help")
 	}
+}
+
+// claudeSlashWords are Claude Code's own slash commands a notification may
+// mention; a tap on one in Telegram is a question, not a corgi command.
+var claudeSlashWords = map[string]bool{"compact": true, "clear": true, "rewind": true, "model": true, "cost": true, "context": true, "resume": true, "continue": true, "remote-control": true, "init": true, "review": true}
+
+func claudeSlashTip(verb, session string) string {
+	tip := "/" + verb + " is Claude Code's command, typed inside a session — not one of corgi's.\nFrom here: reply to the session's notification with /" + verb + ", or\n/send <session> /" + verb
+	if session != "" {
+		tip += "\n\nfor the one drifting now:\n/send " + session + " /" + verb
+	}
+	return tip
+}
+
+// driftingSession is the one session the last drift line was about — the
+// only one drifting, else the fullest — as a word /send takes.
+func (t *telegramControl) driftingSession() string {
+	rep, err := readBoard(t.agentIn)
+	if err != nil {
+		return ""
+	}
+	best, fill := "", 0
+	for _, s := range rep.State.Sessions {
+		if s.Status == sessions.StatusGone || len(s.Drift) == 0 {
+			continue
+		}
+		pct := 0
+		if s.Context != nil {
+			pct = s.Context.Percent
+		}
+		if best == "" || pct > fill {
+			best, fill = firstNonEmpty(s.Display, s.Label), pct
+		}
+	}
+	return best
+}
+
+// mute holds every ring for a while, from the chat.
+func (t *telegramControl) mute(arg string) {
+	word := strings.ToLower(strings.TrimSpace(arg))
+	if word == "" {
+		word = "1h"
+	}
+	var until time.Time
+	if word != "off" {
+		d, err := time.ParseDuration(word)
+		if err != nil || d <= 0 || d > 24*time.Hour {
+			t.send("/mute [1h|30m|off]")
+			return
+		}
+		until = time.Now().Add(d)
+	}
+	if err := daemon.SetMute(t.agentIn, until); err != nil {
+		t.send("could not mute: " + err.Error())
+		return
+	}
+	if until.IsZero() {
+		t.send("ringing again")
+		return
+	}
+	t.send("muted until " + until.Local().Format("15:04") + " — nothing rings; the board goes on")
 }
 
 // sessionFromNotification finds the session a corgi notification was about:
@@ -329,7 +400,10 @@ const telegramHelp = `corgi commands:
 /allow /always /deny <s>  answer its permission prompt
 /focus <s>         bring its window to the front
 /ask <question>    the chief: what to look at first, what is blocked, who is on what
-/help              this`
+/mute [1h|off]     nothing rings for a while
+/help              this
+
+A /compact or /model in a notification is Claude Code's — /send <session> /compact types it there.`
 
 func (t *telegramControl) statusText() string {
 	status, err := daemon.ReadStatus(t.agentIn)

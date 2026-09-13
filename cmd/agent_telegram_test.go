@@ -262,6 +262,10 @@ func TestTelegramHandleWithoutADaemon(t *testing.T) {
 		{"/say s1 go on", "", "corgi agent is not running"},
 		{"/focus s1", "", "corgi agent is not running"},
 		{"/bogus", "", "unknown command. /help"},
+		// Claude Code's own word, tapped in a notification: a tip, not "unknown".
+		{"/compact", "", "/compact is Claude Code's command, typed inside a session — not one of corgi's.\nFrom here: reply to the session's notification with /compact, or\n/send <session> /compact"},
+		{"/model@corgibot", "", "/model is Claude Code's command, typed inside a session — not one of corgi's.\nFrom here: reply to the session's notification with /model, or\n/send <session> /model"},
+		{"/mute 25h", "", "/mute [1h|30m|off]"},
 	} {
 		before := len(fake.messages())
 		c.handle(tc.text, tc.replyTo)
@@ -508,5 +512,21 @@ func TestStartTelegramControlStopsBeforeItSaysAnything(t *testing.T) {
 			t.Fatal("a cancelled daemon greeted the chat anyway — that is a network call on the way out")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// With a session drifting on the board, the tip names it, ready to send.
+func TestTelegramCompactTipNamesTheDriftingSession(t *testing.T) {
+	fake := newFakeTelegram(t)
+	c, dir := telegramUnderTest(t)
+	t0 := time.Now()
+	writeBoardState(t, dir, sessions.State{UpdatedAt: t0, Sessions: []sessions.Session{
+		{ID: "s1", Display: "api·auth", Status: sessions.StatusWorking, Context: &usage.Context{Percent: 40}},
+		{ID: "s2", Display: "corgi", Status: sessions.StatusDone, Drift: []string{"context 85% full — /compact, or fresh from a handoff"}, Context: &usage.Context{Percent: 85}},
+	}})
+	c.handle("/compact", "")
+	got := fake.messages()
+	if len(got) != 1 || !strings.HasSuffix(got[0], "for the one drifting now:\n/send corgi /compact") {
+		t.Fatalf("%q", got)
 	}
 }
