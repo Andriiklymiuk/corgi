@@ -1357,6 +1357,20 @@ func (r *Registry) ReadBy(ref string, now time.Time) error {
 // row saying so. Claude Code fires no hook for it, so the board would
 // otherwise say working until the next message. A session that had already
 // moved on is left as it is, and its next event corrects the row either way.
+// AutoAllowed notes that the daemon answered the prompt itself, under the
+// workspace's policy: the count rides on the session so a surface can say
+// "3 reads allowed for it".
+func (r *Registry) AutoAllowed(ref string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil {
+		return
+	}
+	s.AutoAllowed++
+	r.touch()
+}
+
 func (r *Registry) Interrupted(ref string, now time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -321,6 +321,25 @@ type WatchConfig struct {
 	// into the session already on that branch, as the next message, so the
 	// loop closes where the work is. Off by default.
 	HandOver bool `yaml:"handOver,omitempty"`
+	// AutoAllow answers a permission prompt on its own when the tool only
+	// reads — Read, Grep, Glob, a web search — so a phone is not woken for
+	// `ls`. "reads" is the one value; anything that writes, and every Bash
+	// command, still waits for a person. Off by default.
+	AutoAllow string `yaml:"autoAllow,omitempty"`
+}
+
+// AutoAllowReads is the one permission policy a workspace can hold.
+const AutoAllowReads = "reads"
+
+// ParseAutoAllow reads a policy word: "reads", or "off"/"" for none.
+func ParseAutoAllow(s string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "off", "none", "no":
+		return "", nil
+	case AutoAllowReads:
+		return AutoAllowReads, nil
+	}
+	return "", fmt.Errorf("auto-allow is reads or off, not %q", s)
 }
 
 // Routine is one scheduled run. Kind names a catalog entry (digest,

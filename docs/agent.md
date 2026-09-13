@@ -307,7 +307,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
 | `corgi agent carry <session> --profile P` | continue a session under another listed account, conversation included (copies the transcript, resumes it in a new terminal) |
 | `corgi agent digest [--send]` | today's one-message summary; with `digestAt: "20:00"` in the agent config the daemon sends it once a day where notifications go |
-| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart) |
+| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself (2.22) |
 | `corgi agent standup [--since 24h] [--write]` | what you asked Claude and what got committed, per workspace; `--write` has `claude -p` turn it into three sentences |
 | `corgi agent stop` | stop the daemon |
 
@@ -580,6 +580,27 @@ They call `corgi agent hook`, which reports to the daemon, which sends the same
 notification as a restart — including the phone push when `notifyUrl` is set.
 It covers every Claude session in that directory, supervised or not.
 `corgi agent hooks disable` removes them and leaves your other hooks alone.
+
+#### Reads answered for you
+
+Every prompt carries a risk word — `reads`, `writes`, `destructive` — read
+off the tool and its input. A workspace can say the first kind is not worth
+waking anyone for:
+
+```bash
+corgi agent watch enable --auto-allow reads   # Read, Grep, Glob, a web search
+corgi agent watch enable --auto-allow off
+```
+
+The daemon then presses Enter into the session itself, a beat after the
+prompt is drawn, and the session's row counts what it allowed
+(`autoAllowed`). Nothing rings, nothing is pushed. Three limits, none of them
+configurable: a Bash command is never a read, however it looks (`cat` and `rm`
+share a prompt shape); anything that writes waits for a person; and only a
+session in iTerm2 is answered, because it is the one host corgi can type into
+without bringing a window forward — in VS Code or Terminal.app the prompt
+rings as before. The switch flips from the phone too, on the repo's sheet,
+and takes at the next prompt.
 
 ### Sessions on a Stream Deck
 

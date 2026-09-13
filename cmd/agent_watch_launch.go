@@ -12,8 +12,9 @@ import (
 
 // The watch's switches, for a phone or a menu bar: what each workspace is
 // told about and works on its own, and the two loops it closes by itself.
-// GET lists them; POST flips some for one workspace. The two automation
-// switches take on the daemon's next round; the rest need the daemon to
+// GET lists them; POST flips some for one workspace. The automation
+// switches — hand-over, auto-merge, the reads policy — take on the
+// daemon's next round; the rest need the daemon to
 // read its config again (corgi agent restart), and the answer says so.
 
 // WatchSwitches is one workspace's watch, in switches.
@@ -31,6 +32,8 @@ type WatchSwitches struct {
 	DaysOff   []string `json:"daysOff"`
 	AutoMerge bool     `json:"autoMerge"`
 	HandOver  bool     `json:"handOver"`
+	// AutoAllow is "reads" or "" — the one permission policy.
+	AutoAllow string `json:"autoAllow"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -39,7 +42,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 		return out
 	}
 	out.Enabled, out.Comments, out.PRs, out.Reviews, out.CI, out.Isolate = wc.Enabled, wc.Comments, wc.PRs, wc.Reviews, wc.CI, wc.Isolate
-	out.Quiet, out.AutoMerge, out.HandOver = wc.Quiet, wc.AutoMerge, wc.HandOver
+	out.Quiet, out.AutoMerge, out.HandOver, out.AutoAllow = wc.Quiet, wc.AutoMerge, wc.HandOver, wc.AutoAllow
 	if wc.Action != "" {
 		out.Action = wc.Action
 	}
@@ -92,6 +95,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			Labels    *[]string `json:"labels"`
 			AutoMerge *bool     `json:"autoMerge"`
 			HandOver  *bool     `json:"handOver"`
+			AutoAllow *string   `json:"autoAllow"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -168,6 +172,14 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.HandOver != nil {
 			wc.HandOver = *req.HandOver
+		}
+		if req.AutoAllow != nil {
+			policy, err := config.ParseAutoAllow(*req.AutoAllow)
+			if err != nil {
+				writeLaunchError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			wc.AutoAllow = policy
 		}
 		entry.Watch = wc
 		user.Workspaces[ws.ID] = entry

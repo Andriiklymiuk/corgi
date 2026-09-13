@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
@@ -103,5 +105,67 @@ func TestAReadyPullRequestIsMergedWhenTheWorkspaceSaysSo(t *testing.T) {
 	d.pullChanged(context.Background(), spec, "acme/api#8", "https://github.com/acme/api/pull/8", watch.PullStatus{}, ready, false)
 	if len(merged) != 1 {
 		t.Fatalf("merged with the switch off: %v", merged)
+	}
+}
+
+// A read in a workspace whose policy is reads is answered by the daemon —
+// Enter into the iTerm2 tab, nothing pushed, the row counting it; a write
+// in the same workspace, a read elsewhere, and a read in a session the
+// daemon cannot type into quietly all ring as before.
+func TestAReadIsAllowedByTheWorkspacePolicy(t *testing.T) {
+	d := trackingDaemon(t)
+	d.Sessions.Load()
+	d.Sessions.OnTransition = d.onSessionTransition
+	t.Cleanup(d.swaps.Wait)
+	prev := autoAllowDelay
+	autoAllowDelay = time.Millisecond
+	t.Cleanup(func() { autoAllowDelay = prev })
+	var mu sync.Mutex
+	var typed, pushed []string
+	d.TypeText = func(_ context.Context, target sessions.FocusTarget, text string, _ bool) error {
+		mu.Lock()
+		defer mu.Unlock()
+		typed = append(typed, target.SessionID+":"+text)
+		return nil
+	}
+	d.Push = func(m push.Message) {
+		mu.Lock()
+		defer mu.Unlock()
+		pushed = append(pushed, m.Body)
+	}
+	d.AllowPolicy = func(s sessions.Session) string {
+		if s.Cwd == "/tmp/acme" {
+			return config.AutoAllowReads
+		}
+		return ""
+	}
+	now := time.Now()
+	iterm := sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/acme", ClaudePID: 1, TermProgram: "iTerm.app", TTY: 5, At: now}
+	d.Sessions.Apply(iterm)
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Read", Subject: "main.go", Risk: "reads", At: now})
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(typed) == 1 })
+	mu.Lock()
+	if typed[0] != "s1:\r" || len(pushed) != 0 {
+		t.Fatalf("Enter, quietly: typed %v pushed %v", typed, pushed)
+	}
+	mu.Unlock()
+	if s, _ := d.Sessions.Lookup("s1"); s.AutoAllowed != 1 {
+		t.Fatalf("the row counts it: %+v", s)
+	}
+	// A write, and a Bash read, still ask.
+	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Read", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Edit", Subject: "main.go", Risk: "writes", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Edit", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "cat main.go", Risk: "reads", At: now})
+	// A read in a workspace with no policy, and one in a VS Code terminal.
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s2", Cwd: "/tmp/other", ClaudePID: 2, TermProgram: "iTerm.app", TTY: 6, At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s2", Tool: "Read", Subject: "a.go", Risk: "reads", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s3", Cwd: "/tmp/acme", ClaudePID: 3, TermProgram: "vscode", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s3", Tool: "Read", Subject: "b.go", Risk: "reads", At: now})
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(pushed) == 4 })
+	mu.Lock()
+	defer mu.Unlock()
+	if len(typed) != 1 {
+		t.Fatalf("only the one read was answered: %v", typed)
 	}
 }

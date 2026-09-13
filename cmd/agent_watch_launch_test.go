@@ -54,4 +54,27 @@ func TestWatchSwitchesFromThePhone(t *testing.T) {
 	if rec := post(launchWatchHandler, "/launch/watch", `{"workspace":"nope","prs":true}`); rec.Code != 404 {
 		t.Fatalf("unknown workspace: %d", rec.Code)
 	}
+	// The reads policy is the third switch that takes at once, and it is
+	// what the daemon's policy lookup answers for anything under the
+	// workspace — a worktree included — and for nothing outside it.
+	wsPath, _ := reg.Find("api")
+	rec = post(launchWatchHandler, "/launch/watch", `{"workspace":"api","autoAllow":"reads"}`)
+	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
+	if rec.Code != 200 || saved.Watch.AutoAllow != "reads" || saved.Restart {
+		t.Fatalf("reads policy: %d %s", rec.Code, rec.Body)
+	}
+	if got := allowPolicyFor(dir, wsPath.AbsPath+"/.worktrees/t1"); got != config.AutoAllowReads {
+		t.Fatalf("a worktree under the workspace: %q", got)
+	}
+	if got := allowPolicyFor(dir, "/somewhere/else"); got != "" {
+		t.Fatalf("outside: %q", got)
+	}
+	if rec := post(launchWatchHandler, "/launch/watch", `{"workspace":"api","autoAllow":"everything"}`); rec.Code != 400 {
+		t.Fatalf("only reads: %d", rec.Code)
+	}
+	rec = post(launchWatchHandler, "/launch/watch", `{"workspace":"api","autoAllow":"off"}`)
+	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
+	if saved.Watch.AutoAllow != "" || allowPolicyFor(dir, wsPath.AbsPath) != "" {
+		t.Fatalf("off: %s", rec.Body)
+	}
 }
