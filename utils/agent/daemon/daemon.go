@@ -719,6 +719,12 @@ func (d *Daemon) notifyAttention(title, body, workspaceID string) {
 // launcher: a tracker issue, a merge request. The launcher is the fallback,
 // because a notification about one ticket should open that ticket.
 func (d *Daemon) notifyAttentionAt(title, body, workspaceID, link string) {
+	d.notifyAttentionKey(title, body, workspaceID, link, "")
+}
+
+// notifyAttentionKey is notifyAttentionAt for an inbox row: the row's key
+// rides in the push, so a tap on the phone opens that row, not the app.
+func (d *Daemon) notifyAttentionKey(title, body, workspaceID, link, key string) {
 	if d.muted() {
 		utils.Infof("agent: (muted) %s: %s\n", title, body)
 		return
@@ -730,6 +736,9 @@ func (d *Daemon) notifyAttentionAt(title, body, workspaceID, link string) {
 		data := map[string]string{"workspace": workspaceID}
 		if link != "" {
 			data["url"] = link
+		}
+		if key != "" {
+			data["key"] = key
 		}
 		// What needs a person now, as against what happened: a phone with
 		// quiet hours or "only what needs me" hears the first.

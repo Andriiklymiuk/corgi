@@ -415,7 +415,7 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
 			return
 		}
-		go d.notifyAttentionAt("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL)
+		go d.notifyAttentionKey("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
 	}
 }
 
