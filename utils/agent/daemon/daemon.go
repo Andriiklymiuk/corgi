@@ -135,6 +135,9 @@ type Daemon struct {
 	// Sessions is the registry of interactive Claude Code sessions, fed by
 	// hooks and published as sessions.json. Nil turns tracking off.
 	Sessions *sessions.Registry
+	// MergePull merges a pull request of mine at the forge (the workspace's
+	// autoMerge); nil means the daemon never merges.
+	MergePull func(ctx context.Context, workspace, link string) error
 	// Raise brings a session's window to the front; nil means the platform
 	// default. Alive, ListProcesses and Cwd are the process probes the
 	// reaper and rescan use. All test seams.
@@ -687,6 +690,19 @@ func (d *Daemon) repeatedAttention(workspaceID, detail string, now time.Time) bo
 	return false
 }
 
+// needsPerson reads a notification's body for the things that wait on a
+// person — a review asked for, a build gone red, a run that failed or
+// stopped, a ticket blocked — as against what merely happened.
+func needsPerson(body string) bool {
+	b := strings.ToLower(body)
+	for _, w := range []string{"review asked", "review requested", "went red", "build red", "failed", "blocked", "not started", "could not", "needs", "waiting on"} {
+		if strings.Contains(b, w) {
+			return true
+		}
+	}
+	return false
+}
+
 func (d *Daemon) notifyAttention(title, body, workspaceID string) {
 	d.notifyAttentionAt(title, body, workspaceID, "")
 }
@@ -699,9 +715,14 @@ func (d *Daemon) notifyAttentionAt(title, body, workspaceID, link string) {
 		link = d.LinkFor(workspaceID)
 	}
 	if d.Push != nil {
-		data := map[string]string{}
+		data := map[string]string{"workspace": workspaceID}
 		if link != "" {
 			data["url"] = link
+		}
+		// What needs a person now, as against what happened: a phone with
+		// quiet hours or "only what needs me" hears the first.
+		if needsPerson(body) {
+			data["needs"] = "1"
 		}
 		go d.Push(push.Message{Title: title, Body: body, Category: "inbox", Data: data, Thread: workspaceID})
 	}

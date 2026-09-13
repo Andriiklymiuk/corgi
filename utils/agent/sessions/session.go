@@ -138,6 +138,9 @@ type Event struct {
 	// a command's program, a pattern. The hook reduces the input to this
 	// before anything is written; the input itself is never spooled.
 	Subject string `json:"subject,omitempty"`
+	// Risk is one word about what the tool would do — reads, writes,
+	// destructive — decided in the hook from the input it then drops.
+	Risk string `json:"risk,omitempty"`
 	// Context is the session's context-window fill as the hook read it from
 	// the transcript's newest assistant turn. The path stays with the hook;
 	// only the numbers travel.
@@ -264,6 +267,9 @@ type Session struct {
 	// (POST /launch/transcript): the row shows an eye while it is recent,
 	// so the laptop always knows.
 	ReadAt time.Time `json:"readAt,omitzero"`
+	// Unread is what Claude said since a phone last read this session —
+	// filled in for the phone from the transcript, never stored here.
+	Unread *Unread `json:"unread,omitempty"`
 	// Bot is the named bot this session runs as (corgi agent bot): the
 	// surfaces draw it with the bot's title and colour, and the daemon
 	// remembers the conversation as the one to resume.
@@ -372,12 +378,22 @@ func IsTestCommand(subject string) bool {
 	return false
 }
 
+// Unread is what a phone has not seen: how many lines Claude said since
+// it last read the conversation, and the first of them.
+type Unread struct {
+	Lines int       `json:"lines"`
+	Since time.Time `json:"since"`
+	First string    `json:"first,omitempty"`
+}
+
 // Pending is one permission prompt: the tool and the safe word about its
 // input, and when it was raised.
 type Pending struct {
-	Tool    string    `json:"tool"`
-	Subject string    `json:"subject,omitempty"`
-	At      time.Time `json:"at"`
+	Tool    string `json:"tool"`
+	Subject string `json:"subject,omitempty"`
+	// Risk is reads, writes or destructive; a surface colours Allow by it.
+	Risk string    `json:"risk,omitempty"`
+	At   time.Time `json:"at"`
 }
 
 // StuckAfter is how long a working session may sit without a hook event

@@ -27,10 +27,10 @@ const (
 	driftLinesFloor = 3000
 )
 
-// generatedDiffPath says whether a file's lines are nobody's work: a lock
+// GeneratedDiffPath says whether a file's lines are nobody's work: a lock
 // file, a snapshot, a bundle. They still count for scope, never for size —
 // one `npm install` is a thousand lines of package-lock.json.
-func generatedDiffPath(path string) bool {
+func GeneratedDiffPath(path string) bool {
 	base := strings.ToLower(filepath.Base(path))
 	switch base {
 	case "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb", "go.sum", "cargo.lock",
@@ -75,7 +75,7 @@ func gitDriftDiff(dir string) (lines int, files []string, ok bool) {
 			continue
 		}
 		files = append(files, f[2])
-		if generatedDiffPath(f[2]) {
+		if GeneratedDiffPath(f[2]) {
 			continue
 		}
 		a, _ := strconv.Atoi(f[0])
@@ -290,7 +290,7 @@ func crossings(live []sessions.Session, measured map[string]measure) map[string]
 			}
 			var shared []string
 			for _, f := range ma.files {
-				if theirs[f] && !generatedDiffPath(f) {
+				if theirs[f] && !GeneratedDiffPath(f) {
 					shared = append(shared, f)
 				}
 			}

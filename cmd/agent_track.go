@@ -561,6 +561,7 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 		TermProgram: getenv("TERM_PROGRAM"),
 		TermSession: firstNonEmpty(getenv("ITERM_SESSION_ID"), getenv("TERM_SESSION_ID")),
 		Subject:     subjectOf(in.Tool, in.ToolInput),
+		Risk:        riskOf(in.Tool, in.ToolInput),
 		At:          time.Now().UTC(),
 	}
 	if wantContext, wantTitle := in.readsTranscript(); in.TranscriptPath != "" && (wantContext || wantTitle) {

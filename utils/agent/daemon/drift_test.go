@@ -63,12 +63,12 @@ func TestDriftIsReadFromTheNumbers(t *testing.T) {
 // the size of the diff.
 func TestGeneratedFilesDoNotCountAsDiffSize(t *testing.T) {
 	for _, p := range []string{"package-lock.json", "app/yarn.lock", "web/dist/app.js", "api/__snapshots__/a.snap", "pkg/x.pb.go", "site/main.min.js"} {
-		if !generatedDiffPath(p) {
+		if !GeneratedDiffPath(p) {
 			t.Errorf("%s should not count", p)
 		}
 	}
 	for _, p := range []string{"src/app/pair.tsx", "cmd/root.go", "Makefile", "docs/build.md"} {
-		if generatedDiffPath(p) {
+		if GeneratedDiffPath(p) {
 			t.Errorf("%s is real work", p)
 		}
 	}

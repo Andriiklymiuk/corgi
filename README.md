@@ -391,6 +391,11 @@ pull requests and what it has cost so far. A card in Review says how its
 pull request stands — checks green, approved — and *ready to merge* once
 nothing is left between it and the button (`pull` on the card, the inbox
 row and `corgi agent watch --json`; read from GitHub or GitLab once a round).
+Two switches close the loop without you: `corgi agent watch enable
+--hand-over` types a review comment or a red build into the session already
+on that branch, and `--auto-merge` merges what the forge calls ready. A bot
+can act on its own too — `corgi agent bot add reviewer --template reviewer`
+reviews every pull request someone asks you about, as itself.
 
 <p align="center"><img src="docs/media/kanban.gif" width="760" alt="corgi agent kanban: Inbox, Ready, Running, Blocked, Review, Done — with the session, the handoff, the pull requests and the cost on each card"></p>
 

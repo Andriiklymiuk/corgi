@@ -27,6 +27,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
+	"andriiklymiuk/corgi/utils/agent/transcript"
 	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -631,6 +632,14 @@ func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
 		if d, derr := daemon.ReadInfo(dir); derr == nil && d != nil {
 			info["daemon"] = true
 			info["daemonPid"] = d.PID
+			if !d.StartedAt.IsZero() {
+				info["daemonSince"] = d.StartedAt
+			}
+		}
+		// The tunnel the phone comes in through, so "why can't I reach it"
+		// has somewhere to start: the provider and the host.
+		if up := loadUpSettings(dir); up.Provider != "" || up.TunnelHostname != "" {
+			info["tunnel"] = map[string]string{"provider": up.Provider, "host": up.TunnelHostname}
 		}
 	}
 	// A release the cache has not seen yet is not "out": the phone would tell
@@ -661,7 +670,44 @@ func launchBoardHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	fillUnread(rep.Sessions)
 	writeLaunchJSON(w, rep)
+}
+
+// unreadTail bounds how far back the transcript is read for a count.
+const unreadTail = 60
+
+// fillUnread says, for each session a phone has read before, what Claude
+// has said since: the count and the first line. Only readable workspaces
+// (the same gate as the conversation), only sessions that were read at all.
+func fillUnread(list []sessions.Session) {
+	for i := range list {
+		s := &list[i]
+		if s.ReadAt.IsZero() || s.Status == sessions.StatusGone || !streamAllowedFor(s.Label) {
+			continue
+		}
+		path := transcriptPathFor(*s)
+		if path == "" || !transcript.Exists(path) {
+			continue
+		}
+		entries, _, err := transcript.Last(path, unreadTail)
+		if err != nil {
+			continue
+		}
+		u := sessions.Unread{Since: s.ReadAt}
+		for _, e := range entries {
+			if e.Kind != "assistant" || !e.At.After(s.ReadAt) {
+				continue
+			}
+			if u.Lines == 0 {
+				u.First = truncateLine(firstLineOf(e.Text), 120)
+			}
+			u.Lines++
+		}
+		if u.Lines > 0 {
+			s.Unread = &u
+		}
+	}
 }
 
 var latestVersion struct {
@@ -3727,16 +3773,20 @@ func launchPushHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var req struct {
 			Token string `json:"token"`
+			// What this phone wants to hear: quiet hours ("23:00-07:00"),
+			// and "needs" for only what needs a person.
+			Quiet string `json:"quiet"`
+			Only  string `json:"only"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the token")
 			return
 		}
-		if err := store.Set(device, req.Token); err != nil {
+		if err := store.SetWith(device, req.Token, push.Prefs{Quiet: strings.TrimSpace(req.Quiet), Only: strings.TrimSpace(req.Only)}); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeLaunchJSON(w, map[string]any{"done": "this phone gets notified", "device": device})
+		writeLaunchJSON(w, map[string]any{"done": "this phone gets notified", "device": device, "quiet": req.Quiet, "only": req.Only})
 	case http.MethodDelete:
 		_ = store.Remove(device)
 		writeLaunchJSON(w, map[string]any{"done": "this phone is quiet", "device": device})
@@ -3817,11 +3867,14 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		PR string `json:"pr,omitempty"`
 		// Pull is how that pull request stands: checks, approval.
 		Pull *watch.PullStatus `json:"pull,omitempty"`
+		// Handed is the session this row was typed into, and when.
+		Handed *watch.Hand `json:"handed,omitempty"`
 	}
 	out := []row{}
 	onTicket := sessionsOnTickets(dir)
 	picks := watch.LoadPicks(dir)
 	pulls := watch.LoadPullLog(dir)
+	hands := watch.LoadHands(dir)
 	now := time.Now()
 	// The events log keeps the column a ticket arrived in. A move made since
 	// then is the truth, so it wins.
@@ -3862,6 +3915,10 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if st, ok := pulls.Get(firstNonEmptyString(r.PR, e.Ref)); ok {
 			p := st
 			r.Pull = &p
+		}
+		if h, ok := hands.Get(e.Key); ok {
+			hh := h
+			r.Handed = &hh
 		}
 		out = append(out, r)
 	}
@@ -3951,6 +4008,38 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Do) == "ignore" {
 		_ = watch.LoadState(dir).Ignore(event.Key)
 		writeLaunchJSON(w, map[string]any{"done": "ignored " + firstNonEmptyString(event.Ref, event.Key)})
+		return
+	}
+	// Hand over: the comment or the red build, typed into the session
+	// already on that branch or ticket as its next message; the row keeps
+	// the mark. The line is the same one the daemon's own handOver uses.
+	if strings.TrimSpace(req.Do) == "handover" {
+		line := watch.HandoverLine(event)
+		if line == "" {
+			writeLaunchError(w, http.StatusBadRequest, "nothing to hand over on a "+string(event.Kind))
+			return
+		}
+		onTicket := sessionsOnTickets(dir)
+		target := onTicket[strings.ToLower(event.Ref)]
+		if target == nil {
+			if link := watch.PullLinkOf(event); link != "" {
+				if rep, err := readBoard(dir); err == nil {
+					for _, s := range rep.Sessions {
+						if s.Status != sessions.StatusGone && s.Status != sessions.StatusStale && s.PR != "" && strings.HasPrefix(s.PR, link) {
+							target = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status)}
+							break
+						}
+					}
+				}
+			}
+		}
+		if target == nil {
+			writeLaunchError(w, http.StatusNotFound, "no live session is on "+event.Ref+" — Work on it opens one")
+			return
+		}
+		from := firstNonEmptyString(r.URL.Query().Get("from"), "phone")
+		_ = watch.LoadHands(dir).Set(event.Key, watch.Hand{At: time.Now(), To: target.ID, Label: target.Label, By: from})
+		launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: target.ID, Text: line, Enter: true, Source: from})
 		return
 	}
 	// Unblocking is a person's call too: it lets the unattended mode back on

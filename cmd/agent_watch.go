@@ -132,6 +132,12 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("ci") {
 			wc.CI, _ = flags.GetBool("ci")
 		}
+		if flags.Changed("auto-merge") {
+			wc.AutoMerge, _ = flags.GetBool("auto-merge")
+		}
+		if flags.Changed("hand-over") {
+			wc.HandOver, _ = flags.GetBool("hand-over")
+		}
 		if flags.Changed("from") {
 			v, _ := flags.GetString("from")
 			wc.From = splitList(v)
@@ -600,13 +606,15 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			Columns   []string  `json:"columns,omitempty"`
 			// PR and Pull: the pull request this row is about or has, and
 			// how it stands — checks, approval, ready to merge.
-			PR   string            `json:"pr,omitempty"`
-			Pull *watch.PullStatus `json:"pull,omitempty"`
+			PR     string            `json:"pr,omitempty"`
+			Pull   *watch.PullStatus `json:"pull,omitempty"`
+			Handed *watch.Hand       `json:"handed,omitempty"`
 		}
 		events := []eventRow{}
 		onTicket := sessionsOnTickets(dir)
 		picks := watch.LoadPicks(dir)
 		pulls := watch.LoadPullLog(dir)
+		hands := watch.LoadHands(dir)
 		moved := watch.LoadStateLog(dir)
 		keeper := watch.NewInboxKeeper(now)
 		for _, e := range watch.RecentEvents(dir, 25) {
@@ -639,6 +647,10 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			if st, ok := pulls.Get(firstNonEmptyString(er.PR, e.Ref)); ok {
 				p := st
 				er.Pull = &p
+			}
+			if h, ok := hands.Get(e.Key); ok {
+				hh := h
+				er.Handed = &hh
 			}
 			events = append(events, er)
 		}
@@ -968,6 +980,12 @@ func describeWatch(wc *config.WatchConfig) string {
 	if wc.PRs {
 		parts = append(parts, "PR reviews and comments")
 	}
+	if wc.HandOver {
+		parts = append(parts, "handed to the session on the branch")
+	}
+	if wc.AutoMerge {
+		parts = append(parts, "merged when green and approved")
+	}
 	action := wc.Action
 	if action == "" {
 		action = "notify"
@@ -1054,6 +1072,8 @@ func init() {
 	f.Bool("isolate", false, "Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout")
 	f.Bool("no-retry", false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
+	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
+	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
 	f.String("auto-for", "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")

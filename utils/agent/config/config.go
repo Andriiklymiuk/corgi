@@ -313,6 +313,14 @@ type WatchConfig struct {
 	// — "In Progress", say. Empty writes nothing: a tracker corgi has not
 	// been told to move tickets on is left alone.
 	PickupStatus string `yaml:"pickupStatus,omitempty"`
+	// AutoMerge merges a pull request of mine the moment the forge says it
+	// is ready — checks green, approved — and says so. Off by default: a
+	// merge is a merge.
+	AutoMerge bool `yaml:"autoMerge,omitempty"`
+	// HandOver types a review comment, a red build or an asked-for review
+	// into the session already on that branch, as the next message, so the
+	// loop closes where the work is. Off by default.
+	HandOver bool `yaml:"handOver,omitempty"`
 }
 
 // Routine is one scheduled run. Kind names a catalog entry (digest,

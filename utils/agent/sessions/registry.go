@@ -408,7 +408,7 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	case "PermissionRequest":
 		s.Tool = ev.Tool
 		s.Detail = "permission: " + toolLine(ev.Tool, ev.Subject)
-		s.Pending = &Pending{Tool: ev.Tool, Subject: ev.Subject, At: now}
+		s.Pending = &Pending{Tool: ev.Tool, Subject: ev.Subject, Risk: ev.Risk, At: now}
 		r.setStatus(s, StatusNeedsInput, now)
 	case "Notification":
 		r.applyNotification(s, ev, now)
@@ -1369,9 +1369,16 @@ func (r *Registry) Interrupted(ref string, now time.Time) bool {
 	return true
 }
 
-// Risky says whether the prompt must not be approved unseen.
+// Risky says whether the prompt must not be approved unseen: the hook's
+// word on the whole command when it gave one, else the subject's shape.
 func (p *Pending) Risky() bool {
-	return p != nil && p.Tool == "Bash" && riskyCommand.MatchString(p.Subject)
+	if p == nil {
+		return false
+	}
+	if p.Risk != "" {
+		return p.Risk == "destructive"
+	}
+	return p.Tool == "Bash" && riskyCommand.MatchString(p.Subject)
 }
 
 // riskyCommand is what an Allow button must not approve unseen. The subject

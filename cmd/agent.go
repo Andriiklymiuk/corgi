@@ -177,6 +177,11 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		return claimTicket(d.Dir, workspaceID, e)
 	}
 	d.Isolate = isolateFixWorktrees
+	// A pull request the forge calls ready is merged with the workspace's
+	// own token, the same way the phone's Merge does it.
+	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
+		return watch.MergePR(ctx, watch.LoadSecretsFor(dir, workspaceID), link)
+	}
 	// Phones that registered a push token hear what the desktop hears, and a
 	// permission prompt with its session id.
 	pushStore := push.Load(dir)

@@ -87,3 +87,32 @@ func commandSubject(command string) string {
 	}
 	return strings.Join(kept, " ")
 }
+
+// riskOf is one word about what a tool would do, decided here where the
+// full input is still in hand and thrown away right after: reads (a file
+// read, a search, a fetch), writes (an edit, a plain command), or
+// destructive (rm, force-push, drop, sudo — the commands an Allow button
+// must not approve unseen). The phone colours Allow by it; nothing of the
+// input itself leaves this process.
+func riskOf(tool string, input json.RawMessage) string {
+	switch tool {
+	case "Read", "Grep", "Glob", "WebFetch", "WebSearch", "Task", "Agent", "Skill", "TodoWrite":
+		return "reads"
+	case "Edit", "Write", "MultiEdit", "NotebookEdit":
+		return "writes"
+	case "Bash":
+		var in struct {
+			Command string `json:"command"`
+		}
+		_ = json.Unmarshal(input, &in)
+		if destructiveCommand.MatchString(in.Command) {
+			return "destructive"
+		}
+		return "writes"
+	}
+	return ""
+}
+
+// destructiveCommand is the same shape the board refuses to answer blind,
+// applied to the whole command line rather than its safe subject.
+var destructiveCommand = regexp.MustCompile(`(?i)(^|[\s;&|])(rm|sudo|mkfs|dd|shutdown|reboot|kill|pkill|killall|chmod|chown|launchctl|diskutil|git\s+push\s+[^\n]*--force|git\s+reset\s+--hard|git\s+clean)(\s|$)|--force\b|--hard\b|--no-verify\b|\bdrop\s+(table|database|schema)\b|\btruncate\b|\bpurge\b|\brm\s+-rf\b`)
