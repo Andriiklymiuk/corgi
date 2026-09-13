@@ -138,6 +138,10 @@ type Daemon struct {
 	// MergePull merges a pull request of mine at the forge (the workspace's
 	// autoMerge); nil means the daemon never merges.
 	MergePull func(ctx context.Context, workspace, link string) error
+	// AllowPolicy is the permission policy for the workspace a session is
+	// in — config.AutoAllowReads, or "" — read live, so a switch flipped on
+	// the phone counts for the next prompt. Nil means no policy anywhere.
+	AllowPolicy func(s sessions.Session) string
 	// Raise brings a session's window to the front; nil means the platform
 	// default. Alive, ListProcesses and Cwd are the process probes the
 	// reaper and rescan use. All test seams.

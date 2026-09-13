@@ -138,6 +138,14 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("hand-over") {
 			wc.HandOver, _ = flags.GetBool("hand-over")
 		}
+		if flags.Changed("auto-allow") {
+			v, _ := flags.GetString("auto-allow")
+			policy, err := config.ParseAutoAllow(v)
+			if err != nil {
+				return err
+			}
+			wc.AutoAllow = policy
+		}
 		if flags.Changed("from") {
 			v, _ := flags.GetString("from")
 			wc.From = splitList(v)
@@ -986,6 +994,9 @@ func describeWatch(wc *config.WatchConfig) string {
 	if wc.AutoMerge {
 		parts = append(parts, "merged when green and approved")
 	}
+	if wc.AutoAllow == config.AutoAllowReads {
+		parts = append(parts, "reads allowed by policy")
+	}
 	action := wc.Action
 	if action == "" {
 		action = "notify"
@@ -1074,6 +1085,7 @@ func init() {
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
+	f.String("auto-allow", "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 sessions only)")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
 	f.String("auto-for", "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")

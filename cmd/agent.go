@@ -182,6 +182,12 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
 		return watch.MergePR(ctx, watch.LoadSecretsFor(dir, workspaceID), link)
 	}
+	// A permission prompt is answered by the daemon when the workspace the
+	// session sits in says reads are allowed — read live, so the switch
+	// takes at the next prompt.
+	d.AllowPolicy = func(s sessions.Session) string {
+		return allowPolicyFor(dir, s.Cwd)
+	}
 	// Phones that registered a push token hear what the desktop hears, and a
 	// permission prompt with its session id.
 	pushStore := push.Load(dir)
@@ -1065,4 +1071,47 @@ func agoText(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
+}
+
+// allowPolicyFor is the permission policy of the workspace a directory
+// belongs to — the registered workspace whose path contains it, longest
+// first, so a worktree under a workspace counts as that workspace.
+func allowPolicyFor(dir, cwd string) string {
+	if cwd == "" {
+		return ""
+	}
+	registry, err := workspace.Load(agentRegistryPath(dir))
+	if err != nil {
+		return ""
+	}
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil || user == nil {
+		return ""
+	}
+	var best workspace.Workspace
+	for _, w := range registry.Sorted() {
+		if w.AbsPath == "" || !pathWithin(cwd, w.AbsPath) {
+			continue
+		}
+		if len(w.AbsPath) > len(best.AbsPath) {
+			best = w
+		}
+	}
+	if best.ID == "" {
+		return ""
+	}
+	repo, _ := config.LoadRepo(best.AbsPath)
+	if wc := config.Resolve(best.ID, repo, user).Watch; wc != nil {
+		return wc.AutoAllow
+	}
+	return ""
+}
+
+// pathWithin says whether p is dir or sits under it.
+func pathWithin(p, dir string) bool {
+	rel, err := filepath.Rel(dir, p)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel))
 }

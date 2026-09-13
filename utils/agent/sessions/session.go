@@ -287,6 +287,9 @@ type Session struct {
 	Limit    LimitKind `json:"limit,omitempty"`
 	ResumeAt time.Time `json:"resumeAt,omitzero"`
 	Resumes  int       `json:"resumes,omitempty"`
+	// AutoAllowed counts the permission prompts the daemon answered for
+	// this session under the workspace's reads policy — nobody was asked.
+	AutoAllowed int `json:"autoAllowed,omitempty"`
 	// FailStreak counts the same tool failing on the same subject in a row
 	// — a test that keeps going red, a command that keeps refusing. Drift is
 	// what the daemon concluded from that, the context fill and the diff:

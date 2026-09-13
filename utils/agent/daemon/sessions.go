@@ -163,6 +163,12 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 			_ = usage.RecordWait(d.Dir, usage.Wait{At: now.UTC(), Kind: kind, Label: label, Profile: s.Profile, Seconds: secs})
 		}
 	}
+	// A prompt the workspace's policy answers is answered here and never
+	// rings: a read is a read.
+	if to == sessions.StatusNeedsInput && s.Pending != nil && d.allowsByPolicy(s) {
+		go d.autoAllow(s)
+		return
+	}
 	// A permission prompt is the one notification a phone can answer from
 	// the lock screen: it carries the session id, and the Allow / Deny
 	// buttons the app registered for this category.

@@ -22,6 +22,8 @@ import (
 //              the next message, and the row says "handed to api·auth".
 //   autoMerge  a pull request of mine that the forge calls ready — checks
 //              green, approved — is merged, and the inbox says so.
+//   autoAllow  a permission prompt for a tool that only reads is answered
+//              by the daemon, and the session's row counts it.
 
 // automation is the two switches for a workspace, as the config says now.
 func (d *Daemon) automation(spec WatchSpec) (handOver, autoMerge bool) {
@@ -120,3 +122,54 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 		go d.notifyAttentionAt("corgi agent · "+spec.Workspace, "merged "+link+" — checks ✓ · approved", spec.Workspace, link)
 	}
 }
+
+// allowsByPolicy says whether the prompt a session just raised is one the
+// workspace's policy answers: the tool only reads, the policy is reads,
+// and the session sits in iTerm2 — the one host that takes keys without
+// its window coming forward, so nothing on the desk moves. A Bash command
+// is never a read here, whatever it says; elsewhere the prompt rings as
+// it always did.
+func (d *Daemon) allowsByPolicy(s sessions.Session) bool {
+	if d.AllowPolicy == nil || s.Pending == nil || s.Pending.Risk != config.AutoAllowReads || s.Pending.Tool == "Bash" {
+		return false
+	}
+	if s.Host.Kind != sessions.HostITerm {
+		return false
+	}
+	return d.AllowPolicy(s) == config.AutoAllowReads
+}
+
+// autoAllow presses Enter into the session for the prompt it raised, a
+// beat after the prompt was drawn, and counts it on the row. The prompt
+// may have been answered at the keyboard meanwhile; then there is nothing
+// pending and nothing is typed.
+func (d *Daemon) autoAllow(s sessions.Session) {
+	d.swaps.Add(1)
+	defer d.swaps.Done()
+	time.Sleep(autoAllowDelay)
+	keys, err := d.Sessions.PendingAnswer(s.ID, "allow")
+	if err != nil {
+		return
+	}
+	target, err := d.Sessions.Focus(s.ID)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), focusBudget)
+	defer cancel()
+	if err := d.deliverText(ctx, target, keys, false); err != nil {
+		utils.Infof("agent: allow %s for %s: %v\n", s.Pending.Tool, s.Label, err)
+		return
+	}
+	label := s.Display
+	if label == "" {
+		label = s.Label
+	}
+	utils.Infof("agent: allowed %s %s for %s — the workspace's reads policy\n", s.Pending.Tool, s.Pending.Subject, label)
+	d.Sessions.AutoAllowed(s.ID)
+	d.flushSessions()
+}
+
+// autoAllowDelay is how long after the prompt appears the Enter lands:
+// enough for Claude Code to draw it, short enough that nobody notices.
+var autoAllowDelay = 400 * time.Millisecond
