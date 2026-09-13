@@ -162,6 +162,9 @@ type Event struct {
 	// so the board can say a session is on the ticket before any branch is.
 	Ticket    string `json:"ticket,omitempty"`
 	TicketKey string `json:"ticketKey,omitempty"`
+	// Attempt is CORGI_ATTEMPT: "<ref>/<n>" when the session is one of
+	// several opened on the same ticket to compare — a fan-out.
+	Attempt string `json:"attempt,omitempty"`
 	// Bot is CORGI_BOT: the named bot this session was opened as.
 	Bot string `json:"bot,omitempty"`
 	// Agent names the CLI the event came from when it is not Claude Code
@@ -263,6 +266,9 @@ type Session struct {
 	// "ABC-1,ABC-2"), TicketKey the inbox key; from the launcher's env.
 	Ticket    string `json:"ticket,omitempty"`
 	TicketKey string `json:"ticketKey,omitempty"`
+	// Attempt is "<ref>/<n>" for one of several sessions opened on the same
+	// ticket to compare; the board groups them and one gets picked.
+	Attempt string `json:"attempt,omitempty"`
 	// Home is the directory the session started in: Claude Code names
 	// its transcript folder after it, whatever the session has cd'd to since.
 	Home string `json:"home,omitempty"`
