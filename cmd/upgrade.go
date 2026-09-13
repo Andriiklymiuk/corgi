@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/daemon"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -305,7 +306,33 @@ func refreshDaemonAfterUpgrade(exePath string) {
 		fmt.Println("Run `corgi agent install` yourself.")
 		return
 	}
+	// install bounces the login service; a daemon `agent up` started by hand
+	// is not the service's and keeps running the old corgi. Ask it to move.
+	if old := runningDaemonVersion(); old != "" && old != APP_VERSION {
+		if out, err := exec.Command(exePath, "agent", "restart").CombinedOutput(); err != nil {
+			fmt.Printf("The daemon still runs corgi %s — `corgi agent restart` failed: %s\n%s", old, err, out)
+			return
+		}
+		if now := runningDaemonVersion(); now != "" && now != APP_VERSION {
+			fmt.Printf("The daemon still runs corgi %s — run `corgi agent restart` yourself.\n", now)
+			return
+		}
+	}
 	fmt.Println("Daemon restarted from the new corgi.")
+}
+
+// runningDaemonVersion is what the daemon's own record says it runs, or ""
+// when none is running.
+func runningDaemonVersion() string {
+	dir, err := agentDir()
+	if err != nil {
+		return ""
+	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil || info == nil {
+		return ""
+	}
+	return info.Version
 }
 
 func mustStableDaemonBinary() string {
