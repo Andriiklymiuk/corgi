@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -58,6 +59,11 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		ticketKey, _ := cmd.Flags().GetString("ticket-key")
 		wanted, _ := cmd.Flags().GetString("workspace")
 		isolate, _ := cmd.Flags().GetBool("isolate")
+		attempt, _ := cmd.Flags().GetInt("attempt")
+		if attempt > 0 {
+			// One of several on the same ticket: a worktree each, always.
+			isolate = true
+		}
 		botName, _ := cmd.Flags().GetString("bot")
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -106,7 +112,11 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		// starts in the workspace's own.
 		var isolation string
 		if isolate {
-			branch := daemon.FixBranch(isolationRef(ticket, time.Now()))
+			ref := isolationRef(ticket, time.Now())
+			if attempt > 0 {
+				ref += "-" + strconv.Itoa(attempt)
+			}
+			branch := daemon.FixBranch(ref)
 			trees, start, err := isolateWorkspace(cwd, branch)
 			if err != nil {
 				exitWithError("agent_claude", fmt.Errorf("could not isolate: %v", err), 2)
@@ -175,6 +185,9 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		}
 		if isolate {
 			env = append(env, "CORGI_ISOLATED=1")
+		}
+		if attempt > 0 {
+			env = append(env, "CORGI_ATTEMPT="+isolationRef(ticket, time.Now())+"/"+strconv.Itoa(attempt))
 		}
 		if bot != nil {
 			env = append(env, "CORGI_BOT="+bot.Name)
@@ -382,6 +395,7 @@ func init() {
 	agentClaudeCmd.Flags().String("prompt-id", "", "Start with the prompt saved under this id by the phone launcher; the file is read once and removed")
 	agentClaudeCmd.Flags().String("ticket", "", "The tracker ref(s) this session works on (ABC-1 or ABC-1,ABC-2): the board shows it on the ticket")
 	agentClaudeCmd.Flags().String("ticket-key", "", "The inbox key of that ticket, with --ticket")
+	agentClaudeCmd.Flags().Int("attempt", 0, "This session is attempt N of several on the same ticket (corgi agent watch work --attempts): its own worktree on corgi/<ticket>-N, and the board groups them")
 	agentClaudeCmd.Flags().Bool("isolate", false, "Start in a worktree of its own on a corgi/<ticket> branch — every repository of the stack gets one — so this session never touches your checkout")
 	agentClaudeCmd.Flags().String("bot", "", "Open as this bot (corgi agent bot list): its workspace, account, model and persona, resuming its last conversation")
 	agentClaudeCmd.Flags().Bool("show", false, "Print the resolved command and exit")

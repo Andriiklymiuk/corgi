@@ -638,6 +638,9 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.Ticket != "" {
 		s.Ticket, s.TicketKey = ev.Ticket, ev.TicketKey
 	}
+	if ev.Attempt != "" {
+		s.Attempt = ev.Attempt
+	}
 	if ev.Summary != "" {
 		s.Summary = ev.Summary
 	}

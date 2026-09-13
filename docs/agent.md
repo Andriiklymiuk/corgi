@@ -299,6 +299,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
+| `corgi agent attempts [ref] [pick <ref> <n>]` | the sessions a fan-out opened on a ticket (`watch work --attempts 3 --models opus,sonnet`), side by side — status, changes, tests, done-when, cost, PR — and keep one (2.22) |
 | `corgi agent event <start\|prompt\|tool\|done\|fail\|permission\|stop\|end>` | one event from an agent that is not Claude Code — Codex, Gemini CLI, your own — so its session sits on the board with the agent's name, its tool's risk word and its host (2.22) |
 | `corgi agent lesson add\|list` | what the workspace learned the hard way, one line each, outside the repo; `watch enable --lessons` has the daemon write reviews on your PRs, red done-when checks and failed bot runs; the context hook points every new session at the file (2.22) |
 | `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own — and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief` fills a bot from a ready-made one (2.21). A run that fails gets one more try a model up — haiku → sonnet → opus — and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
@@ -1151,6 +1152,25 @@ Both are empty by default, so no existing setup starts writing to a board it
 was not asked to. `corgi agent watch board --refresh` prints the real column
 names; a name that is not on that list is refused, and Jira also decides which
 moves are legal from where the ticket currently sits.
+
+### Several tries at once
+
+```bash
+corgi agent watch work ABC-123 --attempts 3 --models opus,sonnet
+corgi agent attempts ABC-123
+corgi agent attempts pick ABC-123 2
+```
+
+`--attempts` opens that many sessions on the ticket (at most five), each in
+a worktree of its own on `corgi/ABC-123-N`, on the models named in turn,
+the same prompt each. The board knows them by `attempt` (`ABC-123/2`), and
+`corgi agent attempts` puts them side by side: status, what each built,
+whether its tests and the workspace's done-when passed, what it cost, the
+pull request it opened, its last word. `pick` keeps one — a note on it, an
+interrupt and a note on each other still working; their worktrees stay
+until you remove them (`corgi agent watch undo`). The phone reads and picks
+the same through `/launch/attempts`; `/launch/work-on` takes `attempts` and
+`models`.
 
 ### A worktree of its own
 

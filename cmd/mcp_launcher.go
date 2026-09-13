@@ -3563,6 +3563,12 @@ func launchSessionFor(ref string) (sessions.Session, int, string) {
 }
 
 func launchBoardCommand(w http.ResponseWriter, c command.Command) {
+	launchBoardCommands(w, []command.Command{c})
+}
+
+// launchBoardCommands writes several commands and nudges once: a fan-out
+// is one press.
+func launchBoardCommands(w http.ResponseWriter, cmds []command.Command) {
 	dir, err := agentDir()
 	if err != nil {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
@@ -3573,12 +3579,18 @@ func launchBoardCommand(w http.ResponseWriter, c command.Command) {
 		writeLaunchError(w, http.StatusServiceUnavailable, "the corgi daemon is not running on that machine")
 		return
 	}
-	if _, err := command.Write(dir, c); err != nil {
-		writeLaunchError(w, http.StatusInternalServerError, err.Error())
-		return
+	for _, c := range cmds {
+		if _, err := command.Write(dir, c); err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	daemon.Nudge(info)
-	writeLaunchJSON(w, map[string]any{"ok": true, "action": c.Action})
+	out := map[string]any{"ok": true, "action": cmds[0].Action}
+	if len(cmds) > 1 {
+		out["count"] = len(cmds)
+	}
+	writeLaunchJSON(w, out)
 }
 
 // A new chat from the phone: a window, a prompt, a model, a profile. The
@@ -4271,10 +4283,20 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		From    string   `json:"from"` // phone (default) or page
 		// Isolate asks for a worktree of the session's own.
 		Isolate bool `json:"isolate"`
+		// Attempts opens that many sessions on the ticket to compare, on
+		// Models in turn; the board groups them under the ticket.
+		Attempts int      `json:"attempts"`
+		Models   []string `json:"models"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
 		return
+	}
+	for _, m := range req.Models {
+		if m != "" && !validModel(m) {
+			writeLaunchError(w, http.StatusBadRequest, "model: letters, digits, dots and dashes only")
+			return
+		}
 	}
 	dir, err := agentDir()
 	if err != nil {
@@ -4289,12 +4311,12 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.From) == "page" {
 		source = "page"
 	}
-	c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: req.Window, Model: req.Model, Profile: req.Profile, Source: source, Isolate: req.Isolate})
+	cmds, status, msg := workOnCommands(dir, keys, workOnOptions{Window: req.Window, Model: req.Model, Profile: req.Profile, Source: source, Isolate: req.Isolate}, req.Attempts, req.Models)
 	if status != 0 {
 		writeLaunchError(w, status, msg)
 		return
 	}
-	launchBoardCommand(w, c)
+	launchBoardCommands(w, cmds)
 }
 
 // ticketRefPattern is what a ref may look like on a command line: a key,
@@ -4308,7 +4330,43 @@ type workOnOptions struct {
 	Window, Model, Profile, Source string
 	// Isolate: the session gets a worktree of its own on corgi/<ref>.
 	Isolate bool
+	// Attempt is N when this is one of several sessions on the ticket, to
+	// compare; each gets its own worktree on corgi/<ref>-N.
+	Attempt int
 }
+
+// workOnCommands is workOnCommand for a fan-out: n sessions on the same
+// ticket, each an attempt of its own, on the models given in turn (one
+// model for all when one is given; the default when none). The picks and
+// the board move happen once.
+func workOnCommands(dir string, keys []string, opt workOnOptions, n int, models []string) ([]command.Command, int, string) {
+	if n < 1 {
+		n = 1
+	}
+	if n > maxAttempts {
+		return nil, http.StatusBadRequest, fmt.Sprintf("at most %d attempts at once", maxAttempts)
+	}
+	var out []command.Command
+	for i := 1; i <= n; i++ {
+		o := opt
+		if n > 1 {
+			o.Attempt, o.Isolate = i, true
+		}
+		if len(models) > 0 {
+			o.Model = strings.TrimSpace(models[(i-1)%len(models)])
+		}
+		c, status, msg := workOnCommand(dir, keys, o)
+		if status != 0 {
+			return nil, status, msg
+		}
+		out = append(out, c)
+	}
+	return out, 0, ""
+}
+
+// maxAttempts is how many sessions a fan-out opens at most: each is a
+// worktree, a terminal and a bill.
+const maxAttempts = 5
 
 // workOnCommand is the new-session command that hands watch events to a
 // real chat — the daemon's own fix prompt, in the ticket's own checkout. The
@@ -4413,6 +4471,9 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 	}
 	if opt.Isolate {
 		args = append(args, "--isolate")
+	}
+	if opt.Attempt > 0 {
+		args = append(args, "--attempt", strconv.Itoa(opt.Attempt))
 	}
 	args = append(args, "--prompt-id", id)
 	return command.Command{Action: command.ActionNew, WindowID: window,

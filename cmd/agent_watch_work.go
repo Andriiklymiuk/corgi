@@ -18,6 +18,7 @@ you can watch and steer. What the page's "Work on it" and the phone do.
   corgi agent watch work ABC-123
   corgi agent watch work ABC-123 ABC-124            one session, both stories
   corgi agent watch work ABC-123 --model opus --profile work
+  corgi agent watch work ABC-123 --attempts 3 --models opus,sonnet    three sessions, a worktree each; corgi agent attempts compares them
 
 A REF is what the inbox shows; a key (linear:ABC-123:comment:…) is what --json
 prints. A ref names its newest row. The daemon must be running.`,
@@ -38,14 +39,22 @@ prints. A ref names its newest row. The daemon must be running.`,
 		profile, _ := cmd.Flags().GetString("profile")
 		from, _ := cmd.Flags().GetString("from")
 		isolate, _ := cmd.Flags().GetBool("isolate")
+		attempts, _ := cmd.Flags().GetInt("attempts")
+		modelList, _ := cmd.Flags().GetString("models")
 		if from != "editor" && from != "bar" {
 			from = "cli"
 		}
-		c, status, msg := workOnCommand(dir, keys, workOnOptions{Window: window, Model: model, Profile: profile, Source: from, Isolate: isolate})
+		cmds, status, msg := workOnCommands(dir, keys, workOnOptions{Window: window, Model: model, Profile: profile, Source: from, Isolate: isolate}, attempts, splitList(modelList))
 		if status != 0 {
 			exitWithError("agent_watch_work", fmt.Errorf("%s", msg), 1)
 		}
-		sendBoardCommand(c, fmt.Sprintf("asked the editor for a session on %s — `corgi agent sessions` in a moment", strings.Join(args, ", ")))
+		for i, c := range cmds {
+			done := fmt.Sprintf("asked the editor for a session on %s — `corgi agent sessions` in a moment", strings.Join(args, ", "))
+			if len(cmds) > 1 {
+				done = fmt.Sprintf("asked the editor for attempt %d of %d on %s — `corgi agent attempts` compares them", i+1, len(cmds), strings.Join(args, ", "))
+			}
+			sendBoardCommand(c, done)
+		}
 	},
 }
 
@@ -67,6 +76,8 @@ func init() {
 	agentWatchWorkCmd.Flags().String("model", "", "claude model for the session")
 	agentWatchWorkCmd.Flags().String("profile", "", "corgi profile (account) for the session")
 	agentWatchWorkCmd.Flags().String("from", "", "who pressed it, for the board: editor or bar")
+	agentWatchWorkCmd.Flags().Int("attempts", 0, "Open this many sessions on the ticket to compare (at most 5), a worktree each on corgi/<ref>-N; corgi agent attempts lists them and picks one")
+	agentWatchWorkCmd.Flags().String("models", "", "The models the attempts run on, in turn (comma separated) — opus,sonnet,haiku; with one, all use it")
 	agentWatchWorkCmd.Flags().Bool("isolate", false, "a worktree of the session's own on corgi/<ref>, one per repository — it never touches your checkout")
 	_ = agentWatchWorkCmd.Flags().MarkHidden("from")
 	agentWatchCmd.AddCommand(agentWatchWorkCmd)
