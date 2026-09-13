@@ -126,6 +126,9 @@ func driftReasonsFrom(s sessions.Session, lines int, files []string, ok bool) (l
 	if !ok {
 		return loud, nil
 	}
+	if s.Behind != nil && len(s.Behind.Conflicts) > 0 {
+		reasons = append(reasons, "main moved: would conflict in "+sessions.JoinFiles(s.Behind.Conflicts, 3)+" — rebase before it grows")
+	}
 	limit := driftLinesFloor
 	if hasScope && sc.Lines > 0 {
 		limit = 2 * sc.Lines
@@ -198,6 +201,13 @@ func (d *Daemon) checkDrift(now time.Time) {
 				touched = touched[:sessions.TouchedMax]
 			}
 			c = &sessions.Changes{Files: len(m.files), Lines: m.lines, Touched: touched, At: now}
+		}
+		if m.ok && len(m.files) > 0 {
+			if commits, conflicts, upstream, ok := behindOf(s.Cwd); ok {
+				d.Sessions.SetBehind(s.ID, &sessions.Behind{Commits: commits, Conflicts: conflicts, Upstream: upstream, At: now})
+			}
+		} else {
+			d.Sessions.SetBehind(s.ID, nil)
 		}
 		if _, crossed := d.Sessions.SetChanges(s.ID, c, overlaps[s.ID]); crossed {
 			label := s.Display

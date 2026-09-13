@@ -306,6 +306,9 @@ type Session struct {
 	Changes *Changes  `json:"changes,omitempty"`
 	Overlap []Overlap `json:"overlap,omitempty"`
 	Tests   *TestRun  `json:"tests,omitempty"`
+	// Behind is how far the base branch has moved since this branch left
+	// it, and the files the two would conflict on, from the minute sweep.
+	Behind *Behind `json:"behind,omitempty"`
 	// Gate is the last done-when run the daemon made for this session —
 	// the workspace's own definition of finished, checked when it stopped.
 	Gate *GateRun `json:"gate,omitempty"`
@@ -357,6 +360,36 @@ type TestRun struct {
 	OK  bool      `json:"ok"`
 	At  time.Time `json:"at"`
 	Cmd string    `json:"cmd"`
+}
+
+// Behind is main having moved: Commits since the merge base, Conflicts the
+// files a rebase would stop on, Upstream the ref measured against. Told
+// says the daemon already acted on this state — rebased, or typed the
+// conflicts into the session — so it does not repeat itself; Rebased
+// counts the rebases it made.
+type Behind struct {
+	Commits   int       `json:"commits"`
+	Conflicts []string  `json:"conflicts,omitempty"`
+	Upstream  string    `json:"upstream,omitempty"`
+	At        time.Time `json:"at"`
+	Told      bool      `json:"told,omitempty"`
+	Rebased   int       `json:"rebased,omitempty"`
+}
+
+// JoinFiles names up to n files by their base name, "+k more" after.
+func JoinFiles(files []string, n int) string {
+	names := []string{}
+	for i, f := range files {
+		if i == n {
+			names = append(names, "+"+strconv.Itoa(len(files)-n)+" more")
+			break
+		}
+		if i := strings.LastIndex(f, "/"); i >= 0 {
+			f = f[i+1:]
+		}
+		names = append(names, f)
+	}
+	return strings.Join(names, ", ")
 }
 
 // GateRun is one pass over a workspace's done-when commands. Cmd is the

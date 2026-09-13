@@ -337,6 +337,11 @@ type WatchConfig struct {
 	// forgets what it was doing. 0 is off; 85 is the number the board
 	// already goes red at.
 	CompactAt int `yaml:"compactAt,omitempty"`
+	// Rebase rebases a session's branch onto main where it sits when the
+	// session stops behind main with a clean tree and no conflicts. Off by
+	// default: it rewrites a branch. (A branch that would conflict is
+	// typed into the session instead, under handOver.)
+	Rebase bool `yaml:"rebase,omitempty"`
 }
 
 // AutoAllowReads is the one permission policy a workspace can hold.

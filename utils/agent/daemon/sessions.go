@@ -172,6 +172,7 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		go func() {
 			defer d.swaps.Done()
 			d.compactIfFull(s)
+			d.onMainMoved(s)
 		}()
 		d.gateDone(s)
 	}

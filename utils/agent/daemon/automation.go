@@ -31,6 +31,9 @@ import (
 //              next message, so "done" means the tests say so.
 //   compactAt  a session past that much context is told to /compact the
 //              next time it stops, before it forgets.
+//   rebase     a session that stops behind main with no conflicts and a
+//              clean tree is rebased where it sits; with handOver, one
+//              that would conflict is told which files.
 
 // Policy is the part of a workspace's watch config that concerns a live
 // session rather than the tracker.
@@ -38,6 +41,10 @@ type Policy struct {
 	AutoAllow string
 	DoneWhen  []string
 	CompactAt int
+	// HandOver and Rebase are what a session behind main gets when it
+	// stops: the conflicts typed in, or a rebase where it sits.
+	HandOver bool
+	Rebase   bool
 }
 
 // automation is the two switches for a workspace, as the config says now.
