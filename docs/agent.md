@@ -1865,6 +1865,20 @@ the whole fix.
   materialize branches. The permission prompts you answer from your phone are
   the defence, which is why weakening them is refused.
 
+## The stack from the phone
+
+`/launch/stack?workspace=<id>` is the workspace's `corgi-compose.yml` at a
+glance — every service and database, running or not, on what port (what
+`corgi ps --json` says) — and `compose: false` for a workspace without one,
+so the phone shows nothing there. `POST {workspace, do, services}` runs the
+stack the way the keyboard would, in the workspace's directory: `run`
+(`corgi run --detach --ci --logs`, `--services` when some are picked),
+`stop` (`--service` when one is picked), `restart`, and `test` / `e2e`
+(`corgi test [--service x]` / `corgi test --e2e`) in the background with a
+push and a toast when they end. Service names are letters, digits, dots and
+dashes; anything else is refused before anything runs. Also `all=1` on
+`/launch/diff` for the whole branch in one body (2.22.3).
+
 ## A phone app
 
 The Claude app already covers the conversation. What it has no concept of —

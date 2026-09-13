@@ -77,16 +77,41 @@ func diffFiles(ctx context.Context, dir, base string) ([]DiffFile, error) {
 	return files, nil
 }
 
+// diffAllMax bounds the whole branch in one body: a phone that asked for
+// everything at once gets the first files whole and a note where it cut.
+const diffAllMax = 600 << 10
+
 // diffPatch is one file's unified diff against the base, cut at diffPatchMax.
+// An empty path is the whole branch, cut at diffAllMax — generated files
+// (lock files, bundles) left out, since nobody reads those on a phone.
 func diffPatch(ctx context.Context, dir, base, path string) (patch string, truncated bool, err error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "diff", "--no-color", "--unified=3", base, "--", path).Output()
+	args := []string{"-C", dir, "diff", "--no-color", "--unified=3", base, "--"}
+	limit := diffPatchMax
+	if path == "" {
+		limit = diffAllMax
+		files, ferr := diffFiles(ctx, dir, base)
+		if ferr != nil {
+			return "", false, ferr
+		}
+		for _, f := range files {
+			if !f.Generated && !f.Binary {
+				args = append(args, f.Path)
+			}
+		}
+		if len(args) == 7 {
+			return "", false, nil
+		}
+	} else {
+		args = append(args, path)
+	}
+	out, err := exec.CommandContext(ctx, "git", args...).Output()
 	if err != nil {
 		return "", false, err
 	}
-	if len(out) > diffPatchMax {
-		cut := bytes.LastIndexByte(out[:diffPatchMax], '\n')
+	if len(out) > limit {
+		cut := bytes.LastIndexByte(out[:limit], '\n')
 		if cut < 0 {
-			cut = diffPatchMax
+			cut = limit
 		}
 		return string(out[:cut]), true, nil
 	}
@@ -94,7 +119,8 @@ func diffPatch(ctx context.Context, dir, base, path string) (patch string, trunc
 }
 
 // launchDiffHandler: GET /launch/diff?session=<id> lists the files;
-// &file=<path> answers with that file's patch.
+// &file=<path> answers with that file's patch; &all=1 with every file's,
+// one body, for a phone that would rather scroll than tap.
 func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -120,6 +146,15 @@ func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 	base := diffBase(ctx, dir)
 	if base == "" {
 		writeLaunchJSON(w, map[string]any{"session": session.ID, "files": []DiffFile{}, "base": "", "note": "no main branch to diff against"})
+		return
+	}
+	if r.URL.Query().Get("all") == "1" {
+		patch, truncated, err := diffPatch(ctx, dir, base, "")
+		if err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, "git could not diff the branch")
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"session": session.ID, "file": "", "patch": patch, "truncated": truncated, "base": base[:min(12, len(base))]})
 		return
 	}
 	if file := r.URL.Query().Get("file"); file != "" {
