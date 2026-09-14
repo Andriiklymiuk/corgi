@@ -105,6 +105,36 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	if cards[0].Column != ColInbox || cards[len(cards)-1].Column != ColDone {
 		t.Errorf("columns in order: %s … %s", cards[0].Column, cards[len(cards)-1].Column)
 	}
+	// Every card carries the ladder's word, so no surface works it out
+	// its own way: the same green pull request is "ready to merge" on the
+	// board, in the inbox and on the phone.
+	standing := map[string]string{"ABC-1": sessions.StandNew, "ABC-2": sessions.StandWorking, "ABC-3": sessions.StandReady,
+		"ABC-4": sessions.StandBlocked, "ABC-5": sessions.StandDone, "ABC-7": sessions.StandWorking, "ABC-8": sessions.StandHandoff,
+		"ABC-9": sessions.StandWorking, "TASK-3": sessions.StandReview, "TASK-4": sessions.StandDone}
+	for ref, word := range standing {
+		if got[ref].Standing.Word != word {
+			t.Errorf("%s stands %q (%s), want %q", ref, got[ref].Standing.Word, got[ref].Standing.Why, word)
+		}
+	}
+	if got["ABC-3"].Standing.Why != "checks ✓ · approved" || got["ABC-4"].Standing.Why != "no token" {
+		t.Errorf("the clause behind the word: %q / %q", got["ABC-3"].Standing.Why, got["ABC-4"].Standing.Why)
+	}
+}
+
+func TestRowStandingReadsThePullFirst(t *testing.T) {
+	open := &watch.PullStatus{State: "open", Checks: "failing"}
+	if st := rowStanding(open, "https://github.com/a/b/pull/1", "", &CardSess{Status: "working"}); st.Word != sessions.StandChecksRed {
+		t.Fatalf("checks red beats a working session: %q", st.Word)
+	}
+	if st := rowStanding(nil, "https://github.com/a/b/pull/1", "", nil); st.Word != sessions.StandPROpen {
+		t.Fatalf("a link alone: %q", st.Word)
+	}
+	if st := rowStanding(nil, "", "", &CardSess{Status: "needs_input"}); st.Word != sessions.StandNeedsYou {
+		t.Fatalf("the session on the ticket: %q", st.Word)
+	}
+	if st := rowStanding(nil, "", "", nil); st.Word != sessions.StandNew {
+		t.Fatalf("nothing known: %q", st.Word)
+	}
 }
 
 // A ticket commented on twice: the older comment settled a day ago and

@@ -913,6 +913,19 @@ Every session on the board carries, when known:
   nothing: the daemon rings once and the row keeps saying so, which is the
   point — a session burning a window is seen from the phone, not from the
   invoice.
+- `standing` — where the session stands, in one word and a clause:
+  `{word, why}`, worked out once by the daemon from everything above and
+  the forge's word on its pull request. One ladder, highest rung wins:
+  *merged* › *closed* › *blocked* › *needs you* (a permission prompt, a
+  word wanted, a gate red three times) › *at a limit* › *checks failing* ›
+  *changes requested* › *conflicts* › *tests failing* › *ready to merge* ›
+  *approved* › *draft* › *in review* › *pull request open* › *stuck* ›
+  *working* › *done* › *idle* › *gone*. Kanban cards and inbox rows carry
+  the same `standing`, so the phone, the menu bar, the editor and the deck
+  print the word rather than each reading the facts its own way; slots
+  carry the word. `why` is the clause a row shows after it — *checks ✓ ·
+  approved*, *allow Bash rm -rf build?*, *main moved 4 · conflicts in
+  x.go* (2.23).
 
 And the board carries `accounts[]`: every account the sessions run under (and
 every profile in the config, whether in use or not) with the /usage picture

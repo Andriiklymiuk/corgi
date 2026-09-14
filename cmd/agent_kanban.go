@@ -65,6 +65,10 @@ type KanbanCard struct {
 	// session linked. Ready to merge is Pull.Ready().
 	Pull      *watch.PullStatus `json:"pull,omitempty"`
 	UpdatedAt time.Time         `json:"updatedAt"`
+	// Standing is the card's one word and clause from the ladder — what a
+	// surface prints on the row instead of reading Pull and Session its
+	// own way.
+	Standing sessions.Standing `json:"standing"`
 }
 
 type CardCost struct {
@@ -345,6 +349,9 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 		}
 	}
 
+	for _, c := range byRef {
+		c.Standing = cardStanding(c)
+	}
 	out := make([]KanbanCard, 0, len(byRef))
 	// A ref can enter order twice: an old settled event drops its card,
 	// then a newer event on the same ref makes it again. One card per ref.
@@ -366,6 +373,52 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
 	return out
+}
+
+// cardStanding runs the ladder over what the card knows. The column still
+// decides where the card sits; the standing is the finer word on it, and a
+// Done card is done whatever its session is up to.
+func cardStanding(c *KanbanCard) sessions.Standing {
+	f := sessions.Facts{PR: cardPullLink(c), Blocked: c.Blocked}
+	if c.Pull != nil {
+		p := c.Pull.Facts()
+		f.Pull = &p
+	}
+	if c.Session != nil {
+		f.Status = sessions.Status(c.Session.Status)
+	}
+	if c.Handoff != nil && c.Column == ColReady {
+		f.Handoff = strings.TrimPrefix(c.Why, "handoff: ")
+	}
+	st := sessions.StandingOf(f)
+	if c.Column == ColDone && st.Word != sessions.StandMerged {
+		return sessions.Standing{Word: sessions.StandDone}
+	}
+	if st.Word == sessions.StandNew {
+		switch c.Column {
+		case ColRunning:
+			st.Word = sessions.StandWorking
+		case ColReview:
+			st.Word = sessions.StandReview
+		case ColBlocked:
+			st = sessions.Standing{Word: sessions.StandBlocked, Why: c.Why}
+		}
+	}
+	return st
+}
+
+// rowStanding runs the ladder over what an inbox row knows: the pull
+// request it is about or has, a wall, the session on its ticket.
+func rowStanding(pull *watch.PullStatus, pr, blocked string, sess *CardSess) sessions.Standing {
+	f := sessions.Facts{PR: pr, Blocked: blocked}
+	if pull != nil {
+		p := pull.Facts()
+		f.Pull = &p
+	}
+	if sess != nil {
+		f.Status = sessions.Status(sess.Status)
+	}
+	return sessions.StandingOf(f)
 }
 
 // cardPullLink is the pull request a card is about, or has: a run's, its

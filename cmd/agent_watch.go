@@ -20,6 +20,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
@@ -634,6 +635,8 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 			PR     string            `json:"pr,omitempty"`
 			Pull   *watch.PullStatus `json:"pull,omitempty"`
 			Handed *watch.Hand       `json:"handed,omitempty"`
+			// Standing is the row's one word and clause from the ladder.
+			Standing sessions.Standing `json:"standing"`
 		}
 		events := []eventRow{}
 		onTicket := sessionsOnTickets(dir)
@@ -677,6 +680,7 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 				hh := h
 				er.Handed = &hh
 			}
+			er.Standing = rowStanding(er.Pull, er.PR, er.Blocked, er.Session)
 			events = append(events, er)
 		}
 		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events})

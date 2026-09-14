@@ -337,6 +337,10 @@ type Session struct {
 	Spend   *Spend `json:"spend,omitempty"`
 	Cap     int64  `json:"cap,omitempty"`
 	OverCap bool   `json:"overCap,omitempty"`
+	// Standing is where the session stands in one word and a clause,
+	// worked out by the ladder in standing.go when the board is published:
+	// what every surface prints instead of reading the facts its own way.
+	Standing *Standing `json:"standing,omitempty"`
 }
 
 // Spend is a session's running total, in tokens and turns.

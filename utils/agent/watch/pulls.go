@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
@@ -25,37 +26,18 @@ type PullStatus struct {
 	At     time.Time `json:"at"`
 }
 
-// Ready is "nothing stands between this and Merge": open, checks green or
-// absent, approved.
-func (p PullStatus) Ready() bool {
-	return p.State == "open" && (p.Checks == "passing" || p.Checks == "none" || p.Checks == "") && p.Review == "approved"
+// Facts is the status as the standing ladder reads it.
+func (p PullStatus) Facts() sessions.PullFacts {
+	return sessions.PullFacts{State: p.State, Checks: p.Checks, Review: p.Review}
 }
+
+// Ready is "nothing stands between this and Merge": open, checks green or
+// absent, approved. One rule, in the ladder.
+func (p PullStatus) Ready() bool { return sessions.PullReady(p.Facts()) }
 
 // Line is the status in a few words for a row: "checks ✓ · approved",
 // "checks ✗", "changes requested".
-func (p PullStatus) Line() string {
-	var parts []string
-	switch p.Checks {
-	case "passing":
-		parts = append(parts, "checks ✓")
-	case "failing":
-		parts = append(parts, "checks ✗")
-	case "pending":
-		parts = append(parts, "checks running")
-	}
-	switch p.Review {
-	case "approved":
-		parts = append(parts, "approved")
-	case "changes":
-		parts = append(parts, "changes requested")
-	case "pending":
-		parts = append(parts, "review pending")
-	}
-	if p.Ready() {
-		return "ready to merge · " + strings.Join(parts, " · ")
-	}
-	return strings.Join(parts, " · ")
-}
+func (p PullStatus) Line() string { return sessions.PullLine(p.Facts()) }
 
 // PullAsker is a source that can say how a pull request stands: GitHub
 // and GitLab do; the trackers do not.

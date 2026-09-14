@@ -29,6 +29,9 @@ type Registry struct {
 	// ProfileFor names the badge for a CLAUDE_CONFIG_DIR: a corgi profile
 	// name when one points at that directory, else the directory's own name.
 	ProfileFor func(configDir string) string
+	// PullFor is the forge's word on a pull request link, when the daemon
+	// has read one; nil or false leaves the ladder with the link alone.
+	PullFor func(link string) (PullFacts, bool)
 
 	mu sync.Mutex
 	// saveMu orders writers: the command loop, the reaper and a focus
@@ -125,10 +128,12 @@ type Slot struct {
 	Risk    string `json:"risk,omitempty"`
 	Note    string `json:"note,omitempty"`
 	Stuck   bool   `json:"stuck,omitempty"`
-	Branch  string `json:"branch,omitempty"`
-	Summary string `json:"summary,omitempty"`
-	PR      string `json:"pr,omitempty"`
-	Ticket  string `json:"ticket,omitempty"`
+	// Standing is the session's one word from the ladder, for a key.
+	Standing string `json:"standing,omitempty"`
+	Branch   string `json:"branch,omitempty"`
+	Summary  string `json:"summary,omitempty"`
+	PR       string `json:"pr,omitempty"`
+	Ticket   string `json:"ticket,omitempty"`
 	// TurnS is how long the current turn has been running, 0 unless working.
 	TurnS int `json:"turnS,omitempty"`
 	// Limit is quota or overload on a limited key; ResumeAt when the daemon
@@ -1687,6 +1692,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		sl.SessionID, sl.Label, sl.Profile, sl.Status = s.ID, r.displayLocked(s), s.Profile, s.Status
 		sl.Detail, sl.Host, sl.FocusError, sl.FocusAt = s.Detail, s.Host.Kind, s.FocusError, s.FocusAt
 		sl.Note, sl.Stuck = s.Note, s.Stuck
+		sl.Standing = StandingOf(s.Facts(r.pullFactsLocked(s))).Word
 		sl.Limit, sl.ResumeAt = s.Limit, s.ResumeAt
 		if len(s.Drift) > 0 {
 			sl.Drift = s.Drift[0]
@@ -1712,6 +1718,8 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 	for _, s := range r.groupedLocked() {
 		c := *s
 		c.Display = r.displayLocked(s)
+		standing := StandingOf(s.Facts(r.pullFactsLocked(s)))
+		c.Standing = &standing
 		st.Sessions = append(st.Sessions, c)
 		switch s.Status {
 		case StatusNeedsInput:
@@ -1902,4 +1910,16 @@ func shorten(s string, max int) string {
 		return strings.TrimSpace(string(runes[:max-1])) + "…"
 	}
 	return s
+}
+
+// pullFactsLocked asks PullFor about the session's pull request, if both
+// exist.
+func (r *Registry) pullFactsLocked(s *Session) *PullFacts {
+	if r.PullFor == nil || s.PR == "" {
+		return nil
+	}
+	if p, ok := r.PullFor(s.PR); ok {
+		return &p
+	}
+	return nil
 }
