@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 func TestDeferredFixesComeBackOnTheirOwn(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
-	d.fixBusy = map[string]*sync.Mutex{"api": {}}
+	d.fixBusy = map[string]chan struct{}{"api": make(chan struct{}, 1)}
 	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), Action: "fix", Interval: time.Minute}
 	now := time.Now()
 	low := watch.Event{Key: "k-low", Ref: "ABC-1", Workspace: "api", Kind: watch.KindIssueNew, At: now.Add(-2 * time.Hour)}
@@ -67,7 +66,7 @@ func TestDeferredFixesComeBackOnTheirOwn(t *testing.T) {
 func TestADeferredFixOnFinishedWorkIsDroppedInTheMorning(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
-	d.fixBusy = map[string]*sync.Mutex{"api": {}}
+	d.fixBusy = map[string]chan struct{}{"api": make(chan struct{}, 1)}
 	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), Action: "fix", Interval: time.Minute,
 		Rules: watch.Rules{Enabled: true, Comments: true}}
 	now := time.Now()
@@ -107,7 +106,7 @@ func TestADeferredFixOnFinishedWorkIsDroppedInTheMorning(t *testing.T) {
 func TestAFixDoesNotStartOnATicketThatIsDoneNow(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
-	d.fixBusy = map[string]*sync.Mutex{"api": {}}
+	d.fixBusy = map[string]chan struct{}{"api": make(chan struct{}, 1)}
 	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), Action: "fix", Interval: time.Minute,
 		Rules: watch.Rules{Enabled: true, Comments: true}}
 	e := watch.Event{Key: "k-1", Ref: "ABC-1", Workspace: "api", Kind: watch.KindIssueComment,

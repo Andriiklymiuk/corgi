@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 func TestRoutinesRunOnTheClockAndReportToTheInbox(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
-	d.fixBusy = map[string]*sync.Mutex{"api": {}}
+	d.fixBusy = map[string]chan struct{}{"api": make(chan struct{}, 1)}
 	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), Action: "notify",
 		Routines: []config.Routine{{Name: "digest", Kind: "digest", Schedule: "daily 08:30"}, {Name: "off", Kind: "deps", Schedule: "daily 08:30", Off: true}}}
 	d.Watches = []WatchSpec{spec}

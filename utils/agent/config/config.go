@@ -295,6 +295,10 @@ type WatchConfig struct {
 	// touches your checkout and two runs on one repo do not collide. Off by
 	// default: it takes disk and a branch per ticket.
 	Isolate bool `yaml:"isolate,omitempty"`
+	// Slots is how many unattended runs may go at once in this workspace;
+	// 0 and 1 are one at a time. More than one needs isolate, or the runs
+	// would share one checkout — the daemon keeps to one without it.
+	Slots int `yaml:"slots,omitempty"`
 	// Reviews reports pull requests someone asked me to review.
 	Reviews bool `yaml:"reviews,omitempty"`
 	// CI reports builds that went red on something of mine.

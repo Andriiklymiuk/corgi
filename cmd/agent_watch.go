@@ -121,6 +121,16 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("isolate") {
 			wc.Isolate, _ = flags.GetBool("isolate")
 		}
+		if flags.Changed("slots") {
+			if wc.Slots, _ = flags.GetInt("slots"); wc.Slots < 1 || wc.Slots > 8 {
+				return fmt.Errorf("--slots is 1 to 8")
+			}
+			// Two runs at once need two checkouts.
+			if wc.Slots > 1 && !wc.Isolate {
+				wc.Isolate = true
+				utils.Info("agent: --slots above 1 turns on --isolate: each run gets worktrees of its own")
+			}
+		}
 		if flags.Changed("no-retry") {
 			wc.NoRetry, _ = flags.GetBool("no-retry")
 		}
@@ -785,7 +795,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, Isolate: wc.Isolate, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Models: resolved.Models, Routines: resolved.Routines}
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Models: resolved.Models, Routines: resolved.Routines}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
@@ -1118,6 +1128,7 @@ func init() {
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
+	f.Int("slots", 1, "How many unattended runs may go at once in this workspace (1 to 8); above 1 turns on --isolate so each has worktrees of its own")
 	f.Bool("lessons", false, "Write what the workspace learned the hard way — a review on a PR of mine, a check that stayed red, a bot that failed — one line each for every new session to read (corgi agent lesson list)")
 	f.Bool("rebase", false, "Rebase a session's branch onto main where it sits when the session stops behind main with a clean tree and no conflicts (a branch that would conflict is typed into the session under --hand-over)")
 	f.Int("compact-at", 0, "Type /compact into a session past this much context the next time it stops — 85 is where the board goes red; 0 is off")
