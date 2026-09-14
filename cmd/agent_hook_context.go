@@ -16,6 +16,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/lessons"
 	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 	"gopkg.in/yaml.v3"
 )
@@ -87,6 +88,9 @@ func sessionContext(dir string, in contextHookInput, configDir string, now time.
 		if others := otherSessionsHere(rep.State, in.SessionID, root, now); others != "" {
 			lines = append(lines, others)
 		}
+		if claimed := claimedHere(dir, rep.State, in.SessionID, root, now); claimed != "" {
+			lines = append(lines, claimed)
+		}
 		if budget := budgetLine(rep.State, configDir, now); budget != "" {
 			lines = append(lines, budget)
 		}
@@ -139,6 +143,43 @@ func handoffLine(root, branch string, now time.Time) string {
 		line += fmt.Sprintf("; `corgi agent handoff verify %s` re-runs its check", p.Ref)
 	}
 	return line
+}
+
+// claimedHere names the files other live sessions claimed in this
+// repository — the ones to leave alone, or ask about first.
+func claimedHere(dir string, st sessions.State, self, root string, now time.Time) string {
+	if root == "" {
+		return ""
+	}
+	live := map[string]bool{}
+	for _, s := range st.Sessions {
+		if s.Status != sessions.StatusGone {
+			live[s.ID] = true
+		}
+	}
+	repo := sessions.CommonRoot(root)
+	if repo == "" {
+		repo = root
+	}
+	var parts []string
+	for _, c := range watch.LoadFileClaims(dir).Live(live, now) {
+		if c.Session == self || !samePath(c.Repo, repo) {
+			continue
+		}
+		who := c.Label
+		if who == "" {
+			who = "another session"
+		}
+		parts = append(parts, c.Path+" ("+who+")")
+		if len(parts) == 6 {
+			parts = append(parts, "…")
+			break
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "claimed by other sessions, leave alone or ask first: " + strings.Join(parts, ", ")
 }
 
 // otherSessionsHere names the live sessions in the same workspace, so two
