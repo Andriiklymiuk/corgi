@@ -71,7 +71,7 @@ func TestStepNeedsRun_SkipsWhenUnchanged(t *testing.T) {
 	if !run {
 		t.Fatal("first run should execute")
 	}
-	PersistStepHash(svc, 0, hash)
+	PersistStepHash(svc, 0, step, hash)
 
 	run2, _ := StepNeedsRun(svc, 0, step, false)
 	if run2 {
@@ -90,7 +90,7 @@ func TestStepNeedsRun_NoCacheForcesRun(t *testing.T) {
 	svc := Service{ServiceName: "api", AbsolutePath: svcDir + "/"}
 	step := BeforeStartStep{Run: "yarn", CacheKey: []string{"lock"}}
 	_, hash := StepNeedsRun(svc, 0, step, false)
-	PersistStepHash(svc, 0, hash)
+	PersistStepHash(svc, 0, step, hash)
 	if run, _ := StepNeedsRun(svc, 0, step, true); !run {
 		t.Fatal("--no-cache should force run")
 	}
@@ -135,7 +135,7 @@ func TestCacheScopeIsolatesRelocatedWorkdir(t *testing.T) {
 	if !run {
 		t.Fatal("first run must not be cached")
 	}
-	PersistStepHash(main, 0, hash)
+	PersistStepHash(main, 0, step, hash)
 	if run, _ := StepNeedsRun(main, 0, step, false); run {
 		t.Fatal("second run on the same dir should be cached")
 	}
@@ -202,7 +202,7 @@ func TestStepNeedsRunWhenCachedOutputIsGone(t *testing.T) {
 	step := BeforeStartStep{Run: "npm ci", CacheKey: []string{"package-lock.json"}}
 
 	_, hash := StepNeedsRun(svc, 0, step, false)
-	PersistStepHash(svc, 0, hash)
+	PersistStepHash(svc, 0, step, hash)
 
 	if run, _ := StepNeedsRun(svc, 0, step, false); run {
 		t.Fatal("marker plus node_modules present should skip")
@@ -214,5 +214,120 @@ func TestStepNeedsRunWhenCachedOutputIsGone(t *testing.T) {
 	}
 	if run, _ := StepNeedsRun(svc, 0, step, false); !run {
 		t.Fatal("a marker without its node_modules must not skip the install")
+	}
+}
+
+func cachedNodeService(t *testing.T) (Service, BeforeStartStep, string) {
+	t.Helper()
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	svcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(svcDir, "package-lock.json"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(svcDir, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	svc := Service{ServiceName: "api", AbsolutePath: svcDir + "/"}
+	step := BeforeStartStep{Run: "npm ci", CacheKey: []string{"package-lock.json"}}
+	return svc, step, svcDir
+}
+
+// The marker vouches for node_modules, so it lives inside node_modules: one
+// cache entry carries both, and they cannot be restored from different runs.
+func TestStepMarkerLivesInsideTheOutputDir(t *testing.T) {
+	svc, step, svcDir := cachedNodeService(t)
+
+	run, hash := StepNeedsRun(svc, 0, step, false)
+	if !run {
+		t.Fatal("first run must execute")
+	}
+	PersistStepHash(svc, 0, step, hash)
+
+	marker := filepath.Join(svcDir, "node_modules", ".corgi-step-0")
+	if got := readStepHash(marker); got != hash {
+		t.Fatalf("expected the marker at %s with %q, got %q", marker, hash, got)
+	}
+	if _, err := os.Stat(filepath.Join(CorgiServicesDir(), cacheDirName)); !os.IsNotExist(err) {
+		t.Errorf("a step with an output dir must not also write the central marker (stat err: %v)", err)
+	}
+	if run, _ := StepNeedsRun(svc, 0, step, false); run {
+		t.Error("unchanged lockfile plus its own marker must skip")
+	}
+}
+
+// The failure this design removes: CI restored fresh markers next to a
+// node_modules saved weeks earlier. With the marker inside node_modules, a
+// stale restore brings its stale marker along and the hash no longer matches.
+func TestStepNeedsRunWhenRestoredOutputDirIsStale(t *testing.T) {
+	svc, step, svcDir := cachedNodeService(t)
+
+	_, oldHash := StepNeedsRun(svc, 0, step, false)
+	PersistStepHash(svc, 0, step, oldHash)
+
+	// A new commit changes the lockfile; the cache's prefix fallback restores
+	// the previous node_modules, marker included.
+	if err := os.WriteFile(filepath.Join(svcDir, "package-lock.json"), []byte("v2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if run, _ := StepNeedsRun(svc, 0, step, false); !run {
+		t.Fatal("a restored node_modules carrying an older marker must not skip the install")
+	}
+
+	// The other skew: a central marker that matches the new lockfile (a
+	// markers cache saved by a later run) must not vouch for this old
+	// node_modules.
+	_, newHash := StepNeedsRun(svc, 0, step, false)
+	if err := writeStepHash(stepCachePath(svc, 0), newHash); err != nil {
+		t.Fatal(err)
+	}
+	if run, _ := StepNeedsRun(svc, 0, step, false); !run {
+		t.Fatal("a central marker must not vouch for an output dir that carries a different one")
+	}
+}
+
+// go.sum installs only into a shared home cache, so there is no directory to
+// carry the marker; those steps keep the central one.
+func TestStepMarkerStaysCentralWithoutAnOutputDir(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	svcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(svcDir, "go.sum"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := Service{ServiceName: "api", AbsolutePath: svcDir + "/"}
+	step := BeforeStartStep{Run: "go mod download", CacheKey: []string{"go.sum"}}
+
+	_, hash := StepNeedsRun(svc, 0, step, false)
+	PersistStepHash(svc, 0, step, hash)
+	if got := readStepHash(stepCachePath(svc, 0)); got != hash {
+		t.Fatalf("expected the central marker, got %q", got)
+	}
+	if run, _ := StepNeedsRun(svc, 0, step, false); run {
+		t.Error("unchanged go.sum must skip")
+	}
+}
+
+// pip without a venv never produces .venv; the marker must not invent one.
+func TestStepMarkerDoesNotCreateAMissingOutputDir(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	svcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(svcDir, "requirements.txt"), []byte("a==1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := Service{ServiceName: "worker", AbsolutePath: svcDir + "/"}
+	step := BeforeStartStep{Run: "pip install -r requirements.txt", CacheKey: []string{"requirements.txt"}}
+
+	_, hash := StepNeedsRun(svc, 0, step, false)
+	PersistStepHash(svc, 0, step, hash)
+	if _, err := os.Stat(filepath.Join(svcDir, ".venv")); !os.IsNotExist(err) {
+		t.Errorf("persisting a marker must not create .venv (stat err: %v)", err)
 	}
 }

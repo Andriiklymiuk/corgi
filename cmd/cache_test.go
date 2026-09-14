@@ -83,7 +83,7 @@ func TestGitLabCacheWriteThenCheckRoundTrips(t *testing.T) {
 func resetCachePathsFlags(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		for _, name := range []string{"gitlab", "key"} {
+		for _, name := range []string{"gitlab", "key", "strict"} {
 			_ = cachePathsCmd.Flags().Set(name, "false")
 		}
 		for _, name := range []string{"out", "check", "path-prefix"} {
@@ -169,5 +169,197 @@ func TestCachePathsGitLabPathPrefix(t *testing.T) {
 	})
 	if !strings.Contains(out, "workspace/.corgi/corgi_services/.cache") {
 		t.Errorf("expected every path under the prefix:\n%s", out)
+	}
+}
+
+// chdirToCachedCompose writes a compose whose one service opts into caching,
+// so the plan has a cacheKey file to be present or missing.
+func chdirToCachedCompose(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	yml := "name: test\nservices:\n  web:\n    path: ./web\n    port: 3000\n" +
+		"    beforeStart:\n      - run: npm ci\n        cacheKey: [package-lock.json]\n"
+	if err := os.WriteFile(filepath.Join(dir, "corgi-compose.yml"), []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func writeLockfile(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "web", "package-lock.json"), []byte(`{"v":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The CI failure this guards: the action hashes the lockfiles before
+// `corgi init` clones them, gets a stable key from nothing, and the cache never
+// invalidates. Silence is what let that ship stale node_modules for weeks.
+func TestCachePathsWarnsWhenCacheKeyFilesAreMissing(t *testing.T) {
+	chdirToCachedCompose(t)
+	resetCachePathsFlags(t)
+	t.Setenv("GITHUB_ACTIONS", "")
+
+	var stderr string
+	stdout := captureStdout(t, func() {
+		stderr = captureStderr(t, func() { runRoot(t, "cache", "paths") })
+	})
+	if !strings.Contains(stderr, "web/package-lock.json") {
+		t.Errorf("stderr must name the missing file:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "corgi init") {
+		t.Errorf("stderr must say to run this after corgi init:\n%s", stderr)
+	}
+	if strings.Contains(stdout, "package-lock.json") {
+		t.Errorf("the warning must not land in the path list on stdout:\n%s", stdout)
+	}
+}
+
+func TestCachePathsKeyWarnsWhenCacheKeyFilesAreMissing(t *testing.T) {
+	chdirToCachedCompose(t)
+	resetCachePathsFlags(t)
+	t.Setenv("GITHUB_ACTIONS", "")
+
+	var stderr string
+	stdout := captureStdout(t, func() {
+		stderr = captureStderr(t, func() { runRoot(t, "cache", "paths", "--key") })
+	})
+	if !strings.Contains(stderr, "web/package-lock.json") {
+		t.Errorf("--key must warn on stderr too:\n%s", stderr)
+	}
+	if strings.TrimSpace(stdout) == "" || strings.Contains(stdout, "\n\n") || !strings.HasPrefix(stdout, "corgi-deps-") {
+		t.Errorf("--key stdout must stay the bare key:\n%q", stdout)
+	}
+}
+
+// Under GitHub Actions the warning becomes a job annotation, which is where a
+// person looks when a nightly goes red.
+func TestCachePathsWarnsAsGitHubAnnotation(t *testing.T) {
+	chdirToCachedCompose(t)
+	resetCachePathsFlags(t)
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	var stderr string
+	captureStdout(t, func() {
+		stderr = captureStderr(t, func() { runRoot(t, "cache", "paths") })
+	})
+	if !strings.Contains(stderr, "::warning::") || !strings.Contains(stderr, "web/package-lock.json") {
+		t.Errorf("expected a ::warning:: annotation naming the file:\n%s", stderr)
+	}
+}
+
+func TestCachePathsJSONReportsMissingFiles(t *testing.T) {
+	chdirToCachedCompose(t)
+	resetCachePathsFlags(t)
+
+	out := captureStdout(t, func() { runRoot(t, "cache", "paths", "--json") })
+	if !strings.Contains(out, `"complete": false`) {
+		t.Errorf("expected complete: false:\n%s", out)
+	}
+	if !strings.Contains(out, `"web/package-lock.json"`) {
+		t.Errorf("expected the missing file in missingFiles:\n%s", out)
+	}
+}
+
+func TestCachePathsIsQuietWhenEveryCacheKeyFileExists(t *testing.T) {
+	dir := chdirToCachedCompose(t)
+	writeLockfile(t, dir)
+	resetCachePathsFlags(t)
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	var stderr string
+	captureStdout(t, func() {
+		stderr = captureStderr(t, func() { runRoot(t, "cache", "paths") })
+	})
+	if strings.Contains(stderr, "warning") || strings.Contains(stderr, "package-lock.json") {
+		t.Errorf("nothing missing, nothing to warn about:\n%s", stderr)
+	}
+
+	out := captureStdout(t, func() { runRoot(t, "cache", "paths", "--json") })
+	if !strings.Contains(out, `"complete": true`) || !strings.Contains(out, `"missingFiles": []`) {
+		t.Errorf("expected complete: true with an empty missingFiles:\n%s", out)
+	}
+}
+
+// exitCodeOf runs fn with osExit stubbed and returns the code it exited with,
+// or -1 when it returned normally.
+func exitCodeOf(t *testing.T, fn func()) int {
+	t.Helper()
+	previous := osExit
+	code := -1
+	osExit = func(c int) { code = c; panic("exit") }
+	t.Cleanup(func() { osExit = previous })
+	func() {
+		defer func() {
+			if r := recover(); r != nil && r != "exit" {
+				panic(r)
+			}
+		}()
+		fn()
+	}()
+	return code
+}
+
+// --strict is what the post-init cache action runs: a plan hashed from nothing
+// must fail the step instead of feeding actions/cache a frozen key.
+func TestCachePathsStrictExitsOneWhenFilesAreMissing(t *testing.T) {
+	chdirToCachedCompose(t)
+	resetCachePathsFlags(t)
+	t.Setenv("GITHUB_ACTIONS", "")
+
+	var code int
+	var stderr string
+	stdout := captureStdout(t, func() {
+		stderr = captureStderr(t, func() {
+			code = exitCodeOf(t, func() { runRoot(t, "cache", "paths", "--json", "--strict") })
+		})
+	})
+	if code != 1 {
+		t.Errorf("--strict with a missing cacheKey file must exit 1, got %d", code)
+	}
+	if !strings.Contains(stderr, "web/package-lock.json") {
+		t.Errorf("the failure must say which file is missing:\n%s", stderr)
+	}
+	if !strings.Contains(stdout, `"complete": false`) {
+		t.Errorf("the plan is still printed so a log shows what was seen:\n%s", stdout)
+	}
+}
+
+func TestCachePathsStrictPassesWhenFilesExist(t *testing.T) {
+	dir := chdirToCachedCompose(t)
+	writeLockfile(t, dir)
+	resetCachePathsFlags(t)
+
+	code := -1
+	out := captureStdout(t, func() {
+		code = exitCodeOf(t, func() { runRoot(t, "cache", "paths", "--json", "--strict") })
+	})
+	if code != -1 {
+		t.Errorf("--strict with every file present must not exit, got %d", code)
+	}
+	if !strings.Contains(out, `"complete": true`) {
+		t.Errorf("expected the complete plan:\n%s", out)
+	}
+}
+
+// The two states must not share a key, or a present lockfile could hit a
+// cache entry saved when it was absent.
+func TestCachePathsKeyDiffersOnceTheLockfileExists(t *testing.T) {
+	dir := chdirToCachedCompose(t)
+	resetCachePathsFlags(t)
+
+	missing := captureStdout(t, func() { runRoot(t, "cache", "paths", "--key") })
+	writeLockfile(t, dir)
+	present := captureStdout(t, func() { runRoot(t, "cache", "paths", "--key") })
+	if strings.TrimSpace(missing) == strings.TrimSpace(present) {
+		t.Errorf("key must change once the file exists: %q", missing)
 	}
 }

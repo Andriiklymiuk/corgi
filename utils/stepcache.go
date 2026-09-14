@@ -51,6 +51,32 @@ func stepCachePath(service Service, stepIndex int) string {
 		stepCacheDirName(service), strconv.Itoa(stepIndex))
 }
 
+// stepOutputDir is the directory the step's install produces inside the
+// service, inferred from its cacheKey lockfile. Empty when corgi does not
+// know one (go.sum installs only into $HOME).
+func stepOutputDir(service Service, step BeforeStartStep) string {
+	for _, key := range step.CacheKey {
+		if dirs := serviceOutputDirs(key); len(dirs) > 0 {
+			return filepath.Join(service.AbsolutePath, dirs[0])
+		}
+	}
+	return ""
+}
+
+// stepMarkerPath puts the marker inside the output directory it vouches for
+// (node_modules/.corgi-step-0), so a CI cache restores the two together: an
+// older node_modules brings its older marker, the hash mismatches and the
+// install runs. Kept in corgi_services/.cache as a separate cache entry, the
+// marker and the dependencies expire on different days and a fresh marker
+// ends up next to stale packages. Steps without a known output directory
+// stay central. A worktree has its own output directory, so no scope needed.
+func stepMarkerPath(service Service, stepIndex int, step BeforeStartStep) string {
+	if dir := stepOutputDir(service, step); dir != "" {
+		return filepath.Join(dir, ".corgi-step-"+strconv.Itoa(stepIndex))
+	}
+	return stepCachePath(service, stepIndex)
+}
+
 func readStepHash(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -67,6 +93,16 @@ func writeStepHash(path, hash string) error {
 	return os.WriteFile(path, []byte(hash), 0o644)
 }
 
+// writeOutputDirMarker writes a marker into an output directory that the
+// step actually produced; inventing the directory for a step that installs
+// elsewhere (pip without a venv) would leave an empty .venv behind.
+func writeOutputDirMarker(path, hash string) error {
+	if _, err := os.Stat(filepath.Dir(path)); err != nil {
+		return nil
+	}
+	return os.WriteFile(path, []byte(hash), 0o644)
+}
+
 // StepNeedsRun reports whether a beforeStart step must run, plus the current
 // cacheKey hash to persist after success. No cacheKey = always run. noCache forces run.
 func StepNeedsRun(service Service, stepIndex int, step BeforeStartStep, noCache bool) (run bool, hash string) {
@@ -77,16 +113,17 @@ func StepNeedsRun(service Service, stepIndex int, step BeforeStartStep, noCache 
 	if noCache {
 		return true, hash
 	}
-	if readStepHash(stepCachePath(service, stepIndex)) == hash && stepOutputPresent(service, step) {
+	if readStepHash(stepMarkerPath(service, stepIndex, step)) == hash && stepOutputPresent(service, step) {
 		return false, hash
 	}
 	return true, hash
 }
 
-// A marker only proves the step ran once, on some machine. CI stores the
-// markers and the dependency directories as separate cache entries that expire
-// independently, so the marker can come back while node_modules does not —
-// skipping the install then leaves nothing to run against.
+// A marker only proves the step ran once, on some machine. A central marker
+// (a step with no output directory of its own) can be restored by CI while
+// the dependency directory is not — skipping the install then leaves nothing
+// to run against. For in-directory markers this is a no-op: the marker's
+// presence already proves the directory exists.
 func stepOutputPresent(service Service, step BeforeStartStep) bool {
 	for _, key := range step.CacheKey {
 		for _, dir := range serviceOutputDirs(key) {
@@ -99,8 +136,12 @@ func stepOutputPresent(service Service, step BeforeStartStep) bool {
 }
 
 // PersistStepHash records a step's hash so an unchanged future run can skip it.
-func PersistStepHash(service Service, stepIndex int, hash string) {
+func PersistStepHash(service Service, stepIndex int, step BeforeStartStep, hash string) {
 	if hash == "" {
+		return
+	}
+	if stepOutputDir(service, step) != "" {
+		_ = writeOutputDirMarker(stepMarkerPath(service, stepIndex, step), hash)
 		return
 	}
 	_ = writeStepHash(stepCachePath(service, stepIndex), hash)

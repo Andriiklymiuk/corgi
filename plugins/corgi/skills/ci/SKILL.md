@@ -70,10 +70,10 @@ One implementation, living in the workspace repo (the one holding
 ```
 service repo PR ──► reusable workflow in the workspace repo
                       1. checkout workspace + install corgi
-                         (GitHub: uses: Andriiklymiuk/corgi@v1 — verified install
-                          + cache-paths/cache-key/cache-groups outputs)
-                      2. restore caches (from the action outputs / corgi cache paths)
-                      3. corgi init --depth 1
+                         (GitHub: uses: Andriiklymiuk/corgi@v1 — verified install)
+                      2. corgi init --depth 1
+                      3. restore caches (GitHub: uses: Andriiklymiuk/corgi/cache@v1
+                         AFTER init — its keys are hashed from the cloned lockfiles)
                       4. corgi run --feature "$BRANCH" --detach --wait --wait-timeout
                       5. corgi status --json          (gate)
                       6. corgi test --e2e             (or the suite's own command)
@@ -184,12 +184,23 @@ Do not hand-write the path list — `corgi cache paths` derives it from the comp
 file (every `beforeStart` cacheKey's dependency dir + `.corgi/corgi_services/.cache/`),
 so it cannot drift as services come and go. `--key` prints the matching cache key,
 `--json` splits the plan per ecosystem (`groups: [{id, key, paths, pathsText}]`)
-so one lockfile change doesn't evict every other language's packages. On GitHub
-the `Andriiklymiuk/corgi@v1` action exposes all of this as step outputs
-(`cache-paths`, `cache-key`, `cache-groups`) ready to feed `actions/cache`, plus
-four fixed slots (`cache-1-key`/`cache-1-paths`/`cache-1-restore-keys` …
-`cache-4-*`) so a workflow writes four plain cache steps instead of
-`fromJSON(...)[i]` indexing. The `restore-keys` slot is the group's
+so one lockfile change doesn't evict every other language's packages.
+
+**Compute the plan after `corgi init`.** The keys are hashed from the services'
+lockfiles, which do not exist until the repos are cloned. Hashed before that,
+the key is the same on every run, `actions/cache` never re-saves the
+dependencies, and weeks later a run boots on stale `node_modules` with
+`beforeStart skipped (cacheKey unchanged)` in the log. corgi warns when a
+`cacheKey` file is missing (`--json`: `complete: false` + `missingFiles`;
+`--strict`: exit 1). On GitHub the `Andriiklymiuk/corgi/cache@v1` action —
+placed after `corgi init` — runs `corgi cache paths --json --strict` and
+exposes the plan as step outputs (`cache-paths`, `cache-key`, `cache-groups`)
+ready to feed `actions/cache`, plus four fixed slots
+(`cache-1-key`/`cache-1-paths`/`cache-1-restore-keys` … `cache-4-*`) so a
+workflow writes four plain cache steps instead of `fromJSON(...)[i]` indexing.
+The install action (`Andriiklymiuk/corgi@v1`) publishes the same outputs for
+older workflows but warns when it computed them from missing files; do not
+feed `actions/cache` from it. The `restore-keys` slot is the group's
 `corgi-deps-<ecosystem>-` prefix, so a lockfile change restores the previous
 packages instead of starting empty; the markers slot stays exact-match on
 purpose. GitHub also scopes caches per ref — a fresh PR restores only what its

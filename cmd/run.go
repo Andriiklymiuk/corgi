@@ -1003,7 +1003,7 @@ func runCachedBeforeStart(service utils.Service, noCache bool, run func(string) 
 		if err := run(step.Run); err != nil {
 			return err
 		}
-		utils.PersistStepHash(service, i, hash)
+		utils.PersistStepHash(service, i, step, hash)
 	}
 	return nil
 }

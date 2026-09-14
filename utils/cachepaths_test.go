@@ -222,3 +222,55 @@ func TestCacheMarkersAreKeyedOnEveryLockfile(t *testing.T) {
 		}
 	}
 }
+
+// A key hashed from files that do not exist yet is stable and therefore
+// useless: in CI it is computed before the service repos are cloned, so the
+// cache never invalidates. The plan has to say the hash covered nothing.
+func TestCachePathsReportsMissingCacheKeyFiles(t *testing.T) {
+	dir := t.TempDir()
+	svc := []Service{{
+		ServiceName: "web", Path: "./web", AbsolutePath: dir,
+		BeforeStart: BeforeStartSteps{{Run: "npm ci", CacheKey: []string{"package-lock.json"}}},
+	}}
+
+	before := planFor(t, svc)
+	if before.Complete {
+		t.Error("a missing cacheKey file must leave the plan incomplete")
+	}
+	if !containsPath(before.MissingFiles, "web/package-lock.json") {
+		t.Errorf("expected web/package-lock.json in %v", before.MissingFiles)
+	}
+	node := groupByID(before, "node")
+	if !containsPath(node.MissingFiles, "web/package-lock.json") {
+		t.Errorf("the node group must name its missing file, got %v", node.MissingFiles)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(`{"v":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after := planFor(t, svc)
+	if !after.Complete {
+		t.Error("every cacheKey file present must make the plan complete")
+	}
+	if after.MissingFiles == nil || len(after.MissingFiles) != 0 {
+		t.Errorf("a complete plan must carry an empty (not nil) list, got %#v", after.MissingFiles)
+	}
+	if g := groupByID(after, "node"); g.MissingFiles == nil || len(g.MissingFiles) != 0 {
+		t.Errorf("a complete group must carry an empty (not nil) list, got %#v", g.MissingFiles)
+	}
+	if after.Key == before.Key {
+		t.Error("the key hashed from a missing file must differ from the key hashed from its contents")
+	}
+	if groupKey(after, "node") == groupKey(before, "node") {
+		t.Error("the node group key must differ once the lockfile exists")
+	}
+}
+
+func groupByID(plan CachePlan, id string) CacheGroup {
+	for _, g := range plan.Groups {
+		if g.ID == id {
+			return g
+		}
+	}
+	return CacheGroup{}
+}
