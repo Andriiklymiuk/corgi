@@ -84,6 +84,8 @@ type Daemon struct {
 	fixBusy    map[string]chan struct{}
 	// carried is which limit each session was already carried for.
 	carried map[string]time.Time
+	// rungClaims is which claimed files a session was already rung about.
+	rungClaims map[string]bool
 	// headless is the sessions with a headless turn under way.
 	headlessMu sync.Mutex
 	headless   map[string]bool

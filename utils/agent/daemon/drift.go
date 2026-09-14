@@ -10,6 +10,7 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 // A session drifts when the numbers say it is no longer doing what it set
@@ -209,6 +210,9 @@ func (d *Daemon) checkDrift(now time.Time) {
 		} else {
 			d.Sessions.SetBehind(s.ID, nil)
 		}
+		if m.ok && len(m.files) > 0 {
+			d.ringClaims(s, m.files, now)
+		}
 		if _, crossed := d.Sessions.SetChanges(s.ID, c, overlaps[s.ID]); crossed {
 			label := s.Display
 			if label == "" {
@@ -314,4 +318,47 @@ func crossings(live []sessions.Session, measured map[string]measure) map[string]
 		}
 	}
 	return out
+}
+
+// ringClaims rings once when a session edits a file another live session
+// claimed — advisory, like the claim: nothing is stopped.
+func (d *Daemon) ringClaims(s sessions.Session, touched []string, now time.Time) {
+	live := map[string]bool{}
+	for _, x := range d.Sessions.Sessions() {
+		if x.Status != sessions.StatusGone {
+			live[x.ID] = true
+		}
+	}
+	repo := sessions.CommonRoot(s.Cwd)
+	if repo == "" {
+		return
+	}
+	crossed := watch.Crossed(watch.LoadFileClaims(d.Dir).Live(live, now), repo, s.ID, touched)
+	if len(crossed) == 0 {
+		return
+	}
+	if d.rungClaims == nil {
+		d.rungClaims = map[string]bool{}
+	}
+	var names []string
+	for _, c := range crossed {
+		key := s.ID + "|" + c.Session + "|" + c.Path
+		if d.rungClaims[key] {
+			continue
+		}
+		d.rungClaims[key] = true
+		who := c.Label
+		if who == "" {
+			who = "another session"
+		}
+		names = append(names, c.Path+" ("+who+")")
+	}
+	if len(names) == 0 {
+		return
+	}
+	label := s.Display
+	if label == "" {
+		label = s.Label
+	}
+	go d.notifyAttention("corgi agent · "+label, "editing a claimed file: "+strings.Join(names, ", "), s.Folder)
 }
