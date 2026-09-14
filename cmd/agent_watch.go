@@ -158,6 +158,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("rerun-ci") {
 			wc.RerunCI, _ = flags.GetBool("rerun-ci")
 		}
+		if flags.Changed("headless") {
+			wc.Headless, _ = flags.GetBool("headless")
+		}
 		if flags.Changed("rebase") {
 			wc.Rebase, _ = flags.GetBool("rebase")
 		}
@@ -1134,6 +1137,7 @@ func init() {
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
+	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, acceptEdits) in its own checkout, so the phone's chat keeps working")
 	f.Bool("rerun-ci", false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
 	f.Bool("auto-carry", false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
 	f.Int("slots", 1, "How many unattended runs may go at once in this workspace (1 to 8); above 1 turns on --isolate so each has worktrees of its own")

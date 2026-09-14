@@ -54,6 +54,8 @@ type Registry struct {
 	notice   string
 	noticeAt time.Time
 	accounts []Account
+	// ended keeps the last few sessions that left, newest first.
+	ended []Session
 	// AutoContinue is copied onto every snapshot; the daemon sets it.
 	AutoContinue bool
 	// MutedUntil mirrors the daemon's mute for the board; zero when it rings.
@@ -76,6 +78,10 @@ type State struct {
 	NeedsInput int    `json:"needsInput"`
 	Working    int    `json:"working"`
 	Slots      []Slot `json:"slots"`
+	// Ended is the last few sessions that left the board — their id,
+	// checkout and account — so a message for one can still run as a
+	// headless turn, and a phone can say "ended" rather than nothing.
+	Ended []Session `json:"ended,omitempty"`
 	// LastFocusWindow is where the last successful focus went, and where
 	// `corgi agent new` opens a session by default.
 	LastFocusWindow string `json:"lastFocusWindow,omitempty"`
@@ -703,14 +709,50 @@ func (r *Registry) setStatus(s *Session, st Status, now time.Time) {
 	}
 }
 
-// dropLocked ends a session: off the board, or gone-but-pinned.
+// endedKeep is how many ended sessions the board remembers.
+const endedKeep = 20
+
+// dropLocked ends a session: off the board, or gone-but-pinned. Either
+// way it is remembered among the ended, id and checkout and account, so
+// a headless turn can still resume it.
 func (r *Registry) dropLocked(s *Session, now time.Time) {
+	r.rememberEndedLocked(s, now)
 	if r.board.Remove(s.ID) {
 		s.Tool, s.Detail = "", ""
 		r.setStatus(s, StatusGone, now)
 		return
 	}
 	delete(r.sessions, s.ID)
+}
+
+func (r *Registry) rememberEndedLocked(s *Session, now time.Time) {
+	if s == nil || Placeholder(s.ID) {
+		return
+	}
+	kept := []Session{{ID: s.ID, Label: s.Label, Display: r.displayLocked(s), Cwd: s.Cwd, Folder: s.Folder, Profile: s.Profile, ConfigDir: s.ConfigDir,
+		Status: StatusGone, StatusSince: now, Title: s.Title, Branch: s.Branch, Summary: s.Summary, PR: s.PR, Ticket: s.Ticket, TicketKey: s.TicketKey, Bot: s.Bot, Home: s.Home, Headless: s.Headless}}
+	for _, e := range r.ended {
+		if e.ID != s.ID && len(kept) < endedKeep {
+			kept = append(kept, e)
+		}
+	}
+	r.ended = kept
+}
+
+// LookupEnded finds a session that left the board by id or id prefix.
+func (r *Registry) LookupEnded(ref string) (Session, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return Session{}, false
+	}
+	for _, e := range r.ended {
+		if e.ID == ref || strings.HasPrefix(e.ID, ref) {
+			return e, true
+		}
+	}
+	return Session{}, false
 }
 
 // Reap drops every session whose process is gone. SessionEnd never fires for
@@ -1119,6 +1161,38 @@ func (r *Registry) MainMovedTold(id string, rebased bool) {
 // SetGate records a done-when run: green resets the streak, red counts
 // it. The tests line shows it too — it is the last test run, whoever ran
 // it — so a key says "tests ✗ go test" without a new field.
+// SetHeadless marks a headless turn: running while it goes, then counted,
+// with the error when it failed. A session the registry does not hold is
+// left alone.
+func (r *Registry) SetHeadless(id string, running bool, errText string, now time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var h *Headless
+	if s, exists := r.sessions[id]; exists {
+		if s.Headless == nil {
+			s.Headless = &Headless{}
+		}
+		h = s.Headless
+	} else {
+		for i := range r.ended {
+			if r.ended[i].ID == id {
+				if r.ended[i].Headless == nil {
+					r.ended[i].Headless = &Headless{}
+				}
+				h = r.ended[i].Headless
+			}
+		}
+	}
+	if h == nil {
+		return
+	}
+	h.Running, h.Error, h.At = running, errText, now
+	if !running && errText == "" {
+		h.Turns++
+	}
+	r.touch()
+}
+
 func (r *Registry) SetGate(id string, ok bool, cmd string, now time.Time) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1730,6 +1804,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 	}
 	st.Windows = r.sortedWindowsLocked()
 	st.Accounts = append([]Account(nil), r.accounts...)
+	st.Ended = append([]Session(nil), r.ended...)
 	if w, ok := r.frontWindowLocked(); ok {
 		st.FrontWindow = w.ID
 		if s := r.frontSessionLocked(w); s != nil {

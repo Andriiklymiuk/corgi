@@ -60,6 +60,9 @@ const (
 	// ActionInterrupt presses Escape in a working session: Claude Code
 	// stops the turn and waits, nothing is closed.
 	ActionInterrupt = "interrupt"
+	// ActionContinue runs one headless turn — claude -p --resume — for a
+	// session whose terminal is gone, with Text as the message.
+	ActionContinue = "continue"
 	// ActionRead says a phone is reading a session's conversation; the
 	// row shows an eye for a minute.
 	ActionRead = "read"

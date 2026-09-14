@@ -83,10 +83,13 @@ type Daemon struct {
 	watchers   map[string]*watch.Watch
 	fixBusy    map[string]chan struct{}
 	// carried is which limit each session was already carried for.
-	carried   map[string]time.Time
-	fixActive map[string]bool
-	gateMu    sync.Mutex
-	gating    map[string]bool
+	carried map[string]time.Time
+	// headless is the sessions with a headless turn under way.
+	headlessMu sync.Mutex
+	headless   map[string]bool
+	fixActive  map[string]bool
+	gateMu     sync.Mutex
+	gating     map[string]bool
 
 	Version string
 	// Dir is the agent data directory holding daemon.json and registry.json.

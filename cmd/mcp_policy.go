@@ -38,6 +38,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 		mcp.WithBoolean("handOver", mcp.Description("Type feedback on a branch into the session on it")),
 		mcp.WithBoolean("autoCarry", mcp.Description("Carry a session at its five-hour quota to another of the workspace's accounts with budget, once per limit")),
 		mcp.WithBoolean("rerunCI", mcp.Description("Rerun a red build's failed jobs once before it is worked on or handed over (GitHub)")),
+		mcp.WithBoolean("headless", mcp.Description("Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume)")),
 		mcp.WithBoolean("autoMerge", mcp.Description("Merge a pull request of mine the moment it is ready")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWatchSet(r)
@@ -139,7 +140,7 @@ func mcpWatchSet(r mcp.CallToolRequest) (any, error) {
 		}
 		wc.CompactAt = int(v)
 	}
-	for key, dst := range map[string]*bool{"rebase": &wc.Rebase, "lessons": &wc.Lessons, "handOver": &wc.HandOver, "autoMerge": &wc.AutoMerge, "autoCarry": &wc.AutoCarry, "rerunCI": &wc.RerunCI} {
+	for key, dst := range map[string]*bool{"rebase": &wc.Rebase, "lessons": &wc.Lessons, "handOver": &wc.HandOver, "autoMerge": &wc.AutoMerge, "autoCarry": &wc.AutoCarry, "rerunCI": &wc.RerunCI, "headless": &wc.Headless} {
 		if v, ok := args[key].(bool); ok {
 			*dst = v
 		}

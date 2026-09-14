@@ -53,6 +53,9 @@ type Policy struct {
 	// AutoCarry moves a session that hit its quota to another of the
 	// workspace's accounts with budget, once per limit (2.23).
 	AutoCarry bool
+	// Headless lets a message for a session whose terminal is gone run
+	// as a headless turn, claude -p --resume (2.23).
+	Headless bool
 }
 
 // automation is the two switches for a workspace, as the config says now.
