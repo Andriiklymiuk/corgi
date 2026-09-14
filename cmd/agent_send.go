@@ -97,6 +97,27 @@ the same through POST /launch/interrupt.`,
 	},
 }
 
+var agentTurnCmd = &cobra.Command{
+	Use:   "turn <session> <message>",
+	Short: "One more turn for a session whose terminal is gone — claude -p --resume",
+	Long: `The editor closed, the lid shut on a tab: the session's process is gone
+but its conversation is not. This runs one headless turn for it — claude -p
+--resume <id> <message> — in its own checkout, under its own account, so the
+conversation goes on and the phone's chat reads the answer. A session that
+still has a terminal is typed into (corgi agent send) and never resumed
+beside itself.
+
+The turn runs with --permission-mode acceptEdits and nobody to ask; the log is
+under the agent dir, watch/runs/continue-<id>.log. With the workspace's
+headless switch on (corgi agent watch enable --headless), a message from the
+phone for a gone session does this on its own.`,
+	Args: cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		sendBoardCommand(command.Command{Action: command.ActionContinue, SessionID: args[0], Text: strings.Join(args[1:], " "), Source: "cli"},
+			fmt.Sprintf("asked the daemon to run %s a headless turn", args[0]))
+	},
+}
+
 var agentCapCmd = &cobra.Command{
 	Use:   "cap [<session>] <tokens|off>",
 	Short: "A token budget for every session, or for one",
@@ -174,5 +195,5 @@ is stopped. "off" takes a budget away. No argument prints the default.`,
 func init() {
 	agentSendCmd.Flags().Bool("enter", false, "Press Enter after the text")
 	agentNoteCmd.Flags().Bool("clear", false, "Remove the note")
-	agentCmd.AddCommand(agentSendCmd, agentAnswerCmd, agentNoteCmd, agentCapCmd, agentInterruptCmd)
+	agentCmd.AddCommand(agentSendCmd, agentAnswerCmd, agentNoteCmd, agentCapCmd, agentInterruptCmd, agentTurnCmd)
 }

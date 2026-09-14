@@ -3538,12 +3538,19 @@ func launchSendHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, code, msg)
 		return
 	}
-	if session.Status == sessions.StatusGone {
-		writeLaunchError(w, http.StatusConflict, "that session is closed")
-		return
-	}
 	if !sendOnce.first(req.ID, time.Now()) {
 		writeLaunchJSON(w, map[string]any{"done": "already typed", "duplicate": true})
+		return
+	}
+	if session.Status == sessions.StatusGone {
+		// No terminal to type into. With the workspace's headless switch
+		// on, the daemon runs the turn itself: claude -p --resume.
+		dir, _ := agentDir()
+		if !policyFor(dir, session.Cwd).Headless {
+			writeLaunchError(w, http.StatusConflict, "that session is closed — corgi agent watch enable --headless lets a message run it a turn anyway")
+			return
+		}
+		launchBoardCommand(w, command.Command{Action: command.ActionContinue, SessionID: session.ID, Text: text, Source: "phone"})
 		return
 	}
 	launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: session.ID, Text: text, Enter: true, Source: "phone"})
@@ -3596,6 +3603,13 @@ func launchSessionFor(ref string) (sessions.Session, int, string) {
 	}
 	for _, s := range rep.Sessions {
 		if s.ID == ref || s.Display == ref {
+			return s, 0, ""
+		}
+	}
+	// One that left the board is still known by id: its transcript can be
+	// read, and a message for it can run as a headless turn (2.23).
+	for _, s := range rep.Ended {
+		if s.ID == ref {
 			return s, 0, ""
 		}
 	}

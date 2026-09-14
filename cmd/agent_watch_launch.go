@@ -49,6 +49,8 @@ type WatchSwitches struct {
 	AutoCarry bool `json:"autoCarry"`
 	// RerunCI reruns a red build's failed jobs once before it is handed on (2.23).
 	RerunCI bool `json:"rerunCI"`
+	// Headless runs a message for a gone session as claude -p --resume (2.23).
+	Headless bool `json:"headless"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -70,7 +72,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	if wc.DoneWhen != nil {
 		out.DoneWhen = wc.DoneWhen
 	}
-	out.CompactAt, out.Rebase, out.Lessons, out.AutoCarry, out.RerunCI = wc.CompactAt, wc.Rebase, wc.Lessons, wc.AutoCarry, wc.RerunCI
+	out.CompactAt, out.Rebase, out.Lessons, out.AutoCarry, out.RerunCI, out.Headless = wc.CompactAt, wc.Rebase, wc.Lessons, wc.AutoCarry, wc.RerunCI, wc.Headless
 	out.Slots = max(1, wc.Slots)
 	return out
 }
@@ -123,6 +125,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			Lessons   *bool     `json:"lessons"`
 			AutoCarry *bool     `json:"autoCarry"`
 			RerunCI   *bool     `json:"rerunCI"`
+			Headless  *bool     `json:"headless"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -229,6 +232,9 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.RerunCI != nil {
 			wc.RerunCI, restart = *req.RerunCI, true
+		}
+		if req.Headless != nil {
+			wc.Headless = *req.Headless
 		}
 		if req.CompactAt != nil {
 			if *req.CompactAt < 0 || *req.CompactAt > 100 {

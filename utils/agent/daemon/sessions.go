@@ -106,6 +106,8 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		d.sendToSession(ctx, c.SessionID, keys, false)
 	case command.ActionRead:
 		_ = d.Sessions.ReadBy(c.SessionID, time.Now())
+	case command.ActionContinue:
+		d.continueHeadless(ctx, c.SessionID, c.Text)
 	case command.ActionInterrupt:
 		keys, err := d.Sessions.InterruptKeys(c.SessionID)
 		if err != nil {

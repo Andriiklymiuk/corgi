@@ -337,10 +337,21 @@ type Session struct {
 	Spend   *Spend `json:"spend,omitempty"`
 	Cap     int64  `json:"cap,omitempty"`
 	OverCap bool   `json:"overCap,omitempty"`
+	// Headless counts the turns the daemon ran for this session after its
+	// terminal was gone (claude -p --resume), and when the last one ended.
+	Headless *Headless `json:"headless,omitempty"`
 	// Standing is where the session stands in one word and a clause,
 	// worked out by the ladder in standing.go when the board is published:
 	// what every surface prints instead of reading the facts its own way.
 	Standing *Standing `json:"standing,omitempty"`
+}
+
+// Headless is what the daemon ran for a session with no terminal.
+type Headless struct {
+	Turns   int       `json:"turns"`
+	At      time.Time `json:"at"`
+	Running bool      `json:"running,omitempty"`
+	Error   string    `json:"error,omitempty"`
 }
 
 // Spend is a session's running total, in tokens and turns.

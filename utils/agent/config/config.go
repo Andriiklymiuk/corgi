@@ -295,6 +295,12 @@ type WatchConfig struct {
 	// touches your checkout and two runs on one repo do not collide. Off by
 	// default: it takes disk and a branch per ticket.
 	Isolate bool `yaml:"isolate,omitempty"`
+	// Headless lets a message for a session whose terminal is gone — the
+	// editor closed, the lid shut on a tab — run as one headless turn,
+	// claude -p --resume, in its own checkout under its own account. The
+	// phone's chat keeps working after the terminal is gone. Off by
+	// default: -p answers permission prompts on its own (acceptEdits).
+	Headless bool `yaml:"headless,omitempty"`
 	// RerunCI reruns the failed jobs of a red build once before anyone is
 	// told or handed it; the second red on the same run goes the usual
 	// way. GitHub. Off by default.
