@@ -217,3 +217,20 @@ func TestTheStreamSealsEveryFrameForAKeyedDevice(t *testing.T) {
 		t.Fatalf("change inside: %s", opened)
 	}
 }
+
+// A send that carries an id is typed once: the phone's queue may hand the
+// same message over twice when the tunnel dropped mid-answer.
+func TestASendWithAnIdIsTypedOnce(t *testing.T) {
+	if !sendOnce.first("phone:abc", time.Now()) {
+		t.Fatal("first time through")
+	}
+	if sendOnce.first("phone:abc", time.Now().Add(time.Minute)) {
+		t.Fatal("the same id a minute later is a repeat")
+	}
+	if !sendOnce.first("phone:abc", time.Now().Add(sendOnceFor+time.Minute)) {
+		t.Fatal("after the window the id is forgotten")
+	}
+	if !sendOnce.first("", time.Now()) || !sendOnce.first("", time.Now()) {
+		t.Fatal("no id, no memory")
+	}
+}

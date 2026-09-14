@@ -3519,6 +3519,10 @@ func launchSendHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Session string `json:"session"`
 		Text    string `json:"text"`
+		// ID, when the phone sends one, makes the send happen once: a
+		// message queued while the laptop was away may be handed over
+		// twice if the tunnel drops mid-answer (2.23).
+		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the text")
@@ -3538,7 +3542,41 @@ func launchSendHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusConflict, "that session is closed")
 		return
 	}
+	if !sendOnce.first(req.ID, time.Now()) {
+		writeLaunchJSON(w, map[string]any{"done": "already typed", "duplicate": true})
+		return
+	}
 	launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: session.ID, Text: text, Enter: true, Source: "phone"})
+}
+
+// sendOnceFor is how long a send id is remembered.
+const sendOnceFor = 10 * time.Minute
+
+// onceSet remembers ids for a while, so a repeat is seen as one.
+type onceSet struct {
+	mu   sync.Mutex
+	seen map[string]time.Time
+}
+
+var sendOnce = &onceSet{seen: map[string]time.Time{}}
+
+// first says whether id is new; "" is never remembered.
+func (o *onceSet) first(id string, now time.Time) bool {
+	if id == "" {
+		return true
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for k, at := range o.seen {
+		if now.Sub(at) > sendOnceFor {
+			delete(o.seen, k)
+		}
+	}
+	if at, ok := o.seen[id]; ok && now.Sub(at) <= sendOnceFor {
+		return false
+	}
+	o.seen[id] = now
+	return true
 }
 
 // launchSessionFor finds a board session by id or display name. A non-zero
