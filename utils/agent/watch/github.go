@@ -165,11 +165,13 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		// The notification names the pull request, not what was said on it;
 		// the comment itself is one more call, and the difference between
 		// "someone commented" and a line a person can act on.
-		author, body, bot := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
+		author, body, bot, hasComment := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
 		// My own comment is not news to me, and a bot's — a tracker link, a
 		// coverage report — is not a person waiting. GitHub still notifies
-		// the author of the thread about both.
-		if r.kind == KindPRComment && (bot || (author != "" && strings.EqualFold(author, g.Me))) {
+		// the author of the thread about both. It also notifies the author
+		// about a push, an edit, the opening itself — activity with no
+		// comment to point at — and that is not anyone commenting either.
+		if r.kind == KindPRComment && (!hasComment || bot || (author != "" && strings.EqualFold(author, g.Me))) {
 			continue
 		}
 		events = append(events, Event{
@@ -190,20 +192,21 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 }
 
 // latestComment is who wrote the newest comment on a thread, what they
-// wrote, and whether they are a bot; nothing when the thread points at the
-// pull request itself (a review request, an opened pull request) or the
-// comment cannot be read.
-func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL string) (author, body string, bot bool) {
+// wrote, and whether they are a bot. hasComment is false when the thread
+// points at the pull request itself or at nothing — a review request, an
+// opened pull request, a push to it — so the caller can tell "no comment"
+// from a comment that could not be read.
+func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL string) (author, body string, bot, hasComment bool) {
 	if commentURL == "" || commentURL == subjectURL {
-		return "", "", false
+		return "", "", false, false
 	}
 	path := strings.TrimPrefix(commentURL, "https://api.github.com")
 	if path == commentURL {
-		return "", "", false
+		return "", "", false, true
 	}
 	resp, err := g.get(ctx, path, "")
 	if err != nil {
-		return "", "", false
+		return "", "", false, true
 	}
 	defer resp.Body.Close()
 	var c struct {
@@ -214,10 +217,10 @@ func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL strin
 		} `json:"user"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&c) != nil {
-		return "", "", false
+		return "", "", false, true
 	}
 	bot = githubBot(c.User.Login, c.User.Type)
-	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax), bot
+	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax), bot, true
 }
 
 // pullState is "draft", "open", "merged" or "closed" for one pull request, cached for
