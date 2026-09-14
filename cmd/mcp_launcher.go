@@ -3883,6 +3883,8 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		Pull *watch.PullStatus `json:"pull,omitempty"`
 		// Handed is the session this row was typed into, and when.
 		Handed *watch.Hand `json:"handed,omitempty"`
+		// Standing is the row's one word and clause from the ladder.
+		Standing sessions.Standing `json:"standing"`
 	}
 	out := []row{}
 	onTicket := sessionsOnTickets(dir)
@@ -3934,6 +3936,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			hh := h
 			r.Handed = &hh
 		}
+		r.Standing = rowStanding(r.Pull, r.PR, r.Blocked, r.Session)
 		out = append(out, r)
 	}
 	fixes := []map[string]any{}

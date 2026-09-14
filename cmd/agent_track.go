@@ -18,6 +18,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/proc"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/usage"
+	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 
 	"github.com/spf13/cobra"
@@ -733,6 +734,27 @@ func profileResolver(agentDir string) func(configDir string) string {
 			loadedAt = time.Now()
 		}
 		return profileNamed(cached, expandTilde(configDir))
+	}
+}
+
+// pullResolver is the forge's word on a session's pull request, for the
+// standing ladder: the pulls the watch refreshed each round, read from disk
+// and cached like the registry, asked under the same lock.
+func pullResolver(agentDir string) func(link string) (sessions.PullFacts, bool) {
+	var (
+		cached   *watch.PullLog
+		loadedAt time.Time
+	)
+	return func(link string) (sessions.PullFacts, bool) {
+		if cached == nil || time.Since(loadedAt) > 10*time.Second {
+			cached = watch.LoadPullLog(agentDir)
+			loadedAt = time.Now()
+		}
+		st, ok := cached.Get(link)
+		if !ok {
+			return sessions.PullFacts{}, false
+		}
+		return st.Facts(), true
 	}
 }
 

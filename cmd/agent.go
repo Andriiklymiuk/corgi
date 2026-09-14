@@ -139,6 +139,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	// by corgi profile, and size the board as the user config says.
 	d.Sessions.Resolve = workspaceResolver(dir)
 	d.Sessions.ProfileFor = profileResolver(dir)
+	d.Sessions.PullFor = pullResolver(dir)
 	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil {
 		if strings.TrimSpace(user.DigestAt) != "" {
 			d.DigestAt = strings.TrimSpace(user.DigestAt)
