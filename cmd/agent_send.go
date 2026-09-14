@@ -131,6 +131,34 @@ is stopped. "off" takes a budget away. No argument prints the default.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
 		path := agentUserConfigPath(dir)
+		// --repo <ws> <tokens|off>: a day budget for one workspace, kept
+		// in its watch config; the daemon rings once when a day passes it.
+		if ws, _ := cmd.Flags().GetString("repo"); ws != "" {
+			if len(args) != 1 {
+				exitWithError(utils.ErrUsage, fmt.Errorf("corgi agent cap --repo %s <tokens per day|off>", ws), 2)
+			}
+			var tokens int64
+			if args[0] != "off" && args[0] != "0" {
+				n, err := sessions.ParseTokens(args[0])
+				if err != nil {
+					exitWithError("agent_cap", err, 2)
+				}
+				tokens = n
+			}
+			if err := setWorkspaceWatch(dir, ws, func(wc *config.WatchConfig) { wc.DayCap = tokens }); err != nil {
+				exitWithError("agent_cap", err, 1)
+			}
+			if utils.JSONOutput {
+				utils.PrintJSON(map[string]any{"workspace": ws, "dayCap": tokens})
+				return
+			}
+			if tokens == 0 {
+				fmt.Printf("%s has no day budget now\n", ws)
+				return
+			}
+			fmt.Printf("%s runs under %s tokens a day — the daemon rings once when a day passes it\n", ws, sessions.Tokens(tokens))
+			return
+		}
 		if len(args) == 0 {
 			user, err := config.LoadUser(path)
 			if err != nil {
@@ -195,5 +223,6 @@ is stopped. "off" takes a budget away. No argument prints the default.`,
 func init() {
 	agentSendCmd.Flags().Bool("enter", false, "Press Enter after the text")
 	agentNoteCmd.Flags().Bool("clear", false, "Remove the note")
+	agentCapCmd.Flags().String("repo", "", "A tokens-per-day budget for this workspace instead: corgi agent cap --repo api 20M")
 	agentCmd.AddCommand(agentSendCmd, agentAnswerCmd, agentNoteCmd, agentCapCmd, agentInterruptCmd, agentTurnCmd)
 }

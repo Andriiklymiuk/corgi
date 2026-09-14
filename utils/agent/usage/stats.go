@@ -22,6 +22,10 @@ type DayStats struct {
 	Sessions  int           `json:"sessions"`
 	ToolCalls int           `json:"toolCalls"`
 	Models    []ModelTokens `json:"models,omitempty"`
+	// Tokens by workspace, and their sum, as the daemon's sweep counted
+	// them (2.24); absent from a day nothing was swept.
+	Tokens      map[string]int64 `json:"tokens,omitempty"`
+	TokensTotal int64            `json:"tokensTotal,omitempty"`
 }
 
 // statsFile is the shape of Claude Code's stats-cache.json, as far as corgi

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -261,4 +262,37 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the switches, POST {workspace, …} to flip them")
 	}
+}
+
+// setWorkspaceWatch edits one workspace's watch config in the user file
+// through edit and writes it back; the daemon reads it live.
+func setWorkspaceWatch(dir, id string, edit func(*config.WatchConfig)) error {
+	registry, err := workspace.Load(agentRegistryPath(dir))
+	if err != nil {
+		return err
+	}
+	ws, ok := registry.Find(strings.TrimSpace(id))
+	if !ok {
+		return fmt.Errorf("no workspace named %s", id)
+	}
+	path := agentUserConfigPath(dir)
+	user, err := config.LoadUser(path)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		user = &config.UserConfig{}
+	}
+	if user.Workspaces == nil {
+		user.Workspaces = map[string]config.WorkspaceConfig{}
+	}
+	entry := user.Workspaces[ws.ID]
+	wc := entry.Watch
+	if wc == nil {
+		wc = &config.WatchConfig{}
+	}
+	edit(wc)
+	entry.Watch = wc
+	user.Workspaces[ws.ID] = entry
+	return writeUserConfig(path, user)
 }

@@ -295,6 +295,10 @@ type WatchConfig struct {
 	// touches your checkout and two runs on one repo do not collide. Off by
 	// default: it takes disk and a branch per ticket.
 	Isolate bool `yaml:"isolate,omitempty"`
+	// DayCap is the workspace's tokens-per-day budget: what its sessions
+	// spend, summed by the sweep; the daemon rings once when a day passes
+	// it. 0 is none (2.24).
+	DayCap int64 `yaml:"dayCap,omitempty"`
 	// Headless lets a message for a session whose terminal is gone — the
 	// editor closed, the lid shut on a tab — run as one headless turn,
 	// claude -p --resume, in its own checkout under its own account. The

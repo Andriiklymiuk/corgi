@@ -25,6 +25,10 @@ type ledgerDay struct {
 	IDs       []string `json:"ids,omitempty"`
 	Prompts   int      `json:"prompts"`
 	ToolCalls int      `json:"toolCalls"`
+	// Tokens is what the day's sessions spent, by workspace label — the
+	// sweep's deltas, so a session that runs for days is counted where the
+	// tokens went (2.24).
+	Tokens map[string]int64 `json:"tokens,omitempty"`
 }
 
 const ledgerKeep = 60
@@ -91,6 +95,44 @@ func (l *Ledger) Note(event, sessionID string, foreign bool, at time.Time) {
 	}
 }
 
+// AddTokens counts n tokens spent today by a workspace's sessions and
+// says the workspace's total for the day afterwards.
+func (l *Ledger) AddTokens(workspace string, n int64, at time.Time) int64 {
+	if l == nil || n <= 0 {
+		return 0
+	}
+	if workspace == "" {
+		workspace = "?"
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	date := Today(at)
+	d := l.days[date]
+	if d == nil {
+		d = &ledgerDay{}
+		l.days[date] = d
+	}
+	if d.Tokens == nil {
+		d.Tokens = map[string]int64{}
+	}
+	d.Tokens[workspace] += n
+	l.dirty = true
+	return d.Tokens[workspace]
+}
+
+// TokensToday is what a workspace's sessions spent on a date so far.
+func (l *Ledger) TokensToday(workspace string, at time.Time) int64 {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if d := l.days[Today(at)]; d != nil {
+		return d.Tokens[workspace]
+	}
+	return 0
+}
+
 // Flush writes the file when something changed, and forgets days older
 // than the ledger keeps.
 func (l *Ledger) Flush() error {
@@ -137,7 +179,15 @@ func (d *ledgerDay) stats(date string) DayStats {
 	if d == nil {
 		return DayStats{Date: date}
 	}
-	return DayStats{Date: date, Sessions: len(d.IDs), Messages: d.Prompts, ToolCalls: d.ToolCalls}
+	st := DayStats{Date: date, Sessions: len(d.IDs), Messages: d.Prompts, ToolCalls: d.ToolCalls}
+	if len(d.Tokens) > 0 {
+		st.Tokens = map[string]int64{}
+		for ws, n := range d.Tokens {
+			st.Tokens[ws] = n
+			st.TokensTotal += n
+		}
+	}
+	return st
 }
 
 // ReadLedgerDays reads the daemon's file for the dates asked, for a process
