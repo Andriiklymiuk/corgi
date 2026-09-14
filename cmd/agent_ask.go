@@ -182,10 +182,32 @@ the kanban and the workspace names, nothing else). The phone's Ask box and
 Telegram's /ask do the same.
 
   corgi agent ask "what should I look at first?"
-  corgi agent ask "which sessions touch the cart?"`,
-	Args: cobra.MinimumNArgs(1),
+  corgi agent ask "which sessions touch the cart?"
+  corgi agent ask --diff api·auth            # what the branch does, in three lines, and a risk word
+  corgi agent ask --diff s1 "does it touch the token?"`,
+	Args: cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		answer, err := askBoard(context.Background(), mustAgentDir(), strings.Join(args, " "))
+		question := strings.Join(args, " ")
+		if ref, _ := cmd.Flags().GetString("diff"); ref != "" {
+			session, _, msg := launchSessionFor(ref)
+			if msg != "" {
+				exitWithError("agent_ask", fmt.Errorf("%s", msg), 1)
+			}
+			answer, risk, files, err := explainSession(context.Background(), session, question)
+			if err != nil {
+				exitWithError("agent_ask", err, 1)
+			}
+			if utils.JSONOutput {
+				utils.PrintJSON(map[string]any{"answer": answer, "risk": risk, "files": files, "session": session.ID})
+				return
+			}
+			fmt.Println(answer)
+			return
+		}
+		if strings.TrimSpace(question) == "" {
+			exitWithError("agent_ask", fmt.Errorf("ask something, or --diff <session> to have a branch explained"), 1)
+		}
+		answer, err := askBoard(context.Background(), mustAgentDir(), question)
 		if err != nil {
 			exitWithError("agent_ask", err, 1)
 		}
@@ -206,9 +228,35 @@ func launchAskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Question string `json:"question"`
+		// Session and Diff: explain that session's branch instead of the
+		// board — three lines and a risk word (2.23).
+		Session string `json:"session"`
+		Diff    bool   `json:"diff"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the question")
+		return
+	}
+	if req.Diff && req.Session != "" {
+		session, code, msg := launchSessionFor(req.Session)
+		if code != 0 {
+			writeLaunchError(w, code, msg)
+			return
+		}
+		if !streamAllowedFor(session.Label) {
+			writeLaunchError(w, http.StatusForbidden, fmt.Sprintf("reading %s's code from a phone is off on the laptop: corgi agent stream enable --workspace %s", session.Label, session.Label))
+			return
+		}
+		answer, risk, files, err := explainSession(r.Context(), session, req.Question)
+		if err != nil {
+			code := http.StatusBadGateway
+			if strings.HasPrefix(err.Error(), "no main") || strings.HasPrefix(err.Error(), "nothing changed") || strings.HasPrefix(err.Error(), "this session") {
+				code = http.StatusConflict
+			}
+			writeLaunchError(w, code, err.Error())
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"answer": answer, "risk": risk, "files": files, "session": session.ID})
 		return
 	}
 	dir, err := agentDir()
@@ -229,5 +277,6 @@ func launchAskHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
+	agentAskCmd.Flags().String("diff", "", "explain this session's branch instead of the board: three lines and a risk word")
 	agentCmd.AddCommand(agentAskCmd)
 }
