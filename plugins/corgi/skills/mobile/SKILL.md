@@ -379,6 +379,9 @@ on-device render gate it leans on. In short:
   directly and demote the computed value to a suggestion.
 
 ## See also
+- **[`before-after`](../before-after/SKILL.md)** — when the change should be proven against
+  the state it replaced: build the base branch too, capture the same screen twice, attach
+  both to the PR. This skill is the capture half of it.
 - **[`design-parity`](../design-parity/SKILL.md)** — when the change has a design behind it:
   pulling the frames to the repo, making a flagged/unseeded feature reachable, labelled
   side-by-sides, and the deviation table (fixed vs deliberate) the MR needs.
