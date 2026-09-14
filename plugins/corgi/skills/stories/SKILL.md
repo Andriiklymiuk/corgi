@@ -95,6 +95,15 @@ Don't fake one.
     with Maestro + screenshots even without a committed harness
     (`references/expo-verification.md`).
 
+**Before/after asked for → run `before-after`.** Any phrasing of "screenshot
+comparison", "before and after", "show the visual diff", "prove the UI changed" is a
+request for the **`before-after`** skill, not a second after-only screenshot: it builds
+the base branch too, captures the same screen twice, and puts both in the PR body. It
+costs two builds, so it runs when the user asks for it or when a visual change lands on
+a surface nobody can rebuild casually (a native app) — otherwise one after-shot plus the
+repo's harness is the proportionate proof. Never satisfy the request by describing the
+old state from the diff; the diff is exactly what does not show it.
+
 ### Complex story → superpowers
 
 Bigger than adjustment (real design, unclear approach, large surface, new contract)
@@ -710,6 +719,13 @@ issue link.
   **draft** PR as _in progress_ and revert this move — the review state only sticks once
   the PR is marked _ready_. Set it once; don't fight a revert.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
+- **Before/after images in the body** when the run captured them (the `before-after`
+  skill, triggered in Phase 3). Upload to the forge and reference the returned markdown
+  — GitLab `glab api … --form file=@…` (`--form`, not `--field`; `-F` is a form *field*
+  and 400s on a file), GitHub has no upload endpoint so commit them to the repo's
+  existing assets path or hand them to the user. Two shots go in a table so they sit
+  side by side, with one line naming the device, environment and what to look at. Never
+  link a local path.
 - **Changed surface at the top of the body.** `corgi surface --branch <branch>`
   (or `corgi_diff` with `surface: true`) prints the `## Changed surface` block:
   exported symbols, routes, contracts, migrations and config this PR changed,
@@ -869,6 +885,24 @@ Rules:
   checkout's real directory.
 - Leftovers are cheap to spot later: `git -C <dir> worktree list` shows every one still
   registered, and a stale entry whose dir is gone clears with `worktree prune`.
+
+---
+
+## Phase 6 — Report
+
+Hand the batch back in the **`summary`** skill's shape: one block per ticket, a table
+row per repo, the PR/MR as a markdown link, the state carrying its nuance (`MERGED ✓`,
+`OPEN — auto-merge armed`, `OPEN — 2 unresolved threads`). Re-read each PR/MR and ticket
+live rather than reporting what this run did to them — auto-merge fires and pipelines
+turn red between the push and the report, and the stale row is always the one that
+matters.
+
+Lead with anything still needing the user: a blocked story, a missing credential, a
+manual job to play, an open question. Then the tables, then the tracker roll-up. Include
+what the Phase 5.5 review caught in this run's own work, one line each — that is the
+highest-signal part and the easiest to quietly drop.
+
+Never wrap it in a fenced code block: it renders monospace and kills every link.
 
 ---
 

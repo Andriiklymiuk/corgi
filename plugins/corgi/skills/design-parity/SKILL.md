@@ -160,6 +160,9 @@ The strings in the mockup are the spec — verify them the same way, and ship th
   and the platform gotchas. This skill is the design-comparison layer on top of it.
 - **[`mobile-screenshots`](../mobile-screenshots/SKILL.md)** — the store-screenshot matrix
   (framing, sizes, upload). Same capture discipline, different output.
+- **[`before-after`](../before-after/SKILL.md)** — same capture discipline, but the target
+  is the base branch rather than a design: use it when there is no design and the question
+  is "what did this replace".
 - **[`review`](../review/SKILL.md)** — when reviewing someone else's PR/MR that carries a
   design link, the composites are the evidence to ask for.
 - **[`stories`](../stories/SKILL.md)** — a story whose ticket links a design is not "done"

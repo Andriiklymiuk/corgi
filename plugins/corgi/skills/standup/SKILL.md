@@ -66,3 +66,10 @@ attribution, never make the facts sound bigger than the diff.
 
 - Redo the git archaeology yourself when the command returned data.
 - Read prompt history beyond what the command prints.
+
+## See also
+
+- **[`summary`](../summary/SKILL.md)** — when the question is "where does my batch stand
+  **now**" rather than "what did I do". That one re-reads every PR/MR and ticket live and
+  groups by ticket; this one narrates a period of work for people who were not here.
+

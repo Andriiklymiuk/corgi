@@ -158,7 +158,10 @@ per-repo note. Never re-fetch the same key per PR.
   copy), is a **finding** — ask for the visual proof / flag the divergence, not
   a pass. **No design on the ticket, or it explicitly waives one → not a
   finding:** review the UI on standards alone; don't demand a design that was
-  never promised.
+  never promised. On **your own** PR (the Phase 4 fix path) a missing visual is
+  something to produce rather than request — the **`before-after`** skill builds the
+  base branch, captures the same screen twice and attaches both, which is what makes a
+  restyle reviewable without the reviewer rebuilding trunk.
 
 Distill into a compact **intent note** the review uses two ways in P3:
 1. **Check** — does the diff do what the ticket asked?
