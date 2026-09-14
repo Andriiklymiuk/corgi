@@ -178,6 +178,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		return claimTicket(d.Dir, workspaceID, e)
 	}
 	d.Isolate = isolateFixWorktrees
+	d.Carry = autoCarry(dir)
 	// A pull request the forge calls ready is merged with the workspace's
 	// own token, the same way the phone's Merge does it.
 	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
@@ -1103,7 +1104,7 @@ func policyFor(dir, cwd string) daemon.Policy {
 	}
 	repo, _ := config.LoadRepo(best.AbsPath)
 	if wc := config.Resolve(best.ID, repo, user).Watch; wc != nil {
-		return daemon.Policy{Workspace: best.ID, AutoAllow: wc.AutoAllow, DoneWhen: wc.DoneWhen, CompactAt: wc.CompactAt, HandOver: wc.HandOver, Rebase: wc.Rebase, Lessons: wc.Lessons}
+		return daemon.Policy{Workspace: best.ID, AutoAllow: wc.AutoAllow, DoneWhen: wc.DoneWhen, CompactAt: wc.CompactAt, HandOver: wc.HandOver, Rebase: wc.Rebase, Lessons: wc.Lessons, AutoCarry: wc.AutoCarry}
 	}
 	return daemon.Policy{}
 }

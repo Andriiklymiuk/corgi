@@ -151,3 +151,39 @@ func quotaStillSpent(configDir string, now time.Time) bool {
 	}
 	return false
 }
+
+// autoCarry is the other way past a limit: with the workspace's autoCarry
+// on, a session that hit its quota is carried to another of its accounts
+// that still has budget — once per limit, and never when no account has
+// any. Off by default: it opens a terminal that is yours.
+func (d *Daemon) autoCarry(ctx context.Context, now time.Time) {
+	if d.Carry == nil || d.Policy == nil || d.Sessions == nil {
+		return
+	}
+	if d.carried == nil {
+		d.carried = map[string]time.Time{}
+	}
+	for _, s := range d.Sessions.Sessions() {
+		if s.Status != sessions.StatusLimited || s.Limit != sessions.LimitQuota {
+			delete(d.carried, s.ID)
+			continue
+		}
+		if at, done := d.carried[s.ID]; done && at.Equal(s.StatusSince) {
+			continue
+		}
+		if !d.Policy(s).AutoCarry {
+			continue
+		}
+		d.carried[s.ID] = s.StatusSince
+		profile, err := d.Carry(s)
+		switch {
+		case err != nil:
+			utils.Infof("agent: %s: could not carry: %v\n", s.Display, err)
+		case profile == "":
+			utils.Infof("agent: %s hit its limit; no other account has budget\n", s.Display)
+		default:
+			utils.Infof("agent: carried %s to %s after its limit\n", s.Display, profile)
+			go d.notifyAttentionAt("corgi agent", "carried "+s.Display+" to "+profile+": the account hit its limit", "", "")
+		}
+	}
+}

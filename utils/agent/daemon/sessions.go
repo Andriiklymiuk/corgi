@@ -454,6 +454,7 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 			}
 			d.sampleAccounts(now)
 			d.autoContinue(ctx, now)
+			d.autoCarry(ctx, now)
 			d.checkDrift(now)
 			d.runRoutines(ctx, now)
 		}

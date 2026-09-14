@@ -82,9 +82,11 @@ type Daemon struct {
 	watchState *watch.State
 	watchers   map[string]*watch.Watch
 	fixBusy    map[string]chan struct{}
-	fixActive  map[string]bool
-	gateMu     sync.Mutex
-	gating     map[string]bool
+	// carried is which limit each session was already carried for.
+	carried   map[string]time.Time
+	fixActive map[string]bool
+	gateMu    sync.Mutex
+	gating    map[string]bool
 
 	Version string
 	// Dir is the agent data directory holding daemon.json and registry.json.
@@ -148,6 +150,10 @@ type Daemon struct {
 	// own — read live, so a switch flipped on the phone counts for the
 	// next prompt or the next stop. Nil means no policy anywhere.
 	Policy func(s sessions.Session) Policy
+	// Carry moves a session to another of its workspace's accounts and
+	// says which; "" when none has budget. cmd owns the profiles, so it
+	// injects this. Nil turns auto-carry off.
+	Carry func(s sessions.Session) (string, error)
 	// Shell runs one done-when command in a directory; nil runs sh -c.
 	Shell func(ctx context.Context, dir, cmd string) ([]byte, error)
 	// Raise brings a session's window to the front; nil means the platform

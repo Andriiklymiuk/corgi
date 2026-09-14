@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,46 +59,141 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 	if profile == "" {
 		exitWithError("agent_carry", fmt.Errorf("--profile is required: which account to carry to (or --fresh to restart under the same one)"), 2)
 	}
+	packetPath, err := carrySession(dir, s, profile, fresh, "cli")
+	if err != nil {
+		code := 1
+		var ce *carryError
+		if errors.As(err, &ce) {
+			code = ce.code
+		}
+		exitWithError("agent_carry", err, code)
+	}
+	if packetPath != "" && !utils.JSONOutput {
+		utils.Infof("handoff: %s\n", packetPath)
+	}
+	if !utils.JSONOutput {
+		utils.Info("the old session keeps running; close its tab when you are done with it")
+	}
+}
+
+// carryError says which exit code a carry that did not happen deserves.
+type carryError struct {
+	err  error
+	code int
+}
+
+func (e *carryError) Error() string { return e.err.Error() }
+func (e *carryError) Unwrap() error { return e.err }
+
+// carrySession moves s to profile: the handoff, the transcript copy (or a
+// fresh start), the new terminal, the old session dismissed. Shared by
+// the command and the daemon's auto-carry.
+func carrySession(dir string, s sessions.Session, profile string, fresh bool, source string) (packetPath string, err error) {
 	if !fresh && s.Context != nil && s.Context.Percent >= carryFreshAt {
 		fresh = true
 		utils.Infof("context is %d%% full — starting the new session clean, from the handoff\n", s.Context.Percent)
 	}
 	plan, err := planCarry(dir, s, profile, fresh)
 	if err != nil {
-		exitWithError("agent_carry", err, 1)
+		return "", &carryError{err, 1}
 	}
 	packet, packetPath := leaveCarryHandoff(plan.Workspace, s, profile)
 	if fresh {
 		if packetPath == "" {
-			exitWithError("agent_carry", fmt.Errorf("a fresh start needs a handoff, and the branch %q names no ticket — say --ref on `corgi agent handoff` first", sessions.Branch(s.Cwd)), 2)
+			return "", &carryError{fmt.Errorf("a fresh start needs a handoff, and the branch %q names no ticket — say --ref on `corgi agent handoff` first", sessions.Branch(s.Cwd)), 2}
 		}
 		id, err := savePrompt(dir, carryPrompt(packet, packetPath))
 		if err != nil {
-			exitWithError("agent_carry", err, 1)
+			return "", &carryError{err, 1}
 		}
 		plan.Command = fmt.Sprintf("%s agent claude --profile %s --prompt-id %s", shellQuote(plan.Exe), shellQuote(profile), id)
 	} else {
 		if err := os.MkdirAll(filepath.Dir(plan.To), 0o700); err != nil {
-			exitWithError("agent_carry", err, 1)
+			return "", &carryError{err, 1}
 		}
 		if err := copyFile(plan.From, plan.To); err != nil {
-			exitWithError("agent_carry", fmt.Errorf("copy transcript: %w", err), 1)
+			return "", &carryError{fmt.Errorf("copy transcript: %w", err), 1}
 		}
 	}
 	how := "a new terminal resumes it there"
 	if fresh {
 		how = "a new terminal starts clean there, from the handoff"
 	}
-	sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: s.Host.WindowID, Command: plan.Command, Source: "cli"},
+	sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: s.Host.WindowID, Command: plan.Command, Source: source},
 		fmt.Sprintf("carrying %s to %s: %s", s.Display, profile, how))
-	if packetPath != "" && !utils.JSONOutput {
-		utils.Infof("handoff: %s\n", packetPath)
-	}
 	if s.Status == sessions.StatusLimited || s.Status == sessions.StatusDone || s.Status == sessions.StatusStale {
-		_, _ = command.Write(dir, command.Command{Action: command.ActionDismiss, SessionID: s.ID, Source: "cli"})
+		_, _ = command.Write(dir, command.Command{Action: command.ActionDismiss, SessionID: s.ID, Source: source})
 	}
-	if !utils.JSONOutput {
-		utils.Info("the old session keeps running; close its tab when you are done with it")
+	return packetPath, nil
+}
+
+// carryProfileFor picks where a limited session goes on its own: the
+// workspace's other accounts, the one with the most of its five hours
+// left, and none at all when every one is at 95 or nothing is known.
+func carryProfileFor(dir string, s sessions.Session) (string, error) {
+	if s.Cwd == "" || sessions.Placeholder(s.ID) {
+		return "", nil
+	}
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil || user == nil {
+		return "", err
+	}
+	launch, err := resolveClaudeLaunch(s.Cwd, "", nil)
+	if err != nil || launch.Workspace == "" {
+		return "", err
+	}
+	registry, _, err := agentRegistry()
+	if err != nil {
+		return "", err
+	}
+	ws, ok := registry.Find(launch.Workspace)
+	if !ok {
+		return "", nil
+	}
+	repo, _ := config.LoadRepo(ws.AbsPath)
+	resolved := config.Resolve(launch.Workspace, repo, user)
+	current := firstNonEmpty(s.Profile, "default")
+	best, bestLeft := "", 0
+	for _, name := range resolved.Accounts {
+		name = strings.TrimSpace(name)
+		if name == "" || strings.EqualFold(name, current) {
+			continue
+		}
+		target, err := config.ApplyProfile(resolved, user, name)
+		if err != nil {
+			continue
+		}
+		limits, ok := usage.ReadLimits(expandTilde(target.ConfigDir))
+		if !ok {
+			continue
+		}
+		left := 100 - limits.FiveHour.Percent
+		if limits.SevenDay.Percent >= quotaFullAt || limits.FiveHour.Percent >= quotaFullAt {
+			continue
+		}
+		if left > bestLeft {
+			best, bestLeft = name, left
+		}
+	}
+	return best, nil
+}
+
+// quotaFullAt is the reading at which an account is no better than the
+// one that just hit its limit.
+const quotaFullAt = 95
+
+// autoCarry is what the daemon calls for a session at its quota: pick an
+// account, carry it there, say which.
+func autoCarry(dir string) func(s sessions.Session) (string, error) {
+	return func(s sessions.Session) (string, error) {
+		profile, err := carryProfileFor(dir, s)
+		if err != nil || profile == "" {
+			return "", err
+		}
+		if _, err := carrySession(dir, s, profile, false, "daemon"); err != nil {
+			return "", err
+		}
+		return profile, nil
 	}
 }
 

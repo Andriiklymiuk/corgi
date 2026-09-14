@@ -45,6 +45,8 @@ type WatchSwitches struct {
 	Rebase bool `json:"rebase"`
 	// Lessons writes reviews, red gates and failed bots down for the next session.
 	Lessons bool `json:"lessons"`
+	// AutoCarry moves a session at its quota to another account with budget (2.23).
+	AutoCarry bool `json:"autoCarry"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -66,7 +68,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	if wc.DoneWhen != nil {
 		out.DoneWhen = wc.DoneWhen
 	}
-	out.CompactAt, out.Rebase, out.Lessons = wc.CompactAt, wc.Rebase, wc.Lessons
+	out.CompactAt, out.Rebase, out.Lessons, out.AutoCarry = wc.CompactAt, wc.Rebase, wc.Lessons, wc.AutoCarry
 	out.Slots = max(1, wc.Slots)
 	return out
 }
@@ -117,6 +119,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			CompactAt *int      `json:"compactAt"`
 			Rebase    *bool     `json:"rebase"`
 			Lessons   *bool     `json:"lessons"`
+			AutoCarry *bool     `json:"autoCarry"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -217,6 +220,9 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Lessons != nil {
 			wc.Lessons = *req.Lessons
+		}
+		if req.AutoCarry != nil {
+			wc.AutoCarry = *req.AutoCarry
 		}
 		if req.CompactAt != nil {
 			if *req.CompactAt < 0 || *req.CompactAt > 100 {
