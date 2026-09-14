@@ -342,6 +342,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/events", launchAuth(token, http.HandlerFunc(launchEventsHandler), deviceStore))
 		mux.Handle("/launch/stream", launchStream(token, deviceStore))
 		mux.Handle("/launch/preview", launchAuth(token, http.HandlerFunc(launchPreviewHandler), deviceStore))
+		mux.Handle("/launch/undo", launchAuth(token, http.HandlerFunc(launchUndoHandler), deviceStore))
 		// The door itself takes no header: the ticket in the path is the key.
 		mux.Handle("/launch/preview/", http.HandlerFunc(previewProxyHandler))
 		mux.Handle("/launch/kanban", launchAuth(token, http.HandlerFunc(launchKanbanHandler), deviceStore))
