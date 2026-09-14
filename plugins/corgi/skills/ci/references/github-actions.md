@@ -41,11 +41,9 @@ jobs:
           dotnet: true
           haskell: true
 
-      # Checksum-verified install + a cache plan derived from the compose file
-      # (cache-paths / cache-key / cache-groups outputs).
+      # Checksum-verified install.
       - name: Install corgi
         uses: Andriiklymiuk/corgi@v1
-        id: corgi
         with:
           version: ${{ inputs.corgi-version }}
 
@@ -54,18 +52,29 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      - name: Clone service repos
+        run: corgi init --depth 1
+
+      # After init on purpose: the keys are hashed from the services'
+      # lockfiles, which do not exist until they are cloned. Computed earlier
+      # the key never changes and the cache never re-saves — this step fails
+      # instead (corgi cache paths --json --strict).
+      - name: Compute the cache plan
+        uses: Andriiklymiuk/corgi/cache@v1
+        id: cache
+
       # The plan covers each service's dependency dir + .corgi/corgi_services/.cache
       # (the beforeStart skip markers). On a polyglot stack, prefer one
       # actions/cache step per slot (cache-1-key/paths/restore-keys …
       # cache-4-*) so one lockfile change doesn't evict every other language's
-      # packages — the restore-keys slot (corgi ≥ 1.20.36) is the group's
-      # corgi-deps-<ecosystem>- prefix, so a changed lockfile starts from the
-      # previous packages instead of empty.
+      # packages — the restore-keys slot is the group's corgi-deps-<ecosystem>-
+      # prefix, so a changed lockfile starts from the previous packages instead
+      # of empty.
       - name: Restore dependency caches
         uses: actions/cache@v4
         with:
-          path: ${{ steps.corgi.outputs.cache-paths }}
-          key: ${{ steps.corgi.outputs.cache-key }}
+          path: ${{ steps.cache.outputs.cache-paths }}
+          key: ${{ steps.cache.outputs.cache-key }}
           restore-keys: corgi-deps-
 
       # Package-manager caches are outside the compose-derived plan but cheap.
@@ -86,9 +95,6 @@ jobs:
         run: |
           mkdir -p env/source
           printf '%s' "$API_ENV" > env/source/api.env
-
-      - name: Clone service repos
-        run: corgi init --depth 1
 
       - name: Boot the stack
         run: corgi run --feature "${{ inputs.branch }}" --detach --wait --wait-timeout 20m

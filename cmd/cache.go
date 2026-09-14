@@ -26,19 +26,28 @@ Derived from the compose file, so the list cannot drift when a service is added.
 A service opts in by giving a beforeStart step a cacheKey; without one corgi
 cannot skip that install anyway.
 
-corgi_services/.cache is always included. It holds the markers that let corgi
-skip an unchanged step, and restoring it without the dependency directories
-would make corgi skip an install whose output is missing.
+corgi_services/.cache is always included. It holds the markers for steps whose
+install has no directory of its own (go.sum, for one). A step that produces a
+dependency directory keeps its marker inside it (node_modules/.corgi-step-0),
+so one cache entry carries both and a stale restore cannot pass as fresh.
 
 GitHub Actions can read this plan at runtime through the corgi action's outputs.
 GitLab cannot — its cache config is static YAML — so --gitlab renders a job
 template to commit, and --check fails when that file no longer matches the
 compose file.
 
+Run it after the service directories exist. A cacheKey file that is not on
+disk yet hashes to a fixed marker, so the key comes out the same on every run
+and the cache never invalidates — in a workflow that means the plan belongs
+after corgi init, not before. The command warns when that happens; --strict
+turns the warning into exit 1, and --json reports it as complete: false with
+the files under missingFiles.
+
 Examples:
   corgi cache paths
   corgi cache paths --json
   corgi cache paths --key
+  corgi cache paths --json --strict
   corgi cache paths --gitlab --out .gitlab/corgi-cache.yml
   corgi cache paths --gitlab --check .gitlab/corgi-cache.yml`,
 	Run: runCachePaths,
@@ -48,6 +57,7 @@ func init() {
 	rootCmd.AddCommand(cacheCmd)
 	cacheCmd.AddCommand(cachePathsCmd)
 	cachePathsCmd.Flags().Bool("key", false, "Print only the cache key")
+	cachePathsCmd.Flags().Bool("strict", false, "Exit 1 when a cacheKey file does not exist, instead of only warning")
 	cachePathsCmd.Flags().Bool("gitlab", false, "Render a GitLab CI cache job template instead of a path list")
 	cachePathsCmd.Flags().String("out", "", "With --gitlab: write to this file instead of stdout, creating its directory")
 	cachePathsCmd.Flags().String("check", "", "With --gitlab: exit non-zero when this file differs from what would be generated")
@@ -65,6 +75,7 @@ func runCachePaths(cmd *cobra.Command, _ []string) {
 	}
 
 	plan := utils.CachePathsFor(corgi)
+	strict, _ := cmd.Flags().GetBool("strict")
 
 	if gitlab, _ := cmd.Flags().GetBool("gitlab"); gitlab {
 		runGitLabCachePaths(cmd, plan)
@@ -73,16 +84,54 @@ func runCachePaths(cmd *cobra.Command, _ []string) {
 
 	if keyOnly, _ := cmd.Flags().GetBool("key"); keyOnly {
 		fmt.Println(plan.Key)
+		warnMissingCacheKeyFiles(plan)
+		failIfIncomplete(plan, strict)
 		return
 	}
 	if utils.JSONOutput {
 		utils.PrintJSON(plan)
+		// The JSON already carries complete/missingFiles, so a warning here
+		// would only double up the annotation the action prints from them.
+		if strict && !plan.Complete {
+			warnMissingCacheKeyFiles(plan)
+		}
+		failIfIncomplete(plan, strict)
 		return
 	}
 	// Newline-separated, which is the format GitHub's cache action expects for
 	// a multi-line path input.
 	fmt.Println(strings.Join(plan.Paths, "\n"))
 	warnCachingIsOff(plan)
+	warnMissingCacheKeyFiles(plan)
+	failIfIncomplete(plan, strict)
+}
+
+// warnMissingCacheKeyFiles is the loud half of the fix for a key hashed from
+// nothing: a CI job that computes the plan before cloning the service repos
+// gets a key that never changes, and a cache that never invalidates. stderr,
+// so a command substitution stays clean; a GitHub annotation, so it is seen.
+func warnMissingCacheKeyFiles(plan utils.CachePlan) {
+	if plan.Complete {
+		return
+	}
+	files := strings.Join(plan.MissingFiles, ", ")
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		utils.Infof("::warning::corgi cache paths: cacheKey files not found, so the key was hashed from nothing "+
+			"and will not change when they do (missing: %s). Run this after `corgi init` (or after the service directories exist).\n",
+			files)
+		return
+	}
+	utils.Infof("\nwarning: these cacheKey files do not exist, so the key was hashed from nothing and will not change when they do:\n")
+	for _, f := range plan.MissingFiles {
+		utils.Infof("  %s\n", f)
+	}
+	utils.Infof("Run this after `corgi init` (or after the service directories exist).\n")
+}
+
+func failIfIncomplete(plan utils.CachePlan, strict bool) {
+	if strict && !plan.Complete {
+		exitProcess(1)
+	}
 }
 
 // warnCachingIsOff distinguishes "nothing opts in" from "nothing to cache".

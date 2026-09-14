@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"andriiklymiuk/corgi/utils"
@@ -165,5 +166,29 @@ func TestCIInitWritesNothingWhenOneFileExists(t *testing.T) {
 	existing, err := os.ReadFile(filepath.Join(dir, ".gitlab", "corgi-cache.yml"))
 	if err != nil || string(existing) != "old\n" {
 		t.Errorf("the existing file must be untouched, got %q / %v", existing, err)
+	}
+}
+
+// The cache keys are hashed from the cloned lockfiles, so the plan has to be
+// computed after `corgi init` — a generated workflow that restores the cache
+// from the install action's outputs freezes the key and ships stale
+// dependencies once the markers cache and the packages cache drift apart.
+func TestGitHubWorkflowComputesCacheKeysAfterInit(t *testing.T) {
+	workflow := githubWorkflowTemplate()
+
+	init := strings.Index(workflow, "corgi init --depth 1")
+	plan := strings.Index(workflow, "uses: Andriiklymiuk/corgi/cache@v"+APP_VERSION)
+	restore := strings.Index(workflow, "uses: actions/cache@")
+	if init < 0 || plan < 0 || restore < 0 {
+		t.Fatalf("expected init, the cache action and actions/cache in:\n%s", workflow)
+	}
+	if !(init < plan && plan < restore) {
+		t.Errorf("order must be init (%d) < corgi/cache (%d) < actions/cache (%d)", init, plan, restore)
+	}
+	if strings.Contains(workflow, "steps.corgi.outputs.cache-") {
+		t.Error("cache steps must read the post-init plan, not the install action's outputs")
+	}
+	if !strings.Contains(workflow, "steps.cache.outputs.cache-1-key") {
+		t.Error("cache steps must read the post-init action's slots")
 	}
 }

@@ -228,36 +228,41 @@ jobs:
       - uses: actions/checkout@v5
 
       - uses: Andriiklymiuk/corgi@v` + APP_VERSION + `
-        id: corgi
+
+      - run: corgi init --depth 1 --feature "$BRANCH"
+
+      # After init on purpose: the keys are hashed from the services'
+      # lockfiles, which do not exist until they are cloned. Computed earlier
+      # the key never changes and the cache never invalidates.
+      - uses: Andriiklymiuk/corgi/cache@v` + APP_VERSION + `
+        id: cache
 
       # Four slots because a workflow expression cannot loop; the action
       # warns by itself when an ecosystem does not fit.
       - uses: actions/cache@v4
-        if: steps.corgi.outputs.cache-1-key != ''
+        if: steps.cache.outputs.cache-1-key != ''
         with:
-          path: ${{ steps.corgi.outputs.cache-1-paths }}
-          key: ${{ steps.corgi.outputs.cache-1-key }}
-          restore-keys: ${{ steps.corgi.outputs.cache-1-restore-keys }}
+          path: ${{ steps.cache.outputs.cache-1-paths }}
+          key: ${{ steps.cache.outputs.cache-1-key }}
+          restore-keys: ${{ steps.cache.outputs.cache-1-restore-keys }}
       - uses: actions/cache@v4
-        if: steps.corgi.outputs.cache-2-key != ''
+        if: steps.cache.outputs.cache-2-key != ''
         with:
-          path: ${{ steps.corgi.outputs.cache-2-paths }}
-          key: ${{ steps.corgi.outputs.cache-2-key }}
-          restore-keys: ${{ steps.corgi.outputs.cache-2-restore-keys }}
+          path: ${{ steps.cache.outputs.cache-2-paths }}
+          key: ${{ steps.cache.outputs.cache-2-key }}
+          restore-keys: ${{ steps.cache.outputs.cache-2-restore-keys }}
       - uses: actions/cache@v4
-        if: steps.corgi.outputs.cache-3-key != ''
+        if: steps.cache.outputs.cache-3-key != ''
         with:
-          path: ${{ steps.corgi.outputs.cache-3-paths }}
-          key: ${{ steps.corgi.outputs.cache-3-key }}
-          restore-keys: ${{ steps.corgi.outputs.cache-3-restore-keys }}
+          path: ${{ steps.cache.outputs.cache-3-paths }}
+          key: ${{ steps.cache.outputs.cache-3-key }}
+          restore-keys: ${{ steps.cache.outputs.cache-3-restore-keys }}
       - uses: actions/cache@v4
-        if: steps.corgi.outputs.cache-4-key != ''
+        if: steps.cache.outputs.cache-4-key != ''
         with:
-          path: ${{ steps.corgi.outputs.cache-4-paths }}
-          key: ${{ steps.corgi.outputs.cache-4-key }}
-          restore-keys: ${{ steps.corgi.outputs.cache-4-restore-keys }}
-
-      - run: corgi init --depth 1 --feature "$BRANCH"
+          path: ${{ steps.cache.outputs.cache-4-paths }}
+          key: ${{ steps.cache.outputs.cache-4-key }}
+          restore-keys: ${{ steps.cache.outputs.cache-4-restore-keys }}
 
       # Fails in seconds on a missing env file, busy port or missing tool.
       - run: corgi doctor

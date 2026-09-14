@@ -26,6 +26,9 @@ outputs:
     description: >-
       Newline-separated directories worth caching, derived from every service's
       beforeStart cacheKey. Pass straight to actions/cache's path input.
+      Computed here, before `corgi init` clones the services, the key is hashed
+      from lockfiles that do not exist yet and never changes — prefer the
+      Andriiklymiuk/corgi/cache action placed after `corgi init`.
     value: ${{ steps.setup.outputs.cache-paths }}
   cache-key:
     description: >-
@@ -90,6 +93,14 @@ outputs:
       How many ecosystems did not fit the four slots. The action already warns
       when this is non-zero, so a workflow does not need a step to check.
     value: ${{ steps.setup.outputs.cache-overflow }}
+  cache-complete:
+    description: >-
+      "true" when every cacheKey file existed when the keys were computed.
+      "false" means the keys were hashed from missing files — the usual case
+      here, since this action runs before `corgi init` — and will not change
+      when those files do. The action warns; use Andriiklymiuk/corgi/cache
+      after `corgi init` for keys that track the real lockfiles.
+    value: ${{ steps.setup.outputs.cache-complete }}
 
 runs:
   using: composite
@@ -155,39 +166,11 @@ runs:
         # Only available once a compose file exists; installing corgi before
         # the checkout should still succeed here.
         if ls ./*corgi-compose.yml >/dev/null 2>&1 || [ -f corgi-compose.yml ]; then
-          {
-            echo "cache-paths<<CORGI_ACTION_EOF"
-            corgi cache paths
-            echo "CORGI_ACTION_EOF"
-          } >> "$GITHUB_OUTPUT"
-          echo "cache-key=$(corgi cache paths --key)" >> "$GITHUB_OUTPUT"
-          groups="$(corgi cache paths --json | jq -c '.groups // []')"
-          echo "cache-groups=$groups" >> "$GITHUB_OUTPUT"
-
-          # Four fixed slots as well as the JSON. An Actions expression cannot
-          # loop, and neither can a composite action, so every workflow used to
-          # copy the same cache step four times with fromJSON(...)[i] indexing
-          # plus a hand-written "ran out of slots" warning. The slots keep the
-          # copies but make each one plain, and the warning moves in here.
-          total="$(jq 'length' <<<"$groups")"
-          for i in 1 2 3 4; do
-            key="$(jq -r --argjson i "$i" '.[$i-1].key // ""' <<<"$groups")"
-            echo "cache-$i-key=$key" >> "$GITHUB_OUTPUT"
-            # `// ""` keeps this working against a corgi predating restorePrefix.
-            restore="$(jq -r --argjson i "$i" '.[$i-1].restorePrefix // ""' <<<"$groups")"
-            echo "cache-$i-restore-keys=$restore" >> "$GITHUB_OUTPUT"
-            {
-              echo "cache-$i-paths<<CORGI_ACTION_EOF"
-              jq -r --argjson i "$i" '.[$i-1].pathsText // ""' <<<"$groups"
-              echo "CORGI_ACTION_EOF"
-            } >> "$GITHUB_OUTPUT"
-          done
-
-          overflow=$(( total > 4 ? total - 4 : 0 ))
-          echo "cache-overflow=$overflow" >> "$GITHUB_OUTPUT"
-          if [ "$overflow" -gt 0 ]; then
-            echo "::warning::corgi found $total cache groups but the action publishes four slots; $overflow ecosystem(s) will not be cached. Use the cache-groups JSON if you need all of them."
-          fi
+          # This runs before `corgi init`, so the cacheKey files are usually
+          # not cloned yet and the plan is hashed from nothing. The script
+          # warns and publishes the outputs anyway (older workflows read
+          # them); the correct pattern is Andriiklymiuk/corgi/cache after init.
+          bash "$GITHUB_ACTION_PATH/cache/emit-outputs.sh"
         else
           echo "::notice::no corgi-compose.yml in ${{ inputs.working-directory }} yet, so no cache outputs"
           for i in 1 2 3 4; do
@@ -196,4 +179,5 @@ runs:
             echo "cache-$i-restore-keys=" >> "$GITHUB_OUTPUT"
           done
           echo "cache-overflow=0" >> "$GITHUB_OUTPUT"
+          echo "cache-complete=true" >> "$GITHUB_OUTPUT"
         fi
