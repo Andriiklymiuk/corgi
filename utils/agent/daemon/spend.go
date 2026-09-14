@@ -42,6 +42,13 @@ func (d *Daemon) checkSpend(live []sessions.Session, now time.Time) {
 		mark.total = mark.total.Plus(delta)
 		mark.offset = offset
 		d.spent[s.ID] = mark
+		// The day's book, by workspace — and the workspace's day budget.
+		if n := delta.Total(); n > 0 && d.Ledger != nil {
+			today := d.Ledger.AddTokens(s.Label, n, now)
+			if cap := d.dayCapFor(s); cap > 0 && today >= cap && today-n < cap {
+				go d.notifyAttention("corgi agent · "+s.Label, "over its day budget: "+sessions.Tokens(today)+" of "+sessions.Tokens(cap)+" tokens today", s.Folder)
+			}
+		}
 		sp := sessions.Spend{Tokens: mark.total.Total(), Turns: int(mark.total.Turns), At: now}
 		if _, crossed := d.Sessions.SetSpend(s.ID, sp, d.SessionCap); crossed {
 			label := s.Display
@@ -61,4 +68,13 @@ func (d *Daemon) checkSpend(live []sessions.Session, now time.Time) {
 			delete(d.spent, id)
 		}
 	}
+}
+
+// dayCapFor is the workspace's tokens-per-day budget for a session's
+// workspace, 0 when it has none.
+func (d *Daemon) dayCapFor(s sessions.Session) int64 {
+	if d.Policy == nil {
+		return 0
+	}
+	return d.Policy(s).DayCap
 }

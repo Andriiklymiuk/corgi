@@ -56,6 +56,9 @@ type Policy struct {
 	// Headless lets a message for a session whose terminal is gone run
 	// as a headless turn, claude -p --resume (2.23).
 	Headless bool
+	// DayCap is the workspace's tokens-per-day budget; the daemon rings
+	// once when the day's sessions pass it (2.24).
+	DayCap int64
 }
 
 // automation is the two switches for a workspace, as the config says now.

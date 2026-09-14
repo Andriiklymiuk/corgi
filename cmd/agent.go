@@ -1124,7 +1124,7 @@ func policyFor(dir, cwd string) daemon.Policy {
 	}
 	repo, _ := config.LoadRepo(best.AbsPath)
 	if wc := config.Resolve(best.ID, repo, user).Watch; wc != nil {
-		return daemon.Policy{Workspace: best.ID, AutoAllow: wc.AutoAllow, DoneWhen: wc.DoneWhen, CompactAt: wc.CompactAt, HandOver: wc.HandOver, Rebase: wc.Rebase, Lessons: wc.Lessons, AutoCarry: wc.AutoCarry, Headless: wc.Headless}
+		return daemon.Policy{Workspace: best.ID, AutoAllow: wc.AutoAllow, DoneWhen: wc.DoneWhen, CompactAt: wc.CompactAt, HandOver: wc.HandOver, Rebase: wc.Rebase, Lessons: wc.Lessons, AutoCarry: wc.AutoCarry, Headless: wc.Headless, DayCap: wc.DayCap}
 	}
 	return daemon.Policy{}
 }
