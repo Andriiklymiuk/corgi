@@ -24,7 +24,7 @@ import (
 // names the feeds to read again, in allFeeds order.
 type streamFrame struct {
 	Seq  uint64    `json:"seq"`
-	What []string  `json:"what"`
+	What []string  `json:"what,omitempty"`
 	At   time.Time `json:"at"`
 }
 
