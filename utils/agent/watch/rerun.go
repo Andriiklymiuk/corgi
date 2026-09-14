@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -159,6 +161,59 @@ func RerunFailedJobs(ctx context.Context, s Secrets, repo string, runID int64) e
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("rerunning %s run %d: %s", repo, runID, resp.Status)
+	}
+	return nil
+}
+
+// SetPullBody writes a description onto a pull request of mine — GitHub
+// (PATCH the pull) or GitLab (PUT the merge request's description).
+func SetPullBody(ctx context.Context, s Secrets, link, body string) error {
+	switch {
+	case strings.Contains(link, "github.com/"):
+		m := githubPRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a repo and number out of %s", link)
+		}
+		if s.GitHub == "" {
+			return ErrNoToken
+		}
+		payload, _ := json.Marshal(map[string]string{"body": body})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, GitHubAPI+"/repos/"+m[1]+"/pulls/"+m[2], strings.NewReader(string(payload)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+s.GitHub)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Content-Type", "application/json")
+		return doWrite(req, link)
+	case strings.Contains(link, "/-/merge_requests/"):
+		m := gitlabMRPath.FindStringSubmatch(link)
+		if m == nil {
+			return fmt.Errorf("cannot read a project and number out of %s", link)
+		}
+		if s.GitLab == "" {
+			return ErrNoToken
+		}
+		payload, _ := json.Marshal(map[string]string{"description": body})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, m[1]+"/api/v4/projects/"+url.PathEscape(m[2])+"/merge_requests/"+m[3], strings.NewReader(string(payload)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		req.Header.Set("Content-Type", "application/json")
+		return doWrite(req, link)
+	}
+	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
+}
+
+func doWrite(req *http.Request, link string) error {
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return fmt.Errorf("writing %s: %w", link, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("writing %s: %s", link, resp.Status)
 	}
 	return nil
 }

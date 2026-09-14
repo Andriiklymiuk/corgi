@@ -68,3 +68,28 @@ func TestRerunLogRemembersRuns(t *testing.T) {
 		t.Fatal("a rerun is remembered across loads")
 	}
 }
+
+func TestSetPullBodyWritesTheDescription(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != "/repos/acme/api/pulls/7" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		got = string(b)
+	}))
+	t.Cleanup(srv.Close)
+	prev := GitHubAPI
+	GitHubAPI = srv.URL
+	t.Cleanup(func() { GitHubAPI = prev })
+	if err := SetPullBody(context.Background(), Secrets{GitHub: "gh"}, "https://github.com/acme/api/pull/7", "## What\n\nx"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, `"body":"## What\n\nx"`) {
+		t.Fatalf("payload %s", got)
+	}
+	if err := SetPullBody(context.Background(), Secrets{}, "https://github.com/acme/api/pull/7", "x"); err != ErrNoToken {
+		t.Fatalf("no token: %v", err)
+	}
+}
