@@ -22,43 +22,67 @@ func launchAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 	if token == "" && deviceStorePath == "" {
 		return next
 	}
-	want := []byte(bearerPrefix + token)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got := []byte(r.Header.Get("Authorization"))
-		if token != "" && subtle.ConstantTimeCompare(got, want) == 1 {
-			next.ServeHTTP(w, r)
-			return
-		}
-		device, ok := authorizedDeviceFull(deviceStorePath, r.Header.Get("Authorization"))
+		id, ok := identifyLaunch(w, r, token, deviceStorePath)
 		if !ok {
-			w.Header().Set("Content-Type", mimeJSON)
-			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
 			return
 		}
-		if device.Viewer() && !viewerMay(r.Method, r.URL.Path) {
-			writeLaunchError(w, http.StatusForbidden, "this device only reads the board")
-			return
-		}
-		if !device.Encrypted() {
-			if r.Header.Get(pairing.E2EHeader) != "" {
-				writeLaunchError(w, http.StatusBadRequest, "this device did not pair with a key; pair again to talk encrypted")
-				return
-			}
+		if id.key == nil {
 			next.ServeHTTP(w, r)
 			return
 		}
-		key, err := e2eKeyFor(deviceStorePath, device)
-		if err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, "the machine's encryption key could not be read")
-			return
-		}
-		if r.Header.Get(pairing.E2EHeader) == "" {
-			writeLaunchError(w, http.StatusForbidden, pairing.ErrNotEncrypted.Error())
-			return
-		}
-		serveSealed(w, r, next, key)
+		serveSealed(w, r, next, id.key)
 	})
+}
+
+// launchIdentity is who a /launch request comes from and how to answer it:
+// sealed with key when the device paired with one, plain when key is nil.
+type launchIdentity struct {
+	key    []byte
+	viewer bool
+}
+
+// identifyLaunch checks a /launch request the way every handler needs it
+// checked — the machine token, else a paired device (a viewer only reads;
+// a keyed device speaks sealed) — and says how to answer. Not ok means
+// the refusal is already written.
+func identifyLaunch(w http.ResponseWriter, r *http.Request, token, deviceStorePath string) (launchIdentity, bool) {
+	if token == "" && deviceStorePath == "" {
+		return launchIdentity{}, true
+	}
+	want := []byte(bearerPrefix + token)
+	got := []byte(r.Header.Get("Authorization"))
+	if token != "" && subtle.ConstantTimeCompare(got, want) == 1 {
+		return launchIdentity{}, true
+	}
+	device, ok := authorizedDeviceFull(deviceStorePath, r.Header.Get("Authorization"))
+	if !ok {
+		w.Header().Set("Content-Type", mimeJSON)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+		return launchIdentity{}, false
+	}
+	if device.Viewer() && !viewerMay(r.Method, r.URL.Path) {
+		writeLaunchError(w, http.StatusForbidden, "this device only reads the board")
+		return launchIdentity{}, false
+	}
+	if !device.Encrypted() {
+		if r.Header.Get(pairing.E2EHeader) != "" {
+			writeLaunchError(w, http.StatusBadRequest, "this device did not pair with a key; pair again to talk encrypted")
+			return launchIdentity{}, false
+		}
+		return launchIdentity{viewer: device.Viewer()}, true
+	}
+	key, err := e2eKeyFor(deviceStorePath, device)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, "the machine's encryption key could not be read")
+		return launchIdentity{}, false
+	}
+	if r.Header.Get(pairing.E2EHeader) == "" {
+		writeLaunchError(w, http.StatusForbidden, pairing.ErrNotEncrypted.Error())
+		return launchIdentity{}, false
+	}
+	return launchIdentity{key: key, viewer: device.Viewer()}, true
 }
 
 // authorizedDeviceFull is authorizedDevice with the device itself.
