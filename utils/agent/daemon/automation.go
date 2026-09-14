@@ -50,6 +50,9 @@ type Policy struct {
 	Rebase   bool
 	// Lessons says a red gate is written down for the next session.
 	Lessons bool
+	// AutoCarry moves a session that hit its quota to another of the
+	// workspace's accounts with budget, once per limit (2.23).
+	AutoCarry bool
 }
 
 // automation is the two switches for a workspace, as the config says now.

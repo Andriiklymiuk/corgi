@@ -152,6 +152,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("lessons") {
 			wc.Lessons, _ = flags.GetBool("lessons")
 		}
+		if flags.Changed("auto-carry") {
+			wc.AutoCarry, _ = flags.GetBool("auto-carry")
+		}
 		if flags.Changed("rebase") {
 			wc.Rebase, _ = flags.GetBool("rebase")
 		}
@@ -1128,6 +1131,7 @@ func init() {
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
+	f.Bool("auto-carry", false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
 	f.Int("slots", 1, "How many unattended runs may go at once in this workspace (1 to 8); above 1 turns on --isolate so each has worktrees of its own")
 	f.Bool("lessons", false, "Write what the workspace learned the hard way — a review on a PR of mine, a check that stayed red, a bot that failed — one line each for every new session to read (corgi agent lesson list)")
 	f.Bool("rebase", false, "Rebase a session's branch onto main where it sits when the session stops behind main with a clean tree and no conflicts (a branch that would conflict is typed into the session under --hand-over)")
