@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -33,6 +32,10 @@ type WatchSpec struct {
 	AgentDir string
 	// Isolate runs each fix in its own worktrees; see Daemon.Isolate.
 	Isolate bool
+	// Slots is how many fixes may run in this workspace at once; 0 and 1
+	// are one at a time. More than one needs Isolate, or two runs would
+	// share one checkout: without it the daemon keeps to one.
+	Slots int
 	// NoRetry leaves deferred fixes to a manual run.
 	NoRetry bool
 	// Models picks the model per event kind, and the one to step up to
@@ -282,7 +285,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 	}
 	d.loadWatchFiles()
 	d.watchers = map[string]*watch.Watch{}
-	d.fixBusy = map[string]*sync.Mutex{}
+	d.fixBusy = map[string]chan struct{}{}
 	for _, spec := range d.Watches {
 		spec := spec
 		spec.AgentDir = d.Dir
@@ -301,7 +304,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 			// A day off is a day off: the tracker is not even asked.
 			Asleep: func(now time.Time) bool { return dayOff(spec, now) }}
 		d.watchers[spec.Workspace] = w
-		d.fixBusy[spec.Workspace] = &sync.Mutex{}
+		d.fixBusy[spec.Workspace] = make(chan struct{}, slotsOf(spec))
 		if len(live) > 0 && spec.Interval > 0 {
 			go w.Run(ctx)
 		}
@@ -863,13 +866,29 @@ func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 
 var prLink = regexp.MustCompile(`https://(?:github\.com/[^\s)]+/pull/\d+|[^\s)]+/-/merge_requests/\d+)`)
 
-// runFix runs one event's fix, one at a time per workspace, and reports
-// how it ended. A key runs once: the seen list already holds it.
+// slotsOf is how many fixes may run at once in a workspace: its slots,
+// when it isolates each run; else one.
+func slotsOf(spec WatchSpec) int {
+	if spec.Slots > 1 && spec.Isolate {
+		return spec.Slots
+	}
+	return 1
+}
+
+// takeSlot waits for a free slot in the workspace and gives it back
+// through the returned func.
+func (d *Daemon) takeSlot(workspace string) func() {
+	sem := d.fixBusy[workspace]
+	sem <- struct{}{}
+	return func() { <-sem }
+}
+
+// runFix runs one event's fix — one at a time per workspace, or as many
+// as its slots allow — and reports how it ended. A key runs once: the
+// seen list already holds it.
 func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	defer d.releaseFix(spec.Workspace, e.Ref)
-	mu := d.fixBusy[spec.Workspace]
-	mu.Lock()
-	defer mu.Unlock()
+	defer d.takeSlot(spec.Workspace)()
 	ctx, cancel := context.WithTimeout(ctx, fixTimeout)
 	defer cancel()
 

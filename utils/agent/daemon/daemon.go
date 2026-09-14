@@ -81,7 +81,7 @@ type Daemon struct {
 	Watches    []WatchSpec
 	watchState *watch.State
 	watchers   map[string]*watch.Watch
-	fixBusy    map[string]*sync.Mutex
+	fixBusy    map[string]chan struct{}
 	fixActive  map[string]bool
 	gateMu     sync.Mutex
 	gating     map[string]bool

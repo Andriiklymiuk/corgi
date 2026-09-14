@@ -28,6 +28,9 @@ type WatchSwitches struct {
 	CI        bool     `json:"ci"`
 	Labels    []string `json:"labels"`
 	Isolate   bool     `json:"isolate"`
+	// Slots is how many unattended runs may go at once (1 to 8); above 1
+	// each has worktrees of its own (2.23).
+	Slots     int      `json:"slots"`
 	Quiet     string   `json:"quiet"`
 	DaysOff   []string `json:"daysOff"`
 	AutoMerge bool     `json:"autoMerge"`
@@ -64,6 +67,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 		out.DoneWhen = wc.DoneWhen
 	}
 	out.CompactAt, out.Rebase, out.Lessons = wc.CompactAt, wc.Rebase, wc.Lessons
+	out.Slots = max(1, wc.Slots)
 	return out
 }
 
@@ -102,6 +106,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			Reviews   *bool     `json:"reviews"`
 			CI        *bool     `json:"ci"`
 			Isolate   *bool     `json:"isolate"`
+			Slots     *int      `json:"slots"`
 			Quiet     *string   `json:"quiet"`
 			DaysOff   *[]string `json:"daysOff"`
 			Labels    *[]string `json:"labels"`
@@ -157,6 +162,16 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Isolate != nil {
 			wc.Isolate, restart = *req.Isolate, true
+		}
+		if req.Slots != nil {
+			if *req.Slots < 1 || *req.Slots > 8 {
+				writeLaunchError(w, http.StatusBadRequest, "slots is 1 to 8")
+				return
+			}
+			wc.Slots, restart = *req.Slots, true
+			if wc.Slots > 1 {
+				wc.Isolate = true
+			}
 		}
 		if req.Labels != nil {
 			wc.Labels, restart = *req.Labels, true
