@@ -994,6 +994,18 @@ frame is `event: hello` with the current `seq`; reconnecting with
 poll never went away: a client whose stream drops asks as before and tries
 the stream again in a minute.
 
+**Preview** (2.23): the phone opens the web app the workspace's stack is
+serving on the laptop. A WebView cannot send a header with every asset it
+loads, so the phone asks — sealed, as a paired device — `POST
+/launch/preview {workspace, service}` and gets a *ticket*: a long random
+path prefix, `/launch/preview/<ticket>/`, that names one running service
+of that stack and dies in ten minutes. Pages and assets load through it
+with no header; the proxy goes to `127.0.0.1` and that service's port,
+nowhere else. A database, a stopped service, a service with no port, or a
+viewer device get no ticket; WebSockets are not carried; a redirect to
+the app's root is kept under the ticket. The ticket travels in URLs, so
+it is short-lived and single-purpose by design.
+
 ### Waits, and what they cost
 
 When a session leaves `needs_input` or `limited`, the daemon records how
