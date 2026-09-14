@@ -226,6 +226,7 @@ func New(version, dir string) *Daemon {
 		NotifyWithLink: utils.NotifyWithLink,
 		Events:         events.NewLog(dir),
 		Sessions:       sessions.New(SessionsPath(dir), sessions.DefaultSize),
+		Ledger:         usage.OpenLedger(dir),
 		ListProcesses:  proc.List,
 		Cwd:            proc.Cwd,
 		publishSignal:  make(chan struct{}, 1),
