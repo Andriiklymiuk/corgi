@@ -34,6 +34,43 @@ Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
 **Install:** `brew install andriiklymiuk/homebrew-tools/corgi` (Homebrew 5 asks you to `brew trust andriiklymiuk/tools` once; [other ways](docs/install.md)). Then, in Claude Code with the plugin: **`/corgi:setup`** installs the rest — VS Code extension, menu bar app, the daemon at login with a tunnel and the pairing QR, notifications, session tracking — and lists the few clicks only you can do.
 
+## Run a team of agents
+
+Plan → implement → review → merge, with a coding agent on each step and you on the phone.
+corgi runs every Claude Code session on your laptop as a team you can see: a worktree per
+task, a kanban worked out from the pull request's own checks and reviews, one word on every
+row that says where it stands, and Allow, Deny, Send, Merge from the menu bar, the editor,
+a Stream Deck or your phone — end-to-end encrypted, through your own machine.
+
+```text
+  ticket / prompt ─► corgi agent watch --action fix     a session per ticket, in its own worktree
+                          │                              (--slots 3 runs three side by side)
+                          ▼
+              sessions.json ── the board ──► menu bar · VS Code · Stream Deck · corgi agent top
+                          │                              needs you / working / ready to merge …
+                          ▼
+                  the phone: Allow · Deny · talk to it · explain this diff · merge
+                          │
+              checks ✓ + approved ──► auto-merge (opt-in), a red build rerun once first
+```
+
+- **One standing per session, card and inbox row** — *needs you*, *checks failing*, *ready to
+  merge* — worked out once by the daemon from the session, its tests and the forge, so the phone
+  never disagrees with the menu bar.
+- **A worktree per task** (`--isolate`), **N at once** (`--slots`), a **token budget** per session,
+  per workspace per day, and **carry to the next account** when one hits its limit — every switch
+  off by default.
+- **Feedback closes the loop on its own** — a review comment, a red build, a merge conflict is typed
+  into the session that owns the branch (`--hand-over`); a red build is rerun once before anyone is
+  told (`--rerun-ci`).
+- **From the phone**: dictate a message, answer permissions one card at a time, have the chief
+  explain a diff in three lines, open the app the agent built, keep chatting after the terminal is
+  gone (`--headless`).
+
+`corgi agent track enable` starts it. [The whole board contract →](docs/agent.md)
+
+<p align="center"><img src="docs/media/kanban.gif" width="760" alt="The kanban: tickets in Inbox, Ready, Running, Blocked, Review and Done, worked out from runs, sessions, handoffs and the pull request's checks"></p>
+
 ## Why corgi
 
 One committed `corgi-compose.yml` describes the project. After that, the things you actually do in
