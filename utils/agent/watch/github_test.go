@@ -39,11 +39,13 @@ type githubFake struct {
 	srv      *httptest.Server
 	requests atomic.Int32
 	users    atomic.Int32
+	// notifications is what /notifications answers; tests swap the feed.
+	notifications string
 }
 
 func newGitHubFake(t *testing.T) *githubFake {
 	t.Helper()
-	f := &githubFake{}
+	f := &githubFake{notifications: githubNotifications}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.requests.Add(1)
 		if r.Header.Get("Authorization") != "Bearer tok" {
@@ -65,13 +67,15 @@ func newGitHubFake(t *testing.T) *githubFake {
 			}
 			w.Header().Set("Last-Modified", "Wed, 09 Sep 2026 10:00:00 GMT")
 			w.Header().Set("X-Poll-Interval", "60")
-			_, _ = w.Write([]byte(githubNotifications))
+			_, _ = w.Write([]byte(f.notifications))
 		case "/repos/acme/web/issues/comments/99":
 			_, _ = w.Write([]byte(`{"body":"can you add a test for the empty case?","user":{"login":"maria","type":"User"}}`))
 		case "/repos/acme/app/issues/comments/500":
 			_, _ = w.Write([]byte(`{"body":"HUM-1 Android app icon\nReview in Linear","user":{"login":"linear-code[bot]","type":"Bot"}}`))
 		case "/repos/acme/app/issues/comments/501":
 			_, _ = w.Write([]byte(`{"body":"rebased","user":{"login":"andrii","type":"User"}}`))
+		case "/repos/acme/api/pulls/9/reviews/77":
+			_, _ = w.Write([]byte(`{"body":"looks good, one nit inline","state":"COMMENTED","user":{"login":"maria","type":"User"}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -183,5 +187,43 @@ func TestGitHubUnauthorized(t *testing.T) {
 	}
 	if cursor["me"] != "andrii" {
 		t.Errorf("cursor lost on error: %v", cursor)
+	}
+}
+
+// GitHub tells a pull request's author about everything on it — a push, an
+// edit, the opening itself — with reason "author" and no comment to point
+// at. Those read as "someone commented on …" with nobody and nothing behind
+// them; the phone rang for every push to my own draft.
+const githubAuthorActivity = `[
+  {"id":"p1","reason":"author","updated_at":"2026-09-14T07:06:14Z",
+   "subject":{"title":"Tracking consent","url":"https://api.github.com/repos/acme/app/pulls/258","type":"PullRequest",
+              "latest_comment_url":null},
+   "repository":{"full_name":"acme/app"}},
+  {"id":"p2","reason":"author","updated_at":"2026-09-14T06:43:40Z",
+   "subject":{"title":"Tracking consent","url":"https://api.github.com/repos/acme/app/pulls/258","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/app/pulls/258"},
+   "repository":{"full_name":"acme/app"}},
+  {"id":"p3","reason":"comment","updated_at":"2026-09-14T06:00:00Z",
+   "subject":{"title":"Retry queue","url":"https://api.github.com/repos/acme/api/pulls/9","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/api/pulls/9/reviews/77"},
+   "repository":{"full_name":"acme/api"}}
+]`
+
+func TestGitHubPollSkipsAuthorActivityWithoutAComment(t *testing.T) {
+	f := newGitHubFake(t)
+	f.notifications = githubAuthorActivity
+	g := &GitHub{Token: "tok", URL: f.srv.URL}
+
+	events, _, err := g.Poll(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want only the review with words in it: %+v", len(events), events)
+	}
+	// A review someone wrote still arrives: it has a comment URL, an author
+	// and a body, so the line a person reads is a line a person can act on.
+	if e := events[0]; e.Ref != "acme/api#9" || e.Author != "maria" || e.Body != "looks good, one nit inline" {
+		t.Errorf("review event = %+v", e)
 	}
 }
