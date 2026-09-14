@@ -184,6 +184,26 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
 		return watch.MergePR(ctx, watch.LoadSecretsFor(dir, workspaceID), link)
 	}
+	// A red build's failed jobs are rerun once (the workspace's rerunCI):
+	// the newest failed run since the notification, unless it was rerun
+	// already — that second red is the real one.
+	d.RerunCI = func(ctx context.Context, workspaceID, repo string, since time.Time) (watch.Rerun, error) {
+		secrets := watch.LoadSecretsFor(dir, workspaceID)
+		run, err := watch.NewestFailedRun(ctx, secrets, repo, since)
+		if err != nil {
+			return watch.Rerun{}, err
+		}
+		reruns := watch.LoadReruns(dir)
+		if reruns.Seen(run.ID) {
+			return watch.Rerun{}, fmt.Errorf("run %d (%s) was rerun already", run.ID, run.Name)
+		}
+		if err := watch.RerunFailedJobs(ctx, secrets, repo, run.ID); err != nil {
+			return watch.Rerun{}, err
+		}
+		r := watch.Rerun{RunID: run.ID, URL: run.URL, At: time.Now()}
+		_ = reruns.Set(r)
+		return r, nil
+	}
 	// A permission prompt is answered by the daemon when the workspace the
 	// session sits in says reads are allowed — read live, so the switch
 	// takes at the next prompt.

@@ -32,6 +32,9 @@ type WatchSpec struct {
 	AgentDir string
 	// Isolate runs each fix in its own worktrees; see Daemon.Isolate.
 	Isolate bool
+	// RerunCI reruns the failed jobs of a red build once before anyone is
+	// told or handed it; see Daemon.RerunCI.
+	RerunCI bool
 	// Slots is how many fixes may run in this workspace at once; 0 and 1
 	// are one at a time. More than one needs Isolate, or two runs would
 	// share one checkout: without it the daemon keeps to one.
@@ -391,6 +394,20 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			return
 		}
 		body := watchBody(e)
+		// A red build is rerun once before it is worked on or handed over:
+		// a runner that died is not a bug in the branch. The second red on
+		// the same run goes the usual way.
+		if e.Kind == watch.KindCIFailed && spec.RerunCI {
+			if note, ok := d.rerunRedBuild(ctx, spec, e); ok {
+				body += " (" + note + ")"
+				if quietNow(spec, time.Now()) {
+					d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
+					return
+				}
+				go d.notifyAttentionKey("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
+				return
+			}
+		}
 		if spec.FixesKind(e.Kind) {
 			if note := d.startFix(ctx, spec, e); note != "" {
 				body += " (" + note + ")"
@@ -420,6 +437,30 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		}
 		go d.notifyAttentionKey("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
 	}
+}
+
+// rerunRedBuild reruns the failed jobs of the run a red-build event is
+// about, once: ok says the rerun went out and this red is done with. A
+// run already rerun, no run to find, or no way to ask leave ok false, so
+// the event goes on to be worked or handed over.
+func (d *Daemon) rerunRedBuild(ctx context.Context, spec WatchSpec, e watch.Event) (string, bool) {
+	if d.RerunCI == nil || e.Ref == "" {
+		return "", false
+	}
+	since := e.At.Add(-30 * time.Minute)
+	if e.At.IsZero() {
+		since = time.Now().Add(-30 * time.Minute)
+	}
+	r, err := d.RerunCI(ctx, spec.Workspace, e.Ref, since)
+	if err != nil {
+		utils.Infof("agent: %s: not rerunning the red build: %v\n", e.Ref, err)
+		return "", false
+	}
+	if r.RunID == 0 {
+		return "", false
+	}
+	utils.Infof("agent: %s: rerunning the failed jobs of run %d once\n", e.Ref, r.RunID)
+	return "rerunning its failed jobs once — a second red is handed on", true
 }
 
 // quietNow is a quiet hour or a day off: nothing rings, nothing starts.
