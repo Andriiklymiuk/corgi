@@ -978,6 +978,20 @@ The model and profile are validated against a pattern and the configured
 profile names before the command is built; the window against the connected
 ones. `POST /launch/new`, behind the same device token as everything else.
 
+**The stream** (2.23): instead of asking every few seconds whether anything
+changed, a phone or an editor keeps one `GET /launch/stream` open and is
+told the moment something does — `event: change`, `data: {seq, what:
+["board","inbox"], at}` — then reads only the feeds named. A frame says
+*what* moved, never what it holds; a device that paired with a key gets
+every frame sealed like any answer (`X-Corgi-E2E: 1` on the stream), and a
+device that did not gets it plain. The launcher looks at the daemon's files
+four times a second while someone listens and not at all otherwise; a quiet
+stream carries a `: ping` every 20 s so a tunnel keeps it open. The first
+frame is `event: hello` with the current `seq`; reconnecting with
+`?after=<seq>` from anywhere but there says to read everything once. The
+poll never went away: a client whose stream drops asks as before and tries
+the stream again in a minute.
+
 ### Waits, and what they cost
 
 When a session leaves `needs_input` or `limited`, the daemon records how
