@@ -155,6 +155,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("auto-carry") {
 			wc.AutoCarry, _ = flags.GetBool("auto-carry")
 		}
+		if flags.Changed("rerun-ci") {
+			wc.RerunCI, _ = flags.GetBool("rerun-ci")
+		}
 		if flags.Changed("rebase") {
 			wc.Rebase, _ = flags.GetBool("rebase")
 		}
@@ -798,7 +801,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Models: resolved.Models, Routines: resolved.Routines}
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Models: resolved.Models, Routines: resolved.Routines}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
@@ -1131,6 +1134,7 @@ func init() {
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
+	f.Bool("rerun-ci", false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
 	f.Bool("auto-carry", false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
 	f.Int("slots", 1, "How many unattended runs may go at once in this workspace (1 to 8); above 1 turns on --isolate so each has worktrees of its own")
 	f.Bool("lessons", false, "Write what the workspace learned the hard way — a review on a PR of mine, a check that stayed red, a bot that failed — one line each for every new session to read (corgi agent lesson list)")

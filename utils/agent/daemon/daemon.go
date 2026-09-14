@@ -146,6 +146,9 @@ type Daemon struct {
 	// MergePull merges a pull request of mine at the forge (the workspace's
 	// autoMerge); nil means the daemon never merges.
 	MergePull func(ctx context.Context, workspace, link string) error
+	// RerunCI reruns the failed jobs of the repository's newest red run
+	// since a moment and says which run; nil means the daemon never does.
+	RerunCI func(ctx context.Context, workspace, repo string, since time.Time) (watch.Rerun, error)
 	// Policy is what the workspace a session sits in wants done on its
 	// own — read live, so a switch flipped on the phone counts for the
 	// next prompt or the next stop. Nil means no policy anywhere.

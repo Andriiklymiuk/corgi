@@ -295,6 +295,10 @@ type WatchConfig struct {
 	// touches your checkout and two runs on one repo do not collide. Off by
 	// default: it takes disk and a branch per ticket.
 	Isolate bool `yaml:"isolate,omitempty"`
+	// RerunCI reruns the failed jobs of a red build once before anyone is
+	// told or handed it; the second red on the same run goes the usual
+	// way. GitHub. Off by default.
+	RerunCI bool `yaml:"rerunCI,omitempty"`
 	// AutoCarry moves a session that hit its five-hour quota to another of
 	// the workspace's accounts that still has budget — the transcript
 	// copied, a new terminal resuming it there — once per limit. Only

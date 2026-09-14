@@ -47,6 +47,8 @@ type WatchSwitches struct {
 	Lessons bool `json:"lessons"`
 	// AutoCarry moves a session at its quota to another account with budget (2.23).
 	AutoCarry bool `json:"autoCarry"`
+	// RerunCI reruns a red build's failed jobs once before it is handed on (2.23).
+	RerunCI bool `json:"rerunCI"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -68,7 +70,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	if wc.DoneWhen != nil {
 		out.DoneWhen = wc.DoneWhen
 	}
-	out.CompactAt, out.Rebase, out.Lessons, out.AutoCarry = wc.CompactAt, wc.Rebase, wc.Lessons, wc.AutoCarry
+	out.CompactAt, out.Rebase, out.Lessons, out.AutoCarry, out.RerunCI = wc.CompactAt, wc.Rebase, wc.Lessons, wc.AutoCarry, wc.RerunCI
 	out.Slots = max(1, wc.Slots)
 	return out
 }
@@ -120,6 +122,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			Rebase    *bool     `json:"rebase"`
 			Lessons   *bool     `json:"lessons"`
 			AutoCarry *bool     `json:"autoCarry"`
+			RerunCI   *bool     `json:"rerunCI"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -223,6 +226,9 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.AutoCarry != nil {
 			wc.AutoCarry = *req.AutoCarry
+		}
+		if req.RerunCI != nil {
+			wc.RerunCI, restart = *req.RerunCI, true
 		}
 		if req.CompactAt != nil {
 			if *req.CompactAt < 0 || *req.CompactAt > 100 {
