@@ -302,6 +302,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 				d.watchState.NewRound()
 				d.releaseHeld(spec, now)
 				d.retryDeferred(ctx, spec, now)
+				d.advancePlans(ctx)
 				go d.refreshInboxStates(ctx, spec)
 			},
 			// A day off is a day off: the tracker is not even asked.
@@ -628,6 +629,8 @@ func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	go func() {
 		defer d.runs.Done()
 		d.runFix(ctx, spec, e)
+		// A run ended: a plan waiting on it may have a next task.
+		d.advancePlans(ctx)
 	}()
 }
 

@@ -96,6 +96,8 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		if c.WatchEvent != nil {
 			d.handleWatchEvent(ctx, *c.WatchEvent)
 		}
+	case command.ActionPlan:
+		d.advancePlans(ctx)
 	case command.ActionAnswer:
 		keys, err := d.Sessions.PendingAnswer(c.SessionID, c.Answer)
 		if err != nil {
