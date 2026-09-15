@@ -57,7 +57,7 @@ when it pairs. AirDrop carries it end-to-end encrypted between your devices.`,
 		if base != "" {
 			link = base + "/pair#" + ans.Code
 		}
-		out := map[string]any{"code": ans.Code, "expiresAt": ans.ExpiresAt, "daemon": ans.Daemon, "role": ans.Role, "url": base, "pairUrl": link}
+		out := map[string]any{"code": ans.Code, "expiresAt": ans.ExpiresAt, "daemon": ans.Daemon, "role": ans.Role, "url": base, "localUrl": ans.LocalURL, "pairUrl": link}
 		var path string
 		if file {
 			path, err = writePairFile(ans)
@@ -117,12 +117,15 @@ func requestPairWindow(dir string, viewer bool, wait time.Duration) (pairAnswer,
 // PairFile is what a .corgipair holds: enough for the phone to pair, and
 // nothing that outlives the code.
 type PairFile struct {
-	Corgi   string    `json:"corgi"`
-	Daemon  string    `json:"daemon"`
-	URL     string    `json:"url,omitempty"`
-	Code    string    `json:"code"`
-	Expires time.Time `json:"expiresAt"`
-	Role    string    `json:"role,omitempty"`
+	Corgi  string `json:"corgi"`
+	Daemon string `json:"daemon"`
+	URL    string `json:"url,omitempty"`
+	// LocalURL is the launcher on this machine itself, for a client on it
+	// — the Mac app from the store, which may not run corgi (2.28).
+	LocalURL string    `json:"localUrl,omitempty"`
+	Code     string    `json:"code"`
+	Expires  time.Time `json:"expiresAt"`
+	Role     string    `json:"role,omitempty"`
 }
 
 func writePairFile(ans pairAnswer) (string, error) {
@@ -140,7 +143,7 @@ func writePairFile(ans pairAnswer) (string, error) {
 		name = "laptop"
 	}
 	path := filepath.Join(home, "Desktop", name+".corgipair")
-	data, _ := json.MarshalIndent(PairFile{Corgi: APP_VERSION, Daemon: ans.Daemon, URL: firstNonEmpty(ans.PublicURL, ans.LocalURL), Code: ans.Code, Expires: ans.ExpiresAt, Role: ans.Role}, "", "  ")
+	data, _ := json.MarshalIndent(PairFile{Corgi: APP_VERSION, Daemon: ans.Daemon, URL: firstNonEmpty(ans.PublicURL, ans.LocalURL), LocalURL: ans.LocalURL, Code: ans.Code, Expires: ans.ExpiresAt, Role: ans.Role}, "", "  ")
 	return path, os.WriteFile(path, data, 0o600)
 }
 
