@@ -18,6 +18,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/atomicfile"
+	"andriiklymiuk/corgi/utils/gitbase"
 )
 
 // State is the A2A task state the card is in when the packet is written.
@@ -372,7 +373,7 @@ func GitWhere(dir string) Where {
 	}
 	w.Branch, _ = run(dir, "rev-parse", "--abbrev-ref", "HEAD")
 	w.Head, _ = run(dir, "rev-parse", "HEAD")
-	for _, base := range []string{"origin/main", "origin/master", "main", "master"} {
+	for _, base := range gitbase.Refs(dir) {
 		if b, err := run(dir, "merge-base", "HEAD", base); err == nil && b != "" && b != w.Head {
 			w.Base = b
 			break

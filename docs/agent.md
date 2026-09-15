@@ -905,9 +905,14 @@ Every session on the board carries, when known:
   What a phone row shows under the label, and what a PR button opens.
 - `turnStartedAt` — when the current turn began; slots carry `turnS`, so a
   surface can say a turn has run fourteen minutes before `stuck` does.
-- `changes` — what its branch has built up since it left main: `{files,
+- `changes` — what its branch has built up since it left its base: `{files,
   lines, touched[]}`, measured once a minute (`git diff` against the
-  merge-base; lock files and bundles never count as lines). Slots carry it
+  merge-base; lock files and bundles never count as lines). The base is
+  what origin calls its default branch (`origin/HEAD`), else the first of
+  main, master, trunk, develop on origin, else the same names locally —
+  so a trunk repo with a stale local master is measured against trunk.
+  `drift`, `behind`, `corgi agent diff` and the scope hook read the same
+  base. Slots carry it
   as one line, *4 files · 120 lines* — the number an operator reads before
   opening the diff.
 - `overlap` — the other live sessions in the same repository touching the
