@@ -164,16 +164,20 @@ func driftReasonsFrom(s sessions.Session, lines int, files []string, ok bool) (l
 
 // checkDrift runs on the minute sweep over live sessions, and notifies
 // once when a session starts drifting for a reason worth ringing about.
+// An idle session is measured too — its branch is still there, and a
+// number that stopped being true (the base branch, a diff since trimmed)
+// would otherwise sit on the board until it worked again — but nothing
+// rings for it.
 func (d *Daemon) checkDrift(now time.Time) {
 	if d.Sessions == nil {
 		return
 	}
 	live := []sessions.Session{}
 	for _, s := range d.Sessions.Sessions() {
-		if s.Status != sessions.StatusWorking && s.Status != sessions.StatusNeedsInput && s.Status != sessions.StatusDone {
-			continue
+		switch s.Status {
+		case sessions.StatusWorking, sessions.StatusNeedsInput, sessions.StatusDone, sessions.StatusStale:
+			live = append(live, s)
 		}
-		live = append(live, s)
 	}
 	// One git diff per session, used for everything: the numbers on the
 	// board, who else is on the same files, and whether it is drifting.
@@ -204,10 +208,11 @@ func (d *Daemon) checkDrift(now time.Time) {
 		} else {
 			d.Sessions.SetBehind(s.ID, nil)
 		}
-		if m.ok && len(m.files) > 0 {
+		resting := s.Status == sessions.StatusStale
+		if m.ok && len(m.files) > 0 && !resting {
 			d.ringClaims(s, m.files, now)
 		}
-		if _, crossed := d.Sessions.SetChanges(s.ID, c, overlaps[s.ID]); crossed {
+		if _, crossed := d.Sessions.SetChanges(s.ID, c, overlaps[s.ID]); crossed && !resting {
 			label := s.Display
 			if label == "" {
 				label = s.Label
@@ -215,7 +220,7 @@ func (d *Daemon) checkDrift(now time.Time) {
 			go d.notifyAttention("corgi agent · "+label, "crossing streams: "+sessions.OverlapLine(overlaps[s.ID]), s.Folder)
 		}
 		loud, quiet := driftReasonsFrom(s, m.lines, m.files, m.ok)
-		if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 {
+		if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 && !resting {
 			label := s.Display
 			if label == "" {
 				label = s.Label
