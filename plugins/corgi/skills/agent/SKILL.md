@@ -779,7 +779,7 @@ corgi agent handoff --ref ABC-123 --done "api returns 429" --remaining "web bann
   --decision "5h sliding window" --uncertain "retry on the phone?" --next "web banner" \
   --verify "corgi test --changed"        # runs it now, records exit + head
 corgi agent handoff show ABC-123         # the packet; says how many commits since
-corgi agent handoff verify ABC-123       # re-runs its check at the current head
+corgi agent handoff verify ABC-123       # re-runs its check (must be a doneWhen line)
 corgi agent handoff --ref ABC-123 --blocked "no GITLAB_TOKEN for the web repo"
 ```
 
@@ -787,8 +787,10 @@ The ref defaults to the ticket key in the branch name. A packet with a
 secret or a TODO is refused. The next run — unattended, or a new session on
 the branch (the SessionStart context says "handoff for ABC-123: read … first")
 — re-runs the packet's check at the current head before trusting its done
-list; a check that fails, or a branch that moved, means start from the
-ticket and the diff. `corgi agent carry` writes a draft packet before it
+list, but only when that check is one of the workspace's `doneWhen` lines
+(the packet was written by a run, so its command is not the person's); a
+check that fails, is not listed, or a branch that moved, means start from
+the ticket and the diff. `corgi agent carry` writes a draft packet before it
 moves a session, and past 85 % context (or `--fresh`) starts the new session
 clean with the packet as its first prompt.
 
