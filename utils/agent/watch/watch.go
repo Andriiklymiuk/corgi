@@ -1189,6 +1189,21 @@ func FindEvent(agentDir, key string) (Event, bool) {
 	return Event{}, false
 }
 
+// FindEventByRef is FindEvent for a caller that has the ticket's ref, as the
+// command line takes it — case as the tracker prints it or not — and the
+// workspace when it knows one; the newest event on that ticket wins.
+func FindEventByRef(agentDir, ref, workspace string) (Event, bool) {
+	if ref == "" {
+		return Event{}, false
+	}
+	for _, e := range RecentEvents(agentDir, 500) {
+		if strings.EqualFold(e.Ref, ref) && (workspace == "" || e.Workspace == workspace) {
+			return e, true
+		}
+	}
+	return Event{}, false
+}
+
 // Outcome is one phrase for what a run ended up doing, so every reader of the
 // log says the same thing about the same run instead of inventing wording.
 func (r FixRecord) Outcome() string {

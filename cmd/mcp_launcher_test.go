@@ -43,12 +43,18 @@ func TestLaunchWorkspacesReturnsTheRegistry(t *testing.T) {
 	}
 }
 
-func TestLaunchWorkspacesRejectsNonGet(t *testing.T) {
+func TestLaunchWorkspacesRejectsOtherMethods(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	rec := httptest.NewRecorder()
-	launchWorkspacesHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/workspaces", nil))
+	launchWorkspacesHandler(rec, httptest.NewRequest(http.MethodDelete, "/launch/workspaces", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", rec.Code)
+	}
+	// A POST with no body registers nothing.
+	rec = httptest.NewRecorder()
+	launchWorkspacesHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/workspaces", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("empty POST: status = %d, want 400", rec.Code)
 	}
 }
 
