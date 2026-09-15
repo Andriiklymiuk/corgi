@@ -323,6 +323,9 @@ func (d *Daemon) startWatches(ctx context.Context) {
 // board published, so every surface reads the same fresh picture.
 func (d *Daemon) refresh() {
 	d.rescan()
+	// An account added a moment ago is on the board after this, not at
+	// the next minute's sweep.
+	d.sampleAccounts(time.Now())
 	for _, w := range d.watchers {
 		w.Nudge()
 	}

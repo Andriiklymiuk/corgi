@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -40,56 +41,19 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_cwd", err, 1)
 	}
-	if !dirIsWorkspace(cwd) {
-		exitWithError("agent_no_workspace",
-			fmt.Errorf("nothing to register here — run this in a corgi stack or a git repository (or `corgi agent scan <dir>` to find stacks)"), 2)
-	}
-
 	id, _ := cmd.Flags().GetString("id")
-	if id == "" {
-		id = filepath.Base(cwd)
-	}
 	aliases, _ := cmd.Flags().GetStringSlice("alias")
 	configDir, _ := cmd.Flags().GetString("config-dir")
 	sensitive, _ := cmd.Flags().GetBool("sensitive")
 	skipPerms, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
 
-	registry, path := mustLoadRegistry()
-	// Refuse to repoint an id that belongs to a different directory. The id is
-	// the key into the trusted per-workspace settings (configDir, a granted
-	// permission bypass), so silently taking over "api" from another repo also
-	// named api would transfer that capability to the new directory. Sticky
-	// settings make this worse, and repo basenames collide constantly.
-	if prior, ok := registry.Find(id); ok && prior.AbsPath != "" && prior.AbsPath != cwd {
-		exitWithError("agent_id_taken", fmt.Errorf(
-			"workspace id %q already belongs to %s — its settings (account, permissions) must not transfer here. "+
-				"Pass --id <something-else> to register this directory under its own name",
-			id, prior.AbsPath), 2)
-	}
-
-	if err := writeRepoAgentConfig(cwd, id, aliases, sensitive); err != nil {
-		exitWithError("agent_write_repo_config", err, 1)
-	}
-
-	existing, _ := registry.Find(id)
-	existing.ID = id
-	existing.AbsPath = cwd
-	existing.ComposeFile = registeredComposeFile(cwd)
-	existing.Aliases = aliases
-	existing.Status = workspace.StatusOK
-	// Cache the service names so "fix the api" can resolve to the stack that
-	// has a service called api. Without this the resolver's service matching
-	// has nothing to match against.
-	existing.Services, existing.Repos = describeStack(cwd)
-	registry.Upsert(existing)
-	if err := workspace.Save(path, registry); err != nil {
-		exitWithError("agent_registry_write", err, 1)
-	}
-
-	// init is the deliberate opt-in, so it is what turns supervision on.
-	// `corgi agent scan` registers without arming anything.
-	if err := enableWorkspace(id, configDir, skipPerms); err != nil {
-		exitWithError("agent_write_user_config", err, 1)
+	id, err = registerWorkspace(cwd, id, aliases, configDir, sensitive, skipPerms)
+	if err != nil {
+		var re *registerError
+		if errors.As(err, &re) {
+			exitWithError(re.code, re.err, re.exit)
+		}
+		exitWithError("agent_init", err, 1)
 	}
 
 	utils.Infof("registered %s (%s) and enabled it\n", id, cwd)
@@ -105,6 +69,73 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	}
 	warnIfUntrusted(configDir, cwd)
 	utils.Info("next: `corgi agent install` to start at login, then `corgi agent status`")
+}
+
+// registerError carries the exit code and error key `corgi agent init`
+// prints for a refusal, so the launcher can say the same thing over HTTP.
+type registerError struct {
+	code string
+	exit int
+	err  error
+}
+
+func (e *registerError) Error() string { return e.err.Error() }
+func (e *registerError) Unwrap() error { return e.err }
+
+// registerWorkspace is what `corgi agent init` does in a directory: writes
+// the repo's .corgi/agent.yml, puts the directory in the registry under id
+// (the directory's name when empty) and turns supervision on. The Mac app
+// registers a folder it was pointed at through the launcher the same way.
+func registerWorkspace(dir, id string, aliases []string, configDir string, sensitive, skipPerms bool) (string, error) {
+	if !dirIsWorkspace(dir) {
+		return "", &registerError{"agent_no_workspace", 2,
+			fmt.Errorf("nothing to register here — run this in a corgi stack or a git repository (or `corgi agent scan <dir>` to find stacks)")}
+	}
+	if id == "" {
+		id = filepath.Base(dir)
+	}
+
+	registry, path, err := agentRegistry()
+	if err != nil {
+		return "", &registerError{"agent_registry_read", 1, err}
+	}
+	// Refuse to repoint an id that belongs to a different directory. The id is
+	// the key into the trusted per-workspace settings (configDir, a granted
+	// permission bypass), so silently taking over "api" from another repo also
+	// named api would transfer that capability to the new directory. Sticky
+	// settings make this worse, and repo basenames collide constantly.
+	if prior, ok := registry.Find(id); ok && prior.AbsPath != "" && prior.AbsPath != dir {
+		return "", &registerError{"agent_id_taken", 2, fmt.Errorf(
+			"workspace id %q already belongs to %s — its settings (account, permissions) must not transfer here. "+
+				"Pass --id <something-else> to register this directory under its own name",
+			id, prior.AbsPath)}
+	}
+
+	if err := writeRepoAgentConfig(dir, id, aliases, sensitive); err != nil {
+		return "", &registerError{"agent_write_repo_config", 1, err}
+	}
+
+	existing, _ := registry.Find(id)
+	existing.ID = id
+	existing.AbsPath = dir
+	existing.ComposeFile = registeredComposeFile(dir)
+	existing.Aliases = aliases
+	existing.Status = workspace.StatusOK
+	// Cache the service names so "fix the api" can resolve to the stack that
+	// has a service called api. Without this the resolver's service matching
+	// has nothing to match against.
+	existing.Services, existing.Repos = describeStack(dir)
+	registry.Upsert(existing)
+	if err := workspace.Save(path, registry); err != nil {
+		return "", &registerError{"agent_registry_write", 1, err}
+	}
+
+	// init is the deliberate opt-in, so it is what turns supervision on.
+	// `corgi agent scan` registers without arming anything.
+	if err := enableWorkspace(id, configDir, skipPerms); err != nil {
+		return "", &registerError{"agent_write_user_config", 1, err}
+	}
+	return id, nil
 }
 
 // describeStack reads a stack's service and repository names for the registry,

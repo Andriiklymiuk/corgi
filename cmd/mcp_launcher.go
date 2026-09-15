@@ -114,8 +114,13 @@ type launchLastEvent struct {
 
 func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
-	if r.Method != http.MethodGet {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+	switch r.Method {
+	case http.MethodGet:
+	case http.MethodPost:
+		launchRegisterWorkspace(w, r)
+		return
+	default:
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the workspaces, or POST {path, id} to register one")
 		return
 	}
 	registry, _, err := agentRegistry()
@@ -131,6 +136,84 @@ func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	out := buildLaunchWorkspaces(registry, status)
 	writeLaunchJSON(w, map[string]any{"workspaces": out})
+}
+
+// launchRegisterWorkspace is `corgi agent init` run in a folder the Mac
+// app was pointed at: the same registry entry, the same repo file, the same
+// refusals. The path must be absolute — the daemon has no working directory
+// of the caller's to resolve against.
+func launchRegisterWorkspace(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+		ID   string `json:"id"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	path := filepath.Clean(strings.TrimSpace(req.Path))
+	if !filepath.IsAbs(path) {
+		writeLaunchError(w, http.StatusBadRequest, "path must be absolute")
+		return
+	}
+	id, err := registerWorkspace(path, strings.TrimSpace(req.ID), nil, "", false, false)
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"done": "registered " + id, "id": id, "path": path})
+}
+
+// launchProfilesHandler lists the account profiles, and adds one the way
+// `corgi agent profile add <name> --config-dir <dir>` does: a name and the
+// Claude config directory whose login it stands for.
+func launchProfilesHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		profiles, err := loadProfiles(dir)
+		if err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, "could not read the profiles")
+			return
+		}
+		type row struct {
+			Name      string `json:"name"`
+			ConfigDir string `json:"configDir,omitempty"`
+			Bin       string `json:"bin,omitempty"`
+		}
+		out := make([]row, 0, len(profiles))
+		for _, name := range sortedProfileNames(profiles) {
+			out = append(out, row{name, profiles[name].ConfigDir, profiles[name].Bin})
+		}
+		writeLaunchJSON(w, map[string]any{"profiles": out})
+	case http.MethodPost:
+		var req struct {
+			Name      string `json:"name"`
+			ConfigDir string `json:"configDir"`
+			Bin       string `json:"bin"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
+			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+			return
+		}
+		name := strings.TrimSpace(req.Name)
+		if !profileNamePattern.MatchString(name) {
+			writeLaunchError(w, http.StatusBadRequest, "a profile name is letters, digits, - and _")
+			return
+		}
+		if err := addProfile(dir, name, config.WorkspaceConfig{ConfigDir: strings.TrimSpace(req.ConfigDir), Bin: strings.TrimSpace(req.Bin)}); err != nil {
+			writeLaunchError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"done": "profile " + name + " saved", "name": name})
+	default:
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the profiles, or POST {name, configDir} to add one")
+	}
 }
 
 type wsRunState struct {
@@ -4057,6 +4140,9 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		Title     string `json:"title"`
 		Body      string `json:"body"`
 		Workspace string `json:"workspace"`
+		// Ref names the ticket the way the command line does (`corgi agent
+		// watch move ABC-1 Done --workspace api`) when the caller has no key.
+		Ref string `json:"ref"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -4067,7 +4153,13 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	event, ok := watch.FindEvent(dir, strings.TrimSpace(req.Key))
+	var event watch.Event
+	var ok bool
+	if key := strings.TrimSpace(req.Key); key != "" {
+		event, ok = watch.FindEvent(dir, key)
+	} else {
+		event, ok = watch.FindEventByRef(dir, strings.TrimSpace(req.Ref), strings.TrimSpace(req.Workspace))
+	}
 	if !ok {
 		writeLaunchError(w, http.StatusNotFound, "no such watch event")
 		return
