@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -187,15 +186,15 @@ func SetPullBody(ctx context.Context, s Secrets, link, body string) error {
 		req.Header.Set("Content-Type", "application/json")
 		return doWrite(req, link)
 	case strings.Contains(link, "/-/merge_requests/"):
-		m := gitlabMRPath.FindStringSubmatch(link)
-		if m == nil {
-			return fmt.Errorf("cannot read a project and number out of %s", link)
-		}
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
+		api, err := gitlabMRAPI(s, link)
+		if err != nil {
+			return err
+		}
 		payload, _ := json.Marshal(map[string]string{"description": body})
-		req, err := http.NewRequestWithContext(ctx, http.MethodPut, m[1]+"/api/v4/projects/"+url.PathEscape(m[2])+"/merge_requests/"+m[3], strings.NewReader(string(payload)))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, api, strings.NewReader(string(payload)))
 		if err != nil {
 			return err
 		}

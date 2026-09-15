@@ -41,6 +41,19 @@ func withEnvSource(command, envFile string) string {
 // SkipAutoSourceEnv disables auto-sourcing for a single command.
 const SkipAutoSourceEnv = "<<corgi:no-env-source>>"
 
+// IsPlainShellWord reports whether s is one shell word with nothing to interpret.
+func IsPlainShellWord(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r <= ' ' || strings.ContainsRune("|&;<>()$`\\\"'*?[]{}!#~", r) {
+			return false
+		}
+	}
+	return true
+}
+
 var (
 	serviceShellOnce sync.Once
 	serviceShellPath string

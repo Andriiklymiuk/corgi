@@ -207,7 +207,8 @@ func bearerAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 			next.ServeHTTP(w, r)
 			return
 		}
-		if _, ok := authorizedDevice(deviceStorePath, r.Header.Get("Authorization")); ok {
+		// a viewer only reads; a keyed device cannot seal the MCP stream
+		if d, ok := authorizedDeviceFull(deviceStorePath, r.Header.Get("Authorization")); ok && !d.Viewer() && !d.Encrypted() {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -371,6 +372,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/ticket", launchAuth(token, http.HandlerFunc(launchTicketHandler), deviceStore))
 		mux.Handle("/launch/profiles", launchAuth(token, http.HandlerFunc(launchProfilesHandler), deviceStore))
 		mux.Handle("/launch/devices", launchAuth(token, http.HandlerFunc(launchDevicesHandler), deviceStore))
+		mux.Handle("/launch/connector", launchAuth(token, http.HandlerFunc(launchConnectorHandler), deviceStore))
 		mux.Handle("/launch/doctor", launchAuth(token, http.HandlerFunc(launchDoctorHandler), deviceStore))
 	}
 

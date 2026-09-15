@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"crypto/ecdh"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -501,5 +503,50 @@ func TestWaitOrDoneRespectsCancellation(t *testing.T) {
 	cancel()
 	if waitOrDone(ctx, time.Hour) {
 		t.Error("a cancelled context must not wait out the delay")
+	}
+}
+
+func TestBearerAuthRefusesAViewerDeviceOnMCP(t *testing.T) {
+	session, code, store := pairingFixture(t)
+	mux := http.NewServeMux()
+	mux.Handle("/pair", pairingHandlerWithRole(session, store, pairing.RoleViewer))
+	reached := false
+	mux.Handle("/mcp", bearerAuth("server-token", http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }), store))
+
+	rec := postPair(t, mux, `{"code":"`+code+`","device":"teammate"}`)
+	var paired struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &paired)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer "+paired.Token)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if reached || rec.Code != http.StatusUnauthorized {
+		t.Fatalf("a viewer only reads the board; /mcp is every tool: reached=%v code=%d", reached, rec.Code)
+	}
+}
+
+func TestBearerAuthRefusesAKeyedDeviceOnMCP(t *testing.T) {
+	session, code, store := pairingFixture(t)
+	phone, _ := ecdh.X25519().GenerateKey(rand.Reader)
+	mux := http.NewServeMux()
+	mux.Handle("/pair", pairingHandler(session, store))
+	reached := false
+	mux.Handle("/mcp", bearerAuth("server-token", http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }), store))
+
+	rec := postPair(t, mux, `{"code":"`+code+`","device":"phone","pubKey":"`+pairing.PublicKeyString(phone.PublicKey())+`"}`)
+	var paired struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &paired)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer "+paired.Token)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if reached || rec.Code != http.StatusUnauthorized {
+		t.Fatalf("a keyed device cannot seal the MCP stream, so its token alone must not open it: reached=%v code=%d", reached, rec.Code)
 	}
 }

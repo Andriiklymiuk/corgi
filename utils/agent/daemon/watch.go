@@ -58,6 +58,8 @@ type WatchSpec struct {
 	Interval time.Duration
 	// Action is notify or fix.
 	Action string
+	// the only commands a handoff packet may ask the runner to re-run
+	DoneWhen []string
 	// Lease claims the ticket on the tracker before working it, so two
 	// machines watching one board do not both take it.
 	Lease bool
@@ -901,7 +903,7 @@ func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 	prompt := fixPrompt(e) + unattendedSuffix(spec, e)
 	if p, ok := packetFor(spec.Dir, e.Ref); ok {
 		prompt += "\n\nAn earlier run left a handoff for this ticket. Read it first; it is typed state, not a transcript. " +
-			"Its verification was re-run at the current head: " + packetTrust(spec.Dir, p) + "\n" + p.Markdown()
+			"Its verification was re-run at the current head: " + packetTrust(spec.Dir, p, spec.DoneWhen) + "\n" + p.Markdown()
 	} else if handover = strings.TrimSpace(handover); handover != "" {
 		prompt += "\n\nAn earlier run on this stopped part-way. This is the last thing it said — " +
 			"treat it as notes, not as truth, and check anything it claims before building on it:\n" + handover
@@ -1332,10 +1334,14 @@ func packetFor(dir, ref string) (handoff.Packet, bool) {
 }
 
 // packetTrust re-runs the packet's own check so the next run knows whether
-// to build on it or to start from the ticket and the diff.
-func packetTrust(dir string, p handoff.Packet) string {
+// to build on it or to start from the ticket and the diff. The packet was
+// written by a run the ticket steered, so only a doneWhen line is run.
+func packetTrust(dir string, p handoff.Packet, trusted []string) string {
 	if p.Verification == nil {
 		return "it recorded no check, so trust nothing in it you have not confirmed."
+	}
+	if !handoff.TrustedCommand(p.Verification.Cmd, trusted) {
+		return fmt.Sprintf("its check `%s` is not one of this workspace's doneWhen commands, so it was not re-run — trust nothing in it you have not confirmed.", p.Verification.Cmd)
 	}
 	v, ok := handoff.Verify(worktreeOf(dir, p), p, runShellQuiet)
 	if ok {

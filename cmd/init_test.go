@@ -784,12 +784,63 @@ func TestNestedInitInheritsDepth(t *testing.T) {
 	t.Cleanup(func() { initDepthFlag = prev })
 
 	initDepthFlag = 0
-	if got := nestedInitCmd(); got != "corgi init --silent" {
+	if got := nestedInitCmd(); got != "corgi init --silent --nested" {
 		t.Errorf("without --depth the nested call must be unchanged, got %q", got)
 	}
 	initDepthFlag = 1
-	if got := nestedInitCmd(); got != "corgi init --silent --depth 1" {
+	if got := nestedInitCmd(); got != "corgi init --silent --nested --depth 1" {
 		t.Errorf("nested init = %q", got)
+	}
+}
+
+func TestNestedInitDoesNotRunInitCommands(t *testing.T) {
+	cwd, _ := os.Getwd()
+	dir := t.TempDir()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(cwd) })
+	if err := os.WriteFile(filepath.Join(dir, "corgi-compose.yml"), []byte("init:\n  - touch ran-init\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &cobra.Command{}
+	c.Flags().Bool("global", false, "")
+	for _, f := range []string{"filename", "fromTemplate", "fromTemplateName", "privateToken", "dockerContext"} {
+		c.Flags().String(f, "", "")
+	}
+	for _, f := range []string{"exampleList", "describe", "fromScratch", "runOnce"} {
+		c.Flags().Bool(f, false, "")
+	}
+	initNestedFlag = true
+	t.Cleanup(func() { initNestedFlag = false })
+	runInit(c, nil)
+	if _, err := os.Stat(filepath.Join(dir, "ran-init")); err == nil {
+		t.Fatal("a nested compose's init lines are not the person's and must not run")
+	}
+	initNestedFlag = false
+	runInit(c, nil)
+	if _, err := os.Stat(filepath.Join(dir, "ran-init")); err != nil {
+		t.Fatal("the person's own compose still runs its init lines")
+	}
+}
+
+func TestACloneWithShellCharactersIsNotRun(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "pwned")
+	service := utils.Service{ServiceName: "api", CloneFrom: "https://x/y.git; touch " + marker, AbsolutePath: filepath.Join(dir, "api")}
+	if runGitClone(service, dir) {
+		t.Fatal("a cloneFrom with shell characters is refused, not cloned")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the shell text after the URL ran")
+	}
+}
+
+func TestGitHousekeepingNeverSourcesTheRepoEnv(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, ".env"), []byte("touch "+filepath.Join(dir, "env-ran")+"\n"), 0o644)
+	_ = exec.Command("git", "init", "-q", dir).Run()
+	runBranchCheckout(utils.Service{ServiceName: "api", AbsolutePath: dir, Branch: "main"})
+	if _, err := os.Stat(filepath.Join(dir, "env-ran")); err == nil {
+		t.Fatal(".env was sourced around a git command")
 	}
 }
 

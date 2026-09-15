@@ -205,7 +205,7 @@ func TestReviewPRSpeaksBothForges(t *testing.T) {
 	}))
 	defer srv.Close()
 	ctx := context.Background()
-	s := Secrets{GitLab: "glpat"}
+	s := Secrets{GitLab: "glpat", GitLabURL: srv.URL}
 	link := srv.URL + "/group/proj/-/merge_requests/7"
 	if err := ReviewPR(ctx, s, link, ReviewApprove, "nice"); err != nil {
 		t.Fatal(err)
@@ -230,5 +230,22 @@ func TestReviewPRSpeaksBothForges(t *testing.T) {
 	}
 	if err := ReviewPR(ctx, Secrets{}, "https://github.com/acme/api/pull/7", ReviewApprove, ""); err != ErrNoToken {
 		t.Fatalf("github without a token: %v", err)
+	}
+}
+
+func TestAGitLabLinkIsOnlyAnAPIAddressOnTheConfiguredHost(t *testing.T) {
+	api, err := gitlabMRAPI(Secrets{}, "https://gitlab.com/acme/api/-/merge_requests/42")
+	if err != nil || api != "https://gitlab.com/api/v4/projects/acme%2Fapi/merge_requests/42" {
+		t.Fatalf("gitlab.com by default: %q %v", api, err)
+	}
+	api, err = gitlabMRAPI(Secrets{GitLabURL: "https://git.example.com/"}, "https://GIT.example.com/team/repo/-/merge_requests/7")
+	if err != nil || api != "https://git.example.com/api/v4/projects/team%2Frepo/merge_requests/7" {
+		t.Fatalf("a self-hosted one, host case aside: %q %v", api, err)
+	}
+	if _, err = gitlabMRAPI(Secrets{}, "https://gitlab.attacker.tld/acme/api/-/merge_requests/42"); err == nil {
+		t.Fatal("a link on another host gets no token")
+	}
+	if _, err = gitlabMRAPI(Secrets{GitLabURL: "https://git.example.com"}, "https://gitlab.com/acme/api/-/merge_requests/42"); err == nil {
+		t.Fatal("nor gitlab.com when the workspace is self-hosted")
 	}
 }
