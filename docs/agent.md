@@ -717,7 +717,7 @@ the same thing is not learned twice by two sessions.
 
 ### Sessions on a Stream Deck
 
-Three clients show this board: [corgi-bar](https://github.com/Andriiklymiuk/corgi-bar)
+Three clients show this board: Corgi Agents for Mac (the menu bar app; Mac App Store)
 in the macOS menu bar, the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi)
 and [Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck) on a
 Stream Deck. They run the commands below.

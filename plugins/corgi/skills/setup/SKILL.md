@@ -114,8 +114,7 @@ config, `corgi agent digest --send` to try it.
 
 ```bash
 code --install-extension Corgi.corgi --force          # VS Code: Agent sessions view, status bar, focus by tab
-brew install --cask andriiklymiuk/tools/corgi-bar     # menu bar
-open -a corgi-bar
+open "macappstore://apps.apple.com/app/corgi-agents"    # Corgi Agents for Mac: the menu bar + window (not on brew — the app is on the store)
 ```
 
 Then the person: reload each VS Code window once (`Developer: Reload

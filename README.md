@@ -321,11 +321,11 @@ does right now. Three clients show it:
 
 | client | what it adds |
 |---|---|
-| [corgi-bar](https://github.com/Andriiklymiuk/corgi-bar), macOS menu bar | rows by workspace, Allow/Deny, accounts with 5-hour and weekly windows and a forecast, Talk, a prompt field |
+| **Corgi Agents for Mac** (menu bar + window; on the Mac App Store soon) | rows by workspace, Allow/Deny, accounts with 5-hour and weekly windows and a forecast, Talk, a prompt field |
 | [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi) | Agent sessions view, status bar item, a toast with Go when a session in another window waits |
 | [Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck), Stream Deck | one key per session, Talk, Prompt and Budget keys |
 
-<p align="center"><img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi-bar/main/docs/media/hero.png" width="380" alt="corgi-bar in the menu bar"> <img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi_vscode_extension/main/docs/media/sessions.png" width="380" alt="The Agent sessions view in VS Code"></p>
+<p align="center"><img src="docs/media/bar-hero.png" width="380" alt="Corgi Agents in the menu bar"> <img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi_vscode_extension/main/docs/media/sessions.png" width="380" alt="The Agent sessions view in VS Code"></p>
 
 <p align="center"><img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi-agent-deck/main/docs/media/deck-mk2.png" width="760" alt="Corgi Agent Deck on a Stream Deck"></p>
 
