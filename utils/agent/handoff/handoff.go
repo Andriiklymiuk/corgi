@@ -404,6 +404,20 @@ func CommitsSince(dir, head string) (int, error) {
 	return n, err
 }
 
+// WorktreeDir is where a packet's check runs: its worktree under dir, or
+// dir itself when the packet names none or names one outside.
+func WorktreeDir(dir string, p Packet) string {
+	if p.Where.Worktree == "" {
+		return dir
+	}
+	full := filepath.Join(dir, p.Where.Worktree)
+	rel, err := filepath.Rel(dir, full)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return dir
+	}
+	return full
+}
+
 // TrustedCommand reports whether cmd is one of the workspace's own lines.
 func TrustedCommand(cmd string, trusted []string) bool {
 	cmd = strings.TrimSpace(cmd)

@@ -1362,12 +1362,7 @@ func runHandover(dir, ref string, started time.Time, out string) string {
 	return watch.TailLines(out, 6)
 }
 
-func worktreeOf(dir string, p handoff.Packet) string {
-	if p.Where.Worktree != "" {
-		return filepath.Join(dir, p.Where.Worktree)
-	}
-	return dir
-}
+func worktreeOf(dir string, p handoff.Packet) string { return handoff.WorktreeDir(dir, p) }
 
 // verifyTimeout bounds a packet's verification command: a check that hangs
 // must not hold the runner before claude has even started.
