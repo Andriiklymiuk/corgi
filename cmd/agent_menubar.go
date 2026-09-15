@@ -53,7 +53,7 @@ func checkMenuBarApp() agentCheck {
 	installed, running := lookForMenuBar()
 	switch {
 	case !installed:
-		return agentCheck{Name: checkMenuBar, OK: true, Detail: "corgi-bar not installed (optional)", Fix: "`brew install --cask andriiklymiuk/tools/corgi-bar`"}
+		return agentCheck{Name: checkMenuBar, OK: true, Detail: "Corgi Agents for Mac not installed (optional)", Fix: "install it from the Mac App Store (Corgi Agents)"}
 	case !running:
 		return agentCheck{Name: checkMenuBar, OK: true, Detail: "corgi-bar installed, not running", Fix: "`open -a corgi-bar` — its first run turns login start on"}
 	}
