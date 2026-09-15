@@ -158,6 +158,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("rerun-ci") {
 			wc.RerunCI, _ = flags.GetBool("rerun-ci")
 		}
+		if flags.Changed("silent") {
+			wc.Silent, _ = flags.GetBool("silent")
+		}
 		if flags.Changed("headless") {
 			wc.Headless, _ = flags.GetBool("headless")
 		}
@@ -590,119 +593,7 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 	state := watch.LoadState(dir)
 	now := time.Now()
 	if utils.JSONOutput {
-		type spec struct {
-			Workspace string           `json:"workspace"`
-			Sources   []string         `json:"sources"`
-			Skipped   []string         `json:"skipped,omitempty"`
-			Action    string           `json:"action"`
-			AutoFor   []string         `json:"autoFor,omitempty"`
-			Interval  string           `json:"interval"`
-			Quiet     string           `json:"quiet,omitempty"`
-			DaysOff   []string         `json:"daysOff,omitempty"`
-			Asleep    bool             `json:"asleep,omitempty"`
-			Fixes     daemon.FixBudget `json:"fixes"`
-		}
-		type fixRow struct {
-			Key       string    `json:"key,omitempty"`
-			Ref       string    `json:"ref"`
-			Workspace string    `json:"workspace"`
-			Kind      string    `json:"kind,omitempty"`
-			URL       string    `json:"url,omitempty"`
-			StartedAt time.Time `json:"startedAt"`
-			Running   bool      `json:"running"`
-			PRs       []string  `json:"prs,omitempty"`
-			Note      string    `json:"note,omitempty"`
-			Error     string    `json:"error,omitempty"`
-		}
-		var out []spec
-		for _, s := range specs {
-			row := spec{Workspace: s.Workspace, Sources: sourceNames(s), Skipped: s.Skipped, Action: s.Action, AutoFor: s.FixKinds, Interval: s.Interval.String(), Quiet: s.Quiet, Fixes: daemon.BudgetFor(s, state.Fixes, now)}
-			for _, d := range s.DaysOff {
-				row.DaysOff = append(row.DaysOff, strings.ToLower(d.String()[:3]))
-			}
-			row.Asleep = daemon.DayOff(s, now)
-			out = append(out, row)
-		}
-		// A run's row links to its ticket, so a menu bar can open what the
-		// run was about, not only the pull request it opened.
-		fixes := []fixRow{}
-		for _, r := range state.Fixes.RecentFixes("", 20) {
-			row := fixRow{Key: r.Key, Ref: firstNonEmptyString(r.Ref, r.Key), Workspace: r.Workspace, Kind: r.Kind,
-				StartedAt: r.StartedAt, Running: !r.Done(), PRs: r.PRs, Note: r.Note, Error: r.Error}
-			if e, ok := watch.FindEvent(dir, r.Key); ok {
-				row.URL = e.URL
-			}
-			fixes = append(fixes, row)
-		}
-		// The inbox itself, so a menu bar or an editor can show what arrived
-		// without reading the log file or asking the phone.
-		type eventRow struct {
-			Key       string    `json:"key"`
-			Ref       string    `json:"ref"`
-			Kind      string    `json:"kind"`
-			Workspace string    `json:"workspace,omitempty"`
-			Title     string    `json:"title,omitempty"`
-			URL       string    `json:"url,omitempty"`
-			State     string    `json:"state,omitempty"`
-			At        time.Time `json:"at"`
-			Blocked   string    `json:"blocked,omitempty"`
-			Session   *CardSess `json:"session,omitempty"`
-			Picked    *CardPick `json:"picked,omitempty"`
-			Columns   []string  `json:"columns,omitempty"`
-			// PR and Pull: the pull request this row is about or has, and
-			// how it stands — checks, approval, ready to merge.
-			PR     string            `json:"pr,omitempty"`
-			Pull   *watch.PullStatus `json:"pull,omitempty"`
-			Handed *watch.Hand       `json:"handed,omitempty"`
-			// Standing is the row's one word and clause from the ladder.
-			Standing sessions.Standing `json:"standing"`
-		}
-		events := []eventRow{}
-		onTicket := sessionsOnTickets(dir)
-		picks := watch.LoadPicks(dir)
-		pulls := watch.LoadPullLog(dir)
-		hands := watch.LoadHands(dir)
-		moved := watch.LoadStateLog(dir)
-		keeper := watch.NewInboxKeeper(now)
-		for _, e := range watch.RecentEvents(dir, 25) {
-			if !keeper.Keep(e) || state.IsIgnored(e.Key) {
-				continue // dismissed, or an old routine report: not waiting on anyone
-			}
-			// Merged, closed, done: history rather than work. The same test
-			// the phone's inbox uses, so the menu bar and the editor do not
-			// disagree with it about what is waiting.
-			current := e.State
-			if now, ok := moved.Get(e.Key); ok {
-				current = now.Status
-			}
-			if watch.Settled(e, current) != "" {
-				continue
-			}
-			er := eventRow{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),
-				Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: current, At: e.At}
-			if b, ok := state.Fixes.Blocked(e.Workspace, e.Ref); ok {
-				er.Blocked = b.Reason
-			}
-			er.Session = onTicket[strings.ToLower(e.Ref)]
-			if p, ok := picks.Get(e.Key); ok && now.Sub(p.At) <= watch.PickFresh {
-				er.Picked = &CardPick{At: p.At, By: p.By}
-			}
-			if e.Kind == watch.KindTask {
-				er.Columns = watch.TaskColumns
-			}
-			er.PR = prLinkFor(dir, e, onTicket)
-			if st, ok := pulls.Get(firstNonEmptyString(er.PR, e.Ref)); ok {
-				p := st
-				er.Pull = &p
-			}
-			if h, ok := hands.Get(e.Key); ok {
-				hh := h
-				er.Handed = &hh
-			}
-			er.Standing = rowStanding(er.Pull, er.PR, er.Blocked, er.Session)
-			events = append(events, er)
-		}
-		utils.PrintJSON(map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events})
+		utils.PrintJSON(watchStatusJSON(dir, specs, state, now))
 		return
 	}
 	fmt.Println("Tokens")
@@ -804,7 +695,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Models: resolved.Models, Routines: resolved.Routines}
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Models: resolved.Models, Routines: resolved.Routines}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
@@ -1138,6 +1029,7 @@ func init() {
 	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
 	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, acceptEdits) in its own checkout, so the phone's chat keeps working")
+	f.Bool("silent", false, "Nothing about this workspace's watch rings — no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")
 	f.Bool("rerun-ci", false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
 	f.Bool("auto-carry", false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
 	f.Int("slots", 1, "How many unattended runs may go at once in this workspace (1 to 8); above 1 turns on --isolate so each has worktrees of its own")
@@ -1166,4 +1058,123 @@ func init() {
 	a.Bool("clear", false, "Remove the token instead of setting one")
 	agentWatchCmd.AddCommand(agentWatchEnableCmd, agentWatchDisableCmd, agentWatchRunCmd, agentWatchTestCmd, agentWatchHooksCmd, agentWatchAuthCmd)
 	agentCmd.AddCommand(agentWatchCmd)
+}
+
+// watchStatusJSON is `corgi agent watch --json`: the watched workspaces,
+// the polls, the recent runs and the inbox rows — what a menu bar or an
+// editor draws. The launcher serves the same at GET /launch/watch-status.
+func watchStatusJSON(dir string, specs []daemon.WatchSpec, state *watch.State, now time.Time) map[string]any {
+	type spec struct {
+		Workspace string           `json:"workspace"`
+		Sources   []string         `json:"sources"`
+		Skipped   []string         `json:"skipped,omitempty"`
+		Action    string           `json:"action"`
+		AutoFor   []string         `json:"autoFor,omitempty"`
+		Interval  string           `json:"interval"`
+		Quiet     string           `json:"quiet,omitempty"`
+		DaysOff   []string         `json:"daysOff,omitempty"`
+		Asleep    bool             `json:"asleep,omitempty"`
+		Fixes     daemon.FixBudget `json:"fixes"`
+	}
+	type fixRow struct {
+		Key       string    `json:"key,omitempty"`
+		Ref       string    `json:"ref"`
+		Workspace string    `json:"workspace"`
+		Kind      string    `json:"kind,omitempty"`
+		URL       string    `json:"url,omitempty"`
+		StartedAt time.Time `json:"startedAt"`
+		Running   bool      `json:"running"`
+		PRs       []string  `json:"prs,omitempty"`
+		Note      string    `json:"note,omitempty"`
+		Error     string    `json:"error,omitempty"`
+	}
+	var out []spec
+	for _, s := range specs {
+		row := spec{Workspace: s.Workspace, Sources: sourceNames(s), Skipped: s.Skipped, Action: s.Action, AutoFor: s.FixKinds, Interval: s.Interval.String(), Quiet: s.Quiet, Fixes: daemon.BudgetFor(s, state.Fixes, now)}
+		for _, d := range s.DaysOff {
+			row.DaysOff = append(row.DaysOff, strings.ToLower(d.String()[:3]))
+		}
+		row.Asleep = daemon.DayOff(s, now)
+		out = append(out, row)
+	}
+	// A run's row links to its ticket, so a menu bar can open what the
+	// run was about, not only the pull request it opened.
+	fixes := []fixRow{}
+	for _, r := range state.Fixes.RecentFixes("", 20) {
+		row := fixRow{Key: r.Key, Ref: firstNonEmptyString(r.Ref, r.Key), Workspace: r.Workspace, Kind: r.Kind,
+			StartedAt: r.StartedAt, Running: !r.Done(), PRs: r.PRs, Note: r.Note, Error: r.Error}
+		if e, ok := watch.FindEvent(dir, r.Key); ok {
+			row.URL = e.URL
+		}
+		fixes = append(fixes, row)
+	}
+	// The inbox itself, so a menu bar or an editor can show what arrived
+	// without reading the log file or asking the phone.
+	type eventRow struct {
+		Key       string    `json:"key"`
+		Ref       string    `json:"ref"`
+		Kind      string    `json:"kind"`
+		Workspace string    `json:"workspace,omitempty"`
+		Title     string    `json:"title,omitempty"`
+		URL       string    `json:"url,omitempty"`
+		State     string    `json:"state,omitempty"`
+		At        time.Time `json:"at"`
+		Blocked   string    `json:"blocked,omitempty"`
+		Session   *CardSess `json:"session,omitempty"`
+		Picked    *CardPick `json:"picked,omitempty"`
+		Columns   []string  `json:"columns,omitempty"`
+		// PR and Pull: the pull request this row is about or has, and
+		// how it stands — checks, approval, ready to merge.
+		PR     string            `json:"pr,omitempty"`
+		Pull   *watch.PullStatus `json:"pull,omitempty"`
+		Handed *watch.Hand       `json:"handed,omitempty"`
+		// Standing is the row's one word and clause from the ladder.
+		Standing sessions.Standing `json:"standing"`
+	}
+	events := []eventRow{}
+	onTicket := sessionsOnTickets(dir)
+	picks := watch.LoadPicks(dir)
+	pulls := watch.LoadPullLog(dir)
+	hands := watch.LoadHands(dir)
+	moved := watch.LoadStateLog(dir)
+	keeper := watch.NewInboxKeeper(now)
+	for _, e := range watch.RecentEvents(dir, 25) {
+		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
+			continue // dismissed, or an old routine report: not waiting on anyone
+		}
+		// Merged, closed, done: history rather than work. The same test
+		// the phone's inbox uses, so the menu bar and the editor do not
+		// disagree with it about what is waiting.
+		current := e.State
+		if now, ok := moved.Get(e.Key); ok {
+			current = now.Status
+		}
+		if watch.Settled(e, current) != "" {
+			continue
+		}
+		er := eventRow{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),
+			Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: current, At: e.At}
+		if b, ok := state.Fixes.Blocked(e.Workspace, e.Ref); ok {
+			er.Blocked = b.Reason
+		}
+		er.Session = onTicket[strings.ToLower(e.Ref)]
+		if p, ok := picks.Get(e.Key); ok && now.Sub(p.At) <= watch.PickFresh {
+			er.Picked = &CardPick{At: p.At, By: p.By}
+		}
+		if e.Kind == watch.KindTask {
+			er.Columns = watch.TaskColumns
+		}
+		er.PR = prLinkFor(dir, e, onTicket)
+		if st, ok := pulls.Get(firstNonEmptyString(er.PR, e.Ref)); ok {
+			p := st
+			er.Pull = &p
+		}
+		if h, ok := hands.Get(e.Key); ok {
+			hh := h
+			er.Handed = &hh
+		}
+		er.Standing = rowStanding(er.Pull, er.PR, er.Blocked, er.Session)
+		events = append(events, er)
+	}
+	return map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events}
 }

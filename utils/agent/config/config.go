@@ -314,6 +314,11 @@ type WatchConfig struct {
 	// told or handed it; the second red on the same run goes the usual
 	// way. GitHub. Off by default.
 	RerunCI bool `yaml:"rerunCI,omitempty"`
+	// Silent keeps this workspace's watch quiet: fixes run, the inbox and
+	// the kanban fill, but nothing rings — no toast, no phone push. A
+	// permission prompt in a live session still rings; that is not the
+	// watch's. Off by default.
+	Silent bool `yaml:"silent,omitempty"`
 	// AutoCarry moves a session that hit its five-hour quota to another of
 	// the workspace's accounts that still has budget — the transcript
 	// copied, a new terminal resuming it there — once per limit. Only
