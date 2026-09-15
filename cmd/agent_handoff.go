@@ -243,12 +243,7 @@ func handoffWorkspaceDir(cmd *cobra.Command) string {
 	return cwd
 }
 
-func worktreeFor(dir string, p handoff.Packet) string {
-	if p.Where.Worktree != "" {
-		return filepath.Join(dir, p.Where.Worktree)
-	}
-	return dir
-}
+func worktreeFor(dir string, p handoff.Packet) string { return handoff.WorktreeDir(dir, p) }
 
 // handoffCheckTrusted: the packet's check is one of the workspace's own
 // doneWhen lines (user config), the only commands a packet may ask to run.
