@@ -28,10 +28,15 @@ installs, and adds corgi's generated paths to .gitignore. Then 'corgi run' start
 }
 
 var initDepthFlag int
+
+// set by corgi itself when it inits a cloned repo's own compose
+var initNestedFlag bool
 var initFeatureFlag string
 
 func init() {
 	rootCmd.AddCommand(initCmd)
+	initCmd.Flags().BoolVar(&initNestedFlag, "nested", false, "internal: this init runs inside a cloned service's own corgi-compose.yml")
+	_ = initCmd.Flags().MarkHidden("nested")
 	initCmd.Flags().IntVar(&initDepthFlag, "depth", 0,
 		"Clone each service repo shallow, keeping this many commits (0 = full clone)")
 	initCmd.Flags().StringVar(&initFeatureFlag, "feature", "",
@@ -76,16 +81,21 @@ func runInit(cmd *cobra.Command, _ []string) {
 	cloneFailures := CloneServices(corgi.Services)
 	CreateServices(corgi.Services)
 	checkoutFeatureBranches(corgi.Services, initFeatureFlag)
-	RunRequired(corgi.Required)
-
-	utils.RunServiceCommands(
-		utils.InitInConfig,
-		"corgi",
-		corgi.Init,
-		"",
-		false,
-		true,
-	)
+	if initNestedFlag {
+		if len(corgi.Required) > 0 || len(corgi.Init) > 0 {
+			utils.Info("nested corgi-compose.yml: its required installs and init commands are not run (they are not yours)")
+		}
+	} else {
+		RunRequired(corgi.Required)
+		utils.RunServiceCommands(
+			utils.InitInConfig,
+			"corgi",
+			corgi.Init,
+			"",
+			false,
+			true,
+		)
+	}
 
 	filesToIgnore := []string{
 		"# Added by corgi cli",
@@ -449,11 +459,16 @@ func gitCloneCmd(service utils.Service, depth int) string {
 }
 
 func runGitClone(service utils.Service, pathWithoutLastFolder string) bool {
+	if !utils.IsPlainShellWord(service.CloneFrom) || !utils.IsPlainShellWord(service.AbsolutePath) {
+		fmt.Printf("[%s] cloneFrom or path holds shell characters, not cloning: %q %q\n", service.ServiceName, service.CloneFrom, service.AbsolutePath)
+		return false
+	}
 	err := utils.RunServiceCmd(
 		service.ServiceName,
 		gitCloneCmd(service, initDepthFlag),
 		pathWithoutLastFolder,
 		true,
+		utils.SkipAutoSourceEnv,
 	)
 	if err == nil {
 		return true
@@ -467,17 +482,22 @@ func runGitClone(service utils.Service, pathWithoutLastFolder string) bool {
 }
 
 func runBranchCheckout(service utils.Service) {
+	if !utils.IsPlainShellWord(service.Branch) {
+		fmt.Printf("[%s] branch holds shell characters, not checking out: %q\n", service.ServiceName, service.Branch)
+		return
+	}
 	err := utils.RunServiceCmd(
 		service.ServiceName,
 		fmt.Sprintf("git checkout %s", service.Branch),
 		service.AbsolutePath,
 		true,
+		utils.SkipAutoSourceEnv,
 	)
 	if err != nil {
 		fmt.Printf("output error: %s, in path %s with git checkout %s\n", err, service.AbsolutePath, service.Branch)
 		return
 	}
-	err = utils.RunServiceCmd(service.ServiceName, "corgi pull --silent", service.AbsolutePath, true)
+	err = utils.RunServiceCmd(service.ServiceName, "corgi pull --silent", service.AbsolutePath, true, utils.SkipAutoSourceEnv)
 	if err != nil {
 		fmt.Printf("output error: %s, in path %s with git pull %s\n", err, service.AbsolutePath, service.Branch)
 	}
@@ -494,9 +514,9 @@ func handleExistingServiceDir(service utils.Service) {
 
 func nestedInitCmd() string {
 	if initDepthFlag > 0 {
-		return fmt.Sprintf("corgi init --silent --depth %d", initDepthFlag)
+		return fmt.Sprintf("corgi init --silent --nested --depth %d", initDepthFlag)
 	}
-	return "corgi init --silent"
+	return "corgi init --silent --nested"
 }
 
 func maybeRunNestedCorgiInit(service utils.Service) {
@@ -508,7 +528,7 @@ func maybeRunNestedCorgiInit(service utils.Service) {
 		return
 	}
 	nested := nestedInitCmd()
-	if err := utils.RunServiceCmd(service.ServiceName, nested, service.AbsolutePath, true); err != nil {
+	if err := utils.RunServiceCmd(service.ServiceName, nested, service.AbsolutePath, true, utils.SkipAutoSourceEnv); err != nil {
 		fmt.Printf("output error: %s, in path %s with %s\n", err, service.AbsolutePath, nested)
 	}
 }
