@@ -207,7 +207,8 @@ func bearerAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 			next.ServeHTTP(w, r)
 			return
 		}
-		if _, ok := authorizedDevice(deviceStorePath, r.Header.Get("Authorization")); ok {
+		// a viewer only reads; a keyed device cannot seal the MCP stream
+		if d, ok := authorizedDeviceFull(deviceStorePath, r.Header.Get("Authorization")); ok && !d.Viewer() && !d.Encrypted() {
 			next.ServeHTTP(w, r)
 			return
 		}
