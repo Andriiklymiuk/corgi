@@ -207,3 +207,27 @@ func TestAgentBoardShowsAndSetsTheSize(t *testing.T) {
 		t.Fatal("no daemon, no spool entry")
 	}
 }
+
+// corgi agent new --workspace/--prompt: the workspace must be registered;
+// a prompt is spooled and handed over by id, never on the command line.
+func TestNewSessionArgs(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	if args, err := newSessionArgs("", "", "", "", "", false); err != nil || args != nil {
+		t.Fatalf("plain new: %v %v", args, err)
+	}
+	if _, err := newSessionArgs("nowhere", "", "", "", "", false); err == nil {
+		t.Fatal("an unknown workspace should fail before the editor is asked")
+	}
+	if _, err := newSessionArgs("", "", "", "not a model!", "", false); err == nil {
+		t.Fatal("a bad model should fail")
+	}
+	args, err := newSessionArgs("", "run the tests", "", "sonnet", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"--model", "sonnet", "--isolate", "--prompt-id"}
+	if len(args) != 5 || strings.Join(args[:4], " ") != strings.Join(want, " ") || args[4] == "" {
+		t.Fatalf("args = %v", args)
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/bots"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/sessions"
@@ -122,13 +123,71 @@ session takes the lowest free key within a second. The "+" key on a deck.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		window, _ := cmd.Flags().GetString("window")
 		isolate, _ := cmd.Flags().GetBool("isolate")
+		workspace, _ := cmd.Flags().GetString("workspace")
+		prompt, _ := cmd.Flags().GetString("prompt")
+		bot, _ := cmd.Flags().GetString("bot")
+		model, _ := cmd.Flags().GetString("model")
+		profile, _ := cmd.Flags().GetString("profile")
+		args, err := newSessionArgs(workspace, prompt, bot, model, profile, isolate)
+		if err != nil {
+			exitWithError("agent_new", err, 2)
+		}
 		var run string
-		if isolate {
-			run = daemon.NewSessionCommand("--isolate")
+		if len(args) > 0 {
+			run = daemon.NewSessionCommand(args...)
 		}
 		sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: window, Command: run, Source: "cli"},
 			"asked the editor for a new Claude session — `corgi agent sessions` in a moment")
 	},
+}
+
+// newSessionArgs is what `corgi agent claude` is run with for a new
+// session: the same checks the launcher makes for the phone, so a bad
+// workspace or bot fails here, not in a terminal nobody is watching.
+func newSessionArgs(workspace, prompt, bot, model, profile string, isolate bool) ([]string, error) {
+	var args []string
+	if bot = strings.TrimSpace(bot); bot != "" {
+		if !bots.ValidName(bot) {
+			return nil, fmt.Errorf("not a bot name: %q", bot)
+		}
+		if _, err := loadBot(bot); err != nil {
+			return nil, err
+		}
+		args = append(args, "--bot", bot)
+	}
+	if ws := strings.TrimSpace(workspace); ws != "" {
+		if _, err := workspaceRoot(ws); err != nil {
+			return nil, err
+		}
+		args = append(args, "--workspace", ws)
+	}
+	if profile = strings.TrimSpace(profile); profile != "" && profile != "default" {
+		if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
+			return nil, fmt.Errorf("no such profile: %q", profile)
+		}
+		args = append(args, "--profile", profile)
+	}
+	if model = strings.TrimSpace(model); model != "" {
+		if !validModel(model) {
+			return nil, fmt.Errorf("model: letters, digits, dots and dashes only")
+		}
+		args = append(args, "--model", model)
+	}
+	if isolate {
+		args = append(args, "--isolate")
+	}
+	if prompt = strings.TrimSpace(prompt); prompt != "" {
+		dir, err := agentDir()
+		if err != nil {
+			return nil, err
+		}
+		id, err := savePrompt(dir, prompt)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, "--prompt-id", id)
+	}
+	return args, nil
 }
 
 var agentWindowsCmd = &cobra.Command{
@@ -429,6 +488,11 @@ func init() {
 	agentPinCmd.Flags().Bool("off", false, "Release the key instead")
 	agentNewCmd.Flags().String("window", "", "Editor window id, as `corgi agent windows` lists them (default: the one in front)")
 	agentNewCmd.Flags().Bool("isolate", false, "Start it in a worktree of its own, on a corgi/session-<time> branch, so it never touches the checkout the window is on")
+	agentNewCmd.Flags().String("workspace", "", "Open it in this workspace's window, as `corgi agent workspaces` names them (default: the window in front)")
+	agentNewCmd.Flags().String("prompt", "", "The first prompt, typed once the session is up")
+	agentNewCmd.Flags().String("bot", "", "Open it as this bot: its workspace, account, model and soul (`corgi agent bot list`)")
+	agentNewCmd.Flags().String("model", "", "The model, as claude --model takes it")
+	agentNewCmd.Flags().String("profile", "", "The account profile to run under (`corgi agent profiles`)")
 	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentDismissCmd, agentPageCmd, agentRescanCmd, agentRefreshCmd, agentWindowsCmd, agentNewCmd)
 }
 
