@@ -139,7 +139,12 @@ func sealedBodyLimit(path string) int64 {
 // sniffer learns the status code and nothing else.
 func serveSealed(w http.ResponseWriter, r *http.Request, next http.Handler, key []byte) {
 	method, path := r.Method, r.URL.Path
-	if r.Body != nil && r.ContentLength != 0 {
+	if r.Body == nil || r.ContentLength == 0 {
+		if method != http.MethodGet && method != http.MethodHead {
+			writeLaunchError(w, http.StatusBadRequest, "this device pairs end-to-end encrypted: a sealed body is required")
+			return
+		}
+	} else {
 		raw, err := io.ReadAll(io.LimitReader(r.Body, sealedBodyLimit(path)))
 		if err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -148,6 +153,10 @@ func serveSealed(w http.ResponseWriter, r *http.Request, next http.Handler, key 
 		plain, err := pairing.Open(key, method, path, raw, time.Now())
 		if err != nil {
 			writeLaunchError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if e2eReplay.Seen(pairing.EnvelopeNonce(raw), time.Now()) {
+			writeLaunchError(w, http.StatusBadRequest, "this message was already delivered")
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(plain))
@@ -172,6 +181,8 @@ func serveSealed(w http.ResponseWriter, r *http.Request, next http.Handler, key 
 	_, _ = w.Write(sealed)
 }
 
+var e2eReplay = pairing.NewReplayGuard()
+
 // sealedWriter is the handler's ResponseWriter while its answer is being
 // gathered for sealing.
 type sealedWriter struct {
@@ -186,13 +197,14 @@ func (s *sealedWriter) Write(b []byte) (int, error) { return s.body.Write(b) }
 
 // viewerMay is what a read-only device gets: every GET but the ones that
 // are the laptop's own business — a conversation, the doctor's report, the
-// workspace session links — and no button at all.
+// workspace session links, a session's patch, an unattended run's output —
+// and no button at all.
 func viewerMay(method, path string) bool {
 	if method != http.MethodGet {
 		return false
 	}
 	switch path {
-	case "/launch/transcript", "/launch/doctor", "/launch/sessions", "/launch/preview":
+	case "/launch/transcript", "/launch/doctor", "/launch/sessions", "/launch/preview", "/launch/diff", "/launch/run":
 		return false
 	}
 	return true

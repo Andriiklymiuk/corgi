@@ -24,7 +24,7 @@ func TestDraftAndReopenReachTheRightPlace(t *testing.T) {
 	defer srv.Close()
 
 	link := srv.URL + "/acme/group/api/-/merge_requests/7"
-	if err := DraftPR(context.Background(), Secrets{GitLab: "glpat-x"}, link); err != nil {
+	if err := DraftPR(context.Background(), Secrets{GitLab: "glpat-x", GitLabURL: srv.URL}, link); err != nil {
 		t.Fatalf("draft: %v", err)
 	}
 	// GitLab keeps draft in the title: read it, then write it back prefixed.
@@ -33,7 +33,7 @@ func TestDraftAndReopenReachTheRightPlace(t *testing.T) {
 	}
 
 	got = nil
-	if err := ReopenPR(context.Background(), Secrets{GitLab: "glpat-x"}, link); err != nil {
+	if err := ReopenPR(context.Background(), Secrets{GitLab: "glpat-x", GitLabURL: srv.URL}, link); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
 	if len(got) != 1 || !strings.HasSuffix(got[0], "?state_event=reopen") {
@@ -61,7 +61,7 @@ func TestDraftLeavesADraftAlone(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"title": "Draft: Search", "draft": true, "state": "opened"})
 	}))
 	defer srv.Close()
-	if err := DraftPR(context.Background(), Secrets{GitLab: "glpat-x"}, srv.URL+"/acme/api/-/merge_requests/1"); err != nil {
+	if err := DraftPR(context.Background(), Secrets{GitLab: "glpat-x", GitLabURL: srv.URL}, srv.URL+"/acme/api/-/merge_requests/1"); err != nil {
 		t.Fatal(err)
 	}
 	if puts != 0 {

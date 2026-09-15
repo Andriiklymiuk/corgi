@@ -380,15 +380,34 @@ func closeGitHubPR(ctx context.Context, s Secrets, link string) error {
 // thing, and refusing it here would look like a broken link.
 var gitlabMRPath = regexp.MustCompile(`^(https?://[^/]+)/(.+)/-/merge_requests/(\d+)`)
 
-func closeGitLabMR(ctx context.Context, s Secrets, link string) error {
+// gitlabMRAPI is the API address of a merge request link, on the
+// configured GitLab only: the token never goes to a host a link names.
+func gitlabMRAPI(s Secrets, link string) (string, error) {
 	m := gitlabMRPath.FindStringSubmatch(link)
 	if m == nil {
-		return fmt.Errorf("cannot read a project and number out of %s", link)
+		return "", fmt.Errorf("cannot read a project and number out of %s", link)
 	}
+	base := strings.TrimRight(strings.TrimSpace(s.GitLabURL), "/")
+	if base == "" {
+		base = "https://gitlab.com"
+	}
+	want, err := url.Parse(base)
+	got, err2 := url.Parse(m[1])
+	if err != nil || err2 != nil || want.Host == "" || !strings.EqualFold(want.Host, got.Host) {
+		return "", fmt.Errorf("%s is not on %s; the GitLab token is not sent there", link, base)
+	}
+	return base + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3], nil
+}
+
+func closeGitLabMR(ctx context.Context, s Secrets, link string) error {
 	if s.GitLab == "" {
 		return ErrNoToken
 	}
-	endpoint := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3] + "?state_event=close"
+	api, err := gitlabMRAPI(s, link)
+	if err != nil {
+		return err
+	}
+	endpoint := api + "?state_event=close"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, nil)
 	if err != nil {
 		return err
@@ -459,14 +478,14 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 		req.Header.Set("Content-Type", "application/json")
 		return doGraphQL(req, link)
 	case strings.Contains(link, "/-/merge_requests/"):
-		m := gitlabMRPath.FindStringSubmatch(link)
-		if m == nil {
-			return fmt.Errorf("cannot read a project and number out of %s", link)
-		}
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
-		base := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3]
+		api, err := gitlabMRAPI(s, link)
+		if err != nil {
+			return err
+		}
+		base := api
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base, nil)
 		if err != nil {
 			return err
@@ -533,14 +552,14 @@ func DraftPR(ctx context.Context, s Secrets, link string) error {
 		req.Header.Set("Content-Type", "application/json")
 		return doGraphQL(req, link)
 	case strings.Contains(link, "/-/merge_requests/"):
-		m := gitlabMRPath.FindStringSubmatch(link)
-		if m == nil {
-			return fmt.Errorf("cannot read a project and number out of %s", link)
-		}
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
-		base := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3]
+		api, err := gitlabMRAPI(s, link)
+		if err != nil {
+			return err
+		}
+		base := api
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base, nil)
 		if err != nil {
 			return err
@@ -596,14 +615,14 @@ func ReopenPR(ctx context.Context, s Secrets, link string) error {
 		req.Header.Set("Accept", "application/vnd.github+json")
 		return doClose(req, link)
 	case strings.Contains(link, "/-/merge_requests/"):
-		m := gitlabMRPath.FindStringSubmatch(link)
-		if m == nil {
-			return fmt.Errorf("cannot read a project and number out of %s", link)
-		}
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
-		endpoint := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3] + "?state_event=reopen"
+		api, err := gitlabMRAPI(s, link)
+		if err != nil {
+			return err
+		}
+		endpoint := api + "?state_event=reopen"
 		req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, nil)
 		if err != nil {
 			return err
@@ -708,14 +727,14 @@ func MergePR(ctx context.Context, s Secrets, link string) error {
 		req.Header.Set("Content-Type", "application/json")
 		return doClose(req, link)
 	case strings.Contains(link, "/-/merge_requests/"):
-		m := gitlabMRPath.FindStringSubmatch(link)
-		if m == nil {
-			return fmt.Errorf("cannot read a project and number out of %s", link)
-		}
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
-		endpoint := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3] + "/merge"
+		api, err := gitlabMRAPI(s, link)
+		if err != nil {
+			return err
+		}
+		endpoint := api + "/merge"
 		req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, nil)
 		if err != nil {
 			return err
@@ -858,14 +877,14 @@ func ReviewPR(ctx context.Context, s Secrets, link, verdict, body string) error 
 		req.Header.Set("Content-Type", "application/json")
 		return doClose(req, link)
 	case strings.Contains(link, "/-/merge_requests/"):
-		m := gitlabMRPath.FindStringSubmatch(link)
-		if m == nil {
-			return fmt.Errorf("cannot read a project and number out of %s", link)
-		}
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
-		base := m[1] + "/api/v4/projects/" + url.PathEscape(m[2]) + "/merge_requests/" + m[3]
+		api, err := gitlabMRAPI(s, link)
+		if err != nil {
+			return err
+		}
+		base := api
 		post := func(endpoint string, payload []byte) error {
 			var rd io.Reader
 			if payload != nil {

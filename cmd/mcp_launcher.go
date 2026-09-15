@@ -843,6 +843,34 @@ func cachedLatestVersion() string {
 
 // A device may not revoke itself: locking the only paired phone out, from that
 // phone, is never what was meant.
+// launchConnectorHandler mints a key-less token for an MCP client (the
+// Claude app as a custom connector): a phone's own token never opens
+// /mcp, so the phone asks for one it can hand out instead.
+func launchConnectorHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST to mint a connector token")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, "could not resolve the agent data directory")
+		return
+	}
+	path := pairing.StorePath(dir)
+	me, _ := authorizedDevice(path, r.Header.Get("Authorization"))
+	name := "connector"
+	if me != "" {
+		name = me + " · connector"
+	}
+	connectorToken, err := pairing.PairLocal(path, name)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, "could not mint a connector token")
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"name": name, "token": connectorToken, "url": strings.TrimSuffix(launcherURL(), "/app") + "/mcp"})
+}
+
 func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()

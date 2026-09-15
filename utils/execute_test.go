@@ -1055,3 +1055,16 @@ func TestServiceShellRunsBashBuiltins(t *testing.T) {
 		t.Errorf("got %q", out)
 	}
 }
+
+func TestIsPlainShellWord(t *testing.T) {
+	for _, ok := range []string{"git@github.com:acme/api.git", "https://github.com/acme/api", "feature/ABC-123", "/Users/me/work/api", "v1.2.3"} {
+		if !IsPlainShellWord(ok) {
+			t.Errorf("%q is one word", ok)
+		}
+	}
+	for _, bad := range []string{"", "main; curl x | sh", "a b", "$(id)", "`id`", "x\ny", "a&&b", "repo'", `"x"`} {
+		if IsPlainShellWord(bad) {
+			t.Errorf("%q is not", bad)
+		}
+	}
+}

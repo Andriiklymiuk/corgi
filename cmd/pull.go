@@ -70,6 +70,7 @@ func pullOneService(service utils.Service, isRunOnce bool) {
 		pullCmdToExecute,
 		service.AbsolutePath,
 		true,
+		utils.SkipAutoSourceEnv,
 	)
 	if err != nil {
 		fmt.Println("pull failed for", service.ServiceName, "error:", err)

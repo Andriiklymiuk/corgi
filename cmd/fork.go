@@ -331,6 +331,7 @@ func changeRepoOrigin(path, serviceName, newRepoOrigin string) error {
 		"git remote remove origin",
 		path,
 		true,
+		utils.SkipAutoSourceEnv,
 	)
 
 	if err != nil {
@@ -347,6 +348,7 @@ func changeRepoOrigin(path, serviceName, newRepoOrigin string) error {
 		fmt.Sprintf("git remote add origin %s", newRepoOrigin),
 		path,
 		true,
+		utils.SkipAutoSourceEnv,
 	)
 
 	if err != nil {
@@ -359,6 +361,7 @@ func changeRepoOrigin(path, serviceName, newRepoOrigin string) error {
 		"git push -u origin --all",
 		path,
 		true,
+		utils.SkipAutoSourceEnv,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to push to remote: %s", err)

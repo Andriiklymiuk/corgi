@@ -404,6 +404,20 @@ func CommitsSince(dir, head string) (int, error) {
 	return n, err
 }
 
+// TrustedCommand reports whether cmd is one of the workspace's own lines.
+func TrustedCommand(cmd string, trusted []string) bool {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return false
+	}
+	for _, t := range trusted {
+		if strings.TrimSpace(t) == cmd {
+			return true
+		}
+	}
+	return false
+}
+
 // Verify re-runs the packet's check at the current head. exit 0 and the same
 // head means the packet can be trusted as written; anything else means the
 // next run starts from the ticket and the diff, not the packet.

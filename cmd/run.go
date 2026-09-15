@@ -1427,6 +1427,7 @@ func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 		"corgi pull --silent",
 		service.AbsolutePath,
 		true,
+		utils.SkipAutoSourceEnv,
 	); err != nil {
 		utils.Info("corgi pull failed for", service.ServiceName, "error:", err)
 	}
