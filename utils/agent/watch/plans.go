@@ -199,7 +199,9 @@ type PlanProgress struct {
 }
 
 // Finished says a task no longer needs a run.
-func taskFinished(state string) bool { return state == "Done" || state == "Review" || state == "Canceled" }
+func taskFinished(state string) bool {
+	return state == "Done" || state == "Review" || state == "Canceled"
+}
 
 // Progress reads the plan's tasks off the board and says which may start.
 func (p Plan) Progress(tasks *TaskLog) PlanProgress {
