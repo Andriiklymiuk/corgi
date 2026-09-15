@@ -106,6 +106,11 @@ func (w *WakeLock) Held() bool {
 	return w.cmd != nil
 }
 
+// KeepDisplay makes the wake lock keep the display lit as well (macOS
+// caffeinate -d), so the screen does not lock while a session works. Set
+// from the user config (keepDisplay) before the daemon starts.
+var KeepDisplay bool
+
 // Supported reports whether this platform can hold a wake lock, so status and
 // doctor can say so plainly rather than silently doing nothing.
 func Supported() bool {
@@ -121,8 +126,14 @@ func Supported() bool {
 func WakeLockCommand(pid int) []string {
 	switch runtime.GOOS {
 	case "darwin":
-		// -i idle, -m disk, -s system; -w ties the lock's life to pid.
-		return []string{"caffeinate", "-i", "-m", "-s", "-w", strconv.Itoa(pid)}
+		// -i idle, -m disk, -s system; -w ties the lock's life to pid. -d
+		// keeps the display lit too: the lock screen comes from the display
+		// sleeping, which the other flags do not stop.
+		argv := []string{"caffeinate", "-i", "-m", "-s"}
+		if KeepDisplay {
+			argv = append(argv, "-d")
+		}
+		return append(argv, "-w", strconv.Itoa(pid))
 	case "linux":
 		// Wait on the supervised pid rather than sleeping forever, so the
 		// inhibitor dies with the process it exists for. `sleep infinity` would

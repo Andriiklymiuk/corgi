@@ -53,6 +53,11 @@ type UserConfig struct {
 	// state agent mode exists to avoid. Off by default: a machine that never
 	// sleeps is a flat battery, and that must be the owner's choice.
 	StayAwake bool `yaml:"stayAwake"`
+	// KeepDisplay makes the wake lock keep the display lit too (macOS
+	// caffeinate -d): the lock screen comes from the display sleeping, which
+	// the plain lock does not stop. Off by default: a lit screen is a
+	// battery and a burn-in, and that is the owner's choice.
+	KeepDisplay bool `yaml:"keepDisplay,omitempty"`
 	// AutoContinue lets the daemon type "continue" into a session that hit
 	// a limit once the window resets (quota) or after a short wait
 	// (overload). Off by default: it types into your terminal.

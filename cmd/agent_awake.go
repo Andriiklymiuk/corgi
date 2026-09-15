@@ -27,6 +27,7 @@ var agentAwakeCmd = &cobra.Command{
 sessions the laptop sleeps, and a phone tap reaches nothing.
 
   corgi agent awake on     hold the wake lock for the daemon's whole life
+  corgi agent awake --display on   keep the display lit too — no lock screen while it holds
   corgi agent awake off    back to holding it per session (the default)
   corgi agent awake        what is set now
 
@@ -38,8 +39,9 @@ keep the lid open, or plug in, for a long unattended run.`,
 }
 
 var stayAwakeLine = regexp.MustCompile(`(?m)^stayAwake:.*$`)
+var keepDisplayLine = regexp.MustCompile(`(?m)^keepDisplay:.*$`)
 
-func runAgentAwake(_ *cobra.Command, args []string) {
+func runAgentAwake(cmd *cobra.Command, args []string) {
 	dir, err := agentDir()
 	if err != nil {
 		exitWithError("agent_data_dir", err, 1)
@@ -48,6 +50,23 @@ func runAgentAwake(_ *cobra.Command, args []string) {
 
 	if len(args) == 0 {
 		printAwakeState(path)
+		return
+	}
+	// --display on|off: the display too, so the screen never locks while
+	// the lock is held. Restart the daemon for it to take.
+	if display, _ := cmd.Flags().GetString("display"); display != "" {
+		on, err := parseOnOff(display)
+		if err != nil {
+			exitWithError(utils.ErrUsage, err, 2)
+		}
+		if err := writeUserConfigLine(path, keepDisplayLine, fmt.Sprintf("keepDisplay: %t", on)); err != nil {
+			exitWithError("agent_awake", err, 1)
+		}
+		if on {
+			utils.Infof("✓ keepDisplay: true in %s — the screen stays lit while the wake lock is held (no lock screen); corgi agent restart\n", path)
+		} else {
+			utils.Infof("✓ keepDisplay: false in %s — the display may sleep and lock; corgi agent restart\n", path)
+		}
 		return
 	}
 	on, err := parseOnOff(args[0])
@@ -124,5 +143,6 @@ func writeStayAwake(path string, on bool) error {
 }
 
 func init() {
+	agentAwakeCmd.Flags().String("display", "", "on|off: keep the display lit too while the wake lock holds, so the screen never locks (macOS caffeinate -d)")
 	agentCmd.AddCommand(agentAwakeCmd)
 }
