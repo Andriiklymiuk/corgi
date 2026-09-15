@@ -752,6 +752,10 @@ func (d *Daemon) notifyAttentionKey(title, body, workspaceID, link, key string) 
 		utils.Infof("agent: (muted) %s: %s\n", title, body)
 		return
 	}
+	if d.silenced(workspaceID) {
+		utils.Infof("agent: (silent %s) %s: %s\n", workspaceID, title, body)
+		return
+	}
 	if link == "" && d.LinkFor != nil {
 		link = d.LinkFor(workspaceID)
 	}
@@ -777,6 +781,27 @@ func (d *Daemon) notifyAttentionKey(title, body, workspaceID, link, key string) 
 	if d.Notify != nil {
 		d.Notify(title, body)
 	}
+}
+
+// silenced says whether a workspace asked its watch to keep quiet
+// (watch enable --silent): by its id, or by a folder under its root —
+// session notices name the folder, not the id.
+func (d *Daemon) silenced(workspaceID string) bool {
+	if workspaceID == "" {
+		return false
+	}
+	for _, spec := range d.Watches {
+		if !spec.Silent {
+			continue
+		}
+		if spec.Workspace == workspaceID {
+			return true
+		}
+		if spec.Dir != "" && (workspaceID == spec.Dir || strings.HasPrefix(workspaceID, strings.TrimRight(spec.Dir, "/")+"/")) {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Daemon) startWorkspace(ctx context.Context, c command.Command, launch func(*supervisor.Runner)) {

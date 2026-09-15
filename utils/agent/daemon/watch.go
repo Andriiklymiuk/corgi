@@ -35,6 +35,8 @@ type WatchSpec struct {
 	// RerunCI reruns the failed jobs of a red build once before anyone is
 	// told or handed it; see Daemon.RerunCI.
 	RerunCI bool
+	// Silent: nothing about this workspace's watch rings; see Daemon.silenced.
+	Silent bool
 	// Slots is how many fixes may run in this workspace at once; 0 and 1
 	// are one at a time. More than one needs Isolate, or two runs would
 	// share one checkout: without it the daemon keeps to one.
