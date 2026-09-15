@@ -9,6 +9,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/gitbase"
 )
 
 // Main moves while a session works. The minute sweep measures how far a
@@ -23,7 +24,7 @@ import (
 var behindOf = gitBehind
 
 func gitBehind(dir string) (commits int, conflicts []string, upstream string, ok bool) {
-	for _, b := range []string{"origin/main", "origin/master", "main", "master"} {
+	for _, b := range gitbase.Refs(dir) {
 		out, err := exec.Command("git", "-C", dir, "rev-list", "--count", "HEAD.."+b).Output()
 		if err != nil {
 			continue

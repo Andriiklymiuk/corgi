@@ -14,6 +14,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/workspace"
+	"andriiklymiuk/corgi/utils/gitbase"
 )
 
 // Two hooks keep a session inside the scope the spec agreed. PreToolUse on
@@ -107,14 +108,7 @@ func runScopeHook(stdin io.Reader, stdout io.Writer) {
 var diffStat = gitDiffStat
 
 func gitDiffStat(dir string) (lines int, newTests int, ok bool) {
-	base := ""
-	for _, b := range []string{"origin/main", "origin/master", "main", "master"} {
-		out, err := exec.Command("git", "-C", dir, "merge-base", "HEAD", b).Output()
-		if err == nil && strings.TrimSpace(string(out)) != "" {
-			base = strings.TrimSpace(string(out))
-			break
-		}
-	}
+	base, _ := gitbase.MergeBase(dir)
 	if base == "" {
 		return 0, 0, false
 	}

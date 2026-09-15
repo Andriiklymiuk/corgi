@@ -11,6 +11,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/lessons"
+	"andriiklymiuk/corgi/utils/gitbase"
 	"github.com/spf13/cobra"
 )
 
@@ -73,10 +74,12 @@ func promoteOnBranch(agentDir, workspace, root string, n int) (string, error) {
 	defer os.RemoveAll(tmp)
 	branch := "corgi/lesson-" + time.Now().Format("0102-1504")
 	tree := filepath.Join(tmp, "tree")
-	base := "origin/main"
-	if out, err := exec.Command("git", "-C", root, "rev-parse", "--verify", base).CombinedOutput(); err != nil {
-		base = "HEAD"
-		_ = out
+	base := "HEAD"
+	for _, ref := range gitbase.Refs(root) {
+		if err := exec.Command("git", "-C", root, "rev-parse", "--verify", "--quiet", ref).Run(); err == nil {
+			base = ref
+			break
+		}
 	}
 	if out, err := exec.Command("git", "-C", root, "worktree", "add", "-q", "-b", branch, tree, base).CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git worktree add: %v\n%s", err, out)

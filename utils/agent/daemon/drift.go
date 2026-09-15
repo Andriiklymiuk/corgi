@@ -11,6 +11,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/watch"
+	"andriiklymiuk/corgi/utils/gitbase"
 )
 
 // A session drifts when the numbers say it is no longer doing what it set
@@ -55,14 +56,7 @@ func GeneratedDiffPath(path string) bool {
 var driftDiff = gitDriftDiff
 
 func gitDriftDiff(dir string) (lines int, files []string, ok bool) {
-	base := ""
-	for _, b := range []string{"origin/main", "origin/master", "main", "master"} {
-		out, err := exec.Command("git", "-C", dir, "merge-base", "HEAD", b).Output()
-		if err == nil && strings.TrimSpace(string(out)) != "" {
-			base = strings.TrimSpace(string(out))
-			break
-		}
-	}
+	base, _ := gitbase.MergeBase(dir)
 	if base == "" {
 		return 0, nil, false
 	}

@@ -12,6 +12,7 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/gitbase"
 )
 
 // The diff a session has built up, for a phone: the files with their
@@ -40,7 +41,7 @@ type DiffFile struct {
 // diffBase is the merge base with the main branch, or "" when there is
 // none to speak of (no main, not a repo).
 var diffBase = func(ctx context.Context, dir string) string {
-	for _, b := range []string{"origin/main", "origin/master", "main", "master"} {
+	for _, b := range gitbase.Refs(dir) {
 		out, err := exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "HEAD", b).Output()
 		if err == nil && strings.TrimSpace(string(out)) != "" {
 			return strings.TrimSpace(string(out))
