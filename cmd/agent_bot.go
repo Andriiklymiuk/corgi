@@ -515,7 +515,7 @@ func launchBotsHandler(w http.ResponseWriter, r *http.Request) {
 		b, _ := store.Find(name)
 		writeLaunchJSON(w, map[string]any{"done": "saved", "bot": row(b)})
 	case http.MethodDelete:
-		name := r.URL.Query().Get("name")
+		name := launchNameArg(r)
 		if !store.Remove(name) {
 			writeLaunchError(w, http.StatusNotFound, "no bot named "+name)
 			return

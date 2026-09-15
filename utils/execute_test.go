@@ -1062,7 +1062,7 @@ func TestIsPlainShellWord(t *testing.T) {
 			t.Errorf("%q is one word", ok)
 		}
 	}
-	for _, bad := range []string{"", "main; curl x | sh", "a b", "$(id)", "`id`", "x\ny", "a&&b", "repo'", `"x"`} {
+	for _, bad := range []string{"", "main; curl x | sh", "a b", "$(id)", "`id`", "x\ny", "a&&b", "repo'", `"x"`, "--template=/tmp/x", "-orphan"} {
 		if IsPlainShellWord(bad) {
 			t.Errorf("%q is not", bad)
 		}

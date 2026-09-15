@@ -155,7 +155,7 @@ func serveSealed(w http.ResponseWriter, r *http.Request, next http.Handler, key 
 			writeLaunchError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if e2eReplay.Seen(pairing.EnvelopeNonce(raw), time.Now()) {
+		if e2eReplay.Seen(string(key)+pairing.EnvelopeNonce(raw), time.Now()) {
 			writeLaunchError(w, http.StatusBadRequest, "this message was already delivered")
 			return
 		}

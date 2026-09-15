@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -896,7 +898,7 @@ func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLaunchJSON(w, map[string]any{"devices": list})
 	case http.MethodDelete:
-		name := strings.TrimSpace(r.URL.Query().Get("name"))
+		name := launchNameArg(r)
 		if name == "" {
 			writeLaunchError(w, http.StatusBadRequest, "a device name is required")
 			return
@@ -1312,6 +1314,22 @@ func launcherPageHandler(w http.ResponseWriter, r *http.Request) {
 func setLaunchHeaders(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+}
+
+// launchNameArg is the name a DELETE names: the sealed body's when it
+// carries one (bound to the key), else the query's.
+func launchNameArg(r *http.Request) string {
+	if r.Body != nil && r.ContentLength != 0 {
+		var body struct {
+			Name string `json:"name"`
+		}
+		raw, _ := io.ReadAll(io.LimitReader(r.Body, 4<<10))
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		if json.Unmarshal(raw, &body) == nil && strings.TrimSpace(body.Name) != "" {
+			return strings.TrimSpace(body.Name)
+		}
+	}
+	return strings.TrimSpace(r.URL.Query().Get("name"))
 }
 
 func writeLaunchJSON(w http.ResponseWriter, v any) {

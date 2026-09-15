@@ -43,7 +43,7 @@ const SkipAutoSourceEnv = "<<corgi:no-env-source>>"
 
 // IsPlainShellWord reports whether s is one shell word with nothing to interpret.
 func IsPlainShellWord(s string) bool {
-	if s == "" {
+	if s == "" || s[0] == '-' {
 		return false
 	}
 	for _, r := range s {

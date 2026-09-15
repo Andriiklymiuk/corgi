@@ -164,3 +164,18 @@ func TestOnlyAWorkspacesOwnCommandIsTrusted(t *testing.T) {
 		t.Fatal("anything else — a longer line, an empty one, no list — is not")
 	}
 }
+
+func TestAPacketsWorktreeStaysUnderTheWorkspace(t *testing.T) {
+	dir := filepath.Join(string(filepath.Separator), "work", "api")
+	if got := WorktreeDir(dir, Packet{Where: Where{Worktree: ".corgi/worktrees/ABC-1"}}); got != filepath.Join(dir, ".corgi/worktrees/ABC-1") {
+		t.Fatalf("a worktree under the workspace: %q", got)
+	}
+	for _, bad := range []string{"..", "../../etc", "x/../../../tmp"} {
+		if got := WorktreeDir(dir, Packet{Where: Where{Worktree: bad}}); got != dir {
+			t.Fatalf("%q leaves the workspace and falls back to it, got %q", bad, got)
+		}
+	}
+	if got := WorktreeDir(dir, Packet{}); got != dir {
+		t.Fatal("no worktree means the workspace")
+	}
+}

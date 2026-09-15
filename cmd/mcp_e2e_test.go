@@ -354,3 +354,36 @@ func TestAKeyedPhoneMintsAConnectorTokenThatOpensMCP(t *testing.T) {
 		t.Fatal("the phone's own token still does not")
 	}
 }
+
+func TestASealedDeleteNamesItsTargetInTheBody(t *testing.T) {
+	session, code, store := pairingFixture(t)
+	mux := http.NewServeMux()
+	var got string
+	mux.Handle("/launch/devices", launchAuth("server-token", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = launchNameArg(r)
+		_, _ = w.Write([]byte(`{}`))
+	}), store))
+	token, key := keyedPhone(t, mux, session, code, store)
+	sealed, _ := pairing.Seal(key, "DELETE", "/launch/devices", []byte(`{"name":"old phone"}`), time.Now())
+	req := httptest.NewRequest(http.MethodDelete, "/launch/devices?name=owner", strings.NewReader(string(sealed)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set(pairing.E2EHeader, "1")
+	mux.ServeHTTP(httptest.NewRecorder(), req)
+	if got != "old phone" {
+		t.Fatalf("the sealed body's name wins over a query anyone on the path can rewrite: %q", got)
+	}
+	req = httptest.NewRequest(http.MethodDelete, "/launch/devices?name=owner", strings.NewReader(`{}`))
+	if launchNameArg(req) != "owner" {
+		t.Fatal("an empty body falls back to the query")
+	}
+}
+
+func TestTheReplayGuardIsPerDevice(t *testing.T) {
+	g := pairing.NewReplayGuard()
+	if g.Seen("keyA|n1", time.Now()) || g.Seen("keyB|n1", time.Now()) {
+		t.Fatal("the same nonce from two devices is two messages")
+	}
+	if !g.Seen("keyA|n1", time.Now()) {
+		t.Fatal("the same device again is a replay")
+	}
+}
