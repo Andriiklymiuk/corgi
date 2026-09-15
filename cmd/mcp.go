@@ -372,6 +372,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/ticket", launchAuth(token, http.HandlerFunc(launchTicketHandler), deviceStore))
 		mux.Handle("/launch/profiles", launchAuth(token, http.HandlerFunc(launchProfilesHandler), deviceStore))
 		mux.Handle("/launch/devices", launchAuth(token, http.HandlerFunc(launchDevicesHandler), deviceStore))
+		mux.Handle("/launch/connector", launchAuth(token, http.HandlerFunc(launchConnectorHandler), deviceStore))
 		mux.Handle("/launch/doctor", launchAuth(token, http.HandlerFunc(launchDoctorHandler), deviceStore))
 	}
 

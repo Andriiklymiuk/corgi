@@ -301,3 +301,56 @@ func TestASealedMessageIsDeliveredOnce(t *testing.T) {
 		t.Fatalf("the same envelope again is a replay: reached=%d", reached)
 	}
 }
+
+func TestAKeyedPhoneMintsAConnectorTokenThatOpensMCP(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", data)
+	agentD, _ := agentDir()
+	_ = os.MkdirAll(agentD, 0o700)
+	store := pairing.StorePath(agentD)
+	session, code, err := pairing.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/launch/connector", launchAuth("server-token", http.HandlerFunc(launchConnectorHandler), store))
+	reached := false
+	mux.Handle("/mcp", bearerAuth("server-token", http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }), store))
+	token, key := keyedPhone(t, mux, session, code, store)
+
+	sealed, _ := pairing.Seal(key, "POST", "/launch/connector", []byte(`{}`), time.Now())
+	req := httptest.NewRequest(http.MethodPost, "/launch/connector", strings.NewReader(string(sealed)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set(pairing.E2EHeader, "1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("mint: %d %s", rec.Code, rec.Body)
+	}
+	plain, err := pairing.Open(key, "POST", "/launch/connector", rec.Body.Bytes(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var minted struct {
+		Name  string `json:"name"`
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(plain, &minted)
+	if minted.Name != "phone · connector" || !strings.HasPrefix(minted.Token, pairing.TokenPrefix) {
+		t.Fatalf("a connector token named after the phone: %s", plain)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer "+minted.Token)
+	mux.ServeHTTP(httptest.NewRecorder(), req)
+	if !reached {
+		t.Fatal("the connector token opens /mcp")
+	}
+	reached = false
+	req = httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	mux.ServeHTTP(httptest.NewRecorder(), req)
+	if reached {
+		t.Fatal("the phone's own token still does not")
+	}
+}
