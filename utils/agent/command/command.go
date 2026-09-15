@@ -68,6 +68,8 @@ const (
 	ActionRead = "read"
 	// ActionWatch delivers a tracker or code-host event a webhook received.
 	ActionWatch = "watch"
+	// ActionPlan asks the daemon to move every running plan along now.
+	ActionPlan = "plan"
 )
 
 // needsWorkspace lists the actions addressed to a workspace; the rest are
