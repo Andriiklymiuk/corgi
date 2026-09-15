@@ -103,6 +103,9 @@ var agentHandoffVerifyCmd = &cobra.Command{
 		if p.Verification == nil {
 			exitWithError("agent_handoff_verify", fmt.Errorf("%s has no verification command", p.Ref), 2)
 		}
+		if !handoff.TrustedCommand(p.Verification.Cmd, policyFor(dir, dir).DoneWhen) {
+			exitWithError("agent_handoff_verify", fmt.Errorf("%s's check `%s` is not one of this workspace's doneWhen commands; add it there (corgi agent watch set --done-when) to re-run it", p.Ref, p.Verification.Cmd), 2)
+		}
 		v, ok := handoff.Verify(worktreeFor(dir, p), p, runShell)
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"ref": p.Ref, "verified": ok, "result": v, "recorded": p.Verification})
