@@ -409,28 +409,52 @@ func TestInterruptTypesEscapeAndMarksTheRow(t *testing.T) {
 	<-done
 }
 
-func TestLimitLiftedWaitsForAFinishedTurn(t *testing.T) {
+// The lift is told when it happens, after a grace — not three quarters of
+// an hour later when the resumed turn ends — and names the account when
+// there is one to tell apart. A prompt that hits the wall again inside the
+// grace is no lift. The resumed turn coming to rest gets its own words.
+func TestLimitLiftedIsToldWhenItHappens(t *testing.T) {
 	d := testDaemon(t)
+	d.LiftGrace = 30 * time.Millisecond
 	got := make(chan string, 4)
 	d.Notify = func(_, body string) { got <- body }
-	s := sessions.Session{ID: "s1", Label: "corgi", StatusSince: time.Now()}
+	s := sessions.Session{ID: "s1", Label: "corgi", Profile: "skp", StatusSince: time.Now()}
 	now := time.Now()
 	d.onSessionTransition(s, sessions.StatusLimited, sessions.StatusWorking, now)
 	d.onSessionTransition(s, sessions.StatusWorking, sessions.StatusLimited, now)
 	select {
 	case body := <-got:
 		t.Fatalf("a prompt that hits the wall again is not a lift: %q", body)
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(80 * time.Millisecond):
 	}
 	d.onSessionTransition(s, sessions.StatusLimited, sessions.StatusWorking, now)
-	d.onSessionTransition(s, sessions.StatusWorking, sessions.StatusDone, now)
 	select {
 	case body := <-got:
-		if body != "limit lifted — back to work" {
+		if body != "limit lifted on skp — back to work" {
 			t.Fatalf("body %q", body)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("a finished turn after the limit is the lift")
+		t.Fatal("the lift is told after the grace, before the turn ends")
+	}
+	d.onSessionTransition(s, sessions.StatusWorking, sessions.StatusDone, now)
+	select {
+	case body := <-got:
+		if body != "the turn resumed after the limit on skp is done" {
+			t.Fatalf("body %q", body)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the resumed turn coming to rest is said too")
+	}
+}
+
+// One account, the default one: no account word at all.
+func TestAccountWordIsQuietWithOneAccount(t *testing.T) {
+	d := testDaemon(t)
+	if w := d.accountWord(sessions.Session{Profile: "default"}); w != "" {
+		t.Fatalf("got %q", w)
+	}
+	if w := d.accountWord(sessions.Session{Profile: "default", Agent: "codex"}); w != " on codex" {
+		t.Fatalf("got %q", w)
 	}
 }
 

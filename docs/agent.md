@@ -1022,7 +1022,11 @@ it is short-lived and single-purpose by design.
 When a session leaves `needs_input` or `limited`, the daemon records how
 long it sat there (`waits.jsonl`). `corgi agent usage` sums the day: how many
 waits, the median, the longest and which session, and how long limits cost.
-A limit lifting is one notification ("limit lifted — back to work"); the
+A limit lifting is one notification the moment it lifts — "limit lifted on
+skp — back to work", the account named when the board has more than one
+(a profile, or codex / gemini), after a 20 s grace so a prompt that hits the
+wall again is not called a lift — and one more when the turn it resumed
+comes to rest ("the turn resumed after the limit on skp is done"). The
 work resumes by itself.
 
 ### The handover brief

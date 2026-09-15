@@ -76,6 +76,9 @@ type Daemon struct {
 	recentAttention map[string]time.Time
 	// limitWatch: sessions that left "limited"; the notice waits for a finished turn.
 	limitWatch map[string]bool
+	// LiftGrace is how long a session must stay off the limit before the
+	// laptop says it lifted — a prompt that hits the wall again is no lift.
+	LiftGrace time.Duration
 
 	// Watches are the workspaces that poll their tracker and code host.
 	Watches    []WatchSpec

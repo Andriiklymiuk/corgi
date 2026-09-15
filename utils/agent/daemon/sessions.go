@@ -260,20 +260,61 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 	if d.limitWatch == nil {
 		d.limitWatch = map[string]bool{}
 	}
-	lifted := false
+	rested := ""
+	resumed := false
 	switch {
 	case from == sessions.StatusLimited && to == sessions.StatusWorking:
 		d.limitWatch[s.ID] = true
+		resumed = true
 	case to == sessions.StatusLimited:
 		delete(d.limitWatch, s.ID)
 	case d.limitWatch[s.ID] && (to == sessions.StatusDone || to == sessions.StatusNeedsInput):
 		delete(d.limitWatch, s.ID)
-		lifted = true
+		rested = "done"
+		if to == sessions.StatusNeedsInput {
+			rested = "needs you"
+		}
 	}
 	d.attentionMu.Unlock()
-	if lifted {
-		go d.notifyAttention("corgi agent · "+label, "limit lifted — back to work", s.Folder)
+	// The lift is told when it happens — after a short grace, so a prompt
+	// that hits the wall again within it is not called a lift — naming the
+	// account, since two can be on the board. The turn it resumed gets its
+	// own word when it comes to rest.
+	if resumed {
+		id := s.ID
+		grace := d.LiftGrace
+		if grace == 0 {
+			grace = 20 * time.Second
+		}
+		time.AfterFunc(grace, func() {
+			d.attentionMu.Lock()
+			still := d.limitWatch[id]
+			d.attentionMu.Unlock()
+			if !still {
+				return
+			}
+			d.notifyAttention("corgi agent · "+label, "limit lifted"+d.accountWord(s)+" — back to work", s.Folder)
+		})
 	}
+	if rested != "" {
+		go d.notifyAttention("corgi agent · "+label, "the turn resumed after the limit"+d.accountWord(s)+" is "+rested, s.Folder)
+	}
+}
+
+// accountWord names the account a session runs under, when the board has
+// more than one to tell apart: " on skp", " on codex", " on codex · work".
+func (d *Daemon) accountWord(s sessions.Session) string {
+	parts := []string{}
+	if s.Agent != "" {
+		parts = append(parts, s.Agent)
+	}
+	if s.Profile != "" && (s.Profile != "default" || len(d.configDirs()) > 1) {
+		parts = append(parts, s.Profile)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " on " + strings.Join(parts, " · ")
 }
 
 // sampleAccounts reads every account's cached /usage numbers, keeps the

@@ -619,8 +619,9 @@ pick), **Corgi Agent Deck** (Stream Deck keys; "+" opens a session in the
 window in front, a hold picks another open window), and the **Telegram bot**
 (`corgi agent notify telegram --token …`: reply to a "needs you" message to
 type into it; `/sessions`, `/usage`, `/send`, `/allow`, `/always`, `/deny`,
-`/focus`). "limit lifted — back to work" arrives once a limited session
-finishes a turn again. A limited key says which kind: **quota** (the
+`/focus`). "limit lifted on <account> — back to work" arrives the moment a
+limited session resumes (after a 20 s grace), and "the turn resumed after
+the limit … is done" when that turn ends. A limited key says which kind: **quota** (the
 account's window is spent; `resets 2pm`, carry or wait) or **overload**
 (the API said try later; minutes). With `corgi agent continue on` the daemon
 plans the resume itself — the key shows `continues 14:02` — and gives up after
