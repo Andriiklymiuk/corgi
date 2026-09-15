@@ -23,7 +23,7 @@ func TestClosingAndMergingReachTheRightPlace(t *testing.T) {
 	// GitLab: the project path is escaped into one segment, and the token
 	// goes in the header GitLab actually reads.
 	link := srv.URL + "/acme/group/api/-/merge_requests/7"
-	if err := ClosePR(context.Background(), Secrets{GitLab: "glpat-x"}, link); err != nil {
+	if err := ClosePR(context.Background(), Secrets{GitLab: "glpat-x", GitLabURL: srv.URL}, link); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 	if len(got) != 1 || !strings.Contains(got[0], "/api/v4/projects/acme%2Fgroup%2Fapi/merge_requests/7") {
@@ -34,7 +34,7 @@ func TestClosingAndMergingReachTheRightPlace(t *testing.T) {
 	}
 
 	got = nil
-	if err := MergePR(context.Background(), Secrets{GitLab: "glpat-x"}, link); err != nil {
+	if err := MergePR(context.Background(), Secrets{GitLab: "glpat-x", GitLabURL: srv.URL}, link); err != nil {
 		t.Fatalf("merge: %v", err)
 	}
 	if len(got) != 1 || !strings.HasSuffix(strings.Fields(got[0])[1], "/merge") {
