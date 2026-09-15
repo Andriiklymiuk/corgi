@@ -21,6 +21,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
@@ -1177,4 +1178,49 @@ func watchStatusJSON(dir string, specs []daemon.WatchSpec, state *watch.State, n
 		events = append(events, er)
 	}
 	return map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events}
+}
+
+// launchWatchStatusHandler is GET /launch/watch-status: `corgi agent watch
+// --json` for a client that cannot run corgi — the sandboxed Mac app.
+func launchWatchStatusHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodGet {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	specs, err := loadWatchSpecs(dir)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeLaunchJSON(w, watchStatusJSON(dir, specs, watch.LoadState(dir), time.Now()))
+}
+
+// launchStatusHandler is GET /launch/status: `corgi agent status --json`,
+// for the same client.
+func launchStatusHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodGet {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	status, err := daemon.ReadStatus(dir)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if status == nil {
+		status = &daemon.Status{Running: false, WakeLockable: supervisor.Supported()}
+	}
+	writeLaunchJSON(w, statusWithUsage(dir, status))
 }

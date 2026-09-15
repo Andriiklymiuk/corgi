@@ -79,6 +79,20 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if base == "" {
 		base = "https://gitlab.com"
 	}
+	// Who I am, once, kept in the cursor: my own note on a merge request
+	// is not news to me, and GitLab does raise a todo for it now and then
+	// (a self-assign, a thread I am in). Without a name, nothing is mine.
+	if g.Me == "" {
+		g.Me = cursor["me"]
+	}
+	if g.Me == "" {
+		var user struct {
+			Username string `json:"username"`
+		}
+		if err := g.getInto(ctx, strings.TrimRight(base, "/")+"/api/v4/user", &user); err == nil {
+			g.Me = user.Username
+		}
+	}
 	path := "/api/v4/todos?state=pending&per_page=50"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+path, nil)
 	if err != nil {
@@ -143,6 +157,9 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 	if maxID > 0 {
 		next["lastId"] = strconv.FormatInt(maxID, 10)
+	}
+	if g.Me != "" {
+		next["me"] = g.Me
 	}
 	return events, next, nil
 }

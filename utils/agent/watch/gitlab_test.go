@@ -46,6 +46,10 @@ func newGitLabFake(t *testing.T) *gitlabFake {
 			_, _ = w.Write([]byte(`{"message":"401 Unauthorized"}`))
 			return
 		}
+		if r.URL.Path == "/api/v4/user" {
+			_, _ = w.Write([]byte(`{"username":"me"}`))
+			return
+		}
 		if r.URL.Path != "/api/v4/todos" || r.URL.Query().Get("state") != "pending" {
 			t.Errorf("unexpected request %s?%s", r.URL.Path, r.URL.RawQuery)
 			http.NotFound(w, r)
@@ -102,6 +106,37 @@ func TestGitLabPoll(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Key != "gitlab:todo:9" {
 		t.Errorf("events after id 7 = %+v", events)
+	}
+}
+
+// Nobody says who I am: the poll asks GitLab once, keeps the name in the
+// cursor, and my own todos are not news from then on.
+func TestGitLabLearnsWhoIAm(t *testing.T) {
+	f := newGitLabFake(t)
+	g := NewGitLab(Secrets{GitLab: "tok", GitLabURL: f.srv.URL})
+	events, cursor, err := g.Poll(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor["me"] != "me" {
+		t.Fatalf("cursor = %v, want me", cursor)
+	}
+	for _, e := range events {
+		if e.Author == "me" {
+			t.Fatalf("my own todo came through: %+v", e)
+		}
+	}
+	if len(events) != 2 {
+		t.Fatalf("events = %d, want 2", len(events))
+	}
+	// The next round reads the name from the cursor, no extra call.
+	before := f.requests.Load()
+	g2 := NewGitLab(Secrets{GitLab: "tok", GitLabURL: f.srv.URL})
+	if _, _, err := g2.Poll(context.Background(), cursor); err != nil {
+		t.Fatal(err)
+	}
+	if f.requests.Load()-before != 1 || g2.Me != "me" {
+		t.Fatalf("requests = %d, me = %q", f.requests.Load()-before, g2.Me)
 	}
 }
 
