@@ -142,7 +142,7 @@ func TestAViewerDeviceOnlyReadsTheBoard(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/pair", pairingHandlerWithRole(session, store, pairing.RoleViewer))
 	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"ok":true}`)) })
-	for _, p := range []string{"/launch/board", "/launch/transcript", "/launch/answer", "/launch/doctor", "/launch/sessions"} {
+	for _, p := range []string{"/launch/board", "/launch/transcript", "/launch/answer", "/launch/doctor", "/launch/sessions", "/launch/diff", "/launch/run"} {
 		mux.Handle(p, launchAuth("", ok, store))
 	}
 	rec := httptest.NewRecorder()
@@ -167,6 +167,9 @@ func TestAViewerDeviceOnlyReadsTheBoard(t *testing.T) {
 	}
 	if try(http.MethodGet, "/launch/transcript") != 403 || try(http.MethodPost, "/launch/answer") != 403 || try(http.MethodGet, "/launch/doctor") != 403 || try(http.MethodGet, "/launch/sessions") != 403 {
 		t.Fatal("a transcript, the doctor, the session links and a button are refused")
+	}
+	if try(http.MethodGet, "/launch/diff") != 403 || try(http.MethodGet, "/launch/run") != 403 {
+		t.Fatal("a patch and a run's output are the laptop's own business")
 	}
 	devices, _ := pairing.Load(store)
 	if len(devices.Devices) != 1 || !devices.Devices[0].Viewer() {
@@ -209,5 +212,92 @@ func TestAPairingWindowReopensOnRequest(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, pairRequestName)); err == nil {
 		t.Fatal("the request is gone once answered")
+	}
+}
+
+func keyedPhone(t *testing.T, mux *http.ServeMux, session *pairing.Session, code, store string) (string, []byte) {
+	t.Helper()
+	phone, _ := ecdh.X25519().GenerateKey(rand.Reader)
+	mux.Handle("/pair", pairingHandler(session, store))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/pair", strings.NewReader(`{"code":"`+code+`","device":"phone","pubKey":"`+pairing.PublicKeyString(phone.PublicKey())+`"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("pair: %d %s", rec.Code, rec.Body)
+	}
+	var paired struct {
+		Token        string `json:"token"`
+		ServerPubKey string `json:"serverPubKey"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &paired)
+	serverPub, err := pairing.ParsePublicKey(paired.ServerPubKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _ := pairing.SharedKeyOnDevice(phone, serverPub)
+	return paired.Token, key
+}
+
+func TestAKeyedDeviceMustSealEvenABodylessChange(t *testing.T) {
+	session, code, store := pairingFixture(t)
+	mux := http.NewServeMux()
+	reached := 0
+	mux.Handle("/launch/devices", launchAuth("server-token", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached++
+		_, _ = w.Write([]byte(`{"done":"revoked"}`))
+	}), store))
+	token, key := keyedPhone(t, mux, session, code, store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/launch/devices?name=owner", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set(pairing.E2EHeader, "1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || reached != 0 {
+		t.Fatalf("a bodyless DELETE from a keyed device: %d reached=%d", rec.Code, reached)
+	}
+
+	sealed, _ := pairing.Seal(key, "DELETE", "/launch/devices", []byte(`{}`), time.Now())
+	req = httptest.NewRequest(http.MethodDelete, "/launch/devices?name=owner", strings.NewReader(string(sealed)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set(pairing.E2EHeader, "1")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || reached != 1 {
+		t.Fatalf("a sealed DELETE: %d reached=%d %s", rec.Code, reached, rec.Body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/launch/devices", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set(pairing.E2EHeader, "1")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || reached != 2 {
+		t.Fatalf("a bodyless GET: %d reached=%d", rec.Code, reached)
+	}
+}
+
+func TestASealedMessageIsDeliveredOnce(t *testing.T) {
+	session, code, store := pairingFixture(t)
+	mux := http.NewServeMux()
+	reached := 0
+	mux.Handle("/launch/send", launchAuth("server-token", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached++
+		_, _ = w.Write([]byte(`{"done":"sent"}`))
+	}), store))
+	token, key := keyedPhone(t, mux, session, code, store)
+	sealed, _ := pairing.Seal(key, "POST", "/launch/send", []byte(`{"text":"rm -rf"}`), time.Now())
+	send := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/launch/send", strings.NewReader(string(sealed)))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set(pairing.E2EHeader, "1")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if send() != http.StatusOK || reached != 1 {
+		t.Fatal("the first delivery goes through")
+	}
+	if send() != http.StatusBadRequest || reached != 1 {
+		t.Fatalf("the same envelope again is a replay: reached=%d", reached)
 	}
 }
