@@ -58,3 +58,15 @@ func TestDetectInstallMethod_UnknownDir(t *testing.T) {
 		t.Errorf("expected installMethodUnknown for temp dir, got %v", got)
 	}
 }
+
+// The daemon moves when its version is not the one just installed. The
+// process running upd is the old corgi, so its own version is no yardstick:
+// a daemon on the same old version must still be restarted.
+func TestDaemonWantsRestartComparesWithTheInstalledVersion(t *testing.T) {
+	if !daemonWantsRestart("2.28.8", "2.28.10") || !daemonWantsRestart("2.28.8", "v2.28.10") {
+		t.Fatal("an older daemon moves")
+	}
+	if daemonWantsRestart("2.28.10", "2.28.10") || daemonWantsRestart("", "2.28.10") {
+		t.Fatal("the same version, or no daemon, stays")
+	}
+}
