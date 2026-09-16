@@ -78,7 +78,7 @@ var needsWorkspace = map[string]bool{ActionStart: true, ActionStop: true, Action
 
 var known = map[string]bool{
 	ActionStart: true, ActionStop: true, ActionAttention: true, ActionSession: true,
-	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionResize: true, ActionNew: true,
+	ActionFocus: true, ActionPin: true, ActionPage: true, ActionRescan: true, ActionRefresh: true, ActionResize: true, ActionNew: true,
 	ActionDismiss:   true,
 	ActionWatch:     true,
 	ActionSend:      true,
