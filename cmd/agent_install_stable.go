@@ -67,7 +67,8 @@ func refreshStableDaemonBinary(from string) (string, error) {
 		os.Remove(tmpPath)
 		return "", err
 	}
-	if err := os.Chmod(tmpPath, 0o755); err != nil {
+	// Owner-only: launchd runs the daemon as this user, nobody else needs it.
+	if err := os.Chmod(tmpPath, 0o700); err != nil {
 		os.Remove(tmpPath)
 		return "", err
 	}
