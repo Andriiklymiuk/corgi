@@ -60,6 +60,9 @@ type WatchSpec struct {
 	Action string
 	// the only commands a handoff packet may ask the runner to re-run
 	DoneWhen []string
+	// Approve: an unattended review of someone else's pull request may
+	// end in an approval when nothing blocks.
+	Approve bool
 	// Lease claims the ticket on the tracker before working it, so two
 	// machines watching one board do not both take it.
 	Lease bool
@@ -790,7 +793,7 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	watch.KindTask: func(e watch.Event) string {
 		body := strings.TrimSpace(e.Body)
 		if body == "" {
-			body = "(no description — use your judgement and ask if it is unclear)"
+			body = "(no description — use your judgement)"
 		}
 		return fmt.Sprintf("You are picking up %s from the corgi board — a task written by the person you work with, not a tracker ticket.\n\n"+
 			"Title: %s\n\n%s\n\n"+
@@ -819,8 +822,8 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 		// Someone else's branch. Read it, say what you think, change nothing.
 		return "Review this pull request, which " + firstNonEmpty(e.Author, "a colleague") +
 			" asked me to review: " + e.URL + ". It is THEIR branch — read the diff and post a review " +
-			"(a summary and inline comments). Do not push commits to it, do not resolve their threads, " +
-			"and do not approve it on my behalf. If it is good, say so and say why. /corgi:review " + e.URL
+			"(a summary and inline comments). Do not push commits to it, do not resolve their threads" +
+			approveClause + ". If it is good, say so and say why. /corgi:review " + e.URL
 	},
 	watch.KindCIFailed: func(e watch.Event) string {
 		// The one kind that brings its own test for "done": make it green.
@@ -864,6 +867,17 @@ func BatchPrompt(events []watch.Event) string {
 }
 
 // fixPrompt is the prompt for an event's kind; "" for a kind with no fix.
+const approveClause = "__APPROVE__"
+
+// withApprove settles the review-request prompt: approve when the
+// workspace says so and the review is clean, else never on my behalf.
+func withApprove(prompt string, approve bool) string {
+	if approve {
+		return strings.Replace(prompt, approveClause, ", and approve it on my behalf only when the review has no blocking finding and the risk card says auto-approve: yes — otherwise post the findings and leave it unapproved", 1)
+	}
+	return strings.Replace(prompt, approveClause, ", and do not approve it on my behalf", 1)
+}
+
 func fixPrompt(e watch.Event) string {
 	if build := fixPrompts[e.Kind]; build != nil {
 		return build(e)
@@ -880,7 +894,10 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 	if e.URL != "" {
 		trail += " · " + e.URL
 	}
-	return "\n\nBefore you finish: review your own diff the way you would review someone else's, " +
+	return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
+		"pick the recommended option yourself, say which you picked and why, and go on. " +
+		"If you truly cannot proceed, leave a handoff with `--blocked <reason>` (the question goes in `--uncertain`) and stop.\n" +
+		"Before you finish: review your own diff the way you would review someone else's, " +
 		"and fix what you find — nobody has looked at this but you. " +
 		"Put this line at the end of the pull request body so whoever reviews it knows where it came from: " +
 		trail + "\n" +
@@ -900,7 +917,7 @@ func fixArgs(spec WatchSpec, e watch.Event) []string {
 // fixArgsWith adds what an earlier run on the same ref left behind, so a
 // second attempt continues rather than starting at the ticket again.
 func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
-	prompt := fixPrompt(e) + unattendedSuffix(spec, e)
+	prompt := withApprove(fixPrompt(e), spec.Approve) + unattendedSuffix(spec, e)
 	if p, ok := packetFor(spec.Dir, e.Ref); ok {
 		prompt += "\n\nAn earlier run left a handoff for this ticket. Read it first; it is typed state, not a transcript. " +
 			"Its verification was re-run at the current head: " + packetTrust(spec.Dir, p, spec.DoneWhen) + "\n" + p.Markdown()

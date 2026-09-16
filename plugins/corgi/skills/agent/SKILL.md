@@ -897,6 +897,12 @@ CLI or the phone's repo sheet, no restart:
   and the last one. **Read them before changing code.**
 - `--hand-over`, `--auto-merge` (2.21): feedback typed into the session on
   the branch; a ready pull request merged.
+- `--approve` (2.28.5): an unattended review of a pull request someone asked
+  the user to review may end in an approval — only when nothing blocks and
+  the risk card says `auto-approve: yes`; otherwise findings, no stamp.
+  Off by default: an approval carries the user's name. `--auto-for all`
+  (or `requests`) is what makes review requests run at all; without it
+  they only notify, and with `--silent` not even that.
 
 **Several tries at once**: `corgi agent watch work ABC-123 --attempts 3
 --models opus,sonnet` opens three sessions in worktrees of their own on

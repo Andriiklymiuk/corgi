@@ -35,6 +35,7 @@ type WatchSwitches struct {
 	Quiet     string   `json:"quiet"`
 	DaysOff   []string `json:"daysOff"`
 	AutoMerge bool     `json:"autoMerge"`
+	Approve   bool     `json:"approve"`
 	HandOver  bool     `json:"handOver"`
 	// AutoAllow is "reads" or "" — the one permission policy.
 	AutoAllow string `json:"autoAllow"`
@@ -62,7 +63,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 		return out
 	}
 	out.Enabled, out.Comments, out.PRs, out.Reviews, out.CI, out.Isolate = wc.Enabled, wc.Comments, wc.PRs, wc.Reviews, wc.CI, wc.Isolate
-	out.Quiet, out.AutoMerge, out.HandOver, out.AutoAllow = wc.Quiet, wc.AutoMerge, wc.HandOver, wc.AutoAllow
+	out.Quiet, out.AutoMerge, out.Approve, out.HandOver, out.AutoAllow = wc.Quiet, wc.AutoMerge, wc.Approve, wc.HandOver, wc.AutoAllow
 	if wc.Action != "" {
 		out.Action = wc.Action
 	}
@@ -120,6 +121,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			DaysOff   *[]string `json:"daysOff"`
 			Labels    *[]string `json:"labels"`
 			AutoMerge *bool     `json:"autoMerge"`
+			Approve   *bool     `json:"approve"`
 			HandOver  *bool     `json:"handOver"`
 			AutoAllow *string   `json:"autoAllow"`
 			DoneWhen  *[]string `json:"doneWhen"`
@@ -210,6 +212,9 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 				wc.DaysOff = append(wc.DaysOff, strings.ToLower(d.String()[:3]))
 			}
 			restart = true
+		}
+		if req.Approve != nil {
+			wc.Approve = *req.Approve
 		}
 		if req.AutoMerge != nil {
 			wc.AutoMerge = *req.AutoMerge
