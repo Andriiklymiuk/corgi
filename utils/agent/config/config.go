@@ -350,6 +350,10 @@ type WatchConfig struct {
 	// is ready — checks green, approved — and says so. Off by default: a
 	// merge is a merge.
 	AutoMerge bool `yaml:"autoMerge,omitempty"`
+	// Approve lets an unattended review of a pull request someone asked
+	// me to review end in an approval when nothing blocks and the risk
+	// card says so. Off by default: an approval carries my name.
+	Approve bool `yaml:"approve,omitempty"`
 	// HandOver types a review comment, a red build or an asked-for review
 	// into the session already on that branch, as the next message, so the
 	// loop closes where the work is. Off by default.

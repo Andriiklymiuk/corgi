@@ -13,6 +13,17 @@ idempotent updates (for example `<!-- corgi-review -->`); it does not render, so
 attribution. Match the repo's own commit style; let pre-commit hooks format and re-stage if
 they rewrite.
 
+## Unattended runs never ask
+
+A prompt that carries the trail `corgi watch · <workspace> · <kind> <ref>` is a run the
+daemon started while nobody is at the desk: no one reads it live, no one answers. In that
+run every gate, preview, "warn and ask", "say A or B" or "paste the link" collapses to the
+recommended choice — take it, name it in one line ("chose A: …"), and go on. `--yes` is
+implied. A merged or closed PR/MR is skipped with one line, not asked about. The only
+stop is a real blocker (a missing credential, a tool that is not there, a question only
+a person can settle): then `corgi agent handoff --ref <ref> --blocked "<why>"` with the
+question under `--uncertain`, and end. Never end a run on a question.
+
 ## manualRun is reference-only
 
 A service or db_service with `manualRun: true` is described in `corgi-compose.yml` so the

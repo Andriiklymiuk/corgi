@@ -471,3 +471,18 @@ func TestAPacketsCheckRunsOnlyWhenTheWorkspaceListsIt(t *testing.T) {
 		t.Fatalf("a listed command is re-run: %q", got)
 	}
 }
+
+func TestAReviewRequestApprovesOnlyWhenTheWorkspaceSaysSo(t *testing.T) {
+	e := watch.Event{Kind: watch.KindReviewRequested, Ref: "acme/api!7", URL: "https://gitlab.com/acme/api/-/merge_requests/7", Author: "sam"}
+	off := fixArgsWith(WatchSpec{Workspace: "api", Dir: t.TempDir()}, e, "")[1]
+	if !strings.Contains(off, "do not approve it on my behalf") || strings.Contains(off, approveClause) {
+		t.Fatalf("off by default: %q", off)
+	}
+	on := fixArgsWith(WatchSpec{Workspace: "api", Dir: t.TempDir(), Approve: true}, e, "")[1]
+	if !strings.Contains(on, "approve it on my behalf only when the review has no blocking finding") || strings.Contains(on, approveClause) {
+		t.Fatalf("with --approve: %q", on)
+	}
+	if !strings.Contains(on, "Never ask a question") {
+		t.Fatal("an unattended run is told nobody answers")
+	}
+}

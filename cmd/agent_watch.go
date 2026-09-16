@@ -147,6 +147,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("auto-merge") {
 			wc.AutoMerge, _ = flags.GetBool("auto-merge")
 		}
+		if flags.Changed("approve") {
+			wc.Approve, _ = flags.GetBool("approve")
+		}
 		if flags.Changed("hand-over") {
 			wc.HandOver, _ = flags.GetBool("hand-over")
 		}
@@ -696,7 +699,7 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From},
 			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Models: resolved.Models, Routines: resolved.Routines}
+			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 		if wc.Action == "fix" {
 			spec.Action = "fix"
 		}
@@ -926,6 +929,9 @@ func describeWatch(wc *config.WatchConfig) string {
 	if wc.AutoMerge {
 		parts = append(parts, "merged when green and approved")
 	}
+	if wc.Approve {
+		parts = append(parts, "review requests approved when clean")
+	}
 	if wc.AutoAllow == config.AutoAllowReads {
 		parts = append(parts, "reads allowed by policy")
 	}
@@ -1028,6 +1034,7 @@ func init() {
 	f.Bool("no-retry", false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
+	f.Bool("approve", false, "An unattended review of a pull request I was asked to review may approve it when nothing blocks and the risk card allows")
 	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
 	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, acceptEdits) in its own checkout, so the phone's chat keeps working")
 	f.Bool("silent", false, "Nothing about this workspace's watch rings — no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")

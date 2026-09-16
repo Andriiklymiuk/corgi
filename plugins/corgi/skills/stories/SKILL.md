@@ -28,6 +28,16 @@ superpowers checkpoints.
   open the draft PR/MR, and **watch CI to green** (Phase 5). Don't re-ask at each step.
   Guardrails still hold — draft-only, never merge, never force-push, blocked stories
   still surface as questions.
+- **Automatic mode (unattended).** The daemon runs this skill on its own for a ticket
+  assigned to the user when the workspace has `corgi agent watch enable --action fix
+  --auto-for tickets` (or `all`); the prompt then carries the `corgi watch · …` trail
+  and "I approve all changes". That is the pre-authorized run above with one more rule
+  from `../_shared/conventions.md`: **never ask** — every choice takes the recommended
+  option, named in one line; a story that cannot go on ends in `corgi agent handoff
+  --ref <key> --blocked "<why>"`, not in a question. The run still posts the spec
+  comment, opens draft PRs/MRs, runs the review loop and reports; `corgi agent today`,
+  the inbox and the kanban show it the same as any run. Turning it on is a person's
+  choice per workspace, never this skill's.
 
 ### Story tiers — set per story (Phase 1), drives rigor
 
@@ -380,7 +390,8 @@ go — that _is_ the gate, the user can still stop you) in exactly two cases:
   is the full gate. A vague "just fix it" with no scope is open intent, not clearance.
 - **Blanket pre-authorization:** the user explicitly pre-approved the changes
   sight-unseen and told you to proceed to PR/MR ("I approve all changes", "do them all
-  and open the MRs"). That is the sign-off for any tier, span, or batch size; state
+  and open the MRs"), or the run is unattended (`../_shared/conventions.md` — the
+  `corgi watch ·` trail). That is the sign-off for any tier, span, or batch size; state
   each spec inline and go. The signal is explicit approval plus a directive, not
   impatience.
 

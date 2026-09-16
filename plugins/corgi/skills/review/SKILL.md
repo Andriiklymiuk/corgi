@@ -100,7 +100,8 @@ everything except the diff content (and any file body read in full).
 
 **State.** Read the PR/MR state on fetch.
 - **Merged or closed → warn and ask** before reviewing either (usually pasted by
-  mistake); skip by default if declined.
+  mistake); skip by default if declined. Unattended (`../_shared/conventions.md`):
+  skip with one line, no question.
 - Draft → review normally (reviewing drafts is the common case).
 
 **Stacked PRs.** `gh pr diff` / `glab mr diff` diff each PR against its own base.
@@ -743,9 +744,12 @@ explaining, the fix in the suggestion is a clearer name or a smaller function.
 **Mode A (give review):**
 - **Comments only.** Never set a formal approve / request-changes state, never merge,
   never push, never modify the branch. **Sole exception — the user explicitly says to
-  approve** ("approve if good", "approve these"). Then: clean PR → plain approval,
+  approve** ("approve if good", "approve these", or the unattended prompt from a
+  workspace with `--approve` on). Then: clean PR → plain approval,
   empty or one-line body; PR with findings → post the findings (summary + inline),
-  approving alongside only when none are blocking. Never pair an approval with a
+  approving alongside only when none are blocking **and** the risk card's last line is
+  `auto-approve: yes`. A `no` there means findings only, never an approval, whatever the
+  prompt said. Never pair an approval with a
   verification write-up — the per-PR "what I checked" report belongs in the terminal
   (P6), not the approve body.
 - **Read-only on the repo.** Never check out / write the PR branch; review from the
