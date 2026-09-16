@@ -45,11 +45,14 @@ func slowClaude(t *testing.T) func() []span {
 	}
 }
 
-// overlapped says whether two runs were inside at the same time.
+// overlapped says whether two runs were inside at the same time: each run
+// sleeps 0.3s, so a second one that started before the first could finish
+// ran beside it. Ends are stamped by a goroutine after cancel, too late to
+// judge by under load.
 func overlapped(spans []span) bool {
 	for i := range spans {
 		for j := range spans {
-			if i != j && spans[j].start.Before(spans[i].end) && spans[i].start.Before(spans[j].end) {
+			if i != j && spans[j].start.Sub(spans[i].start).Abs() < 250*time.Millisecond {
 				return true
 			}
 		}
