@@ -1,6 +1,7 @@
 package utils
 
 import (
+	// The notification sound is embedded with go:embed below.
 	_ "embed"
 	"fmt"
 	"net/url"

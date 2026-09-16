@@ -248,12 +248,12 @@ func sqlBreaks(patch string) bool {
 func SurfaceMarkdown(repos []RepoSurface) string {
 	var b strings.Builder
 	b.WriteString("## Changed surface\n")
-	any := false
+	found := false
 	for _, r := range repos {
 		if len(r.Changes) == 0 {
 			continue
 		}
-		any = true
+		found = true
 		if len(repos) > 1 {
 			b.WriteString("\n**" + r.Service + "**\n")
 		}
@@ -265,7 +265,7 @@ func SurfaceMarkdown(repos []RepoSurface) string {
 			b.WriteString("- " + c.Op + " " + c.Kind + " `" + c.Name + "` — " + c.Path + mark + "\n")
 		}
 	}
-	if !any {
+	if !found {
 		b.WriteString("- nothing public changed: no exported symbol, route, contract, migration or config\n")
 	}
 	return b.String()

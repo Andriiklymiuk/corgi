@@ -46,7 +46,7 @@ type accountDayJSON struct {
 func runAgentUsage(cmd *cobra.Command, _ []string) {
 	watch, _ := cmd.Flags().GetBool("watch")
 	dir := mustAgentDir()
-	print := func() {
+	show := func() {
 		rep := buildUsageReport(dir, time.Now())
 		if utils.JSONOutput {
 			utils.PrintJSON(rep)
@@ -57,7 +57,7 @@ func runAgentUsage(cmd *cobra.Command, _ []string) {
 		}
 		printUsageReport(rep)
 	}
-	print()
+	show()
 	if !watch || utils.JSONOutput {
 		return
 	}
@@ -70,7 +70,7 @@ func runAgentUsage(cmd *cobra.Command, _ []string) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			print()
+			show()
 		}
 	}
 }

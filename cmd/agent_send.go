@@ -66,12 +66,12 @@ var agentNoteCmd = &cobra.Command{
 	Short: "Put your own line under a session on the board",
 	Long: `Sets the note a session shows under its label — "waiting on PR review",
 "do not touch" — on every surface that draws the board. No text, or
---clear, removes it. Notes go when the session is dismissed.`,
+--clearNote, removes it. Notes go when the session is dismissed.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		clear, _ := cmd.Flags().GetBool("clear")
+		clearNote, _ := cmd.Flags().GetBool("clear")
 		note := strings.Join(args[1:], " ")
-		if clear {
+		if clearNote {
 			note = ""
 		}
 		done := fmt.Sprintf("note set on %s", args[0])

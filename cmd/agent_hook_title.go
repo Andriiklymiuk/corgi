@@ -216,15 +216,15 @@ func isShortSuffix(s string) bool {
 	return true
 }
 
-func clipTitle(s string, max int) string {
-	if max < 8 {
-		max = 8
+func clipTitle(s string, limit int) string {
+	if limit < 8 {
+		limit = 8
 	}
 	r := []rune(strings.TrimSpace(s))
-	if len(r) <= max {
+	if len(r) <= limit {
 		return string(r)
 	}
-	return strings.TrimSpace(string(r[:max-1])) + "…"
+	return strings.TrimSpace(string(r[:limit-1])) + "…"
 }
 
 // titleHookStdin is a seam for the tests: the real hook reads the payload

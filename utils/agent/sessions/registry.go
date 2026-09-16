@@ -1979,10 +1979,10 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func shorten(s string, max int) string {
+func shorten(s string, limit int) string {
 	s = strings.TrimSpace(strings.SplitN(s, "\n", 2)[0])
-	if runes := []rune(s); len(runes) > max {
-		return strings.TrimSpace(string(runes[:max-1])) + "…"
+	if runes := []rune(s); len(runes) > limit {
+		return strings.TrimSpace(string(runes[:limit-1])) + "…"
 	}
 	return s
 }

@@ -192,7 +192,7 @@ func (l *PlanLog) All() []Plan {
 // PlanProgress is where a plan's tasks stand, from the task board.
 type PlanProgress struct {
 	Todo, Doing, Review, Done, Canceled int
-	// Ready is the Todo tasks whose every predecessor is Done or Review.
+	// Ready is the tasks still in the first column whose every predecessor is Done or Review.
 	Ready []Task
 	// Missing lists task ids the board no longer has.
 	Missing []int

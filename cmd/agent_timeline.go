@@ -36,7 +36,7 @@ type TimelineItem struct {
 }
 
 // timelineFor joins a session's story from every book the laptop keeps.
-func timelineFor(dir string, s sessions.Session, max int) []TimelineItem {
+func timelineFor(dir string, s sessions.Session, limit int) []TimelineItem {
 	var items []TimelineItem
 	if !s.StartedAt.IsZero() {
 		items = append(items, TimelineItem{At: s.StartedAt, Kind: "start", Text: "session started in " + firstNonEmpty(s.Label, s.Cwd)})
@@ -141,8 +141,8 @@ func timelineFor(dir string, s sessions.Session, max int) []TimelineItem {
 		}
 	}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].At.Before(items[j].At) })
-	if max > 0 && len(items) > max {
-		items = items[len(items)-max:]
+	if limit > 0 && len(items) > limit {
+		items = items[len(items)-limit:]
 	}
 	return items
 }
@@ -178,11 +178,11 @@ func launchTimelineHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	max, _ := strconv.Atoi(r.URL.Query().Get("max"))
-	if max <= 0 || max > 400 {
-		max = 200
+	limit, _ := strconv.Atoi(r.URL.Query().Get("max"))
+	if limit <= 0 || limit > 400 {
+		limit = 200
 	}
-	items := timelineFor(dir, session, max)
+	items := timelineFor(dir, session, limit)
 	if items == nil {
 		items = []TimelineItem{}
 	}

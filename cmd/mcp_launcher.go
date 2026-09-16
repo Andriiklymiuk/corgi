@@ -552,8 +552,8 @@ func refreshUsage(key, absPath, configDir string) {
 	entry.computed = time.Now()
 	entry.report = nil
 	if rep.Week.Total() > 0 {
-		copy := rep
-		entry.report = &copy
+		dup := rep
+		entry.report = &dup
 	}
 }
 
@@ -4726,8 +4726,8 @@ func pathForms(p string) []string {
 		return nil
 	}
 	forms := []string{filepath.Clean(abs)}
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		if clean := filepath.Clean(real); clean != forms[0] {
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		if clean := filepath.Clean(resolved); clean != forms[0] {
 			forms = append(forms, clean)
 		}
 	}

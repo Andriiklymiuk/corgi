@@ -92,10 +92,10 @@ func (l *StateLog) SetFrom(key, status, was string, at time.Time) error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// StillOpen is the state a source reports for a ref right now, so the inbox
+// RefStater is the state a source reports for a ref right now, so the inbox
 // can drop what has since been merged, closed or done. A source that cannot
 // answer returns "" and the row stays: guessing it finished would hide real
 // feedback.
-type StillOpen interface {
+type RefStater interface {
 	RefState(ctx context.Context, ref string) string
 }

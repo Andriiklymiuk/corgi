@@ -72,7 +72,7 @@ func stackSnapshot(ctx context.Context, root string) (services []StackService, r
 	}
 	// ps prints the rows, or {"error": …}; either way the rows are what count.
 	var rows []StackService
-	if jerr := json.Unmarshal(out, &rows); jerr != nil {
+	if json.Unmarshal(out, &rows) != nil {
 		var wrapped struct {
 			Rows []StackService `json:"rows"`
 		}
