@@ -158,22 +158,25 @@ func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchJSON(w, map[string]any{"session": session.ID, "file": "", "patch": patch, "truncated": truncated, "base": base[:min(12, len(base))]})
 		return
 	}
+	files, err := diffFiles(ctx, dir, base)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, "git could not diff the branch")
+		return
+	}
 	if file := r.URL.Query().Get("file"); file != "" {
-		if !validDiffPath(file) {
-			writeLaunchError(w, http.StatusBadRequest, "a path inside the checkout")
+		// Only a path git itself listed reaches git again, and as git's own
+		// string: the phone picks from the list, it never names a path.
+		listed := listedDiffPath(files, file)
+		if listed == "" {
+			writeLaunchError(w, http.StatusBadRequest, "a file from this branch's diff")
 			return
 		}
-		patch, truncated, err := diffPatch(ctx, dir, base, file)
+		patch, truncated, err := diffPatch(ctx, dir, base, listed)
 		if err != nil {
 			writeLaunchError(w, http.StatusInternalServerError, "git could not diff that file")
 			return
 		}
-		writeLaunchJSON(w, map[string]any{"session": session.ID, "file": file, "patch": patch, "truncated": truncated, "base": base[:min(12, len(base))]})
-		return
-	}
-	files, err := diffFiles(ctx, dir, base)
-	if err != nil {
-		writeLaunchError(w, http.StatusInternalServerError, "git could not diff the branch")
+		writeLaunchJSON(w, map[string]any{"session": session.ID, "file": listed, "patch": patch, "truncated": truncated, "base": base[:min(12, len(base))]})
 		return
 	}
 	added, deleted := 0, 0
@@ -184,6 +187,21 @@ func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeLaunchJSON(w, map[string]any{"session": session.ID, "base": base[:min(12, len(base))], "branch": session.Branch, "files": files, "added": added, "deleted": deleted})
+}
+
+// listedDiffPath returns the diff's own copy of file when the branch's diff
+// lists it (a plain path; validDiffPath keeps oddities out of the lookup
+// too), or "" for anything else.
+func listedDiffPath(files []DiffFile, file string) string {
+	if !validDiffPath(file) {
+		return ""
+	}
+	for _, f := range files {
+		if f.Path == file {
+			return f.Path
+		}
+	}
+	return ""
 }
 
 // validDiffPath admits a plain relative path inside the checkout and nothing

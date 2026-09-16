@@ -112,3 +112,15 @@ func TestValidDiffPath(t *testing.T) {
 		}
 	}
 }
+
+func TestListedDiffPathOnlyReturnsGitsOwnString(t *testing.T) {
+	files := []DiffFile{{Path: "cmd/agent.go"}, {Path: "docs/a b.md"}}
+	if got := listedDiffPath(files, "cmd/agent.go"); got != "cmd/agent.go" {
+		t.Errorf("listed = %q", got)
+	}
+	for _, p := range []string{"cmd/other.go", "--output=x", "../cmd/agent.go", ""} {
+		if got := listedDiffPath(files, p); got != "" {
+			t.Errorf("%q should not resolve, got %q", p, got)
+		}
+	}
+}
