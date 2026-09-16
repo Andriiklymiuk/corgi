@@ -103,16 +103,10 @@ func driftReasonsSplit(s sessions.Session) (loud, quiet []string) {
 
 // driftReasonsFrom is driftReasonsSplit given a diff already measured.
 func driftReasonsFrom(s sessions.Session, lines int, files []string, ok bool) (loud, quiet []string) {
-	if s.Context != nil && s.Context.Percent >= driftContextAt {
-		loud = append(loud, fmt.Sprintf("context %d%% full — /compact, or fresh from a handoff", s.Context.Percent))
-	}
-	if s.FailStreak >= driftFailsAt {
-		loud = append(loud, fmt.Sprintf("the same tool failed %d times running — step in, or /rewind to before the loop", s.FailStreak))
-	}
+	loud = loudDriftReasons(s)
 	if s.Cwd == "" {
 		return loud, nil
 	}
-	reasons := quiet
 	root := workspaceRootOf(s.Cwd)
 	sc, hasScope := scope.Scope{}, false
 	if root != "" {
@@ -121,45 +115,84 @@ func driftReasonsFrom(s sessions.Session, lines int, files []string, ok bool) (l
 	if !ok {
 		return loud, nil
 	}
-	if s.Behind != nil && len(s.Behind.Conflicts) > 0 {
-		reasons = append(reasons, "main moved: would conflict in "+sessions.JoinFiles(s.Behind.Conflicts, 3)+" — rebase before it grows")
+	for _, reason := range []string{conflictReason(s), sizeReason(lines, sc, hasScope), scopeReason(s.Cwd, root, sc, hasScope, files)} {
+		if reason != "" {
+			quiet = append(quiet, reason)
+		}
 	}
+	return loud, quiet
+}
+
+// loudDriftReasons are the ones about the session itself, worth a ring.
+func loudDriftReasons(s sessions.Session) []string {
+	var loud []string
+	if s.Context != nil && s.Context.Percent >= driftContextAt {
+		loud = append(loud, fmt.Sprintf("context %d%% full — /compact, or fresh from a handoff", s.Context.Percent))
+	}
+	if s.FailStreak >= driftFailsAt {
+		loud = append(loud, fmt.Sprintf("the same tool failed %d times running — step in, or /rewind to before the loop", s.FailStreak))
+	}
+	return loud
+}
+
+func conflictReason(s sessions.Session) string {
+	if s.Behind == nil || len(s.Behind.Conflicts) == 0 {
+		return ""
+	}
+	return "main moved: would conflict in " + sessions.JoinFiles(s.Behind.Conflicts, 3) + " — rebase before it grows"
+}
+
+// sizeReason says when the diff is past the line: a scope's budget doubled,
+// else the floor.
+func sizeReason(lines int, sc scope.Scope, hasScope bool) string {
 	limit := driftLinesFloor
 	if hasScope && sc.Lines > 0 {
 		limit = 2 * sc.Lines
 	}
-	if lines > limit {
-		what := "far past the usual size"
-		if hasScope && sc.Lines > 0 {
-			what = fmt.Sprintf("twice the %d-line budget", sc.Lines)
-		}
-		reasons = append(reasons, fmt.Sprintf("diff is %d lines, %s — split it, or trim to the spec", lines, what))
+	if lines <= limit {
+		return ""
 	}
-	if hasScope && len(sc.Paths) > 0 {
-		// Diff paths are relative to the repository; name them the way the
-		// scope was written when the session sits in a sub-repo or worktree.
-		repoRoot := sessions.RepoRoot(s.Cwd)
-		var outside []string
-		for _, f := range files {
-			named := f
-			if repoRoot != "" {
-				if n := scope.InRepo(root, repoRoot, filepath.Join(repoRoot, f)); n != "" {
-					named = n
-				}
-			}
-			if !sc.Allows(named) {
-				outside = append(outside, named)
+	what := "far past the usual size"
+	if hasScope && sc.Lines > 0 {
+		what = fmt.Sprintf("twice the %d-line budget", sc.Lines)
+	}
+	return fmt.Sprintf("diff is %d lines, %s — split it, or trim to the spec", lines, what)
+}
+
+// scopeReason names the files the diff touches outside the branch's scope.
+func scopeReason(cwd, root string, sc scope.Scope, hasScope bool, files []string) string {
+	if !hasScope || len(sc.Paths) == 0 {
+		return ""
+	}
+	outside := filesOutsideScope(cwd, root, sc, files)
+	if len(outside) == 0 {
+		return ""
+	}
+	shown := outside
+	if len(shown) > 3 {
+		shown = append(shown[:3], "…")
+	}
+	return fmt.Sprintf("%d file(s) outside the scope for %s: %s", len(outside), sc.Ref, strings.Join(shown, ", "))
+}
+
+// filesOutsideScope is the diff's files the scope does not allow. Diff
+// paths are relative to the repository; they are named the way the scope
+// was written when the session sits in a sub-repo or worktree.
+func filesOutsideScope(cwd, root string, sc scope.Scope, files []string) []string {
+	repoRoot := sessions.RepoRoot(cwd)
+	var outside []string
+	for _, f := range files {
+		named := f
+		if repoRoot != "" {
+			if n := scope.InRepo(root, repoRoot, filepath.Join(repoRoot, f)); n != "" {
+				named = n
 			}
 		}
-		if len(outside) > 0 {
-			shown := outside
-			if len(shown) > 3 {
-				shown = append(shown[:3], "…")
-			}
-			reasons = append(reasons, fmt.Sprintf("%d file(s) outside the scope for %s: %s", len(outside), sc.Ref, strings.Join(shown, ", ")))
+		if !sc.Allows(named) {
+			outside = append(outside, named)
 		}
 	}
-	return loud, reasons
+	return outside
 }
 
 // checkDrift runs on the minute sweep over live sessions, and notifies
@@ -172,6 +205,17 @@ func (d *Daemon) checkDrift(now time.Time) {
 	if d.Sessions == nil {
 		return
 	}
+	live := d.driftCandidates()
+	measured := measureAll(live)
+	overlaps := crossings(live, measured)
+	d.checkSpend(live, now)
+	for _, s := range live {
+		d.recordDrift(s, measured[s.ID], overlaps[s.ID], now)
+	}
+}
+
+// driftCandidates are the sessions whose branch is worth measuring.
+func (d *Daemon) driftCandidates() []sessions.Session {
 	live := []sessions.Session{}
 	for _, s := range d.Sessions.Sessions() {
 		switch s.Status {
@@ -179,8 +223,12 @@ func (d *Daemon) checkDrift(now time.Time) {
 			live = append(live, s)
 		}
 	}
-	// One git diff per session, used for everything: the numbers on the
-	// board, who else is on the same files, and whether it is drifting.
+	return live
+}
+
+// measureAll is one git diff per session, used for everything: the numbers
+// on the board, who else is on the same files, and whether it is drifting.
+func measureAll(live []sessions.Session) map[string]measure {
 	measured := map[string]measure{}
 	for _, s := range live {
 		if s.Cwd == "" {
@@ -189,45 +237,50 @@ func (d *Daemon) checkDrift(now time.Time) {
 		lines, files, ok := driftDiff(s.Cwd)
 		measured[s.ID] = measure{lines: lines, files: files, ok: ok, repo: workspaceRootOf(s.Cwd), tree: workingTreeOf(s.Cwd)}
 	}
-	overlaps := crossings(live, measured)
-	d.checkSpend(live, now)
-	for _, s := range live {
-		m := measured[s.ID]
-		var c *sessions.Changes
-		if m.ok {
-			touched := m.files
-			if len(touched) > sessions.TouchedMax {
-				touched = touched[:sessions.TouchedMax]
-			}
-			c = &sessions.Changes{Files: len(m.files), Lines: m.lines, Touched: touched, At: now}
-		}
-		if m.ok && len(m.files) > 0 {
-			if commits, conflicts, upstream, ok := behindOf(s.Cwd); ok {
-				d.Sessions.SetBehind(s.ID, &sessions.Behind{Commits: commits, Conflicts: conflicts, Upstream: upstream, At: now})
-			}
-		} else {
-			d.Sessions.SetBehind(s.ID, nil)
-		}
-		resting := s.Status == sessions.StatusStale
-		if m.ok && len(m.files) > 0 && !resting {
-			d.ringClaims(s, m.files, now)
-		}
-		if _, crossed := d.Sessions.SetChanges(s.ID, c, overlaps[s.ID]); crossed && !resting {
-			label := s.Display
-			if label == "" {
-				label = s.Label
-			}
-			go d.notifyAttention("corgi agent · "+label, "crossing streams: "+sessions.OverlapLine(overlaps[s.ID]), s.Folder)
-		}
-		loud, quiet := driftReasonsFrom(s, m.lines, m.files, m.ok)
-		if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 && !resting {
-			label := s.Display
-			if label == "" {
-				label = s.Label
-			}
-			go d.notifyAttention("corgi agent · "+label, "drifting: "+loud[0], s.Folder)
-		}
+	return measured
+}
+
+// recordDrift puts one session's numbers on the board and rings, once,
+// for what began: crossing streams, or drifting for a loud reason. A
+// resting session is measured but never rung for.
+func (d *Daemon) recordDrift(s sessions.Session, m measure, overlap []sessions.Overlap, now time.Time) {
+	d.recordBehind(s, m, now)
+	resting := s.Status == sessions.StatusStale
+	if m.ok && len(m.files) > 0 && !resting {
+		d.ringClaims(s, m.files, now)
 	}
+	if _, crossed := d.Sessions.SetChanges(s.ID, changesOf(m, now), overlap); crossed && !resting {
+		go d.notifyAttention(notifyTitlePrefix+label(s), "crossing streams: "+sessions.OverlapLine(overlap), s.Folder)
+	}
+	loud, quiet := driftReasonsFrom(s, m.lines, m.files, m.ok)
+	if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 && !resting {
+		go d.notifyAttention(notifyTitlePrefix+label(s), "drifting: "+loud[0], s.Folder)
+	}
+}
+
+// recordBehind reads how far behind main a branch with changes is; a branch
+// with none has nothing to be behind with.
+func (d *Daemon) recordBehind(s sessions.Session, m measure, now time.Time) {
+	if !m.ok || len(m.files) == 0 {
+		d.Sessions.SetBehind(s.ID, nil)
+		return
+	}
+	if commits, conflicts, upstream, ok := behindOf(s.Cwd); ok {
+		d.Sessions.SetBehind(s.ID, &sessions.Behind{Commits: commits, Conflicts: conflicts, Upstream: upstream, At: now})
+	}
+}
+
+// changesOf is the board's summary of a measured diff, nil when the diff
+// could not be read.
+func changesOf(m measure, now time.Time) *sessions.Changes {
+	if !m.ok {
+		return nil
+	}
+	touched := m.files
+	if len(touched) > sessions.TouchedMax {
+		touched = touched[:sessions.TouchedMax]
+	}
+	return &sessions.Changes{Files: len(m.files), Lines: m.lines, Touched: touched, At: now}
 }
 
 // measure is one session's diff, and where it lives: the repository (so
@@ -260,23 +313,6 @@ func gitWorkingTreeOf(dir string) string {
 // board should say before a merge does.
 func crossings(live []sessions.Session, measured map[string]measure) map[string][]sessions.Overlap {
 	out := map[string][]sessions.Overlap{}
-	// The other session by the name a person knows it by: its title, its
-	// bot, and only then the label·id the board made up.
-	name := func(s sessions.Session) string {
-		if t := strings.TrimSpace(s.Title); t != "" {
-			if len(t) > 32 {
-				t = t[:32] + "…"
-			}
-			return t
-		}
-		if s.Bot != "" {
-			return s.Bot
-		}
-		if s.Display != "" {
-			return s.Display
-		}
-		return s.Label
-	}
 	for i, a := range live {
 		ma, ok := measured[a.ID]
 		if !ok || ma.repo == "" {
@@ -286,37 +322,65 @@ func crossings(live []sessions.Session, measured map[string]measure) map[string]
 			if i == j {
 				continue
 			}
-			mb, ok := measured[b.ID]
-			if !ok || mb.repo != ma.repo {
-				continue
+			if o, ok := overlapWith(b, ma, measured[b.ID]); ok {
+				out[a.ID] = append(out[a.ID], o)
 			}
-			if ma.tree != "" && ma.tree == mb.tree {
-				out[a.ID] = append(out[a.ID], sessions.Overlap{ID: b.ID, Session: name(b), SameCheckout: true})
-				continue
-			}
-			if !ma.ok || !mb.ok {
-				continue
-			}
-			theirs := map[string]bool{}
-			for _, f := range mb.files {
-				theirs[f] = true
-			}
-			var shared []string
-			for _, f := range ma.files {
-				if theirs[f] && !GeneratedDiffPath(f) {
-					shared = append(shared, f)
-				}
-			}
-			if len(shared) == 0 {
-				continue
-			}
-			if len(shared) > sessions.TouchedMax {
-				shared = shared[:sessions.TouchedMax]
-			}
-			out[a.ID] = append(out[a.ID], sessions.Overlap{ID: b.ID, Session: name(b), Files: shared})
 		}
 	}
 	return out
+}
+
+// overlapWith is how the other session crosses this one's work, if it does:
+// the same checkout, or shared files in the same repository.
+func overlapWith(other sessions.Session, mine, theirs measure) (sessions.Overlap, bool) {
+	if theirs.repo != mine.repo {
+		return sessions.Overlap{}, false
+	}
+	if mine.tree != "" && mine.tree == theirs.tree {
+		return sessions.Overlap{ID: other.ID, Session: overlapName(other), SameCheckout: true}, true
+	}
+	if !mine.ok || !theirs.ok {
+		return sessions.Overlap{}, false
+	}
+	shared := sharedFiles(mine.files, theirs.files)
+	if len(shared) == 0 {
+		return sessions.Overlap{}, false
+	}
+	return sessions.Overlap{ID: other.ID, Session: overlapName(other), Files: shared}, true
+}
+
+// sharedFiles is what both diffs touch, generated files aside, capped at
+// what a row can show.
+func sharedFiles(mine, theirs []string) []string {
+	seen := map[string]bool{}
+	for _, f := range theirs {
+		seen[f] = true
+	}
+	var shared []string
+	for _, f := range mine {
+		if seen[f] && !GeneratedDiffPath(f) {
+			shared = append(shared, f)
+		}
+	}
+	if len(shared) > sessions.TouchedMax {
+		shared = shared[:sessions.TouchedMax]
+	}
+	return shared
+}
+
+// overlapName is the other session by the name a person knows it by: its
+// title, its bot, and only then the label·id the board made up.
+func overlapName(s sessions.Session) string {
+	if t := strings.TrimSpace(s.Title); t != "" {
+		if len(t) > 32 {
+			t = t[:32] + "…"
+		}
+		return t
+	}
+	if s.Bot != "" {
+		return s.Bot
+	}
+	return label(s)
 }
 
 // ringClaims rings once when a session edits a file another live session
@@ -359,5 +423,5 @@ func (d *Daemon) ringClaims(s sessions.Session, touched []string, now time.Time)
 	if label == "" {
 		label = s.Label
 	}
-	go d.notifyAttention("corgi agent · "+label, "editing a claimed file: "+strings.Join(names, ", "), s.Folder)
+	go d.notifyAttention(notifyTitlePrefix+label, "editing a claimed file: "+strings.Join(names, ", "), s.Folder)
 }

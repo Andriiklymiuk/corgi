@@ -52,16 +52,23 @@ func ReadLimits(configDir string) (Limits, bool) {
 	return Limits{}, false
 }
 
+// cacheFile is the slice of Claude Code's .claude.json corgi reads.
+type cacheFile struct {
+	Cached cachedUtilization `json:"cachedUsageUtilization"`
+}
+
+type cachedUtilization struct {
+	FetchedAtMs int64          `json:"fetchedAtMs"`
+	Utilization rawUtilization `json:"utilization"`
+}
+
+type rawUtilization struct {
+	FiveHour *rawWindow `json:"five_hour"`
+	SevenDay *rawWindow `json:"seven_day"`
+}
+
 func parseLimits(data []byte) (Limits, bool) {
-	var file struct {
-		Cached struct {
-			FetchedAtMs int64 `json:"fetchedAtMs"`
-			Utilization struct {
-				FiveHour *rawWindow `json:"five_hour"`
-				SevenDay *rawWindow `json:"seven_day"`
-			} `json:"utilization"`
-		} `json:"cachedUsageUtilization"`
-	}
+	var file cacheFile
 	if json.Unmarshal(data, &file) != nil || file.Cached.FetchedAtMs == 0 {
 		return Limits{}, false
 	}

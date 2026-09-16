@@ -106,7 +106,8 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 			fmt.Fprintf(logFile, "=== could not isolate, running in place: %v\n", err)
 		}
 	}
-	out, receipt, runErr := d.botAttempt(ctx, spec, b, b.Model, prompt, dir, env, logFile)
+	attempt := botRun{spec: spec, bot: b, prompt: prompt, dir: dir, env: env, log: logFile}
+	out, receipt, runErr := d.botAttempt(ctx, attempt, b.Model)
 	cost, tokens := receipt.costUSD, receipt.tokens
 	// One failure gets one more try, a rung up the ladder: the model that
 	// looped or fell over is often the model that was too small for it.
@@ -115,7 +116,7 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 			fmt.Fprintf(logFile, "\n=== failed: %v — trying again on %s\n", runErr, next)
 			d.watchState.Fixes.SetRetry(key, next)
 			var again runReceipt
-			out, again, runErr = d.botAttempt(ctx, spec, b, next, prompt, dir, env, logFile)
+			out, again, runErr = d.botAttempt(ctx, attempt, next)
 			cost, tokens = cost+again.costUSD, tokens+again.tokens
 		}
 	}
@@ -127,7 +128,7 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
 		d.watchState.Fixes.Finish(key, nil, "", runErr.Error(), time.Now())
 		d.learn(spec, "bot "+b.Name, "failed on "+e.Ref+": "+lastLine(string(out))+" ("+runErr.Error()+")")
-		go d.notifyAttentionAt("corgi agent · "+b.Display(), fmt.Sprintf("%s on %s failed: %v — log: %s", b.Display(), e.Ref, runErr, logPath), spec.Workspace, e.URL)
+		go d.notifyAttentionAt(notifyTitlePrefix+b.Display(), fmt.Sprintf("%s on %s failed: %v — log: %s", b.Display(), e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
 	}
 	links := uniqueStrings(prLink.FindAllString(string(out), -1))
@@ -141,33 +142,50 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 	if len(links) > 0 {
 		target = links[0]
 	}
-	go d.notifyAttentionAt("corgi agent · "+b.Display(), body, spec.Workspace, target)
+	go d.notifyAttentionAt(notifyTitlePrefix+b.Display(), body, spec.Workspace, target)
+}
+
+// botRun is one bot's run on one event: everything an attempt needs that
+// does not change between the first try and the retry on a bigger model.
+type botRun struct {
+	spec   WatchSpec
+	bot    bots.Bot
+	prompt string
+	dir    string
+	env    []string
+	log    *os.File
 }
 
 // botAttempt is one `claude -p` under the bot's soul on one model; what
 // it printed goes to the log as it comes.
-func (d *Daemon) botAttempt(ctx context.Context, spec WatchSpec, b bots.Bot, model, prompt, dir string, env []string, logFile *os.File) ([]byte, runReceipt, error) {
-	args := []string{"-p", prompt, "--output-format", "json"}
-	if soul := strings.TrimSpace(b.Soul); soul != "" {
+func (d *Daemon) botAttempt(ctx context.Context, run botRun, model string) ([]byte, runReceipt, error) {
+	args := botArgs(run, model)
+	cmd := claudeCommand(ctx, run.dir, run.env, args...)
+	cmd.Stdin = nil
+	raw, err := cmd.Output()
+	out, rc := unwrapResult(raw)
+	run.log.Write(out)
+	if rc.ok {
+		fmt.Fprintf(run.log, "\n=== attempt on %s: $%.4f · %d tokens · %d turns\n", modelWord(model), rc.costUSD, rc.tokens, rc.turns)
+	}
+	return out, rc, err
+}
+
+// botArgs is the claude command line for one attempt.
+func botArgs(run botRun, model string) []string {
+	args := []string{"-p", run.prompt, "--output-format", "json"}
+	if soul := strings.TrimSpace(run.bot.Soul); soul != "" {
 		args = append(args, "--append-system-prompt", soul)
 	}
 	if model != "" {
 		args = append(args, "--model", model)
 	}
-	if spec.SkipPermissions {
+	if run.spec.SkipPermissions {
 		args = append(args, "--dangerously-skip-permissions")
 	} else {
 		args = append(args, "--permission-mode", "acceptEdits")
 	}
-	cmd := claudeCommand(ctx, dir, env, args...)
-	cmd.Stdin = nil
-	raw, err := cmd.Output()
-	out, rc := unwrapResult(raw)
-	logFile.Write(out)
-	if rc.ok {
-		fmt.Fprintf(logFile, "\n=== attempt on %s: $%.4f · %d tokens · %d turns\n", modelWord(model), rc.costUSD, rc.tokens, rc.turns)
-	}
-	return out, rc, err
+	return args
 }
 
 // nextModel is the rung above: the retry after a failed run. Past opus

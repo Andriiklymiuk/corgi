@@ -164,14 +164,14 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 	if autoMerge && link != "" && now.Ready() && d.MergePull != nil {
 		if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
 			utils.Infof("agent: auto-merge %s: %v\n", ref, err)
-			go d.notifyAttentionAt("corgi agent · "+spec.Workspace, "could not merge "+link+": "+err.Error(), spec.Workspace, link)
+			go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "could not merge "+link+": "+err.Error(), spec.Workspace, link)
 			return
 		}
 		_ = watch.LoadPullLog(d.Dir).Set(ref, watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: time.Now()})
 		if d.Events != nil {
 			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " — checks ✓, approved", URL: link})
 		}
-		go d.notifyAttentionAt("corgi agent · "+spec.Workspace, "merged "+link+" — checks ✓ · approved", spec.Workspace, link)
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "merged "+link+" — checks ✓ · approved", spec.Workspace, link)
 	}
 }
 
@@ -239,55 +239,76 @@ func (d *Daemon) gateDone(s sessions.Session) {
 	if len(cmds) == 0 || !hasWork(s) || s.Detail == "interrupted" {
 		return
 	}
-	d.gateMu.Lock()
-	if d.gating == nil {
-		d.gating = map[string]bool{}
-	}
-	if d.gating[s.ID] {
-		d.gateMu.Unlock()
+	if !d.claimGate(s.ID) {
 		return
 	}
-	d.gating[s.ID] = true
-	d.gateMu.Unlock()
 	d.runs.Add(1)
 	go func() {
 		defer d.runs.Done()
-		defer func() {
-			d.gateMu.Lock()
-			delete(d.gating, s.ID)
-			d.gateMu.Unlock()
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), gateBudget)
-		defer cancel()
-		label := s.Display
-		if label == "" {
-			label = s.Label
-		}
-		for _, cmd := range cmds {
-			out, err := d.shell(ctx, s.Cwd, cmd)
-			if err == nil {
-				continue
-			}
-			fails := d.Sessions.SetGate(s.ID, false, cmd, time.Now())
-			d.flushSessions()
-			utils.Infof("agent: %s stopped, but %q failed (%d in a row)\n", label, cmd, fails)
-			if fails > gateTries {
-				go d.notifyAttentionAt("corgi agent · "+label, "not done: "+cmd+" still red after "+strconv.Itoa(fails)+" tries", s.Label, "")
-				if p := d.Policy(s); p.Lessons && p.Workspace != "" {
-					where := s.Branch
-					if where == "" {
-						where = label
-					}
-					_ = lessons.Add(d.Dir, p.Workspace, lessons.Lesson{At: time.Now(), Source: "done-when", Text: "`" + cmd + "` stayed red after " + strconv.Itoa(fails) + " tries on " + where + " — " + lastLine(string(out))})
-				}
-				return
-			}
-			d.sendToSession(ctx, s.ID, gateMessage(cmd, string(out), err), true)
+		defer d.releaseGate(s.ID)
+		d.runGate(s, cmds)
+	}()
+}
+
+// claimGate takes the session's gate; false when a run already holds it.
+func (d *Daemon) claimGate(id string) bool {
+	d.gateMu.Lock()
+	defer d.gateMu.Unlock()
+	if d.gating == nil {
+		d.gating = map[string]bool{}
+	}
+	if d.gating[id] {
+		return false
+	}
+	d.gating[id] = true
+	return true
+}
+
+func (d *Daemon) releaseGate(id string) {
+	d.gateMu.Lock()
+	delete(d.gating, id)
+	d.gateMu.Unlock()
+}
+
+// runGate runs the commands in order and stops at the first red one.
+func (d *Daemon) runGate(s sessions.Session, cmds []string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gateBudget)
+	defer cancel()
+	for _, cmd := range cmds {
+		out, err := d.shell(ctx, s.Cwd, cmd)
+		if err != nil {
+			d.gateRed(ctx, s, cmd, string(out), err)
 			return
 		}
-		d.Sessions.SetGate(s.ID, true, "", time.Now())
-		d.flushSessions()
-	}()
+	}
+	d.Sessions.SetGate(s.ID, true, "", time.Now())
+	d.flushSessions()
+}
+
+// gateRed counts the failure on the row and types it back as the next
+// message — or, once the session has argued with it enough, rings a person
+// and writes the lesson down.
+func (d *Daemon) gateRed(ctx context.Context, s sessions.Session, cmd, out string, err error) {
+	fails := d.Sessions.SetGate(s.ID, false, cmd, time.Now())
+	d.flushSessions()
+	utils.Infof("agent: %s stopped, but %q failed (%d in a row)\n", label(s), cmd, fails)
+	if fails <= gateTries {
+		d.sendToSession(ctx, s.ID, gateMessage(cmd, out, err), true)
+		return
+	}
+	go d.notifyAttentionAt(notifyTitlePrefix+label(s), "not done: "+cmd+" still red after "+strconv.Itoa(fails)+" tries", s.Label, "")
+	if p := d.Policy(s); p.Lessons && p.Workspace != "" {
+		_ = lessons.Add(d.Dir, p.Workspace, lessons.Lesson{At: time.Now(), Source: "done-when", Text: gateLesson(s, cmd, fails, out)})
+	}
+}
+
+// gateLesson is the line the next session reads about a check that stayed red.
+func gateLesson(s sessions.Session, cmd string, fails int, out string) string {
+	where := s.Branch
+	if where == "" {
+		where = label(s)
+	}
+	return "`" + cmd + "` stayed red after " + strconv.Itoa(fails) + " tries on " + where + " — " + lastLine(out)
 }
 
 // hasWork says the session has something on its branch worth checking:

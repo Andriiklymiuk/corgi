@@ -121,122 +121,174 @@ type kanbanInputs struct {
 	sessionTokens func(s sessions.Session) (int64, bool)
 }
 
+// kanbanBoard is the board while it is being derived: one step per book,
+// in the order the books outrank each other.
+type kanbanBoard struct {
+	in    kanbanInputs
+	byRef map[string]*KanbanCard
+	order []string
+}
+
+const kanbanSessionWord = "session "
+
 func buildKanban(in kanbanInputs) []KanbanCard {
-	byRef := map[string]*KanbanCard{}
-	order := []string{}
-	card := func(ws, ref string) *KanbanCard {
-		id := ws + "/" + ref
-		if c, ok := byRef[id]; ok {
-			return c
-		}
-		c := &KanbanCard{Ref: ref, Workspace: ws, Column: ColInbox}
-		byRef[id] = c
-		order = append(order, id)
+	b := &kanbanBoard{in: in, byRef: map[string]*KanbanCard{}}
+	b.placeEvents()
+	b.placeRuns()
+	b.placeSessions()
+	b.placePicks()
+	b.placeHandoffs()
+	b.placeWallsAndCost()
+	b.placePulls()
+	return b.cards()
+}
+
+func (b *kanbanBoard) card(ws, ref string) *KanbanCard {
+	id := ws + "/" + ref
+	if c, ok := b.byRef[id]; ok {
 		return c
 	}
+	c := &KanbanCard{Ref: ref, Workspace: ws, Column: ColInbox}
+	b.byRef[id] = c
+	b.order = append(b.order, id)
+	return c
+}
 
-	// Inbox events, newest first: the first one on a ref names the card.
-	for _, e := range in.events {
-		if e.Ref == "" || e.Kind == watch.KindRoutine || (in.ignored != nil && in.ignored(e.Key)) {
+func (b *kanbanBoard) drop(ws, ref string) {
+	delete(b.byRef, ws+"/"+ref)
+}
+
+// cardOpen is a card no run, wall or pull request has settled yet.
+func cardOpen(c *KanbanCard) bool {
+	return c.Column == ColInbox || c.Column == ColReady || c.Column == ColRunning
+}
+
+// Inbox events, newest first: the first one on a ref names the card.
+func (b *kanbanBoard) placeEvents() {
+	for _, e := range b.in.events {
+		if e.Ref == "" || e.Kind == watch.KindRoutine || (b.in.ignored != nil && b.in.ignored(e.Key)) {
 			continue
 		}
 		current := e.State
-		if now, ok := in.moved.Get(e.Key); ok {
+		if now, ok := b.in.moved.Get(e.Key); ok {
 			current = now.Status
 		}
-		c := card(e.Workspace, e.Ref)
+		c := b.card(e.Workspace, e.Ref)
 		if c.Key == "" {
 			c.Key, c.Title, c.URL, c.Kind, c.State, c.UpdatedAt = e.Key, firstLineOf(e.Title), e.URL, string(e.Kind), current, e.At
 		}
-		// A task of your own sits where you put it: its column is its state.
-		// A session or a run on it still moves it along below.
 		if e.Kind == watch.KindTask {
-			c.Body, c.Columns = e.Body, watch.TaskColumns
-			switch watch.TaskColumn(current) {
-			case "Doing":
-				c.Column, c.Why = ColRunning, "picked up"
-			case "Review":
-				c.Column, c.Why = ColReview, "in review"
-			case "Done", "Canceled":
-				if in.now.Sub(e.At) > 7*24*time.Hour {
-					delete(byRef, e.Workspace+"/"+e.Ref)
-					continue
-				}
-				c.Column, c.Why = ColDone, strings.ToLower(watch.TaskColumn(current))
-			default:
-				c.Why = "waiting in the inbox"
-			}
+			b.placeTask(c, e, current)
+		} else {
+			b.placeTicket(c, e, current)
+		}
+	}
+}
+
+// A task of your own sits where you put it: its column is its state. A
+// session or a run on it still moves it along later.
+func (b *kanbanBoard) placeTask(c *KanbanCard, e watch.Event, current string) {
+	c.Body, c.Columns = e.Body, watch.TaskColumns
+	switch watch.TaskColumn(current) {
+	case "Doing":
+		c.Column, c.Why = ColRunning, "picked up"
+	case "Review":
+		c.Column, c.Why = ColReview, "in review"
+	case "Done", "Canceled":
+		if b.in.now.Sub(e.At) > 7*24*time.Hour {
+			b.drop(e.Workspace, e.Ref)
+			return
+		}
+		c.Column, c.Why = ColDone, strings.ToLower(watch.TaskColumn(current))
+	default:
+		c.Why = "waiting in the inbox"
+	}
+}
+
+func (b *kanbanBoard) placeTicket(c *KanbanCard, e watch.Event, current string) {
+	over := watch.Settled(e, current)
+	switch {
+	case over != "" && strings.HasPrefix(over, "picked up"):
+		c.Column, c.Why = ColReady, over
+	case over != "":
+		if b.in.now.Sub(e.At) > 24*time.Hour {
+			b.drop(e.Workspace, e.Ref)
+			return
+		}
+		c.Column, c.Why = ColDone, over
+	case c.Why == "":
+		c.Why = "waiting in the inbox"
+	}
+}
+
+// Runs: in flight is Running; a pull request is Review; a failure is
+// something a person reads, so it stays where the ticket is with the
+// outcome on the card.
+func (b *kanbanBoard) placeRuns() {
+	if b.in.fixes == nil {
+		return
+	}
+	for _, r := range b.in.fixes.RecentFixes("", 100) {
+		b.placeRun(r)
+	}
+	for _, e := range b.in.fixes.DeferredEvents() {
+		if e.Ref == "" {
 			continue
 		}
-		if over := watch.Settled(e, current); over != "" && strings.HasPrefix(over, "picked up") {
-			c.Column, c.Why = ColReady, over
-		} else if over != "" {
-			if in.now.Sub(e.At) > 24*time.Hour {
-				delete(byRef, e.Workspace+"/"+e.Ref)
-				continue
-			}
-			c.Column, c.Why = ColDone, over
-		} else if c.Why == "" {
-			c.Why = "waiting in the inbox"
+		c := b.card(e.Workspace, e.Ref)
+		if c.Column == ColInbox {
+			c.Column, c.Why = ColReady, "deferred: waits for budget or a manual run"
 		}
 	}
+}
 
-	// Runs: in flight is Running; a pull request is Review; a failure is
-	// something a person reads, so it stays where the ticket is with the
-	// outcome on the card.
-	if in.fixes != nil {
-		for _, r := range in.fixes.RecentFixes("", 100) {
-			if r.Ref == "" || strings.HasPrefix(r.Ref, "routine/") {
-				continue
-			}
-			// Ignored means out of the inbox everywhere: a run that
-			// happened on an ignored event brings no card back on its own.
-			if in.ignored != nil && in.ignored(r.Key) {
-				if _, kept := byRef[r.Workspace+"/"+r.Ref]; !kept {
-					continue
-				}
-			}
-			c := card(r.Workspace, r.Ref)
-			if c.Fix != nil && !c.Fix.Running {
-				continue // the newest run on a ref is the one that counts
-			}
-			c.Fix = &CardFix{Running: !r.Done(), StartedAt: r.StartedAt, Outcome: r.Outcome(), PRs: r.PRs, Branch: r.Branch}
-			// A card the run brought in still needs a key: it is what Move,
-			// Ignore and the log are addressed to.
-			if c.Key == "" {
-				c.Key, c.Kind = r.Key, string(r.Kind)
-			}
-			if c.Title == "" {
-				c.Title = firstLineOf(r.Title)
-			}
-			if c.URL == "" {
-				c.URL = r.URL
-			}
-			if r.StartedAt.After(c.UpdatedAt) {
-				c.UpdatedAt = r.StartedAt
-			}
-			switch {
-			case !r.Done():
-				c.Column, c.Why = ColRunning, "a run started "+roughAge(in.now.Sub(r.StartedAt))+" ago"
-			case len(r.PRs) > 0 && c.Column != ColDone:
-				c.Column, c.Why = ColReview, r.Outcome()
-			}
-		}
-		for _, e := range in.fixes.DeferredEvents() {
-			if e.Ref == "" {
-				continue
-			}
-			c := card(e.Workspace, e.Ref)
-			if c.Column == ColInbox {
-				c.Column, c.Why = ColReady, "deferred: waits for budget or a manual run"
-			}
+func (b *kanbanBoard) placeRun(r watch.FixRecord) {
+	if r.Ref == "" || strings.HasPrefix(r.Ref, "routine/") {
+		return
+	}
+	// Ignored means out of the inbox everywhere: a run that happened on an
+	// ignored event brings no card back on its own.
+	if b.in.ignored != nil && b.in.ignored(r.Key) {
+		if _, kept := b.byRef[r.Workspace+"/"+r.Ref]; !kept {
+			return
 		}
 	}
+	c := b.card(r.Workspace, r.Ref)
+	if c.Fix != nil && !c.Fix.Running {
+		return // the newest run on a ref is the one that counts
+	}
+	c.Fix = &CardFix{Running: !r.Done(), StartedAt: r.StartedAt, Outcome: r.Outcome(), PRs: r.PRs, Branch: r.Branch}
+	nameCardFromRun(c, r)
+	switch {
+	case !r.Done():
+		c.Column, c.Why = ColRunning, "a run started "+roughAge(b.in.now.Sub(r.StartedAt))+" ago"
+	case len(r.PRs) > 0 && c.Column != ColDone:
+		c.Column, c.Why = ColReview, r.Outcome()
+	}
+}
 
-	// A live session on the ticket is a person or an agent at work: one
-	// opened for it by "Work on it" (the ticket rides in its environment),
-	// or one on a branch named after it.
-	for _, s := range in.sessions {
+// nameCardFromRun fills what a card the run brought in is missing. The key
+// above all: it is what Move, Ignore and the log are addressed to.
+func nameCardFromRun(c *KanbanCard, r watch.FixRecord) {
+	if c.Key == "" {
+		c.Key, c.Kind = r.Key, string(r.Kind)
+	}
+	if c.Title == "" {
+		c.Title = firstLineOf(r.Title)
+	}
+	if c.URL == "" {
+		c.URL = r.URL
+	}
+	if r.StartedAt.After(c.UpdatedAt) {
+		c.UpdatedAt = r.StartedAt
+	}
+}
+
+// A live session on the ticket is a person or an agent at work: one
+// opened for it by "Work on it" (the ticket rides in its environment),
+// or one on a branch named after it.
+func (b *kanbanBoard) placeSessions() {
+	for _, s := range b.in.sessions {
 		if s.Status == sessions.StatusGone || s.Status == sessions.StatusStale {
 			continue
 		}
@@ -244,124 +296,170 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 		if len(refs) == 0 {
 			continue
 		}
-		for _, c := range byRef {
-			if !containsFold(refs, c.Ref) {
-				continue
-			}
-			c.Session = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status), PR: s.PR}
-			if s.Branch != "" {
-				c.Branch = s.Branch
-			}
-			if in.sessionTokens != nil {
-				if tok, ok := in.sessionTokens(s); ok {
-					if c.Cost == nil {
-						c.Cost = &CardCost{}
-					}
-					c.Cost.Tokens += tok
-					c.Cost.Sessions++
-				}
-			}
-			if c.Column == ColInbox || c.Column == ColReady || c.Column == ColRunning {
-				c.Column, c.Why = ColRunning, sessionWhy(c.Session, s)
-			}
-			// A pull request from the session is the ticket in review.
-			if s.PR != "" && (c.Column == ColRunning || c.Column == ColInbox || c.Column == ColReady) {
-				c.Column, c.Why = ColReview, "session "+c.Session.Label+" opened a pull request"
+		for _, c := range b.byRef {
+			if containsFold(refs, c.Ref) {
+				b.placeSession(c, s)
 			}
 		}
 	}
+}
 
-	// "Work on it" pressed, no session yet: the card says so, and by whom,
-	// instead of sitting in the inbox as if nothing happened. A pick with a
-	// session on the card is just history.
-	if in.picks != nil {
-		for _, c := range byRef {
-			p, ok := in.picks.Get(c.Key)
-			if !ok {
-				continue
-			}
-			c.Picked = &CardPick{At: p.At, By: p.By}
-			if c.Session != nil || c.Column == ColDone || c.Column == ColReview {
-				continue
-			}
-			if in.now.Sub(p.At) <= watch.PickFresh {
-				c.Column, c.Why = ColRunning, "picked from the "+pickedFrom(p.By)+" "+roughAge(in.now.Sub(p.At))+" ago · waiting for a session to open"
-			} else if c.Column == ColRunning && c.Kind == string(watch.KindTask) {
-				c.Why = "picked from the " + pickedFrom(p.By) + " " + roughAge(in.now.Sub(p.At)) + " ago · no session came — Work on it again"
-			}
+func (b *kanbanBoard) placeSession(c *KanbanCard, s sessions.Session) {
+	c.Session = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status), PR: s.PR}
+	if s.Branch != "" {
+		c.Branch = s.Branch
+	}
+	b.addSessionCost(c, s)
+	if cardOpen(c) {
+		c.Column, c.Why = ColRunning, sessionWhy(c.Session, s)
+	}
+	// A pull request from the session is the ticket in review.
+	if s.PR != "" && cardOpen(c) {
+		c.Column, c.Why = ColReview, kanbanSessionWord+c.Session.Label+" opened a pull request"
+	}
+}
+
+func (b *kanbanBoard) addSessionCost(c *KanbanCard, s sessions.Session) {
+	if b.in.sessionTokens == nil {
+		return
+	}
+	tok, ok := b.in.sessionTokens(s)
+	if !ok {
+		return
+	}
+	if c.Cost == nil {
+		c.Cost = &CardCost{}
+	}
+	c.Cost.Tokens += tok
+	c.Cost.Sessions++
+}
+
+// "Work on it" pressed, no session yet: the card says so, and by whom,
+// instead of sitting in the inbox as if nothing happened. A pick with a
+// session on the card is just history.
+func (b *kanbanBoard) placePicks() {
+	if b.in.picks == nil {
+		return
+	}
+	for _, c := range b.byRef {
+		p, ok := b.in.picks.Get(c.Key)
+		if !ok {
+			continue
+		}
+		c.Picked = &CardPick{At: p.At, By: p.By}
+		if c.Session != nil || c.Column == ColDone || c.Column == ColReview {
+			continue
+		}
+		age := b.in.now.Sub(p.At)
+		if age <= watch.PickFresh {
+			c.Column, c.Why = ColRunning, pickedWhy(p.By, age, "waiting for a session to open")
+		} else if c.Column == ColRunning && c.Kind == string(watch.KindTask) {
+			c.Why = pickedWhy(p.By, age, "no session came — Work on it again")
 		}
 	}
+}
 
-	// A handoff means someone stopped part-way: the card is Ready unless a
-	// run or a session has it, and it says what comes next.
-	for ws, list := range in.packets {
+func pickedWhy(by string, age time.Duration, then string) string {
+	return "picked from the " + pickedFrom(by) + " " + roughAge(age) + " ago · " + then
+}
+
+// A handoff means someone stopped part-way: the card is Ready unless a
+// run or a session has it, and it says what comes next.
+func (b *kanbanBoard) placeHandoffs() {
+	for ws, list := range b.in.packets {
 		for _, p := range list {
-			if in.now.Sub(p.WrittenAt) > handoff.MaxAge {
+			if b.in.now.Sub(p.WrittenAt) > handoff.MaxAge {
 				continue
 			}
-			c := card(ws, p.Ref)
-			c.Handoff = &CardHand{State: p.State, Next: p.Next, Path: handoff.MarkdownPath("", p.Ref), Draft: p.Draft}
-			if c.Branch == "" {
-				c.Branch = p.Where.Branch
-			}
-			if p.WrittenAt.After(c.UpdatedAt) {
-				c.UpdatedAt = p.WrittenAt
-			}
-			if c.Column == ColInbox {
-				c.Column, c.Why = ColReady, "handoff: "+p.Summary()
-			}
-			if p.State == handoff.StateCompleted && c.Column != ColReview {
-				c.Column, c.Why = ColDone, "handoff says completed"
-			}
+			b.placeHandoff(ws, p)
 		}
 	}
+}
 
-	// Blocked wins over everything but Done: a wall is a wall. And every
-	// card says what it has cost so far.
-	if in.fixes != nil {
-		for _, c := range byRef {
-			if b, ok := in.fixes.Blocked(c.Workspace, c.Ref); ok && c.Column != ColDone {
-				c.Column, c.Why, c.Blocked, c.BlockedBy = ColBlocked, b.Reason, b.Reason, b.By
-			}
-			if cost := in.fixes.CostFor(c.Workspace, c.Ref); cost.Runs > 0 {
-				if c.Cost == nil {
-					c.Cost = &CardCost{}
-				}
-				c.Cost.USD += cost.USD
-				c.Cost.Tokens += cost.Tokens
-				c.Cost.Runs = cost.Runs
-			}
+func (b *kanbanBoard) placeHandoff(ws string, p handoff.Packet) {
+	c := b.card(ws, p.Ref)
+	c.Handoff = &CardHand{State: p.State, Next: p.Next, Path: handoff.MarkdownPath("", p.Ref), Draft: p.Draft}
+	if c.Branch == "" {
+		c.Branch = p.Where.Branch
+	}
+	if p.WrittenAt.After(c.UpdatedAt) {
+		c.UpdatedAt = p.WrittenAt
+	}
+	if c.Column == ColInbox {
+		c.Column, c.Why = ColReady, "handoff: "+p.Summary()
+	}
+	if p.State == handoff.StateCompleted && c.Column != ColReview {
+		c.Column, c.Why = ColDone, "handoff says completed"
+	}
+}
+
+// Blocked wins over everything but Done: a wall is a wall. And every
+// card says what it has cost so far.
+func (b *kanbanBoard) placeWallsAndCost() {
+	if b.in.fixes == nil {
+		return
+	}
+	for _, c := range b.byRef {
+		if wall, ok := b.in.fixes.Blocked(c.Workspace, c.Ref); ok && c.Column != ColDone {
+			c.Column, c.Why, c.Blocked, c.BlockedBy = ColBlocked, wall.Reason, wall.Reason, wall.By
+		}
+		addRunCost(c, b.in.fixes.CostFor(c.Workspace, c.Ref))
+	}
+}
+
+func addRunCost(c *KanbanCard, cost watch.Cost) {
+	if cost.Runs == 0 {
+		return
+	}
+	if c.Cost == nil {
+		c.Cost = &CardCost{}
+	}
+	c.Cost.USD += cost.USD
+	c.Cost.Tokens += cost.Tokens
+	c.Cost.Runs = cost.Runs
+}
+
+// The pull request's own standing, once the daemon has read it: a card
+// in Review says ready to merge when the checks pass and someone
+// approved, instead of only that a pull request exists.
+func (b *kanbanBoard) placePulls() {
+	if b.in.pulls == nil {
+		return
+	}
+	for _, c := range b.byRef {
+		st, ok := b.in.pulls.Get(cardPullLink(c))
+		if !ok {
+			continue
+		}
+		p := st
+		c.Pull = &p
+		if c.Column == ColReview && st.Line() != "" {
+			c.Why = st.Line()
 		}
 	}
+}
 
-	// The pull request's own standing, once the daemon has read it: a card
-	// in Review says ready to merge when the checks pass and someone
-	// approved, instead of only that a pull request exists.
-	if in.pulls != nil {
-		for _, c := range byRef {
-			if st, ok := in.pulls.Get(cardPullLink(c)); ok {
-				p := st
-				c.Pull = &p
-				if c.Column == ColReview && st.Line() != "" {
-					c.Why = st.Line()
-				}
-			}
-		}
-	}
-
-	for _, c := range byRef {
+// cards is the board in its final order: one card per ref, by column, the
+// newest first within one.
+func (b *kanbanBoard) cards() []KanbanCard {
+	for _, c := range b.byRef {
 		c.Standing = cardStanding(c)
 	}
-	out := make([]KanbanCard, 0, len(byRef))
+	out := make([]KanbanCard, 0, len(b.byRef))
 	// A ref can enter order twice: an old settled event drops its card,
 	// then a newer event on the same ref makes it again. One card per ref.
 	emitted := map[string]bool{}
-	for _, id := range order {
-		if c, ok := byRef[id]; ok && !emitted[id] {
+	for _, id := range b.order {
+		if c, ok := b.byRef[id]; ok && !emitted[id] {
 			emitted[id] = true
 			out = append(out, *c)
 		}
 	}
+	sortKanban(out)
+	return out
+}
+
+func sortKanban(out []KanbanCard) {
 	rank := map[string]int{}
 	for i, col := range kanbanColumns {
 		rank[col] = i
@@ -372,7 +470,6 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 		}
 		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
-	return out
 }
 
 // cardStanding runs the ladder over what the card knows. The column still
@@ -597,15 +694,15 @@ func containsFold(list []string, want string) bool {
 func sessionWhy(c *CardSess, s sessions.Session) string {
 	switch s.Status {
 	case sessions.StatusNeedsInput:
-		return "session " + c.Label + " needs you"
+		return kanbanSessionWord + c.Label + " needs you"
 	case sessions.StatusWorking:
-		return "session " + c.Label + " is working on it"
+		return kanbanSessionWord + c.Label + " is working on it"
 	case sessions.StatusDone:
-		return "session " + c.Label + " finished a turn — check it, then move the card"
+		return kanbanSessionWord + c.Label + " finished a turn — check it, then move the card"
 	case sessions.StatusLimited:
-		return "session " + c.Label + " is limited; continues later"
+		return kanbanSessionWord + c.Label + " is limited; continues later"
 	}
-	return "session " + c.Label + " is on it"
+	return kanbanSessionWord + c.Label + " is on it"
 }
 
 // pickedFrom is the surface that pressed Work on it, in the words a card uses.

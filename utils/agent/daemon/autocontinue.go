@@ -46,45 +46,52 @@ func (d *Daemon) autoContinue(ctx context.Context, now time.Time) {
 		if s.Status != sessions.StatusLimited {
 			continue
 		}
-		if s.ResumeAt.IsZero() {
-			if at := resumeTime(s, now); !at.IsZero() {
-				d.Sessions.PlanResume(s.ID, at)
-			}
-			continue
+		if d.resumeIsDue(s, now) {
+			d.resumeSession(ctx, s)
 		}
-		if now.Before(s.ResumeAt) {
-			continue
-		}
-		if s.Limit == sessions.LimitQuota && quotaStillSpent(s.ConfigDir, now) {
-			// The clock said yes, the numbers say no: the reset has not
-			// landed in the cache yet, or the week is what is spent. Look
-			// again in a few minutes rather than type into a wall.
-			d.Sessions.PlanResume(s.ID, now.Add(5*time.Minute))
-			continue
-		}
-		if s.Resumes >= maxResumes(s.Limit) {
-			continue
-		}
-		if target, err := d.Sessions.Focus(s.ID); err != nil || target.Kind == sessions.HostVSCodePanel {
-			// Nowhere to type: the panel takes text only from the keyboard.
-			// Leave the plan cleared so the key stops promising a continue.
-			d.Sessions.PlanResume(s.ID, time.Time{})
-			if err == nil {
-				utils.Infof("agent: %s: limit should be over, but it runs in the Claude Code panel — continue it by hand\n", s.Display)
-			}
-			continue
-		}
-		if _, ok := d.Sessions.MarkResumed(s.ID); !ok {
-			continue
-		}
-		utils.Infof("agent: %s: continuing after %s limit (try %d)\n", s.Display, s.Limit, s.Resumes+1)
-		d.sendToSession(ctx, s.ID, "continue", true)
-		label := s.Display
-		if label == "" {
-			label = s.Label
-		}
-		go d.notifyAttention("corgi agent · "+label, "limit should be over — continued for you", s.Folder)
 	}
+}
+
+// resumeIsDue says the session's clock ran out and the numbers agree. A
+// session with no plan yet is given one here; one that still reads as
+// spent is told to look again in a few minutes.
+func (d *Daemon) resumeIsDue(s sessions.Session, now time.Time) bool {
+	if s.ResumeAt.IsZero() {
+		if at := resumeTime(s, now); !at.IsZero() {
+			d.Sessions.PlanResume(s.ID, at)
+		}
+		return false
+	}
+	if now.Before(s.ResumeAt) {
+		return false
+	}
+	if s.Limit == sessions.LimitQuota && quotaStillSpent(s.ConfigDir, now) {
+		// The clock said yes, the numbers say no: the reset has not
+		// landed in the cache yet, or the week is what is spent. Look
+		// again in a few minutes rather than type into a wall.
+		d.Sessions.PlanResume(s.ID, now.Add(5*time.Minute))
+		return false
+	}
+	return s.Resumes < maxResumes(s.Limit)
+}
+
+// resumeSession types "continue" into a session whose limit should be over.
+func (d *Daemon) resumeSession(ctx context.Context, s sessions.Session) {
+	if target, err := d.Sessions.Focus(s.ID); err != nil || target.Kind == sessions.HostVSCodePanel {
+		// Nowhere to type: the panel takes text only from the keyboard.
+		// Leave the plan cleared so the key stops promising a continue.
+		d.Sessions.PlanResume(s.ID, time.Time{})
+		if err == nil {
+			utils.Infof("agent: %s: limit should be over, but it runs in the Claude Code panel — continue it by hand\n", s.Display)
+		}
+		return
+	}
+	if _, ok := d.Sessions.MarkResumed(s.ID); !ok {
+		return
+	}
+	utils.Infof("agent: %s: continuing after %s limit (try %d)\n", s.Display, s.Limit, s.Resumes+1)
+	d.sendToSession(ctx, s.ID, "continue", true)
+	go d.notifyAttention(notifyTitlePrefix+label(s), "limit should be over — continued for you", s.Folder)
 }
 
 func maxResumes(kind sessions.LimitKind) int {
@@ -101,38 +108,53 @@ func maxResumes(kind sessions.LimitKind) int {
 func resumeTime(s sessions.Session, now time.Time) time.Time {
 	switch s.Limit {
 	case sessions.LimitOverload:
-		wait := overloadBackoff << uint(s.Resumes)
-		if wait > overloadBackoffM {
-			wait = overloadBackoffM
-		}
-		return now.Add(wait + jitter(resumeJitter))
+		return overloadResumeTime(s.Resumes, now)
 	case sessions.LimitQuota:
-		l, ok := readLimits(s.ConfigDir)
-		if !ok {
-			return time.Time{}
-		}
-		var at time.Time
-		for _, w := range []usage.Window{l.FiveHour, l.SevenDay} {
-			if w.Percent < quotaStillFull || w.ResetsAt.IsZero() {
-				continue
-			}
-			if at.IsZero() || w.ResetsAt.Before(at) {
-				at = w.ResetsAt
-			}
-		}
-		if at.IsZero() {
-			// Nothing reads as spent but the session said limit: a
-			// session-credit cap, or a cache older than the limit. No
-			// reset this side knows means no plan — typing into it only
-			// makes the session say no again.
-			return time.Time{}
-		}
-		if at.Before(now) {
-			at = now
-		}
-		return at.Add(resumeGrace + jitter(resumeJitter))
+		return quotaResumeTime(s.ConfigDir, now)
 	}
 	return time.Time{}
+}
+
+func overloadResumeTime(resumes int, now time.Time) time.Time {
+	wait := overloadBackoff << uint(resumes)
+	if wait > overloadBackoffM {
+		wait = overloadBackoffM
+	}
+	return now.Add(wait + jitter(resumeJitter))
+}
+
+func quotaResumeTime(configDir string, now time.Time) time.Time {
+	l, ok := readLimits(configDir)
+	if !ok {
+		return time.Time{}
+	}
+	at := earliestSpentReset(l)
+	if at.IsZero() {
+		// Nothing reads as spent but the session said limit: a
+		// session-credit cap, or a cache older than the limit. No
+		// reset this side knows means no plan — typing into it only
+		// makes the session say no again.
+		return time.Time{}
+	}
+	if at.Before(now) {
+		at = now
+	}
+	return at.Add(resumeGrace + jitter(resumeJitter))
+}
+
+// earliestSpentReset is the soonest reset among the windows that read as
+// full, zero when none does.
+func earliestSpentReset(l usage.Limits) time.Time {
+	var at time.Time
+	for _, w := range []usage.Window{l.FiveHour, l.SevenDay} {
+		if w.Percent < quotaStillFull || w.ResetsAt.IsZero() {
+			continue
+		}
+		if at.IsZero() || w.ResetsAt.Before(at) {
+			at = w.ResetsAt
+		}
+	}
+	return at
 }
 
 // quotaStillSpent says the account's numbers still read as full: a window
