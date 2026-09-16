@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -268,9 +269,14 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 	switch {
 	case from == sessions.StatusLimited && to == sessions.StatusWorking:
 		d.limitWatch[s.ID] = true
-		resumed = true
+		// Rung at the clock already: the resume is not news.
+		resumed = !d.liftTold[s.ID]
+		delete(d.liftTold, s.ID)
+		d.stopLiftClock(s.ID)
 	case to == sessions.StatusLimited:
 		delete(d.limitWatch, s.ID)
+		delete(d.liftTold, s.ID)
+		d.scheduleLiftClock(s, label, now)
 	case d.limitWatch[s.ID] && (to == sessions.StatusDone || to == sessions.StatusNeedsInput):
 		delete(d.limitWatch, s.ID)
 		rested = "done"
@@ -766,4 +772,80 @@ func shellQuote(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// resetClock is the clock a limit message names ("resets 2:30pm (Europe/Kiev)",
+// "resets at 9am"), as the next such moment after now. Nothing known: false.
+var resetClock = func(detail string, now time.Time) (time.Time, bool) {
+	m := resetClockText.FindStringSubmatch(detail)
+	if m == nil {
+		return time.Time{}, false
+	}
+	loc := now.Location()
+	if m[2] != "" {
+		if l, err := time.LoadLocation(m[2]); err == nil {
+			loc = l
+		}
+	}
+	clock := strings.ToUpper(strings.ReplaceAll(m[1], " ", ""))
+	var at time.Time
+	var err error
+	for _, layout := range []string{"3:04PM", "3PM", "15:04"} {
+		if at, err = time.ParseInLocation(layout, clock, loc); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return time.Time{}, false
+	}
+	local := now.In(loc)
+	at = time.Date(local.Year(), local.Month(), local.Day(), at.Hour(), at.Minute(), 0, 0, loc)
+	if !at.After(now) {
+		at = at.Add(24 * time.Hour)
+	}
+	return at, true
+}
+
+var resetClockText = regexp.MustCompile(`(?i)resets?\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s*\(([A-Za-z_]+/[A-Za-z_]+)\))?`)
+
+// scheduleLiftClock rings the lift when the limit said it ends, so the person
+// hears it at that minute and not whenever the session next moves. Must hold
+// attentionMu.
+func (d *Daemon) scheduleLiftClock(s sessions.Session, label string, now time.Time) {
+	d.stopLiftClock(s.ID)
+	at, ok := resetClock(s.Detail, now)
+	if !ok || at.Sub(now) > 24*time.Hour {
+		return
+	}
+	if d.liftDue == nil {
+		d.liftDue = map[string]*time.Timer{}
+	}
+	if d.liftTold == nil {
+		d.liftTold = map[string]bool{}
+	}
+	id := s.ID
+	d.liftDue[id] = time.AfterFunc(at.Sub(now), func() {
+		d.attentionMu.Lock()
+		delete(d.liftDue, id)
+		// Resumed before the clock: that path speaks for itself.
+		if d.limitWatch[id] || d.liftTold[id] {
+			d.attentionMu.Unlock()
+			return
+		}
+		d.liftTold[id] = true
+		if d.liftRang == nil {
+			d.liftRang = map[string]time.Time{}
+		}
+		d.liftRang[id] = time.Now()
+		d.attentionMu.Unlock()
+		d.notifyAttention(notifyTitlePrefix+label, "limit lifted"+d.accountWord(s)+" — back to work", s.Folder)
+	})
+}
+
+// stopLiftClock cancels a pending clock ring. Must hold attentionMu.
+func (d *Daemon) stopLiftClock(id string) {
+	if t, ok := d.liftDue[id]; ok {
+		t.Stop()
+		delete(d.liftDue, id)
+	}
 }
