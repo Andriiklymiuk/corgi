@@ -824,9 +824,20 @@ func runAgentStop(_ *cobra.Command, _ []string) {
 	if waitForDaemonExit(dir, 10*time.Second) {
 		utils.Info("stopped")
 	} else {
-		utils.Infof("still shutting down after 10s — check `corgi agent status` (pid %d)\n", info.PID)
+		// A shutdown stuck on a runner would leave a daemon that answers
+		// nothing and still holds the record; the person asked for a stop.
+		killDaemon(proc)
+		utils.Infof("did not stop in 10s — killed (pid %d)\n", info.PID)
 	}
 	stopStrayServers()
+}
+
+// killDaemon is the last word after a SIGTERM went unanswered.
+func killDaemon(p *os.Process) {
+	_ = p.Signal(syscall.SIGKILL)
+	for i := 0; i < 20 && p.Signal(syscall.Signal(0)) == nil; i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // otherServers is swapped in tests, which must never signal the machine's
@@ -847,6 +858,12 @@ func stopStrayServers() int {
 		deadline := time.Now().Add(10 * time.Second)
 		for time.Now().Before(deadline) && len(otherServers(os.Getpid())) > 0 {
 			time.Sleep(150 * time.Millisecond)
+		}
+		for _, pid := range otherServers(os.Getpid()) {
+			if p, err := os.FindProcess(pid); err == nil {
+				killDaemon(p)
+				utils.Infof("a stray did not stop in 10s — killed (pid %d)\n", pid)
+			}
 		}
 	}
 	return len(strays)
