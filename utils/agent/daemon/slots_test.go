@@ -115,7 +115,9 @@ func TestSlotsOf(t *testing.T) {
 
 func TestCommentsOnOnePullRequestSettleIntoOneFix(t *testing.T) {
 	prev := commentSettle
-	commentSettle = 150 * time.Millisecond
+	// Three comments land 50 ms apart; the settle must outlast a slow CI
+	// runner's scheduling under -race, or a fix starts between them.
+	commentSettle = 600 * time.Millisecond
 	t.Cleanup(func() { commentSettle = prev })
 	d := testDaemon(t)
 	notes := make(chan string, 8)
