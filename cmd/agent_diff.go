@@ -159,7 +159,7 @@ func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if file := r.URL.Query().Get("file"); file != "" {
-		if strings.Contains(file, "..") || strings.HasPrefix(file, "/") {
+		if !validDiffPath(file) {
 			writeLaunchError(w, http.StatusBadRequest, "a path inside the checkout")
 			return
 		}
@@ -184,6 +184,26 @@ func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeLaunchJSON(w, map[string]any{"session": session.ID, "base": base[:min(12, len(base))], "branch": session.Branch, "files": files, "added": added, "deleted": deleted})
+}
+
+// validDiffPath admits a plain relative path inside the checkout and nothing
+// git could read as an option or another tree: no leading dash, no parent
+// hops, no absolute path, no control characters.
+func validDiffPath(file string) bool {
+	if file == "" || len(file) > 4096 || strings.HasPrefix(file, "-") || strings.HasPrefix(file, "/") {
+		return false
+	}
+	for _, part := range strings.Split(file, "/") {
+		if part == ".." || part == "" {
+			return false
+		}
+	}
+	for _, r := range file {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 // diffDirFor is where a session's branch lives: its cwd, which for an
