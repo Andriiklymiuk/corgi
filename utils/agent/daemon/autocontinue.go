@@ -121,12 +121,10 @@ func resumeTime(s sessions.Session, now time.Time) time.Time {
 			}
 		}
 		if at.IsZero() {
-			// Nothing reads as spent but the session said limit: the
-			// cache is older than the limit. The five-hour reset is the
-			// honest default when it is known.
-			at = l.FiveHour.ResetsAt
-		}
-		if at.IsZero() {
+			// Nothing reads as spent but the session said limit: a
+			// session-credit cap, or a cache older than the limit. No
+			// reset this side knows means no plan — typing into it only
+			// makes the session say no again.
 			return time.Time{}
 		}
 		if at.Before(now) {
