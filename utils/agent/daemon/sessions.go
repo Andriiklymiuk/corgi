@@ -40,6 +40,9 @@ var (
 const focusBudget = 1500 * time.Millisecond
 
 // SessionsPath is where the daemon publishes the board.
+// liftEpisode is how long one lift stays told for a session.
+const liftEpisode = 10 * time.Minute
+
 func SessionsPath(dir string) string { return filepath.Join(dir, "sessions.json") }
 
 // handleSessionCommand executes one board-related spool entry. Returns false
@@ -289,8 +292,17 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		time.AfterFunc(grace, func() {
 			d.attentionMu.Lock()
 			still := d.limitWatch[id]
+			// A limit that bounces — continue, the same limit, continue — is
+			// one episode, told once, not on every bounce.
+			recent := !d.liftRang[id].IsZero() && time.Since(d.liftRang[id]) < liftEpisode
+			if still && !recent {
+				if d.liftRang == nil {
+					d.liftRang = map[string]time.Time{}
+				}
+				d.liftRang[id] = time.Now()
+			}
 			d.attentionMu.Unlock()
-			if !still {
+			if !still || recent {
 				return
 			}
 			d.notifyAttention("corgi agent · "+label, "limit lifted"+d.accountWord(s)+" — back to work", s.Folder)

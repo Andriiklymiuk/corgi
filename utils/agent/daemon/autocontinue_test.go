@@ -75,11 +75,14 @@ func TestTheDaemonContinuesALimitedSessionWhenTheWindowResets(t *testing.T) {
 		t.Fatalf("one resume counted, plan cleared: %+v", got)
 	}
 
-	// The limit comes straight back, three times: the daemon stops.
+	// The limit comes straight back, three times — the window reads spent
+	// again with a reset ahead each time: the daemon stops.
 	for i := 0; i < 4; i++ {
 		d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 100, TermProgram: "iTerm.app", TTY: 5, At: at})
 		d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s1", Error: "rate_limit", Message: "usage limit", At: at})
+		limits.FiveHour = usage.Window{Percent: 100, ResetsAt: at.Add(time.Minute)}
 		d.autoContinue(ctx, at)
+		limits.FiveHour = usage.Window{Percent: 3, ResetsAt: at.Add(5 * time.Hour)}
 		at = d.Sessions.Sessions()[0].ResumeAt.Add(time.Second)
 		if at.IsZero() {
 			at = now.Add(time.Duration(i+1) * time.Hour)
@@ -124,5 +127,29 @@ func TestAnOverloadWaitsMinutesNotHours(t *testing.T) {
 	s.Resumes = 6
 	if got := resumeTime(s, now); got.Sub(now) != overloadBackoffM {
 		t.Fatalf("capped at %v, got %v", overloadBackoffM, got.Sub(now))
+	}
+}
+
+func TestALimitWithNoSpentWindowIsLeftToAPerson(t *testing.T) {
+	d := trackingDaemon(t)
+	d.AutoContinue = true
+	d.Sessions.Load()
+	typed := 0
+	d.Raise = func(context.Context, sessions.FocusTarget) error { return nil }
+	d.TypeText = func(context.Context, sessions.FocusTarget, string, bool) error { typed++; return nil }
+	origLimits := readLimits
+	defer func() { readLimits = origLimits }()
+	now := time.Now()
+	readLimits = func(string) (usage.Limits, bool) {
+		return usage.Limits{FetchedAt: now, FiveHour: usage.Window{Percent: 12, ResetsAt: now.Add(-time.Hour)}, SevenDay: usage.Window{Percent: 40, ResetsAt: now.Add(48 * time.Hour)}}, true
+	}
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 100, TermProgram: "iTerm.app", TTY: 5, At: now})
+	d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s1", Error: "rate_limit", Message: "You've hit your session limit · resets 2:30pm", At: now})
+	for _, at := range []time.Time{now, now.Add(2 * time.Minute), now.Add(time.Hour)} {
+		d.autoContinue(context.Background(), at)
+	}
+	d.swaps.Wait()
+	if s := d.Sessions.Sessions()[0]; !s.ResumeAt.IsZero() || typed != 0 {
+		t.Fatalf("a session-credit limit with fresh windows: no plan, nothing typed; got resumeAt=%v typed=%d", s.ResumeAt, typed)
 	}
 }

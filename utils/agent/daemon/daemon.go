@@ -95,6 +95,7 @@ type Daemon struct {
 	fixActive  map[string]bool
 	// fixSettle holds a feedback fix while more comments land on the same
 	// pull request; fixFollowUp is what arrived while a fix was running.
+	liftRang    map[string]time.Time
 	fixSettle   map[string]*time.Timer
 	fixFollowUp map[string]watch.Event
 	gateMu      sync.Mutex
