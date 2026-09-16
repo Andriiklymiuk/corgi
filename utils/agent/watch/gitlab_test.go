@@ -72,8 +72,8 @@ func TestGitLabPoll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 2 {
-		t.Fatalf("events = %d, want 2: %+v", len(events), events)
+	if len(events) != 3 || !events[2].Bot || events[2].Author != "project_42_bot_9f" {
+		t.Fatalf("events = %d, want 3 with the bot's tagged: %+v", len(events), events)
 	}
 	review, comment := events[0], events[1]
 	// A review request is on someone else's merge request, so it is not mine;
@@ -126,8 +126,8 @@ func TestGitLabLearnsWhoIAm(t *testing.T) {
 			t.Fatalf("my own todo came through: %+v", e)
 		}
 	}
-	if len(events) != 2 {
-		t.Fatalf("events = %d, want 2", len(events))
+	if len(events) != 3 {
+		t.Fatalf("events = %d, want 3", len(events))
 	}
 	// The next round reads the name from the cursor, no extra call.
 	before := f.requests.Load()

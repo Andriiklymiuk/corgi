@@ -398,6 +398,9 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		// seen index dedupes a comment against itself; this dedupes the
 		// second comment against the first, within a round.
 		if dup := d.watchState.SameRefThisRound(spec.Workspace, e); dup > 0 {
+			if isFeedback(e.Kind) && spec.FixesKind(e.Kind) {
+				d.settleFix(ctx, spec, e)
+			}
 			return
 		}
 		// Dismissed from the inbox means dismissed here too.
@@ -420,7 +423,10 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			}
 		}
 		if spec.FixesKind(e.Kind) {
-			if note := d.startFix(ctx, spec, e); note != "" {
+			if isFeedback(e.Kind) {
+				d.settleFix(ctx, spec, e)
+				body += " (fix starts once the comments settle)"
+			} else if note := d.startFix(ctx, spec, e); note != "" {
 				body += " (" + note + ")"
 			}
 		}
@@ -627,11 +633,62 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 		return "fix deferred: " + reason
 	}
 	if !d.claimFix(spec.Workspace, e.Ref) {
+		if isFeedback(e.Kind) {
+			d.queueFollowUp(spec, e)
+			return "queued for after the fix already running"
+		}
 		return "a fix for it is already running"
 	}
 	d.watchState.Fixes.StartFor(e, now)
 	d.spawnFix(ctx, spec, e)
 	return ""
+}
+
+// commentSettle is how long a feedback fix waits after the last comment on
+// its pull request: reviewers, and review bots, post several in a row.
+var commentSettle = time.Minute
+
+func isFeedback(kind watch.Kind) bool {
+	return kind == watch.KindPRComment || kind == watch.KindPRReview || kind == watch.KindIssueComment
+}
+
+// settleFix starts the fix for a comment once no more have landed on the
+// same ref for commentSettle; a fix already running gets it afterwards.
+func (d *Daemon) settleFix(ctx context.Context, spec WatchSpec, e watch.Event) {
+	key := spec.Workspace + "/" + e.Ref
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	if d.fixSettle == nil {
+		d.fixSettle = map[string]*time.Timer{}
+	}
+	if t := d.fixSettle[key]; t != nil {
+		t.Stop()
+	}
+	d.fixSettle[key] = time.AfterFunc(commentSettle, func() {
+		d.attentionMu.Lock()
+		delete(d.fixSettle, key)
+		d.attentionMu.Unlock()
+		if note := d.startFix(ctx, spec, e); note != "" {
+			utils.Infof("agent: watch %s: %s: %s\n", spec.Workspace, e.Ref, note)
+		}
+	})
+}
+
+func (d *Daemon) queueFollowUp(spec WatchSpec, e watch.Event) {
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	if d.fixFollowUp == nil {
+		d.fixFollowUp = map[string]watch.Event{}
+	}
+	d.fixFollowUp[spec.Workspace+"/"+e.Ref] = e
+}
+
+func (d *Daemon) takeFollowUp(spec WatchSpec, ref string) (watch.Event, bool) {
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	e, ok := d.fixFollowUp[spec.Workspace+"/"+ref]
+	delete(d.fixFollowUp, spec.Workspace+"/"+ref)
+	return e, ok
 }
 
 func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
@@ -641,6 +698,12 @@ func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.runFix(ctx, spec, e)
 		// A run ended: a plan waiting on it may have a next task.
 		d.advancePlans(ctx)
+		// A comment that landed during the run is the next one, after the
+		// same settle: the run read every open thread when it started, so
+		// this one is only what came later.
+		if follow, ok := d.takeFollowUp(spec, e.Ref); ok && ctx.Err() == nil {
+			d.settleFix(ctx, spec, follow)
+		}
 	}()
 }
 

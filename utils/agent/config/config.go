@@ -334,6 +334,9 @@ type WatchConfig struct {
 	CI bool `yaml:"ci,omitempty"`
 	// From narrows comments and reviews to these people; empty is anyone.
 	From []string `yaml:"from,omitempty"`
+	// Bots lets comments from bot accounts count — a review bot whose
+	// findings are to be fixed. Off by default.
+	Bots bool `yaml:"bots,omitempty"`
 	// FixKinds narrows what action: fix runs on — "issue.new",
 	// "issue.comment", "pr.comment", "pr.review". Empty is every kind that
 	// matched, which is what fix has always meant.

@@ -129,8 +129,8 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		if !ok {
 			continue
 		}
-		// A bot's comment is not a person waiting, and my own is not news.
-		if kind == KindPRComment && (gitlabBot(t.Author.Username, t.Author.Bot) || isMe(g.Me, t.Author.Username)) {
+		// My own comment is not news; a bot's is for the rules to weigh.
+		if kind == KindPRComment && isMe(g.Me, t.Author.Username) {
 			continue
 		}
 		at, _ := time.Parse(time.RFC3339, t.CreatedAt)
@@ -146,6 +146,7 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			// A review request is on someone else's merge request; every
 			// other todo is on something of mine.
 			Mine:  kind != KindReviewRequested,
+			Bot:   kind == KindPRComment && gitlabBot(t.Author.Username, t.Author.Bot),
 			State: t.Target.State,
 			At:    at,
 		})
