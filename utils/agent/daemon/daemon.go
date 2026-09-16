@@ -93,8 +93,12 @@ type Daemon struct {
 	headlessMu sync.Mutex
 	headless   map[string]bool
 	fixActive  map[string]bool
-	gateMu     sync.Mutex
-	gating     map[string]bool
+	// fixSettle holds a feedback fix while more comments land on the same
+	// pull request; fixFollowUp is what arrived while a fix was running.
+	fixSettle   map[string]*time.Timer
+	fixFollowUp map[string]watch.Event
+	gateMu      sync.Mutex
+	gating      map[string]bool
 
 	Version string
 	// Dir is the agent data directory holding daemon.json and registry.json.

@@ -171,7 +171,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		// the author of the thread about both. It also notifies the author
 		// about a push, an edit, the opening itself — activity with no
 		// comment to point at — and that is not anyone commenting either.
-		if r.kind == KindPRComment && (!hasComment || bot || (author != "" && strings.EqualFold(author, g.Me))) {
+		if r.kind == KindPRComment && (!hasComment || (author != "" && strings.EqualFold(author, g.Me))) {
 			continue
 		}
 		events = append(events, Event{
@@ -184,6 +184,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			URL:    "https://github.com/" + t.Repository.FullName + "/pull/" + number,
 			Author: author,
 			Mine:   r.mine,
+			Bot:    bot,
 			State:  state,
 			At:     at,
 		})

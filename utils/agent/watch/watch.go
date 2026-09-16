@@ -58,6 +58,7 @@ type Event struct {
 	State     string    `json:"state,omitempty"`
 	Assignee  string    `json:"assignee,omitempty"`
 	Mine      bool      `json:"mine,omitempty"` // assigned to me, or my PR
+	Bot       bool      `json:"bot,omitempty"`  // posted by a bot account
 	At        time.Time `json:"at"`
 }
 
@@ -76,6 +77,9 @@ type Rules struct {
 	// author's name or login. Half of what blocks a day is shaped like a
 	// person — the one review you are waiting on — not like a board.
 	From []string
+	// Bots lets comments from bot accounts count: a review bot whose
+	// findings are meant to be fixed. Off, a bot is not a person waiting.
+	Bots bool
 }
 
 // Match says whether an event is one the rules asked for.
@@ -130,6 +134,9 @@ func (r Rules) Why(e Event) string {
 		// thumbs-up is the end of the work, not more of it.
 		if e.Kind != KindPRReview && IsAcknowledgement(e.Body) {
 			return "it is a thank-you or a sign-off, not a request"
+		}
+		if e.Bot && !r.Bots {
+			return "it is from a bot; --bots makes those count"
 		}
 		if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
 			return fmt.Sprintf("it is from %s, and you are waiting on %s",

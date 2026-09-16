@@ -112,3 +112,58 @@ func TestSlotsOf(t *testing.T) {
 		}
 	}
 }
+
+func TestCommentsOnOnePullRequestSettleIntoOneFix(t *testing.T) {
+	prev := commentSettle
+	commentSettle = 150 * time.Millisecond
+	t.Cleanup(func() { commentSettle = prev })
+	d := testDaemon(t)
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	spans := slowClaude(t)
+	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Repos: []string{"acme/api"}, Rules: watch.Rules{Enabled: true, PRs: true}, Action: "fix"}}
+	d.startWatches(context.Background())
+	for i, body := range []string{"rename this", "and add a test", "typo in the docstring"} {
+		d.handleWatchEvent(context.Background(), watch.Event{Key: "github:c" + string(rune('1'+i)), Kind: watch.KindPRComment, Ref: "acme/api#7", URL: "https://github.com/acme/api/pull/7", Body: body, Author: "reviewer", Mine: true})
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(spans()) != 0 {
+		t.Fatal("no fix starts while comments are still landing")
+	}
+	collectNotes(t, notes, "fixed acme/api#7")
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(spans()) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(400 * time.Millisecond)
+	if n := len(spans()); n != 1 {
+		t.Fatalf("three comments in a row are one fix, got %d", n)
+	}
+}
+
+func TestACommentDuringAFixGetsAFollowUp(t *testing.T) {
+	prev := commentSettle
+	commentSettle = 50 * time.Millisecond
+	t.Cleanup(func() { commentSettle = prev })
+	d := testDaemon(t)
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	spans := slowClaude(t)
+	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Repos: []string{"acme/api"}, Rules: watch.Rules{Enabled: true, PRs: true}, Action: "fix"}}
+	d.startWatches(context.Background())
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:c1", Kind: watch.KindPRComment, Ref: "acme/api#7", URL: "https://github.com/acme/api/pull/7", Body: "rename this", Author: "reviewer", Mine: true})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(spans()) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	d.watchState.NewRound()
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:c2", Kind: watch.KindPRComment, Ref: "acme/api#7", URL: "https://github.com/acme/api/pull/7", Body: "one more thing", Author: "reviewer", Mine: true})
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && len(spans()) < 2 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	got := spans()
+	if len(got) != 2 || overlapped(got) {
+		t.Fatalf("a comment during the fix is one more run after it, got %d overlapped=%v", len(got), len(got) == 2 && overlapped(got))
+	}
+}

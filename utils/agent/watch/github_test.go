@@ -93,9 +93,13 @@ func TestGitHubPoll(t *testing.T) {
 		t.Fatal(err)
 	}
 	// n5 is a bot linking the ticket and n6 is my own comment: GitHub tells
-	// the thread's author about both, neither is a person waiting on me.
-	if len(events) != 2 {
-		t.Fatalf("events = %d, want 2: %+v", len(events), events)
+	// the thread's author about both. My own never comes through; the
+	// bot's does, tagged, for the rules to weigh.
+	if len(events) != 3 || !events[2].Bot || events[2].Author == "" {
+		t.Fatalf("events = %d, want 3 with the bot's tagged: %+v", len(events), events)
+	}
+	if (Rules{Enabled: true, PRs: true}).Match(events[2]) || !(Rules{Enabled: true, PRs: true, Bots: true}).Match(events[2]) {
+		t.Fatal("a bot's comment counts only with --bots")
 	}
 	review, comment := events[0], events[1]
 	// review_requested is someone asking me to review THEIR pull request.

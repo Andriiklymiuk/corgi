@@ -903,6 +903,17 @@ CLI or the phone's repo sheet, no restart:
   Off by default: an approval carries the user's name. `--auto-for all`
   (or `requests`) is what makes review requests run at all; without it
   they only notify, and with `--silent` not even that.
+- `--bots` (2.28.6): comments from bot accounts count. Off, a bot is not a
+  person waiting — right for a coverage or pipeline bot, wrong for an AI
+  reviewer whose findings are meant to be fixed. Ask which account posts
+  those before turning it on.
+- Comment fixes settle (2.28.6): a fix for a comment on a pull request
+  starts a minute after the **last** comment on it — reviewers and review
+  bots post several in a row — and one run reads every open thread, so
+  three comments are one fix. A comment that lands while a fix is running
+  is one more run after it, through the same settle, never a parallel one.
+  The user's own comments never count; a merged or closed pull request is
+  skipped before any run.
 
 **Several tries at once**: `corgi agent watch work ABC-123 --attempts 3
 --models opus,sonnet` opens three sessions in worktrees of their own on
