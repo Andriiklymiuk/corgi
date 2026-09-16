@@ -147,3 +147,11 @@ func TestWriteValidatesSessionAndBoardCommands(t *testing.T) {
 		t.Fatalf("payloads survive the round trip: %+v", got)
 	}
 }
+
+// Every surface's reload button sends this; it was missing from the known
+// list and every press came back "unknown command action".
+func TestRefreshIsAKnownAction(t *testing.T) {
+	if err := (Command{Action: ActionRefresh, Source: "cli"}).validate(); err != nil {
+		t.Fatalf("refresh must validate, got %v", err)
+	}
+}
