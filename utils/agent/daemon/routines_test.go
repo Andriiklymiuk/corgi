@@ -2,10 +2,13 @@ package daemon
 
 import (
 	"context"
+	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/bots"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
@@ -58,5 +61,63 @@ func TestRoutinesRunOnTheClockAndReportToTheInbox(t *testing.T) {
 	}
 	if _, ok := RoutineEvent("api", config.Routine{Name: "x"}, day); ok {
 		t.Fatal("no kind, no prompt, nothing to run")
+	}
+}
+
+// A routine that names a bot runs under that bot's soul and model, is
+// filed under the bot's name, reports to the inbox like any routine and
+// gives its claim back; one naming a bot that is not there runs plain.
+func TestARoutineRunsAsTheBotItNames(t *testing.T) {
+	d := dynDaemon(t)
+	d.loadWatchFiles()
+	d.fixBusy = map[string]chan struct{}{"api": make(chan struct{}, 1)}
+	var mu sync.Mutex
+	var ran []string
+	prev := claudeCommand
+	claudeCommand = func(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
+		mu.Lock()
+		defer mu.Unlock()
+		ran = append(ran, strings.Join(args, " "))
+		return exec.CommandContext(ctx, "echo", "Search by tag: the README promises it, the API has no route\n- api/routes.go:40")
+	}
+	t.Cleanup(func() { claudeCommand = prev })
+	store, _ := bots.Load(bots.Path(d.Dir))
+	store.Put(bots.Bot{Name: "proactive", Title: "Proactive", Workspace: "api", Soul: "Find the next thing.", Model: "opus"})
+	store.Put(bots.Bot{Name: "elsewhere", Title: "Elsewhere", Workspace: "web", Soul: "Not here."})
+	if err := bots.Save(bots.Path(d.Dir), store); err != nil {
+		t.Fatal(err)
+	}
+	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), ConfigDir: t.TempDir(), Action: "notify", SkipPermissions: true,
+		Routines: []config.Routine{
+			{Name: "suggest", Kind: "suggest", Schedule: "weekly mon 09:30", Bot: "proactive"},
+			{Name: "digest", Kind: "digest", Schedule: "weekly mon 09:30", Bot: "elsewhere"},
+		}}
+	d.Watches = []WatchSpec{spec}
+	monday := time.Date(2026, 9, 14, 10, 0, 0, 0, time.Local)
+	d.runRoutines(context.Background(), monday)
+	d.runs.Wait()
+	runs := d.watchState.Fixes.RecentFixes("api", 10)
+	if len(runs) != 1 || runs[0].Bot != "proactive" || runs[0].Ref != "routine/suggest" || !strings.HasPrefix(runs[0].Note, "- api/routes.go") {
+		t.Fatalf("filed under the bot: %+v", runs)
+	}
+	rows := watch.RecentEvents(d.Dir, 5)
+	if len(rows) != 1 || rows[0].Kind != watch.KindRoutine || !strings.Contains(rows[0].Title, "suggest — Search by tag") {
+		t.Fatalf("its report is a routine row: %+v", rows)
+	}
+	if !d.claimFix("api", "routine/suggest") {
+		t.Fatal("the claim is given back when the bot is done")
+	}
+	d.releaseFix("api", "routine/suggest")
+
+	// The next one in line names a bot of another workspace: it runs plain.
+	d.runRoutines(context.Background(), monday)
+	d.runs.Wait()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(ran) != 2 || !strings.Contains(ran[0], "--append-system-prompt Find the next thing.") || !strings.Contains(ran[0], "--model opus") {
+		t.Fatalf("the first run is the bot's: %v", ran)
+	}
+	if strings.Contains(ran[1], "--append-system-prompt") {
+		t.Fatalf("a bot from elsewhere does not lend its soul: %v", ran[1])
 	}
 }

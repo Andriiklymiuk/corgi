@@ -356,8 +356,7 @@ func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 			if !d.claimFix(spec.Workspace, e.Ref) {
 				return
 			}
-			d.watchState.Fixes.StartFor(e, time.Now())
-			d.spawnFix(ctx, spec, e)
+			d.startRoutine(ctx, spec, routineFor(spec, e), e)
 			return
 		}
 		return

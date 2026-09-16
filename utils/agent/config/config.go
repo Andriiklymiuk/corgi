@@ -412,7 +412,10 @@ type Routine struct {
 	Prompt   string `yaml:"prompt,omitempty"`
 	Schedule string `yaml:"schedule"`
 	Model    string `yaml:"model,omitempty"`
-	Off      bool   `yaml:"off,omitempty"`
+	// Bot is the bot the run happens as: its soul, model and account, and
+	// the run is filed under its name. Empty runs plain, like a fix.
+	Bot string `yaml:"bot,omitempty"`
+	Off bool   `yaml:"off,omitempty"`
 }
 
 // ModelPolicy names a model per phase of work. Empty fields take the

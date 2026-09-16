@@ -1,20 +1,21 @@
 ---
-description: Suggest real, measurable improvements for a corgi workspace — scans the stack + its business domain + existing features and proposes ranked, evidence-backed ideas across two lenses (product/business and engineering: performance, reliability, security, cost, tech-debt, even a language rewrite when ROI is high), each tied to a measurable outcome. Specs the chosen one and offers to create a tracker story (asks where). Pass a focus in plain words (e.g. "performance ideas", "new business cases", "what's missing"); no args = scan everything, both lenses.
+description: Suggest the few things worth building next in a corgi workspace — reads the stack, the READMEs, the memory and the board once, then proposes three to six evidence-backed ideas across three lenses (magic a user would feel, friction a developer trips on, risk that will bite), each with how you will know it worked. Specs the chosen one and puts it on the board as a task or a tracker ticket, then offers to hand it to stories. Pass a focus in plain words ("performance", "the api", "retention"); no args = the whole stack.
 ---
 
 Run the corgi **suggest** flow for the focus in `$ARGUMENTS`.
 
-- `$ARGUMENTS` = an optional focus (a lens like "performance"/"security", a service
-  name, or a goal like "retention"). Empty → scan the whole workspace, both lenses.
+- `$ARGUMENTS` = an optional focus: a lens ("magic", "friction", "risk", "performance",
+  "security"), a service name, or a goal ("retention"). Empty → the whole stack.
 - Run **inside the workspace folder** (the one with `corgi-compose.yml`).
 
-Follow the `suggest` skill (`plugins/corgi/skills/suggest/SKILL.md`) end to end: map
-the stack + business (Phase 0), gather **cited** evidence per lens once (Phase 1),
-turn signals into measurable suggestion cards and cut the slop (Phase 2), present a
-ranked product+engineering shortlist (Phase 3), spec the chosen one (Phase 4), then
-offer a story and ask **where** to create it — handing implementation to the
-`stories` skill if the user wants it (Phase 5).
+Follow the `suggest` skill (`plugins/corgi/skills/suggest/SKILL.md`) end to end: read the
+stack, the promise, the memory and what is already taken once (Phase 0), walk the three
+lenses in one pass (Phase 1), write cards and cut what is not real (Phase 2), present a
+ranked shortlist, magic first (Phase 3), spec the chosen one in the stories shape (Phase
+4), then give it a home — a corgi task, a tracker ticket or just the spec — record it in
+the suggest history and offer to hand it to `stories` (Phase 5).
 
-Honor every guardrail: evidence + a measurable outcome on every suggestion or it's
-dropped; suggest and spec only (never implement here); a rewrite needs a feasibility
-+ ROI case; metrics/analytics on demand and after asking; honest effort and ranking.
+Honour every guardrail: one pass in this session, no agent per lens; evidence on every
+card or it is cut; suggest and spec only, never implement here; a rewrite needs an ROI
+case; metrics read-only and after asking; what the board, the history or a memory
+decision already holds is not proposed again.

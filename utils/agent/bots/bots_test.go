@@ -2,6 +2,7 @@ package bots
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -75,5 +76,14 @@ func TestTriggersAndTemplates(t *testing.T) {
 		if _, err := ParseTriggers(tt.On); err != nil {
 			t.Fatalf("template %s has a bad trigger: %v", name, err)
 		}
+	}
+	// The proactive one runs on a clock, not on an event: it has a routine
+	// to its name and no trigger.
+	pro, ok := Template("proactive")
+	if !ok || len(pro.On) != 0 || !strings.Contains(pro.Soul, "never change code") {
+		t.Fatalf("proactive template: %+v %v", pro, ok)
+	}
+	if TemplateClock("proactive") != "suggest" || TemplateClock("reviewer") != "" {
+		t.Fatal("only the proactive bot has a clock")
 	}
 }

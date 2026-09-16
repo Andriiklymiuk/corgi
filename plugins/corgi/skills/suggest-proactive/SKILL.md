@@ -1,68 +1,122 @@
 ---
 name: suggest-proactive
-description: Use when the user wants corgi to surface improvements on a schedule instead of on demand: "suggest things automatically", "run suggest every week", "open a ticket for the best idea on a cadence", "be a proactive engineer / push me work", or when a scheduled job invokes /corgi-suggest-proactive. NOT for on-demand ideas (suggest) or implementing anything (stories).
+description: Use when corgi should push ideas on its own instead of being asked: "suggest things automatically", "run suggest every week", "put the proactive bot on", "be a proactive engineer / push me work", "why did the proactive bot propose X", or when a daemon routine or a scheduled job invokes /corgi-suggest-proactive. NOT for on-demand ideas (suggest) or implementing anything (stories).
 ---
 
-# Corgi proactive suggest
+# Corgi proactive suggest — the Proactive bot
 
-A scheduled **push** wrapper around `suggest`: on a cadence (owned by `/schedule`), runs the `suggest` ranking, takes the top idea, dedupes it against open tickets + recently-dismissed ones, then either **proposes it and asks** (default) or — only if the workspace opted in — files exactly **one draft** tracker ticket. **Reuses `suggest` for ranking and `tracker` for the write gate — does NOT duplicate either.** Default is propose-and-ask; the opt-in files one draft per run, rate-limited + deduped. Inspired by the "proactive engineer" idea: push, not pull.
+Once a week the Proactive bot reads the stack the way `suggest` does, picks
+**one** thing worth building, and puts it on the board as a task with its
+evidence — where **Work on it** on the phone, the bar or the editor hands it to
+`stories`. It never writes into the repository, never files on the tracker
+unless the workspace opted in, never builds.
+
+Two ways it runs:
+
+- **On the clock** (the default) — a daemon routine under the bot's soul:
+  ```
+  corgi agent bot add proactive --template proactive --workspace <id>
+  corgi agent routine add suggest --bot proactive --workspace <id>   # weekly Mon 09:30; --schedule to change
+  corgi agent restart
+  ```
+  The watch's caps, quiet hours and budget apply. The run is filed under the
+  bot (`corgi agent bot show proactive`), its headline is one inbox row, the
+  task is on the board. `corgi agent routine run suggest` runs it now.
+- **By hand or from another scheduler** — `/corgi-suggest-proactive
+  [/abs/workspace]`: the same flow, with a person maybe present.
+  `references/schedule-config.md` covers `/schedule` and `CronCreate`.
 
 ## Guardrails (non-negotiable)
 
-- **Reuse, don't duplicate.** Ranking + evidence + measurable-outcome rules are owned by `suggest`; issue creation goes through the `tracker` write gate + MCP preflight. Never re-implement either, never reinvent scheduling — `/schedule` owns it.
-- **One ticket per run, max.** Per-week cap (default 1, **hard ceiling 3**) enforced via `.corgi/corgi_services/suggest-history.json` (`corgi suggest-history check/record`).
-- **Default is propose+ask.** Auto-file requires the explicit `suggest.autoFileDrafts` flag in `~/.corgi/config.yml` and is **draft-only**: never assign, never move past draft/backlog, never trigger `stories`/a build, never open a PR.
-- **Dedupe before filing:** open tickets, the state file (`filed` always + `dismissed` within cooldown + `proposed` within cooldown), and [[workspace-memory]] (loose, best-effort — see `memory` skill).
-- **Headless = never silently file in `propose` mode.** No human to confirm → record `proposed`, notify, exit. The cron fires while the REPL is idle — treat it as headless.
-- **Idempotent.** Match on slug/title; update or skip, never create a duplicate.
-- **Print the active mode at the top of every run** so it's never a surprise.
-- Read `../_shared/conventions.md` first (attribution, preflight).
+- **One idea per run**, at most `maxPerWeek` (default 1, hard ceiling 3) —
+  `corgi suggest-history check` says when the week is spent.
+- **Ranking is `suggest`'s** (its Phases 0–3): consume the shortlist, never
+  re-invent the lenses or the evidence rule.
+- **Dedupe before anything:** the board (`corgi agent kanban --json`: open
+  tasks and tickets by title), the history (`filed` always; `proposed` and
+  `dismissed` within the 30-day cooldown), workspace memory (a `decision` or
+  a "won't build"), open pull requests.
+- **The output is a task, not a file.** `corgi agent task add`, nothing in
+  `docs/`. A tracker ticket only with `suggest.autoFileDrafts` on, and then
+  draft-only: no assignee, never past backlog, never a build, never a PR.
+- **Unattended never asks.** A routine run (the `corgi watch ·` trail, or no
+  one to answer) takes the recommended choice, records `proposed`, and ends on
+  the headline.
+- **Idempotent.** Same slug → skip, never a duplicate.
+- **Say the mode first:** `proactive · <workspace> · mode=propose · cap=1/week`.
+- Read `../_shared/conventions.md` first.
 
-## Phase 0 — Resolve workspace + mode + state
+## Phase 0 — Workspace, mode, state
 
-1. **Workspace.** Resolve the path from `$ARGUMENTS` (absolute) or cwd. `cd` there. Preflight per `../_shared/conventions.md`; absent → stop with the "open the workspace folder" message. The cron fires with no implied cwd, so the schedule prompt always names the absolute path (Phase 5).
-2. **Mode.** Read `corgi suggest-history config --json` → `{autoFileDrafts, maxPerWeek}` (fallback: read `~/.corgi/config.yml` directly; absent → propose, cap 1). Print the active mode line, e.g. `proactive suggest · mode=propose · cap=1/week`.
-3. **State.** Load history via `corgi suggest-history list --json` (fallback: read `.corgi/corgi_services/suggest-history.json`; absent → empty). The helper is optional at runtime — if the binary predates it, read/append the JSON directly with the same shape.
+1. **Workspace.** `$ARGUMENTS` (absolute path) or cwd; a routine already runs
+   in the workspace directory. Preflight per conventions; none → stop with
+   the "open the workspace folder" line.
+2. **Mode.** `corgi suggest-history config --json` → `{autoFileDrafts,
+   maxPerWeek}`; absent → propose, 1. Print the mode line.
+3. **State.** `corgi suggest-history list --json`, `corgi agent kanban
+   --json`. If `check --slug _` answers `rate-limit`, the week is spent:
+   `record --status skipped`, headline "nothing this week: cap reached", stop.
 
-## Phase 1 — Rank (reuse `suggest`)
+## Phase 1 — Rank, magic first
 
-- Invoke the `suggest` skill flow (its **Phases 0–3**) **scoped to this workspace, both lenses**, to produce the ranked shortlist. Don't re-spec everything — only the chosen survivor gets specced (Phase 3), and only after it survives dedupe.
-- State explicitly to yourself: **ranking + evidence + measurable-outcome rules are owned by `suggest`; this skill only consumes the ranked list.**
+Run `suggest` Phases 0–3 in this session: one pass, three lenses, about ten
+cited signals, cards, ranked. At equal effort prefer **magic** (a user would
+feel it) over friction over risk — unless the risk is a path that loses data,
+which always wins.
 
-## Phase 2 — Dedupe + rate-limit
+## Phase 2 — Dedupe, top down
 
-- Derive a `slug` per candidate deterministically from its title (lowercase, non-alphanumeric → `-`, collapse repeats, trim) — same idea ⇒ stable key across runs. (`corgi suggest-history record` and the helper use the same `Slugify`.)
-- **Top candidate down**, for each: `corgi suggest-history check --slug <slug> --json` → `{ "skip": bool, "reason": "filed|dismissed|proposed|rate-limit", "slug": ... }`. Also fuzzy-match the candidate title/slug against **open tickets** via `tracker` Phase-0/1 (the `corgi-suggest` label set + title match) — a hit there is `open-ticket`, skip. And consult [[workspace-memory]] (below): a matching "dismissed suggestion" / "won't build" slug is treated like a `dismissed` state-file entry.
-- The **first surviving candidate wins**. If none survive, or `check` returns `reason=rate-limit` (week cap already used) → **no-op**: record a `skipped` audit entry (`corgi suggest-history record --slug <slug> --status skipped`), report what was deduped and why, go to Phase 5. Don't file anything.
+`slug` = the title in kebab-case (lowercase, non-alphanumerics → `-`, repeats
+collapsed, trimmed; the same rule `corgi suggest-history` uses). For each card
+from the top:
 
-## Phase 3 — Decide: propose vs auto-file-draft
+- `corgi suggest-history check --slug <slug> --json` → skip on
+  `filed | dismissed | proposed | rate-limit`.
+- Title match against the board's open cards and the open pull requests →
+  skip as `open`.
+- Memory says rejected → skip as `dismissed`.
 
-- **`propose` (default):** spec the survivor — reuse `suggest`'s **Phase 4** spec shape → `docs/suggestions/<slug>.md` — and present it. Then:
-  - **Human present** → ask **"file this as a tracker story?"** (identical to interactive `suggest` Phase 5). Yes → Phase 4 (the `tracker` write gate). No → record `dismissed` so the cron won't re-propose it within the cooldown; stop.
-  - **Headless** (cron, idle REPL, no one to answer) → **do not file.** Record `proposed` (`corgi suggest-history record --slug <slug> --status proposed --title <…> --lens <…>`), fire a `PushNotification` if available, stop. Surface it next time a human is present.
-- **`auto-file-drafts` (explicit opt-in):** go straight to Phase 4 to file **one** draft.
+The first survivor wins. None → `record --slug <top> --status skipped`,
+headline "nothing new: N ideas already on the board or proposed", stop.
 
-## Phase 4 — File (reuse `tracker` write gate) OR record-and-report
+## Phase 3 — Put it on the board
 
-- **Preflight the matching tracker MCP** (read `../_shared/tracker-mcp.md` first). **Not connected → do NOT silently file:** keep `docs/suggestions/<slug>.md` + a paste-ready body + the tracker's new-issue URL, record `proposed`, stop.
-- **Connected →** create the issue **in the draft/triage/backlog-equivalent state**, labels `corgi-suggest` + `draft`, **no assignee**, link the spec. Reuse the same `tracker` write path — do not hand-roll the MCP call shape. Then record it: `corgi suggest-history record --slug <slug> --status filed --ticket <KEY> --title <…> --lens <…>`.
-- **Never offer "implement it now?" here.** That's the interactive `suggest`/`stories` path — proactive stays hands-off: never assign, never move past draft, never build, never open a PR.
+```
+corgi agent task add "<title>" --body - <<'EOF'
+why now: <one line>
+evidence: <file:line · README promise · gap>
+change: <three lines, by service>
+done when: <the check>
+effort: S/M/L · risk: <one line>
+EOF
+corgi suggest-history record --slug <slug> --status proposed --title "<title>" --lens <magic|friction|risk>
+```
 
-## Phase 5 — Arm/maintain the schedule
+- A person is present and wants the tracker → the `tracker` write gate
+  (`../_shared/tracker-mcp.md`, MCP preflight; draft, label `corgi-suggest`,
+  no assignee, the task body as the description) → `record --status filed
+  --ticket <KEY>`.
+- `autoFileDrafts` on → the same, unattended, one per run; not connected →
+  the task stands, record `proposed`.
+- "Not this" → `record --status dismissed`; the cooldown keeps it away.
 
-- Point at `references/schedule-config.md` for the literal CronCreate args.
-- If the user asked to set it up: an unattended weekly cadence is a `/schedule` routine
-  (weekly, off-:00 minute, the absolute workspace path in the prompt). A first-time trial
-  is a one-shot `CronCreate` job — session-only, so say it dies with the session and a
-  recurring one expires after 7 days.
-- Disarm: `CronList` → `CronDelete` by id (see the reference).
+## Phase 4 — Report
 
-## [[workspace-memory]] integration (loose)
-
-If a workspace-memory store is present (`.corgi/memory/`, the `memory` skill), do a **best-effort** read for entries tagged "dismissed suggestion" / "won't build" and treat a matching slug the same as a `dismissed` state-file entry — so an idea the user explicitly rejected in conversation isn't re-proposed by the cron. Advisory only: degrades silently when no memory store exists, and the **state file remains the source of truth.** Match on slug/title text; never block on the memory API. Don't duplicate the memory convention here — see the `memory` skill.
+The first line is the headline the inbox row shows: `<title> — <why, in ten
+words>`. Then the task ref, the evidence, and what was skipped and why. No
+shortlist, no essay.
 
 ## Scenarios
 
-- **First-time setup** → prefer the `--once` next-Monday one-shot; explain the 7-day expire before arming anything recurring.
-- **Every candidate deduped / week cap hit** → a clean no-op with a `skipped` audit entry, so `gain`/`suggest-history list` shows the job ran and why nothing filed.
-- **No tracker MCP** → never guess a tracker; record `proposed` and report the new-issue URL.
+- **First time** → add the bot and the routine (above); a trial is `corgi
+  agent routine run suggest` right away.
+- **No daemon or the workspace is not watched** → routines cannot run: `corgi
+  agent watch enable --workspace <id>`, then `routine add suggest`, or run by
+  hand.
+- **The bot is missing** → `routine add suggest --bot proactive` refuses and
+  prints the add line; without `--bot` the routine runs plain (same prompt,
+  no soul).
+- **Cap hit or everything deduped** → a clean no-op with a `skipped` entry, so
+  `suggest-history list` shows it ran and why nothing landed.
+- **Another scheduler** → `references/schedule-config.md`; the daemon routine
+  stays the default.

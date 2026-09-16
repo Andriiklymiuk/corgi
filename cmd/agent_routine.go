@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/bots"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
@@ -19,7 +20,7 @@ import (
 // and its report is one inbox row.
 var agentRoutineCmd = &cobra.Command{
 	Use:   "routine",
-	Short: "Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, or your own",
+	Short: "Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, or your own",
 	Long: `Routines run in a workspace on a schedule, through the daemon, with the same
 caps, quiet hours and budget as an unattended fix. Each report is one row in
 the inbox with the log behind it.
@@ -28,6 +29,7 @@ the inbox with the log behind it.
   corgi agent routine add digest                           # on its default schedule (daily 08:30)
   corgi agent routine add babysit-pr --schedule "every 2h"
   corgi agent routine add nightly-e2e --prompt "run corgi test --e2e and open a ticket per failure" --schedule "daily 03:00"
+  corgi agent routine add suggest --bot proactive              # weekly, as the Proactive bot
   corgi agent routine list
   corgi agent routine run digest                           # now, ignoring the clock
   corgi agent routine rm digest
@@ -76,7 +78,13 @@ var agentRoutineAddCmd = &cobra.Command{
 		prompt, _ := cmd.Flags().GetString("prompt")
 		schedule, _ := cmd.Flags().GetString("schedule")
 		model, _ := cmd.Flags().GetString("model")
-		r := config.Routine{Name: name, Prompt: strings.TrimSpace(prompt), Schedule: strings.TrimSpace(schedule), Model: model}
+		bot, _ := cmd.Flags().GetString("bot")
+		if bot != "" {
+			if err := routineBotExists(dir, bot, id); err != nil {
+				return err
+			}
+		}
+		r := config.Routine{Name: name, Prompt: strings.TrimSpace(prompt), Schedule: strings.TrimSpace(schedule), Model: model, Bot: bot}
 		if k, ok := watch.CatalogKind(name); ok && r.Prompt == "" {
 			r.Kind = k.Name
 			if r.Schedule == "" {
@@ -110,7 +118,11 @@ var agentRoutineAddCmd = &cobra.Command{
 			k, _ := watch.CatalogKind(r.Kind)
 			what = k.What
 		}
-		utils.Infof("✓ %s in %s: %s — %s\n", r.Name, id, sched.String(), clipTitle(what, 70))
+		as := ""
+		if r.Bot != "" {
+			as = " as " + r.Bot
+		}
+		utils.Infof("✓ %s in %s: %s%s — %s\n", r.Name, id, sched.String(), as, clipTitle(what, 70))
 		utils.Info("restart the daemon to pick it up: corgi agent restart")
 		return nil
 	},
@@ -132,6 +144,7 @@ var agentRoutineListCmd = &cobra.Command{
 			Name      string `json:"name"`
 			Kind      string `json:"kind,omitempty"`
 			Schedule  string `json:"schedule"`
+			Bot       string `json:"bot,omitempty"`
 			Off       bool   `json:"off,omitempty"`
 			LastRun   string `json:"lastRun,omitempty"`
 		}
@@ -146,7 +159,7 @@ var agentRoutineListCmd = &cobra.Command{
 						break
 					}
 				}
-				rows = append(rows, row{Workspace: ws, Name: r.Name, Kind: r.Kind, Schedule: r.Schedule, Off: r.Off, LastRun: lr})
+				rows = append(rows, row{Workspace: ws, Name: r.Name, Kind: r.Kind, Schedule: r.Schedule, Bot: r.Bot, Off: r.Off, LastRun: lr})
 			}
 		}
 		if utils.JSONOutput {
@@ -159,8 +172,11 @@ var agentRoutineListCmd = &cobra.Command{
 		}
 		for _, r := range rows {
 			state := ""
+			if r.Bot != "" {
+				state = " as " + r.Bot
+			}
 			if r.Off {
-				state = " (off)"
+				state += " (off)"
 			}
 			fmt.Printf("%-12s %-14s %-18s %s%s\n", r.Workspace, r.Name, r.Schedule, r.LastRun, state)
 		}
@@ -250,6 +266,23 @@ The daemon has to be running.`,
 	},
 }
 
+// routineBotExists refuses a bot that is not there or lives elsewhere: a
+// routine runs in one workspace, and its bot has to be of that workspace.
+func routineBotExists(dir, name, workspace string) error {
+	store, err := bots.Load(bots.Path(dir))
+	if err != nil {
+		return err
+	}
+	b, ok := store.Find(name)
+	if !ok {
+		return fmt.Errorf("no bot %q — corgi agent bot add %s --template %s --workspace %s", name, name, name, workspace)
+	}
+	if b.Workspace != workspace {
+		return fmt.Errorf("bot %q is in %s, not %s", name, b.Workspace, workspace)
+	}
+	return nil
+}
+
 func init() {
 	for _, c := range []*cobra.Command{agentRoutineAddCmd, agentRoutineRmCmd, agentRoutineRunCmd} {
 		c.Flags().String("workspace", "", "the workspace (default: the one you are in)")
@@ -257,6 +290,7 @@ func init() {
 	agentRoutineAddCmd.Flags().String("schedule", "", "\"daily HH:MM\", \"every 6h\" or \"weekly Mon HH:MM\" (a catalog kind has a default)")
 	agentRoutineAddCmd.Flags().String("prompt", "", "your own routine: what the run should do")
 	agentRoutineAddCmd.Flags().String("model", "", "the model to run it on (default: the workspace policy's execute model)")
+	agentRoutineAddCmd.Flags().String("bot", "", "run it as this bot: its soul, model and account, filed under its name (corgi agent bot list)")
 	agentRoutineCmd.AddCommand(agentRoutineCatalogCmd, agentRoutineAddCmd, agentRoutineListCmd, agentRoutineRmCmd, agentRoutineRunCmd)
 	agentCmd.AddCommand(agentRoutineCmd)
 }

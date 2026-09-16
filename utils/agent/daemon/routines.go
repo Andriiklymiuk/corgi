@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/bots"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/atomicfile"
@@ -112,16 +113,61 @@ func (d *Daemon) runRoutines(ctx context.Context, now time.Time) {
 				continue
 			}
 			d.routines.set(key, now)
-			d.watchState.Fixes.StartFor(e, now)
-			run := spec
-			if r.Model != "" {
-				run.Models = &config.ModelPolicy{Kinds: map[string]string{string(watch.KindRoutine): r.Model}}
-			}
-			utils.Infof("agent: routine %s starts in %s\n", e.Title, spec.Workspace)
-			d.spawnFix(ctx, run, e)
+			d.startRoutine(ctx, spec, r, e)
 			break // one per workspace per tick; the caps pace the rest
 		}
 	}
+}
+
+// startRoutine runs one due routine: as the bot it names when that bot
+// is in this workspace, else as a plain fix on its own model.
+func (d *Daemon) startRoutine(ctx context.Context, spec WatchSpec, r config.Routine, e watch.Event) {
+	if b, ok := d.routineBot(spec, r); ok {
+		utils.Infof("agent: routine %s starts in %s as %s\n", e.Title, spec.Workspace, b.Display())
+		d.runs.Add(1)
+		go func() {
+			defer d.runs.Done()
+			defer d.releaseFix(spec.Workspace, e.Ref)
+			d.runBot(ctx, spec, b, e)
+		}()
+		return
+	}
+	d.watchState.Fixes.StartFor(e, time.Now())
+	run := spec
+	if r.Model != "" {
+		run.Models = &config.ModelPolicy{Kinds: map[string]string{string(watch.KindRoutine): r.Model}}
+	}
+	utils.Infof("agent: routine %s starts in %s\n", e.Title, spec.Workspace)
+	d.spawnFix(ctx, run, e)
+}
+
+// routineBot is the bot a routine runs as, when it names one that lives
+// in the same workspace; a bot gone missing runs the routine plain.
+func (d *Daemon) routineBot(spec WatchSpec, r config.Routine) (bots.Bot, bool) {
+	if strings.TrimSpace(r.Bot) == "" {
+		return bots.Bot{}, false
+	}
+	store, err := bots.Load(bots.Path(d.Dir))
+	if err != nil {
+		return bots.Bot{}, false
+	}
+	b, ok := store.Find(r.Bot)
+	if !ok || b.Workspace != spec.Workspace {
+		utils.Infof("agent: routine %s: no bot %q in %s, running plain\n", r.Name, r.Bot, spec.Workspace)
+		return bots.Bot{}, false
+	}
+	return b, true
+}
+
+// routineFor finds the routine an event was made from, by the name the
+// event carries as its title.
+func routineFor(spec WatchSpec, e watch.Event) config.Routine {
+	for _, r := range spec.Routines {
+		if strings.EqualFold(firstNonEmpty(r.Name, r.Kind), e.Title) {
+			return r
+		}
+	}
+	return config.Routine{}
 }
 
 // routineReport turns a finished routine into an inbox row: the headline

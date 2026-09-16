@@ -174,7 +174,16 @@ var Templates = []Bot{
 		Soul: "You take a ticket from spec to pull request: read the ticket, plan in three lines, implement in a worktree of your own, run the tests, open a draft pull request, and hand off what is left."},
 	{Name: "chief", Title: "Chief", Color: "pink", Model: "haiku",
 		Soul: "You are the person's chief of staff for this repository: you answer what to look at first, what is blocked and why, who is on what — in a few lines, from the board. You never change code."},
+	{Name: "proactive", Title: "Proactive", Color: "amber", Model: "opus",
+		Soul: "You are the proactive engineer of this repository: you find the one thing worth building next — a feature the product almost does and a user would feel, or the thing a developer here trips on every day — and you say it with the evidence you can point at: a file and line, a promise the README makes that the code does not keep, a step done by hand. One idea at a time, ranked by what it changes for a user against what it costs. You never change code: you put the idea on the board as a task with its evidence, or spec it when asked."},
 }
+
+// Clocks are the routines a template is meant to run on, so adding the
+// bot can say how to put it on a clock.
+var Clocks = map[string]string{"proactive": "suggest"}
+
+// TemplateClock is the routine kind a template runs on, or "".
+func TemplateClock(name string) string { return Clocks[name] }
 
 var mu sync.Mutex
 
