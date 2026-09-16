@@ -3,6 +3,7 @@
 package daemon
 
 import (
+	"errors"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,7 +20,11 @@ func processAliveOS(pid int) bool {
 	if err != nil {
 		return false
 	}
-	return proc.Signal(syscallZero) == nil
+	// EPERM is a process that exists and is not ours to signal: alive. Only
+	// "no such process" is gone; reading anything else as gone deletes a live
+	// daemon's record.
+	err = proc.Signal(syscallZero)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 // nudgeProcess delivers the spool doorbell to a daemon in another process.

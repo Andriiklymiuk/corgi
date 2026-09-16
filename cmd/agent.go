@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -126,6 +127,13 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	if info, err := daemon.ReadInfo(dir); err == nil && info != nil {
 		exitWithError("agent_already_running",
 			fmt.Errorf("corgi agent is already running (pid %d) — `corgi agent stop` first", info.PID), 1)
+	}
+	// A daemon whose record went missing is still a daemon. Two of them write
+	// the same board in turns, so the second is refused here by the process
+	// table, not by the record.
+	if strays := otherServers(os.Getpid()); len(strays) > 0 {
+		exitWithError("agent_already_running",
+			fmt.Errorf("corgi agent is already running (pid %d) without its record — `corgi agent restart` replaces it", strays[0]), 1)
 	}
 
 	configs, err := loadSpawnConfigs(dir, foreground)
@@ -576,10 +584,12 @@ func runAgentStatus(_ *cobra.Command, _ []string) {
 
 	if !status.Running {
 		fmt.Println("corgi agent is not running. Start it with `corgi agent serve`, or `corgi agent install` to start at login.")
+		warnStrayServers(0)
 		return
 	}
 
 	fmt.Printf("corgi agent running (pid %d, version %s)\n", status.PID, status.Version)
+	warnStrayServers(status.PID)
 	if !status.WakeLockable {
 		fmt.Println("wake lock: unsupported on this platform")
 	}
@@ -793,7 +803,9 @@ func runAgentStop(_ *cobra.Command, _ []string) {
 		exitWithError("agent_stop", err, 1)
 	}
 	if info == nil {
-		utils.Info("corgi agent is not running")
+		if stopStrayServers() == 0 {
+			utils.Info("corgi agent is not running")
+		}
 		return
 	}
 	proc, err := os.FindProcess(info.PID)
@@ -813,6 +825,44 @@ func runAgentStop(_ *cobra.Command, _ []string) {
 		utils.Info("stopped")
 	} else {
 		utils.Infof("still shutting down after 10s — check `corgi agent status` (pid %d)\n", info.PID)
+	}
+	stopStrayServers()
+}
+
+// otherServers is swapped in tests, which must never signal the machine's
+// real daemon.
+var otherServers = daemon.OtherServers
+
+// stopStrayServers ends every `corgi agent serve` process the record does not
+// name — the leftovers of an overlap — and returns how many it signalled.
+// Bounded wait, so a stuck one never holds up the stop that was asked for.
+func stopStrayServers() int {
+	strays := otherServers(os.Getpid())
+	for _, pid := range strays {
+		if p, err := os.FindProcess(pid); err == nil && p.Signal(syscall.SIGTERM) == nil {
+			utils.Infof("stopped a stray agent daemon (pid %d)\n", pid)
+		}
+	}
+	if len(strays) > 0 {
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) && len(otherServers(os.Getpid())) > 0 {
+			time.Sleep(150 * time.Millisecond)
+		}
+	}
+	return len(strays)
+}
+
+// warnStrayServers points at daemons the record does not name, so a board
+// that flips between two writers has a visible cause.
+func warnStrayServers(recorded int) {
+	var strays []string
+	for _, pid := range otherServers(os.Getpid()) {
+		if pid != recorded {
+			strays = append(strays, strconv.Itoa(pid))
+		}
+	}
+	if len(strays) > 0 {
+		fmt.Printf("⚠ %d more corgi agent daemon(s) running without a record (pid %s) — `corgi agent restart` leaves one\n", len(strays), strings.Join(strays, ", "))
 	}
 }
 

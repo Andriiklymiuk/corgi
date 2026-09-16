@@ -275,6 +275,9 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 	if info, err := daemon.ReadInfo(dir); err == nil && info != nil {
 		return info, nil
 	}
+	if strays := otherServers(os.Getpid()); len(strays) > 0 {
+		return nil, fmt.Errorf("a corgi agent daemon (pid %d) is running without its record — `corgi agent restart` replaces it", strays[0])
+	}
 	if _, err := spawnDetached(dir, "serve.log", "agent", "serve"); err != nil {
 		return nil, err
 	}
@@ -837,6 +840,11 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 			utils.Infof("stopped agent daemon (pid %d)\n", info.PID)
 			stopped = true
 		}
+	}
+	// A daemon the record forgot is still writing the board; `down` is
+	// where every one of them goes, so `restart` comes back with exactly one.
+	if stopStrayServers() > 0 {
+		stopped = true
 	}
 
 	// The detached MCP + tunnel `agent up` recorded; stopping it is what takes

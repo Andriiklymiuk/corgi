@@ -501,6 +501,7 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 
 	idle := d.idle()
 	for ctx.Err() == nil {
+		d.reassertInfo()
 		d.drainCommands(ctx, launch)
 		if now := d.idle(); now != idle {
 			idle = now
@@ -1145,7 +1146,7 @@ func (d *Daemon) writeInfoIDs(ids []string) error {
 // looks like a running one.
 func (d *Daemon) cleanup() {
 	_ = d.Ledger.Flush()
-	_ = os.Remove(d.InfoPath())
+	d.removeOwnInfo()
 	_ = os.Remove(d.StatusPath())
 }
 
