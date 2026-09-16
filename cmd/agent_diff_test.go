@@ -95,3 +95,20 @@ func TestDiffListsFilesThenOnePatch(t *testing.T) {
 		t.Fatalf("all: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// The phone's file parameter reaches git; anything git could read as an
+// option or another tree is refused before that.
+func TestValidDiffPath(t *testing.T) {
+	good := []string{"cmd/agent.go", "README.md", "a b/c.txt", "docs/über.md"}
+	for _, p := range good {
+		if !validDiffPath(p) {
+			t.Errorf("%q should be a valid path", p)
+		}
+	}
+	bad := []string{"", "-", "--output=/tmp/x", "/etc/passwd", "../secret", "a/../../b", "a//b", "a\nb", "x\x00y", strings.Repeat("a", 5000)}
+	for _, p := range bad {
+		if validDiffPath(p) {
+			t.Errorf("%q should be refused", p)
+		}
+	}
+}
