@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,5 +72,19 @@ func TestOneInboxRowPerThread(t *testing.T) {
 	other := Event{Key: "github:o/r#2:t2:ten", Kind: KindPRComment, Ref: "o/r#2", At: now.Add(-3 * time.Hour)}
 	if !k.Keep(noon) || k.Keep(ten) || !k.Keep(other) {
 		t.Fatal("newest per thread, every thread once")
+	}
+}
+
+// Every catalog entry has a schedule the parser takes; the suggest one is
+// weekly and puts its idea on the board rather than in the repository.
+func TestTheCatalogDefaultsParse(t *testing.T) {
+	for _, k := range Catalog {
+		if _, err := ParseSchedule(k.Default); err != nil {
+			t.Fatalf("%s: %v", k.Name, err)
+		}
+	}
+	k, ok := CatalogKind("suggest")
+	if !ok || !strings.HasPrefix(k.Default, "weekly") || !strings.Contains(k.Prompt, "corgi agent task add") || !strings.Contains(k.Prompt, "Change no code") {
+		t.Fatalf("suggest: %+v", k)
 	}
 }

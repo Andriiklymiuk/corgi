@@ -145,6 +145,9 @@ var agentBotAddCmd = &cobra.Command{
 			return
 		}
 		utils.Infof("✓ bot %s in %s — corgi agent bot open %s\n", name, workspace, name)
+		if clock := bots.TemplateClock(template); clock != "" {
+			utils.Infof("  on a clock: corgi agent routine add %s --bot %s --workspace %s\n", clock, name, workspace)
+		}
 	},
 }
 

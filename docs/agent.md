@@ -315,7 +315,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent attempts [ref] [pick <ref> <n>]` | the sessions a fan-out opened on a ticket (`watch work --attempts 3 --models opus,sonnet`), side by side — status, changes, tests, done-when, cost, PR — and keep one (2.22) |
 | `corgi agent event <start\|prompt\|tool\|done\|fail\|permission\|stop\|end>` | one event from an agent that is not Claude Code — Codex, Gemini CLI, your own — so its session sits on the board with the agent's name, its tool's risk word and its host (2.22) |
 | `corgi agent lesson add\|list` | what the workspace learned the hard way, one line each, outside the repo; `watch enable --lessons` has the daemon write reviews on your PRs, red done-when checks and failed bot runs; the context hook points every new session at the file (2.22) |
-| `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own — and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief` fills a bot from a ready-made one (2.21). A run that fails gets one more try a model up — haiku → sonnet → opus — and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
+| `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own — and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief\|proactive` fills a bot from a ready-made one (2.21; `proactive` runs on a clock, see `routine add suggest --bot proactive`, 2.28.11). A run that fails gets one more try a model up — haiku → sonnet → opus — and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
 | `corgi agent ask "<question>"` | the chief: one question about the board — what to look at first, what is blocked, who is on what — answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
 | `corgi agent stream [enable\|disable] [--workspace X\|--all]` | which workspaces a paired phone may read as a conversation (off by default); the phone's Chat sheet, `POST /launch/transcript` |
 | `corgi agent awake --display on` | the wake lock keeps the display lit as well (`caffeinate -d`): the lock screen comes from the display sleeping, which the plain lock (`-i -m -s`) does not stop — what people ran `caffeinate -d` by hand for. `keepDisplay` in the user config; `corgi agent restart` after (2.25) |
@@ -350,7 +350,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent kanban [--workspace X] [--json]` | one card per ticket in a column corgi works out — Inbox, Ready, Running, Blocked, Review, Done — from the inbox, the runs, the sessions on each branch, the handoffs; the phone's Board tab draws the same |
 | `corgi agent handoff --ref X --done … --remaining … --next …` / `show X` | a handoff for the next session or person: corgi fills in branch, head, base, uncommitted files, who was writing, budget left; you say what is done, what is not, what was decided; `.corgi/corgi_services/handoffs/<ref>.json` plus a Markdown twin |
 | `corgi agent scope set\|add\|show\|clear <ref>` | the contract a ticket's change stays inside — paths, a line budget, tests, done-when — enforced by the hooks `track enable` installs: a write outside the paths is refused with the way to widen; a diff over budget is said once at the end of the turn |
-| `corgi agent routine catalog\|add\|list\|run\|rm` | runs on a clock through the unattended runner (`add digest`, `add babysit-pr --schedule "every 2h"`, `--prompt … --schedule "daily 03:00"`), with the same caps, quiet hours and budget; each report is one inbox row with the log behind it; restart the daemon after add or rm |
+| `corgi agent routine catalog\|add\|list\|run\|rm` | runs on a clock through the unattended runner (`add digest`, `add babysit-pr --schedule "every 2h"`, `--prompt … --schedule "daily 03:00"`), with the same caps, quiet hours and budget; each report is one inbox row with the log behind it; restart the daemon after add or rm. `--bot <name>` runs it as that bot — its soul, model and account, filed under its name (2.28.11); `add suggest --bot proactive` is the Proactive bot: once a week, one thing worth building next, on the board as a task with its evidence |
 | `corgi agent harden [--dry-run]` | deny rules for secrets and destruction (`.env`, keys, `rm -rf`, force push, `--no-verify`) plus a hook that refuses to write a credential into a file, added to the workspace's `.claude/settings.local.json`; `doctor --security` says what is still loose |
 | `corgi agent refresh` | reload everything now: rescan sessions, poll every tracker, publish the board |
 | `corgi agent stop` | stop the daemon |
@@ -1301,6 +1301,25 @@ so *Code Reviewer* on the phone is the same chat as on the desk. The daemon
 records the thread from the session's first event (`CORGI_BOT` in the
 environment, `bot` on the session row). `GET /launch/bots` lists them
 without the souls; `POST /launch/new {bot}` opens one.
+
+### The Proactive bot: what to build next, on a clock
+
+```bash
+corgi agent bot add proactive --template proactive --workspace api
+corgi agent routine add suggest --bot proactive      # weekly Mon 09:30
+corgi agent restart
+corgi agent routine run suggest                      # now, as a trial
+```
+
+A bot that runs on a clock rather than on an event: the `suggest` routine
+runs under its soul, model and account (`--bot` on any routine does this),
+reads the stack, the READMEs, the memory and the board, picks one thing a
+user would feel or a developer trips on, and puts it on the board as a task
+with the evidence — `corgi agent task add` — where **Work on it** hands it to
+a session. It changes no code and files nothing on the tracker. The run is
+filed under the bot (`bot show proactive`), the headline is one inbox row.
+`corgi suggest-history` keeps it to one idea a week and never the same twice.
+The `suggest-proactive` skill is the same flow by hand.
 
 ### A session as a chat, on the phone
 

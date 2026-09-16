@@ -1,50 +1,31 @@
-# Arming the proactive-suggest schedule
+# Putting the Proactive bot on a clock
 
-`suggest-proactive` does **not** schedule itself. Two host mechanisms can fire it, and
-they are not the same thing:
-
-- **`/schedule`** creates a cloud routine on a cron. It outlives the terminal session.
-  Use it for the unattended weekly run.
-- **`CronCreate`** is session-only: the job lives in memory, fires while the REPL is
-  idle, dies when the session ends, and a recurring job auto-expires after 7 days.
-  Use it for a one-off or a same-day trial.
-
-Either way the prompt names the absolute workspace path — the job fires with no implied
-cwd, and the skill refuses to run without a `corgi-compose.yml`.
-
-## Arm (recurring, weekly) — `/schedule`
-
-Weekly matches the rate limit (default 1 ticket/week; hard ceiling 3 — a tighter
-cadence does not file more). Pick an off-:00 minute.
+The default clock is the corgi daemon: a **routine** runs in the workspace with the
+watch's caps, quiet hours and budget, filed under the bot, one inbox row per run.
 
 ```
-cron:    "23 9 * * 1"          # Monday ~09:23 local
-prompt:  "Run /corgi-suggest-proactive in workspace /abs/path/to/workspace"
+corgi agent bot add proactive --template proactive --workspace <id>
+corgi agent routine add suggest --bot proactive --workspace <id>      # weekly Mon 09:30
+corgi agent routine add suggest --bot proactive --schedule "weekly fri 16:00"
+corgi agent restart
+corgi agent routine run suggest                                       # now, as a trial
+corgi agent routine list                                              # when it last ran
+corgi agent routine rm suggest                                        # off
 ```
 
-## Trial run — `CronCreate`, one shot
+A schedule is `daily HH:MM`, `every 6h` (at least 5m) or `weekly Mon HH:MM`.
+Weekly matches the filing cap (default 1 per week, ceiling 3): a tighter clock
+proposes nothing more. The daemon needs the workspace watched (`corgi agent watch
+enable --workspace <id>`); without `--bot` the routine runs plain, same prompt, no soul.
 
-For a first run, a single next-Monday shot proves the flow without committing to a
-cadence:
+## Without the daemon
 
-```
-cron:      "23 9 * * 1"
-recurring: false
-prompt:    "Run /corgi-suggest-proactive in workspace /abs/path/to/workspace"
-```
+- **`/schedule`** makes a cloud routine on a cron that outlives the terminal:
+  `cron "23 9 * * 1"`, prompt `Run /corgi-suggest-proactive in workspace /abs/path`.
+  The job fires with no implied cwd, so the prompt names the absolute path.
+- **`CronCreate`** is session-only: fires while the REPL is idle, dies with the
+  session, a recurring one expires after 7 days. Good for a one-off trial
+  (`recurring: false`). `CronList` / `CronDelete <id>` manage it.
 
-A recurring `CronCreate` job also works for a week-long trial; tell the user it
-expires after 7 days and offer to move it to `/schedule` when it lapses.
-
-## Disarm
-
-```
-CronList                          # find the job id
-CronDelete <id>                   # remove it
-```
-
-`CronList` / `CronDelete` only see `CronCreate` jobs; a `/schedule` routine is managed
-through `/schedule` itself.
-
-Cancelling the job is safe at any time — the `.corgi/corgi_services/suggest-history.json` state stays
-consistent (it's only appended to by the run itself).
+Stopping any clock is safe at any time: `.corgi/corgi_services/suggest-history.json`
+is only appended to by the run itself.

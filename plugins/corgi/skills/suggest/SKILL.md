@@ -1,134 +1,151 @@
 ---
 name: suggest
-description: Use when the user wants feature or improvement ideas for a corgi workspace: "suggest features", "what should we build next", "ideas to improve X", "how do we make this faster/safer/cheaper", "what's missing", "any new business cases". NOT for implementing it (use the stories skill) or authoring corgi-compose.yml (use the corgi skill).
+description: Use when the user wants feature or improvement ideas for a corgi workspace: "suggest features", "what should we build next", "what would make this magic", "ideas to improve X", "how do we make this faster/safer/cheaper", "what's missing", "any new business cases". NOT for implementing it (stories), running it on a clock (suggest-proactive), or authoring corgi-compose.yml (corgi).
 ---
 
 # Corgi suggest
 
-Propose **real, measurable** improvements for a corgi workspace — the way a product
-manager and a senior engineer would after actually reading the code and the
-business. Two lenses, every idea grounded in evidence and tied to an outcome, then
-**spec the chosen one** and **offer a story** (ask where). Suggests + specs; does not
-implement (that's `stories`).
+Find the few things worth building next in **this** stack — the way a product
+engineer who read the code and used the product would — and turn the chosen one
+into work: a story-shaped spec, a task on the board or a tracker ticket, and a
+handoff to `stories`. Suggests and specs; never implements.
+
+## What a good suggestion is
+
+- **A user would feel it.** Magic is the thing the product almost does: the
+  promise in the README the code does not keep, the data it stores and never
+  shows, the flow that dead-ends, the three steps that could be one, the wait
+  that could be a word.
+- **You can point at it.** A `file:line`, a README line, a route with no test, a
+  step the README says to do by hand, a TODO older than the last month of `git
+  log`. Not a feeling about the domain.
+- **You know when it worked.** The check that passes after, in one line. A
+  number only when you have one — "p95 1.2s → <300ms" with a measurement, or
+  "an estimate" said out loud.
+- **Not** "add dark mode / add AI / add notifications / rewrite in Rust" unless
+  the evidence in this stack says so. Slop is the failure mode.
 
 ## Guardrails (non-negotiable)
 
-- **Evidence or it doesn't ship.** Every suggestion cites a real signal — a
-  `file:line`, a dependency, a metric, a concrete domain gap. No generic "add dark
-  mode / add AI / add notifications" without a reason rooted in *this* stack. Slop is
-  the failure mode; kill it.
-- **Measurable outcome required.** Name the metric, a rough magnitude, how you'd
-  measure it (p95 latency, signup completion, error rate, bundle size, infra $/mo,
-  test coverage, MTTR). Can't tie it to an outcome → drop it.
-- **Suggest, don't build.** Output = ranked shortlist → one spec → optional story
-  handoff. No code changes here.
-- **A rewrite is a claim, not a vibe.** "Rewrite service X to Go/Rust" only with a
-  feasibility + ROI case: a hot path, a large measured/estimated gain, a migration
-  path. Never for novelty.
-- **Metrics/analytics on demand only.** Any perf/cost claim needing runtime data →
-  reuse the `debug` skill's provider detection; ask before querying, scoped,
-  read-only.
-- **Honest effort + ranking.** Rank by impact/effort; don't bury a big lift as a
-  "quick win".
+- **One pass, in this session.** Read the stack once, keep the evidence in
+  your head, then write cards. No agent per lens, no fan-out: a second reader
+  costs more than it finds.
+- **Evidence or cut.** Every card cites something in the repo, the memory, the
+  board or the product. A card with a hand-wavy field is cut, not softened.
+- **Suggest, don't build.** Output is a shortlist, one spec, one place for it
+  to live. No code changes here.
+- **Honour what is known.** A memory `decision` that rejected it → don't
+  propose it. What is on `corgi agent kanban`, in `corgi suggest-history
+  list`, or in an open pull request → already taken.
+- **A rewrite is a claim, not a vibe.** "Move service X to Go/Rust" only with a
+  hot path, a measured or estimated gain and a migration path.
+- **Metrics on demand only.** A claim that needs runtime numbers → the `debug`
+  skill's provider, read-only, after asking; else say "estimate".
 - Read `../_shared/conventions.md` first (attribution, `manualRun`, preflight).
 
-## Phase 0 — Map the stack + the business
+## Phase 0 — Read the stack, once
 
-Preflight per `../_shared/conventions.md`.
-Read once:
-- **Stack** — `services`/`db_services`, `depends_on`, ports, each service's
-  **language/runtime** (from `package.json`/`go.mod`/`Cargo.toml`/`pyproject`/
-  Gemfile…), `manualRun` (reference-only). Schema:
-  `../corgi/references/yml-schema.md`.
-- **Business + existing features** — workspace README + per-service READMEs: what the
-  product does, **who the users are, the business model**, what already exists.
-  Product suggestions anchor to *this* domain — don't invent a generic SaaS.
-- **Workspace memory** — if `.corgi/memory/` exists, run `corgi memory list --json`
-  (or read `index.md`) and open the matching facts (see the `memory` skill). Don't
-  propose what a `decision` rejected; ground a product idea in a `domain` fact; cite a
-  past `incident` as evidence. Absent → skip silently.
+Preflight per `../_shared/conventions.md`. Then, in this order:
 
-## Phase 1 — Gather evidence (investigate once, parallel lenses)
+- **Shape** — `corgi context --json`: services, languages, ports, branches,
+  what is dirty. Schema in `../corgi/references/yml-schema.md`.
+- **Promise** — the workspace README and each service's: what the product
+  says it does, for whom, how money moves. The routes, screens or commands are
+  the truth to check it against.
+- **Memory** — `.corgi/memory/` if present (`corgi memory list --json`, see
+  the `memory` skill): `decision` rules out, `domain` grounds, `incident` is
+  evidence. Absent → skip silently.
+- **Taken** — `corgi agent kanban --json` (the board), `corgi suggest-history
+  list --json` (proposed before), open pull requests, `git log --since=4.weeks
+  --oneline` (what the team is on).
+- **Focus** — `$ARGUMENTS` narrows to a lens, a service or a goal
+  ("performance", "the api", "retention"). Empty → all three lenses.
 
-Dispatch **one `Explore`/`Task` per lens** (not per idea; scan each area once,
-orchestrator holds the evidence ledger). Each returns **cited** signals, not opinions:
+## Phase 1 — Three lenses, one walk
 
-- **Product / business** — table-stakes features missing for this domain;
-  activation/retention/revenue levers; UX friction; per-service capability gaps vs
-  domain norms. Cite the README/route/screen.
-- **Performance** — hot/heavy paths, N+1, missing indexes/caching, big bundles,
-  sync-where-async, chatty cross-service calls. Cite `file:line`. Need runtime
-  numbers → `debug` provider (on demand).
-- **Reliability / safety / security** — missing healthchecks, tests, structured
-  logging/observability, error handling, retries/timeouts; authz gaps, secret
-  handling, vulnerable/deprecated deps, data-loss risks. Cite the gap.
-- **Cost / DX / tech-debt** — outdated deps, oversized files, duplication, slow CI, a
-  hot service on a runtime costing latency/$$ (rewrite candidate). Cite it.
+Walk the services once and note signals under three headings, cited as you
+go. Stop around ten: enough for a shortlist, not a survey.
 
-## Phase 2 — Turn each signal into a REAL suggestion
+- **Magic** (what a user would feel): a promise not kept, a dead-end flow, an
+  empty state that could act, data held and never shown, a manual step the
+  product could take, a wait the user is not told about.
+- **Friction** (what a developer here trips on): the README step done by
+  hand, no test on the hot path, the script everyone copies, the service
+  restarted by hand, the flaky job, the setting kept in three places.
+- **Risk** (what will bite): no healthcheck, timeout or retry on a
+  cross-service call, an unbounded query, a secret handled loosely, a
+  deprecated dependency with an advisory, a path that loses data.
 
-One card per candidate; any hand-wavy field → **cut the card**:
+## Phase 2 — Cards; cut what is not real
 
-- **Title** + **lens** (product | eng).
-- **Evidence** — the signal (`file:line` / dep / metric / domain gap).
-- **Change** — concrete, which service(s).
-- **Measurable outcome** — metric + rough magnitude + how measured. e.g. *"p95 of
-  /search 1200ms → <400ms (add the missing index + a 60s cache)"*, *"signup
-  completion +X% (remove the dead address step)"*, *"JS bundle 2.1MB → <900KB"*,
-  *"MTTR ↓ via structured logs + one dashboard"*, *"infra $/mo ↓ moving the cron
-  worker off the always-on dyno"*.
-- **Effort** — S/M/L + the main risk.
-- **Why now** — the business/engineering reason it matters for this stack.
+One card per signal that survives:
 
-## Phase 3 — Rank + present the shortlist
+- **Title** + **lens** (magic | friction | risk).
+- **Evidence** — the citation.
+- **Change** — concrete, by service.
+- **Worked when** — the check that passes after; a number only if you have one.
+- **Effort** — S/M/L and the main risk.
+- **Why now** — the reason for this stack this month.
 
-Adversarial pass on every card: *"real, measurable improvement, or generic slop?"*
-Drop the slop. Rank by **impact/effort**. Present a tight shortlist (~5–8),
-**mixing product + engineering**, a rewrite candidate only if it earns its place:
+Any field you cannot fill honestly → cut the card.
+
+## Phase 3 — Shortlist
+
+Rank by what it changes for a user against what it costs. Three to six cards,
+magic first when one earned it, a rewrite only with its ROI case:
 
 ```
-[eng] Add composite index on orders(creator_id, created_at)
-   evidence: api/queries/orders.rb:88 — full scan; logs show /orders p95 ~1.2s
-   outcome:  /orders p95 1.2s → <300ms; ~0 risk; effort S
+★ [magic] Search by tag
+   evidence: README "filter items by tag" — no route in api/routes.go; tags are stored (db/schema.sql:44)
+   change:   api: GET /items?tag= · web: a tag chip on the list
+   worked:   a tagged item shows under its tag; one test on the route
+   effort:   S · risk: none · why now: tags exist and nobody can use them
 
-[product] Email-digest of weekly activity
-   evidence: notification-service exists but only sends transactional; README
-             says retention is the Q3 goal
-   outcome:  W2 retention lever — measure via cohort open→return; effort M
+  [friction] Seed the local database from one command
+   evidence: README "run these 6 psql lines" — done by hand on every clone
+   change:   api: `make seed` wrapping the six lines; corgi-compose afterStart runs it
+   worked:   a fresh clone has data after corgi run
+   effort:   S · risk: none · why now: two new people onboarded this month
 ```
 
-Offer the user to pick one (or a few).
+Ask which one (or a few). Do not spec the rest.
 
-## Phase 4 — Spec the chosen suggestion
+## Phase 4 — Spec the chosen one
 
-Write `docs/suggestions/<slug>.md` — **reuse the `stories` spec shape** so it drops
-straight into implementation: problem + evidence (`file:line`), change **grouped by
-service**, the measurable outcome **and how to verify it**, effort/risk, rollout.
-Multi-service → add `## Contract` + producer→consumer order.
+Write it in the `stories` spec shape so it drops into implementation as is:
+problem and evidence (`file:line`), the change **by service**, `## Contract`
+plus producer→consumer order when it spans services, **done when** (the
+check), effort and risk, rollout. Show it in the answer; write
+`docs/suggestions/<slug>.md` only if the user wants a file in the repo — the
+spec otherwise lives on the task or the ticket.
 
-## Phase 5 — Offer a story (ask where)
+## Phase 5 — Give it a home, then offer the build
 
-Ask: **"Create a story for this?"** If yes, ask **where**:
-- **Tracker** — read `../_shared/tracker-mcp.md` first; confirm the detection.
-- **Project / service** — which tracker project, which service(s) the work lands in
-  (paths from `corgi-compose.yml`).
+Ask **"put it on the board?"** and where:
 
-**Preflight: confirm the matching tracker MCP is actually connected** before creating
-anything. Missing → don't silently create in the wrong tracker: keep
-`docs/suggestions/<slug>.md` as the deliverable + a paste-ready issue body + the
-tracker's new-issue URL, and stop.
+- **Task** — `corgi agent task add "<title>" --body -` with the spec on
+  stdin. On the board, the phone and the editor now, no tracker needed;
+  **Work on it** hands it to `stories`. The default when no tracker MCP is
+  connected.
+- **Tracker** — read `../_shared/tracker-mcp.md`; confirm the MCP is
+  connected, else fall back to the task plus a paste-ready body and the
+  tracker's new-issue URL. Create in draft/backlog, label `corgi-suggest`,
+  link or paste the spec. One terse comment at most.
+- **Just the spec** — leave the file; nothing filed.
 
-Connected → create the issue from the spec (Linear `mcp__linear-server__save_issue`
-with `title`+`team` and no `id` / Jira `mcp__atlassian__createJiraIssue`) at the chosen location, link the spec,
-report the key/link. Post one terse comment, not several — don't spam the ticket;
-update an existing comment in place rather than adding new ones. Then offer **"Implement it now?"** → hand the approved spec
-**and the created issue key** to the **`stories`** skill (it branches per service off
-that key — don't let it re-create the issue). Declined → leave the spec; done.
+Then record it so the proactive run never proposes it again:
+`corgi suggest-history record --slug <slug> --status filed|proposed --ticket
+<KEY or TASK-N> --title "<title>" --lens <magic|friction|risk>`.
+
+Then **"implement it now?"** → the `stories` skill with the ticket key or the
+task ref: it branches off that; don't let it re-create the issue. Declined →
+done.
 
 ## Scenarios & scaling
 
-- **Big workspace** → lens agents per service-cluster in parallel; orchestrator
-  merges + dedups the ledger before carding.
-- **Perf/cost claims needing real numbers** → `debug` provider, on demand, ask first;
-  else mark the magnitude an estimate and say so.
-- **One spec → one story** at a time; batch more later via `stories`.
+- **A focus was given** → one lens or one service, still cited, still ranked.
+- **No memory, no board, no history** → say so in one line and go on.
+- **Numbers wanted** → `debug` provider, ask first, read-only; else "estimate".
+- **Big stack** → walk service by service in the same pass; still ten signals.
+- **Every idea is taken** → say what is on the board already and what you
+  would have added; no card for its own sake.
