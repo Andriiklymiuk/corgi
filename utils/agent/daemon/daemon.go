@@ -698,7 +698,7 @@ func (d *Daemon) reportAttention(c command.Command) {
 		d.requestPublish()
 		return
 	}
-	d.notifyAttention("corgi agent · "+c.WorkspaceID, detail, c.WorkspaceID)
+	d.notifyAttention(notifyTitlePrefix+c.WorkspaceID, detail, c.WorkspaceID)
 	d.requestPublish()
 }
 
@@ -739,6 +739,10 @@ func needsPerson(body string) bool {
 	}
 	return false
 }
+
+// notifyTitlePrefix opens every notification the daemon sends, before the
+// workspace or session it is about.
+const notifyTitlePrefix = "corgi agent · "
 
 func (d *Daemon) notifyAttention(title, body, workspaceID string) {
 	d.notifyAttentionAt(title, body, workspaceID, "")
@@ -985,7 +989,7 @@ func (d *Daemon) commandFailed(c command.Command, err error) {
 	utils.Infof("agent: %s %s: %v\n", c.Action, c.WorkspaceID, err)
 	d.setDiag(WorkspaceDiagnostic{WorkspaceID: c.WorkspaceID, Warning: fmt.Sprintf("remote %s failed: %v", c.Action, err)})
 	if d.Notify != nil {
-		d.Notify("corgi agent · "+c.WorkspaceID, fmt.Sprintf("remote %s failed: %v", c.Action, err))
+		d.Notify(notifyTitlePrefix+c.WorkspaceID, fmt.Sprintf("remote %s failed: %v", c.Action, err))
 	}
 	d.requestPublish()
 }
@@ -1001,7 +1005,7 @@ func (d *Daemon) announceRemote(c command.Command, what string) {
 	if c.Source != "" {
 		body += " · via " + c.Source
 	}
-	d.Notify("corgi agent · "+c.WorkspaceID, body)
+	d.Notify(notifyTitlePrefix+c.WorkspaceID, body)
 }
 
 func (d *Daemon) findRunner(id string) *supervisor.Runner {

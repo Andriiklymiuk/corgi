@@ -257,7 +257,7 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		if s.Pending.Risk != "" {
 			data["risk"] = s.Pending.Risk
 		}
-		go d.Push(push.Message{Title: "corgi agent · " + label, Body: body, Category: "permission", Data: data, Thread: s.ID})
+		go d.Push(push.Message{Title: notifyTitlePrefix + label, Body: body, Category: "permission", Data: data, Thread: s.ID})
 	}
 	d.attentionMu.Lock()
 	if d.limitWatch == nil {
@@ -305,11 +305,11 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 			if !still || recent {
 				return
 			}
-			d.notifyAttention("corgi agent · "+label, "limit lifted"+d.accountWord(s)+" — back to work", s.Folder)
+			d.notifyAttention(notifyTitlePrefix+label, "limit lifted"+d.accountWord(s)+" — back to work", s.Folder)
 		})
 	}
 	if rested != "" {
-		go d.notifyAttention("corgi agent · "+label, "the turn resumed after the limit"+d.accountWord(s)+" is "+rested, s.Folder)
+		go d.notifyAttention(notifyTitlePrefix+label, "the turn resumed after the limit"+d.accountWord(s)+" is "+rested, s.Folder)
 	}
 }
 

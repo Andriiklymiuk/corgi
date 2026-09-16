@@ -418,7 +418,7 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 					d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
 					return
 				}
-				go d.notifyAttentionKey("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
+				go d.notifyAttentionKey(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
 				return
 			}
 		}
@@ -452,7 +452,7 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
 			return
 		}
-		go d.notifyAttentionKey("corgi agent · "+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
+		go d.notifyAttentionKey(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
 	}
 }
 
@@ -524,7 +524,7 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 	for _, n := range kept {
 		body += "\n  " + n.Body
 	}
-	go d.notifyAttention("corgi agent · "+spec.Workspace, body, spec.Workspace)
+	go d.notifyAttention(notifyTitlePrefix+spec.Workspace, body, spec.Workspace)
 }
 
 // retryDeferred starts the most urgent deferred fix for a workspace once
@@ -1047,7 +1047,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if kind, runs := d.watchState.Fixes.RecentBlocker(spec.Workspace, blockerWindow, time.Now()); runs >= 2 {
 		d.watchState.Fixes.Defer(e)
 		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: the last "+strconv.Itoa(runs)+" runs here failed on "+kind, time.Now())
-		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
 			"not working on "+e.Ref+": the last runs failed on "+kind+" — fix that and run corgi agent watch run",
 			spec.Workspace, e.URL)
 		return
@@ -1089,7 +1089,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		if err != nil {
 			fmt.Fprintf(logFile, "\n=== could not isolate: %v\n", err)
 			d.watchState.Fixes.Finish(e.Key, nil, "", "could not create worktrees: "+err.Error(), time.Now())
-			go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
+			go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
 				fmt.Sprintf("fix for %s did not start: could not create worktrees: %v", e.Ref, err), spec.Workspace, e.URL)
 			return
 		}
@@ -1118,7 +1118,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.mirrorHandoff(spec, e.Ref, started)
 		d.tripBreaker(spec, e, runErr.Error())
 		d.routineReport(spec, e, string(out), runErr)
-		go d.notifyAttentionAt("corgi agent · "+spec.Workspace,
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
 			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
 	}
@@ -1150,7 +1150,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if len(links) > 0 {
 		target = links[0]
 	}
-	go d.notifyAttentionAt("corgi agent · "+spec.Workspace, body, spec.Workspace, target)
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, target)
 }
 
 // Probe is one synthesized event's walk through the pipeline, for
@@ -1512,7 +1512,7 @@ func (d *Daemon) tripBreaker(spec WatchSpec, e watch.Event, lastErr string) {
 	if d.Workpad != nil {
 		go d.Workpad(spec.Workspace, e.Ref, "Blocked", reason+"\n\n`corgi agent watch unblock "+e.Ref+"` once it is fixed.")
 	}
-	go d.notifyAttentionAt("corgi agent · "+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
 }
 
 // blockIfRunSaidSo honours a run's own handoff: a packet in state blocked
@@ -1534,7 +1534,7 @@ func (d *Daemon) blockIfRunSaidSo(spec WatchSpec, e watch.Event, started time.Ti
 	if d.Workpad != nil {
 		go d.Workpad(spec.Workspace, e.Ref, "Blocked", reason+"\n\n`corgi agent watch unblock "+e.Ref+"` once it is fixed.")
 	}
-	go d.notifyAttentionAt("corgi agent · "+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
 }
 
 // RunLog is the last n lines of a run's log, for a surface that cannot open

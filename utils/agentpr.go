@@ -29,6 +29,12 @@ type PRSet struct {
 
 type prRunner func(dir, name string, args ...string) (string, error)
 
+// prRequest is what every repository's pull request shares.
+type prRequest struct {
+	branch, base, title, body string
+	draft                     bool
+}
+
 // prStepTimeout bounds each push and forge call: both talk to a network, and a
 // hung one would block the MCP handler that called the tool.
 const prStepTimeout = 3 * time.Minute
@@ -71,19 +77,21 @@ func openBranchPRs(dirs map[string]string, branch, base, title, body string, dra
 	sort.Strings(repos)
 
 	set := &PRSet{Branch: branch, Base: base}
+	req := prRequest{branch: branch, base: base, title: title, body: body, draft: draft}
 	for _, repo := range repos {
-		set.PRs = append(set.PRs, openOnePR(run, repo, dirs[repo], branch, base, title, body, draft))
+		set.PRs = append(set.PRs, openOnePR(run, repo, dirs[repo], req))
 	}
 	crossLinkPRs(run, set, dirs, body)
 	return set, nil
 }
 
-func openOnePR(run prRunner, repo, dir, branch, base, title, body string, draft bool) RepoPR {
+func openOnePR(run prRunner, repo, dir string, req prRequest) RepoPR {
+	branch := req.branch
 	pr := RepoPR{Repo: repo, Dir: dir, Branch: branch}
 
 	// Nothing to open a pull request for is the common case in a stack where
 	// the change touched two of five repositories.
-	if !branchHasCommits(run, dir, branch, base) {
+	if !branchHasCommits(run, dir, branch, req.base) {
 		pr.Skipped = "no commits on " + branch
 		return pr
 	}
@@ -101,7 +109,7 @@ func openOnePR(run prRunner, repo, dir, branch, base, title, body string, draft 
 		return pr
 	}
 
-	args := forge.createArgs(branch, base, title, body, draft)
+	args := forge.createArgs(branch, req.base, req.title, req.body, req.draft)
 	out, err := run(dir, forge.bin, args...)
 	if err != nil {
 		pr.Error = firstLine(out)

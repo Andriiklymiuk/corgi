@@ -231,33 +231,7 @@ type expoReceipt struct {
 // longer registered is dropped. Errors are for the log: a push is never
 // worth blocking anything on.
 func (s *Store) Send(ctx context.Context, m Message) error {
-	tokens := s.List()
-	if len(tokens) == 0 {
-		return nil
-	}
-	// A phone paired with two laptops answers the one that asked: the
-	// hostname is what pairing told it this laptop is called.
-	data := make(map[string]string, len(m.Data)+1)
-	for k, v := range m.Data {
-		data[k] = v
-	}
-	if _, ok := data["laptop"]; !ok {
-		if host, err := os.Hostname(); err == nil && host != "" {
-			data["laptop"] = host
-		}
-	}
-	msgs := make([]expoMessage, 0, len(tokens))
-	now := time.Now()
-	sent := tokens[:0]
-	for _, t := range tokens {
-		if !t.wants(m, now) {
-			continue
-		}
-		sent = append(sent, t)
-		msgs = append(msgs, expoMessage{To: t.Token, Title: m.Title, Body: m.Body, Sound: "default", Priority: "high",
-			CategoryID: m.Category, Data: data, ThreadID: m.Thread, ChannelID: channelFor(m.Category)})
-	}
-	tokens = sent
+	tokens, msgs := expoMessages(s.List(), m, time.Now())
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -291,6 +265,42 @@ func (s *Store) Send(ctx context.Context, m Message) error {
 		}
 	}
 	return nil
+}
+
+// expoMessages is one message per phone that wants m, with the tokens it
+// went to in the same order, so a receipt maps back to its phone.
+func expoMessages(tokens []Token, m Message, now time.Time) ([]Token, []expoMessage) {
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+	data := messageData(m)
+	msgs := make([]expoMessage, 0, len(tokens))
+	sent := tokens[:0]
+	for _, t := range tokens {
+		if !t.wants(m, now) {
+			continue
+		}
+		sent = append(sent, t)
+		msgs = append(msgs, expoMessage{To: t.Token, Title: m.Title, Body: m.Body, Sound: "default", Priority: "high",
+			CategoryID: m.Category, Data: data, ThreadID: m.Thread, ChannelID: channelFor(m.Category)})
+	}
+	return sent, msgs
+}
+
+// messageData is m's data with the laptop named: a phone paired with two
+// laptops answers the one that asked, and the hostname is what pairing
+// told it this laptop is called.
+func messageData(m Message) map[string]string {
+	data := make(map[string]string, len(m.Data)+1)
+	for k, v := range m.Data {
+		data[k] = v
+	}
+	if _, ok := data["laptop"]; !ok {
+		if host, err := os.Hostname(); err == nil && host != "" {
+			data["laptop"] = host
+		}
+	}
+	return data
 }
 
 func channelFor(category string) string {

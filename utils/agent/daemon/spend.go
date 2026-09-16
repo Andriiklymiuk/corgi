@@ -46,7 +46,7 @@ func (d *Daemon) checkSpend(live []sessions.Session, now time.Time) {
 		if n := delta.Total(); n > 0 && d.Ledger != nil {
 			today := d.Ledger.AddTokens(s.Label, n, now)
 			if dayCap := d.dayCapFor(s); dayCap > 0 && today >= dayCap && today-n < dayCap {
-				go d.notifyAttention("corgi agent · "+s.Label, "over its day budget: "+sessions.Tokens(today)+" of "+sessions.Tokens(dayCap)+" tokens today", s.Folder)
+				go d.notifyAttention(notifyTitlePrefix+s.Label, "over its day budget: "+sessions.Tokens(today)+" of "+sessions.Tokens(dayCap)+" tokens today", s.Folder)
 			}
 		}
 		sp := sessions.Spend{Tokens: mark.total.Total(), Turns: int(mark.total.Turns), At: now}
@@ -59,7 +59,7 @@ func (d *Daemon) checkSpend(live []sessions.Session, now time.Time) {
 			if limit == 0 {
 				limit = d.SessionCap
 			}
-			go d.notifyAttention("corgi agent · "+label, "over its budget: "+sessions.Tokens(sp.Tokens)+" of "+sessions.Tokens(limit)+" tokens", s.Folder)
+			go d.notifyAttention(notifyTitlePrefix+label, "over its budget: "+sessions.Tokens(sp.Tokens)+" of "+sessions.Tokens(limit)+" tokens", s.Folder)
 		}
 	}
 	// A session that left the board takes its mark with it.

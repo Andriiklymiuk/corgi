@@ -43,7 +43,7 @@ func (d *Daemon) advancePlans(ctx context.Context) {
 		if pr.Over() {
 			_, _ = plans.SetState(p.ID, watch.PlanDone, now)
 			utils.Infof("agent: plan %s is done: %d done, %d in review, %d canceled\n", p.Ref(), pr.Done, pr.Review, pr.Canceled)
-			go d.notifyAttentionAt("corgi agent · "+p.Workspace,
+			go d.notifyAttentionAt(notifyTitlePrefix+p.Workspace,
 				fmt.Sprintf("plan %s finished: %s — %d in review, %d done", p.Ref(), clipGoal(p.Goal), pr.Review, pr.Done), p.Workspace, "")
 			continue
 		}

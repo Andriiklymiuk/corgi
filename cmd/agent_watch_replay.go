@@ -54,7 +54,7 @@ func runAgentWatchReplay(cmd *cobra.Command, _ []string) {
 		byWorkspace[s.Workspace] = s
 	}
 	// A setting tried on the spot, without saving it anywhere.
-	if raw, _ := cmd.Flags().GetString("auto-for"); cmd.Flags().Changed("auto-for") {
+	if raw, _ := cmd.Flags().GetString(watchFlagAutoFor); cmd.Flags().Changed(watchFlagAutoFor) {
 		kinds, err := parseAutoFor(raw)
 		if err != nil {
 			exitWithError("agent_watch_replay", err, 2)
@@ -145,6 +145,6 @@ func sortedKeys(m map[string][]replayRow) []string {
 
 func init() {
 	agentWatchReplayCmd.Flags().String("since", "168h", "How far back to replay")
-	agentWatchReplayCmd.Flags().String("auto-for", "", "Try this --auto-for setting without saving it")
+	agentWatchReplayCmd.Flags().String(watchFlagAutoFor, "", "Try this --auto-for setting without saving it")
 	agentWatchCmd.AddCommand(agentWatchReplayCmd)
 }

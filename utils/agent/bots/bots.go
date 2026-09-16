@@ -67,16 +67,24 @@ func ValidName(name string) bool { return namePattern.MatchString(name) }
 // Colors are the hues a surface may draw; the first is the default.
 var Colors = []string{"indigo", "orange", "teal", "pink", "green", "amber", "blue", "red"}
 
+// The kinds a default bot answers to, by name so the catalogue below and
+// the fixed order agree.
+const (
+	triggerPRReview        = "pr.review"
+	triggerReviewRequested = "review.requested"
+	triggerCIFailed        = "ci.failed"
+)
+
 // Triggers are the event kinds a bot may run on, in the words the watch
 // uses; the map says what each means for a person.
 var Triggers = map[string]string{
-	"pr.review":        "a review lands on a pull request",
-	"pr.comment":       "someone comments on a pull request",
-	"review.requested": "someone asks for a review",
-	"ci.failed":        "a build goes red",
-	"issue.new":        "a new issue arrives",
-	"issue.comment":    "someone comments on an issue",
-	"task":             "a task of your own lands",
+	triggerPRReview:        "a review lands on a pull request",
+	"pr.comment":           "someone comments on a pull request",
+	triggerReviewRequested: "someone asks for a review",
+	triggerCIFailed:        "a build goes red",
+	"issue.new":            "a new issue arrives",
+	"issue.comment":        "someone comments on an issue",
+	"task":                 "a task of your own lands",
 }
 
 // ValidTrigger says whether kind is one a bot can run on.
@@ -84,7 +92,7 @@ func ValidTrigger(kind string) bool { _, ok := Triggers[kind]; return ok }
 
 // TriggerKinds is every kind a bot can run on, in a fixed order.
 func TriggerKinds() []string {
-	return []string{"review.requested", "pr.review", "pr.comment", "ci.failed", "issue.new", "issue.comment", "task"}
+	return []string{triggerReviewRequested, triggerPRReview, "pr.comment", triggerCIFailed, "issue.new", "issue.comment", "task"}
 }
 
 // ParseTriggers reads kinds off a flag or a phone: trimmed, lower-case,
@@ -158,9 +166,9 @@ func (b Bot) RunsOn(kind string) bool {
 // Templates are the bots most people want, ready to add: a name, a
 // title, a soul and what they run on. The workspace is the person's.
 var Templates = []Bot{
-	{Name: "reviewer", Title: "Code Reviewer", Color: "orange", Model: "sonnet", On: []string{"review.requested", "pr.review"},
+	{Name: "reviewer", Title: "Code Reviewer", Color: "orange", Model: "sonnet", On: []string{triggerReviewRequested, triggerPRReview},
 		Soul: "You review pull requests in this repository. Read the diff, run the tests, be brief: what is wrong, what is risky, what is fine. Post your findings as one review comment on the pull request. Never merge, never push."},
-	{Name: "fixer", Title: "Build Fixer", Color: "red", Model: "sonnet", On: []string{"ci.failed"},
+	{Name: "fixer", Title: "Build Fixer", Color: "red", Model: "sonnet", On: []string{triggerCIFailed},
 		Soul: "A build went red on a branch. Read the failing job, find the cause, fix it on that branch with the smallest change, run the tests, push, and say in one line what it was."},
 	{Name: "shipper", Title: "Shipper", Color: "teal", Model: "opus", Isolate: true,
 		Soul: "You take a ticket from spec to pull request: read the ticket, plan in three lines, implement in a worktree of your own, run the tests, open a draft pull request, and hand off what is left."},

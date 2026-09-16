@@ -26,6 +26,24 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
+// The flag names, once, so the definition and every read agree.
+const (
+	watchFlagMaxPerHour   = "max-per-hour"
+	watchFlagMaxPerDay    = "max-per-day"
+	watchFlagReviewStatus = "review-status"
+	watchFlagNoRetry      = "no-retry"
+	watchFlagAutoMerge    = "auto-merge"
+	watchFlagHandOver     = "hand-over"
+	watchFlagAutoCarry    = "auto-carry"
+	watchFlagRerunCI      = "rerun-ci"
+	watchFlagCompactAt    = "compact-at"
+	watchFlagDoneWhen     = "done-when"
+	watchFlagAutoAllow    = "auto-allow"
+	watchFlagAutoFor      = "auto-for"
+	watchFlagDaysOff      = "days-off"
+	watchFlagDryRun       = "dry-run"
+)
+
 var agentWatchCmd = &cobra.Command{
 	Use:   "watch",
 	Short: "Watch the tracker and your pull requests: new issues, new comments, reviews — notify, or fix",
@@ -105,18 +123,18 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("prs") {
 			wc.PRs, _ = flags.GetBool("prs")
 		}
-		if flags.Changed("max-per-hour") {
-			if wc.MaxFixesPerHour, _ = flags.GetInt("max-per-hour"); wc.MaxFixesPerHour < 1 {
+		if flags.Changed(watchFlagMaxPerHour) {
+			if wc.MaxFixesPerHour, _ = flags.GetInt(watchFlagMaxPerHour); wc.MaxFixesPerHour < 1 {
 				return fmt.Errorf("--max-per-hour must be at least 1")
 			}
 		}
-		if flags.Changed("max-per-day") {
-			if wc.MaxFixesPerDay, _ = flags.GetInt("max-per-day"); wc.MaxFixesPerDay < 1 {
+		if flags.Changed(watchFlagMaxPerDay) {
+			if wc.MaxFixesPerDay, _ = flags.GetInt(watchFlagMaxPerDay); wc.MaxFixesPerDay < 1 {
 				return fmt.Errorf("--max-per-day must be at least 1")
 			}
 		}
-		if flags.Changed("review-status") {
-			v, _ := flags.GetString("review-status")
+		if flags.Changed(watchFlagReviewStatus) {
+			v, _ := flags.GetString(watchFlagReviewStatus)
 			wc.ReviewStatus = strings.TrimSpace(v)
 		}
 		if flags.Changed("isolate") {
@@ -132,8 +150,8 @@ var agentWatchEnableCmd = &cobra.Command{
 				utils.Info("agent: --slots above 1 turns on --isolate: each run gets worktrees of its own")
 			}
 		}
-		if flags.Changed("no-retry") {
-			wc.NoRetry, _ = flags.GetBool("no-retry")
+		if flags.Changed(watchFlagNoRetry) {
+			wc.NoRetry, _ = flags.GetBool(watchFlagNoRetry)
 		}
 		if flags.Changed("lease") {
 			wc.Lease, _ = flags.GetBool("lease")
@@ -144,23 +162,23 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("ci") {
 			wc.CI, _ = flags.GetBool("ci")
 		}
-		if flags.Changed("auto-merge") {
-			wc.AutoMerge, _ = flags.GetBool("auto-merge")
+		if flags.Changed(watchFlagAutoMerge) {
+			wc.AutoMerge, _ = flags.GetBool(watchFlagAutoMerge)
 		}
 		if flags.Changed("approve") {
 			wc.Approve, _ = flags.GetBool("approve")
 		}
-		if flags.Changed("hand-over") {
-			wc.HandOver, _ = flags.GetBool("hand-over")
+		if flags.Changed(watchFlagHandOver) {
+			wc.HandOver, _ = flags.GetBool(watchFlagHandOver)
 		}
 		if flags.Changed("lessons") {
 			wc.Lessons, _ = flags.GetBool("lessons")
 		}
-		if flags.Changed("auto-carry") {
-			wc.AutoCarry, _ = flags.GetBool("auto-carry")
+		if flags.Changed(watchFlagAutoCarry) {
+			wc.AutoCarry, _ = flags.GetBool(watchFlagAutoCarry)
 		}
-		if flags.Changed("rerun-ci") {
-			wc.RerunCI, _ = flags.GetBool("rerun-ci")
+		if flags.Changed(watchFlagRerunCI) {
+			wc.RerunCI, _ = flags.GetBool(watchFlagRerunCI)
 		}
 		if flags.Changed("silent") {
 			wc.Silent, _ = flags.GetBool("silent")
@@ -171,19 +189,19 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("rebase") {
 			wc.Rebase, _ = flags.GetBool("rebase")
 		}
-		if flags.Changed("compact-at") {
-			v, _ := flags.GetInt("compact-at")
+		if flags.Changed(watchFlagCompactAt) {
+			v, _ := flags.GetInt(watchFlagCompactAt)
 			if v < 0 || v > 100 {
 				return fmt.Errorf("compact-at is a percent, 0 to 100, not %d", v)
 			}
 			wc.CompactAt = v
 		}
-		if flags.Changed("done-when") {
-			v, _ := flags.GetString("done-when")
+		if flags.Changed(watchFlagDoneWhen) {
+			v, _ := flags.GetString(watchFlagDoneWhen)
 			wc.DoneWhen = splitList(v)
 		}
-		if flags.Changed("auto-allow") {
-			v, _ := flags.GetString("auto-allow")
+		if flags.Changed(watchFlagAutoAllow) {
+			v, _ := flags.GetString(watchFlagAutoAllow)
 			policy, err := config.ParseAutoAllow(v)
 			if err != nil {
 				return err
@@ -197,8 +215,8 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("bots") {
 			wc.Bots, _ = flags.GetBool("bots")
 		}
-		if flags.Changed("auto-for") {
-			v, _ := flags.GetString("auto-for")
+		if flags.Changed(watchFlagAutoFor) {
+			v, _ := flags.GetString(watchFlagAutoFor)
 			kinds, err := parseAutoFor(v)
 			if err != nil {
 				return err
@@ -216,8 +234,8 @@ var agentWatchEnableCmd = &cobra.Command{
 			}
 			wc.Quiet = strings.TrimSpace(v)
 		}
-		if flags.Changed("days-off") {
-			v, _ := flags.GetString("days-off")
+		if flags.Changed(watchFlagDaysOff) {
+			v, _ := flags.GetString(watchFlagDaysOff)
 			days, err := daemon.ParseDaysOff([]string{v})
 			if err != nil {
 				return fmt.Errorf("--days-off: %w", err)
@@ -282,7 +300,7 @@ var agentWatchRunCmd = &cobra.Command{
 			utils.Info("no watched workspaces — `corgi agent watch enable` inside one")
 			return nil
 		}
-		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		dryRun, _ := cmd.Flags().GetBool(watchFlagDryRun)
 		state := watch.LoadState(dir)
 		if dryRun {
 			state = watch.LoadState(filepath.Join(dir, "watch", "dry-run"))
@@ -419,63 +437,75 @@ func synthesizeWatchEvent(kind watch.Kind, specs []daemon.WatchSpec, ref, url, b
 	e := watch.Event{Kind: kind, Ref: ref, URL: url, Body: body, Title: "watch test", Author: "watch test", Mine: true, At: time.Now()}
 	switch kind {
 	case watch.KindIssueNew, watch.KindIssueComment:
-		e.Source = "linear"
-		for _, src := range first.Sources {
-			if src.Name() == "jira" {
-				e.Source = "jira"
-			}
-		}
-		if e.Ref == "" {
-			e.Ref = firstNonEmptyString(first.Project, "TEST") + "-1"
-		}
-		if kind == watch.KindIssueComment && e.Body == "" {
-			e.Body = "could you also cover the empty state?"
-		}
+		synthesizeIssueEvent(&e, first)
 	case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested:
-		e.Source = "github"
-		if e.Ref == "" {
-			repo := "acme/api"
-			if len(first.Repos) > 0 {
-				repo = first.Repos[0]
-			}
-			e.Ref = repo + "#1"
-		}
-		if e.URL == "" {
-			e.URL = prRefURL(e.Ref)
-			if strings.Contains(e.Ref, "!") {
-				e.Source = "gitlab"
-			}
-		}
-		if e.Body == "" {
-			e.Body = "nit: this name reads wrong"
-		}
-		if kind == watch.KindPRReview {
-			e.State = "changes_requested"
-		}
-		if kind == watch.KindReviewRequested {
-			// Someone else's pull request: not mine, which is the whole
-			// difference between reviewing it and fixing my own.
-			e.Mine = false
-			e.Author = "a colleague"
-			e.Title = "Retry the upload on a 502"
-		}
+		synthesizePullEvent(&e, first)
 	case watch.KindCIFailed:
-		e.Source = "github"
-		if e.Ref == "" {
-			e.Ref = "acme/api"
-			if len(first.Repos) > 0 {
-				e.Ref = first.Repos[0]
-			}
-		}
-		if e.URL == "" {
-			e.URL = "https://github.com/" + e.Ref + "/actions"
-		}
-		e.Title = "e2e / checkout failed"
+		synthesizeCIEvent(&e, first)
 	default:
 		return e, fmt.Errorf("kind %q — want issue.new, issue.comment, pr.comment, pr.review, review.requested or ci.failed", kind)
 	}
 	e.Key = "test:" + string(kind) + ":" + e.Ref
 	return e, nil
+}
+
+func synthesizeIssueEvent(e *watch.Event, first daemon.WatchSpec) {
+	e.Source = "linear"
+	for _, src := range first.Sources {
+		if src.Name() == "jira" {
+			e.Source = "jira"
+		}
+	}
+	if e.Ref == "" {
+		e.Ref = firstNonEmptyString(first.Project, "TEST") + "-1"
+	}
+	if e.Kind == watch.KindIssueComment && e.Body == "" {
+		e.Body = "could you also cover the empty state?"
+	}
+}
+
+func synthesizePullEvent(e *watch.Event, first daemon.WatchSpec) {
+	e.Source = "github"
+	if e.Ref == "" {
+		e.Ref = watchFirstRepo(first, "acme/api") + "#1"
+	}
+	if e.URL == "" {
+		e.URL = prRefURL(e.Ref)
+		if strings.Contains(e.Ref, "!") {
+			e.Source = "gitlab"
+		}
+	}
+	if e.Body == "" {
+		e.Body = "nit: this name reads wrong"
+	}
+	if e.Kind == watch.KindPRReview {
+		e.State = "changes_requested"
+	}
+	if e.Kind == watch.KindReviewRequested {
+		// Someone else's pull request: not mine, which is the whole
+		// difference between reviewing it and fixing my own.
+		e.Mine = false
+		e.Author = "a colleague"
+		e.Title = "Retry the upload on a 502"
+	}
+}
+
+func synthesizeCIEvent(e *watch.Event, first daemon.WatchSpec) {
+	e.Source = "github"
+	if e.Ref == "" {
+		e.Ref = watchFirstRepo(first, "acme/api")
+	}
+	if e.URL == "" {
+		e.URL = "https://github.com/" + e.Ref + "/actions"
+	}
+	e.Title = "e2e / checkout failed"
+}
+
+func watchFirstRepo(spec daemon.WatchSpec, fallback string) string {
+	if len(spec.Repos) > 0 {
+		return spec.Repos[0]
+	}
+	return fallback
 }
 
 func firstNonEmptyString(a, b string) string {
@@ -603,73 +633,94 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 		utils.PrintJSON(watchStatusJSON(dir, specs, state, now))
 		return
 	}
+	printWatchTokens(dir, secrets)
+	if len(specs) == 0 {
+		fmt.Println("\nNo watched workspaces. Inside one: corgi agent watch enable --labels bug --prs")
+		return
+	}
+	printWatchedWorkspaces(specs, state.Fixes, now)
+	printWatchPolls(state.Summaries())
+	printWatchFixes(state.Fixes.RecentFixes("", 5), now)
+	if n := countWatchEventsToday(dir); n > 0 {
+		fmt.Printf("\n%d event(s) today — %s\n", n, filepath.Join(dir, "watch", "events.jsonl"))
+	}
+}
+
+func printWatchTokens(dir string, secrets watch.Secrets) {
 	fmt.Println("Tokens")
 	fmt.Printf("  machine-wide  %s · webhook secret %s\n", tokenLine(secrets), watch.Fingerprint(secrets.HookSecret))
 	for _, id := range watch.WorkspacesWithSecrets(dir) {
 		fmt.Printf("  %-13s %s\n", id, tokenLine(watch.LoadSecretsFor(dir, id)))
 	}
-	if len(specs) == 0 {
-		fmt.Println("\nNo watched workspaces. Inside one: corgi agent watch enable --labels bug --prs")
-		return
-	}
+}
+
+func printWatchedWorkspaces(specs []daemon.WatchSpec, fixes *watch.FixLog, now time.Time) {
 	fmt.Println("\nWatched")
 	for _, s := range specs {
-		names := sourceNames(s)
-		if len(names) == 0 {
-			names = []string{"no source with a token"}
-		}
-		line := fmt.Sprintf("  %-20s %-8s every %-4s %s", s.Workspace, s.Action, s.Interval, strings.Join(names, ", "))
-		if len(s.Skipped) > 0 {
-			line += fmt.Sprintf(" (%s skipped: --prs off)", strings.Join(s.Skipped, ", "))
-		}
-		if len(s.DaysOff) > 0 {
-			line += " · off " + daemon.DaysOffWords(s.DaysOff)
-		}
-		fmt.Println(line)
+		fmt.Println(watchedWorkspaceLine(s))
 		if s.Action == "fix" {
-			fmt.Printf("  %-20s %s\n", "", fixBudgetLine(s, state.Fixes, now))
+			fmt.Printf("  %-20s %s\n", "", fixBudgetLine(s, fixes, now))
 		} else if s.Quiet != "" {
 			// Quiet hours hold the notification too, so a reporting watch
 			// has to say when it goes quiet or it looks broken in the evening.
 			fmt.Printf("  %-20s quiet %s — held until the window opens\n", "", s.Quiet)
 		}
 	}
-	polls := state.Summaries()
-	if len(polls) > 0 {
-		fmt.Println("\nLast polls")
-		for _, p := range polls {
-			line := fmt.Sprintf("  %-28s %s", p.Key, p.Polled)
-			if p.Error != "" {
-				line += " ✗ " + p.Error
-			}
-			fmt.Println(line)
-		}
-	}
-	if fixes := state.Fixes.RecentFixes("", 5); len(fixes) > 0 {
-		fmt.Println("\nLast fixes")
-		for _, r := range fixes {
-			what := r.Ref
-			if what == "" {
-				what = r.Key
-			}
-			line := fmt.Sprintf("  %-28s %s", what, roughAge(now.Sub(r.StartedAt))+" ago")
-			switch {
-			case r.Error != "":
-				line += " ✗ " + firstLineOf(r.Error)
-			case len(r.PRs) > 0:
-				line += " → " + strings.Join(r.PRs, " ")
-			case r.Done():
-				line += " → " + firstLineOf(r.Note)
-			default:
-				line += " · running"
-			}
-			fmt.Println(line)
-		}
-	}
+}
 
-	if n := countWatchEventsToday(dir); n > 0 {
-		fmt.Printf("\n%d event(s) today — %s\n", n, filepath.Join(dir, "watch", "events.jsonl"))
+func watchedWorkspaceLine(s daemon.WatchSpec) string {
+	names := sourceNames(s)
+	if len(names) == 0 {
+		names = []string{"no source with a token"}
 	}
+	line := fmt.Sprintf("  %-20s %-8s every %-4s %s", s.Workspace, s.Action, s.Interval, strings.Join(names, ", "))
+	if len(s.Skipped) > 0 {
+		line += fmt.Sprintf(" (%s skipped: --prs off)", strings.Join(s.Skipped, ", "))
+	}
+	if len(s.DaysOff) > 0 {
+		line += " · off " + daemon.DaysOffWords(s.DaysOff)
+	}
+	return line
+}
+
+func printWatchPolls(polls []watch.Summary) {
+	if len(polls) == 0 {
+		return
+	}
+	fmt.Println("\nLast polls")
+	for _, p := range polls {
+		line := fmt.Sprintf("  %-28s %s", p.Key, p.Polled)
+		if p.Error != "" {
+			line += " ✗ " + p.Error
+		}
+		fmt.Println(line)
+	}
+}
+
+func printWatchFixes(fixes []watch.FixRecord, now time.Time) {
+	if len(fixes) == 0 {
+		return
+	}
+	fmt.Println("\nLast fixes")
+	for _, r := range fixes {
+		fmt.Println(fixRecordLine(r, now))
+	}
+}
+
+// fixRecordLine is one run: what it was about, how long ago, how it ended.
+func fixRecordLine(r watch.FixRecord, now time.Time) string {
+	line := fmt.Sprintf("  %-28s %s", firstNonEmptyString(r.Ref, r.Key), roughAge(now.Sub(r.StartedAt))+" ago")
+	switch {
+	case r.Error != "":
+		line += " ✗ " + firstLineOf(r.Error)
+	case len(r.PRs) > 0:
+		line += " → " + strings.Join(r.PRs, " ")
+	case r.Done():
+		line += " → " + firstLineOf(r.Note)
+	default:
+		line += " · running"
+	}
+	return line
 }
 
 // loadWatchSpecs builds the daemon's watches from config and tokens. A
@@ -687,72 +738,100 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 	var out []daemon.WatchSpec
 	for _, w := range registry.Sorted() {
 		repo, _ := config.LoadRepo(w.AbsPath)
-		resolved := config.Resolve(w.ID, repo, user)
-		wc := resolved.Watch
-		if wc == nil || !wc.Enabled {
-			// No watch, but routines on a clock still need a spec to run
-			// under: the caps and the log, no sources, no polling.
-			if len(resolved.Routines) > 0 {
-				out = append(out, daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir),
-					SkipPermissions: resolved.DangerouslySkipPermissions, Models: resolved.Models, Routines: resolved.Routines})
-			}
-			continue
+		if spec, ok := watchSpecOf(dir, w, config.Resolve(w.ID, repo, user)); ok {
+			out = append(out, spec)
 		}
-		secrets := watch.LoadSecretsFor(dir, w.ID)
-		spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
-			Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
-			Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-			MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
-		if wc.Action == "fix" {
-			spec.Action = "fix"
-		}
-		// A bad day name in the file is ignored, not fatal: the watch runs
-		// every day rather than not at all.
-		if days, err := daemon.ParseDaysOff(wc.DaysOff); err == nil {
-			spec.DaysOff = days
-		} else {
-			utils.Infof("agent: watch %s: daysOff ignored: %v\n", w.ID, err)
-		}
-		// A source the rules take nothing from is not built: polling it would
-		// only spend requests.
-		spec.Skipped = spec.Rules.DeadSources()
-		if wc.Interval != "" {
-			if d, err := time.ParseDuration(wc.Interval); err == nil {
-				spec.Interval = d
-			} else if wc.Interval == "0" {
-				spec.Interval = 0
-			}
-		}
-		tracker := wc.Tracker
-		if tracker == "" {
-			switch {
-			case secrets.Linear != "":
-				tracker = "linear"
-			case secrets.JiraToken != "":
-				tracker = "jira"
-			}
-		}
-		switch tracker {
-		case "linear":
-			if secrets.Linear != "" {
-				spec.Sources = append(spec.Sources, watch.NewLinear(secrets, wc.Project))
-			}
-		case "jira":
-			if secrets.JiraToken != "" {
-				spec.Sources = append(spec.Sources, watch.NewJira(secrets, wc.Project))
-			}
-		}
-		if !spec.Rules.DeadSource("github") {
-			if gh := watch.NewGitHub(secrets, wc.Repos); gh.Token != "" {
-				spec.Sources = append(spec.Sources, gh)
-			}
-		}
-		if !spec.Rules.DeadSource("gitlab") && secrets.GitLab != "" {
-			spec.Sources = append(spec.Sources, watch.NewGitLab(secrets))
-		}
-		out = append(out, spec)
 	}
 	return out, nil
+}
+
+// watchSpecOf is one workspace's spec; false when it neither watches nor
+// runs routines, so the daemon has nothing to do there.
+func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (daemon.WatchSpec, bool) {
+	wc := resolved.Watch
+	if wc == nil || !wc.Enabled {
+		// No watch, but routines on a clock still need a spec to run
+		// under: the caps and the log, no sources, no polling.
+		if len(resolved.Routines) > 0 {
+			return daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir),
+				SkipPermissions: resolved.DangerouslySkipPermissions, Models: resolved.Models, Routines: resolved.Routines}, true
+		}
+		return daemon.WatchSpec{}, false
+	}
+	secrets := watch.LoadSecretsFor(dir, w.ID)
+	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
+		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
+		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
+		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
+	if wc.Action == "fix" {
+		spec.Action = "fix"
+	}
+	// A bad day name in the file is ignored, not fatal: the watch runs
+	// every day rather than not at all.
+	if days, err := daemon.ParseDaysOff(wc.DaysOff); err == nil {
+		spec.DaysOff = days
+	} else {
+		utils.Infof("agent: watch %s: daysOff ignored: %v\n", w.ID, err)
+	}
+	// A source the rules take nothing from is not built: polling it would
+	// only spend requests.
+	spec.Skipped = spec.Rules.DeadSources()
+	spec.Interval = watchInterval(wc.Interval, spec.Interval)
+	spec.Sources = watchSources(spec.Rules, wc, secrets)
+	return spec, true
+}
+
+// watchInterval is the configured poll interval; "0" means webhooks only,
+// and anything else unreadable keeps the default.
+func watchInterval(raw string, fallback time.Duration) time.Duration {
+	if raw == "" {
+		return fallback
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		return d
+	}
+	if raw == "0" {
+		return 0
+	}
+	return fallback
+}
+
+// watchTracker is the tracker a workspace polls: the one configured, else
+// whichever has a token.
+func watchTracker(configured string, secrets watch.Secrets) string {
+	if configured != "" {
+		return configured
+	}
+	switch {
+	case secrets.Linear != "":
+		return "linear"
+	case secrets.JiraToken != "":
+		return "jira"
+	}
+	return ""
+}
+
+func watchSources(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secrets) []watch.Source {
+	var sources []watch.Source
+	switch watchTracker(wc.Tracker, secrets) {
+	case "linear":
+		if secrets.Linear != "" {
+			sources = append(sources, watch.NewLinear(secrets, wc.Project))
+		}
+	case "jira":
+		if secrets.JiraToken != "" {
+			sources = append(sources, watch.NewJira(secrets, wc.Project))
+		}
+	}
+	if !rules.DeadSource("github") {
+		if gh := watch.NewGitHub(secrets, wc.Repos); gh.Token != "" {
+			sources = append(sources, gh)
+		}
+	}
+	if !rules.DeadSource("gitlab") && secrets.GitLab != "" {
+		sources = append(sources, watch.NewGitLab(secrets))
+	}
+	return sources
 }
 
 func tokenLine(s watch.Secrets) string {
@@ -911,6 +990,17 @@ func currentWorkspaceID(dir string) (string, error) {
 }
 
 func describeWatch(wc *config.WatchConfig) string {
+	action := firstNonEmptyString(wc.Action, "notify")
+	out := strings.Join(describeWatchParts(wc), " · ") + " → " + action
+	if action == "fix" {
+		out += describeWatchCaps(wc)
+	}
+	return out
+}
+
+// describeWatchParts is what the watch listens for and does, in the order
+// the flags read.
+func describeWatchParts(wc *config.WatchConfig) []string {
 	var parts []string
 	if len(wc.Labels) > 0 {
 		parts = append(parts, "labels "+strings.Join(wc.Labels, ","))
@@ -920,53 +1010,37 @@ func describeWatch(wc *config.WatchConfig) string {
 	} else {
 		parts = append(parts, "assigned to me")
 	}
-	if wc.Comments {
-		parts = append(parts, "issue comments")
-	}
-	if wc.PRs {
-		parts = append(parts, "PR reviews and comments")
-	}
-	if wc.HandOver {
-		parts = append(parts, "handed to the session on the branch")
-	}
-	if wc.AutoMerge {
-		parts = append(parts, "merged when green and approved")
-	}
-	if wc.Approve {
-		parts = append(parts, "review requests approved when clean")
-	}
-	if wc.Bots {
-		parts = append(parts, "bot comments count")
-	}
-	if wc.AutoAllow == config.AutoAllowReads {
-		parts = append(parts, "reads allowed by policy")
-	}
-	if len(wc.DoneWhen) > 0 {
-		parts = append(parts, "done when "+strings.Join(wc.DoneWhen, " and "))
-	}
-	if wc.CompactAt > 0 {
-		parts = append(parts, fmt.Sprintf("/compact past %d%%", wc.CompactAt))
-	}
-	if wc.Rebase {
-		parts = append(parts, "rebased when main moves")
-	}
-	if wc.Lessons {
-		parts = append(parts, "lessons written down")
-	}
-	action := wc.Action
-	if action == "" {
-		action = "notify"
-	}
-	out := strings.Join(parts, " · ") + " → " + action
-	if action == "fix" {
-		perHour, perDay := daemon.WatchSpec{MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay}.FixCaps()
-		out += fmt.Sprintf(", at most %d/h %d/day", perHour, perDay)
-		if len(wc.DaysOff) > 0 {
-			out += ", off " + strings.Join(wc.DaysOff, "/")
+	for _, p := range []struct {
+		on   bool
+		text string
+	}{
+		{wc.Comments, "issue comments"},
+		{wc.PRs, "PR reviews and comments"},
+		{wc.HandOver, "handed to the session on the branch"},
+		{wc.AutoMerge, "merged when green and approved"},
+		{wc.Approve, "review requests approved when clean"},
+		{wc.Bots, "bot comments count"},
+		{wc.AutoAllow == config.AutoAllowReads, "reads allowed by policy"},
+		{len(wc.DoneWhen) > 0, "done when " + strings.Join(wc.DoneWhen, " and ")},
+		{wc.CompactAt > 0, fmt.Sprintf("/compact past %d%%", wc.CompactAt)},
+		{wc.Rebase, "rebased when main moves"},
+		{wc.Lessons, "lessons written down"},
+	} {
+		if p.on {
+			parts = append(parts, p.text)
 		}
-		if wc.Quiet != "" {
-			out += ", quiet " + wc.Quiet
-		}
+	}
+	return parts
+}
+
+func describeWatchCaps(wc *config.WatchConfig) string {
+	perHour, perDay := daemon.WatchSpec{MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay}.FixCaps()
+	out := fmt.Sprintf(", at most %d/h %d/day", perHour, perDay)
+	if len(wc.DaysOff) > 0 {
+		out += ", off " + strings.Join(wc.DaysOff, "/")
+	}
+	if wc.Quiet != "" {
+		out += ", quiet " + wc.Quiet
 	}
 	return out
 }
@@ -1029,34 +1103,34 @@ func init() {
 	f.Bool("auto", false, "Shorthand for --action fix --prs --comments (not --reviews: reviewing someone else's PR is a separate ask): work on what arrives without being asked, draft PRs only")
 	f.Bool("comments", false, "Also new comments on issues assigned to me")
 	f.Bool("prs", false, "Also reviews and comments on pull requests I opened")
-	f.Int("max-per-hour", 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
-	f.Int("max-per-day", 0, "With --action fix: at most this many fixes a day (default 10)")
+	f.Int(watchFlagMaxPerHour, 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
+	f.Int(watchFlagMaxPerDay, 0, "With --action fix: at most this many fixes a day (default 10)")
 	f.String("quiet", "", "Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens")
-	f.String("days-off", "", "Days the watch sleeps through — weekends, or sat,sun, or mon,fri: no polling, no fix, nothing rings until the next working day (none clears)")
+	f.String(watchFlagDaysOff, "", "Days the watch sleeps through — weekends, or sat,sun, or mon,fri: no polling, no fix, nothing rings until the next working day (none clears)")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
-	f.String("review-status", "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
+	f.String(watchFlagReviewStatus, "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
 	f.Bool("isolate", false, "Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout")
-	f.Bool("no-retry", false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
+	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
-	f.Bool("auto-merge", false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
+	f.Bool(watchFlagAutoMerge, false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Bool("bots", false, "Comments from bot accounts count too (a review bot whose findings are to be fixed); off, a bot is not a person waiting")
 	f.Bool("approve", false, "An unattended review of a pull request I was asked to review may approve it when nothing blocks and the risk card allows")
-	f.Bool("hand-over", false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
+	f.Bool(watchFlagHandOver, false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
 	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, acceptEdits) in its own checkout, so the phone's chat keeps working")
 	f.Bool("silent", false, "Nothing about this workspace's watch rings — no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")
-	f.Bool("rerun-ci", false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
-	f.Bool("auto-carry", false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
+	f.Bool(watchFlagRerunCI, false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
+	f.Bool(watchFlagAutoCarry, false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
 	f.Int("slots", 1, "How many unattended runs may go at once in this workspace (1 to 8); above 1 turns on --isolate so each has worktrees of its own")
 	f.Bool("lessons", false, "Write what the workspace learned the hard way — a review on a PR of mine, a check that stayed red, a bot that failed — one line each for every new session to read (corgi agent lesson list)")
 	f.Bool("rebase", false, "Rebase a session's branch onto main where it sits when the session stops behind main with a clean tree and no conflicts (a branch that would conflict is typed into the session under --hand-over)")
-	f.Int("compact-at", 0, "Type /compact into a session past this much context the next time it stops — 85 is where the board goes red; 0 is off")
-	f.String("done-when", "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes — `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
-	f.String("auto-allow", "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 sessions only)")
+	f.Int(watchFlagCompactAt, 0, "Type /compact into a session past this much context the next time it stops — 85 is where the board goes red; 0 is off")
+	f.String(watchFlagDoneWhen, "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes — `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
+	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 sessions only)")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
-	f.String("auto-for", "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")
-	agentWatchRunCmd.Flags().Bool("dry-run", false, "Do not advance the saved cursors")
+	f.String(watchFlagAutoFor, "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")
+	agentWatchRunCmd.Flags().Bool(watchFlagDryRun, false, "Do not advance the saved cursors")
 	tf := agentWatchTestCmd.Flags()
 	tf.String("ref", "", "Issue key (ABC-12) or PR (owner/repo#12); default: one shaped for the first watched workspace")
 	tf.String("url", "", "PR URL, for pr.* kinds")
@@ -1075,123 +1149,161 @@ func init() {
 	agentCmd.AddCommand(agentWatchCmd)
 }
 
+// watchStatusWorkspace is one watched workspace as `--json` and the
+// launcher report it.
+type watchStatusWorkspace struct {
+	Workspace string           `json:"workspace"`
+	Sources   []string         `json:"sources"`
+	Skipped   []string         `json:"skipped,omitempty"`
+	Action    string           `json:"action"`
+	AutoFor   []string         `json:"autoFor,omitempty"`
+	Interval  string           `json:"interval"`
+	Quiet     string           `json:"quiet,omitempty"`
+	DaysOff   []string         `json:"daysOff,omitempty"`
+	Asleep    bool             `json:"asleep,omitempty"`
+	Fixes     daemon.FixBudget `json:"fixes"`
+}
+
+type watchStatusFix struct {
+	Key       string    `json:"key,omitempty"`
+	Ref       string    `json:"ref"`
+	Workspace string    `json:"workspace"`
+	Kind      string    `json:"kind,omitempty"`
+	URL       string    `json:"url,omitempty"`
+	StartedAt time.Time `json:"startedAt"`
+	Running   bool      `json:"running"`
+	PRs       []string  `json:"prs,omitempty"`
+	Note      string    `json:"note,omitempty"`
+	Error     string    `json:"error,omitempty"`
+}
+
+// watchStatusEvent is one inbox row.
+type watchStatusEvent struct {
+	Key       string    `json:"key"`
+	Ref       string    `json:"ref"`
+	Kind      string    `json:"kind"`
+	Workspace string    `json:"workspace,omitempty"`
+	Title     string    `json:"title,omitempty"`
+	URL       string    `json:"url,omitempty"`
+	State     string    `json:"state,omitempty"`
+	At        time.Time `json:"at"`
+	Blocked   string    `json:"blocked,omitempty"`
+	Session   *CardSess `json:"session,omitempty"`
+	Picked    *CardPick `json:"picked,omitempty"`
+	Columns   []string  `json:"columns,omitempty"`
+	// PR and Pull: the pull request this row is about or has, and
+	// how it stands — checks, approval, ready to merge.
+	PR     string            `json:"pr,omitempty"`
+	Pull   *watch.PullStatus `json:"pull,omitempty"`
+	Handed *watch.Hand       `json:"handed,omitempty"`
+	// Standing is the row's one word and clause from the ladder.
+	Standing sessions.Standing `json:"standing"`
+}
+
 // watchStatusJSON is `corgi agent watch --json`: the watched workspaces,
 // the polls, the recent runs and the inbox rows — what a menu bar or an
 // editor draws. The launcher serves the same at GET /launch/watch-status.
 func watchStatusJSON(dir string, specs []daemon.WatchSpec, state *watch.State, now time.Time) map[string]any {
-	type spec struct {
-		Workspace string           `json:"workspace"`
-		Sources   []string         `json:"sources"`
-		Skipped   []string         `json:"skipped,omitempty"`
-		Action    string           `json:"action"`
-		AutoFor   []string         `json:"autoFor,omitempty"`
-		Interval  string           `json:"interval"`
-		Quiet     string           `json:"quiet,omitempty"`
-		DaysOff   []string         `json:"daysOff,omitempty"`
-		Asleep    bool             `json:"asleep,omitempty"`
-		Fixes     daemon.FixBudget `json:"fixes"`
-	}
-	type fixRow struct {
-		Key       string    `json:"key,omitempty"`
-		Ref       string    `json:"ref"`
-		Workspace string    `json:"workspace"`
-		Kind      string    `json:"kind,omitempty"`
-		URL       string    `json:"url,omitempty"`
-		StartedAt time.Time `json:"startedAt"`
-		Running   bool      `json:"running"`
-		PRs       []string  `json:"prs,omitempty"`
-		Note      string    `json:"note,omitempty"`
-		Error     string    `json:"error,omitempty"`
-	}
-	var out []spec
+	workspaces := watchStatusWorkspaces(specs, state, now)
+	fixes := watchStatusFixes(dir, state)
+	events := watchStatusEvents(dir, state, now)
+	return map[string]any{"workspaces": workspaces, "polls": state.Summaries(), "fixes": fixes, "events": events}
+}
+
+func watchStatusWorkspaces(specs []daemon.WatchSpec, state *watch.State, now time.Time) []watchStatusWorkspace {
+	var out []watchStatusWorkspace
 	for _, s := range specs {
-		row := spec{Workspace: s.Workspace, Sources: sourceNames(s), Skipped: s.Skipped, Action: s.Action, AutoFor: s.FixKinds, Interval: s.Interval.String(), Quiet: s.Quiet, Fixes: daemon.BudgetFor(s, state.Fixes, now)}
+		row := watchStatusWorkspace{Workspace: s.Workspace, Sources: sourceNames(s), Skipped: s.Skipped, Action: s.Action, AutoFor: s.FixKinds, Interval: s.Interval.String(), Quiet: s.Quiet, Fixes: daemon.BudgetFor(s, state.Fixes, now)}
 		for _, d := range s.DaysOff {
 			row.DaysOff = append(row.DaysOff, strings.ToLower(d.String()[:3]))
 		}
 		row.Asleep = daemon.DayOff(s, now)
 		out = append(out, row)
 	}
-	// A run's row links to its ticket, so a menu bar can open what the
-	// run was about, not only the pull request it opened.
-	fixes := []fixRow{}
+	return out
+}
+
+// watchStatusFixes are the recent runs. A run's row links to its ticket,
+// so a menu bar can open what the run was about, not only the pull
+// request it opened.
+func watchStatusFixes(dir string, state *watch.State) []watchStatusFix {
+	fixes := []watchStatusFix{}
 	for _, r := range state.Fixes.RecentFixes("", 20) {
-		row := fixRow{Key: r.Key, Ref: firstNonEmptyString(r.Ref, r.Key), Workspace: r.Workspace, Kind: r.Kind,
+		row := watchStatusFix{Key: r.Key, Ref: firstNonEmptyString(r.Ref, r.Key), Workspace: r.Workspace, Kind: r.Kind,
 			StartedAt: r.StartedAt, Running: !r.Done(), PRs: r.PRs, Note: r.Note, Error: r.Error}
 		if e, ok := watch.FindEvent(dir, r.Key); ok {
 			row.URL = e.URL
 		}
 		fixes = append(fixes, row)
 	}
-	// The inbox itself, so a menu bar or an editor can show what arrived
-	// without reading the log file or asking the phone.
-	type eventRow struct {
-		Key       string    `json:"key"`
-		Ref       string    `json:"ref"`
-		Kind      string    `json:"kind"`
-		Workspace string    `json:"workspace,omitempty"`
-		Title     string    `json:"title,omitempty"`
-		URL       string    `json:"url,omitempty"`
-		State     string    `json:"state,omitempty"`
-		At        time.Time `json:"at"`
-		Blocked   string    `json:"blocked,omitempty"`
-		Session   *CardSess `json:"session,omitempty"`
-		Picked    *CardPick `json:"picked,omitempty"`
-		Columns   []string  `json:"columns,omitempty"`
-		// PR and Pull: the pull request this row is about or has, and
-		// how it stands — checks, approval, ready to merge.
-		PR     string            `json:"pr,omitempty"`
-		Pull   *watch.PullStatus `json:"pull,omitempty"`
-		Handed *watch.Hand       `json:"handed,omitempty"`
-		// Standing is the row's one word and clause from the ladder.
-		Standing sessions.Standing `json:"standing"`
-	}
-	events := []eventRow{}
-	onTicket := sessionsOnTickets(dir)
-	picks := watch.LoadPicks(dir)
-	pulls := watch.LoadPullLog(dir)
-	hands := watch.LoadHands(dir)
-	moved := watch.LoadStateLog(dir)
+	return fixes
+}
+
+// watchInbox is what every inbox row is read against, loaded once.
+type watchInbox struct {
+	dir      string
+	now      time.Time
+	state    *watch.State
+	onTicket map[string]*CardSess
+	picks    *watch.PickLog
+	pulls    *watch.PullLog
+	hands    *watch.HandLog
+	moved    *watch.StateLog
+}
+
+// watchStatusEvents is the inbox itself, so a menu bar or an editor can
+// show what arrived without reading the log file or asking the phone.
+func watchStatusEvents(dir string, state *watch.State, now time.Time) []watchStatusEvent {
+	inbox := watchInbox{dir: dir, now: now, state: state, onTicket: sessionsOnTickets(dir),
+		picks: watch.LoadPicks(dir), pulls: watch.LoadPullLog(dir), hands: watch.LoadHands(dir), moved: watch.LoadStateLog(dir)}
 	keeper := watch.NewInboxKeeper(now)
+	events := []watchStatusEvent{}
 	for _, e := range watch.RecentEvents(dir, 25) {
 		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
 			continue // dismissed, or an old routine report: not waiting on anyone
 		}
-		// Merged, closed, done: history rather than work. The same test
-		// the phone's inbox uses, so the menu bar and the editor do not
-		// disagree with it about what is waiting.
-		current := e.State
-		if now, ok := moved.Get(e.Key); ok {
-			current = now.Status
+		if row, ok := inbox.row(e); ok {
+			events = append(events, row)
 		}
-		if watch.Settled(e, current) != "" {
-			continue
-		}
-		er := eventRow{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),
-			Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: current, At: e.At}
-		if b, ok := state.Fixes.Blocked(e.Workspace, e.Ref); ok {
-			er.Blocked = b.Reason
-		}
-		er.Session = onTicket[strings.ToLower(e.Ref)]
-		if p, ok := picks.Get(e.Key); ok && now.Sub(p.At) <= watch.PickFresh {
-			er.Picked = &CardPick{At: p.At, By: p.By}
-		}
-		if e.Kind == watch.KindTask {
-			er.Columns = watch.TaskColumns
-		}
-		er.PR = prLinkFor(dir, e, onTicket)
-		if st, ok := pulls.Get(firstNonEmptyString(er.PR, e.Ref)); ok {
-			p := st
-			er.Pull = &p
-		}
-		if h, ok := hands.Get(e.Key); ok {
-			hh := h
-			er.Handed = &hh
-		}
-		er.Standing = rowStanding(er.Pull, er.PR, er.Blocked, er.Session)
-		events = append(events, er)
 	}
-	return map[string]any{"workspaces": out, "polls": state.Summaries(), "fixes": fixes, "events": events}
+	return events
+}
+
+// row is one event as the inbox shows it; false when it is history.
+func (in watchInbox) row(e watch.Event) (watchStatusEvent, bool) {
+	// Merged, closed, done: history rather than work. The same test
+	// the phone's inbox uses, so the menu bar and the editor do not
+	// disagree with it about what is waiting.
+	current := e.State
+	if st, ok := in.moved.Get(e.Key); ok {
+		current = st.Status
+	}
+	if watch.Settled(e, current) != "" {
+		return watchStatusEvent{}, false
+	}
+	er := watchStatusEvent{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),
+		Workspace: e.Workspace, Title: firstLineOf(e.Title), URL: e.URL, State: current, At: e.At}
+	if b, ok := in.state.Fixes.Blocked(e.Workspace, e.Ref); ok {
+		er.Blocked = b.Reason
+	}
+	er.Session = in.onTicket[strings.ToLower(e.Ref)]
+	if p, ok := in.picks.Get(e.Key); ok && in.now.Sub(p.At) <= watch.PickFresh {
+		er.Picked = &CardPick{At: p.At, By: p.By}
+	}
+	if e.Kind == watch.KindTask {
+		er.Columns = watch.TaskColumns
+	}
+	er.PR = prLinkFor(in.dir, e, in.onTicket)
+	if st, ok := in.pulls.Get(firstNonEmptyString(er.PR, e.Ref)); ok {
+		p := st
+		er.Pull = &p
+	}
+	if h, ok := in.hands.Get(e.Key); ok {
+		hh := h
+		er.Handed = &hh
+	}
+	er.Standing = rowStanding(er.Pull, er.PR, er.Blocked, er.Session)
+	return er, true
 }
 
 // launchWatchStatusHandler is GET /launch/watch-status: `corgi agent watch

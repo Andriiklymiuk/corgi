@@ -555,6 +555,24 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 
 // overlay applies the non-empty fields of over onto base.
 func overlay(base, over WorkspaceConfig) WorkspaceConfig {
+	base = overlayLaunch(base, over)
+	base = overlayAccount(base, over)
+	base.Watch = overlayWatch(base.Watch, over.Watch)
+	base.Models = overlayModels(base.Models, over.Models)
+	if len(over.Routines) > 0 {
+		base.Routines = over.Routines
+	}
+	// Booleans that grant capability are OR-ed rather than overwritten, so a
+	// per-workspace entry cannot silently turn off a default the user set.
+	base.InheritAPIKey = base.InheritAPIKey || over.InheritAPIKey
+	base.InheritOAuthToken = base.InheritOAuthToken || over.InheritOAuthToken
+	base.DangerouslySkipPermissions = base.DangerouslySkipPermissions || over.DangerouslySkipPermissions
+	return base
+}
+
+// overlayLaunch covers how a session is started: the program and its
+// supervision.
+func overlayLaunch(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.Autostart != nil {
 		base.Autostart = over.Autostart
 	}
@@ -573,12 +591,6 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	if len(over.Args) > 0 {
 		base.Args = over.Args
 	}
-	if over.ConfigDirEnv != "" {
-		base.ConfigDirEnv = over.ConfigDirEnv
-	}
-	if len(over.CredentialEnv) > 0 {
-		base.CredentialEnv = over.CredentialEnv
-	}
 	if over.Spawn != "" {
 		base.Spawn = over.Spawn
 	}
@@ -587,6 +599,18 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	}
 	if over.PermissionMode != "" {
 		base.PermissionMode = over.PermissionMode
+	}
+	return base
+}
+
+// overlayAccount covers which account a session runs under and what it
+// may take from the machine.
+func overlayAccount(base, over WorkspaceConfig) WorkspaceConfig {
+	if over.ConfigDirEnv != "" {
+		base.ConfigDirEnv = over.ConfigDirEnv
+	}
+	if len(over.CredentialEnv) > 0 {
+		base.CredentialEnv = over.CredentialEnv
 	}
 	if over.ConfigDir != "" {
 		base.ConfigDir = over.ConfigDir
@@ -597,16 +621,6 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.WakeLock != "" {
 		base.WakeLock = over.WakeLock
 	}
-	base.Watch = overlayWatch(base.Watch, over.Watch)
-	base.Models = overlayModels(base.Models, over.Models)
-	if len(over.Routines) > 0 {
-		base.Routines = over.Routines
-	}
-	// Booleans that grant capability are OR-ed rather than overwritten, so a
-	// per-workspace entry cannot silently turn off a default the user set.
-	base.InheritAPIKey = base.InheritAPIKey || over.InheritAPIKey
-	base.InheritOAuthToken = base.InheritOAuthToken || over.InheritOAuthToken
-	base.DangerouslySkipPermissions = base.DangerouslySkipPermissions || over.DangerouslySkipPermissions
 	return base
 }
 

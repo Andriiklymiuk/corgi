@@ -265,47 +265,12 @@ func RefFromBranch(branch string) string {
 // Markdown is the packet for a person, or a harness that reads files.
 func (p Packet) Markdown() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# Handoff · %s\n\n", p.Ref)
-	fmt.Fprintf(&b, "state: **%s**", p.State)
-	if p.Blocked != "" {
-		fmt.Fprintf(&b, " — %s", p.Blocked)
-	}
-	if p.Draft {
-		b.WriteString(" _(draft: assembled by corgi, not written by the run)_")
-	}
-	b.WriteString("\n")
-	if p.Tracker != "" {
-		fmt.Fprintf(&b, "ticket: %s\n", p.Tracker)
-	}
-	if p.Where.Branch != "" || p.Where.Head != "" {
-		fmt.Fprintf(&b, "where: `%s`", p.Where.Branch)
-		if p.Where.Worktree != "" {
-			fmt.Fprintf(&b, " in `%s`", p.Where.Worktree)
-		}
-		if p.Where.Head != "" {
-			fmt.Fprintf(&b, " at %s", short(p.Where.Head))
-		}
-		if p.Where.Base != "" {
-			fmt.Fprintf(&b, " (base %s)", short(p.Where.Base))
-		}
-		b.WriteString("\n")
-		if len(p.Where.Dirty) > 0 {
-			fmt.Fprintf(&b, "uncommitted: %s\n", strings.Join(p.Where.Dirty, ", "))
-		}
-	}
-	section := func(name string, items []string) {
-		if len(items) == 0 {
-			return
-		}
-		fmt.Fprintf(&b, "\n## %s\n", name)
-		for _, it := range items {
-			fmt.Fprintf(&b, "- %s\n", it)
-		}
-	}
-	section("Done", p.Done)
-	section("Remaining", p.Remaining)
-	section("Decisions", p.Decisions)
-	section("Uncertain — ask before assuming", p.Uncertain)
+	p.writeHeading(&b)
+	p.Where.writeMarkdown(&b)
+	writeSection(&b, "Done", p.Done)
+	writeSection(&b, "Remaining", p.Remaining)
+	writeSection(&b, "Decisions", p.Decisions)
+	writeSection(&b, "Uncertain — ask before assuming", p.Uncertain)
 	if p.Verification != nil {
 		fmt.Fprintf(&b, "\n## Verified\n`%s` → exit %d", p.Verification.Cmd, p.Verification.Exit)
 		if p.Verification.At != "" {
@@ -316,22 +281,76 @@ func (p Packet) Markdown() string {
 	if p.Next != "" {
 		fmt.Fprintf(&b, "\n## Next\n%s\n", p.Next)
 	}
-	var from []string
-	for _, kv := range [][2]string{{"harness", p.From.Harness}, {"model", p.From.Model}, {"account", p.From.Account}, {"session", p.From.Session}, {"host", p.From.Host}} {
-		if kv[1] != "" {
-			from = append(from, kv[0]+" "+kv[1])
-		}
+	p.writeProvenance(&b)
+	return b.String()
+}
+
+func (p Packet) writeHeading(b *strings.Builder) {
+	fmt.Fprintf(b, "# Handoff · %s\n\n", p.Ref)
+	fmt.Fprintf(b, "state: **%s**", p.State)
+	if p.Blocked != "" {
+		fmt.Fprintf(b, " — %s", p.Blocked)
 	}
-	if len(from) > 0 {
-		fmt.Fprintf(&b, "\nfrom: %s\n", strings.Join(from, " · "))
+	if p.Draft {
+		b.WriteString(" _(draft: assembled by corgi, not written by the run)_")
+	}
+	b.WriteString("\n")
+	if p.Tracker != "" {
+		fmt.Fprintf(b, "ticket: %s\n", p.Tracker)
+	}
+}
+
+func (w Where) writeMarkdown(b *strings.Builder) {
+	if w.Branch == "" && w.Head == "" {
+		return
+	}
+	fmt.Fprintf(b, "where: `%s`", w.Branch)
+	if w.Worktree != "" {
+		fmt.Fprintf(b, " in `%s`", w.Worktree)
+	}
+	if w.Head != "" {
+		fmt.Fprintf(b, " at %s", short(w.Head))
+	}
+	if w.Base != "" {
+		fmt.Fprintf(b, " (base %s)", short(w.Base))
+	}
+	b.WriteString("\n")
+	if len(w.Dirty) > 0 {
+		fmt.Fprintf(b, "uncommitted: %s\n", strings.Join(w.Dirty, ", "))
+	}
+}
+
+func writeSection(b *strings.Builder, name string, items []string) {
+	if len(items) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\n## %s\n", name)
+	for _, it := range items {
+		fmt.Fprintf(b, "- %s\n", it)
+	}
+}
+
+// writeProvenance is who wrote the packet, with what left, and when.
+func (p Packet) writeProvenance(b *strings.Builder) {
+	if from := p.From.parts(); len(from) > 0 {
+		fmt.Fprintf(b, "\nfrom: %s\n", strings.Join(from, " · "))
 	}
 	if p.Budget.Context > 0 || p.Budget.FiveHour > 0 {
-		fmt.Fprintf(&b, "budget when written: context %d%% · 5h %d%% · week %d%%\n", p.Budget.Context, p.Budget.FiveHour, p.Budget.SevenDay)
+		fmt.Fprintf(b, "budget when written: context %d%% · 5h %d%% · week %d%%\n", p.Budget.Context, p.Budget.FiveHour, p.Budget.SevenDay)
 	}
 	if !p.WrittenAt.IsZero() {
-		fmt.Fprintf(&b, "written: %s\n", p.WrittenAt.Local().Format("2006-01-02 15:04"))
+		fmt.Fprintf(b, "written: %s\n", p.WrittenAt.Local().Format("2006-01-02 15:04"))
 	}
-	return b.String()
+}
+
+func (f From) parts() []string {
+	var out []string
+	for _, kv := range [][2]string{{"harness", f.Harness}, {"model", f.Model}, {"account", f.Account}, {"session", f.Session}, {"host", f.Host}} {
+		if kv[1] != "" {
+			out = append(out, kv[0]+" "+kv[1])
+		}
+	}
+	return out
 }
 
 // Summary is one line for a board row or a ticket comment.
@@ -356,6 +375,8 @@ func short(sha string) string {
 	return sha
 }
 
+const gitRevParse = "rev-parse"
+
 // run is a seam for git in tests.
 var run = func(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
@@ -371,8 +392,8 @@ func GitWhere(dir string) Where {
 	if dir == "" {
 		return w
 	}
-	w.Branch, _ = run(dir, "rev-parse", "--abbrev-ref", "HEAD")
-	w.Head, _ = run(dir, "rev-parse", "HEAD")
+	w.Branch, _ = run(dir, gitRevParse, "--abbrev-ref", "HEAD")
+	w.Head, _ = run(dir, gitRevParse, "HEAD")
 	for _, base := range gitbase.Refs(dir) {
 		if b, err := run(dir, "merge-base", "HEAD", base); err == nil && b != "" && b != w.Head {
 			w.Base = b
@@ -439,7 +460,7 @@ func Verify(dir string, p Packet, runCmd func(dir, cmd string) (int, error)) (Ve
 	if p.Verification == nil || strings.TrimSpace(p.Verification.Cmd) == "" {
 		return Verification{}, false
 	}
-	head, _ := run(dir, "rev-parse", "HEAD")
+	head, _ := run(dir, gitRevParse, "HEAD")
 	code, err := runCmd(dir, p.Verification.Cmd)
 	if err != nil && code == 0 {
 		code = 1

@@ -143,7 +143,7 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 	report.Body = ""
 	d.watchState.MarkSeen(report.Key)
 	d.appendWatchEvent(report)
-	go d.notifyAttention("corgi agent · "+spec.Workspace, e.Title+": "+clipText(headline, 160), spec.Workspace)
+	go d.notifyAttention(notifyTitlePrefix+spec.Workspace, e.Title+": "+clipText(headline, 160), spec.Workspace)
 }
 
 func firstLine(s string) string {

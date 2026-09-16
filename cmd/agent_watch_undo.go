@@ -31,7 +31,7 @@ that cannot be undone in turn.`,
 
 func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 	dir := mustAgentDir()
-	dry, _ := cmd.Flags().GetBool("dry-run")
+	dry, _ := cmd.Flags().GetBool(watchFlagDryRun)
 	ref := ""
 	if len(args) == 1 {
 		ref = strings.TrimSpace(args[0])
@@ -157,6 +157,6 @@ func lastUndoable(dir, ref string) (watch.FixRecord, bool) {
 }
 
 func init() {
-	agentWatchUndoCmd.Flags().Bool("dry-run", false, "Say what it would do and change nothing")
+	agentWatchUndoCmd.Flags().Bool(watchFlagDryRun, false, "Say what it would do and change nothing")
 	agentWatchCmd.AddCommand(agentWatchUndoCmd)
 }
