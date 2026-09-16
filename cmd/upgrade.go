@@ -60,7 +60,7 @@ func upgradeRun(cmd *cobra.Command, args []string) {
 			fmt.Printf("Failed to upgrade via Homebrew: %s\n", err)
 		} else {
 			fmt.Println("Upgrade successful!")
-			refreshDaemonAfterUpgrade(exePath)
+			refreshDaemonAfterUpgrade(exePath, latestVersion)
 		}
 	case installMethodScript:
 		fmt.Printf("Detected script install at %s. Re-running install script...\n", exeDir)
@@ -68,7 +68,7 @@ func upgradeRun(cmd *cobra.Command, args []string) {
 			fmt.Printf("Failed to upgrade via install script: %s\n", err)
 		} else {
 			fmt.Println("Upgrade successful!")
-			refreshDaemonAfterUpgrade(exePath)
+			refreshDaemonAfterUpgrade(exePath, latestVersion)
 		}
 	case installMethodWindows:
 		// We can't safely overwrite the running corgi.exe from inside corgi.exe.
@@ -290,7 +290,9 @@ func tagFromReleaseLocation(location string) string {
 // installed. The daemon runs from its own copy (see agent_install_stable.go),
 // and that copy is only refreshed by `agent install` — which has to be the
 // new binary, not this process, so the copy is the new version.
-func refreshDaemonAfterUpgrade(exePath string) {
+// installed is the version that was just put on disk: this process is
+// still the old corgi, so APP_VERSION is the wrong thing to compare with.
+func refreshDaemonAfterUpgrade(exePath, installed string) {
 	if !daemonRunsFromStableCopy() || !loginServiceInstalled() {
 		return
 	}
@@ -308,17 +310,25 @@ func refreshDaemonAfterUpgrade(exePath string) {
 	}
 	// install bounces the login service; a daemon `agent up` started by hand
 	// is not the service's and keeps running the old corgi. Ask it to move.
-	if old := runningDaemonVersion(); old != "" && old != APP_VERSION {
-		if out, err := exec.Command(exePath, "agent", "restart").CombinedOutput(); err != nil {
-			fmt.Printf("The daemon still runs corgi %s — `corgi agent restart` failed: %s\n%s", old, err, out)
-			return
-		}
-		if now := runningDaemonVersion(); now != "" && now != APP_VERSION {
-			fmt.Printf("The daemon still runs corgi %s — run `corgi agent restart` yourself.\n", now)
-			return
-		}
+	old := runningDaemonVersion()
+	if !daemonWantsRestart(old, installed) {
+		return
 	}
-	fmt.Println("Daemon restarted from the new corgi.")
+	if out, err := exec.Command(exePath, "agent", "restart").CombinedOutput(); err != nil {
+		fmt.Printf("The daemon still runs corgi %s — `corgi agent restart` failed: %s\n%s", old, err, out)
+		return
+	}
+	if now := runningDaemonVersion(); daemonWantsRestart(now, installed) {
+		fmt.Printf("The daemon still runs corgi %s — run `corgi agent restart` yourself.\n", now)
+		return
+	}
+	fmt.Printf("Daemon restarted on corgi %s.\n", installed)
+}
+
+// daemonWantsRestart says whether a running daemon is on another version
+// than the one just installed; no daemon, nothing to move.
+func daemonWantsRestart(running, installed string) bool {
+	return running != "" && strings.TrimPrefix(running, "v") != strings.TrimPrefix(installed, "v")
 }
 
 // runningDaemonVersion is what the daemon's own record says it runs, or ""
