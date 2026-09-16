@@ -397,7 +397,7 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		// Three comments on one pull request are one thing to look at. The
 		// seen index dedupes a comment against itself; this dedupes the
 		// second comment against the first, within a round.
-		if dup := d.watchState.SameRefThisRound(spec.Workspace, e); dup > 0 {
+		if d.watchState.SameRefThisRound(spec.Workspace, e) > 0 {
 			if isFeedback(e.Kind) && spec.FixesKind(e.Kind) {
 				d.settleFix(ctx, spec, e)
 			}
@@ -551,7 +551,7 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 	if len(queue) == 0 {
 		return
 	}
-	if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
+	if fixDeferral(spec, d.watchState.Fixes, now) != "" {
 		return
 	}
 	sort.SliceStable(queue, func(i, j int) bool { return watch.Less(queue[i], queue[j]) })
@@ -600,7 +600,7 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 		return ""
 	}
 	for _, src := range spec.Sources {
-		asker, ok := src.(watch.StillOpen)
+		asker, ok := src.(watch.RefStater)
 		if !ok {
 			continue
 		}
@@ -1312,7 +1312,7 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 			continue // already known to be over
 		}
 		for _, src := range spec.Sources {
-			asker, ok := src.(watch.StillOpen)
+			asker, ok := src.(watch.RefStater)
 			if !ok {
 				continue
 			}

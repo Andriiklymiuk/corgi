@@ -47,9 +47,9 @@ const maxLine = 4 << 20
 // Read returns the entries written after offset (a byte position from a
 // previous read; 0 reads from the top) and the position to continue from.
 // A file shorter than offset was replaced: it reads from the top again.
-func Read(path string, offset int64, max int) ([]Entry, int64, error) {
-	if max <= 0 || max > MaxEntries {
-		max = MaxEntries
+func Read(path string, offset int64, limit int) ([]Entry, int64, error) {
+	if limit <= 0 || limit > MaxEntries {
+		limit = MaxEntries
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -66,7 +66,7 @@ func Read(path string, offset int64, max int) ([]Entry, int64, error) {
 	}
 	r := bufio.NewReaderSize(f, 256<<10)
 	var out []Entry
-	for len(out) < max {
+	for len(out) < limit {
 		line, err := r.ReadBytes('\n')
 		if err != nil {
 			// A line still being written is read next time, whole.
@@ -81,9 +81,9 @@ func Read(path string, offset int64, max int) ([]Entry, int64, error) {
 // Last returns the newest max entries of the whole file, and the position
 // after the last complete line — how a phone opens a conversation that has
 // been going for hours without reading it all.
-func Last(path string, max int) ([]Entry, int64, error) {
-	if max <= 0 || max > MaxEntries {
-		max = MaxEntries
+func Last(path string, limit int) ([]Entry, int64, error) {
+	if limit <= 0 || limit > MaxEntries {
+		limit = MaxEntries
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -91,7 +91,7 @@ func Last(path string, max int) ([]Entry, int64, error) {
 	}
 	defer f.Close()
 	r := bufio.NewReaderSize(f, 256<<10)
-	ring := make([]Entry, 0, max*2)
+	ring := make([]Entry, 0, limit*2)
 	var offset int64
 	for {
 		line, err := r.ReadBytes('\n')
@@ -100,12 +100,12 @@ func Last(path string, max int) ([]Entry, int64, error) {
 		}
 		offset += int64(len(line))
 		ring = append(ring, parse(line)...)
-		if len(ring) > max*2 {
-			ring = append(ring[:0], ring[len(ring)-max:]...)
+		if len(ring) > limit*2 {
+			ring = append(ring[:0], ring[len(ring)-limit:]...)
 		}
 	}
-	if len(ring) > max {
-		ring = ring[len(ring)-max:]
+	if len(ring) > limit {
+		ring = ring[len(ring)-limit:]
 	}
 	return ring, offset, nil
 }
@@ -303,12 +303,12 @@ func shortPath(p string) string {
 	return p
 }
 
-func firstLineOf(s string, max int) string {
+func firstLineOf(s string, limit int) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = s[:i]
 	}
-	if len(s) > max {
-		return s[:max] + "…"
+	if len(s) > limit {
+		return s[:limit] + "…"
 	}
 	return s
 }

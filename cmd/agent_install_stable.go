@@ -39,8 +39,8 @@ func refreshStableDaemonBinary(from string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if real, err := filepath.EvalSymlinks(from); err == nil {
-		from = real
+	if resolved, err := filepath.EvalSymlinks(from); err == nil {
+		from = resolved
 	}
 	if same, _ := sameFileContent(from, dest); same {
 		return dest, nil
@@ -173,8 +173,8 @@ func checkDaemonBinaryPath() agentCheck {
 	if err != nil {
 		return agentCheck{Name: checkDaemonBinary, OK: true, Detail: stable}
 	}
-	if real, err := filepath.EvalSymlinks(self); err == nil {
-		self = real
+	if resolved, err := filepath.EvalSymlinks(self); err == nil {
+		self = resolved
 	}
 	if self == stable {
 		return agentCheck{Name: checkDaemonBinary, OK: true, Detail: stable}

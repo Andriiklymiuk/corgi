@@ -30,7 +30,7 @@ number names the session as everywhere else.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		after, _ := cmd.Flags().GetInt64("after")
-		max, _ := cmd.Flags().GetInt("max")
+		limit, _ := cmd.Flags().GetInt("max")
 		session, code, msg := launchSessionFor(args[0])
 		if code != 0 {
 			exitWithError("agent_transcript", fmt.Errorf("%s", msg), 2)
@@ -43,9 +43,9 @@ number names the session as everywhere else.`,
 		case path == "" || !transcript.Exists(path):
 			entries = []transcript.Entry{}
 		case after <= 0:
-			entries, offset, err = transcript.Last(path, max)
+			entries, offset, err = transcript.Last(path, limit)
 		default:
-			entries, offset, err = transcript.Read(path, after, max)
+			entries, offset, err = transcript.Read(path, after, limit)
 		}
 		if err != nil {
 			exitWithError("agent_transcript", err, 1)

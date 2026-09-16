@@ -22,11 +22,11 @@ func lookup(pid int) (Process, bool) {
 
 func parseStat(pid int, stat string) (Process, bool) {
 	open := strings.IndexByte(stat, '(')
-	close := strings.LastIndexByte(stat, ')')
-	if open < 0 || close < open {
+	closeParen := strings.LastIndexByte(stat, ')')
+	if open < 0 || closeParen < open {
 		return Process{}, false
 	}
-	fields := strings.Fields(stat[close+1:])
+	fields := strings.Fields(stat[closeParen+1:])
 	if len(fields) < 2 {
 		return Process{}, false
 	}
@@ -34,7 +34,7 @@ func parseStat(pid int, stat string) (Process, bool) {
 	if err != nil {
 		return Process{}, false
 	}
-	p := Process{PID: pid, PPID: ppid, Name: stat[open+1 : close]}
+	p := Process{PID: pid, PPID: ppid, Name: stat[open+1 : closeParen]}
 	if len(fields) > 4 {
 		// tty_nr: 0 when there is no controlling terminal.
 		if tty, err := strconv.ParseUint(fields[4], 10, 64); err == nil {

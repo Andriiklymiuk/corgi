@@ -469,10 +469,10 @@ func isIdleNudge(detail string) bool {
 	return strings.Contains(strings.ToLower(detail), "waiting for your input")
 }
 
-func truncateLine(s string, max int) string {
+func truncateLine(s string, limit int) string {
 	s = strings.TrimSpace(strings.SplitN(s, "\n", 2)[0])
-	if len(s) > max {
-		return strings.TrimSpace(s[:max]) + "…"
+	if len(s) > limit {
+		return strings.TrimSpace(s[:limit]) + "…"
 	}
 	return s
 }

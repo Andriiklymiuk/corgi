@@ -28,11 +28,11 @@ const (
 	quotaStillFull = 95
 )
 
-var jitter = func(max time.Duration) time.Duration {
-	if max <= 0 {
+var jitter = func(limit time.Duration) time.Duration {
+	if limit <= 0 {
 		return 0
 	}
-	return time.Duration(rand.Int63n(int64(max)))
+	return time.Duration(rand.Int63n(int64(limit)))
 }
 
 // readLimits is a seam for tests; the daemon reads Claude's cached usage.

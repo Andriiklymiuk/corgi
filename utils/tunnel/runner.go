@@ -125,12 +125,12 @@ type BackoffConfig struct {
 // restarting with capped exponential backoff until ctx is cancelled. Each
 // attempt delegates to Run. Bound entirely to ctx — returns when ctx is done.
 func RunSupervised(ctx context.Context, provider Provider, service string, port int, named *NamedConfig, events chan<- Event, cfg BackoffConfig) {
-	base, max := cfg.Base, cfg.Max
+	base, limit := cfg.Base, cfg.Max
 	if base <= 0 {
 		base = 500 * time.Millisecond
 	}
-	if max <= 0 {
-		max = 30 * time.Second
+	if limit <= 0 {
+		limit = 30 * time.Second
 	}
 	delay := base
 	for {
@@ -146,10 +146,10 @@ func RunSupervised(ctx context.Context, provider Provider, service string, port 
 		case <-ctx.Done():
 			return
 		}
-		if delay < max {
+		if delay < limit {
 			delay *= 2
-			if delay > max {
-				delay = max
+			if delay > limit {
+				delay = limit
 			}
 		}
 	}

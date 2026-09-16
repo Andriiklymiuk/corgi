@@ -105,12 +105,12 @@ func repoPicture(root string) string {
 			continue
 		}
 		lines := strings.Split(string(data), "\n")
-		max := 60
+		limit := 60
 		if name == "README.md" {
-			max = 30
+			limit = 30
 		}
-		if len(lines) > max {
-			lines = lines[:max]
+		if len(lines) > limit {
+			lines = lines[:limit]
 		}
 		fmt.Fprintf(&b, "\n--- %s (head) ---\n%s\n", name, strings.Join(lines, "\n"))
 	}
@@ -122,7 +122,7 @@ func repoPicture(root string) string {
 
 // parsePlannerAnswer reads the JSON out of what the planner said, fenced
 // or not, and checks it stands up.
-func parsePlannerAnswer(text string, max int) (plannerAnswer, error) {
+func parsePlannerAnswer(text string, limit int) (plannerAnswer, error) {
 	var ans plannerAnswer
 	start, end := strings.Index(text, "{"), strings.LastIndex(text, "}")
 	if start < 0 || end <= start {
@@ -134,8 +134,8 @@ func parsePlannerAnswer(text string, max int) (plannerAnswer, error) {
 	if len(ans.Tasks) == 0 {
 		return ans, fmt.Errorf("the planner wrote no tasks")
 	}
-	if max > 0 && len(ans.Tasks) > max {
-		ans.Tasks = ans.Tasks[:max]
+	if limit > 0 && len(ans.Tasks) > limit {
+		ans.Tasks = ans.Tasks[:limit]
 	}
 	for i, t := range ans.Tasks {
 		t.Title = strings.TrimSpace(t.Title)
@@ -232,7 +232,7 @@ say so; the tasks sit in Todo for you to read, edit (corgi agent task edit) or
 remove.
 
   corgi agent plan "add rate limits to the public API"
-  corgi agent plan "…" --workspace api --max 4
+  corgi agent plan "…" --workspace api --limit 4
   corgi agent plan "…" --run --slots 2            start at once, two tasks side by side
 
 Running (corgi agent plan run P-1): the daemon starts each task when its turn
@@ -254,7 +254,7 @@ daemon to run anything.`,
 		dir := mustAgentDir()
 		ws, _ := cmd.Flags().GetString("workspace")
 		model, _ := cmd.Flags().GetString("model")
-		max, _ := cmd.Flags().GetInt("max")
+		limit, _ := cmd.Flags().GetInt("max")
 		slots, _ := cmd.Flags().GetInt("slots")
 		run, _ := cmd.Flags().GetBool("run")
 		if ws == "" {
@@ -269,8 +269,8 @@ daemon to run anything.`,
 		if err != nil {
 			exitWithError("agent_plan", err, 2)
 		}
-		if max < 2 || max > 12 {
-			max = 6
+		if limit < 2 || limit > 12 {
+			limit = 6
 		}
 		if slots < 1 {
 			slots = 1
@@ -290,7 +290,7 @@ daemon to run anything.`,
 				openTitles = append(openTitles, t.Ref()+" "+t.Title)
 			}
 		}
-		prompt := fmt.Sprintf("Goal: %s\n\nAt most %d tasks.\n\n%s", goal, max, repoPicture(root))
+		prompt := fmt.Sprintf("Goal: %s\n\nAt most %d tasks.\n\n%s", goal, limit, repoPicture(root))
 		if len(openTitles) > 0 {
 			prompt += "\nTasks already on the board (do not repeat them): " + strings.Join(openTitles, "; ") + "\n"
 		}
@@ -301,7 +301,7 @@ daemon to run anything.`,
 		if err != nil {
 			exitWithError("agent_plan", err, 1)
 		}
-		ans, err := parsePlannerAnswer(text, max)
+		ans, err := parsePlannerAnswer(text, limit)
 		if err != nil {
 			exitWithError("agent_plan", err, 1)
 		}

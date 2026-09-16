@@ -355,8 +355,8 @@ func cleanPath(p string) string {
 	if abs, err := filepath.Abs(expandTilde(p)); err == nil {
 		p = abs
 	}
-	if real, err := filepath.EvalSymlinks(p); err == nil {
-		p = real
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		p = resolved
 	}
 	return filepath.Clean(p)
 }

@@ -87,7 +87,7 @@ func (l *TaskLog) save() error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// Add writes a new task in Todo and returns it.
+// Add writes a new task in the first column and returns it.
 func (l *TaskLog) Add(title, body, workspace, by string, now time.Time) (Task, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {

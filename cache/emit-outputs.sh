@@ -9,7 +9,7 @@
 set -euo pipefail
 
 args=(cache paths --json)
-if [ "${CORGI_CACHE_STRICT:-}" = "true" ]; then
+if [[ "${CORGI_CACHE_STRICT:-}" = "true" ]]; then
   args+=(--strict)
 fi
 
@@ -48,7 +48,7 @@ done
 
 overflow=$(( total > 4 ? total - 4 : 0 ))
 echo "cache-overflow=$overflow" >> "$GITHUB_OUTPUT"
-if [ "$overflow" -gt 0 ]; then
+if [[ "$overflow" -gt 0 ]]; then
   echo "::warning::corgi found $total cache groups but the action publishes four slots; $overflow ecosystem(s) will not be cached. Use the cache-groups JSON if you need all of them."
 fi
 
@@ -56,7 +56,7 @@ fi
 # A corgi predating the field reports nothing, and nothing is what it knew.
 complete="$(jq -r 'if has("complete") then .complete else true end' <<<"$plan")"
 echo "cache-complete=$complete" >> "$GITHUB_OUTPUT"
-if [ "$complete" != "true" ]; then
+if [[ "$complete" != "true" ]]; then
   missing="$(jq -r '.missingFiles // [] | join(", ")' <<<"$plan")"
   echo "::warning::corgi cache keys were computed before the cacheKey files exist (missing: $missing). The key will not change when they do, so the cache never invalidates. Add \`uses: Andriiklymiuk/corgi/cache@v1\` after \`corgi init\` and feed the cache steps from its outputs, or run \`corgi cache paths --json\` there yourself."
 fi

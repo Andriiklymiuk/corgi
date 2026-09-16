@@ -60,7 +60,7 @@ type gitlabTodo struct {
 	} `json:"author"`
 }
 
-// gitlabBot says a todo was raised by a bot rather than a person: the API's
+// gitlabBot says a to-do item was raised by a bot rather than a person: the API's
 // own flag when it sends one, else the names GitLab gives its bots — project
 // and group access tokens, the ghost user, the built-in service bots.
 var gitlabBotName = regexp.MustCompile(`(?i)^(project|group)_\d+_bot|[_-]bot$|^(ghost|support-bot|alert-bot|security-bot|gitlab-bot)$`)
@@ -80,7 +80,7 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		base = "https://gitlab.com"
 	}
 	// Who I am, once, kept in the cursor: my own note on a merge request
-	// is not news to me, and GitLab does raise a todo for it now and then
+	// is not news to me, and GitLab does raise a to-do item for it now and then
 	// (a self-assign, a thread I am in). Without a name, nothing is mine.
 	if g.Me == "" {
 		g.Me = cursor["me"]
@@ -144,7 +144,7 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			URL:    t.TargetURL,
 			Author: t.Author.Username,
 			// A review request is on someone else's merge request; every
-			// other todo is on something of mine.
+			// other to-do item is on something of mine.
 			Mine:  kind != KindReviewRequested,
 			Bot:   kind == KindPRComment && gitlabBot(t.Author.Username, t.Author.Bot),
 			State: t.Target.State,
