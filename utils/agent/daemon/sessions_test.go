@@ -592,3 +592,53 @@ func TestDaemonKeepsADayLedgerFromHookEvents(t *testing.T) {
 		t.Fatalf("days.json says %+v", got)
 	}
 }
+
+func TestResetClockReadsTheLimitMessage(t *testing.T) {
+	kyiv, _ := time.LoadLocation("Europe/Kiev")
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, kyiv)
+	cases := map[string]string{
+		"resets 2:30pm (Europe/Kiev)": "2026-09-16 14:30 +0300",
+		"resets at 9am":               "2026-09-17 09:00 +0300",
+		"resets 14:05":                "2026-09-16 14:05 +0300",
+		"limit reached":               "",
+	}
+	for detail, want := range cases {
+		at, ok := resetClock(detail, now)
+		got := ""
+		if ok {
+			got = at.In(kyiv).Format("2006-01-02 15:04 -0700")
+		}
+		if got != want {
+			t.Errorf("%q → %q, want %q", detail, got, want)
+		}
+	}
+}
+
+// The person hears the lift at the minute the limit named, not when the
+// session next happens to move; the resume after that says nothing more.
+func TestLiftRingsAtTheClockTheLimitNamed(t *testing.T) {
+	prev := resetClock
+	resetClock = func(string, time.Time) (time.Time, bool) { return time.Now().Add(40 * time.Millisecond), true }
+	t.Cleanup(func() { resetClock = prev })
+	d := testDaemon(t)
+	d.LiftGrace = 10 * time.Millisecond
+	got := make(chan string, 4)
+	d.Notify = func(_, body string) { got <- body }
+	s := sessions.Session{ID: "s2", Label: "corgi", Profile: "skp", Detail: "resets 2:30pm", StatusSince: time.Now()}
+	now := time.Now()
+	d.onSessionTransition(s, sessions.StatusWorking, sessions.StatusLimited, now)
+	select {
+	case body := <-got:
+		if body != "limit lifted on skp — back to work" {
+			t.Fatalf("body %q", body)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the lift should ring at the clock")
+	}
+	d.onSessionTransition(s, sessions.StatusLimited, sessions.StatusWorking, now)
+	select {
+	case body := <-got:
+		t.Fatalf("the resume after a clock ring must stay quiet, got %q", body)
+	case <-time.After(60 * time.Millisecond):
+	}
+}
