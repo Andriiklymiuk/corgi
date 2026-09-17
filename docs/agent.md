@@ -286,7 +286,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent install` / `uninstall` | start (or stop starting) at login — daemon only |
 | `corgi agent up --at-login` | the same, plus the endpoint and tunnel that up used |
 | `corgi agent awake [on\|off]` | keep the machine awake for the daemon's whole life |
-| `corgi agent status [--json]` | what is running (`online` = device with no session yet), restarts, which account |
+| `corgi agent status [--json]` | what is running (`online` = device with no session yet), the launcher and connector URLs, restarts, which account |
 | `corgi agent doctor [--json]` | can this work here, and what to fix |
 | `corgi agent workspaces` | list, `forget`, `relocate` |
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |
@@ -341,6 +341,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent down` | the mirror of `up`: the daemon and the detached MCP server go down, the public URL with them (`stop` stops only the daemon) |
 | `corgi agent continue [on\|off]` | a session that hit a usage limit waits on a clock, not on you: the daemon plans a resume from the account's reset time, types "continue" when the window is back, gives up after a few tries; the key says *continues 14:02* |
 | `corgi agent dashboard [--print]` | open the dashboard in this machine's browser, authorised on the way — no QR for a browser that can already read the daemon's files |
+| `corgi agent approve <code>` | approve a Claude connector sign-in whose consent page showed a code — proves you are at the machine ([docs/mcp.md](mcp.md#add-corgi-to-claudeai-desktop-or-the-phone)) |
 | `corgi agent today [--since 8h] [--write] [--json]` | what has been done today since midnight: commits, prompts, the watch's unattended runs and their pull requests; `--json` adds `waits` (how often sessions waited on you) and `days` (a fortnight of sessions, prompts and tool calls per day) — the numbers the phone's share card draws. The days come from the daemon's own ledger, `days.json` in the agent dir, fed by the tracking hooks; a daemon that has none reads a fortnight of transcripts once to fill it (2.22.6) |
 | `corgi agent task add\|list\|move\|done <…>` | a ticket you write yourself — title, body, workspace — kept on this machine and shown on the same board as the tracker's: Todo, Doing, Review, Done. `watch work TASK-3` and the phone's **Work on it** start a session on it; nothing about it reaches a tracker |
 | `GET /launch/watch-status` · `GET /launch/status` | `corgi agent watch --json` and `corgi agent status --json` over the launcher, for a client on the machine that cannot run corgi — the Mac app from the store, sandboxed. `corgi agent pair --file` writes `localUrl` into the `.corgipair` for it (2.28) |
