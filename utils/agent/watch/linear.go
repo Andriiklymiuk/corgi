@@ -66,7 +66,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 	query := fmt.Sprintf(`{
   issues(filter: {%s}, first: 50, sort: [{updatedAt: {order: Ascending}}]) {
-    nodes { id identifier title description url state { name } labels { nodes { name } } assignee { id name } createdAt updatedAt }
+    nodes { id identifier title description url state { name } labels { nodes { name } } assignee { id name } creator { id name } createdAt updatedAt }
   }
   comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt) {
     nodes { id body createdAt user { id name } botActor { name } issue { identifier url title state { name } } }
@@ -81,6 +81,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 				State                                   struct{ Name string }
 				Labels                                  struct{ Nodes []struct{ Name string } }
 				Assignee                                *struct{ ID, Name string }
+				Creator                                 *struct{ ID, Name string }
 				CreatedAt, UpdatedAt                    string
 			}
 		}
@@ -130,6 +131,10 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		if n.Assignee != nil {
 			e.Assignee = n.Assignee.Name
 			e.Mine = isMe(l.Me, n.Assignee.ID)
+		}
+		if n.Creator != nil {
+			e.Author = n.Creator.Name
+			e.Self = isMe(l.Me, n.Creator.ID)
 		}
 		events = append(events, e)
 	}

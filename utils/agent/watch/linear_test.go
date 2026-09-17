@@ -31,7 +31,7 @@ func newLinearFake(t *testing.T) *linearFake {
 	data := fmt.Sprintf(`{"data":{
   "issues":{"nodes":[
     {"id":"i1","identifier":"ABC-1","title":"Login breaks","description":"Steps to reproduce","url":"https://linear.app/acme/issue/ABC-1",
-     "state":{"name":"Todo"},"labels":{"nodes":[{"name":"Bug"},{"name":"agent"}]},"assignee":{"id":"me-1","name":"Andrii"},
+     "state":{"name":"Todo"},"labels":{"nodes":[{"name":"Bug"},{"name":"agent"}]},"assignee":{"id":"me-1","name":"Andrii"},"creator":{"id":"me-1","name":"Andrii"},
      "createdAt":%q,"updatedAt":%q},
     {"id":"i2","identifier":"ABC-2","title":"Old one","description":"","url":"https://linear.app/acme/issue/ABC-2",
      "state":{"name":"In Progress"},"labels":{"nodes":[]},"assignee":null,
@@ -169,6 +169,9 @@ func TestLinearEventFields(t *testing.T) {
 		issue.State != "Todo" || issue.Assignee != "Andrii" || issue.Body != "Steps to reproduce" ||
 		strings.Join(issue.Labels, ",") != "Bug,agent" || issue.URL != "https://linear.app/acme/issue/ABC-1" {
 		t.Errorf("issue: %+v", issue)
+	}
+	if !issue.Self || issue.Author != "Andrii" {
+		t.Errorf("a ticket I created must say so: %+v", issue)
 	}
 	if comment.Kind != KindIssueComment || !comment.Mine || comment.Author != "Bob" || comment.Body != "Can you check staging?" ||
 		comment.Ref != "ABC-1" || comment.Title != "Login breaks" || comment.At != f.now.Add(-20*time.Minute) {
