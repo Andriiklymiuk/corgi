@@ -98,9 +98,10 @@ Quirks:
 - **Dynamic text** (room codes, generated ids): `maestro hierarchy` dumps the
   accessibility tree as JSON — parse the value out instead of guessing.
 - **Verify visually**: `xcrun simctl io <udid> screenshot /tmp/x.png`, then Read
-  the image. Assertions prove presence; the screenshot proves it looks right. It
-  is a working file — attach it only when the user asked for screenshots (ticket
-  by default, PR when they said PR; SKILL.md Phase 3's screenshot bullet). Story
+  the image. Assertions prove presence; the screenshot proves it looks right.
+  Attach it when the user asked for screenshots (ticket by default, PR when they
+  said PR) or when it shows a reviewer what the diff can't; otherwise it has done
+  its job as your check (SKILL.md Phase 3's screenshot bullet). Story
   has a design reference (ticket/bug screenshot, mockup, Figma export)? Read it
   **alongside** the capture and compare spacing, colour, type, icons — don't stop
   at presence.
@@ -129,11 +130,11 @@ needs 3 sims). Delete cloned sims after (`simctl delete`).
 ## 5. Evidence into the story
 
 - Spec's manual-verification section: which flows ran, on what sims, result.
-- PR body: flow names in `e2e/`, sims used, result. Screenshots go in **only when
-  the user asked for them in the PR**, attached per `../../_shared/forge-commands.md`
-  §6a — on GitHub the assets branch + blob `?raw=true` link, or the box renders
-  empty. Asked with no place named → the ticket's upload instead. Verification-only
-  shots stay working files.
+- PR body: flow names in `e2e/`, sims used, result. Screenshots when the user
+  asked for them in the PR, or when a shot shows what the diff can't — attached
+  per `../../_shared/forge-commands.md` §6a (on GitHub the assets branch + blob
+  `?raw=true` link, or the box renders empty). Asked with no place named → the
+  ticket's upload instead.
 - A device-only bug found this way (interop, entitlement, dialog) → fix it in
   this story if in scope, else report `needs attention` — never ship on jest
   green alone when the change is native-scoped.
