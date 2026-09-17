@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
@@ -22,7 +25,7 @@ func newTestOAuthServer(t *testing.T) (*oauthServer, *http.ServeMux, string) {
 		t.Fatal(err)
 	}
 	origins := newOriginAllowlist("127.0.0.1:18765", nil)
-	oa := newOAuthServer("127.0.0.1:18765", newOAuthClientHosts(nil, nil), origins, store)
+	oa := newOAuthServer("127.0.0.1:18765", newOAuthClientHosts(nil, nil), origins, store, oauthStatePath(dir))
 	mux := http.NewServeMux()
 	oa.mount(mux)
 	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuthWithOAuth("", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,5 +139,113 @@ func TestOAuthOffWithoutAuthOrWithFlag(t *testing.T) {
 	bearerAuth("tok", http.NotFoundHandler(), "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/mcp", nil))
 	if got := rec.Header().Get("WWW-Authenticate"); got != `Bearer realm="corgi"` {
 		t.Errorf("challenge without oauth = %q", got)
+	}
+}
+
+func postJSON(t *testing.T, h http.Handler, path, body string, hdr map[string]string) (*httptest.ResponseRecorder, map[string]any) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var out map[string]any
+	if rec.Body.Len() > 0 && strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") {
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	}
+	return rec, out
+}
+
+func TestOAuthRegisterShape(t *testing.T) {
+	oa, mux, _ := newTestOAuthServer(t)
+	rec, body := postJSON(t, mux, oauthRegisterPath, `{"redirect_uris":["https://claude.ai/api/mcp/auth_callback"],"client_name":"Claude","grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}`, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register = %d %s", rec.Code, rec.Body.String())
+	}
+	id, _ := body["client_id"].(string)
+	if !strings.HasPrefix(id, "corgi_client_") || len(id) != len("corgi_client_")+43 {
+		t.Errorf("client_id = %q", id)
+	}
+	if _, has := body["client_secret"]; has {
+		t.Error("no secret for a public client")
+	}
+	if body["client_name"] != "Claude" || body["token_endpoint_auth_method"] != "none" || body["client_id_issued_at"] == nil {
+		t.Errorf("body = %v", body)
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Error("registration response must not be cached")
+	}
+	st, err := loadOAuthState(oa.statePath)
+	if err != nil || len(st.Clients) != 1 || st.Clients[0].ID != id {
+		t.Errorf("state on disk = %+v, %v", st, err)
+	}
+	if info, err := os.Stat(oa.statePath); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("oauth.json mode = %v %v", info, err)
+	}
+}
+
+func TestOAuthRegisterRefusals(t *testing.T) {
+	_, mux, _ := newTestOAuthServer(t)
+	cases := map[string]string{
+		`{"redirect_uris":["https://evil.example/cb"]}`: "invalid_redirect_uri",
+		`{"redirect_uris":["http://claude.ai/cb"]}`:     "invalid_redirect_uri",
+		`{"redirect_uris":[]}`:                          "invalid_redirect_uri",
+		`{"redirect_uris":["http://localhost/cb"],"token_endpoint_auth_method":"client_secret_basic"}`: "invalid_client_metadata",
+		`{"redirect_uris":["http://localhost/cb"],"grant_types":["client_credentials"]}`:               "invalid_client_metadata",
+		`not json`: "invalid_client_metadata",
+	}
+	for body, want := range cases {
+		rec, out := postJSON(t, mux, oauthRegisterPath, body, nil)
+		if rec.Code != http.StatusBadRequest || out["error"] != want {
+			t.Errorf("%s → %d %v, want %s", body, rec.Code, out, want)
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, oauthRegisterPath, strings.NewReader(`{"redirect_uris":["http://localhost/cb"]}`))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("form body on register = %d", rec.Code)
+	}
+}
+
+func TestOAuthClientStoreEvictsAtCap(t *testing.T) {
+	now := time.Now()
+	st := &oauthState{}
+	for i := 0; i < maxOAuthClients; i++ {
+		st.addClient(oauthClient{ID: fmt.Sprintf("c%03d", i), CreatedAt: now.Add(time.Duration(i) * time.Second)}, now)
+	}
+	// c000 is the oldest but has a live grant; c001 is the oldest without.
+	st.Families = []tokenFamily{{ClientID: "c000", ExpiresAt: now.Add(time.Hour)}}
+	st.addClient(oauthClient{ID: "new", CreatedAt: now.Add(time.Hour)}, now)
+	if len(st.Clients) != maxOAuthClients {
+		t.Fatalf("len = %d", len(st.Clients))
+	}
+	if _, ok := st.findClient("c000"); !ok {
+		t.Error("a client with a live grant must survive eviction")
+	}
+	if _, ok := st.findClient("c001"); ok {
+		t.Error("the oldest client without a grant must go")
+	}
+	if _, ok := st.findClient("new"); !ok {
+		t.Error("the new client must be kept")
+	}
+}
+
+func TestOAuthRateBucket(t *testing.T) {
+	b := rateBucket{capacity: 3, perSecond: 1}
+	now := time.Unix(1000, 0)
+	for i := 0; i < 3; i++ {
+		if !b.take(now) {
+			t.Fatalf("take %d refused", i)
+		}
+	}
+	if b.take(now) {
+		t.Error("4th take in the same instant must be refused")
+	}
+	if !b.take(now.Add(time.Second)) {
+		t.Error("one second refills one token")
 	}
 }

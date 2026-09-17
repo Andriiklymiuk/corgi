@@ -389,8 +389,16 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	// has nothing to protect and --no-oauth turns it off.
 	var oa *oauthServer
 	if !opts.noOAuth && (token != "" || deviceStore != "") {
-		oa = newOAuthServer(addr, newOAuthClientHosts(opts.oauthHosts, os.Stderr), origins, deviceStore)
-		oa.mount(mux)
+		if dir, err := agentDir(); err == nil {
+			// Access tokens are devices, so a --token-only server still needs
+			// the device store's path to write them.
+			oauthDevices := deviceStore
+			if oauthDevices == "" {
+				oauthDevices = pairing.StorePath(dir)
+			}
+			oa = newOAuthServer(addr, newOAuthClientHosts(opts.oauthHosts, os.Stderr), origins, oauthDevices, oauthStatePath(dir))
+			oa.mount(mux)
+		}
 	}
 	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuthWithOAuth(token, httpSrv, deviceStore, oa)))
 

@@ -2,7 +2,11 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,18 +38,74 @@ type oauthServer struct {
 	hosts       *oauthClientHosts
 	origins     *originAllowlist
 	deviceStore string
+	statePath   string
+	state       *oauthState
+	bucket      rateBucket
 	now         func() time.Time
 }
 
-// newOAuthServer starts with the loopback issuer for listenAddr.
-func newOAuthServer(listenAddr string, hosts *oauthClientHosts, origins *originAllowlist, deviceStore string) *oauthServer {
+// newOAuthServer starts with the loopback issuer for listenAddr. deviceStore
+// is where access tokens are recorded as devices; statePath is oauth.json.
+// An unreadable oauth.json is reported and treated as empty, never fatal:
+// the header path must keep serving.
+func newOAuthServer(listenAddr string, hosts *oauthClientHosts, origins *originAllowlist, deviceStore, statePath string) *oauthServer {
+	state, err := loadOAuthState(statePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "corgi mcp: cannot read %s (%v); starting with no OAuth clients\n", statePath, err)
+		state = &oauthState{}
+	}
 	return &oauthServer{
 		issuer:      "http://" + localURL(listenAddr), // NOSONAR — loopback issuer until the tunnel resolves; OAuth 2.1 allows plain http only there
 		hosts:       hosts,
 		origins:     origins,
 		deviceStore: deviceStore,
+		statePath:   statePath,
+		state:       state,
+		bucket:      rateBucket{capacity: oauthRequestsPerMinute, perSecond: oauthRequestsPerMinute / 60},
 		now:         time.Now,
 	}
+}
+
+// oauthRequestsPerMinute is one bucket for register, authorize and token
+// together. Behind a tunnel every request comes from the tunnel agent, so a
+// per-IP limit would be the same bucket with more code.
+const oauthRequestsPerMinute = 60
+
+// rateBucket is a token bucket; the caller holds oa.mu.
+type rateBucket struct {
+	capacity  float64
+	perSecond float64
+	tokens    float64
+	last      time.Time
+}
+
+func (b *rateBucket) take(now time.Time) bool {
+	if b.last.IsZero() {
+		b.tokens = b.capacity
+	} else {
+		b.tokens = min(b.capacity, b.tokens+now.Sub(b.last).Seconds()*b.perSecond)
+	}
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+// limited answers 429 when the shared bucket is empty. Called with oa.mu
+// held by the handler that owns the request.
+func (oa *oauthServer) limitedLocked(w http.ResponseWriter) bool {
+	if oa.bucket.take(oa.now()) {
+		return false
+	}
+	w.Header().Set("Retry-After", "5")
+	oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable", "too many requests; try again in a few seconds")
+	return true
+}
+
+func (oa *oauthServer) saveLocked() error {
+	return saveOAuthState(oa.statePath, oa.state)
 }
 
 // setIssuer records the public origin the tunnel gave us.
@@ -146,6 +206,99 @@ func (oa *oauthServer) mount(mux *http.ServeMux) {
 	mux.Handle(oauthPRMPath+"/mcp", prm)
 	mux.Handle(oauthASMetadataPath, as)
 	mux.Handle(oauthASMetadataPath+"/mcp", as)
+	mux.Handle(oauthRegisterPath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.registerHandler)))
+}
+
+// maxOAuthBody bounds a registration or token request body.
+const maxOAuthBody = 64 << 10
+
+// registerRequest is the RFC 7591 metadata corgi reads; the rest is ignored.
+type registerRequest struct {
+	RedirectURIs            []string `json:"redirect_uris"`
+	ClientName              string   `json:"client_name"`
+	GrantTypes              []string `json:"grant_types"`
+	ResponseTypes           []string `json:"response_types"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+}
+
+// registerHandler is dynamic client registration: a public client with
+// allowlisted redirect URIs gets an id, no secret.
+func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	oa.mu.Lock()
+	defer oa.mu.Unlock()
+	if oa.limitedLocked(w) {
+		return
+	}
+	if ct := r.Header.Get(headerContentType); !strings.HasPrefix(ct, "application/json") {
+		oauthError(w, http.StatusBadRequest, "invalid_request", "registration wants application/json, got "+strconv.Quote(ct))
+		return
+	}
+	var req registerRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxOAuthBody)).Decode(&req); err != nil {
+		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "body is not valid JSON")
+		return
+	}
+	if len(req.RedirectURIs) == 0 {
+		oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "redirect_uris is required")
+		return
+	}
+	for _, u := range req.RedirectURIs {
+		if !oa.hosts.allowedRedirectURI(u) {
+			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "redirect URI not allowed: "+u+" (loopback, or https to claude.ai / claude.com / an --oauth-client-host)")
+			return
+		}
+	}
+	for _, g := range req.GrantTypes {
+		if g != "authorization_code" && g != "refresh_token" {
+			oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "unsupported grant_type "+g)
+			return
+		}
+	}
+	for _, rt := range req.ResponseTypes {
+		if rt != "code" {
+			oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "unsupported response_type "+rt)
+			return
+		}
+	}
+	if m := req.TokenEndpointAuthMethod; m != "" && m != "none" {
+		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "token_endpoint_auth_method must be none; corgi issues no client secrets")
+		return
+	}
+	name := strings.TrimSpace(req.ClientName)
+	if name == "" {
+		name = "MCP client"
+	}
+	if len(name) > 64 {
+		name = name[:64]
+	}
+	id, err := randomToken("corgi_client_")
+	if err != nil {
+		oauthError(w, http.StatusInternalServerError, "server_error", "could not mint a client id")
+		return
+	}
+	now := oa.now()
+	oa.state.addClient(oauthClient{ID: id, Name: name, RedirectURIs: req.RedirectURIs, CreatedAt: now}, now)
+	if err := oa.saveLocked(); err != nil {
+		oauthError(w, http.StatusInternalServerError, "server_error", "could not record the client: "+err.Error())
+		return
+	}
+	w.Header().Set(headerContentType, mimeJSON)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusCreated)
+	body, _ := json.Marshal(map[string]any{
+		"client_id":                  id,
+		"client_id_issued_at":        now.Unix(),
+		"client_name":                name,
+		"redirect_uris":              req.RedirectURIs,
+		"grant_types":                []string{"authorization_code", "refresh_token"},
+		"response_types":             []string{"code"},
+		"token_endpoint_auth_method": "none",
+	})
+	_, _ = w.Write(body)
 }
 
 // oauthError writes an RFC 6749 §5.2 error body.
