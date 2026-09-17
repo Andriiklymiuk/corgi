@@ -170,6 +170,12 @@ agents, tracker MCP.
 
 1. Locate the compose file (preflight in `../_shared/conventions.md`). None →
    `/corgi-new` first, or ask which repos; don't guess a layout.
+   **The pasted context may not be this workspace.** A diff, MR body, ticket or
+   screenshot dropped into the prompt can come from another product entirely — and
+   may be an *example of the shape wanted*, not the target. Never identify the
+   workspace by hunting the filesystem for code that matches the paste: confirm
+   which one before Phase 1, and re-confirm when the paste names services the
+   compose file doesn't.
 2. **Read the yaml, extract only needed keys** —
    `services.<name>.{path,cloneFrom,manualRun}`, `depends_on_services`, `exports`
    (schema: `skills/corgi/references/yml-schema.md`). Don't render the whole
@@ -326,6 +332,12 @@ Batched stories overlap. Re-exploring per story doubles tokens. So:
    honor a
    `decision` constraint, reuse an `incident` fix for a regression, ground a
    free-text feature in `domain` facts. Absent → skip.
+7. **Story is conformance to an EXTERNAL contract** (a platform's integration
+   requirements, a protocol revision, a third-party API)? Read that vendor's
+   current docs before speccing. The repo only shows what was implemented, never
+   what the other side requires today — and their **limits** (payload caps,
+   timeouts, supported versions) bind as hard as their endpoints, while failing
+   only on real data. Cite the doc in the spec.
 
 ### Forecast the risk — every story
 
@@ -832,9 +844,10 @@ between stories.
 - **Blocked / failed** → no link, one line:
   `[<key>] <Service>: BLOCKED — <decision needed>` (or `needs attention — <reason>`, +
   the worktree `/tmp` path if partial work is parked there).
-- **Review-channel blurb (only when asked)** — user asks for a message for the
-  team's review channel → terse. No pitch, no root-cause paragraph, no emoji, no
-  "please review" — the link unfurls; the channel convention is terse.
+- **Review-channel blurb (print it last, every run)** — the one part that leaves the
+  terminal, so never make the user ask for it → terse. No pitch, no root-cause
+  paragraph, no emoji, no "please review" — the link unfurls; the channel
+  convention is terse.
   - **Single-repo change** → two lines: `<Service>: <short title>` then the bare
     PR/MR link.
   - **Related multi-repo change** → one `<short title>` line for the whole change,
@@ -900,6 +913,10 @@ Rules:
 ---
 
 ## Phase 6 — Report
+
+**The Grouped report's lines above ARE the report — render them, never a prose
+write-up around them.** A findings essay with tables is not a hand-back: nothing in
+it can be pasted anywhere.
 
 Hand the batch back in the **`summary`** skill's shape: one block per ticket, a table
 row per repo, the PR/MR as a markdown link, the state carrying its nuance (`MERGED ✓`,
