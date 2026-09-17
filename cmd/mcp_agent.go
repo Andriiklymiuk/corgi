@@ -32,7 +32,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 	composeOpt := mcp.WithString("composePath", mcp.Description("compose path (default: cwd)"))
 	serviceOpt := mcp.WithString("service", mcp.Required(), mcp.Description("Service name"))
 
-	s.AddTool(mcp.NewTool("corgi_agent_status",
+	s.AddTool(newCorgiTool("corgi_agent_status",
 		mcp.WithDescription(
 			"Health of the corgi agent daemon: whether it is running, each workspace's supervised session, "+
 				"restart count, wake lock, and which Claude account each workspace uses. Read-only. "+
@@ -43,7 +43,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpAgentStatus()
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_sessions",
+	s.AddTool(newCorgiTool("corgi_sessions",
 		mcp.WithDescription(
 			"Every interactive Claude Code session on this machine, as the board `corgi agent track` keeps: "+
 				"label, status (working, needs_input, done, stale, gone), what it is doing, which account, and where "+
@@ -53,7 +53,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpSessions()
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_session_brief",
+	s.AddTool(newCorgiTool("corgi_session_brief",
 		mcp.WithDescription(
 			"What the previous supervised session in this workspace was working on before it was restarted. "+
 				"Read-only. A restart produces a NEW session with none of the earlier conversation, so call this "+
@@ -65,7 +65,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpSessionBrief(r.GetString("workspace", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_workspaces",
+	s.AddTool(newCorgiTool("corgi_workspaces",
 		mcp.WithDescription(
 			"List the corgi stacks registered on this machine, with their paths and whether each is reachable. "+
 				"Read-only. Use this to find out what you can work on."),
@@ -73,7 +73,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpWorkspaces()
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_workspace_resolve",
+	s.AddTool(newCorgiTool("corgi_workspace_resolve",
 		mcp.WithDescription(
 			"Resolve a human name like \"the recipe app\" to one registered workspace. Read-only. "+
 				"Returns either a single workspace or a candidate list — it never guesses, because picking the "+
@@ -88,7 +88,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 	// (no caller-defined command), `sensitive` workspaces refusing remote start,
 	// and 0600 status.json for the sessionUrl. A stolen token can stop sessions;
 	// revocation is the answer, as for every tool the token reaches.
-	s.AddTool(mcp.NewTool("corgi_session_start",
+	s.AddTool(newCorgiTool("corgi_session_start",
 		mcp.WithDescription(
 			"Start a supervised Claude Code Remote Control session in a registered workspace, by name. "+
 				"Returns immediately with state \"starting\" — poll corgi_agent_status until the workspace reports "+
@@ -102,7 +102,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpSessionStart(r.GetString("workspace", ""), r.GetString("profile", ""), r.GetString("name", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_session_stop",
+	s.AddTool(newCorgiTool("corgi_session_stop",
 		mcp.WithDescription(
 			"Stop the supervised session in a workspace. Returns immediately with state \"stopping\"; "+
 				"poll corgi_agent_status to confirm. Stopping a workspace that is not running is a clean no-op."),
@@ -111,7 +111,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpSessionStop(r.GetString("workspace", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_session_events",
+	s.AddTool(newCorgiTool("corgi_session_events",
 		mcp.WithDescription(
 			"A workspace's session timeline, newest first: starts, exits with their classified cause and reason, "+
 				"disables, and captured claude.ai session links. Use it to answer why a session died or restarted. "+
@@ -122,7 +122,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpSessionEvents(r.GetString("workspace", ""), r.GetInt("limit", 30))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_worktrees_materialize",
+	s.AddTool(newCorgiTool("corgi_worktrees_materialize",
 		mcp.WithDescription(
 			"Give every repository in the stack a git worktree on one shared branch, creating the branch off each "+
 				"repo's HEAD when it does not exist yet. This is how a change spans several repositories at once. "+
@@ -141,7 +141,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		)
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_pr_open",
+	s.AddTool(newCorgiTool("corgi_pr_open",
 		mcp.WithDescription(
 			"Open a pull request in every repository of the stack that has commits on a branch, and cross-link "+
 				"them so each names its siblings. This is the step after corgi_worktrees_materialize and corgi_diff: "+
@@ -167,7 +167,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		)
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_worktrees_release",
+	s.AddTool(newCorgiTool("corgi_worktrees_release",
 		mcp.WithDescription(
 			"Remove the worktrees a branch materialized. Branches and commits are left alone, and a worktree "+
 				"with uncommitted changes is kept and reported rather than discarded — pass force to remove it anyway."),
@@ -181,7 +181,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpWorktreesRelease(r.GetString("composePath", ""), r.GetString("branch", ""), r.GetBool("force", false))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_preview_start",
+	s.AddTool(newCorgiTool("corgi_preview_start",
 		mcp.WithDescription(
 			"Open a public tunnel to a running service so the user can watch it on their phone while you edit. "+
 				"Returns immediately with state \"starting\"; poll corgi_preview_state for the URL. "+
@@ -199,7 +199,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpPreviewStart(r)
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_preview_state",
+	s.AddTool(newCorgiTool("corgi_preview_state",
 		mcp.WithDescription(
 			"State of one preview, or all of them. States: starting (no URL yet), ready, broken (the tunnel is up "+
 				"but nothing answers on the port — usually a build in progress), stopped. A url is present only in ready."),
@@ -209,7 +209,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpPreviewState(r.GetString("composePath", ""), r.GetString("id", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_preview_freeze",
+	s.AddTool(newCorgiTool("corgi_preview_freeze",
 		mcp.WithDescription(
 			"Pin a preview so idle reaping leaves it alone while the user is reading it. Set frozen=false to release."),
 		composeOpt,
@@ -224,7 +224,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpPreviewFreeze(r.GetString("composePath", ""), r.GetString("id", ""), r.GetBool("frozen", true))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_preview_stop",
+	s.AddTool(newCorgiTool("corgi_preview_stop",
 		mcp.WithDescription(
 			"Tear a preview down and close its public URL. An un-stopped preview is reaped after idleMinutes unless frozen."),
 		composeOpt,
@@ -236,7 +236,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpPreviewStop(r.GetString("composePath", ""), r.GetString("id", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_diff",
+	s.AddTool(newCorgiTool("corgi_diff",
 		mcp.WithDescription(
 			"Diff every repository in the stack against a base branch, in one response. Read-only, needs no running "+
 				"stack and no tunnel, so it works on a bad connection. This is usually the best way to show someone "+
