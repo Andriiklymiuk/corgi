@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -169,6 +170,13 @@ func findTestScript(service utils.Service) ([]string, bool) {
 // dependency readiness, then run its test script. Services without one are
 // skipped. Returns the per-service results and whether every run test passed.
 func runTests(corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTimeout time.Duration) (results []testResult, allPassed bool) {
+	return runTestsContext(context.Background(), corgi, sel, ensureDeps, readyTimeout)
+}
+
+// runTestsContext is runTests bounded by ctx; a service whose test is still
+// running when ctx ends is reported as failed with a timed-out message and
+// the services after it are skipped.
+func runTestsContext(ctx context.Context, corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTimeout time.Duration) (results []testResult, allPassed bool) {
 	results = []testResult{}
 	allPassed = true
 
@@ -180,6 +188,10 @@ func runTests(corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTi
 	interactive := utils.StdinIsTTY()
 
 	for _, service := range sel.services {
+		if ctx.Err() != nil {
+			results = append(results, testResult{Name: service.ServiceName, Skipped: true, Message: "not run: the call budget was spent"})
+			continue
+		}
 		commands, ok := findTestScript(service)
 		if !ok {
 			results = append(results, testResult{Name: service.ServiceName, Skipped: true})
@@ -199,7 +211,7 @@ func runTests(corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTi
 			}
 		}
 
-		res := runServiceTest(service, commands, interactive, childOut)
+		res := runServiceTest(ctx, service, commands, interactive, childOut)
 		if !res.Passed {
 			allPassed = false
 		}
@@ -211,13 +223,14 @@ func runTests(corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTi
 
 // runServiceTest runs a service's test commands sequentially in its env,
 // stopping on the first non-zero exit.
-func runServiceTest(service utils.Service, commands []string, interactive bool, childOut *os.File) testResult {
+func runServiceTest(ctx context.Context, service utils.Service, commands []string, interactive bool, childOut *os.File) testResult {
 	env := getServiceEnv(service)
 	start := time.Now()
 
 	exitCode := 0
 	for _, command := range commands {
-		code, err := utils.RunServiceCommandExitCode(
+		code, err := utils.RunServiceCommandExitCodeContext(
+			ctx,
 			command,
 			service.AbsolutePath,
 			interactive,
@@ -226,6 +239,15 @@ func runServiceTest(service utils.Service, commands []string, interactive bool, 
 			env,
 		)
 		if err != nil {
+			if ctx.Err() != nil {
+				return testResult{
+					Name:       service.ServiceName,
+					Passed:     false,
+					ExitCode:   -1,
+					DurationMs: time.Since(start).Milliseconds(),
+					Message:    "timed out: the test ran past the call budget and was killed",
+				}
+			}
 			return testResult{
 				Name:       service.ServiceName,
 				Passed:     false,

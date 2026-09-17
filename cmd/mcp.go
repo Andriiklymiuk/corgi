@@ -1210,6 +1210,7 @@ type execResult struct {
 	ExitCode   int    `json:"exitCode"`
 	Output     string `json:"output"`
 	Truncated  bool   `json:"truncated,omitempty"`
+	TimedOut   bool   `json:"timedOut,omitempty"`
 	DurationMs int64  `json:"durationMs"`
 }
 
@@ -1256,8 +1257,11 @@ func mcpExec(args execArgs) (execResult, error) {
 		err2 error
 	)
 	start := time.Now()
+	budgetCtx, cancel := context.WithTimeout(context.Background(), mcpCallBudget())
+	defer cancel()
 	withStdoutToStderr(func() {
-		code, err2 = utils.RunServiceCommandExitCode(
+		code, err2 = utils.RunServiceCommandExitCodeContext(
+			budgetCtx,
 			args.Command,
 			service.AbsolutePath,
 			false, // never interactive under MCP
@@ -1267,11 +1271,11 @@ func mcpExec(args execArgs) (execResult, error) {
 		)
 	})
 	durationMs := time.Since(start).Milliseconds()
-	if err2 != nil {
+	if err2 != nil && budgetCtx.Err() == nil {
 		return execResult{}, fmt.Errorf("%s: failed to run command for %s: %v", utils.ErrExecFailed, args.Service, err2)
 	}
 	out, truncated := capMCPOutput(buf.String(), mcpMaxOutputLines, mcpMaxOutputBytes)
-	return execResult{ExitCode: code, Output: out, Truncated: truncated, DurationMs: durationMs}, nil
+	return execResult{ExitCode: code, Output: out, Truncated: truncated, TimedOut: budgetCtx.Err() != nil, DurationMs: durationMs}, nil
 }
 
 type testArgs struct {
@@ -1289,6 +1293,7 @@ type testArgs struct {
 type testRunResult struct {
 	Services []testResult `json:"services"`
 	Passed   bool         `json:"passed"`
+	TimedOut bool         `json:"timedOut,omitempty"`
 	Note     string       `json:"note,omitempty"`
 }
 
@@ -1334,10 +1339,12 @@ func mcpTest(args testArgs) (testRunResult, error) {
 		results []testResult
 		passed  bool
 	)
+	budgetCtx, cancel := context.WithTimeout(context.Background(), mcpCallBudget())
+	defer cancel()
 	withStdoutToStderr(func() {
-		results, passed = runTests(corgi, sel, args.EnsureDeps, defaultReadyTimeout)
+		results, passed = runTestsContext(budgetCtx, corgi, sel, args.EnsureDeps, defaultReadyTimeout)
 	})
-	return testRunResult{Services: results, Passed: passed}, nil
+	return testRunResult{Services: results, Passed: passed, TimedOut: budgetCtx.Err() != nil}, nil
 }
 
 // mcpE2E runs the stack's e2e block against the already-running stack with
@@ -1393,11 +1400,11 @@ type restartArgs struct {
 
 // mcpRestart stops the detached stack then starts it again detached, returning
 // the new run-state. Down/up already route their progress prints to stderr.
-func mcpRestart(args restartArgs) (utils.RunState, error) {
+func mcpRestart(args restartArgs) (upLaunch, error) {
 	if _, err := mcpDown(validateArgs{ComposePath: args.ComposePath}); err != nil {
-		return utils.RunState{}, err
+		return upLaunch{}, err
 	}
-	return mcpUp(upArgs{ComposePath: args.ComposePath, Profile: args.Profile})
+	return mcpUpDetached(upArgs{ComposePath: args.ComposePath, Profile: args.Profile}, mcpUpWait)
 }
 
 type dbQueryArgs struct {
@@ -1764,7 +1771,7 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_up",
-		mcp.WithDescription("Start every database and service detached and return the run-state {services[], dbServices[]} with each entry's name, pid, port, status. Not instant: it clones missing repos, runs every beforeStart (installs, migrations, builds) and brings databases up before returning — minutes on a cold stack. Returning is not a ready gate; poll corgi_status until healthy. Fails with E_ALREADY_RUNNING while a run is live — call corgi_down first. A service that crashed on spawn shows status \"crashed\" in the returned array."),
+		mcp.WithDescription("Start every database and service detached, in a child process, and return within about 20 seconds: {status, handle{pid, logPath}, next, state?}. status \"started\" means the boot finished and state is the run-state {services[], dbServices[]} with each entry's name, pid, port, status; \"starting\" means it is still cloning repos, running beforeStart (installs, migrations, builds) or bringing databases up — minutes on a cold stack — and handle.logPath is where to read the boot log; \"failed\" carries the last log lines in error. Neither is a ready gate: poll corgi_status until healthy. Fails with E_ALREADY_RUNNING while a run is live — call corgi_down first; a second call during a boot returns the same handle. A service that crashed on spawn shows status \"crashed\" in state."),
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
 		mcp.WithString("omit", mcp.Description(omitDesc)),
@@ -1772,14 +1779,14 @@ func registerMCPTools(s *server.MCPServer) {
 		mcp.WithString("serviceBranch", mcp.Description(serviceBranchDesc)),
 		mcp.WithString("serviceDir", mcp.Description(serviceDirDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
-		return mcpUp(upArgs{
+		return mcpUpDetached(upArgs{
 			ComposePath:   r.GetString("composePath", ""),
 			Profile:       r.GetString("profile", ""),
 			Omit:          r.GetString("omit", ""),
 			Seed:          r.GetBool("seed", false),
 			ServiceBranch: r.GetString("serviceBranch", ""),
 			ServiceDir:    r.GetString("serviceDir", ""),
-		})
+		}, mcpUpWait)
 	}))
 
 	s.AddTool(newCorgiTool("corgi_down",
@@ -1863,7 +1870,7 @@ func registerMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_restart",
-		mcp.WithDescription("corgi_down then corgi_up in one call; returns the new run-state. Same cost and caveats as corgi_up: beforeStart re-runs unless its cacheKey is warm, and returning is not a ready gate — poll corgi_status."),
+		mcp.WithDescription("corgi_down then corgi_up in one call; returns what corgi_up returns: {status, handle, next, state?}. Same cost and caveats as corgi_up: beforeStart re-runs in the child unless its cacheKey is warm, and returning is not a ready gate — poll corgi_status."),
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {

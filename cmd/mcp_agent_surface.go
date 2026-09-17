@@ -65,11 +65,11 @@ func registerAgentSurfaceTools(s *server.MCPServer, composeOpt mcp.ToolOption) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_wait_for_log",
-		mcp.WithDescription("Block until a service's log matches a regexp, then return the matching line. Use instead of polling corgi_logs on a timer."),
+		mcp.WithDescription("Block until a service's log matches a regexp, then return the matching line. Use instead of polling corgi_logs on a timer. One call waits at most the call budget (200 s by default); when timedOut is true the wait was cut there and the same call can be made again."),
 		composeOpt,
 		mcp.WithString("service", mcp.Required(), mcp.Description("Service name whose log to watch")),
 		mcp.WithString("pattern", mcp.Required(), mcp.Description("Go regexp the line must match")),
-		mcp.WithNumber("timeoutSec", mcp.Description("Give up after this many seconds (default 60)")),
+		mcp.WithNumber("timeoutSec", mcp.Description("Give up after this many seconds (default 60, at most the call budget)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWaitForLog(waitForLogArgs{
 			ComposePath: r.GetString("composePath", ""),
@@ -148,6 +148,7 @@ type waitForLogResult struct {
 	Matched  bool   `json:"matched"`
 	Line     string `json:"line,omitempty"`
 	WaitedMs int64  `json:"waitedMs"`
+	TimedOut bool   `json:"timedOut,omitempty"`
 }
 
 func mcpWaitForLog(args waitForLogArgs) (waitForLogResult, error) {
@@ -161,6 +162,7 @@ func mcpWaitForLog(args waitForLogArgs) (waitForLogResult, error) {
 	if timeout <= 0 {
 		timeout = time.Minute
 	}
+	timeout, clamped := clampToBudget(timeout)
 	started := time.Now()
 	line, matched, err := utils.WaitForLogLine(logsBase(), utils.LogWait{
 		Service: args.Service,
@@ -175,6 +177,7 @@ func mcpWaitForLog(args waitForLogArgs) (waitForLogResult, error) {
 		Matched:  matched,
 		Line:     line,
 		WaitedMs: time.Since(started).Milliseconds(),
+		TimedOut: clamped && !matched,
 	}, nil
 }
 
