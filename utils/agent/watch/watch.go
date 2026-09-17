@@ -58,6 +58,7 @@ type Event struct {
 	State     string    `json:"state,omitempty"`
 	Assignee  string    `json:"assignee,omitempty"`
 	Mine      bool      `json:"mine,omitempty"` // assigned to me, or my PR
+	Self      bool      `json:"self,omitempty"` // I made it: a ticket I wrote is not news
 	Bot       bool      `json:"bot,omitempty"`  // posted by a bot account
 	At        time.Time `json:"at"`
 }

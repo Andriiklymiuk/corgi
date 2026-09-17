@@ -95,6 +95,28 @@ func TestWatchSinkNotifiesAndFixesOnce(t *testing.T) {
 	}
 }
 
+func TestATicketIWroteMyselfFixesWithoutRinging(t *testing.T) {
+	d := testDaemon(t)
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	ran := fakeClaude(t)
+	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Project: "ABC", Rules: watch.Rules{Enabled: true}, Action: "fix", SkipPermissions: true}}
+	d.startWatches(context.Background())
+
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:ABC-1", Source: "linear", Kind: watch.KindIssueNew, Ref: "ABC-1", Title: "Login loops", Mine: true, Self: true, Author: "Andrii", At: time.Now()})
+
+	got := collectNotes(t, notes, "fixed ABC-1")
+	if got["new issue ABC-1 — Login loops"] {
+		t.Fatalf("a ticket I wrote rang as news: %v", got)
+	}
+	if !got["fixed ABC-1 — https://github.com/acme/api/pull/412"] || len(*ran) != 1 {
+		t.Fatalf("the fix must still run and report: %v, runs %v", got, *ran)
+	}
+	if data, _ := os.ReadFile(filepath.Join(d.Dir, "watch", "events.jsonl")); !strings.Contains(string(data), "ABC-1") {
+		t.Fatal("the inbox must still have it")
+	}
+}
+
 func TestDeferredFixIsNotRunAndNotRetried(t *testing.T) {
 	d := testDaemon(t)
 	notes := make(chan string, 8)

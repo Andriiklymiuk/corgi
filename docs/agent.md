@@ -1087,7 +1087,8 @@ Not every exit is worth retrying:
 `corgi agent watch` makes the daemon notice work that arrives while you are
 elsewhere: a new bug in Linear or Jira, a comment on an issue assigned to
 you, a review on a pull request you opened. It tells you, and it can start
-the fix.
+the fix. A ticket you created yourself is not news: it lands in the inbox
+and a fix still starts, but nothing rings (2.28.15).
 
 ```bash
 cd ~/dev/acme-stack

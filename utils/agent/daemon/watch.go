@@ -448,6 +448,12 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		if d.handOverEvent(ctx, spec, e) {
 			body += " (handed to the session on it)"
 		}
+		// A ticket I wrote myself is not news: the inbox has it and a fix
+		// still runs, but nothing rings.
+		if e.Self && e.Kind == watch.KindIssueNew {
+			utils.Infof("agent: (mine) %s\n", body)
+			return
+		}
 		// Quiet hours mean quiet: the event is recorded and the inbox shows
 		// it, but nothing buzzes until the window opens.
 		if quietNow(spec, time.Now()) {

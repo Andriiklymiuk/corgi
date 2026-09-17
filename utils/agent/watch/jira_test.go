@@ -32,7 +32,7 @@ func newJiraFake(t *testing.T) *jiraFake {
 	stamp := func(d time.Duration) string { return f.now.Add(d).Format(jiraStamp) }
 	search := fmt.Sprintf(`{"issues":[
   {"key":"ABC-1","fields":{"summary":"Login breaks","labels":["bug","agent"],"status":{"name":"To Do"},
-   "assignee":{"accountId":"me-1","displayName":"Andrii"},"created":%q,"updated":%q,
+   "assignee":{"accountId":"me-1","displayName":"Andrii"},"creator":{"accountId":"u-2","displayName":"Bob"},"created":%q,"updated":%q,
    "description":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Steps to "},{"type":"text","text":"reproduce"}]}]}}},
   {"key":"ABC-2","fields":{"summary":"Old one","labels":[],"status":{"name":"In Progress"},
    "assignee":{"accountId":"u-2","displayName":"Bob"},"created":%q,"updated":%q,"description":null}}
@@ -171,6 +171,9 @@ func TestJiraEventFields(t *testing.T) {
 		issue.State != "To Do" || issue.Assignee != "Andrii" || issue.Body != "Steps to  reproduce" ||
 		strings.Join(issue.Labels, ",") != "bug,agent" || issue.URL != f.srv.URL+"/browse/ABC-1" {
 		t.Errorf("issue: %+v", issue)
+	}
+	if issue.Self || issue.Author != "Bob" {
+		t.Errorf("Bob's ticket is not mine: %+v", issue)
 	}
 	if comment.Kind != KindIssueComment || !comment.Mine || comment.Author != "Bob" || comment.Body != "Can you check staging?" ||
 		comment.Ref != "ABC-1" || comment.Title != "Login breaks" || !comment.At.Equal(f.now.Add(-20*time.Minute)) {

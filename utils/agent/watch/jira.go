@@ -39,6 +39,10 @@ type jiraIssue struct {
 			AccountID   string `json:"accountId"`
 			DisplayName string `json:"displayName"`
 		} `json:"assignee"`
+		Creator *struct {
+			AccountID   string `json:"accountId"`
+			DisplayName string `json:"displayName"`
+		} `json:"creator"`
 		Created string `json:"created"`
 		Updated string `json:"updated"`
 		Comment *struct {
@@ -106,7 +110,7 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	// second request unless Jira truncated the list.
 	params := url.Values{
 		"jql":        {jql},
-		"fields":     {"summary,description,labels,status,assignee,created,updated,comment"},
+		"fields":     {"summary,description,labels,status,assignee,creator,created,updated,comment"},
 		"maxResults": {"50"},
 	}
 	if err := j.get(ctx, "/rest/api/3/search/jql", params, &search); err != nil {
@@ -141,6 +145,10 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 		}
 		if issue.Fields.Assignee != nil {
 			e.Assignee = issue.Fields.Assignee.DisplayName
+		}
+		if issue.Fields.Creator != nil {
+			e.Author = issue.Fields.Creator.DisplayName
+			e.Self = isMe(j.Me, issue.Fields.Creator.AccountID)
 		}
 		events = append(events, e)
 	}
