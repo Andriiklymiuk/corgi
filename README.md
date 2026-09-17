@@ -312,6 +312,27 @@ corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 
 `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux — a headless server too, where the phone and Telegram are the screen ([running it on a server](docs/agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
 
+### Talk to your laptop from any Claude
+
+The same daemon is an MCP connector for Claude.ai, Claude Desktop and the
+Claude phone app — the whole stack as 52 tools, behind your own sign-in:
+
+```text
+$ corgi agent status
+corgi agent running (pid 84639, version 2.29.0)
+  launcher   https://<host>/app
+  connector  https://<host>/mcp   add in Claude: Connect, or No sign-in + Authorization: Bearer <device token>
+```
+
+In Claude: *Add custom connector* → paste the connector URL → **Sign in now**
+→ **Add**. corgi opens its own consent page; approve it in a browser that has
+seen `corgi agent dashboard`, or run `corgi agent approve ABCD-2345` on the
+laptop. Then ask Claude *"what's running in my stack?"*, *"tail the api
+logs since 10 minutes"*, *"start a session on the billing repo and fix the
+failing test"*. Read-only tools just run; destructive ones ask first, and
+`corgi_exec` stays off over a public tunnel. Revoke any time with
+`corgi mcp devices revoke`. Details: [docs/mcp.md](docs/mcp.md#add-corgi-to-claudeai-desktop-or-the-phone).
+
 ## See every Claude session at once
 
 `corgi agent track enable` hooks into Claude Code. The daemon then keeps a

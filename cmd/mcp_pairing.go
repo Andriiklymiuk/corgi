@@ -339,10 +339,11 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 			CreatedAt time.Time `json:"createdAt"`
 			Encrypted bool      `json:"encrypted"`
 			Role      string    `json:"role,omitempty"`
+			ExpiresAt time.Time `json:"expiresAt,omitempty"`
 		}
 		rows := make([]row, 0, len(store.Devices))
 		for _, d := range store.Devices {
-			rows = append(rows, row{Name: d.Name, CreatedAt: d.CreatedAt, Encrypted: d.Encrypted(), Role: d.Role})
+			rows = append(rows, row{Name: d.Name, CreatedAt: d.CreatedAt, Encrypted: d.Encrypted(), Role: d.Role, ExpiresAt: d.ExpiresAt})
 		}
 		utils.PrintJSON(rows)
 		return
@@ -360,6 +361,14 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 		if d.Viewer() {
 			how += " · reads only"
 		}
+		if !d.ExpiresAt.IsZero() {
+			how = "oauth access token"
+			if d.Expired(time.Now()) {
+				how += " · expired"
+			} else {
+				how += " · expires " + d.ExpiresAt.Local().Format("2006-01-02 15:04")
+			}
+		}
 		fmt.Printf("%-24s paired %s · %s\n", d.Name, d.CreatedAt.Local().Format("2006-01-02 15:04"), how)
 	}
 }
@@ -370,12 +379,14 @@ func runMCPDevicesRevoke(_ *cobra.Command, args []string) {
 	if err != nil {
 		exitWithError("mcp_devices_read", err, 1)
 	}
+	device, _ := store.Find(args[0])
 	if !store.Revoke(args[0]) {
 		exitWithError("mcp_device_unknown", fmt.Errorf("no paired device called %q", args[0]), 1)
 	}
 	if err := pairing.Save(path, store); err != nil {
 		exitWithError("mcp_devices_write", err, 1)
 	}
+	revokeOAuthFamily(filepath.Dir(path), device.Family)
 	utils.Infof("revoked %s — other devices are unaffected\n", args[0])
 }
 

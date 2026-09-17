@@ -65,6 +65,12 @@ type Device struct {
 	// Role is "" for a device that may do everything, or RoleViewer for
 	// one that only reads — a teammate's phone on your board.
 	Role string `json:"role,omitempty"`
+	// ExpiresAt is set on a token that dies on its own — an OAuth access
+	// token. Zero means the device lives until revoked.
+	ExpiresAt time.Time `json:"expiresAt,omitempty"`
+	// Family ties an OAuth access token to the grant it came from, so
+	// revoking the device revokes the refresh token too.
+	Family string `json:"family,omitempty"`
 }
 
 // RoleViewer is the read-only role: every GET but the transcript, no POST.
@@ -75,6 +81,11 @@ func (d Device) Encrypted() bool { return strings.TrimSpace(d.PubKey) != "" }
 
 // Viewer says whether the device only reads.
 func (d Device) Viewer() bool { return d.Role == RoleViewer }
+
+// Expired says whether a self-expiring device is past its time.
+func (d Device) Expired(now time.Time) bool {
+	return !d.ExpiresAt.IsZero() && !now.Before(d.ExpiresAt)
+}
 
 // Store is the set of paired devices.
 type Store struct {
@@ -202,8 +213,18 @@ func (s *Store) Authorize(token string) (string, bool) {
 }
 
 // AuthorizeDevice is Authorize with the whole device, for the encryption
-// layer that needs its key.
+// layer that needs its key. An expired device does not authorize.
 func (s *Store) AuthorizeDevice(token string) (Device, bool) {
+	d, ok := s.FindByToken(token)
+	if !ok || d.Expired(time.Now()) {
+		return Device{}, false
+	}
+	return d, true
+}
+
+// FindByToken is the lookup behind AuthorizeDevice without the expiry check,
+// for callers that manage lifetimes themselves.
+func (s *Store) FindByToken(token string) (Device, bool) {
 	if token == "" {
 		return Device{}, false
 	}
@@ -216,6 +237,21 @@ func (s *Store) AuthorizeDevice(token string) (Device, bool) {
 		}
 	}
 	return matched, found
+}
+
+// RevokeExpired drops every device past its ExpiresAt. Reports how many.
+func (s *Store) RevokeExpired(now time.Time) int {
+	kept := s.Devices[:0]
+	dropped := 0
+	for _, d := range s.Devices {
+		if d.Expired(now) {
+			dropped++
+			continue
+		}
+		kept = append(kept, d)
+	}
+	s.Devices = kept
+	return dropped
 }
 
 // HashToken is what the store holds. A readable store is then not a usable

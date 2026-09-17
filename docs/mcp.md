@@ -62,8 +62,10 @@ localhost where a web page could otherwise reach corgi through DNS rebinding:
   an MCP client binary) passes.
 - An `MCP-Protocol-Version` header corgi does not speak is `400`; a missing
   one is taken as `2025-03-26`, as the spec says.
-- A `401` carries `WWW-Authenticate: Bearer realm="corgi"`, with
-  `error="invalid_token"` added only when a credential was presented.
+- A `401` carries `WWW-Authenticate: Bearer realm="corgi",
+  resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp"`, with
+  `error="invalid_token"` added only when a credential was presented. The
+  `resource_metadata` pointer is what lets a client find the sign-in.
 - Every tool result is cut at 100,000 emitted characters (measured after
   JSON escaping, which is what the client counts) and ends with a
   `{"truncated":true,…}` note; `CORGI_MCP_MAX_RESULT_CHARS` moves the cap.
@@ -79,27 +81,76 @@ localhost where a web page could otherwise reach corgi through DNS rebinding:
 
 ### Add corgi to Claude.ai, Desktop or the phone
 
-Those surfaces reach corgi over the tunnel URL with a paired device token as
-a request header — no OAuth, no sign-in screen:
+corgi is its own sign-in: the `/mcp` endpoint is an OAuth 2.1 resource server
+and authorization server on the tunnel origin, so the connector dialog's
+preselected *Sign in now* works with one click. No token to copy.
 
 1. Have the endpoint up with a tunnel: `corgi agent up`, or by hand
-   `corgi mcp --http 127.0.0.1:8765 --tunnel --pair`. The public URL is in
-   `<data>/agent/public.url` (or on the running `corgi mcp` process as
-   `--tunnel-hostname`); the connector URL is that origin plus `/mcp`.
-2. Mint a token for the connector: `corgi agent dashboard --print --name
-   claude-web` in a terminal you are looking at prints a link ending in
-   `#token=corgi_dev_…`; the part after `token=` is the bearer. The phone's
-   Settings mints one too. A phone's own token is refused on `/mcp`.
-3. In Claude, add a custom connector: the URL from step 1, Authentication
-   **No sign-in** (Claude preselects *Sign in now — Detected* because the
-   `401` carries `WWW-Authenticate: Bearer`; corgi has no OAuth, so that
-   choice fails with "Couldn't register with the sign-in service"), and a
-   request header `Authorization` = `Bearer corgi_dev_…`.
-4. The connector shows the **Corgi** server with its description; read-only
-   tools run without a prompt, destructive ones ask first. Revoke the token
-   any time with `corgi mcp devices revoke claude-web`.
+   `corgi mcp --http 127.0.0.1:8765 --tunnel --pair`. `corgi agent status`
+   prints the URLs:
 
-Claude Code keeps using stdio (`corgi mcp`) and needs none of this.
+   ```
+   corgi agent running (pid 84639, version 2.29.0)
+     launcher   https://<host>/app
+     connector  https://<host>/mcp   add in Claude: Connect, or No sign-in + Authorization: Bearer <device token>
+   ```
+
+2. In Claude, *Add custom connector* → paste the connector URL → leave
+   Authentication on **Sign in now** → **Add**. A browser tab opens corgi's
+   consent page.
+3. Approve. A browser that has opened the dashboard before (`corgi agent
+   dashboard`) shows one **Approve** button. Any other browser shows a code:
+   run `corgi agent approve ABCD-2345` on the machine the daemon runs on and
+   the page finishes on its own. Codes live ten minutes.
+4. The connector shows the **Corgi** server with its 52 tools; read-only
+   tools run without a prompt, destructive ones ask first.
+
+The access token corgi hands Claude is a paired device named `Claude · oauth
+<id>` with a one-hour life; Claude refreshes it silently for 30 days. It
+shows in `corgi mcp devices` and `corgi mcp devices revoke "<name>"` ends
+the whole grant — Claude then asks you to sign in again. A refresh token
+that is replayed after rotation revokes the grant too.
+
+Claude Code can use the same path over HTTP —
+`claude mcp add --transport http corgi https://<host>/mcp` opens the same
+consent — but stdio (`corgi mcp`) needs none of this.
+
+**The header path still works.** Authentication **No sign-in** plus a
+request header `Authorization` = `Bearer corgi_dev_…` from
+`corgi agent dashboard --print --name claude-web` (a terminal you are
+looking at; the phone's Settings mints one too). A phone's own token is
+refused on `/mcp`.
+
+#### What the sign-in serves
+
+| Path | Purpose |
+|------|---------|
+| `/.well-known/oauth-protected-resource[/mcp]` | RFC 9728: who the authorization server is (corgi itself) |
+| `/.well-known/oauth-authorization-server[/mcp]` | RFC 8414: endpoints, `S256`, `none`, `client_id_metadata_document_supported` |
+| `POST /oauth/register` | RFC 7591 dynamic registration: public clients, allowlisted redirect URIs, `corgi_client_…` ids, newest 200 kept |
+| `GET /oauth/authorize` | PKCE `S256` required; client and redirect URI are checked **before** anything can redirect |
+| `POST /oauth/approve`, `GET /oauth/pending/<id>` | the consent page's approve and poll |
+| `POST /oauth/token` | `authorization_code` and `refresh_token`, form-encoded; refresh tokens rotate |
+| `POST /oauth/revoke` | RFC 7009 |
+
+Client IDs that are `https` URLs are Client ID Metadata Documents (what
+Claude and ChatGPT prefer): corgi fetches the document from an allowlisted
+host only, refuses any address that resolves to a private or loopback
+range, follows no redirects, and caches per `Cache-Control` for at most a
+day. Redirect URIs are loopback on any port (RFC 8252) or `https` to
+`claude.ai`, `claude.com` or a host passed with `--oauth-client-host`
+(repeatable; also `CORGI_MCP_OAUTH_CLIENT_HOSTS`, comma-separated; a
+single-label host such as `com` is ignored). Nothing else, so the endpoint
+cannot be used as an open redirect.
+
+State lives in `<data>/agent/oauth.json` (clients and refresh-token
+families) and `devices.json` (access tokens as devices), both `0600`.
+Sign-ins waiting on the consent page are in memory only — at most twenty at
+once, ten minutes each.
+
+`--no-oauth` turns all of this off and the `401` loses its
+`resource_metadata` pointer; `--insecure` never serves it (there is nothing
+to sign in to).
 
 ### Bearer-token auth
 
@@ -120,8 +171,9 @@ startup, and clients send it as an `Authorization: Bearer` header:
 ```
 
 Auth uses a constant-time comparison; mismatches get `401 {"error":"unauthorized"}`
-with a `WWW-Authenticate: Bearer realm="corgi"` header. Tokens are read from
-the `Authorization` header only, never from the query string.
+with a `WWW-Authenticate: Bearer realm="corgi", resource_metadata="…"` header.
+Tokens are read from the `Authorization` header only, never from the query
+string.
 Use `--insecure` to disable auth even when a token is set.
 
 ### Public tunnels

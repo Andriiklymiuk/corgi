@@ -593,7 +593,7 @@ func TestStartMCPTunnelDoneClosesOnMissingBinary(t *testing.T) {
 	defer cancel()
 
 	opts := mcpHTTPOpts{tunnel: true, tunnelProvider: "cloudflared"}
-	done := startMCPTunnel(ctx, "127.0.0.1:8765", "", opts, nil)
+	done := startMCPTunnel(ctx, "127.0.0.1:8765", "", opts, nil, nil)
 	if done == nil {
 		t.Fatal("startMCPTunnel returned nil channel")
 	}
@@ -611,7 +611,7 @@ func TestStartMCPTunnelDoneClosesOnCancel(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	opts := mcpHTTPOpts{tunnel: true, tunnelProvider: "cloudflared"}
-	done := startMCPTunnel(ctx, "127.0.0.1:8765", "", opts, nil)
+	done := startMCPTunnel(ctx, "127.0.0.1:8765", "", opts, nil, nil)
 	cancel()
 
 	select {

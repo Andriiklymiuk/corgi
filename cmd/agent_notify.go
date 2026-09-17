@@ -39,6 +39,16 @@ func launcherURL() string {
 	return strings.TrimSuffix(u.String(), "/") + "/app"
 }
 
+// connectorURL is the MCP endpoint a Claude connector points at. Empty until
+// the tunnel resolves.
+func connectorURL() string {
+	launcher := launcherURL()
+	if launcher == "" {
+		return ""
+	}
+	return strings.TrimSuffix(launcher, "/app") + "/mcp"
+}
+
 // localLauncherURL is the same launcher page, served from this machine. Empty
 // when no MCP that `agent up` started is listening.
 func localLauncherURL() string {
