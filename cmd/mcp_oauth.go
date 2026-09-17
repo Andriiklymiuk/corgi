@@ -41,7 +41,21 @@ type oauthServer struct {
 	statePath   string
 	state       *oauthState
 	bucket      rateBucket
+	codes       map[string]authCode
+	pending     map[string]*pendingAuth
+	cimd        *cimdFetcher
 	now         func() time.Time
+}
+
+// pendingAuth is a consent page waiting for approval. Filled in by the
+// authorize endpoint.
+type pendingAuth struct {
+	client        oauthClient
+	redirectURI   string
+	codeChallenge string
+	state         string
+	expires       time.Time
+	code          string
 }
 
 // newOAuthServer starts with the loopback issuer for listenAddr. deviceStore
@@ -61,7 +75,10 @@ func newOAuthServer(listenAddr string, hosts *oauthClientHosts, origins *originA
 		deviceStore: deviceStore,
 		statePath:   statePath,
 		state:       state,
-		bucket:      rateBucket{capacity: oauthRequestsPerMinute, perSecond: oauthRequestsPerMinute / 60},
+		bucket:      rateBucket{capacity: oauthRequestsPerMinute, perSecond: float64(oauthRequestsPerMinute) / 60},
+		codes:       map[string]authCode{},
+		pending:     map[string]*pendingAuth{},
+		cimd:        newCIMDFetcher(),
 		now:         time.Now,
 	}
 }
@@ -82,8 +99,8 @@ type rateBucket struct {
 func (b *rateBucket) take(now time.Time) bool {
 	if b.last.IsZero() {
 		b.tokens = b.capacity
-	} else {
-		b.tokens = min(b.capacity, b.tokens+now.Sub(b.last).Seconds()*b.perSecond)
+	} else if elapsed := now.Sub(b.last); elapsed > 0 { // a clock step back refills nothing
+		b.tokens = min(b.capacity, b.tokens+elapsed.Seconds()*b.perSecond)
 	}
 	b.last = now
 	if b.tokens < 1 {
@@ -207,6 +224,8 @@ func (oa *oauthServer) mount(mux *http.ServeMux) {
 	mux.Handle(oauthASMetadataPath, as)
 	mux.Handle(oauthASMetadataPath+"/mcp", as)
 	mux.Handle(oauthRegisterPath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.registerHandler)))
+	mux.Handle(oauthTokenPath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.tokenHandler)))
+	mux.Handle(oauthRevokePath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.revokeHandler)))
 }
 
 // maxOAuthBody bounds a registration or token request body.
@@ -309,11 +328,4 @@ func oauthError(w http.ResponseWriter, status int, code, description string) {
 	w.WriteHeader(status)
 	body, _ := json.Marshal(map[string]string{"error": code, "error_description": description})
 	_, _ = w.Write(body)
-}
-
-// authorizeAccessToken reports whether header carries a live access token
-// corgi issued. Filled in with the token store; false until then.
-func (oa *oauthServer) authorizeAccessToken(header string) bool {
-	_ = header
-	return false
 }

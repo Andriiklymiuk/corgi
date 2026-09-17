@@ -379,12 +379,14 @@ func runMCPDevicesRevoke(_ *cobra.Command, args []string) {
 	if err != nil {
 		exitWithError("mcp_devices_read", err, 1)
 	}
+	device, _ := store.Find(args[0])
 	if !store.Revoke(args[0]) {
 		exitWithError("mcp_device_unknown", fmt.Errorf("no paired device called %q", args[0]), 1)
 	}
 	if err := pairing.Save(path, store); err != nil {
 		exitWithError("mcp_devices_write", err, 1)
 	}
+	revokeOAuthFamily(filepath.Dir(path), device.Family)
 	utils.Infof("revoked %s — other devices are unaffected\n", args[0])
 }
 
