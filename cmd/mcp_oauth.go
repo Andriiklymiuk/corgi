@@ -295,13 +295,7 @@ func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "token_endpoint_auth_method must be none; corgi issues no client secrets")
 		return
 	}
-	name := strings.TrimSpace(req.ClientName)
-	if name == "" {
-		name = "MCP client"
-	}
-	if len(name) > 64 {
-		name = name[:64]
-	}
+	name := cleanClientName(req.ClientName, "MCP client")
 	id, err := randomToken("corgi_client_")
 	if err != nil {
 		oauthError(w, http.StatusInternalServerError, "server_error", "could not mint a client id")

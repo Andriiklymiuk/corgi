@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -58,13 +59,21 @@ type oauthState struct {
 
 func oauthStatePath(agentDir string) string { return filepath.Join(agentDir, oauthStateName) }
 
-// loadOAuthState reads the file; missing is empty.
+// loadOAuthState reads the file; missing is empty. Like the device store,
+// a group- or world-readable file is refused: it lists every live grant.
 func loadOAuthState(path string) (*oauthState, error) {
 	st := &oauthState{}
-	data, err := os.ReadFile(path)
+	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return st, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	if mode := info.Mode().Perm(); mode&0o077 != 0 {
+		return nil, fmt.Errorf("%s is readable by others (mode %04o); chmod 600 it", path, mode)
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
