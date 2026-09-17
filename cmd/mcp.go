@@ -1620,14 +1620,14 @@ func registerMCPTools(s *server.MCPServer) {
 	registerAgentMCPTools(s)
 	registerPolicyMCPTools(s)
 
-	s.AddTool(mcp.NewTool("corgi_watch_status",
+	s.AddTool(newCorgiTool("corgi_watch_status",
 		mcp.WithDescription("What each registered workspace watches on the tracker and code host, and what it still needs before anything arrives. Returns one row per workspace: {workspace, dir, enabled, tracker, project, repos, states, prs, comments, action, hasOwnTokens, sources[], whatIsMissing[]}. sources says which of linear/jira/github/gitlab has a token (fingerprint only, never the token) and when each last polled. whatIsMissing is the ordered list of what to fix — read it before calling corgi_watch_enable. Read-only."),
 		mcp.WithString("workspace", mcp.Description("Only this workspace id")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWatchStatus(watchStatusArgs{Workspace: r.GetString("workspace", "")})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_watch_enable",
+	s.AddTool(newCorgiTool("corgi_watch_enable",
 		mcp.WithDescription("Turn on the tracker and code-host watch for one workspace, and report what it still needs. Use when someone asks to watch a tracker or their reviews (\"watch the jira issues here\", \"tell me when someone comments on my MRs\"). project is the issue-key prefix and repos are owner/name — they are what route an event to this workspace, so derive them from the repos' own commit ids and remotes rather than guessing; a wrong key routes nothing and looks like a quiet week. states filters NEW ISSUES only, and stops a backlog arriving every poll. Tokens are NOT set here and must never be put in a tool call: run `corgi agent watch auth <source> --local` inside the workspace. Writes the user config; run corgi agent restart afterwards."),
 		mcp.WithString("workspace", mcp.Description("Workspace id; omitted means the one the cwd is in")),
 		mcp.WithString("tracker", mcp.Description("linear or jira; omitted keeps whichever token exists")),
@@ -1653,7 +1653,7 @@ func registerMCPTools(s *server.MCPServer) {
 		return mcpWatchEnable(args)
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_watch_events",
+	s.AddTool(newCorgiTool("corgi_watch_events",
 		mcp.WithDescription("What the watch has seen, newest first: {key, kind, ref, title, url, workspace, at, canWorkOn}. kind is issue.new | issue.comment | pr.comment | pr.review. canWorkOn says corgi knows a skill for it — a new issue hands to /corgi:stories, a review to /corgi:review in address mode. Use it to answer \"what came in?\" and to pick what to work on. Read-only."),
 		mcp.WithString("workspace", mcp.Description("Only this workspace's events")),
 		mcp.WithNumber("limit", mcp.Description("How many, newest first (default 25)")),
@@ -1665,7 +1665,7 @@ func registerMCPTools(s *server.MCPServer) {
 		return map[string]any{"events": events}, nil
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_watch_fixes",
+	s.AddTool(newCorgiTool("corgi_watch_fixes",
 		mcp.WithDescription("What the unattended watch (action: fix) has worked on and what it opened: [{key, ref, kind, workspace, startedAt, running, issueUrl?, prs[], note?, error?}], newest first. A fix announces its pull request in a notification that is gone in a second — this outlives it, so it answers \"what did it do while I was away?\" and \"did it open anything?\". Read-only."),
 		mcp.WithString("workspace", mcp.Description("Only this workspace's fixes")),
 		mcp.WithNumber("limit", mcp.Description("How many, newest first (default 20)")),
@@ -1677,7 +1677,7 @@ func registerMCPTools(s *server.MCPServer) {
 		return map[string]any{"fixes": fixes}, nil
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_watch_board",
+	s.AddTool(newCorgiTool("corgi_watch_board",
 		mcp.WithDescription("The tracker columns a workspace can move a ticket to, and who its token belongs to: {workspace, tracker, project, columns[], me}. Read once and cached, so this is cheap. Read it BEFORE offering or making a move — a column name that is not on this list will be refused. Read-only."),
 		mcp.WithString("workspace", mcp.Description("Which workspace; omitted means the one you are in")),
 		mcp.WithBoolean("refresh", mcp.Description("Read the columns from the tracker again instead of the cache")),
@@ -1685,7 +1685,7 @@ func registerMCPTools(s *server.MCPServer) {
 		return mcpWatchBoard(r.GetString("workspace", ""), r.GetBool("refresh", false))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_watch_move",
+	s.AddTool(newCorgiTool("corgi_watch_move",
 		mcp.WithDescription("Move one ticket to another column, as the user. `status` must be one corgi_watch_board lists; Jira also decides which moves are legal from where the ticket is now, and a refused move names the ones that were. This writes to a real board someone else reads — do it when asked, never to tidy up."),
 		mcp.WithString("ref", mcp.Required(), mcp.Description("The ticket, e.g. ABC-123")),
 		mcp.WithString("status", mcp.Required(), mcp.Description("The column to move it to, from corgi_watch_board")),
@@ -1694,21 +1694,21 @@ func registerMCPTools(s *server.MCPServer) {
 		return mcpWatchMove(r.GetString("workspace", ""), r.GetString("ref", ""), r.GetString("status", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_today",
+	s.AddTool(newCorgiTool("corgi_today",
 		mcp.WithDescription("What has been done today, per workspace: {since, headline, totals, workspaces[{workspace, dir, commits[], prompts[], fixes[], arrived[], deferred[]}], waits{count, medianS, longestS}, days[{date, sessions, messages, toolCalls}]}. Answers \"what have I done today?\" in one call — the commits that landed, what Claude was asked, and what the unattended watch did on its own with the pull requests it opened; `waits` is how often sessions waited on a person today, `days` a fortnight of activity per day across every account (the numbers the phone's share card draws; 2.22.6). The window is since midnight unless `since` asks for a rolling one. Read-only."),
 		mcp.WithString("since", mcp.Description("A rolling window like 8h or 72h; omitted means since midnight")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return todayForMCP(r.GetString("since", ""), time.Now())
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_validate",
+	s.AddTool(newCorgiTool("corgi_validate",
 		mcp.WithDescription("Statically validate corgi-compose.yml (no side effects). Returns {ok, errors[], warnings[]}."),
 		composeOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpValidate(validateArgs{ComposePath: r.GetString("composePath", "")})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_plan",
+	s.AddTool(newCorgiTool("corgi_plan",
 		mcp.WithDescription("Compute the dry-run plan: start order, databases, services, validation. No side effects."),
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
@@ -1716,7 +1716,7 @@ func registerMCPTools(s *server.MCPServer) {
 		return mcpPlan(planArgs{ComposePath: r.GetString("composePath", ""), Profile: r.GetString("profile", "")})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_status",
+	s.AddTool(newCorgiTool("corgi_status",
 		mcp.WithDescription("Live health of declared services and db_services (TCP, or HTTP when a healthCheck path is declared). Returns one entry per target: {label, kind, port, url, healthy, detail}. This is the liveness truth — corgi_ps only says whether a pid or container exists. Targets with no declared port are not probed and do not appear, so an empty list is not a healthy stack. Pass service to get one target, unhealthyOnly to get only what is down (empty = all healthy). Probe results are reused for 1s across calls. Read-only."),
 		composeOpt,
 		mcp.WithString("service", mcp.Description("Only this service or db_service (declared name)")),
@@ -1729,7 +1729,7 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_env",
+	s.AddTool(newCorgiTool("corgi_env",
 		mcp.WithDescription("Resolved environment per service with source attribution. Returns {service: {KEY: {value, source}}}, real values. Prefer service (one service, every var) or key (one var across services): without either, each service is capped at 40 vars and a \"_truncated\" entry says how many were hidden. Read-only."),
 		composeOpt,
 		mcp.WithString("service", mcp.Description("Only this service's vars (uncapped)")),
@@ -1744,14 +1744,14 @@ func registerMCPTools(s *server.MCPServer) {
 
 	registerAgentSurfaceTools(s, composeOpt)
 
-	s.AddTool(mcp.NewTool("corgi_ps",
+	s.AddTool(newCorgiTool("corgi_ps",
 		mcp.WithDescription("Runtime snapshot of the detached run: one row per declared service and db_service, {name, kind, port, status, url, startedAt}, reconciled against corgi_services/.state.json with a cheap port-listening check. status is process/container state (running | crashed | stopped), not health — db_services and container-backed services never report crashed. Use corgi_status for liveness. Read-only."),
 		composeOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpPs(validateArgs{ComposePath: r.GetString("composePath", "")})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_up",
+	s.AddTool(newCorgiTool("corgi_up",
 		mcp.WithDescription("Start every database and service detached and return the run-state {services[], dbServices[]} with each entry's name, pid, port, status. Not instant: it clones missing repos, runs every beforeStart (installs, migrations, builds) and brings databases up before returning — minutes on a cold stack. Returning is not a ready gate; poll corgi_status until healthy. Fails with E_ALREADY_RUNNING while a run is live — call corgi_down first. A service that crashed on spawn shows status \"crashed\" in the returned array."),
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
@@ -1770,14 +1770,14 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_down",
+	s.AddTool(newCorgiTool("corgi_down",
 		mcp.WithDescription("Stop the detached run: end the service processes, run each service's afterStart, bring db_service containers down, clear the run-state. Idempotent — nothing running is a clean no-op. Returns {stopped[], failed[]}."),
 		composeOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpDown(validateArgs{ComposePath: r.GetString("composePath", "")})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_logs",
+	s.AddTool(newCorgiTool("corgi_logs",
 		mcp.WithDescription("Read the last N lines of a service's newest captured log run (capture is on by default for detached runs). Returns {service, lines[], truncated}. Filters (grep, since, errorsOnly) apply before the tail, so lines counts matching lines — use errorsOnly or grep first and read the whole log only when they come back empty. Needs a prior corgi_up; a service that never spawned has no log. To wait for a specific line use corgi_wait_for_log instead of polling this. Read-only."),
 		composeOpt,
 		serviceOpt,
@@ -1796,7 +1796,7 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_exec",
+	s.AddTool(newCorgiTool("corgi_exec",
 		mcp.WithDescription("Run a one-off command in a service's resolved env. Returns {exitCode, output, truncated, durationMs}; large output is capped head+tail."),
 		composeOpt,
 		serviceOpt,
@@ -1818,7 +1818,7 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_test",
+	s.AddTool(newCorgiTool("corgi_test",
 		mcp.WithDescription("Run each selected service's `test` script in its resolved env. Returns {services[], passed, note?}. Does not start databases/services. changed narrows to services whose repo differs from base (uncommitted work counts) — the cheap default after editing a few repos. e2e runs the stack's e2e: block against the already-running stack instead, returning one \"e2e\" entry with the captured output in message."),
 		composeOpt,
 		mcp.WithString("service", mcp.Description("Only test this service")),
@@ -1843,14 +1843,14 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_doctor",
+	s.AddTool(newCorgiTool("corgi_doctor",
 		mcp.WithDescription("Preflight checks (required tools, Docker, port availability). Returns {ok, checks[]}. No side effects."),
 		composeOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpDoctor(validateArgs{ComposePath: r.GetString("composePath", "")})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_restart",
+	s.AddTool(newCorgiTool("corgi_restart",
 		mcp.WithDescription("corgi_down then corgi_up in one call; returns the new run-state. Same cost and caveats as corgi_up: beforeStart re-runs unless its cacheKey is warm, and returning is not a ready gate — poll corgi_status."),
 		composeOpt,
 		mcp.WithString("profile", mcp.Description(profileDesc)),
@@ -1863,7 +1863,7 @@ func registerMCPTools(s *server.MCPServer) {
 
 	addStackTools(s, composeOpt, serviceOpt)
 
-	s.AddTool(mcp.NewTool("corgi_db_query",
+	s.AddTool(newCorgiTool("corgi_db_query",
 		mcp.WithDescription("Run one non-interactive query inside a running db_service container through its driver's own client (psql, redis-cli, mongosh, …); write the query in that client's syntax. Returns {service, output, truncated}. The db_service must already be up (corgi_up). Writes are not blocked — a mutating statement runs, so call corgi_db_snapshot first and corgi_db_restore to undo. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
 		composeOpt,
 		serviceOpt,
@@ -1879,7 +1879,7 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_db_snapshot",
+	s.AddTool(newCorgiTool("corgi_db_snapshot",
 		mcp.WithDescription("Physical snapshot of a postgres-family db_service's data (postgres, postgis, pgvector, timescaledb), the same as corgi db snapshot. Take one BEFORE a corgi_db_query that mutates data (UPDATE/DELETE/DROP/migrations) so corgi_db_restore can undo it. Returns {service, name, archive, sizeBytes, pgVersionMajor, image, arch}. Stops the db container briefly and restarts it if it was running; refused with E_ALREADY_RUNNING while a detached run is supervising service processes (bring only the databases up, or corgi_down first)."),
 		composeOpt,
 		mcp.WithString("service", mcp.Description("db_service name (optional when the stack has exactly one postgres-family db)")),
@@ -1894,7 +1894,7 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_db_restore",
+	s.AddTool(newCorgiTool("corgi_db_restore",
 		mcp.WithDescription("DESTRUCTIVE: wipe a postgres-family db_service's data volume and restore a snapshot taken by corgi_db_snapshot (or an archive path), the same as corgi db restore --yes. No confirmation — the undo for a mutating corgi_db_query. Returns {service, archive}. Same E_ALREADY_RUNNING rule as corgi_db_snapshot. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
 		composeOpt,
 		mcp.WithString("name", mcp.Required(), mcp.Description("Snapshot name from corgi_db_snapshot, or a path to a .tar.zst archive")),
@@ -1912,7 +1912,7 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_schema",
+	s.AddTool(newCorgiTool("corgi_schema",
 		mcp.WithDescription("Return the JSON Schema (draft-07) for corgi-compose.yml."),
 	), func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		mcpHandlerMu.Lock()

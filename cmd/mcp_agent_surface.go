@@ -40,7 +40,7 @@ type checkpointArgs struct {
 }
 
 func registerAgentSurfaceTools(s *server.MCPServer, composeOpt mcp.ToolOption) {
-	s.AddTool(mcp.NewTool("corgi_context",
+	s.AddTool(newCorgiTool("corgi_context",
 		mcp.WithDescription("One call to orient: every service and db_service with port, status and repo state (branch, dirty, ahead/behind), the active env tier, declared profiles, and validation findings."),
 		composeOpt,
 		mcp.WithBoolean("noGit", mcp.Description("Skip per-repo git state (faster on a big workspace)")),
@@ -51,7 +51,7 @@ func registerAgentSurfaceTools(s *server.MCPServer, composeOpt mcp.ToolOption) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_why",
+	s.AddTool(newCorgiTool("corgi_why",
 		mcp.WithDescription("Explain why one service is not up: unmet dependencies, who owns its port, last exit code, missing or unresolved env, and its last log lines. Returns a single verdict to branch on."),
 		composeOpt,
 		mcp.WithString("service", mcp.Required(), mcp.Description("Service name from corgi-compose.yml")),
@@ -64,7 +64,7 @@ func registerAgentSurfaceTools(s *server.MCPServer, composeOpt mcp.ToolOption) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_wait_for_log",
+	s.AddTool(newCorgiTool("corgi_wait_for_log",
 		mcp.WithDescription("Block until a service's log matches a regexp, then return the matching line. Use instead of polling corgi_logs on a timer."),
 		composeOpt,
 		mcp.WithString("service", mcp.Required(), mcp.Description("Service name whose log to watch")),
@@ -79,7 +79,7 @@ func registerAgentSurfaceTools(s *server.MCPServer, composeOpt mcp.ToolOption) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_checkout",
+	s.AddTool(newCorgiTool("corgi_checkout",
 		mcp.WithDescription("Put the workspace repo and every service repo on a branch and fast-forward it. A repo without that branch falls back to its own default branch. Dirty repos are skipped, never clobbered."),
 		composeOpt,
 		mcp.WithString("branch", mcp.Description("Branch to check out; empty means each repo's own default branch")),
@@ -92,7 +92,7 @@ func registerAgentSurfaceTools(s *server.MCPServer, composeOpt mcp.ToolOption) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_checkpoint",
+	s.AddTool(newCorgiTool("corgi_checkpoint",
 		mcp.WithDescription("Record every repo's branch, HEAD and uncommitted work under one name, so a cross-repo change can be undone with corgi_restore."),
 		composeOpt,
 		mcp.WithString("name", mcp.Description("Checkpoint name; defaults to a timestamp")),
@@ -103,7 +103,7 @@ func registerAgentSurfaceTools(s *server.MCPServer, composeOpt mcp.ToolOption) {
 		})
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_restore",
+	s.AddTool(newCorgiTool("corgi_restore",
 		mcp.WithDescription("Put every repo back to a checkpoint. Uncommitted work present now is captured under a safety checkpoint first, whose name is returned."),
 		composeOpt,
 		mcp.WithString("name", mcp.Required(), mcp.Description("Checkpoint name from corgi_checkpoint")),
