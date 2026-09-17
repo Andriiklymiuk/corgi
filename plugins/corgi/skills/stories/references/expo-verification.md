@@ -70,7 +70,13 @@ Long compiles: run xcodebuild in the background and keep working; the `.app` is
 complete only when `Info.plist` exists inside it — `simctl install` before that
 fails with "Missing bundle ID".
 
-## 3. Drive the UI — Maestro
+## 3. Drive the UI — argent when present, else Maestro
+
+**argent MCP first** (`mcp__argent__*` tools in the tool list): it boots the
+simulator, launches the app, reads the accessibility tree for tap coordinates and
+returns a screenshot after every action — no flow file, no coordinate guessing.
+Read its rule/skill before the first call. Keep Maestro for a flow worth committing
+to `e2e/` (a regression the PR should ship with). Without argent:
 
 `maestro` (install: `brew install mobile-dev-inc/tap/maestro` — curl|bash
 installers are often denied). Keep flows in the repo's `e2e/` so they ship with
@@ -121,7 +127,9 @@ needs 3 sims). Delete cloned sims after (`simctl delete`).
 ## 5. Evidence into the story
 
 - Spec's manual-verification section: which flows ran, on what sims, result.
-- PR body: screenshots (before/after for visual), flow names in `e2e/`.
+- PR body: screenshots (before/after for visual) attached per
+  `../../_shared/forge-commands.md` §6a — on GitHub the assets branch + blob
+  `?raw=true` link, or the box renders empty — plus flow names in `e2e/`.
 - A device-only bug found this way (interop, entitlement, dialog) → fix it in
   this story if in scope, else report `needs attention` — never ship on jest
   green alone when the change is native-scoped.

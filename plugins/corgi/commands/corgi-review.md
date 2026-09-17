@@ -9,7 +9,9 @@ modes — route from the verb:
   more PR/MR URLs or bare numbers, optionally `--yes`. No `$ARGUMENTS` → ask for the
   link(s), or infer from the current branch's open PR/MR. Follow the `review` skill
   Phases 0–6: resolve targets (P0), fetch diffs without checkout (P1), pull tracker
-  intent (P1.5), per-repo standards note (P2), review each PR scoped to its diff (P3),
+  intent (P1.5), per-repo standards note (P2), review each PR anchored to its diff with evidence from the
+  whole tree — callers and twins, config delivery, dependency source, what the tests
+  assert (P3),
   cross-service contract pass (P3.5), preview then act by authorship (P4 — posts on other people's PRs without asking; `--yes` skips printing it), post
   summary + inline suggestions (P5), grouped report (P6).
   Guardrails: **comments only, never merge/approve/push, read-only on the repo**,

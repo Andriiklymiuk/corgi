@@ -7,8 +7,8 @@ description: Use when verifying a mobile (Expo / React Native) change on a real 
 
 ## Overview
 A change is not done until you drove it on a device and read the screenshot. A green
-build can still render magenta. Pick surface → navigate → drive+assert Maestro →
-screenshot → look. Evidence before "works".
+build can still render magenta. Pick surface → navigate → drive+assert (argent MCP
+when present, else Maestro) → screenshot → look. Evidence before "works".
 
 ## Pick surface first
 - **JS / TS / Skia / RN styles / shaders** → hot-reload over Metro. Use the **Android
@@ -27,10 +27,16 @@ screenshot → look. Evidence before "works".
    - Android `adb shell am start -a android.intent.action.VIEW -d "<scheme>://<route>" <pkg>`
    - iOS `xcrun simctl openurl booted "<scheme>://<route>"`
    - or Maestro `scrollUntilVisible` + `tapOn`.
-2. **Drive+assert Maestro** — **flow must be a file** (no stdin `-`). Two devices attached
-   (emulator + sim) → pass `--device <udid | emulator-5554>`. Tools: `tapOn:` text or
-   `point: "50%,40%"`, `scrollUntilVisible`, `waitForAnimationToEnd`, `takeScreenshot`.
-3. **Screenshot** — `adb exec-out screencap -p > f.png` / `xcrun simctl io booted
+2. **Drive+assert** — **argent MCP when its tools are present** (`mcp__argent__*`):
+   `list-devices`, `launch-app`, `describe` for the element tree, `gesture-tap` /
+   `gesture-swipe`, `screenshot`; every action returns the screen after it, so no flow
+   file and no guessed coordinates. Else **Maestro** — **flow must be a file** (no stdin
+   `-`). Two devices attached (emulator + sim) → pass `--device <udid | emulator-5554>`.
+   Tools: `tapOn:` text or `point: "50%,40%"`, `scrollUntilVisible`,
+   `waitForAnimationToEnd`, `takeScreenshot`. Keep Maestro for a flow worth committing
+   to `e2e/`.
+3. **Screenshot** — argent `screenshot` (`scale: 1` writes a full-size PNG worth
+   attaching), else `adb exec-out screencap -p > f.png` / `xcrun simctl io booted
    screenshot f.png`. Zoom detail: `sips -c <H> <W> --cropOffset <top> <left> f.png --out
    crop.png`.
 4. **Read it.** Never assert "renders fine" on a frame you didn't open. Design
