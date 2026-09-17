@@ -520,6 +520,7 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 			d.autoCarry(ctx, now)
 			d.checkDrift(now)
 			d.runRoutines(ctx, now)
+			d.pruneWorktrees(now)
 		}
 		d.flushSessions()
 	}

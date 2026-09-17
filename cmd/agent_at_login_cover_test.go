@@ -446,3 +446,49 @@ func TestNotifierCheckSaysWhenNothingWillShow(t *testing.T) {
 		t.Fatalf("with nothing: %+v — must stay green and point at Telegram", c)
 	}
 }
+
+func TestUnattendedChecksNameWhatAFixTripsOver(t *testing.T) {
+	missing := gitIdentityMissing([]string{"/a", "/b"}, func(d string) string {
+		if d == "/a" {
+			return "me@acme.io"
+		}
+		return ""
+	})
+	if len(missing) != 1 || missing[0] != "/b" {
+		t.Fatalf("missing = %v", missing)
+	}
+	if c := gitIdentityCheck(missing); c.OK || !strings.Contains(c.Fix, "user.email") {
+		t.Fatalf("identity check: %+v", c)
+	}
+	if c := gitIdentityCheck(nil); !c.OK {
+		t.Fatalf("identity check with nothing missing: %+v", c)
+	}
+
+	if c := forgeCLICheck(false, false, true, false); c.OK || !strings.Contains(c.Detail, "gh") {
+		t.Fatalf("github token without gh: %+v", c)
+	}
+	if c := forgeCLICheck(true, false, false, true); c.OK || !strings.Contains(c.Detail, "glab") {
+		t.Fatalf("gitlab token without glab: %+v", c)
+	}
+	if c := forgeCLICheck(true, true, true, true); !c.OK || c.Detail != "gh, glab" {
+		t.Fatalf("both present: %+v", c)
+	}
+	if c := forgeCLICheck(false, false, false, false); !c.OK {
+		t.Fatalf("nothing needed yet must stay green: %+v", c)
+	}
+
+	installed := []byte(`{"version":2,"plugins":{"corgi@corgi":[{"scope":"user"}],"swift-lsp@official":[]}}`)
+	if !pluginInstalled(installed, "corgi") || pluginInstalled(installed, "corgi-bar") || pluginInstalled(nil, "corgi") {
+		t.Fatal("pluginInstalled misread installed_plugins.json")
+	}
+	if c := pluginCheck([]string{"/home/me/.claude"}); c.OK || !strings.Contains(c.Fix, "/plugin install corgi@corgi") {
+		t.Fatalf("plugin check: %+v", c)
+	}
+}
+
+func TestServiceEnvCarriesTZ(t *testing.T) {
+	t.Setenv("TZ", "Europe/Paris")
+	if env := serviceEnv(); env["TZ"] != "Europe/Paris" {
+		t.Fatalf("serviceEnv() = %v", env)
+	}
+}

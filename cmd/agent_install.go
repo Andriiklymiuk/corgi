@@ -179,7 +179,9 @@ func serviceEnv() map[string]string {
 	env := map[string]string{"PATH": servicePATH()}
 	// HOME is normally injected by launchd/systemd, but the daemon's data-dir
 	// resolution now depends on it, so pin it rather than rely on the launcher.
-	for _, key := range []string{"CORGI_DATA_DIR", "HOME", "XDG_DATA_HOME", "HOMEBREW_PREFIX"} {
+	// TZ too: quiet hours and routines are local time, and a server's
+	// launcher would otherwise hand the daemon UTC.
+	for _, key := range []string{"CORGI_DATA_DIR", "HOME", "XDG_DATA_HOME", "HOMEBREW_PREFIX", "TZ"} {
 		if v := os.Getenv(key); v != "" {
 			env[key] = v
 		}
