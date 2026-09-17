@@ -120,9 +120,7 @@ func runMCP(cmd *cobra.Command, _ []string) {
 
 	warnStrandedAgentData()
 
-	s := server.NewMCPServer("corgi", APP_VERSION, server.WithInstructions(mcpServerInstructions))
-	registerMCPTools(s)
-	registerMCPResources(s)
+	s := newCorgiMCPServer(APP_VERSION)
 
 	httpAddr, _ := cmd.Flags().GetString("http")
 	opts := mcpHTTPOptsFromFlags(cmd)
@@ -147,6 +145,20 @@ func runMCP(cmd *cobra.Command, _ []string) {
 		return
 	}
 	serveMCPStdio(s)
+}
+
+// newCorgiMCPServer is the one server every transport serves: the name a
+// client shows, the instructions it reads at initialize, every tool and
+// resource, and the result guard around every tool.
+func newCorgiMCPServer(version string) *server.MCPServer {
+	s := server.NewMCPServer("corgi", version,
+		server.WithTitle("Corgi"),
+		server.WithInstructions(mcpServerInstructions),
+		server.WithToolHandlerMiddleware(mcpResultGuard(mcpMaxEmittedChars())),
+	)
+	registerMCPTools(s)
+	registerMCPResources(s)
+	return s
 }
 
 type mcpHTTPOpts struct {
