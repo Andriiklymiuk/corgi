@@ -32,6 +32,9 @@ type WatchSpec struct {
 	AgentDir string
 	// Isolate runs each fix in its own worktrees; see Daemon.Isolate.
 	Isolate bool
+	// PruneAfter is how long a finished isolated run keeps its worktrees;
+	// zero keeps them.
+	PruneAfter time.Duration
 	// RerunCI reruns the failed jobs of a red build once before anyone is
 	// told or handed it; see Daemon.RerunCI.
 	RerunCI bool

@@ -345,6 +345,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent task add\|list\|move\|done <…>` | a ticket you write yourself — title, body, workspace — kept on this machine and shown on the same board as the tracker's: Todo, Doing, Review, Done. `watch work TASK-3` and the phone's **Work on it** start a session on it; nothing about it reaches a tracker |
 | `GET /launch/watch-status` · `GET /launch/status` | `corgi agent watch --json` and `corgi agent status --json` over the launcher, for a client on the machine that cannot run corgi — the Mac app from the store, sandboxed. `corgi agent pair --file` writes `localUrl` into the `.corgipair` for it (2.28) |
 | `GET`/`POST /launch/profiles` | the account profiles, and one added as `corgi agent profile add <name> --config-dir <dir>` would — the Mac app's **Add account** (2.28.4) |
+| `corgi agent watch prune [--older-than 7d] [--dry-run]` | remove the worktrees of isolated runs finished that long ago; the branch and any dirty worktree stay. `watch enable --prune-after 7d` does it from the daemon, hourly (2.28.14) |
 | `corgi agent watch enable --silent [--workspace X]` | this workspace's watch keeps quiet: fixes run, the inbox and the kanban fill, but nothing rings — no toast, no phone push — until `--silent=false`. For a repository where comments and reviews should just get fixed. A permission prompt in a live session still rings. `silent` in the phone's repo switches too (2.28) |
 | `corgi agent plan "<goal>" [--workspace X] [--max N] [--run --slots N]` · `plan run\|status\|stop <P-n>` | a goal handed to a planner (a short `claude -p`, sonnet by default) that writes 2–6 tasks on the board — what to change, where, how a session knows it is done, which tasks wait for which — and to the daemon, which works through them: each task the same unattended run a ticket gets, in a worktree of its own, `--slots N` at a time, the next when one ends (Review or Done lets the tasks after it start). The workspace's caps, quiet hours and breaker hold; a run that failed leaves its task for you, the plan never retries it. The tasks are ordinary tasks (TASK-n on the kanban, `task edit` before `plan run`); the plan is the order and the slots, in `watch/plans.json`, and a readable `plans/P-n.md` with a Decisions section. Needs the workspace watched with `--isolate`. `GET /launch/plans` for the phone (2.26) |
 | `corgi agent kanban [--workspace X] [--json]` | one card per ticket in a column corgi works out — Inbox, Ready, Running, Blocked, Review, Done — from the inbox, the runs, the sessions on each branch, the handoffs; the phone's Board tab draws the same |
@@ -1423,6 +1424,13 @@ corgi agent watch undo ABC-1        # close what it opened, put the ticket back
 that cannot be undone in turn. The event goes back in the inbox, because
 undoing a run means it was not done.
 
+An isolated run's worktrees otherwise stay, and on a machine that runs
+unattended they add up. `corgi agent watch prune` removes those of runs
+finished more than seven days ago (`--older-than 2d`, `--dry-run`); the
+branch stays, a worktree with uncommitted work stays and is named. `watch
+enable --prune-after 7d` has the daemon do it on its own, once an hour
+(2.28.14).
+
 ## Wake lock
 
 A machine that sleeps mid-session kills the session, the stack, and any tunnel.
@@ -1961,10 +1969,19 @@ corgi agent watch enable --labels bug --prs --comments --action fix --isolate --
 corgi agent notify telegram --token <TOKEN>       # the only "desktop" a server has
 corgi agent routine add digest                    # and anything else on a clock
 
-# 4. keep it up
+# 4. what a fix needs when nobody is watching
+git config --global user.name "corgi on build-1" && git config --global user.email "me@acme.io"
+gh auth login --with-token < token.txt      # or glab auth login --token …; the PR is opened with it
+claude                     # once, in the workspace: /plugin marketplace add Andriiklymiuk/corgi, /plugin install corgi@corgi, trust the folder
+corgi agent init --dangerously-skip-permissions   # or a Bash step waits for an answer until the timeout
+corgi agent harden         # deny rules and the secrets hook, so that switch has a fence
+corgi agent watch enable --prune-after 7d         # worktrees of finished runs go on their own
+
+# 5. keep it up
+export TZ=Europe/Paris     # quiet hours and routines are local time; the unit carries TZ
 corgi agent install        # a systemd user unit
 loginctl enable-linger $USER   # or it dies with this SSH session
-corgi agent doctor         # says whether linger is on and whether anything can ring
+corgi agent doctor         # linger, a notifier, git identity, gh/glab, the plugin: every quiet failure, named
 ```
 
 From then on a ticket, a review or a red build arrives, the daemon runs
@@ -1994,6 +2011,10 @@ each thing is, `corgi agent brief` what a run was on.
   wake lock to hold (`wakeLock: off` keeps the doctor quiet). A phone message
   for a session whose process is gone runs as a headless turn with
   `--headless` on the watch.
+- **Housekeeping.** Run transcripts sit in `<agent dir>/watch/runs/`, a few
+  KB each; `find … -mtime +30 -delete` from cron is enough. Docker wants the
+  user in the `docker` group. `corgi upd` upgrades the daemon in place; put
+  it in cron if nobody logs in.
 
 ## Platform support
 

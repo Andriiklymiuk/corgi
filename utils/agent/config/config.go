@@ -300,6 +300,10 @@ type WatchConfig struct {
 	// touches your checkout and two runs on one repo do not collide. Off by
 	// default: it takes disk and a branch per ticket.
 	Isolate bool `yaml:"isolate,omitempty"`
+	// PruneAfter removes an isolated run's worktrees this long after it
+	// finished ("7d", "48h"); the branch stays, a dirty worktree stays.
+	// Empty keeps them until `watch undo` or `watch prune`.
+	PruneAfter string `yaml:"pruneAfter,omitempty"`
 	// DayCap is the workspace's tokens-per-day budget: what its sessions
 	// spend, summed by the sweep; the daemon rings once when a day passes
 	// it. 0 is none (2.24).

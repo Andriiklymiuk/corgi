@@ -93,6 +93,10 @@ type Daemon struct {
 	headlessMu sync.Mutex
 	headless   map[string]bool
 	fixActive  map[string]bool
+	// pruned is the isolated runs whose worktrees were already released;
+	// lastPrune is when the sweep last ran (once an hour is plenty).
+	pruned    map[string]bool
+	lastPrune time.Time
 	// fixSettle holds a feedback fix while more comments land on the same
 	// pull request; fixFollowUp is what arrived while a fix was running.
 	liftRang map[string]time.Time

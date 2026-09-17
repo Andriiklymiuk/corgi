@@ -28,6 +28,7 @@ import (
 
 // The flag names, once, so the definition and every read agree.
 const (
+	watchFlagPruneAfter   = "prune-after"
 	watchFlagMaxPerHour   = "max-per-hour"
 	watchFlagMaxPerDay    = "max-per-day"
 	watchFlagReviewStatus = "review-status"
@@ -139,6 +140,13 @@ var agentWatchEnableCmd = &cobra.Command{
 		}
 		if flags.Changed("isolate") {
 			wc.Isolate, _ = flags.GetBool("isolate")
+		}
+		if flags.Changed(watchFlagPruneAfter) {
+			v, _ := flags.GetString(watchFlagPruneAfter)
+			if _, err := watch.ParseAge(v); err != nil {
+				return fmt.Errorf("--%s: %w", watchFlagPruneAfter, err)
+			}
+			wc.PruneAfter = strings.TrimSpace(v)
 		}
 		if flags.Changed("slots") {
 			if wc.Slots, _ = flags.GetInt("slots"); wc.Slots < 1 || wc.Slots > 8 {
@@ -766,6 +774,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	if wc.Action == "fix" {
 		spec.Action = "fix"
 	}
+	spec.PruneAfter, _ = watch.ParseAge(wc.PruneAfter)
 	// A bad day name in the file is ignored, not fatal: the watch runs
 	// every day rather than not at all.
 	if days, err := daemon.ParseDaysOff(wc.DaysOff); err == nil {
@@ -1111,6 +1120,7 @@ func init() {
 	f.String(watchFlagReviewStatus, "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
 	f.Bool("isolate", false, "Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout")
+	f.String(watchFlagPruneAfter, "", "Remove an isolated run's worktrees this long after it finished, e.g. 7d; the branch stays, a dirty worktree stays (empty keeps them until `watch undo` or `watch prune`)")
 	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool(watchFlagAutoMerge, false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")

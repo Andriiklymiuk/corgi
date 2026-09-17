@@ -17,6 +17,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
+	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 
 	"github.com/spf13/cobra"
@@ -489,6 +490,7 @@ func collectAgentChecks() []agentCheck {
 	}
 	checks = append(checks, checkWorkspaceTrust()...)
 	checks = append(checks, checkSessionTracking(dir)...)
+	checks = append(checks, checkUnattended(dir)...)
 	return checks
 }
 
@@ -757,4 +759,134 @@ func init() {
 
 	agentDoctorCmd.Flags().Bool("security", false, "only the security checks: deny rules, the secrets hook, permissions, isolation, tunnel exposure")
 	agentCmd.AddCommand(agentInitCmd, agentScanCmd, agentDoctorCmd)
+}
+
+// gitConfigEmail is a seam: what `git config user.email` says in dir.
+var gitConfigEmail = func(dir string) string {
+	out, _ := exec.Command("git", "-C", dir, "config", "--get", "user.email").Output()
+	return strings.TrimSpace(string(out))
+}
+
+// checkUnattended is what a fix that nobody watches trips over on a fresh
+// machine: a commit with no author, a pull request with no CLI to open it,
+// a skill that is not installed. Each is a quiet failure thirty minutes in.
+func checkUnattended(dir string) []agentCheck {
+	registry, _ := mustLoadRegistry()
+	user, _ := config.LoadUser(agentUserConfigPath(dir))
+	var dirs []string
+	fixing := map[string]bool{}
+	for _, ws := range registry.Sorted() {
+		if ws.AbsPath != "" {
+			dirs = append(dirs, ws.AbsPath)
+		}
+		if user == nil {
+			continue
+		}
+		if wc, ok := user.Workspaces[ws.ID]; ok && wc.Watch != nil && wc.Watch.Enabled && wc.Watch.Action == "fix" {
+			fixing[claudeConfigDirOf(wc.ConfigDir)] = true
+		}
+	}
+	if len(dirs) == 0 {
+		return nil
+	}
+	secrets := watch.LoadSecrets(dir)
+	_, haveGH := lookPathOK("gh")
+	_, haveGlab := lookPathOK("glab")
+	checks := []agentCheck{
+		gitIdentityCheck(gitIdentityMissing(dirs, gitConfigEmail)),
+		forgeCLICheck(haveGH, haveGlab, secrets.GitHub != "", secrets.GitLab != ""),
+	}
+	if len(fixing) > 0 {
+		var missing []string
+		for configDir := range fixing {
+			data, _ := os.ReadFile(filepath.Join(configDir, "plugins", "installed_plugins.json"))
+			if !pluginInstalled(data, "corgi") {
+				missing = append(missing, configDir)
+			}
+		}
+		sort.Strings(missing)
+		checks = append(checks, pluginCheck(missing))
+	}
+	return checks
+}
+
+func lookPathOK(name string) (string, bool) {
+	p, err := exec.LookPath(name)
+	return p, err == nil
+}
+
+func claudeConfigDirOf(configDir string) string {
+	if strings.TrimSpace(configDir) != "" {
+		return expandTilde(configDir)
+	}
+	return defaultClaudeConfigDir()
+}
+
+func gitIdentityMissing(dirs []string, email func(string) string) []string {
+	var missing []string
+	for _, d := range dirs {
+		if email(d) == "" {
+			missing = append(missing, d)
+		}
+	}
+	return missing
+}
+
+func gitIdentityCheck(missing []string) agentCheck {
+	const name = "git identity"
+	if len(missing) == 0 {
+		return agentCheck{Name: name, OK: true, Detail: "user.email set in every workspace"}
+	}
+	return agentCheck{Name: name, Detail: "no user.email in " + strings.Join(missing, ", ") + " — an unattended commit fails there",
+		Fix: "git config --global user.name \"…\" && git config --global user.email \"…\""}
+}
+
+func forgeCLICheck(haveGH, haveGlab, githubToken, gitlabToken bool) agentCheck {
+	const name = "forge cli"
+	var have, need []string
+	if haveGH {
+		have = append(have, "gh")
+	}
+	if haveGlab {
+		have = append(have, "glab")
+	}
+	if githubToken && !haveGH {
+		need = append(need, "gh (a GitHub token is set, the pull request is opened with it): install it, then `gh auth login --with-token`")
+	}
+	if gitlabToken && !haveGlab {
+		need = append(need, "glab (a GitLab token is set, the merge request is opened with it): install it, then `glab auth login --token …`")
+	}
+	if len(need) > 0 {
+		return agentCheck{Name: name, Detail: "missing " + strings.Join(need, "; "), Fix: "a fix that cannot open its pull request ends with the work stuck on a branch"}
+	}
+	if len(have) == 0 {
+		return agentCheck{Name: name, OK: true, Detail: "none — fine until a watch opens pull requests", Fix: "install gh or glab and log it in before `watch enable --action fix`"}
+	}
+	return agentCheck{Name: name, OK: true, Detail: strings.Join(have, ", ")}
+}
+
+// pluginInstalled reads Claude Code's installed_plugins.json: a key is
+// "<name>@<marketplace>".
+func pluginInstalled(data []byte, name string) bool {
+	var f struct {
+		Plugins map[string]json.RawMessage `json:"plugins"`
+	}
+	if err := json.Unmarshal(data, &f); err != nil {
+		return false
+	}
+	for key := range f.Plugins {
+		if strings.HasPrefix(key, name+"@") {
+			return true
+		}
+	}
+	return false
+}
+
+func pluginCheck(missingIn []string) agentCheck {
+	const name = "corgi plugin"
+	if len(missingIn) == 0 {
+		return agentCheck{Name: name, OK: true, Detail: "installed for every account that fixes"}
+	}
+	return agentCheck{Name: name, Detail: "not installed under " + strings.Join(missingIn, ", ") + " — a fix runs /corgi:stories and /corgi:review, which live in it",
+		Fix: "in `claude` under that account: /plugin marketplace add Andriiklymiuk/corgi, then /plugin install corgi@corgi"}
 }
