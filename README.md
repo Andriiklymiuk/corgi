@@ -104,7 +104,7 @@ commands on every project instead of a bespoke `make dev` per repo. Your
 [phone](#code-from-your-phone) drive that same file.
 
 If you already use `docker-compose`, keep it. corgi runs the repos, seed data, env files and tool
-checks around your containers.
+checks around your containers. 
 
 ## Quick start
 
