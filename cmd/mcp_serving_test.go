@@ -292,3 +292,34 @@ func spawnGroupLeader(t *testing.T) int {
 	})
 	return cmd.Process.Pid
 }
+
+// The initialize result is what a connector shows before the first call:
+// the name, the title, and the instructions the model reads.
+func TestCorgiMCPServerInitializeResult(t *testing.T) {
+	s := newCorgiMCPServer("0.0.0-test")
+	c, err := client.NewInProcessClient(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	res, err := c.Initialize(context.Background(), mcp.InitializeRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ServerInfo.Name != "corgi" || res.ServerInfo.Title != "Corgi" {
+		t.Errorf("serverInfo = %+v, want name corgi, title Corgi", res.ServerInfo)
+	}
+	if res.Instructions != mcpServerInstructions {
+		t.Error("instructions are not wired into the initialize result")
+	}
+}
+
+func TestMCPInstructionsStayShort(t *testing.T) {
+	const limit = 1500
+	if n := len(mcpServerInstructions); n > limit {
+		t.Errorf("instructions are %d chars; the connector description should stay under %d", n, limit)
+	}
+	if !strings.Contains(mcpServerInstructions, "corgi_context") {
+		t.Error("instructions must name corgi_context as the first call")
+	}
+}

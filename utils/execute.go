@@ -313,6 +313,19 @@ func RunServiceCommandExitCode(
 	stdout, stderr io.Writer,
 	envFile ...string,
 ) (int, error) {
+	return RunServiceCommandExitCodeContext(context.Background(), command, path, interactive, stdout, stderr, envFile...)
+}
+
+// RunServiceCommandExitCodeContext is RunServiceCommandExitCode bounded by
+// ctx: when ctx ends first the whole process group is killed and the error
+// is ctx.Err().
+func RunServiceCommandExitCodeContext(
+	ctx context.Context,
+	command, path string,
+	interactive bool,
+	stdout, stderr io.Writer,
+	envFile ...string,
+) (int, error) {
 	resolvedEnvFile := resolveEnvFile(path, envFile)
 	shellCommand := withEnvSource(command, resolvedEnvFile)
 	cmd := exec.Command(ServiceShell(), "-c", shellCommand)
@@ -330,7 +343,20 @@ func RunServiceCommandExitCode(
 	addProcess(cmd.Process)
 	defer removeProcess(cmd.Process)
 
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = KillProcessGroup(cmd.Process.Pid)
+		case <-done:
+		}
+	}()
+
 	err := cmd.Wait()
+	if ctx.Err() != nil {
+		return -1, ctx.Err()
+	}
 	if err == nil {
 		return 0, nil
 	}

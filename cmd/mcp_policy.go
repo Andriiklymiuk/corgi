@@ -20,14 +20,14 @@ import (
 // tries, the lessons. The same code the phone's switches go through.
 
 func registerPolicyMCPTools(s *server.MCPServer) {
-	s.AddTool(mcp.NewTool("corgi_watch_switches",
+	s.AddTool(newCorgiTool("corgi_watch_switches",
 		mcp.WithDescription("What each workspace does on its own, as switches: {workspace, enabled, action, prs, reviews, ci, comments, isolate, quiet, daysOff, autoMerge, handOver, autoAllow, doneWhen[], compactAt, rebase, lessons}. autoAllow \"reads\" means the daemon answers Read/Grep/Glob prompts itself; doneWhen are the commands that define finished (a red one is typed back into the session); compactAt sends /compact past that context fill; rebase rebases a stopped clean branch when main moved; lessons writes reviews, red checks and failed bots down for every new session. Read-only."),
 		mcp.WithString("workspace", mcp.Description("Only this workspace id")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWatchSwitches(r.GetString("workspace", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_watch_set",
+	s.AddTool(newCorgiTool("corgi_watch_set",
 		mcp.WithDescription("Flip a workspace's own switches — autoAllow, doneWhen, compactAt, rebase, lessons, handOver, autoMerge — the ones that take on the daemon's next round with no restart. Do it when the user asks for the behaviour (\"answer the read prompts yourself\", \"a session is not done until go test passes\", \"rebase my branch when main moves\"), never to tidy up: each one makes the daemon act on their code. Omitted fields keep their value."),
 		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id")),
 		mcp.WithString("autoAllow", mcp.Description("reads, or off")),
@@ -45,14 +45,14 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 		return mcpWatchSet(r)
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_agent_mute",
+	s.AddTool(newCorgiTool("corgi_agent_mute",
 		mcp.WithDescription("Nothing rings for a while — no desktop toast, no phone push, no permission ping — while the inbox and the board go on. `for` is a duration up to 24h (1h, 30m) or off; omitted reads the current state. Returns {muted, until}."),
 		mcp.WithString("for", mcp.Description("1h, 30m, off; omitted only reads")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpMute(r.GetString("for", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_agent_attempts",
+	s.AddTool(newCorgiTool("corgi_agent_attempts",
 		mcp.WithDescription("The sessions a fan-out opened on a ticket (corgi agent watch work <ref> --attempts N), side by side: [{ref, attempts[{n, session, label, status, model, branch, changes, tests, gate, spend, pr, summary, picked}]}]. With `pick` (the attempt's n) that one is kept: a note on it, the others interrupted and marked not picked, their worktrees left. Read-only without pick."),
 		mcp.WithString("ref", mcp.Description("Only this ticket's tries")),
 		mcp.WithString("pick", mcp.Description("Keep this attempt (its n) — needs ref")),
@@ -60,7 +60,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 		return mcpAttempts(r.GetString("ref", ""), r.GetString("pick", ""))
 	}))
 
-	s.AddTool(mcp.NewTool("corgi_agent_lessons",
+	s.AddTool(newCorgiTool("corgi_agent_lessons",
 		mcp.WithDescription("What a workspace learned the hard way, one line each, oldest first: [{at, source, text}] — reviews on the user's pull requests, checks that stayed red, bots that failed, lines the user wrote. Read them before changing code in that workspace. With `add`, write one line yourself (say why in the line)."),
 		mcp.WithString("workspace", mcp.Description("Workspace id; omitted means the one the cwd is in")),
 		mcp.WithString("add", mcp.Description("A lesson to write, one line")),
