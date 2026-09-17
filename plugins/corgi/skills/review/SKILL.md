@@ -172,15 +172,18 @@ per-repo note. Never re-fetch the same key per PR.
 - Discussion/comments — later clarifications that override the original ask.
 - Linked specs/docs + sub-tasks — follow one hop for design context.
 - **Design screenshots / Figma links on a UI ticket = the visual acceptance
-  bar.** View them; a UI diff whose PR carries no screenshot evidence, or whose
-  screenshots visibly diverge from the design (layout, spacing, colour, icons,
-  copy), is a **finding** — ask for the visual proof / flag the divergence, not
-  a pass. **No design on the ticket, or it explicitly waives one → not a
+  bar.** View them and check the **diff** against them — layout values, spacing,
+  colour, icons and copy in the code are what you compare. Screenshots the PR
+  **does** carry are evidence: ones that visibly diverge from the design are a
+  **finding**. A PR with **no** screenshots is **not** a finding — screenshots are
+  opt-in in this flow, nobody owes them; review the code against the design, and
+  ask for a screen only when the diff genuinely can't settle a visual question
+  (name which one). **No design on the ticket, or it explicitly waives one → not a
   finding:** review the UI on standards alone; don't demand a design that was
-  never promised. On **your own** PR (the Phase 4 fix path) a missing visual is
-  something to produce rather than request — the **`before-after`** skill builds the
-  base branch, captures the same screen twice and attaches both, which is what makes a
-  restyle reviewable without the reviewer rebuilding trunk. A body whose image links
+  never promised. On **your own** PR (the Phase 4 fix path) don't add screenshots
+  unless the user asked for them — the **`before-after`** skill (base built, same
+  screen captured twice) is for when they do, and it puts them where they said: the
+  PR when they named it, else the ticket. A body whose image links
   are `raw.githubusercontent.com` on a private repo, or local paths, renders empty
   boxes — a `nit` with the fix (`../_shared/forge-commands.md` §6a: assets branch +
   blob `?raw=true`), and not visual proof until they render.

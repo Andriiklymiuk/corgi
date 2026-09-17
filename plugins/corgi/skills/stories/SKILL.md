@@ -84,7 +84,8 @@ wiring). Lighter steps, same guardrails:
 - **No local `docs/stories/*.md`** — the `## Spec` tracker comment IS the spec, don't
   write both (multi-service/feature still gets the file).
 - **Right-size proof** — gate once (typecheck/lint/test) + the single proof the change
-  needs (visual swap → one screenshot/serve check). Don't stack every proof.
+  needs (visual swap → a serve check, or one screenshot you read when looking is the
+  quickest way to know). Don't stack every proof.
 
 Still mandatory: gate sign-off, the spec comment (QA section folded in), branch, per-story review, draft
 PR, report. Unsure on scope → a quick inline grep settles it; don't default to the
@@ -98,21 +99,25 @@ Don't fake one.
 - **Repo has a visual/e2e harness** (Playwright, Cypress, Storybook visual diff;
   Maestro for Expo/RN — `references/expo-verification.md`) → red check **there**,
   same FAILS-on-base.
-- **None** → **manual-only is legit, not a skip.** Spec + PR body carry repro steps
-  - before/after screenshot; report says manually verified, no auto guard. Still
-    include the **QA "what to test" section** in the spec comment — a human must re-check visual.
+- **None** → **manual-only is legit, not a skip.** Spec + PR body carry repro steps;
+  report says manually verified, no auto guard. Still include the **QA "what to
+  test" section** in the spec comment — a human must re-check visual. Screenshots
+  follow Phase 3's screenshot bullet (the user asked, or looking is the quickest way
+  for you to see the fix) — they are not a standing requirement of this path.
   - **Expo/RN service on a macOS host → not manual-only:** drive the simulator
-    with argent MCP or Maestro + screenshots even without a committed harness
-    (`references/expo-verification.md`, Phase 3's screenshot bullet).
+    with argent MCP or Maestro even without a committed harness and look at the
+    screen the fix touches (`references/expo-verification.md`, Phase 3's
+    screenshot bullet).
 
 **Before/after asked for → run `before-after`.** Any phrasing of "screenshot
 comparison", "before and after", "show the visual diff", "prove the UI changed" is a
 request for the **`before-after`** skill, not a second after-only screenshot: it builds
-the base branch too, captures the same screen twice, and puts both in the PR body. It
-costs two builds, so it runs when the user asks for it or when a visual change lands on
-a surface nobody can rebuild casually (a native app) — otherwise one after-shot plus the
-repo's harness is the proportionate proof. Never satisfy the request by describing the
-old state from the diff; the diff is exactly what does not show it.
+the base branch too, captures the same screen twice, and puts both where the user
+asked — the PR body when they said PR, else the ticket (§6a). It costs two builds, so
+it runs **only when the user asks for it** — never on your own initiative, however
+visual the change; the gate plus the repo's harness is the default proof. Never satisfy
+the request by describing the old state from the diff; the diff is exactly what does
+not show it.
 
 ### Complex story → superpowers
 
@@ -605,12 +610,23 @@ matching existing patterns.
   `prisma migrate dev` / `drizzle-kit generate` / `knex migrate:make` / `alembic
   revision --autogenerate`). Commit the generated migration **and** the regenerated
   client. `corgi stop` when done.
-- **Screenshots — decide once, then use the driver at hand.** Capture when the user
-  asked for them, when the diff changes what a user sees (a screen, component, style,
-  copy in situ, an empty or error state, a native control), or when the spec recorded
-  a design reference. Skip for api-only, config, CI and test-only changes — the report
-  says "no screenshots: nothing rendered changed" instead of shooting a terminal. Pick
-  the driver in this order, first one present wins:
+- **Screenshots — opt-in, never a reflex.** Decide once, from three triggers:
+  1. **The user asked** ("with screenshots", "attach screens", "show me how it looks")
+     → capture and attach to the **ticket** (Linear/Jira, through the tracker's own
+     upload — §6a); that is where an asked-for screenshot goes when no place is named.
+     It goes in the **PR body only when the user said PR** ("screenshots in the PR",
+     "include them in the PR"). Both when they asked for both.
+  2. **Nobody asked, but looking is the quickest way for *you* to know the change
+     works** (a layout fix jsdom can't see, a native control, a design reference to
+     compare against) → take it, **read it**, verify. It is a working file: the
+     report says "verified on <device/browser>", and nothing gets attached unless
+     trigger 1 also applies.
+  3. **Neither** → no screenshots, and no apology for their absence — the report
+     simply doesn't mention them. Api-only, config, CI, test-only and most logic
+     changes never need one; "a screen changed" is not by itself a reason.
+  Never shoot a terminal, never pad a PR or ticket with screens to look thorough, and
+  never skip one the user asked for because the change "is small". When capturing,
+  pick the driver in this order, first one present wins:
   1. **argent MCP** (`mcp__argent__*` tools in the tool list; `argent --version` on
      PATH) — iOS simulator, Android emulator, or a Chromium page over CDP (a web
      service in a browser started with `--remote-debugging-port`): `list-devices`,
@@ -625,17 +641,21 @@ matching existing patterns.
   4. **Bare capture** last — `xcrun simctl io <udid> screenshot`, `adb exec-out
      screencap -p`.
   Whatever captured it: log in as the account class the story is about, seed the
-  state the ticket describes, shoot every state the spec names (empty / in progress /
-  done / error), **read each image** before attaching, and cover every rendered side
-  of a multi-service story — a web or admin console that shows the same record gets
-  its shot too. Name each file `<n>-<what>.png`. Attach per Phase 5 (§6a link form);
-  the tracker gets its copy through the tracker's own upload. No driver and no device
-  (a host with no simulator or browser) → the manual-only path: repro steps in the
-  spec and PR, say so in the report.
+  state the ticket describes, and **read each image** before attaching or concluding.
+  An **asked-for** set (trigger 1) is complete: every state the spec names (empty /
+  in progress / done / error) and every rendered side of a multi-service story — a
+  web or admin console that shows the same record gets its shot too. A
+  **verification** shot (trigger 2) covers the one spot the change touches, nothing
+  more. Name each file `<n>-<what>.png`. Attaching is trigger 1 only: ticket through
+  the tracker's own upload, PR per Phase 5 (§6a link form). No driver and no device
+  (a host with no simulator or browser) and the user asked → say so in the report
+  and fall back to repro steps in the spec and PR; nobody asked → nothing to do.
 - **Ticket links a design (Figma / mockup) → the story is done at a READ side-by-side**,
   not at green tests. Pull the frames into `docs/design/<ticket>/`, capture the same states
   from the app, compose labelled design-vs-app images, and put the deviation table (fixed vs
-  deliberate divergence) in the PR/MR. A feature still behind a flag or without seeded data
+  deliberate divergence) in the PR/MR — the table is the record; the composed images
+  attach per the screenshot bullet above (ticket when the user asked for screenshots,
+  PR when they said PR, otherwise working files). A feature still behind a flag or without seeded data
   is forced on with a temporary, clearly-marked local switch — reverted before commit. Full
   loop: the `design-parity` skill.
 - **Expo / React Native service → verify on a simulator, not just jest**
@@ -647,7 +667,9 @@ matching existing patterns.
   install` → xcodebuild) and re-install; JS-only → existing build + Metro
   reload. Drive the changed flow with the driver the screenshot bullet picked —
   argent MCP when present, else **Maestro** (flows in `e2e/`, committed with the
-  PR) — confirm with screenshots you read, watch the Metro log for runtime errors. Multi-device features (P2P/LAN): clone simulators — they
+  PR) — confirm by reading the screen the driver returns (the screenshot bullet's
+  trigger 2: verification, not an attachment), watch the Metro log for runtime
+  errors. Multi-device features (P2P/LAN): clone simulators — they
   share the host's network/Bonjour, so the real radio path is testable. Use the
   `expo:*` plugin skills for SDK-specific guidance when installed; the
   same-plugin **`mobile`** skill is the canonical device-driving loop + the build
@@ -665,8 +687,9 @@ matching existing patterns.
   MCP, Maestro, the repo's web harness, bare capture), **Read reference + capture
   side by side** and compare layout, spacing, colour, typography, icons, copy.
   Bug screenshot = the "before" — your capture must show it fixed at that spot.
-  Mismatch → fix, or list as intentional deviation in the PR body; attach both
-  images to the PR. Functionally perfect + visually off = not done.
+  Mismatch → fix, or list as intentional deviation in the PR body. The compare is
+  for you; the images attach only per the screenshot bullet (user asked → ticket, PR
+  when they said PR). Functionally perfect + visually off = not done.
 - **Webhook / callback feature** (a new inbound endpoint an external provider calls —
   Stripe, GitHub, Twilio, e-sign…) → **test with a simulated signed payload, not a
   live call:** assert the signature check + handler behaviour against a sample event
@@ -769,15 +792,18 @@ issue link.
   **draft** PR as _in progress_ and revert this move — the review state only sticks once
   the PR is marked _ready_. Set it once; don't fight a revert.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
-- **Screenshots in the body** when the run captured them (Phase 3's screenshot
-  bullet, or the `before-after` skill). Attach them the way
+- **Screenshots in the body only when the user asked for them in the PR** (Phase 3's
+  screenshot bullet, trigger 1 with the PR named; or `before-after` run with the PR as
+  its target). Asked for screenshots with no place named → the ticket, not here.
+  Captured only to verify → not attached; one line in `## Evidence` ("verified on
+  iPhone 16 sim") is enough. When they do go in, attach them the way
   `../_shared/forge-commands.md` §6a says — `corgi assets push <files> --key <key>
   --dir <repo>` puts them on the repo's `pr-assets/<key>` branch and prints the
   `![name](…blob/pr-assets/<key>/<path>?raw=true)` lines to paste (GitLab may use the
   project upload instead) — and paste exactly what it printed. Never `raw.githubusercontent.com` (an
   empty box on a private repo), never a local path, never an image on the PR branch
   (gone after the merge). Shots go in a table, one line naming device, environment,
-  account and what to look at. The ticket gets the same images in the `## Spec`
+  account and what to look at. Ticket-bound screenshots go into the `## Spec`
   comment through the tracker's own upload (§6a) — a forge link is unreadable there.
 - **Changed surface at the top of the body.** `corgi surface --branch <branch>`
   (or `corgi_diff` with `surface: true`) prints the `## Changed surface` block:
