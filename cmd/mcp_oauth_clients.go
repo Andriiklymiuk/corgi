@@ -7,7 +7,39 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"unicode"
 )
+
+// cleanClientName makes a client's self-declared name safe to store as a
+// device name and print in a terminal: graphic runes only (no escapes, no
+// newlines), single spaces, at most 64 runes, cut on a rune boundary.
+// Empty after cleaning → fallback.
+func cleanClientName(raw, fallback string) string {
+	var b strings.Builder
+	space := false
+	for _, r := range raw {
+		if unicode.IsSpace(r) {
+			space = true
+			continue
+		}
+		if !unicode.IsGraphic(r) {
+			continue
+		}
+		if space && b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		space = false
+		b.WriteRune(r)
+	}
+	name := b.String()
+	if runes := []rune(name); len(runes) > 64 {
+		name = string(runes[:64])
+	}
+	if name == "" {
+		return fallback
+	}
+	return name
+}
 
 // builtinOAuthClientHosts are the hosted callbacks corgi trusts out of the
 // box: Claude's. A subdomain of either passes too.

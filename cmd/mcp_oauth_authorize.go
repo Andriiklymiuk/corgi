@@ -18,8 +18,9 @@ import (
 const (
 	maxPendingAuths = 20
 	pendingAuthTTL  = 10 * time.Minute
-	// approveCodeAlphabet leaves out letters that read like digits.
-	approveCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	// approveCodeAlphabet is pairing's code alphabet without 0 and 1, so
+	// pairing.NormalizeCode keeps every character a page shows.
+	approveCodeAlphabet = "23456789ABCDEFGHJKMNPQRSTVWXYZ"
 )
 
 // newApproveCode is the short code a consent page shows for
@@ -141,8 +142,7 @@ func (oa *oauthServer) authorizeHandler(w http.ResponseWriter, r *http.Request) 
 	oa.mu.Unlock()
 
 	target, _ := url.Parse(redirectURI)
-	w.Header().Set(headerContentType, "text/html; charset=utf-8")
-	setLaunchHeaders(w)
+	setConsentHeaders(w)
 	_ = consentPage.Execute(w, consentView{
 		ClientName:  client.Name,
 		Host:        target.Hostname(),
@@ -152,11 +152,21 @@ func (oa *oauthServer) authorizeHandler(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// setConsentHeaders: the consent page must never render inside another
+// site's frame — a browser holding corgi_token could be clickjacked into
+// Approve. Inline script and same-origin fetch only.
+func setConsentHeaders(w http.ResponseWriter) {
+	setLaunchHeaders(w)
+	w.Header().Set(headerContentType, "text/html; charset=utf-8")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+}
+
 // consentError is the 400 page for a request whose redirect target cannot
 // be trusted.
 func (oa *oauthServer) consentError(w http.ResponseWriter, msg string) {
-	w.Header().Set(headerContentType, "text/html; charset=utf-8")
-	setLaunchHeaders(w)
+	setConsentHeaders(w)
 	w.WriteHeader(http.StatusBadRequest)
 	_ = consentErrorPage.Execute(w, msg)
 }

@@ -84,11 +84,25 @@ func publicIP(ip net.IP) bool {
 		ip.IsInterfaceLocalMulticast(), ip.IsMulticast(), ip.IsUnspecified():
 		return false
 	}
-	if len(ip) == net.IPv4len && ip[0] == 0 { // 0.0.0.0/8
-		return false
+	for _, cidr := range reservedV4 {
+		if cidr.Contains(ip) {
+			return false
+		}
 	}
 	return true
 }
+
+// reservedV4 is what IsPrivate and the link-local checks miss: "this"
+// network, shared address space (CGNAT), IETF protocol assignments,
+// benchmarking, and the reserved top block with broadcast.
+var reservedV4 = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, c := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4"} { // NOSONAR — IANA special-purpose ranges on a blocklist, not an endpoint
+		_, n, _ := net.ParseCIDR(c)
+		out = append(out, n)
+	}
+	return out
+}()
 
 // client returns the client a metadata URL describes, from cache or fetched.
 func (f *cimdFetcher) client(ctx context.Context, clientID string, hosts *oauthClientHosts) (oauthClient, error) {
@@ -224,7 +238,7 @@ func parseCIMD(body []byte, clientID string, hosts *oauthClientHosts) (oauthClie
 	if doc.ClientID != clientID {
 		return oauthClient{}, fmt.Errorf("%w: client_id in the document does not match its URL", errCIMDRefused)
 	}
-	name := strings.TrimSpace(doc.ClientName)
+	name := cleanClientName(doc.ClientName, "")
 	if name == "" {
 		return oauthClient{}, fmt.Errorf("%w: client_name is required", errCIMDRefused)
 	}
@@ -238,9 +252,6 @@ func parseCIMD(body []byte, clientID string, hosts *oauthClientHosts) (oauthClie
 	}
 	if m := doc.TokenEndpointAuthMethod; m != "" && m != "none" {
 		return oauthClient{}, fmt.Errorf("%w: token_endpoint_auth_method %s is not supported (only none)", errCIMDRefused, m)
-	}
-	if len(name) > 64 {
-		name = name[:64]
 	}
 	return oauthClient{ID: clientID, Name: name, RedirectURIs: doc.RedirectURIs}, nil
 }
