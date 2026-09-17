@@ -82,12 +82,22 @@ localhost where a web page could otherwise reach corgi through DNS rebinding:
 Those surfaces reach corgi over the tunnel URL with a paired device token as
 a request header — no OAuth, no sign-in screen:
 
-1. `corgi mcp --http 127.0.0.1:8765 --tunnel --pair`, pair a device (see
-   [Pairing a device](#pairing-a-device)) or copy the printed token.
-2. In Claude, add a custom connector with the URL `https://<tunnel>/mcp`,
-   no authentication, and the header `Authorization: Bearer corgi_dev_…`.
-3. The connector shows the `corgi` server with its description; read-only
-   tools run without a prompt, destructive ones ask first.
+1. Have the endpoint up with a tunnel: `corgi agent up`, or by hand
+   `corgi mcp --http 127.0.0.1:8765 --tunnel --pair`. The public URL is in
+   `<data>/agent/public.url` (or on the running `corgi mcp` process as
+   `--tunnel-hostname`); the connector URL is that origin plus `/mcp`.
+2. Mint a token for the connector: `corgi agent dashboard --print --name
+   claude-web` in a terminal you are looking at prints a link ending in
+   `#token=corgi_dev_…`; the part after `token=` is the bearer. The phone's
+   Settings mints one too. A phone's own token is refused on `/mcp`.
+3. In Claude, add a custom connector: the URL from step 1, Authentication
+   **No sign-in** (Claude preselects *Sign in now — Detected* because the
+   `401` carries `WWW-Authenticate: Bearer`; corgi has no OAuth, so that
+   choice fails with "Couldn't register with the sign-in service"), and a
+   request header `Authorization` = `Bearer corgi_dev_…`.
+4. The connector shows the **Corgi** server with its description; read-only
+   tools run without a prompt, destructive ones ask first. Revoke the token
+   any time with `corgi mcp devices revoke claude-web`.
 
 Claude Code keeps using stdio (`corgi mcp`) and needs none of this.
 

@@ -396,8 +396,10 @@ URL that survives restarts — and a phone that stays paired, since the origin
 never changes — pass `--tunnel-name <name> --tunnel-hostname <host>` (cloudflared
 named tunnel; both flags, see docs/agent.md). The mirror is `corgi agent down`: stops the
 daemon AND the detached MCP + tunnel (`agent stop` stops only the daemon).
-`corgi agent restart` is `down` + `up --fresh` in one — recommend it after a
-corgi upgrade so the daemon and launcher run the new binary. `up` remembers
+`corgi agent restart` is `down` + `up --fresh` in one. `corgi upd` runs it
+itself when the daemon was set up with `corgi agent install` (it says so, or
+says why not); only recommend a restart by hand when `corgi agent status`
+still shows the old version. `up` remembers
 the tunnel flags it last ran with, so a bare `restart` keeps the named tunnel;
 `--tunnel-hostname ""` is the way back to a quick tunnel. ngrok works too:
 `--provider ngrok --tunnel-hostname <yours>.ngrok-free.dev` (the static dev
@@ -418,11 +420,36 @@ tunnel** so the URL is stable). Verify end-to-end with `corgi agent session
 start <workspace>` or by tapping a repo in the launcher, and watch the session
 URL appear.
 
-The Claude-app custom connector still works as a second option (add corgi's
-`/mcp` URL + a Bearer token on claude.ai — the server token, or the connector
-token the phone mints under Settings; a phone's own token never opens `/mcp`.
-The request-header path is beta and rolling out); the launcher is the
-setup-free path.
+The Claude-app custom connector is the second option: claude.ai, Claude
+Desktop and the Claude phone app all reach corgi's tools through it. The
+launcher is the setup-free path; the connector is for "ask Claude to run
+corgi_status" from a chat. Walk the user through it in this order, and give
+them each value ready to paste:
+
+1. **URL** — the daemon's public tunnel origin plus `/mcp`. Read it from
+   `<data>/agent/public.url` (the daemon writes it when the tunnel resolves)
+   or off the running process: `pgrep -fl "corgi mcp --http"` shows the
+   `--tunnel-hostname`. So `https://<host>/mcp`. `corgi agent status` does
+   not print it.
+2. **Authentication → No sign-in.** Claude preselects *Sign in now —
+   Detected* because corgi's `401` carries `WWW-Authenticate: Bearer`, and
+   the connector then fails with *Couldn't register with … sign-in service*:
+   corgi has no OAuth. Tell the user to pick **No sign-in** by hand.
+3. **Request header** — `Authorization` = `Bearer corgi_dev_…`. The token
+   is a paired-device token minted for this purpose, in one of two ways:
+   `corgi agent dashboard --print --name claude-web` in a terminal the user is
+   looking at (it refuses a pipe; the link it prints ends in
+   `#token=corgi_dev_…`, the part after `token=` is the bearer), or the
+   phone's Settings → connector token. The phone's **own** token is refused
+   on `/mcp` by design (it is end-to-end keyed for the launcher). The
+   server token printed at `corgi mcp --http` start also works but is the
+   machine's master key; prefer a device token, revocable with
+   `corgi mcp devices revoke claude-web`.
+
+After **Add**, the connector lists the server as **Corgi** with every tool
+titled; read-only tools (`corgi_status`, `corgi_logs`) run without a prompt,
+destructive ones (`corgi_exec`, `corgi_db_query`) ask first. Verify with
+"corgi status" in a chat.
 
 The old longhand still works when you want the pieces separately:
 `corgi agent scan ~/dev` → `corgi agent serve &` → `corgi mcp --http :8765
@@ -460,10 +487,9 @@ where you actually talk. Two apps, by design.
 ### Which client calls corgi_session_start
 
 `corgi_session_start` is an MCP tool, so any MCP client works. Today that is
-the **Claude app as a custom connector**: add the tunnel URL + the server
-token (or a connector token minted from the phone's Settings — a phone's own
-token is refused on `/mcp`), then say "start a session in the recipe app" and
-it calls the tool for you. A
+the **Claude app as a custom connector** (the three-step recipe above: tunnel
+URL + `/mcp`, No sign-in, `Authorization: Bearer corgi_dev_…`), then say
+"start a session in the recipe app" and it calls the tool for you. A
 dedicated companion app is a separate project (it must **not** live in the
 corgi repo).
 
