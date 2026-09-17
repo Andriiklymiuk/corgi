@@ -436,3 +436,25 @@ func TestPairRejectsAControlCharacterInTheDeviceName(t *testing.T) {
 		t.Errorf("must be a caller-input error, got %v", err)
 	}
 }
+
+func TestExpiredDeviceDoesNotAuthorize(t *testing.T) {
+	token, _ := NewDeviceToken()
+	live, _ := NewDeviceToken()
+	s := &Store{Devices: []Device{
+		{Name: "old", TokenHash: HashToken(token), ExpiresAt: time.Now().Add(-time.Minute)},
+		{Name: "live", TokenHash: HashToken(live), ExpiresAt: time.Now().Add(time.Hour)},
+		{Name: "forever", TokenHash: HashToken("x")},
+	}}
+	if _, ok := s.Authorize(token); ok {
+		t.Error("an expired device must not authorize")
+	}
+	if d, ok := s.FindByToken(token); !ok || d.Name != "old" {
+		t.Error("FindByToken must still see the expired device")
+	}
+	if name, ok := s.Authorize(live); !ok || name != "live" {
+		t.Error("an unexpired device must authorize")
+	}
+	if n := s.RevokeExpired(time.Now()); n != 1 || len(s.Devices) != 2 {
+		t.Errorf("RevokeExpired dropped %d, kept %d", n, len(s.Devices))
+	}
+}

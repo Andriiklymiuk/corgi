@@ -339,10 +339,11 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 			CreatedAt time.Time `json:"createdAt"`
 			Encrypted bool      `json:"encrypted"`
 			Role      string    `json:"role,omitempty"`
+			ExpiresAt time.Time `json:"expiresAt,omitempty"`
 		}
 		rows := make([]row, 0, len(store.Devices))
 		for _, d := range store.Devices {
-			rows = append(rows, row{Name: d.Name, CreatedAt: d.CreatedAt, Encrypted: d.Encrypted(), Role: d.Role})
+			rows = append(rows, row{Name: d.Name, CreatedAt: d.CreatedAt, Encrypted: d.Encrypted(), Role: d.Role, ExpiresAt: d.ExpiresAt})
 		}
 		utils.PrintJSON(rows)
 		return
@@ -359,6 +360,14 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 		}
 		if d.Viewer() {
 			how += " · reads only"
+		}
+		if !d.ExpiresAt.IsZero() {
+			how = "oauth access token"
+			if d.Expired(time.Now()) {
+				how += " · expired"
+			} else {
+				how += " · expires " + d.ExpiresAt.Local().Format("2006-01-02 15:04")
+			}
 		}
 		fmt.Printf("%-24s paired %s · %s\n", d.Name, d.CreatedAt.Local().Format("2006-01-02 15:04"), how)
 	}
