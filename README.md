@@ -210,8 +210,8 @@ Nothing ships without you. It opens **draft** PRs and waits. If you have no proj
 corgi is built to be driven by a program: it never stops to ask a question, prints JSON with `--json`, and returns exit codes you can branch on (`0` ok, `1` failed, `2` bad usage). It also ships an **MCP server**, so an agent calls real tools instead of guessing shell commands:
 
 ```bash
-corgi mcp                        # stdio, local, no network — point any MCP client at it
-corgi mcp --http :8765 --tunnel  # remote: a bearer-token-protected public URL
+corgi mcp                                  # stdio, local, no network — point any MCP client at it
+corgi mcp --http 127.0.0.1:8765 --tunnel   # remote: a bearer-token-protected public URL
 ```
 
 More: [agents & scripting](docs/agents.md) · [MCP server](docs/mcp.md) · [planning from your tracker](docs/tracker.md).
@@ -311,6 +311,40 @@ corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 `agent tunnel setup` stores the choice, so plain `corgi agent up` keeps using it after that. Because the origin stops changing, the phone stays paired across restarts and reboots — save `https://<your-host>/app` to the home screen and it keeps working.
 
 `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux — a headless server too, where the phone and Telegram are the screen ([running it on a server](docs/agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
+
+### Talk to your laptop from any Claude
+
+The same endpoint is a **Claude connector**: add it once and claude.ai, Claude
+Desktop and the Claude phone app can ask your laptop questions and give it
+work — in a normal chat, no terminal, no session open.
+
+```text
+you:    is anything waiting on me?
+claude: two sessions are blocked on a permission — api wants to run the
+        migration, web wants to install a package. Want me to answer them?
+
+you:    why is the api down?
+claude: port 3084 is held by a stale node from yesterday; the log ends with
+        EADDRINUSE. Kill it and restart?
+
+you:    start a session in the recipe app and fix the flaky checkout test
+claude: started. Here is the link to follow along.
+```
+
+Read-only tools (`corgi_status`, `corgi_logs`, `corgi_diff`) run without a
+prompt; anything that changes state (`corgi_exec`, `corgi_db_query`) asks
+first. Setup is three values in Claude's *Add custom connector* dialog:
+
+1. **URL** — your tunnel origin plus `/mcp` (it is in `<data>/agent/public.url`
+   after `corgi agent up`).
+2. **Authentication** — *No sign-in*. Claude preselects "Sign in now" because
+   the endpoint speaks Bearer; corgi has no OAuth, so pick this by hand.
+3. **Header** — `Authorization: Bearer corgi_dev_…`, a device token from
+   `corgi agent dashboard --print --name claude-web` (revoke it any time with
+   `corgi mcp devices revoke claude-web`).
+
+Details and what the endpoint enforces (Origin check, loopback by default,
+result and time budgets): [docs/mcp.md](docs/mcp.md#add-corgi-to-claudeai-desktop-or-the-phone).
 
 ## See every Claude session at once
 
