@@ -426,25 +426,34 @@ launcher is the setup-free path; the connector is for "ask Claude to run
 corgi_status" from a chat. Walk the user through it in this order, and give
 them each value ready to paste:
 
-1. **URL** — the daemon's public tunnel origin plus `/mcp`. Read it from
-   `<data>/agent/public.url` (the daemon writes it when the tunnel resolves)
-   or off the running process: `pgrep -fl "corgi mcp --http"` shows the
-   `--tunnel-hostname`. So `https://<host>/mcp`. `corgi agent status` does
-   not print it.
-2. **Authentication → No sign-in.** Claude preselects *Sign in now —
-   Detected* because corgi's `401` carries `WWW-Authenticate: Bearer`, and
-   the connector then fails with *Couldn't register with … sign-in service*:
-   corgi has no OAuth. Tell the user to pick **No sign-in** by hand.
-3. **Request header** — `Authorization` = `Bearer corgi_dev_…`. The token
-   is a paired-device token minted for this purpose, in one of two ways:
+1. **URL** — `corgi agent status` prints it on the `connector` line
+   (`https://<host>/mcp`); `--json` has it as `connectorUrl`. It is the
+   daemon's public tunnel origin plus `/mcp`; if the status says *no public
+   URL yet*, the tunnel is not up — `corgi agent up`.
+2. **Authentication → Sign in now** (the default Claude detects). corgi is
+   its own OAuth server on that origin, so **Add** opens corgi's consent
+   page in a browser tab. Approve it:
+   - a browser that has opened `corgi agent dashboard` before shows one
+     **Approve** button;
+   - any other browser (the phone's, a fresh profile) shows a code — the
+     user runs `corgi agent approve ABCD-2345` on the machine the daemon
+     runs on, and the page finishes on its own. Ten minutes per code.
+   Claude then holds a one-hour access token it refreshes for 30 days. It
+   shows in `corgi mcp devices` as `Claude · oauth <id>`; `corgi mcp devices
+   revoke "<that name>"` ends the grant and Claude asks to sign in again.
+3. **Fallback, header path** — if the daemon runs with `--no-oauth`, or the
+   user prefers a token: Authentication **No sign-in** and a request header
+   `Authorization` = `Bearer corgi_dev_…`. The token comes from
    `corgi agent dashboard --print --name claude-web` in a terminal the user is
-   looking at (it refuses a pipe; the link it prints ends in
-   `#token=corgi_dev_…`, the part after `token=` is the bearer), or the
-   phone's Settings → connector token. The phone's **own** token is refused
-   on `/mcp` by design (it is end-to-end keyed for the launcher). The
-   server token printed at `corgi mcp --http` start also works but is the
-   machine's master key; prefer a device token, revocable with
-   `corgi mcp devices revoke claude-web`.
+   looking at (it refuses a pipe; the link ends in `#token=corgi_dev_…`, the
+   part after `token=` is the bearer) or the phone's Settings → connector
+   token. The phone's **own** token is refused on `/mcp` by design. Revoke
+   with `corgi mcp devices revoke claude-web`.
+
+If the consent page answers *cannot start this sign-in*, the client's
+redirect URI is not one corgi trusts: loopback, `claude.ai`, `claude.com`,
+or a host given with `corgi mcp --oauth-client-host` /
+`CORGI_MCP_OAUTH_CLIENT_HOSTS`. Nothing was redirected.
 
 After **Add**, the connector lists the server as **Corgi** with every tool
 titled; read-only tools (`corgi_status`, `corgi_logs`) run without a prompt,
@@ -487,8 +496,8 @@ where you actually talk. Two apps, by design.
 ### Which client calls corgi_session_start
 
 `corgi_session_start` is an MCP tool, so any MCP client works. Today that is
-the **Claude app as a custom connector** (the three-step recipe above: tunnel
-URL + `/mcp`, No sign-in, `Authorization: Bearer corgi_dev_…`), then say
+the **Claude app as a custom connector** (the recipe above: connector URL
+from `corgi agent status`, Sign in now, approve the consent page), then say
 "start a session in the recipe app" and it calls the tool for you. A
 dedicated companion app is a separate project (it must **not** live in the
 corgi repo).

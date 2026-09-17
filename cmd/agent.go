@@ -589,6 +589,9 @@ func runAgentStatus(_ *cobra.Command, _ []string) {
 	}
 
 	fmt.Printf("corgi agent running (pid %d, version %s)\n", status.PID, status.Version)
+	for _, line := range publicURLLines() {
+		fmt.Println(line)
+	}
 	warnStrayServers(status.PID)
 	if !status.WakeLockable {
 		fmt.Println("wake lock: unsupported on this platform")
@@ -640,6 +643,7 @@ type statusJSON struct {
 	Usage        []workspaceUsageJSON `json:"usage,omitempty"`
 	Accounts     []accountJSON        `json:"accounts,omitempty"`
 	DashboardURL string               `json:"dashboardUrl,omitempty"`
+	ConnectorURL string               `json:"connectorUrl,omitempty"`
 }
 
 // accountJSON is one Claude account: the rate-limit picture /usage shows,
@@ -679,7 +683,21 @@ func statusWithUsage(dir string, status *daemon.Status) statusJSON {
 	out.Accounts = accountLimits(out.Usage)
 	// The launcher page, not the tunnel's root: "/" is a 404 there.
 	out.DashboardURL = launcherURL()
+	out.ConnectorURL = connectorURL()
 	return out
+}
+
+// publicURLLines is what `corgi agent status` prints under the running line:
+// the launcher and the connector URL, or one line saying the tunnel is not up.
+func publicURLLines() []string {
+	launcher := launcherURL()
+	if launcher == "" {
+		return []string{"  no public URL yet — corgi agent up opens the tunnel"}
+	}
+	return []string{
+		"  launcher   " + launcher,
+		"  connector  " + connectorURL() + "   add in Claude: Connect, or No sign-in + Authorization: Bearer <device token>",
+	}
 }
 
 // accountLimits: one entry per distinct config dir the workspaces run under,

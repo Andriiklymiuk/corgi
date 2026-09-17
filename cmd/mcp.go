@@ -55,6 +55,8 @@ func init() {
 	mcpCmd.Flags().Bool("pair", false, "Open a single-use pairing window so a device can claim its own revocable token (requires --http).")
 	mcpCmd.Flags().Bool("viewer", false, "The device that pairs in this window only reads: the board, the inbox, the brief — never a transcript, never a button (with --pair).")
 	mcpCmd.Flags().Bool("bind-all", false, "Let --http listen on a non-loopback address (0.0.0.0, a LAN IP). Off, a bare port binds 127.0.0.1.")
+	mcpCmd.Flags().Bool("no-oauth", false, "Do not serve the OAuth sign-in (Connect button) beside /mcp; the Authorization header path still works.")
+	mcpCmd.Flags().StringSlice("oauth-client-host", nil, "Extra host whose https redirect URIs OAuth clients may use (claude.ai and claude.com are built in). Also CORGI_MCP_OAUTH_CLIENT_HOSTS, comma-separated.")
 	mcpCmd.Flags().StringSlice("allow-origin", nil, "Extra browser Origin allowed on /mcp (scheme://host[:port]); loopback origins and the tunnel's are always allowed. Also CORGI_MCP_ALLOWED_ORIGINS, comma-separated.")
 	rootCmd.AddCommand(mcpCmd)
 }
@@ -172,6 +174,8 @@ type mcpHTTPOpts struct {
 	viewer         bool
 	bindAll        bool
 	allowOrigins   []string
+	noOAuth        bool
+	oauthHosts     []string
 }
 
 func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
@@ -186,6 +190,8 @@ func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
 	o.viewer, _ = cmd.Flags().GetBool("viewer")
 	o.bindAll, _ = cmd.Flags().GetBool("bind-all")
 	o.allowOrigins, _ = cmd.Flags().GetStringSlice("allow-origin")
+	o.noOAuth, _ = cmd.Flags().GetBool("no-oauth")
+	o.oauthHosts, _ = cmd.Flags().GetStringSlice("oauth-client-host")
 	if env := strings.TrimSpace(os.Getenv("CORGI_MCP_ALLOWED_ORIGINS")); env != "" {
 		for _, origin := range strings.Split(env, ",") {
 			if origin = strings.TrimSpace(origin); origin != "" {
@@ -230,6 +236,13 @@ const bearerPrefix = "Bearer "
 // deviceStorePath, when set, additionally accepts any paired device's token, so
 // a phone never has to be handed the server token itself. Empty disables that.
 func bearerAuth(token string, next http.Handler, deviceStorePath string) http.Handler {
+	return bearerAuthWithOAuth(token, next, deviceStorePath, nil)
+}
+
+// bearerAuthWithOAuth is bearerAuth that also accepts the access tokens oa
+// issued and points a 401 at oa's protected-resource metadata (RFC 9728), so
+// a client that lands on the endpoint cold learns where to sign in.
+func bearerAuthWithOAuth(token string, next http.Handler, deviceStorePath string, oa *oauthServer) http.Handler {
 	if token == "" && deviceStorePath == "" {
 		return next
 	}
@@ -245,9 +258,16 @@ func bearerAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 			next.ServeHTTP(w, r)
 			return
 		}
+		if oa != nil && oa.authorizeAccessToken(r.Header.Get("Authorization")) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		// RFC 6750 §3.1: error="invalid_token" only when a credential was
 		// presented; a bare challenge when there was none.
 		challenge := `Bearer realm="corgi"`
+		if oa != nil {
+			challenge += `, resource_metadata="` + oa.resourceMetadataURL() + `"`
+		}
 		if r.Header.Get("Authorization") != "" {
 			challenge += `, error="invalid_token"`
 		}
@@ -363,7 +383,24 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	// paths 404.
 	mux := http.NewServeMux()
 	origins := newOriginAllowlist(addr, opts.allowOrigins)
-	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuth(token, httpSrv, deviceStore)))
+
+	// OAuth rides beside /mcp whenever there is auth to sign in to: the
+	// connector dialog's "Sign in now" then works with one click. --insecure
+	// has nothing to protect and --no-oauth turns it off.
+	var oa *oauthServer
+	if !opts.noOAuth && (token != "" || deviceStore != "") {
+		if dir, err := agentDir(); err == nil {
+			// Access tokens are devices, so a --token-only server still needs
+			// the device store's path to write them.
+			oauthDevices := deviceStore
+			if oauthDevices == "" {
+				oauthDevices = pairing.StorePath(dir)
+			}
+			oa = newOAuthServer(addr, newOAuthClientHosts(opts.oauthHosts, os.Stderr), origins, oauthDevices, oauthStatePath(dir))
+			oa.mount(mux)
+		}
+	}
+	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuthWithOAuth(token, httpSrv, deviceStore, oa)))
 
 	// The launcher: corgi's own phone UI. /app is a static page (no secret); its
 	// data endpoints sit behind the same bearer/device-token auth as /mcp and do
@@ -468,7 +505,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	defer cancel()
 	var tunnelDone <-chan struct{}
 	if opts.tunnel {
-		tunnelDone = startMCPTunnel(ctx, addr, token, opts, origins)
+		tunnelDone = startMCPTunnel(ctx, addr, token, opts, origins, oa)
 	}
 
 	// Cancel the tunnel ctx on signal so its subprocess dies with the server.
@@ -503,7 +540,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 // tunnel.Run runner, bound to ctx so it dies with the server. The returned
 // channel closes once the tunnel runner drains, letting callers join the child
 // before exiting (so os.Exit doesn't orphan cloudflared/ngrok).
-func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, origins *originAllowlist) <-chan struct{} {
+func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, origins *originAllowlist, oa *oauthServer) <-chan struct{} {
 	provider, named, err := buildMCPTunnelConfig(opts.tunnelProvider, opts.tunnelHostname, opts.tunnelName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tunnel:", err)
@@ -535,6 +572,9 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, o
 				mcpPublicTunnelActive.Store(true)
 				if origins != nil {
 					origins.add(ev.URL)
+				}
+				if oa != nil {
+					oa.setIssuer(ev.URL)
 				}
 				// Probe the route the tools are actually served on, not the
 				// root — see probeTunnelExposure.
