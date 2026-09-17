@@ -310,7 +310,7 @@ corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 
 `agent tunnel setup` stores the choice, so plain `corgi agent up` keeps using it after that. Because the origin stops changing, the phone stays paired across restarts and reboots — save `https://<your-host>/app` to the home screen and it keeps working.
 
-`corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux. With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
+`corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux — a headless server too, where the phone and Telegram are the screen ([running it on a server](docs/agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
 
 ## See every Claude session at once
 

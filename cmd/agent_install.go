@@ -328,9 +328,31 @@ func installSystemd(binary, logDir string) error {
 	}
 
 	utils.Infof("installed %s\n", unitPath)
-	utils.Info("If it should survive logout too: `loginctl enable-linger $USER`")
+	if on, known := lingerEnabled(); known && !on {
+		utils.Info("it stops when your last login ends — `loginctl enable-linger $USER` keeps it up on a server")
+	} else if !known {
+		utils.Info("If it should survive logout too: `loginctl enable-linger $USER`")
+	}
 	_ = logDir
 	return nil
+}
+
+// lingerEnabled asks logind whether this user's services outlive their
+// logins. Without linger a user unit on a server dies with the SSH session
+// that installed it, which looks exactly like a daemon that never started.
+func lingerEnabled() (on, known bool) {
+	if runtime.GOOS != "linux" {
+		return false, false
+	}
+	out, err := runSupervisorCommand("loginctl", "show-user", currentUID(), "-p", "Linger", "--value")
+	if err != nil {
+		return false, false
+	}
+	return lingerFromOutput(out), true
+}
+
+func lingerFromOutput(out []byte) bool {
+	return strings.TrimSpace(string(out)) == "yes"
 }
 
 // renderedSystemdUnit is the user unit corgi installs. Like the plist, it

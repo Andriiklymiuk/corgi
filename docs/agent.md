@@ -1937,12 +1937,70 @@ corgi at the right place explicitly:
 export CORGI_DATA_DIR="$(brew --prefix)/var/corgi"
 ```
 
+## Running it on a server
+
+Nothing in agent mode needs a window. The daemon, the watch, the routines,
+the bots and every headless fix are plain processes, so a Linux box with
+`claude`, `git` and Docker runs the same loop a laptop does. The screen is
+the phone, Telegram, or an editor on another machine.
+
+```bash
+# 1. the binaries — once
+curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh   # or the .deb/.rpm, see docs/install.md
+curl -fsSL https://claude.ai/install.sh | bash                                          # Claude Code
+claude auth login          # no browser here: it prints a URL, open it anywhere, paste the code back
+
+# 2. the code
+git clone git@github.com:acme/acme-stack.git ~/dev/acme-stack && cd ~/dev/acme-stack
+corgi init                 # clones every service corgi-compose.yml names; skip when the repo is the service
+corgi agent init           # this directory is now a workspace
+
+# 3. what to watch, and what to do about it
+corgi agent watch auth jira --url https://acme.atlassian.net --email me@acme.io --token …   # or linear / GITLAB_TOKEN / gh auth login
+corgi agent watch enable --labels bug --prs --comments --action fix --isolate --quiet 23:00-07:00
+corgi agent notify telegram --token <TOKEN>       # the only "desktop" a server has
+corgi agent routine add digest                    # and anything else on a clock
+
+# 4. keep it up
+corgi agent install        # a systemd user unit
+loginctl enable-linger $USER   # or it dies with this SSH session
+corgi agent doctor         # says whether linger is on and whether anything can ring
+```
+
+From then on a ticket, a review or a red build arrives, the daemon runs
+`claude -p` in a worktree of its own, opens a draft pull request and tells
+Telegram. `corgi agent watch` shows the last polls, `corgi agent kanban` where
+each thing is, `corgi agent brief` what a run was on.
+
+- **Services too.** `corgi run -d --wait` boots the stack detached, so a fix
+  that needs the database or the API against a live stack has one. Docker on
+  Linux is started through `systemctl start docker` when it is down.
+- **The phone.** `corgi agent up` opens a tunnel (cloudflared or ngrok, from
+  the vendor's packages — `brew` is rarely on a server) and prints the QR.
+  On a private network, `corgi agent up --http 0.0.0.0:8765` needs no
+  tunnel; on the open internet put your own TLS in front or use the tunnel,
+  never plain HTTP.
+- **A token instead of a login.** `claude setup-token` prints a long-lived
+  token for a subscription. A headless fix inherits the daemon's whole
+  environment, so a systemd drop-in carries it:
+  `~/.config/systemd/user/corgi-agent.service.d/env.conf` with
+  `[Service]` / `Environment=CLAUDE_CODE_OAUTH_TOKEN=…`, mode `0600`, then
+  `systemctl --user daemon-reload && corgi agent restart`. Sessions the phone
+  starts strip it unless the workspace sets `inheritOauthToken: true`, the
+  same rule as on a laptop.
+- **Two Claude accounts** work as on a laptop: `claude auth login` under
+  `CLAUDE_CONFIG_DIR=~/.claude-work`, then `configDir` on the workspace.
+- **What does not apply.** No menu bar, no editor to reveal a session in, no
+  wake lock to hold (`wakeLock: off` keeps the doctor quiet). A phone message
+  for a session whose process is gone runs as a headless turn with
+  `--headless` on the watch.
+
 ## Platform support
 
 | | supported |
 |---|---|
 | macOS | yes — launchd, `caffeinate` |
-| Linux | yes — systemd user unit, `systemd-inhibit` |
+| Linux | yes — systemd user unit (`loginctl enable-linger` on a server, see above), `systemd-inhibit` |
 | Windows | **not yet.** `corgi agent install` exits 2 and says so rather than half-installing. Run `corgi agent serve` under your own supervisor. |
 
 ## macOS keeps asking to let corgi read Documents

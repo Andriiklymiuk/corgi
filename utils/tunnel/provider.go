@@ -4,6 +4,8 @@
 // a matching public URL line that can be parsed back out.
 package tunnel
 
+import "runtime"
+
 type NamedConfig struct {
 	Hostname string
 	Name     string
@@ -34,4 +36,17 @@ func Names() []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// installHint names the install that fits this machine: brew on a Mac, the
+// vendor's packages on a Linux box where brew is rarely there.
+func installHint(goos, formula, linuxURL string) string {
+	if goos == "linux" {
+		return "download it from " + linuxURL + " (deb, rpm or a binary), or `brew install " + formula + "` with Linuxbrew"
+	}
+	return "brew install " + formula
+}
+
+func hostInstallHint(formula, linuxURL string) string {
+	return installHint(runtime.GOOS, formula, linuxURL)
 }

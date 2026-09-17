@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/tunnel"
 
 	"github.com/spf13/cobra"
 )
@@ -129,7 +130,7 @@ func tunnelNameFor(provider, name string) string {
 
 func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host string, dryRun bool) error {
 	if err := have("cloudflared"); err != nil {
-		return fmt.Errorf("cloudflared is not installed — `brew install cloudflared` (or see developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads)")
+		return fmt.Errorf("cloudflared is not installed — %s", tunnel.Cloudflared{}.InstallHint())
 	}
 
 	utils.Info("checking cloudflared login…")

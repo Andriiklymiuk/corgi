@@ -184,3 +184,13 @@ func TestLocaltunnelInstallHint(t *testing.T) {
 		t.Error("InstallHint should not be empty")
 	}
 }
+
+func TestInstallHintFitsTheHost(t *testing.T) {
+	if got := installHint("darwin", "cloudflared", "x.example"); got != "brew install cloudflared" {
+		t.Fatalf("darwin: %q", got)
+	}
+	got := installHint("linux", "cloudflared", "x.example")
+	if !strings.Contains(got, "x.example") || !strings.Contains(got, "Linuxbrew") {
+		t.Fatalf("linux hint must name the vendor download and Linuxbrew: %q", got)
+	}
+}
