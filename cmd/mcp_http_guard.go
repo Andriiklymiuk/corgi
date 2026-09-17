@@ -27,7 +27,7 @@ type originAllowlist struct {
 func newOriginAllowlist(listenAddr string, extra []string) *originAllowlist {
 	a := &originAllowlist{exact: map[string]bool{}}
 	if listenAddr != "" {
-		a.add("http://" + localURL(listenAddr))
+		a.add("http://" + localURL(listenAddr)) // NOSONAR — the loopback listener is plain http; the public side is the tunnel's https origin, added when it resolves
 	}
 	for _, o := range extra {
 		a.add(o)

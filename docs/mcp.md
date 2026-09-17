@@ -153,13 +153,13 @@ with an authenticated proxy.
 | `corgi_status` | `{composePath?, service?, unhealthyOnly?}` | `[{label, port, kind, url, healthy, detail}]` — `service` picks one target, `unhealthyOnly` drops the healthy ones; probe results are reused for 1s | `collectStatusRows` + `probeAll` |
 | `corgi_env` | `{composePath?, service?, key?}` | `{service: {KEY: {value, source}}}` — `service` = one service uncapped, `key` = one var across services; with neither, each service is capped at 40 vars plus a `_truncated` marker entry | `utils.ResolveAllEnv` |
 | `corgi_ps` | `{composePath?}` | `[{name, kind, port, status, url, startedAt}]` — `status` is process/container state, not health | `buildPsRows` |
-| `corgi_up` | `{composePath?, profile?, seed?, serviceBranch?, serviceDir?}` | run-state (`services[]`, `dbServices[]`) — **always detached** | run prelude + `runDetached` machinery |
+| `corgi_up` | `{composePath?, profile?, omit?, seed?, serviceBranch?, serviceDir?}` | `{status, handle{pid, logPath}, next, state?, error?}` — `state` is the run-state (`services[]`, `dbServices[]`) once `status` is `started`; `starting` after ~20 s of boot, `failed` with the log tail — **always detached** | child `corgi run --detach` |
 | `corgi_down` | `{composePath?}` | `{stopped[], failed[]}` | stop machinery (`stopProcessGroup`) |
 | `corgi_logs` | `{composePath?, service, lines?, grep?, since?, errorsOnly?}` | `{service, lines[], truncated}` — filters run before the tail (`grep` regexp or literal, `since` = `10m` or RFC3339, `errorsOnly` = the `corgi logs --json` level heuristic) | newest captured log run, same matcher as `corgi logs --grep/--since` |
 | `corgi_exec` | `{composePath?, service, command, ensureDeps?, serviceBranch?, serviceDir?}` | `{exitCode, output, truncated, durationMs}` | `RunServiceCommandExitCode` (output captured) |
 | `corgi_test` | `{composePath?, service?, profile?, ensureDeps?, changed?, base?, e2e?, serviceBranch?, serviceDir?}` | `{services[], passed, note?}` — `changed` keeps only repos that differ from `base` (default `main`), `e2e` runs the compose `e2e:` block with output captured in `message` | `runTests` / e2e suite (does not start db/services) |
 | `corgi_doctor` | `{composePath?}` | `{ok, checks[]}` | `buildDoctorResult` (required tools, Docker, ports) |
-| `corgi_restart` | `{composePath?, profile?}` | run-state — **always detached** | `corgi_down` then `corgi_up` |
+| `corgi_restart` | `{composePath?, profile?}` | same shape as `corgi_up` — **always detached** | `corgi_down` then `corgi_up` |
 | `corgi_db_query` | `{composePath?, service, query}` | `{service, output, truncated}` | `utils.ExecDBQueryCapture` (non-interactive) |
 | `corgi_db_snapshot` | `{composePath?, service?, name?, force?}` | `{service, name, archive, sizeBytes, pgVersionMajor, image, arch}` | `utils.RunSnapshot` — postgres-family only, same as `corgi db snapshot` |
 | `corgi_db_restore` | `{composePath?, name, service?, force?}` | `{service, archive}` — **wipes the data volume**, no prompt | `utils.RunRestore`, same as `corgi db restore --yes` |

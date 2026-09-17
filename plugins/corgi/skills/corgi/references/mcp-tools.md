@@ -23,13 +23,13 @@ them.
 | `corgi_validate` | `composePath?` | `{ok, errors[], warnings[]}` | static, no side effects |
 | `corgi_plan` | `composePath?, profile?` | `{order, databases, services, warnings}` | dry run |
 | `corgi_doctor` | `composePath?` | `{ok, checks[]}` | required tools, Docker, ports |
-| `corgi_up` | `composePath?, profile?, seed?, serviceBranch?, serviceDir?` | run-state `{services[], dbServices[]}` | **always detached; not a ready gate.** Runs every `beforeStart` before returning — minutes on a cold stack. `E_ALREADY_RUNNING` while a run is live → `corgi_down` first |
+| `corgi_up` | `composePath?, profile?, omit?, seed?, serviceBranch?, serviceDir?` | `{status, handle{pid, logPath}, next, state?, error?}` — `state` is the run-state `{services[], dbServices[]}` when `status` is `started` | **always detached; not a ready gate.** Boots in a child process and returns within ~20 s: `starting` means `beforeStart` is still running (minutes on a cold stack; `handle.logPath` is the boot log), `failed` carries the log tail in `error`. `E_ALREADY_RUNNING` while a run is live → `corgi_down` first; a second call during a boot returns the same handle |
 | `corgi_status` | `composePath?, service?, unhealthyOnly?` | `[{label, kind, port, url, healthy, detail}]` | **the only liveness truth** — live TCP/HTTP probe. Targets without a declared port are not listed |
 | `corgi_ps` | `composePath?` | `[{name, kind, port, status, url, startedAt}]` | `status` = process/container exists (`running`/`crashed`/`stopped`), not health; db_services and container-backed services never show `crashed` |
 | `corgi_why` | `service, logLines?` | `{verdict, detail, dependencies[], port, lastExitCode, env, logTail[], nextStep}` | one verdict for one down service — use before the ps/status/logs ladder |
 | `corgi_logs` | `service, lines?, grep?, since?, errorsOnly?` | `{service, lines[], truncated?}` | newest captured run; needs a prior `corgi_up`. Filter first (`errorsOnly`, `grep`, `since: "10m"`), then the tail: 200 raw lines is the expensive default |
 | `corgi_wait_for_log` | `service, pattern, timeoutSec?` | `{matched, line, waitedMs}` | **blocks** until a line matches — use instead of polling `corgi_logs` |
-| `corgi_restart` | `composePath?, profile?` | run-state | `corgi_down` + `corgi_up`, same caveats |
+| `corgi_restart` | `composePath?, profile?` | same shape as `corgi_up` | `corgi_down` + `corgi_up`, same caveats |
 | `corgi_down` | `composePath?` | `{stopped[], failed[]}` | runs `afterStart`, brings dbs down; idempotent |
 | `corgi_env` | `composePath?, service?, key?` | `{service: {KEY: {value, source}}}` | real values — never echo into a transcript. Pass `service` or `key`; unfiltered output is capped at 40 vars per service |
 | `corgi_exec` | `service, command, ensureDeps?, serviceBranch?, serviceDir?` | `{exitCode, output, truncated, durationMs}` | one-off command in the service's resolved env; **tunnel-gated** |
