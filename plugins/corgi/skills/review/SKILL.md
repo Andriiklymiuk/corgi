@@ -176,14 +176,14 @@ per-repo note. Never re-fetch the same key per PR.
   colour, icons and copy in the code are what you compare. Screenshots the PR
   **does** carry are evidence: ones that visibly diverge from the design are a
   **finding**. A PR with **no** screenshots is **not** a finding — screenshots are
-  opt-in in this flow, nobody owes them; review the code against the design, and
-  ask for a screen only when the diff genuinely can't settle a visual question
-  (name which one). **No design on the ticket, or it explicitly waives one → not a
-  finding:** review the UI on standards alone; don't demand a design that was
-  never promised. On **your own** PR (the Phase 4 fix path) don't add screenshots
-  unless the user asked for them — the **`before-after`** skill (base built, same
-  screen captured twice) is for when they do, and it puts them where they said: the
-  PR when they named it, else the ticket. A body whose image links
+  not owed in this flow; review the code against the design, and ask for a screen
+  when the diff genuinely can't settle a visual question (name which one). **No
+  design on the ticket, or it explicitly waives one → not a finding:** review the
+  UI on standards alone; don't demand a design that was never promised. On **your
+  own** PR (the Phase 4 fix path) screenshots are yours to add when they help or
+  the user asked — the **`before-after`** skill (base built, same screen captured
+  twice) is the tool for a restyle, and it puts them where the user said: the PR
+  when they named it, else the ticket. A body whose image links
   are `raw.githubusercontent.com` on a private repo, or local paths, renders empty
   boxes — a `nit` with the fix (`../_shared/forge-commands.md` §6a: assets branch +
   blob `?raw=true`), and not visual proof until they render.
