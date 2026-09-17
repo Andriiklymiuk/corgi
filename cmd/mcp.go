@@ -54,6 +54,8 @@ func init() {
 	mcpCmd.Flags().Bool("insecure", false, "Disable bearer-token auth on the HTTP endpoint.")
 	mcpCmd.Flags().Bool("pair", false, "Open a single-use pairing window so a device can claim its own revocable token (requires --http).")
 	mcpCmd.Flags().Bool("viewer", false, "The device that pairs in this window only reads: the board, the inbox, the brief — never a transcript, never a button (with --pair).")
+	mcpCmd.Flags().Bool("bind-all", false, "Let --http listen on a non-loopback address (0.0.0.0, a LAN IP). Off, a bare port binds 127.0.0.1.")
+	mcpCmd.Flags().StringSlice("allow-origin", nil, "Extra browser Origin allowed on /mcp (scheme://host[:port]); loopback origins and the tunnel's are always allowed. Also CORGI_MCP_ALLOWED_ORIGINS, comma-separated.")
 	rootCmd.AddCommand(mcpCmd)
 }
 
@@ -133,7 +135,15 @@ func runMCP(cmd *cobra.Command, _ []string) {
 		exitProcess(2)
 	}
 	if httpAddr != "" {
-		serveMCPHTTP(s, httpAddr, resolveMCPToken(opts), opts)
+		listen, notice, err := resolveMCPListenAddr(httpAddr, opts.bindAll)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "corgi mcp:", err)
+			exitProcess(2)
+		}
+		if notice != "" {
+			fmt.Fprintln(os.Stderr, notice)
+		}
+		serveMCPHTTP(s, listen, resolveMCPToken(opts), opts)
 		return
 	}
 	serveMCPStdio(s)
@@ -148,6 +158,8 @@ type mcpHTTPOpts struct {
 	insecure       bool
 	pair           bool
 	viewer         bool
+	bindAll        bool
+	allowOrigins   []string
 }
 
 func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
@@ -160,6 +172,15 @@ func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
 	o.insecure, _ = cmd.Flags().GetBool("insecure")
 	o.pair, _ = cmd.Flags().GetBool("pair")
 	o.viewer, _ = cmd.Flags().GetBool("viewer")
+	o.bindAll, _ = cmd.Flags().GetBool("bind-all")
+	o.allowOrigins, _ = cmd.Flags().GetStringSlice("allow-origin")
+	if env := strings.TrimSpace(os.Getenv("CORGI_MCP_ALLOWED_ORIGINS")); env != "" {
+		for _, origin := range strings.Split(env, ",") {
+			if origin = strings.TrimSpace(origin); origin != "" {
+				o.allowOrigins = append(o.allowOrigins, origin)
+			}
+		}
+	}
 	return o
 }
 
@@ -212,6 +233,13 @@ func bearerAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 			next.ServeHTTP(w, r)
 			return
 		}
+		// RFC 6750 §3.1: error="invalid_token" only when a credential was
+		// presented; a bare challenge when there was none.
+		challenge := `Bearer realm="corgi"`
+		if r.Header.Get("Authorization") != "" {
+			challenge += `, error="invalid_token"`
+		}
+		w.Header().Set("WWW-Authenticate", challenge)
 		w.Header().Set("Content-Type", mimeJSON)
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
@@ -319,9 +347,11 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	// with no credential in existence to fix it.
 	deviceStore := resolveDeviceStore(opts)
 
-	// Only /mcp is behind the bearer check; other paths 404.
+	// Only /mcp is behind the transport guard and the bearer check; other
+	// paths 404.
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", bearerAuth(token, httpSrv, deviceStore))
+	origins := newOriginAllowlist(addr, opts.allowOrigins)
+	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuth(token, httpSrv, deviceStore)))
 
 	// The launcher: corgi's own phone UI. /app is a static page (no secret); its
 	// data endpoints sit behind the same bearer/device-token auth as /mcp and do
@@ -426,7 +456,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	defer cancel()
 	var tunnelDone <-chan struct{}
 	if opts.tunnel {
-		tunnelDone = startMCPTunnel(ctx, addr, token, opts)
+		tunnelDone = startMCPTunnel(ctx, addr, token, opts, origins)
 	}
 
 	// Cancel the tunnel ctx on signal so its subprocess dies with the server.
@@ -461,7 +491,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 // tunnel.Run runner, bound to ctx so it dies with the server. The returned
 // channel closes once the tunnel runner drains, letting callers join the child
 // before exiting (so os.Exit doesn't orphan cloudflared/ngrok).
-func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <-chan struct{} {
+func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, origins *originAllowlist) <-chan struct{} {
 	provider, named, err := buildMCPTunnelConfig(opts.tunnelProvider, opts.tunnelHostname, opts.tunnelName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tunnel:", err)
@@ -491,6 +521,9 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts) <
 				fmt.Fprintf(os.Stderr, "🌐 ✗ tunnel: %s\n", ev.Err)
 			case ev.URL != "":
 				mcpPublicTunnelActive.Store(true)
+				if origins != nil {
+					origins.add(ev.URL)
+				}
 				// Probe the route the tools are actually served on, not the
 				// root — see probeTunnelExposure.
 				go probeTunnelExposure(ctx, mcpProbeTarget(ev.URL), nil)
