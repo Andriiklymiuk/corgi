@@ -332,6 +332,48 @@ Failing job log: `gh run view <run-id> --log-failed` / `glab ci trace --branch <
 (§1). Find PRs for a ticket key across repos: `gh pr list --search <KEY>` /
 `glab mr list --search <KEY>`.
 
+### 6a. Images in a PR/MR body (screenshots, before/after)
+
+An image link the reviewer's browser cannot fetch renders as an empty box, and the
+posting call still exits 0 — so check the **form** of the link, not the exit code.
+
+**GitLab** — the project upload endpoint, `--form` (a file), not `-F` (a form field,
+which returns `400 Bad Request` on a file):
+```bash
+glab api --method POST "projects/<group>%2F<proj>/uploads" --form "file=@<scratch>/1-<what>.png"
+# → .markdown is "![1-<what>](/uploads/<hash>/1-<what>.png)" — paste it verbatim
+```
+
+**GitHub (and any forge, one line)** — `gh` has no upload endpoint and the
+drag-and-drop host (`user-attachments`) is browser-only. Commit the images to a
+long-lived assets branch of the same repo and link them through the blob viewer:
+```bash
+corgi assets push <scratch>/*.png --key <key> --dir <repo dir>     # --json for the fields
+```
+It commits the files to `docs/pr-assets/<key>/` on `pr-assets/<key>` (created from
+`origin/<base>` the first time, appended to after), pushes, confirms origin has that
+head, and prints one `![name](url)` per file plus a one-row table — paste those. The
+user's checkout is untouched (a throwaway worktree does the work). Link form it
+prints — the only one a private repo renders; it works on a public one too:
+```
+https://github.com/<owner>/<repo>/blob/pr-assets/<key>/docs/pr-assets/<key>/1-<what>.png?raw=true
+https://<gitlab host>/<group>/<proj>/-/raw/pr-assets/<key>/docs/pr-assets/<key>/1-<what>.png
+```
+Never `raw.githubusercontent.com/…` (a private repo answers 404 to the browser — the
+box is empty and GitHub shows no error), never a `file://` or local path, never an
+image on the PR branch itself (it dies with the branch after the merge; a squash makes
+the commit unreachable). The assets branch is never merged and never deleted; one
+branch per story key, more images appended to it on a later run.
+
+Verify before posting: `corgi assets push` already checked origin has the head; still
+`grep` the body for `raw.githubusercontent.com` and local paths — none. Then post.
+
+**Tracker comment (Linear / Jira)** — a forge link needs a forge session the tracker
+does not have, so an image posted to the ticket goes through the tracker's own upload:
+Linear `prepare_attachment_upload` → `PUT` the bytes to the returned URL with the
+returned headers → `![<what>](<assetUrl>)` in the comment; Jira the issue attachments
+endpoint. The forge link stays for the PR; the tracker gets its own copy.
+
 ---
 
 ## Context

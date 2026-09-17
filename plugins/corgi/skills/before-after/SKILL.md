@@ -138,8 +138,12 @@ looks like a permissions problem, which sends you hunting for a token you do not
 the CLI's own auth is fine. The response carries `markdown` (`![before](/uploads/…)`);
 use that string verbatim. Then `glab mr update <n> --description "$(cat body.md)"`.
 
-**GitHub** — `gh` has no upload endpoint. Either commit the images to a docs/assets path
-the repo already uses, or ask the user to drag them into the PR. Do not invent a host.
+**GitHub** — `gh` has no upload endpoint. `corgi assets push before.png after.png
+--key <key> --dir <repo>` commits them to the repo's long-lived `pr-assets/<key>`
+branch and prints the `https://github.com/<owner>/<repo>/blob/pr-assets/<key>/<path>?raw=true`
+markdown to paste — details in `../_shared/forge-commands.md` §6a. That is the one link form a private
+repo renders: `raw.githubusercontent.com` shows an empty box there, and an image
+committed on the PR branch dies with the branch after the merge. Do not invent a host.
 
 Put them in a table so they sit side by side, with one line saying what to look at:
 
@@ -174,6 +178,8 @@ after-only PR with an honest note beats a fabricated before.
   Do not attach them.
 - The before is on a different record, device, locale or scroll position → recapture.
 - Uploading without reading the image first → check for tokens, real names, internal URLs.
+- A `raw.githubusercontent.com` or local-path image link in the body → an empty box on a
+  private repo; use the blob `?raw=true` form (§6a) and verify the file sits at that ref.
 - Left on the base branch after capturing → return to your branch before anything else.
 
 ## See also

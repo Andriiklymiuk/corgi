@@ -368,6 +368,17 @@ Manage the worktrees corgi creates for `run/exec/test --service-branch` (under `
 - `corgi worktree prune` (alias `clean`) — `git worktree remove` each one and prune the source repos' admin entries. A worktree with **uncommitted or untracked changes is kept and named**, not removed; `--force` drops those too (discards the work). Safe to run anytime; recreated on next `--service-branch`. Prints `[n/total]` per worktree — deleting a big `node_modules` takes a while and the line is how you tell work from a hang.
 - Only covers `.corgi/corgi_services/.worktrees/`. Worktrees you made yourself elsewhere (e.g. the `stories` skill's `/tmp/corgi-wt/`) are untouched — remove those with `git worktree remove` in the source repo.
 
+### `corgi assets push <file>... --key <KEY>`
+
+Images a PR/MR body can show. Commits the files to `docs/pr-assets/<KEY>/` on the
+branch `pr-assets/<KEY>` of the repo in `--dir` (default `.`; created from origin's
+default branch or `--base` the first time, appended to after, never merged), pushes it,
+confirms origin has that head, and prints one `![name](url)` per file plus a one-row
+table. The URL is the form a private repo renders — GitHub
+`…/blob/pr-assets/<KEY>/…?raw=true`, GitLab `…/-/raw/pr-assets/<KEY>/…` — because
+`raw.githubusercontent.com` answers 404 to a browser there and `gh` cannot upload. The
+checkout is untouched: a throwaway worktree does the work. `--json` for the fields.
+
 ### `corgi context` (alias: `ctx`)
 
 **The first call of a session.** One snapshot instead of `ps` + `status` + `validate` + a `git` call per repo:

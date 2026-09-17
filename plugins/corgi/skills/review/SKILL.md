@@ -87,6 +87,12 @@ separately (don't make a second call just for a SHA):
   before posting. And a pipeline that reads green **only because a failed job is
   `allow_failure`** ("passed with warnings") hides a real red job — list the jobs
   (`../_shared/forge-commands.md` §1) and see which finding it confirms.
+  **Read the red, not the colour.** A red check that died before the tests ran (a
+  version gate, an install, a lockfile check) means the PR has **no test or coverage
+  signal at all** — a blocking line on its own, naming the step that killed it, not a
+  footnote. And `git merge-tree --write-tree origin/<base> <head>` from the evidence
+  worktree: a conflict — usually a version field both sides bumped — blocks the merge
+  whatever the checks say.
 
 **rtk:** metadata, status, and list calls go through rtk automatically (the Claude
 Code hook rewrites `git`/`gh`/`glab`). Fetch the **reviewable diff raw** to avoid
@@ -118,6 +124,18 @@ only, no reply). You need them twice: to **dedup** (P5 marker skip) and, more
 importantly, to **stay relevant** — a point a human already raised, the author
 already answered, or anything on a **resolved** thread is not a fresh finding. Carry
 this thread list into P3.6's prune pass. Don't re-litigate settled threads.
+
+**Evidence worktree (read-only).** The diff is where findings anchor; the evidence
+lives in the tree around it. Put the head SHA in a throwaway detached worktree — never
+the user's checkout, never a branch:
+```bash
+git -C <dir> fetch origin pull/<n>/head            # GitLab: merge-requests/<iid>/head
+git -C <dir> worktree add --detach /tmp/corgi-review/<repo>-<n> FETCH_HEAD
+```
+Grep callers, open a dependency's source, run the coverage gate or a probe there;
+`git worktree remove` it in P6. Remote-only repo → a shallow clone of the head into the
+same path, same rule. Without it the review stays inside the hunk and misses what the
+human reviewer next to you finds (P3, evidence sweep).
 
 **Noise filter.** Drop generated/vendored/binary paths from the review surface:
 lockfiles (`*.lock`, `package-lock.json`, `go.sum`, …), `vendor/`, `node_modules/`,
@@ -162,7 +180,10 @@ per-repo note. Never re-fetch the same key per PR.
   never promised. On **your own** PR (the Phase 4 fix path) a missing visual is
   something to produce rather than request — the **`before-after`** skill builds the
   base branch, captures the same screen twice and attaches both, which is what makes a
-  restyle reviewable without the reviewer rebuilding trunk.
+  restyle reviewable without the reviewer rebuilding trunk. A body whose image links
+  are `raw.githubusercontent.com` on a private repo, or local paths, renders empty
+  boxes — a `nit` with the fix (`../_shared/forge-commands.md` §6a: assets branch +
+  blob `?raw=true`), and not visual proof until they render.
 
 Distill into a compact **intent note** the review uses two ways in P3:
 1. **Check** — does the diff do what the ticket asked?
@@ -225,8 +246,11 @@ reused unchanged across every PR in that repo.
 ## Phase 3 — Review each PR (subagent, scoped)
 
 Hand a review subagent: that PR's diff + title/body + the repo's standards note
-+ (if any) the intent note from P1.5. Scope **strictly to the diff** — don't
-review untouched code.
++ (if any) the intent note from P1.5 + the evidence worktree path (P1). Findings
+**anchor on the diff**; the **evidence comes from the whole tree** — every symbol,
+key and test the diff touches has callers, twins and consumers outside the hunk,
+and that is where the bugs a good human reviewer finds live. Untouched code is not
+reviewed for its own sake; it is read to judge the touched code.
 
 **Surface first, then the diff.** Before a line of implementation, read the
 changed surface — the PR body's `## Changed surface` section when the author
@@ -283,6 +307,47 @@ should know whether to look closer.
   engine, library, vendor, or infra detail to end users (`nit`); suggest selling
   the user benefit, not the mechanism. Skip if the ticket is about that copy.
 - Ticket-intent mismatch (diff doesn't do what the ticket asked).
+
+### Evidence sweep — follow every change out of the diff
+
+Run this before any style point, per changed symbol, key, route, flag, schema field
+and test. Shapes, greps and failure scenarios: `references/evidence-sweep.md`. An
+item is a finding only when the grep or the read shows it; none is a checklist to
+recite back.
+
+1. **Twins and callers.** Grep the tree for the changed symbol. A read path that
+   gained a field, a context or a filter while its write / enforce / validate twin did
+   not (or the reverse) is `blocking`; so is a policy applied where a row is written
+   but never where it is used, when a second path into the same gate re-checks it.
+2. **Config delivery.** A new env var, secret or flag: name where each deployed
+   environment gets it — deploy workflow, task definition, chart, secrets list — with
+   an anchored grep (`(^|[^A-Z_])KEY`; a substring match hides absence). Declared only
+   in `.env.example` / the CI env = unreachable in production = the fallback default is
+   what ships; say what that default does there. `blocking`.
+3. **Library premise.** When correctness rests on how a dependency behaves (a version
+   comparator, a safe-area provider, an error wrapper, an ORM's null semantics, a
+   reconciler), open that dependency's source at the locked version in the worktree,
+   or run a probe. The PR body's claim about a library is a hypothesis.
+4. **What the tests assert.** Per test in the diff: does it exercise the behaviour the
+   criterion names, or a literal — decorator metadata, a mock's call args, the module
+   under test mocked away? Would it stay green with the bug put back? Run the repo's
+   coverage gate on the head worktree: the component the fix rests on at 0% functions
+   is `blocking`.
+5. **Deployed contract.** A consumer reading a new field: does the *deployed*
+   producer have it (the base branch's schema file, a staging introspection)? The
+   real order is deploy mechanics — an auto-published OTA or CD-on-merge versus a
+   manual dispatch — not the merge order the body states.
+6. **Claims the diff makes false.** A doc, `.env.example` line, code comment or
+   CLAUDE.md sentence that now states the wrong count, default or behaviour
+   (`corgi docs check` names the file). `nit`, or `blocking` when it describes a
+   safety property ("refuses to boot without X" when it only warns).
+7. **Edges the happy path hides.** A timestamp that may lie in the future, `??` on a
+   value that can be `""`, an optional relation with a live fallback, a transient
+   error treated as absence, a hand-copied list nothing keeps in sync, an input that
+   fans out exponentially — measure the last one and put the number in the finding.
+8. **Failure domain and structure.** A non-critical component now wrapping a critical
+   one; a wrapper whose element type flips between branches (the subtree remounts);
+   a shared document or query two features now depend on together.
 
 ### Comments: the bar is high
 
@@ -341,9 +406,16 @@ the preview already shows the line that will actually be posted, not a guess. A
 finding whose `anchorText` matches no diffed line has no anchor → goes in the
 summary (P5). See `../_shared/forge-commands.md` §2.
 
-Plus a **2–4 sentence human summary per PR** written above the findings list.
+Plus a **2–4 sentence human summary per PR** written above the findings list. When
+the ticket enumerates acceptance criteria, the summary ends with one row per
+criterion — met / unmet → finding / not verifiable — so the author sees what stands
+between the PR and done, not only what is wrong.
 
 **Token discipline (stories model):**
+- **Spend the budget on evidence, not on standards.** P2 stays a dozen bullets; the
+  sweep above reads whatever the changed symbols touch — callers, a dependency's
+  function, the deploy workflow. Twenty neighbour files opened to settle a real
+  question is the review; twenty opened to learn the code style is not.
 - **One Explore sweep per service+area, not per PR.** Orchestrator holds the
   investigation note (the cache); subagents reference it, never re-explore the
   same files.
@@ -387,6 +459,10 @@ direction from `corgi-compose.yml` (`depends_on_services`, `exports`,
 - Type, enum, or nullability mismatch across the boundary.
 - Producer change with no matching consumer update (or an orphan consumer
   change with no producer change).
+- **Deployed producer, not merged producer** (sweep item 5) — the consumer's field
+  must exist on the producer that is *running* when the consumer ships; name the
+  mechanism that ships each side (CD on merge, OTA on tag, manual dispatch) and the
+  window where the consumer is live against the old producer.
 - **Merge order** (producer PR first) — state it explicitly in the output. If
   compose doesn't encode the dependency (an HTTP response-field contract usually
   isn't a `depends_on` edge), infer it from the diffs: the PR that **adds/changes
@@ -423,7 +499,10 @@ and let the observed result, not the assumed behavior, decide. A finding that
 green → one of them is wrong, verify before posting. Conversely a "passed with
 warnings" pipeline (a failed `allow_failure` job) often hides the real red job a
 finding points at — pull that job's log (`../_shared/forge-commands.md` §1)
-to confirm. State how each contradiction resolved in the report.
+to confirm. State how each contradiction resolved in the report. A claim about
+cost or amplification carries the measured number (input size → time or calls),
+never an adjective; a test finding (sweep item 4) quotes the coverage report or
+the test run from the evidence worktree.
 
 **Prune against existing discussion.** Drop any finding a human already raised, the
 author already answered, or that sits on a **resolved** thread (the existing-thread
@@ -646,7 +725,8 @@ permission-blocked (scenario 6) → `0 posted — printed locally (no write acce
 declined, blocked) so a skipped target isn't lost between P1 and the report.
 
 List anything that couldn't be inlined explicitly (file, line, reason) — no
-silent drops.
+silent drops. Then remove the evidence worktree(s):
+`git -C <dir> worktree remove /tmp/corgi-review/<repo>-<n>`.
 
 **No ceremony footer.** Don't append "review only — does not approve/merge" to every
 report; it reads like a bot covering itself, and the user knows what a review is. The
@@ -736,7 +816,9 @@ helps — a few sharp comments beat many; drop low-value nits rather than pad th
 A posted **summary body** is plain prose — a few short sentences, at most a couple of
 bullets, the way a person types into the PR box. Not a structured document: no `##`
 section headers, no long numbered-question lists, no pasted spec / code-map dumps.
-That report shape belongs in the terminal output (P6), never in the comment.
+That report shape belongs in the terminal output (P6), never in the comment. One
+exception: the acceptance-criteria rows (P3) when the ticket enumerates criteria — a
+short table, one line per criterion, nothing else structured.
 **Never suggest adding a comment to the code.** The reviewer's job is to remove
 the ones that do not earn their place, not to plant more — if a line needs
 explaining, the fix in the suggestion is a clearer name or a smaller function.
@@ -752,9 +834,10 @@ explaining, the fix in the suggestion is a clearer name or a smaller function.
   prompt said. Never pair an approval with a
   verification write-up — the per-PR "what I checked" report belongs in the terminal
   (P6), not the approve body.
-- **Read-only on the repo.** Never check out / write the PR branch; review from the
-  fetched diff only. (Exception: a PR that is **your own** routes to the Fix path — Phase 4
-  / Mode B — which does write its branch.)
+- **Read-only on the repo.** Never touch the user's checkout or the PR branch; the
+  detached evidence worktree (P1) is the only tree you open, for reading and probes,
+  and it is removed in P6. (Exception: a PR that is **your own** routes to the Fix path —
+  Phase 4 / Mode B — which does write its branch.)
 - **Preview before posting** unless `--yes` — show what will post; posting is
   outward-facing. But the **post-vs-fix decision is authorship** (Phase 4), not a
   recurring "should I post?" prompt: your own PR → fix + push (no post), someone else's →

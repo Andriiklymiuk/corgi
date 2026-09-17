@@ -18,6 +18,6 @@ Common calls (tool names without their namespace prefix):
 | comment                | `save_comment({ issueId, body })`; pass `id` to update | `addCommentToJiraIssue`                                |
 | statuses / transitions | `list_issue_statuses`                                  | `getTransitionsForJiraIssue`                           |
 | assign to me           | `assignee: "me"` (also id, name, email)                | `editJiraIssue`; current user from `atlassianUserInfo` |
-| attachments            | image URLs in the issue body                           | `fetch` returns ARIs and metadata, never bytes         |
+| attachments            | read: image URLs in the body; write: `prepare_attachment_upload` → PUT bytes → `![](assetUrl)` (`forge-commands.md` §6a) | `fetch` returns ARIs and metadata, never bytes; write via the issue attachments endpoint |
 
 Writes stay behind the calling skill's confirm gate.

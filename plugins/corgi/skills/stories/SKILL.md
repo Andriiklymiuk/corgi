@@ -102,8 +102,8 @@ Don't fake one.
   - before/after screenshot; report says manually verified, no auto guard. Still
     include the **QA "what to test" section** in the spec comment — a human must re-check visual.
   - **Expo/RN service on a macOS host → not manual-only:** drive the simulator
-    with Maestro + screenshots even without a committed harness
-    (`references/expo-verification.md`).
+    with argent MCP or Maestro + screenshots even without a committed harness
+    (`references/expo-verification.md`, Phase 3's screenshot bullet).
 
 **Before/after asked for → run `before-after`.** Any phrasing of "screenshot
 comparison", "before and after", "show the visual diff", "prove the UI changed" is a
@@ -605,6 +605,33 @@ matching existing patterns.
   `prisma migrate dev` / `drizzle-kit generate` / `knex migrate:make` / `alembic
   revision --autogenerate`). Commit the generated migration **and** the regenerated
   client. `corgi stop` when done.
+- **Screenshots — decide once, then use the driver at hand.** Capture when the user
+  asked for them, when the diff changes what a user sees (a screen, component, style,
+  copy in situ, an empty or error state, a native control), or when the spec recorded
+  a design reference. Skip for api-only, config, CI and test-only changes — the report
+  says "no screenshots: nothing rendered changed" instead of shooting a terminal. Pick
+  the driver in this order, first one present wins:
+  1. **argent MCP** (`mcp__argent__*` tools in the tool list; `argent --version` on
+     PATH) — iOS simulator, Android emulator, or a Chromium page over CDP (a web
+     service in a browser started with `--remote-debugging-port`): `list-devices`,
+     `launch-app` / `open-url`, `describe` for tap coordinates, `gesture-tap`,
+     `screenshot`. Every action returns the screen after it, so no flow file and no
+     guessed coordinates. Read the argent rule/skill it ships before the first call.
+  2. **Maestro** (the `mobile` skill; its MCP when connected) — a flow file with
+     `takeScreenshot` inside the flow, `--device <udid>`.
+  3. **The repo's web harness** (Playwright / Cypress screenshot) for a browser
+     surface with no argent; else a headless browser (`npx playwright screenshot`,
+     `chrome --headless --screenshot`).
+  4. **Bare capture** last — `xcrun simctl io <udid> screenshot`, `adb exec-out
+     screencap -p`.
+  Whatever captured it: log in as the account class the story is about, seed the
+  state the ticket describes, shoot every state the spec names (empty / in progress /
+  done / error), **read each image** before attaching, and cover every rendered side
+  of a multi-service story — a web or admin console that shows the same record gets
+  its shot too. Name each file `<n>-<what>.png`. Attach per Phase 5 (§6a link form);
+  the tracker gets its copy through the tracker's own upload. No driver and no device
+  (a host with no simulator or browser) → the manual-only path: repro steps in the
+  spec and PR, say so in the report.
 - **Ticket links a design (Figma / mockup) → the story is done at a READ side-by-side**,
   not at green tests. Pull the frames into `docs/design/<ticket>/`, capture the same states
   from the app, compose labelled design-vs-app images, and put the deviation table (fixed vs
@@ -618,9 +645,9 @@ matching existing patterns.
   fail on device. Native-scoped change (new native dep, `app.json`
   plugins/permissions) → rebuild dev client (prebuild → `LANG=en_US.UTF-8 pod
   install` → xcodebuild) and re-install; JS-only → existing build + Metro
-  reload. Drive the changed flow with **Maestro** (flows in `e2e/`, committed
-  with the PR), confirm with `simctl` screenshots, watch the Metro log for
-  runtime errors. Multi-device features (P2P/LAN): clone simulators — they
+  reload. Drive the changed flow with the driver the screenshot bullet picked —
+  argent MCP when present, else **Maestro** (flows in `e2e/`, committed with the
+  PR) — confirm with screenshots you read, watch the Metro log for runtime errors. Multi-device features (P2P/LAN): clone simulators — they
   share the host's network/Bonjour, so the real radio path is testable. Use the
   `expo:*` plugin skills for SDK-specific guidance when installed; the
   same-plugin **`mobile`** skill is the canonical device-driving loop + the build
@@ -634,8 +661,8 @@ matching existing patterns.
 - **Frontend change with a design reference → screenshot + compare, not just
   green tests.** Spec recorded a reference (Phase 1: screenshot, mockup, design
   export, prototype-app capture)? Done = the rendered UI **matches it**. Capture the
-  implemented screen (web → the repo's e2e/screenshot harness or a headless
-  browser; Expo/RN → the Maestro/simctl loop above), **Read reference + capture
+  implemented screen (the driver order in the screenshot bullet above — argent
+  MCP, Maestro, the repo's web harness, bare capture), **Read reference + capture
   side by side** and compare layout, spacing, colour, typography, icons, copy.
   Bug screenshot = the "before" — your capture must show it fixed at that spot.
   Mismatch → fix, or list as intentional deviation in the PR body; attach both
@@ -742,13 +769,16 @@ issue link.
   **draft** PR as _in progress_ and revert this move — the review state only sticks once
   the PR is marked _ready_. Set it once; don't fight a revert.
 - **Cross-link** siblings + merge order in each multi-repo PR/MR body.
-- **Before/after images in the body** when the run captured them (the `before-after`
-  skill, triggered in Phase 3). Upload to the forge and reference the returned markdown
-  — GitLab `glab api … --form file=@…` (`--form`, not `--field`; `-F` is a form *field*
-  and 400s on a file), GitHub has no upload endpoint so commit them to the repo's
-  existing assets path or hand them to the user. Two shots go in a table so they sit
-  side by side, with one line naming the device, environment and what to look at. Never
-  link a local path.
+- **Screenshots in the body** when the run captured them (Phase 3's screenshot
+  bullet, or the `before-after` skill). Attach them the way
+  `../_shared/forge-commands.md` §6a says — `corgi assets push <files> --key <key>
+  --dir <repo>` puts them on the repo's `pr-assets/<key>` branch and prints the
+  `![name](…blob/pr-assets/<key>/<path>?raw=true)` lines to paste (GitLab may use the
+  project upload instead) — and paste exactly what it printed. Never `raw.githubusercontent.com` (an
+  empty box on a private repo), never a local path, never an image on the PR branch
+  (gone after the merge). Shots go in a table, one line naming device, environment,
+  account and what to look at. The ticket gets the same images in the `## Spec`
+  comment through the tracker's own upload (§6a) — a forge link is unreadable there.
 - **Changed surface at the top of the body.** `corgi surface --branch <branch>`
   (or `corgi_diff` with `surface: true`) prints the `## Changed surface` block:
   exported symbols, routes, contracts, migrations and config this PR changed,
