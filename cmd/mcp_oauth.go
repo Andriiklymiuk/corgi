@@ -33,7 +33,9 @@ const (
 type oauthServer struct {
 	mu sync.Mutex
 	// issuer is the public origin, set once the tunnel resolves; before that
-	// the loopback address. Never the request's Host header.
+	// the loopback address. Never the request's Host header. Its own lock,
+	// so it can be read while mu is held.
+	issuerMu    sync.Mutex
 	issuer      string
 	hosts       *oauthClientHosts
 	origins     *originAllowlist
@@ -50,12 +52,15 @@ type oauthServer struct {
 // pendingAuth is a consent page waiting for approval. Filled in by the
 // authorize endpoint.
 type pendingAuth struct {
+	id            string
 	client        oauthClient
 	redirectURI   string
 	codeChallenge string
 	state         string
+	approveCode   string
 	expires       time.Time
-	code          string
+	// redirect is set once approved: the redirect URI with the code on it.
+	redirect string
 }
 
 // newOAuthServer starts with the loopback issuer for listenAddr. deviceStore
@@ -131,14 +136,14 @@ func (oa *oauthServer) setIssuer(raw string) {
 	if raw == "" {
 		return
 	}
-	oa.mu.Lock()
+	oa.issuerMu.Lock()
 	oa.issuer = raw
-	oa.mu.Unlock()
+	oa.issuerMu.Unlock()
 }
 
 func (oa *oauthServer) issuerURL() string {
-	oa.mu.Lock()
-	defer oa.mu.Unlock()
+	oa.issuerMu.Lock()
+	defer oa.issuerMu.Unlock()
 	return oa.issuer
 }
 
@@ -226,6 +231,9 @@ func (oa *oauthServer) mount(mux *http.ServeMux) {
 	mux.Handle(oauthRegisterPath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.registerHandler)))
 	mux.Handle(oauthTokenPath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.tokenHandler)))
 	mux.Handle(oauthRevokePath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.revokeHandler)))
+	mux.Handle(oauthAuthorizePath, oa.guard("GET, HEAD", http.HandlerFunc(oa.authorizeHandler)))
+	mux.Handle(oauthApprovePath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.approveHandler)))
+	mux.Handle(oauthPendingPath, oa.guard("GET", http.HandlerFunc(oa.pendingHandler)))
 }
 
 // maxOAuthBody bounds a registration or token request body.
