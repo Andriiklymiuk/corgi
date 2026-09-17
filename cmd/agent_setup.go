@@ -475,6 +475,9 @@ func collectAgentChecks() []agentCheck {
 	var checks []agentCheck
 
 	checks = append(checks, checkClaudeBinary(), checkAmbientAPIKey(), checkWakeLockSupport(), checkInstallSupport(), checkDaemonBinaryPath(), checkMenuBarApp())
+	if runtime.GOOS == "linux" {
+		checks = append(checks, checkNotifier())
+	}
 
 	dir, err := agentDir()
 	if err != nil {
@@ -653,7 +656,34 @@ func checkInstallSupport() agentCheck {
 	if dir, err := agentDir(); err == nil && loadUpSettings(dir).AtLogin {
 		detail = installMechanism() + " — daemon, MCP endpoint and tunnel"
 	}
+	if on, known := lingerEnabled(); known && !on {
+		return agentCheck{Name: checkAtLogin, OK: true, Detail: detail + ", stops with your last login", Fix: "`loginctl enable-linger $USER` so it outlives the SSH session"}
+	}
 	return agentCheck{Name: checkAtLogin, OK: true, Detail: detail}
+}
+
+// checkNotifier is for a Linux box: a server has no desktop to toast on, and
+// a notification nobody sees is the same as none.
+func checkNotifier() agentCheck {
+	_, err := exec.LookPath("notify-send")
+	url := ""
+	if dir, dirErr := agentDir(); dirErr == nil {
+		if user, loadErr := config.LoadUser(agentUserConfigPath(dir)); loadErr == nil && user != nil {
+			url = user.NotifyUrl
+		}
+	}
+	return notifierCheck(err == nil, url)
+}
+
+func notifierCheck(haveNotifySend bool, notifyURL string) agentCheck {
+	const name = "notifications"
+	switch {
+	case haveNotifySend:
+		return agentCheck{Name: name, OK: true, Detail: "notify-send"}
+	case notifyURL != "":
+		return agentCheck{Name: name, OK: true, Detail: "no desktop notifier — notifyUrl carries them"}
+	}
+	return agentCheck{Name: name, OK: true, Detail: "no notify-send and no notifyUrl — nothing here shows a notification", Fix: "`corgi agent notify telegram --token <TOKEN>`, then `corgi agent restart`"}
 }
 
 func checkUserConfigPermissions(path string) agentCheck {

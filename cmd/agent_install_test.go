@@ -201,3 +201,14 @@ func TestServiceEnvCapturesHomeForTheDataDir(t *testing.T) {
 		t.Errorf("HOME = %q; the daemon's agent dir now resolves from HOME, so it must be captured", env["HOME"])
 	}
 }
+
+func TestLingerIsReadFromLogindsAnswer(t *testing.T) {
+	if !lingerFromOutput([]byte("yes\n")) {
+		t.Fatal("logind said yes and corgi read no")
+	}
+	for _, out := range []string{"no\n", "", "stub"} {
+		if lingerFromOutput([]byte(out)) {
+			t.Fatalf("%q read as linger on", out)
+		}
+	}
+}

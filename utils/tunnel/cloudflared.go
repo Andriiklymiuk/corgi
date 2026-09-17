@@ -29,7 +29,9 @@ func (Cloudflared) ExtractURL(line string) string {
 	return cloudflaredURLRe.FindString(line)
 }
 
-func (Cloudflared) InstallHint() string { return "brew install cloudflared" }
+func (Cloudflared) InstallHint() string {
+	return hostInstallHint("cloudflared", "developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads")
+}
 
 func (Cloudflared) AcceptsStdin() bool { return false }
 

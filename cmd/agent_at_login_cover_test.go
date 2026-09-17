@@ -433,3 +433,16 @@ func TestPreferLocalLinkPassesAnEmptyLinkThrough(t *testing.T) {
 		t.Fatalf("preferLocalLink(\"\") = %q", got)
 	}
 }
+
+func TestNotifierCheckSaysWhenNothingWillShow(t *testing.T) {
+	if c := notifierCheck(true, ""); c.Detail != "notify-send" || c.Fix != "" {
+		t.Fatalf("with notify-send present: %+v", c)
+	}
+	if c := notifierCheck(false, "https://api.telegram.org/bot1/sendMessage"); !strings.Contains(c.Detail, "notifyUrl") || c.Fix != "" {
+		t.Fatalf("with a notifyUrl: %+v", c)
+	}
+	c := notifierCheck(false, "")
+	if !c.OK || !strings.Contains(c.Fix, "corgi agent notify telegram") {
+		t.Fatalf("with nothing: %+v — must stay green and point at Telegram", c)
+	}
+}
