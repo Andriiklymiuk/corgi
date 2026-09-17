@@ -97,7 +97,7 @@ func publicIP(ip net.IP) bool {
 // benchmarking, and the reserved top block with broadcast.
 var reservedV4 = func() []*net.IPNet {
 	var out []*net.IPNet
-	for _, c := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4"} {
+	for _, c := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4"} { // NOSONAR — IANA special-purpose ranges on a blocklist, not an endpoint
 		_, n, _ := net.ParseCIDR(c)
 		out = append(out, n)
 	}
