@@ -30,6 +30,7 @@ type UserConfig struct {
 	NotifyUrl    string                     `yaml:"notifyUrl"`
 	DigestAt     string                     `yaml:"digestAt"`
 	StayAwake    bool                       `yaml:"stayAwake"`
+	PulseUrl     string                     `yaml:"pulseUrl,omitempty"`
 	KeepDisplay  bool                       `yaml:"keepDisplay,omitempty"`
 	AutoContinue bool                       `yaml:"autoContinue"`
 	Profiles     map[string]WorkspaceConfig `yaml:"profiles"`
