@@ -692,6 +692,34 @@ corgi agent watch hooks                                       # webhook URLs on 
 corgi agent restart
 ```
 
+**Slack.** The watch reads Slack with the person's own user token (`xoxp-`),
+issued by any Slack app they own in that workspace (Slack has no app-less
+personal tokens; a free workspace caps apps at 10, so reuse an existing one
+rather than creating a new one). Scopes go under **User Token Scopes**, never
+Bot:
+
+| Wanted | User Token Scopes |
+|---|---|
+| mentions of me → phone | `search:read`, `users:read` (the smallest token) |
+| + a review channel read (a teammate's post with PR links = one review) | + `channels:read`, `channels:history` (`groups:*` for a private channel) |
+| + DMs count as mentions | + `im:read`, `im:history` |
+| + answer in the thread / `chat announce` as me | + `chat:write` |
+| + the ✅ on a reviewed post | + `reactions:write` |
+
+Pitfalls: the granular `search:read.*` and any `admin.*` scope are
+Enterprise-only on a user token — plain `search:read` is the one; a reinstall
+keeps the token and the app's existing webhooks (a CI bot posting through the
+same app keeps working; do not remove `incoming-webhook`). A token with fewer
+scopes still works for what it can read (public channels alone, mentions
+alone); `corgi agent watch` names the scope a failing call needs.
+
+```bash
+corgi agent watch auth slack --token xoxp-… --local          # the person runs this; the token never goes through a session
+corgi agent watch enable --mentions                           # notify: @me anywhere → phone
+corgi agent watch enable --review-channel '#code-review' --reply-as me   # teammates' review posts in; chat announce out
+corgi agent watch enable --action fix --auto-for reviews --approve --trust @teammate   # reviews run on their own; only --trust people may start one from a mention
+```
+
 **Unattended.** `corgi agent watch enable --auto` is `--action fix --prs
 --comments`: it works on what arrives instead of only telling you. Draft PRs
 only, never a merge, one run at a time per ticket, at most 3/hour and 10/day,
