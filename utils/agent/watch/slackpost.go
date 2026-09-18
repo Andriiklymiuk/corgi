@@ -112,6 +112,10 @@ func (p *SlackPoster) Resolve(ctx context.Context, to string) (string, error) {
 	s := &Slack{api: api, names: map[string]string{}}
 	convs, err := s.conversations(ctx)
 	if err != nil {
+		// chat.postMessage takes a channel name; only a DM needs the list.
+		if strings.HasPrefix(to, "#") && strings.Contains(err.Error(), "missing_scope") {
+			return to, nil
+		}
 		return "", err
 	}
 	want := strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(to, "#"), "@"))

@@ -1148,6 +1148,7 @@ corgi agent watch auth slack --bot xoxb-…              # optional: let replies
 corgi agent watch enable --mentions --trust @teammate
 corgi agent watch enable --review-channel '#code-review' --action fix --auto-for reviews --approve
 corgi agent chat post "on it" --reply slack:C0RE:1726000400.000100
+corgi agent chat announce "[ABC-12] Phone field" <pr url> <pr url>   # the review-channel post, from the stories skill
 ```
 
 The user token wants `search:read` and `users:read` for mentions alone
