@@ -12,9 +12,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
+	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/push"
@@ -152,11 +152,11 @@ func checkHeat() agentCheck {
 
 func checkDisk(dir string) agentCheck {
 	const name = "disk"
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(dir, &st); err != nil {
+	free, ok := utils.FreeDiskBytes(dir)
+	if !ok {
 		return couldNotCheck(name)
 	}
-	freeGB := int(uint64(st.Bavail) * uint64(st.Bsize) / (1 << 30))
+	freeGB := int(free / (1 << 30))
 	if freeGB >= awayDiskMinGB {
 		return agentCheck{Name: name, OK: true, Detail: fmt.Sprintf("%d GB free", freeGB)}
 	}

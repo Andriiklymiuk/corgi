@@ -7,8 +7,9 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
+
+	"andriiklymiuk/corgi/utils"
 )
 
 const (
@@ -41,11 +42,8 @@ var readThermal = func() (int, bool) {
 
 // Worktrees and images pile up over weeks with nobody pruning by hand.
 var readFreeGB = func(dir string) (int, bool) {
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(dir, &st); err != nil {
-		return 0, false
-	}
-	return int(uint64(st.Bavail) * uint64(st.Bsize) / (1 << 30)), true
+	free, ok := utils.FreeDiskBytes(dir)
+	return int(free / (1 << 30)), ok
 }
 
 var onHot, onLowDisk func()
