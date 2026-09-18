@@ -17,7 +17,7 @@ import (
 
 func registerPolicyMCPTools(s *server.MCPServer) {
 	s.AddTool(newCorgiTool("corgi_watch_switches",
-		mcp.WithDescription("What each workspace does on its own, as switches: {workspace, enabled, action, prs, reviews, ci, comments, isolate, quiet, daysOff, autoMerge, handOver, autoAllow, doneWhen[], compactAt, rebase, lessons}. autoAllow \"reads\" means the daemon answers Read/Grep/Glob prompts itself; doneWhen are the commands that define finished (a red one is typed back into the session); compactAt sends /compact past that context fill; rebase rebases a stopped clean branch when main moved; lessons writes reviews, red checks and failed bots down for every new session. Read-only."),
+		mcp.WithDescription("What each workspace does on its own, as switches: {workspace, enabled, action, prs, reviews, ci, comments, isolate, quiet, daysOff, autoMerge, handOver, autoAllow, doneWhen[], compactAt, rebase, lessons, planReview}. autoAllow \"reads\" means the daemon answers Read/Grep/Glob prompts itself; doneWhen are the commands that define finished (a red one is typed back into the session); compactAt sends /compact past that context fill; rebase rebases a stopped clean branch when main moved; lessons writes reviews, red checks and failed bots down for every new session; planReview (\"\", always, risk>=N) says when the stories skill must wait for a human on the spec before cutting a branch. Read-only."),
 		mcp.WithString("workspace", mcp.Description("Only this workspace id")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWatchSwitches(r.GetString("workspace", ""))
@@ -31,6 +31,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 		mcp.WithNumber("compactAt", mcp.Description("Context percent past which a stopped session gets /compact; 0 is off")),
 		mcp.WithBoolean("rebase", mcp.Description("Rebase a stopped session's clean branch onto main when main moved")),
 		mcp.WithBoolean("lessons", mcp.Description("Write lessons down for every new session")),
+		mcp.WithString("planReview", mcp.Description("When a story's spec waits for a human before code: always, risk>=N (forecast 1 to 10), or off")),
 		mcp.WithBoolean("handOver", mcp.Description("Type feedback on a branch into the session on it")),
 		mcp.WithBoolean("autoCarry", mcp.Description("Carry a session at its five-hour quota to another of the workspace's accounts with budget, once per limit")),
 		mcp.WithBoolean("rerunCI", mcp.Description("Rerun a red build's failed jobs once before it is worked on or handed over (GitHub)")),
@@ -134,6 +135,13 @@ func mcpWatchSet(r mcp.CallToolRequest) (any, error) {
 			return nil, err
 		}
 		wc.AutoAllow = policy
+	}
+	if v, ok := args["planReview"].(string); ok {
+		policy, err := config.ParsePlanReview(v)
+		if err != nil {
+			return nil, err
+		}
+		wc.PlanReview = policy
 	}
 	if v, ok := args["doneWhen"].([]any); ok {
 		wc.DoneWhen = nil

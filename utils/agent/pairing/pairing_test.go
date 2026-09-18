@@ -444,3 +444,43 @@ func TestExpiredDeviceDoesNotAuthorize(t *testing.T) {
 		t.Errorf("RevokeExpired dropped %d, kept %d", n, len(s.Devices))
 	}
 }
+
+func TestLaunchCodeOpensAWindowOnThatCode(t *testing.T) {
+	code, err := NewCode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewSessionWithCode(strings.ToLower(code), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Code() != code {
+		t.Fatalf("code %q, want %q", s.Code(), code)
+	}
+	if left := time.Until(s.ExpiresAt()); left < 59*time.Minute || left > time.Hour {
+		t.Fatalf("expires in %s, want about an hour", left)
+	}
+	if err := s.Redeem(code); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLaunchCodeTTLIsCappedAndDefaulted(t *testing.T) {
+	code, _ := NewCode()
+	s, _ := NewSessionWithCode(code, 0)
+	if left := time.Until(s.ExpiresAt()); left > CodeTTL || left < CodeTTL-time.Minute {
+		t.Fatalf("no ttl → %s, want %s", left, CodeTTL)
+	}
+	s, _ = NewSessionWithCode(code, 100*time.Hour)
+	if left := time.Until(s.ExpiresAt()); left > MaxLaunchTTL {
+		t.Fatalf("ttl %s not capped at %s", left, MaxLaunchTTL)
+	}
+}
+
+func TestLaunchCodeMustBeAFullCode(t *testing.T) {
+	for _, bad := range []string{"", "SHORT", strings.Repeat("A", 19), strings.Repeat("A", 21)} {
+		if _, err := NewSessionWithCode(bad, 0); !errors.Is(err, ErrBadLaunchCode) {
+			t.Fatalf("%q accepted: %v", bad, err)
+		}
+	}
+}

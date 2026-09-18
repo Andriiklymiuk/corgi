@@ -26,12 +26,26 @@ agent up did.
   corgi agent pair --viewer           a read-only window, for a teammate's phone
   corgi agent pair --file             also write ~/Desktop/<laptop>.corgipair: AirDrop it to the phone,
                                       which opens it with corgi and is paired — no scanning, no typing
+  corgi agent pair --mint             a launch code for a daemon you will start without a terminal:
+                                      corgi agent up --pair-code <code> on that host opens its first window on it
   corgi agent pair --json
 
 The file holds the code and the address, nothing that lasts: the code dies in
 ten minutes or on first use, and the phone's own token is minted on the laptop
 when it pairs. AirDrop carries it end-to-end encrypted between your devices.`,
 	Run: func(cmd *cobra.Command, _ []string) {
+		if mint, _ := cmd.Flags().GetBool("mint"); mint {
+			code, err := pairing.NewCode()
+			if err != nil {
+				exitWithError("agent_pair", err, 1)
+			}
+			if utils.JSONOutput {
+				utils.PrintJSON(map[string]any{"code": code})
+				return
+			}
+			fmt.Println(code)
+			return
+		}
 		dir := mustAgentDir()
 		viewer, _ := cmd.Flags().GetBool("viewer")
 		file, _ := cmd.Flags().GetBool("file")
@@ -139,5 +153,6 @@ func writePairFile(ans pairAnswer) (string, error) {
 func init() {
 	agentPairCmd.Flags().Bool("viewer", false, "A window whose phone only reads the board")
 	agentPairCmd.Flags().Bool("file", false, "Also write ~/Desktop/<laptop>.corgipair to AirDrop to the phone")
+	agentPairCmd.Flags().Bool("mint", false, "Print a fresh launch code and exit; hand it to `corgi agent up --pair-code` on a headless host")
 	agentCmd.AddCommand(agentPairCmd)
 }

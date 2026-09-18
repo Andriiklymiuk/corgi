@@ -362,3 +362,20 @@ func TestModelPolicyPicksByPhaseAndKind(t *testing.T) {
 		t.Fatal("overlay must not write into the base map")
 	}
 }
+
+func TestPlanReviewPolicy(t *testing.T) {
+	for in, want := range map[string]string{"": "", "off": "", "always": "always", "risk>=7": "risk>=7", "RISK >= 3": "risk>=3"} {
+		got, err := ParsePlanReview(in)
+		if err != nil || got != want {
+			t.Fatalf("%q → %q %v, want %q", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"risk>=0", "risk>=11", "sometimes", "risk>7"} {
+		if _, err := ParsePlanReview(bad); err == nil {
+			t.Fatalf("%q accepted", bad)
+		}
+	}
+	if PlanReviewRequired("", 10) || !PlanReviewRequired("always", 1) || PlanReviewRequired("risk>=7", 6) || !PlanReviewRequired("risk>=7", 7) {
+		t.Fatal("PlanReviewRequired")
+	}
+}

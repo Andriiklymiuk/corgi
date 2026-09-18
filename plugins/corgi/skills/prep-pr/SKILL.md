@@ -36,8 +36,9 @@ gate, continue.
 
 Follow `stories` Phase 5: push the branch, create the draft with `forge-commands.md`
 §6, title `<subject> [<key>]`, body with what / how / tests / issue link, then stamp the
-risk card. Draft only; a human flips it to ready. Multi-repo → one PR per repo, sibling
-links in each body, contract lines on every side.
+risk card. Add `## Assumptions` — the `align` picks nobody overruled, ≤5 bullets; omit
+the section when there are none. Draft only; a human flips it to ready. Multi-repo → one
+PR per repo, sibling links in each body, contract lines on every side.
 
 Offer, don't do: watch CI to green, move the ticket to review (`tracker` skill), post
 the spec comment.

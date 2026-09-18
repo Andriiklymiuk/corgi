@@ -191,6 +191,7 @@ agent reads the whole workspace
 Slash-commands and plain English both work:
 
 ```
+/corgi:align "move auth to api"  "make sure we agree before you touch anything"
 /corgi:stories ABC-123          "build a referral program across the services"
 /corgi:review <pr-url>          "fix the comments on this MR and answer them"
 /corgi-run                      "run the todo stack, then show me the logs"
@@ -203,7 +204,7 @@ Slash-commands and plain English both work:
 /corgi:showcase                 "make README gifs of the new feature"
 ```
 
-Nothing ships without you. It opens **draft** PRs and waits. If you have no project to try this on, `corgi run -l` fetches an example.
+Ask once, then ship: `align` looks the code up itself, asks only the questions that change the work — at most five, each with a recommended answer — and says "Aligned. Going." when there are none. Nothing ships without you. It opens **draft** PRs and waits. If you have no project to try this on, `corgi run -l` fetches an example.
 
 <p align="center"><img src="docs/media/stories.gif" width="760" alt="/corgi:stories ABC-123: the agent edits api, web and mobile, runs the stack, waits for health, runs e2e, opens three draft PRs"></p>
 

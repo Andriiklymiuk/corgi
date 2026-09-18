@@ -390,7 +390,9 @@ resolve ambiguity before blocking.
 ## Phase 2 — Gate: spec sign-off (the one blocking gate)
 
 Present all actionable specs in **one round**; sign-off before any branch —
-batch-level, not per-branch. Re-present only changed specs. Blocked held out.
+batch-level, not per-branch. Re-present only changed specs. Blocked held out. Open
+questions inside a spec use the `align` skill's fork format (`❓ Qn` + `➡️` pick, ≤5 per
+spec); a story with more forks than that is not ready to gate.
 Superpowers-escalated stories pass here too: their `writing-plans` output is the
 spec.
 
@@ -409,6 +411,12 @@ go — that _is_ the gate, the user can still stop you) in exactly two cases:
   `corgi watch ·` trail). That is the sign-off for any tier, span, or batch size; state
   each spec inline and go. The signal is explicit approval plus a directive, not
   impatience.
+
+**Workspace says wait.** `corgi_watch_switches` (or `corgi agent watch`) may carry
+`planReview: always | risk>=N` for this workspace (`corgi agent watch enable --plan-review`).
+When it matches the story's forecast, neither fast-path applies: post the spec, then ask
+for the sign-off with `AskUserQuestion` so the phone can answer it, and cut no branch
+until it comes back. Unset or `off` (the default) changes nothing above.
 
 Either way the fast-path drops the pause — never the thinking, and not the artifacts:
 post the spec comment (with its QA section) even for a one-liner. It is the durable

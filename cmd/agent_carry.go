@@ -34,7 +34,16 @@ its first prompt: same worktree, none of the old context.
 
 Only a profile the workspace's accounts: list names is allowed — a workspace
 that lists none cannot be carried anywhere. The old session is dismissed once
-the new one is up; its process is left alone.`,
+the new one is up; its process is left alone.
+
+--fork N opens N new sessions that all continue this one's conversation (claude
+--fork-session), each in its own terminal: one session that read the code once
+becomes several that build on the same context. --prompt, repeated, hands each
+fork its own first message, in order; forks past the last --prompt start with
+none. Without --profile the forks run under the session's own account. The
+original keeps running.
+
+  corgi agent carry k3 --fork 3 --prompt "do the api side" --prompt "do the web side" --prompt "write the tests"`,
 	Args: cobra.ExactArgs(1),
 	Run:  runAgentCarry,
 }
@@ -43,6 +52,8 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 	profile, _ := cmd.Flags().GetString("profile")
 	profile = strings.TrimSpace(profile)
 	fresh, _ := cmd.Flags().GetBool("fresh")
+	forks, _ := cmd.Flags().GetInt("fork")
+	prompts, _ := cmd.Flags().GetStringArray("prompt")
 	dir := mustAgentDir()
 	board, err := readBoard(dir)
 	if err != nil {
@@ -51,6 +62,23 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 	s, err := findBoardSession(board.State, args[0])
 	if err != nil {
 		exitWithError("agent_carry", err, 1)
+	}
+	if forks > 0 || len(prompts) > 0 {
+		if fresh {
+			exitWithError("agent_carry", fmt.Errorf("--fork continues the conversation; it cannot be combined with --fresh"), 2)
+		}
+		if err := forkSession(dir, s, profile, forks, prompts, "cli"); err != nil {
+			code := 1
+			var ce *carryError
+			if errors.As(err, &ce) {
+				code = ce.code
+			}
+			exitWithError("agent_carry", err, code)
+		}
+		if !utils.JSONOutput {
+			utils.Infof("%d forks of %s are opening; the original keeps running\n", forks, s.Display)
+		}
+		return
 	}
 	if profile == "" && fresh {
 		profile = firstNonEmpty(s.Profile, "default")
@@ -120,6 +148,65 @@ func carrySession(dir string, s sessions.Session, profile string, fresh bool, so
 		_, _ = command.Write(dir, command.Command{Action: command.ActionDismiss, SessionID: s.ID, Source: source})
 	}
 	return packetPath, nil
+}
+
+const maxForks = 8
+
+func forkSession(dir string, s sessions.Session, profile string, n int, prompts []string, source string) error {
+	if n < 2 || n > maxForks {
+		return &carryError{fmt.Errorf("--fork takes 2 to %d", maxForks), 2}
+	}
+	if len(prompts) > n {
+		return &carryError{fmt.Errorf("%d prompts for %d forks — one --prompt per fork at most", len(prompts), n), 2}
+	}
+	own := firstNonEmpty(s.Profile, "default")
+	if profile == "" {
+		profile = own
+	}
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		exe = "corgi"
+	}
+	if !strings.EqualFold(profile, own) {
+		plan, err := planCarry(dir, s, profile, false)
+		if err != nil {
+			return &carryError{err, 1}
+		}
+		if err := os.MkdirAll(filepath.Dir(plan.To), 0o700); err != nil {
+			return &carryError{err, 1}
+		}
+		if err := copyFile(plan.From, plan.To); err != nil {
+			return &carryError{fmt.Errorf("copy transcript: %w", err), 1}
+		}
+		exe = plan.Exe
+	} else if s.Cwd == "" || sessions.Placeholder(s.ID) {
+		return &carryError{fmt.Errorf("%s has not reported its session id yet", s.Display), 1}
+	}
+	ids := make([]string, 0, len(prompts))
+	for _, text := range prompts {
+		id, err := savePrompt(dir, text)
+		if err != nil {
+			return &carryError{err, 1}
+		}
+		ids = append(ids, id)
+	}
+	for i, c := range forkCommands(exe, profile, s.ID, ids, n) {
+		sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: s.Host.WindowID, Command: c, Source: source},
+			fmt.Sprintf("fork %d of %s opens under %s", i+1, s.Display, profile))
+	}
+	return nil
+}
+
+func forkCommands(exe, profile, sessionID string, promptIDs []string, n int) []string {
+	out := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		c := fmt.Sprintf("%s agent claude --profile %s", shellQuote(exe), shellQuote(profile))
+		if i < len(promptIDs) {
+			c += " --prompt-id " + shellQuote(promptIDs[i])
+		}
+		out = append(out, c+fmt.Sprintf(" -- --resume %s --fork-session", shellQuote(sessionID)))
+	}
+	return out
 }
 
 func carryProfileFor(dir string, s sessions.Session) (string, error) {
@@ -349,6 +436,8 @@ func findBoardSession(st sessions.State, ref string) (sessions.Session, error) {
 
 func init() {
 	agentCarryCmd.Flags().String("profile", "", "The account (corgi profile) to continue under")
+	agentCarryCmd.Flags().Int("fork", 0, "Open this many sessions that all continue the conversation (2 to 8); the original keeps running")
+	agentCarryCmd.Flags().StringArray("prompt", nil, "First message for the next fork, in order; repeat once per fork")
 	agentCarryCmd.Flags().Bool("fresh", false, "Start clean from the handoff instead of resuming the transcript (automatic past 85% context); without --profile, the same account")
 	agentCmd.AddCommand(agentCarryCmd)
 }
