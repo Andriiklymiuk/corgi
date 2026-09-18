@@ -413,3 +413,18 @@ It is a real device with a name: `corgi mcp devices list` shows it,
 - Several comments on one pull request collapse to one per poll.
 - `--quiet 17:00-09:00` holds notifications as well as fixes, and delivers one
   summary when the window opens. It applies to a reporting watch too.
+
+## If they are not in Claude Code
+
+Codex, Cursor, Cline, Droid, an in-house agent — do not tell them corgi has
+no plugin for their tool. The skills are plain Markdown in the repository and
+the `skills` CLI installs them anywhere:
+
+```bash
+npx skills add Andriiklymiuk/corgi
+```
+
+Then say which skills matter for what they actually do, rather than listing
+all of them. The frontmatter must stay valid YAML for this to work: a
+`description` containing a colon has to be quoted, or a strict parser skips
+that skill silently while Claude Code goes on reading it fine.
