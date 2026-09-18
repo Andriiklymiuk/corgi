@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -194,6 +195,8 @@ type WatchConfig struct {
 	Action          string      `yaml:"action"`
 	MaxFixesPerHour int         `yaml:"maxFixesPerHour,omitempty"`
 	MaxFixesPerDay  int         `yaml:"maxFixesPerDay,omitempty"`
+	MaxFixesTotal   int         `yaml:"maxFixesTotal,omitempty"`
+	CapSince        time.Time   `yaml:"capSince,omitempty"`
 	Quiet           string      `yaml:"quiet,omitempty"`
 	DaysOff         []string    `yaml:"daysOff,omitempty"`
 	Lease           bool        `yaml:"lease,omitempty"`

@@ -491,3 +491,22 @@ func TestAReviewRequestApprovesOnlyWhenTheWorkspaceSaysSo(t *testing.T) {
 		t.Fatal("an unattended run is told nobody answers")
 	}
 }
+
+func TestFixDeferralTripCap(t *testing.T) {
+	log := watch.LoadFixLog(t.TempDir())
+	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	spec := WatchSpec{Workspace: "w", MaxFixesTotal: 2, CapSince: now.Add(-time.Hour), MaxFixesPerHour: 10, MaxFixesPerDay: 10}
+	log.Start("w", "a", now.Add(-50*time.Minute))
+	log.Start("w", "b", now.Add(-40*time.Minute))
+	if got := fixDeferral(spec, log, now); got != "trip cap 2" {
+		t.Fatalf("got %q", got)
+	}
+	spec.CapSince = now.Add(-30 * time.Minute)
+	if got := fixDeferral(spec, log, now); got != "" {
+		t.Fatalf("starts before capSince do not count: %q", got)
+	}
+	b := BudgetFor(spec, log, now)
+	if b.PerTrip != 2 || b.Trip != 0 || !strings.Contains(b.String(), "0/2 this trip") {
+		t.Fatalf("budget: %+v %s", b, b.String())
+	}
+}

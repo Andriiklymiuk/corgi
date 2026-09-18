@@ -30,6 +30,7 @@ const (
 	watchFlagPruneAfter   = "prune-after"
 	watchFlagMaxPerHour   = "max-per-hour"
 	watchFlagMaxPerDay    = "max-per-day"
+	watchFlagMaxTotal     = "max-total"
 	watchFlagReviewStatus = "review-status"
 	watchFlagNoRetry      = "no-retry"
 	watchFlagAutoMerge    = "auto-merge"
@@ -131,6 +132,12 @@ var agentWatchEnableCmd = &cobra.Command{
 			if wc.MaxFixesPerDay, _ = flags.GetInt(watchFlagMaxPerDay); wc.MaxFixesPerDay < 1 {
 				return fmt.Errorf("--max-per-day must be at least 1")
 			}
+		}
+		if flags.Changed(watchFlagMaxTotal) {
+			if wc.MaxFixesTotal, _ = flags.GetInt(watchFlagMaxTotal); wc.MaxFixesTotal < 0 {
+				return fmt.Errorf("--max-total cannot be negative (0 clears it)")
+			}
+			wc.CapSince = time.Now().UTC()
 		}
 		if flags.Changed(watchFlagReviewStatus) {
 			v, _ := flags.GetString(watchFlagReviewStatus)
@@ -863,7 +870,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
+		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 	if wc.Action == "fix" {
 		spec.Action = "fix"
 	}
@@ -1155,6 +1162,9 @@ func planReviewWords(policy string) string {
 func describeWatchCaps(wc *config.WatchConfig) string {
 	perHour, perDay := daemon.WatchSpec{MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay}.FixCaps()
 	out := fmt.Sprintf(", at most %d/h %d/day", perHour, perDay)
+	if wc.MaxFixesTotal > 0 {
+		out += fmt.Sprintf(", %d this trip", wc.MaxFixesTotal)
+	}
 	if len(wc.DaysOff) > 0 {
 		out += ", off " + strings.Join(wc.DaysOff, "/")
 	}
@@ -1224,6 +1234,7 @@ func init() {
 	f.Bool("prs", false, "Also reviews and comments on pull requests I opened")
 	f.Int(watchFlagMaxPerHour, 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
 	f.Int(watchFlagMaxPerDay, 0, "With --action fix: at most this many fixes a day (default 10)")
+	f.Int(watchFlagMaxTotal, 0, "With --action fix: at most this many fixes in total, counted from now — a cap for a trip; run enable --max-total again to reset, 0 clears")
 	f.String("quiet", "", "Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens")
 	f.String(watchFlagDaysOff, "", "Days the watch sleeps through — weekends, or sat,sun, or mon,fri: no polling, no fix, nothing rings until the next working day (none clears)")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
