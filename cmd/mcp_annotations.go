@@ -29,6 +29,7 @@ var mcpToolMeta = map[string]toolMeta{
 	"corgi_agent_lessons":         {Title: "Workspace lessons", Kind: toolWrite},
 	"corgi_agent_mute":            {Title: "Mute notifications", Kind: toolWrite},
 	"corgi_agent_status":          {Title: "Agent sessions status", Kind: toolReadOnly},
+	"corgi_chat_post":             {Title: "Say something in Slack", Kind: toolWrite, OpenWorld: true},
 	"corgi_checkout":              {Title: "Check out a branch in every repo", Kind: toolDestructive},
 	"corgi_checkpoint":            {Title: "Save a cross-repo checkpoint", Kind: toolWrite},
 	"corgi_context":               {Title: "Stack overview", Kind: toolReadOnly},

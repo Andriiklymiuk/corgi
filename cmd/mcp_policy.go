@@ -45,6 +45,18 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 		return mcpWatchSet(r)
 	}))
 
+	s.AddTool(newCorgiTool("corgi_chat_post",
+		mcp.WithDescription("Say something in the Slack the workspace listens to, or answer the message an event came from — the reply lands in its thread. `reply` is a watch event key (slack:<channel>:<ts>); `to` is #channel, @handle or a channel id when there is nothing to answer. `as` is bot or me: without it the workspace's replyAs decides, and speaking as the person is never the accidental default. `react` also puts one emoji on the message being answered. Returns {channel, ts, permalink, as}."),
+		mcp.WithString("text", mcp.Description("What to say")),
+		mcp.WithString("to", mcp.Description("#channel, @handle, or a channel id")),
+		mcp.WithString("reply", mcp.Description("Event key to answer (slack:<channel>:<ts>)")),
+		mcp.WithString("as", mcp.Description("bot or me")),
+		mcp.WithString("react", mcp.Description("Emoji to add to the message being answered, e.g. white_check_mark")),
+		mcp.WithString("workspace", mcp.Description("Workspace whose token and defaults to use")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		return mcpChatPost(r)
+	}))
+
 	s.AddTool(newCorgiTool("corgi_agent_mute",
 		mcp.WithDescription("Nothing rings for a while — no desktop toast, no phone push, no permission ping — while the inbox and the board go on. `for` is a duration up to 24h (1h, 30m) or off; omitted reads the current state. Returns {muted, until}."),
 		mcp.WithString("for", mcp.Description("1h, 30m, off; omitted only reads")),
