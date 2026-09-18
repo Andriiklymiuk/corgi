@@ -128,10 +128,14 @@ this thread list into P3.6's prune pass. Don't re-litigate settled threads.
 **Evidence worktree (read-only).** The diff is where findings anchor; the evidence
 lives in the tree around it. Put the head SHA in a throwaway detached worktree — never
 the user's checkout, never a branch. A detached worktree has **no installed
-dependencies**, so it cannot run a test or a probe as-is: when the hunt needs one,
-prepare **one** runnable copy per repo up front (copy out, link the deps in from the
-local checkout) rather than letting each subagent rebuild its own — otherwise half the
-set verifies by running and half falls back to trusting CI:
+dependencies**, so it cannot run a test or a probe as-is. Decide once per repo whether
+the hunt needs to run anything; if it does, install into **one** copy per repo up front
+rather than letting each subagent rebuild its own — otherwise half the set verifies by
+running and half falls back to trusting CI. **Never borrow another checkout's installed
+deps when the PR touches the manifest or lockfile** — you would test a dependency tree
+the PR just changed, and a version bump is often the thing under review. Can't install →
+say so in the report and let CI carry the test signal; a probe on the wrong deps is worse
+than no probe:
 ```bash
 git -C <dir> fetch origin pull/<n>/head            # GitLab: merge-requests/<iid>/head
 git -C <dir> worktree add --detach /tmp/corgi-review/<repo>-<n> FETCH_HEAD
