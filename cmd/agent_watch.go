@@ -863,7 +863,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
+		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 	if wc.Action == "fix" {
 		spec.Action = "fix"
 	}
@@ -1278,16 +1278,17 @@ func init() {
 }
 
 type watchStatusWorkspace struct {
-	Workspace string           `json:"workspace"`
-	Sources   []string         `json:"sources"`
-	Skipped   []string         `json:"skipped,omitempty"`
-	Action    string           `json:"action"`
-	AutoFor   []string         `json:"autoFor,omitempty"`
-	Interval  string           `json:"interval"`
-	Quiet     string           `json:"quiet,omitempty"`
-	DaysOff   []string         `json:"daysOff,omitempty"`
-	Asleep    bool             `json:"asleep,omitempty"`
-	Fixes     daemon.FixBudget `json:"fixes"`
+	Workspace  string           `json:"workspace"`
+	Sources    []string         `json:"sources"`
+	Skipped    []string         `json:"skipped,omitempty"`
+	Action     string           `json:"action"`
+	AutoFor    []string         `json:"autoFor,omitempty"`
+	Interval   string           `json:"interval"`
+	Quiet      string           `json:"quiet,omitempty"`
+	DaysOff    []string         `json:"daysOff,omitempty"`
+	Asleep     bool             `json:"asleep,omitempty"`
+	PlanReview string           `json:"planReview,omitempty"`
+	Fixes      daemon.FixBudget `json:"fixes"`
 }
 
 type watchStatusFix struct {
@@ -1332,7 +1333,7 @@ func watchStatusJSON(dir string, specs []daemon.WatchSpec, state *watch.State, n
 func watchStatusWorkspaces(specs []daemon.WatchSpec, state *watch.State, now time.Time) []watchStatusWorkspace {
 	var out []watchStatusWorkspace
 	for _, s := range specs {
-		row := watchStatusWorkspace{Workspace: s.Workspace, Sources: sourceNames(s), Skipped: s.Skipped, Action: s.Action, AutoFor: s.FixKinds, Interval: s.Interval.String(), Quiet: s.Quiet, Fixes: daemon.BudgetFor(s, state.Fixes, now)}
+		row := watchStatusWorkspace{Workspace: s.Workspace, Sources: sourceNames(s), Skipped: s.Skipped, Action: s.Action, AutoFor: s.FixKinds, Interval: s.Interval.String(), Quiet: s.Quiet, PlanReview: s.PlanReview, Fixes: daemon.BudgetFor(s, state.Fixes, now)}
 		for _, d := range s.DaysOff {
 			row.DaysOff = append(row.DaysOff, strings.ToLower(d.String()[:3]))
 		}
