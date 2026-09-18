@@ -67,21 +67,6 @@ don't bump — reusing the already-bumped version.
   (`DYLD Symbol not found`) shows in neither build nor upload. Install + open the binary
   once; if it bounces, it's dep-version skew (pin exact, see `mobile`), not app code.
 
-## Red flags — stop
-- `bash -lc` for the build → `visionos` CocoaPods error incoming; non-login shell.
-- Non-login but no `LANG` export → `Encoding::CompatibilityError`; export `LANG`/`LC_ALL`.
-- Pods "worked" but the build later failed on pods → it's EAS's nested pod install with an
-  empty ambient `LANG`; export it in the parent shell, not just inline in the Makefile.
-- Re-running `make ship` after a post-bump failure → double version bump; re-run the
-  build+submit targets directly instead.
-- Trusting a "build completed" exit code / a `tee`'d "✓" → `tee` reports tee's exit and a
-  Makefile `||` masks failure; trust the new IPA/AAB timestamp + the "Submitted…" line.
-- "Uploaded = released" on Play → it's a draft; promote it in Play Console.
-- "Uploaded = done" with nobody opening the build → a launch-time ABI-skew crash passes
-  build + upload; install + open once.
-- Shipping a native shader/scene/Skia change straight to a store with no on-device render →
-  magenta risk; run the `mobile` render gate first.
-
 ## See also
 - **`mobile` skill** — the device-driving loop + the full gotcha list (the render gate this
   skill leans on, plus the dyld-skew / disk / autolinking traps a ship hits).

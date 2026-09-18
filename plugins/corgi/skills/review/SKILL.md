@@ -94,15 +94,8 @@ separately (don't make a second call just for a SHA):
   worktree: a conflict — usually a version field both sides bumped — blocks the merge
   whatever the checks say.
 
-**rtk:** metadata, status, and list calls go through rtk automatically (the Claude
-Code hook rewrites `git`/`gh`/`glab`). Fetch the **reviewable diff raw** to avoid
-truncation degrading review quality:
-```
-rtk proxy gh pr diff <n> --repo <owner>/<repo>
-rtk proxy glab mr diff <n> --repo <host>/<group>/<proj> --color=never
-```
-See `../_shared/forge-commands.md` §0 for the rule of thumb: rtk-filtered for
-everything except the diff content (and any file body read in full).
+Fetch the **reviewable diff raw** — an output filter on `gh`/`glab` (rtk or similar)
+truncates it and degrades the review; `../_shared/forge-commands.md` §0 has the bypass.
 
 **State.** Read the PR/MR state on fetch.
 - **Merged or closed → warn and ask** before reviewing either (usually pasted by
@@ -168,9 +161,12 @@ per-repo note. Never re-fetch the same key per PR.
 - **Linear** → `mcp__linear-server__get_issue` (+ comments); view screenshots by
   `curl`-ing the signed `uploads.linear.app` URLs (they expire ~5 min — re-fetch
   the issue for fresh URLs) then read.
-- **Jira** → `mcp__atlassian__getJiraIssue` (+ comments); fetch attachment bytes
-  via `mcp__atlassian__fetch` then read (getJiraIssue returns attachment metadata,
-  not image bytes). Use `getAccessibleAtlassianResources` for the site if needed.
+- **Jira** → `mcp__atlassian__getJiraIssue` (+ comments). It returns attachment
+  metadata only and no MCP tool returns the bytes (`../_shared/tracker-mcp.md`):
+  with `$JIRA_EMAIL`/`$JIRA_API_TOKEN` in the env, `curl -u
+  "$JIRA_EMAIL:$JIRA_API_TOKEN" -L -o <file> "<content-url>"` then read; otherwise
+  ask the user to download and share the file. `getAccessibleAtlassianResources`
+  for the site if needed.
 
 **Extract the whole intent, not just acceptance criteria** — tickets carry the why:
 - Description + acceptance criteria.
@@ -580,15 +576,6 @@ post-then-address; don't re-read threads — findings already in hand. Pushed-ba
 
 `--yes` skips printing the preview too. Nothing else changes: the action was
 never waiting on an answer.
-
-**Red flags — you are about to get this wrong:**
-
-| thought | reality |
-|---|---|
-| "It is someone else's repo, I should check first" | Their repo is exactly the case that posts. That is what a review is. |
-| "Posting is public, so it needs confirmation" | The user asked for a review of a PR they linked. That was the confirmation. |
-| "I will show the findings and let them decide" | Print the preview and post in the same turn. |
-| "I will ask once, just to be safe" | Asking once per PR is the behaviour this section exists to stop. |
 
 ## Phase 5 — Post
 

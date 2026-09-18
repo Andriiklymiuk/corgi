@@ -35,7 +35,7 @@ Neighbours, so you pick the right one:
 
 - **Same everything except the branch.** Same device, same account, same locale, same
   theme, same data row, same scroll position. One variable changes: the code. A "before"
-  taken on a different campaign or a different simulator proves nothing and will be
+  taken on a different record or a different simulator proves nothing and will be
   believed anyway.
 - **Capture the base branch FIRST or LAST, never from memory.** If you already have the
   after, build the base and take the before — do not describe the old state from the
@@ -49,7 +49,7 @@ Neighbours, so you pick the right one:
 - **Scratch files go to the session scratchpad**, not `/tmp` — the host names it in the
   environment. Shared `/tmp` leaks between sessions and users.
 - **No secrets in an image.** Read every shot before uploading: tokens in a debug
-  banner, a real creator's name and address, an internal URL. An upload is public to
+  banner, a real user's name and address, an internal URL. An upload is public to
   everyone who can read the PR, and deleting the PR comment does not unpublish it.
 
 ## Phase 0 — Decide it is worth it
@@ -73,7 +73,7 @@ Reaching it:
 - **Driver** (`mobile` skill: Maestro, argent, Playwright) for the tap sequence. Prefer a
   flow file over ad-hoc taps: the flow is what makes the second capture identical.
 - **Seed the data first** if the screen needs a particular record, and note which one.
-  "A White Label campaign" is not reproducible; `Test white label creator #1` is.
+  "an order with a discount" is not reproducible; `Test order #1 (discount)` is.
 
 A screen behind a feature flag needs the flag **on in both builds**. Check it rather
 than assume — a flag that defaults off gives you two identical "before" shots and a very
@@ -150,7 +150,7 @@ Put them in a table so they sit side by side, with one line saying what to look 
 ```markdown
 ## Before / after
 
-Captured on the iOS simulator, staging, same campaign and scroll position.
+Captured on the iOS simulator, staging, same record and scroll position.
 
 | Before (`master`) | After (this MR) |
 | --- | --- |

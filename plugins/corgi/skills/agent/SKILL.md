@@ -1,6 +1,6 @@
 ---
 name: agent
-description: "Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking (\"which sessions are waiting on me\", \"answer that permission from my phone\"). Also whenever someone asks to be told about tracker or review activity — \"watch the jira issues here\", \"watch my linear tickets\", \"tell me when someone comments on my MRs\", \"notify me about new bugs\", \"what came in?\", \"stop watching this\" — or asks what is being tracked at all (\"what do we watch?\", \"what is corgi tracking?\", \"should we track anything else?\"), or asks why the watch did or did not fire. NOT for compose authoring (corgi), starting (run), or debugging (debug)."
+description: "Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking (\"which sessions are waiting on me\", \"answer that permission from my phone\"). Also for the daemon's tracker and PR watch: being told about ticket or review activity (\"watch the jira issues here\", \"tell me when someone comments on my MRs\"), what is or should be tracked, stopping a watch, or why it did or did not fire. NOT for compose authoring (corgi), starting (run), or debugging (debug)."
 ---
 
 # Corgi agent mode
@@ -259,9 +259,8 @@ Everything the phone can do without the Claude app: start and stop a session,
 pick a profile and name it, read the timeline, revoke a paired device, run
 doctor. With session tracking on, the top of the page is the session board —
 "2 waiting on you", each with what it is waiting for — so the phone answers
-the question it was unlocked for before any card is tapped. With session tracking on, the top of the page is the session board —
-"2 waiting on you", each with what it is waiting for — so the phone answers
-the question it was unlocked for before any card is tapped. Two things worth telling a user unprompted:
+the question it was unlocked for before any card is tapped. Worth telling a user
+unprompted:
 
 - Cards carry a **hide** chip. Hidden cards collapse into one button, on that
   browser only — nothing on the machine changes. It is for showing the screen
@@ -553,8 +552,6 @@ sessions awake but sleeps between turns.
 | `corgi agent sessions` is empty though Claude is running | Hooks not installed, or installed after the session started: `corgi agent track enable`, then `corgi agent rescan`; new sessions report from their next event. |
 | a Stream Deck / `focus` press does nothing | `corgi agent doctor` → a session with `unknown` host. Install the corgi VS Code extension and reopen the terminal; iTerm2 needs the tty (a session started before tracking shows none until its next event). |
 | VS Code tabs still say "claude" | Set `terminal.integrated.tabs.title` to `${sequence}` — the default `${process}` ignores the title the hook sets. |
-| `corgi agent sessions` is empty though Claude is running | Hooks not installed, or installed after the session started: `corgi agent track enable`, then `corgi agent rescan`; new sessions report from their next event. |
-| a Stream Deck / `focus` press does nothing | `corgi agent doctor` → a session with `unknown` host. Install the corgi VS Code extension and reopen the terminal; iTerm2 needs the tty (a session started before tracking shows none until its next event). |
 | `up` says the port is in use, pairing "not open" on the old URL | A leftover MCP holds the port. Newer corgi reclaims it on `up` automatically; otherwise `corgi agent down` then `corgi agent up` for a fresh tunnel + pairing window. |
 
 ## Tracking every session on the machine
@@ -645,7 +642,7 @@ corgi agent watch enable --pickup "In Progress"      # picking a story up moves 
 corgi agent watch board [--refresh]                  # the tracker columns corgi knows
 corgi agent watch move ABC-123 "Ready for staging"  # move, assign, comment: writes as you
 corgi agent today [--write]                          # today since midnight, the watch's own runs included
-corgi agent today --json                             # + waits{count, medianS} and days[14] from the daemon's own ledger — the phone's share card numbers (2.22.6)
+corgi agent today --json                             # + waits{count, medianS} and days[14] from the daemon's own ledger — the phone's share card numbers
 corgi agent standup [--since 48h] [--write]          # a rolling window of the same
 corgi agent digest --send                            # the daily message (digestAt in the user config)
 corgi agent workspaces pause|resume <id>             # stop supervising one (autostart: false), or resume
@@ -911,7 +908,7 @@ what the ticket has cost (runs keep claude's own receipt; sessions on the
 branch add their transcripts). The phone's Board tab draws the same. Moving a
 card is `watch move`; nobody drags one into Running.
 
-### What a workspace does on its own (corgi 2.22)
+### What a workspace does on its own
 
 Switches per workspace, each off until flipped, each read live — from the
 CLI or the phone's repo sheet, no restart:
@@ -934,19 +931,19 @@ CLI or the phone's repo sheet, no restart:
   bot runs are written one line each to `<agentDir>/lessons/<workspace>.md`;
   `corgi agent lesson add|list`; the SessionStart hook tells you how many
   and the last one. **Read them before changing code.**
-- `--hand-over`, `--auto-merge` (2.21): feedback typed into the session on
+- `--hand-over`, `--auto-merge`: feedback typed into the session on
   the branch; a ready pull request merged.
-- `--approve` (2.28.5): an unattended review of a pull request someone asked
+- `--approve`: an unattended review of a pull request someone asked
   the user to review may end in an approval — only when nothing blocks and
   the risk card says `auto-approve: yes`; otherwise findings, no stamp.
   Off by default: an approval carries the user's name. `--auto-for all`
   (or `requests`) is what makes review requests run at all; without it
   they only notify, and with `--silent` not even that.
-- `--bots` (2.28.6): comments from bot accounts count. Off, a bot is not a
+- `--bots`: comments from bot accounts count. Off, a bot is not a
   person waiting — right for a coverage or pipeline bot, wrong for an AI
   reviewer whose findings are meant to be fixed. Ask which account posts
   those before turning it on.
-- Comment fixes settle (2.28.6): a fix for a comment on a pull request
+- Comment fixes settle: a fix for a comment on a pull request
   starts a minute after the **last** comment on it — reviewers and review
   bots post several in a row — and one run reads every open thread, so
   three comments are one fix. A comment that lands while a fix is running
@@ -975,10 +972,10 @@ permission|stop|end --agent codex --session $ID` from another CLI's hooks.
 **A read-only phone**: `corgi agent up --viewer` (or `corgi agent pair
 --viewer`) pairs a teammate who can look but press nothing.
 
-**Pairing without a QR** (2.22.4): `corgi agent pair` opens a fresh window
+**Pairing without a QR**: `corgi agent pair` opens a fresh window
 on the running server; `--file` writes `~/Desktop/<laptop>.corgipair` to
 AirDrop to the phone, which opens it with corgi and is paired. With
-corgi-bar 0.22 the Mac is findable by a phone beside it the AirDrop way
+corgi-bar the Mac is findable by a phone beside it the AirDrop way
 (Bonjour over Bluetooth / peer-to-peer Wi-Fi / LAN, relayed to the daemon),
 no tunnel needed nearby; Handoff shows the session in front on the iPhone's
 lock screen. A quick tunnel's address dies with a restart: `agent up` warns,

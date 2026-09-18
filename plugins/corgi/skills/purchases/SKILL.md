@@ -20,7 +20,7 @@ against `customerInfo.allPurchasedProductIdentifiers`. Renaming one = renaming i
 places. Derive everything else (the store grid, the metadata below) FROM this module so
 they can't drift.
 
-## Version-control the IAP review notes (примечание)
+## Version-control the IAP review notes
 The per-IAP "how a reviewer tests this purchase" steps used to live only in App Store
 Connect (and often only for ONE product), so they were easy to lose + drift. Make them a
 code artifact:
