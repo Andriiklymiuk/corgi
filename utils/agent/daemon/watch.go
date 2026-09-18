@@ -428,7 +428,9 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			}
 		}
 		if spec.FixesKind(e.Kind) {
-			if isFeedback(e.Kind) {
+			if why := chatRunRefusal(spec, e); why != "" {
+				body += " (no run: " + why + ")"
+			} else if isFeedback(e.Kind) {
 				d.settleFix(ctx, spec, e)
 				body += " (fix starts once the comments settle)"
 			} else if note := d.startFix(ctx, spec, e); note != "" {
@@ -703,6 +705,11 @@ func (d *Daemon) takeFollowUp(spec WatchSpec, ref string) (watch.Event, bool) {
 }
 
 func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
+	// The person who asked sees corgi pick it up before the run has anything
+	// to say, which is most of what an ack is for.
+	if e.Source == "slack" {
+		d.say(ctx, spec, e, "", "eyes")
+	}
 	d.runs.Add(1)
 	go func() {
 		defer d.runs.Done()
@@ -832,7 +839,14 @@ func watchBody(e watch.Event) string {
 	case watch.KindCIFailed:
 		return fmt.Sprintf("red build in %s — %s", e.Ref, e.Title)
 	case watch.KindReviewRequested:
+		if e.Source == "slack" {
+			return fmt.Sprintf("%s posted %d pull request(s) for review in %s — %s",
+				firstNonEmpty(e.Author, "someone"), len(e.Links), firstNonEmpty(e.State, "chat"), clipText(e.Body, 120))
+		}
 		return fmt.Sprintf("%s wants your review on %s — %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Title)
+	case watch.KindChatMention, watch.KindChatMessage:
+		return fmt.Sprintf("%s in %s: %s", firstNonEmpty(e.Author, "someone"),
+			firstNonEmpty(e.State, "chat"), clipText(e.Body, 160))
 	default:
 		return commentLine(e)
 	}
@@ -890,9 +904,16 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			"and when there is no such branch run /corgi:stories %s. I approve all changes; draft PRs only.",
 			e.Ref, firstNonEmpty(e.Author, "someone"), e.Body, e.Ref, e.Ref, e.Ref)
 	},
-	watch.KindPRComment: reviewFeedbackPrompt,
-	watch.KindPRReview:  reviewFeedbackPrompt,
+	watch.KindPRComment:   reviewFeedbackPrompt,
+	watch.KindPRReview:    reviewFeedbackPrompt,
+	watch.KindChatMention: chatPrompt,
+	watch.KindChatMessage: chatPrompt,
 	watch.KindReviewRequested: func(e watch.Event) string {
+		// A review asked for in chat names several pull requests at once —
+		// one ticket across its repositories — and is reviewed as one.
+		if e.Source == "slack" {
+			return chatPrompt(e)
+		}
 		// Someone else's branch. Read it, say what you think, change nothing.
 		return "Review this pull request, which " + firstNonEmpty(e.Author, "a colleague") +
 			" asked me to review: " + e.URL + ". It is THEIR branch — read the diff and post a review " +
@@ -1129,6 +1150,9 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.mirrorHandoff(spec, e.Ref, started)
 		d.tripBreaker(spec, e, runErr.Error())
 		d.routineReport(spec, e, string(out), runErr)
+		if e.Source == "slack" {
+			d.say(ctx, spec, e, chatOutcome(nil, "", runErr.Error()), "x")
+		}
 		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
 			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
@@ -1155,6 +1179,13 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	if after, ok := usage.ReadLimits(spec.ConfigDir); ok && hadBefore {
 		d.watchState.Fixes.SetSpent(e.Key, after.FiveHour.Percent-before.FiveHour.Percent)
+	}
+	if e.Source == "slack" {
+		said := chatOutcome(links, note, "")
+		if lines := d.chatReviewReply(ctx, spec, e); lines != "" {
+			said = lines
+		}
+		d.say(ctx, spec, e, said, d.chatMark(ctx, spec, e))
 	}
 	// The pull request it opened is where to go, if it opened one.
 	target := e.URL

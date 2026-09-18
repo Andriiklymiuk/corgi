@@ -137,6 +137,10 @@ type Daemon struct {
 	// permission prompt with the session id so the phone can answer it from
 	// the lock screen. Nil when nothing is paired.
 	Push func(m push.Message)
+	// Chat says something back in the chat an event came from. Injected
+	// because holding a Slack token belongs to the command layer, like the
+	// tracker writes beside it. Nil means the daemon never speaks.
+	Chat func(ctx context.Context, workspace string, target watch.SlackTarget, text, emoji string) error
 	// Isolate gives a workspace's repositories worktrees on a branch and
 	// returns their directories, for a watch with isolate on. Nil means
 	// runs happen in the checkout.
