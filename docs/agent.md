@@ -287,7 +287,9 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent up --at-login` | the same, plus the endpoint and tunnel that up used |
 | `corgi agent awake [on\|off]` | keep the machine awake for the daemon's whole life |
 | `corgi agent status [--json]` | what is running (`online` = device with no session yet), the launcher and connector URLs, restarts, which account |
-| `corgi agent doctor [--json]` | can this work here, and what to fix |
+| `corgi agent doctor [--json] [--away]` | can this work here, and what to fix; `--away` adds what matters when nobody touches the machine for weeks (2.28.29) |
+| `corgi agent away [--dry-run] [--pulse <url>]` | the away doctor, with every corgi-side fix applied: a digest routine per watched workspace, worktrees + pruning + harden where fixes run unattended; then the sudo lines only you can run (2.28.29) |
+| `corgi agent pulse [url\|off]` | a dead-man ping every five minutes to a healthchecks.io / Uptime Kuma push URL, so a service alarms you when the machine goes quiet (2.28.29) |
 | `corgi agent workspaces` | list, `forget`, `relocate` |
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |
 | `corgi agent brief [id]` | what the last session was working on before it restarted |
@@ -1513,8 +1515,59 @@ machine that never sleeps is a flat battery and that is the owner's call.
 **Honest limits:** `caffeinate -s` (prevent system sleep) is AC-only, but `-i`
 (prevent idle sleep) is honoured on battery too, so an idle laptop on battery
 does *not* doze off with the lock held. What still ends a session is closing the
-lid, or the battery running out. "Lid closed on the train" only works plugged
-in; if that is your workflow, supervise from a machine that stays on.
+lid, or the battery running out. `sudo pmset -a disablesleep 1` lets the lid
+close (plugged in — see [Leaving it alone for weeks](#leaving-it-alone-for-weeks));
+otherwise "lid closed on the train" needs a machine that stays on.
+
+## Leaving it alone for weeks
+
+A laptop closed in a bag, plugged in, working through tickets while you are
+away, with the phone as the only screen. Two things end that trip on day one:
+the machine sleeps when the lid closes, and macOS reboots into the FileVault
+login screen after an update it installed on its own. Neither is corgi's to
+change, so corgi names them:
+
+```bash
+corgi agent away                  # applies what corgi can, prints what only you can
+sudo pmset -a disablesleep 1      # the lid may close
+sudo softwareupdate --schedule off && \
+  sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstallMacOSUpdates -bool false
+corgi agent pulse https://hc-ping.com/<uuid>   # a free healthchecks.io check; it emails when the pings stop
+corgi agent restart
+```
+
+`corgi agent away` adds a `digest` routine to every watched workspace (five
+bullets a morning, on the phone), turns on worktrees and a seven-day prune
+where fixes run unattended, runs `harden` there, and then prints the rest as a
+list. `corgi agent doctor --away` is the same list without the changes:
+updates, lid, power, FileVault, disk, network (a captive portal shows up here
+— hotel Wi-Fi often asks again every day, and a closed laptop cannot click
+"accept"; a travel router or a spare phone's hotspot avoids that), heat, pulse,
+tunnel, phone, digest, isolation, and whether Claude Code may update itself
+mid-trip.
+
+While you are away:
+
+- **Pictures.** A screenshot a tool returned inside a session (the simulator
+  through argent or agent-device) shows in the phone's Chat under the tool
+  line — `POST /launch/picture {session, id}` hands the bytes over, sealed
+  like every other route; nothing is pushed for it.
+- **Heat.** A laptop in a bag throttles itself. While macOS reports a CPU
+  speed limit under 60%, no fix starts; you get one push, and runs resume when
+  it cools.
+- **A trip cap.** `corgi agent watch enable --max-total 5` lets a workspace
+  fix at most five tickets from now on, on top of the hourly and daily caps;
+  run it again to reset the count, `--max-total 0` clears it.
+- **VPN.** A headless run leaves a `useAwsVpn` client out of the stack
+  preflight: nobody is there for its browser sign-in.
+- **Reviews of other people's branches** no longer carry the PR-body lines
+  (the trail and the Evidence section): there is no PR of ours to write them
+  into.
+
+**Honest limits:** a reboot of any kind waits at the FileVault login screen;
+a captive portal is reported, never clicked; a chat that lives in Microsoft
+Teams is not watched (an Azure app registration with tenant consent is not
+something to set up from a hotel); corgi does not upgrade itself while away.
 
 ## Supervising an agent other than Claude Code
 
