@@ -52,6 +52,8 @@ type WatchSpec struct {
 	SkipPermissions bool
 	MaxFixesPerHour int
 	MaxFixesPerDay  int
+	MaxFixesTotal   int
+	CapSince        time.Time
 	Quiet           string
 	DaysOff         []time.Weekday
 }
@@ -615,6 +617,9 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	if log.StartedSince(spec.Workspace, now.Add(-24*time.Hour)) >= perDay {
 		return fmt.Sprintf("%d/day cap", perDay)
 	}
+	if spec.MaxFixesTotal > 0 && log.StartedSince(spec.Workspace, spec.CapSince) >= spec.MaxFixesTotal {
+		return fmt.Sprintf("trip cap %d", spec.MaxFixesTotal)
+	}
 	if dayOff(spec, now) {
 		return "day off"
 	}
@@ -638,6 +643,8 @@ type FixBudget struct {
 	Day      int       `json:"day"`
 	PerDay   int       `json:"perDay"`
 	Today    int       `json:"today"`
+	Trip     int       `json:"trip,omitempty"`
+	PerTrip  int       `json:"perTrip,omitempty"`
 	Last     time.Time `json:"last,omitempty"`
 	Deferred int       `json:"deferred"`
 }
@@ -650,11 +657,19 @@ func BudgetFor(spec WatchSpec, log *watch.FixLog, now time.Time) FixBudget {
 	local := now.Local()
 	b.Today = log.StartedSince(spec.Workspace, time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, local.Location()))
 	b.Last, _ = log.LastStarted(spec.Workspace)
+	if spec.MaxFixesTotal > 0 {
+		b.PerTrip = spec.MaxFixesTotal
+		b.Trip = log.StartedSince(spec.Workspace, spec.CapSince)
+	}
 	return b
 }
 
 func (b FixBudget) String() string {
-	return fmt.Sprintf("%d/%d this hour · %d/%d today", b.Hour, b.PerHour, b.Day, b.PerDay)
+	s := fmt.Sprintf("%d/%d this hour · %d/%d today", b.Hour, b.PerHour, b.Day, b.PerDay)
+	if b.PerTrip > 0 {
+		s += fmt.Sprintf(" · %d/%d this trip", b.Trip, b.PerTrip)
+	}
+	return s
 }
 
 func limitUsed(configDir string, now time.Time) (int, bool) {
