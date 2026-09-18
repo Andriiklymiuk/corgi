@@ -188,6 +188,21 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 	d.Isolate = isolateFixWorktrees
 	d.Carry = autoCarry(dir)
+	// Answering in the thread a message came from, with the workspace's own
+	// token and in the voice its config chose.
+	d.Chat = func(ctx context.Context, workspaceID string, target watch.SlackTarget, text, emoji string) error {
+		poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, workspaceID))
+		poster.Team = watch.LoadState(dir).SourceIdentity("slack", "team")
+		if strings.TrimSpace(text) != "" {
+			if _, err := poster.Post(ctx, target, text); err != nil {
+				return err
+			}
+		}
+		if strings.TrimSpace(emoji) != "" {
+			return poster.React(ctx, target, emoji)
+		}
+		return nil
+	}
 	// A pull request the forge calls ready is merged with the workspace's
 	// own token, the same way the phone's Merge does it.
 	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
