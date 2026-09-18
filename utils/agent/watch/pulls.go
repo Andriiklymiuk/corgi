@@ -50,6 +50,23 @@ var (
 	gitlabMR   = regexp.MustCompile(`^https?://[^/]+/(.+?)/-/merge_requests/(\d+)`)
 )
 
+// pullLink finds pull-request and merge-request URLs inside free text — a
+// chat message listing one per repository.
+var pullLink = regexp.MustCompile(`https?://github\.com/[^/\s]+/[^/\s]+/pull/\d+|https?://[^/\s]+/\S+?/-/merge_requests/\d+`)
+
+// PullLinks is every pull request a piece of text mentions, in the order it
+// mentions them, each one PullRef can file.
+func PullLinks(text string) []string {
+	var out []string
+	for _, link := range pullLink.FindAllString(text, -1) {
+		link = strings.TrimRight(link, ").,;:")
+		if PullRef(link) != "" {
+			out = append(out, link)
+		}
+	}
+	return out
+}
+
 // PullRef is the ref a pull request link is filed under: acme/api#7 for
 // GitHub, group/project!7 for GitLab. "" for anything else.
 func PullRef(link string) string {
