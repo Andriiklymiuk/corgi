@@ -18,9 +18,9 @@ spec:
 
 include:
   # Pin a tag, not main: an include is fetched fresh on every pipeline.
-  - remote: https://raw.githubusercontent.com/Andriiklymiuk/corgi/v1.20.17/gitlab/corgi.yml
+  - remote: https://raw.githubusercontent.com/Andriiklymiuk/corgi/v2.28.21/gitlab/corgi.yml
     inputs:
-      corgi_version: "1.20.17"
+      corgi_version: "2.28.21"
       branch: $[[ inputs.branch ]]
       runner_tags: [vm]          # the workspace's shell / docker+machine runner
       wait_timeout: 20m

@@ -181,9 +181,7 @@ invariant that would otherwise be lost, and only where the file already comments
 - **Reproduce a suspect service on its branch / worktree** →
   `corgi run --services <x> --with-deps --detach --logs --service-branch <x>=<branch>`
   (corgi makes a non-destructive worktree off the pushed branch; main checkout
-  untouched), or `--service-dir <x>=<worktree-dir>` for live/uncommitted code. Guard:
-  `corgi run --help | grep service-branch` (absent → `git checkout <branch> &&
-corgi run --services <x>`).
+  untouched), or `--service-dir <x>=<worktree-dir>` for live/uncommitted code.
 - **DB is the problem** (most common) → `corgi run --dbServices <db> --services none
 --detach`, then `corgi status --json` / its logs.
 - **Full-stack flake** → `corgi restart`.

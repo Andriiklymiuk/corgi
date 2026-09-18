@@ -69,14 +69,12 @@ against the running stack (`corgi run`, `corgi logs <svc> --errors-only`,
 regression test that fails on `<base>`, then the smallest fix. No plan file, no
 subagent fan-out: a bug is a straight line from the log to the test.
 
-**Express lane — small-surface adjustment.** Reuses the Phase 2 fast-path's _tier +
-span_ bar — **adjustment/bug, single service, no cross-service contract** — but NOT
-its "one item / one sentence / no open question" half: that gates the approval
-_pause_; this gates _machinery_. They're independent — a small change with an open
-design question (which variant? what scope?) still takes the express lane: skip the
-subagent, just don't skip the gate. Fires whenever the surface is locatable up front
-— one component or a few files you can name (asset/copy/flag/style swap, small
-wiring). Lighter steps, same guardrails:
+**Express lane — small-surface adjustment.** An adjustment or bug in a single service
+with no cross-service contract, whose surface you can name up front (one component or
+a few files: an asset/copy/flag/style swap, small wiring), takes lighter machinery. An
+open design question (which variant? what scope?) does not change that — it only
+decides whether the Phase 2 gate pauses, and the express lane never skips the gate.
+Lighter steps, same guardrails:
 
 - **No `Explore` subagent** — grep + read the 2–3 files inline; a subagent returns a
   full report to map one component, the orchestrator's own search is cheaper. Reserve
@@ -487,12 +485,9 @@ edits overlapping the story's files → STOP and ask; no overlap → worktree sa
 
 **Must-run producer in a worktree → run it with `--service-dir`.** A producer that
 must be _running_ for a consumer to verify (Phase 4) can live in a worktree:
-`corgi run --service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` (below). Only if
-corgi lacks the flag (`corgi run --help | grep service-dir`) must it go **in place** —
-dirty → ask the user to stash/commit first.
+`corgi run --service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` (below).
 
-- **Branch in place** (clean tree; or a must-run producer when `--service-dir` is
-  unavailable, after stash/commit). Branch straight off the fetched remote base — no
+- **Branch in place** (clean tree). Branch straight off the fetched remote base — no
   `checkout <base>`/`pull` dance, no local-divergence trap:
   `git -C <dir> fetch origin && git -C <dir> checkout -b <branch> origin/<base>`.
 - **Worktree** (dirty tree, or several stories in one repo). Path
@@ -526,10 +521,9 @@ dirty → ask the user to stash/commit first.
     `--service-dir` runs the **exact** worktree code. (corgi also has
     `--service-branch <svc>=<branch>` — its _own_ reused worktree off a branch — and
     `--service-checkout <svc>=<branch>` for an in-place checkout; handy for ad-hoc
-    "run this branch", but for stories point at your impl worktree.) Needs the flag
-    (`corgi run --help | grep service-dir`); without it, run such a producer in
-    place. A branched repo that **isn't** a corgi service → no `--service-dir`; run
-    its runner in the worktree dir.
+    "run this branch", but for stories point at your impl worktree.) A branched repo
+    that **isn't** a corgi service → no `--service-dir`; run its runner in the
+    worktree dir.
   - **Success →** `git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>-<service>` once
     the PR is up. **Failure (Stop rule) →** leave it; report its `/tmp` path. Never
     `worktree remove` a failed story.
@@ -558,7 +552,7 @@ matching existing patterns.
     `corgi exec <svc> --service-dir <svc>=<worktree-dir> --ensure-deps -- <cmd>`.
   - Not in compose, no `test` script, or no compose → run the discovered runner
     (Phase 0) in the worktree dir. Same `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>`
-    mapping as `corgi run` (Phase 3); drop for in-place. Needs the flag.
+    mapping as `corgi run` (Phase 3); drop for in-place.
 - **Bug tier: red test first** — write it, confirm **FAILS on base**, then make it
   pass. Adjustments skip.
 - **New code lowers complexity, never raises it.** Before the per-service gate, run
@@ -572,28 +566,13 @@ matching existing patterns.
   noise hide your breakage. Gate on **no NEW errors** — filter the run to changed
   files, or diff the base error set. Touched files clean; baseline left as-is, not
   "fixed" (scope creep).
-- **Scoped test run can false-green.** Path/pattern selector can match **nothing**
-  yet exit 0 — jest reads `app/(app)/…` parens + `[id]` brackets as regex, so the
-  target suite silently never runs while another file prints PASS. Confirm the
-  **intended suite ran** (assert test count > 0); match by filename substring or
-  escape the path. Green exit ≠ tests ran.
-- **Scoped run misses downstream importers — prefer the repo's FULL suite.** Running
-  only the suites for the files you touched can pass while a **barrel/`index`/sibling
-  suite that imports your changed module** fails to even load — a new import you added
-  pulls an unmocked native/heavy dep into that suite's graph. corgi gives you the
-  resolved env, so the full suite is cheap: `corgi test --changed --base <base>` runs
-  each changed repo's whole `test` script (what CI runs) instead of cherry-picking
-  files; `--service <svc>` only when `--changed` finds nothing. If you must scope, also
-  run any suite that **imports** the module you changed. A green cherry-picked run
-  that skips the importer is how a red CI slips through.
-- **Run the repo's CI gate, not just tests — a coverage threshold counts.** Many repos
-  fail CI on a **per-changed-file coverage floor** (`test:cov:check` / `check-coverage`),
-  computed over the diff vs `<base>` and often **aggregated across all changed files** —
-  one 0%-covered file sinks the average. A green test run (scoped or full) says nothing
-  about coverage; run that exact gate before pushing (Phase 0 found it). Key trap:
-  **touching a previously-UNTESTED file makes it a "changed file"** subject to the floor —
-  a pure refactor/extraction into (or an edit of) an uncovered file fails the gate though
-  behaviour is unchanged. Editing an uncovered file = add a test for it, or don't touch it.
+- **Run what CI runs, not a cherry-picked subset.** `corgi test --changed --base <base>`
+  runs each changed repo's whole `test` script in its resolved env (`--service <svc>`
+  when `--changed` finds nothing), so the suites that import your changed module load
+  too. Then run the CI gate Phase 0 found: a coverage floor over changed files counts
+  an untested file you merely touched — add a test for it or leave it alone. A green
+  exit proves nothing unless the intended suites ran: check the test count is above
+  zero (a path filter containing `(…)` or `[…]` can match nothing and still pass).
 - **Edited a generated artifact's source → regen + commit the output** (even
   single-service). Touch an i18n catalog, GraphQL schema, snapshot, or other codegen
   input → run the repo's regen step (`generate:types`, `codegen`, …; in
@@ -754,7 +733,7 @@ never auto-install). No `.corgi/memory/` → offer to create; declined → skip.
   `depends_on_services`/`exports` graph (Phase 0). `corgi stop` when done. **Producer
   in a worktree?** `corgi run` serves its `path:` (main checkout) by default — add
   `--service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` to run the worktree's
-  code (Phase 3). Without the flag, implement the producer in place.
+  code (Phase 3).
 - Consumers regenerate, commit generated output, finish their slice.
 - **Merge order:** producer PR first, consumers after. State in spec + every PR body.
 
@@ -831,7 +810,7 @@ issue link.
   nothing you did, invent nothing you did not. Multi-repo → per PR, its own
   files. Before the `Deferred` list and the risk card.
 - **Run-locally line in the body** — the same one-paste
-  `corgi run --service-branch <svc>=<branch> … --with-deps` (Grouped report) so a
+  `corgi run --service-branch <svc>=<branch> … --with-deps` (Per-story lines) so a
   reviewer spins the branch up without hunting.
 - **`Deferred` in the body** — one line per deliberate shortcut from Phase 3
   (`<what> · ceiling: <limit> · revisit when: <trigger>`), and one line per thing
@@ -863,26 +842,17 @@ blocked/failed stories.
   `✗ review open — round <n>: stopped by user`.
 - Still **draft-only** — a clean review is not a merge, human flips to ready.
 
-### Grouped report (final output)
+### Per-story lines (under each ticket block of the report)
 
-`<subject>` = the PR/MR title **without** its trailing `[<issue-key>]` (Phase 5 puts
-the key in the title — don't print it twice). **No `(draft)` suffix.** One blank line
-between stories.
-
-- **Single-repo** → one line `[<issue-key>] <Service>: <subject>`, link directly
-  below.
-- **Multi-repo** → a **header `[<issue-key>] <story description>`**, then **one line
-  per repo: `<Service>: <link>`** — label and link on the SAME line. Subject lives in
-  the header; never repeat it per repo. No key repeated, no blank line between repos.
-- **No-ticket** → swap `[<issue-key>]` for a short `[<slug>]` tag so the lines still
-  group.
+The report is the `summary` skill's shape (Phase 6): one `## [<issue-key>] <title>`
+block per story, a table row per repo with the PR/MR as a markdown link and the state
+with its nuance. No-ticket → a short `[<slug>]` tag as the key. Under each block:
 - **Run line** → after the link(s), one **copy-paste** `corgi run` spinning up every
   impacted service on its branch via `--service-branch <svc>=<branch>` (corgi builds
   the worktree from the pushed branch — reviewer needs nothing else). Same `<branch>`
   across repos. `--with-deps` so deps/dbs come up. One `--service-branch` per service.
-  Skip blocked/failed. Needs the flag (`corgi run --help | grep service-branch`);
-  else `git checkout <branch> && corgi run --services <svc>`. Same line for you +
-  reviewer — the branch is committed now, no `--service-dir` variant needed.
+  Skip blocked/failed. Same line for you + reviewer — the branch is committed now,
+  no `--service-dir` variant needed.
   (`--service-dir` at the live impl worktree belongs to the Phase 3 gate, code still
   uncommitted.)
 - **Review hint** → after the link(s) per actionable (non-blocked) story, one line
@@ -921,21 +891,22 @@ between stories.
   https://github.com/<org>/api/pull/<n>
   ```
 
-```
-[ABC-123] web: Remove address step from mobile signup
-https://github.com/<org>/<repo>/pull/<n>
-risk 2/10 trivial · auto-approve: yes
-↳ review it: /corgi-review https://github.com/<org>/<repo>/pull/<n>
-▶ corgi run --service-branch web=feature/ABC-123/remove-address-step --with-deps
+Example (rendered as markdown, not fenced):
 
-[ABC-200] Add phone field to user
-api: https://github.com/<org>/api/pull/<n>
-web: https://github.com/<org>/web/pull/<n>
+```markdown
+## [ABC-200] Add phone field to user
+
+| Repo | PR | State |
+|---|---|---|
+| api | [#41](https://github.com/<org>/api/pull/41) | OPEN — draft, CI ✓ |
+| web | [#37](https://github.com/<org>/web/pull/37) | OPEN — draft, CI ✓ |
+
 risk 7/10 high · auto-approve: no — cross-service contract
-↳ review it: /corgi-review https://github.com/<org>/api/pull/<n> https://github.com/<org>/web/pull/<n>
+✓ review clean (1 round)
+↳ review it: /corgi-review https://github.com/<org>/api/pull/41 https://github.com/<org>/web/pull/37
 ▶ corgi run --with-deps --service-branch api=feature/ABC-200/user-phone --service-branch web=feature/ABC-200/user-phone
 
-[ABC-125] api: BLOCKED — which auth scope gates the endpoint?
+## [ABC-125] api — BLOCKED — which auth scope gates the endpoint?
 ```
 
 ### Then clean up the worktrees
@@ -971,9 +942,9 @@ Rules:
 
 ## Phase 6 — Report
 
-**The Grouped report's lines above ARE the report — render them, never a prose
-write-up around them.** A findings essay with tables is not a hand-back: nothing in
-it can be pasted anywhere.
+**The per-story lines above are the report's content — render them, never a prose
+write-up around them.** A findings essay is not a hand-back: nothing in it can be
+pasted anywhere.
 
 Hand the batch back in the **`summary`** skill's shape: one block per ticket, a table
 row per repo, the PR/MR as a markdown link, the state carrying its nuance (`MERGED ✓`,

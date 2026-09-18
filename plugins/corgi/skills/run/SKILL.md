@@ -118,8 +118,6 @@ Run a service from **code other than its compose `path:`** — a feature/PR bran
 an existing worktree dir — without touching the main checkout. Per-service,
 repeatable, `<svc>=<value>`, mixable (named svcs from branch/dir, the rest from
 compose `path:`); combine with `--detach`, `--with-deps`, `--services`.
-**Flag-existence guard** (newer flags): `corgi run --help | grep service-branch` —
-missing → no fallback; use `git checkout <branch> && corgi run --services <svc>`.
 
 - **Committed/pushed branch** — `--service-branch <svc>=<branch>`. corgi makes (or
   reuses) its **own non-destructive worktree** off that branch under

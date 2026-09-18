@@ -135,12 +135,6 @@ when present, else Maestro) → screenshot → look. Evidence before "works".
 - **Metro `--clear` while a dev client is connected** → `Requiring unknown module N` redbox
   on a lazy `import()` (async-chunk id desync). Usually stale — cold relaunch + one-two
   Maestro `tapOn: "Dismiss"` clears it to a healthy screen. Not a code bug.
-- **SceneKit / Metal shader-modifier failures render magenta at runtime, not xcodebuild.** A
-  clean prod build builds + ships a magenta board uncaught. Verify a native shader on a
-  sim/device before the store submit. Classic trigger: `#pragma arguments float3` + a KVC
-  uniform binding — hardcode colour literals instead.
-- **Programmatic `SCNParticleSystem` with no `particleImage` draws hard squares.** Set a
-  soft radial (white→transparent) puff texture → smoke/fire/splash read as round puffs.
 - **`expo-doctor` non-zero during a build usually benign** (peer-dep + RN-directory-metadata
   warnings) — doesn't fail the build or the submit.
 - **Native dep version/ABI skew → `DYLD Symbol missing` crash at launch.** A native module
@@ -167,47 +161,6 @@ when present, else Maestro) → screenshot → look. Evidence before "works".
   build … || (test -f ipa)` fallback masks failure too. `exit ${PIPESTATUS[0]}` after the
   pipe; trust ground truth (new IPA timestamp + "Submitted your app to App Store Connect"),
   never the exit code.
-- **Maestro can't flip a SwiftUI / `@expo/ui` Toggle by tapping its label** — label Text +
-  switch are separate elements. Tap the switch control (`point` on the row's right edge);
-  gate it with the `checked` selector (`when: notVisible: { id, checked: true }`) so it
-  flips only when off.
-- **A gesture-handler `Pressable` as the sized flex cell stretches its child — circle →
-  square.** RNGH `Pressable` doesn't hold a fixed pixel width the way a plain `View` does,
-  and an inline / dynamic width style (worse with React Compiler on) lets the child disc
-  grow to fill the cell → a "circle" renders as a rounded square — and often only after a
-  re-render (a freshly-toggled day) while the first-paint ones still look right. Fix: size
-  the cell with a plain `View` / static `StyleSheet` entry, keep the shape a fixed, centred
-  child, and mirror the screen's already-working sibling cell (e.g. the month-view DayCell)
-  instead of re-deriving sizes inline. `onLayout` on an RNGH Pressable is flaky too — put
-  it on a plain wrapper.
-- **Absolute-fill background behind a separately-centred label clips / offsets on iOS.** A
-  disc drawn as a `position:absolute` layer behind a sibling number can sit off-centre or
-  get clipped at the top on iOS (fine on Android). Fix: make it one in-flow element — a
-  fixed circle with the label inside it — so the cell centres the whole unit. (Keep an
-  absolute layer only for a shape that must bleed past the cell, like a joined period
-  pill.)
-- **A native 3D / Skia view (SceneKit, react-native-skia, a Metal/GL surface) inside a
-  react-navigation `formSheet` (`sheetAllowedDetents: "fitToContents"`) breaks RN layout for
-  its siblings.** A sibling box (a toggle row, a label) overlaps the native view no matter
-  the child order, a wrapper `View`, a fixed-height slot, or `position:absolute` — `maestro
-  hierarchy` shows the two `bounds` overlapping by tens of px (the sheet's content-fit
-  measure + the native view reporting no intrinsic box). Measure with `maestro hierarchy`
-  before reshuffling flex for an hour; clean separation may need the native view in its own
-  detent-sized container (or dropping the sibling). It renders fine on a plain (non-sheet)
-  screen — so it's the sheet, not your styles.
-- **Dismiss an iOS `formSheet` in Maestro with a grabber swipe-down, not a backdrop tap.**
-  The backdrop tap is racy (works once, misses the next — leaving the sheet open so the next
-  step fails); `swipe: { start: "50%,38%", end: "50%,97%", duration: 600 }` is reliable. And
-  in a capture sweep (open → `takeScreenshot` → dismiss → next), the screenshot can race the
-  present animation and silently grab the previous screen — the flow logs `COMPLETED` but the
-  PNG is the list behind the sheet. Read every captured frame; `COMPLETED` ≠ the right screen.
-- **To drive or screenshot a paywall, the product must be unowned** — tapping an owned premium
-  item usually equips it (no sheet opens), so a sweep silently captures the store grid instead.
-  Reset the purchases SDK's anonymous user to all-unowned by reinstalling the same build
-  (`simctl uninstall` + `simctl install <existing .app>` — also re-triggers onboarding, Skip
-  it; no rebuild needed). A sandbox/test SDK key (e.g. RevenueCat Test Store `test_…`) returns
-  SDK-configured prices, so set those to match prod to capture prod-looking paywalls without
-  waiting on store approval.
 - **Attach a dev client to Metro + recover a blank screen (Android).** Boot the emulator
   detached, `expo start --dev-client`, `adb reverse tcp:8081 tcp:8081`, then deep-link
   `<scheme>://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081` to attach and pull
@@ -246,24 +199,10 @@ when present, else Maestro) → screenshot → look. Evidence before "works".
   `xcrun simctl spawn booted defaults write <bundleId> RCT_jsLocation "localhost:<port>"`;
   Android `adb reverse tcp:<port> tcp:<port>` then the dev-client `?url=` deep link.
   Symptom = wrong-app bundle, not a code bug.
-- **Native `headerSearchBarOptions` (react-native-screens) on iOS 26 floats to the bottom by
-  default.** The default `placement: "automatic"` drops the search field to the bottom of the
-  screen, overlapping content (a UIKit root-screen toolbar-integration bug) → set
-  `placement: "stacked"` and it anchors below the title bar as expected (rn-screens forces
-  `allowToolbarIntegration:false` for stacked, which dodges the bug). These header/search
-  options are JS nav config → they hot-reload on an already-built dev client (no native
-  rebuild), so iterate the layout live on the sim. (`headerLargeTitle` can also render blank
-  in some expo-router setups — if it does on yours, draw the big title in-content instead of
-  fighting it; verify per-app, don't assume.) A documented "native X can't anchor / doesn't
-  work here" is often a stale, fixable conclusion — re-test the native option on-device first.
-- **"Search visible at rest and tucking on scroll" (Telegram-style) wants a working large
-  title; without one, drive it from JS.** `hideWhenScrolling: true` on its own leaves a
-  stacked search hidden at rest (pull-to-reveal). To show it at the top and hide it once the
-  list scrolls, keep `headerSearchBarOptions` mounted and remove it (set `undefined`) past a
-  scroll threshold — with hysteresis whose gap clears the search bar's own height, or the
-  layout shift from removing it bounces the offset back over the threshold (flicker loop).
-  Gate to iOS — a Material toolbar search icon (Android) is compact and shouldn't hide on
-  scroll.
+- **Framework- and app-specific traps** (SceneKit/Metal shaders and particles, RNGH
+  `Pressable` sizing, native views inside a `formSheet`, native header search on
+  recent iOS, paywall capture, SwiftUI toggles): `references/gotchas.md` — read it
+  when the screen uses one of those.
 
 ## Native extension targets (apple-targets widgets / App Clips)
 A widget / App Clip / share extension via `@bacons/apple-targets` is a second signed
@@ -307,82 +246,6 @@ on-device render gate it leans on. In short:
   build opens on a device. Install + open it once before trusting the ship; if it bounces,
   read the device crashlog (Console.app / Devices & Simulators → View Device Logs).
   `DYLD … Symbol not found` = native version skew (see Gotchas), not app code.
-
-## Red flags — stop
-- "Renders fine" no screenshot you opened → drive it, read it.
-- Ship a native shader/scene change straight to TestFlight, no sim render → magenta risk.
-- Treat a `Requiring unknown module` redbox as a code bug → stale Metro desync; reload + dismiss.
-- `bash -lc` for a pod / EAS build → visionos error coming; use a non-login shell.
-- Maestro flow via stdin, or Cyrillic `inputText` → write a flow file, use ASCII.
-- Hold a foreground shell through a 20-min build → background + poll the log.
-- Maestro `element not found` on a screen you know renders → a system dialog (iCloud
-  re-auth / permission) on top; dismiss the system button, not the app's.
-- `bash -c` non-login build but no `LANG` export → visionos gone but
-  `Encoding::CompatibilityError` coming; export `LANG=en_US.UTF-8` too.
-- New apple-targets extension + straight `--non-interactive` build → "Credentials not set
-  up"; do the one-time interactive `eas build --local` first.
-- eas says a capability "synced" on an extension but signing fails "doesn't support App
-  Group" → it's not on the identifier; enable on the portal identifier + recreate the profile.
-- Android `package com.<slug> does not exist` at compileJava → stale incremental
-  autolinking; `rm -rf android`, prebuild fresh.
-- Trust a "build completed" exit code → tee / Makefile `||` masks it; confirm a new IPA +
-  "Submitted".
-- `tapOn` a SwiftUI/@expo/ui switch's label does nothing → tap the switch control by point.
-- Launch a local iOS build without `df -h` → low disk kills pod install / archive mid-run
-  with a misleading error; free GBs first.
-- Maestro flow tapping from "home" after `launchApp` → it resumes the last screen;
-  deep-link or clearState to a known start.
-- Maestro web run stuck on a blank `data:,` tab (`CdpWebDriver.deviceInfo` NPE) → headed
-  mode handed off to the already-running system Chrome; rerun with `--headless`.
-- Native dep off the SDK's pinned versions (a `~` resolved it up) → `DYLD Symbol missing`
-  launch crash that builds + ships clean. Run the SDK version-alignment check; pin exact.
-- "Uploaded = done" with nobody opening the build → a launch-time version/ABI-skew crash
-  passes build + upload; install, open once, read the crashlog.
-- "Looks like a circle" from a full-frame screenshot → measure the node bounds + zoom-crop;
-  square discs, top-clipped shapes and off-centre numbers are invisible at scale.
-- RNGH `Pressable` sized with an inline / dynamic width (React Compiler on) → child stretches
-  (circle → square, often only after a re-render); size with a plain View + static StyleSheet,
-  fixed centred child.
-- `keyevent 4` left a blank screen → you backed out of the route, not a crash; re-launch the
-  dev-client URL to recover.
-- Black/blank frame, empty view tree, or Maestro `element not found` right after a
-  force-stop relaunch → still re-bundling over Metro (both platforms), not a crash; poll for
-  a known node or the Metro `Bundled` line before shooting or concluding.
-- Native search floating at the bottom of the screen on iOS 26 → default
-  `headerSearchBarOptions` placement; set `placement: "stacked"`. (Large title blank in your
-  setup? draw it in-content.) Re-test any stale "native X doesn't work here" on-device —
-  header/search options hot-reload, so it's cheap.
-- Design in the ticket but no side-by-side you opened → "matches design" is a guess; run the
-  `design-parity` pass (pull frames, capture the same states, composite, read).
-- A flagged / unseeded feature parked as "verify later" → force it on locally with a marked
-  constant, shoot it, revert; unverified UI is how a layout bug reaches users.
-- A mock/preview constant still in the diff at commit → strip it and grep; it ships the
-  feature to everyone.
-- Label text ending in "…", or a sentence with a double space / dangling preposition → not a
-  font issue: single-line sizing, uncounted padding, or a nil value formatted into the string.
-- Concluded a layout / shape change is fine from one platform → iOS and Android clip, centre
-  and size differently; spot-check shape-sensitive UI on the iOS sim too before ship.
-- Hand-building a custom cell / shape with inline, per-render sizes → mirror the screen's
-  existing working component and lift sizes into a static StyleSheet; inline / dynamic styles
-  are where shape bugs (and React Compiler surprises) hide.
-- Your edit isn't showing on device → you may be reading the old bundle; confirm a new Metro
-  `Bundled` line since the edit (force a reload if none) before concluding anything.
-- Edit still not loading after a prod build's `cleanPrebuild` → Metro detached; a touch /
-  relaunch won't do it — kill Metro + `expo start --dev-client --clear` for a full re-bundle.
-- An hour reshuffling flex because a toggle / label overlaps a native (SceneKit / Skia)
-  preview → it's the native-view-inside-`formSheet` layout limit; `maestro hierarchy` to
-  measure, give the native view its own detent-sized container or drop the sibling.
-- Backdrop-tap to dismiss a `formSheet` in a capture sweep → racy; grabber swipe-down, and
-  read every captured frame (a sweep can log `COMPLETED` yet grab the prior screen).
-- `tapOn` a premium item opens no paywall / it just equips → the product is owned; reset to
-  unowned (reinstall the same build) so the paywall sheet opens.
-- Verified a mutating tap by the optimistic frame only → re-open the screen / another view and
-  confirm the write persisted through the store, not just the instant paint.
-- Changed a setting and nothing downstream moved → a derived / auto value (an average, a
-  cached default, a value computed from the data) is overriding it; the setting isn't the
-  source of truth. True for any setting → output — units, theme, thresholds, sort order, a
-  prediction — so change-it-and-watch is the universal test; the fix is to read the setting
-  directly and demote the computed value to a suggestion.
 
 ## See also
 - **[`before-after`](../before-after/SKILL.md)** — when the change should be proven against

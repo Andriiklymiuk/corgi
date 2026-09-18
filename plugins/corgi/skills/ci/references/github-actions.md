@@ -20,7 +20,7 @@ on:
       corgi-version:
         required: false
         type: string
-        default: "1.20.32"   # ≥1.20.13 test --e2e; ≥1.20.31 gitlab template; ≥1.20.32 cache slots + ci init
+        default: "2.28.21"   # what `corgi ci init` wrote; keep it at the version the workspace runs
     secrets:
       REPO_TOKEN:
         required: true

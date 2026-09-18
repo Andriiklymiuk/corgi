@@ -10,12 +10,11 @@ GitLab repo selector `<repo>` = `<host>/<group>/<proj>` (or `OWNER/REPO`), passe
 with `-R` — no URL-encoding needed. The raw-API fallback (§3b) needs the
 URL-encoded project path `<group>%2F<proj>` plus `--hostname <host>` instead.
 
-## 0. Token efficiency (rtk) — without degrading review quality
+## 0. Output filters — the diff stays full-fidelity
 
-`rtk` (the user's token-killer proxy) filters/compresses command output. The Claude
-Code hook auto-rewrites `git`/`gh`/`glab` calls through it, so **metadata, status,
-and list calls get the savings for free** — safe, the review doesn't need those
-verbatim.
+Some machines route `git`/`gh`/`glab` through an output filter such as `rtk` (a
+hook rewrites the command; `command -v rtk` says whether it is installed). Filtered
+metadata, status and list output is fine — the review does not need those verbatim.
 
 **One hard exception: the diff that gets reviewed must be full-fidelity.** A
 filtered/truncated diff = a bad review. Fetch the reviewable diff **raw**, and
@@ -24,13 +23,13 @@ several commits arrives several times and its hunk headers number an intermediat
 state, not head. Anchoring off those lands comments on the wrong code:
 
 ```bash
-rtk proxy gh pr diff <n> --repo <owner>/<repo>                # raw, combined
-rtk proxy glab mr diff <n> --repo <repo> --color=never
+gh pr diff <n> --repo <owner>/<repo>                          # raw, combined
+glab mr diff <n> --repo <repo> --color=never
+# rtk installed → prefix `rtk proxy ` so the hook's filter is bypassed
 ```
 
-Rule of thumb: **rtk-filtered for everything except the diff content under review**
-(and any file body you must read in full). When in doubt about fidelity,
-`rtk proxy` it.
+Rule of thumb: filtered output for everything except the diff content under review
+(and any file body you must read in full).
 
 ---
 
@@ -48,10 +47,10 @@ gh pr view <n> --repo <owner>/<repo> \
 glab mr view <n> -R <repo> -F json    # read .diff_refs, .state, .draft, .source_branch, .commits from the JSON
 ```
 
-Reviewable diff (raw, see §0):
+Reviewable diff (raw, see §0 — `rtk proxy` prefix when rtk is installed):
 ```bash
-rtk proxy gh pr diff <n> --repo <owner>/<repo>
-rtk proxy glab mr diff <n> -R <repo> --color=never
+gh pr diff <n> --repo <owner>/<repo>
+glab mr diff <n> -R <repo> --color=never
 ```
 
 CI / pipeline status — cross-check for SKILL P3.6 ("is a build/test-fails finding real?"):
@@ -193,12 +192,12 @@ Removed-line: keep `new_path`+`old_path`, drop `new_line`, add `"old_line": <n>`
 For a complex body (multi-line ` ```suggestion `, backticks), write the JSON to a
 temp file and `--input file.json` rather than wrestling heredoc/shell quoting.
 
-**rtk caveat for POST calls.** The Claude Code hook auto-rewrites `glab`→`rtk glab`,
-whose wrapper passes through only a subset of flags — it can drop `--input`,
+**Output-filter caveat for POST calls (rtk installed).** A hook that rewrites
+`glab`→`rtk glab` passes through only a subset of flags — it can drop `--input`,
 `-H`, or nested `-F`, so a posting call routed through it lands malformed. For any
 **write** (`reviews`, `discussions`, `notes`, `--input` bodies) invoke the real
 binary directly (`$(command -v glab)` / full path) or `rtk proxy glab …`; don't
-rely on the auto-rewrite. Read/list/status calls through rtk are fine (§0).
+rely on the auto-rewrite. Read/list/status calls through the filter are fine (§0).
 
 ---
 

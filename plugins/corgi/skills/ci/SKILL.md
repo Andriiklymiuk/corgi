@@ -31,18 +31,11 @@ stack from the branches under review and drives real e2e against it.
 3. **Show the generated files and the edits before committing**, and say what a
    run will cost (wall clock, and that every participating PR triggers it).
 
-If the workspace predates `corgi ci init` (< 1.20.32), write the files by hand
-from `references/github-actions.md` / `references/gitlab-ci.md` instead.
-
 ## Before writing anything
 
-1. **`corgi run --help | grep -E 'feature|wait'`** and **`corgi init --help | grep depth`**.
-   Missing → the installed corgi predates these flags. Do **not** invent them; either
-   bump corgi, or fall back to the shell equivalents in `references/fallbacks.md`.
-   Also check `corgi test --help | grep e2e` and `corgi cache --help` — recent corgi
-   adds `corgi test --e2e` (runs the compose's `e2e:` block against the live stack)
-   and `corgi cache paths` (derives the CI cache plan from the compose file).
-   `corgi env check --help` working means the env-drift gate below is available too.
+1. **`corgi upd`.** The pipeline uses `corgi run --feature/--wait`, `corgi init
+   --depth`, `corgi test --e2e`, `corgi cache paths` and `corgi env check`; run the
+   current corgi locally and pin the same version in the job (Non-negotiables).
 2. **Read `corgi-compose.yml`.** Count `db_services` (each is containers + disk) and
    services. Note every `required:` tool and which are human-only. Check for a
    top-level `e2e:` block — if there is one, the e2e step is `corgi test --e2e`,
@@ -111,14 +104,12 @@ the first request, thousands of lines from the cause.
 **A failed `beforeStart` fails the run — do not grep the logs for it.** corgi
 still lets the rest of the stack come up, but `corgi run --wait` returns the
 failure immediately instead of waiting out the readiness timeout, and a run
-without `--wait` now exits non-zero. Older pipelines carry a
-`grep -rh "aborting beforeStart" .corgi/corgi_services/.logs/ && exit 1` step from
-when that was not true; it can never fire after `--wait` and should be deleted.
-Requires corgi ≥ 1.20.10 for the `--wait` half, ≥ 1.20.32 for the exit status.
+without `--wait` exits non-zero. A `grep "aborting beforeStart" … && exit 1` step
+can never fire after `--wait`; delete it.
 
 **A compose that works on macOS can die on Linux.** `/bin/sh` is bash-like on
-macOS and dash on Linux (fixed in corgi 1.20.9, which prefers bash — but a repo
-pinning an older corgi still needs POSIX `.` rather than `source`).
+macOS and dash on Linux. corgi runs steps with bash when it is on PATH; a runner
+image without bash still needs POSIX `.` rather than `source` in `beforeStart`.
 
 **Env vars validated at construction crash the service, not the request.** An
 empty credential threw inside a mail transport's constructor, so the service
