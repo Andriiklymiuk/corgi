@@ -243,6 +243,9 @@ func (d *Daemon) startWatches(ctx context.Context) {
 	onHot = func() {
 		go d.notifyAttentionAt("corgi agent", "the laptop is hot — no fix starts until it cools", "", "")
 	}
+	onLowDisk = func() {
+		go d.notifyAttentionAt("corgi agent", "under 10 GB of disk left — no fix starts until there is room (corgi agent watch prune, docker system prune)", "", "")
+	}
 	d.watchers = map[string]*watch.Watch{}
 	d.fixBusy = map[string]chan struct{}{}
 	for _, spec := range d.Watches {
@@ -631,6 +634,9 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	}
 	if tooHot(now) {
 		return "too hot"
+	}
+	if lowDisk(now, firstNonEmpty(spec.AgentDir, ".")) {
+		return "low disk"
 	}
 	if pct, ok := limitUsed(spec.ConfigDir, now); ok {
 		if pct >= limitRefusePercent {

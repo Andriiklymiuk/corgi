@@ -7,12 +7,14 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 )
 
 const (
 	hotSpeedLimit = 60
-	heatCacheFor  = time.Minute
+	lowDiskGB     = 10
+	gateCacheFor  = time.Minute
 )
 
 var speedLimitLine = regexp.MustCompile(`CPU_Speed_Limit\s*=\s*(\d+)`)
@@ -37,37 +39,67 @@ var readThermal = func() (int, bool) {
 	return n, err == nil
 }
 
-var onHot func()
+// Worktrees and images pile up over weeks with nobody pruning by hand.
+var readFreeGB = func(dir string) (int, bool) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
+		return 0, false
+	}
+	return int(uint64(st.Bavail) * uint64(st.Bsize) / (1 << 30)), true
+}
 
-var heat struct {
+var onHot, onLowDisk func()
+
+// A gate holds new runs while a machine condition lasts, re-reads it at most
+// once a minute, and tells the person once per stretch.
+type gate struct {
 	mu      sync.Mutex
 	checked time.Time
-	hot     bool
+	closed  bool
 	told    bool
 }
 
-func resetHeat() {
-	heat.mu.Lock()
-	defer heat.mu.Unlock()
-	heat.checked, heat.hot, heat.told = time.Time{}, false, false
+func (g *gate) reset() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.checked, g.closed, g.told = time.Time{}, false, false
 }
 
-func tooHot(now time.Time) bool {
-	heat.mu.Lock()
-	defer heat.mu.Unlock()
-	if !heat.checked.IsZero() && now.Sub(heat.checked) < heatCacheFor {
-		return heat.hot
+func (g *gate) holds(now time.Time, read func() bool, tell func()) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.checked.IsZero() && now.Sub(g.checked) < gateCacheFor {
+		return g.closed
 	}
-	heat.checked = now
-	limit, known := readThermal()
-	heat.hot = known && limit < hotSpeedLimit
-	if !heat.hot {
-		heat.told = false
+	g.checked = now
+	g.closed = read()
+	if !g.closed {
+		g.told = false
 		return false
 	}
-	if !heat.told && onHot != nil {
-		heat.told = true
-		onHot()
+	if !g.told && tell != nil {
+		g.told = true
+		tell()
 	}
 	return true
+}
+
+var heat, disk gate
+
+func resetHeat() { heat.reset() }
+
+func resetDisk() { disk.reset() }
+
+func tooHot(now time.Time) bool {
+	return heat.holds(now, func() bool {
+		limit, known := readThermal()
+		return known && limit < hotSpeedLimit
+	}, onHot)
+}
+
+func lowDisk(now time.Time, dir string) bool {
+	return disk.holds(now, func() bool {
+		free, known := readFreeGB(dir)
+		return known && free < lowDiskGB
+	}, onLowDisk)
 }

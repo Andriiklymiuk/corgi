@@ -1555,6 +1555,8 @@ While you are away:
 - **Heat.** A laptop in a bag throttles itself. While macOS reports a CPU
   speed limit under 60%, no fix starts; you get one push, and runs resume when
   it cools.
+- **Disk.** Under 10 GB free, no fix starts either — worktrees and images
+  pile up over weeks — with one push naming the prune commands.
 - **A trip cap.** `corgi agent watch enable --max-total 5` lets a workspace
   fix at most five tickets from now on, on top of the hourly and daily caps;
   run it again to reset the count, `--max-total 0` clears it.

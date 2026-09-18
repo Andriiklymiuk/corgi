@@ -49,3 +49,24 @@ func TestFixDeferralTooHot(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestLowDiskGate(t *testing.T) {
+	old := readFreeGB
+	defer func() { readFreeGB = old; onLowDisk = nil; resetDisk() }()
+	told := 0
+	onLowDisk = func() { told++ }
+	readFreeGB = func(string) (int, bool) { return 3, true }
+	resetDisk()
+	now := time.Now()
+	if !lowDisk(now, "/x") || told != 1 {
+		t.Fatalf("3 GB is low: told=%d", told)
+	}
+	log := watch.LoadFixLog(t.TempDir())
+	if got := fixDeferral(WatchSpec{Workspace: "w", AgentDir: "/x"}, log, now); got != "low disk" {
+		t.Fatalf("got %q", got)
+	}
+	readFreeGB = func(string) (int, bool) { return 80, true }
+	if lowDisk(now.Add(2*time.Minute), "/x") {
+		t.Fatal("room again")
+	}
+}
