@@ -1,6 +1,6 @@
 ---
 name: ci
-description: Use when the user wants the corgi stack in CI or end-to-end tests across repos: "set up CI for this workspace", "wire this up to GitHub Actions/GitLab CI", "run the stack in CI", "full-stack e2e on the PR", "each repo's CI passes but the combination breaks". NOT for compose authoring, local runs, broken stacks, or PR review.
+description: "Use when the user wants the corgi stack in CI or end-to-end tests across repos: \"set up CI for this workspace\", \"wire this up to GitHub Actions/GitLab CI\", \"run the stack in CI\", \"full-stack e2e on the PR\", \"each repo's CI passes but the combination breaks\". NOT for compose authoring, local runs, broken stacks, or PR review."
 ---
 
 # Corgi in CI

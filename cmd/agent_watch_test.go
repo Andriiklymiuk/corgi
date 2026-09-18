@@ -692,3 +692,22 @@ func TestWatchEnableStoresTheSlackBlockAndBuildsTheSource(t *testing.T) {
 		t.Fatal("a workspace with a slack block and a token must poll slack")
 	}
 }
+
+func TestWatchStatusNamesTheChatBlock(t *testing.T) {
+	spec := daemon.WatchSpec{Workspace: "acme", Chat: &config.SlackWatch{
+		Mentions: true, ReviewChannels: []string{"#code-review"}, RunFrom: []string{"@vincent"},
+	}}
+	got := chatStatusLine(spec)
+	for _, want := range []string{"mentions", "#code-review", "@vincent"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("status line %q must name %q", got, want)
+		}
+	}
+	quiet := daemon.WatchSpec{Workspace: "acme", Chat: &config.SlackWatch{Mentions: true}}
+	if !strings.Contains(chatStatusLine(quiet), "no runs from chat") {
+		t.Errorf("a workspace nobody may start a run in should say so: %q", chatStatusLine(quiet))
+	}
+	if chatStatusLine(daemon.WatchSpec{Workspace: "acme"}) != "" {
+		t.Error("a workspace with no chat block prints no chat line")
+	}
+}

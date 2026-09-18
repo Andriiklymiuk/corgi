@@ -1,6 +1,6 @@
 ---
 name: prep-pr
-description: Use when the user says "prep my PR", "get this ready for review", "open a PR for this branch". One entry point: complexity gate, `corgi test --changed`, risk score, then the draft PR. NOT for reviewing someone else's PR (review).
+description: "Use when the user says \"prep my PR\", \"get this ready for review\", \"open a PR for this branch\". One entry point: complexity gate, `corgi test --changed`, risk score, then the draft PR. NOT for reviewing someone else's PR (review)."
 ---
 
 # Prep PR

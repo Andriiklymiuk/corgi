@@ -654,6 +654,33 @@ agent directory, mode 0600, next to the machine-wide ones.
 	},
 }
 
+// chatStatusLine is a workspace's chat listening in one line; "" when it
+// listens to no chat at all.
+func chatStatusLine(spec daemon.WatchSpec) string {
+	c := spec.Chat
+	if c == nil {
+		return ""
+	}
+	var parts []string
+	if c.Mentions {
+		parts = append(parts, "mentions")
+	}
+	if len(c.Channels) > 0 {
+		parts = append(parts, strings.Join(c.Channels, " "))
+	}
+	if len(c.ReviewChannels) > 0 {
+		parts = append(parts, "reviews in "+strings.Join(c.ReviewChannels, " "))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	line := "slack: " + strings.Join(parts, " · ")
+	if len(c.RunFrom) > 0 {
+		return line + " · runs from " + strings.Join(c.RunFrom, " ")
+	}
+	return line + " · no runs from chat"
+}
+
 // withoutSource drops one name from a skipped list.
 func withoutSource(list []string, drop string) []string {
 	out := list[:0]
@@ -752,6 +779,9 @@ func printWatchedWorkspaces(specs []daemon.WatchSpec, fixes *watch.FixLog, now t
 			// Quiet hours hold the notification too, so a reporting watch
 			// has to say when it goes quiet or it looks broken in the evening.
 			fmt.Printf("  %-20s quiet %s — held until the window opens\n", "", s.Quiet)
+		}
+		if line := chatStatusLine(s); line != "" {
+			fmt.Printf("  %-20s %s\n", "", line)
 		}
 	}
 }

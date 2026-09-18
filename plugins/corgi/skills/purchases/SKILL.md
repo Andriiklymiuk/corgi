@@ -1,6 +1,6 @@
 ---
 name: purchases
-description: Use when managing In-App Purchases, store metadata, or RevenueCat for an Expo / React Native app: "set up the IAPs", "push the IAP review notes", "configure RevenueCat products", "add a premium pack / unlock", "manage non-consumables", "sync product ids across stores". NOT for the binary submit (ship skill) or device verification (mobile skill).
+description: "Use when managing In-App Purchases, store metadata, or RevenueCat for an Expo / React Native app: \"set up the IAPs\", \"push the IAP review notes\", \"configure RevenueCat products\", \"add a premium pack / unlock\", \"manage non-consumables\", \"sync product ids across stores\". NOT for the binary submit (ship skill) or device verification (mobile skill)."
 ---
 
 # Manage IAPs + store purchase metadata

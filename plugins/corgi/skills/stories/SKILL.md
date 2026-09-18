@@ -1,6 +1,6 @@
 ---
 name: stories
-description: Use when the user wants to ship work across a corgi-compose workspace: tracker issues named by key (ABC-123), by tracker LINK (linear.app/…/issue/…, …atlassian.net/browse/…), or by several links or keys at once — "do this story <link>", "do <link>, <link>", "do these stories", "implement these tickets"; a bare tracker link with no verb means this too. Also a free-text feature ("build a feature that ...", "add X across the services"), or "what should I work on", "grab some agent tickets". NOT for authoring or running compose, or one-line edits.
+description: "Use when the user wants to ship work across a corgi-compose workspace: tracker issues named by key (ABC-123), by tracker LINK (linear.app/…/issue/…, …atlassian.net/browse/…), or by several links or keys at once — \"do this story <link>\", \"do <link>, <link>\", \"do these stories\", \"implement these tickets\"; a bare tracker link with no verb means this too. Also a free-text feature (\"build a feature that ...\", \"add X across the services\"), or \"what should I work on\", \"grab some agent tickets\". NOT for authoring or running compose, or one-line edits."
 ---
 
 # Corgi stories

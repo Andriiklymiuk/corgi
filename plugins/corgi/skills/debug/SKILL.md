@@ -1,6 +1,6 @@
 ---
 name: debug
-description: Use to diagnose a corgi stack or pull runtime data for a bug: a service won't start ("debug the stack", "the api is down"), a ticket needs logs ("pull the staging logs", "check the 500s"), red CI ("why is CI red"), or behaviour differs by environment ("works on staging not prod"). NOT for compose authoring or PR review.
+description: "Use to diagnose a corgi stack or pull runtime data for a bug: a service won't start (\"debug the stack\", \"the api is down\"), a ticket needs logs (\"pull the staging logs\", \"check the 500s\"), red CI (\"why is CI red\"), or behaviour differs by environment (\"works on staging not prod\"). NOT for compose authoring or PR review."
 ---
 
 # Corgi debug

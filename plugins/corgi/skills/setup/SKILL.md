@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Use when the user wants corgi set up end to end: "set up corgi for me", "I just installed corgi, what now", "get corgi agent running", "connect my phone, Telegram, menu bar", "connect Jira, Linear, GitHub to corgi", "onboard me to corgi". Runs every step a program can; lists the manual clicks. NOT for authoring compose or running the stack.
+description: "Use when the user wants corgi set up end to end: \"set up corgi for me\", \"I just installed corgi, what now\", \"get corgi agent running\", \"connect my phone, Telegram, menu bar\", \"connect Jira, Linear, GitHub to corgi\", \"onboard me to corgi\". Runs every step a program can; lists the manual clicks. NOT for authoring compose or running the stack."
 ---
 
 # Set corgi up, end to end
@@ -139,15 +139,30 @@ The Claude Code panel uses its own `cmd+d`.
 
 ### 7. The tracker and code-host watch (optional)
 
-Ask whether they want the daemon to notice new bugs and PR reviews while
-they are away. Then, per service they use, get the token into the command
-(never into the chat):
+Ask whether they want the daemon to notice things while they are away, and
+**offer the list rather than asking an open question** — people answer
+"which of these do you use?" far better than "what do you want watched?".
+Say it as a menu and take whatever they name:
+
+> corgi can watch these, and you pick the ones you actually use:
+>
+> - **Linear** or **Jira** — new tickets assigned to you, new comments on them
+> - **GitHub** or **GitLab** — reviews and comments on your pull requests, requests to review someone else's, red builds
+> - **Slack** — someone naming you or writing to you directly; a channel you want every message of; a code-review channel where pull requests get posted
+>
+> Which do you use? I only need a token for the ones you name.
+
+Then take only those, in one pass. Do not ask for a token for a service they
+did not name, and do not run a second round of questions per service: the
+table below has everything each one needs. Get the token into the command,
+never into the chat:
 
 | service | where the token comes from | command |
 |---|---|---|
 | Linear | linear.app → Settings → Security & access → Personal API keys → New key (read is enough) | `corgi agent watch auth linear --token lin_api_…` or `LINEAR_API_KEY` |
 | Jira Cloud | id.atlassian.com → Security → API tokens → **Create API token**, the plain one. Not "create with scopes": corgi authenticates with Basic auth (email + token), which a scoped bearer token is not. Plus the site URL and the login email | `corgi agent watch auth jira --url https://you.atlassian.net --email me@x.io --token …` or `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
 | GitHub | `gh auth login` is enough (the watch reads the notifications feed through it); or a fine-grained PAT with Notifications read | nothing, or `corgi agent watch auth github --token ghp_…` / `GITHUB_TOKEN` |
+| Slack | api.slack.com/apps → your app → OAuth & Permissions → **User Token Scopes**: `search:read`, `channels:history`, `groups:history`, `im:history`, `mpim:history`, `channels:read`, `groups:read`, `im:read`, `mpim:read`, `users:read`, `chat:write`, `reactions:write` → Install to workspace → copy the **User OAuth Token** (`xoxp-`). A bot token (`xoxb-`, scopes `chat:write`, `reactions:write`, `chat:write.public`) is optional and only changes whose name a reply carries | `corgi agent watch auth slack --token xoxp-… [--bot xoxb-…]` or `SLACK_USER_TOKEN`, `SLACK_BOT_TOKEN` |
 | GitLab | Preferences → Access tokens → **legacy** token, scope `read_api` only. A fine-grained token is scoped to groups and projects; corgi reads `/api/v4/todos`, which belongs to the user and sits outside that scoping. Self-hosted needs the URL | `corgi agent watch auth gitlab --token glpat-… --url https://gitlab.example.com` or `GITLAB_TOKEN`, `GITLAB_URL` |
 
 Those are the machine-wide tokens: every watched workspace falls back to
@@ -175,6 +190,21 @@ corgi agent watch enable --tracker linear --project ABC --prs --action fix   # a
 corgi agent watch run --dry-run                                      # prove the tokens work: no bookmark moved
 corgi agent restart
 corgi agent watch                                                    # tokens per workspace, watched workspaces, last polls
+```
+
+For Slack, ask two more things and nothing else:
+
+- **"Where do people post pull requests for review?"** → `--review-channel '#code-review'`
+- **"Who may set corgi working by mentioning you?"** → `--run-from @vincent @lena`
+
+The second is a security question wearing a friendly hat: everyone in a
+channel can type a mention, so the answer is a list of named people and the
+default is nobody. Never suggest a wildcard, and never fill it in from the
+channel's membership.
+
+```bash
+corgi agent watch enable --mentions --run-from @vincent
+corgi agent watch enable --review-channel '#code-review' --action fix --auto-for reviews
 ```
 
 **Always set `--project` and `--repos`.** They are what routes an event to a

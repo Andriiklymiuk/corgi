@@ -1,6 +1,6 @@
 ---
 name: summary
-description: Use when someone asks where a batch of work stands: "give me a summary", "what's left", "status of all the MRs", "what did we ship today", "recap", "which PRs are still open". Reads the live state of every PR/MR and ticket the session touched and reports it grouped by ticket, with clickable links. NOT a code review (review), NOT a standup post for someone else (standup).
+description: "Use when someone asks where a batch of work stands: \"give me a summary\", \"what's left\", \"status of all the MRs\", \"what did we ship today\", \"recap\", \"which PRs are still open\". Reads the live state of every PR/MR and ticket the session touched and reports it grouped by ticket, with clickable links. NOT a code review (review), NOT a standup post for someone else (standup)."
 ---
 
 # Where the batch actually stands

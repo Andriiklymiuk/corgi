@@ -1,6 +1,6 @@
 ---
 name: memory
-description: The memory convention: a committed `.corgi/memory/` store of decisions, incidents, and recurring fixes that suggest, debug, stories, and review read before acting and append to afterwards. Use to read prior decisions, record a decision or an incident fix, or propose a recurring fix as a skill. Read before act, confirm before write, never secrets.
+description: "The memory convention: a committed `.corgi/memory/` store of decisions, incidents, and recurring fixes that suggest, debug, stories, and review read before acting and append to afterwards. Use to read prior decisions, record a decision or an incident fix, or propose a recurring fix as a skill. Read before act, confirm before write, never secrets."
 ---
 
 # Corgi workspace memory
