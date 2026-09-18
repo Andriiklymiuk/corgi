@@ -44,6 +44,7 @@ type WatchSpec struct {
 	Interval        time.Duration
 	Action          string
 	DoneWhen        []string
+	PlanReview      string
 	Approve         bool
 	Lease           bool
 	ReviewStatus    string
