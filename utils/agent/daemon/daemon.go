@@ -62,6 +62,9 @@ type Daemon struct {
 	limitWatch      map[string]bool
 	LiftGrace       time.Duration
 
+	PulseURL   string
+	PulseEvery time.Duration
+
 	Watches     []WatchSpec
 	watchState  *watch.State
 	watchers    map[string]*watch.Watch
@@ -349,6 +352,9 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	reapDone := make(chan struct{})
 	go func() { defer close(reapDone); d.reapSessions(ctx) }()
 	defer func() { <-reapDone }()
+	pulseDone := make(chan struct{})
+	go func() { defer close(pulseDone); d.pulse(ctx) }()
+	defer func() { <-pulseDone }()
 
 	ticker := time.NewTicker(d.pollInterval(d.CommandTick))
 	defer ticker.Stop()

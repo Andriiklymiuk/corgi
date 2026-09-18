@@ -137,6 +137,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		d.Sessions.AutoContinue = user.AutoContinue
 		supervisor.KeepDisplay = user.KeepDisplay
 		d.SessionCap = user.SessionCap
+		d.PulseURL = user.PulseUrl
 	}
 	d.AccountDirs = func() []string {
 		profiles, err := loadProfiles(dir)
