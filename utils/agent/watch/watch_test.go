@@ -308,7 +308,7 @@ func TestParseHooks(t *testing.T) {
 
 	// A bot's comment on my pull request — Linear's link, a coverage
 	// report — is not a person waiting: the webhook drops it like the poller.
-	botComment := `{"action":"created","repository":{"full_name":"acme/api"},"issue":{"number":12,"title":"Referrals","html_url":"https://github.com/acme/api/pull/12","user":{"login":"andrii"},"pull_request":{}},"comment":{"id":77,"body":"HUM-1470 Meta add tracker app","created_at":"2026-09-09T10:00:00Z","user":{"login":"linear-code[bot]","type":"Bot"}}}`
+	botComment := `{"action":"created","repository":{"full_name":"acme/api"},"issue":{"number":12,"title":"Referrals","html_url":"https://github.com/acme/api/pull/12","user":{"login":"andrii"},"pull_request":{}},"comment":{"id":77,"body":"ABC-99 Add a tracker link","created_at":"2026-09-09T10:00:00Z","user":{"login":"linear-code[bot]","type":"Bot"}}}`
 	r.Header.Set("X-GitHub-Event", "issue_comment")
 	if events, _ := ParseHook("github", r, []byte(botComment), "andrii"); len(events) != 0 {
 		t.Fatalf("a bot's comment is not news: %+v", events)
@@ -472,8 +472,8 @@ func TestAnAsleepWatchDoesNotPollUntilNudged(t *testing.T) {
 }
 
 func TestRulesOnChatEvents(t *testing.T) {
-	mention := Event{Kind: KindChatMention, Ref: "slack-1726000000", Author: "@lena", Body: "can you look at this", Mine: true}
-	message := Event{Kind: KindChatMessage, Ref: "slack-1726000001", Author: "@tom", Body: "deploying now", State: "#incidents"}
+	mention := Event{Kind: KindChatMention, Ref: "slack-1726000000", Author: "@reviewer", Body: "can you look at this", Mine: true}
+	message := Event{Kind: KindChatMessage, Ref: "slack-1726000001", Author: "@someone", Body: "deploying now", State: "#incidents"}
 
 	off := Rules{Enabled: true}
 	if off.Why(mention) == "" {
@@ -508,12 +508,12 @@ func TestRulesOnChatEvents(t *testing.T) {
 		t.Error("a bot's mention needs --bots")
 	}
 
-	waiting := Rules{Enabled: true, Mentions: true, From: []string{"lena"}}
+	waiting := Rules{Enabled: true, Mentions: true, From: []string{"reviewer"}}
 	if waiting.Why(mention) != "" {
-		t.Error("from-list should take lena's mention")
+		t.Error("from-list should take reviewer's mention")
 	}
 	other := mention
-	other.Author = "@tom"
+	other.Author = "@someone"
 	if waiting.Why(other) == "" {
 		t.Error("from-list should refuse tom's mention")
 	}

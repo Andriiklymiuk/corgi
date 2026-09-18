@@ -50,7 +50,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 		mcp.WithString("text", mcp.Description("What to say")),
 		mcp.WithString("to", mcp.Description("#channel, @handle, or a channel id")),
 		mcp.WithString("reply", mcp.Description("Event key to answer (slack:<channel>:<ts>)")),
-		mcp.WithString("as", mcp.Description("bot or me")),
+		mcp.WithString("as", mcp.Description("bot. A session cannot post under the user's own name; leave this out and the workspace's replyAs decides")),
 		mcp.WithString("react", mcp.Description("Emoji to add to the message being answered, e.g. white_check_mark")),
 		mcp.WithString("workspace", mcp.Description("Workspace whose token and defaults to use")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {

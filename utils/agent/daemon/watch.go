@@ -635,6 +635,12 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 // start it (retryDeferred) or someone runs `corgi agent watch run`.
 func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) string {
 	now := time.Now()
+	// Checked again here, not only where the event arrived: a deferred run
+	// can start hours later, and by then the trust list may have changed.
+	if why := chatRunRefusal(spec, e); why != "" {
+		d.watchState.Fixes.DropDeferred(e.Key)
+		return "not started: " + why
+	}
 	if why := d.stillWorthFixing(ctx, spec, e); why != "" {
 		utils.Infof("agent: watch %s: not fixing %s: %s\n", spec.Workspace, e.Ref, why)
 		return "not started: " + why

@@ -156,10 +156,14 @@ func (s *Slack) conversations(ctx context.Context) ([]slackConversation, error) 
 }
 
 type slackMatch struct {
-	TS        string `json:"ts"`
-	Text      string `json:"text"`
-	User      string `json:"user"`
+	TS   string `json:"ts"`
+	Text string `json:"text"`
+	User string `json:"user"`
+	// A search hit for a bot's message carries username and bot_id rather
+	// than a user, so the flag has to be read here as well as in history.
 	Username  string `json:"username"`
+	BotID     string `json:"bot_id"`
+	Subtype   string `json:"subtype"`
 	Permalink string `json:"permalink"`
 	Channel   struct {
 		ID   string `json:"id"`
@@ -212,7 +216,8 @@ func (s *Slack) mentions(ctx context.Context, cursor Cursor, me, team string) ([
 			newest = m.TS
 		}
 		events = append(events, s.event(ctx, cursor,
-			slackMessage{User: m.User, Text: m.Text, TS: m.TS, ThreadTS: threadFromPermalink(m.Permalink)},
+			slackMessage{User: m.User, BotID: m.BotID, Subtype: m.Subtype, Text: m.Text,
+				TS: m.TS, ThreadTS: threadFromPermalink(m.Permalink)},
 			slackConversation{ID: m.Channel.ID, Name: m.Channel.Name}, me, team, KindChatMention))
 	}
 	cursor["search"] = newest

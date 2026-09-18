@@ -26,11 +26,11 @@ func chatRunRefusal(spec WatchSpec, e watch.Event) string {
 	if e.Self {
 		return "I wrote it"
 	}
-	if spec.Chat == nil || len(spec.Chat.RunFrom) == 0 {
-		return "nobody may start a run from chat here (corgi agent watch enable --run-from @someone)"
+	if spec.Chat == nil || len(spec.Chat.Trust) == 0 {
+		return "nobody here is trusted to start a run from chat (corgi agent watch enable --trust @someone)"
 	}
 	if !spec.Chat.MayRun(e.Author) {
-		return fmt.Sprintf("%s is not on the --run-from list", firstNonEmpty(e.Author, "whoever wrote it"))
+		return fmt.Sprintf("%s is not trusted to start a run here (--trust)", firstNonEmpty(e.Author, "whoever wrote it"))
 	}
 	return ""
 }
@@ -41,7 +41,7 @@ func chatPrompt(e watch.Event) string {
 	who := firstNonEmpty(e.Author, "a colleague")
 	where := firstNonEmpty(e.State, "chat")
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s wrote in %s on Slack and named you:\n\n<<<\n%s\n>>>\n\n", who, where, strings.TrimSpace(e.Body))
+	fmt.Fprintf(&b, "%s wrote in %s on Slack and named you:\n\n<<<\n%s\n>>>\n\n", who, where, fenced(e.Body))
 	if len(e.Links) > 0 {
 		b.WriteString("The pull requests this thread is about:\n")
 		for _, l := range e.Links {
@@ -59,6 +59,14 @@ func chatPrompt(e watch.Event) string {
 			". They are not your branches: do not push commits to them. /corgi:review " + strings.Join(e.Links, " "))
 	}
 	return b.String()
+}
+
+// fenced is a message body that cannot end the block it is quoted inside.
+// Anyone in a channel can type the closing marker and carry on writing, and
+// text after it would read as the run's own instructions rather than as
+// something a colleague said.
+func fenced(body string) string {
+	return strings.NewReplacer("<<<", "<‌<‌<", ">>>", ">‌>‌>").Replace(strings.TrimSpace(body))
 }
 
 // chatTargetFor is the message a reply answers.

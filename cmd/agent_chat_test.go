@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/mark3labs/mcp-go/mcp"
 	"strings"
 	"testing"
 
@@ -49,5 +50,21 @@ func TestChatTargetFromFlagsAndEvent(t *testing.T) {
 	}
 	if got.As != "bot" {
 		t.Fatalf("an explicit voice beats the workspace's: %+v", got)
+	}
+}
+
+func TestASessionCannotAskToSpeakAsThePerson(t *testing.T) {
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"text": "approved", "to": "#code-review", "as": "me"}
+
+	if _, err := mcpChatPost(req); err == nil {
+		t.Fatal("a session must not be able to put words in its owner's mouth")
+	} else if !strings.Contains(err.Error(), "under your name") {
+		t.Fatalf("the refusal should say why and what to do instead: %v", err)
+	}
+
+	req.Params.Arguments = map[string]any{"text": "approved", "as": "ME"}
+	if _, err := mcpChatPost(req); err == nil || !strings.Contains(err.Error(), "under your name") {
+		t.Fatalf("the check is on the meaning, not the spelling: %v", err)
 	}
 }

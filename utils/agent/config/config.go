@@ -268,10 +268,11 @@ type SlackWatch struct {
 	// ReviewChannels are where pull requests are posted for review: a post
 	// carrying links is one review to do, answered in its thread.
 	ReviewChannels []string `yaml:"reviewChannels,omitempty"`
-	// RunFrom names who may start an unattended run by mentioning me.
-	// Empty means nobody: a message from a channel is not an instruction,
-	// and a channel is open to whoever is in it.
-	RunFrom []string `yaml:"runFrom,omitempty"`
+	// Trust names the people whose mention may start an unattended run —
+	// the author of the message, not whoever it names. Empty means nobody:
+	// a channel is open to whoever is in it, so a message arriving from one
+	// is a request to look at, never an instruction to carry out.
+	Trust []string `yaml:"trust,omitempty"`
 	// PostTo is the default channel for `corgi agent chat post`.
 	PostTo string `yaml:"postTo,omitempty"`
 	// ReplyAs is bot or me; empty picks the bot when there is a bot token.
@@ -280,14 +281,14 @@ type SlackWatch struct {
 
 // MayRun says whether this person's mention may start an unattended run.
 func (s *SlackWatch) MayRun(author string) bool {
-	if s == nil || len(s.RunFrom) == 0 {
+	if s == nil || len(s.Trust) == 0 {
 		return false
 	}
 	who := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(author), "@"))
 	if who == "" {
 		return false
 	}
-	for _, w := range s.RunFrom {
+	for _, w := range s.Trust {
 		if strings.ToLower(strings.TrimPrefix(strings.TrimSpace(w), "@")) == who {
 			return true
 		}
