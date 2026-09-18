@@ -91,30 +91,31 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchJSON(w, map[string]any{"workspaces": list})
 	case http.MethodPost:
 		var req struct {
-			Workspace string    `json:"workspace"`
-			Enabled   *bool     `json:"enabled"`
-			Action    *string   `json:"action"`
-			Comments  *bool     `json:"comments"`
-			PRs       *bool     `json:"prs"`
-			Reviews   *bool     `json:"reviews"`
-			CI        *bool     `json:"ci"`
-			Isolate   *bool     `json:"isolate"`
-			Slots     *int      `json:"slots"`
-			Quiet     *string   `json:"quiet"`
-			DaysOff   *[]string `json:"daysOff"`
-			Labels    *[]string `json:"labels"`
-			AutoMerge *bool     `json:"autoMerge"`
-			Approve   *bool     `json:"approve"`
-			HandOver  *bool     `json:"handOver"`
-			AutoAllow *string   `json:"autoAllow"`
-			DoneWhen  *[]string `json:"doneWhen"`
-			CompactAt *int      `json:"compactAt"`
-			Rebase    *bool     `json:"rebase"`
-			Lessons   *bool     `json:"lessons"`
-			AutoCarry *bool     `json:"autoCarry"`
-			RerunCI   *bool     `json:"rerunCI"`
-			Silent    *bool     `json:"silent"`
-			Headless  *bool     `json:"headless"`
+			Workspace  string    `json:"workspace"`
+			Enabled    *bool     `json:"enabled"`
+			Action     *string   `json:"action"`
+			Comments   *bool     `json:"comments"`
+			PRs        *bool     `json:"prs"`
+			Reviews    *bool     `json:"reviews"`
+			CI         *bool     `json:"ci"`
+			Isolate    *bool     `json:"isolate"`
+			Slots      *int      `json:"slots"`
+			Quiet      *string   `json:"quiet"`
+			DaysOff    *[]string `json:"daysOff"`
+			Labels     *[]string `json:"labels"`
+			AutoMerge  *bool     `json:"autoMerge"`
+			Approve    *bool     `json:"approve"`
+			HandOver   *bool     `json:"handOver"`
+			AutoAllow  *string   `json:"autoAllow"`
+			DoneWhen   *[]string `json:"doneWhen"`
+			CompactAt  *int      `json:"compactAt"`
+			Rebase     *bool     `json:"rebase"`
+			Lessons    *bool     `json:"lessons"`
+			AutoCarry  *bool     `json:"autoCarry"`
+			RerunCI    *bool     `json:"rerunCI"`
+			Silent     *bool     `json:"silent"`
+			Headless   *bool     `json:"headless"`
+			PlanReview *string   `json:"planReview"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -228,6 +229,14 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Headless != nil {
 			wc.Headless = *req.Headless
+		}
+		if req.PlanReview != nil {
+			policy, err := config.ParsePlanReview(*req.PlanReview)
+			if err != nil {
+				writeLaunchError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			wc.PlanReview = policy
 		}
 		if req.CompactAt != nil {
 			if *req.CompactAt < 0 || *req.CompactAt > 100 {

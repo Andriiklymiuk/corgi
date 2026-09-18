@@ -44,6 +44,14 @@ func TestWatchSwitchesFromThePhone(t *testing.T) {
 	if rec.Code != 200 || !saved.Watch.Enabled || !saved.Watch.PRs || saved.Watch.Quiet != "23:00-07:00" || !saved.Restart {
 		t.Fatalf("the rest needs a restart: %d %s", rec.Code, rec.Body)
 	}
+	rec = post(launchWatchHandler, "/launch/watch", `{"workspace":"api","planReview":"risk>=7"}`)
+	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
+	if rec.Code != 200 || saved.Watch.PlanReview != "risk>=7" {
+		t.Fatalf("plan review from the phone: %d %s", rec.Code, rec.Body)
+	}
+	if rec = post(launchWatchHandler, "/launch/watch", `{"workspace":"api","planReview":"sometimes"}`); rec.Code != 400 {
+		t.Fatalf("a bad plan-review word must be refused: %d %s", rec.Code, rec.Body)
+	}
 	user, err := config.LoadUser(agentUserConfigPath(dir))
 	if err != nil || user.Workspaces["api"].Watch == nil || !user.Workspaces["api"].Watch.AutoMerge || !user.Workspaces["api"].Watch.PRs {
 		t.Fatalf("written to the config: %+v %v", user, err)
