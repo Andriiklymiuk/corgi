@@ -88,6 +88,21 @@ func LimitReset(errorType, message string) (bool, string) {
 	return ok, reset
 }
 
+// ModelLabel is the short name a person uses for a model id.
+func ModelLabel(id string) string {
+	switch {
+	case strings.Contains(id, "fable"):
+		return "Fable"
+	case strings.Contains(id, "opus"):
+		return "Opus"
+	case strings.Contains(id, "sonnet"):
+		return "Sonnet"
+	case strings.Contains(id, "haiku"):
+		return "Haiku"
+	}
+	return id
+}
+
 // StaleAfter is how long a working or done session may sit without an event
 // before it is called stale. A needs_input session never goes stale: it is
 // waiting on a person, and that is the fact worth keeping on the key.
@@ -116,7 +131,11 @@ const (
 // tool inputs, no transcript path.
 type Event struct {
 	// Name is the hook_event_name.
-	Name      string `json:"name"`
+	Name string `json:"name"`
+	// Model is the model the transcript's newest assistant turn ran on, as
+	// the hook read it. The board needs it because "the limit lifted" and
+	// "they switched model" look identical without it.
+	Model     string `json:"model,omitempty"`
 	SessionID string `json:"sessionId"`
 	Cwd       string `json:"cwd,omitempty"`
 	// ConfigDir is CLAUDE_CONFIG_DIR as the hook saw it; empty for the
@@ -256,6 +275,14 @@ type Session struct {
 	// Title is what the Claude Code panel tab is called, when known: how a
 	// window tells one chat tab from another.
 	Title string `json:"title,omitempty"`
+	// Model is what this session is running on now.
+	Model string `json:"model,omitempty"`
+	// ResumedBy says what took a limited session back to work: "clock" when
+	// the runtime picked the turn up by itself, "person" when someone typed.
+	// A person typing is not a limit lifting — they may have switched model,
+	// or account, or simply waited — and they were at the keyboard, so it is
+	// not news either.
+	ResumedBy string `json:"resumedBy,omitempty"`
 	// Note is the owner's own line under the label (`corgi agent note`).
 	// Kept until dismissed or cleared.
 	Note string `json:"note,omitempty"`

@@ -1020,3 +1020,75 @@ func TestOnTransitionSeesEveryChange(t *testing.T) {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
+
+func TestTheModelTravelsWithTheSessionAndSaysWhoResumedIt(t *testing.T) {
+	r := newTestRegistry(t)
+
+	start := ev("SessionStart", "s1", 0)
+	start.Model = "claude-fable-5-1"
+	r.Apply(start)
+
+	s, err := r.Lookup("s1")
+	if err != nil || s.Model != "claude-fable-5-1" {
+		t.Fatalf("model = %q, %v", s.Model, err)
+	}
+
+	limit := ev("Notification", "s1", time.Minute)
+	limit.Notification, limit.Message = "agent_needs_input", "Usage limit reached, resets at 3pm"
+	r.Apply(limit)
+	if status(t, r, "s1") != StatusLimited {
+		t.Fatal("the limit must register")
+	}
+
+	prompt := ev("UserPromptSubmit", "s1", 2*time.Minute)
+	prompt.Model = "claude-opus-5"
+	r.Apply(prompt)
+
+	s, _ = r.Lookup("s1")
+	if s.Model != "claude-opus-5" {
+		t.Fatalf("a prompt on a different model must move the session to it: %q", s.Model)
+	}
+	if s.ResumedBy != "person" {
+		t.Fatalf("a person typing must be recorded as such: %q", s.ResumedBy)
+	}
+
+	again := ev("Notification", "s1", 3*time.Minute)
+	again.Notification, again.Message = "agent_needs_input", "Usage limit reached, resets at 5pm"
+	r.Apply(again)
+	if got, _ := r.Lookup("s1"); got.ResumedBy != "" {
+		t.Fatalf("a fresh limit must clear who resumed the last one: %q", got.ResumedBy)
+	}
+
+	auto := ev("Notification", "s1", 4*time.Minute)
+	auto.Notification = "quota_auto_resume_fired"
+	r.Apply(auto)
+	if got, _ := r.Lookup("s1"); got.ResumedBy != "clock" {
+		t.Fatalf("the runtime picking the turn up is the clock: %q", got.ResumedBy)
+	}
+}
+
+func TestModelLabelIsTheNamePeopleUse(t *testing.T) {
+	for id, want := range map[string]string{
+		"claude-fable-5-1":          "Fable",
+		"claude-opus-5":             "Opus",
+		"claude-sonnet-5":           "Sonnet",
+		"claude-haiku-4-5-20251001": "Haiku",
+		"something-else":            "something-else",
+	} {
+		if got := ModelLabel(id); got != want {
+			t.Errorf("ModelLabel(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
+func TestTheModelComesFromTheContextTheHookAlreadySends(t *testing.T) {
+	r := newTestRegistry(t)
+	stop := ev("Stop", "s1", time.Minute)
+	stop.Context = &usage.Context{Tokens: 1000, Window: 200000, Percent: 1, Model: "claude-fable-5-1"}
+	r.Apply(ev("SessionStart", "s1", 0))
+	r.Apply(stop)
+
+	if s, _ := r.Lookup("s1"); s.Model != "claude-fable-5-1" {
+		t.Fatalf("the context gauge already knows the model: %q", s.Model)
+	}
+}
