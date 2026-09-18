@@ -19,8 +19,6 @@ in corgi_services/.autopilot.json and coordinates iterations across /loop or
 /schedule runs. Draft PRs only; never merges.`,
 }
 
-// failAutopilot reports a config/IO error (JSON via JSONError, else a human line
-// routed through utils.Info so --json stdout stays pure) and exits 1.
 func failAutopilot(humanMsg string, err error) {
 	if utils.JSONOutput {
 		utils.JSONError(utils.ErrConfig, err.Error())
@@ -30,9 +28,6 @@ func failAutopilot(humanMsg string, err error) {
 	exitProcess(1)
 }
 
-// autopilotStateDir resolves the compose dir the same way sibling commands do
-// (loads corgi-compose.yml, which sets utils.CorgiComposePathDir). On a resolve
-// failure it emits the shared E_CONFIG error and exits 1.
 func autopilotStateDir(cmd *cobra.Command) string {
 	if _, err := utils.GetCorgiServices(cmd); err != nil {
 		failAutopilot("couldn't get services config", err)
@@ -40,10 +35,6 @@ func autopilotStateDir(cmd *cobra.Command) string {
 	return utils.CorgiComposePathDir
 }
 
-// loadAutopilotStatus reads state for the compose dir; absent file → an
-// uninitialized state (a genuine first run, distinct from an explicit stop), so
-// the loop can start instead of mistaking it for the kill switch. Never errors
-// on absence — status must always answer.
 func loadAutopilotStatus(composeDir string) (utils.AutopilotState, error) {
 	path := utils.AutopilotStatePath(composeDir)
 	st, err := utils.ReadAutopilotState(path)
@@ -78,8 +69,6 @@ var autopilotStatusCmd = &cobra.Command{
 	},
 }
 
-// printAutopilotStatus renders the human view: mode, heartbeat age, and the last
-// iteration summary. Routed via utils.Info so --json stdout stays pure JSON.
 func printAutopilotStatus(st utils.AutopilotState) {
 	utils.Infof("autopilot: %s\n", st.Mode)
 	if st.LastHeartbeat.IsZero() {
@@ -171,7 +160,6 @@ func init() {
 	autopilotHeartbeatCmd.Flags().Int("awaiting", 0, "Tickets staged and awaiting the spec gate")
 	autopilotHeartbeatCmd.Flags().String("note", "", "Short human note for this iteration")
 
-	// Local --json mirrors status/mission-control; PersistentPreRun reads it into utils.JSONOutput.
 	autopilotCmd.PersistentFlags().Bool("json", false, "Emit the autopilot state object as JSON")
 
 	autopilotCmd.AddCommand(autopilotStatusCmd, autopilotPauseCmd, autopilotResumeCmd, autopilotStopCmd, autopilotHeartbeatCmd)

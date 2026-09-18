@@ -1,10 +1,6 @@
 package templates
 
-// LocalstackRegion is the default AWS region for the localstack driver.
 var LocalstackRegion = "eu-central-1"
-
-// Image default pinned to 3.8 — last tag that runs without a LOCALSTACK_AUTH_TOKEN
-// (Hobby plan or higher required for newer tags since March 2026).
 
 var DockerComposeLocalstack = `services:
   localstack-{{.ServiceName}}:

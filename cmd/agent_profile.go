@@ -14,12 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// A profile is a named account bundle in the trusted user config, picked at
-// session-start time with --profile. It lives in the GLOBAL corgi data dir, not
-// a repo's .corgi/agent.yml: choosing a config directory or binary grants
-// capability, and a committed file must never do that (a clone would run under
-// your login). See utils/agent/config for the trust split.
-
 var agentProfileCmd = &cobra.Command{
 	Use:   "profile",
 	Short: "Manage named Claude account profiles for remote session start",
@@ -108,9 +102,6 @@ var agentProfileRemoveCmd = &cobra.Command{
 	},
 }
 
-// addProfile writes one profile into the trusted user config, creating the file
-// and section as needed. It rejects a profile that grants nothing and a binary
-// that is a path (which would let this choose an arbitrary program to run).
 func addProfile(dir, name string, wc config.WorkspaceConfig) error {
 	if name == "" {
 		return fmt.Errorf("a profile name is required")
@@ -140,7 +131,6 @@ func addProfile(dir, name string, wc config.WorkspaceConfig) error {
 	return writeUserConfig(path, user)
 }
 
-// removeProfile deletes a profile, reporting whether it existed.
 func removeProfile(dir, name string) (bool, error) {
 	path := agentUserConfigPath(dir)
 	user, err := config.LoadUser(path)
@@ -171,9 +161,6 @@ func sortedProfileNames(profiles map[string]config.WorkspaceConfig) []string {
 	return names
 }
 
-// writeUserConfig persists the trusted user config at 0600. The file names the
-// directories holding Claude credentials, so it is never group- or
-// world-readable.
 func writeUserConfig(path string, user *config.UserConfig) error {
 	body, err := yaml.Marshal(user)
 	if err != nil {

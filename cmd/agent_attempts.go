@@ -14,12 +14,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// A fan-out: several sessions on one ticket, each in a worktree of its
-// own, on different models or the same — then a person compares what they
-// built and keeps one. The board knows them by their attempt ("ABC-123/2");
-// this lists them side by side and picks.
-
-// Attempt is one session of a fan-out as the comparison shows it.
 type Attempt struct {
 	Ref     string `json:"ref"`
 	N       string `json:"n"`
@@ -37,15 +31,11 @@ type Attempt struct {
 	Picked  bool   `json:"picked,omitempty"`
 }
 
-// AttemptGroup is every attempt on one ref, in order.
 type AttemptGroup struct {
 	Ref      string    `json:"ref"`
 	Attempts []Attempt `json:"attempts"`
 }
 
-// attemptGroups reads the board into fan-outs: sessions with an attempt,
-// grouped by the ref before the slash, gone ones left out unless they
-// were picked.
 func attemptGroups(list []sessions.Session, ref string) []AttemptGroup {
 	byRef := map[string][]Attempt{}
 	for _, s := range list {
@@ -170,8 +160,6 @@ var agentAttemptsPickCmd = &cobra.Command{
 	},
 }
 
-// pickCommands is what keeping one attempt sends the board: a note on the
-// kept one, an interrupt and a note on each other still working.
 func pickCommands(g AttemptGroup, n string) []command.Command {
 	var out []command.Command
 	for _, a := range g.Attempts {
@@ -192,8 +180,6 @@ func init() {
 	agentCmd.AddCommand(agentAttemptsCmd)
 }
 
-// launchAttemptsHandler is the fan-out for a phone: GET the groups, POST
-// {ref, n} to keep one.
 func launchAttemptsHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()

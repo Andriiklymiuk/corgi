@@ -24,35 +24,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Session tracking is the user-level cousin of `corgi agent hooks`: where
-// those notify about one workspace, these tell the daemon what EVERY Claude
-// session on the machine is doing, so a Stream Deck (or `corgi agent
-// sessions`) can show the board and a key press can land on the right
-// window. They live in the account's own settings.json, one per config
-// directory, because a session started in a scratch directory is still a
-// session you might be waiting on.
-
 const (
-	flagConfigDir = "config-dir"
-	hookEmit      = "corgi agent hook emit"
-	hookTabTitle  = "corgi agent hook tab"
-	hookContext   = "corgi agent hook context"
-	hookScope     = "corgi agent hook scope"
-	hookBudget    = "corgi agent hook budget"
-	// trackMarkers identify corgi's tracking hooks in a settings file, so
-	// enable and disable never touch anyone else's.
+	flagConfigDir      = "config-dir"
+	hookEmit           = "corgi agent hook emit"
+	hookTabTitle       = "corgi agent hook tab"
+	hookContext        = "corgi agent hook context"
+	hookScope          = "corgi agent hook scope"
+	hookBudget         = "corgi agent hook budget"
 	trackMarkerEmit    = "agent hook emit"
 	trackMarkerTab     = "agent hook tab"
 	trackMarkerContext = "agent hook context"
 	trackMarkerScope   = "agent hook scope"
 	trackMarkerBudget  = "agent hook budget"
-	// writingTools are the tools a scope can refuse: the ones that change a
-	// file.
-	writingTools = "Edit|Write|MultiEdit|NotebookEdit"
-	// promptingTools are the tools worth a PreToolUse event: the ones that
-	// can raise a permission prompt or a question. Reads and searches fire
-	// dozens of times a turn and change nothing a key shows.
-	promptingTools = "Bash|Edit|Write|MultiEdit|NotebookEdit|Task|WebFetch|WebSearch|AskUserQuestion"
+	writingTools       = "Edit|Write|MultiEdit|NotebookEdit"
+	promptingTools     = "Bash|Edit|Write|MultiEdit|NotebookEdit|Task|WebFetch|WebSearch|AskUserQuestion"
 )
 
 var agentTrackCmd = &cobra.Command{
@@ -89,21 +74,14 @@ var agentTrackDisableCmd = &cobra.Command{
 	Run:   runAgentTrackDisable,
 }
 
-// trackedEvents is the whole event map. Every entry gets the async emit hook;
-// the ones with a title also get the synchronous tab-title hook.
 var trackedEvents = []struct {
 	Event   string
 	Matcher string
 	Title   bool
-	// Context adds the synchronous hook that hands the session what the
-	// daemon knows: other sessions here, the budget, the last brief.
 	Context bool
-	// Scope and Budget add the hooks that keep a session inside the scope
-	// its ticket agreed (see agent_hook_scope.go); silent without one.
-	Scope  bool
-	Budget bool
-	// NoEmit is an entry that exists only for its extra hook.
-	NoEmit bool
+	Scope   bool
+	Budget  bool
+	NoEmit  bool
 }{
 	{Event: "SessionStart", Matcher: "startup|resume|clear|fork", Context: true},
 	{Event: "UserPromptSubmit", Title: true},
@@ -169,8 +147,6 @@ func runAgentTrackDisable(cmd *cobra.Command, _ []string) {
 	}
 }
 
-// resizeRunningBoard applies a new size to a daemon that is up, so a plugin
-// that learns its device's key count never has to ask for a restart.
 func resizeRunningBoard(dir string, slots int) bool {
 	info, err := daemon.ReadInfo(dir)
 	if err != nil || info == nil || !info.Commands {
@@ -183,7 +159,6 @@ func resizeRunningBoard(dir string, slots int) bool {
 	return true
 }
 
-// setTrackSlots records the board size in the trusted user config.
 func setTrackSlots(dir string, slots int) error {
 	if slots < 1 || slots > 64 {
 		return fmt.Errorf("--slots must be between 1 and 64, got %d", slots)
@@ -197,11 +172,6 @@ func setTrackSlots(dir string, slots int) error {
 	return writeUserConfig(path, user)
 }
 
-// trackConfigDirs is every Claude config directory hooks go into: the
-// account in use now, each corgi profile's, each workspace's own (a
-// workspace can run under another account), and any passed explicitly. A
-// profile IS a config directory, so a second account never needs naming
-// twice.
 func trackConfigDirs(agentDir string, extra []string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -235,8 +205,6 @@ func trackConfigDirs(agentDir string, extra []string) []string {
 	return out
 }
 
-// defaultClaudeConfigDir is where Claude Code keeps the account in use:
-// CLAUDE_CONFIG_DIR, or ~/.claude.
 func defaultClaudeConfigDir() string {
 	if d := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); d != "" {
 		return d
@@ -252,11 +220,6 @@ func claudeUserSettingsPath(configDir string) string {
 	return filepath.Join(configDir, "settings.json")
 }
 
-// corgiCommandPath is the corgi the hooks should run. An absolute path,
-// because a hook fired from an editor launched from the Dock has the Dock's
-// PATH, which rarely includes Homebrew. The PATH entry (a stable symlink) is
-// preferred over the executable itself, which under Homebrew names a
-// versioned Cellar directory that the next upgrade removes.
 func corgiCommandPath() string {
 	if p, err := exec.LookPath("corgi"); err == nil {
 		if abs, err := filepath.Abs(p); err == nil {
@@ -278,10 +241,6 @@ func hookCommand(bin, hook string) string {
 	return bin + " " + rest
 }
 
-// enableTrackingIn merges the tracking hooks into one settings.json. Unlike
-// the per-workspace file, an account's settings.json holds everything the
-// person configured, so a file that does not parse is refused rather than
-// replaced.
 func enableTrackingIn(path, bin string, tabTitle bool) error {
 	settings, err := readUserSettings(path)
 	if err != nil {
@@ -372,7 +331,6 @@ func stripTrackingHooks(existing any) []any {
 	return out
 }
 
-// hasTrackingHooks reports whether a settings file carries the emit hook.
 func hasTrackingHooks(path string) bool {
 	settings, err := readUserSettings(path)
 	if err != nil {
@@ -381,11 +339,6 @@ func hasTrackingHooks(path string) bool {
 	return strings.Contains(marshalCompact(settings["hooks"]), trackMarkerEmit)
 }
 
-// trackingHooksStale says the file has corgi's hooks, but not the set this
-// corgi installs: an upgrade added an event, a matcher or the context hook,
-// and the settings file still holds the old shape. Doctor turns this into
-// one line, because a session that starts without the context hook loses a
-// feature silently.
 func trackingHooksStale(path string) bool {
 	settings, err := readUserSettings(path)
 	if err != nil {
@@ -404,8 +357,6 @@ func trackingHooksStale(path string) bool {
 	return false
 }
 
-// eventHookCurrent checks one event's corgi entry with the given matcher:
-// the extra handlers this version installs are there, and nothing else.
 func eventHookCurrent(existing any, matcher string, wantContext, wantTab, wantScope, wantBudget, noEmit bool) bool {
 	list, _ := existing.([]any)
 	for _, entry := range list {
@@ -448,11 +399,6 @@ func readUserSettings(path string) (map[string]any, error) {
 	return out, nil
 }
 
-// --- the hooks themselves ---------------------------------------------------
-
-// hookInput is the slice of a hook's stdin the tracking hooks read. The tool
-// input and transcript path are read only to be reduced on the spot — to a
-// safe subject word and to numbers — and never leave the hook themselves.
 type hookInput struct {
 	SessionID        string          `json:"session_id"`
 	Event            string          `json:"hook_event_name"`
@@ -469,8 +415,6 @@ type hookInput struct {
 	TranscriptPath   string          `json:"transcript_path"`
 }
 
-// readsTranscript says which events are worth a look at the transcript:
-// the context number changes once per turn, the title rarely.
 func (in hookInput) readsTranscript() (context, title bool) {
 	switch in.Event {
 	case "Stop", "StopFailure":
@@ -488,9 +432,6 @@ func readHookInput(stdin io.Reader) (hookInput, bool) {
 	if stdin == nil {
 		return in, false
 	}
-	// The payload carries the whole tool input — a Write of a large file is
-	// megabytes — and a truncated one would drop the event, so the cap is
-	// generous. Decoding it is the hook's one real cost.
 	data, err := io.ReadAll(io.LimitReader(stdin, 64<<20))
 	if err != nil || json.Unmarshal(data, &in) != nil {
 		return in, false
@@ -498,8 +439,6 @@ func readHookInput(stdin io.Reader) (hookInput, bool) {
 	return in, in.SessionID != "" && in.Event != ""
 }
 
-// errorType reads StopFailure's error however it is shaped: a type string,
-// or an object with one.
 func (in hookInput) errorType() string {
 	if in.ErrorType != "" {
 		return in.ErrorType
@@ -518,8 +457,6 @@ func (in hookInput) errorType() string {
 	return ""
 }
 
-// errorMessage reads StopFailure's human text: the error when it is a
-// string, or its message field. The usage-limit reset time lives here.
 func (in hookInput) errorMessage() string {
 	if in.Message != "" {
 		return in.Message
@@ -534,23 +471,15 @@ func (in hookInput) errorMessage() string {
 	if json.Unmarshal(in.Error, &obj) == nil && obj.Message != "" {
 		return obj.Message
 	}
-	// Whatever shape the error has, the human text is in there somewhere;
-	// the registry only greps it for "resets …".
 	return strings.TrimSpace(string(in.Error))
 }
 
-// runEmitHook turns one hook firing into a spool entry and a nudge. It
-// never prints, never blocks on the daemon and never fails: the session is
-// unaffected whatever corgi's state is. Returns what it built, for tests.
 func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessions.Event, bool) {
 	in, ok := readHookInput(stdin)
 	if !ok || in.AgentID != "" {
-		// A subagent is not a session; a hook with no session id is not
-		// telling corgi anything.
 		return sessions.Event{}, false
 	}
 	if strings.EqualFold(getenv("CLAUDE_CODE_REMOTE"), "true") {
-		// Remote sessions have no window on this machine to focus.
 		return sessions.Event{}, false
 	}
 	ev := sessions.Event{
@@ -587,8 +516,6 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 	}
 	chain := proc.Ancestors(parent)
 	if proc.HasCorgi(chain) {
-		// A claude the corgi daemon supervises: the remote-control server,
-		// which has no window to focus and would only eat a key.
 		return sessions.Event{}, false
 	}
 	ev.Ancestors = proc.PIDs(chain)
@@ -600,9 +527,6 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 	return ev, true
 }
 
-// deliverEvent spools the event for a running daemon and rings its bell.
-// No daemon, no file: with hooks on every tool call, a spool nobody drains
-// would grow without bound. The next daemon rescans instead.
 func deliverEvent(ev sessions.Event) {
 	dir, err := agentDir()
 	if err != nil {
@@ -618,10 +542,6 @@ func deliverEvent(ev sessions.Event) {
 	daemon.Nudge(info)
 }
 
-// tabTitle composes the terminal title for an event, or "" for one that
-// should leave the title alone. The label is the registered workspace id
-// when the cwd is inside one, else the directory name — the same word the
-// board shows.
 func tabTitle(in hookInput, label string) string {
 	switch in.Event {
 	case "UserPromptSubmit":
@@ -647,8 +567,6 @@ func tabTitle(in hookInput, label string) string {
 	return ""
 }
 
-// shortReset keeps "12:10pm" out of "12:10pm (Europe/Kiev)": a tab title
-// has no room for the zone.
 func shortReset(reset string) string {
 	if i := strings.Index(reset, " ("); i > 0 {
 		reset = reset[:i]
@@ -656,9 +574,6 @@ func shortReset(reset string) string {
 	return strings.TrimSpace(reset)
 }
 
-// runTabTitleHook prints the terminalSequence Claude Code forwards to the
-// terminal: OSC 2 sets the window/tab title. No I/O beyond stdin and stdout;
-// it is the synchronous hook, so it must be instant.
 func runTabTitleHook(stdin io.Reader, stdout io.Writer, label func(cwd string) string) {
 	in, ok := readHookInput(stdin)
 	if !ok || in.AgentID != "" {
@@ -679,9 +594,6 @@ func runTabTitleHook(stdin io.Reader, stdout io.Writer, label func(cwd string) s
 	})
 }
 
-// workspaceLabel resolves a cwd against the workspace registry: the
-// workspace whose root contains it (deepest wins), else the directory name.
-// Returns the label and the folder the label stands for.
 func workspaceLabel(registry *workspace.Registry, cwd string) (string, string) {
 	if registry != nil && cwd != "" {
 		best, bestLen := workspace.Workspace{}, -1
@@ -698,10 +610,6 @@ func workspaceLabel(registry *workspace.Registry, cwd string) (string, string) {
 	return sessions.DefaultResolve(cwd)
 }
 
-// workspaceResolver is the daemon's label function, reloading the registry
-// on demand so a workspace registered after the daemon started still names
-// its sessions. The read is cached briefly: a burst of tool events must not
-// become a burst of file reads.
 func workspaceResolver(agentDir string) func(cwd string) (string, string) {
 	var (
 		cached   *workspace.Registry
@@ -716,10 +624,6 @@ func workspaceResolver(agentDir string) func(cwd string) (string, string) {
 	}
 }
 
-// profileResolver names a CLAUDE_CONFIG_DIR after the corgi profile that
-// points at it, so the badge reads "work" rather than ".claude-work". The
-// profiles are cached like the registry: the registry asks under its lock,
-// and a burst of tool events must not become a burst of YAML parses.
 func profileResolver(agentDir string) func(configDir string) string {
 	var (
 		cached   map[string]config.WorkspaceConfig
@@ -737,9 +641,6 @@ func profileResolver(agentDir string) func(configDir string) string {
 	}
 }
 
-// pullResolver is the forge's word on a session's pull request, for the
-// standing ladder: the pulls the watch refreshed each round, read from disk
-// and cached like the registry, asked under the same lock.
 func pullResolver(agentDir string) func(link string) (sessions.PullFacts, bool) {
 	var (
 		cached   *watch.PullLog
@@ -758,7 +659,6 @@ func pullResolver(agentDir string) func(link string) (sessions.PullFacts, bool) 
 	}
 }
 
-// profileNamed is the alphabetically first profile whose config dir is dir.
 func profileNamed(profiles map[string]config.WorkspaceConfig, dir string) string {
 	var names []string
 	for name, p := range profiles {

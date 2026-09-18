@@ -53,11 +53,9 @@ func TestRegisterCwdWorkspaceDoesNotHijackABasenameCollision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// An existing "api" workspace, pointing somewhere else entirely.
 	elsewhere := stackWithAgentConfig(t, "")
 	registerStack(t, agentD, "api", elsewhere)
 
-	// A different directory that also happens to be called "api".
 	parent := t.TempDir()
 	collide := filepath.Join(parent, "api")
 	if err := os.MkdirAll(filepath.Join(collide, ".corgi"), 0o755); err != nil {
@@ -86,7 +84,6 @@ func TestRegisterCwdWorkspaceDoesNotHijackABasenameCollision(t *testing.T) {
 }
 
 func TestParseMCPLogIgnoresATruncatedCode(t *testing.T) {
-	// mcp.log read mid-write: URL is complete, code line has no newline yet.
 	partial := "🌐 ✓ public MCP endpoint: https://abc.trycloudflare.com/mcp\n  pairing code: WOR"
 	if _, done := parseMCPLog(partial); done {
 		t.Error("a code with no line terminator must not be treated as complete — it could be mid-write")
@@ -120,7 +117,6 @@ func TestUpLockReclaimsAStaleLock(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// A lock file with a pid that cannot be parsed is stale by definition.
 	if err := os.WriteFile(filepath.Join(dir, "agent-up.lock"), []byte("not-a-pid\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +149,6 @@ func TestMcpListeningDetectsAListener(t *testing.T) {
 }
 
 func TestMcpListeningFalseOnAFreePort(t *testing.T) {
-	// Bind then close to get a port nothing listens on.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -198,21 +193,17 @@ func TestAwaitMCPLogTimesOutWithNoCode(t *testing.T) {
 }
 
 func TestPrintTerminalQRDoesNotPanic(t *testing.T) {
-	// Best-effort renderer; must never crash the command.
 	printTerminalQR("https://example.com/pair#CODE")
 }
 
 func TestPrintAgentUpJSON(t *testing.T) {
 	utils.JSONOutput = true
 	defer func() { utils.JSONOutput = false }()
-	// Just exercise the JSON branch; it must not panic and must serialize.
 	printAgentUp(agentUpResult{Workspace: "acme", Registered: true, DaemonPID: 1, PublicURL: "https://x", PairCode: "C"})
 }
 
 func TestPrintAgentUpHumanPaths(t *testing.T) {
 	utils.JSONOutput = false
-	// Exercise the human-readable branches: public URL + pair QR, and the
-	// no-tunnel + hint fallback. Must not panic.
 	printAgentUp(agentUpResult{
 		Workspace: "acme", Registered: true, DaemonPID: 7,
 		PublicURL: "https://x.trycloudflare.com", PairCode: "C1",
@@ -384,8 +375,6 @@ func TestLANLauncherURL(t *testing.T) {
 }
 
 func TestLANAddressSkipsVirtualInterfaces(t *testing.T) {
-	// A docker bridge and a VPN tunnel both carry private addresses, and both
-	// are the wrong answer for a phone on the real network.
 	docker := net.Interface{Name: "docker0", Flags: net.FlagUp}
 	vpn := net.Interface{Name: "utun4", Flags: net.FlagUp | net.FlagPointToPoint}
 	loop := net.Interface{Name: "lo0", Flags: net.FlagUp | net.FlagLoopback}
@@ -415,9 +404,6 @@ func TestOutboundIPIsPrivateAndRoutable(t *testing.T) {
 	}
 }
 
-// A quick tunnel's address dies with the process: the summary says so, in
-// words a person can act on, and --json carries quickTunnel; a configured
-// hostname says nothing, because nothing is lost.
 func TestAQuickTunnelIsWarnedAbout(t *testing.T) {
 	quick := quickTunnelWarning(agentUpResult{PublicURL: "https://kind-zebra-42.trycloudflare.com"})
 	for _, want := range []string{"changes every time the tunnel restarts", "corgi agent tunnel setup", "ngrok-free.dev", "loses this laptop"} {

@@ -15,7 +15,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// fakeClaude swaps the headless run for an echo and restores it after.
 func fakeClaude(t *testing.T) *[]string {
 	t.Helper()
 	var ran []string
@@ -31,9 +30,6 @@ func fakeClaude(t *testing.T) *[]string {
 	return &ran
 }
 
-// collectNotes gathers notification bodies until every want has been seen.
-// A fix notifies from its own goroutine, so waiting on one string alone
-// returns whenever that one happens to win the race.
 func collectNotes(t *testing.T, notes <-chan string, wants ...string) map[string]bool {
 	t.Helper()
 	got := map[string]bool{}
@@ -142,7 +138,6 @@ func TestDeferredFixIsNotRunAndNotRetried(t *testing.T) {
 	if d.watchState.Fixes.DeferredCount("acme") != 1 {
 		t.Fatalf("deferred %d", d.watchState.Fixes.DeferredCount("acme"))
 	}
-	// Handed back while still capped: deferred again, once, no run.
 	d.handleWatchEvent(context.Background(), second)
 	collectNotes(t, notes, "fix deferred")
 	if len(*ran) != 1 || d.watchState.Fixes.DeferredCount("acme") != 1 {
@@ -241,7 +236,7 @@ func TestFixBudget(t *testing.T) {
 	l := watch.LoadFixLog(t.TempDir())
 	l.Start("acme", "a", now.Add(-30*time.Minute))
 	l.Start("acme", "b", now.Add(-3*time.Hour))
-	l.Start("acme", "c", now.Add(-20*time.Hour)) // yesterday, still within the day cap
+	l.Start("acme", "c", now.Add(-20*time.Hour))
 	l.Defer(watch.Event{Key: "d", Workspace: "acme"})
 	b := BudgetFor(WatchSpec{Workspace: "acme"}, l, now)
 	if b.Hour != 1 || b.Day != 3 || b.Today != 2 || b.PerHour != 3 || b.PerDay != 10 || b.Deferred != 1 || !b.Last.Equal(now.Add(-30*time.Minute)) {
@@ -255,7 +250,6 @@ func TestFixBudget(t *testing.T) {
 func TestStartWatchesSkipsDeadSources(t *testing.T) {
 	d := testDaemon(t)
 	github, linear, gitlab := &countingSource{name: "github"}, &countingSource{name: "linear"}, &countingSource{name: "gitlab"}
-	// Interval 0: the rounds are run by hand below, so nothing outlives the test.
 	d.Watches = []WatchSpec{
 		{Workspace: "web", Rules: watch.Rules{Enabled: true}, Sources: []watch.Source{github, linear}},
 		{Workspace: "docs", Rules: watch.Rules{Enabled: true}, Sources: []watch.Source{gitlab}},
@@ -345,14 +339,11 @@ func TestFixPromptPerKind(t *testing.T) {
 	if strings.Join(args[2:], " ") != "--output-format json --permission-mode acceptEdits" {
 		t.Fatalf("flags %q", args[2:])
 	}
-	// Nobody but the run has read this diff, and whoever finds the PR later
-	// needs to know where it came from.
 	for _, want := range []string{"review your own diff", "corgi watch · api · issue.new ABC-1", "https://x/browse/ABC-1"} {
 		if !strings.Contains(args[1], want) {
 			t.Errorf("an unattended prompt must carry %q:\n%s", want, args[1])
 		}
 	}
-	// A run someone started by hand is already being read; it gets none of it.
 	if strings.Contains(fixPrompt(e), "review your own diff") {
 		t.Error("the suffix belongs to unattended runs, not to the prompt the phone hands a session")
 	}
@@ -394,7 +385,6 @@ func TestQuietHoursHoldTheNotificationAndReleaseItLater(t *testing.T) {
 	notes := make(chan string, 8)
 	d.Notify = func(_, body string) { notes <- body }
 	fakeClaude(t)
-	// A window that is open now would defeat the test, so cover the whole day.
 	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Project: "ABC",
 		Rules: watch.Rules{Enabled: true}, Action: "notify", Quiet: "00:00-23:59"}
 	d.Watches = []WatchSpec{spec}
@@ -408,12 +398,10 @@ func TestQuietHoursHoldTheNotificationAndReleaseItLater(t *testing.T) {
 		t.Fatalf("quiet hours must not notify, got %q", body)
 	case <-time.After(300 * time.Millisecond):
 	}
-	// The events are still recorded — the inbox shows them, nothing is lost.
 	if data, _ := os.ReadFile(filepath.Join(d.Dir, "watch", "events.jsonl")); strings.Count(string(data), "\n") != 2 {
 		t.Fatalf("both events should be logged: %q", data)
 	}
 
-	// The window opens: one notification for the lot, not one each.
 	open := spec
 	open.Quiet = ""
 	d.releaseHeld(open, time.Now())
@@ -429,7 +417,6 @@ func TestQuietHoursHoldTheNotificationAndReleaseItLater(t *testing.T) {
 		t.Fatalf("summary = %q", summary)
 	}
 
-	// Released once: a second round says nothing.
 	d.releaseHeld(open, time.Now())
 	select {
 	case body := <-notes:
@@ -437,7 +424,6 @@ func TestQuietHoursHoldTheNotificationAndReleaseItLater(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	// Still quiet? Nothing is released.
 	d.watchState.Hold("acme", "later", time.Now())
 	d.releaseHeld(spec, time.Now())
 	select {
@@ -447,8 +433,6 @@ func TestQuietHoursHoldTheNotificationAndReleaseItLater(t *testing.T) {
 	}
 }
 
-// A note held through the night about a ticket that finished, or a row
-// someone dismissed, is not news in the morning.
 func TestTheMorningDropsHeldNotesThatSettledOvernight(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
@@ -464,7 +448,6 @@ func TestTheMorningDropsHeldNotesThatSettledOvernight(t *testing.T) {
 	d.watchState.HoldEvent("acme", done.Key, "Nadia commented on ABC-1: thanks", time.Now())
 	d.watchState.HoldEvent("acme", live.Key, "Sam commented on ABC-2: still broken", time.Now())
 	d.watchState.HoldEvent("acme", gone.Key, "Kim commented on ABC-3: hm", time.Now())
-	// Overnight: ABC-1 moved to Done, ABC-3 was dismissed from the phone.
 	_ = watch.LoadStateLog(d.Dir).Set(done.Key, "Done", time.Now())
 	_ = d.watchState.Ignore(gone.Key)
 

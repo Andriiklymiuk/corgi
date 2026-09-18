@@ -528,9 +528,6 @@ func TestRunWatchAppendJSON(t *testing.T) {
 	stopWatch(t, cancel, done)
 }
 
-// stopWatch lets a watch loop run briefly, then cancels it and waits for the
-// goroutine to actually exit — so it can't leak and race later tests that
-// mutate shared globals (os.Stdout, utils.JSONOutput) while emitting output.
 func stopWatch(t *testing.T, cancel context.CancelFunc, done <-chan struct{}) {
 	t.Helper()
 	time.Sleep(150 * time.Millisecond)
@@ -543,7 +540,6 @@ func stopWatch(t *testing.T, cancel context.CancelFunc, done <-chan struct{}) {
 }
 
 func TestFinalizeTimeoutHuman(t *testing.T) {
-	// down + !healthy + human -> the timeout branch plus renderProbeResults.
 	rows := []statusRow{{Label: "down", Kind: "tcp", Port: 1}}
 	out := captureStdout(t, func() { finalize(rows, false, false, false) })
 	if !strings.Contains(out, "timeout") {
@@ -560,8 +556,6 @@ func TestRunStatusUntilHealthyImmediate(t *testing.T) {
 	port := ln.Addr().(*net.TCPAddr).Port
 	rows := []statusRow{{Label: "svc", Kind: "tcp", Port: port}}
 
-	// Already healthy: returns on the first check without entering the ticker
-	// loop or calling os.Exit.
 	out := captureStdout(t, func() {
 		runStatusUntilHealthy(rows, 50*time.Millisecond, 2*time.Second, false, false)
 	})
@@ -571,7 +565,6 @@ func TestRunStatusUntilHealthyImmediate(t *testing.T) {
 }
 
 func TestProbeHTTPDownReason(t *testing.T) {
-	// Unreachable host: code==0 so the reason branch (not the HTTP-code branch).
 	ok, detail := probe(statusRow{Kind: "http", URL: "http://127.0.0.1:1/health", Port: 1})
 	if ok {
 		t.Fatal("expected down")

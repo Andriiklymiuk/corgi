@@ -43,7 +43,6 @@ func TestPickLogRun_NoLogs(t *testing.T) {
 }
 
 func TestFollowLog_NonExistentFile(t *testing.T) {
-	// Should not panic, just print an error.
 	followLog("/tmp/corgi_test_nonexistent_12345.log")
 }
 
@@ -76,10 +75,10 @@ func TestHasTimestampShape(t *testing.T) {
 		{"INFO 2024-01-01 my service starts", false},
 		{"INFO server starting up nice", false},
 		{"2024/01/01T10:32:01.123Z foo", false},
-		{"2024-13-01T10:32:01.123Z foo", true}, // we don't validate month range — cheap
+		{"2024-13-01T10:32:01.123Z foo", true},
 		{"2024-01-01T10-32-01.123Z foo", false},
 		{"2024-01-01T10:32:01,123Z foo", false},
-		{"2024-01-01T10:32:01.123  foo", false}, // no Z
+		{"2024-01-01T10:32:01.123  foo", false},
 		{"", false},
 		{"short", false},
 	}
@@ -126,8 +125,6 @@ func TestPickLogRun_ReturnsExistingFile(t *testing.T) {
 	os.MkdirAll(svcDir, 0o755)
 	os.WriteFile(filepath.Join(svcDir, "2024-01-01T10-00-00.log"), []byte("x"), 0o644)
 
-	// pickLogRun with one entry would still call interactive picker.
-	// Instead, verify the empty path: zero runs.
 	if _, err := pickLogRun(dir, "nonexistent"); err == nil {
 		t.Error("expected error for nonexistent service")
 	}
@@ -299,12 +296,10 @@ func TestDetectLevel(t *testing.T) {
 }
 
 func TestFollowShouldStop(t *testing.T) {
-	// read error (non-EOF) always stops
 	var idle time.Time
 	if !followShouldStop(errLogTest("io fail"), "/nope", &idle) {
 		t.Fatal("non-EOF error should stop")
 	}
-	// EOF on an inactive (old) file stops
 	dir := t.TempDir()
 	p := filepath.Join(dir, "svc", "run.log")
 	os.MkdirAll(filepath.Dir(p), 0755)
@@ -478,8 +473,6 @@ func serviceLog(t *testing.T, root, service string) string {
 	return filepath.Join(dir, "2026-01-01T00-00-00.log")
 }
 
-// The bug this replaces: --all drained to EOF and returned, so it printed the
-// existing lines once and exited instead of following.
 func TestFollowAllLogsKeepsTailing(t *testing.T) {
 	root := logsRoot(t)
 	log := serviceLog(t, root, "api")
@@ -506,7 +499,6 @@ func TestFollowAllLogsKeepsTailing(t *testing.T) {
 	}
 }
 
-// A service that starts slowly has no log file when the follow begins.
 func TestFollowAllLogsAdoptsALateService(t *testing.T) {
 	root := logsRoot(t)
 	writeLine(t, serviceLog(t, root, "api"), "api up\n")
@@ -530,7 +522,6 @@ func TestFollowAllLogsAdoptsALateService(t *testing.T) {
 	}
 }
 
-// A line still being written must not be printed, then printed again whole.
 func TestFollowAllLogsHoldsBackAPartialLine(t *testing.T) {
 	root := logsRoot(t)
 	log := serviceLog(t, root, "api")

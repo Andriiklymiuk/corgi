@@ -59,7 +59,6 @@ func TestPruneLogs_KeepsLatestN(t *testing.T) {
 }
 
 func TestPruneLogs_NoDir(t *testing.T) {
-	// Should not panic when dir doesn't exist.
 	PruneLogs(t.TempDir(), "nonexistent", 5)
 }
 
@@ -105,7 +104,6 @@ func TestListServiceRuns_NewestFirst(t *testing.T) {
 	if len(runs) != 3 {
 		t.Fatalf("expected 3 runs, got %d", len(runs))
 	}
-	// Newest first: 2024-01-03 > 2024-01-02 > 2024-01-01
 	if !strings.Contains(runs[0], "2024-01-03") {
 		t.Errorf("expected newest first, got %v", runs)
 	}
@@ -299,7 +297,7 @@ func TestLogWriter_FlushesPendingOnClose(t *testing.T) {
 
 func TestLogWriterRotatesAtCap(t *testing.T) {
 	prev := logFileSizeCap
-	logFileSizeCap = 64 // tiny cap so a few writes trigger rotation
+	logFileSizeCap = 64
 	t.Cleanup(func() { logFileSizeCap = prev })
 
 	dir := t.TempDir()
@@ -307,7 +305,6 @@ func TestLogWriterRotatesAtCap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Write well past the tiny cap across several lines.
 	for i := 0; i < 20; i++ {
 		if _, err := w.Write([]byte("a line of output that is long enough\n")); err != nil {
 			t.Fatalf("write %d: %v", i, err)
@@ -319,7 +316,6 @@ func TestLogWriterRotatesAtCap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Expect the original run file PLUS at least one rotation sibling.
 	var rotated int
 	for _, f := range files {
 		if strings.Contains(filepath.Base(f), ".part") {

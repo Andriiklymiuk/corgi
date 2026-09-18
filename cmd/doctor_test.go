@@ -188,7 +188,6 @@ func TestProcessRequired_Found(t *testing.T) {
 }
 
 func TestProcessRequired_MissingNoInstallSteps(t *testing.T) {
-	// Missing tool with no install steps must fail without prompting.
 	if processRequired(utils.Required{Name: "this-tool-does-not-exist-zzz"}) {
 		t.Error("expected false when tool missing and no install steps")
 	}
@@ -198,7 +197,6 @@ func TestProcessRequired_OptionalNonInteractiveSkips(t *testing.T) {
 	orig := utils.NonInteractive
 	defer func() { utils.NonInteractive = orig }()
 	utils.NonInteractive = true
-	// Optional + non-interactive: skipped (no prompt, no install attempt), returns false.
 	got := processRequired(utils.Required{
 		Name:     "this-tool-does-not-exist-zzz",
 		Optional: true,
@@ -210,7 +208,6 @@ func TestProcessRequired_OptionalNonInteractiveSkips(t *testing.T) {
 }
 
 func TestBuildDoctorResult_RequiredPresent(t *testing.T) {
-	// 'go' is guaranteed present in this test environment.
 	corgi := &utils.CorgiCompose{
 		Required: []utils.Required{{Name: "go", CheckCmd: "go version"}},
 	}
@@ -248,7 +245,6 @@ func TestBuildDoctorResult_RequiredMissing(t *testing.T) {
 }
 
 func TestBuildDoctorResult_OKIsAndOfChecks(t *testing.T) {
-	// One present + one missing required → overall false (AND of checks).
 	corgi := &utils.CorgiCompose{
 		Required: []utils.Required{
 			{Name: "go", CheckCmd: "go version"},
@@ -284,8 +280,6 @@ func TestRunRequired_ReportsMissing(t *testing.T) {
 }
 
 func TestProcessRequired_RequiredRunsInstallThenRechecks(t *testing.T) {
-	// Non-optional missing tool: no prompt, runs the (harmless) install step,
-	// re-checks, still absent → false. Exercises the install loop + recheck.
 	got := processRequired(utils.Required{
 		Name:    "this-tool-does-not-exist-zzz",
 		Why:     []string{"to test the install path"},
@@ -300,7 +294,6 @@ func TestRunDoctorJSON_EmptyComposePasses(t *testing.T) {
 	origJSON := utils.JSONOutput
 	defer func() { utils.JSONOutput = origJSON }()
 	utils.JSONOutput = true
-	// No required tools, no db_services, no ports → all checks pass, no os.Exit.
 	out := captureStdout(t, func() { runDoctorJSON(&utils.CorgiCompose{}) })
 	if !strings.Contains(out, `"ok": true`) {
 		t.Errorf("expected ok:true JSON for empty compose, got %q", out)
@@ -416,7 +409,6 @@ func TestRunFixes_DockerAndInstallSucceed(t *testing.T) {
 		installTool: func(string) error { return nil },
 		killPort:    func(int) error { return nil },
 	}
-	// non-interactive + yes so install is allowed
 	out := runFixes(res, acts, true, true)
 	if len(out.Fixed) != 2 {
 		t.Fatalf("expected docker+install fixed, got %+v", out.Fixed)
@@ -463,7 +455,6 @@ func newTestDoctorCommand() *cobra.Command {
 func TestRunDoctorFix_AllCleanJSON(t *testing.T) {
 	dir := t.TempDir()
 	yml := filepath.Join(dir, "corgi-compose.yml")
-	// no required tools, no db_services (so no docker check), a high free port
 	content := "name: test\nservices:\n  api:\n    port: 65510\n    start:\n      - echo hi\n"
 	if err := os.WriteFile(yml, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -497,24 +488,19 @@ func TestFixOneCheck(t *testing.T) {
 		installTool: func(string) error { return nil },
 		killPort:    func(int) error { return nil },
 	}
-	// unremediable
 	if fixed, reason := fixOneCheck(doctorCheck{Name: "weird"}, acts, true, true); fixed || reason != "no remediation available" {
 		t.Fatalf("weird: %v %q", fixed, reason)
 	}
-	// gated (non-interactive, no yes, destructive)
 	if fixed, reason := fixOneCheck(doctorCheck{Name: "port:3000"}, acts, true, false); fixed || reason == "" {
 		t.Fatalf("gated: %v %q", fixed, reason)
 	}
-	// docker auto-fix success
 	if fixed, _ := fixOneCheck(doctorCheck{Name: "docker"}, acts, true, false); !fixed {
 		t.Fatal("docker should auto-fix")
 	}
-	// apply error surfaces
 	bad := fixActions{installTool: func(string) error { return errTest("nope") }}
 	if fixed, reason := fixOneCheck(doctorCheck{Name: "required:bun"}, bad, true, true); fixed || reason != "nope" {
 		t.Fatalf("apply-err: %v %q", fixed, reason)
 	}
-	// declined in interactive
 	declined := fixActions{killPort: func(int) error { return nil }, confirm: func(string) bool { return false }}
 	if fixed, reason := fixOneCheck(doctorCheck{Name: "port:5432"}, declined, false, false); fixed || reason != "declined" {
 		t.Fatalf("declined: %v %q", fixed, reason)
@@ -523,7 +509,7 @@ func TestFixOneCheck(t *testing.T) {
 
 func TestInstallRequiredByName_Errors(t *testing.T) {
 	corgi := &utils.CorgiCompose{Required: []utils.Required{
-		{Name: "bun"}, // no install steps
+		{Name: "bun"},
 	}}
 	if err := installRequiredByName(corgi, "bun"); err == nil {
 		t.Fatal("expected error for no install steps")
@@ -549,13 +535,9 @@ func TestRunDoctorFix_HumanOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// non-JSON human branch (no fixes needed -> no exit)
 	_ = captureStdout(t, func() { runDoctorFix(c, corgi) })
 }
 
-// The CI-only checks must stay invisible on a laptop: a half-configured env
-// file is a normal state mid-setup, and a devcontainer is a legitimate place
-// to run corgi locally.
 func TestCIChecksAreSilentOutsideCI(t *testing.T) {
 	orig := utils.CIMode
 	utils.CIMode = false
@@ -569,8 +551,6 @@ func TestCIChecksAreSilentOutsideCI(t *testing.T) {
 	}
 }
 
-// In CI the gitignored env file is simply absent, and corgi falling back to a
-// committed example is what makes the failure land far from its cause.
 func TestCIChecksReportAMissingEnvSource(t *testing.T) {
 	orig := utils.CIMode
 	utils.CIMode = true
@@ -598,8 +578,6 @@ func TestCIChecksReportAMissingEnvSource(t *testing.T) {
 	}
 }
 
-// Without db_services there are no containers publishing to localhost, so the
-// host check has nothing to say.
 func TestCIChecksSkipTheHostCheckWithoutDatabases(t *testing.T) {
 	orig := utils.CIMode
 	utils.CIMode = true
@@ -612,8 +590,6 @@ func TestCIChecksSkipTheHostCheckWithoutDatabases(t *testing.T) {
 	}
 }
 
-// db_services mean containers publishing to localhost, so the host check has
-// something to say and must appear.
 func TestCIChecksIncludeTheHostCheckWithDatabases(t *testing.T) {
 	orig := utils.CIMode
 	utils.CIMode = true

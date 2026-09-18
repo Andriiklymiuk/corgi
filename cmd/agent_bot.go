@@ -17,10 +17,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A bot is a session you come back to: a workspace, a persona, a model and
-// an account under one name, with the conversation it last had. "Open the
-// reviewer" starts Claude Code there, as that, and picks the thread up.
-
 var agentBotCmd = &cobra.Command{
 	Use:   "bot",
 	Short: "Named sessions you come back to: a workspace, a persona, a model, a thread",
@@ -63,8 +59,6 @@ var agentBotAddCmd = &cobra.Command{
 		color, _ := cmd.Flags().GetString("color")
 		onList, _ := cmd.Flags().GetStringSlice("on")
 		template, _ := cmd.Flags().GetString("template")
-		// A template fills what was not said: the reviewer's soul, its
-		// triggers, its colour — and a soul or --on on the line still wins.
 		if template != "" {
 			t, ok := bots.Template(template)
 			if !ok {
@@ -208,31 +202,23 @@ var agentBotShowCmd = &cobra.Command{
 	},
 }
 
-// BotDetail is a bot with what it has done: its runs, newest first, and
-// the sum of them — what it cost and what came of it — so a person can
-// say whether the reviewer earns its keep.
 type BotDetail struct {
 	bots.Bot
 	Runs []watch.FixRecord `json:"runs"`
 	ROI  BotROI            `json:"roi"`
 }
 
-// BotROI is a bot's ledger over every run on record: how many ran, how
-// many failed (a retry that landed does not count), the pull requests it
-// opened and how many of those merged, and the bill.
 type BotROI struct {
-	Runs    int     `json:"runs"`
-	Failed  int     `json:"failed"`
-	Retried int     `json:"retried"`
-	PRs     int     `json:"prs"`
-	Merged  int     `json:"merged"`
-	CostUSD float64 `json:"costUSD"`
-	Tokens  int64   `json:"tokens"`
-	// Since is the oldest run counted; empty with no runs.
-	Since time.Time `json:"since,omitzero"`
+	Runs    int       `json:"runs"`
+	Failed  int       `json:"failed"`
+	Retried int       `json:"retried"`
+	PRs     int       `json:"prs"`
+	Merged  int       `json:"merged"`
+	CostUSD float64   `json:"costUSD"`
+	Tokens  int64     `json:"tokens"`
+	Since   time.Time `json:"since,omitzero"`
 }
 
-// Line is the ledger in one line: "14 runs · 2 failed · 5 PRs, 3 merged · $12.40".
 func (r BotROI) Line() string {
 	if r.Runs == 0 {
 		return "no runs yet"
@@ -265,9 +251,6 @@ func tokenWord(n int64) string {
 	return fmt.Sprintf("%d", n)
 }
 
-// botDetail reads the bot's runs out of the fix log: the newest twelve to
-// show, every one for the ledger. A merged PR is one the pull log saw
-// merged.
 func botDetail(dir string, b bots.Bot) BotDetail {
 	d := BotDetail{Bot: b, Runs: []watch.FixRecord{}}
 	pulls := watch.LoadPullLog(dir)
@@ -370,7 +353,6 @@ var agentBotOpenCmd = &cobra.Command{
 	},
 }
 
-// agoWord is roughAge as a sentence ends: "3m ago", or "just now".
 func agoWord(d time.Duration) string {
 	w := roughAge(d)
 	if w == "just now" {
@@ -387,11 +369,6 @@ func mustCwd() string {
 	return cwd
 }
 
-// launchBotsHandler is the bots for the phone, the bar and the editor:
-// GET lists them (?name= is one, with its runs); POST adds or edits one
-// (a paired phone may write a soul — the body travels sealed); DELETE
-// ?name= removes one. The templates ride along, so a surface can offer
-// "add a reviewer" as one tap.
 func launchBotsHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()

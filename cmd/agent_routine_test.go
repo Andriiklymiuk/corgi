@@ -7,8 +7,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/bots"
 )
 
-// A routine's bot has to exist and live in the routine's workspace; the
-// refusal says how to add it.
 func TestARoutineBotMustLiveInTheWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	store := &bots.Store{Version: 1}

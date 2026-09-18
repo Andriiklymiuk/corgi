@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// The replay's whole job is a tally you can decide from.
 func TestReplayTallySaysWhatTheWeekWouldHaveBeen(t *testing.T) {
 	list := []replayRow{
 		{Ref: "ABC-1", Would: "worked on"},
@@ -25,7 +24,6 @@ func TestReplayTallySaysWhatTheWeekWouldHaveBeen(t *testing.T) {
 	if replayTally(nil) != "nothing arrived" {
 		t.Fatalf("an empty week says so: %q", replayTally(nil))
 	}
-	// The order is fixed, so two runs read the same way.
 	if i, j := strings.Index(got, "worked on"), strings.Index(got, "ignored"); i > j {
 		t.Fatal("what would have been worked on leads")
 	}
@@ -34,7 +32,6 @@ func TestReplayTallySaysWhatTheWeekWouldHaveBeen(t *testing.T) {
 	}
 }
 
-// --auto-for is meant to be tried before it is saved.
 func TestReplayAcceptsASettingToTry(t *testing.T) {
 	kinds, err := parseAutoFor("reviews,ci")
 	if err != nil {

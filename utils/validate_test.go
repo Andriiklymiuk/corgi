@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// codesOf collects the Code field from a slice of issues for easy assertion.
 func codesOf(issues []ValidationIssue) []string {
 	out := make([]string, len(issues))
 	for i, x := range issues {
@@ -29,9 +28,9 @@ func TestValidateCompose(t *testing.T) {
 	tests := []struct {
 		name      string
 		compose   *CorgiCompose
-		wantErr   map[string]int // code -> expected count (0 = must be absent)
+		wantErr   map[string]int
 		wantWarn  map[string]int
-		wantClean bool // no errors and no warnings at all
+		wantClean bool
 	}{
 		{
 			name:      "nil compose",
@@ -338,7 +337,6 @@ func TestValidateCompose(t *testing.T) {
 }
 
 func TestAbortOnValidationErrors(t *testing.T) {
-	// Clean compose → no error, no abort.
 	clean := &CorgiCompose{
 		Services: []Service{{ServiceName: "api", Port: 3000, Start: []string{"x"}}},
 	}
@@ -346,7 +344,6 @@ func TestAbortOnValidationErrors(t *testing.T) {
 		t.Fatalf("clean compose should have no errors, got %v", codesOf(errs))
 	}
 
-	// Port conflict → exactly the same code the validate command reports.
 	bad := &CorgiCompose{
 		DatabaseServices: []DatabaseService{{ServiceName: "db", Driver: "postgres", Port: 8080}},
 		Services:         []Service{{ServiceName: "api", Port: 8080, Start: []string{"x"}}},

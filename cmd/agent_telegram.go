@@ -18,11 +18,8 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// telegramAPIBase is swapped for an httptest server in tests.
 var telegramAPIBase = "https://api.telegram.org"
 
-// waitForDaemonToAct gives the daemon a moment to refuse a board command
-// before the reply goes out; tests replace it.
 var waitForDaemonToAct = func() { time.Sleep(1500 * time.Millisecond) }
 
 type telegramControl struct {
@@ -56,14 +53,9 @@ func telegramControlFrom(notifyURL, agentDir string) *telegramControl {
 }
 
 func (t *telegramControl) run(ctx context.Context) {
-	// A daemon that is already shutting down has nothing to say. Checked
-	// before the greeting, which is a network call: without this, stopping
-	// the daemon in its first moment still posts into the chat.
 	if ctx.Err() != nil {
 		return
 	}
-	// Once per chat, not on every daemon restart: the greeting is for a
-	// chat that just got wired up, and a restart is not news.
 	if t.firstTimeInChat() {
 		t.sendCtx(ctx, "corgi is listening here. /help for what it can do.")
 	}
@@ -85,8 +77,6 @@ func (t *telegramControl) run(ctx context.Context) {
 	}
 }
 
-// telegramMessage is one incoming message: its text and, when it answers
-// one of corgi's own notifications, that notification's text.
 type telegramMessage struct {
 	Text    string
 	ReplyTo string
@@ -149,8 +139,6 @@ func (t *telegramControl) handle(text, replyTo string) {
 		return
 	}
 	if !strings.HasPrefix(fields[0], "/") {
-		// Plain text is either a reply to a "needs you" notification —
-		// typed into that session — or noise.
 		if label := sessionFromNotification(replyTo); label != "" {
 			t.sendToSession(label, text)
 		} else if replyTo == "" {
@@ -199,8 +187,6 @@ func (t *telegramControl) handle(text, replyTo string) {
 			t.send("/ask <question about the board>")
 			return
 		}
-		// The chief runs a short claude; the answer follows in a moment,
-		// and the poll loop is not held while it thinks.
 		question := strings.Join(fields[1:], " ")
 		go func() {
 			answer, err := askBoard(context.Background(), t.agentIn, question)
@@ -214,9 +200,6 @@ func (t *telegramControl) handle(text, replyTo string) {
 		t.mute(arg)
 	default:
 		if claudeSlashWords[verb] {
-			// Telegram made "/compact" in a notification tappable, and the tap
-			// lands here: it is Claude Code's word, not corgi's. Say where it
-			// goes, with the session filled in when the board knows which.
 			t.send(claudeSlashTip(verb, t.driftingSession()))
 			return
 		}
@@ -224,8 +207,6 @@ func (t *telegramControl) handle(text, replyTo string) {
 	}
 }
 
-// claudeSlashWords are Claude Code's own slash commands a notification may
-// mention; a tap on one in Telegram is a question, not a corgi command.
 var claudeSlashWords = map[string]bool{"compact": true, "clear": true, "rewind": true, "model": true, "cost": true, "context": true, "resume": true, "continue": true, "remote-control": true, "init": true, "review": true}
 
 func claudeSlashTip(verb, session string) string {
@@ -236,8 +217,6 @@ func claudeSlashTip(verb, session string) string {
 	return tip
 }
 
-// driftingSession is the one session the last drift line was about — the
-// only one drifting, else the fullest — as a word /send takes.
 func (t *telegramControl) driftingSession() string {
 	rep, err := readBoard(t.agentIn)
 	if err != nil {
@@ -259,7 +238,6 @@ func (t *telegramControl) driftingSession() string {
 	return best
 }
 
-// mute holds every ring for a while, from the chat.
 func (t *telegramControl) mute(arg string) {
 	word := strings.ToLower(strings.TrimSpace(arg))
 	if word == "" {
@@ -285,8 +263,6 @@ func (t *telegramControl) mute(arg string) {
 	t.send("muted until " + until.Local().Format("15:04") + " — nothing rings; the board goes on")
 }
 
-// sessionFromNotification finds the session a corgi notification was about:
-// its title line reads "corgi agent · <label>".
 func sessionFromNotification(text string) string {
 	first := strings.TrimSpace(strings.SplitN(text, "\n", 2)[0])
 	_, label, ok := strings.Cut(first, "corgi agent · ")
@@ -313,8 +289,6 @@ func (t *telegramControl) answer(ref, answer string) {
 		answer+" sent to "+ref)
 }
 
-// board drops a board command in the spool for the daemon, and reports the
-// board's notice a moment later when the daemon refused it.
 func (t *telegramControl) board(c command.Command, done string) {
 	if t.agentIn == "" {
 		return
@@ -481,8 +455,6 @@ func matchesAlias(ws workspace.Workspace, want string) bool {
 
 func (t *telegramControl) send(text string) { t.sendCtx(context.Background(), text) }
 
-// sendCtx posts one message. It takes a context so a daemon shutting down
-// does not sit in a ten-second POST nobody is waiting for any more.
 func (t *telegramControl) sendCtx(ctx context.Context, text string) {
 	payload, err := json.Marshal(map[string]any{
 		"chat_id": t.chatID, "text": text, "disable_web_page_preview": true,
@@ -504,9 +476,6 @@ func (t *telegramControl) sendCtx(ctx context.Context, text string) {
 	_ = resp.Body.Close()
 }
 
-// startTelegramControl runs the chat loop until ctx ends. The returned
-// channel closes when the loop has actually stopped, so shutdown can wait
-// for it instead of leaving a goroutine mid-request.
 func startTelegramControl(ctx context.Context, notifyURL, agentDir string) <-chan struct{} {
 	done := make(chan struct{})
 	control := telegramControlFrom(notifyURL, agentDir)
@@ -522,7 +491,6 @@ func startTelegramControl(ctx context.Context, notifyURL, agentDir string) <-cha
 	return done
 }
 
-// firstTimeInChat reports whether this chat has been greeted, and marks it.
 func (t *telegramControl) firstTimeInChat() bool {
 	if t.agentIn == "" {
 		return true

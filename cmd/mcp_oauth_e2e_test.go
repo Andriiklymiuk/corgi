@@ -15,8 +15,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// jsonRPC posts one MCP request with a bearer token and returns the status,
-// the session id and the decoded body.
 func jsonRPC(t *testing.T, base, access, sid, body string) (int, string, map[string]any) {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, base+"/mcp", strings.NewReader(body))
@@ -56,8 +54,6 @@ func toolCount(t *testing.T, base, access string) (int, int) {
 	return code, len(tools)
 }
 
-// The whole Connect-button path against a real MCP server, the way Claude
-// walks it: discovery, registration, consent, token, tools, refresh, replay.
 func TestOAuthEndToEndConnectFlow(t *testing.T) {
 	t.Setenv("CORGI_MCP_OAUTH_CLIENT_HOSTS", "")
 	dir := tempAgentHome(t)
@@ -77,7 +73,6 @@ func TestOAuthEndToEndConnectFlow(t *testing.T) {
 	oa.setIssuer(srv.URL)
 	origins.add(srv.URL)
 
-	// 1. a cold call is a 401 pointing at the metadata
 	resp, _ := http.Post(srv.URL+"/mcp", "application/json", strings.NewReader(`{}`))
 	if resp.StatusCode != 401 {
 		t.Fatalf("cold /mcp = %d", resp.StatusCode)
@@ -85,14 +80,12 @@ func TestOAuthEndToEndConnectFlow(t *testing.T) {
 	if !strings.Contains(resp.Header.Get("WWW-Authenticate"), `resource_metadata="`+srv.URL+oauthPRMPath+`/mcp"`) {
 		t.Fatalf("challenge = %q", resp.Header.Get("WWW-Authenticate"))
 	}
-	// 2. discovery
 	var prm, as map[string]any
 	getInto(t, srv.URL+oauthPRMPath+"/mcp", &prm)
 	getInto(t, prm["authorization_servers"].([]any)[0].(string)+oauthASMetadataPath, &as)
 	if as["issuer"] != srv.URL {
 		t.Fatalf("issuer = %v", as["issuer"])
 	}
-	// 3. register
 	resp, err = http.Post(as["registration_endpoint"].(string), "application/json", strings.NewReader(`{"client_name":"Claude","redirect_uris":["`+testRedirectURI+`"],"token_endpoint_auth_method":"none"}`))
 	if err != nil || resp.StatusCode != 201 {
 		t.Fatalf("register = %v %d", err, resp.StatusCode)
@@ -100,7 +93,6 @@ func TestOAuthEndToEndConnectFlow(t *testing.T) {
 	var reg map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&reg)
 	clientID := reg["client_id"].(string)
-	// 4. authorize → consent page
 	authorize := as["authorization_endpoint"].(string) + "?" + url.Values{
 		"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {testRedirectURI},
 		"code_challenge": {challengeFor(testVerifier)}, "code_challenge_method": {"S256"}, "state": {"s1"},
@@ -111,7 +103,6 @@ func TestOAuthEndToEndConnectFlow(t *testing.T) {
 		t.Fatalf("authorize = %d %s", resp.StatusCode, page)
 	}
 	id := regexp.MustCompile(`var id="([^"]+)"`).FindSubmatch(page)[1]
-	// 5. the browser that knows corgi approves
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+oauthApprovePath, strings.NewReader(`{"id":"`+string(id)+`"}`))
 	req.Header.Set("Authorization", "Bearer "+deviceToken)
 	req.Header.Set("Content-Type", "application/json")
@@ -126,17 +117,14 @@ func TestOAuthEndToEndConnectFlow(t *testing.T) {
 	if redirect.Query().Get("state") != "s1" || redirect.Query().Get("iss") != srv.URL {
 		t.Fatalf("redirect = %s", redirect)
 	}
-	// 6. token
 	tok := postFormInto(t, as["token_endpoint"].(string), url.Values{
 		"grant_type": {"authorization_code"}, "code": {redirect.Query().Get("code")}, "code_verifier": {testVerifier},
 		"client_id": {clientID}, "redirect_uri": {testRedirectURI},
 	})
 	access1, refresh1 := tok["access_token"].(string), tok["refresh_token"].(string)
-	// 7. tools
 	if code, n := toolCount(t, srv.URL, access1); code != 200 || n < 50 {
 		t.Fatalf("tools/list with the access token = %d, %d tools", code, n)
 	}
-	// 8. refresh rotates
 	tok2 := postFormInto(t, as["token_endpoint"].(string), url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh1}, "client_id": {clientID}})
 	access2 := tok2["access_token"].(string)
 	if code, _ := toolCount(t, srv.URL, access1); code != 401 {
@@ -145,7 +133,6 @@ func TestOAuthEndToEndConnectFlow(t *testing.T) {
 	if code, n := toolCount(t, srv.URL, access2); code != 200 || n < 50 {
 		t.Errorf("new access token = %d, %d tools", code, n)
 	}
-	// 9. replaying the old refresh token kills everything
 	errResp := postFormInto(t, as["token_endpoint"].(string), url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh1}})
 	if errResp["error"] != "invalid_grant" {
 		t.Errorf("replay = %v", errResp)
@@ -156,7 +143,6 @@ func TestOAuthEndToEndConnectFlow(t *testing.T) {
 	if resp.StatusCode != 401 || !strings.Contains(resp.Header.Get("WWW-Authenticate"), `error="invalid_token"`) {
 		t.Errorf("after replay the live access token = %d %q", resp.StatusCode, resp.Header.Get("WWW-Authenticate"))
 	}
-	// the device store has no oauth devices left, the browser's own device stays
 	s, _ := pairing.Load(store)
 	for _, d := range s.Devices {
 		if d.Family != "" {

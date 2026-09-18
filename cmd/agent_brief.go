@@ -15,33 +15,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// captureWorkspaceBrief is the daemon's probe: what did the session that just
-// ended leave on disk?
-//
-// Best-effort throughout. A workspace whose compose file has been moved or
-// broken still gets a brief saying the session restarted — losing the note is
-// never a reason to hold up a restart.
 func captureWorkspaceBrief(p brief.Params) *brief.Brief {
 	b := brief.Capture(p, probeWorkspaceRepos(p.Dir))
 	return &b
 }
 
-// probeWorkspaceRepos reads every checkout in a stack: the services' own
-// directories, plus any worktrees a cross-repo branch materialized.
-//
-// The worktrees matter most. They are the thing Remote Control cannot make and
-// the thing a restarted session has no way to discover — a branch spread across
-// four repositories looks like nothing at all from a fresh session's cwd.
 func probeWorkspaceRepos(dir string) []brief.RepoState {
 	if dir == "" {
 		return nil
 	}
 
-	// Parsing a compose file mutates process-wide state (root command flags,
-	// utils.CorgiComposePath*), which is why every MCP handler is serialized
-	// behind this same lock. Briefs are captured from one goroutine per
-	// workspace, so without it two workspaces restarting together can hand each
-	// other's services back.
 	mcpHandlerMu.Lock()
 	corgi, err := loadComposeAtDir(dir)
 	mcpHandlerMu.Unlock()
@@ -49,21 +32,12 @@ func probeWorkspaceRepos(dir string) []brief.RepoState {
 	byPrefix := map[string]string{}
 	var out []brief.RepoState
 	if err != nil || corgi == nil {
-		// A git-only workspace (no compose) still has exactly one repo worth
-		// briefing: the workspace directory itself. Without this, the handover
-		// brief for the restarted session carries no branch or dirty state at
-		// all — for the very workspaces that are nothing but a repo.
 		if state, ok := repoState(filepath.Base(dir), dir, false); ok {
 			out = append(out, state)
 		}
 	}
 	if err == nil && corgi != nil {
 		for service, path := range utils.ServiceDirs(corgi, nil) {
-			// Worktree directories are named from the repository ROOT, not the
-			// service path — those differ for `path: .`, for a service in a
-			// monorepo subdirectory, and wherever the project dir is a symlink.
-			// Hashing the service path instead would never match, so every
-			// worktree would quietly fall back to the repo's basename.
 			if root, ok := utils.RepoRootOf(path); ok {
 				byPrefix[utils.WorktreeDirPrefix(root)] = service
 			}
@@ -75,13 +49,6 @@ func probeWorkspaceRepos(dir string) []brief.RepoState {
 	return append(out, probeWorktreeRepos(dir, byPrefix)...)
 }
 
-// probeWorktreeRepos scans the agent worktree directory rather than asking for
-// a branch, because the point is to report a branch nobody remembered.
-//
-// byPrefix maps a worktree directory's prefix back to the service that owns it.
-// The prefix is "<repo-basename>-<hash>", so splitting the name on "@" would
-// label every service "api-3f2a1b"; when the compose file cannot be read the
-// hash is trimmed instead, which at least yields the repository's name.
 func probeWorktreeRepos(dir string, byPrefix map[string]string) []brief.RepoState {
 	base := utils.AgentWorktreeBase(dir)
 	entries, err := os.ReadDir(base)
@@ -95,7 +62,7 @@ func probeWorktreeRepos(dir string, byPrefix map[string]string) []brief.RepoStat
 		}
 		prefix, _, ok := strings.Cut(e.Name(), "@")
 		if !ok {
-			continue // not a worktree this scheme created
+			continue
 		}
 		service := byPrefix[prefix]
 		if service == "" {
@@ -108,7 +75,6 @@ func probeWorktreeRepos(dir string, byPrefix map[string]string) []brief.RepoStat
 	return out
 }
 
-// worktreeHashSuffix matches the "-<6 hex>" that WorktreeDirPrefix appends.
 var worktreeHashSuffix = regexp.MustCompile(`-[0-9a-f]{6}$`)
 
 func trimWorktreeHash(prefix string) string {
@@ -116,9 +82,6 @@ func trimWorktreeHash(prefix string) string {
 }
 
 func repoState(service, path string, worktree bool) (brief.RepoState, bool) {
-	// ProbeAgentWork would additionally shell out to gh/glab with no timeout.
-	// A restart caused by the network going away must not then block on GitHub
-	// once per repository.
 	st, ok := utils.ProbeRepoState(path)
 	if !ok {
 		return brief.RepoState{}, false
@@ -132,8 +95,6 @@ func repoState(service, path string, worktree bool) (brief.RepoState, bool) {
 	}, true
 }
 
-// loadComposeAtDir parses the compose file in dir. Callers must hold
-// mcpHandlerMu: the loader underneath mutates process-wide state.
 func loadComposeAtDir(dir string) (*utils.CorgiCompose, error) {
 	for _, name := range []string{"corgi-compose.yml", "corgi-compose.yaml"} {
 		path := filepath.Join(dir, name)
@@ -175,9 +136,6 @@ func runAgentBrief(cmd *cobra.Command, args []string) {
 			exitWithError("agent_brief", readErr, 1)
 		}
 		if asJSON {
-			// One id asked for, one object or null returned — never an array.
-			// docs/agents.md documents both shapes, and a command that switches
-			// between them makes every consumer branch on the shape first.
 			printJSON(b)
 			return
 		}
@@ -198,8 +156,6 @@ func runAgentBrief(cmd *cobra.Command, args []string) {
 
 func printBriefs(briefs []brief.Brief, asJSON bool) {
 	if asJSON {
-		// Never nil: docs/agents.md promises an array, and a `null` here makes
-		// every consumer that iterates the result special-case the empty case.
 		if briefs == nil {
 			briefs = []brief.Brief{}
 		}
@@ -209,11 +165,6 @@ func printBriefs(briefs []brief.Brief, asJSON bool) {
 	utils.Infof("%s", formatBriefs(briefs))
 }
 
-// formatBriefs renders briefs for a person.
-//
-// Kept pure and separate from printing so what a restart actually reports can
-// be asserted on directly. This is the text someone reads to decide where they
-// left off, so getting it wrong is not cosmetic.
 func formatBriefs(briefs []brief.Brief) string {
 	if len(briefs) == 0 {
 		return "no briefs yet — nothing has restarted\n"
@@ -250,8 +201,6 @@ func orDash(s string) string {
 	return s
 }
 
-// printJSON writes a value as pure JSON on stdout, matching the --json contract
-// the rest of the agent commands follow.
 func printJSON(v any) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")

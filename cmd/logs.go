@@ -142,7 +142,6 @@ func logJSONLine(service, ts, level, line string) string {
 	return string(b)
 }
 
-// detectLevel is a best-effort log-level guess from a line's content.
 func detectLevel(line string) string {
 	low := strings.ToLower(line)
 	switch {
@@ -282,7 +281,6 @@ func pruneAllLogs(base string) {
 	fmt.Println(art.GreenColor, "✅ All log files removed.", art.WhiteColor)
 }
 
-// dumpNewestLogs copies each service's newest run into dir as <service>.log.
 func dumpNewestLogs(base, dir string) error {
 	services, err := utils.ListLoggedStreams(base)
 	if err != nil || len(services) == 0 {
@@ -371,7 +369,6 @@ func pickLogRun(base, serviceName string) (string, error) {
 	return "", fmt.Errorf("run not found: %s", chosen)
 }
 
-// labelForRun makes a picker label that surfaces .ok / .crashed status.
 func labelForRun(path string) string {
 	base := filepath.Base(path)
 	switch {
@@ -436,9 +433,6 @@ func splitLogLine(line string, stripPrefix bool) (ts, content string) {
 	return ts, content
 }
 
-// followShouldStop reports whether the follow loop should end: a non-EOF read
-// error, or EOF past the idle/inactivity threshold. Prints the matching
-// human notice (suppressed in JSON mode).
 func followShouldStop(err error, path string, idleSince *time.Time) bool {
 	if err != io.EOF {
 		if !utils.JSONOutput {
@@ -476,9 +470,6 @@ func shouldExitFollow(path string, idleSince *time.Time) bool {
 	return !isLogFileActive(path) || idleExceeded
 }
 
-// looksLikeStampedLog returns true when the file's first 25 bytes match
-// the `YYYY-MM-DDTHH:MM:SS.sssZ ` shape written by the logger. Logs from
-// older corgi versions (no prefix) are read as-is.
 func looksLikeStampedLog(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
@@ -493,10 +484,8 @@ func looksLikeStampedLog(path string) bool {
 	return hasTimestampShape(buf)
 }
 
-// timestampShapePattern: 'd' = any digit, every other byte literal (25 bytes).
 const timestampShapePattern = "dddd-dd-ddTdd:dd:dd.dddZ "
 
-// hasTimestampShape checks `YYYY-MM-DDTHH:MM:SS.sssZ `.
 func hasTimestampShape(b []byte) bool {
 	if len(b) < len(timestampShapePattern) {
 		return false
@@ -514,10 +503,6 @@ func hasTimestampShape(b []byte) bool {
 	return true
 }
 
-// mergeStream is one input to the k-way merge — a service's log file read line
-// by line, head buffered for heap compare. A Reader rather than a Scanner
-// because a Scanner stops for good at EOF and a live log hits EOF constantly.
-// A trailing line without a newline is held back until the rest arrives.
 type mergeStream struct {
 	service string
 	reader  *bufio.Reader
@@ -527,8 +512,6 @@ type mergeStream struct {
 	partial string
 }
 
-// readLine returns the next complete line. An incomplete trailing line is kept
-// until its newline shows up, so a half-written line is never printed twice.
 func (s *mergeStream) readLine() (string, bool) {
 	chunk, err := s.reader.ReadString('\n')
 	if err != nil {
@@ -547,9 +530,6 @@ func (s *mergeStream) close() {
 	}
 }
 
-// followAllLogs merges the newest run of every logged service into one
-// timestamp-sorted stream. K-way merge → memory is O(num services), not
-// O(total log bytes), so big projects don't OOM the CLI.
 func followAllLogs(base string) error {
 	services, err := utils.ListLoggedStreams(base)
 	if err != nil || len(services) == 0 {
@@ -582,12 +562,8 @@ func followAllLogs(base string) error {
 	}
 }
 
-// followPollInterval is how often the tail checks for new content. Short
-// enough to feel live, long enough not to spin.
 const followPollInterval = 250 * time.Millisecond
 
-// keepFollowing stops after --idle of dead air. --idle 0 tails forever, which
-// is what a CI job wants alongside a booting stack.
 func keepFollowing(idleSince *time.Time) bool {
 	if idleSince.IsZero() {
 		*idleSince = time.Now()
@@ -598,8 +574,6 @@ func keepFollowing(idleSince *time.Time) bool {
 	return time.Since(*idleSince) <= logsIdleFlag
 }
 
-// adoptNewServices picks up services that started logging after the follow
-// began — a slow one has no log file when the first pass runs.
 func adoptNewServices(base string, streams map[string]*mergeStream) {
 	services, err := utils.ListLoggedStreams(base)
 	if err != nil {
@@ -615,9 +589,6 @@ func adoptNewServices(base string, streams map[string]*mergeStream) {
 	}
 }
 
-// drainStreams writes every line currently available, oldest first, and
-// reports how many. Each file is already in order, so sorting one tick's batch
-// is enough to interleave services correctly.
 func drainStreams(out *bufio.Writer, streams map[string]*mergeStream) int {
 	type entry struct {
 		ts, line, service string
@@ -635,8 +606,6 @@ func drainStreams(out *bufio.Writer, streams map[string]*mergeStream) int {
 	return len(batch)
 }
 
-// advanceTail is advance for a file still being written: EOF means "nothing
-// more yet", not "finished".
 func (s *mergeStream) advanceTail() bool {
 	line, ok := s.readLine()
 	if !ok {
@@ -680,7 +649,6 @@ func writeMergedLine(out *bufio.Writer, service, ts, line string) {
 	fmt.Fprintf(out, "%s[%s]%s %s\n", art.CyanColor, service, art.WhiteColor, line)
 }
 
-// isLogFileActive returns true when the log file was modified in the last 2s.
 func isLogFileActive(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {

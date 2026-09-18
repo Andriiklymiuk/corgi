@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// Fields corgi computes rather than reads from the compose file.
 var computedServiceFields = map[string]bool{
 	"ServiceName":  true,
 	"AbsolutePath": true,
@@ -18,8 +17,6 @@ var computedRequiredFields = map[string]bool{
 	"Name": true,
 }
 
-// Fields buildDatabaseService derives (defaults, credential processing, the
-// localstack service injection) rather than passing straight through.
 var computedDatabaseFields = map[string]bool{
 	"ServiceName": true,
 	"Driver":      true,
@@ -66,9 +63,6 @@ func assertNoFieldDropped(t *testing.T, in, out reflect.Value, computed map[stri
 	var checked int
 	for i := 0; i < in.NumField(); i++ {
 		field := in.Type().Field(i)
-		// CanSet is false here: reflect.ValueOf on a non-pointer is not
-		// addressable. Exportedness is the question, and checking CanSet
-		// instead made this loop skip every field and pass vacuously.
 		if computed[field.Name] || !field.IsExported() || in.Field(i).IsZero() {
 			continue
 		}
@@ -83,8 +77,6 @@ func assertNoFieldDropped(t *testing.T, in, out reflect.Value, computed map[stri
 	}
 }
 
-// skipInCi and warmup both shipped doing nothing because a builder copied
-// fields one at a time. This walks the struct so the next one cannot.
 func TestBuildServiceKeepsEveryComposeField(t *testing.T) {
 	var parsed Service
 	setRecognisableValues(t, reflect.ValueOf(&parsed).Elem())
@@ -115,8 +107,6 @@ func TestParseRequiredKeepsEveryComposeField(t *testing.T) {
 func TestBuildDatabaseServiceKeepsEveryComposeField(t *testing.T) {
 	var parsed DatabaseService
 	setRecognisableValues(t, reflect.ValueOf(&parsed).Elem())
-	// A recognisable value in every field would otherwise trip the localstack
-	// validation, which is not what this test is about.
 	parsed.Driver = "postgres"
 
 	built, err := buildDatabaseService("api-db", parsed)

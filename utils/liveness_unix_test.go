@@ -9,7 +9,6 @@ import (
 )
 
 func TestPidAliveGroupLeader(t *testing.T) {
-	// Own process group → pid is its own group leader, like a detached proc.
 	cmd := exec.Command("sleep", "30")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
@@ -27,8 +26,6 @@ func TestPidAliveGroupLeader(t *testing.T) {
 }
 
 func TestPidAliveNonLeader(t *testing.T) {
-	// Without Setpgid the child joins the test runner's group, so pgid != pid:
-	// stands in for a recycled pid that isn't its own group leader.
 	cmd := exec.Command("sleep", "30")
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start sleep: %v", err)

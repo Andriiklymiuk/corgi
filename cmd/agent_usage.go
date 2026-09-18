@@ -75,8 +75,6 @@ func runAgentUsage(cmd *cobra.Command, _ []string) {
 	}
 }
 
-// buildUsageReport prefers the board's accounts (the daemon samples them
-// every minute) and falls back to reading the caches itself.
 func buildUsageReport(dir string, now time.Time) usageReport {
 	rep := usageReport{At: now}
 	if board, err := readBoard(dir); err == nil && len(board.Accounts) > 0 {
@@ -146,7 +144,6 @@ func printUsageReport(rep usageReport) {
 	}
 }
 
-// limitBar is "62% ▓▓▓▓▓▓░░░░ resets 4:10pm".
 func limitBar(w usage.Window) string {
 	filled := w.Percent / 10
 	if filled > 10 {
@@ -168,7 +165,6 @@ func resetText(at time.Time) string {
 	return at.Format("3:04pm")
 }
 
-// forecastLine turns the slope into the sentence that decides things.
 func forecastLine(l *usage.Limits, f *usage.Forecast) string {
 	if f == nil {
 		return ""
@@ -200,7 +196,6 @@ func forecastLine(l *usage.Limits, f *usage.Forecast) string {
 	return strings.Join(parts, " · ")
 }
 
-// forecastSuffix is the short form for `corgi agent status`.
 func forecastSuffix(f *usage.Forecast) string {
 	if f == nil || f.FiveHour == nil || f.FiveHour.ExhaustAt.IsZero() || f.FiveHour.Safe {
 		return ""
@@ -221,8 +216,6 @@ func init() {
 	agentCmd.AddCommand(agentUsageCmd)
 }
 
-// digestText is the one message a day: what ran, what it cost in waiting,
-// where the limits stand. Plain lines, short enough for a phone.
 func digestText(dir string, now time.Time) string {
 	rep := buildUsageReport(dir, now)
 	var lines []string

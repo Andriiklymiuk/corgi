@@ -71,7 +71,3 @@ done
 echo -e "\e[32mScyllaDB created successfully\e[0m"
 echo -e "\e[32m===================\e[0m"
 `
-
-// This template doesn't create user (by default scylla is allowing all auth)
-// for now it is fine, but need to change authenticator in scylla.yaml in the future
-// https://opensource.docs.scylladb.com/stable/operating-scylla/security/runtime-authentication.html

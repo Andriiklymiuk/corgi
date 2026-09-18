@@ -1,9 +1,3 @@
-// Package pairing issues per-device tokens for corgi's MCP HTTP endpoint.
-//
-// A QR holding the server's bearer token would be a credential for the whole
-// machine (the endpoint runs shell and queries databases), visible to anyone
-// who sees the screen and unrevocable per device. Instead a short-lived,
-// single-use code buys a per-device token, stored hashed and revocable alone.
 package pairing
 
 import (
@@ -26,68 +20,38 @@ import (
 	"unicode"
 )
 
-// ErrBadRequest marks failures caused by the caller's own input — a wrong or
-// expired code, a bad device name. Only these are safe to report back over the
-// unauthenticated pairing endpoint; anything else names local paths.
 var ErrBadRequest = errors.New("pairing request rejected")
 
-// CodeTTL has to survive a code being read off a terminal, sent to a phone and
-// opened there; the single-use rule and MaxAttempts are what bound guessing.
 const CodeTTL = 10 * time.Minute
 
-// MaxAttempts is how many wrong codes are tolerated before pairing closes.
-// The code is high-entropy, so this is about shutting down noise, not about
-// making a guess unlikely.
 const MaxAttempts = 10
 
-// TokenPrefix marks a device token in logs and config files.
 const TokenPrefix = "corgi_dev_"
 
-// codeAlphabet is Crockford base32 without I, L, O, U — unambiguous when read
-// off a screen and typed by hand, which is the fallback when a camera fails.
 const codeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-// codeLength gives ~100 bits of entropy. The code rides in the QR / link
-// fragment and is read by the pair page, so length costs the user nothing;
-// hand-typing it is only the fallback when a camera fails.
 const codeLength = 20
 
-// Device is one paired client. Deliberately no "last seen": recording it means
-// a read-modify-write on every authenticated request, and a concurrent
-// `devices revoke` could then be undone by a touch that loaded before it.
 type Device struct {
 	Name      string    `json:"name"`
 	TokenHash string    `json:"tokenHash"`
 	CreatedAt time.Time `json:"createdAt"`
-	// PubKey is the device's X25519 public key when it paired end-to-end
-	// encrypted (see e2e.go); empty for a device that talks plainly.
-	PubKey string `json:"pubKey,omitempty"`
-	// Role is "" for a device that may do everything, or RoleViewer for
-	// one that only reads — a teammate's phone on your board.
-	Role string `json:"role,omitempty"`
-	// ExpiresAt is set on a token that dies on its own — an OAuth access
-	// token. Zero means the device lives until revoked.
+	PubKey    string    `json:"pubKey,omitempty"`
+	Role      string    `json:"role,omitempty"`
 	ExpiresAt time.Time `json:"expiresAt,omitempty"`
-	// Family ties an OAuth access token to the grant it came from, so
-	// revoking the device revokes the refresh token too.
-	Family string `json:"family,omitempty"`
+	Family    string    `json:"family,omitempty"`
 }
 
-// RoleViewer is the read-only role: every GET but the transcript, no POST.
 const RoleViewer = "viewer"
 
-// Encrypted says whether the device pairs end-to-end encrypted.
 func (d Device) Encrypted() bool { return strings.TrimSpace(d.PubKey) != "" }
 
-// Viewer says whether the device only reads.
 func (d Device) Viewer() bool { return d.Role == RoleViewer }
 
-// Expired says whether a self-expiring device is past its time.
 func (d Device) Expired(now time.Time) bool {
 	return !d.ExpiresAt.IsZero() && !now.Before(d.ExpiresAt)
 }
 
-// Store is the set of paired devices.
 type Store struct {
 	Version int      `json:"version"`
 	Devices []Device `json:"devices"`
@@ -95,14 +59,8 @@ type Store struct {
 
 const storeVersion = 1
 
-// StorePath is where paired devices are recorded.
 func StorePath(agentDir string) string { return filepath.Join(agentDir, "devices.json") }
 
-// Load reads the device store. A missing file is an empty store.
-//
-// The file records token hashes, not tokens, but it still names every device
-// with access — so a group- or world-readable one is refused, the same way ssh
-// refuses a loose private key.
 func Load(path string) (*Store, error) {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -111,9 +69,6 @@ func Load(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Skipped on Windows, where Go reports 0666 for every file: the check would
-	// reject the store on every read, and every paired device would get a 401
-	// with nothing the user could do about it.
 	if runtime.GOOS != "windows" {
 		if mode := info.Mode().Perm(); mode&0o077 != 0 {
 			return nil, fmt.Errorf("%s is readable by other users (mode %04o) — run: chmod 600 %s",
@@ -134,25 +89,14 @@ func Load(path string) (*Store, error) {
 	return &s, nil
 }
 
-// StoreState describes whether device tokens are in play.
 type StoreState int
 
 const (
-	// StoreEmpty means no device has been paired.
 	StoreEmpty StoreState = iota
-	// StoreHasDevices means at least one device is paired.
 	StoreHasDevices
-	// StoreUnreadable means the store exists but could not be read — bad
-	// permissions, or corrupt JSON.
 	StoreUnreadable
 )
 
-// InspectStore reports the store's state.
-//
-// The unreadable case is distinguished deliberately. Collapsing it into "no
-// devices" would let a chmod or a truncated file turn an authenticated endpoint
-// back into an open one, which is the worst possible direction for that mistake
-// to fail in.
 func InspectStore(path string) StoreState {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return StoreEmpty
@@ -167,8 +111,6 @@ func InspectStore(path string) StoreState {
 	return StoreHasDevices
 }
 
-// Save writes the store with owner-only permissions, tmp-write then rename so a
-// crash cannot truncate it.
 func Save(path string, s *Store) error {
 	s.Version = storeVersion
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -182,7 +124,6 @@ func Save(path string, s *Store) error {
 	return atomicfile.Write(path, data, 0o600)
 }
 
-// Find returns the device with the given name.
 func (s *Store) Find(name string) (Device, bool) {
 	for _, d := range s.Devices {
 		if strings.EqualFold(d.Name, name) {
@@ -192,7 +133,6 @@ func (s *Store) Find(name string) (Device, bool) {
 	return Device{}, false
 }
 
-// Revoke removes one device. Reports whether anything was removed.
 func (s *Store) Revoke(name string) bool {
 	for i := range s.Devices {
 		if strings.EqualFold(s.Devices[i].Name, name) {
@@ -203,17 +143,11 @@ func (s *Store) Revoke(name string) bool {
 	return false
 }
 
-// Authorize reports whether token belongs to a paired device, and which.
-//
-// Every stored hash is compared even after a match, so the time taken does not
-// reveal how far down the list a token sits.
 func (s *Store) Authorize(token string) (string, bool) {
 	d, ok := s.AuthorizeDevice(token)
 	return d.Name, ok
 }
 
-// AuthorizeDevice is Authorize with the whole device, for the encryption
-// layer that needs its key. An expired device does not authorize.
 func (s *Store) AuthorizeDevice(token string) (Device, bool) {
 	d, ok := s.FindByToken(token)
 	if !ok || d.Expired(time.Now()) {
@@ -222,8 +156,6 @@ func (s *Store) AuthorizeDevice(token string) (Device, bool) {
 	return d, true
 }
 
-// FindByToken is the lookup behind AuthorizeDevice without the expiry check,
-// for callers that manage lifetimes themselves.
 func (s *Store) FindByToken(token string) (Device, bool) {
 	if token == "" {
 		return Device{}, false
@@ -239,7 +171,6 @@ func (s *Store) FindByToken(token string) (Device, bool) {
 	return matched, found
 }
 
-// RevokeExpired drops every device past its ExpiresAt. Reports how many.
 func (s *Store) RevokeExpired(now time.Time) int {
 	kept := s.Devices[:0]
 	dropped := 0
@@ -254,14 +185,11 @@ func (s *Store) RevokeExpired(now time.Time) int {
 	return dropped
 }
 
-// HashToken is what the store holds. A readable store is then not a usable
-// credential, only a list of which devices exist.
 func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
 
-// NewDeviceToken returns a fresh device token.
 func NewDeviceToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -270,7 +198,6 @@ func NewDeviceToken() (string, error) {
 	return TokenPrefix + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b), nil
 }
 
-// NewCode returns a fresh pairing code.
 func NewCode() (string, error) {
 	b := make([]byte, codeLength)
 	if _, err := rand.Read(b); err != nil {
@@ -283,7 +210,6 @@ func NewCode() (string, error) {
 	return string(out), nil
 }
 
-// NormalizeCode makes a typed code comparable: case and separators are noise.
 func NormalizeCode(code string) string {
 	var b strings.Builder
 	for _, r := range strings.ToUpper(strings.TrimSpace(code)) {
@@ -294,17 +220,15 @@ func NormalizeCode(code string) string {
 	return b.String()
 }
 
-// Session is one open pairing window. Zero value is closed.
 type Session struct {
 	mu       sync.Mutex
 	code     string
 	expires  time.Time
 	attempts int
 	used     bool
-	now      func() time.Time // test seam
+	now      func() time.Time
 }
 
-// NewSession opens a pairing window with a fresh code.
 func NewSession() (*Session, string, error) {
 	code, err := NewCode()
 	if err != nil {
@@ -316,7 +240,6 @@ func NewSession() (*Session, string, error) {
 	return s, code, nil
 }
 
-// Code returns the session's pairing code, for display on the machine itself.
 func (s *Session) Code() string {
 	if s == nil {
 		return ""
@@ -326,7 +249,6 @@ func (s *Session) Code() string {
 	return s.code
 }
 
-// Open reports whether the window is still accepting attempts.
 func (s *Session) Open() bool {
 	if s == nil {
 		return false
@@ -340,8 +262,6 @@ func (s *Session) openLocked() bool {
 	return !s.used && s.attempts < MaxAttempts && s.now().Before(s.expires)
 }
 
-// Redeem consumes the code. A correct code can be redeemed exactly once; the
-// window then closes, so a code observed in transit cannot be replayed.
 func (s *Session) Redeem(offered string) error {
 	if s == nil {
 		return fmt.Errorf("%w: pairing is not open", ErrBadRequest)
@@ -366,7 +286,6 @@ func (s *Session) Redeem(offered string) error {
 	return nil
 }
 
-// Close ends the window early.
 func (s *Session) Close() {
 	if s == nil {
 		return
@@ -376,20 +295,14 @@ func (s *Session) Close() {
 	s.used = true
 }
 
-// Pair validates the code and records a new device, returning its token.
-// The token is returned once and never stored in the clear.
 func Pair(storePath string, session *Session, code, deviceName string) (string, error) {
 	return PairWithKey(storePath, session, code, deviceName, "")
 }
 
-// PairWithKey is Pair for a device that also offers its X25519 public key:
-// from then on it talks end-to-end encrypted, and only that way.
 func PairWithKey(storePath string, session *Session, code, deviceName, pubKey string) (string, error) {
 	return PairWithRole(storePath, session, code, deviceName, pubKey, "")
 }
 
-// PairWithRole is PairWithKey with the role the machine chose for this
-// window — the device never picks its own.
 func PairWithRole(storePath string, session *Session, code, deviceName, pubKey, role string) (string, error) {
 	if role != "" && role != RoleViewer {
 		return "", fmt.Errorf("%w: role is viewer or nothing", ErrBadRequest)
@@ -401,10 +314,6 @@ func PairWithRole(storePath string, session *Session, code, deviceName, pubKey, 
 	if len(deviceName) > 64 {
 		return "", fmt.Errorf("%w: device name is too long", ErrBadRequest)
 	}
-	// The name is stored and later printed by `corgi mcp devices list`. A
-	// control character (ANSI escape, newline) in it would rewrite that
-	// terminal output, so reject anything unprintable rather than sanitize on
-	// display in every reader.
 	for _, r := range deviceName {
 		if r == '\t' || !unicode.IsGraphic(r) {
 			return "", fmt.Errorf("%w: device name must be printable text", ErrBadRequest)
@@ -426,9 +335,6 @@ func PairWithRole(storePath string, session *Session, code, deviceName, pubKey, 
 	if err != nil {
 		return "", err
 	}
-	// Re-pairing under an existing name replaces that device's token, which is
-	// what someone reinstalling the app expects — and it invalidates the old
-	// one, which is what they want if the phone was lost.
 	store.Revoke(deviceName)
 	d := Device{
 		Name:      deviceName,
@@ -446,10 +352,6 @@ func PairWithRole(storePath string, session *Session, code, deviceName, pubKey, 
 	return token, nil
 }
 
-// PairLocal mints a device token without a pairing code, for a browser on
-// the machine that owns the store. Anyone who can run this already has the
-// store on disk, so no code is being skipped — there is nothing a code
-// would protect against here. Remote pairing still goes through Pair.
 func PairLocal(storePath, deviceName string) (string, error) {
 	deviceName = strings.TrimSpace(deviceName)
 	if deviceName == "" {

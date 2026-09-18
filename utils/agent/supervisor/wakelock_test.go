@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// fakeLock returns a WakeLock whose held process is a trivial local command,
-// so the tests never depend on caffeinate or systemd-inhibit being installed.
 func fakeLock(t *testing.T, mode WakeLockMode) (*WakeLock, *int) {
 	t.Helper()
 	starts := 0
@@ -22,10 +20,6 @@ func fakeLock(t *testing.T, mode WakeLockMode) (*WakeLock, *int) {
 		starts++
 		cmd := exec.Command("sleep", "30")
 		if err := cmd.Start(); err != nil {
-			// The idle monitor calls this from its own goroutine, where
-			// t.Fatal would stop only that goroutine and leave the test to
-			// time out on a lock nothing re-acquires. Acquire propagates the
-			// error instead, so the test fails on its real assertion.
 			return nil, err
 		}
 		return cmd, nil
@@ -145,9 +139,6 @@ func TestValidWakeLockMode(t *testing.T) {
 	}
 }
 
-// `always` must hold the lock across the gaps between restarts too, otherwise
-// it is identical to `session` and the machine can sleep during a five-minute
-// backoff and never come back.
 func TestWakeLockAlwaysSurvivesBetweenRestarts(t *testing.T) {
 	runs := []*fakeProcess{
 		{pid: 1, code: 1, exitNow: true},

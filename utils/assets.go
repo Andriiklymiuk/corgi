@@ -9,12 +9,8 @@ import (
 	"strings"
 )
 
-// AssetsBranchPrefix is where a repo keeps the images its pull requests show.
-// The branch is never merged, so the links outlive the PR branch.
 const AssetsBranchPrefix = "pr-assets/"
 
-// AssetFile is one image after the push: where it came from, where it sits on
-// the assets branch, and the link a PR body can carry.
 type AssetFile struct {
 	Source   string `json:"source"`
 	Path     string `json:"path"`
@@ -22,8 +18,6 @@ type AssetFile struct {
 	Markdown string `json:"markdown"`
 }
 
-// AssetPush is the result of PushAssets: the branch, its pushed head, and one
-// entry per file with the markdown to paste.
 type AssetPush struct {
 	Branch   string      `json:"branch"`
 	Head     string      `json:"head"`
@@ -31,11 +25,6 @@ type AssetPush struct {
 	Markdown string      `json:"markdown"`
 }
 
-// PushAssets commits the files to docs/pr-assets/<key>/ on the repo's
-// pr-assets/<key> branch (created from origin/<base> the first time, appended
-// to after), pushes it, confirms origin has the same head, and returns the
-// link form the forge renders on a private repo. The user's checkout is not
-// touched: the work happens in a throwaway worktree that is removed at the end.
 func PushAssets(dir, key, base string, files []string) (AssetPush, error) {
 	var out AssetPush
 	key = strings.TrimSpace(key)
@@ -148,10 +137,6 @@ func assetsStartRef(dir, base string) (string, error) {
 	return "", fmt.Errorf("base branch %s is not in this repo", base)
 }
 
-// assetURL is the one link form the forge renders inside a private repo's PR
-// body: GitHub through the blob viewer with ?raw=true (raw.githubusercontent.com
-// answers 404 to a browser there), GitLab through /-/raw/. A remote that is not
-// a forge URL (a local path in tests) yields "".
 func assetURL(remote, branch, p string) string {
 	host, repoPath := remoteWebParts(remote)
 	if host == "" {
@@ -163,8 +148,6 @@ func assetURL(remote, branch, p string) string {
 	return "https://" + host + "/" + repoPath + "/blob/" + branch + "/" + p + "?raw=true"
 }
 
-// remoteWebParts turns git@host:group/repo.git or https://host/group/repo.git
-// into (host, group/repo).
 func remoteWebParts(remote string) (host, repoPath string) {
 	remote = strings.TrimSpace(remote)
 	if strings.HasPrefix(remote, "git@") || (strings.Contains(remote, ":") && !strings.Contains(remote, "://")) {

@@ -14,10 +14,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// Explain this diff: the chief reads the session's branch — the counts and
-// the patch, bounded — and answers three plain lines and a risk word. The
-// same gate as the diff itself: the workspace has to be readable from a
-// phone.
 func TestExplainReadsTheDiffAndAnswersInThreeLines(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
@@ -82,7 +78,6 @@ func TestExplainReadsTheDiffAndAnswersInThreeLines(t *testing.T) {
 	if !strings.Contains(gotPrompt, "auth.go") || !strings.Contains(gotPrompt, "+func Refresh() { grace() }") || !strings.Contains(gotPrompt, "APP-1") {
 		t.Fatalf("the prompt carries the files, the patch and the ticket:\n%s", gotPrompt)
 	}
-	// A question of your own rides along.
 	post(`{"session":"s1","diff":true,"question":"does it touch the token?"}`)
 	if !strings.Contains(gotPrompt, "QUESTION: does it touch the token?") {
 		t.Fatalf("the question: %s", gotPrompt)

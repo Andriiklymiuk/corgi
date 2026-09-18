@@ -9,9 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// The chief gets the board, not the souls or the transcripts, and the
-// phone's Ask box carries the answer back; an empty question is refused
-// before any claude runs.
 func TestAskHandsTheBoardToClaudeAndTheAnswerBack(t *testing.T) {
 	dir := phoneBoard(t, true,
 		sessions.Session{ID: "s1", Label: "api", Display: "api·auth", Status: sessions.StatusNeedsInput, Pending: &sessions.Pending{Tool: "Bash", Subject: "go test"}, Ticket: "APP-1"},

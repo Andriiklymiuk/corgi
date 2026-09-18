@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// The morning card has to lead with what corgi did on its own, because that
-// is the part no notification survived.
 func TestWhileAwayLeadsWithWhatCorgiDid(t *testing.T) {
 	rep := awayReport{
 		Since:   time.Now().Add(-12 * time.Hour),
@@ -28,11 +26,9 @@ func TestWhileAwayLeadsWithWhatCorgiDid(t *testing.T) {
 			t.Errorf("the card is missing %q:\n%s", want, out)
 		}
 	}
-	// What corgi did comes before what merely arrived.
 	if strings.Index(out, "corgi opened") > strings.Index(out, "arrived") {
 		t.Error("what it did on its own leads; what arrived is context")
 	}
-	// The deferred list is sorted, so two mornings read the same way.
 	if strings.Index(out, "ABC-5") > strings.Index(out, "ABC-6") {
 		t.Error("deferred refs are sorted")
 	}

@@ -9,9 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// An agent client reads a workspace's switches and flips the live ones
-// through the same code the phone uses; the mute and the lessons answer
-// in kind.
 func TestMCPSwitchesMuteAndLessons(t *testing.T) {
 	dir := phoneBoard(t, true)
 	reg := &workspace.Registry{}

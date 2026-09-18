@@ -6,9 +6,6 @@ import (
 	"regexp"
 )
 
-// Ngrok wraps the ngrok CLI in log=stdout mode so we can parse the
-// "url=https://...ngrok-free.app" or "url=https://...ngrok.io" line emitted
-// when the tunnel is established.
 type Ngrok struct{}
 
 func (Ngrok) Name() string { return "ngrok" }
@@ -17,8 +14,6 @@ func (Ngrok) Cmd(port int) []string {
 	return []string{"ngrok", "http", "--log=stdout", fmt.Sprintf("%d", port)}
 }
 
-// ngrok writes structured-ish log lines, URLs appear inside addr=… url=…
-// fields. Match any ngrok-flavored https URL.
 var ngrokURLRe = regexp.MustCompile(`https://[a-z0-9-]+\.ngrok[a-z0-9.-]*`)
 
 func (Ngrok) ExtractURL(line string) string { return ngrokURLRe.FindString(line) }
@@ -55,7 +50,5 @@ func (Ngrok) PreflightNamedAuth(cfg NamedConfig) error {
 	if err := (Ngrok{}).PreflightAuth(); err != nil {
 		return err
 	}
-	// Domain claim verification needs ngrok API; defer to runtime.
-	// If hostname unclaimed, ngrok prints a clear error in stdout.
 	return nil
 }

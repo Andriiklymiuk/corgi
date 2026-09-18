@@ -12,16 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The guard: a git pre-push hook that asks the board about the branch
-// being pushed. A session on it whose done-when gate is red, or whose last
-// test run went red, means the push is refused with the command that
-// failed — so an agent's red branch does not become a red pull request.
-// CORGI_FORCE=1 pushes anyway; a branch no session sits on is not the
-// guard's business.
-
 const guardMarker = "# corgi agent guard"
 
-// guardVerdict says whether a push of branch from repo may go, and why not.
 func guardVerdict(st sessions.State, repo, branch string) (bool, string) {
 	repo = filepath.Clean(repo)
 	for _, s := range st.Sessions {
@@ -63,8 +55,6 @@ command -v corgi >/dev/null 2>&1 || exit 0
 exec corgi agent guard check
 `
 
-// installGuard writes the pre-push hook; another hook already there is
-// left alone unless force.
 func installGuard(repo string, force bool) (string, error) {
 	dir, err := hooksDir(repo)
 	if err != nil {
@@ -80,7 +70,6 @@ func installGuard(repo string, force bool) (string, error) {
 	return path, os.WriteFile(path, []byte(guardHook), 0o755)
 }
 
-// uninstallGuard removes the hook when it is corgi's.
 func uninstallGuard(repo string) error {
 	dir, err := hooksDir(repo)
 	if err != nil {
@@ -138,12 +127,12 @@ git push goes through anyway.
 		case "check":
 			out, err := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
 			if err != nil {
-				return // not a checkout: nothing to guard
+				return
 			}
 			branch := strings.TrimSpace(string(out))
 			board, err := readBoard(mustAgentDir())
 			if err != nil {
-				return // no board, no opinion
+				return
 			}
 			ok, why := guardVerdict(board.State, repo, branch)
 			if utils.JSONOutput {

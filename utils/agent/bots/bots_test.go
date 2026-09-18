@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// A bot keeps its thread through a redefinition, and the daemon's record of
-// a new session moves it; a name that would not survive a shell is refused.
 func TestABotKeepsItsThread(t *testing.T) {
 	path := Path(t.TempDir())
 	s, _ := Load(path)
@@ -50,8 +48,6 @@ func TestABotKeepsItsThread(t *testing.T) {
 	}
 }
 
-// A bot may act on its own: the kinds it runs on are checked on the way
-// in, said back in words, and a template fills a whole bot from a name.
 func TestTriggersAndTemplates(t *testing.T) {
 	on, err := ParseTriggers([]string{"pr.review, ci.failed", "PR.REVIEW", "", "none"})
 	if err != nil || len(on) != 2 || on[0] != "pr.review" || on[1] != "ci.failed" {
@@ -77,8 +73,6 @@ func TestTriggersAndTemplates(t *testing.T) {
 			t.Fatalf("template %s has a bad trigger: %v", name, err)
 		}
 	}
-	// The proactive one runs on a clock, not on an event: it has a routine
-	// to its name and no trigger.
 	pro, ok := Template("proactive")
 	if !ok || len(pro.On) != 0 || !strings.Contains(pro.Soul, "never change code") {
 		t.Fatalf("proactive template: %+v %v", pro, ok)

@@ -89,11 +89,6 @@ func TestIsServiceRunningFalseForFakeContainer(t *testing.T) {
 	}
 }
 
-// installFakeDockerPS writes a `docker ps` stub that mimics how the real
-// daemon treats the `--filter name=...` value: an anchored `^name$` matches
-// only the exact container, while a bare `name` substring-matches every
-// container whose name contains it. running is the set of up containers; the
-// stub prints "<name>\tUp 3 seconds" for each that satisfies the filter.
 func installFakeDockerPS(t *testing.T, running []string) {
 	t.Helper()
 	binDir := t.TempDir()
@@ -130,8 +125,6 @@ emit() {
 }
 
 func TestIsServiceRunningExactMatch(t *testing.T) {
-	// "postgres-main-replica" is up but "postgres-main" is NOT — an unanchored
-	// substring filter would wrongly report postgres-main as running.
 	installFakeDockerPS(t, []string{"postgres-main-replica"})
 
 	if ok, err := IsServiceRunning("postgres-main"); err != nil || ok {
@@ -140,7 +133,6 @@ func TestIsServiceRunningExactMatch(t *testing.T) {
 	if ok, err := IsServiceRunning("postgres-main-replica"); err != nil || !ok {
 		t.Fatalf("postgres-main-replica should be running: ok=%v err=%v", ok, err)
 	}
-	// A wholly absent container is down.
 	if ok, err := IsServiceRunning("absent"); err != nil || ok {
 		t.Fatalf("absent must be down: ok=%v err=%v", ok, err)
 	}
@@ -169,17 +161,12 @@ func TestGetContainerIdNoMakefile(t *testing.T) {
 }
 
 func TestStartDockerAndWait_BailsBeforeLaunchingDockerApp(t *testing.T) {
-	// If docker is already running, the function would return nil before
-	// hitting StartDocker — that path doesn't prove anything about the
-	// shutdown short-circuit, so skip.
 	if CheckDockerStatus() == nil {
 		t.Skip("docker already running")
 	}
 	ResetShutdownForTests()
 	t.Cleanup(ResetShutdownForTests)
 
-	// Pre-signal shutdown. startDockerAndWait must return BEFORE invoking
-	// StartDocker (which would `open /Applications/Docker.app` on macOS).
 	RequestShutdown()
 
 	start := time.Now()
@@ -192,8 +179,6 @@ func TestStartDockerAndWait_BailsBeforeLaunchingDockerApp(t *testing.T) {
 	if !strings.Contains(err.Error(), "aborted by shutdown signal") {
 		t.Errorf("expected abort-by-shutdown error, got: %v", err)
 	}
-	// Must return effectively instantly — never touch StartDocker or the
-	// 60s poll deadline.
 	if elapsed > 500*time.Millisecond {
 		t.Errorf("did not short-circuit promptly: %s — may have launched Docker", elapsed)
 	}

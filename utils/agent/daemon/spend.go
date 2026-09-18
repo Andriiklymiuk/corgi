@@ -7,19 +7,13 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// spendMark is how far into a session's transcript the daemon has summed,
-// and the total so far. Kept here, not on the session: a daemon that
-// restarts sums from the top once and the board's number stays right.
 type spendMark struct {
 	offset int64
 	total  usage.Totals
 }
 
-// transcriptOf is a seam: where a session's transcript is.
 var transcriptOf = usage.TranscriptPath
 
-// checkSpend adds what each live session wrote since the last sweep to
-// its total, and rings once when a session passes its budget.
 func (d *Daemon) checkSpend(live []sessions.Session, now time.Time) {
 	if d.spent == nil {
 		d.spent = map[string]spendMark{}
@@ -42,7 +36,6 @@ func (d *Daemon) checkSpend(live []sessions.Session, now time.Time) {
 		mark.total = mark.total.Plus(delta)
 		mark.offset = offset
 		d.spent[s.ID] = mark
-		// The day's book, by workspace — and the workspace's day budget.
 		if n := delta.Total(); n > 0 && d.Ledger != nil {
 			today := d.Ledger.AddTokens(s.Label, n, now)
 			if dayCap := d.dayCapFor(s); dayCap > 0 && today >= dayCap && today-n < dayCap {
@@ -62,7 +55,6 @@ func (d *Daemon) checkSpend(live []sessions.Session, now time.Time) {
 			go d.notifyAttention(notifyTitlePrefix+label, "over its budget: "+sessions.Tokens(sp.Tokens)+" of "+sessions.Tokens(limit)+" tokens", s.Folder)
 		}
 	}
-	// A session that left the board takes its mark with it.
 	for id := range d.spent {
 		if !seen[id] {
 			delete(d.spent, id)
@@ -70,8 +62,6 @@ func (d *Daemon) checkSpend(live []sessions.Session, now time.Time) {
 	}
 }
 
-// dayCapFor is the workspace's tokens-per-day budget for a session's
-// workspace, 0 when it has none.
 func (d *Daemon) dayCapFor(s sessions.Session) int64 {
 	if d.Policy == nil {
 		return 0

@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// A ticket key or a comment is someone else's text. It must never be able to
-// close the GraphQL string it sits in and add fields of its own.
 func TestGraphQLValuesAreQuotedNotPasted(t *testing.T) {
 	nasty := `x") { id } } mutation { issueDelete(id: "y`
 	got := jsonString(nasty)
@@ -58,7 +56,6 @@ func TestJiraCommentBodyIsADFParagraphs(t *testing.T) {
 	}
 }
 
-// jiraStub answers the three calls a move makes.
 func jiraStub(t *testing.T, transitions string, record *string) *Jira {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -193,9 +190,6 @@ func TestUndraftTitleDropsEveryDraftMarker(t *testing.T) {
 	}
 }
 
-// A review from the phone or the CLI: GitHub takes it as one review call
-// with the verdict; GitLab as a note (changes requested say so) and an
-// approve or unapprove. A request without words is refused before any call.
 func TestReviewPRSpeaksBothForges(t *testing.T) {
 	var calls []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

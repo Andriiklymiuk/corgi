@@ -11,10 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// A limited session is waiting on a clock. With autoContinue on, the daemon
-// plans a resume from the account's reset time, types "continue" once the
-// numbers say the window is back, and stops after a few tries so a limit
-// that comes straight back is not fought all night.
 func TestTheDaemonContinuesALimitedSessionWhenTheWindowResets(t *testing.T) {
 	d := trackingDaemon(t)
 	d.AutoContinue = true
@@ -47,8 +43,6 @@ func TestTheDaemonContinuesALimitedSessionWhenTheWindowResets(t *testing.T) {
 		t.Fatalf("the plan is the reset plus grace, got %v for reset %v", s.ResumeAt, reset)
 	}
 
-	// The clock passes but a fresh reading says the account is still spent
-	// (the week, say — a new reset ahead): wait, do not type.
 	later := s.ResumeAt.Add(time.Second)
 	limits.FiveHour = usage.Window{Percent: 100, ResetsAt: later.Add(time.Hour)}
 	d.autoContinue(ctx, later)
@@ -61,7 +55,6 @@ func TestTheDaemonContinuesALimitedSessionWhenTheWindowResets(t *testing.T) {
 	}
 	mu.Unlock()
 
-	// The reset lands in the cache.
 	limits.FiveHour = usage.Window{Percent: 3, ResetsAt: reset.Add(5 * time.Hour)}
 	at := d.Sessions.Sessions()[0].ResumeAt.Add(time.Second)
 	d.autoContinue(ctx, at)
@@ -75,8 +68,6 @@ func TestTheDaemonContinuesALimitedSessionWhenTheWindowResets(t *testing.T) {
 		t.Fatalf("one resume counted, plan cleared: %+v", got)
 	}
 
-	// The limit comes straight back, three times — the window reads spent
-	// again with a reset ahead each time: the daemon stops.
 	for i := 0; i < 4; i++ {
 		d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 100, TermProgram: "iTerm.app", TTY: 5, At: at})
 		d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s1", Error: "rate_limit", Message: "usage limit", At: at})
@@ -114,7 +105,6 @@ func TestAutoContinueIsOffUnlessAsked(t *testing.T) {
 	}
 }
 
-// An overload is minutes, not hours: a growing wait from now, capped.
 func TestAnOverloadWaitsMinutesNotHours(t *testing.T) {
 	origJitter := jitter
 	defer func() { jitter = origJitter }()

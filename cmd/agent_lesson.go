@@ -10,11 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/lessons"
 )
 
-// What a workspace learned the hard way, one line each: the daemon writes
-// a review that asked for changes, a check that stayed red, a bot that
-// fell over (`corgi agent watch enable --lessons`); a person writes the
-// rest. Every new session in the workspace is pointed at the file.
-
 var agentLessonCmd = &cobra.Command{
 	Use:   "lesson",
 	Short: "What this workspace learned the hard way — read by every new session",

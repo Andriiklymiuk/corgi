@@ -18,7 +18,7 @@ func TestOpenTargets_AllWithPorts(t *testing.T) {
 		Services: []utils.Service{
 			{ServiceName: "api", Port: 3000},
 			{ServiceName: "web", Port: 5173},
-			{ServiceName: "worker"}, // no port -> skipped
+			{ServiceName: "worker"},
 		},
 	}
 	got := openTargets(corgi, nil)
@@ -82,7 +82,6 @@ func TestBrowserCommand(t *testing.T) {
 	if name == "" || len(args) == 0 {
 		t.Fatalf("browserCommand returned empty: %q %v", name, args)
 	}
-	// last arg should always carry the URL
 	if args[len(args)-1] != "http://localhost:3000" {
 		t.Fatalf("URL not in args: %v", args)
 	}
@@ -128,7 +127,6 @@ func TestRunOpen_LaunchesAndJSON(t *testing.T) {
 	os.Chdir(dir)
 	t.Cleanup(func() { os.Chdir(cwd) })
 
-	// normal mode: launcher invoked per target
 	var opened []string
 	origLauncher := launcher
 	launcher = func(url string) error { opened = append(opened, url); return nil }
@@ -140,7 +138,6 @@ func TestRunOpen_LaunchesAndJSON(t *testing.T) {
 		t.Fatalf("expected api launched, got %v", opened)
 	}
 
-	// json mode: pure JSON on stdout, launcher not called
 	opened = nil
 	origJSON := utils.JSONOutput
 	utils.JSONOutput = true

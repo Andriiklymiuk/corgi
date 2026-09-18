@@ -145,7 +145,7 @@ func TestTTYNameOfSelfOrNone(t *testing.T) {
 	}
 	p, _ := Lookup(os.Getpid())
 	if p.TTY == 0 {
-		return // no controlling terminal under the test runner
+		return
 	}
 	if name := TTYName(p.TTY); !strings.HasPrefix(name, "/dev/") {
 		t.Fatalf("tty %d resolved to %q", p.TTY, name)

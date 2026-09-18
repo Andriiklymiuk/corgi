@@ -15,34 +15,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A session's timeline: what happened, in order, on one scroll — the
-// prompts, the bursts of tool calls between them, the test runs and the
-// gate, the pull request and every review, check and hand-over on it,
-// the merge. Joined here from the transcript, the board and the watch's
-// files; the phone draws it, the CLI prints it. "What happened while I
-// was away" in one screen.
-
-// TimelineItem is one moment.
 type TimelineItem struct {
 	At   time.Time `json:"at"`
-	Kind string    `json:"kind"` // start, prompt, tools, said, tests, gate, pr, review, comment, ci, handed, merged, closed, headless
+	Kind string    `json:"kind"`
 	Text string    `json:"text"`
-	// N is how many tool calls a tools burst holds.
-	N int `json:"n,omitempty"`
-	// OK is the outcome of a tests or gate item.
-	OK *bool `json:"ok,omitempty"`
-	// URL is where a pull request item goes.
-	URL string `json:"url,omitempty"`
+	N    int       `json:"n,omitempty"`
+	OK   *bool     `json:"ok,omitempty"`
+	URL  string    `json:"url,omitempty"`
 }
 
-// timelineFor joins a session's story from every book the laptop keeps.
 func timelineFor(dir string, s sessions.Session, limit int) []TimelineItem {
 	var items []TimelineItem
 	if !s.StartedAt.IsZero() {
 		items = append(items, TimelineItem{At: s.StartedAt, Kind: "start", Text: "session started in " + firstNonEmpty(s.Label, s.Cwd)})
 	}
-	// The transcript: prompts, what was said, and tool calls folded into
-	// bursts between them.
 	if path := transcriptPathFor(s); path != "" && transcript.Exists(path) {
 		entries, _, err := transcript.Read(path, 0, transcript.MaxEntries)
 		if err == nil {
@@ -93,7 +79,6 @@ func timelineFor(dir string, s sessions.Session, limit int) []TimelineItem {
 	if s.Headless != nil && !s.Headless.At.IsZero() {
 		items = append(items, TimelineItem{At: s.Headless.At, Kind: "headless", Text: fmt.Sprintf("%d headless turn(s) after the terminal was gone", s.Headless.Turns)})
 	}
-	// The pull request: its standing, and everything the watch saw on it.
 	if s.PR != "" {
 		ref := watch.PullRef(s.PR)
 		if st, ok := watch.LoadPullLog(dir).Get(s.PR); ok {
@@ -156,7 +141,6 @@ func byWord(by string) string {
 	}
 }
 
-// launchTimelineHandler is GET /launch/timeline?session=<id>[&max=N].
 func launchTimelineHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -168,7 +152,6 @@ func launchTimelineHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, code, msg)
 		return
 	}
-	// The transcript is the code's story: the same gate as reading it.
 	if !streamAllowedFor(session.Label) {
 		writeLaunchError(w, http.StatusForbidden, fmt.Sprintf("reading %s's story from a phone is off on the laptop: corgi agent stream enable --workspace %s", session.Label, session.Label))
 		return

@@ -11,9 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// The timeline joins the transcript, the board and the watch into one
-// ordered story: prompts, tool bursts, tests, the pull request's standing
-// and what was said on it.
 func TestTimelineJoinsTheBooksInOrder(t *testing.T) {
 	dir := t.TempDir()
 	home := t.TempDir()

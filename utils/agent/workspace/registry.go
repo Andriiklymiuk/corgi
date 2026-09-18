@@ -1,5 +1,3 @@
-// Package workspace tracks which corgi stacks exist on this machine and where
-// they live, so a message from a phone can name a stack instead of a path.
 package workspace
 
 import (
@@ -12,21 +10,14 @@ import (
 	"time"
 )
 
-// Status is whether a registered workspace can be used right now.
 type Status string
 
 const (
-	// StatusOK means the path exists and still holds a compose file.
-	StatusOK Status = "ok"
-	// StatusUnreachable means the path did not resolve. The row is kept —
-	// an unmounted drive is not a deleted project, and "not found" would send
-	// someone hunting for a workspace that is fine.
+	StatusOK          Status = "ok"
 	StatusUnreachable Status = "unreachable"
-	// StatusDisabled means a human or the supervisor took it out of service.
-	StatusDisabled Status = "disabled"
+	StatusDisabled    Status = "disabled"
 )
 
-// Workspace is one registered corgi stack.
 type Workspace struct {
 	ID          string    `json:"id"`
 	Aliases     []string  `json:"aliases,omitempty"`
@@ -39,18 +30,14 @@ type Workspace struct {
 	Status      Status    `json:"status,omitempty"`
 }
 
-// Registry is the on-disk set of workspaces.
 type Registry struct {
 	Version    int         `json:"version"`
 	UpdatedAt  time.Time   `json:"updatedAt"`
 	Workspaces []Workspace `json:"workspaces"`
 }
 
-// registryVersion is bumped only for a breaking layout change.
 const registryVersion = 1
 
-// Upsert adds or updates a workspace, matching on ID so a moved repo updates
-// its path instead of creating a duplicate row.
 func (r *Registry) Upsert(w Workspace) {
 	if w.Status == "" {
 		w.Status = StatusOK
@@ -60,8 +47,6 @@ func (r *Registry) Upsert(w Workspace) {
 			continue
 		}
 		existing := r.Workspaces[i]
-		// Preserve fields the caller did not supply, so a partial update from
-		// one code path cannot erase what another discovered.
 		if len(w.Aliases) == 0 {
 			w.Aliases = existing.Aliases
 		}
@@ -83,7 +68,6 @@ func (r *Registry) Upsert(w Workspace) {
 	r.Workspaces = append(r.Workspaces, w)
 }
 
-// Find returns the workspace with the given id, case-insensitively.
 func (r *Registry) Find(id string) (Workspace, bool) {
 	for _, w := range r.Workspaces {
 		if strings.EqualFold(w.ID, id) {
@@ -93,7 +77,6 @@ func (r *Registry) Find(id string) (Workspace, bool) {
 	return Workspace{}, false
 }
 
-// Forget removes a workspace. Reports whether anything was removed.
 func (r *Registry) Forget(id string) bool {
 	for i := range r.Workspaces {
 		if strings.EqualFold(r.Workspaces[i].ID, id) {
@@ -104,12 +87,10 @@ func (r *Registry) Forget(id string) bool {
 	return false
 }
 
-// Reconcile refreshes each workspace's status against the filesystem.
-// exists is injected so tests do not need real directories.
 func (r *Registry) Reconcile(exists func(path string) bool) {
 	for i := range r.Workspaces {
 		if r.Workspaces[i].Status == StatusDisabled {
-			continue // a human turned this off; the filesystem does not override that
+			continue
 		}
 		if exists(r.Workspaces[i].AbsPath) {
 			r.Workspaces[i].Status = StatusOK
@@ -119,8 +100,6 @@ func (r *Registry) Reconcile(exists func(path string) bool) {
 	}
 }
 
-// Sorted returns the workspaces most-recently-used first, then by id, so every
-// surface lists them in the same order.
 func (r *Registry) Sorted() []Workspace {
 	out := append([]Workspace(nil), r.Workspaces...)
 	sort.SliceStable(out, func(i, j int) bool {
@@ -132,7 +111,6 @@ func (r *Registry) Sorted() []Workspace {
 	return out
 }
 
-// Load reads the registry, returning an empty one when the file is absent.
 func Load(path string) (*Registry, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -151,8 +129,6 @@ func Load(path string) (*Registry, error) {
 	return &r, nil
 }
 
-// Save writes the registry with the tmp-write plus rename discipline the rest
-// of corgi uses, so a SIGKILL mid-write cannot truncate it.
 func Save(path string, r *Registry) error {
 	r.Version = registryVersion
 	r.UpdatedAt = time.Now().UTC()

@@ -6,7 +6,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// Relaunch detached procs that crashed at startup, per restartPolicy.
 func healCrashedDetached(corgi *utils.CorgiCompose, procs []detachedProc) {
 	for i := range procs {
 		if procs[i].status != "crashed" {
@@ -32,7 +31,6 @@ func healCrashedDetached(corgi *utils.CorgiCompose, procs []detachedProc) {
 	}
 }
 
-// Retry relaunch up to maxRetries with backoff. Bounded, no goroutine. relaunch/sleep injected for tests.
 func healCrashed(policy *utils.RestartPolicy, relaunch func() bool, sleep func(time.Duration)) (recovered bool, attempts int) {
 	if policy == nil || policy.Mode != "on-failure" || policy.MaxRetries <= 0 {
 		return false, 0

@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// Context is how full a session's context window is: what Claude Code's own
-// status line shows, read from the transcript instead. Every assistant
-// message carries the usage of the request that produced it, and the input
-// side of the newest one (fresh input plus everything read from or written
-// to the cache) is the context the next turn starts from.
 type Context struct {
 	Tokens  int64     `json:"tokens"`
 	Window  int64     `json:"window"`
@@ -22,20 +17,10 @@ type Context struct {
 	At      time.Time `json:"at"`
 }
 
-// contextTail is how much of the transcript's end is read. A turn is one
-// line and the last assistant line is what matters; 256 KiB spans even a
-// large tool result sitting after it.
 const contextTail = 256 << 10
 
-// DefaultWindow is the context window of every current Claude model except
-// the long-context variants, which Claude Code names with a "[1m]" suffix.
 const DefaultWindow = 200_000
 
-// WindowFor is the context window for a model name as the transcript spells
-// it: a million for the long-context variants ("[1m]") and for the Claude 5
-// family (Fable and Mythos run sessions well past 200k), else the default.
-// A name nobody recognises gets the default: a wrong percentage is worse
-// than a slightly conservative one. CORGI_CONTEXT_WINDOW overrides all.
 func WindowFor(model string) int64 {
 	if v := strings.TrimSpace(os.Getenv("CORGI_CONTEXT_WINDOW")); v != "" {
 		var n int64
@@ -60,9 +45,6 @@ func WindowFor(model string) int64 {
 	return DefaultWindow
 }
 
-// ContextOf reads the newest assistant usage out of a transcript. ok is
-// false when the file is missing, unreadable, or holds no assistant turn
-// yet.
 func ContextOf(transcriptPath string) (Context, bool) {
 	f, err := os.Open(transcriptPath)
 	if err != nil {
@@ -87,8 +69,6 @@ func ContextOf(transcriptPath string) (Context, bool) {
 	return contextFromTail(data, start > 0)
 }
 
-// contextFromTail scans lines from the end. When the read started mid-file
-// the first line is a fragment and is dropped.
 func contextFromTail(data []byte, truncated bool) (Context, bool) {
 	lines := bytes.Split(data, []byte{'\n'})
 	first := 0

@@ -8,109 +8,42 @@ import (
 	"strings"
 )
 
-// SpawnConfig is one workspace's agent launch settings, resolved from the
-// trusted user config.
 type SpawnConfig struct {
-	WorkspaceID string
-	Dir         string
-	// Kind selects which agent CLI this workspace runs. Empty means
-	// DefaultKind, so a config written before kinds existed keeps working.
-	Kind string
-	// Bin overrides the kind's default command. Must be a bare command name.
-	Bin string
-	// Args is the full argv for KindCustom, after the binary name. Ignored by
-	// every built-in kind, which builds its own from the settings below.
-	Args []string
-	// ConfigDirEnv and CredentialEnv describe a custom kind's environment: the
-	// variable that scopes it to one account, and the ambient credentials to
-	// strip. Built-in kinds carry their own and reject these.
-	ConfigDirEnv  string
-	CredentialEnv []string
-	Spawn         string // same-dir | worktree | session
-	Capacity      int
-	// PermissionMode is passed to remote control for spawned sessions.
-	// bypassPermissions is rejected — see ValidateSpawnConfig.
-	PermissionMode string
-	// ConfigDir sets the kind's config-directory variable so this workspace runs
-	// under its own account, memory, skills, and MCP servers.
-	ConfigDir string
-	// InheritAPIKey opts this workspace in to an ambient ANTHROPIC_API_KEY.
-	// Off by default: remote control refuses to run with one set, and an
-	// inherited key silently bills the API instead of a subscription.
-	InheritAPIKey bool
-	// InheritOAuthToken does the same for CLAUDE_CODE_OAUTH_TOKEN.
+	WorkspaceID       string
+	Dir               string
+	Kind              string
+	Bin               string
+	Args              []string
+	ConfigDirEnv      string
+	CredentialEnv     []string
+	Spawn             string
+	Capacity          int
+	PermissionMode    string
+	ConfigDir         string
+	InheritAPIKey     bool
 	InheritOAuthToken bool
-	// SkipPermissions runs the session with permission prompts disarmed,
-	// emitted as --permission-mode bypassPermissions. This is the one sanctioned
-	// route around the bypass block, so ValidateSpawnConfig allows it — unlike a
-	// forbidden permissionMode string or a smuggled --dangerously arg. It comes
-	// only from trusted config, and the supervisor warns when it is on, because
-	// it removes the gate a person answers from their phone.
-	SkipPermissions bool
-	// Name is the remote-control session name shown in claude.ai/code.
-	Name string
-	// DeviceOnly runs the server without opening a session in the checkout.
-	//
-	// `claude remote-control` pre-creates one session in its directory as it
-	// starts, so there is somewhere to type — and leaves it listed on claude.ai
-	// when it stops. A daemon that restarts four servers at login, again after
-	// the ten-minute network exit, and again after `corgi agent restart` fills
-	// the phone's session list with rows nobody opened. Device-only is the
-	// mode for a server that exists so the machine is REACHABLE: it registers
-	// with claude.ai, sessions are created from there (or by a launcher Start)
-	// on demand, and a restart leaves nothing behind. Ignored by kinds that
-	// build no argv of their own.
-	DeviceOnly bool
-	// SessionNamePrefix names the sessions remote control creates on demand —
-	// "<prefix>-graceful-unicorn" instead of the machine's hostname — so a
-	// list of sessions from three workspaces on one laptop still says which
-	// repo each is in. Carried in the environment, which an older CLI ignores.
+	SkipPermissions   bool
+	Name              string
+	DeviceOnly        bool
 	SessionNamePrefix string
-	// WakeLock controls whether the machine is kept awake while this
-	// workspace's session runs. Empty means WakeLockSession.
-	WakeLock WakeLockMode
-	// MirrorOutput echoes the supervised process's output to corgi's stderr.
-	//
-	// Off by default. Remote control's output can contain anything the session
-	// printed — env values, tokens, file contents — and in `serve` mode corgi's
-	// stderr is a log file on disk. Only `--foreground`, where a person is
-	// watching the terminal, turns this on.
-	MirrorOutput bool
-	// Origin says who asked for this workspace to run: OriginAutostart from
-	// the daemon's startup set, OriginRemote from a spool command.
-	Origin string
-	// Profile is the trusted-config profile overlaid onto this workspace's
-	// settings, when one was requested.
-	Profile string
-	// OnSessionURL is runtime wiring, not configuration: the runner installs
-	// it so the exec layer can report the claude.ai session URL it spots in
-	// the process output. Best-effort — may never fire.
-	OnSessionURL func(url string)
-	// OnSessionLink is runtime wiring too: called once per distinct
-	// per-session id (session_…) remote control prints as sessions spawn —
-	// the only source of a session's real web link.
-	OnSessionLink func(id string)
-	// OnActivity is runtime wiring too: the exec layer calls it on every chunk
-	// of process output, which the idle wake lock uses as a "still working"
-	// signal. Must be cheap — it is on the output path.
-	OnActivity func()
+	WakeLock          WakeLockMode
+	MirrorOutput      bool
+	Origin            string
+	Profile           string
+	OnSessionURL      func(url string)
+	OnSessionLink     func(id string)
+	OnActivity        func()
 }
 
-// Origin values for SpawnConfig.Origin / RunState.Origin.
 const (
 	OriginAutostart = "autostart"
 	OriginRemote    = "remote"
 )
 
-// forbiddenPermissionModes never reach a supervised process. A daemon running
-// unattended must not be able to skip permission prompts — those prompts are
-// what a person answers from their phone, and they are the main defence
-// against a prompt-injected session acting on its own.
 var forbiddenPermissionModes = map[string]bool{
 	"bypasspermissions": true,
 }
 
-// validPermissionModes mirrors `claude remote-control --permission-mode`.
 var validPermissionModes = map[string]bool{
 	"acceptedits": true,
 	"auto":        true,
@@ -119,15 +52,12 @@ var validPermissionModes = map[string]bool{
 	"plan":        true,
 }
 
-// validSpawnModes mirrors `claude remote-control --spawn`.
 var validSpawnModes = map[string]bool{
 	"same-dir": true,
 	"worktree": true,
 	"session":  true,
 }
 
-// ValidateSpawnConfig rejects a configuration before anything is launched, so a
-// bad setting fails at startup with a clear message instead of on first use.
 func ValidateSpawnConfig(c SpawnConfig) error {
 	if err := validateSpawnIdentity(c); err != nil {
 		return err
@@ -153,8 +83,6 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	if _, err := ResolveBin(c); err != nil {
 		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
 	}
-	// Build the argv now so a bad one fails at startup with a clear message,
-	// rather than at the first restart hours later.
 	if _, err := kind.Args(c); err != nil {
 		return fmt.Errorf("workspace %s: %w", c.WorkspaceID, err)
 	}
@@ -187,10 +115,6 @@ func validateSpawnIdentity(c SpawnConfig) error {
 	return nil
 }
 
-// ValidPermissionMode reports whether mode is one a supervised session accepts.
-// Empty is valid (the CLI's default). Exposed so a bad value can be rejected
-// where it is written — e.g. `corgi agent profile add --permission-mode` — not
-// only when a session is launched hours later.
 func ValidPermissionMode(mode string) bool {
 	m := normalize(mode)
 	if m == "" {
@@ -199,13 +123,10 @@ func ValidPermissionMode(mode string) bool {
 	return !forbiddenPermissionModes[m] && validPermissionModes[m]
 }
 
-// PermissionModeHint lists the accepted modes for an error message.
 func PermissionModeHint() string { return sortedKeys(validPermissionModes) }
 
 func validatePermissionMode(c SpawnConfig, kind Kind) error {
 	if c.SkipPermissions {
-		// The sanctioned bypass. Still has to be a kind that understands a
-		// permission mode, and must not also carry a different one.
 		if !kind.SupportsPermissionMode {
 			return fmt.Errorf(
 				"workspace %s: kind %q takes no permission mode, so dangerouslySkipPermissions has nothing to disarm — put the flag in args: instead",
@@ -258,8 +179,6 @@ func validateSpawnMode(c SpawnConfig, kind Kind) error {
 	return nil
 }
 
-// validateKindOwnedSettings rejects settings a kind builds itself: a
-// `capacity: 4` that quietly does nothing reads as a limit being applied.
 func validateKindOwnedSettings(c SpawnConfig, kind Kind) error {
 	if !kind.BuildsArgvFromSettings {
 		if c.Capacity > 0 {
@@ -284,8 +203,6 @@ func validateKindOwnedSettings(c SpawnConfig, kind Kind) error {
 	return nil
 }
 
-// ResolveBin returns the command to run for a workspace: its `bin:` if set,
-// otherwise the kind's default.
 func ResolveBin(c SpawnConfig) (string, error) {
 	bin, err := SanitizeBin(c.Bin)
 	if err != nil {
@@ -304,10 +221,6 @@ func ResolveBin(c SpawnConfig) (string, error) {
 	return kind.DefaultBin, nil
 }
 
-// SanitizeBin rejects a binary name that is a path, so no config file can
-// point the supervisor at an arbitrary executable. Only a bare command name
-// resolved through PATH is allowed. An empty name is left empty for ResolveBin
-// to fill from the kind.
 func SanitizeBin(bin string) (string, error) {
 	bin = strings.TrimSpace(bin)
 	if bin == "" {
@@ -324,9 +237,6 @@ func SanitizeBin(bin string) (string, error) {
 	return bin, nil
 }
 
-// BuildArgs returns the argv for a workspace's agent process, after the binary
-// name. It never emits a flag that disarms permission prompts, whatever the
-// caller's shell aliases or config say.
 func BuildArgs(c SpawnConfig) ([]string, error) {
 	kind, err := KindFor(c)
 	if err != nil {
@@ -335,17 +245,9 @@ func BuildArgs(c SpawnConfig) ([]string, error) {
 	return kind.Args(c)
 }
 
-// BuildEnv constructs the child environment explicitly from parentEnv
-// ("KEY=value" form) rather than handing over the daemon's own. launchd and
-// systemd never source a shell rc file, so without this every workspace runs
-// under the default Claude account — no error, correct-looking output.
 func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 	kind, err := KindFor(c)
 	if err != nil {
-		// Unreachable via the daemon, which validates first. Empty rather than
-		// the parent env so a misconfigured child fails loudly instead of
-		// inheriting every ambient credential — and non-nil, because exec.Cmd
-		// reads a nil Env as "inherit everything".
 		return []string{}
 	}
 	configVar := kind.ConfigDirEnv
@@ -362,10 +264,10 @@ func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 			continue
 		}
 		if configVar != "" && key == configVar && c.ConfigDir != "" {
-			continue // replaced below
+			continue
 		}
 		if prefixVar != "" && key == prefixVar && prefix != "" {
-			continue // replaced below
+			continue
 		}
 		keep = append(keep, entry)
 	}
@@ -378,10 +280,6 @@ func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 	return keep
 }
 
-// isStrippedCredential reports whether a variable is one of the kind's ambient
-// credentials the workspace has not opted in to keeping. The two opt-ins are
-// split because they fail differently: an API key bills the API instead of a
-// subscription, an OAuth token points at another account.
 func isStrippedCredential(kind Kind, key string, c SpawnConfig) bool {
 	for _, name := range kind.CredentialEnv {
 		if key != name {
@@ -395,9 +293,6 @@ func isStrippedCredential(kind Kind, key string, c SpawnConfig) bool {
 	return false
 }
 
-// StrippedCredentials reports which credential variables were removed, so the
-// supervisor can say so in its startup diagnostic instead of leaving the user
-// to wonder which account a task ran under.
 func StrippedCredentials(c SpawnConfig, parentEnv []string) []string {
 	kind, err := KindFor(c)
 	if err != nil {
@@ -414,11 +309,6 @@ func StrippedCredentials(c SpawnConfig, parentEnv []string) []string {
 	return stripped
 }
 
-// sanitizePrefix keeps a session-name prefix to what reads as one word in a
-// list and cannot break an environment entry: letters, digits, dashes and
-// underscores. A dot or a space becomes a dash, so "my stack.v2" reads as
-// "my-stack-v2"; anything else is dropped rather than escaped. The one place
-// this shaping happens — callers hand over the raw id.
 func sanitizePrefix(p string) string {
 	var b strings.Builder
 	for _, r := range strings.TrimSpace(p) {
@@ -432,7 +322,6 @@ func sanitizePrefix(p string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// expandHome resolves a leading ~ so config files can use the short form.
 func expandHome(path string) string {
 	if path != "~" && !strings.HasPrefix(path, "~/") {
 		return path

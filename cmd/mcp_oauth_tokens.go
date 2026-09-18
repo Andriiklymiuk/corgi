@@ -21,8 +21,6 @@ const (
 	authCodeTTL        = 60 * time.Second
 )
 
-// authCode is one authorization code, held in memory under its hash until
-// redeemed or expired. Bound to everything the token request must repeat.
 type authCode struct {
 	clientID      string
 	clientName    string
@@ -31,7 +29,6 @@ type authCode struct {
 	expires       time.Time
 }
 
-// issueCodeLocked mints a single-use code for an approved authorization.
 func (oa *oauthServer) issueCodeLocked(client oauthClient, redirectURI, challenge string) (string, error) {
 	code, err := randomToken("")
 	if err != nil {
@@ -50,9 +47,6 @@ func (oa *oauthServer) issueCodeLocked(client oauthClient, redirectURI, challeng
 	return code, nil
 }
 
-// redeemCodeLocked burns the code and reports whether it was valid for this
-// client, redirect URI and PKCE verifier. A failed attempt kills the code
-// too: a guessed code gets no second try.
 func (oa *oauthServer) redeemCodeLocked(code, clientID, redirectURI, verifier string) (authCode, bool) {
 	hash := pairing.HashToken(code)
 	c, ok := oa.codes[hash]
@@ -69,7 +63,6 @@ func (oa *oauthServer) redeemCodeLocked(code, clientID, redirectURI, verifier st
 	return c, true
 }
 
-// pkceMatches is RFC 7636 S256: BASE64URL(SHA256(verifier)) == challenge.
 func pkceMatches(verifier, challenge string) bool {
 	if len(verifier) < 43 || len(verifier) > 128 || challenge == "" {
 		return false
@@ -79,7 +72,6 @@ func pkceMatches(verifier, challenge string) bool {
 	return subtle.ConstantTimeCompare([]byte(want), []byte(challenge)) == 1
 }
 
-// tokenResponse is what both grants return.
 type tokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	TokenType    string `json:"token_type"`
@@ -87,8 +79,6 @@ type tokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// grantLocked creates a family for a redeemed code and issues its first
-// tokens.
 func (oa *oauthServer) grantLocked(clientID, clientName string) (tokenResponse, error) {
 	id, err := randomToken("")
 	if err != nil {
@@ -103,9 +93,6 @@ func (oa *oauthServer) grantLocked(clientID, clientName string) (tokenResponse, 
 	return oa.rotateLocked(len(oa.state.Families) - 1)
 }
 
-// rotateLocked issues a fresh access and refresh token for the family at
-// index i, retiring the previous ones. The old refresh hash is kept a day so
-// a replay is recognised.
 func (oa *oauthServer) rotateLocked(i int) (tokenResponse, error) {
 	fam := &oa.state.Families[i]
 	access, err := randomToken(accessTokenPrefix)
@@ -162,8 +149,6 @@ func dropDevicesByHash(devices []pairing.Device, hashes []string) []pairing.Devi
 	return kept
 }
 
-// familyIndexLocked finds the family a refresh token belongs to: as its
-// current token (rotated=false) or as one it already replaced (rotated=true).
 func (oa *oauthServer) familyIndexLocked(refreshHash string) (i int, rotated bool) {
 	for i, f := range oa.state.Families {
 		if subtle.ConstantTimeCompare([]byte(f.RefreshHash), []byte(refreshHash)) == 1 {
@@ -178,8 +163,6 @@ func (oa *oauthServer) familyIndexLocked(refreshHash string) (i int, rotated boo
 	return -1, false
 }
 
-// revokeFamilyLocked deletes the family and every access token it issued.
-// Returns whether anything changed; the caller saves.
 func (oa *oauthServer) revokeFamilyLocked(id string) bool {
 	for i, f := range oa.state.Families {
 		if f.ID != id {
@@ -205,9 +188,6 @@ func dropDevicesByFamily(devices []pairing.Device, family string) []pairing.Devi
 	return kept
 }
 
-// revokeOAuthFamily is `corgi mcp devices revoke` on an oauth device: the
-// refresh token must die with the access token, or the client just mints a
-// new one. Best effort; a missing oauth.json means nothing to do.
 func revokeOAuthFamily(agentDir, family string) {
 	if family == "" {
 		return
@@ -226,9 +206,6 @@ func revokeOAuthFamily(agentDir, family string) {
 	}
 }
 
-// sweepLocked drops what has expired: codes, pending authorizations,
-// families, day-old rotated hashes, and expired oauth devices. Inline on
-// every /oauth request; no background goroutine.
 func (oa *oauthServer) sweepLocked() {
 	now := oa.now()
 	for h, c := range oa.codes {
@@ -268,8 +245,6 @@ func (oa *oauthServer) sweepLocked() {
 	}
 }
 
-// authorizeAccessToken reports whether header carries a live access token:
-// an unexpired device whose family still exists.
 func (oa *oauthServer) authorizeAccessToken(header string) bool {
 	offered, ok := strings.CutPrefix(header, bearerPrefix)
 	if !ok || !strings.HasPrefix(offered, accessTokenPrefix) {
@@ -293,8 +268,6 @@ func (oa *oauthServer) authorizeAccessToken(header string) bool {
 	return false
 }
 
-// tokenHandler is POST /oauth/token: authorization_code with PKCE, or
-// refresh_token with rotation and replay detection.
 func (oa *oauthServer) tokenHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -335,8 +308,6 @@ func (oa *oauthServer) tokenHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		fam := oa.state.Families[i]
 		if rotated {
-			// A token that was already exchanged came back: someone else
-			// holds a copy. Nothing in the family can be trusted any more.
 			oa.revokeFamilyLocked(fam.ID)
 			_ = oa.saveLocked()
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token was already used; the grant is revoked, sign in again")
@@ -365,8 +336,6 @@ func (oa *oauthServer) tokenHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(body)
 }
 
-// revokeHandler is RFC 7009: the family the token belongs to dies. Always
-// 200, so a caller learns nothing about which tokens exist.
 func (oa *oauthServer) revokeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)

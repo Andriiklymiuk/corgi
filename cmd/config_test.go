@@ -26,9 +26,6 @@ func TestConfigJSONShape(t *testing.T) {
 	}
 }
 
-// withHumanOutput forces the non-JSON output path and restores the global
-// afterward, so these tests stay deterministic even if an earlier test left
-// utils.JSONOutput set (test-isolation, not production behavior).
 func withHumanOutput(t *testing.T) {
 	t.Helper()
 	prev := utils.JSONOutput

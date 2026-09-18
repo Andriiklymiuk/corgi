@@ -16,14 +16,10 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// Routines run on a clock through the same runner as a fix, so the caps,
-// the quiet hours, the budget, the log, the cost and the handoff all apply.
-// The report is one inbox row: the run's headline, with the log behind it.
-
 type routineState struct {
 	mu   sync.Mutex
 	path string
-	Last map[string]time.Time `json:"last"` // "<workspace>/<name>" → started
+	Last map[string]time.Time `json:"last"`
 }
 
 func loadRoutineState(agentDir string) *routineState {
@@ -53,8 +49,6 @@ func (s *routineState) set(key string, at time.Time) {
 	}
 }
 
-// RoutineEvent is the synthetic event a routine runs as: the prompt in the
-// body, the name as the ref, so the fix log and the inbox tell it apart.
 func RoutineEvent(workspace string, r config.Routine, now time.Time) (watch.Event, bool) {
 	prompt := strings.TrimSpace(r.Prompt)
 	title := r.Name
@@ -79,8 +73,6 @@ func RoutineEvent(workspace string, r config.Routine, now time.Time) (watch.Even
 	}, true
 }
 
-// runRoutines starts every routine that is due, one per workspace per
-// tick, under the fix caps.
 func (d *Daemon) runRoutines(ctx context.Context, now time.Time) {
 	if d.watchState == nil {
 		return
@@ -114,13 +106,11 @@ func (d *Daemon) runRoutines(ctx context.Context, now time.Time) {
 			}
 			d.routines.set(key, now)
 			d.startRoutine(ctx, spec, r, e)
-			break // one per workspace per tick; the caps pace the rest
+			break
 		}
 	}
 }
 
-// startRoutine runs one due routine: as the bot it names when that bot
-// is in this workspace, else as a plain fix on its own model.
 func (d *Daemon) startRoutine(ctx context.Context, spec WatchSpec, r config.Routine, e watch.Event) {
 	if b, ok := d.routineBot(spec, r); ok {
 		utils.Infof("agent: routine %s starts in %s as %s\n", e.Title, spec.Workspace, b.Display())
@@ -141,8 +131,6 @@ func (d *Daemon) startRoutine(ctx context.Context, spec WatchSpec, r config.Rout
 	d.spawnFix(ctx, run, e)
 }
 
-// routineBot is the bot a routine runs as, when it names one that lives
-// in the same workspace; a bot gone missing runs the routine plain.
 func (d *Daemon) routineBot(spec WatchSpec, r config.Routine) (bots.Bot, bool) {
 	if strings.TrimSpace(r.Bot) == "" {
 		return bots.Bot{}, false
@@ -159,8 +147,6 @@ func (d *Daemon) routineBot(spec WatchSpec, r config.Routine) (bots.Bot, bool) {
 	return b, true
 }
 
-// routineFor finds the routine an event was made from, by the name the
-// event carries as its title.
 func routineFor(spec WatchSpec, e watch.Event) config.Routine {
 	for _, r := range spec.Routines {
 		if strings.EqualFold(firstNonEmpty(r.Name, r.Kind), e.Title) {
@@ -170,8 +156,6 @@ func routineFor(spec WatchSpec, e watch.Event) config.Routine {
 	return config.Routine{}
 }
 
-// routineReport turns a finished routine into an inbox row: the headline
-// the run was asked to start with, the rest behind the Log button.
 func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed error) {
 	if e.Kind != watch.KindRoutine {
 		return

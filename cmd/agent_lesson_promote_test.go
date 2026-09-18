@@ -10,9 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/lessons"
 )
 
-// A lesson promoted lands in the workspace's CLAUDE.md under a Lessons
-// heading — once, however often it is promoted — so every session reads
-// it, not only the ones corgi starts.
 func TestPromoteWritesALessonIntoClaudeMdOnce(t *testing.T) {
 	agent, repo := t.TempDir(), t.TempDir()
 	_ = lessons.Add(agent, "api", lessons.Lesson{At: time.Now(), Source: "review acme/api#7 (dan)", Text: "never log the token"})
@@ -32,7 +29,6 @@ func TestPromoteWritesALessonIntoClaudeMdOnce(t *testing.T) {
 	if !strings.Contains(string(data), "## Lessons\n") || !strings.Contains(string(data), "- run go vet before saying done\n") {
 		t.Fatalf("CLAUDE.md:\n%s", data)
 	}
-	// Twice is once.
 	if _, err := promoteLesson(agent, "api", repo, 2); err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +36,6 @@ func TestPromoteWritesALessonIntoClaudeMdOnce(t *testing.T) {
 	if strings.Count(string(data), "run go vet") != 1 {
 		t.Fatalf("written twice:\n%s", data)
 	}
-	// An existing file keeps its own words and gains the section.
 	_ = os.WriteFile(filepath.Join(repo, "CLAUDE.md"), []byte("# api\n\nUse make test.\n"), 0o644)
 	if _, err := promoteLesson(agent, "api", repo, 1); err != nil {
 		t.Fatal(err)

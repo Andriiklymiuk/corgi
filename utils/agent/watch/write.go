@@ -13,19 +13,16 @@ import (
 	"time"
 )
 
-// Status is one column a ticket can sit in.
 type Status struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-// Identity is whoever the token belongs to, so "assign it to me" has a name.
 type Identity struct {
 	ID   string `json:"id"`
 	Name string `json:"name,omitempty"`
 }
 
-// Comment is one comment on a ticket, as much of it as a lease needs.
 type Comment struct {
 	ID     string
 	Author string
@@ -33,25 +30,17 @@ type Comment struct {
 	At     time.Time
 }
 
-// Writer is a tracker corgi can change, not only read. Every method is a
-// deliberate act someone asked for: nothing here runs on a poll.
 type Writer interface {
 	Name() string
 	Statuses(ctx context.Context) ([]Status, error)
 	Whoami(ctx context.Context) (Identity, error)
 	Move(ctx context.Context, ref, status string) error
-	// RecentComments is the newest comments on a ticket, which is where the
-	// claim that stops two machines working it lives.
 	RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error)
 	Assign(ctx context.Context, ref, userID string) error
 	Comment(ctx context.Context, ref, body string) error
-	// UpdateComment rewrites one comment corgi wrote earlier, so the ticket
-	// carries one corgi comment that grows rather than a trail of them.
 	UpdateComment(ctx context.Context, ref, id, body string) error
 }
 
-// WriterFor is the tracker a workspace writes to, or nil when it has no
-// token for one.
 func WriterFor(s Secrets, tracker, project string) Writer {
 	switch strings.ToLower(strings.TrimSpace(tracker)) {
 	case "jira":
@@ -66,11 +55,6 @@ func WriterFor(s Secrets, tracker, project string) Writer {
 	return nil
 }
 
-// ---- Jira ----
-
-// Statuses is what the project's workflow offers, deduped by name across
-// issue types: the menu, not the transitions, which depend on where the
-// issue currently sits.
 func (j *Jira) Statuses(ctx context.Context) ([]Status, error) {
 	if j.Project == "" {
 		return nil, fmt.Errorf("jira: no project key to read statuses from")
@@ -108,9 +92,6 @@ func (j *Jira) Whoami(ctx context.Context) (Identity, error) {
 	return Identity{ID: me.AccountID, Name: me.DisplayName}, nil
 }
 
-// Move transitions an issue to the named status. Jira's transition ids are
-// per-workflow-position, so the one to use is read from the issue itself
-// rather than guessed from the cached status list.
 func (j *Jira) Move(ctx context.Context, ref, status string) error {
 	var available struct {
 		Transitions []struct {
@@ -153,8 +134,6 @@ func (j *Jira) UpdateComment(ctx context.Context, ref, id, body string) error {
 	return j.send(ctx, http.MethodPut, "/rest/api/3/issue/"+ref+"/comment/"+url.PathEscape(id), map[string]any{"body": adf(body)})
 }
 
-// adf is Jira Cloud's Atlassian Document Format: plain text is not accepted
-// on this API, one paragraph per line is.
 func adf(text string) map[string]any {
 	var paragraphs []any
 	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
@@ -196,10 +175,8 @@ func (j *Jira) send(ctx context.Context, method, path string, body any) error {
 	return nil
 }
 
-// ---- Linear ----
-
 func (l *Linear) Statuses(ctx context.Context) ([]Status, error) {
-	filter := "" // every state the token can see, when no team is configured
+	filter := ""
 	if l.Team != "" {
 		filter = fmt.Sprintf("(filter: {team: {key: {eq: %s}}})", jsonString(l.Team))
 	}
@@ -295,7 +272,6 @@ func (l *Linear) UpdateComment(ctx context.Context, _, id, body string) error {
 	return nil
 }
 
-// issueID turns ABC-123 into the id the mutations take.
 func (l *Linear) issueID(ctx context.Context, ref string) (string, error) {
 	var out struct {
 		Issue *struct {
@@ -331,9 +307,7 @@ func (l *Linear) updateIssue(ctx context.Context, ref, input string) error {
 	return nil
 }
 
-// jsonString quotes a value for a GraphQL document. Everything user-supplied
-// goes through it: a ticket key or a comment must never be able to close the
-// string and add fields of its own.
+// Every user value passes here so a ticket key or comment cannot close the string.
 func jsonString(s string) string {
 	raw, err := json.Marshal(s)
 	if err != nil {
@@ -342,9 +316,6 @@ func jsonString(s string) string {
 	return string(raw)
 }
 
-// ClosePR closes a pull request or merge request corgi opened, by its web
-// URL. Only the two hosts corgi watches; anything else is refused rather
-// than guessed at.
 func ClosePR(ctx context.Context, s Secrets, link string) error {
 	switch {
 	case strings.Contains(link, "github.com/"):
@@ -376,12 +347,8 @@ func closeGitHubPR(ctx context.Context, s Secrets, link string) error {
 	return doClose(req, link)
 }
 
-// http as well as https: a self-hosted GitLab on a private network is a real
-// thing, and refusing it here would look like a broken link.
 var gitlabMRPath = regexp.MustCompile(`^(https?://[^/]+)/(.+)/-/merge_requests/(\d+)`)
 
-// gitlabMRAPI is the API address of a merge request link, on the
-// configured GitLab only: the token never goes to a host a link names.
 func gitlabMRAPI(s Secrets, link string) (string, error) {
 	m := gitlabMRPath.FindStringSubmatch(link)
 	if m == nil {
@@ -429,9 +396,6 @@ func doClose(req *http.Request, link string) error {
 	return nil
 }
 
-// ReadyPR takes a draft pull request or merge request out of draft — the
-// "mark as ready for review" button, from wherever the person is. GitHub
-// has it only in GraphQL; GitLab keeps draft in the title.
 func ReadyPR(ctx context.Context, s Secrets, link string) error {
 	switch {
 	case strings.Contains(link, "github.com/"):
@@ -442,7 +406,6 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 		if s.GitHub == "" {
 			return ErrNoToken
 		}
-		// The node id first: GraphQL addresses the pull request by it.
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+m[1]+"/pulls/"+m[2], nil)
 		if err != nil {
 			return err
@@ -464,7 +427,7 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 			return fmt.Errorf("reading %s: no pull request there", link)
 		}
 		if !pr.Draft {
-			return nil // already ready: nothing to do is not an error
+			return nil
 		}
 		q, _ := json.Marshal(map[string]any{
 			"query":     "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { isDraft } } }",
@@ -520,9 +483,6 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }
 
-// DraftPR puts a pull request or merge request back into draft — the
-// opposite of ReadyPR, for a review that was asked for too early. GitHub
-// has it only in GraphQL; on GitLab draft is a title prefix.
 func DraftPR(ctx context.Context, s Secrets, link string) error {
 	switch {
 	case strings.Contains(link, "github.com/"):
@@ -593,8 +553,6 @@ func DraftPR(ctx context.Context, s Secrets, link string) error {
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }
 
-// ReopenPR opens a closed pull request or merge request again. A merged one
-// cannot be reopened anywhere, and the forge says so.
 func ReopenPR(ctx context.Context, s Secrets, link string) error {
 	switch {
 	case strings.Contains(link, "github.com/"):
@@ -633,8 +591,6 @@ func ReopenPR(ctx context.Context, s Secrets, link string) error {
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }
 
-// readGitHubPR is the node id and draft flag of one pull request, which
-// the GraphQL mutations need.
 func readGitHubPR(ctx context.Context, s Secrets, repo, num, link string) (struct {
 	NodeID string `json:"node_id"`
 	Draft  bool   `json:"draft"`
@@ -663,7 +619,6 @@ func readGitHubPR(ctx context.Context, s Secrets, repo, num, link string) (struc
 	return pr, nil
 }
 
-// undraftTitle drops every draft marker GitLab knows from a title.
 func undraftTitle(title string) string {
 	t := strings.TrimSpace(title)
 	for {
@@ -682,8 +637,6 @@ func undraftTitle(title string) string {
 	}
 }
 
-// doGraphQL runs one GitHub GraphQL mutation; an error in the answer body
-// is an error, whatever the status.
 func doGraphQL(req *http.Request, link string) error {
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
@@ -705,8 +658,6 @@ func doGraphQL(req *http.Request, link string) error {
 	return nil
 }
 
-// MergePR merges a pull request or merge request corgi opened. Never
-// automatic: this is only ever reached from something a person tapped.
 func MergePR(ctx context.Context, s Secrets, link string) error {
 	switch {
 	case strings.Contains(link, "github.com/"):
@@ -745,7 +696,6 @@ func MergePR(ctx context.Context, s Secrets, link string) error {
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }
 
-// RecentComments reads a Jira issue's newest comments.
 func (j *Jira) RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error) {
 	var page struct {
 		Comments []jiraComment `json:"comments"`
@@ -764,7 +714,6 @@ func (j *Jira) RecentComments(ctx context.Context, ref string, limit int) ([]Com
 	return out, nil
 }
 
-// RecentComments reads a Linear issue's newest comments.
 func (l *Linear) RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error) {
 	document := fmt.Sprintf(
 		"query { issue(id: %s) { comments(last: %d) { nodes { id body createdAt user { name } } } } }",
@@ -801,8 +750,6 @@ func (l *Linear) RecentComments(ctx context.Context, ref string, limit int) ([]C
 	return comments, nil
 }
 
-// RefState is a Jira issue's current column, so a ticket someone finished
-// can leave the inbox.
 func (j *Jira) RefState(ctx context.Context, ref string) string {
 	var issue struct {
 		Fields struct {
@@ -819,7 +766,6 @@ func (j *Jira) RefState(ctx context.Context, ref string) string {
 	return issue.Fields.Status.Name
 }
 
-// RefState is a Linear issue's current state.
 func (l *Linear) RefState(ctx context.Context, ref string) string {
 	var out struct {
 		Issue *struct {
@@ -834,17 +780,12 @@ func (l *Linear) RefState(ctx context.Context, ref string) string {
 	return out.Issue.State.Name
 }
 
-// Verdicts a review can carry, from wherever the person is.
 const (
 	ReviewApprove = "approve"
 	ReviewRequest = "request"
 	ReviewComment = "comment"
 )
 
-// ReviewPR posts a review on a pull request or merge request: approve it,
-// ask for changes, or just say something. It is a person's call — the
-// phone's row and the CLI offer it; nothing does it on its own. GitLab has
-// no "request changes": that lands as a note and takes the approval back.
 func ReviewPR(ctx context.Context, s Secrets, link, verdict, body string) error {
 	verdict = strings.ToLower(strings.TrimSpace(verdict))
 	body = strings.TrimSpace(body)
@@ -914,7 +855,6 @@ func ReviewPR(ctx context.Context, s Secrets, link, verdict, body string) error 
 		case ReviewApprove:
 			return post(base+"/approve", nil)
 		case ReviewRequest:
-			// Taking an approval back that was never given is not an error.
 			_ = post(base+"/unapprove", nil)
 		}
 		return nil

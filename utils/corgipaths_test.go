@@ -60,8 +60,6 @@ func TestMigrateMovesTheFolderAndRetargetsGitignore(t *testing.T) {
 		t.Errorf("content did not come along: %v", err)
 	}
 	ignore, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	// The old rules stay: dropping them un-ignores the folder for anyone on
-	// the team whose corgi still puts it there.
 	for _, want := range []string{
 		"node_modules",
 		".corgi/corgi_services/*", "corgi_services/*",
@@ -101,8 +99,6 @@ func TestMigrateRefusesWhileServicesRunOrBothFoldersExist(t *testing.T) {
 	}
 }
 
-// A crash or a reboot leaves rows saying "running" that no longer are. They
-// must not wedge the move forever.
 func TestMigrateIgnoresARunningRowWhoseProcessIsGone(t *testing.T) {
 	dir := t.TempDir()
 	legacy := filepath.Join(dir, "corgi_services")
@@ -141,8 +137,6 @@ func TestMigrateIgnoresARunningRowWhoseProcessIsGone(t *testing.T) {
 	}
 }
 
-// A separator is escaped inside JSON, so rewriting the saved paths as raw
-// text silently misses every Windows one. Assert on the parsed state.
 func TestMigrateRewritesLogPathsThroughTheParsedState(t *testing.T) {
 	dir := t.TempDir()
 	legacy := filepath.Join(dir, "corgi_services")
@@ -179,7 +173,6 @@ func TestMigrateRewritesLogPathsThroughTheParsedState(t *testing.T) {
 	}
 }
 
-// deadPID is a pid nothing owns: claimed, then reaped.
 func deadPID(t *testing.T) int {
 	t.Helper()
 	cmd := exec.Command("true")
@@ -189,8 +182,6 @@ func deadPID(t *testing.T) int {
 	return cmd.Process.Pid
 }
 
-// Git records a worktree's path absolutely, in both directions. A move that
-// only fixes one of them leaves the checkout prunable.
 func TestMigrateRepairsMovedWorktrees(t *testing.T) {
 	root := t.TempDir()
 	repo := filepath.Join(root, "api")
@@ -252,13 +243,11 @@ func TestGitignoreGainsTheNewPathWithoutLosingTheOld(t *testing.T) {
 		t.Errorf("got:\n%q\nwant:\n%q", got, want)
 	}
 
-	// A repository already ignoring .corgi/ has the new path covered.
 	whole := "node_modules\ncorgi_services/*\n.corgi/\n"
 	if got := migrateWith(t, whole); got != whole {
 		t.Errorf("an ignored .corgi/ needs no rule, got:\n%q", got)
 	}
 
-	// Running twice must not stack duplicates.
 	twice := migrateWith(t, ".corgi/corgi_services/*\ncorgi_services/*\n")
 	if strings.Count(twice, ".corgi/corgi_services/*") != 1 {
 		t.Errorf("the rule was added again:\n%q", twice)

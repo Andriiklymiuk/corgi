@@ -22,8 +22,6 @@ func serviceWithLockfile(t *testing.T, name, lockfile, run string, cacheKey []st
 	}
 }
 
-// An install with no cacheKey is the difference between a five-minute CI run
-// and a twenty-minute one, and nothing said so before.
 func TestCacheOptInHintsFindsAnUnkeyedInstall(t *testing.T) {
 	svc := serviceWithLockfile(t, "api", "package-lock.json", "npm ci", nil)
 	hints := CacheOptInHints(&CorgiCompose{Services: []Service{svc}})
@@ -36,7 +34,6 @@ func TestCacheOptInHintsFindsAnUnkeyedInstall(t *testing.T) {
 	}
 }
 
-// A step that already opts in is not a hint.
 func TestCacheOptInHintsIgnoresAKeyedStep(t *testing.T) {
 	svc := serviceWithLockfile(t, "api", "package-lock.json", "npm ci", []string{"package-lock.json"})
 	if hints := CacheOptInHints(&CorgiCompose{Services: []Service{svc}}); len(hints) != 0 {
@@ -44,8 +41,6 @@ func TestCacheOptInHintsIgnoresAKeyedStep(t *testing.T) {
 	}
 }
 
-// Suggesting a cacheKey for a file that is not there would make every run miss
-// instead of skip, which is worse than saying nothing.
 func TestCacheOptInHintsNeedsTheLockfileToExist(t *testing.T) {
 	svc := serviceWithLockfile(t, "api", "", "npm ci", nil)
 	if hints := CacheOptInHints(&CorgiCompose{Services: []Service{svc}}); len(hints) != 0 {
@@ -53,7 +48,6 @@ func TestCacheOptInHintsNeedsTheLockfileToExist(t *testing.T) {
 	}
 }
 
-// corgi cannot know what `make setup` installs, so it must not guess.
 func TestCacheOptInHintsDoesNotGuessAtOpaqueCommands(t *testing.T) {
 	svc := serviceWithLockfile(t, "api", "package-lock.json", "make setup", nil)
 	if hints := CacheOptInHints(&CorgiCompose{Services: []Service{svc}}); len(hints) != 0 {
@@ -82,7 +76,6 @@ func TestCacheOptInHintsCoversEachEcosystem(t *testing.T) {
 	}
 }
 
-// The hints ride along on the plan, so every output format can show them.
 func TestCachePlanCarriesTheHints(t *testing.T) {
 	svc := serviceWithLockfile(t, "api", "package-lock.json", "npm ci", nil)
 	plan := CachePathsFor(&CorgiCompose{Services: []Service{svc}})
@@ -110,9 +103,6 @@ func TestCacheHintLinesAreStable(t *testing.T) {
 	}
 }
 
-// `bundle exec rake db:migrate` is a task, not an install. Keying it on
-// Gemfile.lock would make corgi skip a migration whenever the gems happened
-// not to change — worse than no hint at all.
 func TestCacheOptInHintsNeverSuggestsCachingATask(t *testing.T) {
 	for _, run := range []string{
 		"bundle exec rake db:migrate",
@@ -128,9 +118,6 @@ func TestCacheOptInHintsNeverSuggestsCachingATask(t *testing.T) {
 	}
 }
 
-// A repo that moved from bun to yarn often still carries the old lockfile.
-// Keying `yarn install` on it would mean the cache never busts when yarn.lock
-// changes — a stale node_modules restored on every run.
 func TestCacheOptInHintsPicksTheLockfileTheCommandActuallyUses(t *testing.T) {
 	dir := t.TempDir()
 	for _, f := range []string{"bun.lock", "yarn.lock"} {

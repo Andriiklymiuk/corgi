@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-// AfterStartTimeout bounds each cleanup command. Hung afterStart must
-// not block corgi shutdown.
 var AfterStartTimeout = 60 * time.Second
 
 const (
@@ -24,10 +22,6 @@ const (
 	errPathToServiceNotFound = "path to target service is not found: %s"
 )
 
-// withEnvSource prepends `set -a; . <envFile>; set +a; ` so a start command like
-// `npx vite --port $PORT` sees corgi-emitted vars without its own `source .env`.
-// envFile is absolute; empty or missing returns the command untouched. POSIX `.`
-// keeps it working under /bin/sh.
 func withEnvSource(command, envFile string) string {
 	if envFile == "" {
 		return command
@@ -38,10 +32,8 @@ func withEnvSource(command, envFile string) string {
 	return fmt.Sprintf("set -a; . %q; set +a; %s", envFile, command)
 }
 
-// SkipAutoSourceEnv disables auto-sourcing for a single command.
 const SkipAutoSourceEnv = "<<corgi:no-env-source>>"
 
-// IsPlainShellWord reports whether s is one shell word with nothing to interpret.
 func IsPlainShellWord(s string) bool {
 	if s == "" || s[0] == '-' {
 		return false
@@ -59,11 +51,6 @@ var (
 	serviceShellPath string
 )
 
-// ServiceShell is the shell corgi runs compose commands with. It prefers bash,
-// because people write these commands in their own shell and reach for `source`
-// and `[[ ]]` without thinking about it: /bin/sh is bash on macOS but dash on
-// most Linux, so a command that works on a laptop exits 127 in CI. $CORGI_SHELL
-// overrides; /bin/sh is the fallback where bash is absent.
 func ServiceShell() string {
 	serviceShellOnce.Do(func() {
 		if override := os.Getenv("CORGI_SHELL"); override != "" {
@@ -106,8 +93,6 @@ var (
 	onServiceCrash    atomic.Pointer[func(string)]
 )
 
-// SetOnServiceCrash registers a callback fired when a managed service exits
-// non-zero (and corgi itself is not shutting down). Pass nil to clear.
 func SetOnServiceCrash(fn func(string)) {
 	if fn == nil {
 		onServiceCrash.Store(nil)
@@ -116,8 +101,6 @@ func SetOnServiceCrash(fn func(string)) {
 	onServiceCrash.Store(&fn)
 }
 
-// SetLogWriter registers a log writer for a service. Any prior writer is
-// closed first so SIGHUP reloads don't leak file descriptors.
 func SetLogWriter(serviceName string, w io.Writer) {
 	logWritersMu.Lock()
 	if prev, ok := ServiceLogWriters[serviceName]; ok {
@@ -129,8 +112,6 @@ func SetLogWriter(serviceName string, w io.Writer) {
 	logWritersMu.Unlock()
 }
 
-// markServiceLogStatus tags the service's log writer with its exit status
-// so Close renames the file to .ok or .crashed. No-op when --logs is off.
 func markServiceLogStatus(serviceName string, status LogStatus) {
 	logWritersMu.RLock()
 	w := ServiceLogWriters[serviceName]
@@ -140,8 +121,6 @@ func markServiceLogStatus(serviceName string, status LogStatus) {
 	}
 }
 
-// markServiceLogStatusIfNotCrashed avoids downgrading a prior Crashed
-// status to OK when later commands in the same start: block succeed.
 func markServiceLogStatusIfNotCrashed(serviceName string, status LogStatus) {
 	logWritersMu.RLock()
 	w := ServiceLogWriters[serviceName]
@@ -156,7 +135,6 @@ func markServiceLogStatusIfNotCrashed(serviceName string, status LogStatus) {
 	}
 }
 
-// CloseAllLogWriters closes every registered io.WriteCloser. Called on exit.
 func CloseAllLogWriters() {
 	logWritersMu.Lock()
 	defer logWritersMu.Unlock()
@@ -203,19 +181,11 @@ func KillAllStoredProcesses() {
 	pidMutex.Lock()
 	defer pidMutex.Unlock()
 	for _, proc := range ProcessHandles {
-		// Signal the group only. Don't Release(): managed procs are reaped by
-		// the concurrent cmd.Wait() in runManaged (calling Release here races
-		// that Wait), and detached procs' handles are freed at process exit.
 		_ = KillProcessGroup(proc.Pid)
 	}
 	ProcessHandles = []*os.Process{}
 }
 
-// RunServiceCmd executes a single shell command for a service.
-//
-// Optional envFile (variadic for backwards compatibility): filename or
-// absolute path of the env file to source before the command. When omitted
-// or empty, defaults to `<path>/.env` if present.
 func RunServiceCmd(
 	serviceName, serviceCommand, path string,
 	interactive bool,
@@ -303,10 +273,6 @@ func runManaged(cmd *exec.Cmd, commandSlice []string, serviceName, finalCommand,
 	return nil
 }
 
-// RunServiceCommandExitCode runs a single command in the service's env and
-// returns the child's exit code (env sourcing matches the start path).
-// interactive wires stdin through for REPLs. Returns exitCode -1 with a non-nil
-// err only on spawn failure.
 func RunServiceCommandExitCode(
 	command, path string,
 	interactive bool,
@@ -316,9 +282,6 @@ func RunServiceCommandExitCode(
 	return RunServiceCommandExitCodeContext(context.Background(), command, path, interactive, stdout, stderr, envFile...)
 }
 
-// RunServiceCommandExitCodeContext is RunServiceCommandExitCode bounded by
-// ctx: when ctx ends first the whole process group is killed and the error
-// is ctx.Err().
 func RunServiceCommandExitCodeContext(
 	ctx context.Context,
 	command, path string,
@@ -371,7 +334,6 @@ func StartDetached(serviceName, command, path string, envFile ...string) (*os.Pr
 	shellCommand := withEnvSource(command, resolvedEnvFile)
 	cmd := exec.Command(ServiceShell(), "-c", shellCommand)
 	cmd.Dir = path
-	// Direct *os.File so the detached child keeps logging after corgi exits.
 	if f := logWriterFile(getLogWriter(serviceName)); f != nil {
 		cmd.Stdout = f
 		cmd.Stderr = f
@@ -405,9 +367,6 @@ func handleCommandFailure(err error, commandSlice []string, serviceName, finalCo
 	return RunServiceCmd(serviceName, finalCommand, path, false, envFile...)
 }
 
-// RunServiceCommands runs a list of commands for a service.
-//
-// Optional envFile (variadic): see RunServiceCmd. Forwarded unchanged.
 func RunServiceCommands(
 	commandsName, serviceName string,
 	commands []string,
@@ -451,9 +410,6 @@ func runCommandsParallel(commandsName, serviceName string, commands []string, pa
 	wg.Wait()
 }
 
-// RunCleanupCommands runs cleanup commands sequentially with a per-cmd
-// timeout. Not tracked in ProcessHandles — must survive concurrent
-// KillAllStoredProcesses sweeps. Own pgroup so timeout can kill children.
 func RunCleanupCommands(
 	commandsName, serviceName string,
 	commands []string,
@@ -631,11 +587,6 @@ func ExecuteCommandRun(targetService string, command ...string) error {
 	return nil
 }
 
-// FollowDatabaseLogs streams a detached db container's `docker logs -f` into
-// the service's --logs writer. db containers start detached (docker compose
-// up -d), so unlike services nothing flows through runManaged — without this
-// their .log files stay empty. No-op when --logs is off (no registered
-// writer). The follow process is tracked so corgi shutdown stops it.
 func FollowDatabaseLogs(driver, serviceName string) {
 	w := getLogWriter(serviceName)
 	if w == nil {
@@ -657,8 +608,6 @@ func FollowDatabaseLogs(driver, serviceName string) {
 	}()
 }
 
-// FollowServiceContainerLogs streams a detached docker service's container
-// logs into its --logs writer (detached containers bypass runManaged).
 func FollowServiceContainerLogs(serviceName string) {
 	w := getLogWriter(serviceName)
 	if w == nil {
@@ -692,7 +641,6 @@ func ExecuteServiceCommandRun(targetService string, command ...string) error {
 
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = path
-	// ConsoleOut keeps stdout pure JSON under --json (child output → stderr).
 	cmd.Stdout = ConsoleOut()
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
@@ -704,8 +652,6 @@ func ExecuteServiceCommandRun(targetService string, command ...string) error {
 	return nil
 }
 
-// StopDockerRunnerServices brings down docker-runner containers (`make down`).
-// Each call is bounded and non-fatal so shutdown/reload never blocks.
 func StopDockerRunnerServices(serviceNames []string) {
 	for _, name := range serviceNames {
 		path, err := GetPathToService(name)
@@ -715,7 +661,6 @@ func StopDockerRunnerServices(serviceNames []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), AfterStartTimeout)
 		cmd := exec.CommandContext(ctx, "make", "down")
 		cmd.Dir = path
-		// ConsoleOut keeps `corgi stop --json` stdout pure (child output → stderr).
 		cmd.Stdout = ConsoleOut()
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {

@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// forkCmd represents the fork command
 var forkCmd = &cobra.Command{
 	Use:   "fork",
 	Short: "Fork an existing service repositories to new repos.",
@@ -302,9 +301,7 @@ func runCommandToOutput(outBuffer *bytes.Buffer, path string, command string, ar
 	}
 	err := cmd.Run()
 	if err != nil {
-		// Handle specific error cases here.
 		if execErr, ok := err.(*exec.ExitError); ok {
-			// The program has exited with an exit code != 0
 			if execErr.ExitCode() == 127 {
 				return fmt.Errorf("executable not found: %s", command)
 			}
@@ -325,7 +322,6 @@ func getListOfServicesWithClonedFrom(services []utils.Service) []string {
 }
 
 func changeRepoOrigin(path, serviceName, newRepoOrigin string) error {
-	// Remove the existing 'origin' if it exists
 	err := utils.RunServiceCmd(
 		serviceName,
 		"git remote remove origin",
@@ -342,7 +338,6 @@ func changeRepoOrigin(path, serviceName, newRepoOrigin string) error {
 		)
 	}
 
-	// Add new 'origin'
 	err = utils.RunServiceCmd(
 		serviceName,
 		fmt.Sprintf("git remote add origin %s", newRepoOrigin),
@@ -355,7 +350,6 @@ func changeRepoOrigin(path, serviceName, newRepoOrigin string) error {
 		return fmt.Errorf("failed to add remote: %s", err)
 	}
 
-	// Push to new 'origin'
 	err = utils.RunServiceCmd(
 		serviceName,
 		"git push -u origin --all",

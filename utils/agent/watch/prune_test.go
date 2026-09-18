@@ -28,9 +28,9 @@ func TestPrunableFixesLeavesTheBusyAndTheYoung(t *testing.T) {
 	records := []FixRecord{
 		{Key: "a", Workspace: "ws", Branch: "corgi/ABC-1", StartedAt: old, FinishedAt: old},
 		{Key: "b", Workspace: "ws", Branch: "corgi/ABC-2", StartedAt: old, FinishedAt: old},
-		{Key: "b2", Workspace: "ws", Branch: "corgi/ABC-2", StartedAt: now.Add(-time.Hour)}, // still running
+		{Key: "b2", Workspace: "ws", Branch: "corgi/ABC-2", StartedAt: now.Add(-time.Hour)},
 		{Key: "c", Workspace: "ws", Branch: "corgi/ABC-3", StartedAt: now.Add(-2 * time.Hour), FinishedAt: now.Add(-time.Hour)},
-		{Key: "d", Workspace: "ws", Branch: "", StartedAt: old, FinishedAt: old}, // not isolated
+		{Key: "d", Workspace: "ws", Branch: "", StartedAt: old, FinishedAt: old},
 		{Key: "a-again", Workspace: "ws", Branch: "corgi/ABC-1", StartedAt: old, FinishedAt: old},
 	}
 	got := PrunableFixes(records, 7*24*time.Hour, now)

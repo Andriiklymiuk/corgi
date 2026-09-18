@@ -13,8 +13,6 @@ func TestAddProfileWritesAndReloads(t *testing.T) {
 	if err := addProfile(dir, "work", config.WorkspaceConfig{ConfigDir: "~/.claude-work"}); err != nil {
 		t.Fatal(err)
 	}
-	// Reload through the real config loader — this is the same path remoteResolver
-	// uses, so a profile that saves but does not load would be caught here.
 	user, err := config.LoadUser(agentUserConfigPath(dir))
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +84,6 @@ func TestRemoveProfile(t *testing.T) {
 }
 
 func TestAddedProfileIsSelectableByTheResolver(t *testing.T) {
-	// End-to-end: a profile added by the command must be applyable at start time.
 	dir := t.TempDir()
 	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n")
 	registerStack(t, dir, "acme", stack)
@@ -136,8 +133,6 @@ func TestLoadProfilesErrorsOnAGroupReadableConfig(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// A world/group-readable config names credential dirs; LoadUser refuses it,
-	// and loadProfiles must surface that rather than silently returning nothing.
 	if err := os.WriteFile(agentUserConfigPath(dir), []byte("version: 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -148,10 +143,9 @@ func TestLoadProfilesErrorsOnAGroupReadableConfig(t *testing.T) {
 
 func TestProfileCommandRunHandlers(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
-	agentD := mustAgentDir() // where the handlers actually write
+	agentD := mustAgentDir()
 	utils.JSONOutput = false
 
-	// add
 	if err := agentProfileAddCmd.Flags().Set("config-dir", "~/.claude-work"); err != nil {
 		t.Fatal(err)
 	}
@@ -161,13 +155,11 @@ func TestProfileCommandRunHandlers(t *testing.T) {
 		t.Fatalf("add handler did not persist the profile: %+v, %v", profiles, err)
 	}
 
-	// list (human + json)
 	agentProfileListCmd.Run(agentProfileListCmd, nil)
 	utils.JSONOutput = true
 	agentProfileListCmd.Run(agentProfileListCmd, nil)
 	utils.JSONOutput = false
 
-	// rm an existing profile
 	agentProfileRemoveCmd.Run(agentProfileRemoveCmd, []string{"work"})
 	if p, _ := loadProfiles(agentD); len(p) != 0 {
 		t.Errorf("rm handler left %d profiles", len(p))
@@ -177,5 +169,5 @@ func TestProfileCommandRunHandlers(t *testing.T) {
 func TestProfileListHandlerWithNoProfiles(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	utils.JSONOutput = false
-	agentProfileListCmd.Run(agentProfileListCmd, nil) // the "none defined" branch
+	agentProfileListCmd.Run(agentProfileListCmd, nil)
 }

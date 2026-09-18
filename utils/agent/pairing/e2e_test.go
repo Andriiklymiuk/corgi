@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// The phone and the machine each hold one half; the key they derive is the
-// same, a sealed body opens where it was sent and not elsewhere, and a copy
-// replayed later is refused.
 func TestSealOpensOnlyWhereAndWhenItWasSent(t *testing.T) {
 	server, err := LoadOrCreateServerKey(filepath.Join(t.TempDir(), "e2e.key"))
 	if err != nil {
@@ -53,8 +50,6 @@ func TestSealOpensOnlyWhereAndWhenItWasSent(t *testing.T) {
 	}
 }
 
-// The machine's key is minted once and read back the same; a device that
-// offers a public key is recorded with it, one that does not stays plain.
 func TestPairingRecordsTheDeviceKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "e2e.key")

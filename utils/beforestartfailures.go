@@ -7,9 +7,6 @@ import (
 	"sync"
 )
 
-// A beforeStart that fails leaves its service unable to start, but the run
-// continues. Recording the failure lets the readiness gate say so immediately
-// instead of waiting out a timeout for a service that was never coming.
 var (
 	beforeStartMu       sync.Mutex
 	beforeStartFailures = map[string]error{}
@@ -24,8 +21,6 @@ func RecordBeforeStartFailure(serviceName string, err error) {
 	beforeStartFailures[serviceName] = err
 }
 
-// BeforeStartFailed reports the services whose beforeStart failed, sorted so
-// the message is stable.
 func BeforeStartFailed() []string {
 	beforeStartMu.Lock()
 	defer beforeStartMu.Unlock()
@@ -37,7 +32,6 @@ func BeforeStartFailed() []string {
 	return names
 }
 
-// BeforeStartFailureError describes every failure, or nil when there are none.
 func BeforeStartFailureError() error {
 	names := BeforeStartFailed()
 	if len(names) == 0 {
@@ -52,7 +46,6 @@ func BeforeStartFailureError() error {
 	return fmt.Errorf("beforeStart failed for %s", strings.Join(parts, ", "))
 }
 
-// ResetBeforeStartFailures exists for tests and for a restart reusing the process.
 func ResetBeforeStartFailures() {
 	beforeStartMu.Lock()
 	defer beforeStartMu.Unlock()

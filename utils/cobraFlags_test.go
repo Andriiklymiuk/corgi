@@ -31,7 +31,6 @@ func TestCheckForFlagAndExecuteMakeFlagOn(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	// Create a db service dir with a Makefile that has a "stop" target
 	dir := filepath.Join(CorgiComposePathDir, DbServicesRel(), "mydb")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)

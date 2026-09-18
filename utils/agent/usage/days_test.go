@@ -26,7 +26,6 @@ func TestLedgerCountsSessionsOncePromptsAndToolCalls(t *testing.T) {
 	if got := ReadLedgerDays(dir, []string{"2026-09-13", "2026-09-12"}); len(got) != 1 || got["2026-09-13"].Sessions != 2 {
 		t.Fatalf("read back %+v", got)
 	}
-	// A later daemon picks up where this one stopped, ids included.
 	again := OpenLedger(dir)
 	again.Note("PostToolUse", "s1", false, at.Add(3*time.Minute))
 	again.Note("PreToolUse", "s1", false, at.Add(3*time.Minute))

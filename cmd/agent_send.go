@@ -131,8 +131,6 @@ is stopped. "off" takes a budget away. No argument prints the default.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
 		path := agentUserConfigPath(dir)
-		// --repo <ws> <tokens|off>: a day budget for one workspace, kept
-		// in its watch config; the daemon rings once when a day passes it.
 		if ws, _ := cmd.Flags().GetString("repo"); ws != "" {
 			if len(args) != 1 {
 				exitWithError(utils.ErrUsage, fmt.Errorf("corgi agent cap --repo %s <tokens per day|off>", ws), 2)

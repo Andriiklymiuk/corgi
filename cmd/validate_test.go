@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// buildReport mirrors runValidate's report assembly without the os.Exit /
-// flag plumbing so the JSON shape and exit decision can be asserted directly.
 func buildReport(c *utils.CorgiCompose, strict bool) (validateReport, bool) {
 	errs, warns := utils.ValidateCompose(c)
 	if errs == nil {
@@ -65,7 +63,6 @@ func TestPrintValidateHuman_Branches(t *testing.T) {
 }
 
 func TestValidateReportJSONShape(t *testing.T) {
-	// Compose with a dangling dep and a duplicate port -> two error codes.
 	c := &utils.CorgiCompose{
 		DatabaseServices: []utils.DatabaseService{
 			{ServiceName: "db", Driver: "postgres", Port: 8080},
@@ -126,14 +123,12 @@ func TestValidateReportCleanIsArrays(t *testing.T) {
 	var buf bytes.Buffer
 	utils.PrintJSONTo(&buf, report)
 	s := buf.String()
-	// errors / warnings must serialize as [] not null so consumers can iterate.
 	if !strings.Contains(s, `"errors": []`) || !strings.Contains(s, `"warnings": []`) {
 		t.Errorf("empty errors/warnings must be [], got:\n%s", s)
 	}
 }
 
 func TestValidateStrictPromotesWarnings(t *testing.T) {
-	// cloneFrom without branch is a warning only.
 	c := &utils.CorgiCompose{
 		Services: []utils.Service{
 			{ServiceName: "api", CloneFrom: "git@github.com:x/y.git", Start: []string{"go run ."}},

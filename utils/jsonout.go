@@ -6,7 +6,6 @@ import (
 	"os"
 )
 
-// JSONOutput is true when the global --json flag is set.
 var JSONOutput bool
 
 func PrintJSONTo(w io.Writer, v any) {

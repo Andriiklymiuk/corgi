@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// Ledger counts the day by what the hooks report — a session the first
-// time its id is seen that day, a prompt on UserPromptSubmit, a tool call
-// on PostToolUse — in <agentDir>/days.json. It is corgi's own record of
-// the fortnight: Claude Code's stats cache stops moving for months at a
-// time and its history file never sees an editor's session.
 type Ledger struct {
 	mu    sync.Mutex
 	path  string
@@ -22,21 +17,16 @@ type Ledger struct {
 }
 
 type ledgerDay struct {
-	IDs       []string `json:"ids,omitempty"`
-	Prompts   int      `json:"prompts"`
-	ToolCalls int      `json:"toolCalls"`
-	// Tokens is what the day's sessions spent, by workspace label — the
-	// sweep's deltas, so a session that runs for days is counted where the
-	// tokens went (2.24).
-	Tokens map[string]int64 `json:"tokens,omitempty"`
+	IDs       []string         `json:"ids,omitempty"`
+	Prompts   int              `json:"prompts"`
+	ToolCalls int              `json:"toolCalls"`
+	Tokens    map[string]int64 `json:"tokens,omitempty"`
 }
 
 const ledgerKeep = 60
 
-// LedgerPath is where the daemon keeps the day counts.
 func LedgerPath(agentDir string) string { return filepath.Join(agentDir, "days.json") }
 
-// OpenLedger loads what an earlier daemon counted, or starts empty.
 func OpenLedger(agentDir string) *Ledger {
 	l := &Ledger{path: LedgerPath(agentDir), days: map[string]*ledgerDay{}}
 	if data, err := os.ReadFile(l.path); err == nil {
@@ -50,10 +40,6 @@ func OpenLedger(agentDir string) *Ledger {
 	return l
 }
 
-// Note counts one hook event. A placeholder id (a rescan's pid:N) is not a
-// session anyone prompted; it counts nothing. Claude Code reports a tool
-// after the fact (PostToolUse); an agent that is not Claude Code, through
-// `corgi agent event tool`, reports it before — foreign says which.
 func (l *Ledger) Note(event, sessionID string, foreign bool, at time.Time) {
 	if l == nil || sessionID == "" || len(sessionID) > 4 && sessionID[:4] == "pid:" {
 		return
@@ -95,8 +81,6 @@ func (l *Ledger) Note(event, sessionID string, foreign bool, at time.Time) {
 	}
 }
 
-// AddTokens counts n tokens spent today by a workspace's sessions and
-// says the workspace's total for the day afterwards.
 func (l *Ledger) AddTokens(workspace string, n int64, at time.Time) int64 {
 	if l == nil || n <= 0 {
 		return 0
@@ -120,7 +104,6 @@ func (l *Ledger) AddTokens(workspace string, n int64, at time.Time) int64 {
 	return d.Tokens[workspace]
 }
 
-// TokensToday is what a workspace's sessions spent on a date so far.
 func (l *Ledger) TokensToday(workspace string, at time.Time) int64 {
 	if l == nil {
 		return 0
@@ -133,8 +116,6 @@ func (l *Ledger) TokensToday(workspace string, at time.Time) int64 {
 	return 0
 }
 
-// Flush writes the file when something changed, and forgets days older
-// than the ledger keeps.
 func (l *Ledger) Flush() error {
 	if l == nil {
 		return nil
@@ -165,7 +146,6 @@ func (l *Ledger) Flush() error {
 	return nil
 }
 
-// Day is what the ledger counted for one local date.
 func (l *Ledger) Day(date string) DayStats {
 	if l == nil {
 		return DayStats{Date: date}
@@ -190,8 +170,6 @@ func (d *ledgerDay) stats(date string) DayStats {
 	return st
 }
 
-// ReadLedgerDays reads the daemon's file for the dates asked, for a process
-// that is not the daemon. Dates it never counted are left out.
 func ReadLedgerDays(agentDir string, dates []string) map[string]DayStats {
 	out := map[string]DayStats{}
 	data, err := os.ReadFile(LedgerPath(agentDir))
@@ -210,7 +188,6 @@ func ReadLedgerDays(agentDir string, dates []string) map[string]DayStats {
 	return out
 }
 
-// Dates lists the dates the ledger holds, oldest first.
 func (l *Ledger) Dates() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()

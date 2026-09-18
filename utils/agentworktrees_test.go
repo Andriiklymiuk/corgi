@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// stack builds a compose directory with n git repos wired as services.
 func stack(t *testing.T, services ...string) (*CorgiCompose, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -42,7 +41,6 @@ func TestMaterializeCreatesOneBranchAcrossEveryRepo(t *testing.T) {
 		if _, err := os.Stat(w.Dir); err != nil {
 			t.Errorf("%s: worktree dir missing: %v", w.Service, err)
 		}
-		// This is the whole point: one branch name, every repository.
 		if got, _ := gitOut(w.Dir, gitRevParse, gitAbbrevRef, "HEAD"); got != "feature/referral" {
 			t.Errorf("%s is on %q, want feature/referral", w.Service, got)
 		}
@@ -152,8 +150,6 @@ func TestMaterializeAddsItsOwnGitignoreEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// corgi_services/ is not wholly ignored, so anything new under it must add
-	// its own entry or it shows up as untracked in the user's repo.
 	data, err := os.ReadFile(filepath.Join(dir, ".corgi", "corgi_services", ".gitignore"))
 	if err != nil {
 		t.Fatalf("no .gitignore written: %v", err)
@@ -214,7 +210,6 @@ func TestReleaseKeepsTheBranchItself(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The commits are usually the point; only the checkout is disposable.
 	if local, _ := branchIsKnown(repo, "feature/x"); !local {
 		t.Error("releasing a worktree must not delete the branch")
 	}
@@ -253,9 +248,6 @@ func TestValidateBranchName(t *testing.T) {
 }
 
 func TestWorktreeDirNameDistinguishesSameNamedRepos(t *testing.T) {
-	// A stack can hold ~/work/api and ~/oss/api. Keying on the basename alone
-	// sent both to one destination, and the second service was silently pointed
-	// at the first repository's worktree.
 	a := worktreeDirName("/home/dev/work/api", "feature/x")
 	b := worktreeDirName("/home/dev/oss/api", "feature/x")
 
@@ -303,7 +295,6 @@ func TestReleaseDoesNotTouchASimilarlyNamedBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// feature-login flattens to the same directory segment as feature/login.
 	removed, err := ReleaseBranchWorktrees(dir, "feature-login")
 	if err != nil {
 		t.Fatal(err)
@@ -359,9 +350,6 @@ func TestExistingBranchWorktreesFindsMaterializedOnes(t *testing.T) {
 }
 
 func TestMaterializePreparesRepositoriesConcurrently(t *testing.T) {
-	// Each repository may consult origin, and this runs inside an MCP handler
-	// holding a process-wide lock. The cost must be the slowest repository, not
-	// the sum of them, or a stack with unreachable remotes freezes the server.
 	corgi, dir := stack(t, "api", "web", "mobile", "docs", "worker")
 
 	start := time.Now()
@@ -374,8 +362,6 @@ func TestMaterializePreparesRepositoriesConcurrently(t *testing.T) {
 	if len(set.Worktrees) != 5 {
 		t.Fatalf("worktrees = %d, want 5", len(set.Worktrees))
 	}
-	// Generous, but a serial implementation over five repos with any remote
-	// probing at all would not come close.
 	if elapsed > 30*time.Second {
 		t.Errorf("took %v for 5 repos; preparation should overlap", elapsed)
 	}
@@ -405,10 +391,6 @@ func TestMaterializeStillSharesAWorktreeWhenPreparedConcurrently(t *testing.T) {
 	}
 }
 
-// A repository whose main checkout is already on the branch is what
-// materialize returns in that case, so the read-only lookup must recognise it —
-// otherwise corgi_diff reports "nothing here" for a correctly checked-out repo
-// and re-running materialize can never fix it.
 func TestExistingWorktreesFindsAMainCheckoutOnTheBranch(t *testing.T) {
 	corgi, dir := stack(t, "api")
 	repo := corgi.Services[0].AbsolutePath
@@ -422,8 +404,6 @@ func TestExistingWorktreesFindsAMainCheckoutOnTheBranch(t *testing.T) {
 	if len(found.Worktrees) != 1 {
 		t.Fatalf("worktrees = %d, want the main checkout to count", len(found.Worktrees))
 	}
-	// git reports symlink-resolved paths, which on macOS differ from t.TempDir's
-	// spelling (/var vs /private/var), so compare resolved.
 	gotDir, _ := filepath.EvalSymlinks(found.Worktrees[0].Dir)
 	wantDir, _ := filepath.EvalSymlinks(repo)
 	if gotDir != wantDir {
@@ -431,8 +411,6 @@ func TestExistingWorktreesFindsAMainCheckoutOnTheBranch(t *testing.T) {
 	}
 }
 
-// `git worktree remove --force` would discard uncommitted work, while the tool
-// only promises that branches and commits survive.
 func TestReleaseKeepsAWorktreeWithUncommittedWork(t *testing.T) {
 	corgi, dir := stack(t, "api")
 	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)

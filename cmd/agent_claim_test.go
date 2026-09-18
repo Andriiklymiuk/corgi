@@ -12,9 +12,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A claim is filed under the repository, not the worktree, so two sessions
-// in two worktrees of one repository see each other's; a starting session
-// is told what its siblings hold.
 func TestClaimsAreSharedAcrossWorktreesAndToldAtStart(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
@@ -49,7 +46,6 @@ func TestClaimsAreSharedAcrossWorktreesAndToldAtStart(t *testing.T) {
 	if claimedHere(dir, st, "s1", repo, now) != "" {
 		t.Fatal("one's own claims are not news")
 	}
-	// The claimant leaving takes the claim with it.
 	st.Sessions[0].Status = sessions.StatusGone
 	if claimedHere(dir, st, "s2", repo, now) != "" {
 		t.Fatal("a gone session holds nothing")

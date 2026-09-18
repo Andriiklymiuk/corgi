@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-// Sample is one reading of an account's limits, kept so the slope says
-// where the numbers are heading. Only readings Claude Code actually fetched
-// are kept: the daemon polls every minute, /usage refreshes when a session
-// asks, and two polls of one fetch are one fact.
 type Sample struct {
 	At        time.Time `json:"at"`
 	FetchedAt time.Time `json:"fetchedAt"`
@@ -23,18 +19,12 @@ type Sample struct {
 }
 
 const (
-	// samplesKeep bounds the file: a day of one-a-minute readings and change.
-	samplesKeep = 2000
-	samplesTrim = 2600
-	// forecastSpan is how far back the slope looks. Longer flattens a fresh
-	// burst of work; shorter reacts to it.
-	forecastSpan = 90 * time.Minute
-	// forecastMinSpread is the least time two readings must be apart before
-	// a rate between them means anything.
+	samplesKeep       = 2000
+	samplesTrim       = 2600
+	forecastSpan      = 90 * time.Minute
 	forecastMinSpread = 8 * time.Minute
 )
 
-// SamplesPath is where one account's readings live under the agent dir.
 func SamplesPath(agentDir, profile string) string {
 	name := strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
@@ -48,8 +38,6 @@ func SamplesPath(agentDir, profile string) string {
 	return filepath.Join(agentDir, "usage", name+".jsonl")
 }
 
-// RecordSample appends l to the account's file when it is a reading not yet
-// on file. Returns whether it wrote.
 func RecordSample(agentDir, profile string, l Limits, now time.Time) (bool, error) {
 	path := SamplesPath(agentDir, profile)
 	last, count := lastSample(path)
@@ -107,8 +95,6 @@ func trimSamples(path string) {
 	_ = os.WriteFile(path, []byte(buf.String()), 0o600)
 }
 
-// LoadSamples reads the readings at path fetched after since (zero: all),
-// oldest first. A missing file is no readings.
 func LoadSamples(path string, since time.Time) []Sample {
 	f, err := os.Open(path)
 	if err != nil {
@@ -131,16 +117,11 @@ func LoadSamples(path string, since time.Time) []Sample {
 	return out
 }
 
-// Forecast is where each limit is heading at the current pace.
 type Forecast struct {
 	FiveHour *WindowForecast `json:"fiveHour,omitempty"`
 	SevenDay *WindowForecast `json:"sevenDay,omitempty"`
 }
 
-// WindowForecast is one limit's slope. ExhaustAt is when it reaches 100% at
-// this pace, absent when the pace is flat or falling. Safe says whether the
-// reset comes first: true means "keep going", false means "this window will
-// run out before it resets".
 type WindowForecast struct {
 	PercentPerHour float64   `json:"percentPerHour"`
 	ExhaustAt      time.Time `json:"exhaustAt,omitempty"`
@@ -148,8 +129,6 @@ type WindowForecast struct {
 	Samples        int       `json:"samples"`
 }
 
-// ForecastFrom fits a line through the recent readings of each window and
-// projects it. nil when there is not enough to say anything.
 func ForecastFrom(samples []Sample, l Limits, now time.Time) *Forecast {
 	recent := samples[:0:0]
 	for _, s := range samples {
@@ -173,8 +152,6 @@ func windowForecast(samples []Sample, pick func(Sample) int, w Window, now time.
 	if last.FetchedAt.Sub(first.FetchedAt) < forecastMinSpread {
 		return nil
 	}
-	// Least squares over hours since the first reading; a reset inside the
-	// span shows as a drop, and the fit then says "falling", which is true.
 	var sx, sy, sxx, sxy float64
 	n := float64(len(samples))
 	for _, s := range samples {

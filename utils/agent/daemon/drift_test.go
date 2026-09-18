@@ -9,8 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// Drift is the numbers, not a feeling: a nearly full context, the same tool
-// failing again and again, a diff twice the budget, files outside the scope.
 func TestDriftIsReadFromTheNumbers(t *testing.T) {
 	origDiff, origRoot := driftDiff, workspaceRootOf
 	defer func() { driftDiff, workspaceRootOf = origDiff, origRoot }()
@@ -38,7 +36,6 @@ func TestDriftIsReadFromTheNumbers(t *testing.T) {
 			t.Errorf("reason %d lacks %q: %s", i, want, r[i])
 		}
 	}
-	// No scope: only the floor applies.
 	noScope := sessions.Session{Cwd: root, Branch: "main"}
 	driftDiff = func(string) (int, []string, bool) { return 1200, []string{"x"}, true }
 	if r := driftReasons(noScope); len(r) != 0 {
@@ -49,8 +46,6 @@ func TestDriftIsReadFromTheNumbers(t *testing.T) {
 	if len(r) != 1 || !strings.Contains(r[0], "far past the usual size") {
 		t.Fatalf("over the floor: %v", r)
 	}
-	// What the diff says shows on the board and never rings; a full context
-	// or a tool failing on repeat does.
 	if l, q := driftReasonsSplit(noScope); len(l) != 0 || len(q) != 1 {
 		t.Errorf("a big diff is quiet: loud=%v quiet=%v", l, q)
 	}
@@ -59,8 +54,6 @@ func TestDriftIsReadFromTheNumbers(t *testing.T) {
 	}
 }
 
-// A lock file or a bundle is nobody's work: it counts for scope, never for
-// the size of the diff.
 func TestGeneratedFilesDoNotCountAsDiffSize(t *testing.T) {
 	for _, p := range []string{"package-lock.json", "app/yarn.lock", "web/dist/app.js", "api/__snapshots__/a.snap", "pkg/x.pb.go", "site/main.min.js"} {
 		if !GeneratedDiffPath(p) {

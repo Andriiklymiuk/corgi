@@ -2,7 +2,6 @@ package utils
 
 import "path/filepath"
 
-// Set when the compose opts into scopeContainers; empty = legacy names.
 var containerScope string
 
 func SetContainerScope(c *CorgiCompose) {

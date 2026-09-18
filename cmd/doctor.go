@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// doctorCmd represents the doctor command
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Preflight checks: required tools, Docker, port availability",
@@ -38,14 +37,11 @@ func init() {
 type fixKind int
 
 const (
-	fixDocker   fixKind = iota // start Docker daemon — safe, auto-OK
-	fixInstall                 // install a missing tool — needs consent
-	fixKillPort                // kill a port hog — destructive
+	fixDocker fixKind = iota
+	fixInstall
+	fixKillPort
 )
 
-// shouldAutoFix decides whether a remediation may run without a prompt.
-// Docker start is always safe. Installs and kills require either an
-// interactive terminal (to prompt) or an explicit --yes.
 func shouldAutoFix(kind fixKind, nonInteractive, yes bool) bool {
 	if kind == fixDocker {
 		return true
@@ -60,7 +56,7 @@ type fixActions struct {
 	startDocker func() error
 	installTool func(name string) error
 	killPort    func(port int) error
-	confirm     func(prompt string) bool // asked before destructive fixes in interactive mode
+	confirm     func(prompt string) bool
 }
 
 type fixSkip struct {
@@ -94,7 +90,6 @@ func portFromCheckName(name string) int {
 	return p
 }
 
-// applyFix runs the remediation for a kind. Pure dispatch over acts.
 func applyFix(kind fixKind, name string, acts fixActions) error {
 	switch kind {
 	case fixDocker:
@@ -107,9 +102,6 @@ func applyFix(kind fixKind, name string, acts fixActions) error {
 	return nil
 }
 
-// fixOneCheck decides and applies the remediation for a single failed check.
-// Returns fixed=true on success, or a skip reason otherwise. Flat early
-// returns keep cognitive complexity low and make it independently testable.
 func fixOneCheck(c doctorCheck, acts fixActions, nonInteractive, yes bool) (bool, string) {
 	kind, ok := classifyCheck(c.Name)
 	if !ok {
@@ -118,7 +110,6 @@ func fixOneCheck(c doctorCheck, acts fixActions, nonInteractive, yes bool) (bool
 	if !shouldAutoFix(kind, nonInteractive, yes) {
 		return false, "needs --yes (destructive or requires consent)"
 	}
-	// Interactive destructive fixes still ask first, unless --yes.
 	if kind != fixDocker && !yes && !nonInteractive && acts.confirm != nil && !acts.confirm(fmt.Sprintf("Fix %s?", c.Name)) {
 		return false, "declined"
 	}
@@ -128,8 +119,6 @@ func fixOneCheck(c doctorCheck, acts fixActions, nonInteractive, yes bool) (bool
 	return true, ""
 }
 
-// runFixes walks failed checks and applies the matching remediation, honoring
-// the auto-fix gate. All side effects go through acts so it stays testable.
 func runFixes(res doctorResult, acts fixActions, nonInteractive, yes bool) fixOutcome {
 	out := fixOutcome{OK: true}
 	for _, c := range res.Checks {
@@ -146,7 +135,6 @@ func runFixes(res doctorResult, acts fixActions, nonInteractive, yes bool) fixOu
 	return out
 }
 
-// installRequiredByName runs the declared install steps for a required tool.
 func installRequiredByName(corgi *utils.CorgiCompose, name string) error {
 	for _, r := range corgi.Required {
 		if r.Name != name {
@@ -155,8 +143,6 @@ func installRequiredByName(corgi *utils.CorgiCompose, name string) error {
 		if len(r.Install) == 0 {
 			return fmt.Errorf("no install steps declared for %s", name)
 		}
-		// In JSON mode run non-interactively so the installer's output is
-		// routed to stderr (via ConsoleOut), keeping stdout pure JSON.
 		interactive := !utils.JSONOutput
 		for _, step := range r.Install {
 			if err := utils.RunServiceCmd(r.Name, step, "", interactive); err != nil {
@@ -265,8 +251,6 @@ func runDoctorJSON(corgi *utils.CorgiCompose) {
 	}
 }
 
-// buildDoctorResult runs the preflight checks (required tools, Docker, ports)
-// and returns the structured result without printing or exiting.
 func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 	var res doctorResult
 
@@ -307,8 +291,6 @@ func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 	return res
 }
 
-// ciChecks catch what is always a bug on a runner but normal mid-setup on a
-// laptop, so they only report in CI.
 func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 	if !utils.CIMode {
 		return nil
@@ -339,7 +321,6 @@ func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 	return checks
 }
 
-// diskHeadroomCheck stays silent when the platform cannot answer.
 func diskHeadroomCheck(corgi *utils.CorgiCompose) (doctorCheck, bool) {
 	need, free, ok, known := utils.DiskHeadroom(corgi, utils.CorgiComposePathDir)
 	if !known {
@@ -385,8 +366,6 @@ func checkRequiredIsFoundQuiet(required utils.Required) (bool, string) {
 	return true, ""
 }
 
-// RunRequired is kept for backwards compatibility with cmd/init.go.
-// It returns whether all required tools were found.
 func RunRequired(required []utils.Required) bool {
 	required = utils.ActiveRequired(required)
 	if len(required) == 0 {
@@ -425,10 +404,9 @@ func runDockerCheck(corgi *utils.CorgiCompose) bool {
 	return false
 }
 
-// portOwnerInfo names what a port is declared for, in the running compose.
 type portOwnerInfo struct {
 	Port int
-	Desc string // e.g. "db_services.api-db (postgres)" or "services.api"
+	Desc string
 }
 
 func collectDeclaredPorts(corgi *utils.CorgiCompose) []portOwnerInfo {

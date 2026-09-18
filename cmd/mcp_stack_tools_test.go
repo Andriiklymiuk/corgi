@@ -10,8 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// corgi_http hits a service by name on the port the compose file declares,
-// sends JSON as JSON, and caps the body.
 func TestCorgiHTTPTalksToAServiceByName(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Request-Id", "abc")

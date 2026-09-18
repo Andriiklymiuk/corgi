@@ -12,15 +12,8 @@ import (
 	"time"
 )
 
-// Backfill reads a fortnight of transcripts once, on the first daemon
-// that has a ledger, so the card's bars are not empty for two weeks after
-// an upgrade. Only lines older than the ledger's opening count: the hooks
-// count everything after it. Every account's projects/ is walked; a
-// transcript untouched for longer than the window is skipped unread.
 const backfillDays = 14
 
-// NeedsBackfill says whether the ledger was born just now: no file, and
-// nothing counted yet.
 func (l *Ledger) NeedsBackfill() bool {
 	if l == nil {
 		return false
@@ -34,9 +27,6 @@ func (l *Ledger) NeedsBackfill() bool {
 	return os.IsNotExist(err)
 }
 
-// Backfill counts transcripts under each config dir's projects/ into the
-// ledger, for lines stamped before `until`. It returns how many transcripts
-// it read. ctx stops it between files.
 func (l *Ledger) Backfill(ctx context.Context, configDirs []string, until time.Time) int {
 	if l == nil {
 		return 0
@@ -81,8 +71,6 @@ func (l *Ledger) Backfill(ctx context.Context, configDirs []string, until time.T
 
 var toolUseMark = []byte(`"type":"tool_use"`)
 
-// countTranscript folds one transcript's prompts, tool calls and session
-// into the ledger by the local day of each line.
 func (l *Ledger) countTranscript(path string, since, until time.Time) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -111,8 +99,6 @@ func (l *Ledger) countTranscript(path string, since, until time.Time) {
 		}
 		switch row.Type {
 		case "user":
-			// A prompt is what a person typed: a string, or text blocks — a
-			// tool_result array is the tool answering, not a person.
 			if row.IsMeta || len(row.Message.Content) == 0 || bytes.Contains(row.Message.Content, []byte(`"tool_result"`)) {
 				l.Note("", row.SessionID, false, at)
 				continue

@@ -7,18 +7,12 @@ import (
 	"strings"
 )
 
-// CacheHint is an install step that could opt into caching but has not.
 type CacheHint struct {
-	Service string `json:"service"`
-	// Command is the beforeStart step's run line, so the user can find it.
-	Command string `json:"command"`
-	// Lockfile is the cacheKey to add, relative to the service.
+	Service  string `json:"service"`
+	Command  string `json:"command"`
 	Lockfile string `json:"lockfile"`
 }
 
-// Keyed by lockfile, not ecosystem: a repo carrying a stale bun.lock would
-// otherwise have `yarn install` keyed on it. "bundle exec" is absent on
-// purpose — keying db:migrate on Gemfile.lock would skip the migration.
 var installVerbs = map[string][]string{
 	"package-lock.json": {"npm ci", "npm install"},
 	"yarn.lock":         {"yarn install", "yarn --"},
@@ -38,8 +32,6 @@ var installVerbs = map[string][]string{
 	"pubspec.lock":      {"pub get"},
 }
 
-// CacheOptInHints finds install steps that could skip on an unchanged lockfile
-// but declare no cacheKey. Without it that cost is invisible.
 func CacheOptInHints(corgi *CorgiCompose) []CacheHint {
 	var hints []CacheHint
 	for _, service := range sortedServices(corgi) {
@@ -59,10 +51,8 @@ func CacheOptInHints(corgi *CorgiCompose) []CacheHint {
 	return hints
 }
 
-// lockfileForStep returns the lockfile this command installs from, or "".
 func lockfileForStep(service Service, run string) string {
 	lower := strings.ToLower(run)
-	// Most specific first, so pnpm wins over a stray package-lock.json.
 	for _, eco := range ecosystems {
 		verbs, known := installVerbs[eco.lockfile]
 		if !known {
@@ -71,7 +61,6 @@ func lockfileForStep(service Service, run string) string {
 		if !mentionsAny(lower, verbs) {
 			continue
 		}
-		// A cacheKey on a missing file makes every run miss instead of skip.
 		if _, err := os.Stat(filepath.Join(service.AbsolutePath, eco.lockfile)); err == nil {
 			return eco.lockfile
 		}
@@ -88,7 +77,6 @@ func mentionsAny(haystack string, needles []string) bool {
 	return false
 }
 
-// CacheHintLines renders the hints as pasteable yml, sorted for stability.
 func CacheHintLines(hints []CacheHint) []string {
 	lines := make([]string, 0, len(hints))
 	for _, h := range hints {

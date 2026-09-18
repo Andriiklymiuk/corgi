@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// gitRepo makes a repository with one commit, on a named branch.
 func gitRepo(t *testing.T, dir, branch string) string {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -44,9 +43,6 @@ func gitRepo(t *testing.T, dir, branch string) string {
 	return dir
 }
 
-// worktreeDir creates a worktree checkout under dir using the real naming
-// scheme, so these tests exercise the names corgi actually produces rather than
-// a convenient invention.
 func worktreeDir(t *testing.T, dir, repoPath, branch string) string {
 	t.Helper()
 	name := utils.WorktreeDirPrefix(repoPath) + "@" + strings.ReplaceAll(branch, "/", "-")
@@ -54,9 +50,6 @@ func worktreeDir(t *testing.T, dir, repoPath, branch string) string {
 }
 
 func TestProbeWorktreeReposReportsBranchesNobodyRemembers(t *testing.T) {
-	// A cross-repo branch is exactly what a restarted session cannot discover:
-	// from a fresh session's cwd, four worktrees on one branch look like
-	// nothing at all.
 	dir := t.TempDir()
 	apiRepo, webRepo := "/dev/acme/api", "/dev/acme/web"
 	worktreeDir(t, dir, apiRepo, "feature/referral")
@@ -80,8 +73,6 @@ func TestProbeWorktreeReposReportsBranchesNobodyRemembers(t *testing.T) {
 			t.Errorf("%s must be marked as a worktree, not a main checkout", r.Service)
 		}
 	}
-	// The compose file maps the directory back to the service. Splitting the
-	// name on "@" would yield "api-3f2a1b", labelling every repo with a hash.
 	services := map[string]bool{got[0].Service: true, got[1].Service: true}
 	for _, want := range []string{"api", "web"} {
 		if !services[want] {
@@ -91,8 +82,6 @@ func TestProbeWorktreeReposReportsBranchesNobodyRemembers(t *testing.T) {
 }
 
 func TestProbeWorktreeReposFallsBackToTheRepoName(t *testing.T) {
-	// With no readable compose file there is no service map, and a name with
-	// the hash still attached would be worse than the repository's own name.
 	dir := t.TempDir()
 	worktreeDir(t, dir, "/dev/acme/api", "feature/referral")
 
@@ -107,8 +96,6 @@ func TestProbeWorktreeReposFallsBackToTheRepoName(t *testing.T) {
 }
 
 func TestProbeWorktreeReposReportsUncommittedWork(t *testing.T) {
-	// Uncommitted work is the part that is genuinely lost if nobody mentions
-	// it, because the next session has no reason to look.
 	dir := t.TempDir()
 	repo := worktreeDir(t, dir, "/dev/acme/api", "feature/x")
 	if err := os.WriteFile(filepath.Join(repo, "new.txt"), []byte("wip\n"), 0o644); err != nil {
@@ -141,8 +128,6 @@ func TestProbeWorktreeReposIgnoresNonRepositories(t *testing.T) {
 }
 
 func TestProbeWorkspaceReposOnAMissingDirectoryIsEmpty(t *testing.T) {
-	// A workspace on an unmounted drive must produce a brief saying the session
-	// restarted, not a crash inside the supervisor's restart path.
 	if got := probeWorkspaceRepos(filepath.Join(t.TempDir(), "gone")); len(got) != 0 {
 		t.Errorf("probed %+v, want nothing", got)
 	}
@@ -152,9 +137,6 @@ func TestProbeWorkspaceReposOnAMissingDirectoryIsEmpty(t *testing.T) {
 }
 
 func TestCaptureWorkspaceBriefAlwaysReturnsABrief(t *testing.T) {
-	// The daemon calls this on every restart. Returning nil for a workspace it
-	// could not read would lose the cause and reason too, which are the parts
-	// that always apply.
 	got := captureWorkspaceBrief(brief.Params{
 		WorkspaceID: "acme",
 		Dir:         filepath.Join(t.TempDir(), "gone"),
@@ -174,8 +156,6 @@ func TestCaptureWorkspaceBriefAlwaysReturnsABrief(t *testing.T) {
 }
 
 func TestFormatBriefsShowsWhereTheSessionLeftOff(t *testing.T) {
-	// This is the text someone reads to decide where they were, so what it
-	// contains is behaviour, not decoration.
 	ended := time.Date(2026, 8, 14, 14, 32, 0, 0, time.Local)
 	got := formatBriefs([]brief.Brief{{
 		WorkspaceID: "acme-stack",
@@ -206,8 +186,6 @@ func TestFormatBriefsShowsWhereTheSessionLeftOff(t *testing.T) {
 }
 
 func TestFormatBriefsOmitsWhatItDoesNotKnow(t *testing.T) {
-	// Empty lines labelled "reason" and "state" would suggest corgi looked and
-	// found nothing, rather than that there was nothing to look at.
 	got := formatBriefs([]brief.Brief{{
 		WorkspaceID: "acme",
 		EndedAt:     time.Now(),
@@ -223,8 +201,6 @@ func TestFormatBriefsOmitsWhatItDoesNotKnow(t *testing.T) {
 }
 
 func TestFormatBriefsMarksADetachedCheckout(t *testing.T) {
-	// An empty branch renders as a dash, never as a blank column that reads
-	// like the value was lost.
 	got := formatBriefs([]brief.Brief{{
 		WorkspaceID: "acme",
 		EndedAt:     time.Now(),
@@ -245,9 +221,6 @@ func TestFormatBriefsSaysSoWhenThereAreNone(t *testing.T) {
 }
 
 func TestAgentBriefJSONShapes(t *testing.T) {
-	// docs/agents.md promises an array for the list form and one object or null
-	// for a single id. A command that switches shapes makes every consumer
-	// branch on the shape before it can read the data.
 	dir := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", dir)
 
@@ -273,8 +246,6 @@ func TestAgentBriefJSONShapes(t *testing.T) {
 	}
 }
 
-// briefCmdWithJSON returns the brief command with --json set, so the handler
-// can be driven without going through the root command.
 func briefCmdWithJSON(t *testing.T) *cobra.Command {
 	t.Helper()
 	c := &cobra.Command{}
@@ -283,10 +254,6 @@ func briefCmdWithJSON(t *testing.T) *cobra.Command {
 }
 
 func TestProbeWorkspaceReposNamesServicesFromTheComposeFile(t *testing.T) {
-	// Worktree dirs are named from the git repository ROOT, so a map keyed on
-	// the service path never matches and every worktree gets the repo basename.
-	// The service lives in a subdirectory here — the monorepo layout where the
-	// two paths diverge — so a regression reports "mono" instead of "api".
 	dir := t.TempDir()
 	repo := gitRepo(t, filepath.Join(dir, "mono"), "main")
 	servicePath := filepath.Join(repo, "services", "api")
@@ -306,7 +273,6 @@ func TestProbeWorkspaceReposNamesServicesFromTheComposeFile(t *testing.T) {
 	if root == servicePath {
 		t.Fatal("the service path and its repository root must differ for this test to discriminate")
 	}
-	// Named from the repository root, the way corgi names it.
 	worktreeDir(t, dir, root, "feature/referral")
 
 	got := probeWorkspaceRepos(dir)

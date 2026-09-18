@@ -12,16 +12,7 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// A claim is a session saying "these files are mine for now" — the
-// auth middleware while it rewrites the refresh path — so a second
-// session in the same repository is told at its start, and the daemon
-// rings when one edits a file another claimed. Advisory: nothing is
-// locked, nobody is stopped. A claim lives until it is released, its
-// session leaves the board, or a day passes.
-
-// FileClaim is one file held by one session.
 type FileClaim struct {
-	// Repo is the repository root the path is relative to.
 	Repo    string    `json:"repo"`
 	Path    string    `json:"path"`
 	Session string    `json:"session"`
@@ -29,7 +20,6 @@ type FileClaim struct {
 	At      time.Time `json:"at"`
 }
 
-// FileClaimFor is how long a claim holds with nobody releasing it.
 const FileClaimFor = 24 * time.Hour
 
 type FileClaimLog struct {
@@ -59,8 +49,6 @@ func (l *FileClaimLog) save() error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// Set claims paths for a session in a repository; a path another session
-// held is taken over, and the caller is told whose it was.
 func (l *FileClaimLog) Set(repo, session, label string, paths []string, now time.Time) (taken []FileClaim, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -81,7 +69,6 @@ func (l *FileClaimLog) Set(repo, session, label string, paths []string, now time
 	return taken, l.save()
 }
 
-// Release drops a session's claims — the paths named, or all of them.
 func (l *FileClaimLog) Release(session string, paths []string) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -101,8 +88,6 @@ func (l *FileClaimLog) Release(session string, paths []string) (int, error) {
 	return dropped, l.save()
 }
 
-// Live is every claim still holding at now, held by a session in live —
-// the rest are forgotten on the way.
 func (l *FileClaimLog) Live(live map[string]bool, now time.Time) []FileClaim {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -121,8 +106,6 @@ func (l *FileClaimLog) Live(live map[string]bool, now time.Time) []FileClaim {
 	return out
 }
 
-// Crossed is which of a session's touched paths another session claims,
-// in the same repository.
 func Crossed(claims []FileClaim, repo, session string, touched []string) []FileClaim {
 	var out []FileClaim
 	for _, c := range claims {

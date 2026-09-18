@@ -43,8 +43,6 @@ func TestCopyTreeCopiesNestedFiles(t *testing.T) {
 	}
 }
 
-// The whole point of the field: a declared directory is collected, so a red
-// suite leaves its screenshots behind.
 func TestCollectE2EArtifactsCopiesDeclaredDir(t *testing.T) {
 	workdir := t.TempDir()
 	dest := filepath.Join(t.TempDir(), "collected")
@@ -61,8 +59,6 @@ func TestCollectE2EArtifactsCopiesDeclaredDir(t *testing.T) {
 	}
 }
 
-// Paths are relative to workdir. A path that does not resolve must not abort the
-// run or invent an empty directory — it warns and moves on.
 func TestCollectE2EArtifactsSkipsMissingPath(t *testing.T) {
 	workdir := t.TempDir()
 	dest := filepath.Join(t.TempDir(), "collected")

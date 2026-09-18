@@ -10,17 +10,6 @@ import (
 	"time"
 )
 
-// snapshot_e2e_test.go needs a real daemon and never runs in CI coverage, so
-// these stub `docker` with a shell script on PATH returning canned output.
-// RunSnapshot, RunRestore and their helpers then run for real with no daemon.
-//
-// Knobs (set after installFakeDocker):
-//
-//	FAKE_FAIL          space-separated: exec|version|stop|cp|cpimport — those calls exit 1
-//	FAKE_FAIL_COMPOSE  space-separated compose subcommands to fail (down|up|start)
-//	FAKE_INSPECT_CODE  container exit code reported by `docker inspect` (default 0)
-//	FAKE_ARCH          arch reported by `docker version` (default arm64)
-//	FAKE_IMAGE         image reported by `docker compose config` (default postgres:17-alpine)
 const fakeDockerScript = `#!/bin/sh
 fail_has() { for x in $FAKE_FAIL; do [ "$x" = "$1" ] && return 0; done; return 1; }
 case "$1" in
@@ -43,8 +32,6 @@ case "$1" in
 esac
 `
 
-// installFakeDocker writes the stub, prepends it to PATH, and points FAKE_TAR at
-// a real (uncompressed) tar the export branch streams out.
 func installFakeDocker(t *testing.T) {
 	t.Helper()
 	binDir := t.TempDir()
@@ -99,8 +86,6 @@ func useTempStack(t *testing.T) {
 	scaffoldDbServiceDir(t, "main")
 }
 
-// craftSnapshot writes a valid zstd(tar) archive plus a meta sidecar for "main",
-// applying meta defaults (matching the fake docker) before any caller overrides.
 func craftSnapshot(t *testing.T, name string, meta SnapshotMeta) (archive, metaPath string) {
 	t.Helper()
 	archive, metaPath, err := SnapshotPaths("main", name)
@@ -117,8 +102,6 @@ func craftSnapshot(t *testing.T, name string, meta SnapshotMeta) (archive, metaP
 	if meta.Arch == "" {
 		meta.Arch = "arm64"
 	}
-	// Record the archive's real SHA by default so the now-always-on integrity
-	// check passes for callers that craft a good snapshot.
 	if meta.SHA256 == "" {
 		meta.SHA256 = fileSHA(t, archive)
 	}
@@ -168,8 +151,6 @@ func TestRunSnapshotAndRestoreFakeDocker(t *testing.T) {
 		t.Errorf("meta not written: %v", err)
 	}
 
-	// the just-written snapshot restores clean (image/arch match the fake, the
-	// archive is valid zstd(tar), and inject + start succeed).
 	if err := RunRestore(RestoreRequest{
 		Service: "main", Driver: "postgres",
 		ArchivePath: archive, MetaPath: metaPath,
@@ -199,7 +180,6 @@ func TestRunSnapshotAlreadyExists(t *testing.T) {
 		t.Error("an existing snapshot without --force should be refused")
 	}
 
-	// --force overwrites without complaint
 	if _, err := RunSnapshot(SnapshotRequest{
 		Service: "main", Driver: "postgres", Name: "dup", Force: true,
 	}, time.Now()); err != nil {
@@ -260,16 +240,14 @@ func TestRunRestoreMissingMeta(t *testing.T) {
 
 func TestRunRestoreArchMismatch(t *testing.T) {
 	useTempStack(t)
-	installFakeDocker(t) // fake reports arm64
+	installFakeDocker(t)
 	archive, metaPath := craftSnapshot(t, "x86", SnapshotMeta{Arch: "amd64"})
 
-	// without --force the arch mismatch aborts
 	if err := RunRestore(RestoreRequest{
 		Service: "main", Driver: "postgres", ArchivePath: archive, MetaPath: metaPath,
 	}); err == nil {
 		t.Error("arch mismatch without --force should abort")
 	}
-	// with --force the warning is logged and the restore proceeds to completion
 	if err := RunRestore(RestoreRequest{
 		Service: "main", Driver: "postgres", ArchivePath: archive, MetaPath: metaPath, Force: true,
 	}); err != nil {
@@ -282,7 +260,6 @@ func TestRunRestoreFromPathVerifiesSHA(t *testing.T) {
 	installFakeDocker(t)
 
 	archive, metaPath := craftSnapshot(t, "trusted", SnapshotMeta{})
-	// record the real sha → the FromPath hash check passes and the restore runs
 	good := SnapshotMeta{SHA256: fileSHA(t, archive)}
 	if err := WriteSnapshotMeta(metaPath, mergeDefaults(good)); err != nil {
 		t.Fatal(err)
@@ -293,7 +270,6 @@ func TestRunRestoreFromPathVerifiesSHA(t *testing.T) {
 		t.Errorf("matching sha from an explicit path should restore, got %v", err)
 	}
 
-	// a wrong recorded sha trips the integrity check before any wipe
 	if err := WriteSnapshotMeta(metaPath, mergeDefaults(SnapshotMeta{SHA256: "deadbeef"})); err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +284,6 @@ func TestRunRestoreNamedVerifiesSHA(t *testing.T) {
 	useTempStack(t)
 	installFakeDocker(t)
 	archive, metaPath := craftSnapshot(t, "named", SnapshotMeta{})
-	// corrupt the recorded checksum on a *named* (not --from-path) restore
 	if err := WriteSnapshotMeta(metaPath, mergeDefaults(SnapshotMeta{SHA256: "deadbeef"})); err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +296,7 @@ func TestRunRestoreNamedVerifiesSHA(t *testing.T) {
 
 func TestRunRestorePgVersionGate(t *testing.T) {
 	useTempStack(t)
-	installFakeDocker(t) // fake reports PG_VERSION 17
+	installFakeDocker(t)
 	archive, metaPath := craftSnapshot(t, "pg15", SnapshotMeta{PgVersionMajor: "15"})
 
 	if err := RunRestore(RestoreRequest{
@@ -350,7 +325,6 @@ func TestRunRestoreCorruptArchive(t *testing.T) {
 	useTempStack(t)
 	installFakeDocker(t)
 	archive, metaPath := craftSnapshot(t, "bad", SnapshotMeta{})
-	// overwrite the valid archive with non-zstd bytes → probeArchive fails
 	if err := os.WriteFile(archive, []byte("not a zstd stream"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -392,14 +366,13 @@ func TestRunRestoreDockerFailures(t *testing.T) {
 func TestComposeImageEmpty(t *testing.T) {
 	useTempStack(t)
 	installFakeDocker(t)
-	t.Setenv("FAKE_NO_IMAGE", "1") // compose config prints nothing
+	t.Setenv("FAKE_NO_IMAGE", "1")
 	if _, err := composeImage(filepath.Join(CorgiComposePathDir, "corgi_services", "db_services", "main")); err == nil {
 		t.Error("composeImage should error when no image is resolved")
 	}
 }
 
 func TestWriteSnapshotMetaBadPath(t *testing.T) {
-	// a path whose parent directory does not exist surfaces the write error
 	err := WriteSnapshotMeta(filepath.Join(t.TempDir(), "missing", "x.meta.json"), SnapshotMeta{})
 	if err == nil {
 		t.Error("writing into a nonexistent directory should fail")
@@ -409,8 +382,6 @@ func TestWriteSnapshotMetaBadPath(t *testing.T) {
 func TestWriteSnapshotArchiveCreateFails(t *testing.T) {
 	useTempStack(t)
 	installFakeDocker(t)
-	// target path sits under a nonexistent directory → os.Create fails after the
-	// docker cp has started, exercising the kill-and-cleanup branch.
 	bad := filepath.Join(t.TempDir(), "no-such-dir", "out.tar.zst")
 	if _, _, err := writeSnapshotArchive("postgres-main", bad); err == nil {
 		t.Error("writeSnapshotArchive should fail when the archive can't be created")
@@ -421,7 +392,7 @@ func TestTrapInterruptDeregister(t *testing.T) {
 	called := false
 	stop := trapInterrupt(func(os.Signal) { called = true })
 	stop()
-	stop() // idempotent — second call must not panic on a closed channel
+	stop()
 	if called {
 		t.Error("handler must not run on the normal (no-signal) path")
 	}

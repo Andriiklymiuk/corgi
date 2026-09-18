@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// The hook says one word about what a tool would do, from the input it
-// then drops: reads, writes, destructive.
 func TestRiskOfAToolInput(t *testing.T) {
 	cases := []struct{ tool, input, want string }{
 		{"Read", `{"file_path":"/x/a.go"}`, "reads"},

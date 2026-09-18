@@ -79,26 +79,17 @@ func psRowFromEntry(e utils.RunStateEntry) psRow {
 	return row
 }
 
-// dockerRunnerBootGrace: a container-backed service whose port isn't listening yet
-// may still be booting. Don't demote it to "stopped" within this window of start.
 const dockerRunnerBootGrace = 15 * time.Second
 
-// probeDockerRunnerServices confirms pid==0 (container-backed) entries by a port
-// probe, since Reconcile cannot pid-track them and a dead container would linger
-// as "running". Within dockerRunnerBootGrace of start it is left booting; after
-// that a closed port marks it stopped and advances StatusChangedAt.
 func probeDockerRunnerServices(st utils.RunState, probe func(port int) bool, now time.Time) utils.RunState {
 	for i := range st.Services {
 		e := &st.Services[i]
 		if e.PID != 0 || e.Port == 0 {
 			continue
 		}
-		// Container state beats a port probe: a booting app is running even
-		// though its port isn't open yet. Repo-compose containers carry their
-		// own names, so a not-found container falls back to the port probe.
 		alive := containerCheck(utils.ServiceContainerName(e.Name)) || probe(e.Port)
 		if !alive && !e.StartedAt.IsZero() && now.Sub(e.StartedAt) < dockerRunnerBootGrace {
-			continue // freshly started; port may not be open yet
+			continue
 		}
 		newStatus := "stopped"
 		if alive {
@@ -112,7 +103,6 @@ func probeDockerRunnerServices(st utils.RunState, probe func(port int) bool, now
 	return st
 }
 
-// containerCheck is overridable in tests.
 var containerCheck = func(containerName string) bool {
 	running, err := utils.IsServiceRunning(containerName)
 	return err == nil && running

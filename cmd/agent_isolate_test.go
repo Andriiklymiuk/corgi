@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// A session of its own: a worktree on corgi/<ref>, under the same base the
-// unattended runs use, so one prune finds them all. Without a ticket the
-// minute names the branch.
 func TestIsolationRefIsTheTicketElseTheMinute(t *testing.T) {
 	at := time.Date(2026, 9, 12, 14, 5, 0, 0, time.Local)
 	if got := isolationRef("ABC-12,ABC-13", at); got != "ABC-12" {
@@ -56,12 +53,10 @@ func TestIsolateWorkspaceGivesABareCheckoutItsOwnWorktree(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(start, "a.txt")); err != nil {
 		t.Fatal("the worktree carries the checkout's files")
 	}
-	// The checkout itself stays where it was.
 	out, _ = exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if strings.TrimSpace(string(out)) != "main" {
 		t.Fatalf("the main checkout must not move: %q", out)
 	}
-	// Asking again reuses it rather than making a second.
 	again, start2, err := isolateWorkspace(repo, "corgi/abc-7")
 	if err != nil || len(again) != 1 || start2 != start {
 		t.Fatalf("the same branch is the same worktree: %v %s %v", again, start2, err)

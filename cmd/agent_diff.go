@@ -15,21 +15,10 @@ import (
 	"andriiklymiuk/corgi/utils/gitbase"
 )
 
-// The diff a session has built up, for a phone: the files with their
-// counts, and one file's patch on request. git does the work; corgi only
-// picks the base and bounds the answer — a phone on 5G wants the list in a
-// blink and one file at a time, never the whole branch in one body.
-//
-// Same gate as the conversation: the workspace has to be readable from a
-// phone (corgi agent stream enable), because a diff is the code.
-
-// diffPatchMax bounds one file's patch; a phone cannot show more anyway.
 const diffPatchMax = 200 << 10
 
-// diffTimeout bounds git: a huge repo must not hold the request.
 const diffTimeout = 8 * time.Second
 
-// DiffFile is one changed path with its counts.
 type DiffFile struct {
 	Path      string `json:"path"`
 	Added     int    `json:"added"`
@@ -38,8 +27,6 @@ type DiffFile struct {
 	Generated bool   `json:"generated,omitempty"`
 }
 
-// diffBase is the merge base with the main branch, or "" when there is
-// none to speak of (no main, not a repo).
 var diffBase = func(ctx context.Context, dir string) string {
 	for _, b := range gitbase.Refs(dir) {
 		out, err := exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "HEAD", b).Output()
@@ -50,7 +37,6 @@ var diffBase = func(ctx context.Context, dir string) string {
 	return ""
 }
 
-// diffFiles is --numstat against the base: every path, with its counts.
 func diffFiles(ctx context.Context, dir, base string) ([]DiffFile, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", dir, "diff", "--numstat", "--no-color", base).Output()
 	if err != nil {
@@ -78,13 +64,8 @@ func diffFiles(ctx context.Context, dir, base string) ([]DiffFile, error) {
 	return files, nil
 }
 
-// diffAllMax bounds the whole branch in one body: a phone that asked for
-// everything at once gets the first files whole and a note where it cut.
 const diffAllMax = 600 << 10
 
-// diffPatch is one file's unified diff against the base, cut at diffPatchMax.
-// An empty path is the whole branch, cut at diffAllMax — generated files
-// (lock files, bundles) left out, since nobody reads those on a phone.
 func diffPatch(ctx context.Context, dir, base, path string) (patch string, truncated bool, err error) {
 	args := []string{"-C", dir, "diff", "--no-color", "--unified=3", base, "--"}
 	limit := diffPatchMax
@@ -119,9 +100,6 @@ func diffPatch(ctx context.Context, dir, base, path string) (patch string, trunc
 	return string(out), false, nil
 }
 
-// launchDiffHandler: GET /launch/diff?session=<id> lists the files;
-// &file=<path> answers with that file's patch; &all=1 with every file's,
-// one body, for a phone that would rather scroll than tap.
 func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -164,8 +142,6 @@ func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if file := r.URL.Query().Get("file"); file != "" {
-		// Only a path git itself listed reaches git again, and as git's own
-		// string: the phone picks from the list, it never names a path.
 		listed := listedDiffPath(files, file)
 		if listed == "" {
 			writeLaunchError(w, http.StatusBadRequest, "a file from this branch's diff")
@@ -189,9 +165,6 @@ func launchDiffHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{"session": session.ID, "base": base[:min(12, len(base))], "branch": session.Branch, "files": files, "added": added, "deleted": deleted})
 }
 
-// listedDiffPath returns the diff's own copy of file when the branch's diff
-// lists it (a plain path; validDiffPath keeps oddities out of the lookup
-// too), or "" for anything else.
 func listedDiffPath(files []DiffFile, file string) string {
 	if !validDiffPath(file) {
 		return ""
@@ -204,9 +177,6 @@ func listedDiffPath(files []DiffFile, file string) string {
 	return ""
 }
 
-// validDiffPath admits a plain relative path inside the checkout and nothing
-// git could read as an option or another tree: no leading dash, no parent
-// hops, no absolute path, no control characters.
 func validDiffPath(file string) bool {
 	if file == "" || len(file) > 4096 || strings.HasPrefix(file, "-") || strings.HasPrefix(file, "/") {
 		return false
@@ -224,6 +194,4 @@ func validDiffPath(file string) bool {
 	return true
 }
 
-// diffDirFor is where a session's branch lives: its cwd, which for an
-// isolated session is the worktree itself.
 var diffDirFor = func(s sessions.Session) string { return s.Cwd }

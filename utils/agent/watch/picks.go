@@ -10,16 +10,11 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// A pick is "Work on it" pressed: who asked for a session on a ticket and
-// when. The session itself shows up a few seconds later, from its first
-// hook event; until then the board would say nothing had happened. This
-// file is that gap, and the record of who picked what.
 type Pick struct {
 	At time.Time `json:"at"`
-	By string    `json:"by,omitempty"` // phone, page, cli, editor
+	By string    `json:"by,omitempty"`
 }
 
-// PickFresh is how long a pick explains a card with no session on it yet.
 const PickFresh = 20 * time.Minute
 
 type PickLog struct {
@@ -50,7 +45,6 @@ func (l *PickLog) Get(key string) (Pick, bool) {
 	return p, ok
 }
 
-// Set records a pick; the oldest go once the file is full.
 func (l *PickLog) Set(key, by string, at time.Time) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()

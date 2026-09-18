@@ -72,8 +72,6 @@ func TestRemoteStartAlwaysOpensASession(t *testing.T) {
 }
 
 func TestSessionNamePrefixJoinsWorkspaceAndProfile(t *testing.T) {
-	// Shaping into one safe word happens in the supervisor's BuildEnv; this
-	// only decides what goes in.
 	for _, tc := range []struct{ id, profile, want string }{
 		{"corgi", "", "corgi"},
 		{"corgi", "work", "corgi-work"},
@@ -168,5 +166,5 @@ func TestRunStateOfBlanksTheLinkOfAnIdleDevice(t *testing.T) {
 	if got := runStateOf(supervisor.RunState{Note: "old CLI"}); got.remark != "old CLI" {
 		t.Errorf("the runner's note must reach the row as the remark, got %q", got.remark)
 	}
-	_ = filepath.Join // keep the import honest if helpers move
+	_ = filepath.Join
 }

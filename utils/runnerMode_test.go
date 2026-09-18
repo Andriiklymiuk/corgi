@@ -131,7 +131,7 @@ func TestSubdirDockerfileDetected(t *testing.T) {
 }
 
 func TestAutoDockerResolvesPortFromExpose(t *testing.T) {
-	s := mkModeService(t, "Dockerfile") // EXPOSE 3000 in fixture
+	s := mkModeService(t, "Dockerfile")
 	out, err := ResolveRunnerModes([]Service{s}, false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +170,7 @@ func TestExplicitRunnerNoExposeNoPortErrors(t *testing.T) {
 }
 
 func TestClonedRepoWithNothingRunnableErrors(t *testing.T) {
-	s := mkModeService(t) // dir exists, empty
+	s := mkModeService(t)
 	s.Port = 3000
 	if _, err := ResolveRunnerModes([]Service{s}, false, false); err == nil {
 		t.Fatal("port + no start + no docker source must error post-clone")

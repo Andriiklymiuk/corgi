@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// harden adds what is missing and leaves what is there: deny rules for
-// secrets and destruction, and the hook that refuses to write a key.
 func TestHardenIsAdditiveAndIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -23,7 +21,7 @@ func TestHardenIsAdditiveAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(added) != len(hardenDeny) { // one deny was there already, the hook is new
+	if len(added) != len(hardenDeny) {
 		t.Fatalf("added %d: %v", len(added), added)
 	}
 	settings, _ := readUserSettings(path)
@@ -43,8 +41,6 @@ func TestHardenIsAdditiveAndIdempotent(t *testing.T) {
 	}
 }
 
-// The secrets hook refuses a real key and lets placeholders and env reads
-// through.
 func TestTheSecretsHookRefusesARealKey(t *testing.T) {
 	run := func(content string) string {
 		in, _ := json.Marshal(map[string]any{"tool_input": map[string]any{"file_path": "config.ts", "content": content}})

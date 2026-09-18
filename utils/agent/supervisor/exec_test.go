@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// fakeClaude puts a stand-in `claude` on PATH so the process layer can be
-// exercised without a real binary, a subscription, or a network.
 func fakeClaude(t *testing.T, script string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -51,8 +49,6 @@ func TestSanitizeBin(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		// Empty stays empty here; ResolveBin fills it from the kind, so the
-		// default lives in one place rather than two.
 		{"", "", false},
 		{"claude", "claude", false},
 		{"  claude  ", "claude", false},
@@ -172,9 +168,6 @@ func TestCancellingContextStopsTheProcess(t *testing.T) {
 	}
 }
 
-// The watcher goroutine must end when the process ends, not only when the
-// context is cancelled — otherwise every restart leaks one for the daemon's
-// lifetime, and this daemon is meant to run for weeks.
 func TestNoGoroutineLeakAcrossManyRestarts(t *testing.T) {
 	fakeClaude(t, `exit 0`)
 
@@ -189,7 +182,6 @@ func TestNoGoroutineLeakAcrossManyRestarts(t *testing.T) {
 		return runtime.NumGoroutine()
 	}
 
-	// Warm up so one-off runtime goroutines are not counted as growth.
 	for range 3 {
 		p, err := StartProcess(ctx, execConfig(t))
 		if err != nil {
@@ -239,7 +231,6 @@ func TestRingBufferHandlesSmallWrites(t *testing.T) {
 }
 
 func TestRingBufferIsSafeForConcurrentWriters(t *testing.T) {
-	// stdout and stderr are both wired to this buffer, so two writers is real.
 	r := newRingBuffer(4096)
 	done := make(chan struct{})
 
@@ -276,9 +267,6 @@ func TestProcessEnvironmentExcludesAmbientCredentials(t *testing.T) {
 }
 
 func TestOutputIsNotMirroredByDefault(t *testing.T) {
-	// In `serve` mode corgi's stderr is a log file, and a session's output can
-	// contain env values, tokens, and file contents. It must not land there
-	// unless a person explicitly asked to watch.
 	fakeClaude(t, `echo "secret-value-from-the-session"; exit 0`)
 
 	cfg := execConfig(t)
@@ -318,7 +306,6 @@ func TestOutputIsMirroredWhenAsked(t *testing.T) {
 	}
 }
 
-// captureStderr swaps os.Stderr for a pipe while fn runs.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()

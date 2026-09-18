@@ -20,8 +20,6 @@ func TestClassify(t *testing.T) {
 			want: CauseRequested,
 		},
 		{
-			// Remote control cannot start without credentials, so a real auth
-			// failure always exits immediately.
 			name: "auth failure detected from a fast exit",
 			exit: Exit{Code: 1, Uptime: time.Second, Output: "Remote Control requires a claude.ai subscription"},
 			want: CauseAuthFailure,
@@ -37,9 +35,6 @@ func TestClassify(t *testing.T) {
 			want: CauseAuthFailure,
 		},
 		{
-			// The output tail belongs to the SESSION. A long healthy run that
-			// merely printed the phrase — reading a log, discussing an error —
-			// must not permanently disable the workspace.
 			name: "auth marker in a long healthy run is not an auth failure",
 			exit: Exit{Code: 1, Uptime: healthy, Output: "the user asked why it said not authenticated"},
 			want: CauseCrash,
@@ -154,7 +149,6 @@ func TestDecideStartupFailureCarriesTheChildsLastLine(t *testing.T) {
 	if !strings.Contains(d.Reason, "Error: config file corrupt") {
 		t.Errorf("the reason must quote the child's last output line so nobody reproduces the failure by hand to see it, got %q", d.Reason)
 	}
-	// No output at all → the generic reason stands alone, no dangling suffix.
 	if d := Decide(Exit{Code: 1, Uptime: time.Second}, 0, 0); strings.Contains(d.Reason, "last output") {
 		t.Errorf("no output must mean no quote suffix, got %q", d.Reason)
 	}

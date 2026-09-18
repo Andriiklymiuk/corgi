@@ -26,8 +26,6 @@ func TestSleepRiskOnBatteryWithSleepEnabled(t *testing.T) {
 	if !strings.Contains(risk.Reason, "1 minute") || strings.Contains(risk.Reason, "1 minutes") {
 		t.Errorf("reason must read naturally: %q", risk.Reason)
 	}
-	// `caffeinate -i` IS honoured on battery — only `-s` is AC-only — so the
-	// warning must not tell people the wake lock does nothing here.
 	if strings.Contains(risk.Reason, "cannot stop that") || strings.Contains(risk.Fix, "pmset -b sleep 0") {
 		t.Errorf("the old claim that battery defeats the wake lock is wrong: %q / %q", risk.Reason, risk.Fix)
 	}
@@ -64,8 +62,6 @@ func TestUnreadablePowerStateIsNotARisk(t *testing.T) {
 }
 
 func TestBatteryReadsItsOwnBlockNotTheACOne(t *testing.T) {
-	// The AC block says 0; the battery block says 5. Reading the wrong one
-	// would silently clear the warning on the machine that needs it.
 	custom := "Battery Power:\n sleep                5\nAC Power:\n sleep                0\n"
 	risk := sleepRiskFrom("Now drawing from 'Battery Power'\n", custom)
 	if risk.SleepMinutes != 5 || !risk.AtRisk() {

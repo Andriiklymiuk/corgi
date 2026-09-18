@@ -9,7 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// testScriptService builds a service rooted at dir with a `test` script.
 func testScriptService(name, dir string, commands ...string) utils.Service {
 	return utils.Service{
 		ServiceName:  name,
@@ -71,7 +70,7 @@ func TestRunTests_StopsOnFirstFailingCommand(t *testing.T) {
 func TestRunTests_NoTestScriptIsSkipped(t *testing.T) {
 	corgi := &utils.CorgiCompose{
 		Services: []utils.Service{
-			{ServiceName: "web", AbsolutePath: t.TempDir()}, // no scripts
+			{ServiceName: "web", AbsolutePath: t.TempDir()},
 		},
 	}
 	sel, _ := resolveSelection(corgi, "", "")
@@ -125,7 +124,7 @@ func TestReportTestResults_JSONShape(t *testing.T) {
 	corgi := &utils.CorgiCompose{
 		Services: []utils.Service{
 			testScriptService("api", t.TempDir(), "sh -c 'echo running; exit 0'"),
-			{ServiceName: "web", AbsolutePath: t.TempDir()}, // skipped
+			{ServiceName: "web", AbsolutePath: t.TempDir()},
 		},
 	}
 	sel, _ := resolveSelection(corgi, "", "")
@@ -154,7 +153,6 @@ func TestReportTestResults_JSONShape(t *testing.T) {
 	if payload.Services[1].Name != "web" || !payload.Services[1].Skipped {
 		t.Errorf("expected web skipped, got %+v", payload.Services[1])
 	}
-	// Child output ("running") must not leak onto stdout in JSON mode.
 	if strings.Contains(out, "running") {
 		t.Errorf("child output leaked into stdout: %q", out)
 	}
@@ -222,7 +220,7 @@ func TestRunTests_JSONServicesNeverNull(t *testing.T) {
 	utils.JSONOutput = true
 	t.Cleanup(func() { utils.JSONOutput = prev })
 
-	corgi := &utils.CorgiCompose{} // no services
+	corgi := &utils.CorgiCompose{}
 	sel, _ := resolveSelection(corgi, "", "")
 	results, allPassed := runTests(corgi, sel, false, time.Second)
 

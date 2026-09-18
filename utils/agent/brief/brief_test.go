@@ -17,8 +17,6 @@ func sampleRepos() []RepoState {
 }
 
 func TestCaptureSortsReposForAStableRender(t *testing.T) {
-	// Map iteration produces these in a random order, and a note that reshuffles
-	// itself between reads is hard to trust.
 	b := Capture(Params{WorkspaceID: "acme"}, sampleRepos())
 
 	if len(b.Repos) != 2 || b.Repos[0].Service != "api" {
@@ -38,8 +36,6 @@ func TestCaptureDefaultsTheTimestamp(t *testing.T) {
 }
 
 func TestEmptyIsTrueWhenThereIsNothingToSay(t *testing.T) {
-	// "It restarted" is already in the notification. A brief that adds nothing
-	// must say so, or every restart gains a second empty line of noise.
 	tests := []struct {
 		name  string
 		repos []RepoState
@@ -69,15 +65,12 @@ func TestSummaryNamesTheBranchAndCountsTheRest(t *testing.T) {
 	if !strings.Contains(got, "1 repo has uncommitted changes") {
 		t.Errorf("summary %q must count uncommitted work", got)
 	}
-	// One branch shared by two repos is one fact, not two.
 	if strings.Count(got, "feature/referral") != 1 {
 		t.Errorf("summary %q repeats a shared branch", got)
 	}
 }
 
 func TestSummaryListsEveryDistinctBranch(t *testing.T) {
-	// A stack half-materialized onto a branch is exactly the state worth
-	// reporting, so both names have to appear.
 	b := Capture(Params{WorkspaceID: "acme"}, []RepoState{
 		{Service: "api", Branch: "feature/referral"},
 		{Service: "web", Branch: "main"},
@@ -134,8 +127,6 @@ func TestWriteThenRead(t *testing.T) {
 }
 
 func TestReadMissingIsNotAnError(t *testing.T) {
-	// The ordinary case is a session that has never restarted. Treating that as
-	// an error would make every first call look like a fault.
 	got, err := Read(t.TempDir(), "acme")
 	if err != nil {
 		t.Fatalf("Read() error = %v, want nil for a workspace with no brief", err)
@@ -146,8 +137,6 @@ func TestReadMissingIsNotAnError(t *testing.T) {
 }
 
 func TestWriteReplacesTheEarlierBrief(t *testing.T) {
-	// Only the latest is a handover note; an older one is a different session's
-	// state wearing the same name.
 	dir := t.TempDir()
 	first := Capture(Params{WorkspaceID: "acme", Cause: "crash"}, sampleRepos())
 	if err := Write(dir, first); err != nil {
@@ -197,8 +186,6 @@ func TestWriteIsNotReadableByOtherUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat() error = %v", err)
 	}
-	// A brief names repository paths and branch names — more than a passer-by
-	// on a shared machine should be handed.
 	if mode := info.Mode().Perm(); mode&0o077 != 0 {
 		t.Errorf("brief mode = %04o, want no group or world access", mode)
 	}
@@ -240,7 +227,6 @@ func TestListOnAMissingDirectoryIsEmpty(t *testing.T) {
 }
 
 func TestListSkipsUnreadableEntriesRatherThanFailing(t *testing.T) {
-	// One corrupt file must not hide every other workspace's note.
 	dir := t.TempDir()
 	if err := Write(dir, Capture(Params{WorkspaceID: "good"}, sampleRepos())); err != nil {
 		t.Fatalf("Write() error = %v", err)
@@ -271,16 +257,12 @@ func TestClearRemovesTheNote(t *testing.T) {
 	if err != nil || got != nil {
 		t.Errorf("Read() = %v, %v after Clear", got, err)
 	}
-	// Clearing something already gone is what `workspaces forget` does on a
-	// workspace that never restarted.
 	if err := Clear(dir, "acme"); err != nil {
 		t.Errorf("Clear() on a missing brief = %v, want nil", err)
 	}
 }
 
 func TestPathStaysInsideTheBriefsDirectory(t *testing.T) {
-	// Ids come from a registry corgi writes, but this builds a filename from a
-	// name, and that is worth closing wherever it appears.
 	dir := t.TempDir()
 	base := filepath.Join(dir, dirName)
 
@@ -293,8 +275,6 @@ func TestPathStaysInsideTheBriefsDirectory(t *testing.T) {
 }
 
 func TestWriteAndReadAgreeOnASanitizedID(t *testing.T) {
-	// Both sides go through the same mapping, so an id needing sanitizing still
-	// round-trips rather than writing one file and reading another.
 	dir := t.TempDir()
 	const id = "acme/stack"
 	if err := Write(dir, Capture(Params{WorkspaceID: id}, sampleRepos())); err != nil {
@@ -311,8 +291,6 @@ func TestWriteAndReadAgreeOnASanitizedID(t *testing.T) {
 }
 
 func TestDistinctIDsDoNotShareAFile(t *testing.T) {
-	// Replacing unsafe runes alone maps both of these onto "acme-stack", so one
-	// workspace's brief would overwrite the other's and then be served for it.
 	dir := t.TempDir()
 	if err := Write(dir, Capture(Params{WorkspaceID: "acme/stack", Cause: "slash"}, sampleRepos())); err != nil {
 		t.Fatalf("Write() error = %v", err)
@@ -334,9 +312,6 @@ func TestDistinctIDsDoNotShareAFile(t *testing.T) {
 }
 
 func TestIDsMatchCaseInsensitively(t *testing.T) {
-	// The registry compares ids with EqualFold, so `workspaces forget ACME`
-	// drops the row. If the brief keyed on case it would survive and resurface
-	// against whatever stack next took that id.
 	dir := t.TempDir()
 	if err := Write(dir, Capture(Params{WorkspaceID: "acme"}, sampleRepos())); err != nil {
 		t.Fatalf("Write() error = %v", err)

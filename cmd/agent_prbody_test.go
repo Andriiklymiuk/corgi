@@ -12,8 +12,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// The body says what was asked, what changed, what was run — and nothing
-// a transcript would not say either.
 func TestPRBodyReadsTheBranchAndTheSession(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
@@ -29,7 +27,6 @@ func TestPRBodyReadsTheBranchAndTheSession(t *testing.T) {
 	gitRun(t, repo, "add", ".")
 	gitRun(t, repo, "commit", "-q", "-m", "a grace window on refresh")
 
-	// A transcript whose first prompt carries a token that must not leak.
 	home := t.TempDir()
 	prev := transcriptPathFor
 	defer func() { transcriptPathFor = prev }()

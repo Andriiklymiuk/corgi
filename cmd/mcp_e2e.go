@@ -13,11 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
-// launchAuth is bearerAuth for the launcher's data endpoints, plus the
-// end-to-end layer: a device that paired with a key sends and receives every
-// body sealed (pairing.Seal / Open), and is refused plaintext. The server
-// token and key-less devices pass through untouched. /mcp itself is not
-// wrapped: its stream is the MCP transport's own.
 func launchAuth(token string, next http.Handler, deviceStorePath string) http.Handler {
 	if token == "" && deviceStorePath == "" {
 		return next
@@ -35,17 +30,11 @@ func launchAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 	})
 }
 
-// launchIdentity is who a /launch request comes from and how to answer it:
-// sealed with key when the device paired with one, plain when key is nil.
 type launchIdentity struct {
 	key    []byte
 	viewer bool
 }
 
-// identifyLaunch checks a /launch request the way every handler needs it
-// checked — the machine token, else a paired device (a viewer only reads;
-// a keyed device speaks sealed) — and says how to answer. Not ok means
-// the refusal is already written.
 func identifyLaunch(w http.ResponseWriter, r *http.Request, token, deviceStorePath string) (launchIdentity, bool) {
 	if token == "" && deviceStorePath == "" {
 		return launchIdentity{}, true
@@ -85,7 +74,6 @@ func identifyLaunch(w http.ResponseWriter, r *http.Request, token, deviceStorePa
 	return launchIdentity{key: key, viewer: device.Viewer()}, true
 }
 
-// authorizedDeviceFull is authorizedDevice with the device itself.
 func authorizedDeviceFull(storePath, header string) (pairing.Device, bool) {
 	if storePath == "" {
 		return pairing.Device{}, false
@@ -101,8 +89,6 @@ func authorizedDeviceFull(storePath, header string) (pairing.Device, bool) {
 	return store.AuthorizeDevice(offered)
 }
 
-// e2eKeys caches each device's derived key: one X25519 per pairing, not per
-// request. Keyed by the device's public key, so a re-pair gets a new one.
 var e2eKeys sync.Map
 
 func e2eKeyFor(storePath string, d pairing.Device) ([]byte, error) {
@@ -125,8 +111,6 @@ func e2eKeyFor(storePath string, d pairing.Device) ([]byte, error) {
 	return key, nil
 }
 
-// sealedBodyLimit is how much sealed request a path may carry: a picture
-// for a session is the one big thing a phone sends.
 func sealedBodyLimit(path string) int64 {
 	if path == "/launch/upload" {
 		return maxUploadSealed
@@ -134,9 +118,6 @@ func sealedBodyLimit(path string) int64 {
 	return 1 << 20
 }
 
-// serveSealed opens the request body, runs the handler against a buffer,
-// and seals what it wrote. Errors the handler wrote travel sealed too: a
-// sniffer learns the status code and nothing else.
 func serveSealed(w http.ResponseWriter, r *http.Request, next http.Handler, key []byte) {
 	method, path := r.Method, r.URL.Path
 	if r.Body == nil || r.ContentLength == 0 {
@@ -183,8 +164,6 @@ func serveSealed(w http.ResponseWriter, r *http.Request, next http.Handler, key 
 
 var e2eReplay = pairing.NewReplayGuard()
 
-// sealedWriter is the handler's ResponseWriter while its answer is being
-// gathered for sealing.
 type sealedWriter struct {
 	header http.Header
 	status int
@@ -195,10 +174,6 @@ func (s *sealedWriter) Header() http.Header         { return s.header }
 func (s *sealedWriter) WriteHeader(code int)        { s.status = code }
 func (s *sealedWriter) Write(b []byte) (int, error) { return s.body.Write(b) }
 
-// viewerMay is what a read-only device gets: every GET but the ones that
-// are the laptop's own business — a conversation, the doctor's report, the
-// workspace session links, a session's patch, an unattended run's output —
-// and no button at all.
 func viewerMay(method, path string) bool {
 	if method != http.MethodGet {
 		return false

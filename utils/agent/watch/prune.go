@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// ParseAge reads "7d" or anything time.ParseDuration does.
 func ParseAge(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -30,9 +29,6 @@ func ParseAge(s string) (time.Duration, error) {
 	return d, nil
 }
 
-// PrunableFixes is the isolated runs whose worktrees may go: finished at
-// least olderThan ago, on a branch no unfinished run is still on. One
-// record per workspace and branch, the newest.
 func PrunableFixes(records []FixRecord, olderThan time.Duration, now time.Time) []FixRecord {
 	busy := map[string]bool{}
 	for _, r := range records {

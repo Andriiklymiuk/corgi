@@ -6,16 +6,12 @@ import (
 	"time"
 )
 
-// TestMain silences real OS notifications for every test in the utils
-// package. Without this, terminal-notifier (on dev machines with brew)
-// pops a toast on every `go test` run.
 func TestMain(m *testing.M) {
 	SilenceNotificationsForTests()
 	os.Exit(m.Run())
 }
 
 func TestIsNotificationsEnabled_Default(t *testing.T) {
-	// With no config file (fresh temp HOME), should return false.
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", dir)
@@ -49,8 +45,6 @@ func TestNotify_DisabledNoOp(t *testing.T) {
 }
 
 func TestNotifyRaw_DoesNotPanic(t *testing.T) {
-	// Dispatch is stubbed: NotifyRaw fires unconditionally, and a test run must
-	// not put toasts on the screen of whoever is running it.
 	SilenceNotifyDispatchForTests(t)
 	NotifyRaw("corgi test", "test notification from unit tests")
 }

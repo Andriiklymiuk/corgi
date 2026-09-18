@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// livePID is a process corgi would recognise as its own: alive, and its own
-// group leader, the way a detached service is started.
 func livePID(t *testing.T) int {
 	t.Helper()
 	cmd := exec.Command("sleep", "30")

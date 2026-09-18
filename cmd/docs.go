@@ -1,6 +1,3 @@
-/*
-Copyright © 2022 ANDRII KLYMIUK
-*/
 package cmd
 
 import (
@@ -21,7 +18,6 @@ const (
 	docsBlankRow = "\t\t\t"
 )
 
-// docsCmd represents the docs command
 var docsCmd = &cobra.Command{
 	Use:     "docs",
 	Short:   "Do stuff with docs",
@@ -421,10 +417,6 @@ func generateCobraDocs(cmd *cobra.Command) {
 
 const commandsDocsDir = "./resources/readme/commands"
 
-// makeCommandDocsMDXSafe rewrites the generated cobra docs so Docusaurus' MDX
-// parser doesn't choke on `<` and `{`, which it reads as JSX/expression syntax.
-// Cobra's Long descriptions contain things like localhost:<port> and JSON
-// snippets in prose; left raw they break the docs build.
 func makeCommandDocsMDXSafe(dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -446,8 +438,6 @@ func makeCommandDocsMDXSafe(dir string) error {
 	return nil
 }
 
-// escapeMDXProse makes prose MDX-safe, leaving fenced code blocks untouched so
-// usage/options examples stay literal.
 func escapeMDXProse(content string) string {
 	lines := strings.Split(content, "\n")
 	inFence := false
@@ -464,8 +454,6 @@ func escapeMDXProse(content string) string {
 	return strings.Join(lines, "\n")
 }
 
-// escapeProseLine wraps the parts of a line MDX would misread, skipping content
-// already inside inline `code` spans (odd segments after splitting on backticks).
 func escapeProseLine(line string) string {
 	segments := strings.Split(line, "`")
 	for i := range segments {
@@ -477,16 +465,10 @@ func escapeProseLine(line string) string {
 	return strings.Join(segments, "`")
 }
 
-// escapeProseSegment wraps the parts MDX would misread in inline code. Backslash
-// escapes and HTML entities don't survive Docusaurus' MDX pipeline; inline code is
-// rendered verbatim, so it's the only reliable escape here. Braces first (JSON
-// snippets can contain spaces), then whole tokens carrying a '<'.
 func escapeProseSegment(s string) string {
 	return wrapAngleTokens(wrapBraceSpans(s))
 }
 
-// wrapBraceSpans wraps each balanced {...} run in inline code so MDX doesn't read
-// it as a JS expression.
 func wrapBraceSpans(s string) string {
 	runes := []rune(s)
 	var b strings.Builder
@@ -505,8 +487,6 @@ func wrapBraceSpans(s string) string {
 	return b.String()
 }
 
-// matchBraceSpan returns the index of the brace that balances the '{' at i, or i
-// if the braces don't balance on this line.
 func matchBraceSpan(runes []rune, i int) int {
 	depth := 0
 	for j := i; j < len(runes); j++ {
@@ -523,11 +503,6 @@ func matchBraceSpan(runes []rune, i int) int {
 	return i
 }
 
-// wrapAngleTokens wraps every whitespace-delimited token containing '<' in inline
-// code, skipping tokens already inside an inline `code` span. The whole token is
-// wrapped (not just <name>) so a placeholder abutting a URL ends up inside the code
-// span — otherwise GFM's literal-URL autolink swallows the backtick and MDX then
-// parses <name> as a JSX tag.
 func wrapAngleTokens(s string) string {
 	parts := strings.Split(s, "`")
 	for i := range parts {
@@ -570,14 +545,13 @@ func scanProseToken(runes []rune, start int) (token []rune, next int, hasAngle b
 	return runes[start:i], i, hasAngle
 }
 
-// wraps up to the last '>' so `localhost:<port>.` keeps its period in prose
 func writeAngleWrappedToken(b *strings.Builder, token []rune) {
 	wrapEnd := len(token)
 	for wrapEnd > 0 && isTrailingPunct(token[wrapEnd-1]) {
 		wrapEnd--
 	}
 	if wrapEnd == 0 || token[wrapEnd-1] != '>' {
-		wrapEnd = len(token) // no clean placeholder end; wrap the whole token
+		wrapEnd = len(token)
 	}
 	b.WriteByte('`')
 	b.WriteString(string(token[:wrapEnd]))

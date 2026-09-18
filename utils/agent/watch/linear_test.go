@@ -21,9 +21,6 @@ type linearFake struct {
 	queries []string
 }
 
-// newLinearFake serves a viewer and one page of issues and comments: ABC-1
-// is new and mine, ABC-2 is old but freshly updated, one comment on ABC-1
-// is by someone else and one is my own.
 func newLinearFake(t *testing.T) *linearFake {
 	t.Helper()
 	f := &linearFake{now: time.Now().UTC().Truncate(time.Millisecond)}
@@ -135,7 +132,6 @@ func TestLinearPoll(t *testing.T) {
 			if want := f.now.Add(-30 * time.Minute).Format(time.RFC3339Nano); next["issues"] != want {
 				t.Errorf("issues cursor = %q, want %q", next["issues"], want)
 			}
-			// The cursor passes the bot's comment too: skipped, but seen.
 			if want := f.now.Add(-5 * time.Minute).Format(time.RFC3339Nano); next["comments"] != want {
 				t.Errorf("comments cursor = %q, want %q", next["comments"], want)
 			}

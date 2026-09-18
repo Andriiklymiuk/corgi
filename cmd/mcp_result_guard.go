@@ -12,9 +12,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// defaultMaxEmittedChars is what one tool result may weigh on the wire.
-// Claude.ai and Desktop refuse a result past ~150,000 characters and Claude
-// Code's default budget is 25,000 tokens; 100,000 sits under both.
 const defaultMaxEmittedChars = 100_000
 
 const truncationHint = "narrow the query: fewer lines, a grep, a since, or a service filter"
@@ -26,8 +23,6 @@ func mcpMaxEmittedChars() int {
 	return defaultMaxEmittedChars
 }
 
-// mcpResultGuard caps every tool result at limit emitted characters. It is
-// the one backstop; tools with their own head+tail caps keep them.
 func mcpResultGuard(limit int) server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -41,9 +36,6 @@ func mcpResultGuard(limit int) server.ToolHandlerMiddleware {
 	}
 }
 
-// emittedSize is the size of the result as the JSON-RPC envelope carries
-// it — after escaping, which is what the client counts. A quote-heavy log
-// doubles on the wire, so measuring the raw text would let it through.
 func emittedSize(res *mcp.CallToolResult) int {
 	b, err := json.Marshal(res)
 	if err != nil {
@@ -52,10 +44,6 @@ func emittedSize(res *mcp.CallToolResult) int {
 	return len(b)
 }
 
-// capToolResult returns res unchanged when it fits, otherwise a copy whose
-// largest text blocks are cut (head kept) until the emitted form fits, with
-// a final text block saying so. Structured content goes first: it repeats
-// the text and would double the payload.
 func capToolResult(res *mcp.CallToolResult, limit int) (*mcp.CallToolResult, bool) {
 	original := emittedSize(res)
 	if original <= limit {
@@ -97,9 +85,6 @@ func largestTextBlock(content []mcp.Content) int {
 	return best
 }
 
-// shrinkToFit finds the longest head of text (on a rune boundary) for which
-// fits holds; fits must be monotone in the length, which an emitted-size
-// check is. An empty head is returned when nothing fits.
 func shrinkToFit(text string, fits func(string) bool) string {
 	lo, hi := 0, len(text)
 	for lo < hi {
@@ -116,7 +101,6 @@ func shrinkToFit(text string, fits func(string) bool) string {
 	return text[:runeBoundary(text, lo)]
 }
 
-// runeBoundary backs n off to the start of the rune it falls inside.
 func runeBoundary(s string, n int) int {
 	if n >= len(s) {
 		return len(s)

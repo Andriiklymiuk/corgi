@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// envCheckFixture builds a compose dir with one service repo holding an
-// example file, returning the compose and a cleanup-managed chdir.
 func envCheckFixture(t *testing.T, example, source string, svc Service) *CorgiCompose {
 	t.Helper()
 	dir := t.TempDir()
@@ -47,7 +45,6 @@ func TestEnvCheck_MissingKeyFound(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("want 1 row, got %d", len(rows))
 	}
-	// PORT is corgi-generated, OTHER is provided; only SECRET_KEY is a finding.
 	if len(rows[0].Missing) != 1 || rows[0].Missing[0] != "SECRET_KEY" {
 		t.Fatalf("missing = %v, want [SECRET_KEY]", rows[0].Missing)
 	}
@@ -58,7 +55,7 @@ func TestEnvCheck_MissingKeyFound(t *testing.T) {
 
 func TestEnvCheck_GeneratedDbKeysExcluded(t *testing.T) {
 	corgi := envCheckFixture(t,
-		"", // example written below, after the db keys are known
+		"",
 		"",
 		Service{ServiceName: "api", Port: 3000, CopyEnvFromFilePath: "api.env",
 			DependsOnDb: []DependsOnDb{{Name: "pg"}}},
@@ -66,7 +63,6 @@ func TestEnvCheck_GeneratedDbKeysExcluded(t *testing.T) {
 	corgi.DatabaseServices = []DatabaseService{
 		{ServiceName: "pg", Driver: "postgres", Port: 5432, User: "u", Password: "p", DatabaseName: "d"},
 	}
-	// The example declares exactly what corgi generates for the db dep.
 	all, err := ResolveAllEnv(corgi)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +91,7 @@ func TestEnvCheck_GeneratedDbKeysExcluded(t *testing.T) {
 func TestEnvCheck_SourceAbsent(t *testing.T) {
 	corgi := envCheckFixture(t,
 		"KEY=1\n",
-		"", // declared env file never written
+		"",
 		Service{ServiceName: "api", CopyEnvFromFilePath: "env/source/api.env"},
 	)
 	rows, err := EnvCheckAll(corgi, "")
@@ -155,7 +151,6 @@ func TestEnvCheck_FileOverride(t *testing.T) {
 		t.Fatalf("missing = %v, want [CI_ONLY]", rows[0].Missing)
 	}
 
-	// And the override being absent is a finding, not a skip.
 	rows, err = EnvCheckAll(corgi, ".env.staging")
 	if err != nil {
 		t.Fatal(err)
@@ -187,8 +182,6 @@ func TestEnvCheck_TierDirFallbackIsChecked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The run resolves env from the tier file, so the check must diff it —
-	// not skip the service for lacking copyEnvFromFilePath.
 	if rows[0].Skipped != "" {
 		t.Fatalf("tier-dir source must be checked, got skip: %+v", rows[0])
 	}
@@ -199,8 +192,8 @@ func TestEnvCheck_TierDirFallbackIsChecked(t *testing.T) {
 
 func TestEnvCheck_AbsentSourceIsFineWhenExampleIsAllGenerated(t *testing.T) {
 	corgi := envCheckFixture(t,
-		"PORT=3000\n", // corgi generates PORT from port:
-		"",            // declared env file never written
+		"PORT=3000\n",
+		"",
 		Service{ServiceName: "api", Port: 3000, CopyEnvFromFilePath: "api.env"},
 	)
 	rows, err := EnvCheckAll(corgi, "")
@@ -280,7 +273,7 @@ func TestEnvCheckSummary_RendersEveryVerdict(t *testing.T) {
 	summary, findings := EnvCheckSummary([]EnvCheckRow{
 		{Service: "a", Example: "e", Source: "s", SourceAbsent: true, Missing: []string{"KEY"}},
 		{Service: "b", Example: "e", Source: "s", Missing: []string{"OTHER"}},
-		{Service: "c", Example: "e"}, // absent file, all keys generated
+		{Service: "c", Example: "e"},
 		{Service: "d", Skipped: "no example"},
 	})
 	if !findings {

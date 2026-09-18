@@ -29,7 +29,6 @@ installs, and adds corgi's generated paths to .gitignore. Then 'corgi run' start
 
 var initDepthFlag int
 
-// set by corgi itself when it inits a cloned repo's own compose
 var initNestedFlag bool
 var initFeatureFlag string
 
@@ -47,9 +46,6 @@ Wins over a service's compose branch: when the repo has it; where it does not,
 the compose branch: still applies.`)
 }
 
-// checkoutFeatureBranches switches the freshly cloned repos to the feature
-// branch, so a later step reading their files gets the code under review rather
-// than the default branch.
 func checkoutFeatureBranches(services []utils.Service, branch string) {
 	if branch == "" {
 		return
@@ -77,7 +73,6 @@ func runInit(cmd *cobra.Command, _ []string) {
 
 	CreateMissingEnvFiles(corgi.Services)
 	CreateDatabaseServices(corgi.DatabaseServices)
-	// Clone before creating docker seams — detection reads the cloned repo.
 	cloneFailures := CloneServices(corgi.Services)
 	CreateServices(corgi.Services)
 	checkoutFeatureBranches(corgi.Services, initFeatureFlag)
@@ -126,7 +121,6 @@ func CreateMissingEnvFiles(services []utils.Service) {
 	}
 }
 
-// Generate database files for each database service
 func CreateDatabaseServices(databaseServices []utils.DatabaseService) {
 	if len(databaseServices) == 0 {
 		utils.Info(`
@@ -137,8 +131,6 @@ Provide them in corgi-compose.yml file`)
 
 	for _, service := range databaseServices {
 		filesToCreate := getFilesToCreate(service.Driver)
-		// Templates build container names as <driver>-<ServiceName>; the copy
-		// carries the scoped name while files stay under the original one.
 		templateData := service
 		templateData.ServiceName = utils.ScopedContainerBase(service.ServiceName)
 		var errDuringFileCreation bool
@@ -179,9 +171,6 @@ Provide them in corgi-compose.yml file`)
 	}
 }
 
-// Copies the user's configTomlPath into the corgi-managed supabase service
-// dir on every init. No-op when configTomlPath isn't set (legacy mode keeps
-// supabase/config.toml at project root, created by `supabase init`).
 func applyDriverPostInit(service utils.DatabaseService) error {
 	if service.Driver != "supabase" || service.ConfigTomlPath == "" {
 		return nil
@@ -217,7 +206,6 @@ func shouldCreateService(service *utils.Service) bool {
 	if !service.Runner.IsDocker() {
 		return false
 	}
-	// corgi init runs before run-time mode resolution stamps the source.
 	if service.ResolvedDockerSource == utils.SourceNone {
 		service.ResolvedDockerSource = utils.DetectDockerSource(*service)
 	}
@@ -230,7 +218,6 @@ func shouldCreateService(service *utils.Service) bool {
 		)
 		return false
 	}
-	// Repo compose files declare their own port mappings.
 	if service.ResolvedDockerSource == utils.SourceImage && service.Port == 0 {
 		utils.Infof(
 			"Service %s uses runner.image but has no port, skipping docker runner creation\n",
@@ -325,11 +312,8 @@ func CreateServices(services []utils.Service) {
 }
 
 func copyEnvFileWithSubstitutions(service utils.Service) error {
-	// GetPathToEnv is already absolute (AbsolutePath + envPath).
 	sourceEnvPath := utils.GetPathToEnv(service)
 
-	// Missing source env is fine (a bare cloneFrom service may have none) —
-	// still write an empty file so the compose env_file reference resolves.
 	var modifiedContent string
 	if content, err := os.ReadFile(sourceEnvPath); err == nil {
 		modifiedContent = strings.ReplaceAll(string(content), "localhost", "host.docker.internal")
@@ -392,9 +376,6 @@ func CheckClonedReposExistence(services []utils.Service) bool {
 	return someRepoShouldBeCloned
 }
 
-// CloneServices clones every service that needs it, returning the names that
-// could not be cloned. A caller that carries on regardless — CI, typically —
-// otherwise fails much later with an error that says nothing about the clone.
 func CloneServices(services []utils.Service) []string {
 	var failed []string
 	for _, service := range services {

@@ -8,9 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// pruneWorktrees releases the worktrees of isolated runs older than the
-// workspace's pruneAfter. Dirty ones stay, and the branch always does, so a
-// later run on the same ticket checks it out again.
 func (d *Daemon) pruneWorktrees(now time.Time) {
 	if now.Sub(d.lastPrune) < time.Hour {
 		return

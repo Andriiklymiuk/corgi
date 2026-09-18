@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-// The composite actions cannot loop, so cache/emit-outputs.sh turns one
-// `corgi cache paths --json` into the fixed cache-N-* slots both of them
-// publish. Driven here with a fake corgi on PATH, so the shell stays honest
-// without a runner.
 func runEmitOutputs(t *testing.T, planJSON string, env ...string) (outputs, log string) {
 	t.Helper()
 	for _, tool := range []string{"bash", "jq"} {
@@ -98,9 +94,6 @@ func TestEmitOutputsPublishesEverySlot(t *testing.T) {
 	}
 }
 
-// The install action runs before `corgi init`, so its plan is usually hashed
-// from files that are not there yet. It still publishes the outputs (older
-// workflows read them) but says so, naming the files.
 func TestEmitOutputsWarnsOnAnIncompletePlan(t *testing.T) {
 	plan := strings.Replace(twoGroupPlan, `"missingFiles":[],"complete":true`, `"missingFiles":["api/package-lock.json"],"complete":false`, 1)
 	outputs, log := runEmitOutputs(t, plan)
@@ -115,8 +108,6 @@ func TestEmitOutputsWarnsOnAnIncompletePlan(t *testing.T) {
 	}
 }
 
-// A corgi predating complete/missingFiles must keep working when a workflow
-// pins its version.
 func TestEmitOutputsTreatsAnOldPlanAsComplete(t *testing.T) {
 	plan := strings.Replace(twoGroupPlan, `,"missingFiles":[],"complete":true`, "", 1)
 	plan = strings.ReplaceAll(plan, `,"missingFiles":[]`, "")
@@ -143,8 +134,6 @@ func TestEmitOutputsCountsOverflow(t *testing.T) {
 	}
 }
 
-// The strict variant is what cache/action.yml runs after `corgi init`: a
-// plan hashed from nothing fails the step instead of freezing the key.
 func TestEmitOutputsStrictPassesTheFlagAndFailsWithCorgi(t *testing.T) {
 	outputs, log := runEmitOutputs(t, twoGroupPlan, "CORGI_CACHE_STRICT=true")
 	if strings.Contains(log, "exit:") {

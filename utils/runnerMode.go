@@ -6,16 +6,12 @@ import (
 	"strconv"
 )
 
-// DockerSource says where a docker-mode service's definition comes from.
 type DockerSource int
 
 const (
 	SourceNone DockerSource = iota
-	// SourceRepoCompose delegates to a compose file the service repo ships.
 	SourceRepoCompose
-	// SourceDockerfile generates a compose wrapper around the Dockerfile.
 	SourceDockerfile
-	// SourceImage runs a registry image directly (runner.image) — no build.
 	SourceImage
 )
 
@@ -23,9 +19,6 @@ var repoComposeNames = []string{
 	"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml",
 }
 
-// RepoComposeFile returns the absolute path of the compose file the service
-// repo ships — the declared runner.composeFile, else the first conventional
-// name found. Empty when none exists.
 func RepoComposeFile(s Service) string {
 	if s.Runner.ComposeFile != "" {
 		p := filepath.Join(s.AbsolutePath, s.Runner.ComposeFile)
@@ -47,9 +40,6 @@ func dockerfileExists(s Service) bool {
 	return fileExists(filepath.Join(s.AbsolutePath, s.DockerfileName()))
 }
 
-// DetectDockerSource inspects the service dir (AbsolutePath must be final).
-// Declared config pins the Dockerfile; only zero-config services let a repo
-// compose file win.
 func DetectDockerSource(s Service) DockerSource {
 	if s.Runner.Image != "" {
 		return SourceImage
@@ -73,10 +63,6 @@ func hasBuildFields(r Runner) bool {
 		r.ContainerPort != 0
 }
 
-// ResolveRunnerModes decides, per service, whether it runs natively or in
-// docker, and stamps Runner.Name so every existing docker branch applies.
-// dockerFlag is `corgi run --docker`. announce prints the ✨ detection lines —
-// pass false from stop/restart where "running from Dockerfile" would mislead.
 func ResolveRunnerModes(services []Service, dockerFlag, announce bool) ([]Service, error) {
 	out := make([]Service, len(services))
 	for i, s := range services {
@@ -108,7 +94,6 @@ func validateRunnerConfig(s Service, dockerFlag bool) error {
 			"service %s: runner.image needs `port:` — there is no Dockerfile to read EXPOSE from",
 			s.ServiceName)
 	}
-	// missing declared dockerfile = config error, not a compose-file fallback
 	if s.Runner.Dockerfile != "" && !dockerfileExists(s) &&
 		(s.Runner.IsDocker() || dockerFlag || len(s.Start) == 0) {
 		return fmt.Errorf(
@@ -133,7 +118,6 @@ func deriveRunnerMode(s Service, dockerFlag, announce bool) (Service, error) {
 			s = flipped
 		}
 	case len(s.Start) == 0 && s.Port != 0:
-		// post-clone parity with E_MISSING_START
 		return s, fmt.Errorf(
 			"service %s: sets port %d but has no start command, no Dockerfile and no compose file in %s",
 			s.ServiceName, s.Port, s.AbsolutePath)
@@ -148,7 +132,6 @@ func applyDeclaredDockerMode(s Service, src DockerSource, announce bool) (Servic
 			s.ServiceName, s.DockerfileName(), s.AbsolutePath)
 	}
 	s.ResolvedDockerSource = src
-	// Declared intent — a missing port here is a hard config error.
 	if src == SourceDockerfile {
 		if err := resolveDockerPortDefaults(&s, announce); err != nil {
 			return s, err
@@ -157,8 +140,6 @@ func applyDeclaredDockerMode(s Service, src DockerSource, announce bool) (Servic
 	return s, nil
 }
 
-// tryDockerFlip stamps docker mode when corgi (not the user) chose it; an
-// unresolvable port falls back to native with a hint instead of failing.
 func tryDockerFlip(s Service, src DockerSource, announce bool, why string) (Service, bool) {
 	flipped := s
 	flipped.Runner.Name = "docker"
@@ -177,7 +158,6 @@ func tryDockerFlip(s Service, src DockerSource, announce bool, why string) (Serv
 	return flipped, true
 }
 
-// resolveDockerPortDefaults fills Port from EXPOSE when none is declared.
 func resolveDockerPortDefaults(s *Service, announce bool) error {
 	if s.Port != 0 {
 		return nil

@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// The changed surface is what a reviewer reads first: exported symbols,
-// routes, contracts, migrations — with removals and signature changes
-// marked breaking, and test files ignored.
 func TestChangedSurfaceReadsTheDiff(t *testing.T) {
 	rd := RepoDiff{Service: "api", Files: []FileDiff{
 		{Path: "limits/limits.go", Patch: "@@\n-func Check(id string) error {\n+func Check(id string, window time.Duration) error {\n+func Reset(id string) {\n-func Old() {}\n+type Window struct {\n+func helper() {}\n"},

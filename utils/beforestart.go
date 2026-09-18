@@ -2,15 +2,11 @@ package utils
 
 import "gopkg.in/yaml.v3"
 
-// One beforeStart entry: a command plus optional cacheKey files whose unchanged
-// hash lets corgi skip the step.
 type BeforeStartStep struct {
 	Run      string
 	CacheKey []string
 }
 
-// BeforeStartSteps parses entries that are either a plain string (today) or an
-// object {run, cacheKey}.
 type BeforeStartSteps []BeforeStartStep
 
 func (s *BeforeStartSteps) UnmarshalYAML(value *yaml.Node) error {
@@ -38,7 +34,6 @@ func (s *BeforeStartSteps) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// HasCacheKeys reports whether any step opts into caching.
 func (s BeforeStartSteps) HasCacheKeys() bool {
 	for _, st := range s {
 		if len(st.CacheKey) > 0 {
@@ -48,7 +43,6 @@ func (s BeforeStartSteps) HasCacheKeys() bool {
 	return false
 }
 
-// Commands returns just the command strings, for the existing runners.
 func (s BeforeStartSteps) Commands() []string {
 	out := make([]string, 0, len(s))
 	for _, st := range s {

@@ -48,7 +48,6 @@ func TestMissionSnapshotJSON(t *testing.T) {
 			t.Errorf("snapshot JSON missing %s\ngot: %s", want, out)
 		}
 	}
-	// db_service has no agentWork -> field omitted.
 	if strings.Contains(out, `"name":"db"`) && strings.Contains(out, `"db","kind":"db_service","port":5432,"runState":"stopped","agentWork"`) {
 		t.Errorf("db_service should omit agentWork, got: %s", out)
 	}
@@ -62,9 +61,8 @@ func TestBuildMissionSnapshot_MapsRunStateAndSummary(t *testing.T) {
 
 	rows := []statusRow{
 		{Label: "services.api", Port: 1, Kind: "http", URL: srv.URL},
-		{Label: "services.web", Port: 2, Kind: "tcp"}, // down
+		{Label: "services.web", Port: 2, Kind: "tcp"},
 	}
-	// Inject a fake agent-work probe so the test doesn't shell out.
 	probe := func(name string) *utils.AgentWork {
 		if name == "api" {
 			return &utils.AgentWork{
@@ -145,7 +143,6 @@ func TestRunMissionLoop_JSONEmitsOneSnapshot(t *testing.T) {
 	rows := []statusRow{{Label: "services.api", Kind: "http", URL: srv.URL, Port: 1}}
 	probe := func(string) *utils.AgentWork { return nil }
 	out := captureStdout(t, func() {
-		// jsonOnce=true: emit one snapshot, no loop.
 		runMissionOnce("/abs/c.yml", rows, probe, true)
 	})
 	var got MissionSnapshot

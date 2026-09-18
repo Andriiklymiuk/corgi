@@ -65,7 +65,6 @@ pass or fail. Defaults to `+defaultE2EArtifactsDir+` next to the compose file.`,
 	registerServiceWorkdirFlags(testCmd.Flags())
 }
 
-// testResult is one service's outcome. A skipped service never counts as failure.
 type testResult struct {
 	Name       string `json:"name"`
 	ExitCode   int    `json:"exitCode,omitempty"`
@@ -75,7 +74,6 @@ type testResult struct {
 	Message    string `json:"message,omitempty"`
 }
 
-// selection holds the resolved set of services to consider for testing.
 type selection struct {
 	services []utils.Service
 }
@@ -125,8 +123,6 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 	}
 }
 
-// resolveSelection narrows corgi.Services by --service / --profile. An unknown
-// --service errors; an unknown --profile yields an empty selection (warn + run nothing).
 func resolveSelection(corgi *utils.CorgiCompose, serviceName, profile string) (selection, error) {
 	if serviceName != "" {
 		for _, s := range corgi.Services {
@@ -156,7 +152,6 @@ func resolveSelection(corgi *utils.CorgiCompose, serviceName, profile string) (s
 	return selection{services: append([]utils.Service(nil), corgi.Services...)}, nil
 }
 
-// findTestScript returns the service's "test" script commands, or false when absent.
 func findTestScript(service utils.Service) ([]string, bool) {
 	for _, s := range service.Scripts {
 		if s.Name == "test" {
@@ -166,21 +161,14 @@ func findTestScript(service utils.Service) ([]string, bool) {
 	return nil, false
 }
 
-// runTests is the testable core: for each selected service, optionally gate on
-// dependency readiness, then run its test script. Services without one are
-// skipped. Returns the per-service results and whether every run test passed.
 func runTests(corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTimeout time.Duration) (results []testResult, allPassed bool) {
 	return runTestsContext(context.Background(), corgi, sel, ensureDeps, readyTimeout)
 }
 
-// runTestsContext is runTests bounded by ctx; a service whose test is still
-// running when ctx ends is reported as failed with a timed-out message and
-// the services after it are skipped.
 func runTestsContext(ctx context.Context, corgi *utils.CorgiCompose, sel selection, ensureDeps bool, readyTimeout time.Duration) (results []testResult, allPassed bool) {
 	results = []testResult{}
 	allPassed = true
 
-	// Keep stdout pure JSON in --json mode by routing child output to stderr.
 	childOut := os.Stdout
 	if utils.JSONOutput {
 		childOut = os.Stderr
@@ -221,8 +209,6 @@ func runTestsContext(ctx context.Context, corgi *utils.CorgiCompose, sel selecti
 	return results, allPassed
 }
 
-// runServiceTest runs a service's test commands sequentially in its env,
-// stopping on the first non-zero exit.
 func runServiceTest(ctx context.Context, service utils.Service, commands []string, interactive bool, childOut *os.File) testResult {
 	env := getServiceEnv(service)
 	start := time.Now()
@@ -258,7 +244,7 @@ func runServiceTest(ctx context.Context, service utils.Service, commands []strin
 		}
 		exitCode = code
 		if code != 0 {
-			break // stop on first failing command within the service
+			break
 		}
 	}
 
@@ -270,7 +256,6 @@ func runServiceTest(ctx context.Context, service utils.Service, commands []strin
 	}
 }
 
-// reportTestResults emits the JSON payload or the human per-service lines + summary.
 func reportTestResults(results []testResult, allPassed bool) {
 	if utils.JSONOutput {
 		utils.PrintJSON(map[string]any{

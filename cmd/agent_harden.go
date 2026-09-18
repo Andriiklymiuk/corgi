@@ -14,12 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// harden writes the safe defaults into a workspace's local Claude settings
-// — the ones every unattended run should have and nobody remembers to set:
-// no reading of secrets, no destructive git or shell, and a hook that
-// refuses to write a key into a file. Additive: it never removes a rule
-// someone wrote, and it is silent about rules already there.
-
 var hardenDeny = []string{
 	"Read(./.env)",
 	"Read(./.env.*)",
@@ -91,8 +85,6 @@ already there is left alone.
 	},
 }
 
-// hardenSettings merges the rules and the hook into a settings file and
-// returns what it added.
 func hardenSettings(path, bin string, dry bool) ([]string, error) {
 	settings, err := readUserSettings(path)
 	if err != nil {
@@ -144,9 +136,6 @@ var (
 	placeholderValue = regexp.MustCompile(`(?i)(example|placeholder|changeme|your[_-]?|xxx+|\$\{|\bprocess\.env\b|os\.Getenv|<[^>]+>)`)
 )
 
-// runSecretsHook refuses a write whose new content carries a credential.
-// The place for a key is the environment or a secret store, never a file a
-// commit can pick up — and never a transcript.
 func runSecretsHook(stdin io.Reader, stdout io.Writer) {
 	data, err := io.ReadAll(io.LimitReader(stdin, 4<<20))
 	if err != nil {
@@ -191,9 +180,6 @@ func runSecretsHook(stdin io.Reader, stdout io.Writer) {
 		}
 	}
 }
-
-// Security checks for doctor: what a hardened machine has, and what this one
-// is missing.
 
 func checkSecurity() []agentCheck {
 	var checks []agentCheck

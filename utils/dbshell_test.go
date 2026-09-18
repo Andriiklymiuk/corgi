@@ -25,7 +25,6 @@ func TestBuildDockerExecArgs_MysqlPasswordViaEnvNotArgv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The secret must never reach the mysql CLI as a -p<pw> flag (visible in `ps`).
 	for _, a := range args {
 		if strings.HasPrefix(a, "-p") && strings.Contains(a, db.Password) {
 			t.Fatalf("password leaked onto mysql CLI argv: %v", args)
@@ -34,7 +33,6 @@ func TestBuildDockerExecArgs_MysqlPasswordViaEnvNotArgv(t *testing.T) {
 	if env["MYSQL_PWD"] != db.Password {
 		t.Fatalf("MYSQL_PWD = %q, want %q", env["MYSQL_PWD"], db.Password)
 	}
-	// the env value must be carried as `docker exec -e MYSQL_PWD=...` before the container id.
 	if !containsArg(args, "-e", "MYSQL_PWD="+db.Password) {
 		t.Fatalf("expected -e MYSQL_PWD=<pw> in docker args, got %v", args)
 	}
@@ -86,7 +84,6 @@ func TestDriverShells_PostgresArgs(t *testing.T) {
 	if len(args) == 0 {
 		t.Error("expected args for postgres")
 	}
-	// Should contain -U myuser
 	found := false
 	for i, a := range args {
 		if a == "-U" && i+1 < len(args) && args[i+1] == "myuser" {
@@ -155,7 +152,6 @@ func TestExecArgs_MongoEscapesSpecialCharsInPassword(t *testing.T) {
 	if strings.Contains(uri, "p@ss:w/rd") {
 		t.Errorf("password should be percent-encoded, got raw in URI: %s", uri)
 	}
-	// '@' (0x40), ':' (0x3A), '/' (0x2F) must all be escaped in the password.
 	for _, want := range []string{"%40", "%3A", "%2F"} {
 		if !strings.Contains(uri, want) {
 			t.Errorf("expected %s in escaped URI, got %s", want, uri)
@@ -228,15 +224,13 @@ func TestExecDBQuery_UnknownDriver(t *testing.T) {
 	}
 }
 
-// TestDriverArgBuilders_AllDrivers walks every registered driver and asserts
-// the shape of both the interactive and (where supported) --exec arg lists.
 func TestDriverArgBuilders_AllDrivers(t *testing.T) {
 	const q = "SELECT 1"
 	cases := []struct {
 		driver       string
 		db           DatabaseService
-		wantArgs     []string // interactive
-		wantExecTail []string // trailing tokens of execArgs (nil = skip exec check)
+		wantArgs     []string
+		wantExecTail []string
 	}{
 		{
 			driver:       "postgres",
@@ -265,7 +259,7 @@ func TestDriverArgBuilders_AllDrivers(t *testing.T) {
 		{
 			driver:       "redis",
 			db:           DatabaseService{Password: "pw"},
-			wantArgs:     nil, // password rides REDISCLI_AUTH env, not argv
+			wantArgs:     nil,
 			wantExecTail: []string{"GET", "k"},
 		},
 		{
@@ -277,7 +271,7 @@ func TestDriverArgBuilders_AllDrivers(t *testing.T) {
 		{
 			driver:       "mysql",
 			db:           DatabaseService{User: "u", Password: "pw", DatabaseName: "d"},
-			wantArgs:     []string{"-u", "u", "d"}, // password rides MYSQL_PWD env, not argv
+			wantArgs:     []string{"-u", "u", "d"},
 			wantExecTail: []string{"-e", q},
 		},
 		{
@@ -332,7 +326,6 @@ func TestDriverArgBuilders_AllDrivers(t *testing.T) {
 }
 
 func TestMongoArgs_DefaultPortAndUser(t *testing.T) {
-	// Port 0 falls back to 27017; user empty + password set defaults user to "mongo".
 	args := mongoArgs(DatabaseService{Password: "pw", DatabaseName: "app"})
 	uri := args[0]
 	if !strings.Contains(uri, "localhost:27017") {
@@ -354,7 +347,6 @@ func TestMongoArgs_CustomPort(t *testing.T) {
 }
 
 func TestMysqlArgs_NoPasswordNoDb(t *testing.T) {
-	// No password, no db name → only -u <user>.
 	args := mysqlArgs(DatabaseService{User: "admin"})
 	if strings.Join(args, " ") != "-u admin" {
 		t.Errorf("expected [-u admin], got %v", args)
@@ -379,7 +371,6 @@ func TestBuildDockerExecArgs_NonInteractiveMysql(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// password rides `-e MYSQL_PWD=pw` (before the container id), never on argv.
 	want := []string{"exec", "-e", "MYSQL_PWD=pw", "cid", "mysql", "-u", "root", "d", "-e", "SELECT 1"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("got %v, want %v", got, want)
@@ -392,7 +383,6 @@ func TestBuildDockerExecArgs_NonInteractiveMongo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// exec cid mongosh <uri> --quiet --eval db.x.find()
 	if got[0] != "exec" || got[1] != "cid" || got[2] != "mongosh" {
 		t.Errorf("unexpected prefix: %v", got)
 	}
@@ -402,7 +392,6 @@ func TestBuildDockerExecArgs_NonInteractiveMongo(t *testing.T) {
 }
 
 func TestBuildDockerExecArgs_DropsEmptyTokens(t *testing.T) {
-	// redis with no password → argsFunc returns nil, no stray "" left in output.
 	cfg := driverShells["redis"]
 	got, _, err := buildDockerExecArgs(cfg, DatabaseService{}, "", "cid", true)
 	if err != nil {
@@ -420,7 +409,6 @@ func TestBuildDockerExecArgs_DropsEmptyTokens(t *testing.T) {
 }
 
 func TestBuildDockerExecArgs_NoExecSupport(t *testing.T) {
-	// A config without execArgsFunc must error in non-interactive mode.
 	cfg := shellConfig{cmd: "x", argsFunc: func(DatabaseService) []string { return nil }}
 	_, _, err := buildDockerExecArgs(cfg, DatabaseService{Driver: "x"}, "q", "cid", false)
 	if err == nil || !strings.Contains(err.Error(), "does not support --exec") {
@@ -429,7 +417,6 @@ func TestBuildDockerExecArgs_NoExecSupport(t *testing.T) {
 }
 
 func TestExecDBQueryCapture_UnknownDriver(t *testing.T) {
-	// Unknown driver returns a clean error before any docker call, no panic.
 	out, err := ExecDBQueryCapture(DatabaseService{Driver: "nope", ServiceName: "svc"}, "SELECT 1")
 	if err == nil || !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("expected error naming driver, got %v (out=%q)", err, out)

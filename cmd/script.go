@@ -1,6 +1,3 @@
-/*
-Copyright © 2023 Andrii Klymiuk
-*/
 package cmd
 
 import (
@@ -11,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// scriptCmd represents the script command
 var scriptCmd = &cobra.Command{
 	Use:     "script",
 	Short:   "Runs script on each service, if it specified",
@@ -97,7 +93,6 @@ func runScriptsForService(corgi *utils.CorgiCompose, service utils.Service) []sc
 		results = append(results, scriptResult{Service: service.ServiceName, Name: scriptServiceCmd.Name, OK: err == nil})
 	}
 
-	// return to previous state of .env file
 	_ = utils.GenerateEnvForService(corgi, service, "", false)
 	return results
 }
@@ -127,7 +122,6 @@ func runScript(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	// --continue-on-error: print a pass/fail summary and exit non-zero on any failure.
 	if continueOnError, _ := cmd.Flags().GetBool("continue-on-error"); continueOnError {
 		lines, failed := summarizeScriptResults(results)
 		utils.Info("\nScript summary:")
@@ -148,7 +142,6 @@ type scriptResult struct {
 	OK      bool
 }
 
-// summarizeScriptResults renders a per-result pass/fail summary + failure count.
 func summarizeScriptResults(results []scriptResult) (lines []string, failed int) {
 	for _, r := range results {
 		mark := "✓"

@@ -45,9 +45,6 @@ func EnsureRunStateGitignored(composeDir string) {
 	EnsureCorgiServicesIgnore(dir, ".state.last.json")
 }
 
-// LockRunState takes an advisory lock so concurrent state mutations (restart,
-// stop --service) don't clobber each other. Returns an unlock func. A lock held
-// longer than the timeout is assumed stale and reclaimed.
 func LockRunState(composeDir string) (func(), error) {
 	lockPath := filepath.Join(CorgiServicesIn(composeDir), ".state.lock")
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
@@ -64,7 +61,7 @@ func LockRunState(composeDir string) (func(), error) {
 			return nil, err
 		}
 		if time.Now().After(deadline) {
-			_ = os.Remove(lockPath) // stale; reclaim and retry
+			_ = os.Remove(lockPath)
 			deadline = time.Now().Add(5 * time.Second)
 			continue
 		}
@@ -93,7 +90,6 @@ func ReconcileRunState(
 	now := time.Now().UTC()
 	for i := range s.Services {
 		e := &s.Services[i]
-		// pid==0 → container-managed (docker-runner); can't probe by pid, leave as-is.
 		if e.PID == 0 {
 			continue
 		}

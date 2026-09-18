@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// `agent up --at-login` opens the menu bar once when it is installed and not
-// running — its first run registers the login item — and stays quiet about
-// an app that is not installed.
 func TestAtLoginOpensTheMenuBarOnceWhenInstalled(t *testing.T) {
 	origLook, origOpen := lookForMenuBar, openMenuBar
 	defer func() { lookForMenuBar, openMenuBar = origLook, origOpen }()

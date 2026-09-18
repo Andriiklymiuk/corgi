@@ -99,8 +99,6 @@ func TestRoughAge(t *testing.T) {
 	}
 }
 
-// A session that starts on a branch with a handoff is told to read it
-// first, and how far the code has moved since it was written.
 func TestSessionStartPointsAtTheHandoffForTheBranch(t *testing.T) {
 	root := t.TempDir()
 	if err := handoff.Write(root, handoff.Packet{Ref: "ABC-5", State: handoff.StateInputRequired, Next: "web side",

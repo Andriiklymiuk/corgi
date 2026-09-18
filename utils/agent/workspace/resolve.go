@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// MatchKind records why a workspace matched, so the answer can explain itself
-// rather than looking like magic.
 type MatchKind string
 
 const (
@@ -18,15 +16,12 @@ const (
 	MatchService MatchKind = "service"
 )
 
-// Candidate is one possible answer to a query.
 type Candidate struct {
 	Workspace Workspace `json:"workspace"`
 	Kind      MatchKind `json:"matchedOn"`
 	Matched   string    `json:"matchedValue"`
 }
 
-// Resolution is the outcome of resolving a name. Exactly one of Workspace or
-// Candidates is meaningful: a resolved workspace, or the choices to offer.
 type Resolution struct {
 	Workspace  *Workspace  `json:"workspace,omitempty"`
 	MatchedOn  MatchKind   `json:"matchedOn,omitempty"`
@@ -34,14 +29,8 @@ type Resolution struct {
 	Reason     string      `json:"reason"`
 }
 
-// Resolved reports whether the query produced exactly one workspace.
 func (r Resolution) Resolved() bool { return r.Workspace != nil }
 
-// Resolve turns a human phrase like "the recipe app" into a workspace.
-//
-// It never guesses. An ambiguous query returns candidates and resolves nothing,
-// because a wrong resolution means an agent editing the wrong repository, and
-// one extra tap is far cheaper than that.
 func Resolve(r *Registry, query string) Resolution {
 	normalizedQuery := normalize(query)
 	if normalizedQuery == "" {
@@ -87,8 +76,6 @@ func Resolve(r *Registry, query string) Resolution {
 	}
 }
 
-// describe is what the caller echoes back before doing any work, so a
-// mis-resolution is caught before code is written rather than after.
 func describe(w Workspace, c Candidate) string {
 	parts := []string{w.ID + " (" + w.AbsPath + ")"}
 	if len(w.Services) > 0 {
@@ -128,8 +115,6 @@ func fuzzyMatches(r *Registry, query string) []Candidate {
 	return out
 }
 
-// bestFuzzyMatch checks the fields in decreasing order of how strongly they
-// identify a workspace, so the explanation names the most meaningful hit.
 func bestFuzzyMatch(w Workspace, query string) (Candidate, bool) {
 	if related(normalize(w.ID), query) {
 		return Candidate{Workspace: w, Kind: MatchID, Matched: w.ID}, true
@@ -149,8 +134,6 @@ func bestFuzzyMatch(w Workspace, query string) (Candidate, bool) {
 			return Candidate{Workspace: w, Kind: MatchRepo, Matched: repo}, true
 		}
 	}
-	// Services come last: "fix the api" should find the stack that has a
-	// service called api, but a service name is the weakest identifier.
 	for _, svc := range w.Services {
 		if related(normalize(svc), query) {
 			return Candidate{Workspace: w, Kind: MatchService, Matched: svc}, true
@@ -159,12 +142,6 @@ func bestFuzzyMatch(w Workspace, query string) (Candidate, bool) {
 	return Candidate{}, false
 }
 
-// related reports whether two normalized strings refer to the same thing.
-//
-// Matching is on whole words only. A raw substring test made "api" match
-// "rapid-prototype", and when that was the sole hit the resolver answered with
-// it confidently — exactly the wrong-repository outcome this package promises
-// never to produce.
 func related(value, query string) bool {
 	if value == "" || query == "" {
 		return false
@@ -172,12 +149,9 @@ func related(value, query string) bool {
 	valueWords := strings.Fields(value)
 	queryWords := strings.Fields(query)
 
-	// One phrase containing the other, word for word: "recipe app" reached by
-	// "the recipe app", and vice versa.
 	if containsAllWords(valueWords, queryWords) || containsAllWords(queryWords, valueWords) {
 		return true
 	}
-	// Otherwise a shared whole word, long enough to identify something.
 	for _, v := range valueWords {
 		if len(v) < 3 {
 			continue
@@ -191,7 +165,6 @@ func related(value, query string) bool {
 	return false
 }
 
-// containsAllWords reports whether every word of want appears in have.
 func containsAllWords(have, want []string) bool {
 	if len(want) == 0 {
 		return false
@@ -216,8 +189,6 @@ func allCandidates(r *Registry) []Candidate {
 	return out
 }
 
-// normalize lowercases and reduces punctuation to spaces so "recipe-app",
-// "recipe_app", and "Recipe App" all compare equal.
 func normalize(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))

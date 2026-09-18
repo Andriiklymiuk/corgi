@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-// Localtunnel wraps the npm `localtunnel` CLI (`lt --port <port>`), which emits
-// one line: "your url is: https://<sub>.localtunnel.me".
-//
-// `tunnel.hostname` takes only the leading subdomain label (`my-api`) and is
-// best-effort — the server picks a random one if it is taken.
 type Localtunnel struct{}
 
 func (Localtunnel) Name() string { return "localtunnel" }
@@ -19,8 +14,6 @@ func (Localtunnel) Cmd(port int) []string {
 	return []string{"lt", "--port", fmt.Sprintf("%d", port)}
 }
 
-// Match URLs on either the canonical `localtunnel.me` host or the legacy
-// short `loca.lt` mirror.
 var localtunnelURLRe = regexp.MustCompile(`https://[a-z0-9-]+\.(?:localtunnel\.me|loca\.lt)`)
 
 func (Localtunnel) ExtractURL(line string) string { return localtunnelURLRe.FindString(line) }
@@ -33,9 +26,6 @@ func (Localtunnel) AcceptsStdin() bool { return false }
 
 func (Localtunnel) PreflightAuth() error { return nil }
 
-// CmdNamed runs `lt --port <port> --subdomain <label>`. Hostname is
-// expected as the bare subdomain label (no dots, no scheme). If a full
-// `*.localtunnel.me` is passed, strip the suffix.
 func (Localtunnel) CmdNamed(port int, cfg NamedConfig) ([]string, error) {
 	sub := cfg.Hostname
 	for _, suffix := range []string{".localtunnel.me", ".loca.lt"} {
@@ -47,8 +37,4 @@ func (Localtunnel) CmdNamed(port int, cfg NamedConfig) ([]string, error) {
 	return []string{"lt", "--port", fmt.Sprintf("%d", port), "--subdomain", sub}, nil
 }
 
-// PreflightNamedAuth: localtunnel needs no auth. Subdomain availability is
-// best-effort — the server falls back to a random subdomain if requested
-// label is taken. Return nil; the runner's URL extraction will print
-// whatever subdomain was actually granted.
 func (Localtunnel) PreflightNamedAuth(cfg NamedConfig) error { return nil }

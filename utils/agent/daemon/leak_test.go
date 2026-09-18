@@ -8,9 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
-// The diagnostic exists to say WHICH credential is in play, never WHAT it is.
-// Its output is printed at startup, written to status.json, and returned over
-// MCP — three places a secret must not reach.
 func TestDiagnosticNeverEchoesACredentialValue(t *testing.T) {
 	const secret = "sk-ant-this-must-never-be-printed"
 	env := []string{
@@ -38,7 +35,6 @@ func TestDiagnosticNeverEchoesACredentialValue(t *testing.T) {
 			t.Fatalf("inherit=%v: a credential value reached the diagnostic: %s", inherit, encoded)
 		}
 
-		// The names are the useful part and must survive.
 		if !inherit {
 			var sawKey bool
 			for _, name := range diag.Stripped {
@@ -72,8 +68,6 @@ func TestStatusJSONCarriesNoCredentialValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// status.json is world-readable and is what `corgi agent status --json`
-	// prints, so anything in it is effectively public to the machine.
 	if strings.Contains(string(encoded), secret) {
 		t.Fatalf("status output contains a credential value: %s", encoded)
 	}

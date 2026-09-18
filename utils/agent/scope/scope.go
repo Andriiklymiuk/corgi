@@ -1,8 +1,3 @@
-// Package scope is the contract a run works inside: which paths it may
-// change, how many lines and new test files the change should stay under,
-// and what done means. Written by the stories skill after the spec is
-// agreed, enforced by hooks while the session runs, so a change that grows
-// past the agreement is stopped where it happens, not found at review.
 package scope
 
 import (
@@ -19,23 +14,16 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// Scope is one ticket's contract.
 type Scope struct {
-	Ref string `json:"ref"`
-	// Paths are globs relative to the workspace; ** crosses directories.
-	// Empty means anywhere: the budgets still apply.
-	Paths []string `json:"paths,omitempty"`
-	// Lines is the diff budget (added + removed) and Tests the number of
-	// new test files the change should stay under; zero means no budget.
-	Lines int `json:"lines,omitempty"`
-	Tests int `json:"tests,omitempty"`
-	// Done is what finished means, one line each.
+	Ref       string     `json:"ref"`
+	Paths     []string   `json:"paths,omitempty"`
+	Lines     int        `json:"lines,omitempty"`
+	Tests     int        `json:"tests,omitempty"`
 	Done      []string   `json:"done,omitempty"`
 	SetAt     time.Time  `json:"setAt"`
 	Widenings []Widening `json:"widenings,omitempty"`
 }
 
-// Widening is a path the run added to its own scope, on the record.
 type Widening struct {
 	Path string    `json:"path"`
 	By   string    `json:"by,omitempty"`
@@ -114,7 +102,6 @@ func List(composeDir string) []Scope {
 
 var refInBranch = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b`)
 
-// ForBranch is the scope for the ticket a branch names, if any.
 func ForBranch(composeDir, branch string) (Scope, bool) {
 	m := refInBranch.FindStringSubmatch(strings.ToUpper(branch))
 	if m == nil {
@@ -124,7 +111,6 @@ func ForBranch(composeDir, branch string) (Scope, bool) {
 	return s, err == nil
 }
 
-// Widen adds a path to the scope, on the record.
 func Widen(composeDir, ref, glob, by string) (Scope, error) {
 	s, err := Read(composeDir, ref)
 	if err != nil {
@@ -139,12 +125,6 @@ func Widen(composeDir, ref, glob, by string) (Scope, error) {
 	return s, Write(composeDir, s)
 }
 
-// Allows says whether a workspace-relative path is inside the scope. No
-// paths means everywhere is. A path inside a worktree corgi made
-// (.corgi/corgi_services/.worktrees/<dir>/…) is judged by what it is inside
-// the worktree, and a path is also tried without its first segment — so a
-// scope written as "api/limits/**" holds whether the file is seen from the
-// workspace root or from inside the api repository.
 func (s Scope) Allows(rel string) bool {
 	if len(s.Paths) == 0 {
 		return true
@@ -159,13 +139,8 @@ func (s Scope) Allows(rel string) bool {
 	return false
 }
 
-// worktreeDir is the name corgi gives a worktree directory: "<repo>-<hash>@<branch>".
 var worktreeDir = regexp.MustCompile(`^(?:\.corgi/corgi_services/\.worktrees|\.corgi/\.worktrees)/([^/@]+)-[0-9a-f]{6}@[^/]+/`)
 
-// Candidates are the spellings of a path a scope glob may have meant: as
-// given; a worktree path rewritten to "<repo>/<inside>"; and, so a glob
-// written from the workspace root also holds for a file named from inside
-// a repository, the path with its first segment dropped.
 func Candidates(rel string) []string {
 	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
 	out := []string{rel}
@@ -180,9 +155,6 @@ func Candidates(rel string) []string {
 	return out
 }
 
-// InRepo names a file the way a scope written from the workspace root
-// would: "<repo dir name>/<path inside the repo>". For a file in a worktree
-// corgi made, the repo is the one the worktree was cut from.
 func InRepo(workspaceRoot, repoRoot, abs string) string {
 	rel, err := filepath.Rel(repoRoot, abs)
 	if err != nil || strings.HasPrefix(rel, "..") {
@@ -198,8 +170,6 @@ func InRepo(workspaceRoot, repoRoot, abs string) string {
 	return name + "/" + filepath.ToSlash(rel)
 }
 
-// Match is a glob with ** for any number of directories, * for a segment
-// and ? for a character. A pattern naming a directory covers what is in it.
 func Match(pattern, rel string) bool {
 	pattern = filepath.ToSlash(strings.TrimPrefix(strings.TrimSpace(pattern), "./"))
 	if pattern == "" {
@@ -218,7 +188,6 @@ func globRegexp(pattern string) *regexp.Regexp {
 		c := pattern[i]
 		switch {
 		case c == '*' && i+1 < len(pattern) && pattern[i+1] == '*':
-			// ** then an optional slash: any depth, including none
 			if i+2 < len(pattern) && pattern[i+2] == '/' {
 				b.WriteString("(?:.*/)?")
 				i += 2
@@ -238,8 +207,6 @@ func globRegexp(pattern string) *regexp.Regexp {
 	return regexp.MustCompile(b.String())
 }
 
-// IsTestFile says whether a path looks like a test, across the stacks a
-// corgi workspace mixes.
 func IsTestFile(rel string) bool {
 	base := strings.ToLower(filepath.Base(rel))
 	dir := strings.ToLower(filepath.ToSlash(filepath.Dir(rel)))

@@ -21,9 +21,6 @@ func gitRun(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// Undo drops what a session left uncommitted in its own worktree — and
-// with --worktree the worktree and its branch too. A session on your own
-// checkout is refused: that would take your edits with it.
 func TestUndoDropsASessionsUncommittedWorkInItsOwnWorktree(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
@@ -37,7 +34,6 @@ func TestUndoDropsASessionsUncommittedWorkInItsOwnWorktree(t *testing.T) {
 	_ = os.MkdirAll(trees, 0o755)
 	wt := filepath.Join(trees, "APP-1")
 	gitRun(t, repo, "worktree", "add", "-q", "-b", "corgi/APP-1", wt, "main")
-	// The session edited a file, added one, and left both uncommitted.
 	_ = os.WriteFile(filepath.Join(wt, "a.go"), []byte("package a\n\nfunc Broken() {}\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(wt, "new.go"), []byte("package a\n"), 0o644)
 
@@ -62,7 +58,6 @@ func TestUndoDropsASessionsUncommittedWorkInItsOwnWorktree(t *testing.T) {
 		t.Fatal("the new file is gone")
 	}
 
-	// --worktree: the tree and the branch go too.
 	plan, _ = sessionUndoPlan(s)
 	if err := runSessionUndo(plan, true); err != nil {
 		t.Fatal(err)
@@ -74,13 +69,11 @@ func TestUndoDropsASessionsUncommittedWorkInItsOwnWorktree(t *testing.T) {
 		t.Fatalf("the branch is gone, got %q", out)
 	}
 
-	// Your own checkout is not a session's to undo.
 	_ = os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // mine\n"), 0o644)
 	own := sessions.Session{ID: "s2", Display: "api", Cwd: repo, Branch: "main", Status: sessions.StatusDone}
 	if _, err := sessionUndoPlan(own); err == nil || !strings.Contains(err.Error(), "shares your checkout") {
 		t.Fatalf("a shared checkout is refused: %v", err)
 	}
-	// A working session is interrupted first, not undone under its feet.
 	busy := s
 	busy.Status = sessions.StatusWorking
 	if _, err := sessionUndoPlan(busy); err == nil || !strings.Contains(err.Error(), "still working") {

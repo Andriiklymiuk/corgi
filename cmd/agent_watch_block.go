@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Blocked is a column, not a failure: the ticket waits for a person, and no
-// unattended run touches it until someone says the wall is gone.
 var agentWatchBlockCmd = &cobra.Command{
 	Use:   "block <REF> <reason>",
 	Short: "Keep unattended runs off a ticket until you unblock it",

@@ -1,9 +1,3 @@
-// Package bots keeps the named sessions a person comes back to: a bot is a
-// workspace, a persona, a model and an account, with the thread it last ran
-// — "Code Reviewer", "Shipper", "Chief". Opening one starts Claude Code in
-// that workspace under that account with the persona appended to its system
-// prompt, and resumes the last conversation when it can. Sessions are
-// processes; bots are who you talk to.
 package bots
 
 import (
@@ -19,30 +13,21 @@ import (
 	"time"
 )
 
-// Bot is one named session identity.
 type Bot struct {
-	Name      string `json:"name"`
-	Title     string `json:"title,omitempty"`
-	Workspace string `json:"workspace"`
-	// Soul is appended to Claude Code's system prompt: who this bot is.
-	Soul    string `json:"soul,omitempty"`
-	Model   string `json:"model,omitempty"`
-	Profile string `json:"profile,omitempty"`
-	Isolate bool   `json:"isolate,omitempty"`
-	// Color is a hue name the surfaces draw the avatar in.
-	Color string `json:"color,omitempty"`
-	// On is what this bot does on its own: the watch event kinds it runs
-	// on when they arrive in its workspace — a review comment, a red
-	// build, a new issue. Empty is a bot you only ever open yourself.
-	On []string `json:"on,omitempty"`
-	// LastSession is the conversation to resume, and when it was last seen
-	// — the daemon records it from the session's first event.
+	Name        string    `json:"name"`
+	Title       string    `json:"title,omitempty"`
+	Workspace   string    `json:"workspace"`
+	Soul        string    `json:"soul,omitempty"`
+	Model       string    `json:"model,omitempty"`
+	Profile     string    `json:"profile,omitempty"`
+	Isolate     bool      `json:"isolate,omitempty"`
+	Color       string    `json:"color,omitempty"`
+	On          []string  `json:"on,omitempty"`
 	LastSession string    `json:"lastSession,omitempty"`
 	LastSeen    time.Time `json:"lastSeen,omitzero"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
-// Display is the title, else the name.
 func (b Bot) Display() string {
 	if strings.TrimSpace(b.Title) != "" {
 		return b.Title
@@ -50,33 +35,25 @@ func (b Bot) Display() string {
 	return b.Name
 }
 
-// Store is every bot on this machine.
 type Store struct {
 	Version int   `json:"version"`
 	Bots    []Bot `json:"bots"`
 }
 
-// Path is where bots live under the agent dir.
 func Path(agentDir string) string { return filepath.Join(agentDir, "bots.json") }
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
-// ValidName is a name safe on a command line and in a URL.
 func ValidName(name string) bool { return namePattern.MatchString(name) }
 
-// Colors are the hues a surface may draw; the first is the default.
 var Colors = []string{"indigo", "orange", "teal", "pink", "green", "amber", "blue", "red"}
 
-// The kinds a default bot answers to, by name so the catalogue below and
-// the fixed order agree.
 const (
 	triggerPRReview        = "pr.review"
 	triggerReviewRequested = "review.requested"
 	triggerCIFailed        = "ci.failed"
 )
 
-// Triggers are the event kinds a bot may run on, in the words the watch
-// uses; the map says what each means for a person.
 var Triggers = map[string]string{
 	triggerPRReview:        "a review lands on a pull request",
 	"pr.comment":           "someone comments on a pull request",
@@ -87,16 +64,12 @@ var Triggers = map[string]string{
 	"task":                 "a task of your own lands",
 }
 
-// ValidTrigger says whether kind is one a bot can run on.
 func ValidTrigger(kind string) bool { _, ok := Triggers[kind]; return ok }
 
-// TriggerKinds is every kind a bot can run on, in a fixed order.
 func TriggerKinds() []string {
 	return []string{triggerReviewRequested, triggerPRReview, "pr.comment", triggerCIFailed, "issue.new", "issue.comment", "task"}
 }
 
-// ParseTriggers reads kinds off a flag or a phone: trimmed, lower-case,
-// each one known, duplicates dropped; "" and "none" are no trigger.
 func ParseTriggers(list []string) ([]string, error) {
 	var out []string
 	seen := map[string]bool{}
@@ -116,8 +89,6 @@ func ParseTriggers(list []string) ([]string, error) {
 	return out, nil
 }
 
-// TriggerWords says the triggers as a person would: "a review lands on a
-// pull request or a build goes red".
 func TriggerWords(on []string) string {
 	var words []string
 	for _, k := range on {
@@ -134,7 +105,6 @@ func TriggerWords(on []string) string {
 	return strings.Join(words[:len(words)-1], ", ") + " or " + words[len(words)-1]
 }
 
-// Template is one of the ready-made bots by name.
 func Template(name string) (Bot, bool) {
 	for _, t := range Templates {
 		if t.Name == name {
@@ -144,7 +114,6 @@ func Template(name string) (Bot, bool) {
 	return Bot{}, false
 }
 
-// TemplateNames lists the templates.
 func TemplateNames() []string {
 	out := make([]string, 0, len(Templates))
 	for _, t := range Templates {
@@ -153,7 +122,6 @@ func TemplateNames() []string {
 	return out
 }
 
-// RunsOn says whether the bot acts on this kind.
 func (b Bot) RunsOn(kind string) bool {
 	for _, k := range b.On {
 		if k == kind {
@@ -163,8 +131,6 @@ func (b Bot) RunsOn(kind string) bool {
 	return false
 }
 
-// Templates are the bots most people want, ready to add: a name, a
-// title, a soul and what they run on. The workspace is the person's.
 var Templates = []Bot{
 	{Name: "reviewer", Title: "Code Reviewer", Color: "orange", Model: "sonnet", On: []string{triggerReviewRequested, triggerPRReview},
 		Soul: "You review pull requests in this repository. Read the diff, run the tests, be brief: what is wrong, what is risky, what is fine. Post your findings as one review comment on the pull request. Never merge, never push."},
@@ -178,16 +144,12 @@ var Templates = []Bot{
 		Soul: "You are the proactive engineer of this repository: you find the one thing worth building next — a feature the product almost does and a user would feel, or the thing a developer here trips on every day — and you say it with the evidence you can point at: a file and line, a promise the README makes that the code does not keep, a step done by hand. One idea at a time, ranked by what it changes for a user against what it costs. You never change code: you put the idea on the board as a task with its evidence, or spec it when asked."},
 }
 
-// Clocks are the routines a template is meant to run on, so adding the
-// bot can say how to put it on a clock.
 var Clocks = map[string]string{"proactive": "suggest"}
 
-// TemplateClock is the routine kind a template runs on, or "".
 func TemplateClock(name string) string { return Clocks[name] }
 
 var mu sync.Mutex
 
-// Load reads the store; none is an empty store.
 func Load(path string) (*Store, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -206,8 +168,6 @@ func Load(path string) (*Store, error) {
 	return &s, nil
 }
 
-// Save writes the store atomically, 0600: a soul can say what a person
-// would not put in a repository.
 func Save(path string, s *Store) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
@@ -224,7 +184,6 @@ func Save(path string, s *Store) error {
 	return os.Rename(tmp, path)
 }
 
-// Find returns the bot with that name.
 func (s *Store) Find(name string) (Bot, bool) {
 	for _, b := range s.Bots {
 		if b.Name == name {
@@ -234,7 +193,6 @@ func (s *Store) Find(name string) (Bot, bool) {
 	return Bot{}, false
 }
 
-// Put adds or replaces a bot by name, keeping the thread it had.
 func (s *Store) Put(b Bot) {
 	for i := range s.Bots {
 		if s.Bots[i].Name == b.Name {
@@ -252,7 +210,6 @@ func (s *Store) Put(b Bot) {
 	s.Bots = append(s.Bots, b)
 }
 
-// Remove takes a bot out; reports whether it was there.
 func (s *Store) Remove(name string) bool {
 	for i := range s.Bots {
 		if s.Bots[i].Name == name {
@@ -263,10 +220,6 @@ func (s *Store) Remove(name string) bool {
 	return false
 }
 
-// RecordSession is what the daemon calls when a session opened for a bot
-// sends its first event: that conversation is the one to resume next time.
-// Load-modify-save under one lock, so two sessions starting at once do not
-// lose each other.
 func RecordSession(path, name, sessionID string, at time.Time) error {
 	mu.Lock()
 	defer mu.Unlock()

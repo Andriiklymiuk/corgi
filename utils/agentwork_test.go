@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// writeFakeBin drops a shell script named `name` on a temp dir prepended to PATH.
 func writeFakeBin(t *testing.T, dir, name, script string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -21,7 +20,6 @@ func writeFakeBin(t *testing.T, dir, name, script string) {
 
 func TestProbeAgentWork_BranchAndGithubPR(t *testing.T) {
 	bin := t.TempDir()
-	// git: respond to the two reads the probe makes.
 	writeFakeBin(t, bin, "git", `
 case "$*" in
   *"rev-parse --abbrev-ref HEAD"*) echo "feature/login" ;;
@@ -29,7 +27,6 @@ case "$*" in
   *"status --porcelain"*)          echo " M file.go" ;;
   *) echo "" ;;
 esac`)
-	// gh: emit the JSON the probe asks for.
 	writeFakeBin(t, bin, "gh", `
 echo '{"number":42,"state":"OPEN","isDraft":true,"url":"https://x/pull/42","statusCheckRollup":[{"conclusion":"SUCCESS"}]}'`)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -58,7 +55,7 @@ echo '{"number":42,"state":"OPEN","isDraft":true,"url":"https://x/pull/42","stat
 
 func TestProbeAgentWork_NoGitRepo(t *testing.T) {
 	bin := t.TempDir()
-	writeFakeBin(t, bin, "git", `exit 128`) // not a repo
+	writeFakeBin(t, bin, "git", `exit 128`)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	if aw := ProbeAgentWork(t.TempDir()); aw != nil {
 		t.Errorf("expected nil for non-repo, got %+v", aw)
@@ -78,9 +75,6 @@ func TestNormalizeCIConclusion(t *testing.T) {
 }
 
 func TestHasUncommittedWorkCountsUntrackedFiles(t *testing.T) {
-	// The difference from isTreeDirty, and the reason this exists: a session's
-	// newly created files are the work most easily lost, and `git diff` alone
-	// says nothing about them.
 	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
 
 	if HasUncommittedWork(repo) {
@@ -95,8 +89,6 @@ func TestHasUncommittedWorkCountsUntrackedFiles(t *testing.T) {
 }
 
 func TestHasUncommittedWorkRespectsGitignore(t *testing.T) {
-	// Otherwise every stack with build output reports every repo as dirty, and
-	// the count in a handover note stops meaning anything.
 	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
 	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("build/\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -144,9 +136,6 @@ func TestProbeRepoStateReadsBranchAndUncommittedWork(t *testing.T) {
 }
 
 func TestProbeRepoStateReportsNoBranchWhenDetached(t *testing.T) {
-	// git prints the literal "HEAD" for a detached checkout. Passing that
-	// through would put "HEAD" in a handover note as though it were a branch
-	// name someone could check out again.
 	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
 	gitIn(t, repo, "checkout", "-q", "--detach")
 
@@ -169,13 +158,9 @@ func TestProbeRepoStateOnANonRepository(t *testing.T) {
 }
 
 func TestProbeRepoStateMakesNoForgeCalls(t *testing.T) {
-	// The point of this function existing alongside ProbeAgentWork: it is used
-	// on the restart path, where a session that died because the network went
-	// away must not then block on `gh pr view` once per repository.
 	dir := t.TempDir()
 	repo := newRepo(t, filepath.Join(dir, "api"))
 
-	// A gh that fails the test if it is ever run, ahead of any real one.
 	fakeBin := t.TempDir()
 	writeFakeBin(t, fakeBin, "gh", "#!/bin/sh\necho CALLED > "+filepath.Join(dir, "gh-was-called")+"\nexit 0\n")
 	writeFakeBin(t, fakeBin, "glab", "#!/bin/sh\necho CALLED > "+filepath.Join(dir, "glab-was-called")+"\nexit 0\n")

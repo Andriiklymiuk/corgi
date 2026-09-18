@@ -69,7 +69,7 @@ func TestReadFactsSortedByTypeThenName(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := []string{facts[0].Name, facts[1].Name, facts[2].Name}
-	want := []string{"a-decision", "z-decision", "b-incident"} // decisions first (a,z), then incidents
+	want := []string{"a-decision", "z-decision", "b-incident"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("order: got %v want %v", got, want)
@@ -136,7 +136,7 @@ func TestLintCatchesPlantedSecret(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "memory")
 	mustAdd(t, root, Fact{
 		Name: "leaky", Description: "has a key", Type: "decision",
-		Body: "the key is AKIAIOSFODNN7EXAMPLE do not", // AWS-key shape
+		Body: "the key is AKIAIOSFODNN7EXAMPLE do not",
 	})
 	errs, _ := LintFacts(root)
 	if !hasCode(errs, "E_MEMORY_SECRET") {
@@ -149,7 +149,6 @@ func TestLintCatchesSecretInLooseRootFile(t *testing.T) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A loose .md dropped in the store root — not in a typed subdir, so ReadFacts skips it.
 	loose := filepath.Join(root, "loose.md")
 	if err := os.WriteFile(loose, []byte("notes\nAKIAIOSFODNN7EXAMPLE\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -166,7 +165,6 @@ func TestLintCatchesSecretInLooseRootFile(t *testing.T) {
 func TestLintCatchesSecretInIndexMd(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "memory")
 	mustAdd(t, root, Fact{Name: "ok", Description: "clean fact", Type: "domain"})
-	// index.md lives at the store root and is never a typed fact.
 	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("token=supersecretvalue\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +195,6 @@ func TestLintDoesNotDoubleReportTypedFactSecret(t *testing.T) {
 func TestLooseRootFileIsNotAFact(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "memory")
 	mustAdd(t, root, Fact{Name: "real", Description: "a real fact", Type: "domain"})
-	// Loose .md at the root and index.md must not surface in list/index.
 	if err := os.WriteFile(filepath.Join(root, "loose.md"), []byte("just notes\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +209,6 @@ func TestLooseRootFileIsNotAFact(t *testing.T) {
 
 func TestLintFlagsTypeDirMismatch(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "memory")
-	// fact says type: decision but lives under incidents/
 	writeFact(t, root, "incidents", "wrong", "---\nname: wrong\ndescription: x\ntype: decision\n---\n")
 	errs, _ := LintFacts(root)
 	if !hasCode(errs, "E_MEMORY_TYPE_MISMATCH") {

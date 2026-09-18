@@ -1,7 +1,3 @@
-// Speaking in Slack, as the person or as their app. The voice is a choice
-// with a safe default: an unattended run speaks as the app unless the
-// workspace says otherwise, because a machine posting under someone's own
-// name is the mistake that cannot be taken back.
 package watch
 
 import (
@@ -11,14 +7,12 @@ import (
 	"strings"
 )
 
-// SlackTarget is where a message goes and in whose voice.
 type SlackTarget struct {
 	Channel  string
 	ThreadTS string
-	As       string // "me", "bot", or empty for the default
+	As       string
 }
 
-// SlackPosted is what was said and where to read it.
 type SlackPosted struct {
 	Channel   string `json:"channel"`
 	TS        string `json:"ts"`
@@ -26,14 +20,12 @@ type SlackPosted struct {
 	As        string `json:"as"`
 }
 
-// SlackPoster holds both voices; either may be absent.
 type SlackPoster struct {
 	User *slackAPI
 	Bot  *slackAPI
 	Team string
 }
 
-// NewSlackPoster builds the poster from whatever tokens are stored.
 func NewSlackPoster(s Secrets) *SlackPoster {
 	p := &SlackPoster{}
 	if t := strings.TrimSpace(s.SlackUser); t != "" {
@@ -45,12 +37,8 @@ func NewSlackPoster(s Secrets) *SlackPoster {
 	return p
 }
 
-// ErrNoSlackToken is posting with nothing to post with.
 var ErrNoSlackToken = errors.New("no Slack token: corgi agent watch auth slack --token xoxp-… [--bot xoxb-…]")
 
-// voice picks the api for a target: what was asked for, else the bot, else
-// the user. Asking for a voice with no token is an error, never a silent
-// fall through to the other one.
 func (p *SlackPoster) voice(as string) (*slackAPI, string, error) {
 	switch strings.TrimSpace(as) {
 	case "me":
@@ -73,7 +61,6 @@ func (p *SlackPoster) voice(as string) (*slackAPI, string, error) {
 	return nil, "", ErrNoSlackToken
 }
 
-// Post says one thing in a channel, in a thread when the target names one.
 func (p *SlackPoster) Post(ctx context.Context, target SlackTarget, text string) (SlackPosted, error) {
 	api, as, err := p.voice(target.As)
 	if err != nil {
@@ -94,7 +81,6 @@ func (p *SlackPoster) Post(ctx context.Context, target SlackTarget, text string)
 		Permalink: slackPermalink(p.Team, res.Channel, res.TS, target.ThreadTS)}, nil
 }
 
-// React puts one emoji on the message the target names.
 func (p *SlackPoster) React(ctx context.Context, target SlackTarget, emoji string) error {
 	api, _, err := p.voice(target.As)
 	if err != nil {
@@ -108,7 +94,6 @@ func (p *SlackPoster) React(ctx context.Context, target SlackTarget, emoji strin
 	}, nil)
 }
 
-// Resolve turns "#name" or "@handle" into a channel id; an id is itself.
 func (p *SlackPoster) Resolve(ctx context.Context, to string) (string, error) {
 	to = strings.TrimSpace(to)
 	if to == "" {

@@ -5,13 +5,8 @@ import (
 	"strings"
 )
 
-// WithDepsFromFlag is the --with-deps flag: expand --services through its
-// depends_on closure.
 var WithDepsFromFlag bool
 
-// applyWithDeps rewrites the --services/--dbServices flag globals to the
-// depends_on closure of the selected services. No-op unless --with-deps and a
-// non-empty --services were given.
 func applyWithDeps(servicesMap map[string]Service) {
 	if !WithDepsFromFlag || len(ServicesItemsFromFlag) == 0 {
 		return
@@ -45,8 +40,6 @@ func sortedSetKeys(m map[string]bool) []string {
 	return out
 }
 
-// ParseProfiles splits a comma-separated --profile value into trimmed,
-// non-empty tokens. Returns nil when nothing meaningful is present.
 func ParseProfiles(value string) []string {
 	var out []string
 	for _, p := range strings.Split(value, ",") {
@@ -57,15 +50,10 @@ func ParseProfiles(value string) []string {
 	return out
 }
 
-// SelectByProfile is the single-profile form of SelectByProfiles.
 func SelectByProfile(corgi *CorgiCompose, profile string) (services, dbs map[string]bool) {
 	return SelectByProfiles(corgi, []string{profile})
 }
 
-// SelectByProfiles returns the services and db_services to run for the union of
-// the given profiles, including the transitive depends_on closure (so a profile
-// pulls in dependencies even when they carry no profiles tag, matching
-// docker-compose). Empty/nil (or a single "") means select all.
 func SelectByProfiles(corgi *CorgiCompose, profiles []string) (services, dbs map[string]bool) {
 	if len(profiles) == 0 || (len(profiles) == 1 && profiles[0] == "") {
 		return selectAll(corgi)
@@ -81,7 +69,6 @@ func SelectByProfiles(corgi *CorgiCompose, profiles []string) (services, dbs map
 	return services, dbs
 }
 
-// selectAll returns every service and db_service (the profile=="" case).
 func selectAll(corgi *CorgiCompose) (services, dbs map[string]bool) {
 	services = map[string]bool{}
 	dbs = map[string]bool{}
@@ -94,8 +81,6 @@ func selectAll(corgi *CorgiCompose) (services, dbs map[string]bool) {
 	return services, dbs
 }
 
-// seedProfileSelection collects services and db_services that directly declare
-// any of the profiles, plus the BFS queue of seed services to expand.
 func seedProfileSelection(corgi *CorgiCompose, profiles []string) (services, dbs map[string]bool, queue []string) {
 	services = map[string]bool{}
 	dbs = map[string]bool{}
@@ -105,7 +90,6 @@ func seedProfileSelection(corgi *CorgiCompose, profiles []string) (services, dbs
 			queue = append(queue, s.ServiceName)
 		}
 	}
-	// db_services may also declare a profile directly.
 	for _, db := range corgi.DatabaseServices {
 		if intersects(db.Profiles, profiles) {
 			dbs[db.ServiceName] = true
@@ -114,8 +98,6 @@ func seedProfileSelection(corgi *CorgiCompose, profiles []string) (services, dbs
 	return services, dbs, queue
 }
 
-// walkDepClosure expands the BFS queue over depends_on_services, pulling each
-// service's transitive service and db dependencies into the selection sets.
 func walkDepClosure(svcByName map[string]Service, services, dbs map[string]bool, queue []string) {
 	for len(queue) > 0 {
 		name := queue[0]
@@ -138,8 +120,6 @@ func walkDepClosure(svcByName map[string]Service, services, dbs map[string]bool,
 	}
 }
 
-// expandWithDeps returns the seed services plus their transitive depends_on
-// closure (services + dbs), for `corgi run --services X --with-deps`.
 func expandWithDeps(servicesMap map[string]Service, seeds []string) (services, dbs map[string]bool) {
 	services = map[string]bool{}
 	dbs = map[string]bool{}
@@ -157,7 +137,6 @@ func expandWithDeps(servicesMap map[string]Service, seeds []string) (services, d
 	return services, dbs
 }
 
-// intersects reports whether any wanted profile is present in have.
 func intersects(have, wanted []string) bool {
 	for _, w := range wanted {
 		if containsString(have, w) {

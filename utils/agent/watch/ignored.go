@@ -8,10 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// The ignored list is a person's decision, and two processes act on it: the
-// phone writes it, the daemon reads it. It lives in its own file so nobody's
-// in-memory copy of state.json can write over it, and it is read fresh every
-// time so the daemon sees an ignore it did not make.
 type ignoredFile struct {
 	Ignored []string `json:"ignored"`
 }
@@ -42,8 +38,6 @@ func writeIgnored(agentDir string, keys []string) error {
 	return atomicfile.Write(ignoredPath(agentDir), data, 0o600)
 }
 
-// Ignore drops an event from the inbox for good and stops the unattended
-// mode picking it up. A person's decision, never corgi's.
 func (s *State) Ignore(key string) error {
 	if key == "" {
 		return nil
@@ -57,7 +51,6 @@ func (s *State) Ignore(key string) error {
 	return writeIgnored(s.agentDir, append(keys, key))
 }
 
-// Unignore puts it back, which is what undoing a run has to do.
 func (s *State) Unignore(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,9 +71,6 @@ func (s *State) IsIgnored(key string) bool {
 	return containsString(readIgnored(s.agentDir), key)
 }
 
-// moveIgnoredOut carries a list an older corgi kept inside state.json into
-// its own file, once. The field stays readable so the move can happen, and
-// is cleared so the next save does not write it back.
 func (s *State) moveIgnoredOut() {
 	if len(s.Ignored) == 0 {
 		return

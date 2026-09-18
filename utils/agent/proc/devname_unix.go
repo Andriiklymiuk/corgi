@@ -9,8 +9,6 @@ import (
 	"syscall"
 )
 
-// findDev returns the entry under dir (with the given name prefix) whose
-// character-device number is dev, or "".
 func findDev(dir, prefix string, dev uint64) string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

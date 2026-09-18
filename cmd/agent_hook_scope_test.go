@@ -10,8 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/scope"
 )
 
-// A write outside the scope is refused with the way to widen; a write
-// inside, or on a branch with no scope, passes without a word.
 func TestTheScopeHookRefusesAWriteOutsideThePaths(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	root := t.TempDir()
@@ -48,8 +46,6 @@ func TestTheScopeHookRefusesAWriteOutsideThePaths(t *testing.T) {
 	}
 }
 
-// A diff over budget stops the turn once with the numbers and the way to
-// raise the budget; the second stop in the same session lets it end.
 func TestTheBudgetHookReportsOnce(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	root := t.TempDir()

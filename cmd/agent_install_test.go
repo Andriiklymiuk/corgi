@@ -7,11 +7,7 @@ import (
 	"testing"
 )
 
-// Service files live in ~/Library/LaunchAgents and ~/.config/systemd/user.
-// Both are world-readable and land in backups, so nothing secret may be
-// written into them — the daemon reads its own config at start instead.
 func TestServiceFilesCarryNoSecrets(t *testing.T) {
-	// The literal templates, as installLaunchd and installSystemd render them.
 	rendered := []string{
 		renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/log", "/tmp/err", map[string]string{"PATH": "/usr/bin"}),
 		renderedSystemdUnit("/usr/local/bin/corgi", map[string]string{"PATH": "/usr/bin"}),
@@ -50,12 +46,7 @@ func TestInstallMechanismIsNamedHonestly(t *testing.T) {
 	}
 }
 
-// corgi decides for itself when a workspace should stay down — an auth failure
-// or repeated crashes. A service manager configured to restart on any non-zero
-// exit would undo exactly those decisions in a loop.
 func TestServiceFilesDoNotFightTheSupervisorsOwnPolicy(t *testing.T) {
-	// Assert on the effective directives, not the prose: the comments in these
-	// templates deliberately name the settings they avoid.
 	plist := stripXMLComments(renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", map[string]string{"PATH": "/usr/bin"}))
 	if strings.Contains(plist, "<key>SuccessfulExit</key>") {
 		t.Error("KeepAlive/SuccessfulExit=false restarts on every error exit, which is precisely the deliberate ones")
@@ -108,9 +99,6 @@ func TestPlistEscapesPathsThatWouldBreakTheXML(t *testing.T) {
 	}
 }
 
-// launchd and systemd start services with a minimal PATH. Without an explicit
-// one the daemon cannot find `claude`, fails to start five times, disables the
-// workspace — and `corgi agent doctor` in the user's shell passes throughout.
 func TestServiceFilesSetAPATH(t *testing.T) {
 	plist := renderedLaunchdPlist("/usr/local/bin/corgi", "/tmp/o", "/tmp/e", map[string]string{"PATH": "/opt/homebrew/bin:/usr/bin"})
 	if !strings.Contains(plist, "<key>PATH</key>") || !strings.Contains(plist, "/opt/homebrew/bin") {
@@ -123,9 +111,6 @@ func TestServiceFilesSetAPATH(t *testing.T) {
 	}
 }
 
-// A PATH entry containing a space is ordinary on macOS ("/Applications/Some
-// App/bin"). Unquoted, systemd truncates the assignment there and the daemon
-// cannot find claude — the exact failure servicePATH exists to prevent.
 func TestSystemdPATHIsQuoted(t *testing.T) {
 	unit := renderedSystemdUnit("/usr/local/bin/corgi", map[string]string{"PATH": "/opt/My Tools/bin:/usr/bin"})
 
@@ -141,7 +126,6 @@ func TestServicePATHIncludesTheUsualClaudeLocations(t *testing.T) {
 			t.Errorf("servicePATH() = %q, missing %q", got, want)
 		}
 	}
-	// The installing shell's PATH is where the user verified their setup.
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
 		if dir != "" && !strings.Contains(got, dir) {
 			t.Errorf("servicePATH() dropped %q from the installing shell", dir)
@@ -160,8 +144,6 @@ func TestServicePATHHasNoDuplicates(t *testing.T) {
 	}
 }
 
-// getDataPath keys on more than PATH. Without these the daemon resolves a
-// different, empty registry than the shell that ran `corgi agent init`.
 func TestServiceFilesCarryTheDataDirEnvironment(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", "/custom/corgi")
 	t.Setenv("HOMEBREW_PREFIX", "/opt/brew")

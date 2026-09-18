@@ -2,9 +2,6 @@ package cmd
 
 import "github.com/spf13/pflag"
 
-// registerServiceWorkdirFlags adds the per-service working-dir overrides shared by
-// run/exec/test: an explicit dir, a reused worktree off a branch, or an in-place
-// checkout. All repointing the same AbsolutePath.
 func registerServiceWorkdirFlags(fs *pflag.FlagSet) {
 	fs.StringArray(
 		"service-dir",

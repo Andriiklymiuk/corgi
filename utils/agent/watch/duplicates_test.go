@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// A ticket already closed as a duplicate is the one piece of work that is
-// certainly wasted, whichever tracker it came from.
 func TestADuplicateOrCancelledTicketIsNotWorthAnyonesTime(t *testing.T) {
 	rules := Rules{Enabled: true}
 	for _, state := range []string{"Duplicate", "duplicate", "Canceled", "Cancelled", "Won't do", "Not planned", "  REJECTED  "} {
@@ -28,7 +26,6 @@ func TestADuplicateOrCancelledTicketIsNotWorthAnyonesTime(t *testing.T) {
 	}
 }
 
-// Asking for a column means you meant it, even a dead-looking one.
 func TestNamedStatesBeatTheDuplicateRule(t *testing.T) {
 	rules := Rules{Enabled: true, States: []string{"Duplicate"}}
 	if !rules.Match(Event{Kind: KindIssueNew, Ref: "ABC-1", State: "Duplicate", Mine: true}) {
@@ -50,12 +47,10 @@ func TestSeveralCommentsOnOnePRAreOneThingToLookAt(t *testing.T) {
 		t.Fatalf("a review on the same PR is still that PR: %d", n)
 	}
 
-	// Another workspace's PR that happens to share a ref is not the same PR.
 	if n := s.SameRefThisRound("web", pr); n != 0 {
 		t.Fatalf("refs are per workspace: %d", n)
 	}
 
-	// A fresh ticket is one event by construction; never collapsed.
 	issue := Event{Kind: KindIssueNew, Ref: "ABC-1"}
 	if n := s.SameRefThisRound("api", issue); n != 0 {
 		t.Fatalf("issues are not collapsed: %d", n)
@@ -64,15 +59,12 @@ func TestSeveralCommentsOnOnePRAreOneThingToLookAt(t *testing.T) {
 		t.Fatalf("issues are never collapsed: %d", n)
 	}
 
-	// The next poll is a new day for that pull request.
 	s.NewRound()
 	if n := s.SameRefThisRound("api", pr); n != 0 {
 		t.Fatalf("a comment next round is news again: %d", n)
 	}
 }
 
-// The real case: a comment arrived on a ticket that was already Done, and
-// the rules had no way to know — comment events carried no column at all.
 func TestACommentOnFinishedWorkIsNotWork(t *testing.T) {
 	rules := Rules{Enabled: true, Comments: true}
 
@@ -86,29 +78,23 @@ func TestACommentOnFinishedWorkIsNotWork(t *testing.T) {
 		}
 	}
 
-	// Work still in flight is exactly what comments are for.
 	for _, state := range []string{"In Progress", "In Review", "Ready", ""} {
 		if !rules.Match(Event{Kind: KindIssueComment, Ref: "ABC-1", State: state, Mine: true}) {
 			t.Errorf("a comment on a %q issue is the point of --comments", state)
 		}
 	}
 
-	// Naming the column means you meant it, even a finished one.
 	asked := Rules{Enabled: true, Comments: true, States: []string{"Done"}}
 	if !asked.Match(Event{Kind: KindIssueComment, Ref: "ABC-1", State: "Done", Mine: true}) {
 		t.Fatal("--states Done is a deliberate ask")
 	}
 
-	// A pull request carries its own state, and merged is finished there too:
-	// see TestACommentOnAMergedPullRequestIsNotWork.
 	pr := Rules{Enabled: true, PRs: true}
 	if !pr.Match(Event{Kind: KindPRReview, Ref: "acme/api#7", State: "open", Mine: true}) {
 		t.Fatal("an open pull request is live work")
 	}
 }
 
-// Ignore is a person saying no thanks. Seen is corgi saying it told you —
-// every delivered event is seen, so the inbox cannot filter on that.
 func TestIgnoringIsNotTheSameAsHavingBeenSeen(t *testing.T) {
 	dir := t.TempDir()
 	s := LoadState(dir)
@@ -131,7 +117,6 @@ func TestIgnoringIsNotTheSameAsHavingBeenSeen(t *testing.T) {
 		t.Fatal("ignoring twice is not an error")
 	}
 
-	// Undoing a run puts it back in front of you.
 	if err := LoadState(dir).Unignore("jira:ABC-1"); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +125,6 @@ func TestIgnoringIsNotTheSameAsHavingBeenSeen(t *testing.T) {
 	}
 }
 
-// A run that stops takes its context with it unless it writes something down.
 func TestARunLeavesSomethingForTheNextOne(t *testing.T) {
 	dir := t.TempDir()
 	log := LoadFixLog(dir)
@@ -164,7 +148,6 @@ func TestARunLeavesSomethingForTheNextOne(t *testing.T) {
 		t.Fatal("it has to survive the daemon that wrote it")
 	}
 
-	// The tail is what a session says at the end, blank lines dropped.
 	if got := TailLines("start\n\nmiddle\n\n  last  \n\n", 2); got != "middle\nlast" {
 		t.Fatalf("tail = %q", got)
 	}
@@ -173,8 +156,6 @@ func TestARunLeavesSomethingForTheNextOne(t *testing.T) {
 	}
 }
 
-// Ten comment fixes and ten whole tickets are the same count and nowhere near
-// the same spend, so the cap has to be able to talk about spend.
 func TestWhatARunCostsIsRemembered(t *testing.T) {
 	dir := t.TempDir()
 	log := LoadFixLog(dir)
@@ -185,8 +166,6 @@ func TestWhatARunCostsIsRemembered(t *testing.T) {
 		log.Finish(key, nil, "", "", now)
 		log.SetSpent(key, pct)
 	}
-	// The median, so one runaway run does not make every later one look
-	// unaffordable.
 	if got := log.TypicalSpend("api"); got != 4 {
 		t.Fatalf("typical spend = %d, want the median 4", got)
 	}
@@ -194,7 +173,6 @@ func TestWhatARunCostsIsRemembered(t *testing.T) {
 		t.Fatalf("a workspace with nothing measured has no figure: %d", got)
 	}
 
-	// A window that reset mid-run reads as a negative; that is not a receipt.
 	log.StartFor(Event{Key: "kz", Workspace: "web", Ref: "kz"}, now)
 	log.Finish("kz", nil, "", "", now)
 	log.SetSpent("kz", -40)
@@ -203,8 +181,6 @@ func TestWhatARunCostsIsRemembered(t *testing.T) {
 	}
 }
 
-// A comment on a pull request that is already merged reads exactly like one
-// on live work, because a notification says nothing about the state.
 func TestACommentOnAMergedPullRequestIsNotWork(t *testing.T) {
 	rules := Rules{Enabled: true, PRs: true, Reviews: true}
 
@@ -216,16 +192,12 @@ func TestACommentOnAMergedPullRequestIsNotWork(t *testing.T) {
 		if why := rules.Why(e); !strings.Contains(why, "not work") {
 			t.Errorf("state %q must say why: %q", state, why)
 		}
-		// Nobody needs to review something already merged either.
 		req := Event{Kind: KindReviewRequested, Ref: "acme/api#7", State: state}
 		if rules.Match(req) {
 			t.Errorf("a review request on a %q pull request is nothing to do", state)
 		}
 	}
 
-	// Live work is exactly what these are for. An empty state means the
-	// source could not say, and guessing it closed would swallow real
-	// feedback.
 	for _, state := range []string{"open", "opened", "draft", ""} {
 		if !rules.Match(Event{Kind: KindPRComment, Ref: "acme/api#7", Mine: true, State: state}) {
 			t.Errorf("a comment on a %q pull request is the point of --prs", state)
@@ -235,16 +207,11 @@ func TestACommentOnAMergedPullRequestIsNotWork(t *testing.T) {
 		}
 	}
 
-	// A review on my own merged PR is also over.
 	if rules.Match(Event{Kind: KindPRReview, Ref: "acme/api#7", Mine: true, State: "merged"}) {
 		t.Fatal("feedback arrives after a merge; acting on it unattended does not")
 	}
 }
 
-// The daemon keeps its State in memory from start; the phone loads a fresh
-// one to ignore a row. Both write the same file whole, so the daemon's next
-// save used to bring the row back — and the daemon never learned it was
-// ignored, so the unattended mode could still pick it up.
 func TestAnIgnoreFromAnotherProcessSurvivesTheDaemonsNextSave(t *testing.T) {
 	dir := t.TempDir()
 	daemon := LoadState(dir)
@@ -253,7 +220,7 @@ func TestAnIgnoreFromAnotherProcessSurvivesTheDaemonsNextSave(t *testing.T) {
 	if err := phone.Ignore("jira:ABC-1"); err != nil {
 		t.Fatal(err)
 	}
-	daemon.MarkSeen("jira:XYZ-9") // any save from the stale copy
+	daemon.MarkSeen("jira:XYZ-9")
 
 	if !LoadState(dir).IsIgnored("jira:ABC-1") {
 		t.Fatal("the daemon's save clobbered the phone's ignore")
@@ -263,8 +230,6 @@ func TestAnIgnoreFromAnotherProcessSurvivesTheDaemonsNextSave(t *testing.T) {
 	}
 }
 
-// An ignored list written by an older corgi lives inside state.json; it has
-// to move to its own file, once, and not come back.
 func TestOldIgnoredListMovesOutOfStateJSON(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "watch"), 0o700); err != nil {
@@ -289,8 +254,6 @@ func TestOldIgnoredListMovesOutOfStateJSON(t *testing.T) {
 	}
 }
 
-// Two failed runs in a row on one ticket trip the breaker; a person
-// unblocks, and the runs before that no longer count toward the next trip.
 func TestTheBreakerCountsFailuresPerTicket(t *testing.T) {
 	dir := t.TempDir()
 	l := LoadFixLog(dir)
@@ -332,8 +295,6 @@ func TestTheBreakerCountsFailuresPerTicket(t *testing.T) {
 	}
 }
 
-// "Thanks! test is ok" is the end of the work, not more of it: no buzz, no
-// fix. A question, a request or a complaint in the same length still is.
 func TestAThankYouIsNotWork(t *testing.T) {
 	for body, ack := range map[string]bool{
 		"Thanks   ! test is ok":                 true,

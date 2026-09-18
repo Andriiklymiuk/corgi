@@ -16,52 +16,19 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// Two things the daemon does on its own once a workspace says so, read
-// from the config every time they are asked — a switch flipped on the
-// phone takes on the next round, no restart:
-//
-//   handOver   a review comment, an asked-for review or a red build on a
-//              branch a session already owns is typed into that session as
-//              the next message, and the row says "handed to api·auth".
-//   autoMerge  a pull request of mine that the forge calls ready — checks
-//              green, approved — is merged, and the inbox says so.
-//   autoAllow  a permission prompt for a tool that only reads is answered
-//              by the daemon, and the session's row counts it.
-//   doneWhen   a session that stops with changes on its branch has the
-//              workspace's own checks run; a red one is typed back as the
-//              next message, so "done" means the tests say so.
-//   compactAt  a session past that much context is told to /compact the
-//              next time it stops, before it forgets.
-//   rebase     a session that stops behind main with no conflicts and a
-//              clean tree is rebased where it sits; with handOver, one
-//              that would conflict is told which files.
-
-// Policy is the part of a workspace's watch config that concerns a live
-// session rather than the tracker.
 type Policy struct {
-	// Workspace is the registered id the session was matched to.
 	Workspace string
 	AutoAllow string
 	DoneWhen  []string
 	CompactAt int
-	// HandOver and Rebase are what a session behind main gets when it
-	// stops: the conflicts typed in, or a rebase where it sits.
-	HandOver bool
-	Rebase   bool
-	// Lessons says a red gate is written down for the next session.
-	Lessons bool
-	// AutoCarry moves a session that hit its quota to another of the
-	// workspace's accounts with budget, once per limit (2.23).
+	HandOver  bool
+	Rebase    bool
+	Lessons   bool
 	AutoCarry bool
-	// Headless lets a message for a session whose terminal is gone run
-	// as a headless turn, claude -p --resume (2.23).
-	Headless bool
-	// DayCap is the workspace's tokens-per-day budget; the daemon rings
-	// once when the day's sessions pass it (2.24).
-	DayCap int64
+	Headless  bool
+	DayCap    int64
 }
 
-// automation is the two switches for a workspace, as the config says now.
 func (d *Daemon) automation(spec WatchSpec) (handOver, autoMerge bool) {
 	wc := d.watchConfig(spec)
 	if wc == nil {
@@ -70,8 +37,6 @@ func (d *Daemon) automation(spec WatchSpec) (handOver, autoMerge bool) {
 	return wc.HandOver, wc.AutoMerge
 }
 
-// watchConfig is the workspace's watch as the config says now, nil when
-// there is none.
 func (d *Daemon) watchConfig(spec WatchSpec) *config.WatchConfig {
 	dir := spec.AgentDir
 	if dir == "" {
@@ -85,7 +50,6 @@ func (d *Daemon) watchConfig(spec WatchSpec) *config.WatchConfig {
 	return config.Resolve(spec.Workspace, repo, user).Watch
 }
 
-// learn writes one lesson for a workspace, when it asked for them.
 func (d *Daemon) learn(spec WatchSpec, source, text string) {
 	if wc := d.watchConfig(spec); wc == nil || !wc.Lessons {
 		return
@@ -95,7 +59,6 @@ func (d *Daemon) learn(spec WatchSpec, source, text string) {
 	}
 }
 
-// sessionOnPull is the live session whose pull request this is.
 func (d *Daemon) sessionOnPull(link string) (sessions.Session, bool) {
 	if link == "" || d.Sessions == nil {
 		return sessions.Session{}, false
@@ -111,8 +74,6 @@ func (d *Daemon) sessionOnPull(link string) (sessions.Session, bool) {
 	return sessions.Session{}, false
 }
 
-// handOverEvent types a PR-kind event into the session on that pull
-// request, when the workspace asked for it. Reports whether it did.
 func (d *Daemon) handOverEvent(ctx context.Context, spec WatchSpec, e watch.Event) bool {
 	on, _ := d.automation(spec)
 	if !on {
@@ -143,9 +104,6 @@ func (d *Daemon) handOverEvent(ctx context.Context, spec WatchSpec, e watch.Even
 	return true
 }
 
-// pullChanged runs what a change in a pull request's standing asks for:
-// a merge when it is ready and the workspace merges on its own; a word to
-// the session on it when the checks went red.
 func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link string, was, now watch.PullStatus, known bool) {
 	handOver, autoMerge := d.automation(spec)
 	if handOver && link != "" && now.Checks == "failing" && (!known || was.Checks != "failing") {
@@ -175,12 +133,6 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 	}
 }
 
-// allowsByPolicy says whether the prompt a session just raised is one the
-// workspace's policy answers: the tool only reads, the policy is reads,
-// and the session sits in iTerm2 — the one host that takes keys without
-// its window coming forward, so nothing on the desk moves. A Bash command
-// is never a read here, whatever it says; elsewhere the prompt rings as
-// it always did.
 func (d *Daemon) allowsByPolicy(s sessions.Session) bool {
 	if d.Policy == nil || s.Pending == nil || s.Pending.Risk != config.AutoAllowReads || s.Pending.Tool == "Bash" {
 		return false
@@ -191,10 +143,6 @@ func (d *Daemon) allowsByPolicy(s sessions.Session) bool {
 	return d.Policy(s).AutoAllow == config.AutoAllowReads
 }
 
-// autoAllow presses Enter into the session for the prompt it raised, a
-// beat after the prompt was drawn, and counts it on the row. The prompt
-// may have been answered at the keyboard meanwhile; then there is nothing
-// pending and nothing is typed.
 func (d *Daemon) autoAllow(s sessions.Session) {
 	d.swaps.Add(1)
 	defer d.swaps.Done()
@@ -222,15 +170,8 @@ func (d *Daemon) autoAllow(s sessions.Session) {
 	d.flushSessions()
 }
 
-// autoAllowDelay is how long after the prompt appears the Enter lands:
-// enough for Claude Code to draw it, short enough that nobody notices.
 var autoAllowDelay = 400 * time.Millisecond
 
-// gateDone runs the workspace's done-when commands for a session that
-// just stopped with work on its branch. All green: the row says so. One
-// red: its tail is typed into the session as the next message and the
-// session is working again — up to gateTries times in a row, after which
-// the daemon rings a person instead of arguing with a model.
 func (d *Daemon) gateDone(s sessions.Session) {
 	if d.Policy == nil || s.Cwd == "" || d.Sessions == nil {
 		return
@@ -250,7 +191,6 @@ func (d *Daemon) gateDone(s sessions.Session) {
 	}()
 }
 
-// claimGate takes the session's gate; false when a run already holds it.
 func (d *Daemon) claimGate(id string) bool {
 	d.gateMu.Lock()
 	defer d.gateMu.Unlock()
@@ -270,7 +210,6 @@ func (d *Daemon) releaseGate(id string) {
 	d.gateMu.Unlock()
 }
 
-// runGate runs the commands in order and stops at the first red one.
 func (d *Daemon) runGate(s sessions.Session, cmds []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), gateBudget)
 	defer cancel()
@@ -285,9 +224,6 @@ func (d *Daemon) runGate(s sessions.Session, cmds []string) {
 	d.flushSessions()
 }
 
-// gateRed counts the failure on the row and types it back as the next
-// message — or, once the session has argued with it enough, rings a person
-// and writes the lesson down.
 func (d *Daemon) gateRed(ctx context.Context, s sessions.Session, cmd, out string, err error) {
 	fails := d.Sessions.SetGate(s.ID, false, cmd, time.Now())
 	d.flushSessions()
@@ -302,7 +238,6 @@ func (d *Daemon) gateRed(ctx context.Context, s sessions.Session, cmd, out strin
 	}
 }
 
-// gateLesson is the line the next session reads about a check that stayed red.
 func gateLesson(s sessions.Session, cmd string, fails int, out string) string {
 	where := s.Branch
 	if where == "" {
@@ -311,8 +246,6 @@ func gateLesson(s sessions.Session, cmd string, fails int, out string) string {
 	return "`" + cmd + "` stayed red after " + strconv.Itoa(fails) + " tries on " + where + " — " + lastLine(out)
 }
 
-// hasWork says the session has something on its branch worth checking:
-// the minute sweep saw changed files, or it ran tests itself.
 func hasWork(s sessions.Session) bool {
 	return (s.Changes != nil && s.Changes.Files > 0) || s.Tests != nil
 }
@@ -326,8 +259,6 @@ func (d *Daemon) shell(ctx context.Context, dir, cmd string) ([]byte, error) {
 	return c.CombinedOutput()
 }
 
-// gateMessage is what the session reads next: the command, the last lines
-// it printed, and what to do — the same words a reviewer would use.
 func gateMessage(cmd, out string, err error) string {
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) > gateTail {
@@ -346,9 +277,6 @@ const (
 	gateTail   = 12
 )
 
-// compactIfFull types /compact into a session that stopped past the
-// workspace's context threshold — once per episode: a compact takes a
-// while to show in the transcript, and typing two is worse than none.
 func (d *Daemon) compactIfFull(s sessions.Session) {
 	if d.Policy == nil || s.Context == nil || d.Sessions == nil {
 		return

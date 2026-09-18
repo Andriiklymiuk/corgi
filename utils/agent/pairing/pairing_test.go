@@ -14,7 +14,6 @@ func storeIn(t *testing.T) string {
 	return StorePath(t.TempDir())
 }
 
-// sessionAt returns a session whose clock the test controls.
 func sessionAt(t *testing.T, clock *time.Time) (*Session, string) {
 	t.Helper()
 	s, code, err := NewSession()
@@ -51,8 +50,6 @@ func TestPairIssuesATokenAndRecordsTheDevice(t *testing.T) {
 	}
 }
 
-// The whole point of a pairing code: seeing it in transit must not let it be
-// used again.
 func TestCodeCannotBeReplayed(t *testing.T) {
 	path := storeIn(t)
 	now := time.Now()
@@ -125,7 +122,6 @@ func TestNormalizeCodeIgnoresTypingNoise(t *testing.T) {
 	now := time.Now()
 	session, code := sessionAt(t, &now)
 
-	// As someone would type it off a screen.
 	spaced := strings.ToLower(code[:5] + "-" + code[5:])
 
 	if err := session.Redeem(spaced); err != nil {
@@ -143,7 +139,6 @@ func TestNewCodeIsUnambiguousAndUnique(t *testing.T) {
 		if len(code) != codeLength {
 			t.Fatalf("code %q has length %d, want %d", code, len(code), codeLength)
 		}
-		// Characters that are misread off a screen are excluded on purpose.
 		if strings.ContainsAny(code, "ILOU") {
 			t.Errorf("code %q contains an ambiguous character", code)
 		}
@@ -168,7 +163,6 @@ func TestTokensAreUnique(t *testing.T) {
 	}
 }
 
-// A readable store must not be a usable credential.
 func TestStoreHoldsHashesNotTokens(t *testing.T) {
 	path := storeIn(t)
 	now := time.Now()
@@ -239,7 +233,6 @@ func TestAuthorizeRejectsUnknownTokens(t *testing.T) {
 	}
 }
 
-// Losing a phone must not mean re-pairing everything else.
 func TestRevokeAffectsOnlyThatDevice(t *testing.T) {
 	path := storeIn(t)
 	var tokens []string
@@ -283,8 +276,6 @@ func TestRevokeIsCaseInsensitiveAndReportsMisses(t *testing.T) {
 	}
 }
 
-// Reinstalling the app re-pairs under the same name; the old token must stop
-// working, which is also what someone whose phone was stolen wants.
 func TestRePairingReplacesTheOldToken(t *testing.T) {
 	path := storeIn(t)
 	now := time.Now()
@@ -329,8 +320,6 @@ func TestPairRequiresADeviceName(t *testing.T) {
 	}
 }
 
-// A failed pairing must not consume the code, or one fat-fingered name would
-// force a restart.
 func TestABadDeviceNameDoesNotBurnTheCode(t *testing.T) {
 	path := storeIn(t)
 	now := time.Now()
@@ -352,7 +341,7 @@ func TestNilSessionIsClosed(t *testing.T) {
 	if err := s.Redeem("anything"); err == nil {
 		t.Error("a nil session must refuse to redeem")
 	}
-	s.Close() // must not panic
+	s.Close()
 }
 
 func TestCloseEndsTheWindow(t *testing.T) {
@@ -400,9 +389,6 @@ func TestConcurrentRedeemYieldsExactlyOneWinner(t *testing.T) {
 	}
 }
 
-// The pairing endpoint is unauthenticated and may be tunnelled, so only errors
-// about the caller's own input may be reported back. Anything else names local
-// paths and file modes.
 func TestCallerFacingErrorsAreTagged(t *testing.T) {
 	path := storeIn(t)
 	now := time.Now()

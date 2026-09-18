@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// Tokens are kept per device, replaced on re-register, dropped when Expo
-// says the device is gone; a send is one request for every phone.
 func TestTokensAreKeptPerDeviceAndDroppedWhenGone(t *testing.T) {
 	dir := t.TempDir()
 	s := Load(dir)
@@ -60,9 +58,6 @@ func TestTokensAreKeptPerDeviceAndDroppedWhenGone(t *testing.T) {
 	}
 }
 
-// A phone says what it wants to hear: a permission always gets through;
-// in quiet hours only what needs a person does; with "only needs" the
-// rest never does.
 func TestAPhoneHearsWhatItAskedFor(t *testing.T) {
 	q, err := ParseQuiet("23:00-07:00")
 	if err != nil {

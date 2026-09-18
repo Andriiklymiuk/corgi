@@ -9,8 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// stackWithAgentConfig writes a minimal corgi stack whose .corgi/agent.yml
-// carries the given body, and returns its absolute path.
 func stackWithAgentConfig(t *testing.T, agentYML string) string {
 	t.Helper()
 	stack := t.TempDir()
@@ -29,8 +27,6 @@ func stackWithAgentConfig(t *testing.T, agentYML string) string {
 	return stack
 }
 
-// registerStack writes a one-workspace registry under agentDir pointing at
-// stack, and returns the workspace id.
 func registerStack(t *testing.T, agentDir, id, stack string) {
 	t.Helper()
 	reg := &workspace.Registry{}

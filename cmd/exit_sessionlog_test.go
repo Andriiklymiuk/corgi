@@ -9,9 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// A command that exits on an error path must still close the session log.
-// logWriter holds a trailing line that has no newline yet, and only Close
-// flushes it — so a bare os.Exit dropped whatever was written last.
 func TestExitProcessFlushesSessionLog(t *testing.T) {
 	dir := t.TempDir()
 	origPath := utils.CorgiComposePathDir

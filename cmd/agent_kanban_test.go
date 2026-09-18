@@ -10,9 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// The column is worked out, never dragged: a run puts a card in Running, a
-// pull request in Review, the breaker in Blocked, a handoff in Ready, a
-// merged ticket in Done — and Blocked beats everything but Done.
 func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
@@ -27,7 +24,6 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 		{Key: "k-ignored", Ref: "ABC-6", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
 		{Key: "k-session", Ref: "ABC-7", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
 		{Key: "k-worked", Ref: "ABC-9", Workspace: "api", Kind: watch.KindIssueNew, State: "Todo", At: now},
-		// Tasks of your own: the column is the state; a pick or a session moves it.
 		{Key: "task:1", Ref: "TASK-1", Workspace: "api", Kind: watch.KindTask, State: "Todo", Title: "write the thing", Body: "how", At: now},
 		{Key: "task:2", Ref: "TASK-2", Workspace: "api", Kind: watch.KindTask, State: "Doing", At: now},
 		{Key: "task:3", Ref: "TASK-3", Workspace: "api", Kind: watch.KindTask, State: "Review", At: now},
@@ -39,8 +35,6 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	picks.Set("k-inbox", "page", now.Add(-time.Hour))
 	fixes.StartFor(events[1], now.Add(-time.Minute))
 	fixes.StartFor(events[2], now.Add(-time.Hour))
-	// A run that happened on the ignored event, finished with nothing to
-	// show: ignoring the ticket takes the run's card with it.
 	fixes.StartFor(events[5], now.Add(-2*time.Hour))
 	fixes.Finish("k-ignored", nil, "", "", now.Add(-90*time.Minute))
 	fixes.Finish("k-review", []string{"https://github.com/a/b/pull/3"}, "", "", now.Add(-30*time.Minute))
@@ -51,11 +45,9 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	}}
 	sess := []sessions.Session{
 		{ID: "s1", Label: "api", Display: "api", Status: sessions.StatusWorking, Branch: "feature/ABC-7/thing"},
-		// Opened by "Work on it": on main still, the ticket in its environment.
 		{ID: "s2", Label: "api", Display: "api 2", Status: sessions.StatusWorking, Branch: "main", Ticket: "abc-9"},
 	}
 
-	// The daemon read the run's pull request: checks green, approved.
 	pulls := watch.LoadPullLog(dir)
 	_ = pulls.Set("a/b#3", watch.PullStatus{State: "open", Checks: "passing", Review: "approved", At: now})
 
@@ -68,8 +60,6 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	}
 	want := map[string]string{"ABC-1": ColInbox, "ABC-2": ColRunning, "ABC-3": ColReview, "ABC-4": ColBlocked, "ABC-5": ColDone, "ABC-7": ColRunning, "ABC-8": ColReady, "ABC-9": ColRunning,
 		"TASK-1": ColInbox, "TASK-2": ColRunning, "TASK-3": ColReview, "TASK-4": ColDone, "TASK-5": ColRunning}
-	// A card in Review with a green, approved pull request says so — the
-	// difference between "a pull request exists" and "press Merge".
 	if c := got["ABC-3"]; c.Pull == nil || !c.Pull.Ready() || c.Why != "ready to merge · checks ✓ · approved" {
 		t.Fatalf("ABC-3: pull %+v why %q", c.Pull, c.Why)
 	}
@@ -105,9 +95,6 @@ func TestTheKanbanDerivesEveryColumn(t *testing.T) {
 	if cards[0].Column != ColInbox || cards[len(cards)-1].Column != ColDone {
 		t.Errorf("columns in order: %s … %s", cards[0].Column, cards[len(cards)-1].Column)
 	}
-	// Every card carries the ladder's word, so no surface works it out
-	// its own way: the same green pull request is "ready to merge" on the
-	// board, in the inbox and on the phone.
 	standing := map[string]string{"ABC-1": sessions.StandNew, "ABC-2": sessions.StandWorking, "ABC-3": sessions.StandReady,
 		"ABC-4": sessions.StandBlocked, "ABC-5": sessions.StandDone, "ABC-7": sessions.StandWorking, "ABC-8": sessions.StandHandoff,
 		"ABC-9": sessions.StandWorking, "TASK-3": sessions.StandReview, "TASK-4": sessions.StandDone}
@@ -137,9 +124,6 @@ func TestRowStandingReadsThePullFirst(t *testing.T) {
 	}
 }
 
-// A ticket commented on twice: the older comment settled a day ago and
-// dropped its card, the newer one made it again — and the board showed the
-// ticket twice, which the phone flagged as two rows with one key.
 func TestOneCardPerRefWhenAnOlderEventOnItSettled(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()

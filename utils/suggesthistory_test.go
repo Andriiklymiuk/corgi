@@ -24,7 +24,7 @@ func TestSlugify(t *testing.T) {
 }
 
 func TestLoadSuggestHistory_MissingIsEmpty(t *testing.T) {
-	root := t.TempDir() // no .corgi/ inside
+	root := t.TempDir()
 	h, err := LoadSuggestHistory(root)
 	if err != nil {
 		t.Fatalf("expected no error for missing history, got: %v", err)
@@ -80,7 +80,7 @@ func TestLoadSuggestHistory_ParsesFixtureInOrder(t *testing.T) {
 }
 
 func TestAppendSuggestEntry_CreatesDirAndRoundTrips(t *testing.T) {
-	root := t.TempDir() // no corgi_services/ yet
+	root := t.TempDir()
 	e := SuggestEntry{
 		Slug: "orders-composite-index", Title: "Add composite index", Lens: "eng",
 		Status: "filed", Ticket: "ABC-321", Ts: time.Date(2026, 6, 8, 9, 23, 11, 0, time.UTC),
@@ -89,7 +89,6 @@ func TestAppendSuggestEntry_CreatesDirAndRoundTrips(t *testing.T) {
 		t.Fatalf("AppendSuggestEntry failed: %v", err)
 	}
 
-	// corgi_services/ created with 0o755, file 0o644 (match SaveUserConfig).
 	di, err := os.Stat(filepath.Join(root, ".corgi", "corgi_services"))
 	if err != nil {
 		t.Fatalf("expected corgi_services/ created: %v", err)
@@ -105,8 +104,6 @@ func TestAppendSuggestEntry_CreatesDirAndRoundTrips(t *testing.T) {
 		t.Errorf("history file mode = %o, want 0644", fi.Mode().Perm())
 	}
 
-	// Per-developer state must be gitignored (docs/skill promise it stays
-	// out of commits), via corgi_services/.gitignore.
 	gi, err := os.ReadFile(filepath.Join(root, ".corgi", "corgi_services", ".gitignore"))
 	if err != nil {
 		t.Fatalf("expected corgi_services/.gitignore: %v", err)
@@ -123,7 +120,6 @@ func TestAppendSuggestEntry_CreatesDirAndRoundTrips(t *testing.T) {
 		t.Fatalf("appended entry not read back: %+v", h.Entries)
 	}
 
-	// A second append preserves the first (append-only).
 	if err := AppendSuggestEntry(root, SuggestEntry{Slug: "second", Status: "skipped", Ts: e.Ts}); err != nil {
 		t.Fatal(err)
 	}
@@ -138,11 +134,11 @@ func TestShouldSkip(t *testing.T) {
 	cooldown := 30 * 24 * time.Hour
 
 	h := &SuggestHistory{Version: 1, Entries: []SuggestEntry{
-		{Slug: "filed-one", Status: "filed", Ts: now.Add(-100 * 24 * time.Hour)}, // old but filed → always blocks
+		{Slug: "filed-one", Status: "filed", Ts: now.Add(-100 * 24 * time.Hour)},
 		{Slug: "dismissed-recent", Status: "dismissed", Ts: now.Add(-5 * 24 * time.Hour)},
 		{Slug: "dismissed-old", Status: "dismissed", Ts: now.Add(-40 * 24 * time.Hour)},
 		{Slug: "proposed-recent", Status: "proposed", Ts: now.Add(-3 * 24 * time.Hour)},
-		{Slug: "skipped-recent", Status: "skipped", Ts: now.Add(-1 * 24 * time.Hour)}, // audit only, never blocks
+		{Slug: "skipped-recent", Status: "skipped", Ts: now.Add(-1 * 24 * time.Hour)},
 	}}
 
 	tests := []struct {
@@ -168,21 +164,18 @@ func TestShouldSkip(t *testing.T) {
 func TestRateLimited(t *testing.T) {
 	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
 	h := &SuggestHistory{Version: 1, Entries: []SuggestEntry{
-		{Slug: "a", Status: "filed", Ts: now.Add(-2 * 24 * time.Hour)},  // within week
-		{Slug: "b", Status: "filed", Ts: now.Add(-10 * 24 * time.Hour)}, // outside week
+		{Slug: "a", Status: "filed", Ts: now.Add(-2 * 24 * time.Hour)},
+		{Slug: "b", Status: "filed", Ts: now.Add(-10 * 24 * time.Hour)},
 		{Slug: "c", Status: "dismissed", Ts: now.Add(-1 * 24 * time.Hour)},
 	}}
 
-	// default (<=0) → treated as 1; one filed in the week → limited.
 	if limited := RateLimited(h, now, 0); !limited {
 		t.Error("maxPerWeek<=0 should default to 1 and block with one filed in the week")
 	}
-	// max 2 → one filed in the week is under the cap.
 	if limited := RateLimited(h, now, 2); limited {
 		t.Error("maxPerWeek=2 with one filed in the week should NOT be limited")
 	}
 
-	// two filed in the week, cap 2 → limited.
 	h2 := &SuggestHistory{Version: 1, Entries: []SuggestEntry{
 		{Slug: "a", Status: "filed", Ts: now.Add(-1 * 24 * time.Hour)},
 		{Slug: "b", Status: "filed", Ts: now.Add(-3 * 24 * time.Hour)},
@@ -191,7 +184,6 @@ func TestRateLimited(t *testing.T) {
 		t.Error("two filed in the week with cap 2 should be limited")
 	}
 
-	// hard ceiling: cap 5 is clamped to 3. Three filed in the week → limited.
 	h3 := &SuggestHistory{Version: 1, Entries: []SuggestEntry{
 		{Slug: "a", Status: "filed", Ts: now.Add(-1 * 24 * time.Hour)},
 		{Slug: "b", Status: "filed", Ts: now.Add(-2 * 24 * time.Hour)},
@@ -200,7 +192,6 @@ func TestRateLimited(t *testing.T) {
 	if limited := RateLimited(h3, now, 5); !limited {
 		t.Error("cap 5 must clamp to 3; three filed in the week should be limited")
 	}
-	// two filed in the week, ceiling-clamped cap 3 → not limited.
 	if limited := RateLimited(h2, now, 5); limited {
 		t.Error("two filed with clamped cap 3 should NOT be limited")
 	}

@@ -16,7 +16,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
-// readFrame reads one SSE event off the stream: its name and data line.
 func readFrame(t *testing.T, r *bufio.Reader) (string, string) {
 	t.Helper()
 	var event, data string
@@ -59,8 +58,6 @@ func openStream(t *testing.T, url, token string, headers map[string]string) (*ht
 	return resp, bufio.NewReader(resp.Body)
 }
 
-// The stream says which feeds moved, the moment their files do — and never
-// what they hold. Nobody listening, nothing runs.
 func TestTheStreamSaysWhatMovedWhileSomeoneListens(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", base)
@@ -84,7 +81,6 @@ func TestTheStreamSaysWhatMovedWhileSomeoneListens(t *testing.T) {
 		t.Fatal("a listener starts the watch")
 	}
 
-	// The daemon wrote the board.
 	if err := os.WriteFile(filepath.Join(dir, "sessions.json"), []byte(`{"sessions":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +94,6 @@ func TestTheStreamSaysWhatMovedWhileSomeoneListens(t *testing.T) {
 		t.Fatal("a frame says what moved, never what it holds")
 	}
 
-	// The watch wrote the inbox and its pulls in one tick: one frame.
 	_ = os.MkdirAll(filepath.Join(dir, "watch"), 0o700)
 	_ = os.WriteFile(filepath.Join(dir, "watch", "events.jsonl"), []byte("{}\n"), 0o600)
 	_ = os.WriteFile(filepath.Join(dir, "watch", "pulls.json"), []byte("{}"), 0o600)
@@ -118,8 +113,6 @@ func TestTheStreamSaysWhatMovedWhileSomeoneListens(t *testing.T) {
 	}
 }
 
-// A listener that comes back with the seq it last saw, and missed
-// something, is told to read everything once.
 func TestTheStreamCatchesUpAListenerThatWasAway(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", base)
@@ -148,8 +141,6 @@ func TestTheStreamCatchesUpAListenerThatWasAway(t *testing.T) {
 	first.Body.Close()
 }
 
-// A keyed device gets every frame sealed like an answer: the words "board
-// moved" are its business and nobody else's on the wire.
 func TestTheStreamSealsEveryFrameForAKeyedDevice(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", base)
@@ -179,7 +170,6 @@ func TestTheStreamSealsEveryFrameForAKeyedDevice(t *testing.T) {
 	serverPub, _ := pairing.ParsePublicKey(paired.ServerPubKey)
 	key, _ := pairing.SharedKeyOnDevice(phone, serverPub)
 
-	// Without the header, a keyed device is refused like everywhere else.
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/launch/stream", nil)
 	req.Header.Set("Authorization", "Bearer "+paired.Token)
 	plain, _ := http.DefaultClient.Do(req)
@@ -218,8 +208,6 @@ func TestTheStreamSealsEveryFrameForAKeyedDevice(t *testing.T) {
 	}
 }
 
-// A send that carries an id is typed once: the phone's queue may hand the
-// same message over twice when the tunnel dropped mid-answer.
 func TestASendWithAnIdIsTypedOnce(t *testing.T) {
 	if !sendOnce.first("phone:abc", time.Now()) {
 		t.Fatal("first time through")

@@ -6,24 +6,14 @@ import (
 	"strings"
 )
 
-// The changed surface is the part of a diff a reviewer reads first: what
-// other code can call, send or query — exported functions and types,
-// routes, schemas, migrations, contracts — with what was added, removed or
-// changed. Read from the patch itself, so it needs no toolchain and works
-// the same across every repository of a stack.
-
-// SurfaceChange is one declaration or contract file that changed.
 type SurfaceChange struct {
-	Kind string `json:"kind"` // symbol, route, contract, migration, config
-	Name string `json:"name"`
-	Path string `json:"path"`
-	// Op is added, removed or changed.
-	Op string `json:"op"`
-	// Breaking marks a removal or a signature change of something public.
-	Breaking bool `json:"breaking,omitempty"`
+	Kind     string `json:"kind"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Op       string `json:"op"`
+	Breaking bool   `json:"breaking,omitempty"`
 }
 
-// RepoSurface is one repository's changed surface.
 type RepoSurface struct {
 	Service string          `json:"service"`
 	Repo    string          `json:"repo,omitempty"`
@@ -45,7 +35,6 @@ var (
 	configRe = regexp.MustCompile(`(?i)(^|/)(corgi-compose\.ya?ml|docker-compose[^/]*\.ya?ml|\.env\.example|package\.json|go\.mod|pyproject\.toml|Cargo\.toml|Gemfile|serverless\.ya?ml|terraform/[^/]+\.tf)$`)
 )
 
-// SurfaceOf reads the changed surface out of a repository's file diffs.
 func SurfaceOf(rd RepoDiff) RepoSurface {
 	out := RepoSurface{Service: rd.Service, Repo: rd.Repo}
 	for _, f := range rd.Files {
@@ -146,7 +135,6 @@ func baseName(path string) string {
 	return path
 }
 
-// declOf names the public declaration a line makes, by the file's language.
 func declOf(path, line string) (kind, name string) {
 	if m := routeRe.FindStringSubmatch(line); m != nil {
 		route := m[2]
@@ -197,8 +185,6 @@ func firstGroup(groups []string) string {
 	return ""
 }
 
-// contractDecls lists the types, paths, messages a contract file gained or
-// lost, so "openapi.yaml changed" says what changed in it.
 func contractDecls(f FileDiff) []SurfaceChange {
 	var out []SurfaceChange
 	seen := map[string]bool{}
@@ -231,7 +217,6 @@ func contractDecls(f FileDiff) []SurfaceChange {
 	return out
 }
 
-// sqlBreaks says whether a migration drops or alters something.
 func sqlBreaks(patch string) bool {
 	for _, line := range strings.Split(patch, "\n") {
 		if !strings.HasPrefix(line, "+") {
@@ -244,7 +229,6 @@ func sqlBreaks(patch string) bool {
 	return false
 }
 
-// SurfaceMarkdown renders the changed surface for a pull request body.
 func SurfaceMarkdown(repos []RepoSurface) string {
 	var b strings.Builder
 	b.WriteString("## Changed surface\n")

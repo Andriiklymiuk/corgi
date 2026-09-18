@@ -58,8 +58,6 @@ func installFakeDockerCmd(t *testing.T) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// chdirStack writes a corgi-compose.yml with one postgres db, chdir's into it,
-// and scaffolds the db service dir so composeImage's `docker compose` can run.
 func chdirStack(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
@@ -82,8 +80,6 @@ func chdirStack(t *testing.T) {
 	}
 }
 
-// resetSnapshotFlags saves the package-level command flags and restores them,
-// defaulting to the create path with the restore prompt suppressed.
 func resetSnapshotFlags(t *testing.T) {
 	t.Helper()
 	pl, prm, pf, ry, rf := snapList, snapRM, snapForce, restoreYes, restoreForce
@@ -91,8 +87,6 @@ func resetSnapshotFlags(t *testing.T) {
 	snapList, snapRM, snapForce, restoreYes, restoreForce = false, "", false, true, false
 }
 
-// Drives the full create → list → restore → rm path through the cobra entry
-// points with a fake docker. None of these hit an os.Exit branch.
 func TestRunDbSnapshotAndRestore(t *testing.T) {
 	chdirStack(t)
 	installFakeDockerCmd(t)
@@ -109,15 +103,12 @@ func TestRunDbSnapshotAndRestore(t *testing.T) {
 		t.Fatalf("snapshot archive not created: %v", err)
 	}
 
-	// --list path
 	snapList = true
 	runDbSnapshot(c, nil)
 	snapList = false
 
-	// restore the named snapshot (restoreYes suppresses the prompt)
 	runDbRestore(c, []string{"snap1"})
 
-	// --rm path removes the pair
 	snapRM = "snap1"
 	runDbSnapshot(c, nil)
 	snapRM = ""
@@ -132,7 +123,6 @@ func TestRunDbSnapshotDefaultName(t *testing.T) {
 	resetSnapshotFlags(t)
 	_, c := newTestComposeCommand()
 
-	// no name arg → a timestamp default name is generated and the snapshot saved
 	runDbSnapshot(c, nil)
 
 	items, err := utils.ListSnapshots("main")
@@ -144,7 +134,6 @@ func TestRunDbSnapshotDefaultName(t *testing.T) {
 	}
 }
 
-// feedStdin replaces os.Stdin with a pipe carrying s for the duration of the test.
 func feedStdin(t *testing.T, s string) {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -173,7 +162,7 @@ func TestRunDbRestorePromptAbort(t *testing.T) {
 	createSnap(t, "snap1")
 
 	restoreYes = false
-	feedStdin(t, "n\n") // decline → aborts before any docker work
+	feedStdin(t, "n\n")
 	_, c := newTestComposeCommand()
 	runDbRestore(c, []string{"snap1"})
 
@@ -188,7 +177,7 @@ func TestRunDbRestorePromptAccept(t *testing.T) {
 	createSnap(t, "snap1")
 
 	restoreYes = false
-	feedStdin(t, "y\n") // accept → proceeds through RunRestore
+	feedStdin(t, "y\n")
 	_, c := newTestComposeCommand()
 	runDbRestore(c, []string{"snap1"})
 }
@@ -198,8 +187,6 @@ func TestRunDbRestoreFromPath(t *testing.T) {
 	installFakeDockerCmd(t)
 	createSnap(t, "snap1")
 
-	// passing the archive path (not a bare name) takes the FromPath branch, which
-	// also verifies the recorded sha256 — written correctly by runDbSnapshot.
 	_, c := newTestComposeCommand()
 	runDbRestore(c, []string{snapArchive(t, "snap1")})
 }
@@ -213,8 +200,6 @@ func snapArchive(t *testing.T, name string) string {
 	return arc
 }
 
-// resolution must succeed end-to-end; this also proves the os.Exit branches in
-// runDbSnapshot/runDbRestore (bad config) won't fire in the run tests below.
 func TestDbSnapshotResolvesViaCobra(t *testing.T) {
 	chdirStack(t)
 	_, c := newTestComposeCommand()

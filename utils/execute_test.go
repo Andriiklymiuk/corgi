@@ -346,7 +346,6 @@ func TestRemoveProcess(t *testing.T) {
 	ProcessHandles = nil
 	t.Cleanup(func() { ProcessHandles = prev })
 
-	// Use a real process so we get a valid *os.Process
 	cmd := exec.Command("true")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -560,7 +559,6 @@ func TestKillAllStoredProcessesEmptiesHandlesRace(t *testing.T) {
 	if len(ProcessHandles) != 0 {
 		t.Fatalf("expected ProcessHandles empty after kill, got %d", len(ProcessHandles))
 	}
-	// Second sweep must be a safe no-op.
 	KillAllStoredProcesses()
 }
 
@@ -662,15 +660,12 @@ func TestRunCleanupCommandsSurvivesKillAll(t *testing.T) {
 	ProcessHandles = nil
 	t.Cleanup(func() { ProcessHandles = prev })
 
-	// Add a tracked dummy so KillAllStoredProcesses has something to kill.
 	dummy := exec.Command("sleep", "30")
 	SetProcessGroup(dummy)
 	if err := dummy.Start(); err != nil {
 		t.Fatal(err)
 	}
 	addProcess(dummy.Process)
-	// Reap the SIGKILL'd dummy to avoid leaking a zombie into the test
-	// runner. Wait returns an exit error after SIGKILL — ignore it.
 	t.Cleanup(func() { _ = dummy.Wait() })
 
 	dir := t.TempDir()
@@ -684,7 +679,6 @@ func TestRunCleanupCommandsSurvivesKillAll(t *testing.T) {
 		}, dir, "")
 	}()
 
-	// Kill tracked procs while cleanup runs — cleanup must not be affected.
 	time.Sleep(50 * time.Millisecond)
 	KillAllStoredProcesses()
 
@@ -694,9 +688,6 @@ func TestRunCleanupCommandsSurvivesKillAll(t *testing.T) {
 	}
 }
 
-// fakeLogWriter implements the optional interfaces runManaged/markServiceLogStatus
-// probe (SetStatus/CurrentStatus/Path) without touching the filesystem. Writes
-// can come from a detached child process goroutine, so access is mutex-guarded.
 type fakeLogWriter struct {
 	mu     sync.Mutex
 	buf    strings.Builder
@@ -725,7 +716,6 @@ func TestSetAndCloseLogWriters(t *testing.T) {
 		t.Fatalf("LogFilePath got %q", got)
 	}
 
-	// Replacing closes the previous writer (fd-leak guard).
 	second := &fakeLogWriter{path: "/tmp/b.log"}
 	SetLogWriter("svc", second)
 	if !first.closed {
@@ -768,7 +758,6 @@ func TestMarkServiceLogStatusIfNotCrashed_DoesNotDowngrade(t *testing.T) {
 	w := &fakeLogWriter{status: LogStatusCrashed}
 	SetLogWriter("svc", w)
 
-	// A later success must not overwrite an earlier crash.
 	markServiceLogStatusIfNotCrashed("svc", LogStatusOK)
 	if w.status != LogStatusCrashed {
 		t.Fatalf("crashed status was downgraded to %v", w.status)
@@ -915,7 +904,6 @@ func TestStopDockerRunnerServicesNonexistent(t *testing.T) {
 	CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	// No service dir / no Makefile: make fails but the call must be non-fatal.
 	StopDockerRunnerServices([]string{"absent-svc"})
 }
 
@@ -937,7 +925,6 @@ func TestRunManagedCrashFiresCallback(t *testing.T) {
 	SetOnServiceCrash(func(name string) { crashed <- name })
 	t.Cleanup(func() { SetOnServiceCrash(nil) })
 
-	// Non-zero exit (not a missing executable) → crash path, callback fires.
 	err := RunServiceCmd("crashy", "exit 3", t.TempDir(), false)
 	if err == nil {
 		t.Fatal("expected error from non-zero exit")
@@ -1007,7 +994,6 @@ func TestStartDetached_WritesDirectlyToLogFile(t *testing.T) {
 	if !strings.Contains(got, "hello") || !strings.Contains(got, "world") {
 		t.Errorf("log missing child output, got %q", got)
 	}
-	// Child writes to the fd directly, so lines are raw (no timestamp prefix).
 	if strings.HasPrefix(got, "20") && got[10:11] == "T" {
 		t.Errorf("expected raw lines without timestamp prefix, got %q", got)
 	}
@@ -1039,7 +1025,6 @@ func TestServiceShellRespectsOverride(t *testing.T) {
 	}
 }
 
-// The resolved shell must actually run a bash-ism; that is the whole point.
 func TestServiceShellRunsBashBuiltins(t *testing.T) {
 	resetServiceShell()
 	t.Cleanup(resetServiceShell)

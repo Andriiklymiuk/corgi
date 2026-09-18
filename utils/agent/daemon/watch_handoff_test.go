@@ -10,9 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A packet an earlier run left is the next run's first input — typed state
-// in the prompt, with its check re-run — and a packet written during a run
-// is what the run leaves behind, instead of six lines of stdout.
 func TestARunReadsAndLeavesAHandoffPacket(t *testing.T) {
 	dir := t.TempDir()
 	spec := WatchSpec{Workspace: "api", Dir: dir}
@@ -48,9 +45,6 @@ func TestARunReadsAndLeavesAHandoffPacket(t *testing.T) {
 	}
 }
 
-// With isolate on, a run gets worktrees on a branch named after the ticket
-// and is told to work only there; the branch is on the fix record so undo
-// can release it. Without the callback, nothing changes.
 func TestAnIsolatedRunIsToldWhereToWork(t *testing.T) {
 	if got := FixBranch("acme/api#42"); got != "corgi/acme-api-42" {
 		t.Fatalf("branch: %s", got)
@@ -73,8 +67,6 @@ func TestAnIsolatedRunIsToldWhereToWork(t *testing.T) {
 	}
 }
 
-// The run's JSON envelope is taken apart: words to the log and the PR scan,
-// numbers to the record. Output that is not the envelope is used as it came.
 func TestARunsReceiptIsRecorded(t *testing.T) {
 	raw := []byte(`{"type":"result","subtype":"success","result":"opened https://github.com/a/b/pull/9\nall green","total_cost_usd":0.4321,"num_turns":7,"usage":{"input_tokens":1000,"output_tokens":200,"cache_read_input_tokens":30000,"cache_creation_input_tokens":500}}`)
 	out, r := unwrapResult(raw)
@@ -102,8 +94,6 @@ func TestARunsReceiptIsRecorded(t *testing.T) {
 	}
 }
 
-// A fresh ticket is planned on the strong model, a red build fixed on the
-// cheap one, and a ticket whose last run failed steps up.
 func TestTheRunnerPicksAModelByKindAndSteppsUpAfterAFailure(t *testing.T) {
 	spec := WatchSpec{}
 	if fixModel(spec, watch.Event{Kind: watch.KindIssueNew}, 0) != "opus" || fixModel(spec, watch.Event{Kind: watch.KindCIFailed}, 0) != "sonnet" {

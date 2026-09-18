@@ -24,8 +24,6 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// A branch measured against main: how many commits main gained since the
-// branch left, and which files a rebase would stop on.
 func TestBehindCountsMainAndNamesConflicts(t *testing.T) {
 	dir := t.TempDir()
 	gitIn(t, dir, "init", "-q", "-b", "main")
@@ -44,7 +42,6 @@ func TestBehindCountsMainAndNamesConflicts(t *testing.T) {
 	if commits, conflicts, up, ok := gitBehind(dir); !ok || commits != 0 || len(conflicts) != 0 || up != "main" {
 		t.Fatalf("nothing moved yet: %d %v %s %v", commits, conflicts, up, ok)
 	}
-	// Main moves on another file: behind, no conflict.
 	gitIn(t, dir, "checkout", "-q", "main")
 	write("b.go", "package b // main\n")
 	gitIn(t, dir, "commit", "-qam", "main moves b")
@@ -52,7 +49,6 @@ func TestBehindCountsMainAndNamesConflicts(t *testing.T) {
 	if commits, conflicts, _, ok := gitBehind(dir); !ok || commits != 1 || len(conflicts) != 0 {
 		t.Fatalf("one commit, no conflict: %d %v %v", commits, conflicts, ok)
 	}
-	// Main touches the feature's file too: a conflict, named.
 	gitIn(t, dir, "checkout", "-q", "main")
 	write("a.go", "package a // main\n")
 	gitIn(t, dir, "commit", "-qam", "main moves a")
@@ -66,9 +62,6 @@ func TestBehindCountsMainAndNamesConflicts(t *testing.T) {
 	}
 }
 
-// A session that stops behind main is rebased where it sits when the
-// workspace says so and nothing is in the way; one that would conflict is
-// told which files under hand-over. Each once per state.
 func TestAStoppedSessionBehindMainIsRebasedOrTold(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
@@ -108,14 +101,12 @@ func TestAStoppedSessionBehindMainIsRebasedOrTold(t *testing.T) {
 	if s.Behind == nil || !s.Behind.Told || s.Behind.Rebased != 1 {
 		t.Fatalf("told and counted: %+v", s.Behind)
 	}
-	// The same state again: nothing. The sweep says the same numbers: still nothing.
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
 	d.swaps.Wait()
 	if d.Sessions.SetBehind("s1", &sessions.Behind{Commits: 3, Upstream: "origin/main", At: now}) {
 		t.Fatal("same numbers are not a change")
 	}
-	// Main moves again, this time into the session's files: told, not rebased.
 	d.Sessions.SetBehind("s1", &sessions.Behind{Commits: 5, Conflicts: []string{"api/x.go"}, Upstream: "origin/main", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})

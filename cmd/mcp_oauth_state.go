@@ -17,12 +17,9 @@ import (
 const (
 	oauthStateName    = "oauth.json"
 	oauthStateVersion = 1
-	// maxOAuthClients bounds the DCR store: Claude registers a client per
-	// connection and never unregisters.
-	maxOAuthClients = 200
+	maxOAuthClients   = 200
 )
 
-// oauthClient is one registered client, from DCR or a CIMD document.
 type oauthClient struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
@@ -30,15 +27,11 @@ type oauthClient struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
-// rotatedHash is a refresh token that was exchanged; kept a day so a replay
-// of it is recognised as theft.
 type rotatedHash struct {
 	Hash string    `json:"hash"`
 	At   time.Time `json:"at"`
 }
 
-// tokenFamily is one grant: the refresh token that is current, the ones it
-// replaced, and the access tokens it issued (hashes only).
 type tokenFamily struct {
 	ID            string        `json:"id"`
 	ClientID      string        `json:"clientId"`
@@ -50,7 +43,6 @@ type tokenFamily struct {
 	ExpiresAt     time.Time     `json:"expiresAt"`
 }
 
-// oauthState is what oauth.json holds.
 type oauthState struct {
 	Version  int           `json:"version"`
 	Clients  []oauthClient `json:"clients"`
@@ -59,8 +51,6 @@ type oauthState struct {
 
 func oauthStatePath(agentDir string) string { return filepath.Join(agentDir, oauthStateName) }
 
-// loadOAuthState reads the file; missing is empty. Like the device store,
-// a group- or world-readable file is refused: it lists every live grant.
 func loadOAuthState(path string) (*oauthState, error) {
 	st := &oauthState{}
 	info, err := os.Stat(path)
@@ -83,7 +73,6 @@ func loadOAuthState(path string) (*oauthState, error) {
 	return st, nil
 }
 
-// saveOAuthState writes the file atomically, owner-only.
 func saveOAuthState(path string, st *oauthState) error {
 	st.Version = oauthStateVersion
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -105,8 +94,6 @@ func (st *oauthState) findClient(id string) (oauthClient, bool) {
 	return oauthClient{}, false
 }
 
-// addClient stores c and, past the cap, evicts the oldest clients that have
-// no live family.
 func (st *oauthState) addClient(c oauthClient, now time.Time) {
 	st.Clients = append(st.Clients, c)
 	if len(st.Clients) <= maxOAuthClients {
@@ -131,7 +118,6 @@ func (st *oauthState) addClient(c oauthClient, now time.Time) {
 	st.Clients = kept
 }
 
-// randomToken is prefix plus 32 random bytes, base64url without padding.
 func randomToken(prefix string) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

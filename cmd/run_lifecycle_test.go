@@ -43,7 +43,6 @@ func TestSpawnDetachedServices_SkipsNoStartCommand(t *testing.T) {
 		called = true
 		return fakeProcess(1), nil
 	}
-	// Service with no Start and no docker runner port → nothing to spawn.
 	corgi := &utils.CorgiCompose{Services: []utils.Service{{ServiceName: "noop"}}}
 	if got := spawnDetachedServices(corgi); len(got) != 0 {
 		t.Fatalf("expected no procs, got %+v", got)
@@ -86,24 +85,20 @@ func TestSpawnDetachedServices_StartErrorIsSkipped(t *testing.T) {
 }
 
 func TestRunDetachedBeforeStart_NilBeforeStartIsNoop(t *testing.T) {
-	// No BeforeStart → returns without touching the filesystem or shelling out.
 	runDetachedBeforeStart(utils.Service{ServiceName: "api"})
 }
 
 func TestRunServiceAfterStop_MissingServiceIsNoop(t *testing.T) {
 	corgi := &utils.CorgiCompose{Services: []utils.Service{{ServiceName: "api"}}}
-	// Unknown name → findService returns nil → no-op, no panic.
 	runServiceAfterStop(corgi, "ghost")
-	// Known service with no AfterStart → also a no-op.
 	runServiceAfterStop(corgi, "api")
 }
 
 func TestSettleDetached_EmptyIsNoop(t *testing.T) {
-	settleDetached(nil) // must not sleep or panic on empty input
+	settleDetached(nil)
 }
 
 func TestSettleDetached_SkipsPidZero(t *testing.T) {
-	// pid==0 (docker runner) is left with whatever status it had.
 	procs := []detachedProc{{name: "dbx", pid: 0, status: "running"}}
 	settleDetached(procs)
 	if procs[0].status != "running" {
@@ -112,14 +107,13 @@ func TestSettleDetached_SkipsPidZero(t *testing.T) {
 }
 
 func TestKillDetached_SkipsPgidZero(t *testing.T) {
-	// pgid<=0 must be skipped; with no positive pgids this is a safe no-op.
 	killDetached([]detachedProc{{name: "dbx", pgid: 0}})
 }
 
 func TestReadySignal_MarkIsIdempotent(t *testing.T) {
 	s := &readySignal{started: make(chan struct{}), ready: make(chan struct{})}
 	s.markStarted()
-	s.markStarted() // second close must not panic (sync.Once)
+	s.markStarted()
 	s.markReady()
 	s.markReady()
 	select {
@@ -139,7 +133,7 @@ func TestEmitDepReady_HumanAndJSON(t *testing.T) {
 	t.Cleanup(func() { utils.JSONOutput = orig })
 
 	utils.JSONOutput = false
-	emitDepReady("api", "pg", "") // empty condition defaults to "ready"; must not panic
+	emitDepReady("api", "pg", "")
 	emitDepReady("api", "pg", "started")
 
 	utils.JSONOutput = true
@@ -149,20 +143,16 @@ func TestEmitDepReady_HumanAndJSON(t *testing.T) {
 
 func TestRunPreflight_NoDockerNoVPNIsNoop(t *testing.T) {
 	c := newRootedCmd()
-	// Neither UseAwsVpn nor docker runners → neither init path is taken.
 	runPreflight(c, &utils.CorgiCompose{})
 }
 
 func TestRunBeforeStart_EmptyIsNoop(t *testing.T) {
-	runBeforeStart(&utils.CorgiCompose{}) // empty BeforeStart → no commands run
+	runBeforeStart(&utils.CorgiCompose{})
 }
 
 func TestRunDetached_BlockedWhenAlreadyRunning(t *testing.T) {
 	dir := chdirToTempCompose(t, "name: x\n")
 	statePath := utils.RunStatePath(dir)
-	// Seed a running state for a docker-runner entry (pid 0 stays "running"
-	// after reconcile via ContainerRunning — but we stub neither; instead use a
-	// live pid so PidAlive keeps it running).
 	if err := utils.WriteRunState(statePath, utils.RunState{
 		ComposePath: filepath.Join(dir, "corgi-compose.yml"),
 		Services: []utils.RunStateEntry{{
@@ -171,10 +161,6 @@ func TestRunDetached_BlockedWhenAlreadyRunning(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// detachAlreadyRunning calls os.Exit(1) on a live running service without
-	// --force, so assert on the guard helper directly rather than runDetached.
-	// blocked==false means "proceed"; with a live pid and force=true it should
-	// reconcile + clear and allow proceed.
 	if blocked := detachAlreadyRunning(statePath, true); blocked {
 		t.Error("force should clear prior state and allow proceed")
 	}
@@ -183,10 +169,8 @@ func TestRunDetached_BlockedWhenAlreadyRunning(t *testing.T) {
 	}
 }
 
-// osProcess aliases *os.Process so the seam signature in tests reads cleanly.
 type osProcess = os.Process
 
-// fakeProcess builds a minimal *os.Process for seam stubs; only Pid is read.
 func fakeProcess(pid int) *osProcess { return &os.Process{Pid: pid} }
 
 func TestOmitted_FlagAndEnv(t *testing.T) {

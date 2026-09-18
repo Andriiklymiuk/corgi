@@ -15,9 +15,6 @@ func keys(m map[string]bool) []string {
 	return out
 }
 
-// sample stack: api(backend,full)+worker(backend) on the backend side,
-// web(frontend,full) on the frontend side, db has no profiles but api
-// depends_on_db it, and cache has no profiles and nobody depends on it.
 func sampleCompose() *CorgiCompose {
 	return &CorgiCompose{
 		Services: []Service{
@@ -38,8 +35,8 @@ func sampleCompose() *CorgiCompose {
 			},
 		},
 		DatabaseServices: []DatabaseService{
-			{ServiceName: "db"},    // no profiles, pulled in via depends_on_db
-			{ServiceName: "cache"}, // no profiles, never referenced
+			{ServiceName: "db"},
+			{ServiceName: "cache"},
 		},
 	}
 }
@@ -62,7 +59,6 @@ func TestSelectByProfileMembersAndTransitiveDeps(t *testing.T) {
 	corgi := sampleCompose()
 	services, dbs := SelectByProfile(corgi, "backend")
 
-	// api + worker are members; api's depends_on_db pulls in db (no profile).
 	wantSvc := []string{"api", "worker"}
 	if got := keys(services); !reflect.DeepEqual(got, wantSvc) {
 		t.Errorf("services = %v, want %v", got, wantSvc)
@@ -74,8 +70,6 @@ func TestSelectByProfileMembersAndTransitiveDeps(t *testing.T) {
 }
 
 func TestSelectByProfileServiceDepPulledInWithoutProfileTag(t *testing.T) {
-	// frontend selects web; web depends_on_db db (no profile) -> db included,
-	// api/worker excluded.
 	corgi := sampleCompose()
 	services, dbs := SelectByProfile(corgi, "frontend")
 
@@ -90,8 +84,6 @@ func TestSelectByProfileServiceDepPulledInWithoutProfileTag(t *testing.T) {
 }
 
 func TestSelectByProfileTransitiveServiceClosure(t *testing.T) {
-	// A profile member whose service dep has no profile tag still pulls that
-	// dep in (transitive over depends_on_services).
 	corgi := &CorgiCompose{
 		Services: []Service{
 			{ServiceName: "front", Profiles: []string{"web"}, DependsOnServices: []DependsOnService{{Name: "gateway"}}},
@@ -135,8 +127,6 @@ func TestParseProfiles(t *testing.T) {
 }
 
 func TestSelectByProfilesUnion(t *testing.T) {
-	// backend selects api+worker (+db via depends_on_db); frontend selects web
-	// (+db). Union is all three services + db, cache still excluded.
 	corgi := sampleCompose()
 	services, dbs := SelectByProfiles(corgi, []string{"backend", "frontend"})
 
@@ -170,7 +160,6 @@ func TestSelectByProfilesUnknownOnlyIsEmpty(t *testing.T) {
 }
 
 func TestSelectByProfilesMixedKnownUnknown(t *testing.T) {
-	// One known (frontend), one unknown — use the known match, ignore the rest.
 	corgi := sampleCompose()
 	services, dbs := SelectByProfiles(corgi, []string{"frontend", "nope"})
 	if got := keys(services); !reflect.DeepEqual(got, []string{"web"}) {
@@ -182,7 +171,6 @@ func TestSelectByProfilesMixedKnownUnknown(t *testing.T) {
 }
 
 func TestSelectByProfileDbDeclaredDirectly(t *testing.T) {
-	// A db_service may itself declare a profile and gets selected on its own.
 	corgi := &CorgiCompose{
 		DatabaseServices: []DatabaseService{
 			{ServiceName: "metrics", Profiles: []string{"observability"}},

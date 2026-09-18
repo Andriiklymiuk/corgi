@@ -1,11 +1,3 @@
-// Package sessions is the daemon's registry of live Claude Code sessions: one
-// entry per interactive `claude`, fed by the hooks `corgi agent track enable`
-// installs, kept honest by a reaper, and laid out onto a fixed board of slots
-// for a Stream Deck or any other key-per-session surface.
-//
-// It renders nothing and talks to nobody. The daemon publishes its Snapshot
-// as sessions.json; a plugin watches that file; presses come back as spool
-// commands. See docs/agent.md, "Sessions on a Stream Deck".
 package sessions
 
 import (
@@ -18,27 +10,16 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// Status is what a session is doing, in the five words a key can show.
 type Status string
 
 const (
-	// StatusWorking: the model is running or a tool is executing.
-	StatusWorking Status = "working"
-	// StatusNeedsInput: a permission prompt, a question, or an API failure —
-	// the one state that justifies looking at the board.
+	StatusWorking    Status = "working"
 	StatusNeedsInput Status = "needs_input"
-	// StatusDone: the turn finished; the session waits for a prompt.
-	StatusDone Status = "done"
-	// StatusStale: alive, but nothing has happened for StaleAfter.
-	StatusStale Status = "stale"
-	// StatusGone: the process exited but the slot is pinned, so it stays
-	// reserved and dimmed until unpinned.
-	StatusGone Status = "gone"
-	// StatusUnknown: found by rescan, no hook has spoken for it yet.
-	StatusUnknown Status = "unknown"
-	// StatusLimited: the account hit its usage limit. Nothing to answer;
-	// Detail says when it resets.
-	StatusLimited Status = "limited"
+	StatusDone       Status = "done"
+	StatusStale      Status = "stale"
+	StatusGone       Status = "gone"
+	StatusUnknown    Status = "unknown"
+	StatusLimited    Status = "limited"
 )
 
 var (
@@ -48,25 +29,13 @@ var (
 	quotaText    = regexp.MustCompile(`(?i)\b(session|usage|weekly|daily) limit\b|\bresets?\s`)
 )
 
-// LimitKind is why a session cannot go on, because the two reasons want
-// opposite reactions: a used-up window is hours and a clock, an overloaded
-// API is minutes and a retry.
 type LimitKind string
 
 const (
-	// LimitQuota: the account's usage window is spent. Comes back at a
-	// known time; carry to another account or wait for the reset.
-	LimitQuota LimitKind = "quota"
-	// LimitOverload: the API asked to try later. Nothing to do with the
-	// account; wait a few minutes and try again.
+	LimitQuota    LimitKind = "quota"
 	LimitOverload LimitKind = "overload"
 )
 
-// ClassifyLimit says whether a StopFailure or notification is a limit rather
-// than something to answer, which kind, and when it resets ("12:10pm
-// (Europe/Kiev)") when the text says. An error typed rate_limit with no
-// reset time and overload wording is an overload: Claude Code uses the
-// same type for both.
 func ClassifyLimit(errorType, message string) (LimitKind, string, bool) {
 	if errorType != "rate_limit" && !limitText.MatchString(message) && !overloadText.MatchString(message) {
 		return "", "", false
@@ -81,14 +50,11 @@ func ClassifyLimit(errorType, message string) (LimitKind, string, bool) {
 	return LimitQuota, reset, true
 }
 
-// LimitReset is ClassifyLimit without the kind, for callers that only need
-// to know a limit was hit.
 func LimitReset(errorType, message string) (bool, string) {
 	_, reset, ok := ClassifyLimit(errorType, message)
 	return ok, reset
 }
 
-// ModelLabel is the short name a person uses for a model id.
 func ModelLabel(id string) string {
 	switch {
 	case strings.Contains(id, "fable"):
@@ -103,277 +69,127 @@ func ModelLabel(id string) string {
 	return id
 }
 
-// StaleAfter is how long a working or done session may sit without an event
-// before it is called stale. A needs_input session never goes stale: it is
-// waiting on a person, and that is the fact worth keeping on the key.
 const StaleAfter = 30 * time.Minute
 
-// HostKind says where a session's terminal lives, which decides how focus
-// reaches it.
 type HostKind string
 
 const (
-	// HostVSCodeTerminal: an integrated terminal. Exact window and tab when
-	// the corgi VS Code extension is installed; app-level otherwise.
 	HostVSCodeTerminal HostKind = "vscode-terminal"
-	// HostVSCodePanel: the Claude Code extension's own panel, bound through
-	// the extension host's pid.
-	HostVSCodePanel HostKind = "vscode-panel"
-	// HostITerm and HostTerminalApp: macOS terminal emulators, app-level.
-	HostITerm       HostKind = "iterm"
-	HostTerminalApp HostKind = "terminal"
-	// HostUnknown: nothing recognisable; label from the cwd, no focus target.
-	HostUnknown HostKind = "unknown"
+	HostVSCodePanel    HostKind = "vscode-panel"
+	HostITerm          HostKind = "iterm"
+	HostTerminalApp    HostKind = "terminal"
+	HostUnknown        HostKind = "unknown"
 )
 
-// Event is one hook firing, as `corgi agent hook emit` writes it to the spool.
-// It carries only the fields the registry reads: nothing typed at Claude, no
-// tool inputs, no transcript path.
 type Event struct {
-	// Name is the hook_event_name.
-	Name string `json:"name"`
-	// Model is the model the transcript's newest assistant turn ran on, as
-	// the hook read it. The board needs it because "the limit lifted" and
-	// "they switched model" look identical without it.
-	Model     string `json:"model,omitempty"`
-	SessionID string `json:"sessionId"`
-	Cwd       string `json:"cwd,omitempty"`
-	// ConfigDir is CLAUDE_CONFIG_DIR as the hook saw it; empty for the
-	// default account.
-	ConfigDir string `json:"configDir,omitempty"`
-	// Source is SessionStart's startup|resume|clear|compact|fork.
-	Source string `json:"source,omitempty"`
-	// Reason is SessionEnd's clear|resume|logout|prompt_input_exit|other.
-	Reason string `json:"reason,omitempty"`
-	// Tool is the tool name on PreToolUse, PostToolUse and PermissionRequest.
-	Tool string `json:"tool,omitempty"`
-	// Notification is Notification's notification_type.
-	Notification string `json:"notification,omitempty"`
-	// Message is Claude's own notification text, already trimmed.
-	Message string `json:"message,omitempty"`
-	// Error is StopFailure's error type.
-	Error string `json:"error,omitempty"`
-	// Subject is the one safe word about a tool's input: a file's base name,
-	// a command's program, a pattern. The hook reduces the input to this
-	// before anything is written; the input itself is never spooled.
-	Subject string `json:"subject,omitempty"`
-	// Risk is one word about what the tool would do — reads, writes,
-	// destructive — decided in the hook from the input it then drops.
-	Risk string `json:"risk,omitempty"`
-	// Context is the session's context-window fill as the hook read it from
-	// the transcript's newest assistant turn. The path stays with the hook;
-	// only the numbers travel.
-	Context *usage.Context `json:"context,omitempty"`
-	// Title is the chat's name as its panel tab shows it, read from the
-	// transcript on Stop and SessionStart.
-	Title string `json:"title,omitempty"`
-	// Branch is the cwd's checked-out branch; Summary the first line of what
-	// Claude last said and PR the last pull request link it mentioned, both
-	// read from the transcript on Stop.
-	Branch  string `json:"branch,omitempty"`
-	Summary string `json:"summary,omitempty"`
-	PR      string `json:"pr,omitempty"`
-	// Window is CORGI_VSCODE_WINDOW, injected by the corgi VS Code extension
-	// into every integrated terminal of its window.
-	Window string `json:"window,omitempty"`
-	// Ticket and TicketKey are CORGI_TICKET and CORGI_TICKET_KEY: the
-	// tracker ref(s) and inbox key a session was opened for by "Work on it",
-	// so the board can say a session is on the ticket before any branch is.
-	Ticket    string `json:"ticket,omitempty"`
-	TicketKey string `json:"ticketKey,omitempty"`
-	// Attempt is CORGI_ATTEMPT: "<ref>/<n>" when the session is one of
-	// several opened on the same ticket to compare — a fan-out.
-	Attempt string `json:"attempt,omitempty"`
-	// Bot is CORGI_BOT: the named bot this session was opened as.
-	Bot string `json:"bot,omitempty"`
-	// Agent names the CLI the event came from when it is not Claude Code
-	// — "codex", "gemini" — reported through corgi agent event.
-	Agent string `json:"agent,omitempty"`
-	// TermProgram and TermSession are TERM_PROGRAM and the emulator's own
-	// session id, for sessions outside an editor.
-	TermProgram string `json:"termProgram,omitempty"`
-	TermSession string `json:"termSession,omitempty"`
-	// ClaudePID is the process the hook belongs to, and Ancestors its parent
-	// chain up to init. The reaper probes the first; window binding joins on
-	// the second.
-	ClaudePID int   `json:"claudePid,omitempty"`
-	Ancestors []int `json:"ancestors,omitempty"`
-	// Names are the ancestors' process names, in the same order. They say
-	// which editor a terminal belongs to ("Cursor Helper (Plugin)") when no
-	// extension is there to say so.
-	Names []string `json:"names,omitempty"`
-	// TTY is the claude process's controlling terminal device, which names
-	// the exact iTerm2 or Terminal.app tab.
-	TTY uint64    `json:"tty,omitempty"`
-	At  time.Time `json:"at"`
+	Name         string         `json:"name"`
+	Model        string         `json:"model,omitempty"`
+	SessionID    string         `json:"sessionId"`
+	Cwd          string         `json:"cwd,omitempty"`
+	ConfigDir    string         `json:"configDir,omitempty"`
+	Source       string         `json:"source,omitempty"`
+	Reason       string         `json:"reason,omitempty"`
+	Tool         string         `json:"tool,omitempty"`
+	Notification string         `json:"notification,omitempty"`
+	Message      string         `json:"message,omitempty"`
+	Error        string         `json:"error,omitempty"`
+	Subject      string         `json:"subject,omitempty"`
+	Risk         string         `json:"risk,omitempty"`
+	Context      *usage.Context `json:"context,omitempty"`
+	Title        string         `json:"title,omitempty"`
+	Branch       string         `json:"branch,omitempty"`
+	Summary      string         `json:"summary,omitempty"`
+	PR           string         `json:"pr,omitempty"`
+	Window       string         `json:"window,omitempty"`
+	Ticket       string         `json:"ticket,omitempty"`
+	TicketKey    string         `json:"ticketKey,omitempty"`
+	Attempt      string         `json:"attempt,omitempty"`
+	Bot          string         `json:"bot,omitempty"`
+	Agent        string         `json:"agent,omitempty"`
+	TermProgram  string         `json:"termProgram,omitempty"`
+	TermSession  string         `json:"termSession,omitempty"`
+	ClaudePID    int            `json:"claudePid,omitempty"`
+	Ancestors    []int          `json:"ancestors,omitempty"`
+	Names        []string       `json:"names,omitempty"`
+	TTY          uint64         `json:"tty,omitempty"`
+	At           time.Time      `json:"at"`
 }
 
-// Host is where a session's terminal was found.
 type Host struct {
-	Kind     HostKind `json:"kind"`
-	WindowID string   `json:"windowId,omitempty"`
-	// App is the editor's application name ("Visual Studio Code", "Cursor"),
-	// as its window reported it. What `open -a` is given.
-	App string `json:"app,omitempty"`
-	// Folder is the workspace folder focus should open: the window's first
-	// folder when a window is known, otherwise the registered workspace or
-	// the cwd.
-	Folder string `json:"folder,omitempty"`
-	// ShellPID and Terminal name the integrated terminal tab, when the join
-	// found one.
-	ShellPID    int    `json:"shellPid,omitempty"`
-	Terminal    string `json:"terminal,omitempty"`
-	TermProgram string `json:"termProgram,omitempty"`
-	// Connected is true while the window's extension record is on disk, so
-	// a tab reveal can actually be delivered.
-	Connected bool `json:"connected,omitempty"`
+	Kind        HostKind `json:"kind"`
+	WindowID    string   `json:"windowId,omitempty"`
+	App         string   `json:"app,omitempty"`
+	Folder      string   `json:"folder,omitempty"`
+	ShellPID    int      `json:"shellPid,omitempty"`
+	Terminal    string   `json:"terminal,omitempty"`
+	TermProgram string   `json:"termProgram,omitempty"`
+	Connected   bool     `json:"connected,omitempty"`
 }
 
-// Session is one tracked Claude Code process.
 type Session struct {
-	ID string `json:"id"`
-	// Label is the display name: the registered workspace id when the cwd is
-	// inside one, else the cwd's base name. Display is the same made unique
-	// across live sessions, and is what a key shows.
-	Label   string `json:"label"`
-	Display string `json:"display,omitempty"`
-	Cwd     string `json:"cwd,omitempty"`
-	// Folder is the workspace root the label came from, if any.
-	Folder    string   `json:"folder,omitempty"`
-	Profile   string   `json:"profile,omitempty"`
-	ConfigDir string   `json:"configDir,omitempty"`
-	ClaudePID int      `json:"claudePid,omitempty"`
-	Ancestors []int    `json:"ancestors,omitempty"`
-	Names     []string `json:"names,omitempty"`
-	TTY       uint64   `json:"tty,omitempty"`
-	// Window, TermProgram and TermSession are kept from the hook so the join
-	// can be redone whenever the set of windows changes.
-	Window      string    `json:"window,omitempty"`
-	TermProgram string    `json:"termProgram,omitempty"`
-	TermSession string    `json:"termSession,omitempty"`
-	Host        Host      `json:"host"`
-	Status      Status    `json:"status"`
-	StatusSince time.Time `json:"statusSince"`
-	// Tool is the running or requested tool; Detail the one line under the
-	// label (a permission's tool, an error type, Claude's notification).
-	Tool         string    `json:"tool,omitempty"`
-	Detail       string    `json:"detail,omitempty"`
-	StartedAt    time.Time `json:"startedAt"`
-	LastActivity time.Time `json:"lastActivity"`
-	// FocusError is the last failed focus attempt, cleared by the next event
-	// or a focus that worked. FocusAt is when the attempt was made, so a
-	// plugin that reconnects can tell a fresh failure from one it already
-	// flashed.
-	FocusError string    `json:"focusError,omitempty"`
-	FocusAt    time.Time `json:"focusAt,omitempty"`
-	// Context is how full the context window is, from the last hook that
-	// could read it. Absent until a turn has completed.
-	Context *usage.Context `json:"context,omitempty"`
-	// Pending is the permission the session is waiting on, when that is what
-	// needs_input means: what `corgi agent answer` would answer.
-	Pending *Pending `json:"pending,omitempty"`
-	// Title is what the Claude Code panel tab is called, when known: how a
-	// window tells one chat tab from another.
-	Title string `json:"title,omitempty"`
-	// Model is what this session is running on now.
-	Model string `json:"model,omitempty"`
-	// ResumedBy says what took a limited session back to work: "clock" when
-	// the runtime picked the turn up by itself, "person" when someone typed.
-	// A person typing is not a limit lifting — they may have switched model,
-	// or account, or simply waited — and they were at the keyboard, so it is
-	// not news either.
-	ResumedBy string `json:"resumedBy,omitempty"`
-	// Note is the owner's own line under the label (`corgi agent note`).
-	// Kept until dismissed or cleared.
-	Note string `json:"note,omitempty"`
-	// Stuck is a working session that has produced no event for StuckAfter:
-	// probably spinning, or waiting on a call that will not return.
-	Stuck bool `json:"stuck,omitempty"`
-	// Ticket is the tracker ref(s) the session was opened for ("ABC-1" or
-	// "ABC-1,ABC-2"), TicketKey the inbox key; from the launcher's env.
-	Ticket    string `json:"ticket,omitempty"`
-	TicketKey string `json:"ticketKey,omitempty"`
-	// Attempt is "<ref>/<n>" for one of several sessions opened on the same
-	// ticket to compare; the board groups them and one gets picked.
-	Attempt string `json:"attempt,omitempty"`
-	// Home is the directory the session started in: Claude Code names
-	// its transcript folder after it, whatever the session has cd'd to since.
-	Home string `json:"home,omitempty"`
-	// ReadAt is when a phone last read this session's conversation
-	// (POST /launch/transcript): the row shows an eye while it is recent,
-	// so the laptop always knows.
-	ReadAt time.Time `json:"readAt,omitzero"`
-	// Unread is what Claude said since a phone last read this session —
-	// filled in for the phone from the transcript, never stored here.
-	Unread *Unread `json:"unread,omitempty"`
-	// Bot is the named bot this session runs as (corgi agent bot): the
-	// surfaces draw it with the bot's title and colour, and the daemon
-	// remembers the conversation as the one to resume.
-	Bot string `json:"bot,omitempty"`
-	// Agent is the CLI this session runs — empty for Claude Code, else the
-	// name its events reported ("codex", "gemini"), so a surface can say.
-	Agent string `json:"agent,omitempty"`
-	// Branch is the cwd's branch as of the last prompt; Summary what Claude
-	// last said; PR the last pull request it linked; TurnStartedAt when the
-	// current or last turn began.
-	Branch        string    `json:"branch,omitempty"`
-	Summary       string    `json:"summary,omitempty"`
-	PR            string    `json:"pr,omitempty"`
-	TurnStartedAt time.Time `json:"turnStartedAt,omitempty"`
-	// Limit says which kind of limit a limited session hit; ResumeAt when
-	// the daemon plans to type "continue" into it, Resumes how many times
-	// it has this episode. Cleared when the session moves on.
-	Limit    LimitKind `json:"limit,omitempty"`
-	ResumeAt time.Time `json:"resumeAt,omitzero"`
-	Resumes  int       `json:"resumes,omitempty"`
-	// AutoAllowed counts the permission prompts the daemon answered for
-	// this session under the workspace's reads policy — nobody was asked.
-	AutoAllowed int `json:"autoAllowed,omitempty"`
-	// FailStreak counts the same tool failing on the same subject in a row
-	// — a test that keeps going red, a command that keeps refusing. Drift is
-	// what the daemon concluded from that, the context fill and the diff:
-	// reasons a person should look, empty when there are none.
-	FailStreak  int `json:"failStreak,omitempty"`
-	failSubject string
-	Drift       []string `json:"drift,omitempty"`
-	// Changes is what the branch has built up since it left main, measured
-	// on the minute sweep: the one line an operator reads before the diff.
-	// Overlap names the other live sessions in the same repository touching
-	// the same files — work crossing streams, which nobody should learn
-	// about at merge time. Tests is the last test command the session ran
-	// and how it went.
-	Changes *Changes  `json:"changes,omitempty"`
-	Overlap []Overlap `json:"overlap,omitempty"`
-	Tests   *TestRun  `json:"tests,omitempty"`
-	// Behind is how far the base branch has moved since this branch left
-	// it, and the files the two would conflict on, from the minute sweep.
-	Behind *Behind `json:"behind,omitempty"`
-	// Gate is the last done-when run the daemon made for this session —
-	// the workspace's own definition of finished, checked when it stopped.
-	Gate *GateRun `json:"gate,omitempty"`
-	// Compacted counts the /compact the daemon typed for this session under
-	// the workspace's compactAt; CompactedAt is the last, so one is enough
-	// per episode.
-	Compacted   int       `json:"compacted,omitempty"`
-	CompactedAt time.Time `json:"compactedAt,omitzero"`
-	// Spend is what the session has cost so far: every token count Claude
-	// Code wrote in its transcript, summed on the sweep. Cap is the budget
-	// it runs under — its own, else the daemon's default — and OverCap says
-	// it went past it. The budget stops nothing by itself; it rings once
-	// and stays on the row.
-	Spend   *Spend `json:"spend,omitempty"`
-	Cap     int64  `json:"cap,omitempty"`
-	OverCap bool   `json:"overCap,omitempty"`
-	// Headless counts the turns the daemon ran for this session after its
-	// terminal was gone (claude -p --resume), and when the last one ended.
-	Headless *Headless `json:"headless,omitempty"`
-	// Standing is where the session stands in one word and a clause,
-	// worked out by the ladder in standing.go when the board is published:
-	// what every surface prints instead of reading the facts its own way.
-	Standing *Standing `json:"standing,omitempty"`
+	ID            string         `json:"id"`
+	Label         string         `json:"label"`
+	Display       string         `json:"display,omitempty"`
+	Cwd           string         `json:"cwd,omitempty"`
+	Folder        string         `json:"folder,omitempty"`
+	Profile       string         `json:"profile,omitempty"`
+	ConfigDir     string         `json:"configDir,omitempty"`
+	ClaudePID     int            `json:"claudePid,omitempty"`
+	Ancestors     []int          `json:"ancestors,omitempty"`
+	Names         []string       `json:"names,omitempty"`
+	TTY           uint64         `json:"tty,omitempty"`
+	Window        string         `json:"window,omitempty"`
+	TermProgram   string         `json:"termProgram,omitempty"`
+	TermSession   string         `json:"termSession,omitempty"`
+	Host          Host           `json:"host"`
+	Status        Status         `json:"status"`
+	StatusSince   time.Time      `json:"statusSince"`
+	Tool          string         `json:"tool,omitempty"`
+	Detail        string         `json:"detail,omitempty"`
+	StartedAt     time.Time      `json:"startedAt"`
+	LastActivity  time.Time      `json:"lastActivity"`
+	FocusError    string         `json:"focusError,omitempty"`
+	FocusAt       time.Time      `json:"focusAt,omitempty"`
+	Context       *usage.Context `json:"context,omitempty"`
+	Pending       *Pending       `json:"pending,omitempty"`
+	Title         string         `json:"title,omitempty"`
+	Model         string         `json:"model,omitempty"`
+	ResumedBy     string         `json:"resumedBy,omitempty"`
+	Note          string         `json:"note,omitempty"`
+	Stuck         bool           `json:"stuck,omitempty"`
+	Ticket        string         `json:"ticket,omitempty"`
+	TicketKey     string         `json:"ticketKey,omitempty"`
+	Attempt       string         `json:"attempt,omitempty"`
+	Home          string         `json:"home,omitempty"`
+	ReadAt        time.Time      `json:"readAt,omitzero"`
+	Unread        *Unread        `json:"unread,omitempty"`
+	Bot           string         `json:"bot,omitempty"`
+	Agent         string         `json:"agent,omitempty"`
+	Branch        string         `json:"branch,omitempty"`
+	Summary       string         `json:"summary,omitempty"`
+	PR            string         `json:"pr,omitempty"`
+	TurnStartedAt time.Time      `json:"turnStartedAt,omitempty"`
+	Limit         LimitKind      `json:"limit,omitempty"`
+	ResumeAt      time.Time      `json:"resumeAt,omitzero"`
+	Resumes       int            `json:"resumes,omitempty"`
+	AutoAllowed   int            `json:"autoAllowed,omitempty"`
+	FailStreak    int            `json:"failStreak,omitempty"`
+	failSubject   string
+	Drift         []string  `json:"drift,omitempty"`
+	Changes       *Changes  `json:"changes,omitempty"`
+	Overlap       []Overlap `json:"overlap,omitempty"`
+	Tests         *TestRun  `json:"tests,omitempty"`
+	Behind        *Behind   `json:"behind,omitempty"`
+	Gate          *GateRun  `json:"gate,omitempty"`
+	Compacted     int       `json:"compacted,omitempty"`
+	CompactedAt   time.Time `json:"compactedAt,omitzero"`
+	Spend         *Spend    `json:"spend,omitempty"`
+	Cap           int64     `json:"cap,omitempty"`
+	OverCap       bool      `json:"overCap,omitempty"`
+	Headless      *Headless `json:"headless,omitempty"`
+	Standing      *Standing `json:"standing,omitempty"`
 }
 
-// Headless is what the daemon ran for a session with no terminal.
 type Headless struct {
 	Turns   int       `json:"turns"`
 	At      time.Time `json:"at"`
@@ -381,16 +197,12 @@ type Headless struct {
 	Error   string    `json:"error,omitempty"`
 }
 
-// Spend is a session's running total, in tokens and turns.
 type Spend struct {
 	Tokens int64     `json:"tokens"`
 	Turns  int       `json:"turns,omitempty"`
 	At     time.Time `json:"at"`
 }
 
-// Changes is a branch's diff against main: files touched, lines that are
-// somebody's work (lock files and bundles never count), and the paths, a
-// few of them, repository-relative.
 type Changes struct {
 	Files   int       `json:"files"`
 	Lines   int       `json:"lines"`
@@ -398,29 +210,19 @@ type Changes struct {
 	At      time.Time `json:"at"`
 }
 
-// Overlap is another session on the same files. Files is empty when the
-// two simply share one checkout — every file is then the same file.
 type Overlap struct {
-	ID      string   `json:"id"`
-	Session string   `json:"session"`
-	Files   []string `json:"files,omitempty"`
-	// SameCheckout: not two worktrees touching one path, but one working
-	// tree with two sessions in it.
-	SameCheckout bool `json:"sameCheckout,omitempty"`
+	ID           string   `json:"id"`
+	Session      string   `json:"session"`
+	Files        []string `json:"files,omitempty"`
+	SameCheckout bool     `json:"sameCheckout,omitempty"`
 }
 
-// TestRun is the last test command a session ran, from the Bash hook.
 type TestRun struct {
 	OK  bool      `json:"ok"`
 	At  time.Time `json:"at"`
 	Cmd string    `json:"cmd"`
 }
 
-// Behind is main having moved: Commits since the merge base, Conflicts the
-// files a rebase would stop on, Upstream the ref measured against. Told
-// says the daemon already acted on this state — rebased, or typed the
-// conflicts into the session — so it does not repeat itself; Rebased
-// counts the rebases it made.
 type Behind struct {
 	Commits   int       `json:"commits"`
 	Conflicts []string  `json:"conflicts,omitempty"`
@@ -430,7 +232,6 @@ type Behind struct {
 	Rebased   int       `json:"rebased,omitempty"`
 }
 
-// JoinFiles names up to n files by their base name, "+k more" after.
 func JoinFiles(files []string, n int) string {
 	names := []string{}
 	for i, f := range files {
@@ -446,10 +247,6 @@ func JoinFiles(files []string, n int) string {
 	return strings.Join(names, ", ")
 }
 
-// GateRun is one pass over a workspace's done-when commands. Cmd is the
-// first that failed, empty when all passed; Fails counts red runs in a row,
-// so the daemon stops typing the failure back after a few and rings
-// instead.
 type GateRun struct {
 	OK    bool      `json:"ok"`
 	At    time.Time `json:"at"`
@@ -457,12 +254,8 @@ type GateRun struct {
 	Fails int       `json:"fails,omitempty"`
 }
 
-// TouchedMax is how many changed paths a session carries on the board.
 const TouchedMax = 8
 
-// IsTestCommand says whether a Bash subject — the program and subcommand
-// words the hook keeps — is a test run: what a person would look at first
-// when a session says it is done.
 func IsTestCommand(subject string) bool {
 	f := strings.Fields(strings.ToLower(subject))
 	if len(f) == 0 {
@@ -481,81 +274,52 @@ func IsTestCommand(subject string) bool {
 	case "bunx jest", "npx jest", "bunx vitest", "npx vitest", "bunx playwright", "npx playwright", "bunx maestro", "npx maestro":
 		return true
 	case "bun run", "npm run", "pnpm run", "yarn run":
-		// A script named test, or test:anything, or check.
 		return len(f) >= 3 && (f[2] == "test" || f[2] == "check" || strings.HasPrefix(f[2], "test:"))
 	}
 	return false
 }
 
-// Unread is what a phone has not seen: how many lines Claude said since
-// it last read the conversation, and the first of them.
 type Unread struct {
 	Lines int       `json:"lines"`
 	Since time.Time `json:"since"`
 	First string    `json:"first,omitempty"`
 }
 
-// Pending is one permission prompt: the tool and the safe word about its
-// input, and when it was raised.
 type Pending struct {
-	Tool    string `json:"tool"`
-	Subject string `json:"subject,omitempty"`
-	// Risk is reads, writes or destructive; a surface colours Allow by it.
-	Risk string    `json:"risk,omitempty"`
-	At   time.Time `json:"at"`
+	Tool    string    `json:"tool"`
+	Subject string    `json:"subject,omitempty"`
+	Risk    string    `json:"risk,omitempty"`
+	At      time.Time `json:"at"`
 }
 
-// StuckAfter is how long a working session may sit without a hook event
-// before it is flagged. Well under StaleAfter: stuck is a warning on a
-// live key, stale is a key going grey.
 const StuckAfter = 12 * time.Minute
 
-// Account is one Claude account the board's sessions run under, with the
-// limits Claude Code last fetched for it and where they are heading.
 type Account struct {
 	Profile   string          `json:"profile"`
 	ConfigDir string          `json:"configDir,omitempty"`
 	Limits    *usage.Limits   `json:"limits,omitempty"`
 	Forecast  *usage.Forecast `json:"forecast,omitempty"`
-	// Sessions is how many live sessions run under it.
-	Sessions int `json:"sessions"`
+	Sessions  int             `json:"sessions"`
 }
 
-// Terminal is one integrated-terminal tab of an editor window.
 type Terminal struct {
 	Name     string `json:"name"`
 	ShellPID int    `json:"shellPid"`
 }
 
-// Window is an editor window as its corgi extension instance reported it.
 type Window struct {
-	ID         string     `json:"id"`
-	App        string     `json:"app,omitempty"`
-	ExtHostPID int        `json:"extHostPid"`
-	Folders    []string   `json:"folders,omitempty"`
-	Terminals  []Terminal `json:"terminals,omitempty"`
-	// FocusedAt is when the window last came to the front, as its extension
-	// saw it; ActiveShellPID is the shell of its active terminal tab. Together
-	// they say which session the user is looking at.
-	FocusedAt      time.Time `json:"focusedAt,omitempty"`
-	ActiveShellPID int       `json:"activeShellPid,omitempty"`
-	// PanelActive is true while the Claude Code panel is the active editor
-	// tab: the user is typing there, not in the terminal VS Code still
-	// calls active.
-	PanelActive bool `json:"panelActive,omitempty"`
-	// ClaudeTabs is how many Claude Code panel tabs the window has open, when
-	// its extension counts them. A finished panel session beyond that count
-	// has no tab left to show it: its chat was closed and Claude Code merely
-	// keeps the process for "reopen closed session".
-	ClaudeTabs *int      `json:"claudeTabs,omitempty"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID             string     `json:"id"`
+	App            string     `json:"app,omitempty"`
+	ExtHostPID     int        `json:"extHostPid"`
+	Folders        []string   `json:"folders,omitempty"`
+	Terminals      []Terminal `json:"terminals,omitempty"`
+	FocusedAt      time.Time  `json:"focusedAt,omitempty"`
+	ActiveShellPID int        `json:"activeShellPid,omitempty"`
+	PanelActive    bool       `json:"panelActive,omitempty"`
+	ClaudeTabs     *int       `json:"claudeTabs,omitempty"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
-// EditorFromChain names the editor whose process tree a session runs in,
-// from the ancestor names a hook captured: VS Code's pty host is "Code
-// Helper (Plugin)" on macOS and "code" on Linux, Cursor's "Cursor Helper
-// (Plugin)" and "cursor", and so on. The kernel's names are cut at 16
-// characters, so prefixes are matched. Empty when nothing is recognised.
 func EditorFromChain(names []string) string {
 	for _, raw := range names {
 		name := strings.ToLower(filepath.Base(raw))
@@ -575,22 +339,15 @@ func EditorFromChain(names []string) string {
 	return ""
 }
 
-// Within reports whether dir is root or inside it.
 func Within(dir, root string) bool {
 	dir, root = filepath.Clean(dir), filepath.Clean(root)
 	return dir == root || strings.HasPrefix(dir, root+string(filepath.Separator))
 }
 
-// PlaceholderID is the id a rescan gives a session no hook has named yet.
-// The next hook from that process replaces it with the real session id.
 func PlaceholderID(pid int) string { return "pid:" + strconv.Itoa(pid) }
 
-// Placeholder reports whether an id came from a rescan.
 func Placeholder(id string) bool { return strings.HasPrefix(id, "pid:") }
 
-// DefaultResolve labels a session by its directory. It names no folder: a
-// directory nothing registered is not a root an editor should be told to
-// open.
 func DefaultResolve(cwd string) (label, folder string) {
 	cwd = strings.TrimSpace(cwd)
 	if cwd == "" {
@@ -599,8 +356,6 @@ func DefaultResolve(cwd string) (label, folder string) {
 	return filepath.Base(cwd), ""
 }
 
-// DefaultProfile turns CLAUDE_CONFIG_DIR into a badge: ~/.claude-work becomes
-// "work", an unset dir "default".
 func DefaultProfile(configDir string) string {
 	base := strings.TrimPrefix(filepath.Base(strings.TrimSpace(configDir)), ".")
 	switch base {

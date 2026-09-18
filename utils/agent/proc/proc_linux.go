@@ -10,8 +10,6 @@ import (
 	"syscall"
 )
 
-// lookup reads /proc/<pid>/stat: "pid (comm) state ppid ...". The comm may
-// contain spaces and parentheses, so the split is on the LAST ')'.
 func lookup(pid int) (Process, bool) {
 	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
 	if err != nil {
@@ -36,7 +34,6 @@ func parseStat(pid int, stat string) (Process, bool) {
 	}
 	p := Process{PID: pid, PPID: ppid, Name: stat[open+1 : closeParen]}
 	if len(fields) > 4 {
-		// tty_nr: 0 when there is no controlling terminal.
 		if tty, err := strconv.ParseUint(fields[4], 10, 64); err == nil {
 			p.TTY = tty
 		}
@@ -47,7 +44,6 @@ func parseStat(pid int, stat string) (Process, bool) {
 	return p, true
 }
 
-// Alive is the classic signal-0 probe.
 func Alive(pid int) bool {
 	if pid <= 0 {
 		return false
@@ -59,7 +55,6 @@ func Alive(pid int) bool {
 	return proc.Signal(syscall.Signal(0)) == nil
 }
 
-// List walks /proc.
 func List() ([]Process, error) {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
@@ -78,7 +73,6 @@ func List() ([]Process, error) {
 	return out, nil
 }
 
-// Cwd resolves the /proc cwd link.
 func Cwd(pid int) string {
 	dir, err := os.Readlink(filepath.Join("/proc", strconv.Itoa(pid), "cwd"))
 	if err != nil {
@@ -87,7 +81,6 @@ func Cwd(pid int) string {
 	return dir
 }
 
-// TTYName resolves a device number to its /dev/pts path.
 func TTYName(dev uint64) string {
 	if dev == 0 {
 		return ""

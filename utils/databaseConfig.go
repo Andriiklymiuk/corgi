@@ -46,8 +46,6 @@ func resolveAdditionalConfig(db DatabaseService, serviceName string) (Additional
 	if db.Additional.DefinitionPath == "" {
 		return AdditionalDatabaseConfig{}, ""
 	}
-	// A compose-relative definitionPath must stay under the compose dir; an
-	// absolute path is taken as-is (existing behavior). Escapes are a hard error.
 	if !filepath.IsAbs(db.Additional.DefinitionPath) {
 		resolved, err := JoinUnderComposeDir(db.Additional.DefinitionPath)
 		if err != nil {

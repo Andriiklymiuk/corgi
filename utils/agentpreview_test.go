@@ -14,8 +14,6 @@ func previewFixture(t *testing.T) string {
 	return t.TempDir()
 }
 
-// livePreview records a preview backed by a real, long-running process so
-// liveness checks behave as they would against a tunnel.
 func livePreview(t *testing.T, dir, service string) Preview {
 	t.Helper()
 	cmd := exec.Command("sleep", "60")
@@ -23,9 +21,6 @@ func livePreview(t *testing.T, dir, service string) Preview {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	// Reap it the way the production spawner does. Without this the killed
-	// child lingers as a zombie owned by the test process, and a zombie still
-	// answers kill(pid, 0) — so a liveness assertion would pass either way.
 	waited := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(waited) }()
 	t.Cleanup(func() {
@@ -141,7 +136,6 @@ func TestReapTearsDownAnIdlePreview(t *testing.T) {
 	dir := previewFixture(t)
 	p := livePreview(t, dir, "web")
 
-	// Rewind so it looks abandoned.
 	store, _ := LoadPreviews(dir)
 	store.Previews[0].LastTouched = time.Now().Add(-2 * time.Hour)
 	if err := SavePreviews(dir, store); err != nil {
@@ -237,8 +231,6 @@ func TestPreviewPicksUpTheURLFromTheTunnelLog(t *testing.T) {
 	if p.URL != "https://kind-zebra-42.trycloudflare.com" {
 		t.Errorf("url = %q, want the one the tunnel printed", p.URL)
 	}
-	// Nothing is listening on the port, so this is the honest answer rather
-	// than handing over a URL that shows a stack trace.
 	if p.State != PreviewBroken {
 		t.Errorf("state = %q, want %q when the port does not answer", p.State, PreviewBroken)
 	}
@@ -280,8 +272,6 @@ func TestSavePreviewsAddsGitignoreEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// corgi_services/ is not wholly ignored, so per-developer state under it
-	// must add its own entries or it shows up as untracked.
 	data, err := os.ReadFile(filepath.Join(dir, ".corgi", "corgi_services", ".gitignore"))
 	if err != nil {
 		t.Fatalf("no .gitignore written: %v", err)
@@ -315,10 +305,6 @@ func TestSavePreviewsLeavesNoTempFile(t *testing.T) {
 	}
 }
 
-// The tunnel argv is what a preview actually depends on. An earlier version
-// passed --tunnel-name and --tunnel-hostname, which `corgi tunnel` does not
-// define, so every named-tunnel preview died instantly with "unknown flag"
-// while still reporting "starting".
 func TestPreviewSpawnsTunnelWithFlagsThatExist(t *testing.T) {
 	dir := previewFixture(t)
 	bin := filepath.Join(t.TempDir(), "fake-corgi")

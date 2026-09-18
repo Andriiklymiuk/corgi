@@ -9,9 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// memoryRoot resolves the workspace memory dir next to corgi-compose.yml. We use cwd
-// (the workspace root) — memory is committed beside the compose file, not under the
-// gitignored corgi_services/.
 func memoryRoot() string {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -159,7 +156,6 @@ var memoryLintCmd = &cobra.Command{
 	},
 }
 
-// failMemory reports an unexpected IO/parse error consistently.
 func failMemory(err error) {
 	if utils.JSONOutput {
 		utils.JSONError(utils.ErrConfig, err.Error())

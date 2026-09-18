@@ -2,8 +2,6 @@ package utils
 
 import "testing"
 
-// Catches accidental typos or duplicate values in the error-code catalog,
-// which is a stable contract for agents.
 func TestErrCodeValues(t *testing.T) {
 	want := map[string]string{
 		"ErrPortConflict":     "E_PORT_CONFLICT",

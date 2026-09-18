@@ -10,12 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/transcript"
 )
 
-// A session's conversation from the command line, the way the phone reads
-// it: the newest entries, or everything after an offset — what an editor
-// panel polls to show a chat beside the code. Local only: the phone's
-// stream switch is about phones, and a person at the laptop reads their
-// own transcripts already.
-
 var agentTranscriptCmd = &cobra.Command{
 	Use:   "transcript <session> [--after N] [--max N]",
 	Short: "A session's conversation: the newest entries, or everything after an offset",

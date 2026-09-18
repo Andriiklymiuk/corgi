@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// The daemon's binary path must not change between updates, or macOS asks
-// for Documents access again at the next login. So it is a copy, refreshed
-// only when the bytes differ, swapped in by rename under a running daemon.
 func TestDaemonRunsFromAStableCopy(t *testing.T) {
 	data := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", data)

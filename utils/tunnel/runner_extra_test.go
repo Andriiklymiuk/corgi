@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// fakeProviderNamedErr fails CmdNamed so Run's named-mode error branch runs.
 type fakeProviderNamedErr struct{ fakeProvider }
 
 func (fakeProviderNamedErr) CmdNamed(int, NamedConfig) ([]string, error) {
@@ -34,7 +33,6 @@ func TestRunNamedCmdError(t *testing.T) {
 	}
 }
 
-// Zero BackoffConfig must fall back to the default base/max delays.
 func TestRunSupervisedDefaultBackoff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := make(chan Event, 64)
@@ -49,11 +47,9 @@ func TestRunSupervisedDefaultBackoff(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		RunSupervised(ctx, fakeProvider{}, "svc", 3000, nil, events, BackoffConfig{}) // zero → defaults
+		RunSupervised(ctx, fakeProvider{}, "svc", 3000, nil, events, BackoffConfig{})
 	}()
 
-	// The default base is 500ms; cancel during the first wait so the loop exits
-	// via ctx.Done without us sitting through the full delay.
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
@@ -66,7 +62,6 @@ func TestRunSupervisedDefaultBackoff(t *testing.T) {
 	<-drained
 }
 
-// Backoff that overshoots the ceiling must clamp to max.
 func TestRunSupervisedClampsToMax(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := make(chan Event, 64)
@@ -88,7 +83,6 @@ func TestRunSupervisedClampsToMax(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		// 15ms*2 = 30ms overshoots the 20ms ceiling, so delay clamps to 20ms.
 		RunSupervised(ctx, fakeProvider{}, "svc", 3000, nil, events,
 			BackoffConfig{Base: 15 * time.Millisecond, Max: 20 * time.Millisecond})
 	}()

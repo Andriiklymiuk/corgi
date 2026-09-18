@@ -17,8 +17,6 @@ func customConfig() SpawnConfig {
 }
 
 func TestDefaultKindIsUnchangedBehaviour(t *testing.T) {
-	// A config written before kinds existed must launch exactly as it did, or
-	// upgrading corgi silently changes what every supervised workspace runs.
 	c := baseConfig()
 	c.Kind = ""
 
@@ -55,8 +53,6 @@ func TestUnknownKindIsRejectedWithTheValidNames(t *testing.T) {
 	if err == nil {
 		t.Fatal("an unknown kind must fail at startup, not launch something unexpected")
 	}
-	// The message has to name the alternatives: this fails inside a daemon,
-	// where nobody is watching a terminal to go and look them up.
 	for _, name := range KindNames() {
 		if !strings.Contains(err.Error(), name) {
 			t.Errorf("error %q does not mention valid kind %q", err, name)
@@ -87,8 +83,6 @@ func TestCustomKindRunsTheConfiguredArgv(t *testing.T) {
 }
 
 func TestCustomKindArgvIsCopiedNotAliased(t *testing.T) {
-	// The returned slice reaches exec.Command. Sharing the backing array with
-	// config would let one launch's mutation change the next one's argv.
 	c := customConfig()
 	args, err := BuildArgs(c)
 	if err != nil {
@@ -115,8 +109,6 @@ func TestCustomKindWithoutArgsIsRejected(t *testing.T) {
 }
 
 func TestCustomKindWithoutBinIsRejected(t *testing.T) {
-	// There is no sensible default command for an agent corgi knows nothing
-	// about, so the failure has to be explicit rather than a PATH lookup for "".
 	c := customConfig()
 	c.Bin = ""
 
@@ -126,8 +118,6 @@ func TestCustomKindWithoutBinIsRejected(t *testing.T) {
 }
 
 func TestCustomArgsCannotDisarmPermissionPrompts(t *testing.T) {
-	// This is the one route around the bypassPermissions rejection: a custom
-	// argv is written by hand, so the same rule has to apply to it.
 	for _, arg := range []string{
 		"--dangerously-skip-permissions",
 		"--DANGEROUSLY-SKIP-PERMISSIONS",
@@ -156,15 +146,12 @@ func TestCustomKindUsesItsOwnConfigDirVariable(t *testing.T) {
 	if !slices.Contains(env, "SOME_AGENT_HOME=/home/u/.some-agent-work") {
 		t.Errorf("env = %v, want the custom kind's config-dir variable set", env)
 	}
-	// Another agent's variable is not this kind's business and must survive.
 	if !slices.Contains(env, "CLAUDE_CONFIG_DIR=/home/u/.claude") {
 		t.Errorf("env = %v, want an unrelated agent's variable left alone", env)
 	}
 }
 
 func TestConfigDirWithNoVariableToSetIsRejected(t *testing.T) {
-	// Silently ignoring it would leave the workspace running under the default
-	// account, which looks exactly like running under the right one.
 	c := customConfig()
 	c.ConfigDir = "/home/u/.some-agent-work"
 
@@ -205,8 +192,6 @@ func TestCustomKindStripsItsOwnCredentials(t *testing.T) {
 }
 
 func TestCustomKindCredentialOptInsAreSeparate(t *testing.T) {
-	// The two failures differ: a key bills the wrong meter, a token points at
-	// another account. Opting in to one must not quietly opt in to the other.
 	c := customConfig()
 	c.CredentialEnv = []string{"SOME_AGENT_API_KEY", "SOME_AGENT_OAUTH_TOKEN"}
 	c.InheritAPIKey = true
@@ -222,9 +207,6 @@ func TestCustomKindCredentialOptInsAreSeparate(t *testing.T) {
 }
 
 func TestBuiltInKindRejectsEnvironmentOverrides(t *testing.T) {
-	// For a built-in, these variable names are a property of the CLI. Letting
-	// config change them would mean a workspace could point the strip list at
-	// nothing and hand the child every ambient credential.
 	c := baseConfig()
 	c.CredentialEnv = []string{"NOTHING_AT_ALL"}
 
@@ -234,8 +216,6 @@ func TestBuiltInKindRejectsEnvironmentOverrides(t *testing.T) {
 }
 
 func TestKindWithoutSpawnSupportRejectsSpawnAndPermissionMode(t *testing.T) {
-	// Dropping an unsupported setting silently would leave someone believing a
-	// session is isolated, or prompting, when it is neither.
 	for name, mutate := range map[string]func(*SpawnConfig){
 		"spawn":          func(c *SpawnConfig) { c.Spawn = "worktree" },
 		"permissionMode": func(c *SpawnConfig) { c.PermissionMode = "default" },
@@ -249,8 +229,6 @@ func TestKindWithoutSpawnSupportRejectsSpawnAndPermissionMode(t *testing.T) {
 }
 
 func TestUnknownKindProducesNoEnvironmentAtAll(t *testing.T) {
-	// BuildEnv cannot report an error, and returning the parent unchanged would
-	// hand a child every ambient credential. Empty fails loudly instead.
 	c := baseConfig()
 	c.Kind = "nonesuch"
 
@@ -260,9 +238,6 @@ func TestUnknownKindProducesNoEnvironmentAtAll(t *testing.T) {
 }
 
 func TestBuildEnvNeverReturnsNil(t *testing.T) {
-	// exec.Cmd treats a nil Env as "inherit the entire parent environment", so
-	// returning nil from the unresolvable-kind path would turn the fail-safe
-	// into total credential inheritance — the exact opposite of its purpose.
 	c := baseConfig()
 	c.Kind = "nonesuch"
 
@@ -277,8 +252,6 @@ func TestBuildEnvNeverReturnsNil(t *testing.T) {
 }
 
 func TestSettingsAKindCannotHonourAreRejected(t *testing.T) {
-	// The PR's own rule: a setting that cannot take effect is an error. A
-	// capacity that silently does nothing reads as a limit being applied.
 	tests := map[string]func(*SpawnConfig){
 		"args on a built-in kind":          func(c *SpawnConfig) { c.Kind = KindClaude; c.Args = []string{"--flag"} },
 		"configDirEnv on a built-in kind":  func(c *SpawnConfig) { c.Kind = KindClaude; c.ConfigDirEnv = "X_HOME" },
@@ -302,9 +275,6 @@ func TestSettingsAKindCannotHonourAreRejected(t *testing.T) {
 }
 
 func TestCustomArgsCannotSmuggleAForbiddenPermissionMode(t *testing.T) {
-	// The prefix check alone only blocks --dangerously* and --yolo, so
-	// `bin: claude, args: [remote-control, --permission-mode, bypassPermissions]`
-	// would walk straight around the rejection applied to the typed setting.
 	for _, args := range [][]string{
 		{"remote-control", "--permission-mode", "bypassPermissions"},
 		{"remote-control", "--permission-mode=bypassPermissions"},
@@ -321,8 +291,6 @@ func TestCustomArgsCannotSmuggleAForbiddenPermissionMode(t *testing.T) {
 }
 
 func TestCustomArgsStillAllowLegitimatePermissionModes(t *testing.T) {
-	// Only the forbidden mode is blocked; a supervised session is expected to
-	// set a real one.
 	c := customConfig()
 	c.Bin = "claude"
 	c.Args = []string{"remote-control", "--permission-mode", "acceptEdits"}

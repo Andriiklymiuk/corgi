@@ -17,10 +17,6 @@ const sample = `{"type":"permission-mode","permissionMode":"auto"}
 {"type":"user","uuid":"u3","timestamp":"2026-09-12T10:00:06Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"ok  \tacme/api/auth\t0.4s"}]}]}}
 `
 
-// The conversation as a person reads it: prompts, Claude's words, each
-// tool call with its subject, each result — thinking, meta rows and side
-// chains left out, secrets scrubbed, a read that continues where the
-// last one stopped.
 func TestReadTellsTheConversationAndScrubsSecrets(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	if err := os.WriteFile(path, []byte(sample), 0o600); err != nil {
@@ -53,7 +49,6 @@ func TestReadTellsTheConversationAndScrubsSecrets(t *testing.T) {
 		t.Fatalf("offset %d, want %d", off, len(sample))
 	}
 
-	// More arrives, and only that is read next time.
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
 	f.WriteString(`{"type":"assistant","uuid":"a4","timestamp":"2026-09-12T10:00:07Z","message":{"role":"assistant","content":[{"type":"text","text":"Tests pass."}]}}` + "\n" + `{"type":"user","uuid":"half"`)
 	f.Close()
@@ -61,7 +56,6 @@ func TestReadTellsTheConversationAndScrubsSecrets(t *testing.T) {
 	if len(more) != 1 || more[0].Text != "Tests pass." || off2 <= off {
 		t.Fatalf("the new line only, the half one not yet: %+v", more)
 	}
-	// A shorter file is a new file: read from the top.
 	os.WriteFile(path, []byte(sample[:len(sample)/2]), 0o600)
 	if again, _, _ := Read(path, off2, 0); len(again) == 0 {
 		t.Fatal("a replaced file reads from the top")

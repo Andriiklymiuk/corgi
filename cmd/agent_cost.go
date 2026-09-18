@@ -16,24 +16,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Cost, three ways: by repo (workspace), by day, by bot. Two books make
-// it: the daemon's day ledger, which books every live session's tokens to
-// its workspace as the sweep counts them, and the fix log, where every
-// unattended run wrote what claude said it cost. Tokens are what both
-// have; dollars only the runs — a session's are on the invoice.
-
-// CostRow is one line of the table.
 type CostRow struct {
 	Key     string  `json:"key"`
 	Tokens  int64   `json:"tokens"`
 	USD     float64 `json:"usd,omitempty"`
 	Runs    int     `json:"runs,omitempty"`
 	Prompts int     `json:"prompts,omitempty"`
-	// DayCap is the workspace's day budget, on the repo table.
-	DayCap int64 `json:"dayCap,omitempty"`
+	DayCap  int64   `json:"dayCap,omitempty"`
 }
 
-// costBy builds the table for the last n days.
 func costBy(dir, by string, n int, now time.Time) ([]CostRow, error) {
 	if n < 1 {
 		n = 14
@@ -176,8 +167,6 @@ func zeroBlank(n int) string {
 	return strconv.Itoa(n)
 }
 
-// launchCostHandler is GET /launch/cost?by=repo|day|bot&days=N, the same
-// table for the phone.
 func launchCostHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {

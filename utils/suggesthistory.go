@@ -10,22 +10,10 @@ import (
 	"time"
 )
 
-// suggestHistoryFileName is the per-developer audit + dedupe state for the
-// proactive-suggest job. It lives under the workspace corgi_services/ dir
-// (already gitignored), alongside other per-developer runtime state like
-// .autopilot.json — not in .corgi/, which holds committed, shared memory.
 const suggestHistoryFileName = "suggest-history.json"
 
-// suggestRateLimitCeiling is the hard ceiling on filed tickets per rolling
-// week, enforced regardless of any maxPerWeek config — the proactive job must
-// never spam the tracker.
 const suggestRateLimitCeiling = 3
 
-// SuggestEntry is one recorded suggestion outcome.
-//
-// Status ∈ filed (a ticket exists, still open) · dismissed (user said no /
-// wontfix) · proposed (pending human confirm) · skipped (deduped or
-// rate-limited this run, audit only).
 type SuggestEntry struct {
 	Slug   string    `json:"slug"`
 	Title  string    `json:"title"`
@@ -35,19 +23,15 @@ type SuggestEntry struct {
 	Ts     time.Time `json:"ts"`
 }
 
-// SuggestHistory is the on-disk append-only history of proactive suggestions.
 type SuggestHistory struct {
 	Version int            `json:"version"`
 	Entries []SuggestEntry `json:"entries"`
 }
 
-// SuggestHistoryPath returns <workspaceRoot>/corgi_services/suggest-history.json.
 func SuggestHistoryPath(workspaceRoot string) string {
 	return filepath.Join(CorgiServicesIn(workspaceRoot), suggestHistoryFileName)
 }
 
-// LoadSuggestHistory reads the workspace suggest-history.json. A missing file
-// is not an error — it returns a fresh, empty history (mirrors LoadUserConfig).
 func LoadSuggestHistory(workspaceRoot string) (*SuggestHistory, error) {
 	path := SuggestHistoryPath(workspaceRoot)
 	data, err := os.ReadFile(path)
@@ -67,9 +51,6 @@ func LoadSuggestHistory(workspaceRoot string) (*SuggestHistory, error) {
 	return &h, nil
 }
 
-// AppendSuggestEntry does a read-modify-write append of one entry: it loads the
-// existing history, appends e, and writes the file back atomically (tmp +
-// rename), creating corgi_services/ (0o755) if absent. File mode 0o644.
 func AppendSuggestEntry(workspaceRoot string, e SuggestEntry) error {
 	h, err := LoadSuggestHistory(workspaceRoot)
 	if err != nil {
@@ -82,7 +63,6 @@ func AppendSuggestEntry(workspaceRoot string, e SuggestEntry) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create corgi_services dir: %w", err)
 	}
-	// Per-developer audit/dedupe state — keep it out of commits.
 	EnsureCorgiServicesIgnore(dir, suggestHistoryFileName)
 	data, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
@@ -94,11 +74,6 @@ func AppendSuggestEntry(workspaceRoot string, e SuggestEntry) error {
 	return nil
 }
 
-// ShouldSkip reports whether a candidate slug is already known and so should be
-// deduped. It blocks on: any filed entry (a ticket exists, always blocks);
-// a dismissed entry within cooldown; a proposed entry within cooldown (don't
-// re-propose the same pending idea). skipped audit entries never block.
-// Returns (true, reason) on a hit, else (false, "").
 func ShouldSkip(h *SuggestHistory, slug string, now time.Time, cooldown time.Duration) (bool, string) {
 	if h == nil {
 		return false, ""
@@ -123,10 +98,6 @@ func ShouldSkip(h *SuggestHistory, slug string, now time.Time, cooldown time.Dur
 	return false, ""
 }
 
-// RateLimited reports whether the per-week filing cap is already hit: it counts
-// filed entries within the rolling 7 days and compares to maxPerWeek.
-// maxPerWeek <= 0 is treated as the default 1; a maxPerWeek above the hard
-// ceiling (3) is clamped to 3 regardless of config.
 func RateLimited(h *SuggestHistory, now time.Time, maxPerWeek int) bool {
 	limit := maxPerWeek
 	if limit <= 0 {
@@ -148,11 +119,9 @@ func RateLimited(h *SuggestHistory, now time.Time, maxPerWeek int) bool {
 	return filed >= limit
 }
 
-// Slugify derives a stable kebab-case key from a suggestion title: lowercase,
-// every run of non-alphanumeric characters becomes a single dash, trimmed.
 func Slugify(title string) string {
 	var b strings.Builder
-	lastDash := true // suppress a leading dash
+	lastDash := true
 	for _, r := range strings.ToLower(title) {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
 			b.WriteRune(r)

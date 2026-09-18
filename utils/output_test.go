@@ -22,8 +22,6 @@ func TestConsoleOverrideRedirectsInfo(t *testing.T) {
 	}
 }
 
-// lockedWriter is a goroutine-safe sink so the race test exercises the
-// override's atomic swap rather than bytes.Buffer's lack of thread-safety.
 type lockedWriter struct {
 	mu sync.Mutex
 }

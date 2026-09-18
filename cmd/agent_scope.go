@@ -40,8 +40,6 @@ var agentScopeSetCmd = &cobra.Command{
 		done, _ := f.GetStringArray("done")
 		s := scope.Scope{Ref: strings.ToUpper(strings.TrimSpace(args[0])), Paths: paths, Lines: lines, Tests: tests, Done: done, SetAt: time.Now()}
 		if old, err := scope.Read(dir, s.Ref); err == nil {
-			// A budget raised on the record keeps the paths it had, and the
-			// paths it was given keep the budget it had.
 			if len(s.Paths) == 0 {
 				s.Paths = old.Paths
 			}

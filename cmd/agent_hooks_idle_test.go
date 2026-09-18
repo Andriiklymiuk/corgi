@@ -24,8 +24,6 @@ func TestIsIdleNudge(t *testing.T) {
 	}
 }
 
-// The default hook drops the idle nudge; --idle keeps it, and the choice is
-// visible in the command written into the settings file.
 func TestWithCorgiHookRecordsTheIdleChoice(t *testing.T) {
 	plain := marshalCompact(withCorgiHook(nil, "acme", hookEventNotification, false))
 	if strings.Contains(plain, "--idle") {
@@ -35,7 +33,6 @@ func TestWithCorgiHookRecordsTheIdleChoice(t *testing.T) {
 	if !strings.Contains(withIdle, "--idle") {
 		t.Errorf("--idle was not written into the hook: %s", withIdle)
 	}
-	// Either way it stays removable.
 	if !strings.Contains(withIdle, hookMarker) {
 		t.Errorf("the hook lost its marker: %s", withIdle)
 	}
@@ -72,7 +69,6 @@ func TestWantsIdleHook(t *testing.T) {
 	}
 }
 
-// The whole point: an idle nudge with no daemon told, so no toast and no push.
 func TestRunAgentHookDropsTheIdleNudge(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	dir, err := agentDir()
@@ -106,7 +102,6 @@ func TestRunAgentHookDropsTheIdleNudge(t *testing.T) {
 
 	runAgentHook(cmd, []string{"Notification"})
 
-	// No command file written means nothing reached the daemon.
 	entries, _ := os.ReadDir(filepath.Join(dir, "commands"))
 	if len(entries) != 0 {
 		t.Fatalf("the idle nudge was forwarded anyway: %d command(s)", len(entries))
@@ -133,12 +128,10 @@ func TestEnableWritesTheTitleHookAndDisableTakesItBack(t *testing.T) {
 	if !strings.Contains(written, "corgi agent hook --workspace acme title") {
 		t.Errorf("UserPromptSubmit hook = %s, want the title hook for this workspace", written)
 	}
-	// --idle belongs to the notification hook; the title hook has no use for it.
 	if strings.Contains(written, "--idle") {
 		t.Errorf("the title hook must not carry notification flags: %s", written)
 	}
 
-	// Off by request, without touching the notification hook.
 	if err := enableHooksIn(dir, "acme", false, false, false); err != nil {
 		t.Fatal(err)
 	}

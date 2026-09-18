@@ -27,7 +27,6 @@ func TestClaimsAreHeldTakenOverReleasedAndForgotten(t *testing.T) {
 	if len(Crossed(live, "/w/web", "s2", []string{"auth/refresh.go"})) != 0 {
 		t.Fatal("another repository's path is not the same file")
 	}
-	// A session that left takes its claims with it; a day ends the rest.
 	if got := LoadFileClaims(dir).Live(map[string]bool{"s2": true}, now); len(got) != 1 || got[0].Session != "s2" {
 		t.Fatalf("gone: %+v", got)
 	}

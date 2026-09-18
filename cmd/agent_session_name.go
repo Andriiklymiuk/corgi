@@ -8,32 +8,11 @@ import (
 )
 
 const (
-	// maxSessionNameLen is sanitizeSessionName's cap, applied to the names
-	// corgi composes as well: past it, claude.ai's session list truncates and
-	// the tail is lost anyway.
 	maxSessionNameLen = 60
-	// sessionNameSep reads as one label on a phone, where the list is narrow.
-	sessionNameSep = " · "
-	// minBranchRoom is the shortest branch fragment still worth showing. Below
-	// it the branch is dropped instead: "fix/l…" identifies nothing.
-	minBranchRoom = 8
+	sessionNameSep    = " · "
+	minBranchRoom     = 8
 )
 
-// defaultSessionName is what a session corgi started itself is called in
-// claude.ai/code's list when nobody named it.
-//
-// The workspace id alone made every session in a workspace identical — a list
-// of four rows all called "corgi" says nothing about which one to open — so
-// the branch being worked on and the clock time the session started come with
-// it:
-//
-//	corgi · fix/login-redirect · 18:55
-//	corgi (work) · main · 09:02
-//
-// The branch is dropped when the workspace is not a git checkout or sits on a
-// detached HEAD, and shortened before either of the other two parts: the id
-// says which workspace and the clock says which run, and a name that loses
-// either stops identifying anything.
 func defaultSessionName(id, dir, profile string, now time.Time) string {
 	head := strings.TrimSpace(id)
 	if p := strings.TrimSpace(profile); p != "" {
@@ -56,11 +35,6 @@ func defaultSessionName(id, dir, profile string, now time.Time) string {
 	return head + sessionNameSep + branch + sessionNameSep + clock
 }
 
-// sessionNamePrefix is what remote control's own generated names start with
-// for this workspace: "corgi-brave-otter", or "corgi-work-brave-otter" under a
-// profile, in place of the hostname every workspace on the machine shares.
-// Shaping it into one safe word is the supervisor's job (it owns the env
-// entry); this only says what goes in.
 func sessionNamePrefix(id, profile string) string {
 	parts := []string{strings.TrimSpace(id)}
 	if p := strings.TrimSpace(profile); p != "" {
@@ -69,8 +43,6 @@ func sessionNamePrefix(id, profile string) string {
 	return strings.Join(parts, "-")
 }
 
-// clipSessionName trims by rune, never by byte: cutting a multi-byte character
-// in half would put an invalid UTF-8 sequence in the argv.
 func clipSessionName(name string) string {
 	r := []rune(name)
 	if len(r) <= maxSessionNameLen {

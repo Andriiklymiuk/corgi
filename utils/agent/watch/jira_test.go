@@ -23,9 +23,6 @@ type jiraFake struct {
 	jql      string
 }
 
-// newJiraFake serves myself, a search with a new issue assigned to me
-// (ABC-1), an old updated one assigned to someone else (ABC-2), and the
-// comments on ABC-1: one by a colleague, one by me.
 func newJiraFake(t *testing.T) *jiraFake {
 	t.Helper()
 	f := &jiraFake{now: time.Now().UTC().Truncate(time.Millisecond)}

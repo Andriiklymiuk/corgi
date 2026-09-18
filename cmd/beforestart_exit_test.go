@@ -7,8 +7,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// A run whose setup failed used to report success, so a script could not tell
-// a healthy stack from one missing a service.
 func TestReportBeforeStartFailuresExitsNonZero(t *testing.T) {
 	utils.ResetBeforeStartFailures()
 	t.Cleanup(utils.ResetBeforeStartFailures)
@@ -33,8 +31,6 @@ func TestReportBeforeStartFailuresIsSilentOnASuccessfulRun(t *testing.T) {
 	}
 }
 
-// The compose watcher and corgi restart re-enter run in the same process.
-// Exiting there would tear down a session the developer is still using.
 func TestReportBeforeStartFailuresDoesNotExitWhileReloading(t *testing.T) {
 	utils.ResetBeforeStartFailures()
 	t.Cleanup(utils.ResetBeforeStartFailures)
@@ -49,8 +45,6 @@ func TestReportBeforeStartFailuresDoesNotExitWhileReloading(t *testing.T) {
 	}
 }
 
-// captureExit swaps the process exit for a recorder, so a path that ends in
-// os.Exit can be asserted instead of killing the test binary.
 func captureExit(t *testing.T, fn func()) (code int, stderr string) {
 	t.Helper()
 	orig := osExit

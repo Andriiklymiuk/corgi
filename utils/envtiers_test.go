@@ -14,7 +14,6 @@ func TestResolveEnvSourceFile_TierConventionDir(t *testing.T) {
 	CorgiComposePathDir = dir
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	// tier dir holds env/staging/api.env; no explicit copyEnvFromFilePath
 	if err := os.MkdirAll(filepath.Join(dir, "env", "staging"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +52,6 @@ func TestResolveEnvSourceFile_TierMissingFallsThrough(t *testing.T) {
 	CorgiComposePathDir = dir
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	// no tier file; .env-example present → fall through to Feature 5 chain
 	writeFile(t, filepath.Join(dir, ".env-example"), "A=1")
 	svc := Service{ServiceName: "api", AbsolutePath: dir + "/"}
 

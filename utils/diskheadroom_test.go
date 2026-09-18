@@ -2,8 +2,6 @@ package utils
 
 import "testing"
 
-// The estimate has to grow with the stack, or a one-service compose and a
-// fourteen-container one would be judged against the same bar.
 func TestDiskHeadroomScalesWithTheStack(t *testing.T) {
 	small, _, _, _ := DiskHeadroom(&CorgiCompose{}, t.TempDir())
 	big, _, _, _ := DiskHeadroom(&CorgiCompose{
@@ -16,7 +14,6 @@ func TestDiskHeadroomScalesWithTheStack(t *testing.T) {
 	}
 }
 
-// A real temp dir has space, so the check should pass rather than cry wolf.
 func TestDiskHeadroomPassesOnAHostWithSpace(t *testing.T) {
 	_, free, ok, known := DiskHeadroom(&CorgiCompose{}, t.TempDir())
 	if !known {
@@ -30,7 +27,6 @@ func TestDiskHeadroomPassesOnAHostWithSpace(t *testing.T) {
 	}
 }
 
-// An unknown figure must not be reported as a failure — the check is skipped.
 func TestDiskHeadroomTreatsUnknownAsFine(t *testing.T) {
 	_, _, ok, known := DiskHeadroom(&CorgiCompose{}, "/definitely/not/a/path/corgi")
 	if known {

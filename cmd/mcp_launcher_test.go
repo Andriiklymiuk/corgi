@@ -50,7 +50,6 @@ func TestLaunchWorkspacesRejectsOtherMethods(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", rec.Code)
 	}
-	// A POST with no body registers nothing.
 	rec = httptest.NewRecorder()
 	launchWorkspacesHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/workspaces", nil))
 	if rec.Code != http.StatusBadRequest {
@@ -81,11 +80,6 @@ func TestLaunchStartRefusesASensitiveWorkspace(t *testing.T) {
 	agentD, _ := agentDir()
 	stack := stackWithAgentConfig(t, "version: 1\nworkspace:\n  id: acme\n  sensitive: true\n")
 	registerStack(t, agentD, "acme", stack)
-	// A daemon must appear "running" for start to reach the resolver, but with no
-	// daemon the handler returns a clear error anyway; assert we don't 200 a start
-	// for a sensitive workspace. Here there is no daemon, so it errors before the
-	// sensitive check — which is still a non-200, the property we care about
-	// (a sensitive workspace never quietly starts).
 	rec := httptest.NewRecorder()
 	launchStartHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/start",
 		strings.NewReader(`{"workspace":"acme"}`)))
@@ -107,7 +101,6 @@ func TestLauncherPageIsSelfContainedAndUsesTheStoredToken(t *testing.T) {
 	if strings.Contains(body, "src=\"http") || strings.Contains(body, "href=\"http") {
 		t.Error("the launcher must be self-contained — no external assets")
 	}
-	// Lock the session-link hardening in place so it can't be silently removed.
 	if !strings.Contains(body, "safeClaudeUrl(") {
 		t.Error("the session link must be gated by safeClaudeUrl — a scanned URL must be validated before it is clickable")
 	}
@@ -133,13 +126,9 @@ func TestLauncherPageKeepsThePhoneControlsItNeeds(t *testing.T) {
 			t.Errorf("the launcher must keep %s (%q)", what, want)
 		}
 	}
-	// A control toggled with the hidden attribute must actually disappear:
-	// a flex display rule outranks the attribute without this.
 	if !strings.Contains(body, "[hidden]{display:none!important}") {
 		t.Error("the launcher must force [hidden] over its display rules")
 	}
-	// The refresh tick reads the session records again, which is how a session
-	// Claude renamed shows its new name here without a reload.
 	if !strings.Contains(body, "REFRESH_MS") {
 		t.Error("the launcher must refresh itself while it is on screen")
 	}
@@ -157,8 +146,6 @@ func TestLaunchStateNamesWhatTheCardLeadsWith(t *testing.T) {
 		"a live session is live":          {launchWorkspace{Running: true, Live: 2, LastEvent: exited}, "live"},
 		"supervised with no session yet":  {launchWorkspace{Running: true}, "starting"},
 		"nothing running is stopped":      {launchWorkspace{LastEvent: exited}, "stopped"},
-		// A session someone started on the laptop is live even though the
-		// daemon is not supervising the workspace.
 		"an unsupervised session is live": {launchWorkspace{Live: 1}, "live"},
 	} {
 		if got := launchState(tc.row); got != tc.want {
@@ -168,9 +155,6 @@ func TestLaunchStateNamesWhatTheCardLeadsWith(t *testing.T) {
 }
 
 func TestTopSessionCarriesTheLiveName(t *testing.T) {
-	// Claude Code rewrites name/nameSource/nameSince in its own session record
-	// when the session is renamed; the launcher must pass that through rather
-	// than the name corgi started it with.
 	top := newestLiveSession([]claudeSession{{
 		Name: "Trim the launcher type scale", NameSource: "auto", NameSince: 1700000001000,
 		StartedAt: 1700000000000, Kind: "interactive", Entrypoint: "sdk-cli",
@@ -189,8 +173,6 @@ func TestTopSessionCarriesTheLiveName(t *testing.T) {
 }
 
 func TestLaunchStateReportsADisabledWorkspace(t *testing.T) {
-	// A workspace the daemon gave up on looked exactly like a stopped one, so
-	// Start was the tap that appeared to do nothing.
 	if got := launchState(launchWorkspace{Disabled: true}); got != "disabled" {
 		t.Errorf("state = %q, want disabled", got)
 	}
@@ -211,12 +193,9 @@ func TestSessionProcessIsLiveRejectsARecycledPID(t *testing.T) {
 	if !sessionProcessIsLive(claudeSession{PID: mine, ProcStart: started}) {
 		t.Error("a record whose start time matches the live process is live")
 	}
-	// The record outlived the machine and something else now holds its pid:
-	// a live pid alone made a finished session show as live.
 	if sessionProcessIsLive(claudeSession{PID: mine, ProcStart: "1"}) {
 		t.Error("a start time that does not match must not pass for the same process")
 	}
-	// No recorded start time (an older CLI) keeps the old behaviour.
 	if !sessionProcessIsLive(claudeSession{PID: mine}) {
 		t.Error("without a recorded start time a live pid is still the best answer")
 	}
@@ -226,8 +205,6 @@ func TestSessionProcessIsLiveRejectsARecycledPID(t *testing.T) {
 }
 
 func TestSameStartTokenIgnoresPsPadding(t *testing.T) {
-	// ps pads a single-digit day, and the same reading must not look like a
-	// different process over a space: that would drop a live session.
 	if !sameStartToken("Wed Sep  3 16:04:12 2025", "Wed Sep 3 16:04:12 2025") {
 		t.Error("internal padding must not matter")
 	}
@@ -243,8 +220,6 @@ func TestStartTokenCacheAnswersTwice(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("no start time to read on this platform")
 	}
-	// The second read must come from the cache: on darwin the uncached path
-	// runs ps, and this list is polled every second.
 	first, ok := processStartToken(os.Getpid())
 	if !ok {
 		t.Skip("could not read this process's start time")
@@ -376,10 +351,6 @@ func TestLaunchBoardServesTheSessionBoard(t *testing.T) {
 	}
 }
 
-// A workspace supervised as a device opens no session of its own, so its
-// link is cleared and the card must offer Start. When you had started
-// sessions there by hand, Live won the state and the phone showed a disabled
-// "Starting…" that never resolved — nothing was pending, so nothing cleared it.
 func TestDeviceWorkspaceWithLocalSessionsIsNotPending(t *testing.T) {
 	now := time.Now()
 	live := launchWorkspace{Running: true, DeviceOnly: true, Live: 2, StartedAt: now.Add(-41 * time.Minute).UnixMilli()}
@@ -406,8 +377,6 @@ func TestDeviceWorkspaceWithLocalSessionsIsNotPending(t *testing.T) {
 	}
 }
 
-// The phone hears about a newer release, never about an older one the
-// cache still remembers.
 func TestVersionNewer(t *testing.T) {
 	for _, c := range []struct {
 		a, b string

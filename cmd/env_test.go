@@ -17,11 +17,11 @@ func TestMaskSecret(t *testing.T) {
 	}{
 		{"DB_PASSWORD", "supersecret", "su****et"},
 		{"API_TOKEN", "abc", "***"},
-		{"LOG_LEVEL", "debug", "debug"}, // not a secret
+		{"LOG_LEVEL", "debug", "debug"},
 		{"DATABASE_URL", "postgres://u:pw@h:5432/d", "postgres://u:****@h:5432/d"},
-		{"DB_DSN", "user:pw@tcp(h:3306)/db", "user:****@tcp(h:3306)/db"}, // scheme-less DSN
-		{"PORT", "5432", "5432"},                                         // no creds, untouched
-		{"ADDR", "localhost:5432", "localhost:5432"},                     // host:port, no @, untouched
+		{"DB_DSN", "user:pw@tcp(h:3306)/db", "user:****@tcp(h:3306)/db"},
+		{"PORT", "5432", "5432"},
+		{"ADDR", "localhost:5432", "localhost:5432"},
 	}
 	for _, c := range cases {
 		if got := maskSecret(c.key, c.val); got != c.want {
@@ -30,7 +30,6 @@ func TestMaskSecret(t *testing.T) {
 	}
 }
 
-// I1: empty-username connection strings must still mask the password.
 func TestMaskSecretEmptyUsernameURL(t *testing.T) {
 	got := maskSecret("REDIS_URL", "redis://:pass@host:6379")
 	if !strings.Contains(got, "****") || strings.Contains(got, "pass") {
@@ -38,7 +37,6 @@ func TestMaskSecretEmptyUsernameURL(t *testing.T) {
 	}
 }
 
-// I2: multibyte secret values must not be corrupted into invalid UTF-8.
 func TestMaskSecretMultibyte(t *testing.T) {
 	got := maskSecret("PASSWORD", "héllo")
 	if !utf8.ValidString(got) {
@@ -46,8 +44,6 @@ func TestMaskSecretMultibyte(t *testing.T) {
 	}
 }
 
-// M3: a secret-named key holding a URL must be fully masked, not just its
-// password segment.
 func TestMaskSecretURLKeyTakesPrecedence(t *testing.T) {
 	got := maskSecret("DB_PASSWORD", "postgres://u:p@h")
 	if strings.Contains(got, "postgres://") {
@@ -102,7 +98,6 @@ func TestRenderPlain(t *testing.T) {
 	if strings.Contains(out, "supersecret") {
 		t.Errorf("secret leaked in plain view:\n%s", out)
 	}
-	// --reveal=true unmasks
 	if !strings.Contains(renderPlain(all, []string{"api"}, true), "supersecret") {
 		t.Errorf("reveal did not unmask")
 	}
@@ -119,7 +114,6 @@ func TestRenderExport(t *testing.T) {
 	if !strings.Contains(out, `export API_PORT='8080'`) {
 		t.Errorf("missing export line:\n%s", out)
 	}
-	// single-quote escaping: ' -> '\''
 	if !strings.Contains(out, `export MSG='it'\''s a test'`) {
 		t.Errorf("bad shell escaping:\n%s", out)
 	}

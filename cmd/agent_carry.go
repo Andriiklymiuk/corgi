@@ -52,7 +52,6 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 	if err != nil {
 		exitWithError("agent_carry", err, 1)
 	}
-	// A fresh start needs no other account: the same one, a clean context.
 	if profile == "" && fresh {
 		profile = firstNonEmpty(s.Profile, "default")
 	}
@@ -76,7 +75,6 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 	}
 }
 
-// carryError says which exit code a carry that did not happen deserves.
 type carryError struct {
 	err  error
 	code int
@@ -85,9 +83,6 @@ type carryError struct {
 func (e *carryError) Error() string { return e.err.Error() }
 func (e *carryError) Unwrap() error { return e.err }
 
-// carrySession moves s to profile: the handoff, the transcript copy (or a
-// fresh start), the new terminal, the old session dismissed. Shared by
-// the command and the daemon's auto-carry.
 func carrySession(dir string, s sessions.Session, profile string, fresh bool, source string) (packetPath string, err error) {
 	if !fresh && s.Context != nil && s.Context.Percent >= carryFreshAt {
 		fresh = true
@@ -127,9 +122,6 @@ func carrySession(dir string, s sessions.Session, profile string, fresh bool, so
 	return packetPath, nil
 }
 
-// carryProfileFor picks where a limited session goes on its own: the
-// workspace's other accounts, the one with the most of its five hours
-// left, and none at all when every one is at 95 or nothing is known.
 func carryProfileFor(dir string, s sessions.Session) (string, error) {
 	if s.Cwd == "" || sessions.Placeholder(s.ID) {
 		return "", nil
@@ -178,12 +170,8 @@ func carryProfileFor(dir string, s sessions.Session) (string, error) {
 	return best, nil
 }
 
-// quotaFullAt is the reading at which an account is no better than the
-// one that just hit its limit.
 const quotaFullAt = 95
 
-// autoCarry is what the daemon calls for a session at its quota: pick an
-// account, carry it there, say which.
 func autoCarry(dir string) func(s sessions.Session) (string, error) {
 	return func(s sessions.Session) (string, error) {
 		profile, err := carryProfileFor(dir, s)
@@ -204,14 +192,8 @@ type carryPlan struct {
 	Workspace string
 }
 
-// carryFreshAt is the context fill past which resuming the transcript
-// carries mostly baggage; the handoff is the better start.
 const carryFreshAt = 85
 
-// leaveCarryHandoff makes sure the ticket has a handoff before the move: the
-// session's own if it wrote one after its last turn began, else a draft from
-// git and the last thing it said. Returns the packet and its Markdown path,
-// or "" when the branch names no ticket.
 func leaveCarryHandoff(workspaceDir string, s sessions.Session, profile string) (handoff.Packet, string) {
 	if workspaceDir == "" {
 		return handoff.Packet{}, ""
@@ -247,8 +229,6 @@ func leaveCarryHandoff(workspaceDir string, s sessions.Session, profile string) 
 	return p, handoff.MarkdownPath(workspaceDir, ref)
 }
 
-// carryPrompt is the first message of a fresh session: read the packet,
-// then do the next thing.
 func carryPrompt(p handoff.Packet, path string) string {
 	msg := fmt.Sprintf("Continue the work on %s. Read the handoff first: %s — it is typed state from the previous session, not a transcript; check its done list against the diff before building on it.", p.Ref, path)
 	if p.Draft {
@@ -260,9 +240,6 @@ func carryPrompt(p handoff.Packet, path string) string {
 	return msg
 }
 
-// planCarry checks the move is allowed and works out the paths. It reads
-// the workspace's accounts list from the trusted user config: a committed
-// file can never widen where a conversation may go.
 func planCarry(agentD string, s sessions.Session, profile string, fresh bool) (carryPlan, error) {
 	if s.Cwd == "" {
 		return carryPlan{}, fmt.Errorf("%s has no working directory on record", s.Display)
@@ -332,8 +309,6 @@ func accountAllowed(accounts []string, profile string) bool {
 	return false
 }
 
-// claudeConfigDir is the directory a CLAUDE_CONFIG_DIR value names, or the
-// default ~/.claude for "".
 func claudeConfigDir(configDir string) string {
 	if configDir != "" {
 		return configDir

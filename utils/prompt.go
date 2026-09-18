@@ -24,7 +24,6 @@ func PickItemFromListPrompt(label string, items []string, backString string, set
 		setter(opts)
 	}
 
-	// Add backString based on the options
 	if opts.backStringAtTheEnd {
 		items = append(items, backString)
 	} else {

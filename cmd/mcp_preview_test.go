@@ -15,15 +15,11 @@ import (
 	"time"
 )
 
-// Preview: a ticket names one running service of one workspace's stack
-// and opens a door to that port alone, for ten minutes, with no header —
-// a WebView loads a page and its assets through it. Anything else is a 404.
 func TestPreviewTicketOpensOneServiceForAWhile(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", base)
 	_ = os.MkdirAll(filepath.Join(base, "agent"), 0o700)
 
-	// The "web" service: a local server that says where it was asked.
 	web := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		io.WriteString(w, "web says "+r.URL.Path+"?"+r.URL.RawQuery+" via "+r.Header.Get("X-Forwarded-Prefix"))
@@ -81,7 +77,6 @@ func TestPreviewTicketOpensOneServiceForAWhile(t *testing.T) {
 		t.Fatalf("a ticket is a long random string, not %q", token)
 	}
 
-	// Through the door: the path after the ticket, the query with it.
 	get := func(path string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		previewProxyHandler(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -97,7 +92,6 @@ func TestPreviewTicketOpensOneServiceForAWhile(t *testing.T) {
 	if rec := get("/launch/preview/" + token); rec.Code != http.StatusNotFound {
 		t.Fatalf("the ticket alone, no trailing slash, is not a page: %d", rec.Code)
 	}
-	// Ten minutes later the door is shut.
 	previewNow = func() time.Time { return time.Date(2026, 9, 14, 12, 11, 0, 0, time.UTC) }
 	if rec := get(ticket.URL); rec.Code != http.StatusNotFound {
 		t.Fatalf("expired: %d", rec.Code)

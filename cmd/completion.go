@@ -1,6 +1,3 @@
-/*
-Copyright © 2026 Andrii Klymiuk
-*/
 package cmd
 
 import (
@@ -15,10 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// loadComposeForCompletion reads + unmarshals corgi-compose.yml without
-// touching globals, printing, or persisting state. Honors -f/--filename.
-// Falls back to ./corgi-compose.yml in cwd. Returns nil on any error so
-// shell completion stays silent.
 func loadComposeForCompletion(cmd *cobra.Command) *utils.CorgiComposeYaml {
 	path, _ := cmd.Root().Flags().GetString("filename")
 	if path == "" {
@@ -39,13 +32,6 @@ func loadComposeForCompletion(cmd *cobra.Command) *utils.CorgiComposeYaml {
 	return &c
 }
 
-// splitCsv parses a `--flag=a,b,c` value into the trailing fragment the
-// user is typing + the prefix of already-completed entries. Lets us hide
-// already-listed names from suggestions and return CSV-aware completions.
-//
-//	"api,broker,el"  -> prefix="api,broker,", current="el"
-//	"api,"           -> prefix="api,",        current=""
-//	"api"            -> prefix="",            current="api"
 func splitCsv(toComplete string) (prefix, current string, already map[string]struct{}) {
 	already = map[string]struct{}{}
 	idx := strings.LastIndex(toComplete, ",")
@@ -63,8 +49,6 @@ func splitCsv(toComplete string) (prefix, current string, already map[string]str
 	return prefix, current, already
 }
 
-// withCsvPrefix prepends prefix to each suggestion + adds NoSpace so the
-// shell doesn't insert a space after a comma.
 func withCsvPrefix(prefix string, items []string) ([]string, cobra.ShellCompDirective) {
 	if prefix == "" {
 		return items, cobra.ShellCompDirectiveNoFileComp
@@ -76,8 +60,6 @@ func withCsvPrefix(prefix string, items []string) ([]string, cobra.ShellCompDire
 	return out, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 }
 
-// completeServices is the catch-all service-name completer (script,
-// status, tunnel use this — they don't filter by manualRun).
 func completeServices(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	c := loadComposeForCompletion(cmd)
 	if c == nil {
@@ -98,7 +80,6 @@ func completeServices(cmd *cobra.Command, _ []string, toComplete string) ([]stri
 	return withCsvPrefix(prefix, names)
 }
 
-// completeServiceEquals suggests "<service>=" for the name=value workdir flags.
 func completeServiceEquals(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if strings.Contains(toComplete, "=") {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -115,9 +96,6 @@ func completeServiceEquals(cmd *cobra.Command, _ []string, toComplete string) ([
 	return names, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 }
 
-// completeTunnelableServices is `corgi tunnel <args>` specific — only
-// services with port: > 0 (no port = nothing to tunnel). manualRun is
-// allowed: tunnel cmd respects explicit positional args even for them.
 func completeTunnelableServices(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	c := loadComposeForCompletion(cmd)
 	if c == nil {
@@ -253,8 +231,6 @@ func completeTunnelProvider(_ *cobra.Command, _ []string, _ string) ([]string, c
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeProfiles suggests profile names declared on any service or
-// db_service. CSV-aware (test --profile takes a comma-separated union).
 func completeProfiles(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	c := loadComposeForCompletion(cmd)
 	if c == nil {
@@ -302,7 +278,6 @@ func completeTier(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.She
 }
 
 func completeHost(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-	// "auto" and "ip" are aliases; an explicit IP is also valid but can't be suggested.
 	return []string{
 		"auto\tdetect first non-loopback IPv4",
 		"ip\talias for auto",
@@ -324,8 +299,6 @@ func completeTemplateName(_ *cobra.Command, _ []string, _ string) ([]string, cob
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
-// registerCompletions wires shell completion handlers. Called from Execute()
-// so all subcommands have already registered their flags via init().
 func registerCompletions() {
 	_ = runCmd.RegisterFlagCompletionFunc("services", completeServices)
 	_ = runCmd.RegisterFlagCompletionFunc("dbServices", completeDbServices)

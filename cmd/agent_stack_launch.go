@@ -15,14 +15,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/push"
 )
 
-// The stack a workspace declares in corgi-compose.yml, for a phone: every
-// service and database at a glance — running or not, on what port — and
-// the buttons: start some or all (corgi run --detach), stop, restart, run
-// the tests. A workspace without a compose file answers compose:false and
-// the phone shows nothing. Everything runs through this binary in the
-// workspace's own directory, as `corgi run` at the keyboard would.
-
-// StackService is one row of `corgi ps --json`, as the phone shows it.
 type StackService struct {
 	Name      string     `json:"name"`
 	Kind      string     `json:"kind"`
@@ -32,8 +24,6 @@ type StackService struct {
 	StartedAt *time.Time `json:"startedAt,omitempty"`
 }
 
-// stackTimeout bounds a start or a stop; the tests get longer, in the
-// background, with a push when they end.
 const (
 	stackTimeout = 3 * time.Minute
 	stackTestMax = 25 * time.Minute
@@ -41,8 +31,6 @@ const (
 
 var stackServiceName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
-// composePathIn is the compose file a workspace runs from: the root, or one
-// level down is not looked at — a stack is declared at the workspace root.
 func composePathIn(root string) string {
 	for _, name := range []string{"corgi-compose.yml", "corgi-compose.yaml"} {
 		p := filepath.Join(root, name)
@@ -53,7 +41,6 @@ func composePathIn(root string) string {
 	return ""
 }
 
-// corgiIn runs this binary with args in dir, bounded by ctx.
 func corgiIn(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -70,7 +57,6 @@ func stackSnapshot(ctx context.Context, root string) (services []StackService, r
 	if err != nil && len(out) == 0 {
 		return nil, 0, err
 	}
-	// ps prints the rows, or {"error": …}; either way the rows are what count.
 	var rows []StackService
 	if json.Unmarshal(out, &rows) != nil {
 		var wrapped struct {
@@ -165,7 +151,6 @@ func launchStackHandler(w http.ResponseWriter, r *http.Request) {
 		case "restart":
 			args = []string{"restart"}
 		case "test", "e2e":
-			// Long: in the background, a push when it ends.
 			go runStackTests(dir, req.Workspace, root, picked, req.Do == "e2e")
 			writeLaunchJSON(w, map[string]any{"done": "running the " + map[bool]string{true: "e2e", false: "tests"}[req.Do == "e2e"] + " — a push says how they went", "workspace": req.Workspace})
 			return
@@ -188,8 +173,6 @@ func launchStackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// runStackTests runs `corgi test` for a workspace and says how it went
-// where the person is: the phone, the desktop.
 func runStackTests(agentDir, workspace, root string, services []string, e2e bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), stackTestMax)
 	defer cancel()
@@ -199,7 +182,6 @@ func runStackTests(agentDir, workspace, root string, services []string, e2e bool
 		args = append(args, "--e2e")
 		what = "e2e"
 	} else if len(services) == 1 {
-		// corgi test takes one --service; several means all.
 		args = append(args, "--service", services[0])
 	}
 	started := time.Now()

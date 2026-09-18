@@ -108,7 +108,6 @@ func TestOAuthConsentPageAndSameBrowserApprove(t *testing.T) {
 	}
 	id := m[1]
 
-	// a viewer cannot approve
 	viewerStore, _ := pairing.Load(oa.deviceStore)
 	viewerTok, _ := pairing.NewDeviceToken()
 	viewerStore.Devices = append(viewerStore.Devices, pairing.Device{Name: "teammate", TokenHash: pairing.HashToken(viewerTok), Role: pairing.RoleViewer})
@@ -230,7 +229,6 @@ func TestAgentApproveTalksToTheLocalServer(t *testing.T) {
 	if _, ok := store.Find("corgi agent approve"); ok {
 		t.Error("the temporary approval device must be revoked afterwards")
 	}
-	// approving twice is idempotent: the same redirect, no second code
 	if _, err := approvePendingLocally(dir, approveCode); err != nil {
 		t.Errorf("second approve = %v", err)
 	}

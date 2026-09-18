@@ -33,8 +33,6 @@ func TestFilterEnvCheckRowsNoNamesReturnsAll(t *testing.T) {
 	}
 }
 
-// A typo'd service name must error — silently checking everything (or
-// nothing) would let the caller read the exit code as their service's verdict.
 func TestFilterEnvCheckRowsRejectsUnknownService(t *testing.T) {
 	rows := []utils.EnvCheckRow{{Service: "api"}}
 	_, err := filterEnvCheckRows(rows, []string{"apo"})
@@ -43,8 +41,6 @@ func TestFilterEnvCheckRowsRejectsUnknownService(t *testing.T) {
 	}
 }
 
-// envCheckCommandFixture writes a compose dir with one service repo, chdirs
-// into it, and returns a cobra command wired like the real `env check`.
 func envCheckCommandFixture(t *testing.T, example, source string) *cobra.Command {
 	t.Helper()
 	dir := t.TempDir()
@@ -132,8 +128,6 @@ func TestRunEnvCheckHumanFindingExitsOne(t *testing.T) {
 	}
 }
 
-// Zero checked services is a finding: the JSON carries a reason and the run
-// exits non-zero, so a misconfigured CI gate cannot read vacuous as green.
 func TestRunEnvCheckJSONNothingChecked(t *testing.T) {
 	c := envCheckCommandFixture(t, "", "")
 	utils.JSONOutput = true

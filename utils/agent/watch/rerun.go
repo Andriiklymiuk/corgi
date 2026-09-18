@@ -16,24 +16,14 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// A red build is not always a red change: a runner that died, a flaky
-// test, a registry that timed out. With rerunCI on, the first red on a
-// repository of mine reruns the failed jobs once; only a second red, on
-// the same run, is handed to the session or worked on. GitHub today —
-// GitLab sends no CI notification the watch reads.
-
-// GitHubAPI is the REST base; a test points it at its own server.
 var GitHubAPI = "https://api.github.com"
 
-// Rerun is one failed run rerun: its id, where it is, and when.
 type Rerun struct {
 	RunID int64     `json:"runId"`
 	URL   string    `json:"url,omitempty"`
 	At    time.Time `json:"at"`
 }
 
-// RerunLog remembers which runs were already rerun, so a second red on
-// one run is not rerun again.
 type RerunLog struct {
 	mu     sync.Mutex
 	path   string
@@ -55,7 +45,6 @@ func LoadReruns(agentDir string) *RerunLog {
 	return l
 }
 
-// Seen says whether a run was rerun already.
 func (l *RerunLog) Seen(runID int64) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -63,7 +52,6 @@ func (l *RerunLog) Seen(runID int64) bool {
 	return ok
 }
 
-// Set records a rerun; the oldest go once the file is full.
 func (l *RerunLog) Set(r Rerun) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -87,7 +75,6 @@ func (l *RerunLog) Set(r Rerun) error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// FailedRun is a workflow run that went red, as GitHub lists it.
 type FailedRun struct {
 	ID        int64
 	URL       string
@@ -95,8 +82,6 @@ type FailedRun struct {
 	UpdatedAt time.Time
 }
 
-// NewestFailedRun is the repository's latest failed workflow run updated
-// since a moment — the one a "workflow run failed" notification is about.
 func NewestFailedRun(ctx context.Context, s Secrets, repo string, since time.Time) (FailedRun, error) {
 	if s.GitHub == "" {
 		return FailedRun{}, ErrNoToken
@@ -142,7 +127,6 @@ func NewestFailedRun(ctx context.Context, s Secrets, repo string, since time.Tim
 	return best, nil
 }
 
-// RerunFailedJobs asks GitHub to run the failed jobs of a run again.
 func RerunFailedJobs(ctx context.Context, s Secrets, repo string, runID int64) error {
 	if s.GitHub == "" {
 		return ErrNoToken
@@ -164,8 +148,6 @@ func RerunFailedJobs(ctx context.Context, s Secrets, repo string, runID int64) e
 	return nil
 }
 
-// SetPullBody writes a description onto a pull request of mine — GitHub
-// (PATCH the pull) or GitLab (PUT the merge request's description).
 func SetPullBody(ctx context.Context, s Secrets, link, body string) error {
 	switch {
 	case strings.Contains(link, "github.com/"):

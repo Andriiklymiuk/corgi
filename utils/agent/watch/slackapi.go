@@ -14,12 +14,8 @@ import (
 	"time"
 )
 
-// errSlackRateLimited is a 429. Named so a poll can back off on it rather
-// than treat it as a dead token.
 var errSlackRateLimited = errors.New("slack: rate limited")
 
-// slackAPI is one token's connection to the Slack Web API, which answers
-// HTTP 200 with an `ok` field, so a failure lives in the body.
 type slackAPI struct {
 	Token  string
 	Client *http.Client
@@ -109,8 +105,6 @@ func firstNonBlank(a, b string) string {
 	return b
 }
 
-// slackPermalink is the archive link for a message; threadTS points it into
-// the thread the message sits in.
 func slackPermalink(team, channel, ts, threadTS string) string {
 	link := "https://" + team + ".slack.com/archives/" + channel + "/p" + strings.Replace(ts, ".", "", 1)
 	if threadTS != "" && threadTS != ts {
@@ -119,8 +113,6 @@ func slackPermalink(team, channel, ts, threadTS string) string {
 	return link
 }
 
-// slackTSTime reads a Slack ts ("1726000000.000100"); an unreadable one is
-// the zero time, so a bad message never claims to be from 1970.
 func slackTSTime(ts string) time.Time {
 	secs, _, _ := strings.Cut(ts, ".")
 	n, err := strconv.ParseInt(secs, 10, 64)
@@ -130,7 +122,6 @@ func slackTSTime(ts string) time.Time {
 	return time.Unix(n, 0).UTC()
 }
 
-// slackTSNewer compares two Slack timestamps as the numbers they are.
 func slackTSNewer(a, b string) bool {
 	af, aerr := strconv.ParseFloat(a, 64)
 	bf, berr := strconv.ParseFloat(b, 64)

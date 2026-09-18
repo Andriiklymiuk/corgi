@@ -25,13 +25,11 @@ func TestWriteStayAwakeCreatesTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The user config grants capability; corgi refuses to read a loose one.
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("mode = %v, want 0600", perm)
 	}
 }
 
-// The file is hand-edited and commented — a rewrite must touch one line.
 func TestWriteStayAwakeLeavesEverythingElseAlone(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yml")
 	original := "# my notes\nnotifyUrl: \"https://ntfy.sh/x\"\nstayAwake: true\nversion: 1\n"
@@ -86,7 +84,6 @@ func TestParseOnOff(t *testing.T) {
 	}
 }
 
-// Off by default: no config, no wake lock, no caffeinate left running.
 func TestDaemonWakeLockIsOffByDefault(t *testing.T) {
 	if lock := daemonWakeLock(t.TempDir()); lock != nil {
 		lock.Release()

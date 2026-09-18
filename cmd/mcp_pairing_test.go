@@ -55,7 +55,6 @@ func TestPairEndpointIssuesADeviceToken(t *testing.T) {
 	}
 }
 
-// A code seen in transit must be useless afterwards.
 func TestPairEndpointRefusesAReplayedCode(t *testing.T) {
 	session, code, store := pairingFixture(t)
 	h := pairingHandler(session, store)
@@ -194,7 +193,6 @@ func TestPairEndpointRefusedWhenTheWindowIsClosed(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("status = %d, want 403", rec.Code)
 	}
-	// Deliberately vague: an expired window and a used one look the same.
 	if strings.Contains(strings.ToLower(rec.Body.String()), "expired") {
 		t.Error("the closed-window response should not distinguish why")
 	}
@@ -304,9 +302,6 @@ func TestBearerAuthRejectsUnknownTokens(t *testing.T) {
 	}
 }
 
-// Device tokens must not become a way to reach an endpoint the operator
-// deliberately left unauthenticated-but-local. With no server token and no
-// device store, the handler is passed through unchanged as before.
 func TestBearerAuthUnchangedWhenNothingIsConfigured(t *testing.T) {
 	reached := false
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true })
@@ -319,8 +314,6 @@ func TestBearerAuthUnchangedWhenNothingIsConfigured(t *testing.T) {
 	}
 }
 
-// Pairing without a server token still protects the MCP endpoint, because a
-// device store is present and only paired tokens pass.
 func TestDeviceStoreAloneStillGatesTheEndpoint(t *testing.T) {
 	dir := t.TempDir()
 	pairedToken(t, dir, "phone")
@@ -342,9 +335,6 @@ func TestDeviceStorePathIsUnderTheAgentDir(t *testing.T) {
 	}
 }
 
-// /pair must be reachable WITHOUT a bearer token — a client that has one does
-// not need to pair. Mounting it inside the bearer check returned 401 to every
-// device trying to enrol, which defeats the feature entirely.
 func TestPairRouteIsReachableWithoutAToken(t *testing.T) {
 	session, code, store := pairingFixture(t)
 
@@ -361,7 +351,6 @@ func TestPairRouteIsReachableWithoutAToken(t *testing.T) {
 	}
 }
 
-// ...while /mcp beside it stays closed to an unauthenticated caller.
 func TestMCPRouteStaysClosedWhilePairingIsOpen(t *testing.T) {
 	session, _, store := pairingFixture(t)
 	reached := false
@@ -380,11 +369,8 @@ func TestMCPRouteStaysClosedWhilePairingIsOpen(t *testing.T) {
 	}
 }
 
-// `corgi mcp --http` with no token is documented as unauthenticated. Consulting
-// a device store that always exists silently turned that into 401 for every
-// request, with no credential in existence to fix it.
 func TestNoTokenAndNoPairedDevicesStaysOpen(t *testing.T) {
-	dir := t.TempDir() // a store path that exists but holds nothing
+	dir := t.TempDir()
 	if pairing.InspectStore(pairing.StorePath(dir)) != pairing.StoreEmpty {
 		t.Fatal("fixture should have no paired devices")
 	}
@@ -413,8 +399,6 @@ func TestInspectStore(t *testing.T) {
 	}
 }
 
-// Collapsing "cannot read" into "no devices" would let a chmod or a truncated
-// file turn an authenticated endpoint back into an open one.
 func TestInspectStoreDistinguishesUnreadable(t *testing.T) {
 	dir := t.TempDir()
 	pairedToken(t, dir, "phone")

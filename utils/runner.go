@@ -6,7 +6,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// BuildArgs tolerates scalar YAML values of any type (NODE_VERSION: 22).
 type BuildArgs map[string]string
 
 func (b *BuildArgs) UnmarshalYAML(value *yaml.Node) error {
@@ -21,10 +20,8 @@ func (b *BuildArgs) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// runnerAlias avoids UnmarshalYAML recursion.
 type runnerAlias Runner
 
-// UnmarshalYAML accepts both `runner: docker` and the full object form.
 func (r *Runner) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.ScalarNode {
 		r.Name = value.Value
@@ -35,7 +32,6 @@ func (r *Runner) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*r = Runner(a)
-	// runner: {image: nginx:alpine} alone means docker — spare the boilerplate.
 	if r.Image != "" && r.Name == "" {
 		r.Name = "docker"
 	}

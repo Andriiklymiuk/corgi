@@ -12,9 +12,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// A message for a session whose terminal is gone runs one headless turn
-// — claude -p --resume — in the session's own checkout; a session with a
-// terminal is typed into instead, never resumed beside itself.
 func TestAHeadlessTurnResumesAGoneSession(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
@@ -54,7 +51,6 @@ func TestAHeadlessTurnResumesAGoneSession(t *testing.T) {
 		t.Fatalf("the board carries the ended: %+v", st.Ended)
 	}
 
-	// A live session is not resumed beside itself.
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s2", Cwd: "/tmp/b", ClaudePID: 200, Ancestors: []int{200}, At: now})
 	d.handleSessionCommand(context.Background(), command.Command{Action: command.ActionContinue, SessionID: "s2", Text: "hello"})
 	d.runs.Wait()

@@ -81,7 +81,6 @@ func TestWatchEnableWritesTheConfigAndReportsTheGaps(t *testing.T) {
 		t.Errorf("a linear token and a project leave nothing missing, got %v", gaps)
 	}
 
-	// A workspace with prs on and no repos cannot route a review.
 	if _, err := mcpWatchEnable(watchEnableArgs{Workspace: "acme-stack", Repos: nil}); err != nil {
 		t.Fatal(err)
 	}

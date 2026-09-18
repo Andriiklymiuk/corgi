@@ -28,7 +28,6 @@ func TestMemoryListAbsentStoreIsEmptyJSON(t *testing.T) {
 	utils.JSONOutput = true
 	t.Cleanup(func() { utils.JSONOutput = false })
 
-	// capture stdout (PrintJSON writes os.Stdout)
 	out := captureStdout(t, func() { _, _ = runMemory(t, "list") })
 	var facts []utils.Fact
 	if err := json.Unmarshal([]byte(out), &facts); err != nil {

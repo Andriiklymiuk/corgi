@@ -9,14 +9,8 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// pickupTimeout keeps a slow tracker from holding up the thing someone
-// actually asked for, which is the session.
 const pickupTimeout = 20 * time.Second
 
-// markPickedUp moves a ticket to the workspace's pickup column — "In
-// Progress" — when someone starts working on it. Best effort by design: the
-// session is the point, and a tracker that refuses the move must not stop it.
-// Only issues move; a pull request review has no column.
 func markPickedUp(agentD string, events []watch.Event) {
 	if len(events) == 0 {
 		return
@@ -42,10 +36,8 @@ func markPickedUp(agentD string, events []watch.Event) {
 		}
 		ref := strings.TrimSpace(e.Ref)
 		if ref == "" || strings.EqualFold(strings.TrimSpace(e.State), status) {
-			continue // already there: a needless write is still a write
+			continue
 		}
-		// A finished ticket stays finished. Moving it back would also clear
-		// its resolution, and nobody asked for that.
 		current := e.State
 		if known, ok := watch.LoadStateLog(agentD).Get(e.Key); ok && known.Status != "" {
 			current = known.Status
@@ -58,14 +50,11 @@ func markPickedUp(agentD string, events []watch.Event) {
 			utils.Infof("corgi: %s stayed where it was: %v\n", ref, err)
 			continue
 		}
-		// Where it came from, so the move can be undone.
 		_ = watch.LoadStateLog(agentD).SetFrom(e.Key, status, e.State, time.Now())
 		utils.Infof("corgi: %s → %s\n", ref, status)
 	}
 }
 
-// pickupStatusFor is the column this workspace moves a picked-up ticket to,
-// or "" when it was never configured to move one.
 func pickupStatusFor(agentD, workspaceID string) string {
 	resolved, err := resolveWorkspaceConfig(agentD, workspaceID)
 	if err != nil || resolved.Watch == nil {
@@ -74,13 +63,10 @@ func pickupStatusFor(agentD, workspaceID string) string {
 	return strings.TrimSpace(resolved.Watch.PickupStatus)
 }
 
-// claimTicket takes a ticket on the tracker for this machine, so a second
-// machine watching the same board leaves it alone. Wired from the daemon,
-// which cannot write to a tracker itself.
 func claimTicket(agentD, workspaceID string, e watch.Event) (bool, string, error) {
 	ref := strings.TrimSpace(e.Ref)
 	if ref == "" {
-		return true, "", nil // nothing to claim on
+		return true, "", nil
 	}
 	w, _, err := watchWriter(agentD, workspaceID)
 	if err != nil {
@@ -91,9 +77,6 @@ func claimTicket(agentD, workspaceID string, e watch.Event) (bool, string, error
 	return watch.Claim(ctx, w, ref, watch.MachineName(), time.Now())
 }
 
-// markDelivered moves a ticket on once a run opened a pull request for it.
-// A different column from the pickup one: the work is finished and waiting
-// on a person, which is not the same as being worked on.
 func markDelivered(agentD, workspaceID string, e watch.Event, prs []string) {
 	if len(prs) == 0 || strings.TrimSpace(e.Ref) == "" {
 		return
@@ -118,14 +101,10 @@ func markDelivered(agentD, workspaceID string, e watch.Event, prs []string) {
 		return
 	}
 	_ = watch.LoadStateLog(agentD).Set(e.Key, status, time.Now())
-	// Say what it opened, on the ticket, so the board is not the only place
-	// the link exists — in the one corgi comment, not a new one each time.
 	_ = watch.UpsertWorkpad(ctx, w, e.Ref, "Pull requests", strings.Join(prs, "\n"))
 	utils.Infof("corgi: %s → %s\n", e.Ref, status)
 }
 
-// writeWorkpad sets one section of a ticket's workpad comment from the
-// daemon, for the runner to leave the handoff or a blocker on the ticket.
 func writeWorkpad(agentD, workspaceID, ref, section, text string) {
 	if strings.TrimSpace(ref) == "" {
 		return

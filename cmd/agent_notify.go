@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// Written by the MCP server, read by the daemon — two processes, so a file.
 const publicURLName = "public.url"
 
 func recordPublicURL(url string) {
@@ -39,8 +38,6 @@ func launcherURL() string {
 	return strings.TrimSuffix(u.String(), "/") + "/app"
 }
 
-// connectorURL is the MCP endpoint a Claude connector points at. Empty until
-// the tunnel resolves.
 func connectorURL() string {
 	launcher := launcherURL()
 	if launcher == "" {
@@ -49,8 +46,6 @@ func connectorURL() string {
 	return strings.TrimSuffix(launcher, "/app") + "/mcp"
 }
 
-// localLauncherURL is the same launcher page, served from this machine. Empty
-// when no MCP that `agent up` started is listening.
 func localLauncherURL() string {
 	dir, err := agentDir()
 	if err != nil {
@@ -64,11 +59,9 @@ func localLauncherURL() string {
 	if addr == "" || !mcpListening(addr) {
 		return ""
 	}
-	return "http://" + addr + "/app" // NOSONAR — this machine's own launcher, no TLS to speak
+	return "http://" + addr + "/app"
 }
 
-// loopbackAddr turns a listen address into one this machine can dial.
-// `--http 0.0.0.0:8765` listens everywhere but is not itself dialable.
 func loopbackAddr(addr string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil || port == "" {
@@ -81,11 +74,6 @@ func loopbackAddr(addr string) string {
 	return net.JoinHostPort(host, port)
 }
 
-// preferLocalLink rewrites the launcher link for the desktop toast. The toast
-// is read at the machine corgi runs on, where the public URL is a round trip
-// out to the internet and back to reach a page already served from localhost —
-// and it is dead whenever the tunnel is. Only the launcher is swapped: a
-// claude.ai session URL is the session, and has no local equivalent.
 func preferLocalLink(link string) string {
 	if link == "" || link != launcherURL() {
 		return link

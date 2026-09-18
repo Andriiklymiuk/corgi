@@ -15,7 +15,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// ticketHome writes an events log and a board cache under a temp agent dir.
 func ticketHome(t *testing.T) string {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
@@ -50,8 +49,6 @@ func ticketHome(t *testing.T) string {
 	return dir
 }
 
-// The phone draws a "move to" menu from these, so they must arrive with the
-// events rather than costing a round trip to the tracker per tap.
 func TestInboxCarriesTheCachedColumns(t *testing.T) {
 	ticketHome(t)
 	rec := httptest.NewRecorder()
@@ -98,7 +95,6 @@ func TestIgnoreTakesARowOutOfTheInboxWithoutTouchingTheTracker(t *testing.T) {
 		t.Fatal("ignoring must record the dismissal, so the row leaves and auto mode skips it")
 	}
 
-	// And the row actually goes: this is what "Ignore does nothing" was.
 	rec = httptest.NewRecorder()
 	launchEventsHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/events", nil))
 	var listed struct {
@@ -116,9 +112,6 @@ func TestIgnoreTakesARowOutOfTheInboxWithoutTouchingTheTracker(t *testing.T) {
 	}
 }
 
-// The events log keeps the column a ticket arrived in and never changes, so
-// a move made from the phone has to be remembered separately or the row goes
-// on showing the old column for good.
 func TestAMovedTicketShowsItsNewColumn(t *testing.T) {
 	dir := ticketHome(t)
 
@@ -153,7 +146,6 @@ func TestAMovedTicketShowsItsNewColumn(t *testing.T) {
 		t.Fatalf("the row must show where it went: %q", got)
 	}
 
-	// It survives a reload, so the column is still right after a refresh.
 	if s, ok := watch.LoadStateLog(dir).Get("jira:ABC-1"); !ok || s.Status != "In Progress" {
 		t.Fatalf("the move must outlive the request that made it: %+v", s)
 	}
@@ -183,8 +175,6 @@ func TestTicketRefusesWhatItCannotDo(t *testing.T) {
 	}
 }
 
-// A ticket belongs in its own checkout: when an editor is already open there,
-// that is where the session goes, whatever window the phone was pointing at.
 func TestWorkOnPrefersTheWindowAlreadyOnThatWorkspace(t *testing.T) {
 	dir := ticketHome(t)
 	root := t.TempDir()
@@ -211,7 +201,6 @@ func TestWorkOnPrefersTheWindowAlreadyOnThatWorkspace(t *testing.T) {
 		t.Fatalf("no workspace, no preference: %q", got)
 	}
 
-	// Nothing open on it: the caller's choice has to stand.
 	none := boardReport{}
 	none.Windows = []sessions.Window{{ID: "win-elsewhere", Folders: []string{t.TempDir()}}}
 	if got := windowOnWorkspace(none, dir, "api"); got != "" {
@@ -219,8 +208,6 @@ func TestWorkOnPrefersTheWindowAlreadyOnThatWorkspace(t *testing.T) {
 	}
 }
 
-// An event is recorded once. A merge request merged an hour later, or a
-// ticket someone finished, stayed on the phone looking like work.
 func TestFinishedWorkLeavesTheInboxWithoutBeingDismissed(t *testing.T) {
 	dir := ticketHome(t)
 
@@ -245,7 +232,6 @@ func TestFinishedWorkLeavesTheInboxWithoutBeingDismissed(t *testing.T) {
 	if len(list()) != 2 {
 		t.Fatalf("both events start in the inbox: %v", list())
 	}
-	// The daemon learned it was merged since; nobody dismissed anything.
 	if err := watch.LoadStateLog(dir).Set("jira:ABC-1", "merged", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +240,6 @@ func TestFinishedWorkLeavesTheInboxWithoutBeingDismissed(t *testing.T) {
 			t.Fatal("merged work is history, not something waiting on you")
 		}
 	}
-	// A state that is still live keeps the row.
 	if err := watch.LoadStateLog(dir).Set("jira:ORPHAN-1", "In Progress", time.Now()); err != nil {
 		t.Fatal(err)
 	}

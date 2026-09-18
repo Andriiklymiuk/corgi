@@ -71,7 +71,6 @@ func TestResolveHostFlag_Auto(t *testing.T) {
 	}
 	err := resolveHostFlag(c)
 	if err != nil {
-		// CI without a non-loopback iface — acceptable, skip.
 		t.Skipf("no detectable LAN iface in test env: %v", err)
 	}
 	if utils.HostOverride == "" || utils.HostOverride == "auto" {
@@ -87,7 +86,6 @@ func TestResolveHostFlag_IP(t *testing.T) {
 	}
 	err := resolveHostFlag(c)
 	if err != nil {
-		// CI without a non-loopback iface — acceptable, skip.
 		t.Skipf("no detectable LAN iface in test env: %v", err)
 	}
 	if utils.HostOverride == "" || utils.HostOverride == "ip" {
@@ -421,7 +419,6 @@ func TestCleanupSkipsAfterStartNil(t *testing.T) {
 }
 
 func TestHandleComposeWriteEventErrorReadingNew(t *testing.T) {
-	// Without compose file, GetCorgiServices fails → handleComposeWriteEvent returns true (stop)
 	cmd := &cobra.Command{}
 	got := handleComposeWriteEvent(nil, cmd, "x")
 	if !got {
@@ -529,7 +526,6 @@ func TestExitInProgressResetsForRetry(t *testing.T) {
 
 	exitInProgress.Store(false)
 	exitInProgress.CompareAndSwap(false, true)
-	// Simulate cleanup-setup error path resetting the flag.
 	exitInProgress.Store(false)
 	if !exitInProgress.CompareAndSwap(false, true) {
 		t.Fatal("after reset, next signal must be able to claim the flag")
@@ -609,7 +605,6 @@ func TestSetupComposeWatcherNoWatchFalse(t *testing.T) {
 }
 
 func TestStartServiceProcessDockerPort(t *testing.T) {
-	// docker runner with port — tries ExecuteServiceCommandRun("make up") which will fail gracefully
 	startServiceProcess(utils.Service{
 		ServiceName: "svc",
 		Runner:      utils.Runner{Name: "docker"},
@@ -627,9 +622,6 @@ func TestStartServiceProcessStartCmds(t *testing.T) {
 }
 
 func TestRunDatabaseServicesWithNonManual(t *testing.T) {
-	// hasDatabaseToRun=true, DockerInit must NOT launch Docker.app in the
-	// test environment — pre-set shutdown so startDockerAndWait bails
-	// before invoking StartDocker.
 	utils.ResetShutdownForTests()
 	t.Cleanup(utils.ResetShutdownForTests)
 	utils.RequestShutdown()
@@ -642,7 +634,6 @@ func TestRunDatabaseServicesWithNonManual(t *testing.T) {
 }
 
 func TestStartDatabaseIfNeededNotRunning(t *testing.T) {
-	// ManualRun=false, but IsServiceRunning will fail (no docker) → prints error, continues
 	startDatabaseIfNeeded(utils.DatabaseService{
 		ServiceName: "pg",
 		Driver:      "postgres",
@@ -654,7 +645,6 @@ func TestWatchCorgiComposeNoWatch(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("no-watch", true, "")
 	cmd.Flags().Set("no-watch", "true")
-	// setupComposeWatcher returns nil when no-watch=true
 	w, err := setupComposeWatcher(cmd)
 	if err != nil {
 		t.Fatal(err)
@@ -757,7 +747,6 @@ func TestSetupLogWriters_RegistersServicesAndDbServices(t *testing.T) {
 	utils.CorgiComposePathDir = tmp
 	defer func() { utils.CorgiComposePathDir = prevDir }()
 
-	// Reset writer registry.
 	utils.ServiceLogWriters = map[string]io.Writer{}
 
 	corgi := &utils.CorgiCompose{
@@ -778,7 +767,6 @@ func TestSetupLogWriters_RegistersServicesAndDbServices(t *testing.T) {
 		}
 	}
 
-	// .gitignore should have been created with .logs/ entry.
 	data, err := os.ReadFile(filepath.Join(tmp, ".corgi", "corgi_services", ".gitignore"))
 	if err != nil {
 		t.Fatalf("expected .gitignore, got error: %v", err)
@@ -818,7 +806,6 @@ func TestRunSummaryJSONShape(t *testing.T) {
 	if first["name"] != "api" || first["kind"] != "service" || first["port"].(float64) != 8080 {
 		t.Errorf("item fields wrong: %v", first)
 	}
-	// port omitted when zero; error omitted when empty.
 	if _, has := failed[0].(map[string]any)["port"]; has {
 		t.Errorf("port should be omitted when zero")
 	}
@@ -942,7 +929,6 @@ func TestOrderedByDatabaseGatePutsOptedOutFirst(t *testing.T) {
 	}
 }
 
-// Without an opt-out the order must be byte-for-byte what it always was.
 func TestOrderedByDatabaseGateKeepsOrderWhenNobodyOptsOut(t *testing.T) {
 	services := []utils.Service{
 		{ServiceName: "api"},
@@ -974,9 +960,6 @@ func TestAnyServiceStartsWithDatabases(t *testing.T) {
 	}
 }
 
-// The gate must start open. Anything that never runs the database phase — every
-// other command, and tests driving the launchers directly — would otherwise
-// block on it forever.
 func TestDatabaseGateStartsOpen(t *testing.T) {
 	select {
 	case <-dbsReady:

@@ -18,8 +18,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// corgi writes these into the workspace's LOCAL settings, never the committed
-// file.
 const (
 	hookEventNotification = "Notification"
 	hookEventStop         = "Stop"
@@ -27,8 +25,6 @@ const (
 	hookMarker            = "corgi agent hook"
 )
 
-// corgiHookEvents is every event corgi writes, so enable and disable can never
-// disagree about what to clean up.
 var corgiHookEvents = []string{hookEventNotification, hookEventStop, hookEventPrompt}
 
 var agentHooksCmd = &cobra.Command{
@@ -84,9 +80,7 @@ var agentHookCmd = &cobra.Command{
 	Run:    runAgentHook,
 }
 
-// samePath compares directories through their symlinks: on macOS a registered
-// /var/... path and the same directory as os.Getwd() reports it (/private/var)
-// are the same place, and a string compare would call them different.
+// macOS reports /var as /private/var; compare through symlinks.
 func samePath(a, b string) bool {
 	if a == b {
 		return true
@@ -142,9 +136,6 @@ func printNotifyUrlHelp() {
 	utils.Info("  then: corgi agent restart")
 }
 
-// The title hook is on by default: a list of sessions all called after their
-// repo is the thing people ask corgi to fix, and the hook only ever renames a
-// session corgi named itself.
 func wantsTitleHook(cmd *cobra.Command) bool {
 	if cmd == nil {
 		return true
@@ -274,8 +265,6 @@ func enableHooksIn(dir, id string, turns, idle, title bool) error {
 
 func withCorgiHook(existing any, workspaceID, event string, idle bool) []any {
 	out := stripCorgiHooks(existing)
-	// The choice rides in the command corgi writes, so it is per workspace and
-	// visible in the settings file rather than hidden in another config.
 	command := fmt.Sprintf("corgi agent hook --workspace %s", workspaceID)
 	if event == hookEventPrompt {
 		command += " title"
@@ -347,7 +336,6 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	}
 	switch event {
 	case "emit":
-		// The session-tracking hook: one spool entry, one nudge, no output.
 		if ev, ok := runEmitHook(os.Stdin, os.Getenv, os.Getppid()); ok {
 			deliverEvent(ev)
 		}
@@ -377,20 +365,11 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 		return
 	}
 	if event == "title" {
-		// The one hook that answers rather than reports: it prints a session
-		// title on stdout and tells the daemon nothing.
 		runAgentTitleHook(id, titleHookStdin, os.Stdout)
 		return
 	}
 	detail, kind := hookDetailAndKind(event, os.Stdin)
 
-	// Claude Code fires Notification for two different things: a permission
-	// prompt, which blocks the session until someone answers, and a 60-second
-	// idle nudge, which blocks nothing at all. Only the first is worth a toast
-	// on your desk or a push to your phone — the second arrives when the
-	// session is simply sitting at its prompt, and reading "waiting for your
-	// input" for something that wants nothing is how people learn to ignore
-	// every notification corgi sends.
 	if idle, _ := cmd.Flags().GetBool("idle"); isIdleNudge(detail) && !idle {
 		return
 	}
@@ -404,7 +383,7 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	}
 	info, err := daemon.ReadInfo(dir)
 	if err != nil || info == nil || !info.Commands {
-		return // no daemon to tell; the session is unaffected either way
+		return
 	}
 	if _, err := command.Write(dir, command.Command{
 		Action: command.ActionAttention, WorkspaceID: id, Detail: detail, Source: "hook",
@@ -414,14 +393,11 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	daemon.Nudge(info)
 }
 
-// Only Claude's own message is used, never session content.
 func hookDetail(event string, stdin io.Reader) string {
 	detail, _ := hookDetailAndKind(event, stdin)
 	return detail
 }
 
-// hookDetailAndKind also returns the notification_type, so the caller can
-// drop the kinds that report news rather than ask for a person.
 func hookDetailAndKind(event string, stdin io.Reader) (string, string) {
 	msg, kind := "", ""
 	if stdin != nil {
@@ -449,10 +425,6 @@ func hookDetailAndKind(event string, stdin io.Reader) (string, string) {
 	}
 }
 
-// quietNotification: Claude Code notifications that carry news, not a
-// request — a login that worked, a usage limit that lifted and the task
-// resuming on its own, an elicitation that completed. Nobody has to act, so
-// nobody's phone should buzz.
 func quietNotification(kind string) bool {
 	switch kind {
 	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response",
@@ -462,9 +434,6 @@ func quietNotification(kind string) bool {
 	return false
 }
 
-// isIdleNudge recognises Claude Code's "nothing is blocked, you have just been
-// away" message. Matched on the message rather than the event name because the
-// event is Notification for both kinds.
 func isIdleNudge(detail string) bool {
 	return strings.Contains(strings.ToLower(detail), "waiting for your input")
 }

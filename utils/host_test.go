@@ -90,14 +90,10 @@ func TestRenderEnvFileContent_LocalhostNameInEnvWinsOverHostOverride(t *testing.
 		Port:               3000,
 		DependsOnServices:  []DependsOnService{{Name: "api", EnvAlias: "API_URL"}},
 	}
-	// Simulate env body that already had HostOverride applied for service URLs
-	// but db host stays "localhost".
 	envBody := "API_URL=http://10.0.0.5:4000\nDB_HOST=localhost\n"
 
 	out := renderEnvFileContent("/nonexistent/path/to/.env", envBody, service)
 
-	// LocalhostNameInEnv ReplaceAll touches "localhost" only — HostOverride
-	// value escapes since it's not the literal "localhost".
 	if !strings.Contains(out, "API_URL=http://10.0.0.5:4000") {
 		t.Fatalf("expected HostOverride preserved, got %q", out)
 	}

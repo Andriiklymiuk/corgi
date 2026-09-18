@@ -11,9 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// A workspace without a compose file has no stack for the phone; one with
-// a compose file lists its services, and a bad service name is refused
-// before anything runs.
 func TestTheStackAnswersOnlyWithACompose(t *testing.T) {
 	dir := phoneBoard(t, true)
 	plain, stack := t.TempDir(), t.TempDir()

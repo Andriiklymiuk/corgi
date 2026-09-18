@@ -38,8 +38,6 @@ func postForm(t *testing.T, h http.Handler, path string, form url.Values) (*http
 	return rec, out
 }
 
-// issueTestCode registers a client and mints a code for it, the way an
-// approved consent page would.
 func issueTestCode(t *testing.T, oa *oauthServer) string {
 	t.Helper()
 	oa.mu.Lock()
@@ -99,7 +97,6 @@ func TestOAuthCodeGrantIssuesWorkingToken(t *testing.T) {
 	if dev.Name == "" || !strings.HasPrefix(dev.Name, "Claude · oauth") || dev.ExpiresAt.IsZero() {
 		t.Errorf("access token must be a device with expiry: %+v", dev)
 	}
-	// the same code again is dead
 	rec, out := postForm(t, mux, oauthTokenPath, codeGrant(issueTestCode(t, oa)))
 	if rec.Code != 200 {
 		t.Fatal(out)
@@ -199,8 +196,6 @@ func TestOAuthAccessTokenExpires(t *testing.T) {
 	access := body["access_token"].(string)
 	real := oa.now
 	oa.now = func() time.Time { return real().Add(2 * time.Hour) }
-	// device expiry is checked by the pairing store against the wall clock;
-	// emulate by rewriting the device
 	store, _ := pairing.Load(oa.deviceStore)
 	for i := range store.Devices {
 		if store.Devices[i].Family != "" {
@@ -232,7 +227,6 @@ func TestOAuthRevokeEndpointAndDevicesRevoke(t *testing.T) {
 		t.Error("revoking by access token must work too")
 	}
 
-	// corgi mcp devices revoke <oauth device> kills the family on disk
 	_, body = postForm(t, mux, oauthTokenPath, codeGrant(issueTestCode(t, oa)))
 	store, _ := pairing.Load(oa.deviceStore)
 	var oauthDevice pairing.Device
@@ -251,9 +245,6 @@ func TestOAuthRevokeEndpointAndDevicesRevoke(t *testing.T) {
 		}
 	}
 	_, out := postForm(t, mux, oauthTokenPath, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {body["refresh_token"].(string)}})
-	// the in-memory server still has the family; a restart reloads the file.
-	// What matters on disk is checked above; here the refresh token still
-	// rotates in memory, so only assert that the on-disk device is gone.
 	_ = out
 	store, _ = pairing.Load(oa.deviceStore)
 	for _, d := range store.Devices {

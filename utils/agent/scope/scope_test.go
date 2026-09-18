@@ -44,11 +44,11 @@ func TestScopeRoundTripsAndMatches(t *testing.T) {
 	}
 	inWorktree := Scope{Ref: "X", Paths: []string{"api/limits/**", "shared/**"}}
 	for rel, want := range map[string]bool{
-		".corgi/corgi_services/.worktrees/api-3f2a1b@feature-x/limits/h.go": true,  // a worktree of the api repo, seen from the root
-		".corgi/corgi_services/.worktrees/web-3f2a1b@feature-x/limits/h.go": false, // a worktree of another repo
-		"api/limits/h.go":        true,  // a monorepo, from the root
-		"web/limits/h.go":        false, // a different repo
-		"services/shared/x.ts":   true,  // the glob was written from inside the repo; the first segment is forgiven
+		".corgi/corgi_services/.worktrees/api-3f2a1b@feature-x/limits/h.go": true,
+		".corgi/corgi_services/.worktrees/web-3f2a1b@feature-x/limits/h.go": false,
+		"api/limits/h.go":        true,
+		"web/limits/h.go":        false,
+		"services/shared/x.ts":   true,
 		"other/shared/deep/x.ts": true,
 	} {
 		if inWorktree.Allows(rel) != want {

@@ -32,22 +32,14 @@ const (
 	flagTunnelHostname = "tunnel-hostname"
 )
 
-// defaultMCPAddr is where `corgi agent up` serves MCP when no --http is given,
-// so nobody has to remember a port.
 const defaultMCPAddr = "127.0.0.1:8765"
 
-// mcpLogName is the detached MCP server's log file, under the agent data dir.
 const mcpLogName = "mcp.log"
 
-// mcpPidName records the detached MCP server's pid so `corgi agent down` can
-// stop the tunnel + pairing server that `agent up` started, not just the daemon.
 const mcpPidName = "mcp.pid"
 
-// mcpVersionName records which corgi spawned the MCP server.
 const mcpVersionName = "mcp.version"
 
-// mcpAddrName records the address that MCP listens on, so `agent down`'s
-// no-pid-file fallback can look at the right port even after --http.
 const mcpAddrName = "mcp.addr"
 
 var agentUpCmd = &cobra.Command{
@@ -66,14 +58,12 @@ Prints the public URL and the pairing code; --json emits the same as JSON.`,
 }
 
 type agentUpResult struct {
-	Workspace  string `json:"workspace,omitempty"`
-	Registered bool   `json:"registered"`
-	DaemonPID  int    `json:"daemonPid"`
-	MCPAddr    string `json:"mcpAddr"`
-	MCPStarted bool   `json:"mcpStarted"`
-	PublicURL  string `json:"publicUrl,omitempty"`
-	// TunnelHostname is the configured hostname — the one thing that keeps
-	// the public URL the same across restarts; empty for a quick tunnel.
+	Workspace      string `json:"workspace,omitempty"`
+	Registered     bool   `json:"registered"`
+	DaemonPID      int    `json:"daemonPid"`
+	MCPAddr        string `json:"mcpAddr"`
+	MCPStarted     bool   `json:"mcpStarted"`
+	PublicURL      string `json:"publicUrl,omitempty"`
 	TunnelHostname string `json:"tunnelHostname,omitempty"`
 	QuickTunnel    bool   `json:"quickTunnel,omitempty"`
 	PairCode       string `json:"pairingCode,omitempty"`
@@ -91,8 +81,6 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_data_dir", err, 1)
 	}
 
-	// Flags given now win; anything not given falls back to what the last
-	// `up` used, so `agent restart` keeps the named tunnel without retyping it.
 	cur := upSettingsFromFlags(cmd)
 	settings, reused := mergeUpSettings(cur, cmd.Flags().Changed, loadUpSettings(dir))
 	if reused != "" {
@@ -105,8 +93,6 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 
 	tunnel, err := tunnelArgs(settings.Provider, settings.TunnelName, settings.TunnelHostname)
 	if viewer, _ := cmd.Flags().GetBool("viewer"); viewer && err == nil {
-		// The pairing window this up opens hands out a read-only token: a
-		// teammate scans it and sees the board, never a button.
 		tunnel = append(tunnel, "--viewer")
 	}
 	if err != nil {
@@ -116,10 +102,6 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_up_tunnel", err, 2)
 	}
 
-	// One `agent up` at a time. Two racing invocations both pass the listening
-	// check, both truncate mcp.log, and one ends up an orphaned server logging
-	// to an unlinked file while both report failure. The lock makes the loser
-	// wait its turn instead.
 	release, err := acquireUpLock(dir)
 	if err != nil {
 		exitWithError("agent_up_locked", err, 1)
@@ -132,9 +114,6 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 
 	res.Workspace, res.Registered = registerCwdWorkspace()
 	if res.Workspace != "" {
-		// Same trust pre-check init does: an untrusted folder produces a phone
-		// card that can only ever fail, so say it now, while the fix is one
-		// `claude` run away in the terminal the user is already in.
 		if absPath, cfgDir, ok := workspaceSessionTarget(res.Workspace, runningProfile(res.Workspace)); ok {
 			warnIfUntrusted(cfgDir, absPath)
 		}
@@ -146,19 +125,13 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	}
 	res.DaemonPID = info.PID
 
-	// Before the MCP branch, so every path below — including "already
-	// listening" — answers the reboot question exactly once.
 	ensureAtLogin(dir, cmd, &settings)
 	res.AtLogin = settings.AtLogin
 
 	res.LogPath = filepath.Join(dir, mcpLogName)
 	if mcpListening(addr) {
-		// Something already holds the port. Re-running `up` must be a safe,
-		// idempotent ensure step — a phone may be mid-session on the running
-		// server, so it is only ever replaced when --fresh says so.
 		if !fresh {
 			if pid, ok := readAgentPidFile(filepath.Join(dir, mcpPidName)); ok && utils.PidAlive(pid, "") {
-				// Ours and healthy: report it as up, with the URL its log recorded.
 				if data, rerr := os.ReadFile(res.LogPath); rerr == nil {
 					if parsed, _ := parseMCPLog(string(data)); parsed.publicURL != "" {
 						res.PublicURL = parsed.publicURL
@@ -202,9 +175,6 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	}
 	res.PublicURL = parsed.publicURL
 	res.PairCode = parsed.pairCode
-	// A quick tunnel came back on a new address: every paired phone hears
-	// it and relinks itself — its token and key are still good, only the
-	// address moved. Without this a reboot silently loses the phone.
 	if res.PublicURL != "" && settings.LastPublicURL != "" && settings.LastPublicURL != res.PublicURL {
 		announceNewAddress(dir, res.PublicURL)
 	}
@@ -213,18 +183,12 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 	}
 	_ = saveUpSettings(dir, settings)
 	if res.PublicURL != "" && res.PairCode != "" {
-		// The code rides in the fragment: it never reaches the server or its
-		// logs, only the pair page's own JS.
 		res.PairURL = res.PublicURL + "/pair#" + res.PairCode
 	}
 
 	printAgentUp(res)
 }
 
-// registerCwdWorkspace puts the current workspace — a corgi stack or a plain
-// git repository — in the registry, like one step of `corgi agent scan`.
-// Registration only — autostart stays opt-in, and remote start is the point of
-// this command anyway.
 func registerCwdWorkspace() (string, bool) {
 	cwd, err := os.Getwd()
 	if err != nil || !dirIsWorkspace(cwd) {
@@ -236,17 +200,11 @@ func registerCwdWorkspace() (string, bool) {
 		if existing.AbsPath == cwd {
 			return id, false
 		}
-		// The basename is already taken by a DIFFERENT directory. Repointing it
-		// would hijack that workspace; disambiguate with the parent instead so
-		// two repos both called "api" can coexist.
 		id = filepath.Base(filepath.Dir(cwd)) + "-" + id
 		if existing2, ok := registry.Find(id); ok {
 			if existing2.AbsPath == cwd {
 				return id, false
 			}
-			// Both levels collide with other directories. Refusing beats
-			// repointing: the id keys trusted settings (account, permissions),
-			// which must never silently transfer to a new directory.
 			utils.Infof("workspace names %q and %q are both taken by other directories — register with `corgi agent init --id <name>`\n",
 				filepath.Base(cwd), id)
 			return "", false
@@ -262,15 +220,12 @@ func registerCwdWorkspace() (string, bool) {
 	if err := workspace.Save(path, registry); err != nil {
 		exitWithError("agent_registry_write", err, 1)
 	}
-	// Said at registration, once, while the choice of directory is still fresh.
 	if note := protectedWorkspaceNote(cwd); note != "" {
 		utils.Infof("ℹ %s\n", note)
 	}
 	return id, true
 }
 
-// ensureDaemon returns the running daemon's record, starting one detached when
-// none is up.
 func ensureDaemon(dir string) (*daemon.Info, error) {
 	if info, err := daemon.ReadInfo(dir); err == nil && info != nil {
 		return info, nil
@@ -291,21 +246,14 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 	return nil, fmt.Errorf("daemon did not come up — see %s", filepath.Join(dir, "serve.log"))
 }
 
-// upSettings is what the last successful `agent up` ran with, kept so a bare
-// `agent up` / `agent restart` repeats it instead of silently dropping the
-// named tunnel — and with it the stable URL the phone is paired to.
 type upSettings struct {
 	HTTP           string `json:"http,omitempty"`
 	Provider       string `json:"provider,omitempty"`
 	TunnelName     string `json:"tunnelName,omitempty"`
 	TunnelHostname string `json:"tunnelHostname,omitempty"`
-	// AtLogin is read by the daemon at startup: it repeats this up after a
-	// reboot. AtLoginAsked stops a declined offer being made every morning.
-	AtLogin      bool `json:"atLogin,omitempty"`
-	AtLoginAsked bool `json:"atLoginAsked,omitempty"`
-	// LastPublicURL is the address the phones were last told about, so a
-	// tunnel that came back on another one can send them the new one.
-	LastPublicURL string `json:"lastPublicUrl,omitempty"`
+	AtLogin        bool   `json:"atLogin,omitempty"`
+	AtLoginAsked   bool   `json:"atLoginAsked,omitempty"`
+	LastPublicURL  string `json:"lastPublicUrl,omitempty"`
 }
 
 const upSettingsName = "up.json"
@@ -319,13 +267,7 @@ func upSettingsFromFlags(cmd *cobra.Command) upSettings {
 	return s
 }
 
-// mergeUpSettings fills every flag the user did not pass from the saved run.
-// An explicitly passed flag always wins, including an explicit empty value —
-// `--tunnel-hostname ""` is how you go back to a quick tunnel. The returned
-// string names what was reused, for the notice.
 func mergeUpSettings(cur upSettings, changed func(string) bool, saved upSettings) (upSettings, string) {
-	// Not flags, so they are never in cur: carried across, or a bare `up` would
-	// silently switch start-at-login back off.
 	cur.AtLogin, cur.AtLoginAsked = saved.AtLogin, saved.AtLoginAsked
 	var reused []string
 	pick := func(flag string, cur *string, saved string) {
@@ -354,9 +296,6 @@ func loadUpSettings(dir string) upSettings {
 	return s
 }
 
-// upSettingsExist reports whether an `agent up` ever completed here. It gates
-// start-at-login restore: there is nothing to bring back for a machine that
-// only ever ran the daemon.
 func upSettingsExist(dir string) bool {
 	info, err := os.Stat(filepath.Join(dir, upSettingsName))
 	return err == nil && !info.IsDir()
@@ -373,9 +312,6 @@ func saveUpSettings(dir string, s upSettings) error {
 	return os.WriteFile(filepath.Join(dir, upSettingsName), append(data, '\n'), 0o600)
 }
 
-// tunnelPreflight runs the provider's own auth check before anything is
-// spawned, so a missing ngrok token or cloudflared login fails here with the
-// provider's instructions instead of as a 90-second wait on a log.
 func tunnelPreflight(provider, name, host string) error {
 	if provider == "" {
 		provider = "cloudflared"
@@ -392,9 +328,6 @@ func tunnelPreflight(provider, name, host string) error {
 	return p.PreflightNamedAuth(tunnel.NamedConfig{Name: name, Hostname: host})
 }
 
-// tunnelArgs turns the up flags into `corgi mcp` tunnel flags. A named tunnel
-// needs its hostname: cloudflared never reports one, and without it the
-// printed launcher URL would be "https:///app".
 func tunnelArgs(provider, name, host string) ([]string, error) {
 	var args []string
 	if provider != "" {
@@ -415,26 +348,17 @@ func tunnelArgs(provider, name, host string) ([]string, error) {
 
 func spawnDetachedMCP(dir, addr string, tunnel []string) error {
 	args := append([]string{"mcp", "--http", addr, "--tunnel", "--pair"}, tunnel...)
-	// Truncate the old log first: awaitMCPLog must not read a previous run's
-	// URL or pairing code as this one's.
 	_ = os.Remove(filepath.Join(dir, mcpLogName))
 	pid, err := spawnDetached(dir, mcpLogName, args...)
 	if err != nil {
 		return err
 	}
-	// Best-effort: a missing pid file only means `agent down` cannot stop this
-	// MCP for you, not that anything is wrong with the running server.
 	_ = os.WriteFile(filepath.Join(dir, mcpPidName), []byte(strconv.Itoa(pid)+"\n"), 0o600)
 	_ = os.WriteFile(filepath.Join(dir, mcpAddrName), []byte(addr+"\n"), 0o600)
-	// The version that spawned it: a daemon starting from a newer binary
-	// restarts the server, so an upgrade reaches the dashboard too.
 	_ = os.WriteFile(filepath.Join(dir, mcpVersionName), []byte(APP_VERSION+"\n"), 0o600)
 	return nil
 }
 
-// spawnDetached starts corgi itself with args, output to <dir>/<logName>, in
-// its own process group so it outlives this command and later Ctrl+Cs. Returns
-// the child pid so the caller can record it for a later stop.
 func spawnDetached(dir, logName string, args ...string) (int, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -456,9 +380,6 @@ func spawnDetached(dir, logName string, args ...string) (int, error) {
 	return c.Process.Pid, nil
 }
 
-// acquireUpLock takes an exclusive, pid-stamped lock so only one `agent up`
-// runs at a time. A lock left by a crashed run whose pid is gone is reclaimed
-// rather than blocking forever.
 func acquireUpLock(dir string) (func(), error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
@@ -483,7 +404,6 @@ func acquireUpLock(dir string) (func(), error) {
 	return nil, fmt.Errorf("could not take the agent-up lock at %s", path)
 }
 
-// upLockIsStale reports whether the lock's owning process is gone.
 func upLockIsStale(path string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -500,10 +420,6 @@ func upLockIsStale(path string) bool {
 	return proc.Signal(syscall.Signal(0)) != nil
 }
 
-// corgiListenerPIDs returns the pids of corgi processes listening on addr's
-// port — the recovery path for an MCP whose pid file was lost, which would
-// otherwise hold the port against every `up`. Only pids whose command name
-// contains "corgi". Unix-only (lsof); elsewhere callers fall back to a hint.
 func corgiListenerPIDs(addr string) []int {
 	if runtime.GOOS == "windows" {
 		return nil
@@ -516,11 +432,7 @@ func corgiListenerPIDs(addr string) []int {
 	if err != nil {
 		return nil
 	}
-	// Exact-name match, not Contains: a neighbour binary that merely embeds the
-	// word (corgit, my-corgi-tool) must never be killed. macOS ps prints the
-	// full path, Linux the bare (possibly truncated) name — Base handles both,
-	// and corgi's own name fits untruncated. A differently-named dev build of
-	// corgi is matched via this process's own executable name.
+	// Exact name only: corgit or my-corgi-tool must never be killed.
 	wanted := map[string]bool{"corgi": true}
 	if exe, err := os.Executable(); err == nil {
 		wanted[filepath.Base(exe)] = true
@@ -542,10 +454,6 @@ func corgiListenerPIDs(addr string) []int {
 	return pids
 }
 
-// reclaimCorgiMCP stops the corgi MCP(s) holding addr and waits for the port to
-// free. found says a corgi listener was there at all; freed says the port is
-// now available — the split keeps the caller's message honest (a corgi server
-// that ignored SIGTERM is not "something that is not corgi").
 func reclaimCorgiMCP(addr string) (found, freed bool) {
 	pids := corgiListenerPIDs(addr)
 	if len(pids) == 0 {
@@ -582,15 +490,11 @@ type mcpLogInfo struct {
 
 var (
 	mcpPublicURLPattern = regexp.MustCompile(`public MCP endpoint: (\S+)/mcp`)
-	// Anchored to the newline so a code read mid-write ("pairing code: WOR"
-	// before "D-123\n" lands) is not captured truncated and QR-encoded wrong.
-	// The URL pattern needs no such guard: its /mcp suffix is the terminator.
 	mcpPairCodePattern  = regexp.MustCompile(`pairing code: (\S+)\n`)
 	mcpFatalPattern     = regexp.MustCompile(`(?m)^(mcp server error:|corgi mcp --pair cannot|could not start pairing:|tunnel: )`)
 	mcpTunnelErrPattern = regexp.MustCompile(`(?m)^🌐 ✗ tunnel: (.+)$`)
 )
 
-// parseMCPLog extracts what the summary needs from `corgi mcp`'s own output.
 func parseMCPLog(log string) (mcpLogInfo, bool) {
 	var out mcpLogInfo
 	if m := mcpPublicURLPattern.FindStringSubmatch(log); m != nil {
@@ -602,8 +506,6 @@ func parseMCPLog(log string) (mcpLogInfo, bool) {
 	return out, out.publicURL != "" && out.pairCode != ""
 }
 
-// awaitMCPLog polls the detached server's log until the tunnel URL and pairing
-// code both appear, or something fatal is printed.
 func awaitMCPLog(path string, timeout time.Duration) (mcpLogInfo, error) {
 	deadline := time.Now().Add(timeout)
 	var last mcpLogInfo
@@ -626,16 +528,12 @@ func awaitMCPLog(path string, timeout time.Duration) (mcpLogInfo, error) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	if last.pairCode != "" {
-		// The endpoint is pairable on the LAN even when no tunnel appeared —
-		// usually a missing cloudflared. Report what works instead of failing.
 		return last, nil
 	}
 	return last, fmt.Errorf("no pairing code within %s", timeout)
 }
 
 func printAgentUp(res agentUpResult) {
-	// Said in the summary and in --json alike: a quick tunnel's address
-	// does not survive a restart.
 	res.QuickTunnel = res.PublicURL != "" && res.TunnelHostname == ""
 	if utils.JSONOutput {
 		utils.PrintJSON(res)
@@ -685,8 +583,6 @@ func printAgentUp(res agentUpResult) {
 	fmt.Println("  or from any MCP client: corgi_session_start {\"workspace\":\"" + orDefault(res.Workspace, "<name>") + "\"}")
 }
 
-// printAgentUpPairing is the pairing half of the summary, split out so the
-// printer stays under the complexity the linter allows.
 func printAgentUpPairing(res agentUpResult) {
 	if res.PairCode == "" {
 		return
@@ -713,7 +609,7 @@ func lanLauncherURL(addr, code string) string {
 	if ip == "" {
 		return ""
 	}
-	base := "http://" + net.JoinHostPort(ip, port) // NOSONAR — a LAN address on your own Wi-Fi, no certificate exists for it
+	base := "http://" + net.JoinHostPort(ip, port)
 	out := "  🏠 on the same Wi-Fi, skip the tunnel entirely:\n"
 	if code != "" {
 		out += "    pair:     " + base + "/pair#" + code + "\n"
@@ -729,8 +625,6 @@ func outboundIP() string {
 	return lanAddressOf(ifaces)
 }
 
-// A phone reaches this machine over the real network, so a docker bridge or a
-// VPN tunnel is the wrong answer even though both carry a private address.
 func lanAddressOf(ifaces []net.Interface) string {
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 ||
@@ -758,10 +652,6 @@ func lanAddressOf(ifaces []net.Interface) string {
 	return ""
 }
 
-// quickTunnelWarning says, once and plainly, what a quick tunnel costs: the
-// address dies with the process, and a phone paired to it is lost at the
-// next reboot until someone scans a new QR. A configured hostname is the
-// one thing that makes the address stable, whatever the provider.
 func quickTunnelWarning(res agentUpResult) string {
 	if res.PublicURL == "" || res.TunnelHostname != "" {
 		return ""
@@ -796,8 +686,6 @@ func sharedTunnelHint(publicURL string) string {
 		"          corgi agent tunnel setup corgi.yourdomain.com\n"
 }
 
-// printTerminalQR renders a scannable QR in the terminal, indented to match
-// the summary block. Best-effort: a QR too big to encode just prints nothing.
 func printTerminalQR(content string) {
 	q, err := qrcode.New(content, qrcode.Low)
 	if err != nil {
@@ -834,8 +722,6 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 
 	if info, rerr := daemon.ReadInfo(dir); rerr == nil && info != nil {
 		if proc, ferr := os.FindProcess(info.PID); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
-			// Wait for the exit, or `down && up` races: up reads the dying
-			// daemon as running and starts nothing.
 			if !waitForDaemonExit(dir, 10*time.Second) {
 				killDaemon(proc)
 			}
@@ -843,16 +729,10 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 			stopped = true
 		}
 	}
-	// A daemon the record forgot is still writing the board; `down` is
-	// where every one of them goes, so `restart` comes back with exactly one.
 	if stopStrayServers() > 0 {
 		stopped = true
 	}
 
-	// The detached MCP + tunnel `agent up` recorded; stopping it is what takes
-	// the public URL down. mcp.pid outlives its process on a crash or reboot, so
-	// PidAlive checks the pid is still its own group leader — a stale file must
-	// not make `down` kill an unrelated process.
 	pidPath := filepath.Join(dir, mcpPidName)
 	mcpStopped := false
 	if pid, ok := readAgentPidFile(pidPath); ok {
@@ -864,12 +744,6 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 		}
 		_ = os.Remove(pidPath)
 	}
-	// Fallback ONLY when the pid file stopped nothing — an MCP from an older
-	// corgi, or a lost file: a corgi process still listening on the recorded
-	// (or default) MCP port is ours to stop. Leaving it is exactly the stuck
-	// loop where every `agent up` refuses the busy port and pairing never
-	// reopens. Guarded so a just-SIGTERMed server still draining its listener
-	// is not signalled twice and reported as two servers.
 	if !mcpStopped {
 		fallbackAddr := defaultMCPAddr
 		if data, rerr := os.ReadFile(filepath.Join(dir, mcpAddrName)); rerr == nil {
@@ -912,8 +786,6 @@ func runAgentRestart(cmd *cobra.Command, args []string) {
 	restartUp(cmd, args)
 }
 
-// readAgentPidFile reads a pid written by spawnDetached. A missing or malformed
-// file just means there is nothing to stop.
 func readAgentPidFile(path string) (int, bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -942,9 +814,6 @@ func init() {
 	agentCmd.AddCommand(agentUpCmd, agentRestartCmd)
 }
 
-// announceNewAddress pushes the laptop's new public address to every
-// paired phone. The app moves the laptop to it and keeps its token: no QR,
-// no pairing, the board is back on the next read.
 func announceNewAddress(dir, url string) {
 	host, _ := os.Hostname()
 	store := push.Load(dir)

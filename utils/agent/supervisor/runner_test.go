@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// fakeProcess is a scripted remote-control run. With exitNow it returns
-// immediately; otherwise it runs until uptime elapses or Stop is called, which
-// is what a real supervised process does.
 type fakeProcess struct {
 	pid     int
 	code    int
@@ -42,8 +39,6 @@ func (f *fakeProcess) Wait() (int, string) {
 
 func (f *fakeProcess) Stop() { f.once.Do(func() { close(f.stopped) }) }
 
-// scriptedStarter hands out the given runs in order, then blocks until the
-// context is cancelled so the loop cannot spin past the script.
 func scriptedStarter(runs ...*fakeProcess) (Starter, *int) {
 	var mu sync.Mutex
 	calls := 0
@@ -68,13 +63,12 @@ func scriptedStarter(runs ...*fakeProcess) (Starter, *int) {
 func testRunner(t *testing.T, start Starter) *Runner {
 	t.Helper()
 	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp/acme", WakeLock: WakeLockOff}, start, NewWakeLock(WakeLockOff))
-	r.Sleep = func(context.Context, time.Duration) {} // no real backoff in tests
-	r.HealthyAfter = time.Millisecond                 // a run counts as healthy fast
+	r.Sleep = func(context.Context, time.Duration) {}
+	r.HealthyAfter = time.Millisecond
 	return r
 }
 
 func TestRunnerRestartsAfterNetworkTimeout(t *testing.T) {
-	// A healthy run that exits cleanly is the documented ~10 minute timeout.
 	start, calls := scriptedStarter(
 		&fakeProcess{pid: 1, code: 0, uptime: 20 * time.Millisecond},
 	)
@@ -93,9 +87,6 @@ func TestRunnerRestartsAfterNetworkTimeout(t *testing.T) {
 	go func() { defer close(done); _ = r.Run(ctx) }()
 
 	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notified) > 0 })
-	// The notification fires when the restart is DECIDED, a hair before the
-	// replacement process starts. Wait for it to actually be running, or cancel
-	// can land in the gap and the second Start never happens (a flake).
 	waitFor(t, func() bool { return r.State().Running })
 	cancel()
 	<-done
@@ -268,11 +259,6 @@ func TestWakeLockModeDefaultsToSession(t *testing.T) {
 	}
 }
 
-// waitForActive is waitFor for a session that is working, so it keeps recording
-// activity while it polls. One stamp is not enough: the monitor ticks on its own
-// schedule, and a tick delayed past the idle window reads a single stamp as
-// stale — then never looks again, because nothing re-stamps it. A real session
-// emits output repeatedly, which is what this reproduces.
 func waitForActive(t *testing.T, r *Runner, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -298,15 +284,12 @@ func waitFor(t *testing.T, cond func() bool) {
 	t.Fatal("condition not met within timeout")
 }
 
-// The backoff must restart from the beginning after a healthy run. An earlier
-// version zeroed the counter and then incremented it in the same pass, so the
-// delay pinned at the second step forever.
 func TestBackoffResetsAfterAHealthyRun(t *testing.T) {
 	start, _ := scriptedStarter(
-		&fakeProcess{pid: 1, code: 1, exitNow: true},                 // startup failure
-		&fakeProcess{pid: 2, code: 1, exitNow: true},                 // and another
-		&fakeProcess{pid: 3, code: 0, uptime: 20 * time.Millisecond}, // healthy
-		&fakeProcess{pid: 4, code: 1, exitNow: true},                 // fails again
+		&fakeProcess{pid: 1, code: 1, exitNow: true},
+		&fakeProcess{pid: 2, code: 1, exitNow: true},
+		&fakeProcess{pid: 3, code: 0, uptime: 20 * time.Millisecond},
+		&fakeProcess{pid: 4, code: 1, exitNow: true},
 	)
 	r := testRunner(t, start)
 
@@ -334,14 +317,11 @@ func TestBackoffResetsAfterAHealthyRun(t *testing.T) {
 	if delays[1] == first {
 		t.Error("the second consecutive failure should back off further")
 	}
-	// The fourth restart follows a healthy run, so it starts over.
 	if delays[3] != first {
 		t.Errorf("delay after a healthy run = %v, want the backoff reset to %v", delays[3], first)
 	}
 }
 
-// Stop must keep it stopped. Without an explicit flag the loop reads the exit
-// as an ordinary one and starts the process straight back up.
 func TestStopKeepsItStopped(t *testing.T) {
 	start, calls := scriptedStarter()
 	r := testRunner(t, start)
@@ -364,16 +344,12 @@ func TestStopKeepsItStopped(t *testing.T) {
 	}
 }
 
-// Stop during a restart backoff had nothing to signal — no process, a live
-// context, an uninterrupted sleep — so the loop went on to start a session
-// nothing would ever stop.
 func TestStopDuringBackoffDoesNotStartAgain(t *testing.T) {
 	start, calls := scriptedStarter(&fakeProcess{pid: 1, code: 1, exitNow: true})
 
 	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp/a", WakeLock: WakeLockOff}, start, NewWakeLock(WakeLockOff))
 	r.HealthyAfter = time.Millisecond
 
-	// A backoff long enough that only an interrupt can end it.
 	sleeping := make(chan struct{})
 	var once sync.Once
 	r.Sleep = func(ctx context.Context, _ time.Duration) {
@@ -400,8 +376,6 @@ func TestStopDuringBackoffDoesNotStartAgain(t *testing.T) {
 }
 
 func TestSessionEndHookRunsBeforeTheReplacementStarts(t *testing.T) {
-	// The state a session leaves behind is only both final and current in the
-	// gap between the old process exiting and the new one starting.
 	start, _ := scriptedStarter(
 		&fakeProcess{pid: 1, code: 0, uptime: 20 * time.Millisecond},
 	)
@@ -435,16 +409,12 @@ func TestSessionEndHookRunsBeforeTheReplacementStarts(t *testing.T) {
 	if len(causes) == 0 || causes[0] != CauseNetworkTimeout {
 		t.Errorf("hook saw causes %v, want it called with the network timeout", causes)
 	}
-	// The summary has to reach the notification: that line is the only thing
-	// most people will ever read about the restart.
 	if !strings.Contains(notified[0], "was on feature/referral") {
 		t.Errorf("notification %q does not carry the handover summary", notified[0])
 	}
 }
 
 func TestSessionEndHookIsSkippedOnARequestedStop(t *testing.T) {
-	// Closing a session deliberately does not need a handover note about the
-	// thing you just closed.
 	start, _ := scriptedStarter(&fakeProcess{pid: 1, code: 0})
 	r := testRunner(t, start)
 
@@ -472,8 +442,6 @@ func TestSessionEndHookIsSkippedOnARequestedStop(t *testing.T) {
 }
 
 func TestSessionEndHookRunsWhenAWorkspaceIsDisabled(t *testing.T) {
-	// A workspace disabled by an auth failure is the case where the note is
-	// worth most: nothing will restart to write one later.
 	start, _ := scriptedStarter(
 		&fakeProcess{pid: 1, code: 1, exitNow: true, output: "Remote Control requires a claude.ai subscription"},
 	)
@@ -571,14 +539,10 @@ func TestSupervisingReportsStopAndDisable(t *testing.T) {
 }
 
 func TestStopBetweenStartAndMarkRunningDoesNotOrphanTheProcess(t *testing.T) {
-	// The command loop can call Stop in the instant after Start returns a live
-	// process but before markRunning records it — when r.proc is still nil and
-	// Stop has nothing to signal. Without the re-check the process would run
-	// unreachable until it exited on its own.
 	proc := &fakeProcess{pid: 7, stopped: make(chan struct{})}
 	var r *Runner
 	start := func(context.Context, SpawnConfig) (Process, error) {
-		r.Stop() // Stop wins the race: proc not yet recorded, nothing to signal
+		r.Stop()
 		return proc, nil
 	}
 	r = NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp", WakeLock: WakeLockOff}, start, NewWakeLock(WakeLockOff))
@@ -610,11 +574,8 @@ func TestIdleWakeLockReleasesWhenQuietAndReacquiresOnActivity(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); _ = r.Run(context.Background()) }()
 
-	// A fresh session is working: the lock is taken.
 	waitFor(t, func() bool { return lock.Held() })
-	// It goes quiet with no further output — the machine may sleep.
 	waitFor(t, func() bool { return !lock.Held() })
-	// Work resumes — awake again.
 	waitForActive(t, r, func() bool { return lock.Held() })
 
 	r.Stop()
@@ -625,7 +586,6 @@ func TestIdleWakeLockReleasesWhenQuietAndReacquiresOnActivity(t *testing.T) {
 }
 
 func TestIdleWakeLockMonitorStopsWithTheProcess(t *testing.T) {
-	// After the session exits, nothing may keep toggling the lock.
 	lock, _ := fakeLock(t, WakeLockIdle)
 	proc := &fakeProcess{pid: 6, stopped: make(chan struct{})}
 	start := func(context.Context, SpawnConfig) (Process, error) { return proc, nil }
@@ -639,7 +599,6 @@ func TestIdleWakeLockMonitorStopsWithTheProcess(t *testing.T) {
 
 	r.Stop()
 	<-done
-	// Even if we simulate late output, the monitor is gone and must not re-grab.
 	r.recordActivity()
 	time.Sleep(60 * time.Millisecond)
 	if lock.Held() {
@@ -656,7 +615,7 @@ func TestStopAsyncStopsWithoutBlocking(t *testing.T) {
 	go func() { defer close(done); _ = r.Run(context.Background()) }()
 	waitFor(t, func() bool { return r.State().Running })
 
-	r.StopAsync() // must return immediately; teardown happens in the background
+	r.StopAsync()
 	if r.Supervising() {
 		t.Error("StopAsync must mark the runner stopped synchronously")
 	}
@@ -684,7 +643,7 @@ func TestSetSessionURLIgnoresARepeat(t *testing.T) {
 	r := NewRunner(SpawnConfig{WorkspaceID: "acme", Dir: "/tmp"}, nil, NewWakeLock(WakeLockOff))
 	r.OnChange = func() { changes++ }
 	r.setSessionURL("https://claude.ai/code/x")
-	r.setSessionURL("https://claude.ai/code/x") // same value: no change, no notify
+	r.setSessionURL("https://claude.ai/code/x")
 	r.setSessionURL("https://claude.ai/code/y")
 	if changes != 2 {
 		t.Errorf("OnChange fired %d times, want 2 — a repeated URL must not notify again", changes)

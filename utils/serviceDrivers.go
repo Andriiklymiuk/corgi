@@ -24,10 +24,6 @@ var ServiceConfigs = map[string]ServiceConfig{
 	},
 }
 
-// DockerSafeName converts a service name to a docker-compose-safe name:
-// lowercased, chars outside [a-z0-9_-] become '-', leading separators trimmed.
-// docker compose lowercases the project name, so without this an uppercase name
-// (e.g. "MyApi") yields a container_name docker rejects.
 func DockerSafeName(name string) string {
 	lower := strings.ToLower(name)
 	var b strings.Builder
@@ -46,14 +42,10 @@ func DockerSafeName(name string) string {
 	return out
 }
 
-// DockerName is the docker-safe container name for generated compose/Makefile
-// templates. Honors scopeContainers.
 func (s Service) DockerName() string {
 	return ServiceContainerName(s.ServiceName)
 }
 
-// DockerRunnerServiceNames returns the names of docker-runner services. They run
-// as containers (not tracked PIDs), so must be brought down explicitly.
 func DockerRunnerServiceNames(services []Service) []string {
 	var names []string
 	for _, s := range services {
@@ -66,9 +58,6 @@ func DockerRunnerServiceNames(services []Service) []string {
 
 func GetExposedPortFromDockerfile(service Service) (string, error) {
 	if service.Port != 0 {
-		// If the port is already specified in the service struct, return it directly
-		// This is because the port is already specified in the service struct
-		// and we don't need to check the Dockerfile for it
 		return fmt.Sprintf("%d", service.Port), nil
 	}
 	dockerfilePath := filepath.Join(service.AbsolutePath, service.DockerfileName())
@@ -83,7 +72,6 @@ func GetExposedPortFromDockerfile(service Service) (string, error) {
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
 		fields := strings.Fields(line)
-		// EXPOSE is case-insensitive and ports may carry /tcp|/udp suffixes.
 		if len(fields) >= 2 && strings.EqualFold(fields[0], "EXPOSE") {
 			port, _, _ := strings.Cut(fields[1], "/")
 			return port, nil

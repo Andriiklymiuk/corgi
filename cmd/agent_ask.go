@@ -18,21 +18,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Ask is the chief: one question about everything on the board — "what
-// should I look at first?", "what is blocked?", "which session is on the
-// cart bug?" — answered by a short Claude Code run on this machine that
-// sees the sessions, the inbox, the kanban and the workspaces, and nothing
-// else. It runs as corgi's child, so the tracking hook keeps it off the
-// board; it costs one small call.
-
 const askTimeout = 90 * time.Second
 
-// askModel is what answers: the cheap one, the context is a few KB.
 const askModel = "haiku"
 
 const askSoul = `You are corgi's chief of staff for one developer's Claude Code sessions. You are given the live board as JSON: sessions (status, what each is doing, its ticket, branch, diff, last test run, cost, overlaps), the inbox (what waits on the person), the kanban (tickets by column) and the workspaces. Answer the question in at most five short lines, plain text only — no markdown, no asterisks, no headings; a list is one item per line. Name sessions and tickets exactly as given. When asked what to do first, pick one and say why in a clause. Never invent a session or ticket that is not in the data.`
 
-// runClaudePrint is the seam: run claude -p with a prompt, return its text.
 var runClaudePrint = func(ctx context.Context, model, system, prompt string) (string, error) {
 	launch, err := resolveClaudeLaunch(mustCwd(), "", nil)
 	if err != nil {
@@ -41,8 +32,6 @@ var runClaudePrint = func(ctx context.Context, model, system, prompt string) (st
 	args := []string{"-p", "--output-format", "text", "--model", model, "--append-system-prompt", system}
 	cmd := exec.CommandContext(ctx, launch.Bin, args...)
 	cmd.Stdin = strings.NewReader(prompt)
-	// Not inside the session that asked: a claude started from a Claude
-	// Code tool call inherits CLAUDECODE and refuses to nest.
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "CLAUDECODE=") {
 			cmd.Env = append(cmd.Env, kv)
@@ -63,9 +52,6 @@ var runClaudePrint = func(ctx context.Context, model, system, prompt string) (st
 	return strings.TrimSpace(out.String()), nil
 }
 
-// askContext is the board as the chief sees it: enough to answer, small
-// enough to be cheap. Bodies of tickets are cut short; souls, prompts and
-// transcripts never go in.
 func askContext(dir string, now time.Time) map[string]any {
 	ctx := map[string]any{}
 	if rep, err := readBoard(dir); err == nil {
@@ -144,7 +130,6 @@ func askContext(dir string, now time.Time) map[string]any {
 	return ctx
 }
 
-// askBoard answers one question about the board.
 func askBoard(ctx context.Context, dir, question string) (string, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
@@ -219,7 +204,6 @@ Telegram's /ask do the same.
 	},
 }
 
-// launchAskHandler is the phone's Ask box: POST {question} → {answer}.
 func launchAskHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -228,10 +212,8 @@ func launchAskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Question string `json:"question"`
-		// Session and Diff: explain that session's branch instead of the
-		// board — three lines and a risk word (2.23).
-		Session string `json:"session"`
-		Diff    bool   `json:"diff"`
+		Session  string `json:"session"`
+		Diff     bool   `json:"diff"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the question")

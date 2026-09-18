@@ -16,9 +16,6 @@ import (
 
 type exitPanic struct{ code int }
 
-// expectExit reports the code fn exits with. The osExit stub panics so fn stops
-// where a real exit would; without that it would run on past the exit with the
-// zero values it was about to abandon.
 func expectExit(t *testing.T, fn func()) int {
 	t.Helper()
 	orig := osExit
@@ -73,8 +70,6 @@ func TestFailHelpersExit(t *testing.T) {
 	}
 }
 
-// The same helpers must exit with the same code on the JSON path, which is a
-// separate branch that writes a JSONError instead of a stderr line.
 func TestFailHelpersExitInJSONMode(t *testing.T) {
 	jsonMode(t, true)
 	err := errors.New("boom")
@@ -112,8 +107,6 @@ func TestRemoveSnapshotExitsOnUnresolvablePaths(t *testing.T) {
 	}
 }
 
-// Every command that loads the compose file must exit 1 rather than run on with
-// a nil config when there is no corgi-compose.yml to load.
 func TestComposeLoadFailuresExit(t *testing.T) {
 	cases := []struct {
 		name string
@@ -134,15 +127,12 @@ func TestComposeLoadFailuresExit(t *testing.T) {
 	}
 }
 
-// composeCmd points the process at a dir holding body as corgi-compose.yml and
-// returns a command carrying the flags the run functions read.
 func composeCmd(t *testing.T, body string) *cobra.Command {
 	t.Helper()
 	chdirToTempCompose(t, body)
 	return cmdWithRunFlags()
 }
 
-// cmdWithRunFlags carries the flags the run functions under test read.
 func cmdWithRunFlags() *cobra.Command {
 	c := newRootedCmd()
 	c.Flags().Bool("strict", false, "")
@@ -153,7 +143,6 @@ func cmdWithRunFlags() *cobra.Command {
 	return c
 }
 
-// noComposeCmd chdirs somewhere with no corgi-compose.yml at all.
 func noComposeCmd(t *testing.T) *cobra.Command {
 	t.Helper()
 	dir := t.TempDir()
@@ -170,8 +159,6 @@ func noComposeCmd(t *testing.T) *cobra.Command {
 	return cmdWithRunFlags()
 }
 
-// A command with no compose file to load must exit rather than continue with a
-// nil config. These are the paths the exitProcess sweep touched.
 func TestCommandsExitWhenComposeIsMissing(t *testing.T) {
 	cases := []struct {
 		name string
@@ -196,7 +183,6 @@ func TestCommandsExitWhenComposeIsMissing(t *testing.T) {
 	}
 }
 
-// `corgi db restore` with no snapshot name is a usage error, not a crash.
 func TestRunDbRestoreWithoutNameExits(t *testing.T) {
 	c := composeCmd(t, "name: stack\ndb_services:\n  main:\n    driver: postgres\n")
 	if got := expectExit(t, func() { runDbRestore(c, nil) }); got != 1 {
@@ -204,7 +190,6 @@ func TestRunDbRestoreWithoutNameExits(t *testing.T) {
 	}
 }
 
-// A compose file that parses but fails validation exits 1, on both output paths.
 func TestRunValidateExitsOnValidationErrors(t *testing.T) {
 	const broken = "name: stack\nservices:\n  api:\n    service_name: api\n    port: 3000\n    depends_on_db:\n      - name: missing\n"
 	t.Run("human", func(t *testing.T) {
@@ -249,8 +234,6 @@ func TestWriteMergedLineHumanModeWithAndWithoutTimestamp(t *testing.T) {
 
 const brokenCompose = "name: stack\nservices:\n  api:\n    service_name: api\n    port: 3000\n    depends_on_db:\n      - name: missing\n"
 
-// A snapshot name builds a path, so one carrying a separator or ".." must exit
-// rather than resolve outside the snapshots directory.
 func TestSnapshotNameRejectionExits(t *testing.T) {
 	dbs := []utils.DatabaseService{{ServiceName: "main", Driver: "postgres"}}
 	if got := expectExit(t, func() { createSnapshot([]string{"../escape"}, dbs) }); got != 1 {
@@ -258,7 +241,6 @@ func TestSnapshotNameRejectionExits(t *testing.T) {
 	}
 }
 
-// `db restore <name> <service>` naming a non-postgres service must exit.
 func TestRunDbRestoreRefusesNonPostgresService(t *testing.T) {
 	c := composeCmd(t, "name: stack\ndb_services:\n  cache:\n    driver: redis\n")
 	if got := expectExit(t, func() { runDbRestore(c, []string{"snap", "cache"}) }); got != 1 {
@@ -266,7 +248,6 @@ func TestRunDbRestoreRefusesNonPostgresService(t *testing.T) {
 	}
 }
 
-// A --service filter matching nothing is an error, not an empty success.
 func TestResolveStatusRowsExitsWhenFilterMatchesNothing(t *testing.T) {
 	c := composeCmd(t, "name: stack\nservices:\n  api:\n    service_name: api\n    port: 3000\n    start_command: echo hi\n")
 	if err := c.Flags().Set("service", "nope"); err != nil {
@@ -277,8 +258,6 @@ func TestResolveStatusRowsExitsWhenFilterMatchesNothing(t *testing.T) {
 	}
 }
 
-// mustLoadCorgiServices reports the failure as JSON when --json is set, and
-// still exits 1.
 func TestMustLoadCorgiServicesExitsInJSONMode(t *testing.T) {
 	jsonMode(t, true)
 	c := noComposeCmd(t)
@@ -287,7 +266,6 @@ func TestMustLoadCorgiServicesExitsInJSONMode(t *testing.T) {
 	}
 }
 
-// A compose that parses but fails validation stops exec before it runs anything.
 func TestRunExecExitsOnValidationErrors(t *testing.T) {
 	c := composeCmd(t, brokenCompose)
 	if got := expectExit(t, func() { runExec(c, []string{"api"}) }); got != 1 {
@@ -295,11 +273,8 @@ func TestRunExecExitsOnValidationErrors(t *testing.T) {
 	}
 }
 
-// `memory add` without the required flags is a usage error.
 func TestMemoryAddWithoutRequiredFlagsExits(t *testing.T) {
 	noComposeCmd(t)
-	// The cobra command is a package var, so a sibling test's flag values
-	// outlive it.
 	for _, name := range []string{"type", "name", "desc", "service", "pattern"} {
 		if err := memoryAddCmd.Flags().Set(name, ""); err != nil {
 			t.Fatal(err)
@@ -310,19 +285,15 @@ func TestMemoryAddWithoutRequiredFlagsExits(t *testing.T) {
 	}
 }
 
-// `memory lint` exits 1 when the store has errors, on both output paths.
 func TestMemoryLintExitsOnStoreErrors(t *testing.T) {
 	write := func(t *testing.T) {
 		t.Helper()
 		noComposeCmd(t)
 		wd, _ := os.Getwd()
-		// Facts are read from the typed subdirs, so a loose file at the root
-		// would not be linted at all.
 		dir := filepath.Join(wd, utils.MemoryDirName, "decisions")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		// No frontmatter at all — the lint's first requirement.
 		if err := os.WriteFile(filepath.Join(dir, "broken.md"), []byte("no frontmatter here\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -342,7 +313,6 @@ func TestMemoryLintExitsOnStoreErrors(t *testing.T) {
 	})
 }
 
-// A non-interactive create with no --kind/--name cannot prompt, so it exits.
 func TestRunCreateNonInteractiveWithoutFlagsExits(t *testing.T) {
 	prev := utils.NonInteractive
 	utils.NonInteractive = true
@@ -357,7 +327,6 @@ func TestRunCreateNonInteractiveWithoutFlagsExits(t *testing.T) {
 	}
 }
 
-// A corrupt autopilot state file is an error, unlike an absent one.
 func TestAutopilotStatusExitsOnCorruptState(t *testing.T) {
 	dir := chdirToTempCompose(t, "name: stack\n")
 	prev := utils.CorgiComposePathDir
@@ -376,7 +345,6 @@ func TestAutopilotStatusExitsOnCorruptState(t *testing.T) {
 	}
 }
 
-// Restarting a service that no run-state knows about must exit, not relaunch it.
 func TestRestartSingleServiceExitsWithoutRunState(t *testing.T) {
 	c := composeCmd(t, "name: stack\nservices:\n  api:\n    service_name: api\n    port: 3000\n    start_command: echo hi\n")
 	prev := restartService
@@ -388,10 +356,7 @@ func TestRestartSingleServiceExitsWithoutRunState(t *testing.T) {
 	}
 }
 
-// A closed port is a down service, and `corgi status` exits 1 for it on both
-// output paths rather than reporting success.
 func TestRunStatusOnceExitsWhenAServiceIsDown(t *testing.T) {
-	// Port 1 needs privileges to bind, so nothing local answers on it.
 	rows := []statusRow{{Label: "api", Port: 1, Kind: "service", URL: "http://localhost:1"}}
 	t.Run("human", func(t *testing.T) {
 		if got := expectExit(t, func() { runStatusOnce(rows, statusFlags{quiet: true}) }); got != 1 {
@@ -405,7 +370,6 @@ func TestRunStatusOnceExitsWhenAServiceIsDown(t *testing.T) {
 	})
 }
 
-// `corgi logs --dump` into a workspace that never logged is an error.
 func TestRunLogsDumpExitsWithNoLogs(t *testing.T) {
 	dir := chdirToTempCompose(t, "name: stack\n")
 	prev := utils.CorgiComposePathDir
@@ -421,14 +385,12 @@ func TestRunLogsDumpExitsWithNoLogs(t *testing.T) {
 	}
 }
 
-// Autopilot state that cannot be written is an error, not a silent no-op.
 func TestAutopilotModeExitsWhenStateIsUnwritable(t *testing.T) {
 	dir := chdirToTempCompose(t, "name: stack\n")
 	prev := utils.CorgiComposePathDir
 	utils.CorgiComposePathDir = dir
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-	// A regular file where the state directory has to go makes the write fail.
 	if err := os.WriteFile(filepath.Join(dir, "corgi_services"), []byte("not a dir"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -439,8 +401,6 @@ func TestAutopilotModeExitsWhenStateIsUnwritable(t *testing.T) {
 	}
 }
 
-// With no resolvable home directory the user config cannot be located, and both
-// config commands must say so rather than print a nonsense path.
 func TestConfigCommandsExitWithoutAHome(t *testing.T) {
 	t.Run("path", func(t *testing.T) {
 		t.Setenv("HOME", "")
@@ -449,8 +409,6 @@ func TestConfigCommandsExitWithoutAHome(t *testing.T) {
 		}
 	})
 	t.Run("show", func(t *testing.T) {
-		// A directory where config.yml belongs is a read error, which is not
-		// the same as the file simply being absent.
 		home := t.TempDir()
 		t.Setenv("HOME", home)
 		if err := os.MkdirAll(filepath.Join(home, ".corgi", "config.yml"), 0o755); err != nil {
@@ -462,7 +420,6 @@ func TestConfigCommandsExitWithoutAHome(t *testing.T) {
 	})
 }
 
-// An unreadable snapshots directory is an error, unlike an absent one.
 func TestListSnapshotsExitsOnUnreadableDir(t *testing.T) {
 	dir := chdirToTempCompose(t, "name: stack\n")
 	prev := utils.CorgiComposePathDir
@@ -476,7 +433,6 @@ func TestListSnapshotsExitsOnUnreadableDir(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(snapDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A regular file where the directory belongs makes ReadDir fail.
 	if err := os.WriteFile(snapDir, []byte("not a dir"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +442,6 @@ func TestListSnapshotsExitsOnUnreadableDir(t *testing.T) {
 	}
 }
 
-// A heartbeat that cannot be persisted is an error, like any other state write.
 func TestAutopilotHeartbeatExitsWhenStateIsUnwritable(t *testing.T) {
 	dir := chdirToTempCompose(t, "name: stack\n")
 	prev := utils.CorgiComposePathDir
@@ -501,8 +456,6 @@ func TestAutopilotHeartbeatExitsWhenStateIsUnwritable(t *testing.T) {
 	}
 }
 
-// Snapshot and restore both stop the container, so they refuse to run while a
-// detached `corgi run` is supervising the stack.
 func TestSnapshotCommandsRefuseASupervisedStack(t *testing.T) {
 	setup := func(t *testing.T) *cobra.Command {
 		t.Helper()
@@ -511,8 +464,6 @@ func TestSnapshotCommandsRefuseASupervisedStack(t *testing.T) {
 		utils.CorgiComposePathDir = dir
 		t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-		// A pid of 0 marks a container-managed service, which reconciliation
-		// leaves alone — so this stays "running" without probing anything.
 		st := utils.RunState{Services: []utils.RunStateEntry{
 			{Name: "api", Kind: "service", PID: 0, Status: "running"},
 		}}

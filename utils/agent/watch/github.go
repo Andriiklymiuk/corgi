@@ -11,17 +11,14 @@ import (
 	"time"
 )
 
-// GitHub polls the notifications feed: one conditional request per round,
-// a 304 when nothing moved.
 type GitHub struct {
 	Token  string
-	Repos  []string // "owner/repo"; empty means every repo
+	Repos  []string
 	Me     string
 	Client *http.Client
 	URL    string
 }
 
-// githubAuthToken asks the gh CLI for its token; tests override it.
 var githubAuthToken = func() string {
 	out, err := exec.Command("gh", "auth", "token").Output()
 	if err != nil {
@@ -30,7 +27,6 @@ var githubAuthToken = func() string {
 	return strings.TrimSpace(string(out))
 }
 
-// NewGitHub uses the saved token, else whatever `gh auth token` has.
 func NewGitHub(s Secrets, repos []string) *GitHub {
 	token := strings.TrimSpace(s.GitHub)
 	if token == "" {
@@ -41,8 +37,6 @@ func NewGitHub(s Secrets, repos []string) *GitHub {
 
 func (g *GitHub) Name() string { return "github" }
 
-// githubReasons are the notification reasons that mean a pull request
-// wants my attention; everything else (subscribed, ci_activity) is noise.
 var githubReasons = map[string]struct {
 	kind Kind
 	mine bool
@@ -52,10 +46,7 @@ var githubReasons = map[string]struct {
 	"author":           {KindPRComment, true},
 	"comment":          {KindPRComment, true},
 	"team_mention":     {KindPRComment, false},
-	// GitHub's default for Actions is to notify only when a run you caused
-	// fails, so ci_activity on your own repo is a red build. It arrives as a
-	// CheckSuite, not a PullRequest, and is only polled when --ci asked.
-	"ci_activity": {KindCIFailed, true},
+	"ci_activity":      {KindCIFailed, true},
 }
 
 type githubThread struct {
@@ -73,8 +64,6 @@ type githubThread struct {
 	} `json:"repository"`
 }
 
-// Poll sends If-Modified-Since from the cursor; a 304 returns the same
-// cursor without reading the body. The first call also fetches /user once.
 func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
 	if g.Token == "" {
 		return nil, cursor, ErrNoToken
@@ -126,7 +115,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 
 	var events []Event
-	states := map[string]string{} // one lookup per pull request per round
+	states := map[string]string{}
 	for _, t := range threads {
 		if !g.wantsRepo(t.Repository.FullName) {
 			continue
@@ -158,19 +147,8 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		number := t.Subject.URL[strings.LastIndex(t.Subject.URL, "/")+1:]
 		ref := t.Repository.FullName + "#" + number
 		at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
-		// A notification says nothing about whether the pull request is still
-		// open, so a comment on one merged last week reads exactly like one on
-		// live work. One lookup per pull request in a round settles it.
 		state := g.pullState(ctx, states, t.Subject.URL)
-		// The notification names the pull request, not what was said on it;
-		// the comment itself is one more call, and the difference between
-		// "someone commented" and a line a person can act on.
 		author, body, bot, hasComment := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
-		// My own comment is not news to me, and a bot's — a tracker link, a
-		// coverage report — is not a person waiting. GitHub still notifies
-		// the author of the thread about both. It also notifies the author
-		// about a push, an edit, the opening itself — activity with no
-		// comment to point at — and that is not anyone commenting either.
 		if r.kind == KindPRComment && (!hasComment || (author != "" && strings.EqualFold(author, g.Me))) {
 			continue
 		}
@@ -192,11 +170,6 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	return events, next, nil
 }
 
-// latestComment is who wrote the newest comment on a thread, what they
-// wrote, and whether they are a bot. hasComment is false when the thread
-// points at the pull request itself or at nothing — a review request, an
-// opened pull request, a push to it — so the caller can tell "no comment"
-// from a comment that could not be read.
 func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL string) (author, body string, bot, hasComment bool) {
 	if commentURL == "" || commentURL == subjectURL {
 		return "", "", false, false
@@ -224,10 +197,6 @@ func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL strin
 	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax), bot, true
 }
 
-// pullState is "draft", "open", "merged" or "closed" for one pull request, cached for
-// the round so several notifications about the same one cost a single call.
-// An unreadable answer is "", which the rules treat as still open: guessing a
-// pull request closed would silently swallow real feedback.
 func (g *GitHub) pullState(ctx context.Context, cache map[string]string, apiURL string) string {
 	if apiURL == "" {
 		return ""
@@ -253,8 +222,6 @@ func (g *GitHub) pullState(ctx context.Context, cache map[string]string, apiURL 
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&pr) != nil {
 		return ""
 	}
-	// GitHub keeps draft out of state: a draft is "open" with draft: true.
-	// Folded in here, so every surface reads one word.
 	state := pr.State
 	if pr.Merged {
 		state = "merged"
@@ -279,8 +246,6 @@ func (g *GitHub) wantsRepo(fullName string) bool {
 	return containsFold(g.Repos, fullName)
 }
 
-// get returns the response for the caller to close; a non-2xx, non-304
-// status becomes an error carrying the start of the body.
 func (g *GitHub) get(ctx context.Context, path, ifModifiedSince string) (*http.Response, error) {
 	base := g.URL
 	if base == "" {
@@ -319,8 +284,6 @@ func githubDecode(resp *http.Response, v any) error {
 	return nil
 }
 
-// RefState is "draft", "open", "merged" or "closed" for acme/api#7, so a row already
-// merged can leave the inbox. "" when it cannot be read.
 func (g *GitHub) RefState(ctx context.Context, ref string) string {
 	repo, num, ok := strings.Cut(ref, "#")
 	if !ok || g.Token == "" {
@@ -329,10 +292,6 @@ func (g *GitHub) RefState(ctx context.Context, ref string) string {
 	return g.pullState(ctx, map[string]string{}, "https://api.github.com/repos/"+repo+"/pulls/"+num)
 }
 
-// PullStatus is how acme/api#7 stands: its state, whether the checks on
-// its head pass, and whether a review approved it. Three reads, the head
-// commit's check runs and legacy statuses both — a repo protected by
-// either. Unreadable is "not known", never a guess.
 func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) {
 	repo, num, ok := strings.Cut(ref, "#")
 	if !ok || g.Token == "" {
@@ -363,9 +322,6 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		return out, true
 	}
 
-	// Reviews: the last word from each reviewer counts; a comment is not a
-	// verdict. Any "changes requested" still standing wins; else an
-	// approval; else pending while someone is asked.
 	var reviews []struct {
 		State string `json:"state"`
 		User  struct {
@@ -394,7 +350,6 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		}
 	}
 
-	// Checks: check runs (Actions and apps) and the older commit statuses.
 	var conclusions []string
 	running := 0
 	if pr.Head.SHA != "" {

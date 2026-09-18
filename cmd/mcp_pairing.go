@@ -17,60 +17,34 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Pairing exists so a phone never has to be handed the server's own bearer
-// token. That token reaches corgi_exec and corgi_db_query, so a QR containing
-// it is a credential for the machine — visible to anyone who sees the screen,
-// and impossible to revoke for one device without re-pairing every other.
-
-// pairRequest is what a client posts to /pair.
 type pairRequest struct {
 	Code   string `json:"code"`
 	Device string `json:"device"`
-	// PubKey is the device's X25519 public key: offered, every body between
-	// the two is sealed from now on (pairing.Seal). Absent for the web page
-	// and older apps, which keep talking plainly.
 	PubKey string `json:"pubKey,omitempty"`
 }
 
 type pairResponse struct {
-	Token   string `json:"token"`
-	Daemon  string `json:"daemon"`
-	Device  string `json:"device"`
-	Version string `json:"version"`
-	// ServerPubKey answers a PubKey: the machine's static X25519 key, the
-	// other half of the shared secret.
+	Token        string `json:"token"`
+	Daemon       string `json:"daemon"`
+	Device       string `json:"device"`
+	Version      string `json:"version"`
 	ServerPubKey string `json:"serverPubKey,omitempty"`
-	// Role is "viewer" for a device this window pairs read-only; absent
-	// for one that may do everything.
-	Role string `json:"role,omitempty"`
-	// PublicURL is the tunnel address, for a device that paired over the
-	// local network or nearby (2.22.4): what it reaches the laptop at from
-	// anywhere else. Absent without a tunnel.
-	PublicURL string `json:"publicUrl,omitempty"`
+	Role         string `json:"role,omitempty"`
+	PublicURL    string `json:"publicUrl,omitempty"`
 }
 
-// maxPairBodyBytes bounds the request body. The payload is two short strings;
-// anything larger is a mistake or an attempt to make the server allocate.
 const maxPairBodyBytes = 4 << 10
 
-// pairingHandler serves /pair while a pairing window is open: GET renders the
-// scan-to-pair page, POST performs the pairing.
 func pairingHandler(session *pairing.Session, storePath string) http.Handler {
 	return pairingHandlerWithRole(session, storePath, "")
 }
 
-// pairingHandlerWithRole is pairingHandler for a window whose devices get
-// a role the machine chose — viewer, for a teammate's phone.
 func pairingHandlerWithRole(session *pairing.Session, storePath, role string) http.Handler {
 	w := &pairWindow{}
 	w.set(session, role)
 	return pairingHandlerFor(w, storePath)
 }
 
-// pairWindow is the pairing window as it is now: the session a fresh
-// `corgi agent pair` opened, or the one the server started with. The
-// handler reads it per request, so a window can be reopened without a
-// restart — for a second phone, or an AirDrop from the bar.
 type pairWindow struct {
 	mu      sync.Mutex
 	session *pairing.Session
@@ -95,23 +69,12 @@ func (p *pairWindow) get() (*pairing.Session, string) {
 func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session, role := window.get()
-		// The POST response carries a device token and the GET page carries the
-		// copy-paste connector: keep both out of any intermediary cache, and
-		// stop content sniffing. Defense in depth — the default cloudflared
-		// tunnel caches neither, but a corporate proxy on the client path might.
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
 		if r.Method == http.MethodGet {
-			// The page holds no secret: the code travels only in the URL
-			// fragment (which never reaches the server) and is typed back by
-			// the page's own JS. Rendering it while closed would only invite a
-			// form that cannot succeed.
 			w.Header().Set(headerContentType, "text/html; charset=utf-8")
 			if !session.Open() {
-				// A person, not a client, lands here: a reopened QR link, an
-				// expired one, or a phone that already paired. Say so in a page
-				// that sends an already-paired browser on to the launcher.
 				w.WriteHeader(http.StatusForbidden)
 				_, _ = fmt.Fprint(w, pairClosedHTML)
 				return
@@ -127,8 +90,6 @@ func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 			return
 		}
 		if !session.Open() {
-			// Deliberately vague about why: an expired window and a used one
-			// are the same answer to anyone who should not be here.
 			writePairError(w, http.StatusForbidden, "pairing is not open — run `corgi mcp --http --pair` on the machine")
 			return
 		}
@@ -151,10 +112,6 @@ func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 		}
 		token, err := pairing.PairWithRole(storePath, session, req.Code, req.Device, req.PubKey, role)
 		if err != nil {
-			// Only errors about the caller's own input go back verbatim.
-			// Anything else — a permission problem, a corrupt store — would
-			// leak absolute paths and file modes to an unauthenticated, possibly
-			// tunnelled caller, so it is logged locally and reported plainly.
 			if errors.Is(err, pairing.ErrBadRequest) {
 				writePairError(w, http.StatusForbidden, err.Error())
 				return
@@ -182,12 +139,6 @@ func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 	})
 }
 
-// pairPageHTML is the scan-to-pair page: the QR printed by `corgi agent up`
-// points here with the code in the URL fragment. Self-contained, no external
-// assets, nothing server-rendered — the fragment stays in the browser.
-// pairClosedHTML is what a browser sees on a pairing link whose window is no
-// longer open. Deliberately vague about why (used vs expired), like the POST
-// path; it only helps a browser that already holds a token find the launcher.
 const pairClosedHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -286,8 +237,6 @@ func writePairError(w http.ResponseWriter, status int, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-// announcePairing prints the code and how to use it. The code is short-lived
-// and single-use, which is the whole reason it is safe to display.
 func announcePairing(code, addr string) {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "  pairing code: %s\n", code)
@@ -332,8 +281,6 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 	}
 
 	if utils.JSONOutput {
-		// Hashes are omitted: they are not needed to answer "which devices are
-		// paired", and printing them invites treating them as identifiers.
 		type row struct {
 			Name      string    `json:"name"`
 			CreatedAt time.Time `json:"createdAt"`
@@ -395,17 +342,11 @@ func init() {
 	mcpCmd.AddCommand(mcpDevicesCmd)
 }
 
-// pairRequestName and pairAnswerName are how `corgi agent pair` reopens a
-// window without a restart: it writes the request (the role wanted), the
-// server opens a fresh session and writes the answer — the code, its
-// expiry, the public address — and removes the request. Both files are
-// the user's own, 0600, in the agent dir; nothing travels over the network.
 const (
 	pairRequestName = "pair.request"
 	pairAnswerName  = "pair.json"
 )
 
-// pairAnswer is what `corgi agent pair` reads back.
 type pairAnswer struct {
 	Code      string    `json:"code"`
 	ExpiresAt time.Time `json:"expiresAt"`

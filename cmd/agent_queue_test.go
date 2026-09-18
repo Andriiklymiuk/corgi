@@ -2,7 +2,6 @@ package cmd
 
 import "testing"
 
-// One queue, not one per repo: whoever is blocked comes first.
 func TestTheInboxIsOrderedByWhoIsStuck(t *testing.T) {
 	order := []string{"review.requested", "ci.failed", "pr.review", "pr.comment", "issue.comment", "issue.new"}
 	for i := 1; i < len(order); i++ {

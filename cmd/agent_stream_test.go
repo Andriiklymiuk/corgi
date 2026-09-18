@@ -14,9 +14,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/transcript"
 )
 
-// The phone reads a conversation only for a workspace the laptop allowed;
-// it opens at the newest entries, continues from where it left off, and a
-// long-poll returns the moment a line lands.
 func TestTranscriptStreamsOnlyAllowedWorkspaces(t *testing.T) {
 	phoneBoard(t, true,
 		sessions.Session{ID: "s1", Label: "api", Display: "api·auth", Status: sessions.StatusWorking, Cwd: "/w/api"},
@@ -54,7 +51,6 @@ func TestTranscriptStreamsOnlyAllowedWorkspaces(t *testing.T) {
 		t.Fatalf("opens at the newest: %+v", got)
 	}
 
-	// A long-poll returns when a line lands, not before.
 	done := make(chan struct{})
 	var next struct {
 		Entries []transcript.Entry `json:"entries"`

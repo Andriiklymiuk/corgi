@@ -16,9 +16,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
-// A phone that pairs with a key gets the machine's back, and from then on
-// its bodies travel sealed both ways; plaintext from it is refused, while a
-// key-less device (the web page) keeps talking as before.
 func TestLaunchAuthSealsBothWaysForAKeyedDevice(t *testing.T) {
 	session, code, store := pairingFixture(t)
 	phone, _ := ecdh.X25519().GenerateKey(rand.Reader)
@@ -50,7 +47,6 @@ func TestLaunchAuthSealsBothWaysForAKeyedDevice(t *testing.T) {
 	}
 	key, _ := pairing.SharedKeyOnDevice(phone, serverPub)
 
-	// Plaintext from this device is refused.
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/launch/answer", strings.NewReader(`{"answer":"allow"}`))
 	req.Header.Set("Authorization", "Bearer "+paired.Token)
@@ -59,7 +55,6 @@ func TestLaunchAuthSealsBothWaysForAKeyedDevice(t *testing.T) {
 		t.Fatalf("plaintext from a keyed device: %d %s", rec.Code, rec.Body)
 	}
 
-	// Sealed goes through, and the answer comes back sealed.
 	sealed, _ := pairing.Seal(key, "POST", "/launch/answer", []byte(`{"answer":"allow"}`), time.Now())
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/launch/answer", strings.NewReader(string(sealed)))
@@ -77,7 +72,6 @@ func TestLaunchAuthSealsBothWaysForAKeyedDevice(t *testing.T) {
 		t.Fatalf("the phone opens the answer: %q %v", plain, err)
 	}
 
-	// A sealed body aimed at another path does not open here.
 	wrong, _ := pairing.Seal(key, "POST", "/launch/send", []byte(`{"answer":"allow"}`), time.Now())
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/launch/answer", strings.NewReader(string(wrong)))
@@ -88,7 +82,6 @@ func TestLaunchAuthSealsBothWaysForAKeyedDevice(t *testing.T) {
 		t.Fatalf("a message for another path: %d", rec.Code)
 	}
 
-	// The server token is untouched by any of this.
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/launch/answer", strings.NewReader(`{"answer":"deny"}`))
 	req.Header.Set("Authorization", "Bearer server-token")
@@ -98,8 +91,6 @@ func TestLaunchAuthSealsBothWaysForAKeyedDevice(t *testing.T) {
 	}
 }
 
-// A device that paired without a key talks plainly, and is told so if it
-// starts sending envelopes.
 func TestLaunchAuthLeavesAKeylessDevicePlain(t *testing.T) {
 	session, code, store := pairingFixture(t)
 	mux := http.NewServeMux()
@@ -134,9 +125,6 @@ func TestLaunchAuthLeavesAKeylessDevicePlain(t *testing.T) {
 	}
 }
 
-// A window opened with --viewer pairs a device that only reads: the board
-// answers, a transcript and every POST are refused, and the pairing answer
-// says so, so the app hides its buttons.
 func TestAViewerDeviceOnlyReadsTheBoard(t *testing.T) {
 	session, code, store := pairingFixture(t)
 	mux := http.NewServeMux()
@@ -177,9 +165,6 @@ func TestAViewerDeviceOnlyReadsTheBoard(t *testing.T) {
 	}
 }
 
-// A window reopens on request while the server runs: the request file is
-// answered with a fresh code, the old window closes, and the new code
-// pairs — for a viewer when asked.
 func TestAPairingWindowReopensOnRequest(t *testing.T) {
 	session, oldCode, store := pairingFixture(t)
 	dir := filepath.Dir(store)

@@ -7,25 +7,17 @@ import (
 	"time"
 )
 
-// Limits is the account's rate-limit picture as Claude Code last fetched it —
-// what /usage shows. Claude Code caches it in <configDir>/.claude.json under
-// cachedUsageUtilization; corgi only reads that cache, so the numbers are as
-// fresh as the last session that asked.
 type Limits struct {
 	FetchedAt time.Time `json:"fetchedAt"`
 	FiveHour  Window    `json:"fiveHour"`
 	SevenDay  Window    `json:"sevenDay"`
 }
 
-// Window is one rolling limit: how much of it is used, and when it resets.
 type Window struct {
 	Percent  int       `json:"percent"`
 	ResetsAt time.Time `json:"resetsAt,omitempty"`
 }
 
-// ReadLimits reads the cached snapshot for one Claude config dir ("" is
-// ~/.claude). ok is false when no session under that account has fetched
-// usage yet.
 func ReadLimits(configDir string) (Limits, bool) {
 	if configDir == "" {
 		home, err := os.UserHomeDir()
@@ -34,8 +26,6 @@ func ReadLimits(configDir string) (Limits, bool) {
 		}
 		configDir = filepath.Join(home, ".claude")
 	}
-	// Claude Code keeps the default account's file at ~/.claude.json, and a
-	// custom config dir's inside that dir.
 	candidates := []string{filepath.Join(configDir, ".claude.json")}
 	if filepath.Base(configDir) == ".claude" {
 		candidates = append(candidates, filepath.Join(filepath.Dir(configDir), ".claude.json"))
@@ -52,7 +42,6 @@ func ReadLimits(configDir string) (Limits, bool) {
 	return Limits{}, false
 }
 
-// cacheFile is the slice of Claude Code's .claude.json corgi reads.
 type cacheFile struct {
 	Cached cachedUtilization `json:"cachedUsageUtilization"`
 }

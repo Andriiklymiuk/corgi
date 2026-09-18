@@ -20,12 +20,6 @@ import (
 
 const workspaceArgDescription = "Workspace id, alias, or human name"
 
-// Tools a Remote Control session calls from a phone: find the right stack,
-// materialize a branch across every repository, read the whole change at once.
-//
-// Nothing here may block — cmd/mcp.go serializes handlers behind one global
-// mutex. Anything that mutates joins the dangerous-tool tunnel gate.
-
 const agentDangerousBlockedMsg = "corgi_worktrees_* are disabled over a public tunnel; set CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1 to allow"
 
 func registerAgentMCPTools(s *server.MCPServer) {
@@ -83,11 +77,6 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		return mcpWorkspaceResolve(r.GetString("query", ""))
 	}))
 
-	// Not behind the dangerous-tunnel gate — a phone-driven endpoint is the
-	// point. Bounded instead by per-device-token auth, registry-scoped starts
-	// (no caller-defined command), `sensitive` workspaces refusing remote start,
-	// and 0600 status.json for the sessionUrl. A stolen token can stop sessions;
-	// revocation is the answer, as for every tool the token reaches.
 	s.AddTool(newCorgiTool("corgi_session_start",
 		mcp.WithDescription(
 			"Start a supervised Claude Code Remote Control session in a registered workspace, by name. "+
@@ -216,8 +205,6 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithString("id", mcp.Required(), mcp.Description("Preview id or service name")),
 		mcp.WithBoolean("frozen", mcp.Description("Default true")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
-		// Freezing disables idle reaping, which is what would otherwise close a
-		// forgotten public URL. Same gate as the rest.
 		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
 			return nil, fmt.Errorf("%s", agentDangerousBlockedMsg)
 		}
@@ -259,8 +246,6 @@ func registerAgentMCPTools(s *server.MCPServer) {
 	}))
 }
 
-// mcpSurface is corgi_diff with surface: the public slice of the change,
-// as a list and as the Markdown block a pull request body carries.
 func mcpSurface(composePath, base, branch string) (any, error) {
 	out, err := mcpDiff(composePath, base, branch, true)
 	if err != nil {
@@ -324,9 +309,6 @@ func mcpSessionBrief(workspace string) (any, error) {
 			return nil, readErr
 		}
 		if b == nil {
-			// Explicitly not an error: "nothing has restarted" is the good case,
-			// and an error here would read as a fault to whoever is holding the
-			// phone.
 			return map[string]any{
 				"brief": nil,
 				"note":  "no restart recorded for this workspace since the daemon started",
@@ -339,8 +321,6 @@ func mcpSessionBrief(workspace string) (any, error) {
 		return nil, err
 	}
 	if briefs == nil {
-		// Never null: a client that iterates the field should not have to
-		// special-case "no restarts yet", which is the ordinary state.
 		briefs = []brief.Brief{}
 	}
 	return map[string]any{"briefs": briefs}, nil
@@ -368,8 +348,6 @@ func mcpWorkspaceResolve(query string) (any, error) {
 	return workspace.Resolve(registry, query), nil
 }
 
-// resolveForSession maps a human name to one workspace, or returns the
-// candidate list shaped exactly like corgi_workspace_resolve.
 func resolveForSession(query string) (*workspace.Workspace, any, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, nil, fmt.Errorf("%s: workspace is required", utils.ErrUsage)
@@ -408,12 +386,6 @@ func mcpSessionStart(query, profile, name string) (any, error) {
 	if !info.Commands {
 		return nil, fmt.Errorf("the running corgi agent predates remote session start — restart it (`corgi agent stop` then `corgi agent serve`) on the laptop")
 	}
-	// No status short-circuit: reading status.json here to answer "already
-	// running" races a stop that has been requested but not yet taken effect,
-	// which would report a dying session as running and enqueue nothing. The
-	// daemon's Supervising() check is the authoritative idempotency guard, and
-	// it orders a queued stop before this start by requestedAt, so enqueuing
-	// unconditionally is both correct and simplest.
 	c, err := command.Write(dir, command.Command{
 		Action: command.ActionStart, WorkspaceID: w.ID, Profile: profile, Name: sanitizeSessionName(name), Source: "mcp",
 	})
@@ -503,8 +475,6 @@ func mcpPROpen(composePath, branch, title, body, base string, draft bool) (any, 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", utils.ErrUsage, err)
 	}
-	// One directory per repository: two services sharing a repo share a
-	// worktree, and one pull request covers both.
 	dirs := map[string]string{}
 	for _, w := range set.Worktrees {
 		if w.Skipped == "" && w.Dir != "" {
@@ -553,25 +523,16 @@ func mcpDiff(composePath, base, branch string, includePatch bool) (any, error) {
 
 	var set *utils.WorktreeSet
 	if strings.TrimSpace(branch) != "" {
-		// Look the worktrees up; never create them. This tool is advertised as
-		// read-only and is deliberately ungated, so it must not be a way around
-		// the gate on corgi_worktrees_materialize.
 		set, err = utils.ExistingBranchWorktrees(corgi, dir, branch)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", utils.ErrUsage, err)
 		}
 		if len(set.Worktrees) == 0 {
-			// Falling back to the main checkouts here would return someone
-			// else's work labelled as this branch.
 			return nil, fmt.Errorf(
 				"%s: no worktrees exist for branch %q — run corgi_worktrees_materialize first, "+
 					"or omit branch to diff the main checkouts",
 				utils.ErrUsage, branch)
 		}
-		// Only the services actually on this branch. Materializing a subset
-		// leaves the rest on their main checkouts, and including those would
-		// show unrelated uncommitted work inside a diff labelled with a branch
-		// that has nothing to do with it.
 		return utils.DiffStack(utils.WorktreeDirs(set), base, includePatch), nil
 	}
 	return utils.DiffStack(utils.ServiceDirs(corgi, nil), base, includePatch), nil
@@ -589,7 +550,6 @@ func mcpPreviewStart(r mcp.CallToolRequest) (any, error) {
 		return nil, fmt.Errorf("%s: no service called %q in this stack", utils.ErrServiceNotFound, service)
 	}
 
-	// Reap first so a stale entry cannot masquerade as a live preview.
 	_, _ = utils.ReapPreviews(dir, time.Now())
 
 	return utils.StartPreview(utils.PreviewOptions{
@@ -644,8 +604,6 @@ func mcpPreviewStop(composePath, id string) (any, error) {
 	return map[string]any{"stopped": id}, nil
 }
 
-// serviceTunnelInfo returns a service's port and whether it declares a named
-// tunnel, which is what makes the preview URL survive a restart.
 func serviceTunnelInfo(corgi *utils.CorgiCompose, name string) (port int, named, found bool) {
 	for i := range corgi.Services {
 		svc := &corgi.Services[i]
@@ -657,15 +615,11 @@ func serviceTunnelInfo(corgi *utils.CorgiCompose, name string) (port int, named,
 	return 0, false, false
 }
 
-// workspaceIsSensitive reads the committed repo config. A workspace may
-// restrict itself; that is the one thing the committed file is trusted for.
 func workspaceIsSensitive(dir string) bool {
 	repo, err := config.LoadRepo(dir)
 	return err == nil && repo != nil && repo.Workspace.Sensitive
 }
 
-// agentRegistry loads the workspace registry the CLI and MCP both read, so
-// every surface agrees on what exists.
 func agentRegistry() (*workspace.Registry, string, error) {
 	dir, err := agentDir()
 	if err != nil {
@@ -690,9 +644,6 @@ func agentRegistry() (*workspace.Registry, string, error) {
 	return registry, path, nil
 }
 
-// loadComposeForAgent parses the compose file and returns it with the directory
-// it lives in. The compose context is released before returning, so a stale
-// --filename cannot leak into the next tool call.
 func loadComposeForAgent(composePath string) (*utils.CorgiCompose, string, error) {
 	ctx, err := loadComposeCtx(composePath)
 	if err != nil {

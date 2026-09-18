@@ -26,8 +26,6 @@ func TestClassifyRecognisesTheAccessLoginRedirect(t *testing.T) {
 }
 
 func TestClassifyRecognisesAccessHeaders(t *testing.T) {
-	// Header names are canonicalised by net/http, but a probe result should not
-	// depend on which casing the proxy happened to send.
 	for _, name := range []string{"Cf-Access-Jwt-Assertion", "CF-Access-Client-Id"} {
 		h := http.Header{}
 		h.Set(name, "value")
@@ -54,10 +52,6 @@ func TestClassifyRecognisesAGenericChallenge(t *testing.T) {
 }
 
 func TestCorgisOwnBearerCheckIsNotAnIdentityProxy(t *testing.T) {
-	// This is the failure that matters: corgi answers 401 to an unauthenticated
-	// request too. Counting that as protection would let the endpoint declare
-	// itself private on the strength of the very token the gate protects, and
-	// silently re-enable corgi_exec over an open URL.
 	for _, challenge := range []string{
 		"Bearer",
 		`Bearer realm="corgi"`,
@@ -74,9 +68,6 @@ func TestCorgisOwnBearerCheckIsNotAnIdentityProxy(t *testing.T) {
 }
 
 func TestClassifyDefaultsToPublic(t *testing.T) {
-	// Anything not recognised is public. The gate must fail closed: assuming
-	// protection on an unrecognised response is how an open shell endpoint
-	// happens.
 	tests := []struct {
 		name   string
 		status int
@@ -110,8 +101,6 @@ func headerWith(key, value string) http.Header {
 }
 
 func TestProbeAccessRejectsPlainHTTP(t *testing.T) {
-	// An identity proxy terminates TLS. A plain-HTTP endpoint is not behind
-	// one, so there is nothing to probe and no request worth making.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cf-Access-Jwt-Assertion", "value")
 	}))
@@ -128,7 +117,6 @@ func TestProbeAccessRejectsPlainHTTP(t *testing.T) {
 }
 
 func TestProbeAccessDoesNotFollowTheRedirect(t *testing.T) {
-	// Following it would discard the evidence and classify the login page.
 	var hits int
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits++
@@ -151,8 +139,6 @@ func TestProbeAccessDoesNotFollowTheRedirect(t *testing.T) {
 }
 
 func TestProbeAccessTreatsAFailedRequestAsPublic(t *testing.T) {
-	// A probe that cannot reach the endpoint knows nothing, and "knows nothing"
-	// must not open the gate.
 	got := ProbeAccess(context.Background(), "https://127.0.0.1:1/nothing-listening")
 
 	if got.Protected {
@@ -175,10 +161,6 @@ func TestProbeAccessRespectsACancelledContext(t *testing.T) {
 	}
 }
 
-// probeWithClientOf runs the probe against a TLS test server, whose certificate
-// the default client will not trust. It repeats ProbeAccess's redirect and
-// classification behaviour against that server's client so the no-follow rule
-// is exercised end to end.
 func probeWithClientOf(srv *httptest.Server) AccessResult {
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error {

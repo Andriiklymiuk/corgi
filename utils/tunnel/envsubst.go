@@ -10,8 +10,6 @@ import (
 
 var envRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
 
-// LoadEnvFile parses KEY=VALUE lines (`#` comments + blanks ignored).
-// Quotes around values are stripped. Errors propagate.
 func LoadEnvFile(path string) (map[string]string, error) {
 	out := map[string]string{}
 	if path == "" {
@@ -43,9 +41,6 @@ func LoadEnvFile(path string) (map[string]string, error) {
 	return out, sc.Err()
 }
 
-// Substitute replaces ${VAR} and $VAR refs in s. Lookup order: shell env,
-// then fileEnv. Missing keys recorded in `missing` and left as the
-// original ref string (caller decides strictness).
 func Substitute(s string, fileEnv map[string]string, missing *[]string) string {
 	return envRefRe.ReplaceAllStringFunc(s, func(match string) string {
 		var key string
@@ -67,7 +62,6 @@ func Substitute(s string, fileEnv map[string]string, missing *[]string) string {
 	})
 }
 
-// MissingError formats a strict-mode error listing unresolved env refs.
 func MissingError(field string, missing []string) error {
 	return fmt.Errorf("env vars not set for %s: %s", field, strings.Join(dedup(missing), ", "))
 }

@@ -14,16 +14,8 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// A task is a ticket of your own: written on the phone, the page or the
-// command line for later, kept in <agentDir>/watch/tasks.json and shown on
-// the same board as the tracker's tickets. It has the columns a small board
-// needs and nothing else; the tracker never hears of it.
-
-// KindTask is the inbox kind of a task. A task only leaves the inbox when it
-// is finished — unlike a new issue, which leaves once anyone moves it.
 const KindTask Kind = "task"
 
-// TaskColumns are the columns a task can be in, in board order.
 var TaskColumns = []string{"Todo", "Doing", "Review", "Done", "Canceled"}
 
 type Task struct {
@@ -37,19 +29,15 @@ type Task struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// Ref is what the board shows: TASK-3.
 func (t Task) Ref() string { return fmt.Sprintf("TASK-%d", t.ID) }
 
-// Key is what every surface acts on: task:3.
 func (t Task) Key() string { return fmt.Sprintf("task:%d", t.ID) }
 
-// Event is the task as the inbox, the board and "Work on it" see it.
 func (t Task) Event() Event {
 	return Event{Key: t.Key(), Source: "task", Kind: KindTask, Workspace: t.Workspace, Ref: t.Ref(),
 		Title: t.Title, Body: t.Body, State: t.State, Mine: true, At: t.UpdatedAt}
 }
 
-// TaskLog is the file of tasks.
 type TaskLog struct {
 	mu    sync.Mutex
 	path  string
@@ -59,7 +47,6 @@ type TaskLog struct {
 
 func tasksPath(agentDir string) string { return filepath.Join(agentDir, "watch", "tasks.json") }
 
-// LoadTasks reads the file; missing or broken is empty, never an error.
 func LoadTasks(agentDir string) *TaskLog {
 	l := &TaskLog{path: tasksPath(agentDir), Next: 1}
 	if data, err := os.ReadFile(l.path); err == nil {
@@ -87,7 +74,6 @@ func (l *TaskLog) save() error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// Add writes a new task in the first column and returns it.
 func (l *TaskLog) Add(title, body, workspace, by string, now time.Time) (Task, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -108,7 +94,6 @@ func (l *TaskLog) Add(title, body, workspace, by string, now time.Time) (Task, e
 	return t, l.save()
 }
 
-// Find is a task by ref (TASK-3), key (task:3) or bare number.
 func (l *TaskLog) Find(arg string) (Task, bool) {
 	id := TaskID(arg)
 	if id == 0 {
@@ -124,7 +109,6 @@ func (l *TaskLog) Find(arg string) (Task, bool) {
 	return Task{}, false
 }
 
-// TaskID reads a task's number from any spelling of it, 0 for anything else.
 func TaskID(arg string) int {
 	s := strings.TrimSpace(arg)
 	for _, prefix := range []string{"task:", "TASK-", "task-", "Task-", "#"} {
@@ -137,8 +121,6 @@ func TaskID(arg string) int {
 	return n
 }
 
-// Move puts a task in a column. The column is one of TaskColumns, matched
-// without regard to case, so a phone's "done" and the board's "Done" agree.
 func (l *TaskLog) Move(arg, column string, now time.Time) (Task, error) {
 	col := TaskColumn(column)
 	if col == "" {
@@ -158,8 +140,6 @@ func (l *TaskLog) Move(arg, column string, now time.Time) (Task, error) {
 	return Task{}, fmt.Errorf("no task %s", arg)
 }
 
-// Edit changes a task's title, description or workspace; an empty field
-// keeps what it had.
 func (l *TaskLog) Edit(arg, title, body, workspace string, now time.Time) (Task, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -183,7 +163,6 @@ func (l *TaskLog) Edit(arg, title, body, workspace string, now time.Time) (Task,
 	return Task{}, fmt.Errorf("no task %s", arg)
 }
 
-// Remove deletes a task for good.
 func (l *TaskLog) Remove(arg string) (Task, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -198,7 +177,6 @@ func (l *TaskLog) Remove(arg string) (Task, error) {
 	return Task{}, fmt.Errorf("no task %s", arg)
 }
 
-// TaskColumn is the canonical spelling of a column, "" for none.
 func TaskColumn(s string) string {
 	for _, c := range TaskColumns {
 		if strings.EqualFold(strings.TrimSpace(s), c) {
@@ -208,11 +186,8 @@ func TaskColumn(s string) string {
 	return ""
 }
 
-// finishedKeep is how long a finished task stays on the board's Done column.
 const finishedKeep = 7 * 24 * time.Hour
 
-// Events is every task as an inbox event, newest change first. A finished
-// task leaves after a week; the file keeps it.
 func (l *TaskLog) Events(now time.Time) []Event {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -227,7 +202,6 @@ func (l *TaskLog) Events(now time.Time) []Event {
 	return out
 }
 
-// TaskEvents is LoadTasks(dir).Events(now) for readers of the events log.
 func TaskEvents(agentDir string, now time.Time) []Event {
 	return LoadTasks(agentDir).Events(now)
 }

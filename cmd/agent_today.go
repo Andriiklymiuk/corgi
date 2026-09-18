@@ -28,7 +28,6 @@ not drift into yesterday evening.
 	Run: runAgentToday,
 }
 
-// todaySince is midnight local, unless --since asked for a rolling window.
 func todaySince(cmd *cobra.Command, now time.Time) (time.Time, error) {
 	raw, _ := cmd.Flags().GetString("since")
 	if strings.TrimSpace(raw) == "" {
@@ -70,7 +69,6 @@ func countToday(entries []standupEntry) todayTotals {
 	return t
 }
 
-// headline is the one line worth reading if you read nothing else.
 func (t todayTotals) headline() string {
 	var parts []string
 	if t.Commits > 0 {
@@ -140,8 +138,6 @@ func init() {
 	agentCmd.AddCommand(agentTodayCmd)
 }
 
-// todayForMCP is the same day report the CLI prints, for a chat asking "what
-// have you done today?". A rolling window is a duration; empty means midnight.
 func todayForMCP(since string, now time.Time) (map[string]any, error) {
 	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	if raw := strings.TrimSpace(since); raw != "" {

@@ -168,15 +168,11 @@ func TestResolutionReasonEchoesPathForConfirmation(t *testing.T) {
 func TestRelatedIgnoresVeryShortWords(t *testing.T) {
 	r := &Registry{Workspaces: []Workspace{{ID: "alpha", AbsPath: "/a", Services: []string{"db"}}}}
 
-	// "do" should not reach the "db" service through word overlap.
 	if got := Resolve(r, "do the thing"); got.Resolved() {
 		t.Errorf("short incidental words must not resolve a workspace, got %q", got.Workspace.ID)
 	}
 }
 
-// A raw substring test made "api" match "rapid-prototype", and when that was
-// the only hit the resolver answered with it confidently — the wrong-repository
-// outcome this package promises never to produce.
 func TestResolveDoesNotMatchOnAccidentalSubstrings(t *testing.T) {
 	r := &Registry{Workspaces: []Workspace{
 		{ID: "rapid-prototype", AbsPath: "/rapid"},

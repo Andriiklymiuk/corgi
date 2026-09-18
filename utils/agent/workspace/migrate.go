@@ -5,17 +5,12 @@ import (
 	"strings"
 )
 
-// LegacyEntry is one row of the pre-existing `corgi_exec_paths.txt` registry.
-// That file is pipe-separated with no quoting and rewritten by truncating, so a
-// name containing "|" corrupts a row. Migration is one-way and skips those.
 type LegacyEntry struct {
 	Name        string
 	Description string
 	Path        string
 }
 
-// FromLegacy converts legacy rows into workspaces, skipping unusable ones.
-// Later rows win, matching the legacy file's own last-write-wins behaviour.
 func FromLegacy(entries []LegacyEntry) []Workspace {
 	seen := map[string]int{}
 	var out []Workspace
@@ -46,8 +41,6 @@ func FromLegacy(entries []LegacyEntry) []Workspace {
 	return out
 }
 
-// legacyID prefers the compose file's own name and falls back to the directory,
-// so a nameless entry still gets something a person would recognise.
 func legacyID(e LegacyEntry, path string) string {
 	if name := strings.TrimSpace(e.Name); name != "" {
 		return name
@@ -55,10 +48,6 @@ func legacyID(e LegacyEntry, path string) string {
 	return filepath.Base(filepath.Dir(path))
 }
 
-// MergeLegacy folds legacy rows into an existing registry without overwriting
-// anything already recorded — a workspace since given aliases or a config dir
-// must survive. pathExists prunes rows whose directory is gone; the legacy file
-// was append-only and accumulated temp dirs and deleted projects.
 func MergeLegacy(r *Registry, entries []LegacyEntry, pathExists func(string) bool) (added int) {
 	for _, w := range FromLegacy(entries) {
 		if _, exists := r.Find(w.ID); exists {

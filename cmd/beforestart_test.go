@@ -58,7 +58,6 @@ func TestRunCachedBeforeStart_FailureNotPersisted(t *testing.T) {
 		t.Fatal("want error from failing step")
 	}
 
-	// failed step must not have cached → next run executes again
 	var runs int
 	if err := runCachedBeforeStart(svc, false, func(string) error { runs++; return nil }); err != nil {
 		t.Fatal(err)
@@ -68,9 +67,6 @@ func TestRunCachedBeforeStart_FailureNotPersisted(t *testing.T) {
 	}
 }
 
-// The nightly that broke: a fresh markers cache next to a node_modules saved
-// weeks earlier. With the marker inside node_modules, an older restore carries
-// its older marker and the install runs instead of being skipped.
 func TestRunCachedBeforeStart_ReinstallsAStaleRestoredOutputDir(t *testing.T) {
 	prev := utils.CorgiComposePathDir
 	utils.CorgiComposePathDir = t.TempDir()
@@ -106,8 +102,6 @@ func TestRunCachedBeforeStart_ReinstallsAStaleRestoredOutputDir(t *testing.T) {
 		t.Fatalf("the marker must live inside node_modules: %v", err)
 	}
 
-	// A dependency is added; the cache's prefix fallback restores the old
-	// node_modules (marker included) while nothing else changes.
 	if err := os.WriteFile(lock, []byte(`{"deps":2}`), 0o644); err != nil {
 		t.Fatal(err)
 	}

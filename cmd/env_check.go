@@ -62,7 +62,6 @@ func runEnvCheck(cmd *cobra.Command, args []string) error {
 		utils.PrintJSON(doc)
 	} else {
 		summary, _ := utils.EnvCheckSummary(rows)
-		// The verdict is the payload; Info would land on stderr here.
 		fmt.Print(summary)
 	}
 	if findings {
@@ -71,8 +70,6 @@ func runEnvCheck(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// filterEnvCheckRows narrows to the named services, erroring on unknown names
-// so a typo cannot read as a pass.
 func filterEnvCheckRows(rows []utils.EnvCheckRow, names []string) ([]utils.EnvCheckRow, error) {
 	if len(names) == 0 {
 		return rows, nil

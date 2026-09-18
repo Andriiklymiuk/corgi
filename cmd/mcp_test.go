@@ -34,7 +34,6 @@ services:
       - name: pg
 `
 
-// mcpComposeWithError has a dangling service dependency -> one validation error.
 const mcpComposeWithError = `name: mcp-bad
 services:
   api:
@@ -53,7 +52,6 @@ func TestMCPValidateParity(t *testing.T) {
 		t.Fatalf("mcpValidate: %v", err)
 	}
 
-	// Parity: same result the CLI builder produces for the same compose.
 	corgi, err := loadComposeForMCP("")
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -88,8 +86,6 @@ func TestMCPValidateReportsError(t *testing.T) {
 	}
 }
 
-// TestMCPEnv guards the keyed shape: variable names must survive into JSON
-// (utils.EnvVar drops Key, so a naive marshal would lose them).
 func TestMCPEnv(t *testing.T) {
 	chdirToTempCompose(t, mcpComposeFixture)
 	got, err := mcpEnv(envArgs{})
@@ -131,8 +127,6 @@ func TestMCPPlanParity(t *testing.T) {
 	}
 }
 
-// mcpComposeWithProfiles has services tagged with profiles and a db pulled in
-// transitively by the backend service.
 const mcpComposeWithProfiles = `name: mcp-profiles
 db_services:
   pg:
@@ -168,8 +162,6 @@ func TestMCPPlanProfileParity(t *testing.T) {
 		t.Fatalf("mcpPlan: %v", err)
 	}
 
-	// Parity: same plan the CLI's `run --profile backend --dry-run` produces,
-	// i.e. computeDryRunPlan over the profile-narrowed compose.
 	corgi, err := loadComposeForMCP("")
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -183,7 +175,6 @@ func TestMCPPlanProfileParity(t *testing.T) {
 		t.Errorf("profile plan mismatch:\n got=%s\nwant=%s", gotJSON, wantJSON)
 	}
 
-	// Sanity: the backend profile must narrow out the frontend-only service.
 	for _, s := range corgi.Services {
 		if s.ServiceName == "web" {
 			t.Errorf("expected web (frontend) to be excluded by backend profile, plan covered %d services", len(corgi.Services))
@@ -248,7 +239,6 @@ func TestGenerateMCPToken(t *testing.T) {
 }
 
 func TestBuildMCPTunnelConfig(t *testing.T) {
-	// Quick tunnel: no hostname/name => nil NamedConfig.
 	_, named, err := buildMCPTunnelConfig("cloudflared", "", "")
 	if err != nil {
 		t.Fatalf("quick: %v", err)
@@ -257,12 +247,10 @@ func TestBuildMCPTunnelConfig(t *testing.T) {
 		t.Errorf("expected nil named config for quick tunnel, got %+v", named)
 	}
 
-	// Unknown provider errors.
 	if _, _, err := buildMCPTunnelConfig("bogus", "", ""); err == nil {
 		t.Error("expected error for unknown provider")
 	}
 
-	// ${VAR} expansion in hostname.
 	t.Setenv("MCP_TEST_HOST", "mcp.example.com")
 	_, named, err = buildMCPTunnelConfig("cloudflared", "${MCP_TEST_HOST}", "my-mcp")
 	if err != nil {
@@ -272,26 +260,21 @@ func TestBuildMCPTunnelConfig(t *testing.T) {
 		t.Errorf("expected expanded named config, got %+v", named)
 	}
 
-	// Missing var errors.
 	if _, _, err := buildMCPTunnelConfig("cloudflared", "${MCP_TEST_MISSING}", ""); err == nil {
 		t.Error("expected error for missing env var")
 	}
 }
 
 func TestResolveMCPToken(t *testing.T) {
-	// Plain --http: no token, no tunnel => no-auth (NON-BREAKING).
 	if got := resolveMCPToken(mcpHTTPOpts{}); got != "" {
 		t.Errorf("plain http should stay no-auth, got %q", got)
 	}
-	// Explicit token honored.
 	if got := resolveMCPToken(mcpHTTPOpts{token: "abc"}); got != "abc" {
 		t.Errorf("explicit token = %q, want abc", got)
 	}
-	// Tunnel without token auto-generates.
 	if got := resolveMCPToken(mcpHTTPOpts{tunnel: true}); !strings.HasPrefix(got, "corgi_mcp_") {
 		t.Errorf("tunnel should auto-generate token, got %q", got)
 	}
-	// Insecure disables auth even with tunnel.
 	if got := resolveMCPToken(mcpHTTPOpts{tunnel: true, insecure: true, token: "abc"}); got != "" {
 		t.Errorf("insecure should disable auth, got %q", got)
 	}
@@ -321,7 +304,6 @@ func TestMCPSchemaMatches(t *testing.T) {
 func TestMCPPsParity(t *testing.T) {
 	chdirToTempCompose(t, mcpComposeFixture)
 
-	// Use a deterministic probe so the result doesn't depend on live ports.
 	corgi, err := loadComposeForMCP("")
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -410,7 +392,6 @@ func TestMCPDoctorShape(t *testing.T) {
 	if got.Checks == nil {
 		t.Error("expected a checks array")
 	}
-	// ok is the AND of every check; just assert it is consistent with the checks.
 	want := true
 	for _, c := range got.Checks {
 		if !c.OK {
@@ -424,7 +405,6 @@ func TestMCPDoctorShape(t *testing.T) {
 
 func TestMCPRestartMissingCompose(t *testing.T) {
 	chdirToTempCompose(t, "name: x\n")
-	// Point at a path that does not exist -> composeLoadError.
 	if _, err := mcpRestart(restartArgs{ComposePath: "/no/such/corgi-compose.yml"}); err == nil {
 		t.Error("expected error for missing compose")
 	}
@@ -454,13 +434,7 @@ func TestMCPDriversResource(t *testing.T) {
 	}
 }
 
-// TestMCPWithStdoutToStderr verifies the stdout swap keeps incidental prints off
-// the real stdout (the JSON-RPC channel) and restores os.Stdout afterward.
 func TestMCPWithStdoutToStderr(t *testing.T) {
-	// withStdoutToStderr now redirects corgi's human/console output via the
-	// goroutine-safe console override (utils.Info/ConsoleOut), WITHOUT mutating
-	// the process-global os.Stdout. Capture the real stdout to prove Info does
-	// not leak onto the JSON-RPC channel.
 	orig := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -470,7 +444,6 @@ func TestMCPWithStdoutToStderr(t *testing.T) {
 	t.Cleanup(func() { os.Stdout = orig })
 
 	withStdoutToStderr(func() {
-		// os.Stdout must NOT be swapped under the override approach.
 		if os.Stdout != w {
 			t.Errorf("os.Stdout was mutated: got %v want %v", os.Stdout, w)
 		}
@@ -492,12 +465,7 @@ func TestMCPWithStdoutToStderr(t *testing.T) {
 	}
 }
 
-// TestLoadComposeCtxResetsFilenameFlag guards the just-fixed leak: a first call
-// with an explicit composePath must not leak that path into a later call with
-// composePath="". cleanup() resets rootCmd's filename persistent flag, so the
-// second load resolves the compose in the current working dir, not the first.
 func TestLoadComposeCtxResetsFilenameFlag(t *testing.T) {
-	// Explicit-path load: a compose file in a dedicated dir.
 	dirA := t.TempDir()
 	pathA := filepath.Join(dirA, "corgi-compose.yml")
 	if err := os.WriteFile(pathA, []byte("name: explicit-a\n"), 0644); err != nil {
@@ -516,7 +484,6 @@ func TestLoadComposeCtxResetsFilenameFlag(t *testing.T) {
 		t.Fatalf("filename flag leaked after explicit-path load: %q", got)
 	}
 
-	// Second load with "" must resolve cwd's compose, not pathA.
 	chdirToTempCompose(t, "name: cwd-b\n")
 	second, err := loadComposeForMCP("")
 	if err != nil {
@@ -528,13 +495,11 @@ func TestLoadComposeCtxResetsFilenameFlag(t *testing.T) {
 }
 
 func TestCapMCPOutput(t *testing.T) {
-	// Small output passes through untouched.
 	small := "line1\nline2\nline3"
 	if got, trunc := capMCPOutput(small, 200, 16384); got != small || trunc {
 		t.Fatalf("small output altered: trunc=%v got=%q", trunc, got)
 	}
 
-	// Over the line budget: keep head+tail, drop the middle, flag truncated.
 	var lines []string
 	for i := 0; i < 1000; i++ {
 		lines = append(lines, fmt.Sprintf("L%d", i))
@@ -550,7 +515,6 @@ func TestCapMCPOutput(t *testing.T) {
 	if !strings.Contains(got, "lines omitted") {
 		t.Fatalf("missing omission marker: %q", got)
 	}
-	// Head (what ran) and tail (errors surface last) must survive.
 	if !strings.HasPrefix(got, "L0\n") {
 		t.Fatalf("head lost: %.20q", got)
 	}
@@ -558,7 +522,6 @@ func TestCapMCPOutput(t *testing.T) {
 		t.Fatalf("tail lost: ...%q", got[len(got)-20:])
 	}
 
-	// Byte ceiling: one giant line still gets clamped.
 	huge := strings.Repeat("x", 100000)
 	gotB, truncB := capMCPOutput(huge, 200, 16384)
 	if !truncB || len(gotB) > 16384+200 {
@@ -585,8 +548,6 @@ func TestMCPDoesNotMutateGlobalStdout(t *testing.T) {
 }
 
 func TestStartMCPTunnelDoneClosesOnMissingBinary(t *testing.T) {
-	// Force the provider binary to be absent so tunnel.Run emits an err Event
-	// and returns immediately; the join channel must then close promptly.
 	t.Setenv("PATH", t.TempDir())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -606,7 +567,6 @@ func TestStartMCPTunnelDoneClosesOnMissingBinary(t *testing.T) {
 }
 
 func TestStartMCPTunnelDoneClosesOnCancel(t *testing.T) {
-	// A present binary that blocks: cancel must drain the runner and close done.
 	t.Setenv("PATH", t.TempDir())
 
 	ctx, cancel := context.WithCancel(context.Background())

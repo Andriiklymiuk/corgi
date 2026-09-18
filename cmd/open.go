@@ -30,8 +30,6 @@ func init() {
 	rootCmd.AddCommand(openCmd)
 }
 
-// openTargets resolves the service URLs to open. names empty = all services
-// with a port. db_services are never browsable and are excluded.
 func openTargets(corgi *utils.CorgiCompose, names []string) []openTarget {
 	want := map[string]bool{}
 	for _, n := range names {
@@ -53,9 +51,6 @@ func openTargets(corgi *utils.CorgiCompose, names []string) []openTarget {
 	return targets
 }
 
-// browserCommand returns the OS launcher command + args for a URL. A non-empty
-// browser opens in that specific app (macOS `open -a`; Linux best-effort via the
-// named binary; Windows falls back to the default handler).
 func browserCommand(url, browser string) (string, []string) {
 	switch runtime.GOOS {
 	case "darwin":
@@ -73,7 +68,6 @@ func browserCommand(url, browser string) (string, []string) {
 	}
 }
 
-// launcher is overridable in tests.
 var launcher = func(url string) error {
 	return launchBrowser(url, "")
 }

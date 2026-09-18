@@ -43,8 +43,6 @@ func init() {
 	registerServiceWorkdirFlags(execCmd.Flags())
 }
 
-// splitExecArgs separates the service name from the command tokens. dash is
-// cmd.ArgsLenAtDash(): index of the first token after `--`, or -1 when absent.
 func splitExecArgs(args []string, dash int) (service string, cmdTokens []string) {
 	if dash >= 0 {
 		service = strings.Join(args[:dash], " ")
@@ -56,8 +54,6 @@ func splitExecArgs(args []string, dash int) (service string, cmdTokens []string)
 	return strings.TrimSpace(service), cmdTokens
 }
 
-// shellJoin single-quotes each token so the runner's `/bin/sh -c` preserves
-// argument boundaries.
 func shellJoin(tokens []string) string {
 	quoted := make([]string, len(tokens))
 	for i, tok := range tokens {
@@ -66,7 +62,6 @@ func shellJoin(tokens []string) string {
 	return strings.Join(quoted, " ")
 }
 
-// emitExecError reports msg (JSON with code, or stderr) and exits with exitCode.
 func emitExecError(code, msg string, exitCode int) {
 	if utils.JSONOutput {
 		utils.JSONError(code, msg)
@@ -79,8 +74,6 @@ func emitExecError(code, msg string, exitCode int) {
 func runExec(cmd *cobra.Command, args []string) {
 	dash := cmd.ArgsLenAtDash()
 
-	// Everything before `--` must be a single token (the service name);
-	// otherwise we'd join extra tokens into a bogus name like "svc extra".
 	if dash > 1 {
 		emitExecError(utils.ErrUsage,
 			"too many arguments before --; usage: corgi exec <service> -- <cmd> [args...]", 2)
@@ -116,14 +109,11 @@ func runExec(cmd *cobra.Command, args []string) {
 
 	code, err := execService(corgi, serviceName, cmdTokens, ensureDeps, readyTo)
 	if err != nil && code < 0 {
-		// No child exit code produced; surface the failure rather than exit silently.
 		emitExecError(utils.ErrExecFailed, err.Error(), 1)
 	}
-	// Propagate the child's exit code (failure cases already emitted their message).
 	exitProcess(code)
 }
 
-// readyTimeoutFlag reads --ready-timeout, falling back to the default.
 func readyTimeoutFlag(cmd *cobra.Command) time.Duration {
 	if d, err := cmd.Flags().GetDuration("ready-timeout"); err == nil && d > 0 {
 		return d
@@ -139,9 +129,6 @@ func serviceNames(corgi *utils.CorgiCompose) []string {
 	return names
 }
 
-// execService is the testable core: resolve the service, optionally gate on
-// dependency readiness, run the command, and emit its own output. Returns the
-// exit code to propagate plus an error for the failure cases.
 func execService(
 	corgi *utils.CorgiCompose,
 	serviceName string,
@@ -167,7 +154,6 @@ func execService(
 	return runServiceCommand(*service, serviceName, cmdTokens)
 }
 
-// reportExecError emits an error (JSON with code, or stderr) without exiting.
 func reportExecError(code, msg string) {
 	if utils.JSONOutput {
 		utils.JSONError(code, msg)
@@ -176,13 +162,10 @@ func reportExecError(code, msg string) {
 	}
 }
 
-// runServiceCommand spawns the command in the service's working dir with its
-// env and returns the child exit code and any spawn error.
 func runServiceCommand(service utils.Service, serviceName string, cmdTokens []string) (int, error) {
 	command := shellJoin(cmdTokens)
 	interactive := utils.StdinIsTTY()
 
-	// Under --json, route child output to stderr so stdout stays pure JSON.
 	childOut := os.Stdout
 	if utils.JSONOutput {
 		childOut = os.Stderr
@@ -215,13 +198,11 @@ func runServiceCommand(service utils.Service, serviceName string, cmdTokens []st
 	return code, nil
 }
 
-// ensureServiceDeps blocks until the service's depends_on_db/services targets
-// are reachable, bounded by readyTimeout, erroring on the first to time out.
 func ensureServiceDeps(corgi *utils.CorgiCompose, service utils.Service, readyTimeout time.Duration) error {
 	for _, dep := range service.DependsOnDb {
 		db, err := utils.GetDbServiceByName(dep.Name, corgi.DatabaseServices)
 		if err != nil {
-			continue // unknown dep — corgi validate flags these
+			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
 		err = utils.WaitForDBReady(ctx, db)

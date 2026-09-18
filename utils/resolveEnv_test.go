@@ -153,7 +153,6 @@ func TestResolveServiceEnv_HostOverrideRewritesValues(t *testing.T) {
 			{ServiceName: "pg", Driver: "postgres", Host: "localhost", Port: 5432, User: "u", Password: "p", DatabaseName: "d"},
 		},
 		Services: []Service{
-			// LocalhostNameInEnv empty -> HostOverride applies.
 			{ServiceName: "api", Port: 3000, DependsOnDb: []DependsOnDb{{Name: "pg", EnvAlias: "PG"}}},
 		},
 	}
@@ -175,9 +174,6 @@ func TestResolveServiceEnv_HostOverrideRewritesValues(t *testing.T) {
 	}
 }
 
-// Value-level anti-drift guard: richer fixture exercising a service dependency,
-// a cross-service ${producer.VAR} reference (resolved via ResolveAllEnv so the
-// exports map is primed), and a file source — asserting VALUES, not just keys.
 func TestResolveAllEnv_RichValueParity(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "seed.env"), []byte("FROM_FILE=seeded\n"), 0644); err != nil {

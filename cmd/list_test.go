@@ -39,8 +39,6 @@ func TestListRunNoEntries(t *testing.T) {
 	listRun(c, nil)
 }
 
-// Cannot directly access utils.storageFilePath from cmd package — test
-// degraded path indirectly via clean.
 var storageFilePathRef = ""
 
 func TestListEntriesJSONShape(t *testing.T) {

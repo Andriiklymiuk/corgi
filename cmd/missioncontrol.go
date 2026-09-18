@@ -42,7 +42,7 @@ func init() {
 }
 
 func runMissionControl(cmd *cobra.Command, _ []string) {
-	rows := resolveStatusRows(cmd) // reuse status.go: load compose, collect+sort+filter
+	rows := resolveStatusRows(cmd)
 	if rows == nil {
 		return
 	}
@@ -58,15 +58,11 @@ func runMissionControl(cmd *cobra.Command, _ []string) {
 		runMissionOnce(composePath, rows, probe, jsonOut)
 		return
 	}
-	// Watch loops until Ctrl+C; cancel on signal so the loop exits cleanly.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	runMissionLoop(ctx, composePath, rows, probe, interval, jsonOut)
 }
 
-// agentWorkProber returns a name->AgentWork probe that resolves each service's
-// repo dir from the loaded compose and runs utils.ProbeAgentWork. When disabled
-// (or compose unavailable) it returns a probe that yields nil for everything.
 func agentWorkProber(cmd *cobra.Command, disabled bool) func(name string) *utils.AgentWork {
 	if disabled {
 		return func(string) *utils.AgentWork { return nil }
@@ -77,8 +73,6 @@ func agentWorkProber(cmd *cobra.Command, disabled bool) func(name string) *utils
 	}
 	dirs := map[string]string{}
 	for _, s := range corgi.Services {
-		// Prefer the resolved AbsolutePath (honors --service-dir/-branch
-		// overrides); fall back to resolving the compose path: directly.
 		dir := s.AbsolutePath
 		if dir == "" && s.Path != "" {
 			dir = utils.ServiceRepoDir(s.Path)
@@ -112,15 +106,15 @@ func runMissionLoop(ctx context.Context, composePath string, rows []statusRow, p
 	render := func() {
 		snap := buildMissionSnapshot(composePath, rows, probe)
 		if jsonOut {
-			utils.PrintJSON(snap) // one object per tick under --json --watch
+			utils.PrintJSON(snap)
 			return
 		}
 		if utils.IsTTY() {
-			fmt.Print("\033[H\033[J") // clear + home
+			fmt.Print("\033[H\033[J")
 		}
 		utils.Info(buildMissionFrame(snap, interval, time.Now()))
 	}
-	render() // first frame immediately
+	render()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -133,9 +127,6 @@ func runMissionLoop(ctx context.Context, composePath string, rows []statusRow, p
 	}
 }
 
-// MissionSnapshot is the single object emitted by `mission-control --json`.
-// It is a snapshot (one object), not the NDJSON stream that `status --watch`
-// produces.
 type MissionSnapshot struct {
 	ComposePath string           `json:"composePath,omitempty"`
 	GeneratedAt time.Time        `json:"generatedAt"`
@@ -160,8 +151,6 @@ type MissionSummary struct {
 	WithOpenPR int `json:"withOpenPR"`
 }
 
-// labelToNameKind splits a status row label ("services.api",
-// "db_services.pg (postgres)") into bare name + kind.
 func labelToNameKind(label string) (name, kind string) {
 	kind = "service"
 	rest := label
@@ -172,14 +161,11 @@ func labelToNameKind(label string) (name, kind string) {
 		rest = strings.TrimPrefix(label, "services.")
 	}
 	if i := strings.IndexByte(rest, ' '); i >= 0 {
-		rest = rest[:i] // drop " (postgres)" suffix
+		rest = rest[:i]
 	}
 	return rest, kind
 }
 
-// buildMissionSnapshot probes run state via status.go's parallel prober, then
-// attaches per-service agent work via the injected probe (nil for db_services
-// and unresolvable repos). agentWorkFor returns nil to skip a service.
 func buildMissionSnapshot(composePath string, rows []statusRow, agentWorkFor func(name string) *utils.AgentWork) MissionSnapshot {
 	results := probeAllParallel(rows)
 	snap := MissionSnapshot{ComposePath: composePath, GeneratedAt: time.Now().UTC()}
@@ -215,9 +201,6 @@ func runStateFor(healthy bool) string {
 	return "stopped"
 }
 
-// buildMissionFrame renders one terminal frame: a colored run-state line per
-// service plus its branch/PR/CI, then a summary footer. interval is shown in
-// the footer when watching (>0).
 func buildMissionFrame(snap MissionSnapshot, interval time.Duration, now time.Time) string {
 	var buf strings.Builder
 	buf.WriteString("🛰️  corgi mission-control\n")

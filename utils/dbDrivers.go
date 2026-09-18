@@ -21,11 +21,8 @@ const (
 	envURL          = "\n%sURL=%s"
 	envDashboardURL = "\n%sDASHBOARD_URL=%s\n"
 
-	// Local container endpoints written into a service's .env. A database
-	// brought up by corgi on this machine serves plain HTTP; there is no
-	// certificate to speak TLS with.
-	urlHostPort    = "http://%s:%s" // NOSONAR — localhost container, no TLS to speak
-	urlHostPortInt = "http://%s:%d" // NOSONAR — localhost container, no TLS to speak
+	urlHostPort    = "http://%s:%s"
+	urlHostPortInt = "http://%s:%d"
 
 	concat5 = "%s%s%s%s%s"
 	concat6 = "%s%s%s%s%s%s"
@@ -73,7 +70,7 @@ var DriverConfigs = map[string]DriverConfig{
 				fmt.Sprintf(awsRegionEnvFmt, templates.SqsRegion),
 				fmt.Sprintf("\n%sENDPOINT=http://%s:%d/000000000000/", serviceNameInEnv, db.Host, db.Port),
 				fmt.Sprintf("\n%sQUEUE_NAME=%s", serviceNameInEnv, db.DatabaseName),
-				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://%s:%d/000000000000/%s", db.Host, db.Port, db.DatabaseName)), // NOSONAR — localstack on this machine, no TLS
+				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://%s:%d/000000000000/%s", db.Host, db.Port, db.DatabaseName)),
 				"\nAWS_ACCESS_KEY_ID=test",
 				"\nAWS_SECRET_ACCESS_KEY=test",
 			)
@@ -402,8 +399,6 @@ var DriverConfigs = map[string]DriverConfig{
 	"neo4j": {
 		Prefix: "NEO4J_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			// add this fix, when neo4j community edition supports multiple databases
-			// validDatabaseName := strings.ReplaceAll(db.DatabaseName, "-", "_")
 
 			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
 			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
@@ -427,7 +422,6 @@ var DriverConfigs = map[string]DriverConfig{
 			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
 			name := fmt.Sprintf(envName, serviceNameInEnv, "0")
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
-			// no user and password is added, because acl is only available in enterprise version
 
 			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "8000"))
 			dbUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, db.Port))
@@ -467,7 +461,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			kibanaDashboardUrl := fmt.Sprintf("\n%sKIBANA_DASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:5601", db.Host)) // NOSONAR — localhost container, no TLS
+			kibanaDashboardUrl := fmt.Sprintf("\n%sKIBANA_DASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:5601", db.Host))
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, kibanaDashboardUrl)
 		},
@@ -502,7 +496,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf("http://%s:%d/_utils", db.Host, db.Port)) // NOSONAR — localhost container, no TLS
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf("http://%s:%d/_utils", db.Host, db.Port))
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
@@ -515,7 +509,6 @@ var DriverConfigs = map[string]DriverConfig{
 	"meilisearch": {
 		Prefix: "MEILISEARCH_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			// it doesn't use traditional usernames, so only host, port, name (for MeiliSearch itself), and the master key (acting like a password) are provided.
 
 			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
 			name := fmt.Sprintf(envName, serviceNameInEnv, "meilisearch")
@@ -554,7 +547,6 @@ var DriverConfigs = map[string]DriverConfig{
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
-			// secret is default password in faunadb
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, "secret")
 
 			return fmt.Sprintf("%s%s%s", host, port, password)
@@ -586,7 +578,6 @@ var DriverConfigs = map[string]DriverConfig{
 	"skytable": {
 		Prefix: "SKYTABLE_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
-			// now docker generates password in logs, so we don't need to provide it
 			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			return fmt.Sprintf("%s%s", host, port)
@@ -665,8 +656,6 @@ var DriverConfigs = map[string]DriverConfig{
 		},
 	},
 	"localstack": {
-		// Unified LocalStack driver: one container, multiple AWS services,
-		// multiple queues and buckets. Emits generic AWS_* env + per-queue/per-bucket env.
 		Prefix: "AWS_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			var out strings.Builder
@@ -680,7 +669,6 @@ var DriverConfigs = map[string]DriverConfig{
 			fmt.Fprintf(&out, "\n%sACCESS_KEY_ID=test", serviceNameInEnv)
 			fmt.Fprintf(&out, "\n%sSECRET_ACCESS_KEY=test", serviceNameInEnv)
 
-			// Per-queue: AWS_SQS_<NAME>=queue-name  AND  AWS_SQS_<NAME>_URL=full-url
 			for _, q := range db.Queues {
 				envKey := strings.ToUpper(strings.ReplaceAll(q, "-", "_"))
 				fmt.Fprintf(&out, "\n%sSQS_%s=%s", serviceNameInEnv, envKey, q)
@@ -688,13 +676,11 @@ var DriverConfigs = map[string]DriverConfig{
 					serviceNameInEnv, envKey, db.Host, db.Port, q)
 			}
 
-			// Per-bucket: AWS_S3_<NAME>_BUCKET=bucket-name
 			for _, b := range db.Buckets {
 				envKey := strings.ToUpper(strings.ReplaceAll(b, "-", "_"))
 				fmt.Fprintf(&out, "\n%sS3_%s_BUCKET=%s", serviceNameInEnv, envKey, b)
 			}
 
-			// Per-topic: AWS_SNS_<NAME>=topic-name  AND  AWS_SNS_<NAME>_ARN=full-arn
 			for _, t := range db.Topics {
 				envKey := strings.ToUpper(strings.ReplaceAll(t, "-", "_"))
 				fmt.Fprintf(&out, "\n%sSNS_%s=%s", serviceNameInEnv, envKey, t)
@@ -702,19 +688,16 @@ var DriverConfigs = map[string]DriverConfig{
 					serviceNameInEnv, envKey, templates.LocalstackRegion, t)
 			}
 
-			// Per-secret: AWS_SECRET_<NAME>=secret-name (path keys flattened)
 			for _, s := range db.Secrets {
 				envKey := awsEnvKey(s.Name)
 				fmt.Fprintf(&out, "\n%sSECRET_%s=%s", serviceNameInEnv, envKey, s.Name)
 			}
 
-			// Per-parameter: AWS_SSM_<NAME>=parameter-name
 			for _, p := range db.Parameters {
 				envKey := awsEnvKey(p.Name)
 				fmt.Fprintf(&out, "\n%sSSM_%s=%s", serviceNameInEnv, envKey, p.Name)
 			}
 
-			// Per-stream: AWS_KINESIS_<NAME>=stream-name
 			for _, st := range db.Streams {
 				envKey := strings.ToUpper(strings.ReplaceAll(st, "-", "_"))
 				fmt.Fprintf(&out, "\n%sKINESIS_%s=%s", serviceNameInEnv, envKey, st)
@@ -730,10 +713,6 @@ var DriverConfigs = map[string]DriverConfig{
 		},
 	},
 	"supabase": {
-		// Wraps the supabase CLI, which manages its own multi-container stack;
-		// corgi only emits env vars and runs `supabase start/stop`. Defaults
-		// match `supabase status -o env` with the stock JWT secret — a custom
-		// secret in supabase/config.toml diverges the keys.
 		Prefix: "SUPABASE_",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			var out strings.Builder
@@ -743,8 +722,6 @@ var DriverConfigs = map[string]DriverConfig{
 				host = "localhost"
 			}
 
-			// Read ports from config.toml, then let yaml override per section.
-			// Path depends on configTomlPath: corgi-managed dir if set, root if not.
 			tomlSource := CorgiComposePathDir
 			if db.ConfigTomlPath != "" {
 				tomlSource = CorgiComposePathDir + "/" + DbServicesRel() + "/" + db.ServiceName + "/supabase/config.toml"
@@ -784,9 +761,6 @@ var DriverConfigs = map[string]DriverConfig{
 			fmt.Fprintf(&out, "\n%sS3_PROTOCOL_ACCESS_KEY_SECRET=%s", serviceNameInEnv, templates.SupabaseS3AccessKey)
 			fmt.Fprintf(&out, "\n%sS3_PROTOCOL_REGION=%s", serviceNameInEnv, templates.SupabaseS3Region)
 
-			// Per-bucket: SUPABASE_BUCKET_<NAME>=<bucket-name>. Buckets are
-			// auto-created by supabase via [storage.buckets.<name>] entries
-			// in supabase/config.toml; corgi just emits the name for consumers.
 			for _, b := range db.Buckets {
 				envKey := strings.ToUpper(strings.ReplaceAll(b, "-", "_"))
 				fmt.Fprintf(&out, "\n%sBUCKET_%s=%s", serviceNameInEnv, envKey, b)
@@ -801,10 +775,6 @@ var DriverConfigs = map[string]DriverConfig{
 		},
 	},
 	"image": {
-		// Stateless docker-image driver for services shipped as a public image
-		// with no persistent state (gotenberg, mailhog, jaeger). Emits
-		// <PREFIX>URL/HOST/PORT; consumers usually set `envAlias:` instead, and
-		// with neither the uppercased ServiceName is the fallback prefix.
 		Prefix: "",
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			prefix := serviceNameInEnv
@@ -889,7 +859,6 @@ Connection info to %s:
 }
 
 func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
-	// postgres
 	if strings.Contains(text, "POSTGRES") {
 		serviceInfo := strings.Replace(strings.TrimSpace(text), "POSTGRES_", "", 1)
 		v := strings.Split(serviceInfo, "=")
@@ -902,7 +871,6 @@ func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
 		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
 	}
 
-	// rabbitmq
 	if strings.Contains(text, "RABBITMQ") {
 		serviceInfo := strings.Replace(strings.TrimSpace(text), "RABBITMQ_DEFAULT_", "", 1)
 		v := strings.Split(serviceInfo, "=")
@@ -915,7 +883,6 @@ func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
 		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
 	}
 
-	// mongodb
 	if strings.Contains(text, "MONGO") {
 		serviceInfo := strings.Replace(strings.TrimSpace(text), "MONGO_INITDB_", "", 1)
 		v := strings.Split(serviceInfo, "=")
@@ -928,7 +895,6 @@ func getDbInfoFromString(text string, dbInfoStringsArray []string) []string {
 		return append(dbInfoStringsArray, "PORT "+strings.Split(v[0], " ")[1])
 	}
 
-	// mysql
 	if strings.Contains(text, "MYSQL") {
 		serviceInfo := strings.Replace(strings.TrimSpace(text), "MYSQL_", "", 1)
 		v := strings.Split(serviceInfo, "=")

@@ -128,7 +128,6 @@ func TestEnsureServiceWorktreeReuseDirtyClean(t *testing.T) {
 	if !insideWorktree(dest) {
 		t.Fatal("dest is not a worktree")
 	}
-	// reuse: second call on the existing healthy worktree must not error
 	if _, err := EnsureServiceWorktree(repo, "feature/x", dest); err != nil {
 		t.Fatalf("reuse: %v", err)
 	}
@@ -553,7 +552,6 @@ func TestIsShallowRepo(t *testing.T) {
 		t.Error("a normal clone is not shallow")
 	}
 	clone := filepath.Join(root, "clone")
-	// git ignores --depth for plain local paths; file:// makes it honour it.
 	if out, err := exec.Command("git", "clone", "--depth", "1", "file://"+origin, clone).CombinedOutput(); err != nil {
 		t.Fatalf("clone: %v\n%s", err, out)
 	}
@@ -626,8 +624,6 @@ func TestEnsureServiceWorktreeReusesDifferentlyNamedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	// git allows a branch in only one worktree; a second dest must reuse the first
-	// rather than fail with "already checked out".
 	second, err := EnsureServiceWorktree(repo, "feature/x", worktreeDest("worker", "feature/x"))
 	if err != nil {
 		t.Fatalf("second dest for the same branch must reuse, not fail: %v", err)

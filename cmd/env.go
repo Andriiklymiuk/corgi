@@ -31,7 +31,6 @@ func init() {
 	envCmd.Flags().Bool("export", false, "Emit eval-able 'export KEY=VALUE' lines (real values)")
 	envCmd.Flags().Bool("reveal", false, "Do not mask secret values in the human view (human view only)")
 	envCmd.Flags().String("explain", "", "Show every source that set this variable, in order, with the winner marked")
-	// Persistent so `env check` inherits it (and its shell completion).
 	envCmd.PersistentFlags().StringVar(&utils.EnvTierFromFlag, "tier", "", "Resolve env for this compose envTier (e.g. staging, prod)")
 	rootCmd.AddCommand(envCmd)
 }
@@ -78,8 +77,6 @@ func runEnv(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// selectEnvServices returns the requested service order, or all services
-// sorted, validating any explicitly-named services.
 func selectEnvServices(args []string, all map[string][]utils.EnvVar) ([]string, error) {
 	if len(args) == 0 {
 		order := make([]string, 0, len(all))
@@ -99,13 +96,9 @@ func selectEnvServices(args []string, all map[string][]utils.EnvVar) ([]string, 
 
 var secretKeyRe = regexp.MustCompile(`(?i)(password|secret|token|api_?key|_pwd|passwd)`)
 
-// urlCredRe matches scheme://user:pass@host (empty user allowed); dsnCredRe
-// matches scheme-less user:pass@host DSNs (e.g. Go's user:pass@tcp(h)/db).
-// Both capture the password as group 2 so only it is masked.
 var urlCredRe = regexp.MustCompile(`^([a-z][a-z0-9+.-]*://[^:/@\s]*:)([^@/\s]+)(@.*)$`)
 var dsnCredRe = regexp.MustCompile(`^([^:/@\s]+:)([^@\s]+)(@\S+)$`)
 
-// maskStars renders a fixed-width mask that never leaks the secret's length.
 func maskStars(s string) string {
 	r := []rune(s)
 	if len(r) <= 4 {
@@ -114,9 +107,6 @@ func maskStars(s string) string {
 	return string(r[:2]) + "****" + string(r[len(r)-2:])
 }
 
-// maskSecret redacts secret-looking values for the human view. Secret-named
-// keys are fully masked; otherwise connection-string values (URL or DSN form)
-// have only their password segment masked.
 func maskSecret(key, val string) string {
 	if secretKeyRe.MatchString(key) {
 		return maskStars(val)
@@ -130,8 +120,6 @@ func maskSecret(key, val string) string {
 	return val
 }
 
-// renderPlain returns the human view: KEY=VALUE with an aligned `# source`
-// comment, grouped under `# <service>` headers. Secrets masked unless reveal.
 func renderPlain(all map[string][]utils.EnvVar, order []string, reveal bool) string {
 	var b strings.Builder
 	for i, name := range order {
@@ -139,7 +127,6 @@ func renderPlain(all map[string][]utils.EnvVar, order []string, reveal bool) str
 			b.WriteString("\n")
 		}
 		fmt.Fprintf(&b, "# %s\n", name)
-		// align `# source` against the rendered (possibly masked) KEY=VALUE line
 		lines := make([]string, len(all[name]))
 		w := 0
 		for i, e := range all[name] {
@@ -159,13 +146,10 @@ func renderPlain(all map[string][]utils.EnvVar, order []string, reveal bool) str
 	return b.String()
 }
 
-// shellSingleQuote wraps s in single quotes, escaping embedded quotes so the
-// result is safe for `eval`.
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// renderExport emits eval-able `export KEY='VALUE'` lines with real values.
 func renderExport(all map[string][]utils.EnvVar, order []string) string {
 	var b strings.Builder
 	for i, name := range order {
@@ -182,15 +166,11 @@ func renderExport(all map[string][]utils.EnvVar, order []string) string {
 	return b.String()
 }
 
-// envEntry is the JSON shape for one resolved variable: name-keyed, value+source.
 type envEntry struct {
 	Value  string `json:"value"`
 	Source string `json:"source"`
 }
 
-// envKeyedMap converts resolver output into {service: {KEY: {value, source}}},
-// the shared JSON contract for `corgi env --json` and the corgi_env MCP tool.
-// utils.EnvVar drops Key from JSON, so callers must build the keyed map here.
 func envKeyedMap(all map[string][]utils.EnvVar, order []string) map[string]map[string]envEntry {
 	doc := map[string]map[string]envEntry{}
 	for _, name := range order {
@@ -203,8 +183,6 @@ func envKeyedMap(all map[string][]utils.EnvVar, order []string) map[string]map[s
 	return doc
 }
 
-// renderJSON emits {service: {KEY: {value, source}}} with REAL values for
-// machine consumption.
 func renderJSON(all map[string][]utils.EnvVar, order []string) (string, error) {
 	doc := envKeyedMap(all, order)
 	b, err := json.MarshalIndent(doc, "", "  ")

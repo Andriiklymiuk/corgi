@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-// TitleOf is the chat's title as Claude Code shows it on its panel tab: the
-// name the user gave it with /rename, else the one Claude generated. Empty
-// when the transcript has neither yet. The whole file is scanned, so call
-// it once per turn, not per tool.
 func TitleOf(transcriptPath string) string {
 	f, err := os.Open(transcriptPath)
 	if err != nil {

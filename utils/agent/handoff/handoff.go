@@ -1,7 +1,3 @@
-// Package handoff is the typed record one run leaves for the next: what is
-// done, what is not, what was decided, what to ask, and where the code is.
-// Never a transcript. A file beside the workspace that any harness can read,
-// mirrored to the ticket by whoever has a tracker token.
 package handoff
 
 import (
@@ -21,7 +17,6 @@ import (
 	"andriiklymiuk/corgi/utils/gitbase"
 )
 
-// State is the A2A task state the card is in when the packet is written.
 const (
 	StateWorking       = "working"
 	StateInputRequired = "input-required"
@@ -33,13 +28,10 @@ const (
 
 var states = map[string]bool{StateWorking: true, StateInputRequired: true, StateAuthRequired: true, StateCompleted: true, StateFailed: true, StateBlocked: true}
 
-// Packet is the whole handoff. Lists are short sentences; Next is one.
 type Packet struct {
-	Ref     string `json:"ref"`
-	Tracker string `json:"tracker,omitempty"`
-	State   string `json:"state"`
-	// Blocked is the reason when State is blocked. Only a missing tool,
-	// credential or secret is a reason; "hard" is not.
+	Ref          string        `json:"ref"`
+	Tracker      string        `json:"tracker,omitempty"`
+	State        string        `json:"state"`
 	Blocked      string        `json:"blocked,omitempty"`
 	Where        Where         `json:"where"`
 	Done         []string      `json:"done,omitempty"`
@@ -50,13 +42,10 @@ type Packet struct {
 	Next         string        `json:"next,omitempty"`
 	From         From          `json:"from"`
 	Budget       Budget        `json:"budget"`
-	// Draft marks a packet corgi assembled without the run's own words —
-	// git state and the last line said — so the reader weighs it as such.
-	Draft     bool      `json:"draft,omitempty"`
-	WrittenAt time.Time `json:"writtenAt"`
+	Draft        bool          `json:"draft,omitempty"`
+	WrittenAt    time.Time     `json:"writtenAt"`
 }
 
-// Where is the code: branch, worktree, the commits, what is uncommitted.
 type Where struct {
 	Branch   string   `json:"branch,omitempty"`
 	Worktree string   `json:"worktree,omitempty"`
@@ -65,15 +54,13 @@ type Where struct {
 	Dirty    []string `json:"dirty,omitempty"`
 }
 
-// Verification is the check that was run, machine-checkable by the next run.
 type Verification struct {
 	Cmd   string    `json:"cmd"`
 	Exit  int       `json:"exit"`
-	At    string    `json:"at,omitempty"` // the head it ran on
+	At    string    `json:"at,omitempty"`
 	RanAt time.Time `json:"ranAt,omitempty"`
 }
 
-// From is who wrote it, enough for a same-harness resume.
 type From struct {
 	Harness    string `json:"harness,omitempty"`
 	Model      string `json:"model,omitempty"`
@@ -83,10 +70,9 @@ type From struct {
 	Host       string `json:"host,omitempty"`
 }
 
-// Budget is how much room was left when the packet was written.
 type Budget struct {
-	Context  int `json:"context,omitempty"`  // percent of the window used
-	FiveHour int `json:"fiveHour,omitempty"` // percent of the 5h window used
+	Context  int `json:"context,omitempty"`
+	FiveHour int `json:"fiveHour,omitempty"`
 	SevenDay int `json:"sevenDay,omitempty"`
 }
 
@@ -94,12 +80,9 @@ const (
 	dirName  = "handoffs"
 	maxBytes = 32 << 10
 	maxItem  = 300
-	// MaxAge is how old a packet may be and still be offered to a new session.
-	MaxAge = 7 * 24 * time.Hour
+	MaxAge   = 7 * 24 * time.Hour
 )
 
-// Dir is where a workspace keeps its packets: per-developer state, under
-// corgi_services, ignored by git.
 func Dir(composeDir string) string {
 	return filepath.Join(utils.CorgiServicesIn(composeDir), dirName)
 }
@@ -108,7 +91,6 @@ func Path(composeDir, ref string) string {
 	return filepath.Join(Dir(composeDir), safeRef(ref)+".json")
 }
 
-// MarkdownPath is the twin a person or a harness without a JSON reader opens.
 func MarkdownPath(composeDir, ref string) string {
 	return filepath.Join(Dir(composeDir), safeRef(ref)+".md")
 }
@@ -129,9 +111,6 @@ var (
 	placeholder = regexp.MustCompile(`\b(TODO|TBD|FIXME|XXX)\b`)
 )
 
-// Validate refuses what would mislead the next run or leak on the ticket:
-// no ref or state, a secret in any field, a placeholder where a fact
-// should be, an item too long to be a sentence, a packet too big to read.
 func Validate(p Packet) error {
 	if strings.TrimSpace(p.Ref) == "" {
 		return errors.New("a handoff needs a ref: the ticket it is about")
@@ -166,7 +145,6 @@ func Validate(p Packet) error {
 	return nil
 }
 
-// Write validates, then writes the JSON and its Markdown twin.
 func Write(composeDir string, p Packet) error {
 	if p.WrittenAt.IsZero() {
 		p.WrittenAt = time.Now()
@@ -189,7 +167,6 @@ func Write(composeDir string, p Packet) error {
 	return atomicfile.Write(MarkdownPath(composeDir, p.Ref), []byte(p.Markdown()), 0o600)
 }
 
-// Read is one packet by ref; os.ErrNotExist when there is none.
 func Read(composeDir, ref string) (Packet, error) {
 	var p Packet
 	data, err := os.ReadFile(Path(composeDir, ref))
@@ -202,7 +179,6 @@ func Read(composeDir, ref string) (Packet, error) {
 	return p, nil
 }
 
-// List is every packet in a workspace, newest first.
 func List(composeDir string) []Packet {
 	entries, err := os.ReadDir(Dir(composeDir))
 	if err != nil {
@@ -226,7 +202,6 @@ func List(composeDir string) []Packet {
 	return out
 }
 
-// Remove deletes a packet and its twin; nothing to delete is not an error.
 func Remove(composeDir, ref string) error {
 	for _, p := range []string{Path(composeDir, ref), MarkdownPath(composeDir, ref)} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
@@ -236,8 +211,6 @@ func Remove(composeDir, ref string) error {
 	return nil
 }
 
-// ForBranch finds the packet whose branch matches, else the one whose ref
-// the branch name carries.
 func ForBranch(composeDir, branch string) (Packet, bool) {
 	if branch == "" {
 		return Packet{}, false
@@ -253,8 +226,6 @@ func ForBranch(composeDir, branch string) (Packet, bool) {
 
 var refInBranch = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b`)
 
-// RefFromBranch pulls a ticket key out of a branch name — feature/ABC-123/slug,
-// ABC-123-slug, fix/abc-123 — or "".
 func RefFromBranch(branch string) string {
 	if m := refInBranch.FindStringSubmatch(strings.ToUpper(branch)); m != nil {
 		return m[1]
@@ -262,7 +233,6 @@ func RefFromBranch(branch string) string {
 	return ""
 }
 
-// Markdown is the packet for a person, or a harness that reads files.
 func (p Packet) Markdown() string {
 	var b strings.Builder
 	p.writeHeading(&b)
@@ -330,7 +300,6 @@ func writeSection(b *strings.Builder, name string, items []string) {
 	}
 }
 
-// writeProvenance is who wrote the packet, with what left, and when.
 func (p Packet) writeProvenance(b *strings.Builder) {
 	if from := p.From.parts(); len(from) > 0 {
 		fmt.Fprintf(b, "\nfrom: %s\n", strings.Join(from, " · "))
@@ -353,7 +322,6 @@ func (f From) parts() []string {
 	return out
 }
 
-// Summary is one line for a board row or a ticket comment.
 func (p Packet) Summary() string {
 	parts := []string{p.State}
 	if n := len(p.Done); n > 0 {
@@ -377,7 +345,6 @@ func short(sha string) string {
 
 const gitRevParse = "rev-parse"
 
-// run is a seam for git in tests.
 var run = func(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
@@ -385,8 +352,6 @@ var run = func(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// GitWhere reads branch, head, base (merge-base with the default branch,
-// best effort) and dirty files from a checkout.
 func GitWhere(dir string) Where {
 	w := Where{}
 	if dir == "" {
@@ -410,8 +375,6 @@ func GitWhere(dir string) Where {
 	return w
 }
 
-// CommitsSince is how far the branch moved since the packet: commits after
-// its head. The staleness that matters is measured in commits, not hours.
 func CommitsSince(dir, head string) (int, error) {
 	if head == "" {
 		return 0, errors.New("the packet has no head")
@@ -425,8 +388,6 @@ func CommitsSince(dir, head string) (int, error) {
 	return n, err
 }
 
-// WorktreeDir is where a packet's check runs: its worktree under dir, or
-// dir itself when the packet names none or names one outside.
 func WorktreeDir(dir string, p Packet) string {
 	if p.Where.Worktree == "" {
 		return dir
@@ -439,7 +400,6 @@ func WorktreeDir(dir string, p Packet) string {
 	return full
 }
 
-// TrustedCommand reports whether cmd is one of the workspace's own lines.
 func TrustedCommand(cmd string, trusted []string) bool {
 	cmd = strings.TrimSpace(cmd)
 	if cmd == "" {
@@ -453,9 +413,6 @@ func TrustedCommand(cmd string, trusted []string) bool {
 	return false
 }
 
-// Verify re-runs the packet's check at the current head. exit 0 and the same
-// head means the packet can be trusted as written; anything else means the
-// next run starts from the ticket and the diff, not the packet.
 func Verify(dir string, p Packet, runCmd func(dir, cmd string) (int, error)) (Verification, bool) {
 	if p.Verification == nil || strings.TrimSpace(p.Verification.Cmd) == "" {
 		return Verification{}, false

@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// Wait is one stretch a session spent waiting on a person (kind "wait") or
-// on the account's limit (kind "limited"), recorded when it ended.
 type Wait struct {
 	At      time.Time `json:"at"`
 	Kind    string    `json:"kind"`
@@ -21,10 +19,8 @@ type Wait struct {
 
 const waitsKeep = 5000
 
-// WaitsPath is the attention log under the agent dir.
 func WaitsPath(agentDir string) string { return filepath.Join(agentDir, "waits.jsonl") }
 
-// RecordWait appends one finished wait.
 func RecordWait(agentDir string, w Wait) error {
 	path := WaitsPath(agentDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -45,7 +41,6 @@ func RecordWait(agentDir string, w Wait) error {
 	return err
 }
 
-// LoadWaits reads the waits that ended after since, oldest first.
 func LoadWaits(agentDir string, since time.Time) []Wait {
 	f, err := os.Open(WaitsPath(agentDir))
 	if err != nil {
@@ -68,17 +63,14 @@ func LoadWaits(agentDir string, since time.Time) []Wait {
 	return out
 }
 
-// WaitSummary is what a day of waits adds up to.
 type WaitSummary struct {
-	Count   int `json:"count"`
-	Median  int `json:"medianS"`
-	Longest int `json:"longestS"`
-	// LongestLabel names the session behind Longest.
+	Count        int    `json:"count"`
+	Median       int    `json:"medianS"`
+	Longest      int    `json:"longestS"`
 	LongestLabel string `json:"longestLabel,omitempty"`
 	Total        int    `json:"totalS"`
 }
 
-// Summarize folds waits of one kind.
 func Summarize(waits []Wait, kind string) WaitSummary {
 	var secs []int
 	var out WaitSummary

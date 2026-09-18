@@ -1,8 +1,3 @@
-// Package push sends a notification to the phones paired with this laptop,
-// through Expo's push service — so the laptop holds no Apple or Google key,
-// and a phone that is revoked stops getting anything the moment its token
-// is dropped. The payload is small on purpose: a title, a line, and ids
-// the app uses to fetch the rest over the tunnel.
 package push
 
 import (
@@ -21,31 +16,21 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// ExpoEndpoint is Expo's push API; a variable so a test can point it at a
-// local server.
 var ExpoEndpoint = "https://exp.host/--/api/v2/push/send"
 
-// Token is one phone's push token, by the device name pairing gave it,
-// with what that phone asked to hear and when.
 type Token struct {
 	Device string    `json:"device"`
 	Token  string    `json:"token"`
 	At     time.Time `json:"at"`
-	// Quiet is a local "HH:MM-HH:MM" window in which only a permission —
-	// the one thing a phone is for at night — gets through; "" is none.
-	Quiet string `json:"quiet,omitempty"`
-	// Only is "needs": only what needs a person (a permission, a red
-	// build, a review asked for); the rest waits for the app. "" is all.
-	Only string `json:"only,omitempty"`
+	Quiet  string    `json:"quiet,omitempty"`
+	Only   string    `json:"only,omitempty"`
 }
 
-// Prefs is what a phone asks to hear.
 type Prefs struct {
 	Quiet string
 	Only  string
 }
 
-// Store is the token file: <agentDir>/push.json, 0600.
 type Store struct {
 	mu     sync.Mutex
 	path   string
@@ -71,12 +56,10 @@ func (s *Store) save() error {
 	return atomicfile.Write(s.path, data, 0o600)
 }
 
-// Set records a device's token, replacing an older one for the same device.
 func (s *Store) Set(device, token string) error {
 	return s.SetWith(device, token, Prefs{})
 }
 
-// SetWith records the token and what the phone asked to hear.
 func (s *Store) SetWith(device, token string, p Prefs) error {
 	token = strings.TrimSpace(token)
 	if !strings.HasPrefix(token, "ExponentPushToken[") && !strings.HasPrefix(token, "ExpoPushToken[") {
@@ -102,10 +85,8 @@ func (s *Store) SetWith(device, token string, p Prefs) error {
 	return s.save()
 }
 
-// Quiet is a local window, "HH:MM-HH:MM", that may cross midnight.
 type Quiet struct{ from, to int }
 
-// ParseQuiet reads "23:00-07:00".
 func ParseQuiet(s string) (Quiet, error) {
 	parts := strings.Split(strings.TrimSpace(s), "-")
 	if len(parts) != 2 {
@@ -129,7 +110,6 @@ func ParseQuiet(s string) (Quiet, error) {
 	return Quiet{from: from, to: to}, nil
 }
 
-// Contains says whether now falls in the window.
 func (q Quiet) Contains(now time.Time) bool {
 	m := now.Hour()*60 + now.Minute()
 	if q.from <= q.to {
@@ -138,9 +118,6 @@ func (q Quiet) Contains(now time.Time) bool {
 	return m >= q.from || m < q.to
 }
 
-// wants says whether this phone hears this message now: a permission
-// always; the rest not in quiet hours and not when it asked for only what
-// needs it — unless the message says it does (Data["needs"]).
 func (t Token) wants(m Message, now time.Time) bool {
 	if m.Category == "permission" {
 		return true
@@ -157,8 +134,6 @@ func (t Token) wants(m Message, now time.Time) bool {
 	return true
 }
 
-// Remove drops a device's token: on revoke, or when Expo says the device
-// is gone.
 func (s *Store) Remove(device string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -194,15 +169,12 @@ func (s *Store) List() []Token {
 	return append([]Token(nil), s.Tokens...)
 }
 
-// Message is one notification. Category picks the buttons the phone shows
-// ("permission" gets Allow / Deny); Data is what the app needs to act.
 type Message struct {
 	Title    string            `json:"title"`
 	Body     string            `json:"body"`
 	Category string            `json:"categoryId,omitempty"`
 	Data     map[string]string `json:"data,omitempty"`
-	// Thread groups notifications about one session or workspace.
-	Thread string `json:"-"`
+	Thread   string            `json:"-"`
 }
 
 type expoMessage struct {
@@ -227,9 +199,6 @@ type expoReceipt struct {
 	} `json:"data"`
 }
 
-// Send delivers one message to every token. A token Expo reports as no
-// longer registered is dropped. Errors are for the log: a push is never
-// worth blocking anything on.
 func (s *Store) Send(ctx context.Context, m Message) error {
 	tokens, msgs := expoMessages(s.List(), m, time.Now())
 	if len(msgs) == 0 {
@@ -267,8 +236,6 @@ func (s *Store) Send(ctx context.Context, m Message) error {
 	return nil
 }
 
-// expoMessages is one message per phone that wants m, with the tokens it
-// went to in the same order, so a receipt maps back to its phone.
 func expoMessages(tokens []Token, m Message, now time.Time) ([]Token, []expoMessage) {
 	if len(tokens) == 0 {
 		return nil, nil
@@ -287,9 +254,6 @@ func expoMessages(tokens []Token, m Message, now time.Time) ([]Token, []expoMess
 	return sent, msgs
 }
 
-// messageData is m's data with the laptop named: a phone paired with two
-// laptops answers the one that asked, and the hostname is what pairing
-// told it this laptop is called.
 func messageData(m Message) map[string]string {
 	data := make(map[string]string, len(m.Data)+1)
 	for k, v := range m.Data {

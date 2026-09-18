@@ -599,7 +599,6 @@ func TestGenerateEnvForServicesCodependentFallback(t *testing.T) {
 	CorgiComposePathDir = dir1
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	// A and B reference each other but only via different VARs (not a true cycle)
 	c := &CorgiCompose{
 		Services: []Service{
 			{
@@ -648,9 +647,6 @@ func TestFindDbByNameFound(t *testing.T) {
 	}
 }
 
-// writerEnvKeys runs the real env writer for a service to a temp dir and
-// extracts the KEYS inside corgi's generated block. Used to prove
-// ComputeEnvKeysForService matches what GenerateEnvForService actually writes.
 func writerEnvKeys(t *testing.T, c *CorgiCompose, svc Service) []string {
 	t.Helper()
 	if err := GenerateEnvForService(c, svc, "", false); err != nil {
@@ -707,8 +703,6 @@ func TestComputeEnvKeysForServiceParity(t *testing.T) {
 	want := writerEnvKeys(t, c, api)
 	got := ComputeEnvKeysForService(api, c)
 
-	// Writer output is a superset only if duplicates appear; both should match
-	// as ordered, de-duplicated key lists.
 	if len(want) == 0 {
 		t.Fatal("expected writer to emit some keys")
 	}

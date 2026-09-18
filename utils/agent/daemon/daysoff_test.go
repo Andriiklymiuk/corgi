@@ -27,13 +27,11 @@ func TestDaysOffAreParsedAndSleptThrough(t *testing.T) {
 	}
 
 	spec := WatchSpec{Workspace: "api", DaysOff: []time.Weekday{time.Saturday, time.Sunday}, Quiet: "23:00-07:00"}
-	sat := time.Date(2026, 9, 12, 12, 0, 0, 0, time.Local) // a Saturday noon
+	sat := time.Date(2026, 9, 12, 12, 0, 0, 0, time.Local)
 	mon := time.Date(2026, 9, 14, 12, 0, 0, 0, time.Local)
 	if !dayOff(spec, sat) || dayOff(spec, mon) {
 		t.Fatal("saturday is off, monday is not")
 	}
-	// A day off is quiet all day: nothing rings, no fix starts, the reason
-	// is the day, not the hour.
 	if !quietNow(spec, sat) || quietNow(spec, mon) {
 		t.Fatal("quiet on the day off, not on monday noon")
 	}

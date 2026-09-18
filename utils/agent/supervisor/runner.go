@@ -9,60 +9,35 @@ import (
 	"time"
 )
 
-// Process is a running remote-control instance. Abstracted so the supervisor's
-// restart logic can be tested without a claude binary, a subscription, or a
-// network.
 type Process interface {
-	// Pid is the process id, used to tie the wake lock to its lifetime.
 	Pid() int
-	// Wait blocks until the process exits, returning its code and a tail of
-	// its combined output for exit classification.
 	Wait() (code int, output string)
-	// Stop asks the process to terminate.
 	Stop()
 }
 
-// Starter launches one remote-control process.
 type Starter func(ctx context.Context, cfg SpawnConfig) (Process, error)
 
-// RunState is the supervisor's view of one workspace, as reported by
-// `corgi agent status`.
 type RunState struct {
-	WorkspaceID string    `json:"workspaceId"`
-	Running     bool      `json:"running"`
-	PID         int       `json:"pid,omitempty"`
-	StartedAt   time.Time `json:"startedAt,omitempty"`
-	Restarts    int       `json:"restarts"`
-	Disabled    bool      `json:"disabled,omitempty"`
-	LastCause   ExitCause `json:"lastCause,omitempty"`
-	LastReason  string    `json:"lastReason,omitempty"`
-	WakeLock    bool      `json:"wakeLock"`
-	Origin      string    `json:"origin,omitempty"`
-	Profile     string    `json:"profile,omitempty"`
-	SessionURL  string    `json:"sessionUrl,omitempty"`
-	// Sessions are the canonical per-session claude.ai URLs spotted in the
-	// process output, oldest first — the only ids the site actually resolves.
-	Sessions []string `json:"sessions,omitempty"`
-	// DeviceOnly says this run opened no session of its own: the server is
-	// online as a device and sessions are created on demand. A launcher
-	// reading it knows "running with no session" is the resting state, not a
-	// start that never finished.
-	DeviceOnly bool `json:"deviceOnly,omitempty"`
-	// SessionsThisRun counts the distinct session links the CURRENT process
-	// has printed. Zero on a device-only run means nobody has opened a
-	// session through it yet, so replacing the process loses nothing.
-	SessionsThisRun int `json:"sessionsThisRun,omitempty"`
-	// Note is a standing remark about how this workspace runs — a flag the
-	// installed CLI turned out not to know, for instance. Not an error.
-	Note string `json:"note,omitempty"`
+	WorkspaceID     string    `json:"workspaceId"`
+	Running         bool      `json:"running"`
+	PID             int       `json:"pid,omitempty"`
+	StartedAt       time.Time `json:"startedAt,omitempty"`
+	Restarts        int       `json:"restarts"`
+	Disabled        bool      `json:"disabled,omitempty"`
+	LastCause       ExitCause `json:"lastCause,omitempty"`
+	LastReason      string    `json:"lastReason,omitempty"`
+	WakeLock        bool      `json:"wakeLock"`
+	Origin          string    `json:"origin,omitempty"`
+	Profile         string    `json:"profile,omitempty"`
+	SessionURL      string    `json:"sessionUrl,omitempty"`
+	Sessions        []string  `json:"sessions,omitempty"`
+	DeviceOnly      bool      `json:"deviceOnly,omitempty"`
+	SessionsThisRun int       `json:"sessionsThisRun,omitempty"`
+	Note            string    `json:"note,omitempty"`
 }
 
-// maxTrackedSessions bounds RunState.Sessions; a runner alive for weeks must
-// not grow status.json without limit. Oldest entries fall off first.
 const maxTrackedSessions = 20
 
-// RunEvent carries classification and links only — never process output,
-// which can hold env values and tokens and must not leave this process.
 type RunEvent struct {
 	Kind   string
 	PID    int
@@ -71,46 +46,28 @@ type RunEvent struct {
 	URL    string
 }
 
-// Runner supervises one workspace's remote-control process.
 type Runner struct {
-	Config   SpawnConfig
-	Start    Starter
-	WakeLock *WakeLock
-	// Notify reports a restart or a shutdown to the user. Optional.
-	Notify func(title, body string)
-	// OnSessionEnd runs after a supervised process exits and before its
-	// replacement starts, while what the session left on disk is still there —
-	// the only moment that state is both final and current, hence a hook rather
-	// than polling. Returns a line for the restart notification, or "". Optional.
+	Config       SpawnConfig
+	Start        Starter
+	WakeLock     *WakeLock
+	Notify       func(title, body string)
 	OnSessionEnd func(Decision) string
-	// Sleep is the delay between restarts. Injected so tests do not wait.
-	Sleep func(ctx context.Context, d time.Duration)
-	// HealthyAfter is how long a run must last to count as healthy, resetting
-	// the failure streak. Zero means MinHealthyUptime.
+	Sleep        func(ctx context.Context, d time.Duration)
 	HealthyAfter time.Duration
-	// OnChange fires after the run state changes, so a watcher can republish
-	// without polling. Called without the lock held.
-	OnChange func()
-	OnEvent  func(RunEvent)
-	// IdleAfter overrides how long the session must be quiet before the idle
-	// wake lock lets the machine sleep. Zero means WakeLockIdleTimeout.
-	IdleAfter time.Duration
+	OnChange     func()
+	OnEvent      func(RunEvent)
+	IdleAfter    time.Duration
 
-	// lastActivity is the unix-nano time of the last output chunk, read by the
-	// idle monitor. Atomic because it is written from the output goroutine.
 	lastActivity atomic.Int64
 
-	mu       sync.Mutex
-	state    RunState
-	proc     Process
-	stopping bool
-	// stopped closes when Stop is called, so a backoff sleep can be cut short
-	// rather than running to completion and starting the process again.
+	mu          sync.Mutex
+	state       RunState
+	proc        Process
+	stopping    bool
 	stopped     chan struct{}
 	stoppedOnce sync.Once
 }
 
-// NewRunner returns a Runner with the real sleep behaviour.
 func NewRunner(cfg SpawnConfig, start Starter, lock *WakeLock) *Runner {
 	r := &Runner{
 		Config:   cfg,
@@ -126,14 +83,9 @@ func NewRunner(cfg SpawnConfig, start Starter, lock *WakeLock) *Runner {
 	return r
 }
 
-// addSessionLink records one per-session web URL spotted in the output. The
-// scanner already dedups within a process run; the check here dedups across
-// restarts, where a re-attached session prints its link again.
 func (r *Runner) addSessionLink(id string) {
 	url := "https://claude.ai/code/" + id
 	r.mu.Lock()
-	// Counted before the cross-restart dedup: a session the new process
-	// brought back is still a session it serves now.
 	r.state.SessionsThisRun++
 	for _, s := range r.state.Sessions {
 		if s == url {
@@ -156,8 +108,6 @@ func (r *Runner) emit(e RunEvent) {
 	}
 }
 
-// recordActivity stamps the last-output time for the idle wake lock. On the
-// output path, so it does nothing but an atomic store.
 func (r *Runner) recordActivity() {
 	r.lastActivity.Store(time.Now().UnixNano())
 }
@@ -169,10 +119,6 @@ func (r *Runner) idleAfter() time.Duration {
 	return WakeLockIdleTimeout
 }
 
-// startIdleMonitor holds the wake lock while the session is producing output and
-// releases it once it has been quiet for idleAfter, re-acquiring when work
-// resumes. The returned stop function ends the monitor and waits for it, so the
-// caller can then release the lock with no goroutine still toggling it.
 func (r *Runner) startIdleMonitor(ctx context.Context, pid int) func() {
 	idleAfter := r.idleAfter()
 	tick := idleAfter / 4
@@ -207,7 +153,6 @@ func (r *Runner) startIdleMonitor(ctx context.Context, pid int) func() {
 	}
 }
 
-// setSessionURL records the URL the exec layer spotted in the output.
 func (r *Runner) setSessionURL(url string) {
 	r.mu.Lock()
 	if r.state.SessionURL == url {
@@ -219,16 +164,12 @@ func (r *Runner) setSessionURL(url string) {
 	r.notifyChange()
 }
 
-// Supervising reports whether this runner still keeps its process up: false
-// once Stop was called or the workspace disabled itself, at which point a new
-// start needs a fresh runner.
 func (r *Runner) Supervising() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return !r.stopping && !r.state.Disabled
 }
 
-// State returns a snapshot for status output.
 func (r *Runner) State() RunState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -237,11 +178,6 @@ func (r *Runner) State() RunState {
 	return s
 }
 
-// Stop asks the supervised process to exit and keeps it stopped, blocking until
-// the process teardown is initiated.
-//
-// The flag matters: without it the loop sees an ordinary exit, classifies it as
-// a crash or a network timeout, and starts the process straight back up.
 func (r *Runner) Stop() {
 	proc := r.beginStop()
 	if proc != nil {
@@ -249,11 +185,6 @@ func (r *Runner) Stop() {
 	}
 }
 
-// StopAsync marks the runner stopped SYNCHRONOUSLY — so Supervising() reads
-// false the instant it returns and a follow-up start in the same command batch
-// is not deduplicated against a runner already on its way out — then runs the
-// blocking process teardown (up to stopGrace) on its own goroutine. The command
-// loop uses this so a stop cannot stall it.
 func (r *Runner) StopAsync() {
 	proc := r.beginStop()
 	if proc != nil {
@@ -261,18 +192,12 @@ func (r *Runner) StopAsync() {
 	}
 }
 
-// beginStop sets the stop flag and wakes any backoff sleep, returning the live
-// process (or nil) for the caller to terminate. The flag is set under the lock
-// before returning, which is the synchronous guarantee StopAsync relies on.
 func (r *Runner) beginStop() Process {
 	r.mu.Lock()
 	r.stopping = true
 	proc := r.proc
 	r.mu.Unlock()
 
-	// Wake a backoff sleep. Without this, Stop during the gap between restarts
-	// did nothing at all — no process to signal, the context still live — and
-	// the loop went on to start a session nothing would ever stop.
 	r.stoppedOnce.Do(func() {
 		if r.stopped != nil {
 			close(r.stopped)
@@ -281,24 +206,15 @@ func (r *Runner) beginStop() Process {
 	return proc
 }
 
-// stopRequested reports whether Stop has been called.
 func (r *Runner) stopRequested() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.stopping
 }
 
-// Run supervises until ctx is cancelled or the workspace is disabled.
-//
-// It always returns with the wake lock released and no process left running,
-// so a caller can rely on Run's return meaning "nothing of mine is still up".
 func (r *Runner) Run(ctx context.Context) error {
 	defer r.WakeLock.Release()
 
-	// `always` holds the lock for the whole supervised lifetime, including the
-	// gaps between restarts. Releasing it per-process would make the mode
-	// identical to `session`, and the machine could sleep during a five-minute
-	// backoff and never come back.
 	alwaysAwake := r.Config.WakeLockMode() == WakeLockAlways
 	if alwaysAwake {
 		_ = r.WakeLock.Acquire(os.Getpid())
@@ -315,8 +231,6 @@ func (r *Runner) Run(ctx context.Context) error {
 
 		exit, startErr := r.runOnce(ctx, alwaysAwake)
 		if r.retryWithoutUnsupportedFlag(exit) {
-			// Not a failure of the workspace, so neither the streak nor the
-			// backoff moves: the same start, minus one flag, right now.
 			continue
 		}
 		decision := Decide(exit, s.attempt, s.startupFailures)
@@ -334,17 +248,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 }
 
-// streak is the failure bookkeeping between restarts: how many restarts this
-// bad patch has taken (selects the backoff step) and how many of them were
-// too-fast exits (the give-up rule).
 type streak struct {
 	attempt         int
 	startupFailures int
 }
 
-// observe counts the exit just classified. A run that lasted long enough to
-// be useful clears the failure streak, so one bad night does not disable a
-// workspace weeks later.
 func (s *streak) observe(healthy bool) {
 	if healthy {
 		s.startupFailures = 0
@@ -353,9 +261,6 @@ func (s *streak) observe(healthy bool) {
 	s.startupFailures++
 }
 
-// advance moves the backoff pointer AFTER this restart's delay was chosen, so
-// the next failure starts from the beginning of the backoff. Zeroing before
-// the increment left it pinned at the second step forever.
 func (s *streak) advance(healthy bool) {
 	if healthy {
 		s.attempt = 0
@@ -364,7 +269,6 @@ func (s *streak) advance(healthy bool) {
 	s.attempt++
 }
 
-// sleepUnlessStopped waits out the backoff, returning early if Stop is called.
 func (r *Runner) sleepUnlessStopped(ctx context.Context, d time.Duration) {
 	done := make(chan struct{})
 	go func() {
@@ -378,13 +282,7 @@ func (r *Runner) sleepUnlessStopped(ctx context.Context, d time.Duration) {
 	}
 }
 
-// runOnce starts the process and waits for it, returning the exit to classify.
-// A launch that never got off the ground reports as an instant failure, so it
-// falls under the same give-up rule as one that exits immediately.
 func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
-	// Reset before Start, not after: the exec layer can report a session link
-	// while the process is still being launched, and that link belongs to
-	// this run.
 	r.mu.Lock()
 	r.state.SessionsThisRun = 0
 	r.state.DeviceOnly = r.Config.DeviceOnly
@@ -397,10 +295,6 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 	startedAt := time.Now()
 	r.markRunning(proc, startedAt)
 
-	// Stop may have run between Start and markRunning, when r.proc was still nil
-	// and there was nothing for it to signal. It set stopping, so Supervising()
-	// is already false; without this the process would run unreachably until it
-	// exited on its own, and a later start would spawn a second one beside it.
 	if r.stopRequested() {
 		proc.Stop()
 	}
@@ -408,14 +302,8 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 	var stopIdle func()
 	switch r.Config.WakeLockMode() {
 	case WakeLockSession:
-		// A failure here is not fatal: the session is more useful awake-only
-		// than not running at all. Surfaced through status instead.
 		_ = r.WakeLock.Acquire(proc.Pid())
 	case WakeLockIdle:
-		// Start awake — a session just launched is working — then let the
-		// monitor drop the lock once it goes quiet. Skip the monitor where wake
-		// locks do nothing (Windows), so it is not a goroutine spinning on a
-		// no-op Acquire every tick.
 		if Supported() {
 			r.recordActivity()
 			_ = r.WakeLock.Acquire(proc.Pid())
@@ -425,8 +313,6 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 
 	code, output := proc.Wait()
 	uptime := time.Since(startedAt)
-	// Stop the monitor before releasing, so nothing re-acquires the lock behind
-	// the release.
 	if stopIdle != nil {
 		stopIdle()
 	}
@@ -443,34 +329,16 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 	}, nil
 }
 
-// unknownOptionMarker is how the CLI's argument parser rejects a flag it does
-// not have. Matched case-insensitively together with the flag itself, so an
-// unrelated "unknown option" in a session's output cannot trip it.
 const unknownOptionMarker = "unknown option"
 
-// unsupportedFlagNote is what status and the launcher show once the flag has
-// been dropped. It names the fix, because nothing corgi does can restore the
-// device-only behaviour on this CLI.
 const unsupportedFlagNote = "this Claude Code predates " + DeviceOnlyFlag +
 	" — a session is opened in the checkout at every start; update Claude Code to stop that"
 
-// flagUnsupported reports whether output is the CLI refusing flag as unknown.
 func flagUnsupported(output, flag string) bool {
 	lower := strings.ToLower(output)
 	return strings.Contains(lower, unknownOptionMarker) && strings.Contains(lower, strings.ToLower(flag))
 }
 
-// retryWithoutUnsupportedFlag handles the one startup failure that is corgi's
-// own doing: an optional flag the installed CLI predates. Older Claude Code
-// rejects --no-create-session-in-dir as an unknown option and exits at once.
-// Retrying with the same argv would fail five times and disable the workspace
-// for a flag it never needed; instead the flag is dropped for the rest of
-// this runner's life, the reason is left in the state for status and the
-// launcher, and the loop starts the process again without a backoff.
-//
-// Reports true when it consumed the exit. Only a run too short to have served
-// anything qualifies — a long session that happened to print those words is
-// the session's business.
 func (r *Runner) retryWithoutUnsupportedFlag(e Exit) bool {
 	if e.Requested || e.Uptime >= e.healthyThreshold() {
 		return false
@@ -485,17 +353,11 @@ func (r *Runner) retryWithoutUnsupportedFlag(e Exit) bool {
 	r.state.Running = false
 	r.state.Note = unsupportedFlagNote
 	r.mu.Unlock()
-	// The timeline gets the exit and its cause, so two consecutive starts do
-	// not read as a mystery; the daemon reads the cause to stop sending the
-	// flag to this workspace at all.
 	r.emit(RunEvent{Kind: "exited", Cause: string(CauseUnsupportedFlag), Reason: unsupportedFlagNote})
 	r.notifyChange()
 	return true
 }
 
-// stopReason is what Run returns when it will not restart: the launch error if
-// the process never started, nil once a workspace is deliberately disabled, and
-// otherwise whatever ended the context.
 func stopReason(d Decision, startErr error, ctx context.Context) error {
 	if startErr != nil && !d.Disable {
 		return startErr
@@ -517,8 +379,6 @@ func (r *Runner) markRunning(proc Process, startedAt time.Time) {
 	r.notifyChange()
 }
 
-// notifyChange runs the watcher callback with no lock held: it will read State,
-// which takes the same lock.
 func (r *Runner) notifyChange() {
 	if r.OnChange != nil {
 		r.OnChange()
@@ -552,11 +412,6 @@ func (r *Runner) recordLocked(d Decision, pid int, disabled bool) {
 	}
 }
 
-// captureSessionEnd records what the ending session left behind.
-//
-// Only for an end that actually replaces or stops the session: a requested stop
-// is the user closing it deliberately, and they do not need a handover note for
-// something they just did.
 func (r *Runner) captureSessionEnd(d Decision) string {
 	if r.OnSessionEnd == nil || !(d.Restart || d.Disable) {
 		return ""
@@ -575,7 +430,6 @@ func (r *Runner) announce(d Decision, detail string) {
 	r.Notify("corgi agent · "+r.Config.WorkspaceID, body)
 }
 
-// healthyAfter is how long a run must last before the failure streak resets.
 func (r *Runner) healthyAfter() time.Duration {
 	if r.HealthyAfter > 0 {
 		return r.HealthyAfter
@@ -583,7 +437,6 @@ func (r *Runner) healthyAfter() time.Duration {
 	return MinHealthyUptime
 }
 
-// WakeLockMode returns the configured mode, defaulting to session scope.
 func (c SpawnConfig) WakeLockMode() WakeLockMode {
 	if c.WakeLock == "" {
 		return WakeLockSession
@@ -591,8 +444,6 @@ func (c SpawnConfig) WakeLockMode() WakeLockMode {
 	return c.WakeLock
 }
 
-// sleepWithContext waits for d, or returns early when ctx is cancelled, so a
-// shutdown during a five-minute backoff is not held up by it.
 func sleepWithContext(ctx context.Context, d time.Duration) {
 	if d <= 0 {
 		return

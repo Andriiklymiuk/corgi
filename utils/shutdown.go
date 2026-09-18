@@ -6,13 +6,7 @@ import (
 	"time"
 )
 
-// Shutdown channel lets blocking init/poll loops abort on Ctrl+C
-// instead of running until handleRunSignal reaches os.Exit.
-//
-// State is wrapped in a struct held by atomic.Pointer so SIGHUP can
-// reset (publish a new state) concurrently with SIGINT requesting
-// shutdown without data races.
-
+// atomic.Pointer so SIGHUP reset and SIGINT shutdown stay race-free.
 type shutdownState struct {
 	ch   chan struct{}
 	once sync.Once
@@ -24,7 +18,6 @@ func init() {
 	state.Store(&shutdownState{ch: make(chan struct{})})
 }
 
-// RequestShutdown closes the shutdown channel. Idempotent.
 func RequestShutdown() {
 	s := state.Load()
 	s.once.Do(func() { close(s.ch) })
@@ -41,7 +34,6 @@ func ShutdownRequested() bool {
 	}
 }
 
-// InterruptibleSleep returns true if shutdown woke it, false on timeout.
 func InterruptibleSleep(d time.Duration) bool {
 	select {
 	case <-time.After(d):
@@ -51,8 +43,6 @@ func InterruptibleSleep(d time.Duration) bool {
 	}
 }
 
-// ResetShutdown re-arms shutdown signaling. Called by the SIGHUP reload
-// path and by tests.
 func ResetShutdown() {
 	state.Store(&shutdownState{ch: make(chan struct{})})
 }

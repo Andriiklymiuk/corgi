@@ -94,8 +94,6 @@ func TestSkipPermissionsIsTheSanctionedBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildArgs() error = %v", err)
 	}
-	// It rides on --permission-mode bypassPermissions, the mode remote control
-	// understands — not the plain-claude --dangerously-skip-permissions flag.
 	i := slices.Index(args, "--permission-mode")
 	if i < 0 || i+1 >= len(args) || args[i+1] != "bypassPermissions" {
 		t.Fatalf("SkipPermissions must emit --permission-mode bypassPermissions, got %v", args)

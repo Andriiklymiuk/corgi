@@ -9,8 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// claudeHome points agentDir at a temp tree and registers two workspaces with
-// different accounts, the way a machine with a work and a client checkout is.
 func claudeHome(t *testing.T) (agentD, mine, client string) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
@@ -72,9 +70,6 @@ func TestWorkspaceRootSaysWhenTheCheckoutIsGone(t *testing.T) {
 	}
 }
 
-// The bug this covers: the phone has no folder of its own, so a session it
-// started landed in whichever checkout the editor window was in — and took
-// that workspace's Claude account with it.
 func TestLaunchResolvesTheNamedWorkspaceNotTheCurrentFolder(t *testing.T) {
 	agentD, mine, _ := claudeHome(t)
 
@@ -89,7 +84,6 @@ func TestLaunchResolvesTheNamedWorkspaceNotTheCurrentFolder(t *testing.T) {
 		t.Fatalf("mine has no account of its own: %+v", fromWrongFolder.Env)
 	}
 
-	// What --workspace does: resolve from the checkout, not the caller's cwd.
 	root, err := workspaceRoot("client")
 	if err != nil {
 		t.Fatal(err)

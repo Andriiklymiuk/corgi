@@ -1,5 +1,3 @@
-// Package events keeps a small per-workspace timeline of supervisor lifecycle
-// events. It never records session output, which can carry secrets.
 package events
 
 import (

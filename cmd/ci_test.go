@@ -61,8 +61,6 @@ func TestResolveCIProviderReadsTheRemote(t *testing.T) {
 	}
 }
 
-// Writing a GitHub workflow into a GitLab project would be silently useless,
-// so an unrecognised remote asks rather than guesses.
 func TestResolveCIProviderRefusesToGuess(t *testing.T) {
 	origin := gitOriginURL
 	gitOriginURL = func() string { return "https://bitbucket.org/o/r.git" }
@@ -91,8 +89,6 @@ func TestCIInitWritesTheGitHubWorkflow(t *testing.T) {
 	assertParsesAsYAML(t, filepath.Join(dir, written[0]))
 }
 
-// GitLab needs the committed cache plan alongside the pipeline, because it
-// cannot read the plan at runtime.
 func TestCIInitWritesThePipelineAndTheCachePlan(t *testing.T) {
 	dir := withComposeDir(t)
 	written, err := writeCIFiles("gitlab", &utils.CorgiCompose{}, false)
@@ -114,8 +110,6 @@ func TestCIInitWritesThePipelineAndTheCachePlan(t *testing.T) {
 	}
 }
 
-// Overwriting a pipeline someone has been editing is not recoverable from the
-// CLI, so it takes an explicit flag.
 func TestCIInitRefusesToOverwrite(t *testing.T) {
 	withComposeDir(t)
 	if _, err := writeCIFiles("github", &utils.CorgiCompose{}, false); err != nil {
@@ -129,8 +123,6 @@ func TestCIInitRefusesToOverwrite(t *testing.T) {
 	}
 }
 
-// A compose with no e2e: block would fail on the `corgi test --e2e` step, and
-// the generated pipeline should say so rather than let it be discovered in CI.
 func TestCINextStepsCallsOutAMissingE2EBlock(t *testing.T) {
 	if !contains(ciNextSteps("github", &utils.CorgiCompose{}), "e2e:") {
 		t.Error("expected the missing e2e block to be mentioned")
@@ -149,8 +141,6 @@ func assertParsesAsYAML(t *testing.T, path string) {
 	}
 }
 
-// Refusing halfway would leave .gitlab-ci.yml behind without the cache plan it
-// includes, which is a broken pipeline rather than a refused one.
 func TestCIInitWritesNothingWhenOneFileExists(t *testing.T) {
 	dir := withComposeDir(t)
 	if err := writeGeneratedFile(filepath.Join(dir, ".gitlab", "corgi-cache.yml"), "old\n"); err != nil {
@@ -169,10 +159,6 @@ func TestCIInitWritesNothingWhenOneFileExists(t *testing.T) {
 	}
 }
 
-// The cache keys are hashed from the cloned lockfiles, so the plan has to be
-// computed after `corgi init` — a generated workflow that restores the cache
-// from the install action's outputs freezes the key and ships stale
-// dependencies once the markers cache and the packages cache drift apart.
 func TestGitHubWorkflowComputesCacheKeysAfterInit(t *testing.T) {
 	workflow := githubWorkflowTemplate()
 

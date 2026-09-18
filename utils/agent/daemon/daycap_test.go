@@ -10,15 +10,12 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// The sweep books each session's new tokens to its workspace's day, and
-// rings once when the workspace passes its day budget.
 func TestSpendBooksTheDayByWorkspaceAndRingsAtTheDayCap(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
 	notes := make(chan string, 4)
 	d.Notify = func(_, body string) { notes <- body }
 	d.Policy = func(s sessions.Session) Policy { return Policy{Workspace: s.Label, DayCap: 1000} }
-	// Two sweeps: the transcript grows between them.
 	home := t.TempDir()
 	path := filepath.Join(home, "s1.jsonl")
 	row := func(in, out int) string {
@@ -55,7 +52,6 @@ func TestSpendBooksTheDayByWorkspaceAndRingsAtTheDayCap(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("crossing the day cap rings")
 	}
-	// Past it already: no second ring.
 	f, _ = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
 	_, _ = f.WriteString(row(100, 100))
 	f.Close()

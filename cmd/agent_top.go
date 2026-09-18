@@ -13,14 +13,6 @@ import (
 	"golang.org/x/term"
 )
 
-// The board in the terminal, live, like top: every session with its
-// standing, what it is doing, its spend; the ones that need you first.
-// j/k move, a allows, d denies, i interrupts, o focuses, q quits. For the
-// laptop that has no menu bar — a Linux box, a server over ssh — and for
-// anyone who lives in a terminal anyway. Reads sessions.json once a second;
-// every key goes through the daemon's spool like every other surface.
-
-// topRow is one session as the screen shows it.
 type topRow struct {
 	S        sessions.Session
 	Standing string
@@ -28,8 +20,6 @@ type topRow struct {
 	Spend    string
 }
 
-// topRows orders sessions for the screen: needs you, then working, then
-// the rest, each newest first.
 func topRows(st sessions.State) []topRow {
 	rank := func(s sessions.Session) int {
 		switch s.Status {
@@ -71,8 +61,6 @@ func topRows(st sessions.State) []topRow {
 	return rows
 }
 
-// topScreen draws the board for a terminal width and height; cursor is the
-// selected row.
 func topScreen(st sessions.State, rows []topRow, cursor, width, height int, at time.Time) string {
 	if width < 40 {
 		width = 40

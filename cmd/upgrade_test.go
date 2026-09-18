@@ -49,8 +49,6 @@ func TestPathsEqual(t *testing.T) {
 }
 
 func TestDetectInstallMethod_UnknownDir(t *testing.T) {
-	// A throwaway temp dir is neither the brew prefix nor a known script dir,
-	// so detection falls through to unknown (on non-Windows hosts).
 	if runtime.GOOS == "windows" {
 		t.Skip("script-dir detection path is non-Windows")
 	}
@@ -59,9 +57,6 @@ func TestDetectInstallMethod_UnknownDir(t *testing.T) {
 	}
 }
 
-// The daemon moves when its version is not the one just installed. The
-// process running upd is the old corgi, so its own version is no yardstick:
-// a daemon on the same old version must still be restarted.
 func TestDaemonWantsRestartComparesWithTheInstalledVersion(t *testing.T) {
 	if !daemonWantsRestart("2.28.8", "2.28.10") || !daemonWantsRestart("2.28.8", "v2.28.10") {
 		t.Fatal("an older daemon moves")

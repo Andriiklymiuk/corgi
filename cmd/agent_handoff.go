@@ -16,10 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A handoff is what one run leaves for the next: typed, short, never a
-// transcript. Written by the session that is stopping — on a limit, at the
-// end of the day, before a carry — and read by whatever picks the ticket up,
-// on this machine or another, under any account.
 var agentHandoffCmd = &cobra.Command{
 	Use:   "handoff [--ref ABC-123] --done … --remaining … --next …",
 	Short: "Leave a typed handoff for the next run on this ticket",
@@ -185,8 +181,6 @@ func runAgentHandoff(cmd *cobra.Command, _ []string) {
 	}
 }
 
-// fillFromBoard adds who is writing and how much room was left, from the
-// session board: the session named, else the one whose cwd this is.
 func fillFromBoard(p *handoff.Packet, sessionRef, cwd string) {
 	dir := agentDirOrEmpty()
 	if dir == "" {
@@ -223,8 +217,6 @@ func fillFromBoard(p *handoff.Packet, sessionRef, cwd string) {
 	}
 }
 
-// handoffWorkspaceDir is where the packets live: the registered workspace
-// that contains cwd, else the git root, else cwd. --dir overrides.
 func handoffWorkspaceDir(cmd *cobra.Command) string {
 	if d, _ := cmd.Flags().GetString("dir"); d != "" {
 		return d
@@ -245,8 +237,6 @@ func handoffWorkspaceDir(cmd *cobra.Command) string {
 
 func worktreeFor(dir string, p handoff.Packet) string { return handoff.WorktreeDir(dir, p) }
 
-// handoffCheckTrusted: the packet's check is one of the workspace's own
-// doneWhen lines (user config), the only commands a packet may ask to run.
 func handoffCheckTrusted(dir string, p handoff.Packet) bool {
 	if p.Verification == nil {
 		return false

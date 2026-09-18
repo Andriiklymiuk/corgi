@@ -12,13 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// defaultE2EArtifactsDir is where `artifacts:` are collected when
-// --artifacts-dir is not given.
 const defaultE2EArtifactsDir = "corgi_artifacts/e2e"
 
-// runE2ESuite runs the stack's e2e: block against whatever is already running.
-// It deliberately does not start anything: an e2e suite asserts on a live
-// stack, and booting one here would hide which half failed.
 func runE2ESuite(cmd *cobra.Command) {
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
@@ -43,8 +38,6 @@ func runE2ESuite(cmd *cobra.Command) {
 
 	runErr := utils.RunServiceCmd("e2e", suite.Run, workdir, false, utils.SkipAutoSourceEnv)
 
-	// Collect before reporting: a red suite is exactly when its screenshots and
-	// videos are worth having, and failE2E exits the process.
 	collectE2EArtifacts(cmd, suite, workdir)
 
 	if runErr != nil {
@@ -63,9 +56,6 @@ func failE2E(msg string) {
 	exitProcess(1)
 }
 
-// collectE2EArtifacts copies the paths declared in the suite's `artifacts:` into
-// one directory. Paths are relative to the suite's workdir, which is where the
-// runner writes them.
 func collectE2EArtifacts(cmd *cobra.Command, suite *utils.E2ESuite, workdir string) {
 	if len(suite.Artifacts) == 0 {
 		return
@@ -113,7 +103,6 @@ func collectE2EArtifacts(cmd *cobra.Command, suite *utils.E2ESuite, workdir stri
 	}
 }
 
-// copyTree copies a directory recursively, creating dst as needed.
 func copyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

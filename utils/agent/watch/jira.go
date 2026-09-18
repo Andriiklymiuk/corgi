@@ -11,13 +11,11 @@ import (
 	"time"
 )
 
-// Jira polls a Cloud site through the REST API with an email and API token.
 type Jira struct {
 	URL, Email, Token, Project string
-	Me                         string // accountId, resolved on the first poll and kept in the cursor
+	Me                         string
 	Client                     *http.Client
-	// zone is the account's Jira time zone, which is what JQL reads dates in.
-	zone *time.Location
+	zone                       *time.Location
 }
 
 func NewJira(s Secrets, project string) *Jira {
@@ -62,9 +60,6 @@ type jiraComment struct {
 	Created string          `json:"created"`
 }
 
-// Poll searches issues updated since the cursor: new ones become
-// KindIssueNew, and for the ones assigned to me the latest comments are
-// fetched and other people's become KindIssueComment.
 func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
 	if strings.TrimSpace(j.URL) == "" || strings.TrimSpace(j.Email) == "" || strings.TrimSpace(j.Token) == "" {
 		return nil, cursor, ErrNoToken
@@ -106,8 +101,6 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	var search struct {
 		Issues []jiraIssue `json:"issues"`
 	}
-	// The comment field rides along, so a comment on my issue costs no
-	// second request unless Jira truncated the list.
 	params := url.Values{
 		"jql":        {jql},
 		"fields":     {"summary,description,labels,status,assignee,creator,created,updated,comment"},
@@ -183,11 +176,9 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 				Body:   clip(jiraText(c.Body), bodyMax),
 				URL:    strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
 				Author: c.Author.DisplayName,
-				// The issue's column travels with its comments, so the rules
-				// can tell a live discussion from chatter on finished work.
-				State: issue.Fields.Status.Name,
-				Mine:  true,
-				At:    created,
+				State:  issue.Fields.Status.Name,
+				Mine:   true,
+				At:     created,
 			})
 		}
 	}
@@ -201,8 +192,6 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	return events, next, nil
 }
 
-// get performs one authenticated request and decodes the JSON body; any
-// non-200 status becomes an error carrying the start of the body.
 func (j *Jira) get(ctx context.Context, path string, params url.Values, out any) error {
 	endpoint := strings.TrimRight(j.URL, "/") + path
 	if len(params) > 0 {

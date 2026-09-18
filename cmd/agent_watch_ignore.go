@@ -68,9 +68,6 @@ func runIgnore(cmd *cobra.Command, arg string, ignore bool) {
 	fmt.Println(said)
 }
 
-// inboxKeysFor is every logged event key for a ticket, newest first. An
-// exact key wins; otherwise every recent event whose ref matches, so
-// "ignore ABC-123" covers the issue and all of its comments.
 func inboxKeysFor(dir, arg, workspace string) []string {
 	arg = strings.TrimSpace(arg)
 	if arg == "" {

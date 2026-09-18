@@ -13,8 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
-// newTestOAuthServer is an OAuth server on a loopback issuer with a device
-// store holding one full device (token returned) in a temp agent dir.
 func newTestOAuthServer(t *testing.T) (*oauthServer, *http.ServeMux, string) {
 	t.Helper()
 	t.Setenv("CORGI_MCP_OAUTH_CLIENT_HOSTS", "")
@@ -133,8 +131,6 @@ func TestOAuth401PointsAtResourceMetadata(t *testing.T) {
 }
 
 func TestOAuthOffWithoutAuthOrWithFlag(t *testing.T) {
-	// serveMCPHTTP mounts oa only with auth and without --no-oauth; the 401
-	// challenge without oa keeps the pre-OAuth shape.
 	rec := httptest.NewRecorder()
 	bearerAuth("tok", http.NotFoundHandler(), "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/mcp", nil))
 	if got := rec.Header().Get("WWW-Authenticate"); got != `Bearer realm="corgi"` {
@@ -217,7 +213,6 @@ func TestOAuthClientStoreEvictsAtCap(t *testing.T) {
 	for i := 0; i < maxOAuthClients; i++ {
 		st.addClient(oauthClient{ID: fmt.Sprintf("c%03d", i), CreatedAt: now.Add(time.Duration(i) * time.Second)}, now)
 	}
-	// c000 is the oldest but has a live grant; c001 is the oldest without.
 	st.Families = []tokenFamily{{ClientID: "c000", ExpiresAt: now.Add(time.Hour)}}
 	st.addClient(oauthClient{ID: "new", CreatedAt: now.Add(time.Hour)}, now)
 	if len(st.Clients) != maxOAuthClients {

@@ -34,16 +34,14 @@ for three plain sentences you can paste into a standup.
 }
 
 type standupEntry struct {
-	Workspace string    `json:"workspace"`
-	Dir       string    `json:"dir"`
-	Prompts   []string  `json:"prompts,omitempty"`
-	Commits   []string  `json:"commits,omitempty"`
-	First     time.Time `json:"first,omitempty"`
-	// What the watch did on its own, which no prompt and no local commit
-	// records: the unattended runs, what arrived, and what is still waiting.
-	Fixes    []standupFix   `json:"fixes,omitempty"`
-	Arrived  []standupEvent `json:"arrived,omitempty"`
-	Deferred []string       `json:"deferred,omitempty"`
+	Workspace string         `json:"workspace"`
+	Dir       string         `json:"dir"`
+	Prompts   []string       `json:"prompts,omitempty"`
+	Commits   []string       `json:"commits,omitempty"`
+	First     time.Time      `json:"first,omitempty"`
+	Fixes     []standupFix   `json:"fixes,omitempty"`
+	Arrived   []standupEvent `json:"arrived,omitempty"`
+	Deferred  []string       `json:"deferred,omitempty"`
 }
 
 type standupFix struct {
@@ -95,8 +93,6 @@ func runAgentStandup(cmd *cobra.Command, _ []string) {
 	fmt.Println(summary)
 }
 
-// collectStandup groups prompts and commits by registered workspace. Prompts
-// under a directory no workspace covers are grouped by that directory.
 func collectStandup(since time.Time) []standupEntry {
 	byDir := map[string]*standupEntry{}
 	entryFor := func(dir string) *standupEntry {
@@ -140,12 +136,8 @@ func collectStandup(since time.Time) []standupEntry {
 	return out
 }
 
-// arrivedCap keeps a busy tracker from burying the day's own work.
 const arrivedCap = 10
 
-// addWatchActions folds in what the watch did while nobody was looking. A
-// fix runs headless and its notification is gone in a second, so without
-// this a day of unattended pull requests leaves no trace in the standup.
 func addWatchActions(since time.Time, byKey map[string]*standupEntry, entryFor func(string) *standupEntry) {
 	dir, err := agentDir()
 	if err != nil {
@@ -193,14 +185,12 @@ func addWatchActions(since time.Time, byKey map[string]*standupEntry, entryFor f
 		e := forWorkspace(ev.Workspace)
 		e.Deferred = append(e.Deferred, ev.Ref)
 	}
-	// The logs are newest first; a day reads oldest first.
 	for _, e := range byKey {
 		sort.Slice(e.Fixes, func(i, j int) bool { return e.Fixes[i].StartedAt.Before(e.Fixes[j].StartedAt) })
 		sort.Slice(e.Arrived, func(i, j int) bool { return e.Arrived[i].At.Before(e.Arrived[j].At) })
 	}
 }
 
-// workspaceRootFor is the deepest registered workspace containing dir.
 func workspaceRootFor(dir string) (root, id string) {
 	registry, _, err := agentRegistry()
 	if err != nil {
@@ -216,8 +206,6 @@ func workspaceRootFor(dir string) (root, id string) {
 	return root, id
 }
 
-// historyConfigDirs is every Claude config dir with a prompt history: the
-// default one and each profile's.
 func historyConfigDirs() []string {
 	home, _ := os.UserHomeDir()
 	dirs := []string{filepath.Join(home, ".claude")}
@@ -247,8 +235,6 @@ type promptRecord struct {
 	At      time.Time
 }
 
-// readPromptHistory reads Claude Code's history.jsonl: one line per prompt,
-// with the project directory and a millisecond timestamp.
 func readPromptHistory(path string, since time.Time) []promptRecord {
 	f, err := os.Open(path)
 	if err != nil {
@@ -273,7 +259,6 @@ func readPromptHistory(path string, since time.Time) []promptRecord {
 		}
 		display := strings.TrimSpace(strings.SplitN(row.Display, "\n", 2)[0])
 		if display == "" || strings.HasPrefix(display, "/") {
-			// Slash commands are housekeeping, not work.
 			continue
 		}
 		if r := []rune(display); len(r) > 100 {
@@ -379,8 +364,6 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-// summarizeWithClaude runs the list through a headless claude. The prompt
-// asks for prose, not a table; the output is what gets pasted somewhere.
 func summarizeWithClaude(ctx context.Context, text string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()

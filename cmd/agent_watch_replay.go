@@ -53,7 +53,6 @@ func runAgentWatchReplay(cmd *cobra.Command, _ []string) {
 	for _, s := range specs {
 		byWorkspace[s.Workspace] = s
 	}
-	// A setting tried on the spot, without saving it anywhere.
 	if raw, _ := cmd.Flags().GetString(watchFlagAutoFor); cmd.Flags().Changed(watchFlagAutoFor) {
 		kinds, err := parseAutoFor(raw)
 		if err != nil {

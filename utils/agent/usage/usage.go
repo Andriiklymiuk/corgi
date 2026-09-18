@@ -1,6 +1,3 @@
-// Package usage sums the token counts Claude Code already records in its
-// transcripts, so a workspace can answer what it has been costing. Nothing is
-// sent anywhere: the files are local and only their usage numbers are read.
 package usage
 
 import (
@@ -21,11 +18,8 @@ type Totals struct {
 	Turns      int64 `json:"turns"`
 }
 
-// Total is what a person means by "how much did this cost": everything that
-// counts against the window, cache reads included.
 func (t Totals) Total() int64 { return t.Input + t.Output + t.CacheRead + t.CacheWrite }
 
-// Plus is t and o together.
 func (t Totals) Plus(o Totals) Totals {
 	t.add(o)
 	return t
@@ -39,18 +33,13 @@ func (t *Totals) add(o Totals) {
 	t.Turns += o.Turns
 }
 
-// Report is one workspace's usage over two windows.
 type Report struct {
 	Today Totals `json:"today"`
 	Week  Totals `json:"week"`
 }
 
-// maxLineBytes bounds the scanner: a transcript line holds a whole turn, and a
-// long one must not stop the sum.
 const maxLineBytes = 8 << 20
 
-// ForDir sums the usage in every transcript for absPath under the account's
-// config dir. Best-effort: unreadable or malformed files contribute nothing.
 func ForDir(absPath, configDir, projectDirName string, now time.Time) Report {
 	base := configDir
 	if base == "" {
@@ -74,8 +63,6 @@ func ForDir(absPath, configDir, projectDirName string, now time.Time) Report {
 			continue
 		}
 		info, err := e.Info()
-		// A transcript last written before the window cannot hold a turn
-		// inside it, and skipping the read is what keeps this cheap.
 		if err != nil || info.ModTime().Before(weekAgo) {
 			continue
 		}
@@ -137,13 +124,10 @@ func (u rawUsage) totals() Totals {
 	}
 }
 
-// ProjectDirName is how Claude Code names a project directory under
-// projects/: the path with every separator and dot turned into a dash.
 func ProjectDirName(dir string) string {
 	return strings.NewReplacer("/", "-", ".", "-", "\\", "-", ":", "-").Replace(dir)
 }
 
-// TranscriptPath is one session's transcript under an account.
 func TranscriptPath(configDir, cwd, sessionID string) string {
 	base := configDir
 	if base == "" {
@@ -156,10 +140,6 @@ func TranscriptPath(configDir, cwd, sessionID string) string {
 	return filepath.Join(base, "projects", ProjectDirName(cwd), sessionID+".jsonl")
 }
 
-// SumFrom adds up the usage rows written to a transcript after offset,
-// and returns where it stopped: the byte after the last complete line. The
-// daemon calls it every sweep, so a session's spend costs one read of what
-// is new, never the whole file again.
 func SumFrom(path string, offset int64) (Totals, int64) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -176,7 +156,6 @@ func SumFrom(path string, offset int64) (Totals, int64) {
 	for {
 		line, err := r.ReadBytes('\n')
 		if err != nil {
-			// A line still being written is read next time, whole.
 			return t, offset
 		}
 		offset += int64(len(line))
@@ -199,8 +178,6 @@ func SumFrom(path string, offset int64) (Totals, int64) {
 	}
 }
 
-// ForSession is everything one session has spent, all time. ok is false
-// when there is no transcript to read.
 func ForSession(configDir, cwd, sessionID string) (Totals, bool) {
 	path := TranscriptPath(configDir, cwd, sessionID)
 	if path == "" {

@@ -8,7 +8,6 @@ import (
 
 var APP_VERSION = "2.28.25"
 
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "corgi",
 	Short: "Corgi cli magic friend",
@@ -36,13 +35,7 @@ func applyGlobalFlags(cmd *cobra.Command) {
 	}
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() string {
-	// Cobra's `completion` subcommand emits shell scripts (bash|zsh|fish|powershell)
-	// that wire up tab completion via corgi's hidden `__complete` entry. Hide
-	// it from the top-level help listing to keep the cmd surface focused —
-	// still callable as `corgi completion <shell>`.
 	rootCmd.CompletionOptions.HiddenDefaultCmd = true
 
 	registerCompletions()

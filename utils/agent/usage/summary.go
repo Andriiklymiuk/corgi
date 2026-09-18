@@ -9,20 +9,15 @@ import (
 	"strings"
 )
 
-// Summary is what the newest assistant turn said, reduced to one line, and
-// the last pull request link it mentioned.
 type Summary struct {
 	Line string
 	PR   string
 }
 
-// maxSummaryLen is what a phone row or a menu bar line has room for.
 const maxSummaryLen = 140
 
 var pullRequestLink = regexp.MustCompile(`https://(?:github\.com/[^\s)>"]+/pull/\d+|[^\s)>"]+/-/merge_requests/\d+)`)
 
-// SummaryOf reads the transcript's tail for the newest assistant text block
-// and the last PR link in that tail.
 func SummaryOf(transcriptPath string) (Summary, bool) {
 	f, err := os.Open(transcriptPath)
 	if err != nil {
@@ -91,8 +86,6 @@ func summaryFromTail(data []byte, truncated bool) (Summary, bool) {
 	return out, out.Line != ""
 }
 
-// firstSentence takes the first line that reads as prose: no headings,
-// bullets, fences or bare links.
 func firstSentence(text string) string {
 	fenced := false
 	for _, raw := range strings.Split(text, "\n") {

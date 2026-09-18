@@ -8,8 +8,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The shipped include is fetched over the network by every pipeline that uses
-// it, so a broken edit here breaks other people's CI rather than corgi's.
 func readGitLabTemplate(t *testing.T) (spec map[string]any, jobs map[string]any, raw string) {
 	t.Helper()
 	data, err := os.ReadFile("../gitlab/corgi.yml")
@@ -50,7 +48,6 @@ func TestGitLabTemplateDeclaresTheDocumentedInputs(t *testing.T) {
 	}
 }
 
-// The caller extends these by name, so renaming one is a breaking change.
 func TestGitLabTemplateKeepsItsJobNames(t *testing.T) {
 	_, jobs, _ := readGitLabTemplate(t)
 	for _, want := range []string{".corgi-setup", ".corgi-stack-e2e"} {
@@ -60,9 +57,6 @@ func TestGitLabTemplateKeepsItsJobNames(t *testing.T) {
 	}
 }
 
-// A job template that sets image: runs in a container, which is the one thing
-// a corgi stack cannot survive: the db containers publish to a localhost the
-// job would no longer share.
 func TestGitLabTemplateNeverRunsInAContainer(t *testing.T) {
 	_, jobs, _ := readGitLabTemplate(t)
 	for name, job := range jobs {
@@ -78,9 +72,6 @@ func TestGitLabTemplateNeverRunsInAContainer(t *testing.T) {
 	}
 }
 
-// after_script starts a fresh shell, so a corgi installed onto PATH in
-// before_script is gone by the time the logs are dumped — which is exactly
-// when they matter.
 func TestGitLabTemplateRestoresPathForTheLogDump(t *testing.T) {
 	_, jobs, _ := readGitLabTemplate(t)
 	job, ok := jobs[".corgi-stack-e2e"].(map[string]any)
@@ -103,8 +94,6 @@ func TestGitLabTemplateRestoresPathForTheLogDump(t *testing.T) {
 	}
 }
 
-// The generated cache fragment and the shipped template have to agree on the
-// name the caller extends, and nothing else enforces that across two files.
 func TestGitLabTemplateMatchesTheGeneratedCacheName(t *testing.T) {
 	_, _, raw := readGitLabTemplate(t)
 	if !strings.Contains(raw, gitlabCacheTemplate) {

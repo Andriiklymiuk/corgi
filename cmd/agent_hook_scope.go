@@ -17,12 +17,6 @@ import (
 	"andriiklymiuk/corgi/utils/gitbase"
 )
 
-// Two hooks keep a session inside the scope the spec agreed. PreToolUse on
-// a write refuses a path outside it, with the way to widen; Stop reports a
-// diff over budget once, so the size is a decision and not a surprise at
-// review. Both are silent when the branch has no scope, so a workspace that
-// never wrote one is untouched.
-
 type scopeHookInput struct {
 	SessionID string `json:"session_id"`
 	Cwd       string `json:"cwd"`
@@ -34,7 +28,6 @@ type scopeHookInput struct {
 	StopHookActive bool `json:"stop_hook_active"`
 }
 
-// scopeFor finds the workspace root and the scope for the branch cwd is on.
 func scopeFor(cwd string) (root string, s scope.Scope, ok bool) {
 	root = scopeWorkspaceRoot(cwd)
 	if root == "" {
@@ -44,8 +37,6 @@ func scopeFor(cwd string) (root string, s scope.Scope, ok bool) {
 	return root, s, ok
 }
 
-// workspaceRootFor is the registered workspace containing cwd, else the git
-// root, else "".
 func scopeWorkspaceRoot(cwd string) string {
 	if dir := agentDirOrEmpty(); dir != "" {
 		if registry, err := workspace.Load(agentRegistryPath(dir)); err == nil {
@@ -82,8 +73,6 @@ func runScopeHook(stdin io.Reader, stdout io.Writer) {
 	if err != nil || strings.HasPrefix(rel, "..") {
 		rel = abs
 	}
-	// Named the way the scope was written: "<repo>/<inside>" for a file in
-	// a service repository or a worktree, plain for a monorepo.
 	if repoRoot := sessions.RepoRoot(filepath.Dir(abs)); repoRoot != "" {
 		if named := scope.InRepo(root, repoRoot, abs); named != "" {
 			rel = named
@@ -103,8 +92,6 @@ func runScopeHook(stdin io.Reader, stdout io.Writer) {
 	})
 }
 
-// diffStat is a seam for tests: added+removed lines and new test files
-// against the branch's base.
 var diffStat = gitDiffStat
 
 func gitDiffStat(dir string) (lines int, newTests int, ok bool) {
@@ -163,8 +150,6 @@ func runBudgetHook(stdin io.Reader, stdout io.Writer) {
 	if len(over) == 0 {
 		return
 	}
-	// Once per session: the second Stop lets the turn end, so a size the
-	// run has already defended is not a loop.
 	marker := filepath.Join(scope.Dir(root), "."+in.SessionID+"-"+s.Ref+".reported")
 	if _, err := os.Stat(marker); err == nil {
 		return
@@ -176,8 +161,6 @@ func runBudgetHook(stdin io.Reader, stdout io.Writer) {
 	_ = json.NewEncoder(stdout).Encode(map[string]any{"decision": "block", "reason": reason})
 }
 
-// sweepOldMarkers drops reported-markers older than a week, so the scope
-// directory does not fill with one file per session forever.
 func sweepOldMarkers(dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

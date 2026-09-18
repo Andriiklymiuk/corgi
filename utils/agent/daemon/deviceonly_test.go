@@ -11,9 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
-// linkingStarter is a blocking starter that, for a device-only launch, also
-// reports one on-demand session link when told to — the shape of a server
-// somebody opened a conversation through from the Claude app.
 func linkingStarter(withSession bool) supervisor.Starter {
 	var n int
 	var mu sync.Mutex
@@ -83,7 +80,6 @@ func TestRemoteStartLeavesADeviceWithSessionsAlone(t *testing.T) {
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
 	d.Nudge()
 	waitFor(t, func() bool { return len(d.Status().Workspaces) == 1 })
-	// Give a wrong replacement time to show up before asserting it did not.
 	for i := 0; i < 20; i++ {
 		d.Nudge()
 	}
@@ -123,8 +119,6 @@ func TestRemoteStopPutsAnAutostartWorkspaceBackOnlineAsADevice(t *testing.T) {
 	<-done
 }
 
-// slowStopProcess is a device-only server whose teardown waits for the test
-// to let it go, so a daemon shutdown can be timed to land mid-swap.
 type slowStopProcess struct {
 	pid     int
 	release chan struct{}
@@ -163,7 +157,6 @@ func TestShutdownDuringASwapLaunchesNothing(t *testing.T) {
 	d.Nudge()
 	waitFor(t, func() bool { return d.isReplacing("acme") })
 
-	// The daemon is asked to stop while the old process is still going down.
 	cancel()
 	close(release)
 	select {
@@ -204,8 +197,6 @@ func TestAnUnsupportedFlagIsForgottenForTheWorkspace(t *testing.T) {
 	<-done
 }
 
-// exitingProcess ends at once with the given output, like a CLI rejecting
-// its argv.
 type exitingProcess struct {
 	pid    int
 	output string

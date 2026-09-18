@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// RepoPR is one repository's pull request, or the reason there is none.
 type RepoPR struct {
 	Repo    string `json:"repo"`
 	Dir     string `json:"dir"`
@@ -20,7 +19,6 @@ type RepoPR struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// PRSet is the result of opening pull requests across a stack.
 type PRSet struct {
 	Branch string   `json:"branch"`
 	Base   string   `json:"base,omitempty"`
@@ -29,14 +27,11 @@ type PRSet struct {
 
 type prRunner func(dir, name string, args ...string) (string, error)
 
-// prRequest is what every repository's pull request shares.
 type prRequest struct {
 	branch, base, title, body string
 	draft                     bool
 }
 
-// prStepTimeout bounds each push and forge call: both talk to a network, and a
-// hung one would block the MCP handler that called the tool.
 const prStepTimeout = 3 * time.Minute
 
 func execInDir(dir, name string, args ...string) (string, error) {
@@ -51,10 +46,6 @@ func execInDir(dir, name string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// OpenBranchPRs pushes branch in every repository that has commits on it and
-// opens a pull request there, then cross-links the bodies so each PR names its
-// siblings. Repositories with nothing to ship are reported as skipped, never
-// silently dropped.
 func OpenBranchPRs(dirs map[string]string, branch, base, title, body string, draft bool) (*PRSet, error) {
 	return openBranchPRs(dirs, branch, base, title, body, draft, execInDir)
 }
@@ -89,8 +80,6 @@ func openOnePR(run prRunner, repo, dir string, req prRequest) RepoPR {
 	branch := req.branch
 	pr := RepoPR{Repo: repo, Dir: dir, Branch: branch}
 
-	// Nothing to open a pull request for is the common case in a stack where
-	// the change touched two of five repositories.
 	if !branchHasCommits(run, dir, branch, req.base) {
 		pr.Skipped = "no commits on " + branch
 		return pr
@@ -119,7 +108,6 @@ func openOnePR(run prRunner, repo, dir string, req prRequest) RepoPR {
 	return pr
 }
 
-// Best effort: a failed edit still leaves a working pull request.
 func crossLinkPRs(run prRunner, set *PRSet, dirs map[string]string, body string) {
 	var links []string
 	for _, pr := range set.PRs {
@@ -224,7 +212,6 @@ func defaultBaseRef(run prRunner, dir string) string {
 	return "origin/main"
 }
 
-// So re-running opens nothing twice.
 func existingPRURL(run prRunner, forge forgeCLI, dir, branch string) string {
 	if out, err := run(dir, forge.bin, forge.viewArgs(branch)...); err == nil {
 		return forgeURL(out)

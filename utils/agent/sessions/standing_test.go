@@ -85,9 +85,6 @@ func TestSessionFacts(t *testing.T) {
 	}
 }
 
-// The board carries every session's standing, and a key its word: the
-// forge's word on the pull request when the daemon has one, the link alone
-// until then, the session itself when there is no pull request.
 func TestTheBoardCarriesEverySessionsStanding(t *testing.T) {
 	r := newTestRegistry(t)
 	e := ev("UserPromptSubmit", "s1", 0)

@@ -13,9 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// claimFor is which session a claim belongs to: the one named, else the
-// session this command runs inside (CLAUDE_SESSION_ID from a hook or a
-// tool call), else the one whose checkout this directory is.
 func claimFor(st sessions.State, ref, cwd string) (sessions.Session, error) {
 	if ref != "" {
 		return findBoardSession(st, ref)
@@ -42,8 +39,6 @@ func claimFor(st sessions.State, ref, cwd string) (sessions.Session, error) {
 	return best, nil
 }
 
-// repoRelative is the path a claim is filed under: relative to the
-// repository root, forward slashes.
 func repoRelative(repo, p string) (string, error) {
 	abs := p
 	if !filepath.IsAbs(abs) {
@@ -161,8 +156,6 @@ var agentClaimsCmd = &cobra.Command{
 	},
 }
 
-// workspaceRootOfDir is the repository a checkout belongs to — the main
-// checkout for a worktree — else the directory itself.
 func workspaceRootOfDir(dir string) string {
 	if root := sessions.CommonRoot(dir); root != "" {
 		return root

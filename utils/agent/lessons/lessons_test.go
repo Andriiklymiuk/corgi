@@ -33,7 +33,6 @@ func TestLessonsAreOneLineEachAndNeverTwice(t *testing.T) {
 	if !strings.HasSuffix(Path(dir, "acme/api"), "/lessons/acme_api.md") {
 		t.Fatal(Path(dir, "acme/api"))
 	}
-	// A line a person typed without the date is kept as text.
 	f, _ := os.OpenFile(Path(dir, "acme/api"), os.O_APPEND|os.O_WRONLY, 0o600)
 	f.WriteString("- never mock the database in api tests\n")
 	f.Close()

@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// A workspace watched with --silent never rings: not by its id, not by a
-// folder under it. Another workspace still does.
 func TestASilentWorkspaceNeverRings(t *testing.T) {
 	d := testDaemon(t)
 	got := make(chan string, 4)

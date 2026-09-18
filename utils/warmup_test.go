@@ -22,7 +22,6 @@ func warmupServer(t *testing.T, h http.HandlerFunc) (port int, done func()) {
 	return p, srv.Close
 }
 
-// The whole point: warmup is performed once, however slow it is.
 func TestWarmupRequestsOnce(t *testing.T) {
 	var calls int32
 	port, done := warmupServer(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -100,9 +99,6 @@ func TestWarmupDefaults(t *testing.T) {
 	}
 }
 
-// buildService copies fields one by one, so a new field parses correctly and
-// is then dropped on the way to the code that uses it. That is how warmup
-// shipped silently doing nothing: the yaml test passed, the feature did not.
 func TestBuildServiceKeepsWarmup(t *testing.T) {
 	parsed := Service{
 		Path:        "./web",

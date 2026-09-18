@@ -8,9 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// versionCmd mirrors --version as a subcommand. Every other CLI a corgi user
-// touches accepts both spellings, and reaching for the wrong one in a CI script
-// fails with "unknown command" rather than the version.
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the installed corgi version",

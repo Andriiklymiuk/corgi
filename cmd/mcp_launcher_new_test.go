@@ -163,9 +163,6 @@ func TestWatchEventsAndWorkingOnOne(t *testing.T) {
 	if len(listed.Events) != 2 {
 		t.Fatalf("deduped by key, bad lines skipped: %+v", listed.Events)
 	}
-	// One queue, ordered by who is stuck: someone replying on a pull request
-	// of mine outranks a fresh ticket that blocks nobody yet, whatever
-	// arrived most recently.
 	if listed.Events[0].Key != "gitlab:acme/api!7" || listed.Events[1].Key != "jira:ABC-1" {
 		t.Errorf("whoever is blocked leads, got %q then %q", listed.Events[0].Key, listed.Events[1].Key)
 	}
@@ -194,8 +191,6 @@ func TestWatchEventsAndWorkingOnOne(t *testing.T) {
 	if strings.Contains(line, "corgi:stories") || strings.Contains(line, "Login loops") {
 		t.Fatalf("the prompt must travel by id, not in the command: %s", line)
 	}
-	// The ref itself does ride along, so the board can put the session on
-	// the ticket from its first event.
 	if !strings.Contains(line, "--model opus --ticket ABC-1 --ticket-key jira:ABC-1 --prompt-id ") {
 		t.Fatalf("command line: %s", line)
 	}
@@ -262,7 +257,6 @@ func TestWorkingOnSeveralIssuesAtOnce(t *testing.T) {
 		}
 	}
 
-	// One key in the list is still the single-event prompt.
 	if rec := post(launchWorkOnHandler, "/launch/work-on", `{"keys":["gitlab:acme/api!7"]}`); rec.Code != 200 {
 		t.Fatalf("single review = %d: %s", rec.Code, rec.Body.String())
 	}
