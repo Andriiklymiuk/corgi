@@ -39,28 +39,36 @@ const (
 	// KindCIFailed is a build that went red on something of mine. It is the
 	// one kind that arrives with its own test for "done".
 	KindCIFailed Kind = "ci.failed"
+	// KindChatMention is someone naming me in chat, or writing to me
+	// directly: the shape most of a day's interruptions actually arrive in.
+	KindChatMention Kind = "chat.mention"
+	// KindChatMessage is any message in a channel the workspace listens to.
+	KindChatMessage Kind = "chat.message"
 )
 
 // Event is one thing worth telling a person or an agent about.
 type Event struct {
 	// Key is stable across polls and webhooks for the same thing, so a
 	// comment seen twice is handled once: "linear:ABC-123", "github:acme/api#12:c123".
-	Key       string    `json:"key"`
-	Source    string    `json:"source"` // linear, jira, github, gitlab
-	Kind      Kind      `json:"kind"`
-	Workspace string    `json:"workspace,omitempty"`
-	Ref       string    `json:"ref"` // ABC-123, acme/api#12
-	Title     string    `json:"title"`
-	Body      string    `json:"body,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	Author    string    `json:"author,omitempty"`
-	Labels    []string  `json:"labels,omitempty"`
-	State     string    `json:"state,omitempty"`
-	Assignee  string    `json:"assignee,omitempty"`
-	Mine      bool      `json:"mine,omitempty"` // assigned to me, or my PR
-	Self      bool      `json:"self,omitempty"` // I made it: a ticket I wrote is not news
-	Bot       bool      `json:"bot,omitempty"`  // posted by a bot account
-	At        time.Time `json:"at"`
+	Key       string   `json:"key"`
+	Source    string   `json:"source"` // linear, jira, github, gitlab
+	Kind      Kind     `json:"kind"`
+	Workspace string   `json:"workspace,omitempty"`
+	Ref       string   `json:"ref"` // ABC-123, acme/api#12
+	Title     string   `json:"title"`
+	Body      string   `json:"body,omitempty"`
+	URL       string   `json:"url,omitempty"`
+	Author    string   `json:"author,omitempty"`
+	Labels    []string `json:"labels,omitempty"`
+	// Links are the pull requests a chat message is about — a review
+	// channel's post carries one per repository. Empty everywhere else.
+	Links    []string  `json:"links,omitempty"`
+	State    string    `json:"state,omitempty"`
+	Assignee string    `json:"assignee,omitempty"`
+	Mine     bool      `json:"mine,omitempty"` // assigned to me, or my PR
+	Self     bool      `json:"self,omitempty"` // I made it: a ticket I wrote is not news
+	Bot      bool      `json:"bot,omitempty"`  // posted by a bot account
+	At       time.Time `json:"at"`
 }
 
 // Rules is what a workspace asked to be told about. Zero value matches
@@ -81,6 +89,11 @@ type Rules struct {
 	// Bots lets comments from bot accounts count: a review bot whose
 	// findings are meant to be fixed. Off, a bot is not a person waiting.
 	Bots bool
+	// Mentions: someone named me in chat, or wrote to me directly.
+	Mentions bool
+	// Channels are the chat channels every message of which is news; a
+	// mention needs no channel here.
+	Channels []string
 }
 
 // Match says whether an event is one the rules asked for.
@@ -102,6 +115,10 @@ func (r Rules) Why(e Event) string {
 			return "red builds need --ci"
 		case KindReviewRequested:
 			return "review requests need --reviews"
+		case KindChatMention:
+			return "chat mentions need --mentions"
+		case KindChatMessage:
+			return "a channel message needs that channel in --channel"
 		}
 		return "kind " + string(e.Kind) + " is not watched"
 	}
@@ -114,6 +131,20 @@ func (r Rules) Why(e Event) string {
 			if over := finishedState(e.State); over != "" {
 				return "it is " + over + " — there is nothing to review"
 			}
+		}
+	case KindChatMention, KindChatMessage:
+		if e.Self {
+			return "I wrote it"
+		}
+		if e.Bot && !r.Bots {
+			return "it is from a bot; --bots makes those count"
+		}
+		if e.Kind == KindChatMessage && !containsFold(r.Channels, e.State) {
+			return fmt.Sprintf("%s is not a channel this workspace listens to", orNone([]string{e.State}))
+		}
+		if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
+			return fmt.Sprintf("it is from %s, and you are waiting on %s",
+				orNone([]string{e.Author}), strings.Join(r.From, ", "))
 		}
 	case KindCIFailed:
 		if !e.Mine {
@@ -276,6 +307,10 @@ func (r Rules) matchesKind(k Kind) bool {
 		return r.Comments
 	case KindIssueNew:
 		return true
+	case KindChatMention:
+		return r.Mentions
+	case KindChatMessage:
+		return len(r.Channels) > 0
 	}
 	return false
 }
@@ -291,6 +326,7 @@ var sourceKinds = map[string][]Kind{
 	"jira":   {KindIssueNew, KindIssueComment},
 	"github": {KindPRComment, KindPRReview, KindReviewRequested, KindCIFailed},
 	"gitlab": {KindPRComment, KindPRReview, KindReviewRequested},
+	"slack":  {KindChatMention, KindChatMessage, KindReviewRequested},
 }
 
 // DeadSource says a source can emit nothing these rules take, so polling
