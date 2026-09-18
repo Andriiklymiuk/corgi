@@ -11,66 +11,41 @@ import (
 	"strings"
 )
 
-// A stack's change spans several repositories, so the diff worth reading on a
-// phone is one view across all of them. It needs no tunnel and no running
-// stack, which is why it is the artifact that works on a train.
-
-// maxPatchBytes caps one file's patch in the response. A generated lockfile can
-// be megabytes, and one of those would break a phone client or blow the MCP
-// response size for everything else in the same call.
 const maxPatchBytes = 32 << 10
 
-// maxStackPatchBytes bounds the whole response. The per-file cap alone does not:
-// a wide branch of many modest files still adds up to a multi-megabyte payload,
-// which is the thing a phone client cannot take. Once the budget is spent the
-// remaining files keep their counts and lose only their patch bodies, so the
-// shape of the change is still complete.
 const maxStackPatchBytes = 1 << 20
 
-// FileDiff is one changed file.
 type FileDiff struct {
-	Path      string `json:"path"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
-	Binary    bool   `json:"binary,omitempty"`
-	New       bool   `json:"new,omitempty"`
-	// RenamedFrom is the previous path when git detected a rename.
+	Path        string `json:"path"`
+	Additions   int    `json:"additions"`
+	Deletions   int    `json:"deletions"`
+	Binary      bool   `json:"binary,omitempty"`
+	New         bool   `json:"new,omitempty"`
 	RenamedFrom string `json:"renamedFrom,omitempty"`
 	Patch       string `json:"patch,omitempty"`
 	Truncated   bool   `json:"truncated,omitempty"`
 }
 
-// RepoDiff is one repository's changes against its merge base.
 type RepoDiff struct {
-	Service   string     `json:"service"`
-	Repo      string     `json:"repo"`
-	Branch    string     `json:"branch"`
-	Base      string     `json:"base"`
-	Additions int        `json:"additions"`
-	Deletions int        `json:"deletions"`
-	Files     []FileDiff `json:"files"`
-	// AlsoServing names other services backed by this same repository, so a
-	// shared repo is reported once rather than counted twice.
-	AlsoServing []string `json:"alsoServing,omitempty"`
-	Error       string   `json:"error,omitempty"`
+	Service     string     `json:"service"`
+	Repo        string     `json:"repo"`
+	Branch      string     `json:"branch"`
+	Base        string     `json:"base"`
+	Additions   int        `json:"additions"`
+	Deletions   int        `json:"deletions"`
+	Files       []FileDiff `json:"files"`
+	AlsoServing []string   `json:"alsoServing,omitempty"`
+	Error       string     `json:"error,omitempty"`
 }
 
-// StackDiff is the whole change, across every repository in the stack.
 type StackDiff struct {
-	Base      string     `json:"base"`
-	Additions int        `json:"additions"`
-	Deletions int        `json:"deletions"`
-	Repos     []RepoDiff `json:"repos"`
-	// PatchesTruncated reports that the response budget was reached and some
-	// files carry counts without a patch body.
-	PatchesTruncated bool `json:"patchesTruncated,omitempty"`
+	Base             string     `json:"base"`
+	Additions        int        `json:"additions"`
+	Deletions        int        `json:"deletions"`
+	Repos            []RepoDiff `json:"repos"`
+	PatchesTruncated bool       `json:"patchesTruncated,omitempty"`
 }
 
-// DiffStack collects the diff of every service's checkout against base.
-//
-// dirs maps a service name to the directory to diff, so it works against either
-// the main checkouts or a materialized worktree set. base is a branch name such
-// as "main"; each repo is compared against its own merge base with it.
 func DiffStack(dirs map[string]string, base string, includePatch bool) *StackDiff {
 	if strings.TrimSpace(base) == "" {
 		base = "main"
@@ -83,10 +58,6 @@ func DiffStack(dirs map[string]string, base string, includePatch bool) *StackDif
 	}
 	sort.Strings(services)
 
-	// Two services can share a repository — including from different
-	// subdirectories of it. Keying on the raw service directory missed that and
-	// diffed the repo twice, listing every change twice and doubling the stack
-	// totals, so the key is the resolved git root.
 	byRoot := map[string]int{}
 	budget := maxStackPatchBytes
 	for _, svc := range services {
@@ -111,8 +82,6 @@ func DiffStack(dirs map[string]string, base string, includePatch bool) *StackDif
 	return out
 }
 
-// applyPatchBudget drops patch bodies once the response budget is spent,
-// keeping every file's counts. Returns the remaining budget.
 func applyPatchBudget(rd *RepoDiff, budget int) int {
 	for i := range rd.Files {
 		if budget <= 0 {
@@ -133,11 +102,6 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 		rd.Error = "not a git repository"
 		return rd
 	}
-	// Every git call runs from the repository root. A service can live in a
-	// subdirectory, and `git diff --numstat` reports paths relative to the
-	// root — so running from the service directory made every pathspec miss
-	// and returned an empty patch for every file. It also silently limited the
-	// diff to that subtree.
 	if root, ok := repoRoot(dir); ok {
 		rd.Repo = root
 		dir = root
@@ -153,12 +117,8 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 	}
 	rd.Base = ref
 
-	// Non-nil so a client can iterate the result without a null check.
 	rd.Files = []FileDiff{}
 
-	// -z, because without it a rename is reported as the single path
-	// "old => new", which is then neither a usable display name nor a pathspec
-	// that matches anything — every renamed file came back with an empty patch.
 	stats, err := gitOut(dir, "diff", "--numstat", "-z", ref)
 	if err != nil {
 		rd.Error = err.Error()
@@ -173,9 +133,6 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 		rd.Deletions += f.Deletions
 	}
 
-	// An agent's first act is usually to create files, and `git diff` shows
-	// nothing for an untracked one. Without this the most common change of all
-	// would read as an empty diff.
 	for _, f := range untrackedFiles(rd.Repo, includePatch) {
 		rd.Files = append(rd.Files, f)
 		rd.Additions += f.Additions
@@ -185,12 +142,7 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 	return rd
 }
 
-// untrackedFiles reports files git does not track yet, respecting .gitignore.
 func untrackedFiles(dir string, includePatch bool) []FileDiff {
-	// -z, or git C-quotes any path with non-ASCII or special characters
-	// ("caf\303\251.ts"). Opening that literal name fails, and the file was
-	// then silently dropped — from precisely the set an agent's work consists
-	// of, newly created files.
 	out, err := gitOut(dir, "ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil || strings.TrimSpace(out) == "" {
 		return nil
@@ -219,10 +171,6 @@ func untrackedFiles(dir string, includePatch bool) []FileDiff {
 	return files
 }
 
-// readForDiff streams a file, keeping only the first maxPatchBytes for the
-// patch while counting every line. A stray multi-gigabyte file is then bounded
-// in memory, and the reported line count is still the real one — a truncated
-// patch that also under-reports its size would be misleading twice over.
 func readForDiff(path string) (head []byte, lines int, truncated bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -252,13 +200,11 @@ func readForDiff(path string) (head []byte, lines int, truncated bool, err error
 		}
 	}
 	if total > 0 && !sawTrailingNewline {
-		lines++ // a final line without a newline still counts
+		lines++
 	}
 	return head, lines, total > maxPatchBytes, nil
 }
 
-// newFilePatch renders an untracked file as a unified diff against nothing, so
-// a client renders it the same way as every other entry.
 func newFilePatch(path string, content []byte, truncated bool) (string, bool) {
 	body := string(content)
 	if len(body) > maxPatchBytes {
@@ -289,7 +235,6 @@ func countLines(content []byte) int {
 	return n
 }
 
-// isProbablyBinary uses git's own heuristic: a NUL byte near the start.
 func isProbablyBinary(content []byte) bool {
 	limit := min(len(content), 8000)
 	for i := range limit {
@@ -300,8 +245,6 @@ func isProbablyBinary(content []byte) bool {
 	return false
 }
 
-// mergeBaseRef resolves the commit to diff against: the merge base with base,
-// falling back to origin/<base> when only the remote-tracking ref exists.
 func mergeBaseRef(dir, base string) string {
 	for _, candidate := range []string{base, "origin/" + base} {
 		if _, err := gitOut(dir, gitRevParse, "--verify", "--quiet", candidate); err != nil {
@@ -314,11 +257,6 @@ func mergeBaseRef(dir, base string) string {
 	return ""
 }
 
-// parseNumstatZ reads `git diff --numstat -z` output.
-//
-// Records are NUL-separated. An ordinary change is "adds\tdels\tpath\0"; a
-// rename drops the path from that field and follows with two more records, the
-// old path then the new one. Binary files report "-" for both counts.
 func parseNumstatZ(out string) []FileDiff {
 	records := strings.Split(out, "\x00")
 	var files []FileDiff
@@ -334,8 +272,6 @@ func parseNumstatZ(out string) []FileDiff {
 		}
 		f := FileDiff{Path: fields[2]}
 		if f.Path == "" {
-			// A rename: the next two records are the old and new paths. The new
-			// one is what the change is about and what a pathspec matches.
 			if i+2 < len(records) {
 				f.Path = records[i+2]
 				f.RenamedFrom = records[i+1]
@@ -356,9 +292,7 @@ func parseNumstatZ(out string) []FileDiff {
 	return files
 }
 
-// filePatch returns one file's unified diff, truncated at maxPatchBytes.
 func filePatch(dir, ref, path string) (patch string, truncated bool) {
-	// `--` stops a path that looks like a flag from being read as one.
 	out, err := gitOut(dir, "diff", ref, "--", path)
 	if err != nil {
 		return "", false
@@ -369,8 +303,6 @@ func filePatch(dir, ref, path string) (patch string, truncated bool) {
 	return out[:maxPatchBytes] + "\n… truncated, open the file to see the rest", true
 }
 
-// ServiceDirs maps each service to the directory its code lives in, preferring
-// a materialized worktree when one exists for the branch.
 func ServiceDirs(corgi *CorgiCompose, set *WorktreeSet) map[string]string {
 	dirs := map[string]string{}
 	for i := range corgi.Services {
@@ -390,9 +322,6 @@ func ServiceDirs(corgi *CorgiCompose, set *WorktreeSet) map[string]string {
 	return dirs
 }
 
-// WorktreeDirs maps only the services a branch was actually materialized for.
-// Used when diffing a branch, so a partial materialize does not drag every
-// other service's main checkout into the result.
 func WorktreeDirs(set *WorktreeSet) map[string]string {
 	dirs := map[string]string{}
 	if set == nil {

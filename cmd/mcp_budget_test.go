@@ -43,8 +43,6 @@ func TestClampToBudget(t *testing.T) {
 	}
 }
 
-// A caller can ask corgi_wait_for_log for an hour; the connector drops the
-// call at four minutes, so the wait ends at the budget and says so.
 func TestWaitForLogClampsToTheBudget(t *testing.T) {
 	dir := chdirToTempCompose(t, agentSurfaceCompose)
 	logDir := filepath.Join(dir, "corgi_services", ".logs", "api")

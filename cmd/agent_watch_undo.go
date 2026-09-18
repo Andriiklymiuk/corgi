@@ -76,7 +76,6 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 			_ = watch.LoadStateLog(dir).Set(run.Key, back, time.Now())
 		}
 	}
-	// An isolated run's worktrees go too, unless they hold uncommitted work.
 	if run.Branch != "" {
 		if registry, err := workspace.Load(agentRegistryPath(dir)); err == nil {
 			ws, _ := registry.Find(run.Workspace)
@@ -90,7 +89,6 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
-	// The event goes back in the inbox: undoing a run means it was not done.
 	st := watch.LoadState(dir)
 	st.Unsee(run.Key)
 	_ = st.Unignore(run.Key)
@@ -98,13 +96,12 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 }
 
 type undoPlan struct {
-	Ref       string   `json:"ref"`
-	Workspace string   `json:"workspace"`
-	PRs       []string `json:"prs,omitempty"`
-	Closed    []string `json:"closed,omitempty"`
-	MoveBack  string   `json:"moveBack,omitempty"`
-	Moved     bool     `json:"moved,omitempty"`
-	// WorktreesRemoved is what an isolated run left that undo cleaned up.
+	Ref              string   `json:"ref"`
+	Workspace        string   `json:"workspace"`
+	PRs              []string `json:"prs,omitempty"`
+	Closed           []string `json:"closed,omitempty"`
+	MoveBack         string   `json:"moveBack,omitempty"`
+	Moved            bool     `json:"moved,omitempty"`
 	WorktreesRemoved []string `json:"worktreesRemoved,omitempty"`
 }
 
@@ -142,7 +139,6 @@ func reportUndo(p undoPlan, problems []string) {
 	}
 }
 
-// lastUndoable is the newest finished run, or the newest for one ref.
 func lastUndoable(dir, ref string) (watch.FixRecord, bool) {
 	for _, r := range watch.LoadFixLog(dir).RecentFixes("", 50) {
 		if !r.Done() {

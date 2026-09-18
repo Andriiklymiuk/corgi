@@ -70,7 +70,6 @@ func TestPsRowFromEntryStartedAt(t *testing.T) {
 	if row.StartedAt == nil || !row.StartedAt.Equal(ts) {
 		t.Fatalf("startedAt not carried: %+v", row)
 	}
-	// zero startedAt → nil pointer → omitted from JSON
 	row2 := psRowFromEntry(utils.RunStateEntry{Name: "x", Kind: "service", Status: "running"})
 	if row2.StartedAt != nil {
 		t.Errorf("zero startedAt must be nil, got %v", row2.StartedAt)
@@ -87,13 +86,13 @@ func TestProbeDockerRunnerServices(t *testing.T) {
 	containerCheck = func(string) bool { return false }
 	t.Cleanup(func() { containerCheck = prev })
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	old := now.Add(-time.Hour) // well past the boot grace
+	old := now.Add(-time.Hour)
 	st := utils.RunState{Services: []utils.RunStateEntry{
-		{Name: "tracked", PID: 123, Port: 8080, Status: "running", StartedAt: old},         // pid-tracked → untouched
-		{Name: "container-up", PID: 0, Port: 9000, Status: "stopped", StartedAt: old},      // port open → running (flip)
-		{Name: "container-dead", PID: 0, Port: 9001, Status: "running", StartedAt: old},    // port closed, past grace → stopped (flip)
-		{Name: "container-booting", PID: 0, Port: 9002, Status: "running", StartedAt: now}, // port closed, within grace → untouched
-		{Name: "no-port", PID: 0, Status: "running", StartedAt: old},                       // no port → untouched
+		{Name: "tracked", PID: 123, Port: 8080, Status: "running", StartedAt: old},
+		{Name: "container-up", PID: 0, Port: 9000, Status: "stopped", StartedAt: old},
+		{Name: "container-dead", PID: 0, Port: 9001, Status: "running", StartedAt: old},
+		{Name: "container-booting", PID: 0, Port: 9002, Status: "running", StartedAt: now},
+		{Name: "no-port", PID: 0, Status: "running", StartedAt: old},
 	}}
 	out := probeDockerRunnerServices(st, func(p int) bool { return p == 9000 }, now)
 

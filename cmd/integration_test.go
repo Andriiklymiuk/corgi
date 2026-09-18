@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// chdirToTempCompose creates a temp dir w/ corgi-compose.yml, chdirs into it.
 func chdirToTempCompose(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -112,11 +111,6 @@ func TestSeedDbDirMissing(t *testing.T) {
 func TestSeedAllDatabasesNoOp(t *testing.T) {
 	SeedAllDatabases([]utils.DatabaseService{})
 }
-
-// Skipped: runDoctor/runPull/runScript without compose triggers interactive
-// "Select corgi config file" prompt that hangs in tests. The compose-loading
-// prompt path is hard to bypass in a test harness. Covered indirectly via
-// other tests that supply valid compose files.
 
 func TestRunScriptNoServices(t *testing.T) {
 	chdirToTempCompose(t, "name: empty\n")

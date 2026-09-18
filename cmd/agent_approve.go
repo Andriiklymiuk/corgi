@@ -40,8 +40,6 @@ func runAgentApprove(_ *cobra.Command, args []string) {
 	fmt.Printf("approved %s — the browser page finishes the sign-in\n", client)
 }
 
-// readLocalMCPAddr is the loopback address of the MCP server `corgi agent up`
-// started, or an error saying it is not running.
 func readLocalMCPAddr(agentDir string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(agentDir, mcpAddrName))
 	if err != nil {

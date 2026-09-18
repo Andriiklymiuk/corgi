@@ -15,11 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The kanban is one card per ticket, in a column corgi works out from what
-// it already knows: the inbox, the runs, the sessions, the handoffs, the
-// ticket's own state. Nobody drags a card into Running; a run puts it
-// there. Moving a card moves the ticket on the tracker, nothing else.
-
 const (
 	ColInbox   = "Inbox"
 	ColReady   = "Ready"
@@ -31,44 +26,29 @@ const (
 
 var kanbanColumns = []string{ColInbox, ColReady, ColRunning, ColBlocked, ColReview, ColDone}
 
-// KanbanCard is one ticket as the board sees it.
 type KanbanCard struct {
-	Ref       string    `json:"ref"`
-	Key       string    `json:"key,omitempty"`
-	Title     string    `json:"title,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	Workspace string    `json:"workspace,omitempty"`
-	Kind      string    `json:"kind,omitempty"`
-	Column    string    `json:"column"`
-	Why       string    `json:"why"`
-	State     string    `json:"state,omitempty"`
-	Branch    string    `json:"branch,omitempty"`
-	Blocked   string    `json:"blocked,omitempty"`
-	BlockedBy string    `json:"blockedBy,omitempty"`
-	Session   *CardSess `json:"session,omitempty"`
-	Fix       *CardFix  `json:"fix,omitempty"`
-	Handoff   *CardHand `json:"handoff,omitempty"`
-	// Picked is "Work on it" pressed and by whom — kept on the card while
-	// the session it asked for is still on its way, and after, as history.
-	Picked *CardPick `json:"picked,omitempty"`
-	// Columns is where this card can be moved: a task's own five; a tracker
-	// ticket's come from the board cache, keyed by workspace.
-	Columns []string `json:"columns,omitempty"`
-	// Body is the description, for a task — a tracker ticket's lives on the
-	// tracker.
-	Body string `json:"body,omitempty"`
-	// Cost is what the ticket has cost so far: the unattended runs (with
-	// claude's own receipt) plus every session that sat on its branch.
-	Cost *CardCost `json:"cost,omitempty"`
-	// Pull is how the pull request on this card stands — checks, approval
-	// — for the one the row is about, the one a run opened, or the one its
-	// session linked. Ready to merge is Pull.Ready().
+	Ref       string            `json:"ref"`
+	Key       string            `json:"key,omitempty"`
+	Title     string            `json:"title,omitempty"`
+	URL       string            `json:"url,omitempty"`
+	Workspace string            `json:"workspace,omitempty"`
+	Kind      string            `json:"kind,omitempty"`
+	Column    string            `json:"column"`
+	Why       string            `json:"why"`
+	State     string            `json:"state,omitempty"`
+	Branch    string            `json:"branch,omitempty"`
+	Blocked   string            `json:"blocked,omitempty"`
+	BlockedBy string            `json:"blockedBy,omitempty"`
+	Session   *CardSess         `json:"session,omitempty"`
+	Fix       *CardFix          `json:"fix,omitempty"`
+	Handoff   *CardHand         `json:"handoff,omitempty"`
+	Picked    *CardPick         `json:"picked,omitempty"`
+	Columns   []string          `json:"columns,omitempty"`
+	Body      string            `json:"body,omitempty"`
+	Cost      *CardCost         `json:"cost,omitempty"`
 	Pull      *watch.PullStatus `json:"pull,omitempty"`
 	UpdatedAt time.Time         `json:"updatedAt"`
-	// Standing is the card's one word and clause from the ladder — what a
-	// surface prints on the row instead of reading Pull and Session its
-	// own way.
-	Standing sessions.Standing `json:"standing"`
+	Standing  sessions.Standing `json:"standing"`
 }
 
 type CardCost struct {
@@ -105,24 +85,19 @@ type CardHand struct {
 	Draft bool   `json:"draft,omitempty"`
 }
 
-// kanbanInputs is everything the board is built from, gathered once so the
-// derivation is a pure function that a test can drive.
 type kanbanInputs struct {
-	events   []watch.Event
-	ignored  func(key string) bool
-	moved    *watch.StateLog
-	fixes    *watch.FixLog
-	sessions []sessions.Session
-	packets  map[string][]handoff.Packet // by workspace id
-	picks    *watch.PickLog
-	pulls    *watch.PullLog
-	now      time.Time
-	// sessionTokens is a seam: what one session has spent, from its transcript.
+	events        []watch.Event
+	ignored       func(key string) bool
+	moved         *watch.StateLog
+	fixes         *watch.FixLog
+	sessions      []sessions.Session
+	packets       map[string][]handoff.Packet
+	picks         *watch.PickLog
+	pulls         *watch.PullLog
+	now           time.Time
 	sessionTokens func(s sessions.Session) (int64, bool)
 }
 
-// kanbanBoard is the board while it is being derived: one step per book,
-// in the order the books outrank each other.
 type kanbanBoard struct {
 	in    kanbanInputs
 	byRef map[string]*KanbanCard
@@ -158,12 +133,10 @@ func (b *kanbanBoard) drop(ws, ref string) {
 	delete(b.byRef, ws+"/"+ref)
 }
 
-// cardOpen is a card no run, wall or pull request has settled yet.
 func cardOpen(c *KanbanCard) bool {
 	return c.Column == ColInbox || c.Column == ColReady || c.Column == ColRunning
 }
 
-// Inbox events, newest first: the first one on a ref names the card.
 func (b *kanbanBoard) placeEvents() {
 	for _, e := range b.in.events {
 		if e.Ref == "" || e.Kind == watch.KindRoutine || (b.in.ignored != nil && b.in.ignored(e.Key)) {
@@ -185,8 +158,6 @@ func (b *kanbanBoard) placeEvents() {
 	}
 }
 
-// A task of your own sits where you put it: its column is its state. A
-// session or a run on it still moves it along later.
 func (b *kanbanBoard) placeTask(c *KanbanCard, e watch.Event, current string) {
 	c.Body, c.Columns = e.Body, watch.TaskColumns
 	switch watch.TaskColumn(current) {
@@ -221,9 +192,6 @@ func (b *kanbanBoard) placeTicket(c *KanbanCard, e watch.Event, current string) 
 	}
 }
 
-// Runs: in flight is Running; a pull request is Review; a failure is
-// something a person reads, so it stays where the ticket is with the
-// outcome on the card.
 func (b *kanbanBoard) placeRuns() {
 	if b.in.fixes == nil {
 		return
@@ -246,8 +214,6 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 	if r.Ref == "" || strings.HasPrefix(r.Ref, "routine/") {
 		return
 	}
-	// Ignored means out of the inbox everywhere: a run that happened on an
-	// ignored event brings no card back on its own.
 	if b.in.ignored != nil && b.in.ignored(r.Key) {
 		if _, kept := b.byRef[r.Workspace+"/"+r.Ref]; !kept {
 			return
@@ -255,7 +221,7 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 	}
 	c := b.card(r.Workspace, r.Ref)
 	if c.Fix != nil && !c.Fix.Running {
-		return // the newest run on a ref is the one that counts
+		return
 	}
 	c.Fix = &CardFix{Running: !r.Done(), StartedAt: r.StartedAt, Outcome: r.Outcome(), PRs: r.PRs, Branch: r.Branch}
 	nameCardFromRun(c, r)
@@ -267,8 +233,6 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 	}
 }
 
-// nameCardFromRun fills what a card the run brought in is missing. The key
-// above all: it is what Move, Ignore and the log are addressed to.
 func nameCardFromRun(c *KanbanCard, r watch.FixRecord) {
 	if c.Key == "" {
 		c.Key, c.Kind = r.Key, string(r.Kind)
@@ -284,9 +248,6 @@ func nameCardFromRun(c *KanbanCard, r watch.FixRecord) {
 	}
 }
 
-// A live session on the ticket is a person or an agent at work: one
-// opened for it by "Work on it" (the ticket rides in its environment),
-// or one on a branch named after it.
 func (b *kanbanBoard) placeSessions() {
 	for _, s := range b.in.sessions {
 		if s.Status == sessions.StatusGone || s.Status == sessions.StatusStale {
@@ -313,7 +274,6 @@ func (b *kanbanBoard) placeSession(c *KanbanCard, s sessions.Session) {
 	if cardOpen(c) {
 		c.Column, c.Why = ColRunning, sessionWhy(c.Session, s)
 	}
-	// A pull request from the session is the ticket in review.
 	if s.PR != "" && cardOpen(c) {
 		c.Column, c.Why = ColReview, kanbanSessionWord+c.Session.Label+" opened a pull request"
 	}
@@ -334,9 +294,6 @@ func (b *kanbanBoard) addSessionCost(c *KanbanCard, s sessions.Session) {
 	c.Cost.Sessions++
 }
 
-// "Work on it" pressed, no session yet: the card says so, and by whom,
-// instead of sitting in the inbox as if nothing happened. A pick with a
-// session on the card is just history.
 func (b *kanbanBoard) placePicks() {
 	if b.in.picks == nil {
 		return
@@ -363,8 +320,6 @@ func pickedWhy(by string, age time.Duration, then string) string {
 	return "picked from the " + pickedFrom(by) + " " + roughAge(age) + " ago · " + then
 }
 
-// A handoff means someone stopped part-way: the card is Ready unless a
-// run or a session has it, and it says what comes next.
 func (b *kanbanBoard) placeHandoffs() {
 	for ws, list := range b.in.packets {
 		for _, p := range list {
@@ -393,8 +348,6 @@ func (b *kanbanBoard) placeHandoff(ws string, p handoff.Packet) {
 	}
 }
 
-// Blocked wins over everything but Done: a wall is a wall. And every
-// card says what it has cost so far.
 func (b *kanbanBoard) placeWallsAndCost() {
 	if b.in.fixes == nil {
 		return
@@ -419,9 +372,6 @@ func addRunCost(c *KanbanCard, cost watch.Cost) {
 	c.Cost.Runs = cost.Runs
 }
 
-// The pull request's own standing, once the daemon has read it: a card
-// in Review says ready to merge when the checks pass and someone
-// approved, instead of only that a pull request exists.
 func (b *kanbanBoard) placePulls() {
 	if b.in.pulls == nil {
 		return
@@ -439,15 +389,11 @@ func (b *kanbanBoard) placePulls() {
 	}
 }
 
-// cards is the board in its final order: one card per ref, by column, the
-// newest first within one.
 func (b *kanbanBoard) cards() []KanbanCard {
 	for _, c := range b.byRef {
 		c.Standing = cardStanding(c)
 	}
 	out := make([]KanbanCard, 0, len(b.byRef))
-	// A ref can enter order twice: an old settled event drops its card,
-	// then a newer event on the same ref makes it again. One card per ref.
 	emitted := map[string]bool{}
 	for _, id := range b.order {
 		if c, ok := b.byRef[id]; ok && !emitted[id] {
@@ -472,9 +418,6 @@ func sortKanban(out []KanbanCard) {
 	})
 }
 
-// cardStanding runs the ladder over what the card knows. The column still
-// decides where the card sits; the standing is the finer word on it, and a
-// Done card is done whatever its session is up to.
 func cardStanding(c *KanbanCard) sessions.Standing {
 	f := sessions.Facts{PR: cardPullLink(c), Blocked: c.Blocked}
 	if c.Pull != nil {
@@ -504,8 +447,6 @@ func cardStanding(c *KanbanCard) sessions.Standing {
 	return st
 }
 
-// rowStanding runs the ladder over what an inbox row knows: the pull
-// request it is about or has, a wall, the session on its ticket.
 func rowStanding(pull *watch.PullStatus, pr, blocked string, sess *CardSess) sessions.Standing {
 	f := sessions.Facts{PR: pr, Blocked: blocked}
 	if pull != nil {
@@ -518,8 +459,6 @@ func rowStanding(pull *watch.PullStatus, pr, blocked string, sess *CardSess) ses
 	return sessions.StandingOf(f)
 }
 
-// cardPullLink is the pull request a card is about, or has: a run's, its
-// session's, or — for a row about a pull request — the row's own.
 func cardPullLink(c *KanbanCard) string {
 	if c.Fix != nil && len(c.Fix.PRs) > 0 {
 		return c.Fix.PRs[0]
@@ -536,7 +475,6 @@ func cardPullLink(c *KanbanCard) string {
 	return ""
 }
 
-// gatherKanban reads everything the board needs from the agent dir.
 func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 	state := watch.LoadState(dir)
 	in := kanbanInputs{
@@ -640,8 +578,6 @@ func init() {
 	agentCmd.AddCommand(agentKanbanCmd)
 }
 
-// costLine is "1.2M tok · $0.84 · 3 runs" — the tokens always, the money
-// when a run reported it.
 func costLine(c CardCost) string {
 	parts := []string{humanTokens(c.Tokens) + " tok"}
 	if c.USD > 0 {
@@ -666,8 +602,6 @@ func humanTokens(n int64) string {
 	return fmt.Sprint(n)
 }
 
-// sessionTicketRefs is every ticket a session is on: the refs "Work on it"
-// put in its environment, and the one its branch is named after.
 func sessionTicketRefs(s sessions.Session) []string {
 	var refs []string
 	for _, r := range strings.Split(s.Ticket, ",") {
@@ -690,7 +624,6 @@ func containsFold(list []string, want string) bool {
 	return false
 }
 
-// sessionWhy is the one line a card says while a session is on it.
 func sessionWhy(c *CardSess, s sessions.Session) string {
 	switch s.Status {
 	case sessions.StatusNeedsInput:
@@ -705,7 +638,6 @@ func sessionWhy(c *CardSess, s sessions.Session) string {
 	return kanbanSessionWord + c.Label + " is on it"
 }
 
-// pickedFrom is the surface that pressed Work on it, in the words a card uses.
 func pickedFrom(by string) string {
 	switch by {
 	case "phone":

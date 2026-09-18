@@ -7,8 +7,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// OpenOnReady opens a service's URL when its healthCheck passes. Parses either
-// a bool (openOnReady: true) or an object {path, scheme, browser}.
 type OpenOnReady struct {
 	Enabled bool
 	Path    string
@@ -34,7 +32,6 @@ func (o *OpenOnReady) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// URL builds the address to open: scheme (default http) + localhost + port + path (default /).
 func (o OpenOnReady) URL(port int) string {
 	scheme := o.Scheme
 	if scheme == "" {

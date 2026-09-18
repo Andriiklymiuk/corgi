@@ -9,9 +9,6 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// tunnelGatedDestructive are the tunnel-gated tools that change state; the
-// two other gated tools (corgi_http, corgi_explain) are gated for
-// reachability, not for what they do.
 var tunnelGatedDestructive = []string{
 	"corgi_exec", "corgi_db_query", "corgi_db_restore", "corgi_pr_open",
 	"corgi_preview_start", "corgi_preview_freeze", "corgi_preview_stop",

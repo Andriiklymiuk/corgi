@@ -13,9 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// The phone reads a session's diff the way it reads its conversation: only
-// for a workspace the laptop allowed, the file list first, one file's patch
-// on request, and never more than a phone can show.
 func TestDiffListsFilesThenOnePatch(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
@@ -76,7 +73,6 @@ func TestDiffListsFilesThenOnePatch(t *testing.T) {
 	if byPath["auth.go"].Added != 1 || !byPath["go.sum"].Generated {
 		t.Fatalf("counts: %+v", byPath)
 	}
-	// The generated file's lines are not somebody's work: not in the total.
 	if list.Added != 1 || list.Deleted != 0 {
 		t.Fatalf("totals: +%d -%d", list.Added, list.Deleted)
 	}
@@ -88,16 +84,12 @@ func TestDiffListsFilesThenOnePatch(t *testing.T) {
 	if rec := get("session=s1&file=../etc/passwd"); rec.Code != http.StatusBadRequest {
 		t.Fatalf("a path outside the checkout: %d", rec.Code)
 	}
-	// Everything at once: every real file's patch in one body, the
-	// generated one left out.
 	rec = get("session=s1&all=1")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "+// a grace window") || strings.Contains(rec.Body.String(), "go.sum") {
 		t.Fatalf("all: %d %s", rec.Code, rec.Body)
 	}
 }
 
-// The phone's file parameter reaches git; anything git could read as an
-// option or another tree is refused before that.
 func TestValidDiffPath(t *testing.T) {
 	good := []string{"cmd/agent.go", "README.md", "a b/c.txt", "docs/über.md"}
 	for _, p := range good {

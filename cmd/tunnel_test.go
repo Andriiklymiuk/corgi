@@ -261,7 +261,6 @@ func TestBuildTargetsFromComposeNoServices(t *testing.T) {
 }
 
 func TestCollectRunTargetsSkipsMissingTunnel(t *testing.T) {
-	// service has no tunnel block → collectRunTargets skips it
 	targets := collectRunTargets([]utils.Service{
 		{ServiceName: "api", Port: 3000, Tunnel: nil},
 	})
@@ -389,5 +388,5 @@ func TestStopRunTunnelsNoCancelNoop(t *testing.T) {
 	runTunnelsDone = nil
 	t.Cleanup(func() { runTunnelsCancel = prevCancel; runTunnelsDone = prevDone })
 
-	stopRunTunnels() // must not panic
+	stopRunTunnels()
 }

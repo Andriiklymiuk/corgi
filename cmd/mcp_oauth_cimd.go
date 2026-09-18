@@ -15,9 +15,6 @@ import (
 	"time"
 )
 
-// Client ID Metadata Documents: a client_id that is an https URL names a
-// JSON document describing the client. corgi fetches it, so the fetch is
-// guarded like any URL a stranger hands a server.
 const (
 	cimdMaxBody       = 64 << 10
 	cimdTimeout       = 5 * time.Second
@@ -34,8 +31,6 @@ type cimdEntry struct {
 	expires time.Time
 }
 
-// cimdFetcher fetches and caches client metadata documents. The resolver
-// and transport are fields so tests can drive the SSRF matrix without DNS.
 type cimdFetcher struct {
 	mu           sync.Mutex
 	cache        map[string]cimdEntry
@@ -54,8 +49,6 @@ func newCIMDFetcher() *cimdFetcher {
 		newTransport: func(pinned string) http.RoundTripper {
 			dialer := &net.Dialer{Timeout: cimdTimeout}
 			return &http.Transport{
-				// The address is replaced by the one we validated; TLS still
-				// verifies against the URL's hostname (SNI comes from the URL).
 				DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 					return dialer.DialContext(ctx, network, pinned)
 				},
@@ -65,16 +58,11 @@ func newCIMDFetcher() *cimdFetcher {
 	}
 }
 
-// isCIMDClientID says whether a client_id names a metadata document: an
-// https URL with a host and a path.
 func isCIMDClientID(clientID string) bool {
 	u, err := url.Parse(clientID)
 	return err == nil && u.Scheme == "https" && u.Host != "" && u.Path != "" && u.Path != "/"
 }
 
-// publicIP refuses every address a server must not be tricked into
-// calling: loopback, private, link-local, ULA, multicast, unspecified, and
-// IPv4-mapped IPv6 that would smuggle one of those past a v6-only check.
 func publicIP(ip net.IP) bool {
 	if ip4 := ip.To4(); ip4 != nil {
 		ip = ip4
@@ -92,19 +80,15 @@ func publicIP(ip net.IP) bool {
 	return true
 }
 
-// reservedV4 is what IsPrivate and the link-local checks miss: "this"
-// network, shared address space (CGNAT), IETF protocol assignments,
-// benchmarking, and the reserved top block with broadcast.
 var reservedV4 = func() []*net.IPNet {
 	var out []*net.IPNet
-	for _, c := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4"} { // NOSONAR — IANA special-purpose ranges on a blocklist, not an endpoint
+	for _, c := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4"} {
 		_, n, _ := net.ParseCIDR(c)
 		out = append(out, n)
 	}
 	return out
 }()
 
-// client returns the client a metadata URL describes, from cache or fetched.
 func (f *cimdFetcher) client(ctx context.Context, clientID string, hosts *oauthClientHosts) (oauthClient, error) {
 	u, err := url.Parse(clientID)
 	if err != nil || !isCIMDClientID(clientID) {
@@ -189,7 +173,6 @@ func (f *cimdFetcher) client(ctx context.Context, clientID string, hosts *oauthC
 	return c, nil
 }
 
-// evictOneLocked drops the entry that expires soonest.
 func (f *cimdFetcher) evictOneLocked() {
 	var victim string
 	var soonest time.Time
@@ -201,8 +184,6 @@ func (f *cimdFetcher) evictOneLocked() {
 	delete(f.cache, victim)
 }
 
-// cimdTTL reads Cache-Control: no-store means do not cache; max-age is
-// honoured up to a day; absent means an hour.
 func cimdTTL(header string) (time.Duration, bool) {
 	ttl := cimdDefaultTTL
 	for _, part := range strings.Split(header, ",") {
@@ -229,7 +210,6 @@ type cimdDocument struct {
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
-// parseCIMD validates the document against what corgi will trust.
 func parseCIMD(body []byte, clientID string, hosts *oauthClientHosts) (oauthClient, error) {
 	var doc cimdDocument
 	if err := json.Unmarshal(body, &doc); err != nil {

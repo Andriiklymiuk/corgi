@@ -22,8 +22,6 @@ import (
 
 const PostgresDataDir = "/var/lib/postgresql/data"
 
-// cockroach/yugabyte are pg-wire but a different storage engine; supabase has a
-// different lifecycle — none share the physical data-dir format, so all excluded.
 var postgresFamily = map[string]bool{
 	"postgres":    true,
 	"postgis":     true,
@@ -141,15 +139,12 @@ func CheckRestoreCompatibility(m SnapshotMeta, targetImage, targetArch, targetPg
 	if m.Arch != targetArch {
 		return fmt.Errorf("arch mismatch: snapshot is %q but target is %q — physical format is architecture-specific. Use --force to override", m.Arch, targetArch)
 	}
-	// Only compare when both sides recorded a version; older snapshots may lack it.
 	if m.PgVersionMajor != "" && targetPgMajor != "" && m.PgVersionMajor != targetPgMajor {
 		return fmt.Errorf("pg version mismatch: snapshot is major %q but target is major %q — a physical data dir is not portable across major versions. Use --force to override", m.PgVersionMajor, targetPgMajor)
 	}
 	return nil
 }
 
-// IsStackSupervised reports whether a detached `corgi run` is managing this stack:
-// snapshot/restore stop+restart the container and would race a live supervisor.
 func IsStackSupervised(composeDir string) bool {
 	path := RunStatePath(composeDir)
 	if _, err := os.Stat(path); err != nil {
@@ -226,8 +221,6 @@ func composeInDir(dir string, args ...string) error {
 	return nil
 }
 
-// Generous timeout: postgres STOPSIGNAL is SIGINT (clean), but a big checkpoint can
-// exceed the default 10s and get SIGKILLed, leaving a recovery-needing data dir.
 func stopContainerClean(container string, timeoutSeconds int) error {
 	out, err := exec.Command("docker", "stop", "-t", fmt.Sprint(timeoutSeconds), container).CombinedOutput()
 	if err != nil {
@@ -247,7 +240,6 @@ type countingWriter struct{ n int64 }
 
 func (c *countingWriter) Write(p []byte) (int, error) { c.n += int64(len(p)); return len(p), nil }
 
-// Streams docker cp through zstd; the returned size/sha256 are over the COMPRESSED archive.
 func writeSnapshotArchive(container, archivePath string) (int64, string, error) {
 	cp := exec.Command("docker", "cp", container+":"+PostgresDataDir, "-")
 	stdout, err := cp.StdoutPipe()
@@ -296,10 +288,7 @@ func writeSnapshotArchive(container, archivePath string) (int64, string, error) 
 	return counter.n, hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// trapInterrupt runs onInterrupt once if SIGINT/SIGTERM arrives, then exits
-// non-zero. Go's default disposition kills the process without running defers,
-// so a long docker cp / inject would otherwise leave the db stopped or wiped.
-// The returned func deregisters the handler on the normal (no-signal) path.
+// Without this, SIGINT skips defers and leaves the db stopped or wiped mid-copy.
 func trapInterrupt(onInterrupt func(os.Signal)) func() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
@@ -326,7 +315,7 @@ type SnapshotRequest struct {
 	Stack      string
 	Name       string
 	Force      bool
-	WasRunning bool // restart afterwards only if it was running
+	WasRunning bool
 }
 
 func RunSnapshot(req SnapshotRequest, now time.Time) (SnapshotMeta, error) {
@@ -353,7 +342,6 @@ func RunSnapshot(req SnapshotRequest, now time.Time) (SnapshotMeta, error) {
 		defer func() { _ = composeInDir(serviceDir, "start") }()
 	}
 
-	// stream to .tmp, write meta, then atomic rename so a partial never looks valid
 	tmp := archive + ".tmp"
 	stop := trapInterrupt(func(os.Signal) {
 		_ = os.Remove(tmp)
@@ -420,8 +408,6 @@ func snapshotSourceInfo(req SnapshotRequest, container, serviceDir string) (pgMa
 	return pgMajor, arch, image, nil
 }
 
-// probeArchive cheaply confirms the payload decompresses+tars, reading only a
-// bounded prefix — run before any destructive wipe.
 func probeArchive(archivePath string) error {
 	f, err := os.Open(archivePath)
 	if err != nil {
@@ -462,8 +448,6 @@ func verifyArchiveSHA(archivePath, want string) error {
 	return nil
 }
 
-// Copies into the data dir's PARENT: the tar is rooted at data/, so it lands as
-// .../postgresql/data — symmetric with how the snapshot copy was taken.
 func injectArchive(container, archivePath string) error {
 	f, err := os.Open(archivePath)
 	if err != nil {
@@ -507,21 +491,16 @@ type RestoreRequest struct {
 	Driver      string
 	ArchivePath string
 	MetaPath    string
-	FromPath    bool // user passed an explicit (untrusted) path → full hash check
+	FromPath    bool
 	Force       bool
 }
 
-// RunRestore validates everything BEFORE wiping, then down → up --no-start →
-// inject → start (data must land before start so the image skips initdb).
 func RunRestore(req RestoreRequest) error {
 	serviceDir, container, err := validateRestore(req)
 	if err != nil {
 		return err
 	}
 
-	// destructive from here: the db is wiped and unusable until inject+start succeed.
-	// An interrupt after the wipe must leave a clear "re-restore needed" message
-	// rather than dying silently with a half-wiped data dir.
 	wiped := false
 	stop := trapInterrupt(func(os.Signal) {
 		if wiped {
@@ -570,7 +549,7 @@ func validateRestore(req RestoreRequest) (serviceDir, container string, err erro
 		return "", "", err
 	}
 	container = ContainerName(req.Driver, req.Service)
-	targetPgMajor, _ := containerPgVersionMajor(container) // best-effort; "" skips the gate
+	targetPgMajor, _ := containerPgVersionMajor(container)
 	if cerr := CheckRestoreCompatibility(meta, image, arch, targetPgMajor); cerr != nil {
 		if !req.Force {
 			return "", "", cerr
@@ -581,8 +560,6 @@ func validateRestore(req RestoreRequest) (serviceDir, container string, err erro
 	if err := probeArchive(req.ArchivePath); err != nil {
 		return "", "", err
 	}
-	// Integrity check runs for every restore — a corrupt named snapshot must be
-	// caught BEFORE `compose down --volumes` wipes the live db.
 	if err := verifyArchiveSHA(req.ArchivePath, meta.SHA256); err != nil {
 		return "", "", err
 	}

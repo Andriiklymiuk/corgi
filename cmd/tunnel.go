@@ -1,6 +1,3 @@
-/*
-Copyright © 2026 ANDRII KLYMIUK
-*/
 package cmd
 
 import (
@@ -46,7 +43,7 @@ corgi tunnel --provider ngrok api`,
 type tunnelTarget struct {
 	service     string
 	port        int
-	providerOvr tunnel.Provider // per-target override (compose `tunnel.provider`); nil = use --provider flag
+	providerOvr tunnel.Provider
 	named       *tunnel.NamedConfig
 }
 
@@ -212,7 +209,6 @@ func runTunnelTargets(targets []tunnelTarget, provider tunnel.Provider) {
 			}
 			mu.Unlock()
 		case ev.Done:
-			// quiet exit
 		}
 	}
 }
@@ -254,9 +250,6 @@ func runTunnelCmd(cmd *cobra.Command, args []string) {
 	runTunnelTargets(targets, provider)
 }
 
-// Resolves a service's tunnel: block into (NamedConfig, provider).
-// Substitutes ${VAR} from shell, runtime .env, then source env (in order).
-// CLI --provider beats compose. Errors on missing vars or unknown provider.
 func resolveTunnel(s utils.Service, flagProvider tunnel.Provider, flagSet bool) (*tunnel.NamedConfig, tunnel.Provider, error) {
 	cfg := s.Tunnel
 
@@ -295,9 +288,6 @@ func resolveTunnel(s utils.Service, flagProvider tunnel.Provider, flagSet bool) 
 	return &tunnel.NamedConfig{Hostname: hostname, Name: name}, p, nil
 }
 
-// Env files to check for ${VAR}, first match wins:
-//  1. <service>/.env — live file devs edit, what corgi run reads.
-//  2. copyEnvFromFilePath source — fallback before clone/run.
 func envFilePaths(s utils.Service) []string {
 	var paths []string
 	if s.AbsolutePath != "" {
@@ -313,17 +303,10 @@ func envFilePaths(s utils.Service) []string {
 	return paths
 }
 
-// Cancel fn for tunnels spawned by `corgi run --tunnel`. run.go's signal
-// handler calls it before os.Exit so the subprocesses die first.
 var runTunnelsCancel context.CancelFunc
 
-// runTunnelsDone closes once the run tunnels' runner + consumer goroutines
-// have drained, so stopRunTunnels can join them instead of guessing a sleep.
 var runTunnelsDone chan struct{}
 
-// Spawns one tunnel per service with a resolvable `tunnel:` block,
-// alongside `corgi run`. Skips (with a warning) when env vars are missing
-// or auth isn't set up — keeps the rest of the stack running.
 type runTarget struct {
 	service  string
 	port     int
@@ -400,9 +383,6 @@ func startTunnelsForRun(services []utils.Service) {
 	}()
 }
 
-// Called from run.go on SIGINT, before os.Exit. Cancels the tunnel ctx so
-// exec.CommandContext sends SIGKILL, then joins the runner/consumer goroutines
-// (bounded) so the kills land before the parent exits.
 func stopRunTunnels() {
 	if runTunnelsCancel == nil {
 		return

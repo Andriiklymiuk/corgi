@@ -24,7 +24,6 @@ func TestReadLimitsFromClaudeCodeCache(t *testing.T) {
 	if _, ok := ReadLimits(filepath.Join(dir, "nothing")); ok {
 		t.Fatal("no cache, no limits")
 	}
-	// The default account keeps its file beside the dir, not inside it.
 	home := filepath.Join(dir, "home")
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o700); err != nil {
 		t.Fatal(err)

@@ -7,8 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The changed surface on the command line, for a person or a skill that has
-// no MCP handy: the same list corgi_diff --surface returns.
 var surfaceCmd = &cobra.Command{
 	Use:   "surface",
 	Short: "What a reviewer reads first: the public slice of the stack's diff",

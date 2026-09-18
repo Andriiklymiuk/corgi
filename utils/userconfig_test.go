@@ -24,7 +24,7 @@ func TestGetUserConfigDir(t *testing.T) {
 func TestLoadUserConfig_NotExist(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("USERPROFILE", dir) // Windows compat
+	t.Setenv("USERPROFILE", dir)
 
 	cfg, err := LoadUserConfig()
 	if err != nil {

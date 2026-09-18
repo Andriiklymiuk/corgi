@@ -11,8 +11,6 @@ import (
 	"github.com/briandowns/spinner"
 )
 
-// osascriptRunner is injected by tests. Wraps *ExitError so caller can
-// match stderr (e.g. -1719 for Accessibility denied).
 var osascriptRunner = func(script string) (string, error) {
 	out, err := exec.Command("osascript", "-e", script).Output()
 	if exitErr, ok := err.(*exec.ExitError); ok {
@@ -33,12 +31,8 @@ func isAccessibilityDeniedErr(err error) bool {
 
 var awsVpnPostConnectWait = 8 * time.Second
 
-// awsVpnMaxLaunchAttempts bounds the launch retry loop; ~30s budget.
 var awsVpnMaxLaunchAttempts = 6
 
-// AwsVpnInit launches AWS VPN Client and auto-connects the first profile
-// when Accessibility permission is granted; otherwise falls back to a
-// manual-click wait.
 func AwsVpnInit() error {
 	if runtime.GOOS == "linux" {
 		return fmt.Errorf("this function is not intended to run on Linux")
@@ -70,10 +64,6 @@ func AwsVpnInit() error {
 	return fmt.Errorf("AWS VPN Client failed to become ready after %d attempts", awsVpnMaxLaunchAttempts)
 }
 
-// connectFirstAwsVpnProfile clicks the first profile's Connect button. AWS VPN
-// Client has no CLI, so GUI automation is the only path; state detection avoids
-// activating to prevent focus steal. The script names only generic UI labels,
-// never profiles — see TestConnectFirstAwsVpnProfile_DoesNotLeakProfileName.
 func connectFirstAwsVpnProfile() error {
 	const script = `
 tell application "System Events"

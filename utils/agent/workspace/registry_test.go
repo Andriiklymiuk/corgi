@@ -42,7 +42,6 @@ func TestUpsertPreservesFieldsAPartialUpdateOmits(t *testing.T) {
 		LastUsedAt: used,
 	})
 
-	// A path-only refresh, e.g. from `corgi list` seeing the compose file again.
 	r.Upsert(Workspace{ID: "acme", AbsPath: "/moved"})
 
 	got := r.Workspaces[0]

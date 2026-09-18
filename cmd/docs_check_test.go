@@ -8,8 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// A doc that names a changed symbol or route is one to re-read; a CLAUDE.md
-// pointer past the end of its file, or to no file, is stale.
 func TestDocsCheckFindsMentionsAndStalePointers(t *testing.T) {
 	root := t.TempDir()
 	write := func(rel, body string) {

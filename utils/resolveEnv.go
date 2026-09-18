@@ -7,18 +7,12 @@ import (
 	"strings"
 )
 
-// EnvVar is one resolved environment entry with the part of the compose that
-// produced it.
 type EnvVar struct {
 	Key    string `json:"-"`
 	Value  string `json:"value"`
-	Source string `json:"source"` // db:<name> | service:<name> | self:port | literal | file:<path>
+	Source string `json:"source"`
 }
 
-// IsGenerated reports whether corgi itself produces this variable at run time,
-// as opposed to reading it from a copied env file. A whitelist on purpose: a
-// future source label lands as not-generated until classified here, so
-// `corgi env check` fails closed instead of silently passing missing keys.
 func (e EnvVar) IsGenerated() bool {
 	for _, prefix := range []string{"db:", "service:", "self:", "literal"} {
 		if strings.HasPrefix(e.Source, prefix) {
@@ -28,8 +22,6 @@ func (e EnvVar) IsGenerated() bool {
 	return false
 }
 
-// parseChunkInOrder splits a corgi env chunk into ordered KEY=VALUE pairs,
-// tagging each with source. Blank/comment lines are skipped.
 func parseChunkInOrder(chunk, source string) []EnvVar {
 	var out []EnvVar
 	for _, line := range strings.Split(chunk, "\n") {
@@ -50,8 +42,6 @@ func parseChunkInOrder(chunk, source string) []EnvVar {
 	return out
 }
 
-// ResolveServiceEnv returns svc's fully-resolved env entries with source
-// attribution. Read-only: calls the same builders as corgi run, writes nothing.
 func ResolveServiceEnv(svc Service, corgi *CorgiCompose) ([]EnvVar, error) {
 	chain, err := ResolveServiceEnvChain(svc, corgi)
 	if err != nil {
@@ -80,8 +70,6 @@ func ResolveServiceEnvChain(svc Service, corgi *CorgiCompose) ([]EnvVar, error) 
 	return entries, nil
 }
 
-// copiedEnvFileEntries is the copied env file (lowest precedence); honors
-// tier + .env-example fallback.
 func copiedEnvFileEntries(svc Service) []EnvVar {
 	src := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir)
 	if src == "" {
@@ -124,8 +112,6 @@ func selfPortEntry(svc Service) []EnvVar {
 	return []EnvVar{{Key: alias, Value: fmt.Sprint(svc.Port), Source: "self:port"}}
 }
 
-// literalEnvironmentEntries covers literal environment: lines (own ${VAR} +
-// cross-service ${producer.VAR}).
 func literalEnvironmentEntries(svc Service, entries []EnvVar) ([]EnvVar, error) {
 	if len(svc.Environment) == 0 {
 		return nil, nil
@@ -140,7 +126,7 @@ func literalEnvironmentEntries(svc Service, entries []EnvVar) ([]EnvVar, error) 
 		if err != nil {
 			var skipped *producerSkippedError
 			if errors.As(err, &skipped) {
-				continue // producer not in selection; generator drops it too
+				continue
 			}
 			return nil, err
 		}
@@ -150,10 +136,6 @@ func literalEnvironmentEntries(svc Service, entries []EnvVar) ([]EnvVar, error) 
 	return out, nil
 }
 
-// rewriteLocalhostInEntries mirrors renderEnvFileContent's final host rewrite
-// (generateEnv.go) so reported values match the written .env.
-// LocalhostNameInEnv wins if set; otherwise --host (HostOverride) catches
-// user-written URLs too.
 func rewriteLocalhostInEntries(resolved []EnvVar, svc Service) {
 	switch {
 	case svc.LocalhostNameInEnv != "":
@@ -167,9 +149,6 @@ func rewriteLocalhostInEntries(resolved []EnvVar, svc Service) {
 	}
 }
 
-// ResolveAllEnv resolves every service's env, keyed by service name. It primes
-// the cross-service exports fixed point first so ${producer.VAR} references in
-// any service resolve to real values.
 func ResolveAllEnv(corgi *CorgiCompose) (map[string][]EnvVar, error) {
 	return resolveEveryService(corgi, ResolveServiceEnv)
 }
@@ -185,9 +164,6 @@ func resolveEveryService(
 	if corgi == nil {
 		return map[string][]EnvVar{}, nil
 	}
-	// resolveExportsFixedPoint only returns the map; it does not assign the
-	// package global that ResolveServiceEnv's literal block reads (unlike the
-	// run path, where GenerateEnvForServices assigns it). Assign it here.
 	resolved, err := resolveExportsFixedPoint(corgi)
 	if err != nil {
 		return nil, err
@@ -206,8 +182,6 @@ func resolveEveryService(
 	return out, nil
 }
 
-// dedupeLastWins keeps the last value/source per key (matching the concat+parse
-// behaviour of the real generator), ordered by each key's final position.
 func dedupeLastWins(in []EnvVar) []EnvVar {
 	last := map[string]int{}
 	for i, e := range in {

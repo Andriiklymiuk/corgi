@@ -93,7 +93,6 @@ func createNonInteractive(cmd *cobra.Command, f createFlags) {
 	}
 }
 
-// createResult is the --json shape for a non-interactive create.
 type createResult struct {
 	Created bool   `json:"created"`
 	Kind    string `json:"kind"`
@@ -101,19 +100,16 @@ type createResult struct {
 	Path    string `json:"path"`
 }
 
-// Deep copy DbService
 func copyDatabaseService(service *utils.DatabaseService) *utils.DatabaseService {
-	newService := *service // This performs a shallow copy
+	newService := *service
 	return &newService
 }
 
-// Deep copy Service
 func copyService(service *utils.Service) *utils.Service {
 	newService := *service
 	return &newService
 }
 
-// Deep copy Required
 func copyRequired(req *utils.Required) *utils.Required {
 	newReq := *req
 	return &newReq
@@ -664,7 +660,6 @@ func removeSeparators(filename string) error {
 		return scanner.Err()
 	}
 
-	// Now write the lines back to the file
 	file, err = os.Create(filename)
 	if err != nil {
 		return err

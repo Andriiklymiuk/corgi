@@ -8,21 +8,18 @@ import (
 	"strings"
 )
 
-// Warning codes for static validation (non-fatal, advisory).
 const (
 	WarnNoHealthcheck = "W_NO_HEALTHCHECK"
 	WarnNoBranch      = "W_NO_BRANCH"
-	WarnUnknownField  = "W_UNKNOWN_FIELD" // strict-decode found a key not in the schema (likely a typo)
+	WarnUnknownField  = "W_UNKNOWN_FIELD"
 )
 
-// ValidationIssue is one problem found by ValidateCompose.
 type ValidationIssue struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Field   string `json:"field,omitempty"`
 }
 
-// ValidateCompose runs static semantic checks over an already-parsed compose (no I/O).
 func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 	if c == nil {
 		return nil, nil
@@ -45,9 +42,6 @@ func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 	return errs, warns
 }
 
-// checkUnknownFields surfaces keys the strict YAML decoder did not recognize
-// (likely typos like `enviroment`). Warn-first: non-fatal today, candidate to
-// become an error in a future release.
 func checkUnknownFields(_ *CorgiCompose) []ValidationIssue {
 	var out []ValidationIssue
 	for _, f := range UnknownComposeFields {
@@ -60,24 +54,17 @@ func checkUnknownFields(_ *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// CollectValidationErrors returns only the hard errors from ValidateCompose,
-// for callers (run/exec) that must abort but ignore advisory warnings.
 func CollectValidationErrors(c *CorgiCompose) []ValidationIssue {
 	errs, _ := ValidateCompose(c)
 	return errs
 }
 
-// AbortOnValidationErrors validates c and, if there are hard errors, reports
-// them (JSON via JSONError, else human lines to stderr) and returns false so
-// the caller can stop before any side effect. true means safe to proceed.
-// Warnings are intentionally ignored here — `corgi validate` surfaces those.
 func AbortOnValidationErrors(c *CorgiCompose) bool {
 	errs := CollectValidationErrors(c)
 	if len(errs) == 0 {
 		return true
 	}
 	if JSONOutput {
-		// One JSONError per issue keeps the agent contract per-code.
 		for _, e := range errs {
 			JSONError(e.Code, e.Message)
 		}
@@ -94,9 +81,6 @@ func AbortOnValidationErrors(c *CorgiCompose) bool {
 	return false
 }
 
-// checkDuplicateNames flags a name claimed by both a service and a db_service.
-// Same-section duplicate keys are caught at decode time (YAML maps collapse
-// them); see DuplicateComposeKeys.
 func checkDuplicateNames(c *CorgiCompose) []ValidationIssue {
 	var out []ValidationIssue
 	services, dbs := composeNames(c)
@@ -114,7 +98,6 @@ func checkDuplicateNames(c *CorgiCompose) []ValidationIssue {
 			})
 		}
 	}
-	// Same-section duplicate keys, detected at decode time.
 	for _, dup := range DuplicateComposeKeys {
 		out = append(out, ValidationIssue{
 			Code:    ErrDuplicateName,
@@ -139,7 +122,6 @@ func checkRestartPolicies(c *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// composeNames returns the known service / db names in the compose.
 func composeNames(c *CorgiCompose) (services, dbs map[string]bool) {
 	services = make(map[string]bool, len(c.Services))
 	dbs = make(map[string]bool, len(c.DatabaseServices))
@@ -197,9 +179,6 @@ func checkDanglingDeps(c *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// checkDependencyCycles flags cycles of condition:-gated edges only — those
-// wait on each other and time out. Plain edges are env-injection only, so
-// cycles over them are a supported pattern.
 func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
 	adj := buildGatedServiceDepAdjacency(c)
 	cyclic := findCyclicServices(c, adj)
@@ -215,8 +194,6 @@ func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// buildGatedServiceDepAdjacency keeps only condition:-gated edges to known
-// services (unknown ones surface as dangling deps).
 func buildGatedServiceDepAdjacency(c *CorgiCompose) map[string][]string {
 	services, _ := composeNames(c)
 	adj := make(map[string][]string, len(c.Services))
@@ -231,8 +208,6 @@ func buildGatedServiceDepAdjacency(c *CorgiCompose) map[string][]string {
 	return adj
 }
 
-// findCyclicServices returns the sorted names of services that participate in a
-// cycle within the dependency adjacency.
 func findCyclicServices(c *CorgiCompose, adj map[string][]string) []string {
 	const (
 		unvisited = 0
@@ -257,7 +232,6 @@ func findCyclicServices(c *CorgiCompose, adj map[string][]string) []string {
 		state[node] = visited
 	}
 
-	// Deterministic start order.
 	names := make([]string, 0, len(c.Services))
 	for _, s := range c.Services {
 		names = append(names, s.ServiceName)
@@ -277,8 +251,6 @@ func findCyclicServices(c *CorgiCompose, adj map[string][]string) []string {
 	return cyclic
 }
 
-// markCycleFrom flags every node from the top of the DFS stack down to (and
-// including) the back-edge target as being part of a cycle.
 func markCycleFrom(stack []string, target string, inCycle map[string]bool) {
 	for i := len(stack) - 1; i >= 0; i-- {
 		inCycle[stack[i]] = true
@@ -288,16 +260,11 @@ func markCycleFrom(stack []string, target string, inCycle map[string]bool) {
 	}
 }
 
-// Supported depends_on condition values. The run path treats any other value as
-// condReady, so checkInvalidConditions surfaces unknown ones as errors.
 const (
 	condReady   = "ready"
 	condStarted = "started"
 )
 
-// checkInvalidConditions flags a depends_on entry whose condition is set to
-// something other than the supported "ready"/"started" values. The run path
-// silently treats unknown values as "ready", so surface them as errors here.
 func checkInvalidConditions(c *CorgiCompose) []ValidationIssue {
 	valid := func(cond string) bool {
 		return cond == "" || cond == condReady || cond == condStarted
@@ -327,10 +294,6 @@ func checkInvalidConditions(c *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// checkMissingStart flags a service that exposes a port but has neither a
-// start command nor a docker runner (which provides its own entrypoint).
-// manualRun services are exempt — declaring a port without start is the
-// pattern for processes the user runs by hand.
 func checkMissingStart(c *CorgiCompose) []ValidationIssue {
 	var out []ValidationIssue
 	for _, s := range c.Services {
@@ -340,12 +303,9 @@ func checkMissingStart(c *CorgiCompose) []ValidationIssue {
 		if len(s.Start) > 0 || s.Runner.IsDocker() {
 			continue
 		}
-		// A repo-shipped Dockerfile/compose file makes the service runnable
-		// without start commands (docker mode kicks in at run time).
 		if DetectDockerSource(s) != SourceNone {
 			continue
 		}
-		// Not cloned yet — capability unknowable until `corgi run` clones it.
 		if s.CloneFrom != "" {
 			if _, err := os.Stat(s.AbsolutePath); err != nil {
 				continue
@@ -360,10 +320,6 @@ func checkMissingStart(c *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// checkPortConflicts reports any host port claimed by more than one
-// service / db_service. Port 0 (unset) is ignored, as are manualRun
-// entries — corgi does not bind those, so sharing a port with one is the
-// alternate-service pattern.
 func checkPortConflicts(c *CorgiCompose) []ValidationIssue {
 	type owner struct {
 		label string
@@ -414,8 +370,6 @@ func checkPortConflicts(c *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// checkPortRanges flags any configured port outside 1..65535. 0 means "unset"
-// and is ignored (consistent with checkPortConflicts).
 func checkPortRanges(c *CorgiCompose) []ValidationIssue {
 	var out []ValidationIssue
 	flag := func(port int, label, field string) {
@@ -440,8 +394,6 @@ func checkPortRanges(c *CorgiCompose) []ValidationIssue {
 	return out
 }
 
-// checkDependedWithoutHealthcheck warns when a service that others depend on
-// has no healthCheck — readiness then falls back to a plain TCP probe.
 func checkDependedWithoutHealthcheck(c *CorgiCompose) []ValidationIssue {
 	depended := make(map[string]bool)
 	for _, s := range c.Services {

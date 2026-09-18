@@ -11,14 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A running plan (corgi agent plan) is moved along here: whenever a fix
-// ends, a round turns, or someone nudges, every running plan is read off
-// the board and the tasks whose turn it is are handed to the fix machinery
-// — the same unattended run, worktree, caps and breaker a ticket gets —
-// up to the plan's slots at once. A task whose run failed stays where it
-// is for a person; the plan does not spin on it. When every task is at
-// rest the plan is done and the laptop says so once.
-
 var plansMu sync.Mutex
 
 func (d *Daemon) advancePlans(ctx context.Context) {
@@ -79,8 +71,6 @@ func (d *Daemon) advancePlans(ctx context.Context) {
 	}
 }
 
-// planTaskTried says a run already went at this task and ended: a second
-// try is a person's call, not the plan's.
 func (d *Daemon) planTaskTried(workspace string, t watch.Task) bool {
 	for _, f := range d.watchState.Fixes.RecentFixes(workspace, 200) {
 		if f.Key == t.Key() && !f.FinishedAt.IsZero() && !strings.HasPrefix(f.Error, "not started") {
@@ -90,8 +80,6 @@ func (d *Daemon) planTaskTried(workspace string, t watch.Task) bool {
 	return false
 }
 
-// planTaskBody is the task's description with the plan around it: the
-// goal, what came before, so a run knows the whole and its part.
 func planTaskBody(p watch.Plan, t watch.Task) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "This task is part of plan %s: %s\n", p.Ref(), p.Goal)

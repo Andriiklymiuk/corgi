@@ -16,7 +16,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// usageHome points HOME and the agent dir at temp dirs and hands back both.
 func usageHome(t *testing.T) (home, agentD string) {
 	t.Helper()
 	home = t.TempDir()
@@ -114,7 +113,6 @@ func TestBuildUsageReportFallsBackToTheCaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeStatsCacheFor(t, filepath.Join(home, ".claude"), now)
-	// Four readings 10 minutes apart give the forecast a slope to project.
 	for i := 0; i <= 3; i++ {
 		at := now.Add(-time.Duration(30-10*i) * time.Minute)
 		l := usage.Limits{FetchedAt: at, FiveHour: usage.Window{Percent: 10 + 10*i}, SevenDay: usage.Window{Percent: 10}}
@@ -312,7 +310,6 @@ func TestRunAgentUsagePrintsOnceWithoutWatch(t *testing.T) {
 	if !strings.Contains(out, `"waitsToday"`) || !strings.Contains(out, `"limitedToday"`) || !strings.Contains(out, `"at"`) {
 		t.Fatalf("json keys:\n%s", out)
 	}
-	// --watch with --json still prints once and returns.
 	c := usageCmd(t)
 	if err := c.Flags().Set("watch", "true"); err != nil {
 		t.Fatal(err)
@@ -335,7 +332,6 @@ func TestDigestText(t *testing.T) {
 	if err := os.MkdirAll(idle, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// A day with tokens but no sessions or messages is not worth a line.
 	if err := os.WriteFile(filepath.Join(idle, "stats-cache.json"), []byte(`{"dailyModelTokens":[{"date":"`+usage.Today(now)+`","tokensByModel":{"m":1}}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -373,8 +369,6 @@ func TestAgentDigestCommand(t *testing.T) {
 	_, agentD := usageHome(t)
 	orig := utils.JSONOutput
 	t.Cleanup(func() { utils.JSONOutput = orig })
-	// Notifications read ~/.corgi/config.yml once; with HOME pointed at an
-	// empty dir --send has nowhere to go, which is the point.
 	utils.ResetNotifyCache()
 	t.Cleanup(utils.ResetNotifyCache)
 

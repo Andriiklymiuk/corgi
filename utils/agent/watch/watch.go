@@ -1,8 +1,3 @@
-// Package watch turns tracker and code-review activity into events the
-// daemon can act on: a new bug in Linear or Jira, a reviewer's comment on
-// one of your pull requests. Sources are polled with a saved cursor so
-// each round asks only for what changed; webhooks feed the same pipeline.
-// Nothing here spends agent tokens — the sink decides what to do.
 package watch
 
 import (
@@ -23,84 +18,56 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// Kind says what happened.
 type Kind string
 
 const (
-	KindIssueNew     Kind = "issue.new"
-	KindIssueComment Kind = "issue.comment"
-	KindPRComment    Kind = "pr.comment"
-	KindPRReview     Kind = "pr.review"
-	// KindReviewRequested is someone asking me to review THEIR pull request.
-	// The opposite of KindPRReview, which is feedback on mine, and the two
-	// were one kind until an unattended run was told to "apply the valid
-	// comments" on a colleague's branch.
+	KindIssueNew        Kind = "issue.new"
+	KindIssueComment    Kind = "issue.comment"
+	KindPRComment       Kind = "pr.comment"
+	KindPRReview        Kind = "pr.review"
 	KindReviewRequested Kind = "review.requested"
-	// KindCIFailed is a build that went red on something of mine. It is the
-	// one kind that arrives with its own test for "done".
-	KindCIFailed Kind = "ci.failed"
-	// KindChatMention is someone naming me in chat, or writing to me
-	// directly: the shape most of a day's interruptions actually arrive in.
-	KindChatMention Kind = "chat.mention"
-	// KindChatMessage is any message in a channel the workspace listens to.
-	KindChatMessage Kind = "chat.message"
+	KindCIFailed        Kind = "ci.failed"
+	KindChatMention     Kind = "chat.mention"
+	KindChatMessage     Kind = "chat.message"
 )
 
-// Event is one thing worth telling a person or an agent about.
 type Event struct {
-	// Key is stable across polls and webhooks for the same thing, so a
-	// comment seen twice is handled once: "linear:ABC-123", "github:acme/api#12:c123".
-	Key       string   `json:"key"`
-	Source    string   `json:"source"` // linear, jira, github, gitlab
-	Kind      Kind     `json:"kind"`
-	Workspace string   `json:"workspace,omitempty"`
-	Ref       string   `json:"ref"` // ABC-123, acme/api#12
-	Title     string   `json:"title"`
-	Body      string   `json:"body,omitempty"`
-	URL       string   `json:"url,omitempty"`
-	Author    string   `json:"author,omitempty"`
-	Labels    []string `json:"labels,omitempty"`
-	// Links are the pull requests a chat message is about — a review
-	// channel's post carries one per repository. Empty everywhere else.
-	Links    []string  `json:"links,omitempty"`
-	State    string    `json:"state,omitempty"`
-	Assignee string    `json:"assignee,omitempty"`
-	Mine     bool      `json:"mine,omitempty"` // assigned to me, or my PR
-	Self     bool      `json:"self,omitempty"` // I made it: a ticket I wrote is not news
-	Bot      bool      `json:"bot,omitempty"`  // posted by a bot account
-	At       time.Time `json:"at"`
+	Key       string    `json:"key"`
+	Source    string    `json:"source"`
+	Kind      Kind      `json:"kind"`
+	Workspace string    `json:"workspace,omitempty"`
+	Ref       string    `json:"ref"`
+	Title     string    `json:"title"`
+	Body      string    `json:"body,omitempty"`
+	URL       string    `json:"url,omitempty"`
+	Author    string    `json:"author,omitempty"`
+	Labels    []string  `json:"labels,omitempty"`
+	Links     []string  `json:"links,omitempty"`
+	State     string    `json:"state,omitempty"`
+	Assignee  string    `json:"assignee,omitempty"`
+	Mine      bool      `json:"mine,omitempty"`
+	Self      bool      `json:"self,omitempty"`
+	Bot       bool      `json:"bot,omitempty"`
+	At        time.Time `json:"at"`
 }
 
-// Rules is what a workspace asked to be told about. Zero value matches
-// nothing; Enabled must be set.
 type Rules struct {
 	Enabled  bool
-	Labels   []string // any of; empty means any label
-	States   []string // any of; empty means any state
-	Assignee string   // "me" (default) or "any"
-	Comments bool     // comments on issues assigned to me
-	PRs      bool     // reviews and comments on my pull requests
-	CI       bool     // builds that went red on something of mine
-	Reviews  bool     // pull requests someone asked me to review
-	// From narrows comments and reviews to these people, matched against the
-	// author's name or login. Half of what blocks a day is shaped like a
-	// person — the one review you are waiting on — not like a board.
-	From []string
-	// Bots lets comments from bot accounts count: a review bot whose
-	// findings are meant to be fixed. Off, a bot is not a person waiting.
-	Bots bool
-	// Mentions: someone named me in chat, or wrote to me directly.
+	Labels   []string
+	States   []string
+	Assignee string
+	Comments bool
+	PRs      bool
+	CI       bool
+	Reviews  bool
+	From     []string
+	Bots     bool
 	Mentions bool
-	// Channels are the chat channels every message of which is news; a
-	// mention needs no channel here.
 	Channels []string
 }
 
-// Match says whether an event is one the rules asked for.
 func (r Rules) Match(e Event) bool { return r.Why(e) == "" }
 
-// Why is what stops an event, in the words a person can act on; "" when
-// the rules take it.
 func (r Rules) Why(e Event) string {
 	if !r.Enabled {
 		return "watch is off here"
@@ -124,9 +91,6 @@ func (r Rules) Why(e Event) string {
 	}
 	switch e.Kind {
 	case KindReviewRequested:
-		// Someone else's pull request, addressed to me by construction: the
-		// tracker only sends a review request to its reviewer. One already
-		// merged needs no review.
 		if len(r.States) == 0 {
 			if over := finishedState(e.State); over != "" {
 				return "it is " + over + " — there is nothing to review"
@@ -154,16 +118,11 @@ func (r Rules) Why(e Event) string {
 		if !e.Mine {
 			return "not on something of mine"
 		}
-		// A comment on work that is already finished, duplicated or cancelled
-		// is chatter, not a thing to do — on a ticket or on a pull request
-		// that has already been merged. Explicit --states wins, as ever.
 		if len(r.States) == 0 {
 			if over := finishedState(e.State); over != "" {
 				return "it is " + over + " — the comment is not work"
 			}
 		}
-		// "Thanks, test is ok" asks for nothing. A thank-you, a sign-off, a
-		// thumbs-up is the end of the work, not more of it.
 		if e.Kind != KindPRReview && IsAcknowledgement(e.Body) {
 			return "it is a thank-you or a sign-off, not a request"
 		}
@@ -176,9 +135,6 @@ func (r Rules) Why(e Event) string {
 		}
 	case KindIssueNew:
 		if dead := finishedState(e.State); dead != "" {
-			// A ticket someone has already closed as a duplicate is the one
-			// piece of work guaranteed to be wasted. Explicit --states wins:
-			// asking for a column means you meant it.
 			if len(r.States) == 0 {
 				return "it is " + dead + " — nobody is going to act on it"
 			}
@@ -196,10 +152,6 @@ func (r Rules) Why(e Event) string {
 	return ""
 }
 
-// deadStates are the columns every tracker uses for work that will not
-// happen: Linear's Duplicate and Canceled, Jira's Cancelled, GitHub's
-// "closed as duplicate". Named rather than inferred, so a board with a
-// column called "Duplicate detection" is not swept up with them.
 var deadStates = map[string]string{
 	"duplicate": "a duplicate", "duplicated": "a duplicate",
 	"canceled": "cancelled", "cancelled": "cancelled",
@@ -208,14 +160,11 @@ var deadStates = map[string]string{
 	"rejected": "rejected",
 }
 
-// closedStates are the columns where the work is over. A comment arriving on
-// one of these is someone tidying up, not something to act on.
 var closedStates = map[string]string{
 	"done": "done", "closed": "closed", "resolved": "resolved",
 	"complete": "done", "completed": "done", "shipped": "shipped",
 	"released": "released", "merged": "merged", "to release": "waiting on a release",
-	"locked": "locked",
-	// Past QA and out the door: a comment here is a sign-off, not work.
+	"locked":   "locked",
 	"verified": "verified", "deployed": "deployed", "in production": "in production",
 	"on production": "in production", "live": "live", "qa passed": "past QA", "tested": "tested",
 }
@@ -225,8 +174,6 @@ var (
 	askWords = regexp.MustCompile(`(?i)\?|\b(could|can|would|please|pls|should|need|needs|must|why|how|what|when|where|fix|change|update|add|remove|revert|still|but|however|not|doesn't|does not|isn't|is not|broken|fails?|failing|error|bug|wrong|missing)\b`)
 )
 
-// IsAcknowledgement says a comment asks for nothing: short, made of thanks
-// or sign-off words, with no question and no request in it.
 func IsAcknowledgement(body string) bool {
 	text := strings.TrimSpace(body)
 	if text == "" || len(text) > 160 {
@@ -238,14 +185,8 @@ func IsAcknowledgement(body string) bool {
 	return ackWords.MatchString(text)
 }
 
-// FinishedState is finishedState for callers outside this package.
 func FinishedState(state string) string { return finishedState(state) }
 
-// Settled names why an event needs nobody any more, given the column its
-// ticket is in now, or "" while it is still waiting. A finished column ends
-// every kind. A new issue is also over once it has left the column it was
-// found in: someone picked it up, and the inbox was only ever announcing
-// that it was there for the taking.
 func Settled(e Event, current string) string {
 	if over := finishedState(current); over != "" {
 		return over
@@ -257,8 +198,6 @@ func Settled(e Event, current string) string {
 	return ""
 }
 
-// finishedState names why a ticket in this state is not worth anyone's time,
-// or "" when there is still work in it.
 func finishedState(state string) string {
 	key := strings.ToLower(strings.TrimSpace(state))
 	if why, ok := deadStates[key]; ok {
@@ -267,9 +206,6 @@ func finishedState(state string) string {
 	return closedStates[key]
 }
 
-// matchesPerson says an author is one of the people being waited on. A
-// tracker spells the same human three ways — "Max Mustermann", "max", an
-// email — so a wanted name matching any part of the author counts.
 func matchesPerson(author string, wanted []string) bool {
 	who := strings.ToLower(strings.TrimSpace(author))
 	if who == "" {
@@ -291,7 +227,6 @@ func orNone(list []string) string {
 	return strings.Join(list, ", ")
 }
 
-// matchesKind says whether any event of this kind could pass the rules.
 func (r Rules) matchesKind(k Kind) bool {
 	if !r.Enabled {
 		return false
@@ -315,12 +250,8 @@ func (r Rules) matchesKind(k Kind) bool {
 	return false
 }
 
-// MatchesNothing says no event can ever pass. Only Enabled closes every
-// kind — issue.new is possible whenever the rules are on — so this is the
-// whole test; per-source dead ends are DeadSource's.
 func (r Rules) MatchesNothing() bool { return !r.Enabled }
 
-// sourceKinds is everything each source can emit.
 var sourceKinds = map[string][]Kind{
 	"linear": {KindIssueNew, KindIssueComment},
 	"jira":   {KindIssueNew, KindIssueComment},
@@ -329,8 +260,6 @@ var sourceKinds = map[string][]Kind{
 	"slack":  {KindChatMention, KindChatMessage, KindReviewRequested},
 }
 
-// DeadSource says a source can emit nothing these rules take, so polling
-// it would only spend requests. A source not in the table is assumed live.
 func (r Rules) DeadSource(source string) bool {
 	kinds, ok := sourceKinds[source]
 	if !ok {
@@ -344,7 +273,6 @@ func (r Rules) DeadSource(source string) bool {
 	return true
 }
 
-// DeadSources lists the known sources these rules can never use, sorted.
 func (r Rules) DeadSources() []string {
 	var out []string
 	for name := range sourceKinds {
@@ -374,62 +302,41 @@ func anyFold(have, want []string) bool {
 	return false
 }
 
-// Cursor is a source's own bookmark: an updatedAt, an ETag, the last id.
 type Cursor map[string]string
 
-// Source is one API that can be polled for changes since a cursor.
 type Source interface {
 	Name() string
-	// Poll returns what changed since cursor and the cursor to save. A source
-	// with nothing new returns nil events and the same cursor; a 304 costs
-	// one request and no parsing.
 	Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 }
 
-// Sink receives matched, unseen events.
 type Sink func(ctx context.Context, e Event)
 
-// State is what survives restarts: cursors per workspace and source, and
-// the keys already handled. One file under the agent dir.
 type State struct {
-	mu       sync.Mutex
-	path     string
-	agentDir string
-	Cursors  map[string]Cursor `json:"cursors"` // "<workspace>/<source>"
-	Seen     []string          `json:"seen"`    // newest last
-	Errors   map[string]string `json:"errors,omitempty"`
-	Polled   map[string]string `json:"polled,omitempty"` // "<workspace>/<source>" → RFC3339
-	// Held is what quiet hours swallowed, waiting for the window to open.
-	Held []HeldNote `json:"held,omitempty"`
-	// Ignored is only read, from a state.json an older corgi wrote; the list
-	// now lives in ignored.json (see ignored.go) and this is cleared on load.
-	Ignored []string `json:"ignored,omitempty"`
-	// seen indexes Seen so a lookup does not walk the list.
-	seen map[string]struct{}
-	// roundRefs counts events per ref within one poll, so several comments
-	// on one pull request collapse to one. Never persisted: it is about
-	// this round only.
+	mu        sync.Mutex
+	path      string
+	agentDir  string
+	Cursors   map[string]Cursor `json:"cursors"`
+	Seen      []string          `json:"seen"`
+	Errors    map[string]string `json:"errors,omitempty"`
+	Polled    map[string]string `json:"polled,omitempty"`
+	Held      []HeldNote        `json:"held,omitempty"`
+	Ignored   []string          `json:"ignored,omitempty"`
+	seen      map[string]struct{}
 	roundRefs map[string]int
-	// Fixes is the fix history beside it, its own file.
-	Fixes *FixLog `json:"-"`
+	Fixes     *FixLog `json:"-"`
 }
 
 const seenKeep = 2000
 
-// HeldNote is a notification quiet hours swallowed, kept so the morning can
-// say what arrived rather than the night saying nothing and losing it.
 type HeldNote struct {
 	Workspace string    `json:"workspace"`
 	Body      string    `json:"body"`
 	At        time.Time `json:"at"`
-	// Key names the event, so the morning can check it is still worth
-	// saying before it says it.
-	Key string `json:"key,omitempty"`
+	Key       string    `json:"key,omitempty"`
 }
 
 const heldKeep = 100
 
-// LoadState reads <agentDir>/watch/state.json; a missing file is empty state.
 func LoadState(agentDir string) *State {
 	s := &State{path: filepath.Join(agentDir, "watch", "state.json"), agentDir: agentDir, Cursors: map[string]Cursor{}}
 	if data, err := os.ReadFile(s.path); err == nil {
@@ -447,12 +354,10 @@ func LoadState(agentDir string) *State {
 	return s
 }
 
-// Hold keeps a notification quiet hours must not deliver yet.
 func (s *State) Hold(workspace, body string, at time.Time) {
 	s.HoldEvent(workspace, "", body, at)
 }
 
-// HoldEvent is Hold with the event's key, for the re-check at release.
 func (s *State) HoldEvent(workspace, key, body string, at time.Time) {
 	s.mu.Lock()
 	s.Held = append(s.Held, HeldNote{Workspace: workspace, Key: key, Body: body, At: at})
@@ -463,7 +368,6 @@ func (s *State) HoldEvent(workspace, key, body string, at time.Time) {
 	_ = s.save()
 }
 
-// TakeHeld returns and clears one workspace's held notes.
 func (s *State) TakeHeld(workspace string) []HeldNote {
 	s.mu.Lock()
 	var mine, rest []HeldNote
@@ -482,7 +386,6 @@ func (s *State) TakeHeld(workspace string) []HeldNote {
 	return mine
 }
 
-// IsSeen says a key was handled, without recording anything.
 func (s *State) IsSeen(key string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -509,7 +412,6 @@ func (s *State) save() error {
 	return atomicfile.Write(s.path, data, 0o600)
 }
 
-// MarkSeen records a key; false when it was already there.
 func (s *State) MarkSeen(key string) bool {
 	s.mu.Lock()
 	if _, ok := s.seen[key]; ok {
@@ -523,8 +425,6 @@ func (s *State) MarkSeen(key string) bool {
 	return true
 }
 
-// Unsee forgets a key so the event can be handled again — a fix that was
-// deferred, not done.
 func (s *State) Unsee(key string) {
 	s.mu.Lock()
 	if _, ok := s.seen[key]; !ok {
@@ -553,8 +453,6 @@ func (s *State) cursor(ws, source string) Cursor {
 	return c
 }
 
-// Thread is the parent timestamp of the message an event key names, when
-// it sat in a thread; "" when it was a top-level post.
 func (s *State) Thread(key string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -566,8 +464,6 @@ func (s *State) Thread(key string) string {
 	return ""
 }
 
-// SourceIdentity is a value a source saved about itself — the Slack team a
-// permalink needs, the login "me" resolved to.
 func (s *State) SourceIdentity(source, field string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -579,7 +475,6 @@ func (s *State) SourceIdentity(source, field string) string {
 	return ""
 }
 
-// SetThreadForTest seeds a thread pointer. Tests only.
 func (s *State) SetThreadForTest(key, parent string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -614,7 +509,6 @@ func (s *State) setCursor(ws, source string, c Cursor, now time.Time, err error)
 	_ = s.save()
 }
 
-// Watch is one workspace's poll loop.
 type Watch struct {
 	Workspace string
 	Rules     Rules
@@ -622,21 +516,13 @@ type Watch struct {
 	Interval  time.Duration
 	State     *State
 	Sink      Sink
-	// Log receives one line per round that did something; nil is silent.
-	Log func(string)
-	// wake is the channel Nudge pokes: a poll now, not at the next tick.
-	wake     chan struct{}
-	wakeOnce sync.Once
-	// Round runs before each poll, for work the clock decides — releasing
-	// what quiet hours held back once the window opens.
-	Round func(now time.Time)
-	// Asleep says the watch is off for now — a day off — so no poll is made
-	// until it wakes; a nudge (the reload button) still polls once.
-	Asleep func(now time.Time) bool
+	Log       func(string)
+	wake      chan struct{}
+	wakeOnce  sync.Once
+	Round     func(now time.Time)
+	Asleep    func(now time.Time) bool
 }
 
-// Once polls every source one time and hands new matches to the sink.
-// Returns how many events were handed over.
 func (w *Watch) Once(ctx context.Context, now time.Time) int {
 	handed := 0
 	for _, src := range w.Sources {
@@ -647,8 +533,6 @@ func (w *Watch) Once(ctx context.Context, now time.Time) int {
 			w.logf("watch %s/%s: %v", w.Workspace, src.Name(), err)
 			continue
 		}
-		// The first round only sets the bookmark: what is already in the
-		// tracker is not news, and with action fix it would be a burst of runs.
 		if len(before) == 0 {
 			if len(events) > 0 {
 				w.logf("watch %s/%s: bookmark set, %d older item(s) skipped", w.Workspace, src.Name(), len(events))
@@ -664,8 +548,6 @@ func (w *Watch) Once(ctx context.Context, now time.Time) int {
 	return handed
 }
 
-// Handle runs one event through the rules and the seen list; true when it
-// reached the sink. Webhooks enter here.
 func (w *Watch) Handle(ctx context.Context, e Event) bool {
 	if e.Workspace == "" {
 		e.Workspace = w.Workspace
@@ -679,8 +561,6 @@ func (w *Watch) Handle(ctx context.Context, e Event) bool {
 	return true
 }
 
-// Run polls until ctx ends. Errors back the interval off, doubling up to
-// ten times the base, so a dead token does not hammer an API.
 func (w *Watch) Run(ctx context.Context) {
 	interval := w.Interval
 	if interval <= 0 {
@@ -712,7 +592,6 @@ func (w *Watch) Run(ctx context.Context) {
 	}
 }
 
-// Nudge asks for a poll now; a nudge while one is pending is the same nudge.
 func (w *Watch) Nudge() {
 	select {
 	case w.wakeChan() <- struct{}{}:
@@ -742,27 +621,20 @@ func (w *Watch) logf(format string, a ...any) {
 	}
 }
 
-// Secrets are the API tokens, read from the environment first and then
-// from <agentDir>/watch/secrets.json (0600), written by `corgi agent watch auth`.
 type Secrets struct {
-	Linear    string `json:"linear,omitempty"`
-	JiraURL   string `json:"jiraUrl,omitempty"`
-	JiraEmail string `json:"jiraEmail,omitempty"`
-	JiraToken string `json:"jiraToken,omitempty"`
-	GitHub    string `json:"github,omitempty"`
-	GitLab    string `json:"gitlab,omitempty"`
-	GitLabURL string `json:"gitlabUrl,omitempty"`
-	// SlackUser is an xoxp- token: it reads the channels and DMs its owner
-	// can see, and a message posted with it is attributed to them.
-	SlackUser string `json:"slackUser,omitempty"`
-	// SlackBot is an xoxb- token, so a reply can come from the app rather
-	// than from the person. Optional: with none, replies speak as the user.
+	Linear     string `json:"linear,omitempty"`
+	JiraURL    string `json:"jiraUrl,omitempty"`
+	JiraEmail  string `json:"jiraEmail,omitempty"`
+	JiraToken  string `json:"jiraToken,omitempty"`
+	GitHub     string `json:"github,omitempty"`
+	GitLab     string `json:"gitlab,omitempty"`
+	GitLabURL  string `json:"gitlabUrl,omitempty"`
+	SlackUser  string `json:"slackUser,omitempty"`
 	SlackBot   string `json:"slackBot,omitempty"`
 	HookSecret string `json:"hookSecret,omitempty"`
-	Me         string `json:"me,omitempty"` // tracker login/email when the API cannot tell us
+	Me         string `json:"me,omitempty"`
 }
 
-// secretsFile is the machine-wide tokens plus a per-workspace override.
 type secretsFile struct {
 	Secrets
 	Workspaces map[string]Secrets `json:"workspaces,omitempty"`
@@ -778,7 +650,6 @@ func readSecretsFile(agentDir string) secretsFile {
 	return f
 }
 
-// LoadSecrets is the machine-wide set; env wins over the file.
 func LoadSecrets(agentDir string) Secrets {
 	s := readSecretsFile(agentDir).Secrets
 	pick := func(dst *string, env string) {
@@ -798,19 +669,14 @@ func LoadSecrets(agentDir string) Secrets {
 	return s
 }
 
-// LoadSecretsFor is what a workspace polls with: machine-wide, then its own
-// tokens on top, so the most specific wins over the file and the env. The
-// webhook secret is never overridden; one endpoint verifies every payload.
 func LoadSecretsFor(agentDir, workspace string) Secrets {
 	return overlaySecrets(LoadSecrets(agentDir), WorkspaceSecrets(agentDir, workspace))
 }
 
-// WorkspaceSecrets is only what this workspace stored, no fallback, no env.
 func WorkspaceSecrets(agentDir, workspace string) Secrets {
 	return readSecretsFile(agentDir).Workspaces[workspace]
 }
 
-// WorkspacesWithSecrets lists the workspaces holding an override.
 func WorkspacesWithSecrets(agentDir string) []string {
 	var out []string
 	for id := range readSecretsFile(agentDir).Workspaces {
@@ -843,9 +709,6 @@ func (s Secrets) IsZero() bool {
 	return s == Secrets{}
 }
 
-// GitHubToken is the token a GitHub poll would use and where it comes from:
-// "saved" for the environment or the file, "gh-auth" for the gh CLI's,
-// "" for none. Saved wins, as in NewGitHub.
 func GitHubToken(s Secrets) (token, source string) {
 	if t := strings.TrimSpace(s.GitHub); t != "" {
 		return t, "saved"
@@ -856,14 +719,12 @@ func GitHubToken(s Secrets) (token, source string) {
 	return "", ""
 }
 
-// SaveSecrets writes the machine-wide tokens, keeping every override.
 func SaveSecrets(agentDir string, s Secrets) error {
 	f := readSecretsFile(agentDir)
 	f.Secrets = s
 	return writeSecretsFile(agentDir, f)
 }
 
-// SaveWorkspaceSecrets writes one override; a zero value drops it.
 func SaveWorkspaceSecrets(agentDir, workspace string, s Secrets) error {
 	f := readSecretsFile(agentDir)
 	if s.IsZero() {
@@ -888,7 +749,6 @@ func writeSecretsFile(agentDir string, f secretsFile) error {
 	return atomicfile.Write(secretsPath(agentDir), data, 0o600)
 }
 
-// Fingerprint is a short id for a token, safe to print.
 func Fingerprint(token string) string {
 	if token == "" {
 		return "none"
@@ -897,14 +757,12 @@ func Fingerprint(token string) string {
 	return hex.EncodeToString(sum[:])[:8]
 }
 
-// Summary is what `corgi agent watch` prints per workspace and source.
 type Summary struct {
 	Key    string
 	Polled string
 	Error  string
 }
 
-// Summaries lists the saved poll state, sorted.
 func (s *State) Summaries() []Summary {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -916,73 +774,44 @@ func (s *State) Summaries() []Summary {
 	return out
 }
 
-// ErrNoToken is what a source returns when it has nothing to authenticate with.
 var ErrNoToken = errors.New("no token")
 
-// FixRecord is one fix the daemon started, kept so the caps hold across
-// restarts.
 type FixRecord struct {
-	Key       string    `json:"key"`
-	Workspace string    `json:"workspace"`
-	Ref       string    `json:"ref,omitempty"`
-	Kind      string    `json:"kind,omitempty"`
-	Title     string    `json:"title,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	StartedAt time.Time `json:"startedAt"`
-	// The outcome, filled in when the run ends: what it opened, or why not.
-	FinishedAt time.Time `json:"finishedAt,omitempty"`
-	PRs        []string  `json:"prs,omitempty"`
-	Note       string    `json:"note,omitempty"`
-	Error      string    `json:"error,omitempty"`
-	// Failure is the shape of the error, so the next run can tell a wall it
-	// has already hit from a one-off.
-	Failure string `json:"failure,omitempty"`
-	// Handover is what the run left for whoever continues the work.
-	Handover string `json:"handover,omitempty"`
-	// Branch is the worktree branch an isolated run worked on, so undo can
-	// release it and a row can say where the code is.
-	Branch string `json:"branch,omitempty"`
-	// Forgiven marks a failed run an unblock has put behind it, so it no
-	// longer counts toward the breaker.
-	Forgiven bool `json:"forgiven,omitempty"`
-	// Bot is the bot this run ran as, when a bot ran on the event rather
-	// than the workspace's fix.
-	Bot string `json:"bot,omitempty"`
-	// CostUSD and Tokens are what the run said it cost, from claude's own
-	// receipt; zero when the run did not say.
-	CostUSD float64 `json:"costUSD,omitempty"`
-	Tokens  int64   `json:"tokens,omitempty"`
-	// Retry is the model a bot's second attempt ran on after the first
-	// failed — the ladder is haiku → sonnet → opus; empty when it ran once.
-	Retry string `json:"retry,omitempty"`
-	// SpentPercent is how much of the account's five-hour window this run
-	// used, measured across it. Ten comment fixes and ten whole tickets are
-	// the same number of runs and nowhere near the same spend.
-	SpentPercent int `json:"spentPercent,omitempty"`
+	Key          string    `json:"key"`
+	Workspace    string    `json:"workspace"`
+	Ref          string    `json:"ref,omitempty"`
+	Kind         string    `json:"kind,omitempty"`
+	Title        string    `json:"title,omitempty"`
+	URL          string    `json:"url,omitempty"`
+	StartedAt    time.Time `json:"startedAt"`
+	FinishedAt   time.Time `json:"finishedAt,omitempty"`
+	PRs          []string  `json:"prs,omitempty"`
+	Note         string    `json:"note,omitempty"`
+	Error        string    `json:"error,omitempty"`
+	Failure      string    `json:"failure,omitempty"`
+	Handover     string    `json:"handover,omitempty"`
+	Branch       string    `json:"branch,omitempty"`
+	Forgiven     bool      `json:"forgiven,omitempty"`
+	Bot          string    `json:"bot,omitempty"`
+	CostUSD      float64   `json:"costUSD,omitempty"`
+	Tokens       int64     `json:"tokens,omitempty"`
+	Retry        string    `json:"retry,omitempty"`
+	SpentPercent int       `json:"spentPercent,omitempty"`
 }
 
-// Done says the run ended, either way.
 func (r FixRecord) Done() bool { return !r.FinishedAt.IsZero() }
 
-// FixLog is <agentDir>/watch/fixes.json: the fixes started, newest last,
-// and the events whose fix a cap, quiet hours or a limit deferred — kept
-// aside for a manual `corgi agent watch run`, never retried by the daemon
-// on its own.
 type FixLog struct {
 	mu       sync.Mutex
 	path     string
-	Started  []FixRecord `json:"started"`
-	Deferred []Event     `json:"deferred,omitempty"`
-	// Blocks are refs taken out of unattended runs: by the breaker after
-	// two failures in a row, by a run that said it was blocked, or by a
-	// person. Keyed "<workspace>/<ref>". A person unblocks.
-	Blocks map[string]Block `json:"blocks,omitempty"`
+	Started  []FixRecord      `json:"started"`
+	Deferred []Event          `json:"deferred,omitempty"`
+	Blocks   map[string]Block `json:"blocks,omitempty"`
 }
 
-// Block is why a ref is not being worked on, and who said so.
 type Block struct {
 	Reason string    `json:"reason"`
-	By     string    `json:"by"` // breaker, run, person
+	By     string    `json:"by"`
 	At     time.Time `json:"at"`
 }
 
@@ -990,13 +819,11 @@ const (
 	BlockedByBreaker = "breaker"
 	BlockedByRun     = "run"
 	BlockedByPerson  = "person"
-	// BreakerAfter is how many failed runs in a row on one ref trip it.
-	BreakerAfter = 2
+	BreakerAfter     = 2
 )
 
 func blockKey(workspace, ref string) string { return workspace + "/" + strings.TrimSpace(ref) }
 
-// Block takes a ref out of unattended runs until someone unblocks it.
 func (l *FixLog) Block(workspace, ref, reason, by string, now time.Time) {
 	if strings.TrimSpace(ref) == "" {
 		return
@@ -1010,8 +837,6 @@ func (l *FixLog) Block(workspace, ref, reason, by string, now time.Time) {
 	_ = l.save()
 }
 
-// Unblock lets runs on the ref start again. The failures that tripped the
-// breaker are forgotten by time: only runs after now count toward the next.
 func (l *FixLog) Unblock(workspace, ref string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1029,7 +854,6 @@ func (l *FixLog) Unblock(workspace, ref string) bool {
 	return true
 }
 
-// Blocked says whether a ref is out, and why.
 func (l *FixLog) Blocked(workspace, ref string) (Block, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1037,9 +861,6 @@ func (l *FixLog) Blocked(workspace, ref string) (Block, bool) {
 	return b, ok
 }
 
-// FailedInARow is how many of the newest finished runs on a ref ended in
-// an error, stopping at the first that did not. A run that was not started
-// (deferred, refused) does not count: it did not try.
 func (l *FixLog) FailedInARow(workspace, ref string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1065,7 +886,6 @@ const (
 	deferredKeep = 100
 )
 
-// LoadFixLog reads the file; a missing file is an empty log.
 func LoadFixLog(agentDir string) *FixLog {
 	l := &FixLog{path: filepath.Join(agentDir, "watch", "fixes.json")}
 	if data, err := os.ReadFile(l.path); err == nil {
@@ -1091,13 +911,10 @@ func (l *FixLog) save() error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// Start records a fix starting and drops the event from the deferred list
-// if it was waiting there.
 func (l *FixLog) Start(workspace, key string, at time.Time) {
 	l.StartFor(Event{Key: key, Workspace: workspace}, at)
 }
 
-// StartFor records a fix with enough of the event to report it later.
 func (l *FixLog) StartFor(e Event, at time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1109,10 +926,6 @@ func (l *FixLog) StartFor(e Event, at time.Time) {
 	_ = l.save()
 }
 
-// Finish writes the outcome onto the newest unfinished run for the key, so
-// what a fix opened outlives the notification that announced it.
-// Finish writes the outcome; failure is the error text, classified on the
-// way in so the next run can recognise a wall it has already hit.
 func (l *FixLog) Finish(key string, prs []string, note, failure string, at time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1130,10 +943,6 @@ func (l *FixLog) Finish(key string, prs []string, note, failure string, at time.
 	}
 }
 
-// Interrupted closes every run that never reported an outcome and returns
-// their events' keys. A daemon killed mid-fix — a crash, a reboot, a laptop
-// closed — otherwise leaves the record "running" for good, and the event is
-// already in the seen list, so nobody would ever hear about that issue again.
 func (l *FixLog) Interrupted(reason string, at time.Time) []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1152,8 +961,6 @@ func (l *FixLog) Interrupted(reason string, at time.Time) []string {
 	return keys
 }
 
-// RecentFixes is the newest runs first, at most limit, optionally one
-// workspace's.
 func (l *FixLog) RecentFixes(workspace string, limit int) []FixRecord {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1167,7 +974,6 @@ func (l *FixLog) RecentFixes(workspace string, limit int) []FixRecord {
 	return out
 }
 
-// StartedSince counts the workspace's fixes started at or after since.
 func (l *FixLog) StartedSince(workspace string, since time.Time) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1180,7 +986,6 @@ func (l *FixLog) StartedSince(workspace string, since time.Time) int {
 	return n
 }
 
-// LastStarted is the workspace's most recent fix start.
 func (l *FixLog) LastStarted(workspace string) (last time.Time, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1192,7 +997,6 @@ func (l *FixLog) LastStarted(workspace string) (last time.Time, ok bool) {
 	return last, ok
 }
 
-// Defer keeps an event whose fix did not start; one entry per key.
 func (l *FixLog) Defer(e Event) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1201,15 +1005,12 @@ func (l *FixLog) Defer(e Event) {
 	_ = l.save()
 }
 
-// DeferredEvents is a copy of what waits for a fix. Only the daemon
-// writes the file: an event leaves the list when its fix starts.
 func (l *FixLog) DeferredEvents() []Event {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]Event(nil), l.Deferred...)
 }
 
-// DeferredCount is how many events wait for a fix in a workspace ("" is all).
 func (l *FixLog) DeferredCount(workspace string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1222,7 +1023,6 @@ func (l *FixLog) DeferredCount(workspace string) int {
 	return n
 }
 
-// DropDeferred forgets a waiting event: its fix is no longer worth starting.
 func (l *FixLog) DropDeferred(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1240,10 +1040,6 @@ func (l *FixLog) dropDeferred(key string) {
 	l.Deferred = kept
 }
 
-// RecentEvents is the tail of the events log, newest first, at most limit,
-// with your own tasks ahead of it: they are on the board until finished,
-// however much else has arrived since. A line that no longer parses is
-// skipped rather than failing the read.
 func RecentEvents(agentDir string, limit int) []Event {
 	out := TaskEvents(agentDir, time.Now())
 	if len(out) > limit {
@@ -1272,7 +1068,6 @@ func RecentEvents(agentDir string, limit int) []Event {
 	return out
 }
 
-// FindEvent is one logged event by key, for acting on it later.
 func FindEvent(agentDir, key string) (Event, bool) {
 	for _, e := range RecentEvents(agentDir, 500) {
 		if e.Key == key {
@@ -1282,9 +1077,6 @@ func FindEvent(agentDir, key string) (Event, bool) {
 	return Event{}, false
 }
 
-// FindEventByRef is FindEvent for a caller that has the ticket's ref, as the
-// command line takes it — case as the tracker prints it or not — and the
-// workspace when it knows one; the newest event on that ticket wins.
 func FindEventByRef(agentDir, ref, workspace string) (Event, bool) {
 	if ref == "" {
 		return Event{}, false
@@ -1297,8 +1089,6 @@ func FindEventByRef(agentDir, ref, workspace string) (Event, bool) {
 	return Event{}, false
 }
 
-// Outcome is one phrase for what a run ended up doing, so every reader of the
-// log says the same thing about the same run instead of inventing wording.
 func (r FixRecord) Outcome() string {
 	switch {
 	case !r.Done():
@@ -1316,8 +1106,6 @@ func (r FixRecord) Outcome() string {
 	}
 }
 
-// FixesSince is every run started at or after since, newest first, across
-// workspaces.
 func (l *FixLog) FixesSince(since time.Time) []FixRecord {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1331,8 +1119,6 @@ func (l *FixLog) FixesSince(since time.Time) []FixRecord {
 	return out
 }
 
-// EventsSince is what the watch saw at or after since, newest first. The log
-// is capped, so scan is bounded whatever the window asks for.
 func EventsSince(agentDir string, since time.Time) []Event {
 	out := []Event{}
 	for _, e := range RecentEvents(agentDir, 2000) {
@@ -1344,16 +1130,9 @@ func EventsSince(agentDir string, since time.Time) []Event {
 	return out
 }
 
-// SameRefThisRound counts how many events about the same ref this workspace
-// has already taken in the current round, and records this one. A reviewer
-// leaving four comments on one pull request is one thing to look at, not
-// four notifications and certainly not four unattended runs.
-//
-// Reset by NewRound at the top of every poll, so a comment tomorrow is news
-// again even though the ref is the same.
 func (s *State) SameRefThisRound(workspace string, e Event) int {
 	if e.Ref == "" || e.Kind == KindIssueNew {
-		return 0 // a new issue is one event by construction
+		return 0
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1366,17 +1145,12 @@ func (s *State) SameRefThisRound(workspace string, e Event) int {
 	return n
 }
 
-// NewRound forgets what the last poll saw, so the collapsing above is
-// per-round rather than for ever.
 func (s *State) NewRound() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.roundRefs = nil
 }
 
-// FailureKinds classify why a run ended badly, because the text of an error
-// is not something to match on twice. Only the blocking ones matter: a run
-// that failed on a missing credential will fail the same way in an hour.
 const (
 	FailureNone       = ""
 	FailureNoAuth     = "no-credential"
@@ -1385,7 +1159,6 @@ const (
 	FailureOther      = "other"
 )
 
-// ClassifyFailure names the shape of a failure from what the run said.
 func ClassifyFailure(reason, output string) string {
 	if strings.TrimSpace(reason) == "" {
 		return FailureNone
@@ -1402,8 +1175,6 @@ func ClassifyFailure(reason, output string) string {
 	return FailureOther
 }
 
-// Blocking says a failure of this shape will happen again until a person
-// changes something, so trying again only spends the budget.
 func Blocking(kind string) bool {
 	return kind == FailureNoAuth || kind == FailurePermission
 }
@@ -1417,9 +1188,6 @@ func containsAny(text string, needles ...string) bool {
 	return false
 }
 
-// RecentBlocker is the blocking failure this workspace keeps hitting, with
-// how many runs in a row hit it, or "" when the last run was fine. Only a
-// run in the window counts: a credential fixed yesterday is not news.
 func (l *FixLog) RecentBlocker(workspace string, within time.Duration, now time.Time) (kind string, runs int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1432,7 +1200,7 @@ func (l *FixLog) RecentBlocker(workspace string, within time.Duration, now time.
 			break
 		}
 		if !Blocking(r.Failure) {
-			return "", 0 // a run that got somewhere clears the record
+			return "", 0
 		}
 		if kind == "" {
 			kind = r.Failure
@@ -1454,13 +1222,8 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
-// Handover is what a run leaves for whoever picks the work up next: the last
-// thing it said before it stopped. A run that ends — finished, failed, or
-// killed with the laptop lid — otherwise takes twenty minutes of context with
-// it, and the next one starts from the ticket again.
 const handoverMax = 700
 
-// SetBranch records the worktree branch an isolated run works on.
 func (l *FixLog) SetBranch(key, branch string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1473,7 +1236,6 @@ func (l *FixLog) SetBranch(key, branch string) {
 	}
 }
 
-// SetHandover records what a run left behind, on the newest run for the key.
 func (l *FixLog) SetHandover(key, text string, at time.Time) {
 	text = strings.TrimSpace(text)
 	if key == "" || text == "" {
@@ -1493,8 +1255,6 @@ func (l *FixLog) SetHandover(key, text string, at time.Time) {
 	}
 }
 
-// LastHandover is what the newest earlier run on this ref left behind, so a
-// second attempt starts where the first stopped rather than at the ticket.
 func (l *FixLog) LastHandover(workspace, ref string) string {
 	if ref == "" {
 		return ""
@@ -1510,8 +1270,6 @@ func (l *FixLog) LastHandover(workspace, ref string) string {
 	return ""
 }
 
-// TailLines is the last n non-empty lines of a run's output, which is where
-// a claude session says what it did and what it could not do.
 func TailLines(out string, n int) string {
 	var kept []string
 	lines := strings.Split(out, "\n")
@@ -1523,7 +1281,6 @@ func TailLines(out string, n int) string {
 	return strings.Join(kept, "\n")
 }
 
-// SetBot names the bot a run ran as.
 func (l *FixLog) SetBot(key, bot string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1536,8 +1293,6 @@ func (l *FixLog) SetBot(key, bot string) {
 	}
 }
 
-// SetCost records claude's receipt on the newest run for the key.
-// SetRetry notes the model a bot's second attempt ran on.
 func (l *FixLog) SetRetry(key, model string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1565,14 +1320,12 @@ func (l *FixLog) SetCost(key string, usd float64, tokens int64) {
 	}
 }
 
-// Cost is what every run on a ticket cost, added up.
 type Cost struct {
 	USD    float64 `json:"usd"`
 	Tokens int64   `json:"tokens"`
 	Runs   int     `json:"runs"`
 }
 
-// CostFor adds up the runs on a ref.
 func (l *FixLog) CostFor(workspace, ref string) Cost {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1588,10 +1341,6 @@ func (l *FixLog) CostFor(workspace, ref string) Cost {
 	return c
 }
 
-// SetSpent records what a run cost, as a share of the account's five-hour
-// window. Only a positive, believable figure is kept: the window resetting
-// mid-run reads as a negative, and a run that spanned a reset cannot be
-// measured this way at all.
 func (l *FixLog) SetSpent(key string, percent int) {
 	if key == "" || percent <= 0 || percent > 100 {
 		return
@@ -1607,10 +1356,6 @@ func (l *FixLog) SetSpent(key string, percent int) {
 	}
 }
 
-// TypicalSpend is what a run in this workspace usually costs, as a share of
-// the five-hour window: the median of what has been measured, or 0 when
-// nothing has. The median rather than the mean, because one runaway run
-// should not make every later one look unaffordable.
 func (l *FixLog) TypicalSpend(workspace string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()

@@ -65,8 +65,6 @@ func init() {
 }
 
 func runCachePaths(cmd *cobra.Command, _ []string) {
-	// Set before the config is read, so the "using compose file" line does not
-	// land in a command substitution.
 	utils.PayloadOnStdout = true
 
 	corgi, err := utils.GetCorgiServices(cmd)
@@ -90,26 +88,18 @@ func runCachePaths(cmd *cobra.Command, _ []string) {
 	}
 	if utils.JSONOutput {
 		utils.PrintJSON(plan)
-		// The JSON already carries complete/missingFiles, so a warning here
-		// would only double up the annotation the action prints from them.
 		if strict && !plan.Complete {
 			warnMissingCacheKeyFiles(plan)
 		}
 		failIfIncomplete(plan, strict)
 		return
 	}
-	// Newline-separated, which is the format GitHub's cache action expects for
-	// a multi-line path input.
 	fmt.Println(strings.Join(plan.Paths, "\n"))
 	warnCachingIsOff(plan)
 	warnMissingCacheKeyFiles(plan)
 	failIfIncomplete(plan, strict)
 }
 
-// warnMissingCacheKeyFiles is the loud half of the fix for a key hashed from
-// nothing: a CI job that computes the plan before cloning the service repos
-// gets a key that never changes, and a cache that never invalidates. stderr,
-// so a command substitution stays clean; a GitHub annotation, so it is seen.
 func warnMissingCacheKeyFiles(plan utils.CachePlan) {
 	if plan.Complete {
 		return
@@ -134,8 +124,6 @@ func failIfIncomplete(plan utils.CachePlan, strict bool) {
 	}
 }
 
-// warnCachingIsOff distinguishes "nothing opts in" from "nothing to cache".
-// stderr, so a command substitution stays clean.
 func warnCachingIsOff(plan utils.CachePlan) {
 	if len(plan.Groups) > 0 || len(plan.Hints) == 0 {
 		return
@@ -172,8 +160,6 @@ func runGitLabCachePaths(cmd *cobra.Command, plan utils.CachePlan) {
 	fmt.Print(rendered)
 }
 
-// checkGitLabCacheFile is the drift guard: a committed generated file is only
-// trustworthy while something fails when it stops matching its source.
 func checkGitLabCacheFile(path, rendered string) error {
 	existing, err := os.ReadFile(path)
 	if err != nil {
@@ -191,7 +177,6 @@ func checkGitLabCacheFile(path, rendered string) error {
 			"Regenerate and commit it: corgi cache paths --gitlab --out %s", path, path)
 }
 
-// writeGeneratedFile writes a generated file, creating its directory.
 func writeGeneratedFile(path, rendered string) error {
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

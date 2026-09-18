@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// httpReadyPort starts an httptest server that serves 200 at the given path and
-// returns its port. The caller closes the server.
 func httpReadyPort(t *testing.T, path string) (*httptest.Server, int) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -59,8 +57,6 @@ func TestReadiness_DBHTTPHealthCheckReady(t *testing.T) {
 	}
 }
 
-// listenerPort opens a TCP listener on an ephemeral port and returns it plus
-// the chosen port. The caller closes the listener.
 func listenerPort(t *testing.T) (net.Listener, int) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "localhost:0")
@@ -83,7 +79,6 @@ func TestReadiness_ServiceListeningReturnsNil(t *testing.T) {
 }
 
 func TestReadiness_ServiceClosedPortTimesOut(t *testing.T) {
-	// Grab a port then close it so nothing is listening.
 	ln, port := listenerPort(t)
 	ln.Close()
 
@@ -100,7 +95,6 @@ func TestReadiness_ServiceClosedPortTimesOut(t *testing.T) {
 }
 
 func TestReadiness_ServiceNoPortReturnsNilImmediately(t *testing.T) {
-	// No port => "started"-style path: returns nil without waiting.
 	ctx := context.Background()
 	if err := WaitForServiceReady(ctx, Service{ServiceName: "svc"}); err != nil {
 		t.Fatalf("expected nil for no-port service, got %v", err)
@@ -126,7 +120,6 @@ func TestReadiness_DBListeningReturnsNil(t *testing.T) {
 	}
 }
 
-// A dev server doing work on its first request must not be reported as down.
 func TestReadinessProbeToleratesASlowFirstResponse(t *testing.T) {
 	var mu sync.Mutex
 	first := true
@@ -136,7 +129,6 @@ func TestReadinessProbeToleratesASlowFirstResponse(t *testing.T) {
 		first = false
 		mu.Unlock()
 		if slow {
-			// Longer than the poll interval, well inside the probe timeout.
 			time.Sleep(2 * time.Second)
 		}
 		w.WriteHeader(http.StatusOK)

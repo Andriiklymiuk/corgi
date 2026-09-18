@@ -21,15 +21,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A session's conversation, on the phone: what you said, what Claude said,
-// each tool call, each result — read from the transcript Claude Code
-// writes, tailed. Off until this machine says which workspaces may be read
-// (`corgi agent stream enable --workspace api`): a transcript carries code
-// and, sometimes, a secret a tool printed, so the decision is made where
-// the code lives, not on the phone. What leaves is scrubbed (transcript.Scrub),
-// cut short, sealed like every body, and only ever pulled while a person
-// is looking at that session's chat.
-
 var agentStreamCmd = &cobra.Command{
 	Use:   "stream",
 	Short: "Which workspaces a paired phone may read as a conversation",
@@ -135,8 +126,6 @@ var agentStreamDisableCmd = &cobra.Command{
 	},
 }
 
-// streamAllowedFor is the seam the handler asks: may this session's
-// workspace be read?
 var streamAllowedFor = func(workspace string) bool {
 	dir, err := agentDir()
 	if err != nil {
@@ -149,13 +138,10 @@ var streamAllowedFor = func(workspace string) bool {
 	return user.StreamAllowed(workspace)
 }
 
-// transcriptPathFor is the seam: where a session's conversation is.
 var transcriptPathFor = func(s sessions.Session) string {
 	if sessions.Placeholder(s.ID) {
 		return ""
 	}
-	// The folder is named after where the session started; a session that
-	// has cd'd since still writes to the file it began with.
 	home := s.Home
 	if home == "" {
 		home = s.Cwd
@@ -165,8 +151,6 @@ var transcriptPathFor = func(s sessions.Session) string {
 			return p
 		}
 	}
-	// A session the daemon met after it had moved: the id is unique, find
-	// it under whichever project folder Claude Code filed it.
 	base := s.ConfigDir
 	if base == "" {
 		if h, err := os.UserHomeDir(); err == nil {
@@ -183,14 +167,8 @@ var transcriptPathFor = func(s sessions.Session) string {
 	return ""
 }
 
-// maxStreamWait bounds the long-poll: the phone asks again after.
 const maxStreamWait = 25 * time.Second
 
-// launchTranscriptHandler is the phone's chat: POST {session, after, wait}.
-// after 0 (or absent) opens the conversation at its newest entries; a
-// later after continues from where the answer said. With wait, the answer
-// holds until the transcript grows or the seconds run out — one request in
-// flight per open chat, a line on the phone within a second of the laptop.
 func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -221,7 +199,6 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchJSON(w, map[string]any{"entries": []transcript.Entry{}, "offset": 0, "empty": true})
 		return
 	}
-	// The row shows an eye: the laptop always knows a phone is reading.
 	if dir, err := agentDir(); err == nil {
 		if info, err := daemon.ReadInfo(dir); err == nil && info != nil && info.Commands {
 			if _, err := command.Write(dir, command.Command{Action: command.ActionRead, SessionID: session.ID, Source: "phone"}); err == nil {

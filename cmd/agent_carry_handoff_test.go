@@ -11,8 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// A carry leaves a handoff before it moves: a draft from git and the last
-// thing said when the session wrote none, the session's own when it did.
 func TestCarryLeavesAHandoffFirst(t *testing.T) {
 	ws := t.TempDir()
 	gitRepoOnBranch(t, ws, "feature/ABC-3/limits")

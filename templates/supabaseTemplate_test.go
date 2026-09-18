@@ -113,8 +113,6 @@ func TestSignSupabaseJWTSecretMatters(t *testing.T) {
 	}
 }
 
-// supabase CLI 2.109 renamed [inbucket] to [local_smtp]. Reading only the old
-// name would silently hand back the default port for a project that moved.
 func TestReadSupabasePortsAcceptsLocalSmtp(t *testing.T) {
 	dir := t.TempDir()
 	toml := filepath.Join(dir, "config.toml")

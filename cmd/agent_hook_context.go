@@ -21,14 +21,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The SessionStart context hook: the one synchronous hook, and the one that
-// talks back. Everything the daemon already knows and a fresh session does
-// not — who else is working in this repo, how much budget is left, what the
-// last session here was doing, whether the workspace has a memory — goes in
-// as a few lines of additionalContext. Nothing is read that is not already
-// on disk, so the hook costs one file read per line and never blocks long:
-// Claude Code gives it five seconds and drops it after that.
-
 type contextHookOutput struct {
 	HookSpecificOutput contextHookSpecific `json:"hookSpecificOutput"`
 }
@@ -70,7 +62,6 @@ func runContextHook(stdin io.Reader, stdout io.Writer, getenv func(string) strin
 	}})
 }
 
-// sessionContext builds the lines. Empty when nothing is worth saying.
 func sessionContext(dir string, in contextHookInput, configDir string, now time.Time) string {
 	registry, _ := workspace.Load(agentRegistryPath(dir))
 	wsID, root := workspaceLabel(registry, in.Cwd)
@@ -120,9 +111,6 @@ func sessionContext(dir string, in contextHookInput, configDir string, now time.
 	return head + "\n" + strings.Join(lines, "\n")
 }
 
-// handoffLine points a new session at the packet an earlier run left for
-// this branch's ticket, with how far the code moved since. The packet is
-// the first thing to read; the hook only says it is there.
 func handoffLine(root, branch string, now time.Time) string {
 	if root == "" {
 		return ""
@@ -145,8 +133,6 @@ func handoffLine(root, branch string, now time.Time) string {
 	return line
 }
 
-// claimedHere names the files other live sessions claimed in this
-// repository — the ones to leave alone, or ask about first.
 func claimedHere(dir string, st sessions.State, self, root string, now time.Time) string {
 	if root == "" {
 		return ""
@@ -182,8 +168,6 @@ func claimedHere(dir string, st sessions.State, self, root string, now time.Time
 	return "claimed by other sessions, leave alone or ask first: " + strings.Join(parts, ", ")
 }
 
-// otherSessionsHere names the live sessions in the same workspace, so two
-// chats do not edit one file without knowing of each other.
 func otherSessionsHere(st sessions.State, self, root string, now time.Time) string {
 	var parts []string
 	for _, s := range st.Sessions {
@@ -207,9 +191,6 @@ func otherSessionsHere(st sessions.State, self, root string, now time.Time) stri
 		if !s.StatusSince.IsZero() {
 			part += " " + roughAge(now.Sub(s.StatusSince))
 		}
-		// What it has touched, so this session can stay off those files or
-		// talk to whoever is on them — the one thing two chats in one
-		// repository most need to know about each other.
 		if s.Changes != nil && len(s.Changes.Touched) > 0 {
 			touched := s.Changes.Touched
 			if len(touched) > 4 {
@@ -232,8 +213,6 @@ func otherSessionsHere(st sessions.State, self, root string, now time.Time) stri
 	return label + ": " + strings.Join(parts, " · ")
 }
 
-// budgetLine is the account's two limits and, when the pace says so, the
-// warning that the five-hour window runs out before it resets.
 func budgetLine(st sessions.State, configDir string, now time.Time) string {
 	for _, a := range st.Accounts {
 		if a.ConfigDir != configDir || a.Limits == nil {
@@ -275,8 +254,6 @@ func roughAge(d time.Duration) string {
 	}
 }
 
-// memoryIndex finds .corgi/memory/index.md between cwd and the workspace
-// root and counts its facts (the "- " lines).
 func memoryIndex(cwd, root string) (string, int) {
 	dir := cwd
 	for i := 0; i < 16 && dir != ""; i++ {
@@ -308,8 +285,6 @@ func memoryIndex(cwd, root string) (string, int) {
 	return "", 0
 }
 
-// scopeLineFor tells a session what its branch's ticket agreed to: the
-// paths it may touch and the budget, so the hooks are no surprise.
 func scopeLineFor(root, branch string) string {
 	if root == "" {
 		return ""
@@ -321,9 +296,6 @@ func scopeLineFor(root, branch string) string {
 	return fmt.Sprintf("scope for %s: %s — a write outside is refused; widen with `corgi agent scope add %s --path …` and say why", s.Ref, scopeLine(s), s.Ref)
 }
 
-// stackLine names the services of the stack a session sits in and how to
-// reach them, so the tools that make this machine different from any other
-// are the first thing the session knows about.
 func stackLine(root string) string {
 	if root == "" {
 		return ""

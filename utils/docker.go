@@ -65,8 +65,6 @@ func CheckDockerStatus() error {
 }
 
 func IsServiceRunning(containerName string) (bool, error) {
-	// Anchor the filter so a request for "postgres-main" doesn't match
-	// "postgres-main-replica".
 	cmd := exec.Command(
 		"docker",
 		"ps",

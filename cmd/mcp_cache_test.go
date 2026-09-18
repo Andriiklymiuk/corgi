@@ -24,7 +24,6 @@ func TestComposeCacheServesClonesAndInvalidates(t *testing.T) {
 		t.Fatal("first load did not populate the cache")
 	}
 
-	// A handler that trims the compose in place must not poison later calls.
 	first.Services = nil
 	first.DatabaseServices[0].ServiceName = "mutated"
 
@@ -44,7 +43,6 @@ func TestComposeCacheServesClonesAndInvalidates(t *testing.T) {
 		t.Error("cache hit must point CorgiComposeFileContent at the returned copy")
 	}
 
-	// Editing the file (size changes) invalidates the entry.
 	if err := os.WriteFile(filepath.Join(dir, "corgi-compose.yml"), []byte("name: edited\n"+mcpComposeFixture[len("name: mcp-fixture\n"):]), 0o644); err != nil {
 		t.Fatal(err)
 	}

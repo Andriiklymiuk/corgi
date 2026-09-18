@@ -15,10 +15,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// What a workspace does on its own (corgi 2.22), for an agent client: read
-// the switches, flip the ones that take at once, the mute, the fan-out's
-// tries, the lessons. The same code the phone's switches go through.
-
 func registerPolicyMCPTools(s *server.MCPServer) {
 	s.AddTool(newCorgiTool("corgi_watch_switches",
 		mcp.WithDescription("What each workspace does on its own, as switches: {workspace, enabled, action, prs, reviews, ci, comments, isolate, quiet, daysOff, autoMerge, handOver, autoAllow, doneWhen[], compactAt, rebase, lessons}. autoAllow \"reads\" means the daemon answers Read/Grep/Glob prompts itself; doneWhen are the commands that define finished (a red one is typed back into the session); compactAt sends /compact past that context fill; rebase rebases a stopped clean branch when main moved; lessons writes reviews, red checks and failed bots down for every new session. Read-only."),

@@ -58,9 +58,6 @@ prints. A ref names its newest row. The daemon must be running.`,
 	},
 }
 
-// newestIssueKey picks the row a ref should open a session on: its issue
-// row when one is logged, else the newest of its rows. A comment's prompt
-// is about that comment; the ticket itself is what "work on it" means.
 func newestIssueKey(dir string, keys []string) string {
 	for _, k := range keys {
 		if e, ok := watch.FindEvent(dir, k); ok && strings.HasPrefix(string(e.Kind), "issue.") {

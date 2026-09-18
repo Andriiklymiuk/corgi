@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// Between "in review" and "ready to merge" sit two facts the forge knows:
-// do the checks pass, and did someone approve. Read once a round, kept in
-// a file every surface reads, so the phone, the menu bar and the editor
-// can all say "ready to merge" instead of "a pull request exists".
-
 func TestPullRefFromALink(t *testing.T) {
 	cases := map[string]string{
 		"https://github.com/acme/api/pull/7":                   "acme/api#7",
@@ -66,7 +61,6 @@ func TestReadyToMergeNeedsGreenChecksAndAnApproval(t *testing.T) {
 	if l := (PullStatus{State: "open", Checks: "failing", Review: "changes"}).Line(); l != "checks ✗ · changes requested" {
 		t.Fatalf("line: %q", l)
 	}
-	// No checks configured at all is not a reason to hold a merge.
 	if !(PullStatus{State: "open", Checks: "none", Review: "approved"}).Ready() {
 		t.Fatal("no checks + approved should be ready")
 	}
@@ -100,13 +94,10 @@ func TestGitHubPullStatus(t *testing.T) {
 	defer srv.Close()
 	g := &GitHub{Token: "tok", URL: srv.URL}
 
-	// dan asked for changes, then approved: the last word counts.
 	st, ok := g.PullStatus(context.Background(), "acme/api#7")
 	if !ok || !st.Ready() {
 		t.Fatalf("7: %+v %v", st, ok)
 	}
-	// A failing run wins over one still running; a requested reviewer who
-	// has not spoken is a review pending.
 	st, ok = g.PullStatus(context.Background(), "acme/api#8")
 	if !ok || st.Checks != "failing" || st.Review != "pending" {
 		t.Fatalf("8: %+v", st)

@@ -18,24 +18,17 @@ const (
 )
 
 var (
-	storageInitMu sync.Mutex
-	// storageFilePath doubles as a test seam: when tests set it before any
-	// SaveExecPath/ListExecPaths call, initializeStorage skips the
-	// getDataPath() computation and uses the test-injected path.
+	storageInitMu   sync.Mutex
 	storageFilePath string
 )
 
-// storagePathChosenByTest reports whether the current registry path was picked
-// by a test rather than derived from the user's real data directory. Comparing
-// against the real path keeps this correct however a test sets the seam, and
-// however many reads have already primed it.
 func storagePathChosenByTest() bool {
 	if storageFilePath == "" {
 		return false
 	}
 	dir, err := getDataPath()
 	if err != nil {
-		return true // cannot locate the real registry, so nothing to pollute
+		return true
 	}
 	return storageFilePath != filepath.Join(dir, storageFileName)
 }
@@ -54,22 +47,12 @@ func ensureDBPathExists(path string) error {
 	return nil
 }
 
-// CorgiDataDir is the per-user directory corgi keeps state in. Exported so
-// agent mode can put its files alongside the existing registry.
 func CorgiDataDir() (string, error) { return getDataPath() }
 
 func getDataPath() (string, error) {
-	// An explicit override wins everywhere, so an unusual install can point
-	// corgi at its real data directory instead of silently starting fresh.
 	if dir := strings.TrimSpace(os.Getenv("CORGI_DATA_DIR")); dir != "" {
 		return dir, nil
 	}
-	// On darwin, keep using the historical brew location when it already holds
-	// data, so nobody loses their saved paths — but decide by looking at the
-	// filesystem, never by running `brew`. corgi runs unattended under launchd,
-	// whose PATH does not include brew: shelling out would give the daemon and
-	// the shell two different data directories, and the daemon would then read
-	// an empty registry. HOMEBREW_PREFIX covers a custom prefix.
 	if runtime.GOOS == "darwin" {
 		for _, prefix := range []string{os.Getenv("HOMEBREW_PREFIX"), "/opt/homebrew", "/usr/local"} {
 			if prefix == "" {
@@ -80,9 +63,6 @@ func getDataPath() (string, error) {
 				return legacy, nil
 			}
 		}
-		// The exec-path registry genuinely fell back to the native dir; on a
-		// custom-prefix brew install that is why `corgi list` looks empty, so
-		// say so once. Only here — the agent dir's native use is deliberate.
 		native, err := NativeDataDir()
 		if err == nil {
 			warnDataDirFallback(native)
@@ -92,11 +72,6 @@ func getDataPath() (string, error) {
 	return NativeDataDir()
 }
 
-// NativeDataDir is the OS-conventional per-user data directory, never the
-// Homebrew prefix. CorgiDataDir uses it as its fallback and keeps the legacy
-// brew location for back-compat; callers that want the proper per-user location
-// regardless of a legacy brew install (agent mode) use it directly. The
-// CORGI_DATA_DIR override still wins over it.
 func NativeDataDir() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("CORGI_DATA_DIR")); dir != "" {
 		return dir, nil
@@ -131,26 +106,17 @@ func NativeDataDir() (string, error) {
 	}
 }
 
-// darwinFallbackDataDir is where corgi keeps state when no Homebrew var/corgi
-// directory was found. Pure: the fallback warning is emitted only by
-// getDataPath, which is the exec-path registry that can genuinely go missing —
-// NOT by NativeDataDir, which the agent dir uses deliberately and where nothing
-// fell back.
 func darwinFallbackDataDir(homeDir string) string {
 	return filepath.Join(homeDir, "Library", "Application Support", "corgi")
 }
 
-// warnDataDirFallback says, once, that the exec-path registry fell back to the
-// native location — which on a machine with a custom Homebrew prefix is why
-// `corgi list` looks empty. It is NOT called for the agent data dir, whose use
-// of the native location is intentional, so no false alarm fires there.
 func warnDataDirFallback(dir string) {
 	warnAboutDataDirFallbackOnce.Do(func() {
 		if _, err := os.Stat(filepath.Join(dir, storageFileName)); err == nil {
-			return // already the established location; nothing surprising
+			return
 		}
 		if !brewLooksInstalled() {
-			return // no Homebrew at all, so nothing was moved
+			return
 		}
 		fmt.Fprintf(os.Stderr,
 			"corgi: using %s for its data.\n"+
@@ -161,8 +127,6 @@ func warnDataDirFallback(dir string) {
 
 var warnAboutDataDirFallbackOnce sync.Once
 
-// brewLooksInstalled checks for a Homebrew binary without running it, so the
-// answer does not depend on PATH the way the daemon's does.
 func brewLooksInstalled() bool {
 	for _, p := range []string{"/opt/homebrew/bin/brew", "/usr/local/bin/brew"} {
 		if _, err := os.Stat(p); err == nil {
@@ -200,12 +164,6 @@ func ensureStorageInitialized() error {
 	return initializeStorage()
 }
 
-// runningUnderTest reports whether this process is a `go test` binary.
-//
-// Every compose parse calls SaveExecPath, so without this guard corgi's own
-// test suite writes its temp fixture directories into the user's real global
-// registry — which then shows up in `corgi list` and, worse, in agent mode's
-// workspace list.
 func runningUnderTest() bool {
 	return strings.HasSuffix(os.Args[0], ".test") ||
 		strings.Contains(os.Args[0], "/_test/") ||
@@ -214,10 +172,6 @@ func runningUnderTest() bool {
 
 func SaveExecPath(name, description, path string) error {
 	if runningUnderTest() && !storagePathChosenByTest() {
-		// No test injected an explicit path, so this would hit the user's real
-		// registry. Skip rather than pollute it. Keyed on the injection flag,
-		// not on storageFilePath being empty: any earlier read primes that with
-		// the real path, which would silently re-enable the writes.
 		return nil
 	}
 	absolutePath, err := filepath.Abs(path)

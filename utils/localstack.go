@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// awsEnvKey converts an AWS resource name like "db/password" or "/app/log_level"
-// into an env var fragment: "DB_PASSWORD" or "APP_LOG_LEVEL".
 func awsEnvKey(name string) string {
 	s := strings.ToUpper(name)
 	s = strings.ReplaceAll(s, "/", "_")
@@ -16,9 +14,6 @@ func awsEnvKey(name string) string {
 	return s
 }
 
-// autoInjectLocalstackServices ensures the SERVICES list passed to the LocalStack
-// container contains every AWS service implied by the configured resources.
-// E.g. listing topics: implies sns; listing streams: implies kinesis.
 func autoInjectLocalstackServices(services []string, db DatabaseService) []string {
 	want := map[string]bool{}
 	for _, s := range services {

@@ -32,21 +32,11 @@ var DescriptionInConfig = "description"
 var ServicesItemsFromFlag []string
 var DbServicesItemsFromFlag []string
 
-// Names declared in corgi-compose.yml but filtered out by --services /
-// --dbServices. Env gen uses these to drop cross-service refs to producers
-// that aren't running, instead of erroring.
 var SkippedServices = map[string]bool{}
 var SkippedDbServices = map[string]bool{}
 
-// UnknownComposeFields holds keys the strict YAML decoder did not recognize on
-// the most recent load (likely typos). Surfaced warn-first via ValidateCompose;
-// reset on every load. Warn-now/error-later: a future release may upgrade these
-// to hard errors once configs are clean.
 var UnknownComposeFields []string
 
-// DuplicateComposeKeys lists keys that appeared more than once within a single
-// services/db_services/required map on the most recent load. YAML silently
-// keeps only the last; ValidateCompose reports these. Reset per load.
 var DuplicateComposeKeys []string
 
 type DatabaseService struct {
@@ -64,39 +54,30 @@ type DatabaseService struct {
 	SeedFromFilePath  string                   `yaml:"seedFromFilePath,omitempty"`
 	SeedFromDb        SeedFromDb               `yaml:"seedFromDb,omitempty"`
 	Additional        AdditionalDatabaseConfig `yaml:"additional,omitempty"`
-	// localstack driver:
-	Services      []string          `yaml:"services,omitempty"`      // e.g. [sqs, s3, sns, secretsmanager, ssm, kinesis]
-	Queues        []string          `yaml:"queues,omitempty"`        // SQS queues to auto-create
-	Buckets       []string          `yaml:"buckets,omitempty"`       // S3 buckets to auto-create
-	Topics        []string          `yaml:"topics,omitempty"`        // SNS topics to auto-create
-	Subscriptions []SnsSubscription `yaml:"subscriptions,omitempty"` // SNS topic -> SQS queue wiring
-	Secrets       []AwsSecret       `yaml:"secrets,omitempty"`       // Secrets Manager entries
-	Parameters    []SsmParameter    `yaml:"parameters,omitempty"`    // SSM Parameter Store entries
-	Streams       []string          `yaml:"streams,omitempty"`       // Kinesis streams (1 shard each)
-	// supabase driver:
-	JWTSecret      string             `yaml:"jwtSecret,omitempty"`      // Override stock JWT secret. If set, driver re-signs ANON_KEY / SERVICE_ROLE_KEY with this secret to match what `supabase status` will report.
-	AuthUsers      []SupabaseAuthUser `yaml:"authUsers,omitempty"`      // Auth users to seed via supabase admin API on `up`.
-	ConfigTomlPath string             `yaml:"configTomlPath,omitempty"` // Optional path (relative to corgi-compose.yml) to a config.toml that corgi copies to corgi_services/db_services/<svc>/supabase/config.toml on each `corgi init`. If unset, supabase init runs at first `corgi up` and config.toml lives at <projectRoot>/supabase/config.toml.
-	StudioPort     int                `yaml:"studioPort,omitempty"`     // supabase only. Patches [studio].port in config.toml on each up. Compose wins over file.
-	InbucketPort   int                `yaml:"inbucketPort,omitempty"`   // supabase only. Patches [inbucket].port in config.toml on each up. Compose wins over file.
-	DbPort         int                `yaml:"dbPort,omitempty"`         // supabase only. Patches [db].port in config.toml on each up. Compose wins over file.
-	// image driver:
-	Image         string   `yaml:"image,omitempty"`         // image driver only. Docker image reference (e.g. "gotenberg/gotenberg:8").
-	ContainerPort int      `yaml:"containerPort,omitempty"` // image driver only. Container's internal port. Defaults to `port:` if unset. Used in docker-compose `<port>:<containerPort>` mapping.
-	Environment   []string `yaml:"environment,omitempty"`   // image driver only. Docker-compose environment entries (e.g. ["MEILI_MASTER_KEY=secret"]).
-	Volumes       []string `yaml:"volumes,omitempty"`       // image driver only. Docker-compose volume mappings (e.g. ["./data:/app/data"]).
-	Command       []string `yaml:"command,omitempty"`       // image driver only. Override container entrypoint args (e.g. ["--collector.zipkin.host-port=9411"]).
-	// Optional HTTP path for `corgi status`. If set, status check does GET
-	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
-	// If unset, status falls back to a TCP connect on the port.
-	HealthCheck string `yaml:"healthCheck,omitempty"`
+	Services          []string                 `yaml:"services,omitempty"`
+	Queues            []string                 `yaml:"queues,omitempty"`
+	Buckets           []string                 `yaml:"buckets,omitempty"`
+	Topics            []string                 `yaml:"topics,omitempty"`
+	Subscriptions     []SnsSubscription        `yaml:"subscriptions,omitempty"`
+	Secrets           []AwsSecret              `yaml:"secrets,omitempty"`
+	Parameters        []SsmParameter           `yaml:"parameters,omitempty"`
+	Streams           []string                 `yaml:"streams,omitempty"`
+	JWTSecret         string                   `yaml:"jwtSecret,omitempty"`
+	AuthUsers         []SupabaseAuthUser       `yaml:"authUsers,omitempty"`
+	ConfigTomlPath    string                   `yaml:"configTomlPath,omitempty"`
+	StudioPort        int                      `yaml:"studioPort,omitempty"`
+	InbucketPort      int                      `yaml:"inbucketPort,omitempty"`
+	DbPort            int                      `yaml:"dbPort,omitempty"`
+	Image             string                   `yaml:"image,omitempty"`
+	ContainerPort     int                      `yaml:"containerPort,omitempty"`
+	Environment       []string                 `yaml:"environment,omitempty"`
+	Volumes           []string                 `yaml:"volumes,omitempty"`
+	Command           []string                 `yaml:"command,omitempty"`
+	HealthCheck       string                   `yaml:"healthCheck,omitempty"`
 
-	// Run profiles this db_service belongs to; empty runs only when no --profile.
 	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 }
 
-// KnownDrivers is the set of valid db_services.driver values, derived from the
-// Driver field's `options:` tag (its trailing "❌skip" sentinel stripped).
 var KnownDrivers = knownDriversFromTag()
 
 func knownDriversFromTag() []string {
@@ -129,19 +110,12 @@ type AwsSecret struct {
 	Value string `yaml:"value,omitempty"`
 }
 
-// SupabaseAuthUser is one entry in db_services.<name>.authUsers for the
-// supabase driver. `metadata` is a yaml map serialized to JSON for
-// user_metadata. Nil omits user_metadata.
 type SupabaseAuthUser struct {
 	Email    string                 `yaml:"email,omitempty"`
 	Password string                 `yaml:"password,omitempty"`
 	Metadata map[string]interface{} `yaml:"metadata,omitempty"`
 }
 
-// MetadataJSON serializes Metadata to a compact JSON object string for the
-// admin API. Returns "{}" if Metadata is nil. Errors marshaling are
-// extremely unlikely (yaml decoder produces JSON-friendly types) but on
-// failure we fall back to "{}" to keep the bootstrap script idempotent.
 func (u SupabaseAuthUser) MetadataJSON() string {
 	if u.Metadata == nil {
 		return "{}"
@@ -156,7 +130,7 @@ func (u SupabaseAuthUser) MetadataJSON() string {
 type SsmParameter struct {
 	Name  string `yaml:"name,omitempty"`
 	Value string `yaml:"value,omitempty"`
-	Type  string `yaml:"type,omitempty"` // String | StringList | SecureString
+	Type  string `yaml:"type,omitempty"`
 }
 
 type SeedFromDb struct {
@@ -177,17 +151,14 @@ type DependsOnService struct {
 	Suffix      string `yaml:"suffix,omitempty"`
 	Scheme      string `yaml:"scheme,omitempty"`
 	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
-	// Condition gates startup: "ready" waits for the readiness probe, "started"
-	// waits only until corgi launched it. Empty = no gating unless --gate-deps.
-	Condition string `yaml:"condition,omitempty" json:"condition,omitempty"`
+	Condition   string `yaml:"condition,omitempty" json:"condition,omitempty"`
 }
 
 type DependsOnDb struct {
 	Name        string `yaml:"name,omitempty"`
 	EnvAlias    string `yaml:"envAlias,omitempty"`
 	ForceUseEnv bool   `yaml:"forceUseEnv,omitempty"`
-	// Condition opts this edge into startup gating. See DependsOnService.
-	Condition string `yaml:"condition,omitempty" json:"condition,omitempty"`
+	Condition   string `yaml:"condition,omitempty" json:"condition,omitempty"`
 }
 
 type Script struct {
@@ -207,12 +178,8 @@ type Runner struct {
 	ContainerPort int       `yaml:"containerPort,omitempty"`
 	Command       string    `yaml:"command,omitempty"`
 	ComposeFile   string    `yaml:"composeFile,omitempty"`
-	// Image runs the service straight from a registry image — no repo, no
-	// build. Mutually exclusive with dockerfile/composeFile sources.
-	Image string `yaml:"image,omitempty"`
-	// Watch rebuilds + restarts the container on context changes
-	// (docker compose up --watch); effective in foreground runs only.
-	Watch bool `yaml:"watch,omitempty"`
+	Image         string    `yaml:"image,omitempty"`
+	Watch         bool      `yaml:"watch,omitempty"`
 }
 
 type Service struct {
@@ -231,69 +198,38 @@ type Service struct {
 	PortAlias              string             `yaml:"portAlias,omitempty"`
 	DependsOnServices      []DependsOnService `yaml:"depends_on_services,omitempty"`
 	DependsOnDb            []DependsOnDb      `yaml:"depends_on_db,omitempty"`
-	// WaitForDatabases gates this service on the database phase. nil/true =
-	// wait (the default). false starts it alongside the databases, for a
-	// service that only needs their env — a bundler that spends a minute
-	// compiling before it serves anything should not spend it idle.
-	WaitForDatabases *bool            `yaml:"waitForDatabases,omitempty"`
-	Exports          []string         `yaml:"exports,omitempty"`
-	BeforeStart      BeforeStartSteps `yaml:"beforeStart,omitempty"`
-	Start            []string         `yaml:"start,omitempty"`
-	AfterStart       []string         `yaml:"afterStart,omitempty"`
-	RestartPolicy    *RestartPolicy   `yaml:"restartPolicy,omitempty"`
-	OpenOnReady      *OpenOnReady     `yaml:"openOnReady,omitempty"`
-	Scripts          []Script         `yaml:"scripts,omitempty"`
-	InteractiveInput bool             `yaml:"interactiveInput,omitempty"`
-	// AutoSourceEnv toggles the `set -a; . <envFile>; set +a` prefix corgi
-	// adds to start/beforeStart/afterStart commands. nil/true = on (default),
-	// false = off. Off avoids exporting every var to subprocesses (e.g. when
-	// a beforeStart `npm install` would otherwise leak secrets to postinstall
-	// scripts).
-	AutoSourceEnv *bool `yaml:"autoSourceEnv,omitempty"`
+	WaitForDatabases       *bool              `yaml:"waitForDatabases,omitempty"`
+	Exports                []string           `yaml:"exports,omitempty"`
+	BeforeStart            BeforeStartSteps   `yaml:"beforeStart,omitempty"`
+	Start                  []string           `yaml:"start,omitempty"`
+	AfterStart             []string           `yaml:"afterStart,omitempty"`
+	RestartPolicy          *RestartPolicy     `yaml:"restartPolicy,omitempty"`
+	OpenOnReady            *OpenOnReady       `yaml:"openOnReady,omitempty"`
+	Scripts                []Script           `yaml:"scripts,omitempty"`
+	InteractiveInput       bool               `yaml:"interactiveInput,omitempty"`
+	AutoSourceEnv          *bool              `yaml:"autoSourceEnv,omitempty"`
 
 	Runner Runner `yaml:"runner,omitempty"`
 
-	// Tunnel declares an optional public HTTPS tunnel managed by `corgi
-	// tunnel`. When set + hostname resolves non-empty, corgi runs the
-	// provider in named/static mode (stable URL across restarts).
-	// Otherwise (block missing or hostname empty) corgi falls back to the
-	// provider's default behavior (cloudflared Quick Tunnels, etc.).
 	Tunnel *TunnelConfig `yaml:"tunnel,omitempty"`
 
-	// Optional HTTP path for `corgi status`. If set, status check does GET
-	// http://localhost:<port><HealthCheck> and accepts any non-5xx as healthy.
-	// If unset, status falls back to a TCP connect on the port.
 	HealthCheck string `yaml:"healthCheck,omitempty"`
 
-	// Warmup is a single expensive request made once the service is live,
-	// before it counts as ready. A polled healthCheck has to be cheap: a dev
-	// server that compiles on demand does the work again for every probe, so
-	// polling one starves the machine and the stack never settles. Put the
-	// expensive check here instead — it runs once and waits.
 	Warmup *WarmupCheck `yaml:"warmup,omitempty"`
 
-	// Run profiles this service belongs to; empty runs only when no --profile.
 	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 
 	AbsolutePath string
 
-	// CacheScope isolates beforeStart step-cache markers when the service runs
-	// from a relocated dir. Empty for the declared checkout.
 	CacheScope string `json:"-"`
 
-	// ResolvedDockerSource is stamped by ResolveRunnerModes for docker-mode
-	// services: repo compose file vs generated Dockerfile wrapper.
 	ResolvedDockerSource DockerSource `yaml:"-" json:"-"`
 }
 
-// TunnelConfig describes a stable public HTTPS tunnel for one service.
-// Hostname / Name support `${VAR}` substitution from shell env first, then
-// from the service's env file (copyEnvFromFilePath). Missing required vars
-// produce a strict error at `corgi tunnel` time — no silent fallback.
 type TunnelConfig struct {
-	Provider string `yaml:"provider,omitempty"` // cloudflared (default) | ngrok | localtunnel.
-	Hostname string `yaml:"hostname,omitempty"` // public URL (e.g. api-andrii.dev.example.com). Required when block present.
-	Name     string `yaml:"name,omitempty"`     // cloudflared tunnel name (must exist via `cloudflared tunnel create`). Ignored for ngrok.
+	Provider string `yaml:"provider,omitempty"`
+	Hostname string `yaml:"hostname,omitempty"`
+	Name     string `yaml:"name,omitempty"`
 }
 
 type Required struct {
@@ -302,11 +238,9 @@ type Required struct {
 	Install  []string `yaml:"install,omitempty"`
 	Optional bool     `yaml:"optional,omitempty"`
 	CheckCmd string   `yaml:"checkCmd,omitempty"`
-	// SkipInCi drops this tool from preflight when corgi detects CI.
-	SkipInCi bool `yaml:"skipInCi,omitempty"`
+	SkipInCi bool     `yaml:"skipInCi,omitempty"`
 }
 
-// ActiveRequired filters out tools declared skipInCi when running in CI.
 func ActiveRequired(required []Required) []Required {
 	if !CIMode {
 		return required
@@ -322,7 +256,6 @@ func ActiveRequired(required []Required) []Required {
 	return active
 }
 
-// Named run-settings bundle selected by --tier.
 type EnvTier struct {
 	Dir        string `yaml:"dir,omitempty"`
 	DbServices string `yaml:"dbServices,omitempty"`
@@ -334,15 +267,13 @@ type CorgiCompose struct {
 	Services         []Service
 	Required         []Required
 	EnvTiers         map[string]EnvTier `yaml:"envTiers,omitempty"`
-	// cannot combine from one common struct (yaml serialization), so have to repeat
-	Init        []string `yaml:"init,omitempty"`
-	BeforeStart []string `yaml:"beforeStart,omitempty"`
-	Start       []string `yaml:"start,omitempty"`
-	AfterStart  []string `yaml:"afterStart,omitempty"`
+	Init             []string           `yaml:"init,omitempty"`
+	BeforeStart      []string           `yaml:"beforeStart,omitempty"`
+	Start            []string           `yaml:"start,omitempty"`
+	AfterStart       []string           `yaml:"afterStart,omitempty"`
 
-	UseDocker bool `yaml:"useDocker,omitempty"`
-	UseAwsVpn bool `yaml:"useAwsVpn,omitempty"`
-	// Opt-in: prefix all containers with the workspace name (cross-workspace collisions).
+	UseDocker       bool `yaml:"useDocker,omitempty"`
+	UseAwsVpn       bool `yaml:"useAwsVpn,omitempty"`
 	ScopeContainers bool `yaml:"scopeContainers,omitempty"`
 
 	Name        string `yaml:"name,omitempty"`
@@ -351,9 +282,6 @@ type CorgiCompose struct {
 	E2E *E2ESuite `yaml:"e2e,omitempty"`
 }
 
-// E2ESuite is a cross-service test suite that belongs to the stack rather than
-// to any one service. Services have their own `scripts.test`; a suite that
-// drives several of them at once has nowhere else to live.
 type E2ESuite struct {
 	Workdir   string   `yaml:"workdir,omitempty"`
 	Install   string   `yaml:"install,omitempty"`
@@ -366,11 +294,10 @@ type CorgiComposeYaml struct {
 	Services         map[string]Service         `yaml:"services"`
 	Required         map[string]Required        `yaml:"required"`
 	EnvTiers         map[string]EnvTier         `yaml:"envTiers,omitempty"`
-	// cannot combine from one common struct (yaml serialization), so have to repeat
-	Init        []string `yaml:"init,omitempty"`
-	BeforeStart []string `yaml:"beforeStart,omitempty"`
-	Start       []string `yaml:"start,omitempty"`
-	AfterStart  []string `yaml:"afterStart,omitempty"`
+	Init             []string                   `yaml:"init,omitempty"`
+	BeforeStart      []string                   `yaml:"beforeStart,omitempty"`
+	Start            []string                   `yaml:"start,omitempty"`
+	AfterStart       []string                   `yaml:"afterStart,omitempty"`
 
 	UseDocker bool `yaml:"useDocker,omitempty"`
 	UseAwsVpn bool `yaml:"useAwsVpn,omitempty"`
@@ -387,7 +314,6 @@ var CorgiComposePath string
 var CorgiComposePathDir string
 var CorgiComposeFileContent *CorgiCompose
 
-// Get corgi-compose info from path to corgi-compose.yml file
 func GetCorgiServices(cobra *cobra.Command) (*CorgiCompose, error) {
 	pathToCorgiComposeFile, corgiYaml, err := loadCorgiComposeFile(cobra)
 	if err != nil {
@@ -462,15 +388,10 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read %s", pathToCorgiComposeFile)
 	}
 
-	// Expand ${VAR} / ${VAR:-default} before parsing, against process env plus an
-	// optional sibling .env (env wins).
 	dotenv, err := LoadDotEnv(filepath.Join(CorgiComposePathDir, ".env"))
 	if err != nil {
 		return "", CorgiComposeYaml{}, fmt.Errorf("couldn't read .env next to %s: %v", pathToCorgiComposeFile, err)
 	}
-	// Tolerant on purpose, and silent: an unset ${VAR} is left untouched so
-	// runtime/per-service env, tunnel hostnames, and cross-service
-	// ${producer.VAR} refs that resolve later keep working without noise.
 	file, _ = InterpolateTolerant(file, EnvThenDotEnv(dotenv))
 
 	var corgiYaml CorgiComposeYaml
@@ -479,8 +400,6 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 	dec := yaml.NewDecoder(bytes.NewReader(file))
 	dec.KnownFields(true)
 	if err := dec.Decode(&corgiYaml); err != nil {
-		// KnownFields surfaces typo'd keys as an error. To stay non-breaking we
-		// record them as warnings and re-decode tolerantly so the load succeeds.
 		if fields := unknownFieldsFromYAMLError(err); len(fields) > 0 {
 			UnknownComposeFields = fields
 			corgiYaml = CorgiComposeYaml{}
@@ -495,9 +414,6 @@ func loadCorgiComposeFile(cobra *cobra.Command) (string, CorgiComposeYaml, error
 	return pathToCorgiComposeFile, corgiYaml, nil
 }
 
-// detectDuplicateComposeKeys parses the document as raw nodes and reports any
-// duplicated key under the top-level services / db_services / required maps,
-// which a normal decode would silently collapse.
 func detectDuplicateComposeKeys(file []byte) []string {
 	var root yaml.Node
 	if err := yaml.Unmarshal(file, &root); err != nil || len(root.Content) == 0 {
@@ -534,9 +450,6 @@ func duplicateKeysInSection(section string, m *yaml.Node) []string {
 	return dups
 }
 
-// unknownFieldsFromYAMLError pulls the offending key names out of a yaml.v3
-// KnownFields(true) error. Returns nil if the error is not about unknown
-// fields (so genuine parse errors still propagate as hard failures).
 func unknownFieldsFromYAMLError(err error) []string {
 	if err == nil {
 		return nil
@@ -620,8 +533,6 @@ func buildDatabaseService(indexName string, db DatabaseService) (DatabaseService
 		}
 	}
 
-	// Copy what was parsed, then set only what corgi computes. Listing fields by
-	// hand dropped each new compose key until someone remembered to add a line.
 	built := db
 	built.ServiceName = indexName
 	built.Driver = driver
@@ -688,12 +599,9 @@ func buildService(indexName string, service Service) Service {
 	resolveServicePathFromCloneFrom(&service)
 	normalizeServicePath(&service)
 
-	// Copy what was parsed, then set only what corgi computes: listing fields
-	// by hand dropped each new compose key until someone added a line here.
 	built := service
 	built.ServiceName = indexName
 	built.AbsolutePath = computeAbsolutePath(service.Path)
-	// Port resolution needs AbsolutePath (reads EXPOSE from the Dockerfile).
 	resolveDockerExposedPort(&built)
 	return built
 }
@@ -702,8 +610,6 @@ func resolveDockerExposedPort(service *Service) {
 	if service.Runner.Name != "docker" || service.Port != 0 {
 		return
 	}
-	// Quiet on error: at parse time the repo may not be cloned yet; run-time
-	// mode resolution reports missing dockerfiles properly.
 	exposedPort, _ := GetExposedPortFromDockerfile(*service)
 	if exposedPort == "" {
 		return
@@ -743,13 +649,8 @@ func computeAbsolutePath(path string) string {
 	return CorgiComposePathDir + "/" + path
 }
 
-// ServiceRepoDir resolves a service's compose `path:` to an absolute repo dir,
-// reusing the same logic env generation uses. Used by mission-control's probe.
 func ServiceRepoDir(path string) string { return computeAbsolutePath(path) }
 
-// JoinUnderComposeDir resolves a compose-relative path against CorgiComposePathDir
-// and rejects anything that escapes it (via `..` or an absolute path), so a
-// crafted definitionPath / seedFromFilePath can't read files outside the project.
 func JoinUnderComposeDir(rel string) (string, error) {
 	if filepath.IsAbs(rel) {
 		return "", fmt.Errorf("path %q escapes the compose directory", rel)
@@ -762,10 +663,6 @@ func JoinUnderComposeDir(rel string) (string, error) {
 	return joined, nil
 }
 
-// overrideServiceDirs repoints named services (name=path) at an external working
-// dir, e.g. a git worktree. AbsolutePath is the only source of cwd, so this is
-// enough. Unknown name / missing dir is a hard error — a typo running the wrong
-// tree is worse than a stop.
 func overrideServiceDirs(corgi *CorgiCompose, pairs []string) error {
 	if len(pairs) == 0 {
 		return nil
@@ -796,8 +693,6 @@ func overrideServiceDirs(corgi *CorgiCompose, pairs []string) error {
 	return nil
 }
 
-// applyServiceDirOverrides applies --service-dir if the command defines it
-// (run/exec/test); others (e.g. clean) are unaffected.
 func applyServiceDirOverrides(cmd *cobra.Command, corgi *CorgiCompose) error {
 	pairs, err := cmd.Flags().GetStringArray("service-dir")
 	if err != nil {
@@ -850,7 +745,6 @@ func CleanFromScratch(cmd *cobra.Command, corgi CorgiCompose) {
 }
 
 func CleanCorgiServicesFolder() {
-	// git worktree remove before rm so source repos don't keep dangling entries.
 	if skipped, _ := CleanCorgiWorktrees(false); len(skipped) > 0 {
 		Infof("kept %d worktree(s) with uncommitted changes (corgi worktree prune --force to drop):\n", len(skipped))
 		for _, d := range skipped {
@@ -867,7 +761,6 @@ func CleanCorgiServicesFolder() {
 		return
 	}
 	for _, e := range entries {
-		// snapshots are expensive to rebuild — preserved here, dropped only by `clean -i snapshots`
 		if err := removeExceptSnapshots(filepath.Join(root, e.Name())); err != nil {
 			fmt.Println("couldn't clean", e.Name(), ":", err)
 		}
@@ -878,8 +771,7 @@ func CleanCorgiServicesFolder() {
 	fmt.Println("🗑️ Cleaned up corgi_services (snapshots preserved)")
 }
 
-// Recursively removes path but keeps any "snapshots" dir. Lstat (not Stat) so a
-// symlink out of corgi_services is removed as a link, never followed and emptied.
+// Lstat, not Stat: a symlink out of corgi_services is removed as a link, never followed.
 func removeExceptSnapshots(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -902,7 +794,6 @@ func removeExceptSnapshots(path string) error {
 	return os.Remove(path)
 }
 
-// removeChildrenExceptSnapshots reports whether anything under path was kept.
 func removeChildrenExceptSnapshots(path string, entries []os.DirEntry) (bool, error) {
 	keptAny := false
 	for _, e := range entries {
@@ -945,7 +836,7 @@ func getDbSourceFromPath(path string) SeedFromDb {
 		}
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
-			continue // no '=', not a key=value line
+			continue
 		}
 		key, value := strings.ToUpper(strings.TrimSpace(parts[0])), parts[1]
 		switch key {
@@ -1013,8 +904,6 @@ func getCorgiConfigFilePath() (string, error) {
 		return defaultCorgiConfigName, nil
 	}
 
-	// No config here — try one level up (e.g. run from a service folder while the
-	// corgi-compose.yml lives in the onboarding/workspace dir above it).
 	parentConfig := filepath.Join("..", defaultCorgiConfigName)
 	parentExists, err := CheckIfFileExistsInDirectory("..", defaultCorgiConfigName)
 	if err == nil && parentExists {
@@ -1242,14 +1131,10 @@ func CompareCorgiFiles(c1, c2 *CorgiCompose) bool {
 	return true
 }
 
-// WaitsForDatabases reports whether this service must hold until the database
-// phase finishes. Default true; waitForDatabases: false opts a service out.
 func (s Service) WaitsForDatabases() bool {
 	return s.WaitForDatabases == nil || *s.WaitForDatabases
 }
 
-// AnyServiceStartsWithDatabases reports whether any service opted out of the
-// database gate, which is what makes corgi run that phase concurrently.
 func AnyServiceStartsWithDatabases(corgi *CorgiCompose) bool {
 	for _, s := range corgi.Services {
 		if !s.WaitsForDatabases() {

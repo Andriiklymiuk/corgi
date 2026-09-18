@@ -50,12 +50,8 @@ func TestWriteCreatesAMissingFile(t *testing.T) {
 	}
 }
 
-// The bug this package exists for: a failed rename used to leave the temp file
-// on disk, and nothing else ever cleans it up.
 func TestWriteRemovesTempWhenRenameFails(t *testing.T) {
 	dir := t.TempDir()
-	// A directory at the destination makes the rename fail while the temp
-	// write itself succeeds.
 	path := filepath.Join(dir, "target")
 	if err := os.MkdirAll(filepath.Join(path, "child"), 0o755); err != nil {
 		t.Fatal(err)

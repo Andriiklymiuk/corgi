@@ -85,7 +85,7 @@ func TestDetectModeNonInteractive(t *testing.T) {
 			}
 			NonInteractive = false
 			CIMode = false
-			detectFromEnv() // env-only check, TTY-independent
+			detectFromEnv()
 			if NonInteractive != tc.wantNI {
 				t.Errorf("NonInteractive = %v, want %v", NonInteractive, tc.wantNI)
 			}
@@ -112,7 +112,6 @@ func TestDetectMode_NonTTYImpliesNonInteractive(t *testing.T) {
 	NonInteractive = false
 	CIMode = false
 	DetectMode()
-	// go test runs with piped stdio, so the TTY check must flip NonInteractive on.
 	if !NonInteractive {
 		t.Error("expected NonInteractive=true when stdio is not a TTY")
 	}

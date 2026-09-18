@@ -13,10 +13,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// The running, seeded stack is the one thing a session here has that a
-// session anywhere else does not. These tools finish that: hit a service by
-// name, ask the database how it would run a query.
-
 const httpBodyMax = 64 << 10
 
 type httpArgs struct {
@@ -156,7 +152,6 @@ func mcpExplain(composePath, service, query string, analyze bool) (any, error) {
 		"hint": explainHint(res.Output)}, nil
 }
 
-// explainHint is the one line a plan is usually read for.
 func explainHint(plan string) string {
 	var hints []string
 	if strings.Contains(plan, "Seq Scan") {

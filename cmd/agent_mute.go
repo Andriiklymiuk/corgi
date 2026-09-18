@@ -13,10 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 )
 
-// Nothing rings for a while: no desktop toast, no phone push. The inbox,
-// the board and the rows go on; a key, the bar and the phone show a bell
-// with a line through it until it passes.
-
 var agentMuteCmd = &cobra.Command{
 	Use:   "mute [1h|30m|off]",
 	Short: "Nothing rings for a while — no toast, no push; the board goes on",
@@ -70,8 +66,6 @@ func init() {
 	agentCmd.AddCommand(agentMuteCmd)
 }
 
-// launchMuteHandler is the phone's and the bar's mute: GET says, POST
-// {minutes} sets (0 ends it).
 func launchMuteHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()

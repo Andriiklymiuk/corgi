@@ -10,12 +10,8 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// The daemon asks for worktrees by workspace directory and branch; loading a
-// compose file goes through globals, so one at a time.
 var isolateMu sync.Mutex
 
-// isolateFixWorktrees gives every repository of the stack in dir a worktree
-// on branch and returns the directories, for an unattended run to work in.
 func isolateFixWorktrees(dir, branch string) ([]string, error) {
 	isolateMu.Lock()
 	defer isolateMu.Unlock()
@@ -52,8 +48,6 @@ func isolateFixWorktrees(dir, branch string) ([]string, error) {
 	return dirs, nil
 }
 
-// releaseFixWorktrees removes an isolated run's worktrees, keeping any with
-// uncommitted work and saying so.
 func releaseFixWorktrees(dir, branch string) (removed, kept []string, err error) {
 	if strings.TrimSpace(branch) == "" {
 		return nil, nil, nil

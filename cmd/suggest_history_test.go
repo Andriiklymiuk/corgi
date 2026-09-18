@@ -78,7 +78,6 @@ func TestSuggestHistoryRateLimitBlocksSecondFile(t *testing.T) {
 	captureStdout(t, func() {
 		runSuggestHistory(t, "record", "--slug", "first", "--status", "filed", "--ticket", "ABC-1")
 	})
-	// Default cap is 1/week → a fresh candidate is rate-limited.
 	out := captureStdout(t, func() { runSuggestHistory(t, "check", "--slug", "second") })
 	var res suggestCheckResult
 	if err := json.Unmarshal([]byte(out), &res); err != nil {

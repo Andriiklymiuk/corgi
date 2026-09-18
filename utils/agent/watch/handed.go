@@ -10,16 +10,11 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// A hand-over is a review comment or a red build typed into the session
-// already on that branch, by the daemon on its own (the workspace's
-// handOver switch) or by a person's Hand over on the phone. This file is
-// the mark the row carries afterwards: "handed to api·auth 2m ago".
 type Hand struct {
-	At time.Time `json:"at"`
-	// To is the session it went to: its id and the name a person reads.
-	To    string `json:"to"`
-	Label string `json:"label,omitempty"`
-	By    string `json:"by,omitempty"` // daemon, phone, bar, editor
+	At    time.Time `json:"at"`
+	To    string    `json:"to"`
+	Label string    `json:"label,omitempty"`
+	By    string    `json:"by,omitempty"`
 }
 
 type HandLog struct {
@@ -50,7 +45,6 @@ func (l *HandLog) Get(key string) (Hand, bool) {
 	return h, ok
 }
 
-// Set records a hand-over; the oldest go once the file is full.
 func (l *HandLog) Set(key string, h Hand) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -77,10 +71,6 @@ func (l *HandLog) Set(key string, h Hand) error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// HandoverLine is what a row says when it is handed to the session on its
-// branch: the comment or the red build, as the message a person would
-// otherwise retype. "" for a kind with nothing to hand (a new issue is
-// Work on it, not a message).
 func HandoverLine(e Event) string {
 	from := ""
 	if e.Author != "" {
@@ -113,8 +103,6 @@ func HandoverLine(e Event) string {
 	return ""
 }
 
-// PullLinkOf is the pull request a PR-kind event is about: its URL without
-// the comment fragment. "" for anything else.
 func PullLinkOf(e Event) string {
 	link := e.URL
 	if i := indexByte(link, '#'); i > 0 {

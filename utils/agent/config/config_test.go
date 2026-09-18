@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// writeRepoConfig writes a committed .corgi/agent.yml, i.e. content that
-// arrived with a `git clone` and was not written by the person running corgi.
 func writeRepoConfig(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -29,9 +27,6 @@ func writeUserConfig(t *testing.T, body string, mode os.FileMode) string {
 	return path
 }
 
-// A cloned repository must not be able to choose which program runs, which
-// credentials are used, or which permission mode applies. This is the whole
-// reason the config is split by trust level.
 func TestClonedRepoCannotGrantItselfCapability(t *testing.T) {
 	dir := writeRepoConfig(t, `
 version: 1
@@ -65,7 +60,6 @@ autostart: true
 	}
 }
 
-// The mirror image: a repo may take capability away from itself.
 func TestClonedRepoMayRestrictItself(t *testing.T) {
 	dir := writeRepoConfig(t, `
 version: 1
@@ -176,16 +170,12 @@ func TestResolveCannotSilentlyDisableACredentialDefault(t *testing.T) {
 
 	got := Resolve("acme", nil, user)
 
-	// A zero-value bool is indistinguishable from "unset" in yaml, so the
-	// permissive default must win rather than being turned off by omission.
 	if !got.InheritAPIKey {
 		t.Error("an omitted bool must not silently override an explicit default")
 	}
 }
 
 func TestDangerouslySkipPermissionsIsATrustedCapabilityFlag(t *testing.T) {
-	// OR-ed like the other capability booleans: an omitted per-workspace value
-	// must not silently disable a default.
 	user := &UserConfig{
 		Defaults:   WorkspaceConfig{DangerouslySkipPermissions: true},
 		Workspaces: map[string]WorkspaceConfig{"acme": {}},
@@ -194,9 +184,6 @@ func TestDangerouslySkipPermissionsIsATrustedCapabilityFlag(t *testing.T) {
 		t.Error("an omitted bool must not override an explicit default")
 	}
 
-	// The security invariant: a committed repo file can never turn it on.
-	// RepoConfig has no such field, so even a repo that declares it resolves to
-	// off without a trusted entry — cloning a repo cannot skip your prompts.
 	dir := writeRepoConfig(t, "version: 1\nworkspace:\n  id: acme\ndangerouslySkipPermissions: true\n")
 	repo, _ := LoadRepo(dir)
 	if got := Resolve("acme", repo, &UserConfig{}); got.DangerouslySkipPermissions {
@@ -211,16 +198,11 @@ func TestLoadUserRejectsBlanketDefaultBypass(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// A default-level bypass would skip prompts for every workspace with no
-	// per-workspace opt-out, so it must fail to load rather than apply silently.
 	if _, err := LoadUser(path); err == nil {
 		t.Error("dangerouslySkipPermissions under defaults: must be rejected")
 	}
 }
 
-// The id is the lookup key into trusted per-workspace settings, so a cloned
-// repository must not be able to choose it. Declaring someone else's workspace
-// id would otherwise inherit their configDir, bin, and permission mode.
 func TestClonedRepoCannotClaimAnotherWorkspacesIdentity(t *testing.T) {
 	dir := writeRepoConfig(t, "version: 1\nworkspace:\n  id: work\n")
 	repo, _ := LoadRepo(dir)
@@ -241,9 +223,6 @@ func TestClonedRepoCannotClaimAnotherWorkspacesIdentity(t *testing.T) {
 	}
 }
 
-// `corgi agent scan ~/projects` can register a dozen stacks. If autostart
-// defaulted to on, the next daemon start would spawn a remote-control process
-// for every one of them.
 func TestAutostartIsOptIn(t *testing.T) {
 	if (Resolved{}).AutostartEnabled() {
 		t.Error("a merely registered workspace must not be supervised until asked for")
@@ -279,9 +258,6 @@ func contains(haystack, needle string) bool {
 }
 
 func TestKindAndArgsComeOnlyFromTrustedConfig(t *testing.T) {
-	// An argv is a choice of what code the daemon runs. The committed repo file
-	// travels with a clone and was written by whoever wrote the repository, so
-	// there is deliberately no field on RepoConfig that could reach it.
 	repo := &RepoConfig{Version: 1}
 	repo.Workspace.ID = "acme"
 
@@ -300,7 +276,6 @@ func TestKindAndArgsComeOnlyFromTrustedConfig(t *testing.T) {
 }
 
 func TestWorkspaceArgsReplaceDefaultsRatherThanAppend(t *testing.T) {
-	// Concatenating would produce a command line neither file asked for.
 	user := &UserConfig{
 		Defaults:   WorkspaceConfig{Kind: "custom", Args: []string{"default", "--flag"}},
 		Workspaces: map[string]WorkspaceConfig{"acme": {Args: []string{"specific"}}},
@@ -311,16 +286,12 @@ func TestWorkspaceArgsReplaceDefaultsRatherThanAppend(t *testing.T) {
 	if len(got.Args) != 1 || got.Args[0] != "specific" {
 		t.Errorf("args = %v, want only the workspace's own", got.Args)
 	}
-	// The kind still falls through from defaults.
 	if got.Kind != "custom" {
 		t.Errorf("kind = %q, want it inherited from defaults", got.Kind)
 	}
 }
 
 func TestEmptyKindKeepsExistingConfigsWorking(t *testing.T) {
-	// Every config written before kinds existed has no kind: field. It must
-	// resolve to empty here and be defaulted downstream, not to some literal
-	// that a later rename could break.
 	user := &UserConfig{Workspaces: map[string]WorkspaceConfig{"acme": {Bin: "claude"}}}
 
 	if got := Resolve("acme", nil, user); got.Kind != "" {
@@ -376,9 +347,6 @@ func TestApplyProfileEmptyNameIsANoOp(t *testing.T) {
 	}
 }
 
-// The model policy: strong model to plan and review, cheap one to execute,
-// a kind's own entry beats the phase, and a workspace overlays defaults
-// field by field.
 func TestModelPolicyPicksByPhaseAndKind(t *testing.T) {
 	var none *ModelPolicy
 	if none.ForAuto() != ModelAutoDefault || none.ForKind("issue.new") != ModelPlanDefault || none.ForKind("ci.failed") != ModelExecuteDefault || none.ForKind("review.requested") != ModelReviewDefault || none.ForEscalation() != ModelEscalateDefault {

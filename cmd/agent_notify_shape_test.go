@@ -97,8 +97,6 @@ type capturedPost struct {
 	click string
 }
 
-// httptest serves on 127.0.0.1, which is not a known host, so the request takes
-// the ntfy shape: body as text with Title and Click headers.
 func TestWebhookLinkNotifierUsesTheGivenLink(t *testing.T) {
 	got := make(chan capturedPost, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

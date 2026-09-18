@@ -19,24 +19,12 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// Registry holds every tracked session and the board they sit on. One mutex,
-// in memory, persisted as the same JSON the plugin reads.
 type Registry struct {
-	// Resolve labels a session from its cwd: the registered workspace id and
-	// its root when the cwd is inside one, otherwise the directory itself.
-	// Injected by cmd, which owns the workspace registry.
-	Resolve func(cwd string) (label, folder string)
-	// ProfileFor names the badge for a CLAUDE_CONFIG_DIR: a corgi profile
-	// name when one points at that directory, else the directory's own name.
+	Resolve    func(cwd string) (label, folder string)
 	ProfileFor func(configDir string) string
-	// PullFor is the forge's word on a pull request link, when the daemon
-	// has read one; nil or false leaves the ladder with the link alone.
-	PullFor func(link string) (PullFacts, bool)
+	PullFor    func(link string) (PullFacts, bool)
 
-	mu sync.Mutex
-	// saveMu orders writers: the command loop, the reaper and a focus
-	// goroutine all Save, and two snapshots racing for the same .tmp file
-	// could leave the older one on disk.
+	mu        sync.Mutex
 	saveMu    sync.Mutex
 	path      string
 	sessions  map[string]*Session
@@ -44,128 +32,78 @@ type Registry struct {
 	windows   map[string]Window
 	updatedAt time.Time
 	dirty     bool
-	// lastFocus is the window the last successful focus landed in: where
-	// a new session opens when nobody says otherwise.
 	lastFocus struct {
 		WindowID  string
 		SessionID string
 		At        time.Time
 	}
-	notice   string
-	noticeAt time.Time
-	accounts []Account
-	// ended keeps the last few sessions that left, newest first.
-	ended []Session
-	// AutoContinue is copied onto every snapshot; the daemon sets it.
+	notice       string
+	noticeAt     time.Time
+	accounts     []Account
+	ended        []Session
 	AutoContinue bool
-	// MutedUntil mirrors the daemon's mute for the board; zero when it rings.
-	mutedUntil time.Time
-	// OnTransition, when set, is told about every status change after it
-	// happened. The daemon turns some into notifications and metrics.
+	mutedUntil   time.Time
 	OnTransition func(s Session, from, to Status, now time.Time)
 }
 
-// State is the published board: what sessions.json holds and what
-// `corgi agent sessions --json` prints.
 type State struct {
-	UpdatedAt time.Time `json:"updatedAt"`
-	Size      int       `json:"size"`
-	// Overflow is how many sessions have no key of their own.
-	Overflow int `json:"overflow"`
-	// NeedsInput and Working count sessions in those states, wherever they
-	// sit — a pager key or a status bar can say "2 waiting" without walking
-	// the board.
-	NeedsInput int    `json:"needsInput"`
-	Working    int    `json:"working"`
-	Slots      []Slot `json:"slots"`
-	// Ended is the last few sessions that left the board — their id,
-	// checkout and account — so a message for one can still run as a
-	// headless turn, and a phone can say "ended" rather than nothing.
-	Ended []Session `json:"ended,omitempty"`
-	// LastFocusWindow is where the last successful focus went, and where
-	// `corgi agent new` opens a session by default.
-	LastFocusWindow string `json:"lastFocusWindow,omitempty"`
-	// FrontWindow is the connected window most recently in front, and
-	// FrontSession the session the user is looking at in it: the one in its
-	// active terminal tab, else its panel session, else the one that moved
-	// last. What a talk key dictates into without a key being pressed first.
-	FrontWindow  string `json:"frontWindow,omitempty"`
-	FrontSession string `json:"frontSession,omitempty"`
-	// Notice is the last board-level failure — a `new` with no window to
-	// open in, say — with its time, for a key to flash once.
-	// AutoContinue says the daemon types "continue" into limited sessions
-	// itself, so an editor with the same feature can stand down.
-	AutoContinue bool `json:"autoContinue,omitempty"`
-	// MutedUntil is set while nothing rings — no toast, no push — and says
-	// until when, so a key or a bar can show a bell with a line through it.
-	MutedUntil time.Time `json:"mutedUntil,omitzero"`
-	Notice     string    `json:"notice,omitempty"`
-	NoticeAt   time.Time `json:"noticeAt,omitempty"`
-	Sessions   []Session `json:"sessions"`
-	Windows    []Window  `json:"windows,omitempty"`
-	// Accounts is every account the sessions run under, with its limits.
-	Accounts []Account `json:"accounts,omitempty"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	Size            int       `json:"size"`
+	Overflow        int       `json:"overflow"`
+	NeedsInput      int       `json:"needsInput"`
+	Working         int       `json:"working"`
+	Slots           []Slot    `json:"slots"`
+	Ended           []Session `json:"ended,omitempty"`
+	LastFocusWindow string    `json:"lastFocusWindow,omitempty"`
+	FrontWindow     string    `json:"frontWindow,omitempty"`
+	FrontSession    string    `json:"frontSession,omitempty"`
+	AutoContinue    bool      `json:"autoContinue,omitempty"`
+	MutedUntil      time.Time `json:"mutedUntil,omitzero"`
+	Notice          string    `json:"notice,omitempty"`
+	NoticeAt        time.Time `json:"noticeAt,omitempty"`
+	Sessions        []Session `json:"sessions"`
+	Windows         []Window  `json:"windows,omitempty"`
+	Accounts        []Account `json:"accounts,omitempty"`
 }
 
-// Slot is one key, ready to draw.
 type Slot struct {
-	Index int  `json:"index"`
-	Empty bool `json:"empty,omitempty"`
-	// Pager marks the "+N" key; Overflow is that N.
-	Pager     bool     `json:"pager,omitempty"`
-	Overflow  int      `json:"overflow,omitempty"`
-	SessionID string   `json:"sessionId,omitempty"`
-	Label     string   `json:"label,omitempty"`
-	Profile   string   `json:"profile,omitempty"`
-	Status    Status   `json:"status,omitempty"`
-	Pinned    bool     `json:"pinned,omitempty"`
-	ElapsedS  int      `json:"elapsedS,omitempty"`
-	Detail    string   `json:"detail,omitempty"`
-	Host      HostKind `json:"host,omitempty"`
-	// FocusError is set when the last press on this key could not land;
-	// FocusAt says when.
+	Index      int       `json:"index"`
+	Empty      bool      `json:"empty,omitempty"`
+	Pager      bool      `json:"pager,omitempty"`
+	Overflow   int       `json:"overflow,omitempty"`
+	SessionID  string    `json:"sessionId,omitempty"`
+	Label      string    `json:"label,omitempty"`
+	Profile    string    `json:"profile,omitempty"`
+	Status     Status    `json:"status,omitempty"`
+	Pinned     bool      `json:"pinned,omitempty"`
+	ElapsedS   int       `json:"elapsedS,omitempty"`
+	Detail     string    `json:"detail,omitempty"`
+	Host       HostKind  `json:"host,omitempty"`
 	FocusError string    `json:"focusError,omitempty"`
 	FocusAt    time.Time `json:"focusAt,omitempty"`
-	// Context is the context-window fill in percent, 0 when unknown.
-	Context int `json:"context,omitempty"`
-	// Pending names the tool of a permission prompt the key could answer;
-	// Risk is its word — reads, writes, destructive — so a key can colour it.
-	Pending string `json:"pending,omitempty"`
-	Risk    string `json:"risk,omitempty"`
-	Note    string `json:"note,omitempty"`
-	Stuck   bool   `json:"stuck,omitempty"`
-	// Standing is the session's one word from the ladder, for a key.
-	Standing string `json:"standing,omitempty"`
-	Branch   string `json:"branch,omitempty"`
-	Summary  string `json:"summary,omitempty"`
-	PR       string `json:"pr,omitempty"`
-	Ticket   string `json:"ticket,omitempty"`
-	// TurnS is how long the current turn has been running, 0 unless working.
-	TurnS int `json:"turnS,omitempty"`
-	// Limit is quota or overload on a limited key; ResumeAt when the daemon
-	// will continue it on its own, so the key can say "continues 14:02".
-	Limit    LimitKind `json:"limit,omitempty"`
-	ResumeAt time.Time `json:"resumeAt,omitzero"`
-	// Drift is the first reason the daemon thinks a person should look.
-	Drift string `json:"drift,omitempty"`
-	// Changes is the branch in one line — "4 files · 120 lines"; Tests the
-	// last test run — "tests ✓" or "tests ✗ go test"; Overlap the first
-	// other session on the same files — "api·2 on registry.go".
-	Changes string `json:"changes,omitempty"`
-	Tests   string `json:"tests,omitempty"`
-	Overlap string `json:"overlap,omitempty"`
-	// Behind is main having moved, in one line — "main moved 12 · conflicts
-	// in api.go".
-	Behind string `json:"behind,omitempty"`
-	// Spend is the running total in one word — "52M" — and OverCap says
-	// it passed the budget it was given.
-	Spend   string `json:"spend,omitempty"`
-	OverCap bool   `json:"overCap,omitempty"`
-	// Reading says a phone read this conversation in the last minute.
-	Reading bool `json:"reading,omitempty"`
+	Context    int       `json:"context,omitempty"`
+	Pending    string    `json:"pending,omitempty"`
+	Risk       string    `json:"risk,omitempty"`
+	Note       string    `json:"note,omitempty"`
+	Stuck      bool      `json:"stuck,omitempty"`
+	Standing   string    `json:"standing,omitempty"`
+	Branch     string    `json:"branch,omitempty"`
+	Summary    string    `json:"summary,omitempty"`
+	PR         string    `json:"pr,omitempty"`
+	Ticket     string    `json:"ticket,omitempty"`
+	TurnS      int       `json:"turnS,omitempty"`
+	Limit      LimitKind `json:"limit,omitempty"`
+	ResumeAt   time.Time `json:"resumeAt,omitzero"`
+	Drift      string    `json:"drift,omitempty"`
+	Changes    string    `json:"changes,omitempty"`
+	Tests      string    `json:"tests,omitempty"`
+	Overlap    string    `json:"overlap,omitempty"`
+	Behind     string    `json:"behind,omitempty"`
+	Spend      string    `json:"spend,omitempty"`
+	OverCap    bool      `json:"overCap,omitempty"`
+	Reading    bool      `json:"reading,omitempty"`
 }
 
-// SpendLine is a token count as the board says it: "52M", "980k", "412".
 func SpendLine(sp *Spend) string {
 	if sp == nil || sp.Tokens == 0 {
 		return ""
@@ -173,7 +111,6 @@ func SpendLine(sp *Spend) string {
 	return Tokens(sp.Tokens)
 }
 
-// Tokens is a count in one word.
 func Tokens(n int64) string {
 	switch {
 	case n >= 1_000_000_000:
@@ -186,8 +123,6 @@ func Tokens(n int64) string {
 	return fmt.Sprintf("%d", n)
 }
 
-// ParseTokens reads a budget the way a person types it: 50M, 800k, 2B, or
-// a plain number.
 func ParseTokens(s string) (int64, error) {
 	s = strings.TrimSpace(strings.ToLower(s))
 	if s == "" {
@@ -209,8 +144,6 @@ func ParseTokens(s string) (int64, error) {
 	return int64(n * float64(mult)), nil
 }
 
-// ChangesLine is the board's one line for a branch: files and lines that
-// are somebody's work.
 func ChangesLine(c *Changes) string {
 	if c == nil || (c.Files == 0 && c.Lines == 0) {
 		return ""
@@ -218,7 +151,6 @@ func ChangesLine(c *Changes) string {
 	return fmt.Sprintf("%d file%s · %d line%s", c.Files, plural(c.Files), c.Lines, plural(c.Lines))
 }
 
-// TestsLine says how the last test run went, in three characters.
 func TestsLine(t *TestRun) string {
 	if t == nil {
 		return ""
@@ -229,8 +161,6 @@ func TestsLine(t *TestRun) string {
 	return "tests ✗ " + t.Cmd
 }
 
-// BehindLine is main having moved, for a key: "main moved 12 · conflicts
-// in api.go, db.go".
 func BehindLine(b *Behind) string {
 	if b == nil || b.Commits == 0 {
 		return ""
@@ -242,8 +172,6 @@ func BehindLine(b *Behind) string {
 	return line
 }
 
-// OverlapLine names the first session on the same files, or the same
-// checkout.
 func OverlapLine(o []Overlap) string {
 	if len(o) == 0 {
 		return ""
@@ -266,7 +194,6 @@ func plural(n int) string {
 	return "s"
 }
 
-// New returns a registry persisted at path, with a board of size keys.
 func New(path string, size int) *Registry {
 	return &Registry{
 		path:       path,
@@ -278,13 +205,8 @@ func New(path string, size int) *Registry {
 	}
 }
 
-// Path is where the registry persists.
 func (r *Registry) Path() string { return r.path }
 
-// Load restores a previous daemon's board so a restart keeps the keys where
-// they were. Windows are not restored: their extensions re-register. A file
-// that is missing or unreadable is an empty board, never an error worth
-// refusing to start over.
 func (r *Registry) Load() {
 	data, err := os.ReadFile(r.path)
 	if err != nil {
@@ -296,15 +218,11 @@ func (r *Registry) Load() {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// The configured size wins over the file's: a `--slots` change applies
-	// on the next start, and seats past the new edge spill into overflow.
 	size := r.board.Size
 	r.board = NewBoard(size)
 	for i := range st.Sessions {
 		s := st.Sessions[i]
 		if s.ID == "" || s.ClaudePID <= 0 {
-			// Nothing to probe: a session with no pid could sit on a key
-			// forever. Its next event brings it back.
 			continue
 		}
 		r.sessions[s.ID] = &s
@@ -318,15 +236,11 @@ func (r *Registry) Load() {
 	}
 	for _, s := range r.sortedLocked() {
 		r.board.Place(s.ID)
-		// No window has reconnected yet: a host restored as connected would
-		// send reveal requests nobody reads.
 		r.bind(s)
 	}
 	r.dirty = true
 }
 
-// Save writes the board when something changed. Cheap to call after every
-// drain: a batch of twenty tool events is one write.
 func (r *Registry) Save() error {
 	r.saveMu.Lock()
 	defer r.saveMu.Unlock()
@@ -345,11 +259,9 @@ func (r *Registry) Save() error {
 	if err != nil {
 		return err
 	}
-	// 0600: cwds, pids and window ids are the owner's business.
 	return atomicfile.Write(r.path, data, 0o600)
 }
 
-// Resize changes the board, keeping every seat that still fits.
 func (r *Registry) Resize(size int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -360,8 +272,6 @@ func (r *Registry) Resize(size int) {
 	r.touch()
 }
 
-// Apply folds one hook event into the registry. Returns whether anything
-// visible changed.
 func (r *Registry) Apply(ev Event) bool {
 	if ev.SessionID == "" || ev.Name == "" {
 		return false
@@ -387,8 +297,6 @@ func (r *Registry) Apply(ev Event) bool {
 	s.FocusError = ""
 
 	r.transition(s, ev, now)
-	// A tool call that changes nothing a key shows must not rewrite the
-	// file: twenty of them in a row would be twenty redraws for nothing.
 	if created || r.sessions[s.ID] == nil || s.visible() != before {
 		r.touch()
 		return true
@@ -396,8 +304,6 @@ func (r *Registry) Apply(ev Event) bool {
 	return false
 }
 
-// visible is the part of a session a key draws, compared to decide whether
-// an event is worth publishing.
 type visible struct {
 	Label, Profile, Detail, Tool, Branch, Summary string
 	Status                                        Status
@@ -408,13 +314,11 @@ func (s *Session) visible() visible {
 	return visible{Label: s.Label, Profile: s.Profile, Detail: s.Detail, Tool: s.Tool, Status: s.Status, Host: s.Host, Branch: s.Branch, Summary: s.Summary}
 }
 
-// transition is the status model: what each hook event means for a session.
 func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	switch ev.Name {
 	case "SessionStart":
 		r.applyStart(s, ev, now)
 	case "UserPromptSubmit":
-		// A person typing is what took it off the wall, whatever they typed.
 		if s.Status == StatusLimited {
 			s.ResumedBy = "person"
 		}
@@ -424,8 +328,6 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	case "PreToolUse":
 		r.applyToolStart(s, ev, now)
 	case "PostToolUse", "PostToolUseFailure":
-		// A tool that finished means whatever prompt preceded it was
-		// answered.
 		s.Tool, s.Pending = "", nil
 		if strings.HasPrefix(s.Detail, ev.Tool) || s.Status == StatusNeedsInput {
 			s.Detail = ""
@@ -439,7 +341,6 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 		} else if ev.Name == "PostToolUseFailure" {
 			s.FailStreak, s.failSubject = 1, subject
 		} else if subject == s.failSubject {
-			// The same thing succeeded: whatever was looping is over.
 			s.FailStreak, s.failSubject = 0, ""
 		}
 		r.setStatus(s, StatusWorking, now)
@@ -465,27 +366,20 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	case "SessionEnd":
 		r.applyEnd(s, ev, now)
 	default:
-		// CwdChanged was refreshed already; anything else still says the
-		// session is alive.
 	}
 }
 
 func (r *Registry) applyStart(s *Session, ev Event, now time.Time) {
 	if ev.Source == "compact" {
-		// Compaction is mid-session housekeeping, not a new session and
-		// not a change of state.
 		return
 	}
 	if s.Status == StatusGone {
-		// Pinned and dead, now back: the same key lights up again.
 		r.board.Pin(r.board.IndexOf(s.ID), true)
 	}
 	s.Tool, s.Detail, s.Pending = "", "", nil
 	r.setStatus(s, StatusDone, now)
 }
 
-// toolLine is the detail a key shows for a tool: "Edit registry.go", "Bash
-// go test", or just the tool when the hook had nothing safe to add.
 func toolLine(tool, subject string) string {
 	if subject == "" {
 		return tool
@@ -498,8 +392,6 @@ func (r *Registry) applyToolStart(s *Session, ev Event, now time.Time) {
 	s.Detail = toolLine(ev.Tool, ev.Subject)
 	s.Pending = nil
 	if ev.Tool == "AskUserQuestion" {
-		// The question is on screen the moment the tool starts; the idle
-		// nudge would only confirm it a minute later.
 		s.Detail = "question"
 		r.setStatus(s, StatusNeedsInput, now)
 		return
@@ -509,17 +401,12 @@ func (r *Registry) applyToolStart(s *Session, ev Event, now time.Time) {
 
 func (r *Registry) applyEnd(s *Session, ev Event, now time.Time) {
 	if ev.Reason == "resume" || ev.Reason == "clear" {
-		// The same process is about to start another session under a
-		// new id; the record waits so that SessionStart renames it in
-		// place and the key stays where it was.
 		r.setStatus(s, StatusStale, now)
 		return
 	}
 	r.dropLocked(s, now)
 }
 
-// applyLimit: the account is out of quota. Not a question, so not
-// needs_input; the key says when to come back instead.
 func (r *Registry) applyLimit(s *Session, kind LimitKind, reset string, now time.Time) {
 	s.Detail = "limit reached"
 	if kind == LimitOverload {
@@ -546,31 +433,20 @@ func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
 		}
 		r.setStatus(s, StatusNeedsInput, now)
 	case "idle_prompt":
-		// "Waiting for your input" fires a minute into ANY wait — after a
-		// finished turn as much as after a question. A done session that
-		// wants nothing stays done; only a session still mid-turn has a
-		// question corgi did not otherwise see.
 		if s.Status == StatusWorking {
 			s.Detail = firstNonEmpty(shorten(ev.Message, 48), "waiting for input")
 			r.setStatus(s, StatusNeedsInput, now)
 		}
 	case "quota_auto_resume_fired":
-		// The limit lifted and Claude picked the turn back up.
 		s.Tool, s.Detail, s.Pending = "", "", nil
 		s.ResumedBy = "clock"
 		r.setStatus(s, StatusWorking, now)
 	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response", "quota_auto_resume_stale", "quota_auto_resume_disabled":
-		// Nothing a key needs to say.
 	}
 }
 
-// adoptLocked creates a session for an event that arrived without a
-// SessionStart — the daemon was down, or the session predates the hooks. A
-// rescan placeholder for the same pid is upgraded in place, keeping its key.
 func (r *Registry) adoptLocked(ev Event, now time.Time) *Session {
 	if old := r.samePIDLocked(ev.ClaudePID); old != nil {
-		// A rescan placeholder, or the same process under a new session id
-		// (/clear, /resume): the key stays, the id changes.
 		delete(r.sessions, old.ID)
 		r.board.Rename(old.ID, ev.SessionID)
 		old.ID = ev.SessionID
@@ -584,9 +460,6 @@ func (r *Registry) adoptLocked(ev Event, now time.Time) *Session {
 	return s
 }
 
-// samePIDLocked finds the session already tracked for a process: the
-// placeholder first, else whichever last spoke for that pid. One process
-// hosts one session at a time, so a second id on it replaces the first.
 func (r *Registry) samePIDLocked(pid int) *Session {
 	if pid <= 0 {
 		return nil
@@ -603,8 +476,6 @@ func (r *Registry) samePIDLocked(pid int) *Session {
 	return latest
 }
 
-// refresh copies the identity fields every event carries. A hook that could
-// not determine a pid does not erase one an earlier hook found.
 func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.Cwd != "" && ev.Cwd != s.Cwd {
 		s.Cwd = ev.Cwd
@@ -614,8 +485,6 @@ func (r *Registry) refresh(s *Session, ev Event) {
 		s.Label, s.Folder = r.resolve(s.Cwd)
 	}
 	if s.Profile == "" || (ev.ConfigDir != "" && ev.ConfigDir != s.ConfigDir) {
-		// An event that carries no config dir (a hook run without the env,
-		// or a synthetic one) must not demote a session to "default".
 		s.ConfigDir = ev.ConfigDir
 		s.Profile = r.profile(ev.ConfigDir)
 	}
@@ -645,9 +514,6 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.Title != "" {
 		s.Title = ev.Title
 	}
-	// The hook already reads the model off the newest assistant turn for the
-	// context gauge, so the board learns it without a second pass over the
-	// transcript; an agent that is not Claude Code sends it outright.
 	if ev.Model != "" {
 		s.Model = ev.Model
 	} else if ev.Context != nil && ev.Context.Model != "" {
@@ -677,7 +543,6 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.PR != "" {
 		s.PR = ev.PR
 	}
-	// Any event at all means the process is alive and talking.
 	s.Stuck = false
 	r.bind(s)
 }
@@ -713,8 +578,6 @@ func (r *Registry) setStatus(s *Session, st Status, now time.Time) {
 	if st != StatusLimited {
 		s.Limit, s.ResumeAt = "", time.Time{}
 	}
-	// A turn that finished or asked something is real progress; the count
-	// of continues is for one limit episode, not the session's life.
 	if st == StatusDone || st == StatusNeedsInput {
 		s.Resumes = 0
 	}
@@ -723,12 +586,8 @@ func (r *Registry) setStatus(s *Session, st Status, now time.Time) {
 	}
 }
 
-// endedKeep is how many ended sessions the board remembers.
 const endedKeep = 20
 
-// dropLocked ends a session: off the board, or gone-but-pinned. Either
-// way it is remembered among the ended, id and checkout and account, so
-// a headless turn can still resume it.
 func (r *Registry) dropLocked(s *Session, now time.Time) {
 	r.rememberEndedLocked(s, now)
 	if r.board.Remove(s.ID) {
@@ -753,7 +612,6 @@ func (r *Registry) rememberEndedLocked(s *Session, now time.Time) {
 	r.ended = kept
 }
 
-// LookupEnded finds a session that left the board by id or id prefix.
 func (r *Registry) LookupEnded(ref string) (Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -769,9 +627,6 @@ func (r *Registry) LookupEnded(ref string) (Session, bool) {
 	return Session{}, false
 }
 
-// Reap drops every session whose process is gone. SessionEnd never fires for
-// a force-quit window, so this is what actually frees a key. alive is
-// injected: the daemon passes proc.Alive.
 func (r *Registry) Reap(alive func(pid int) bool, now time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -781,10 +636,6 @@ func (r *Registry) Reap(alive func(pid int) bool, now time.Time) bool {
 			continue
 		}
 		if s.ClaudePID <= 0 {
-			// Nothing to probe (no process table on this platform, or a
-			// chain the hook could not read): the session leaves once it
-			// has been silent for as long as one would take to go stale,
-			// instead of sitting on a key until the next restart.
 			if now.Sub(s.LastActivity) >= StaleAfter {
 				r.dropLocked(s, now)
 				changed = true
@@ -803,7 +654,6 @@ func (r *Registry) Reap(alive func(pid int) bool, now time.Time) bool {
 	return changed
 }
 
-// Sweep marks sessions nothing has happened to for StaleAfter.
 func (r *Registry) Sweep(now time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -830,9 +680,6 @@ func (r *Registry) Sweep(now time.Time) bool {
 	return changed
 }
 
-// SetWindows replaces the set of connected editor windows and re-runs the
-// join for every session. Sessions keep their keys; only how focus reaches
-// them changes.
 func (r *Registry) SetWindows(windows []Window) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -854,12 +701,6 @@ func (r *Registry) SetWindows(windows []Window) bool {
 	return true
 }
 
-// dropClosedPanelsLocked frees the keys of panel sessions whose chat tab is
-// gone. A window that counts its Claude tabs can have more finished panel
-// sessions bound to it than tabs; the quietest surplus ones are dropped. A
-// session still working or waiting is never touched, and a dropped one
-// comes back with its next hook event, so a miscount (the sidebar view is
-// not a tab) costs a key for a moment, not a session.
 func (r *Registry) dropClosedPanelsLocked(now time.Time) {
 	for _, w := range r.windows {
 		if w.ClaudeTabs == nil {
@@ -910,21 +751,7 @@ func sameWindows(a, b map[string]Window) bool {
 	return true
 }
 
-// bind joins a session to a window and a tab, in the order that trusts the
-// most exact evidence first:
-//  1. The window id the extension injected into the terminal's environment,
-//     then the tab whose shell is in the session's parent chain.
-//  2. A window whose extension host is in the parent chain: the Claude Code
-//     panel, which spawns claude from the extension host itself.
-//  3. TERM_PROGRAM: an integrated terminal without the extension (matched to
-//     a window by folder when one is connected), or a terminal emulator.
 func (r *Registry) bind(s *Session) {
-	// Folder is only ever a folder a connected window reported open: an
-	// editor told to open any other folder opens a NEW window on it, or
-	// reloads one, which is worse than just bringing the app forward. App
-	// likewise comes from the window, or from the process names in the
-	// session's parent chain — never a default, since Cursor, Windsurf and
-	// VSCodium all claim TERM_PROGRAM=vscode.
 	h := Host{Kind: HostUnknown, TermProgram: s.TermProgram, App: EditorFromChain(s.Names)}
 	switch {
 	case s.Window != "":
@@ -936,8 +763,6 @@ func (r *Registry) bind(s *Session) {
 	s.Host = h
 }
 
-// bindInjectedWindow is rule 1: the window id the extension put in the
-// terminal's environment, then the tab whose shell is in the parent chain.
 func (r *Registry) bindInjectedWindow(s *Session, h *Host) {
 	h.Kind = HostVSCodeTerminal
 	h.WindowID = s.Window
@@ -957,10 +782,6 @@ func (r *Registry) bindInjectedWindow(s *Session, h *Host) {
 	}
 }
 
-// bindPanel is rule 2: a window whose extension host is in the parent
-// chain — the Claude Code panel, which spawns claude from the extension
-// host itself. An editor in the chain with no window connected yet and no
-// TERM_PROGRAM is most likely the panel too.
 func (r *Registry) bindPanel(s *Session, h *Host) bool {
 	for _, w := range r.sortedWindowsLocked() {
 		if w.ExtHostPID > 0 && containsInt(s.Ancestors, w.ExtHostPID) {
@@ -978,8 +799,6 @@ func (r *Registry) bindPanel(s *Session, h *Host) bool {
 	return false
 }
 
-// bindTermProgram is rule 3: an integrated terminal without the extension
-// (matched to a window by folder when one is connected), or an emulator.
 func (r *Registry) bindTermProgram(s *Session, h *Host) {
 	switch strings.ToLower(s.TermProgram) {
 	case "vscode":
@@ -995,9 +814,6 @@ func (r *Registry) bindTermProgram(s *Session, h *Host) {
 	}
 }
 
-// windowForDir finds the connected window whose folder contains dir. The
-// deepest folder wins, so a window on the repo beats one on the whole
-// projects directory.
 func (r *Registry) windowForDir(dir string) (Window, bool) {
 	var best Window
 	bestLen := -1
@@ -1024,7 +840,6 @@ func containsInt(list []int, n int) bool {
 	return false
 }
 
-// Pin toggles a key's reservation. Unpinning a gone session drops it.
 func (r *Registry) Pin(index int, on bool) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1041,10 +856,6 @@ func (r *Registry) Pin(index int, on bool) bool {
 	return true
 }
 
-// Dismiss takes a session off the board — and off its pin — until its next
-// hook event brings it back. For a chat that was closed while Claude Code
-// kept its process, or any finished session hogging a key. A session still
-// working or waiting on a person is refused: nothing should hide those.
 func (r *Registry) Dismiss(ref string, now time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1064,7 +875,6 @@ func (r *Registry) Dismiss(ref string, now time.Time) error {
 	return nil
 }
 
-// SetNote puts the owner's line on a session, or clears it with "".
 func (r *Registry) SetNote(ref, note string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1084,8 +894,6 @@ func (r *Registry) SetNote(ref, note string) error {
 	return nil
 }
 
-// SetDrift records what the daemon concluded about a session; true when
-// the reasons changed, and whether drift just began (worth one notice).
 func (r *Registry) SetDrift(id string, reasons []string) (changed, began bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1102,9 +910,6 @@ func (r *Registry) SetDrift(id string, reasons []string) (changed, began bool) {
 	return true, began
 }
 
-// SetChanges records what the sweep measured on a session's branch and who
-// else is on the same files. Reported as changed only when the numbers or
-// the names moved, so a quiet board is not rewritten every minute.
 func (r *Registry) SetChanges(id string, c *Changes, overlap []Overlap) (changed, crossed bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1119,16 +924,12 @@ func (r *Registry) SetChanges(id string, c *Changes, overlap []Overlap) (changed
 	if same {
 		return false, false
 	}
-	// crossed: this session's work just started meeting somebody else's on
-	// a file — said once, the moment it happens.
 	crossed = len(overlap) > 0 && !overlap[0].SameCheckout && len(s.Overlap) == 0
 	s.Changes, s.Overlap = c, overlap
 	r.touch()
 	return true, crossed
 }
 
-// SetBehind records what the sweep measured against main. A change in the
-// numbers is a new state: Told clears, so the daemon may act once more.
 func (r *Registry) SetBehind(id string, b *Behind) (changed bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1156,8 +957,6 @@ func (r *Registry) SetBehind(id string, b *Behind) (changed bool) {
 	return true
 }
 
-// MainMovedTold marks the daemon's one move on the current behind state;
-// rebased says it was a rebase, which the row counts.
 func (r *Registry) MainMovedTold(id string, rebased bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1172,12 +971,6 @@ func (r *Registry) MainMovedTold(id string, rebased bool) {
 	r.touch()
 }
 
-// SetGate records a done-when run: green resets the streak, red counts
-// it. The tests line shows it too — it is the last test run, whoever ran
-// it — so a key says "tests ✗ go test" without a new field.
-// SetHeadless marks a headless turn: running while it goes, then counted,
-// with the error when it failed. A session the registry does not hold is
-// left alone.
 func (r *Registry) SetHeadless(id string, running bool, errText string, now time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1229,7 +1022,6 @@ func (r *Registry) SetGate(id string, ok bool, cmd string, now time.Time) int {
 	return fails
 }
 
-// Compacted notes a /compact the daemon typed.
 func (r *Registry) Compacted(id string, now time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1242,9 +1034,6 @@ func (r *Registry) Compacted(id string, now time.Time) {
 	r.touch()
 }
 
-// SetSpend records what a session has cost and whether that passed its
-// budget (its own cap, else fallback). crossed is true the moment it does,
-// so the daemon rings once.
 func (r *Registry) SetSpend(id string, sp Spend, fallback int64) (changed, crossed bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1267,8 +1056,6 @@ func (r *Registry) SetSpend(id string, sp Spend, fallback int64) (changed, cross
 	return true, crossed
 }
 
-// SetCap gives one session its own budget; zero takes it away, and the
-// daemon's default applies again on the next sweep.
 func (r *Registry) SetCap(ref string, tokens int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1295,8 +1082,6 @@ func overlapKey(o []Overlap) string {
 	return strings.Join(parts, "|")
 }
 
-// PlanResume records when the daemon will continue a limited session; a
-// zero time clears the plan. Nothing else changes, so no transition fires.
 func (r *Registry) PlanResume(id string, at time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1308,8 +1093,6 @@ func (r *Registry) PlanResume(id string, at time.Time) bool {
 	return true
 }
 
-// MarkResumed counts one continue typed into a limited session and clears
-// the plan; the next hook event decides whether it worked.
 func (r *Registry) MarkResumed(id string) (Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1322,8 +1105,6 @@ func (r *Registry) MarkResumed(id string) (Session, bool) {
 	return *s, true
 }
 
-// SetAccounts replaces the accounts block. Sessions per account are counted
-// here so callers pass only what they read.
 func (r *Registry) SetAccounts(accounts []Account) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1375,7 +1156,6 @@ func sameWindowForecast(a, b *usage.WindowForecast) bool {
 	return a == nil || (a.PercentPerHour == b.PercentPerHour && a.Safe == b.Safe && a.ExhaustAt.Equal(b.ExhaustAt))
 }
 
-// Sessions is a copy of every tracked session, board order.
 func (r *Registry) Sessions() []Session {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1388,7 +1168,6 @@ func (r *Registry) Sessions() []Session {
 	return out
 }
 
-// Page rotates the unpinned keys through the overflow.
 func (r *Registry) Page(direction int) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1399,10 +1178,6 @@ func (r *Registry) Page(direction int) bool {
 	return true
 }
 
-// Adopt registers Claude processes no hook has reported — sessions started
-// while the daemon was down. Each gets a placeholder id, an unknown status
-// and whatever cwd the platform will give up; the first hook from it fills
-// in the rest. Processes already tracked are left alone.
 func (r *Registry) Adopt(procs []proc.Process, cwd func(pid int) string, now time.Time) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1437,9 +1212,6 @@ func (r *Registry) Adopt(procs []proc.Process, cwd func(pid int) string, now tim
 	return added
 }
 
-// notASession recognises claude processes that are not an interactive
-// session: the supervised remote-control server, an MCP server, a one-shot
-// --print run. Adopting one would park it on a key forever.
 func notASession(args string) bool {
 	for _, marker := range []string{"remote-control", " mcp ", " mcp serve", "--print", " -p ", " -p\n"} {
 		if strings.Contains(args+"\n", marker) {
@@ -1449,7 +1221,6 @@ func notASession(args string) bool {
 	return false
 }
 
-// FocusTarget is what the daemon needs to bring a session to the front.
 type FocusTarget struct {
 	SessionID string
 	Kind      HostKind
@@ -1457,25 +1228,16 @@ type FocusTarget struct {
 	Folder    string
 	WindowID  string
 	ShellPID  int
-	// Panel asks the window to reveal the Claude Code panel rather than a
-	// terminal tab.
-	Panel bool
-	// TTY is the controlling terminal device for an emulator session.
-	TTY uint64
-	// New asks the window for a fresh terminal running claude, in Folder.
-	New bool
-	// Connected says a reveal request will be read by a live extension.
+	Panel     bool
+	TTY       uint64
+	New       bool
 	Connected bool
-	// Title is the chat tab's name, for a window with several panels open.
-	Title string
-	// Label is the session's display name, for messages.
-	Label string
+	Title     string
+	Label     string
 }
 
-// ErrNoSession is returned for an id or label nothing matches.
 var ErrNoSession = errors.New("no such session")
 
-// Focus resolves a session reference into a focus target.
 func (r *Registry) Focus(ref string) (FocusTarget, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1494,9 +1256,6 @@ func (r *Registry) Focus(ref string) (FocusTarget, error) {
 	}, nil
 }
 
-// PendingAnswer resolves a permission answer into the keys that give it,
-// refusing what should not be answered blind. answer is allow, always or
-// deny.
 func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1522,9 +1281,6 @@ func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
 	return "", fmt.Errorf("answer is allow, always or deny, not %q", answer)
 }
 
-// InterruptKeys is what stops a session's turn — Escape — and an error
-// when there is no turn to stop: Claude Code takes Escape at rest as
-// nothing, but a key pressed into a session for no reason is a surprise.
 func (r *Registry) InterruptKeys(ref string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1538,9 +1294,6 @@ func (r *Registry) InterruptKeys(ref string) (string, error) {
 	return "\x1b", nil
 }
 
-// ReadBy records that a phone read the conversation now. Called by the
-// launcher's process, which holds its own copy of the board; the daemon
-// picks the mark up through the command spool (ActionRead).
 func (r *Registry) ReadBy(ref string, now time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1556,13 +1309,6 @@ func (r *Registry) ReadBy(ref string, now time.Time) error {
 	return nil
 }
 
-// Interrupted marks a working session stopped by Escape: done, with the
-// row saying so. Claude Code fires no hook for it, so the board would
-// otherwise say working until the next message. A session that had already
-// moved on is left as it is, and its next event corrects the row either way.
-// AutoAllowed notes that the daemon answered the prompt itself, under the
-// workspace's policy: the count rides on the session so a surface can say
-// "3 reads allowed for it".
 func (r *Registry) AutoAllowed(ref string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1588,8 +1334,6 @@ func (r *Registry) Interrupted(ref string, now time.Time) bool {
 	return true
 }
 
-// Risky says whether the prompt must not be approved unseen: the hook's
-// word on the whole command when it gave one, else the subject's shape.
 func (p *Pending) Risky() bool {
 	if p == nil {
 		return false
@@ -1600,12 +1344,8 @@ func (p *Pending) Risky() bool {
 	return p.Tool == "Bash" && riskyCommand.MatchString(p.Subject)
 }
 
-// riskyCommand is what an Allow button must not approve unseen. The subject
-// is the program and two words, so this is coarse on purpose.
 var riskyCommand = regexp.MustCompile(`(?i)(^|\s)(rm|sudo|mkfs|dd|shutdown|reboot|kill|pkill|killall|chmod|chown|launchctl|diskutil)(\s|$)|--force|--hard|--no-verify|\bdrop\b|\btruncate\b|\bpurge\b`)
 
-// RecordFocus stores the outcome of a focus attempt on the session, so the
-// key can flash a failure on the next push.
 func (r *Registry) RecordFocus(id string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1628,9 +1368,6 @@ func (r *Registry) RecordFocus(id string, err error) {
 	r.touch()
 }
 
-// SetNotice records a board-level failure for the next publish.
-// SetMuted records until when nothing rings; the board says so. Reports
-// whether that changed.
 func (r *Registry) SetMuted(until time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1653,12 +1390,8 @@ func (r *Registry) SetNotice(err error) {
 	r.touch()
 }
 
-// ErrNoWindow is returned when nothing can open a new session.
 var ErrNoWindow = errors.New("no editor window connected — open a folder in VS Code with the corgi extension installed")
 
-// NewSessionTarget picks the window a fresh session opens in: the one
-// named, else the one in front, else the most recently updated. The window
-// must be connected: only its extension can open a terminal in it.
 func (r *Registry) NewSessionTarget(windowID string) (FocusTarget, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1688,7 +1421,6 @@ func (r *Registry) NewSessionTarget(windowID string) (FocusTarget, error) {
 	return t, nil
 }
 
-// Lookup finds a session by id, id prefix, label, or slot index.
 func (r *Registry) Lookup(ref string) (Session, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1707,8 +1439,6 @@ func (r *Registry) lookupLocked(ref string) (*Session, error) {
 	if s := r.sessions[ref]; s != nil {
 		return s, nil
 	}
-	// A key number comes before an id prefix: ids are hex, so "2" would
-	// otherwise match a sixteenth of them and focus the wrong window.
 	if n, ok := slotRef(ref); ok {
 		if n >= 0 && n < r.board.Size && r.board.Slots[n] != "" {
 			return r.sessions[r.board.Slots[n]], nil
@@ -1737,7 +1467,6 @@ func (r *Registry) lookupLocked(ref string) (*Session, error) {
 	return nil, ErrNoSession
 }
 
-// slotRef reads a key number: "3" or "#3", 1-based as printed on the board.
 func slotRef(ref string) (int, bool) {
 	ref = strings.TrimPrefix(ref, "#")
 	n := 0
@@ -1750,7 +1479,6 @@ func slotRef(ref string) (int, bool) {
 	return n - 1, ref != ""
 }
 
-// Snapshot is the board as of now.
 func (r *Registry) Snapshot(now time.Time) State {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1828,10 +1556,6 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 	return st
 }
 
-// frontWindowLocked is the connected window most recently in front: the
-// newest focus its extension reported, or where corgi's own last focus
-// landed when that is newer. A lone window with no word either way is the
-// front one too.
 func (r *Registry) frontWindowLocked() (Window, bool) {
 	var best Window
 	found := false
@@ -1851,11 +1575,6 @@ func (r *Registry) frontWindowLocked() (Window, bool) {
 	return best, found
 }
 
-// frontSessionLocked is the session the user sees in a window: the one
-// corgi just focused there, until the window reports something newer; else
-// its panel session while the Claude Code panel is the active tab; else the
-// one in its active terminal tab, else its panel session, else the one that
-// moved last. Nil when no live session is bound to the window.
 func (r *Registry) frontSessionLocked(w Window) *Session {
 	if r.lastFocus.WindowID == w.ID && r.lastFocus.At.After(w.FocusedAt) {
 		if s := r.sessions[r.lastFocus.SessionID]; s != nil && s.Status != StatusGone {
@@ -1888,8 +1607,6 @@ func (r *Registry) frontSessionLocked(w Window) *Session {
 	return latest
 }
 
-// displayLocked makes a label unique among live sessions: two sessions in
-// the same repo get their terminal name, or a piece of the id, appended.
 func (r *Registry) displayLocked(s *Session) string {
 	twins := 0
 	for _, o := range r.sessions {
@@ -1900,8 +1617,6 @@ func (r *Registry) displayLocked(s *Session) string {
 	if twins <= 1 {
 		return s.Label
 	}
-	// The chat's own title first: a tab named by corgi or by Claude repeats
-	// the label or the title with a glyph in front.
 	if s.Title != "" && r.titleUniqueLocked(s) {
 		return s.Label + "·" + s.Title
 	}
@@ -1915,13 +1630,11 @@ func (r *Registry) displayLocked(s *Session) string {
 	return s.Label + "·" + id
 }
 
-// glyphNamed: a tab Claude Code or corgi titled itself ("✻ Fix login", "▲ api NEEDS YOU").
 func glyphNamed(term string) bool {
 	r := []rune(strings.TrimSpace(term))
 	return len(r) > 0 && !unicode.IsLetter(r[0]) && !unicode.IsDigit(r[0])
 }
 
-// titleUniqueLocked: the chat's own name tells twins apart when they differ.
 func (r *Registry) titleUniqueLocked(s *Session) bool {
 	for _, o := range r.sessions {
 		if o.ID != s.ID && o.Label == s.Label && o.Title == s.Title {
@@ -1931,10 +1644,6 @@ func (r *Registry) titleUniqueLocked(s *Session) bool {
 	return true
 }
 
-// terminalNameUniqueLocked: a tab name only tells sessions apart when the
-// twins have different ones. A tab corgi named itself ("✓ acme-api 55%")
-// repeats the label and tells nothing either. VS Code names every tab running claude by the
-// process ("2.1.263"), which tells nothing.
 func (r *Registry) terminalNameUniqueLocked(s *Session) bool {
 	for _, o := range r.sessions {
 		if o.ID != s.ID && o.Label == s.Label && o.Host.Terminal == s.Host.Terminal {
@@ -1958,10 +1667,6 @@ func (r *Registry) sortedLocked() []*Session {
 	return out
 }
 
-// groupedLocked is the published order: sessions of one workspace together,
-// workspaces alphabetically, oldest session first within each. A list that
-// reads top to bottom by repository, and does not reshuffle when a status
-// changes.
 func (r *Registry) groupedLocked() []*Session {
 	out := r.sortedLocked()
 	sort.SliceStable(out, func(i, j int) bool {
@@ -2001,8 +1706,6 @@ func shorten(s string, limit int) string {
 	return s
 }
 
-// pullFactsLocked asks PullFor about the session's pull request, if both
-// exist.
 func (r *Registry) pullFactsLocked(s *Session) *PullFacts {
 	if r.PullFor == nil || s.PR == "" {
 		return nil

@@ -130,8 +130,6 @@ func TestRunnerDropsAFlagTheCLIDoesNotKnowAndRetriesAtOnce(t *testing.T) {
 	if st.DeviceOnly {
 		t.Error("a run without the flag is not device-only")
 	}
-	// The retry is not a restart: no backoff was slept before it, and it does
-	// not count against the workspace.
 	if n := slept.Load(); n > 1 {
 		t.Errorf("the flag retry must not wait out a backoff; slept %d times", n)
 	}
@@ -149,8 +147,6 @@ func TestRunnerDropsAFlagTheCLIDoesNotKnowAndRetriesAtOnce(t *testing.T) {
 }
 
 func TestRunnerCountsSessionsPerRun(t *testing.T) {
-	// One scripted run, then the starter's own blocked process, which the
-	// context cancel stops.
 	first := &fakeProcess{pid: 1, code: 0, uptime: 30 * time.Millisecond}
 	start, _ := scriptedStarter(first)
 	var links func(string)
@@ -175,8 +171,6 @@ func TestRunnerCountsSessionsPerRun(t *testing.T) {
 	if st := r.State(); st.SessionsThisRun != 0 {
 		t.Errorf("a new process starts with no sessions of its own, got %d", st.SessionsThisRun)
 	}
-	// A session the new process brought back is one it serves now, even
-	// though the cross-restart list already has it.
 	links("session_a")
 	if st := r.State(); st.SessionsThisRun != 1 || len(st.Sessions) != 2 {
 		t.Errorf("resumed link: this run %d, all-time %d", st.SessionsThisRun, len(st.Sessions))

@@ -16,8 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runUpAll mirrors the --upAll path of CheckForFlagAndExecuteMake, adding an
-// optional --wait readiness gate before the --runOnce exit.
 func runUpAll(cmd *cobra.Command, dbs []utils.DatabaseService) {
 	if up, _ := cmd.Flags().GetBool("upAll"); !up {
 		return
@@ -27,7 +25,6 @@ func runUpAll(cmd *cobra.Command, dbs []utils.DatabaseService) {
 	if wait, _ := cmd.Flags().GetBool("wait"); wait {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultReadyTimeout)
 		defer cancel()
-		// Explicit --wait gates: a timeout is a hard failure (useful in CI).
 		if err := waitForDbsReady(ctx, dbs, utils.WaitForDBReady); err != nil {
 			if utils.JSONOutput {
 				utils.JSONError(utils.ErrReadinessTimeout, err.Error())
@@ -44,7 +41,6 @@ func runUpAll(cmd *cobra.Command, dbs []utils.DatabaseService) {
 	}
 }
 
-// Wait for each db with a port to accept connections. ready is injected for tests.
 func waitForDbsReady(ctx context.Context, dbs []utils.DatabaseService, ready func(context.Context, utils.DatabaseService) error) error {
 	for _, db := range dbs {
 		if db.Port == 0 || db.ManualRun {
@@ -59,11 +55,8 @@ func waitForDbsReady(ctx context.Context, dbs []utils.DatabaseService, ready fun
 
 const errMakeCommandFailed = "Make command failed"
 
-// seedReady waits for a db to accept connections before seeding. Indirected
-// through a var so tests can stub the readiness probe.
 var seedReady = utils.WaitForDBReady
 
-// dbCmd represents the db command
 var dbCmd = &cobra.Command{
 	Use:   "db",
 	Short: "Database action helpers",
@@ -101,9 +94,6 @@ func init() {
 	dbCmd.AddCommand(dbRestoreCmd)
 }
 
-// dbShellCmd opens an interactive shell inside the running container for a
-// db_service. Credentials are read from the generated env so the user never
-// has to copy-paste passwords.
 var dbShellCmd = &cobra.Command{
 	Use:   "shell [service-name]",
 	Short: "Open an interactive shell for a db_service",
@@ -285,7 +275,6 @@ func ensureDbRunningForSeed(targetService string) error {
 	return nil
 }
 
-// argv exec: container id never re-expanded by make's shell
 func seedPostgresFromDump(dbService utils.DatabaseService, containerId string, s *spinner.Spinner) error {
 	serviceDir, perr := utils.GetPathToDbService(dbService.ServiceName)
 	if perr != nil {
@@ -344,11 +333,8 @@ func SeedDb(dbService utils.DatabaseService) error {
 	return nil
 }
 
-// Get dump either from seedDb or from self, if isSelf true, that dump is from current db
 func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
 	if serviceConfig.Driver == "postgres" {
-		// Postgres dumps run via exec.Command argv with PGPASSWORD in cmd.Env,
-		// so the password never lands on argv or in a re-expanding make recipe.
 		source := serviceConfig
 		if !isSelf {
 			s := serviceConfig.SeedFromDb
@@ -399,8 +385,6 @@ func GetDump(serviceConfig utils.DatabaseService, isSelf bool) {
 func DumpAndSeedDb(dbService utils.DatabaseService) error {
 	if dbService.SeedFromFilePath != "" {
 		src := dbService.SeedFromFilePath
-		// A compose-relative seedFromFilePath must stay under the compose dir; an
-		// absolute path is taken as-is (existing behavior).
 		if !filepath.IsAbs(src) {
 			resolved, err := utils.JoinUnderComposeDir(src)
 			if err != nil {

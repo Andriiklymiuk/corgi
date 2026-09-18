@@ -8,8 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A fix that waited for budget runs when budget returns: the most urgent
-// first, one per round, never a blocked or ignored one, never with --no-retry.
 func TestDeferredFixesComeBackOnTheirOwn(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
@@ -33,7 +31,7 @@ func TestDeferredFixesComeBackOnTheirOwn(t *testing.T) {
 		return out
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // the run itself must not go anywhere; only the start matters
+	cancel()
 
 	d.retryDeferred(ctx, WatchSpec{Workspace: "api", Dir: spec.Dir, Action: "fix", NoRetry: true}, now)
 	if len(started()) != 0 {
@@ -59,10 +57,6 @@ func TestDeferredFixesComeBackOnTheirOwn(t *testing.T) {
 	d.runs.Wait()
 }
 
-// A "thanks, test is ok" that was queued during quiet hours — before the
-// rules learned to refuse thank-yous, or on a ticket that has since been
-// closed — is dropped in the morning, not started. Starting it would have
-// moved a Done ticket back to In Progress.
 func TestADeferredFixOnFinishedWorkIsDroppedInTheMorning(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
@@ -79,7 +73,6 @@ func TestADeferredFixOnFinishedWorkIsDroppedInTheMorning(t *testing.T) {
 	for _, e := range []watch.Event{thanks, closed, live} {
 		d.watchState.Fixes.Defer(e)
 	}
-	// Overnight someone closed ABC-2; the daemon saw it.
 	if err := watch.LoadStateLog(d.Dir).Set("k-closed", "Done", now); err != nil {
 		t.Fatal(err)
 	}
@@ -101,8 +94,6 @@ func TestADeferredFixOnFinishedWorkIsDroppedInTheMorning(t *testing.T) {
 	d.runs.Wait()
 }
 
-// The same check guards a fix that is about to start fresh: what the poll
-// saw a minute ago may be Done by now.
 func TestAFixDoesNotStartOnATicketThatIsDoneNow(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()

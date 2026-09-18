@@ -14,13 +14,6 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// A plan is a goal broken into tasks by a planner, then worked through by
-// the daemon: each task is a task on the board (TASK-n), run unattended in
-// its own worktree when its turn comes, a few at a time. The plan holds
-// the order — which tasks wait for which — and how many run at once. The
-// tasks say how they are doing, the way any task does: Doing when a run is
-// on it, Review when a pull request is up, Done, Canceled.
-
 const (
 	PlanPlanned = "planned"
 	PlanRunning = "running"
@@ -28,8 +21,6 @@ const (
 	PlanDone    = "done"
 )
 
-// PlanTask is one task of a plan: its board id and which of the plan's
-// tasks it waits for.
 type PlanTask struct {
 	ID    int   `json:"id"`
 	After []int `json:"after,omitempty"`
@@ -42,19 +33,16 @@ type Plan struct {
 	Workspace string     `json:"workspace"`
 	Model     string     `json:"model,omitempty"`
 	Tasks     []PlanTask `json:"tasks"`
-	// Slots is how many of its tasks run at once.
-	Slots     int       `json:"slots"`
-	State     string    `json:"state"`
-	By        string    `json:"by,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	// Notes is what the planner and the runs said worth keeping.
-	Notes []string `json:"notes,omitempty"`
+	Slots     int        `json:"slots"`
+	State     string     `json:"state"`
+	By        string     `json:"by,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+	Notes     []string   `json:"notes,omitempty"`
 }
 
 func (p Plan) Ref() string { return fmt.Sprintf("P-%d", p.ID) }
 
-// TaskIDs is the plan's tasks in order.
 func (p Plan) TaskIDs() []int {
 	out := make([]int, 0, len(p.Tasks))
 	for _, t := range p.Tasks {
@@ -63,7 +51,6 @@ func (p Plan) TaskIDs() []int {
 	return out
 }
 
-// Has says whether a task belongs to the plan.
 func (p Plan) Has(taskID int) bool {
 	for _, t := range p.Tasks {
 		if t.ID == taskID {
@@ -104,7 +91,6 @@ func (l *PlanLog) save() error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// Add records a new plan, planned and not yet running.
 func (l *PlanLog) Add(goal, summary, workspace, model, by string, tasks []PlanTask, slots int, now time.Time) (Plan, error) {
 	goal = strings.TrimSpace(goal)
 	if goal == "" {
@@ -125,7 +111,6 @@ func (l *PlanLog) Add(goal, summary, workspace, model, by string, tasks []PlanTa
 	return p, l.save()
 }
 
-// PlanID reads "P-3", "p-3" or "3".
 func PlanID(arg string) int {
 	s := strings.TrimSpace(strings.ToUpper(arg))
 	s = strings.TrimPrefix(s, "P-")
@@ -148,7 +133,6 @@ func (l *PlanLog) Find(arg string) (Plan, bool) {
 	return Plan{}, false
 }
 
-// Update rewrites one plan through f and saves.
 func (l *PlanLog) Update(id int, now time.Time, f func(p *Plan)) (Plan, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -162,12 +146,10 @@ func (l *PlanLog) Update(id int, now time.Time, f func(p *Plan)) (Plan, error) {
 	return Plan{}, fmt.Errorf("no plan P-%d", id)
 }
 
-// SetState moves a plan; it is a no-op when it is already there.
 func (l *PlanLog) SetState(id int, state string, now time.Time) (Plan, error) {
 	return l.Update(id, now, func(p *Plan) { p.State = state })
 }
 
-// Running is every plan the daemon should be moving along.
 func (l *PlanLog) Running() []Plan {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -180,7 +162,6 @@ func (l *PlanLog) Running() []Plan {
 	return out
 }
 
-// All is every plan, newest first.
 func (l *PlanLog) All() []Plan {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -189,21 +170,16 @@ func (l *PlanLog) All() []Plan {
 	return out
 }
 
-// PlanProgress is where a plan's tasks stand, from the task board.
 type PlanProgress struct {
 	Todo, Doing, Review, Done, Canceled int
-	// Ready is the tasks still in the first column whose every predecessor is Done or Review.
-	Ready []Task
-	// Missing lists task ids the board no longer has.
-	Missing []int
+	Ready                               []Task
+	Missing                             []int
 }
 
-// Finished says a task no longer needs a run.
 func taskFinished(state string) bool {
 	return state == "Done" || state == "Review" || state == "Canceled"
 }
 
-// Progress reads the plan's tasks off the board and says which may start.
 func (p Plan) Progress(tasks *TaskLog) PlanProgress {
 	var out PlanProgress
 	state := map[int]string{}
@@ -247,5 +223,4 @@ func (p Plan) Progress(tasks *TaskLog) PlanProgress {
 	return out
 }
 
-// Over says whether every task has come to rest.
 func (pr PlanProgress) Over() bool { return pr.Todo == 0 && pr.Doing == 0 }

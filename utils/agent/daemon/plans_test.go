@@ -8,9 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A running plan of three tasks, the third waiting for the first two, on
-// one slot: the daemon starts one, then the next when it ends, then the
-// third once both are at rest — and says the plan is done at the end.
 func TestAPlanIsWorkedThroughInOrder(t *testing.T) {
 	d := testDaemon(t)
 	notes := make(chan string, 16)
@@ -40,7 +37,6 @@ func TestAPlanIsWorkedThroughInOrder(t *testing.T) {
 	if task, _ := watch.LoadTasks(d.Dir).Find(a.Ref()); task.State != "Doing" {
 		t.Fatalf("the started task is Doing, got %s", task.State)
 	}
-	// The run ends; the session put the task in Review as its prompt says.
 	collectNotes(t, notes, "fixed "+a.Ref())
 	if _, err := watch.LoadTasks(d.Dir).Move(a.Ref(), "Review", time.Now()); err != nil {
 		t.Fatal(err)
@@ -60,8 +56,6 @@ func TestAPlanIsWorkedThroughInOrder(t *testing.T) {
 	}
 }
 
-// A task whose run already ended without the session moving it is not run
-// again by the plan: it waits for a person.
 func TestAPlanDoesNotRetryATaskWhoseRunEnded(t *testing.T) {
 	d := testDaemon(t)
 	notes := make(chan string, 16)
@@ -79,7 +73,6 @@ func TestAPlanDoesNotRetryATaskWhoseRunEnded(t *testing.T) {
 	d.advancePlans(context.Background())
 	collectNotes(t, notes, "fixed "+a.Ref())
 	waitUntil(t, func() bool { return !spans()[0].end.IsZero() }, "the run ends")
-	// Back to Todo by hand, as if nothing had happened: still not rerun.
 	_, _ = watch.LoadTasks(d.Dir).Move(a.Ref(), "Todo", time.Now())
 	d.advancePlans(context.Background())
 	time.Sleep(50 * time.Millisecond)

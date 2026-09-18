@@ -71,8 +71,6 @@ func TestSessionFromNotificationReadsTheTitleLine(t *testing.T) {
 	}
 }
 
-// fakeTelegram is a stand-in for api.telegram.org: it serves queued
-// getUpdates bodies in order and records every sendMessage text.
 type fakeTelegram struct {
 	srv     *httptest.Server
 	mu      sync.Mutex
@@ -129,8 +127,6 @@ func (f *fakeTelegram) last() string {
 	return m[len(m)-1]
 }
 
-// fakeRunningDaemon writes a daemon record naming this very process, which
-// passes ReadInfo's liveness and name checks.
 func fakeRunningDaemon(t *testing.T, dir string, commands bool) {
 	t.Helper()
 	exe, _ := os.Executable()
@@ -161,7 +157,6 @@ func noSettle(t *testing.T, fn func()) {
 	t.Cleanup(func() { waitForDaemonToAct = previous })
 }
 
-// telegramUnderTest wires a controller to an isolated agent dir and home.
 func telegramUnderTest(t *testing.T) (*telegramControl, string) {
 	t.Helper()
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
@@ -221,7 +216,7 @@ func TestTelegramSendPostsToTheChat(t *testing.T) {
 		t.Fatalf("sent = %v", m)
 	}
 	fake.srv.Close()
-	c.send("lost") // a dead server is not fatal
+	c.send("lost")
 	telegramAPIBase = "://bad"
 	c.send("unbuildable")
 	if len(fake.messages()) != 1 {
@@ -262,7 +257,6 @@ func TestTelegramHandleWithoutADaemon(t *testing.T) {
 		{"/say s1 go on", "", "corgi agent is not running"},
 		{"/focus s1", "", "corgi agent is not running"},
 		{"/bogus", "", "unknown command. /help"},
-		// Claude Code's own word, tapped in a notification: a tip, not "unknown".
 		{"/compact", "", "/compact is Claude Code's command, typed inside a session — not one of corgi's.\nFrom here: reply to the session's notification with /compact, or\n/send <session> /compact"},
 		{"/model@corgibot", "", "/model is Claude Code's command, typed inside a session — not one of corgi's.\nFrom here: reply to the session's notification with /model, or\n/send <session> /model"},
 		{"/mute 25h", "", "/mute [1h|30m|off]"},
@@ -457,7 +451,6 @@ func TestTelegramRunGreetsOnceThenDispatches(t *testing.T) {
 		t.Error("the greeting must be marked so a restart stays quiet")
 	}
 
-	// Cancelled before it starts: no poll, and the chat was greeted already.
 	c.run(ctx)
 	if len(fake.messages()) != 2 || fake.polls != 2 {
 		t.Errorf("a restart must neither greet nor poll: sent=%v polls=%d", fake.messages(), fake.polls)
@@ -478,17 +471,12 @@ func TestTelegramFirstTimeInChat(t *testing.T) {
 	}
 }
 
-// A cancelled context must stop the control loop before it greets, because
-// the greeting is a network call. The test used to assert nothing and leak
-// the goroutine that made it, which is what failed a release on CI.
 func TestStartTelegramControlStopsBeforeItSaysAnything(t *testing.T) {
 	c, dir := telegramUnderTest(t)
-	c.firstTimeInChat() // greeted, so this chat has nothing to send anyway
+	c.firstTimeInChat()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Not a telegram URL: no control at all, and a channel already closed so
-	// a caller waiting on it is never held up.
 	notTelegram := startTelegramControl(ctx, "https://ntfy.sh/topic", dir)
 	select {
 	case <-notTelegram:
@@ -496,8 +484,6 @@ func TestStartTelegramControlStopsBeforeItSaysAnything(t *testing.T) {
 		t.Fatal("a URL with no chat behind it must not leave the caller waiting")
 	}
 
-	// A chat nobody has greeted yet, so the marker can only appear if the
-	// cancelled loop went ahead and greeted it.
 	done := startTelegramControl(ctx, "https://api.telegram.org/bot1:x/sendMessage?chat_id=100", dir)
 	select {
 	case <-done:
@@ -515,7 +501,6 @@ func TestStartTelegramControlStopsBeforeItSaysAnything(t *testing.T) {
 	}
 }
 
-// With a session drifting on the board, the tip names it, ready to send.
 func TestTelegramCompactTipNamesTheDriftingSession(t *testing.T) {
 	fake := newFakeTelegram(t)
 	c, dir := telegramUnderTest(t)

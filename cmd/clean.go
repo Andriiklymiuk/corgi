@@ -1,6 +1,3 @@
-/*
-Copyright © 2022 ANDRII KLYMIUK
-*/
 package cmd
 
 import (
@@ -11,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// cleanCmd represents the clean command
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Cleans all services",
@@ -31,10 +27,6 @@ corgi clean -i db`,
 var cleanItems []string
 
 func runClean(cobra *cobra.Command, _ []string) {
-	// Resolve corgi-compose.yml first so utils.CorgiComposePathDir is set —
-	// downstream helpers (ExecuteForEachService, CleanCorgiServicesFolder,
-	// cleanServices) rely on it to locate corgi_services/ and cloned repos.
-	// Without this, "db" / "corgi_services" branches silently no-op.
 	if _, err := utils.GetCorgiServices(cobra); err != nil {
 		fmt.Printf("couldn't load corgi-compose.yml, error: %s\n", err)
 		return

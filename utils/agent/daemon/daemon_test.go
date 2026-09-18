@@ -17,7 +17,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
-// blockingProcess runs until stopped, like a healthy remote-control session.
 type blockingProcess struct {
 	pid     int
 	stopped chan struct{}
@@ -43,14 +42,10 @@ func blockingStarter() supervisor.Starter {
 
 func testDaemon(t *testing.T) *Daemon {
 	t.Helper()
-	// A home of its own: the day ledger's first run reads ~/.claude/projects,
-	// and a test must never read the transcripts of whoever runs it.
 	t.Setenv("HOME", t.TempDir())
 	d := New("test", t.TempDir())
 	d.Start = blockingStarter()
 	d.Notify = func(string, string) {}
-	// New() wires the real notifier to NotifyWithLink, and a body with a link
-	// prefers it — so a test that overrides only Notify would lose the call.
 	d.NotifyWithLink = func(title, body, _ string) { d.Notify(title, body) }
 	return d
 }
@@ -198,8 +193,6 @@ func TestDiagnosticShowsDefaultConfigDirExplicitly(t *testing.T) {
 
 func TestReadInfoTreatsADeadDaemonAsAbsent(t *testing.T) {
 	dir := t.TempDir()
-	// PID 0 is never a live user process; a record left by a machine that lost
-	// power must not look like a running daemon.
 	if err := writeJSONAtomic(filepath.Join(dir, "daemon.json"), Info{PID: 0}); err != nil {
 		t.Fatal(err)
 	}
@@ -262,8 +255,6 @@ func waitFor(t *testing.T, cond func() bool) {
 	t.Fatal("condition not met within timeout")
 }
 
-// Pids are recycled. A record left by an unclean exit must not make
-// `corgi agent stop` signal whatever now holds that number.
 func TestReadInfoRejectsARecycledPid(t *testing.T) {
 	dir := t.TempDir()
 	if err := writeJSONAtomic(filepath.Join(dir, "daemon.json"), Info{
@@ -286,8 +277,6 @@ func TestReadInfoRejectsARecycledPid(t *testing.T) {
 	}
 }
 
-// exitingStarter hands out processes that exit cleanly after a moment, which
-// the supervisor classifies as the documented network timeout and restarts.
 func exitingStarter() supervisor.Starter {
 	var n int
 	var mu sync.Mutex
@@ -308,8 +297,6 @@ func exitingStarter() supervisor.Starter {
 }
 
 func TestDaemonWritesABriefWhenASessionIsReplaced(t *testing.T) {
-	// The whole point of the feature: a restarted session is a NEW session, and
-	// what the old one left on disk has to be recorded while it is still there.
 	d := testDaemon(t)
 	d.Start = exitingStarter()
 
@@ -347,14 +334,9 @@ func TestDaemonWritesABriefWhenASessionIsReplaced(t *testing.T) {
 	if len(got.Repos) != 1 || got.Repos[0].Branch != "feature/referral" {
 		t.Errorf("brief repos = %+v, want the probed state", got.Repos)
 	}
-	// Whether the summary reaches the notification is the supervisor's job and
-	// is asserted there, where a healthy run can be simulated without waiting
-	// out MinHealthyUptime.
 }
 
 func TestDaemonWithoutABriefProbeStillRuns(t *testing.T) {
-	// CaptureBrief is injected, and a nil one must disable the feature rather
-	// than take the daemon down on the first restart.
 	d := testDaemon(t)
 	d.Start = exitingStarter()
 	d.CaptureBrief = nil
@@ -371,10 +353,6 @@ func TestDaemonWithoutABriefProbeStillRuns(t *testing.T) {
 }
 
 func TestRunWaitsForTheStatusPublisherBeforeReturning(t *testing.T) {
-	// Without an explicit wait, Run's deferred delete of status.json races the
-	// status publisher goroutine still mid-write, resurrecting the file. That
-	// surfaced under -race as a TempDir cleanup failure in the next test.
-	// The delay makes the ordering deterministic.
 	d := testDaemon(t)
 	var publisherFinished atomic.Bool
 	d.publishStopped = func() {
@@ -528,10 +506,7 @@ func TestDynamicDaemonAllowsAnEmptyStartupSet(t *testing.T) {
 }
 
 func TestDaemonSurvivesASIGUSR1Nudge(t *testing.T) {
-	// SIGUSR1's default disposition is to terminate the process. The daemon must
-	// install its handler before it becomes nudge-able and keep it for its whole
-	// lifetime, so a nudge is caught, never fatal — on the fixed path too.
-	d := testDaemon(t) // no ResolveWorkspace: the fixed lifecycle
+	d := testDaemon(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { defer close(done); _ = d.Run(ctx, []supervisor.SpawnConfig{cfg("acme", "/tmp")}) }()
@@ -644,12 +619,11 @@ func TestDynamicDaemonDropsAStaleCommandWithoutStarting(t *testing.T) {
 }
 
 func TestDynamicDaemonDrainsOnTheTickWithoutANudge(t *testing.T) {
-	d := dynDaemon(t) // CommandTick is 10ms
+	d := dynDaemon(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { defer close(done); _ = d.Run(ctx, nil) }()
 
-	// No Nudge — only the tick can pick this up.
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionStart, WorkspaceID: "acme"})
 	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
 	cancel()
@@ -657,10 +631,6 @@ func TestDynamicDaemonDrainsOnTheTickWithoutANudge(t *testing.T) {
 }
 
 func TestDynamicDaemonRestartBatchDoesNotDropTheStart(t *testing.T) {
-	// The phone "restart my session" gesture is a stop immediately followed by a
-	// start, both draining in one batch. The start must not be deduplicated
-	// against the runner the stop is tearing down, or the session would stop and
-	// never come back.
 	d := dynDaemon(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -676,8 +646,6 @@ func TestDynamicDaemonRestartBatchDoesNotDropTheStart(t *testing.T) {
 	d.Nudge()
 
 	waitFor(t, func() bool { s := d.Status(); return len(s.Workspaces) == 1 && s.Workspaces[0].Running })
-	// And it stays running — the stop's backgrounded teardown must not later
-	// knock out the fresh runner.
 	time.Sleep(80 * time.Millisecond)
 	if s := d.Status(); len(s.Workspaces) != 1 || !s.Workspaces[0].Running {
 		t.Fatalf("after a stop+start batch the workspace must be running, got %+v", s.Workspaces)
@@ -687,14 +655,9 @@ func TestDynamicDaemonRestartBatchDoesNotDropTheStart(t *testing.T) {
 }
 
 func TestPackageNudgeIsSafeWithoutCommandSupport(t *testing.T) {
-	// nil, non-positive pid, and a daemon that does not advertise command
-	// support must all be no-ops — never signal a process that has no handler.
 	Nudge(nil)
 	Nudge(&Info{PID: 0, Commands: true})
 	Nudge(&Info{PID: os.Getpid(), Commands: false})
-	// A command-capable record for our own pid delivers a (harmless) SIGUSR1;
-	// the test process has the daemon's handler installed only inside Run, so we
-	// do not send to self here — the no-op branches are the contract under test.
 }
 
 func TestAttentionCommandNotifiesAndRecords(t *testing.T) {
@@ -736,7 +699,6 @@ func TestAttentionCommandNotifiesAndRecords(t *testing.T) {
 		return len(evs) == 1 && evs[0].Kind == "attention"
 	})
 
-	// A hook that sent no message still has to say something useful.
 	if _, err := command.Write(d.Dir, command.Command{
 		Action: command.ActionAttention, WorkspaceID: "acme", Source: "hook",
 	}); err != nil {
@@ -758,8 +720,6 @@ func TestAttentionCommandNotifiesAndRecords(t *testing.T) {
 	cancel()
 	<-done
 
-	// Attention never touches a runner: the session is usually one corgi does
-	// not supervise.
 	if len(d.Status().Workspaces) != 0 {
 		t.Errorf("attention must not start a runner, got %+v", d.Status().Workspaces)
 	}

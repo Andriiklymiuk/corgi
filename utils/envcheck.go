@@ -8,35 +8,19 @@ import (
 	"strings"
 )
 
-// EnvCheckRow is one service's drift verdict: which example keys the resolved
-// env (or --file override) neither provides nor corgi generates.
 type EnvCheckRow struct {
-	Service string `json:"service"`
-	// Example is the reference file the service repo commits
-	// (.env-example / .env.example), relative to the compose dir.
-	Example string `json:"example,omitempty"`
-	// Source is the file whose keys were checked against the example,
-	// relative to the compose dir. Empty when it does not exist.
-	Source string `json:"source,omitempty"`
-	// Missing are keys the example declares that the source file does not
-	// provide and corgi does not generate (db/service deps, port, literals).
-	Missing []string `json:"missing,omitempty"`
-	// Skipped explains why this service was not checked.
-	Skipped string `json:"skipped,omitempty"`
-	// SourceAbsent: the service declares an env source but the file is not
-	// there, so a run would fall back to the example's placeholder values.
-	SourceAbsent bool `json:"sourceAbsent,omitempty"`
+	Service      string   `json:"service"`
+	Example      string   `json:"example,omitempty"`
+	Source       string   `json:"source,omitempty"`
+	Missing      []string `json:"missing,omitempty"`
+	Skipped      string   `json:"skipped,omitempty"`
+	SourceAbsent bool     `json:"sourceAbsent,omitempty"`
 }
 
-// OK reports whether this row is free of findings.
 func (r EnvCheckRow) OK() bool {
 	return !r.SourceAbsent && len(r.Missing) == 0
 }
 
-// EnvCheckAll diffs each service's env source against the example file its
-// repo commits, subtracting everything corgi generates itself. fileOverride
-// checks <service repo>/<fileOverride> instead of the resolved source —
-// useful for a committed CI env file before anything copies it into place.
 func EnvCheckAll(corgi *CorgiCompose, fileOverride string) ([]EnvCheckRow, error) {
 	all, err := ResolveAllEnv(corgi)
 	if err != nil {
@@ -88,8 +72,6 @@ func envCheckService(svc Service, resolved []EnvVar, fileOverride string) (EnvCh
 		sort.Strings(missing)
 		return missing
 	}
-	// An absent source is only a finding when the example declares keys corgi
-	// does not generate — an example of purely generated keys needs no file.
 	absentSource := func(display string) EnvCheckRow {
 		if missing := missingFrom(nil); len(missing) > 0 {
 			row.Source = display
@@ -107,12 +89,8 @@ func envCheckService(svc Service, resolved []EnvVar, fileOverride string) (EnvCh
 		}
 		source = candidate
 	} else {
-		// The same resolution corgi run uses, so check and run can never
-		// disagree about which file a service's env comes from.
 		resolvedSrc := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir)
 		if resolvedSrc == "" || sameFile(resolvedSrc, example) {
-			// Resolution fell through to the example (or nothing): diffing
-			// the example against itself proves nothing.
 			if svc.CopyEnvFromFilePath == "" {
 				row.Skipped = "no copyEnvFromFilePath — env comes from the example file itself"
 				return row, nil
@@ -131,9 +109,6 @@ func envCheckService(svc Service, resolved []EnvVar, fileOverride string) (EnvCh
 	return row, nil
 }
 
-// envFileKeys errors instead of returning an empty set: an unreadable file
-// silently treated as "declares nothing" would pass exactly the check it
-// should fail.
 func envFileKeys(path string) (map[string]bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -141,7 +116,6 @@ func envFileKeys(path string) (map[string]bool, error) {
 	}
 	keys := map[string]bool{}
 	for _, e := range parseChunkInOrder(string(data), "") {
-		// Shell-sourceable files write `export KEY=value`; the key is KEY.
 		keys[strings.TrimPrefix(e.Key, "export ")] = true
 	}
 	return keys, nil
@@ -159,8 +133,6 @@ func sameFile(a, b string) bool {
 	return os.SameFile(ai, bi)
 }
 
-// displayPath renders a path relative to the compose dir when possible, so
-// output stays portable between a laptop and a runner.
 func displayPath(path string) string {
 	rel, err := filepath.Rel(CorgiComposePathDir, path)
 	if err != nil || strings.HasPrefix(rel, "..") {
@@ -169,9 +141,6 @@ func displayPath(path string) string {
 	return rel
 }
 
-// EnvCheckStats counts the rows that were actually checked and whether any
-// finding exists. Zero checked rows count as a finding — a vacuous pass
-// would read as coverage.
 func EnvCheckStats(rows []EnvCheckRow) (checked int, findings bool) {
 	for _, row := range rows {
 		if row.Skipped != "" {
@@ -188,11 +157,8 @@ func EnvCheckStats(rows []EnvCheckRow) (checked int, findings bool) {
 	return checked, findings
 }
 
-// EnvCheckNothingChecked is the shared explanation for a vacuous run, used by
-// both the human summary and the JSON reason field.
 const EnvCheckNothingChecked = "nothing was checked — no service pairs an env source with a committed .env-example / .env.example"
 
-// EnvCheckSummary renders the human view and says whether findings exist.
 func EnvCheckSummary(rows []EnvCheckRow) (string, bool) {
 	var b strings.Builder
 	for _, row := range rows {

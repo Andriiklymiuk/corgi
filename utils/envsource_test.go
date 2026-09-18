@@ -36,7 +36,6 @@ func TestResolveEnvSourceFile_FallsBackToEnvExample(t *testing.T) {
 	CorgiComposePathDir = dir
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	// explicit source missing; .env-example present in the service dir
 	writeFile(t, filepath.Join(dir, ".env-example"), "A=1")
 	svc := Service{AbsolutePath: dir + "/", CopyEnvFromFilePath: "missing.env"}
 
@@ -53,7 +52,6 @@ func TestResolveEnvSourceFile_FallsBackToDotEnvExample(t *testing.T) {
 	CorgiComposePathDir = dir
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	// only .env.example variant present, no explicit source
 	writeFile(t, filepath.Join(dir, ".env.example"), "A=1")
 	svc := Service{AbsolutePath: dir + "/"}
 

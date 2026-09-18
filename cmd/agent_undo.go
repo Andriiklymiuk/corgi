@@ -15,25 +15,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Undo: a run went the wrong way. Drop what the session left uncommitted
-// in its own worktree — every edit, every new file — and, with --worktree,
-// the worktree and its branch as well. Only a session with a worktree of
-// its own (--isolate, corgi/<ref>): one on your checkout would take your
-// edits with it, so it is refused. A working session is interrupted
-// first, never undone under its feet.
-
-// sessionUndo is what undo would do, for a look before it does.
 type sessionUndo struct {
 	Session  sessions.Session
 	Dir      string
 	Branch   string
 	Isolated bool
 	Changed  []string
-	// Repo is the main checkout the worktree belongs to.
-	Repo string
+	Repo     string
 }
 
-// undoPlan looks at the session's checkout and refuses what it must.
 func sessionUndoPlan(s sessions.Session) (sessionUndo, error) {
 	if s.Cwd == "" {
 		return sessionUndo{}, fmt.Errorf("%s has no checkout on record", firstNonEmpty(s.Display, s.Label))
@@ -71,7 +61,6 @@ func sessionUndoPlan(s sessions.Session) (sessionUndo, error) {
 	return sessionUndo{Session: s, Dir: s.Cwd, Branch: branch, Isolated: true, Changed: changed, Repo: repo}, nil
 }
 
-// runUndo drops the uncommitted work; with worktree, the tree and branch.
 func runSessionUndo(p sessionUndo, worktree bool) error {
 	if !p.Isolated {
 		return fmt.Errorf("not a worktree of its own")
@@ -163,8 +152,6 @@ acts unless --yes.
 	},
 }
 
-// launchUndoHandler is the phone's Undo: POST {session, worktree} — the
-// phone asked first (a hold), so this does not.
 func launchUndoHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -196,7 +183,6 @@ func launchUndoHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{"session": s.ID, "dropped": plan.Changed, "worktree": req.Worktree, "branch": plan.Branch})
 }
 
-// endedSession finds a session that left the board by id or prefix.
 func endedSession(st sessions.State, ref string) (sessions.Session, bool) {
 	for _, e := range st.Ended {
 		if e.ID == ref || e.Display == ref || strings.HasPrefix(e.ID, ref) {

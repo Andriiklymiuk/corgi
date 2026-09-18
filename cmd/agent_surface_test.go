@@ -10,9 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Every command merges the root's persistent flags the first time its flag set
-// is read. A shorthand that collides with one of them panics at that moment,
-// which is a broken binary rather than a failing command.
 func TestEveryCommandMergesRootFlagsWithoutColliding(t *testing.T) {
 	var walk func(cmd *cobra.Command)
 	walk = func(cmd *cobra.Command) {

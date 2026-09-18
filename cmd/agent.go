@@ -31,9 +31,6 @@ import (
 )
 
 var agentCmd = &cobra.Command{
-	// Cobra runs only the nearest PersistentPreRun, so replicate the root's
-	// global-flag handling, then warn once if agent data was left at the old
-	// location by the data-dir move.
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		applyGlobalFlags(cmd)
 		warnStrandedAgentData()
@@ -57,12 +54,6 @@ Getting started:
   corgi agent status    # what is running, and under which account`,
 }
 
-// agentDir is where agent mode keeps daemon.json, status.json and the registry.
-//
-// It uses the per-user data directory (NativeDataDir), never the Homebrew
-// prefix: a registry of paths and per-device tokens is user data, and a brew
-// reinstall must not wipe it. Agent mode is new, so there is no legacy data to
-// carry across.
 func agentDir() (string, error) {
 	base, err := utils.NativeDataDir()
 	if err != nil {
@@ -73,11 +64,6 @@ func agentDir() (string, error) {
 
 var legacyAgentWarnOnce sync.Once
 
-// warnStrandedAgentData says once, if agent data exists at the old Homebrew-var
-// location but not the new per-user one, that the location changed and the old
-// setup is not carried over. Called from command entry points (never agentDir,
-// so path resolution stays side-effect-free); a plain notice, never a move —
-// agent mode is unreleased, so there is nothing to migrate for real users.
 func warnStrandedAgentData() {
 	legacyAgentWarnOnce.Do(func() {
 		newDir, err := agentDir()
@@ -85,7 +71,7 @@ func warnStrandedAgentData() {
 			return
 		}
 		if _, err := os.Stat(newDir); err == nil {
-			return // already using the new location
+			return
 		}
 		legacyBase, err := utils.CorgiDataDir()
 		if err != nil {
@@ -93,10 +79,10 @@ func warnStrandedAgentData() {
 		}
 		legacy := filepath.Join(legacyBase, "agent")
 		if legacy == newDir {
-			return // no separate legacy location (CORGI_DATA_DIR override, etc.)
+			return
 		}
 		if info, statErr := os.Stat(legacy); statErr != nil || !info.IsDir() {
-			return // nothing stranded
+			return
 		}
 		utils.Infof("corgi: agent data now lives at %s (was %s).\n"+
 			"The old setup is not carried over — re-run `corgi agent init` and re-pair your devices.\n",
@@ -114,7 +100,6 @@ var agentServeCmd = &cobra.Command{
 }
 
 func runAgentServe(cmd *cobra.Command, _ []string) {
-	// A daemon must never stop to ask a question.
 	utils.NonInteractive = true
 
 	dir, err := agentDir()
@@ -128,9 +113,6 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_already_running",
 			fmt.Errorf("corgi agent is already running (pid %d) — `corgi agent stop` first", info.PID), 1)
 	}
-	// A daemon whose record went missing is still a daemon. Two of them write
-	// the same board in turns, so the second is refused here by the process
-	// table, not by the record.
 	if strays := otherServers(os.Getpid()); len(strays) > 0 {
 		exitWithError("agent_already_running",
 			fmt.Errorf("corgi agent is already running (pid %d) without its record — `corgi agent restart` replaces it", strays[0]), 1)
@@ -143,8 +125,6 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 
 	d := daemon.New(APP_VERSION, dir)
 	d.CaptureBrief = captureWorkspaceBrief
-	// Session tracking: label sessions by registered workspace, badge them
-	// by corgi profile, and size the board as the user config says.
 	d.Sessions.Resolve = workspaceResolver(dir)
 	d.Sessions.ProfileFor = profileResolver(dir)
 	d.Sessions.PullFor = pullResolver(dir)
@@ -188,8 +168,6 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 	d.Isolate = isolateFixWorktrees
 	d.Carry = autoCarry(dir)
-	// Answering in the thread a message came from, with the workspace's own
-	// token and in the voice its config chose.
 	d.Chat = func(ctx context.Context, workspaceID string, target watch.SlackTarget, text, emoji string) error {
 		poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, workspaceID))
 		poster.Team = watch.LoadState(dir).SourceIdentity("slack", "team")
@@ -203,14 +181,9 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		}
 		return nil
 	}
-	// A pull request the forge calls ready is merged with the workspace's
-	// own token, the same way the phone's Merge does it.
 	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
 		return watch.MergePR(ctx, watch.LoadSecretsFor(dir, workspaceID), link)
 	}
-	// A red build's failed jobs are rerun once (the workspace's rerunCI):
-	// the newest failed run since the notification, unless it was rerun
-	// already — that second red is the real one.
 	d.RerunCI = func(ctx context.Context, workspaceID, repo string, since time.Time) (watch.Rerun, error) {
 		secrets := watch.LoadSecretsFor(dir, workspaceID)
 		run, err := watch.NewestFailedRun(ctx, secrets, repo, since)
@@ -228,14 +201,9 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		_ = reruns.Set(r)
 		return r, nil
 	}
-	// A permission prompt is answered by the daemon when the workspace the
-	// session sits in says reads are allowed — read live, so the switch
-	// takes at the next prompt.
 	d.Policy = func(s sessions.Session) daemon.Policy {
 		return policyFor(dir, s.Cwd)
 	}
-	// Phones that registered a push token hear what the desktop hears, and a
-	// permission prompt with its session id.
 	pushStore := push.Load(dir)
 	d.Push = func(m push.Message) {
 		if err := pushStore.Send(context.Background(), m); err != nil {
@@ -254,8 +222,6 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		}
 		return launcherURL()
 	}
-	// The desktop toast is read here, at the machine corgi runs on, so it opens
-	// the launcher served from localhost rather than the public tunnel.
 	d.NotifyWithLink = func(title, body, link string) {
 		utils.NotifyWithLink(title, body, preferLocalLink(link))
 	}
@@ -279,24 +245,15 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 	printStartupDiagnostics(configs)
 
-	// Held for the daemon's whole life, not just a session's: a sleeping laptop
-	// answers no phone, and the gap between sessions is exactly when the phone
-	// is used to start one.
 	if lock := daemonWakeLock(dir); lock != nil {
 		defer lock.Release()
 	}
 
-	// Started at login, this is the half `corgi agent install` never covered:
-	// the endpoint and tunnel the last `up --at-login` used come back too.
 	restoreUpAtLogin(dir)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Keep the machine awake while any tracked Claude is mid-turn, whoever
-	// started it — the per-workspace lock only ever covered corgi's own
-	// supervised processes, so a session started by hand in a terminal was
-	// cut off by the lid closing.
 	if supervisor.Supported() {
 		go d.HoldAwakeWhileWorking(ctx, supervisor.NewWakeLock(supervisor.WakeLockAlways))
 	}
@@ -307,8 +264,6 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 
 	runErr := d.Run(ctx, configs)
-	// Wait for the chat loop to finish rather than exiting under it. Bounded,
-	// because a stuck request must not hold up a stop the person asked for.
 	select {
 	case <-telegramDone:
 	case <-time.After(3 * time.Second):
@@ -319,9 +274,6 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	utils.Info(art.BlueColor, "corgi agent stopped", art.WhiteColor)
 }
 
-// daemonWakeLock takes the machine-wide wake lock when the user config asks for
-// it. Returns nil when it is off or unavailable, so the caller has nothing to
-// release. Never fatal: a daemon that cannot hold a lock still supervises.
 func daemonWakeLock(dir string) *supervisor.WakeLock {
 	user, err := config.LoadUser(agentUserConfigPath(dir))
 	if err != nil || user == nil || !user.StayAwake {
@@ -340,8 +292,6 @@ func daemonWakeLock(dir string) *supervisor.WakeLock {
 	return lock
 }
 
-// loadSpawnConfigs turns the registry plus both config files into launch
-// settings, skipping workspaces that are unreachable or opted out.
 func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, error) {
 	registry, err := workspace.Load(agentRegistryPath(dir))
 	if err != nil {
@@ -364,10 +314,6 @@ func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, er
 	return out, nil
 }
 
-// remoteResolver builds launch settings for one workspace on demand,
-// reloading registry and config so a remote start sees the current files,
-// not the ones from daemon startup. No autostart check: a remote start IS
-// the explicit act autostart substitutes for.
 func remoteResolver(dir string, foreground bool) func(id, profile, name string) (supervisor.SpawnConfig, error) {
 	return func(id, profile, name string) (supervisor.SpawnConfig, error) {
 		registry, err := workspace.Load(agentRegistryPath(dir))
@@ -392,9 +338,6 @@ func remoteResolver(dir string, foreground bool) func(id, profile, name string) 
 		}
 		resolved := config.Resolve(w.ID, repo, user)
 		if resolved.Sensitive {
-			// A workspace the repo marked sensitive has opted out of being
-			// driven remotely. Same refusal the preview tunnels give it, so the
-			// flag means one thing everywhere.
 			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is marked sensitive — remote session start is refused (start it on the laptop, or unset sensitive in .corgi/agent.yml)", w.ID)
 		}
 		resolved, err = config.ApplyProfile(resolved, user, profile)
@@ -405,17 +348,12 @@ func remoteResolver(dir string, foreground bool) func(id, profile, name string) 
 		cfg.Origin = supervisor.OriginRemote
 		cfg.Profile = profile
 		if n := sanitizeSessionName(name); n != "" {
-			// A name typed on the phone beats anything composed here: it says
-			// what the session is *for*, which no local probe can know.
 			cfg.Name = n
 		}
 		return cfg, nil
 	}
 }
 
-// sanitizeSessionName makes a phone-supplied session name safe to place in an
-// argv: printable ASCII only, no leading dash (which argv would read as a
-// flag), and short enough to read in claude.ai's session list.
 func sanitizeSessionName(name string) string {
 	var b strings.Builder
 	for _, r := range name {
@@ -432,9 +370,6 @@ func sanitizeSessionName(name string) string {
 	return out
 }
 
-// spawnConfigForWorkspace decides whether one registered workspace should be
-// supervised, and with what settings. Anything skipped says why, since a
-// workspace silently not starting is the confusing failure here.
 func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, foreground bool) (supervisor.SpawnConfig, bool) {
 	if w.Status != workspace.StatusOK {
 		utils.Infof("agent: skipping %s (%s)\n", w.ID, w.Status)
@@ -447,20 +382,11 @@ func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, for
 	}
 	resolved := config.Resolve(w.ID, repo, user)
 	if !resolved.AutostartEnabled() {
-		// Every other skip explains itself; this one is the most likely to be
-		// unexpected, since `corgi agent scan` registers without enabling.
 		utils.Infof("agent: skipping %s (not enabled — run `corgi agent init` there, or set autostart: true)\n", w.ID)
 		return supervisor.SpawnConfig{}, false
 	}
 	cfg := spawnConfigFrom(w, resolved, "", foreground)
 	if kind, err := supervisor.KindFor(cfg); err == nil && kind.BuildsArgvFromSettings {
-		// A server the daemon starts on its own is there so the machine is
-		// reachable — not to open a conversation nobody asked for. Remote
-		// control would pre-create one session per start, and every restart
-		// (login, the ten-minute network exit, `corgi agent restart`) would
-		// leave another "<workspace> · main · 10:00" row in the phone's list.
-		// So it runs as a device: sessions come from claude.ai's device list
-		// or a launcher Start, and a restart leaves nothing behind.
 		cfg.DeviceOnly = !resolved.AutostartSessionEnabled()
 	}
 	return cfg, true
@@ -487,34 +413,20 @@ func spawnConfigFrom(w workspace.Workspace, r config.Resolved, profile string, f
 	}
 	kind, err := supervisor.KindFor(cfg)
 	if err != nil {
-		// An unknown kind is reported by ValidateSpawnConfig with the valid
-		// names; filling in defaults for it here would only mask that.
 		return cfg
 	}
 	if kind.BuildsArgvFromSettings {
-		// The session name shown in claude.ai/code. Meaningless to a kind handed
-		// a complete argv, where it would be a setting that never takes effect.
 		cfg.Name = defaultSessionName(r.ID, w.AbsPath, profile, time.Now())
 	}
 	if kind.SessionPrefixEnv != "" {
-		// Sessions remote control creates on demand get "<workspace>-brave-otter"
-		// instead of "<hostname>-brave-otter": the hostname is the same for
-		// every workspace on this machine and says nothing.
 		cfg.SessionNamePrefix = sessionNamePrefix(r.ID, profile)
 	}
 	if cfg.Spawn == "" && kind.SupportsSpawn {
-		// Isolate each on-demand session, so two remote sessions in one
-		// workspace do not fight over a single checkout.
 		cfg.Spawn = "worktree"
 	}
 	return cfg
 }
 
-// dirHasComposeFile reports whether dir is a corgi stack.
-//
-// It requires an actual compose file. An earlier version fell back to "is a
-// directory", which made the guard in `corgi agent init` dead: running it in
-// any folder registered that folder and the daemon then supervised it.
 func dirHasComposeFile(dir string) bool {
 	if dir == "" {
 		return false
@@ -527,11 +439,6 @@ func dirHasComposeFile(dir string) bool {
 	return false
 }
 
-// dirIsWorkspace reports whether dir can be registered for agent mode: a corgi
-// stack, or any git repository. Remote Control is useful on a plain repo too —
-// requiring a compose file locked whole projects out of `agent init`/`up` for
-// no reason. Still not "any folder": the git requirement keeps the old dead-guard
-// bug (registering an arbitrary directory) from coming back.
 func dirIsWorkspace(dir string) bool {
 	if dirHasComposeFile(dir) {
 		return true
@@ -540,12 +447,9 @@ func dirIsWorkspace(dir string) bool {
 		return false
 	}
 	info, err := os.Stat(filepath.Join(dir, ".git"))
-	// A .git FILE (not dir) is a worktree/submodule pointer — also a repo.
 	return err == nil && (info.IsDir() || info.Mode().IsRegular())
 }
 
-// printStartupDiagnostics is the one line per workspace that prevents the most
-// likely surprise: work running under the wrong Claude account.
 func printStartupDiagnostics(configs []supervisor.SpawnConfig) {
 	env := os.Environ()
 	for _, c := range configs {
@@ -649,10 +553,6 @@ func printWorkspaceState(w supervisor.RunState) {
 	}
 }
 
-// statusJSON is `corgi agent status --json`: the daemon's status plus what
-// the human output adds — token usage per workspace, the account each runs
-// under, and the dashboard URL — so a menu bar or a deck need not re-derive
-// them.
 type statusJSON struct {
 	*daemon.Status
 	Usage        []workspaceUsageJSON `json:"usage,omitempty"`
@@ -661,9 +561,6 @@ type statusJSON struct {
 	ConnectorURL string               `json:"connectorUrl,omitempty"`
 }
 
-// accountJSON is one Claude account: the rate-limit picture /usage shows,
-// as Claude Code last cached it. Absent windows mean no session under that
-// account has fetched usage yet.
 type accountJSON struct {
 	Profile   string          `json:"profile"`
 	ConfigDir string          `json:"configDir,omitempty"`
@@ -696,14 +593,11 @@ func statusWithUsage(dir string, status *daemon.Status) statusJSON {
 		}
 	}
 	out.Accounts = accountLimits(out.Usage)
-	// The launcher page, not the tunnel's root: "/" is a 404 there.
 	out.DashboardURL = launcherURL()
 	out.ConnectorURL = connectorURL()
 	return out
 }
 
-// publicURLLines is what `corgi agent status` prints under the running line:
-// the launcher and the connector URL, or one line saying the tunnel is not up.
 func publicURLLines() []string {
 	launcher := launcherURL()
 	if launcher == "" {
@@ -715,8 +609,6 @@ func publicURLLines() []string {
 	}
 }
 
-// accountLimits: one entry per distinct config dir the workspaces run under,
-// the default account first.
 func accountLimits(usages []workspaceUsageJSON) []accountJSON {
 	seen := map[string]bool{"": true}
 	dirs := []string{""}
@@ -742,7 +634,6 @@ func accountLimits(usages []workspaceUsageJSON) []accountJSON {
 	return out
 }
 
-// printAccountLimits is the /usage line per account in `corgi agent status`.
 func printAccountLimits(accounts []accountJSON) {
 	for _, a := range accounts {
 		name := "~/.claude"
@@ -784,10 +675,6 @@ func formatTokens(n int64) string {
 	}
 }
 
-// workspaceState collapses the flags into the one word worth reading first.
-// Disabled outranks running: a disabled workspace is the thing to explain.
-// A device-only server with nothing on it is "online" rather than "running":
-// the machine answers, and there is no session to look for.
 func workspaceState(w supervisor.RunState) string {
 	switch {
 	case w.Disabled:
@@ -801,8 +688,6 @@ func workspaceState(w supervisor.RunState) string {
 	}
 }
 
-// deviceOnlyLine explains the online state in the words status and the
-// launcher share, so the laptop and the phone describe it the same way.
 func deviceOnlyLine(sessions int) string {
 	if sessions > 0 {
 		return fmt.Sprintf("device · %d session(s) opened on demand", sessions)
@@ -850,22 +735,15 @@ func runAgentStop(_ *cobra.Command, _ []string) {
 	}
 	utils.Infof("stopping corgi agent (pid %d)\n", info.PID)
 
-	// Block until the daemon is actually gone. Returning on signal-sent made
-	// `corgi agent stop && corgi agent up` a race: up's ensureDaemon read the
-	// dying daemon as "running (same pid)", skipped starting a fresh one, and
-	// the machine ended up with no daemon at all.
 	if waitForDaemonExit(dir, 10*time.Second) {
 		utils.Info("stopped")
 	} else {
-		// A shutdown stuck on a runner would leave a daemon that answers
-		// nothing and still holds the record; the person asked for a stop.
 		killDaemon(proc)
 		utils.Infof("did not stop in 10s — killed (pid %d)\n", info.PID)
 	}
 	stopStrayServers()
 }
 
-// killDaemon is the last word after a SIGTERM went unanswered.
 func killDaemon(p *os.Process) {
 	_ = p.Signal(syscall.SIGKILL)
 	for i := 0; i < 20 && p.Signal(syscall.Signal(0)) == nil; i++ {
@@ -873,13 +751,9 @@ func killDaemon(p *os.Process) {
 	}
 }
 
-// otherServers is swapped in tests, which must never signal the machine's
-// real daemon.
+// Swapped in tests so they never signal the machine's real daemon.
 var otherServers = daemon.OtherServers
 
-// stopStrayServers ends every `corgi agent serve` process the record does not
-// name — the leftovers of an overlap — and returns how many it signalled.
-// Bounded wait, so a stuck one never holds up the stop that was asked for.
 func stopStrayServers() int {
 	strays := otherServers(os.Getpid())
 	for _, pid := range strays {
@@ -902,8 +776,6 @@ func stopStrayServers() int {
 	return len(strays)
 }
 
-// warnStrayServers points at daemons the record does not name, so a board
-// that flips between two writers has a visible cause.
 func warnStrayServers(recorded int) {
 	var strays []string
 	for _, pid := range otherServers(os.Getpid()) {
@@ -916,8 +788,6 @@ func warnStrayServers(recorded int) {
 	}
 }
 
-// waitForDaemonExit polls until the daemon's record is gone (ReadInfo validates
-// liveness and clears a stale file itself) or the timeout passes.
 func waitForDaemonExit(dir string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -1002,8 +872,6 @@ var agentWorkspacesForgetCmd = &cobra.Command{
 		if err := workspace.Save(path, registry); err != nil {
 			exitWithError("agent_registry_write", err, 1)
 		}
-		// Drop the handover note too. Reusing an id for a different stack later
-		// would otherwise surface branches belonging to something else.
 		if dir, dirErr := agentDir(); dirErr == nil {
 			_ = brief.Clear(dir, args[0])
 		}
@@ -1031,9 +899,6 @@ var agentWorkspacesRelocateCmd = &cobra.Command{
 		if err := workspace.Save(path, registry); err != nil {
 			exitWithError("agent_registry_write", err, 1)
 		}
-		// Same reason `forget` drops it: the brief holds the old stack's repo
-		// paths and branches, and keeping it would have `corgi agent brief`
-		// describe a directory this id no longer points at.
 		if dir, dirErr := agentDir(); dirErr == nil {
 			_ = brief.Clear(dir, existing.ID)
 		}
@@ -1066,9 +931,6 @@ var agentSessionStopCmd = &cobra.Command{
 	},
 }
 
-// enqueueSessionCommand resolves the workspace, writes the spool command and
-// nudges the daemon — the same path the MCP tools use, so the two surfaces
-// cannot drift.
 func enqueueSessionCommand(action string, args []string, profile, name string) {
 	registry, _ := mustLoadRegistry()
 	registry.Reconcile(dirIsWorkspace)
@@ -1131,8 +993,6 @@ var agentResolveCmd = &cobra.Command{
 
 		if utils.JSONOutput {
 			utils.PrintJSON(res)
-			// Same exit code as the human path: a script must not read an
-			// ambiguous answer as a resolved one.
 			if !res.Resolved() {
 				exitProcess(2)
 			}
@@ -1146,13 +1006,10 @@ var agentResolveCmd = &cobra.Command{
 		for _, c := range res.Candidates {
 			fmt.Printf("  %-20s %s\n", c.Workspace.ID, c.Workspace.AbsPath)
 		}
-		// Ambiguity is a question for a person, not a failure of the machine,
-		// but it must not read as success to a script.
 		exitProcess(2)
 	},
 }
 
-// mustLoadRegistry is the CLI's view of the same registry the MCP tools read.
 func mustLoadRegistry() (*workspace.Registry, string) {
 	registry, path, err := agentRegistry()
 	if err != nil {
@@ -1196,9 +1053,6 @@ func agoText(d time.Duration) string {
 	}
 }
 
-// policyFor is what the workspace a directory belongs to wants done on its
-// own — the registered workspace whose path contains it, longest first,
-// so a worktree under a workspace counts as that workspace.
 func policyFor(dir, cwd string) daemon.Policy {
 	if cwd == "" {
 		return daemon.Policy{}
@@ -1230,7 +1084,6 @@ func policyFor(dir, cwd string) daemon.Policy {
 	return daemon.Policy{}
 }
 
-// pathWithin says whether p is dir or sits under it.
 func pathWithin(p, dir string) bool {
 	rel, err := filepath.Rel(dir, p)
 	if err != nil {

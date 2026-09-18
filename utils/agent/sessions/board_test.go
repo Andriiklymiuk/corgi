@@ -10,12 +10,10 @@ func TestBoardPlacesLowestFreeAndNeverResorts(t *testing.T) {
 	b.Place("a")
 	b.Place("b")
 	b.Place("c")
-	b.Place("d") // overflow
+	b.Place("d")
 	if !reflect.DeepEqual(b.Slots, []string{"a", "b", "c"}) || !reflect.DeepEqual(b.Overflow, []string{"d"}) {
 		t.Fatalf("board = %v overflow %v", b.Slots, b.Overflow)
 	}
-	// The middle one ends: its slot frees and the oldest overflow takes it;
-	// a and c do not move.
 	b.Remove("b")
 	if !reflect.DeepEqual(b.Slots, []string{"a", "d", "c"}) || len(b.Overflow) != 0 {
 		t.Fatalf("after remove: board = %v overflow %v", b.Slots, b.Overflow)
@@ -25,7 +23,7 @@ func TestBoardPlacesLowestFreeAndNeverResorts(t *testing.T) {
 	if !reflect.DeepEqual(b.Slots, []string{"e", "d", "c"}) {
 		t.Fatalf("new session takes the lowest free index, got %v", b.Slots)
 	}
-	b.Place("e") // idempotent
+	b.Place("e")
 	if b.Has("zzz") || !b.Has("e") {
 		t.Fatal("Has is wrong")
 	}
@@ -42,7 +40,6 @@ func TestBoardPinnedSlotKeepsItsSession(t *testing.T) {
 	if kept := b.Remove("a"); !kept || b.Slots[0] != "a" {
 		t.Fatalf("a pinned slot keeps its id, kept=%v slots=%v", kept, b.Slots)
 	}
-	// Unpin frees it and overflow c moves in.
 	b.Pin(0, false)
 	b.Free(0)
 	if !reflect.DeepEqual(b.Slots, []string{"c", "b"}) || len(b.Overflow) != 0 {
@@ -65,8 +62,6 @@ func TestBoardPagerAndPaging(t *testing.T) {
 	if b.PagerIndex() != 2 || b.Hidden() != 3 {
 		t.Fatalf("pager should be the last unpinned slot standing for 3, got %d/%d", b.PagerIndex(), b.Hidden())
 	}
-	// Two visible (a, b), c hidden behind the pager, d and e in overflow.
-	// Next page shows c and d; e and then a, b wait.
 	if !b.Page(1) {
 		t.Fatal("page should rotate")
 	}
@@ -76,7 +71,6 @@ func TestBoardPagerAndPaging(t *testing.T) {
 	if !b.Page(-1) || !reflect.DeepEqual(b.Slots, []string{"a", "b", "c"}) {
 		t.Fatalf("page back: %v %v", b.Slots, b.Overflow)
 	}
-	// A pinned slot stays put while the others rotate around it.
 	b.Pin(0, true)
 	b.Page(1)
 	if b.Slots[0] != "a" {
@@ -85,7 +79,6 @@ func TestBoardPagerAndPaging(t *testing.T) {
 	if b.PagerIndex() != 2 {
 		t.Fatalf("pager = %d", b.PagerIndex())
 	}
-	// Everything pinned: no pager, but the overflow is still counted.
 	b.Pin(1, true)
 	b.Pin(2, true)
 	if b.PagerIndex() != -1 || b.Page(1) {

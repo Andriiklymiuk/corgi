@@ -157,7 +157,6 @@ func TestReapFreesKeysAndPinnedSlotsStayGone(t *testing.T) {
 	if r.Reap(alive, t0.Add(7*time.Second)) {
 		t.Fatal("a second reap finds nothing new")
 	}
-	// It comes back (resume in the same slot) and lights up again.
 	r.Apply(ev("SessionStart", "a", 8*time.Second))
 	if status(t, r, "a") != StatusDone || r.Snapshot(t0).Slots[0].SessionID != "a" {
 		t.Fatal("a revived pinned session keeps its key")
@@ -260,8 +259,6 @@ func TestWindowJoinRules(t *testing.T) {
 	if got.Host.Kind != HostITerm || got.Host.Folder != "" {
 		t.Fatalf("iTerm: no folder an editor should open: %+v", got.Host)
 	}
-	// An unregistered directory names no folder: focus activates the app
-	// rather than opening a new window on the cwd.
 	r.Resolve = DefaultResolve
 	scratch := ev("SessionStart", "scratch", 0)
 	scratch.ClaudePID, scratch.Ancestors, scratch.Cwd, scratch.TermProgram = 600, []int{600}, "/tmp/scratch", "vscode"
@@ -282,7 +279,6 @@ func TestWindowJoinRules(t *testing.T) {
 	if _, err := r.Focus("nope"); err == nil {
 		t.Fatal("unknown ref")
 	}
-	// Window gone: seats stay, focus degrades.
 	r.SetWindows(nil)
 	got, _ = r.Lookup("term")
 	if got.Host.Connected || got.Host.ShellPID != 0 {
@@ -351,7 +347,6 @@ func TestLabelsAndLookup(t *testing.T) {
 	if s, err := r.Lookup("#3"); err != nil || s.ID != "ijkl-3" {
 		t.Fatalf("lookup by key number: %+v %v", s, err)
 	}
-	// A bare digit is a key, never an id prefix: ids are hex.
 	r.sessions["2222-hex"] = &Session{ID: "2222-hex", ClaudePID: 9, StartedAt: t0}
 	if s, err := r.Lookup("2"); err != nil || s.ID != "efgh-2" {
 		t.Fatalf("\"2\" is key 2, got %+v %v", s, err)
@@ -413,7 +408,6 @@ func TestPersistenceKeepsTheBoard(t *testing.T) {
 		t.Fatalf("resize keeps seats: %+v", snap.Slots)
 	}
 
-	// A session with no pid to probe is not restored: it could never be reaped.
 	nopid := New(path, 3)
 	nopid.Apply(Event{Name: "Stop", SessionID: "ghost", At: t0})
 	_ = nopid.Save()
@@ -462,7 +456,6 @@ func TestAdoptGivesRescannedProcessesAKeyUntilAHookNamesThem(t *testing.T) {
 	if r.Adopt(procs, nil, t0) != 0 {
 		t.Fatal("already known")
 	}
-	// The first hook from that pid replaces the placeholder, same key.
 	real := ev("UserPromptSubmit", "real-id", time.Second)
 	real.ClaudePID = 700
 	r.Apply(real)
@@ -592,7 +585,7 @@ func TestClearKeepsTheKeyLikeResume(t *testing.T) {
 	gone := ev("Stop", "first", 0)
 	gone.ClaudePID = 55
 	r.Apply(gone)
-	r.Apply(ev("Stop", "s1", time.Second)) // key 2
+	r.Apply(ev("Stop", "s1", time.Second))
 	r.Apply(Event{Name: "SessionEnd", SessionID: "first", Reason: "other", ClaudePID: 55, At: t0.Add(2 * time.Second)})
 	end := ev("SessionEnd", "s1", 3*time.Second)
 	end.Reason = "clear"
@@ -916,7 +909,6 @@ func TestTwinsWithTheSameTabNameFallBackToTheId(t *testing.T) {
 	if !names["acme-api·api"] || !names["acme-api·web"] {
 		t.Fatalf("tab names when they differ: %v", names)
 	}
-	// Tabs corgi titled itself repeat the label; the chat titles win, then the ids.
 	r.SetWindows([]Window{{ID: "w1", ExtHostPID: 7, Terminals: []Terminal{{Name: "✓ acme-api 55%", ShellPID: 90}, {Name: "● acme-api", ShellPID: 91}}, UpdatedAt: t0}})
 	names = map[string]bool{}
 	for _, s := range r.Snapshot(t0).Sessions {
@@ -935,7 +927,6 @@ func TestTwinsWithTheSameTabNameFallBackToTheId(t *testing.T) {
 	if !names["acme-api·Order emails"] {
 		t.Fatalf("the chat title when there is one: %v", names)
 	}
-	// Claude's own tab title ("✻ …") is not a suffix either; the title wins, then the id.
 	r.SetWindows([]Window{{ID: "w1", ExtHostPID: 7, Terminals: []Terminal{{Name: "✻ Order emails", ShellPID: 90}, {Name: "✻ Refund flow", ShellPID: 91}}, UpdatedAt: t0}})
 	names = map[string]bool{}
 	for _, s := range r.Snapshot(t0).Sessions {

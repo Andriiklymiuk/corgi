@@ -15,8 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// stubSupervisor replaces launchctl/systemctl so the install paths can be
-// exercised without loading a real job into the test runner's login session.
 func stubSupervisor(t *testing.T, err error) *[][]string {
 	t.Helper()
 	var calls [][]string
@@ -29,7 +27,6 @@ func stubSupervisor(t *testing.T, err error) *[][]string {
 	return &calls
 }
 
-// tempAgentHome isolates both the data dir and the login-service path.
 func tempAgentHome(t *testing.T) string {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
@@ -69,7 +66,6 @@ func TestInstallLoginServiceWritesTheServiceFile(t *testing.T) {
 	}
 }
 
-// A supervisor that refuses must surface as an error, not a silent half-install.
 func TestInstallLoginServiceReportsASupervisorFailure(t *testing.T) {
 	if !installSupported() {
 		t.Skip("no login service on " + runtime.GOOS)
@@ -105,7 +101,6 @@ func TestRunAgentUninstallRemovesTheFileAndClearsRestore(t *testing.T) {
 	}
 }
 
-// `install` after an `up` should bring back what that up started, not half of it.
 func TestAdoptSavedUpAtLogin(t *testing.T) {
 	dir := tempAgentHome(t)
 	if adoptSavedUpAtLogin() {
@@ -120,7 +115,6 @@ func TestAdoptSavedUpAtLogin(t *testing.T) {
 	if !loadUpSettings(dir).AtLogin {
 		t.Fatal("adoption did not persist")
 	}
-	// Idempotent: a second install must not report a change it did not make.
 	if !adoptSavedUpAtLogin() {
 		t.Fatal("a second adopt disagreed with the first")
 	}
@@ -142,8 +136,6 @@ func TestClearAtLoginLeavesTheTunnelSettingsAlone(t *testing.T) {
 }
 
 func TestReportLoginInstallSaysWhatComesBack(t *testing.T) {
-	// Both branches print; the point is that neither panics and both are honest
-	// about whether the tunnel is included.
 	reportLoginInstall(true)
 	reportLoginInstall(false)
 }
@@ -181,7 +173,6 @@ func TestEnableAtLoginInstallsAndRecords(t *testing.T) {
 	}
 }
 
-// The flag path must install even when a previous run said no.
 func TestEnsureAtLoginFlagOverridesAPreviousNo(t *testing.T) {
 	if !installSupported() {
 		t.Skip("no login service on " + runtime.GOOS)
@@ -201,7 +192,6 @@ func TestEnsureAtLoginFlagOverridesAPreviousNo(t *testing.T) {
 	}
 }
 
-// A service file removed behind corgi's back is put back, not silently ignored.
 func TestEnsureAtLoginReinstallsAMissingService(t *testing.T) {
 	if !installSupported() {
 		t.Skip("no login service on " + runtime.GOOS)
@@ -238,12 +228,9 @@ func TestAwaitMCPBoundReturnsWhenThePortIsTaken(t *testing.T) {
 }
 
 func TestAwaitMCPBoundGivesUpQuietly(t *testing.T) {
-	// A server that never binds logs its own failure; this must not hang.
 	awaitMCPBound("127.0.0.1:1", 300*time.Millisecond)
 }
 
-// A named tunnel with no hostname cannot produce a usable URL, so the daemon
-// must say so rather than spawn a server nobody can reach.
 func TestRestoreUpAtLoginRefusesAnUnusableTunnel(t *testing.T) {
 	dir := t.TempDir()
 	if err := saveUpSettings(dir, upSettings{AtLogin: true, TunnelName: "corgi"}); err != nil {
@@ -255,7 +242,6 @@ func TestRestoreUpAtLoginRefusesAnUnusableTunnel(t *testing.T) {
 	}
 }
 
-// Already listening: nothing to restore, and nothing must be started on top.
 func TestRestoreUpAtLoginLeavesARunningEndpointAlone(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -321,7 +307,6 @@ func TestCorgiIsAdhocSignedReadsTheCodesignReport(t *testing.T) {
 	if corgiIsAdhocSigned() {
 		t.Error("a Developer ID signature was read as ad-hoc")
 	}
-	// Unreadable counts as signed: a wrong warning is worse than a missing one.
 	codesignTeamProbe = func(string) string { return "" }
 	if corgiIsAdhocSigned() {
 		t.Error("an unreadable report should not produce a warning")

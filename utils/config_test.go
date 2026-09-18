@@ -379,12 +379,11 @@ func TestGetDbSourceFromPathBadPort(t *testing.T) {
 func TestGetDbSourceFromPathMalformedLines(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
-	// blank line, comment, a line with no '=', and a password that contains '='
 	body := "\n# a comment\nNOEQUALS\nDB_HOST=h\nDB_PASSWORD=p=a==b\nDB_PORT=5432\n"
 	if err := os.WriteFile(envFile, []byte(body), 0644); err != nil {
 		t.Fatal(err)
 	}
-	got := getDbSourceFromPath(envFile) // must NOT panic
+	got := getDbSourceFromPath(envFile)
 	if got.Host != "h" {
 		t.Errorf("host = %q", got.Host)
 	}
@@ -599,7 +598,6 @@ func TestResolveServicePathFromCloneFromPathAlreadySet(t *testing.T) {
 }
 
 func TestCleanCorgiServicesFolderMissing(t *testing.T) {
-	// Should not panic when folder doesn't exist
 	CleanCorgiServicesFolder()
 }
 
@@ -614,7 +612,6 @@ func TestCleanFromScratchEnabled(t *testing.T) {
 	os.Chdir(dir)
 	t.Cleanup(func() { os.Chdir(cwd) })
 
-	// No DatabaseServices → just calls CleanCorgiServicesFolder (os.RemoveAll on tmp)
 	CleanFromScratch(c, CorgiCompose{})
 }
 
@@ -659,8 +656,6 @@ func TestGetCorgiConfigFilePathExists(t *testing.T) {
 	}
 }
 
-// Running from a service subfolder with no config falls back to the
-// corgi-compose.yml one level up (onboarding/workspace dir above the service).
 func TestGetCorgiConfigFilePathParentDir(t *testing.T) {
 	parent := t.TempDir()
 	if err := os.WriteFile(filepath.Join(parent, CorgiComposeDefaultName), []byte("name: t\n"), 0644); err != nil {
@@ -684,7 +679,6 @@ func TestGetCorgiConfigFilePathParentDir(t *testing.T) {
 	}
 }
 
-// No config here and none one level up → clear abort, not an empty picker.
 func TestGetCorgiConfigFilePathNoneAborts(t *testing.T) {
 	prevNI := NonInteractive
 	NonInteractive = false
@@ -708,8 +702,6 @@ func TestGetCorgiConfigFilePathNoneAborts(t *testing.T) {
 	}
 }
 
-// An explicit -f/--filename wins and never triggers the parent-dir lookup,
-// even when a corgi-compose.yml sits one level up.
 func TestDetermineCorgiComposePathFilenameFlagWins(t *testing.T) {
 	parent := t.TempDir()
 	if err := os.WriteFile(filepath.Join(parent, CorgiComposeDefaultName), []byte("name: parent\n"), 0644); err != nil {
@@ -738,9 +730,6 @@ func TestDetermineCorgiComposePathFilenameFlagWins(t *testing.T) {
 	}
 }
 
-// Full path: from a service subfolder, GetCorgiServices loads the parent's
-// config and resolves the workspace dir to the parent (so db_services and
-// service dirs generate under it, not the cwd).
 func TestGetCorgiServicesFromParentDir(t *testing.T) {
 	parent := t.TempDir()
 	content := `name: testapp
@@ -784,8 +773,6 @@ services:
 	if len(corgi.Services) != 1 {
 		t.Errorf("expected 1 service from parent config, got %d", len(corgi.Services))
 	}
-	// Workspace dir must be the parent (where the config lives), so generated
-	// services land beside it, not in the service subfolder we ran from.
 	wd, _ := os.Getwd()
 	if want := filepath.Dir(wd); CorgiComposePathDir != want {
 		t.Errorf("CorgiComposePathDir = %q, want parent %q", CorgiComposePathDir, want)
@@ -855,13 +842,11 @@ services:
 	if err != nil {
 		t.Fatalf("typo'd key must NOT fail the load (warn-first): %v", err)
 	}
-	// The typo'd value is dropped (proves it was unknown) ...
 	for _, s := range corgi.Services {
 		if s.ServiceName == "api" && len(s.Environment) != 0 {
 			t.Errorf("enviroment typo should not populate environment, got %v", s.Environment)
 		}
 	}
-	// ... and validation reports it as a warning.
 	_, warns := ValidateCompose(corgi)
 	if countCode(warns, WarnUnknownField) == 0 {
 		t.Errorf("expected a %s warning, got %v", WarnUnknownField, codesOf(warns))
@@ -1136,7 +1121,7 @@ func TestDetermineCorgiComposePathGlobalNoData(t *testing.T) {
 }
 
 func TestGetCorgiConfigFromAlertNonInteractive(t *testing.T) {
-	t.Chdir(t.TempDir()) // empty dir: no corgi-compose.yml present
+	t.Chdir(t.TempDir())
 	prev := NonInteractive
 	NonInteractive = true
 	defer func() { NonInteractive = prev }()
@@ -1156,7 +1141,6 @@ func TestCleanCorgiServicesFolderPreservesSnapshots(t *testing.T) {
 	CorgiComposePathDir = dir
 	t.Cleanup(func() { CorgiComposePathDir = prev })
 
-	// chdir so the relative "./corgi_services/" in CleanCorgiServicesFolder resolves here
 	wd, _ := os.Getwd()
 	os.Chdir(dir)
 	t.Cleanup(func() { os.Chdir(wd) })
@@ -1166,7 +1150,6 @@ func TestCleanCorgiServicesFolderPreservesSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(snapDir, "x.tar.zst"), []byte("z"), 0o644)
-	// a non-snapshot artifact that SHOULD be removed
 	os.MkdirAll(filepath.Join(dir, "corgi_services", "db_services", "main"), 0o755)
 	os.WriteFile(filepath.Join(dir, "corgi_services", "db_services", "main", "dump.sql"), []byte("d"), 0o644)
 
@@ -1180,8 +1163,6 @@ func TestCleanCorgiServicesFolderPreservesSnapshots(t *testing.T) {
 	}
 }
 
-// A symlink inside corgi_services pointing at an external dir must be removed as
-// a link only — the target and its contents must survive (no recursion through it).
 func TestCleanCorgiServicesFolderPreservesSnapshotsDoesNotFollowSymlinks(t *testing.T) {
 	prev := CorgiComposePathDir
 	dir := t.TempDir()
@@ -1192,7 +1173,6 @@ func TestCleanCorgiServicesFolderPreservesSnapshotsDoesNotFollowSymlinks(t *test
 	os.Chdir(dir)
 	t.Cleanup(func() { os.Chdir(wd) })
 
-	// external dir living OUTSIDE corgi_services, with files that must not be touched
 	outside := filepath.Join(dir, "OUTSIDE")
 	if err := os.MkdirAll(filepath.Join(outside, "nested"), 0o755); err != nil {
 		t.Fatal(err)

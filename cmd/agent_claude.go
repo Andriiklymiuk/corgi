@@ -25,8 +25,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// claudeLaunch is the command line `corgi agent claude` runs: the binary,
-// its arguments and the variables that pick the account.
 type claudeLaunch struct {
 	Workspace string
 	Bin       string
@@ -61,7 +59,6 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		isolate, _ := cmd.Flags().GetBool("isolate")
 		attempt, _ := cmd.Flags().GetInt("attempt")
 		if attempt > 0 {
-			// One of several on the same ticket: a worktree each, always.
 			isolate = true
 		}
 		botName, _ := cmd.Flags().GetString("bot")
@@ -69,10 +66,6 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		if err != nil {
 			exitWithError("agent_claude", err, 1)
 		}
-		// A bot is the defaults in one word: its workspace, account, model,
-		// worktree, and the persona appended to the system prompt. A flag
-		// given beside it still wins. Its last conversation is resumed when
-		// the transcript is still there.
 		var bot *bots.Bot
 		if botName != "" {
 			b, err := loadBot(botName)
@@ -93,9 +86,6 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 				isolate = b.Isolate
 			}
 		}
-		// A caller with no cwd of its own — the phone, a menu bar — names the
-		// workspace instead. Without this the session lands in whichever
-		// checkout the terminal happened to be in, under that one's account.
 		if id := strings.TrimSpace(wanted); id != "" {
 			root, err := workspaceRoot(id)
 			if err != nil {
@@ -106,10 +96,6 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 			}
 			cwd = root
 		}
-		// Its own worktree: one session, one branch, one checkout nobody
-		// else is in. The ticket names the branch; without one, the minute
-		// does. Every repository of the stack gets one, and the session
-		// starts in the workspace's own.
 		var isolation string
 		if isolate {
 			ref := isolationRef(ticket, time.Now())
@@ -174,9 +160,6 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		for k, v := range launch.Env {
 			env = append(env, k+"="+v)
 		}
-		// The ticket rides in the environment: the tracking hook, a child of
-		// claude, reads it and the board shows a session on the ticket from
-		// its first event — before any branch is named after it.
 		if t := strings.TrimSpace(ticket); t != "" {
 			env = append(env, "CORGI_TICKET="+t)
 			if k := strings.TrimSpace(ticketKey); k != "" {
@@ -201,7 +184,6 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 	},
 }
 
-// loadBot finds a bot by name on this machine.
 func loadBot(name string) (bots.Bot, error) {
 	dir, err := agentDir()
 	if err != nil {
@@ -227,8 +209,6 @@ func hasFlag(args []string, flag string) bool {
 	return false
 }
 
-// transcriptExists says whether Claude Code still has the conversation to
-// resume, under the account the launch runs as.
 func transcriptExists(env map[string]string, cwd, sessionID string) bool {
 	path := usage.TranscriptPath(env["CLAUDE_CONFIG_DIR"], cwd, sessionID)
 	if path == "" {
@@ -238,15 +218,8 @@ func transcriptExists(env map[string]string, cwd, sessionID string) bool {
 	return err == nil
 }
 
-// execProcess is syscall.Exec, swappable so tests can watch the exec path.
 var execProcess = syscall.Exec
 
-// runClaudeInPlace replaces this process with claude where the OS allows,
-// so claude's parent is the shell, not corgi. The tracking hook skips any
-// claude with a corgi ancestor — that is how the daemon's own remote-control
-// sessions stay off the board — and a claude run as corgi's child would be
-// skipped the same way: started from the "+" key, never on a key. Where exec
-// is unavailable it runs as a child and returns when claude exits.
 func runClaudeInPlace(bin string, args []string, env []string) error {
 	path, err := exec.LookPath(bin)
 	if err != nil {
@@ -256,7 +229,6 @@ func runClaudeInPlace(bin string, args []string, env []string) error {
 		if err := execProcess(path, append([]string{bin}, args...), env); err == nil {
 			return nil
 		}
-		// Exec refused (a script without a shebang, say): fall through.
 	}
 	c := exec.Command(path, args...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -264,8 +236,6 @@ func runClaudeInPlace(bin string, args []string, env []string) error {
 	return c.Run()
 }
 
-// resolveClaudeLaunch picks the workspace whose path contains dir (the
-// deepest one when they nest) and turns its resolved config into a command.
 func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, error) {
 	launch := claudeLaunch{Bin: "claude", Args: append([]string(nil), extra...), Env: map[string]string{}}
 	registry, _, err := agentRegistry()
@@ -327,7 +297,6 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 	return launch, nil
 }
 
-// workspaceRoot is a registered workspace's checkout, by id.
 func workspaceRoot(id string) (string, error) {
 	registry, _, err := agentRegistry()
 	if err != nil {
@@ -368,7 +337,6 @@ func (l claudeLaunch) accountSuffix() string {
 	return ""
 }
 
-// String is the shell form, for --show and for a terminal to run.
 func (l claudeLaunch) String() string {
 	parts := make([]string, 0, len(l.Env)+1+len(l.Args))
 	for k, v := range l.Env {
@@ -402,11 +370,6 @@ func init() {
 	agentCmd.AddCommand(agentClaudeCmd)
 }
 
-// pickAccountProfile is --profile auto: among the profiles the workspace's
-// accounts: list allows, the one whose 5-hour window has the most room, by
-// the numbers Claude Code last fetched. "" keeps the workspace's own account
-// — a workspace that lists nothing never switches — and a profile with no
-// snapshot yet counts as full, so an account nobody has used is tried last.
 func pickAccountProfile(user *config.UserConfig, resolved config.Resolved) string {
 	if user == nil || len(resolved.Accounts) == 0 {
 		return ""
@@ -435,8 +398,6 @@ func pickAccountProfile(user *config.UserConfig, resolved config.Resolved) strin
 	return best
 }
 
-// autoModelFor is --model auto: the workspace's policy, else opusplan —
-// Opus to plan, Sonnet to execute, in one session.
 func autoModelFor(cwd string) string {
 	dir := agentDirOrEmpty()
 	if dir == "" {
@@ -454,17 +415,10 @@ func autoModelFor(cwd string) string {
 	return resolved.Models.ForAuto()
 }
 
-// autoSwitchAt is the reading past which --profile auto leaves the account
-// it has been using. Not sooner: a session pinned to an account with room
-// left should stay there, and bouncing between accounts on every small
-// difference is how two windows end up limited at once.
 const autoSwitchAt = 98
 
 func autoProfilePath(agentDir string) string { return filepath.Join(agentDir, "auto-profile") }
 
-// pickAccountProfileSticky is --profile auto with a memory: the account it
-// picked last time stays picked until its window is nearly spent, then the
-// one with the most room takes over and stays even when the first recovers.
 func pickAccountProfileSticky(agentDir string, user *config.UserConfig, resolved config.Resolved) string {
 	if user == nil || len(resolved.Accounts) == 0 {
 		return ""
@@ -491,10 +445,6 @@ func pickAccountProfileSticky(agentDir string, user *config.UserConfig, resolved
 	return pick
 }
 
-// A prompt typed on the phone reaches the new terminal by id, never inside
-// the shell line: the launcher writes it under prompts/ with 0600, the new
-// session reads it once and removes it. Ids are random and short-lived.
-
 var (
 	promptIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 	modelPattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`)
@@ -506,9 +456,6 @@ func validModel(model string) bool { return modelPattern.MatchString(model) }
 
 func promptsDir(agentDir string) string { return filepath.Join(agentDir, "prompts") }
 
-// savePrompt stores text for a new session and returns its id. Files older
-// than promptMaxAge are removed on the way, so a prompt nobody picked up
-// does not linger.
 func savePrompt(agentDir, text string) (string, error) {
 	dir := promptsDir(agentDir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -532,7 +479,6 @@ func savePrompt(agentDir, text string) (string, error) {
 	return id, nil
 }
 
-// takePrompt reads a saved prompt and removes it.
 func takePrompt(agentDir, id string) (string, error) {
 	if !promptIDPattern.MatchString(id) {
 		return "", fmt.Errorf("prompt id %q is not one the launcher makes", id)
@@ -554,8 +500,6 @@ func takePrompt(agentDir, id string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-// isolationRef is what names an isolated session's branch: the first
-// ticket it works on, else the minute it started.
 func isolationRef(ticket string, now time.Time) string {
 	if first := strings.TrimSpace(strings.Split(ticket, ",")[0]); first != "" {
 		return first
@@ -563,10 +507,6 @@ func isolationRef(ticket string, now time.Time) string {
 	return "session-" + now.Format("0102-1504")
 }
 
-// isolateWorkspace gives the workspace at root a worktree per repository on
-// branch, and picks the one to start in: the repository root itself when it
-// is one, else the first. A workspace with a corgi-compose.yml gets one per
-// service repository; a bare checkout gets its own.
 func isolateWorkspace(root, branch string) (trees []string, start string, err error) {
 	hasCompose := false
 	for _, name := range []string{utils.CorgiComposeDefaultName, "corgi-compose.yaml"} {
@@ -578,8 +518,6 @@ func isolateWorkspace(root, branch string) (trees []string, start string, err er
 	if hasCompose {
 		trees, err = isolateFixWorktrees(root, branch)
 		if err == nil && len(trees) > 0 {
-			// The stack's own repository, when the compose file sits in one,
-			// is where the session should start; a service's otherwise.
 			start = trees[0]
 			if repo, ok := utils.RepoRootOf(root); ok && repo != "" {
 				prefix := utils.WorktreeDirPrefix(repo) + "@"

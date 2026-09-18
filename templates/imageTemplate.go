@@ -1,12 +1,5 @@
 package templates
 
-// DockerComposeImage renders a generic docker-compose for stateless (or
-// stateful) services shipped as a public image (gotenberg, mailhog, jaeger,
-// meilisearch, etc.). Supported optional fields:
-//   - port + containerPort: host:container port mapping
-//   - environment: docker-compose environment list ([KEY=VALUE])
-//   - volumes: docker-compose volume mounts (["./data:/app/data"])
-//   - command: override container entrypoint args (["--flag", "value"])
 var DockerComposeImage = `services:
   image-{{.ServiceName}}:
     image: {{.Image}}
@@ -39,8 +32,6 @@ networks:
     driver: bridge
 `
 
-// MakefileImage matches the postgres-driver Makefile shape (up/down/stop/id/...)
-// so corgi's lifecycle commands work identically across drivers.
 var MakefileImage = `up:
 	docker compose up -d
 down:

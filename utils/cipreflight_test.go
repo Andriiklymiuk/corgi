@@ -55,9 +55,6 @@ func swapContainerProbes(t *testing.T, marker, cgroup string) func() {
 	return func() { dockerEnvMarkerPath, initCgroupPath = origMarker, origCgroup }
 }
 
-// The gitignored env file is the classic CI blocker: corgi falls back to a
-// committed example whose placeholder values start the service and then fail
-// at the first request, thousands of lines from the cause.
 func TestMissingEnvSourcesReportsTheFallback(t *testing.T) {
 	dir := t.TempDir()
 	serviceDir := filepath.Join(dir, "api")
@@ -109,7 +106,6 @@ func TestMissingEnvSourcesIsQuietWhenTheFileExists(t *testing.T) {
 	}
 }
 
-// A service with no copyEnvFromFilePath has nothing to be missing.
 func TestMissingEnvSourcesIgnoresServicesWithoutADeclaration(t *testing.T) {
 	restore := swapComposeDir(t, t.TempDir())
 	defer restore()
@@ -120,8 +116,6 @@ func TestMissingEnvSourcesIgnoresServicesWithoutADeclaration(t *testing.T) {
 	}
 }
 
-// ${tier} is substituted before the file is looked for, or --tier staging would
-// always report a miss.
 func TestMissingEnvSourcesSubstitutesTheTier(t *testing.T) {
 	dir := t.TempDir()
 	restore := swapComposeDir(t, dir)

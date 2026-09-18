@@ -1,9 +1,3 @@
-// Slack is the one source whose events are people talking rather than a
-// tracker moving: a mention, a direct message, a post in a channel the
-// workspace listens to. Polled like every other source, on one cursor —
-// a search for my own handle finds mentions wherever they are, including
-// inside threads of channels nobody listed, and the named channels are
-// read message by message.
 package watch
 
 import (
@@ -15,30 +9,24 @@ import (
 	"strings"
 )
 
-// SlackWatchConfig is what a workspace asked Slack for.
 type SlackWatchConfig struct {
 	Mentions       bool
 	Channels       []string
 	ReviewChannels []string
 }
 
-// Slack polls one workspace's Slack.
 type Slack struct {
-	api *slackAPI
-	cfg SlackWatchConfig
-	// names caches user id to handle for the daemon's life: a channel of
-	// ten people would otherwise be ten lookups a round.
+	api   *slackAPI
+	cfg   SlackWatchConfig
 	names map[string]string
 }
 
-// NewSlack builds the source; with no token the caller must not use it.
 func NewSlack(s Secrets, cfg SlackWatchConfig) *Slack {
 	return &Slack{api: &slackAPI{Token: strings.TrimSpace(s.SlackUser)}, cfg: cfg, names: map[string]string{}}
 }
 
 func (s *Slack) Name() string { return "slack" }
 
-// Token says whether this source can be polled at all.
 func (s *Slack) Token() string { return s.api.Token }
 
 type slackMessage struct {
@@ -58,8 +46,6 @@ type slackConversation struct {
 	User string `json:"user"`
 }
 
-// Poll asks for mentions once, then for each listened channel and, when
-// mentions are on, each direct message. The first round only bookmarks.
 func (s *Slack) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
 	next := Cursor{}
 	for k, v := range cursor {
@@ -107,9 +93,6 @@ func (s *Slack) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error
 	return events, next, nil
 }
 
-// channels is every conversation this round reads: the listened ones, the
-// review ones, and — with mentions on — every direct message, since a DM
-// to me is a mention that carries no handle.
 func (s *Slack) channels(convs []slackConversation) []slackConversation {
 	want := map[string]bool{}
 	for _, name := range append(append([]string{}, s.cfg.Channels...), s.cfg.ReviewChannels...) {
@@ -156,11 +139,9 @@ func (s *Slack) conversations(ctx context.Context) ([]slackConversation, error) 
 }
 
 type slackMatch struct {
-	TS   string `json:"ts"`
-	Text string `json:"text"`
-	User string `json:"user"`
-	// A search hit for a bot's message carries username and bot_id rather
-	// than a user, so the flag has to be read here as well as in history.
+	TS        string `json:"ts"`
+	Text      string `json:"text"`
+	User      string `json:"user"`
 	Username  string `json:"username"`
 	BotID     string `json:"bot_id"`
 	Subtype   string `json:"subtype"`
@@ -171,8 +152,6 @@ type slackMatch struct {
 	} `json:"channel"`
 }
 
-// mentions searches for my own handle, which is the only way to see a
-// mention inside a thread of a channel nobody listed.
 func (s *Slack) mentions(ctx context.Context, cursor Cursor, me, team string) ([]Event, error) {
 	bookmark := cursor["search"]
 	var matches []slackMatch
@@ -262,9 +241,6 @@ func (s *Slack) history(ctx context.Context, cursor Cursor, c slackConversation,
 	return events, nil
 }
 
-// event turns one Slack message into a watch Event. A review channel's post
-// carrying pull requests becomes a review request for the whole post: three
-// repositories of one ticket are one review, not three.
 func (s *Slack) event(ctx context.Context, cursor Cursor, m slackMessage, c slackConversation, me, team string, kind Kind) Event {
 	author := s.handle(ctx, m.User)
 	where := "#" + c.Name
@@ -335,8 +311,6 @@ func (s *Slack) parent(ctx context.Context, channel, ts string) (slackMessage, b
 	return res.Messages[0], true
 }
 
-// handle is "@name" for a user id, cached; an id that cannot be looked up
-// stays as it is, so a failed lookup never loses who said something.
 func (s *Slack) handle(ctx context.Context, id string) string {
 	if id == "" {
 		return ""
@@ -363,9 +337,6 @@ var (
 	slackLinkRef = regexp.MustCompile(`<(https?://[^|>]+)(\|[^>]*)?>`)
 )
 
-// render turns Slack's wire text into what a person wrote: ids become
-// handles, angle-bracketed links become plain ones, so a prompt and a
-// notification read the way the message did on screen.
 func (s *Slack) render(ctx context.Context, text string) string {
 	out := slackUserRef.ReplaceAllStringFunc(text, func(m string) string {
 		return s.handle(ctx, slackUserRef.FindStringSubmatch(m)[1])

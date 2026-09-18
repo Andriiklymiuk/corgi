@@ -1,6 +1,6 @@
 package utils
 
-import _ "embed" // for go:embed
+import _ "embed"
 
 //go:embed corgi-compose.schema.json
 var composeJSONSchema string

@@ -16,9 +16,6 @@ var worktreeCmd = &cobra.Command{
 	Short:   "Manage worktrees corgi created for --service-branch and isolated sessions",
 }
 
-// worktreeBaseHere is where this folder's corgi worktrees live: under the
-// compose file's corgi_services, or a bare repository's own when a session
-// was isolated without a stack.
 func worktreeBaseHere(cmd *cobra.Command) (string, error) {
 	if _, err := utils.GetCorgiServices(cmd); err == nil {
 		return filepath.Join(utils.CorgiServicesDir(), ".worktrees"), nil

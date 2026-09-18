@@ -19,22 +19,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Plan is a goal handed to a planner, who breaks it into tasks on the
-// board, and to the daemon, who works through them: each task an
-// unattended run in a worktree of its own, a few at a time, in the order
-// the planner set. The tasks are ordinary tasks — TASK-n on the kanban,
-// Review when a pull request is up — so every surface already shows how
-// the plan is going; the plan itself is the order and the slots.
-//
-//   corgi agent plan "add rate limits to the public API"        writes the tasks, prints them
-//   corgi agent plan "…" --run --slots 2                          and starts working through them
-//   corgi agent plan run P-1                                      start (or resume) a plan
-//   corgi agent plan status [P-1]                                 where every plan stands
-//   corgi agent plan stop P-1                                     the rest of its tasks go to Canceled
-
 const planTimeout = 4 * time.Minute
 
-// planModel writes the tasks; the cheap chief would cut corners here.
 const planModel = "sonnet"
 
 const planSoul = `You are a staff engineer breaking one goal into tasks for a team of coding agents. Each task is worked by one Claude Code session, alone, in its own git worktree of the repository, unattended, ending in a draft pull request. Tasks must be independent enough to run side by side unless you say one waits for another. Write between 2 and the given maximum tasks: each small enough for one session in one sitting, each with a title (one line, imperative, under 80 characters) and a body that says exactly what to change, where, and how the session knows it is done (the tests or checks to run). Say what NOT to touch when two tasks are near each other. Put shared groundwork first and let the others wait for it. Answer with JSON only, no prose and no code fence: {"summary": "one or two sentences of the approach", "tasks": [{"title": "...", "body": "...", "after": [1]}]} where "after" lists the 1-based numbers of the tasks this one waits for (omit or empty when none).`
@@ -50,8 +36,6 @@ type plannerAnswer struct {
 	Tasks   []plannerTask `json:"tasks"`
 }
 
-// repoPicture is what the planner sees of the workspace: enough to place
-// the work, small enough to be cheap. No source files go in.
 func repoPicture(root string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Repository root: %s\n", root)
@@ -120,8 +104,6 @@ func repoPicture(root string) string {
 	return b.String()
 }
 
-// parsePlannerAnswer reads the JSON out of what the planner said, fenced
-// or not, and checks it stands up.
 func parsePlannerAnswer(text string, limit int) (plannerAnswer, error) {
 	var ans plannerAnswer
 	start, end := strings.Index(text, "{"), strings.LastIndex(text, "}")
@@ -157,9 +139,6 @@ func parsePlannerAnswer(text string, limit int) (plannerAnswer, error) {
 	return ans, nil
 }
 
-// writePlanFile keeps the plan readable beside the board: the goal, the
-// approach, every task with what it waits for — for a person, and for a
-// session that wants the whole picture.
 func writePlanFile(dir string, p watch.Plan, tasks []watch.Task) string {
 	path := filepath.Join(dir, "plans", fmt.Sprintf("%s.md", p.Ref()))
 	_ = os.MkdirAll(filepath.Dir(path), 0o700)
@@ -191,7 +170,6 @@ func writePlanFile(dir string, p watch.Plan, tasks []watch.Task) string {
 	return path
 }
 
-// nudgePlans asks a running daemon to move plans along now.
 func nudgePlans(dir string) bool {
 	info, err := daemon.ReadInfo(dir)
 	if err != nil || info == nil || !info.Commands {
@@ -204,7 +182,6 @@ func nudgePlans(dir string) bool {
 	return true
 }
 
-// planWatchReady says why the daemon could not work a plan in ws, or "".
 func planWatchReady(dir, ws string, slots int) string {
 	specs, err := loadWatchSpecs(dir)
 	if err != nil {
@@ -481,8 +458,6 @@ func init() {
 	agentCmd.AddCommand(agentPlanCmd)
 }
 
-// launchPlansHandler is GET /launch/plans — every plan with where its tasks
-// stand — and POST /launch/plans {plan, do: "run"|"stop", slots?}.
 func launchPlansHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()

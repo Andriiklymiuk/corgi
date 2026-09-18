@@ -14,22 +14,17 @@ const (
 	UserConfigSchemaVersion = 1
 )
 
-// SuggestConfig holds opt-in settings for proactive scheduled suggest. The
-// zero value is the safe default: propose-and-ask, weekly cap of 1.
 type SuggestConfig struct {
-	AutoFileDrafts bool `yaml:"autoFileDrafts"` // opt-in: file ONE draft ticket per run unattended
-	MaxPerWeek     int  `yaml:"maxPerWeek"`     // 0 = use default 1; hard ceiling 3 enforced in the helper
+	AutoFileDrafts bool `yaml:"autoFileDrafts"`
+	MaxPerWeek     int  `yaml:"maxPerWeek"`
 }
 
-// UserConfig is the on-disk shape of ~/.corgi/config.yml. Version == 0
-// means an old file with no version stamp; LoadUserConfig migrates it.
 type UserConfig struct {
 	Version       int           `yaml:"version"`
 	Notifications bool          `yaml:"notifications"`
 	Suggest       SuggestConfig `yaml:"suggest"`
 }
 
-// GetUserConfigDir is the ~/.corgi directory path.
 func GetUserConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -38,8 +33,6 @@ func GetUserConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".corgi"), nil
 }
 
-// LoadUserConfig reads ~/.corgi/config.yml. Returns a zero-value
-// UserConfig (no error) when the file is missing.
 func LoadUserConfig() (*UserConfig, error) {
 	dir, err := GetUserConfigDir()
 	if err != nil {
@@ -63,17 +56,12 @@ func LoadUserConfig() (*UserConfig, error) {
 	return &cfg, nil
 }
 
-// migrateUserConfig bumps older on-disk schemas to the current version.
-// Add a case per historical version as new fields land.
 func migrateUserConfig(cfg *UserConfig) {
 	if cfg.Version == 0 {
-		// v0 → v1: stamp the version. Existing files stay valid.
 		cfg.Version = UserConfigSchemaVersion
 	}
 }
 
-// SaveUserConfig writes cfg to ~/.corgi/config.yml, creating the directory
-// and file if necessary. The current schema version is always stamped.
 func SaveUserConfig(cfg *UserConfig) error {
 	dir, err := GetUserConfigDir()
 	if err != nil {

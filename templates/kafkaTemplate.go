@@ -1,6 +1,5 @@
 package templates
 
-// todo: kafka in this setup has o users, so add one later
 var DockerComposeKafka = `services:
   zookeeper-{{.ServiceName}}:
     image: confluentinc/cp-zookeeper:{{if .Version}}{{.Version}}{{else}}latest{{end}}

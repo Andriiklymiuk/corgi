@@ -32,7 +32,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// mcpCmd runs corgi as an MCP server over stdio. stdout is the JSON-RPC channel.
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
 	Short: "Run corgi as an MCP server over stdio (for AI agent clients)",
@@ -67,30 +66,14 @@ const (
 	headerContentType = "Content-Type"
 )
 
-// mcpHandlerMu serializes all MCP tool/resource work. mcp-go can invoke handlers
-// concurrently, but handlers mutate global state (os.Stdout swap, rootCmd flags,
-// utils.CorgiComposePath*) that isn't concurrency-safe. Held across the entire
-// handler body so the stdout swap and compose/flag mutation never overlap.
 var mcpHandlerMu sync.Mutex
 
-// mcpPublicTunnelActive is set once a public tunnel URL is published (from the
-// tunnel goroutine) and read per-call by the dangerous-tool handlers, so it's
-// atomic to stay race-free.
 var mcpPublicTunnelActive atomic.Bool
 
-// mcpTunnelPrivate is set when the published tunnel URL was observed to be
-// behind an identity proxy, so an unauthenticated request never reaches corgi.
-//
-// It is only ever set from a probe that saw the interception happen — never
-// from configuration. A gate that relaxes because a config file claimed
-// protection is a gate that fails open on a typo.
 var mcpTunnelPrivate atomic.Bool
 
-// dangerousToolBlockedMsg is returned by corgi_exec / corgi_db_query when they
-// are reachable over a public tunnel without the explicit opt-in.
 const dangerousToolBlockedMsg = "corgi_exec/corgi_db_query are disabled over a public tunnel; put the tunnel behind an identity proxy, or set CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1 to allow"
 
-// mcpExposure reports which tier the endpoint currently sits in.
 func mcpExposure() tunnel.Exposure {
 	if !mcpPublicTunnelActive.Load() {
 		return tunnel.ExposureLocal
@@ -101,10 +84,6 @@ func mcpExposure() tunnel.Exposure {
 	return tunnel.ExposurePublic
 }
 
-// dangerousTunnelToolsAllowed reports whether corgi_exec / corgi_db_query may
-// run. Always over stdio or a plain HTTP endpoint, and over a tunnel behind an
-// identity proxy. A tunnel anyone with the URL can reach needs the explicit
-// opt-in — this is arbitrary command and DB execution.
 func dangerousTunnelToolsAllowed(publicTunnel bool) bool {
 	if !publicTunnel {
 		return true
@@ -116,7 +95,6 @@ func dangerousTunnelToolsAllowed(publicTunnel bool) bool {
 }
 
 func runMCP(cmd *cobra.Command, _ []string) {
-	// Route corgi's own logging to stderr so stdout stays the JSON-RPC channel.
 	utils.NonInteractive = true
 	utils.JSONOutput = true
 
@@ -149,9 +127,6 @@ func runMCP(cmd *cobra.Command, _ []string) {
 	serveMCPStdio(s)
 }
 
-// newCorgiMCPServer is the one server every transport serves: the name a
-// client shows, the instructions it reads at initialize, every tool and
-// resource, and the result guard around every tool.
 func newCorgiMCPServer(version string) *server.MCPServer {
 	s := server.NewMCPServer("corgi", version,
 		server.WithTitle("Corgi"),
@@ -202,9 +177,6 @@ func mcpHTTPOptsFromFlags(cmd *cobra.Command) mcpHTTPOpts {
 	return o
 }
 
-// resolveMCPToken applies the token rules. Plain --http with no --token and no
-// --tunnel stays no-auth (token=="") so existing users are unaffected. A token
-// is auto-generated only for a public tunnel without an explicit one.
 func resolveMCPToken(o mcpHTTPOpts) string {
 	if o.insecure {
 		return ""
@@ -216,32 +188,21 @@ func resolveMCPToken(o mcpHTTPOpts) string {
 	return token
 }
 
-// generateMCPToken returns a url-safe bearer token prefixed corgi_mcp_.
 func generateMCPToken() string {
 	b := make([]byte, 18)
 	if _, err := rand.Read(b); err != nil {
-		// crypto/rand failure is fatal: a weak token would defeat the auth.
 		fmt.Fprintln(os.Stderr, "could not generate token:", err)
 		exitProcess(1)
 	}
 	return "corgi_mcp_" + base64.RawURLEncoding.EncodeToString(b)
 }
 
-// bearerPrefix is the Authorization scheme corgi accepts.
 const bearerPrefix = "Bearer "
 
-// bearerAuth wraps next with a constant-time Bearer-token check. token=="" is
-// no-auth and returns next unchanged.
-//
-// deviceStorePath, when set, additionally accepts any paired device's token, so
-// a phone never has to be handed the server token itself. Empty disables that.
 func bearerAuth(token string, next http.Handler, deviceStorePath string) http.Handler {
 	return bearerAuthWithOAuth(token, next, deviceStorePath, nil)
 }
 
-// bearerAuthWithOAuth is bearerAuth that also accepts the access tokens oa
-// issued and points a 401 at oa's protected-resource metadata (RFC 9728), so
-// a client that lands on the endpoint cold learns where to sign in.
 func bearerAuthWithOAuth(token string, next http.Handler, deviceStorePath string, oa *oauthServer) http.Handler {
 	if token == "" && deviceStorePath == "" {
 		return next
@@ -253,7 +214,6 @@ func bearerAuthWithOAuth(token string, next http.Handler, deviceStorePath string
 			next.ServeHTTP(w, r)
 			return
 		}
-		// a viewer only reads; a keyed device cannot seal the MCP stream
 		if d, ok := authorizedDeviceFull(deviceStorePath, r.Header.Get("Authorization")); ok && !d.Viewer() && !d.Encrypted() {
 			next.ServeHTTP(w, r)
 			return
@@ -262,8 +222,6 @@ func bearerAuthWithOAuth(token string, next http.Handler, deviceStorePath string
 			next.ServeHTTP(w, r)
 			return
 		}
-		// RFC 6750 §3.1: error="invalid_token" only when a credential was
-		// presented; a bare challenge when there was none.
 		challenge := `Bearer realm="corgi"`
 		if oa != nil {
 			challenge += `, resource_metadata="` + oa.resourceMetadataURL() + `"`
@@ -278,8 +236,6 @@ func bearerAuthWithOAuth(token string, next http.Handler, deviceStorePath string
 	})
 }
 
-// authorizedDevice reports whether an Authorization header carries a paired
-// device's token.
 func authorizedDevice(storePath, header string) (string, bool) {
 	if storePath == "" {
 		return "", false
@@ -295,9 +251,6 @@ func authorizedDevice(storePath, header string) (string, bool) {
 	return store.Authorize(offered)
 }
 
-// buildMCPTunnelConfig selects a provider and builds a NamedConfig from the mcp
-// tunnel flags, expanding ${VAR} in the hostname. A named config is returned
-// only when a hostname (or name) is set; otherwise nil => quick tunnel.
 func buildMCPTunnelConfig(provider, hostname, name string) (tunnel.Provider, *tunnel.NamedConfig, error) {
 	p, ok := tunnel.Providers[provider]
 	if !ok {
@@ -317,16 +270,12 @@ func buildMCPTunnelConfig(provider, hostname, name string) (tunnel.Provider, *tu
 }
 
 func serveMCPStdio(s *server.MCPServer) {
-	// WithWorkerPoolSize(1) is defense-in-depth; mcpHandlerMu is the real guard.
 	if err := server.ServeStdio(s, server.WithWorkerPoolSize(1)); err != nil {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		exitProcess(1)
 	}
 }
 
-// resolveDeviceStore returns the store to authenticate against, or "" when
-// pairing is not in play — it is otherwise always a valid path, which would
-// defeat bearerAuth's no-auth escape.
 func resolveDeviceStore(opts mcpHTTPOpts) string {
 	if opts.insecure {
 		return ""
@@ -340,9 +289,6 @@ func resolveDeviceStore(opts mcpHTTPOpts) string {
 	case pairing.StoreHasDevices:
 		return path
 	case pairing.StoreUnreadable:
-		// Refuse rather than serve: silently continuing would drop back to
-		// whatever auth remains, and with no --token that is none at all — an
-		// unreadable file would reopen corgi_exec to anyone.
 		fmt.Fprintf(os.Stderr,
 			"corgi mcp: cannot read the paired-device store at %s.\n"+
 				"Fix its permissions (chmod 600) or remove it to start over; refusing to serve in the meantime.\n", path)
@@ -355,12 +301,9 @@ func resolveDeviceStore(opts mcpHTTPOpts) string {
 	return ""
 }
 
-// announceMCPAuth says what a client will need to connect.
 func announceMCPAuth(token, deviceStore string) {
 	switch {
 	case token == "" && deviceStore != "":
-		// Paired devices make this endpoint authenticated even with no server
-		// token, which also means any existing tokenless client stops working.
 		fmt.Fprintln(os.Stderr, "corgi mcp --http requires a paired device token (see `corgi mcp devices`).")
 		fmt.Fprintln(os.Stderr, "Tokenless clients will be rejected; pass --token to keep one working, or --insecure for no auth.")
 	case token == "":
@@ -373,25 +316,14 @@ func announceMCPAuth(token, deviceStore string) {
 func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	httpSrv := server.NewStreamableHTTPServer(s)
 
-	// Only consult the device store when pairing is actually in play. It is
-	// otherwise always a valid path, which would defeat bearerAuth's no-auth
-	// escape and make `corgi mcp --http` (and --insecure) reject every request
-	// with no credential in existence to fix it.
 	deviceStore := resolveDeviceStore(opts)
 
-	// Only /mcp is behind the transport guard and the bearer check; other
-	// paths 404.
 	mux := http.NewServeMux()
 	origins := newOriginAllowlist(addr, opts.allowOrigins)
 
-	// OAuth rides beside /mcp whenever there is auth to sign in to: the
-	// connector dialog's "Sign in now" then works with one click. --insecure
-	// has nothing to protect and --no-oauth turns it off.
 	var oa *oauthServer
 	if !opts.noOAuth && (token != "" || deviceStore != "") {
 		if dir, err := agentDir(); err == nil {
-			// Access tokens are devices, so a --token-only server still needs
-			// the device store's path to write them.
 			oauthDevices := deviceStore
 			if oauthDevices == "" {
 				oauthDevices = pairing.StorePath(dir)
@@ -402,11 +334,6 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	}
 	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuthWithOAuth(token, httpSrv, deviceStore, oa)))
 
-	// The launcher: corgi's own phone UI. /app is a static page (no secret); its
-	// data endpoints sit behind the same bearer/device-token auth as /mcp and do
-	// the same thing the session tools do. Mounted only when there is some auth
-	// to gate them — otherwise /launch/start would be an unauthenticated way to
-	// spawn sessions.
 	if token != "" || deviceStore != "" {
 		mux.HandleFunc("/app", launcherPageHandler)
 		mux.Handle("/launch/workspaces", launchAuth(token, http.HandlerFunc(launchWorkspacesHandler), deviceStore))
@@ -428,7 +355,6 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/plans", launchAuth(token, http.HandlerFunc(launchPlansHandler), deviceStore))
 		mux.Handle("/launch/watch-status", launchAuth(token, http.HandlerFunc(launchWatchStatusHandler), deviceStore))
 		mux.Handle("/launch/status", launchAuth(token, http.HandlerFunc(launchStatusHandler), deviceStore))
-		// The door itself takes no header: the ticket in the path is the key.
 		mux.Handle("/launch/preview/", http.HandlerFunc(previewProxyHandler))
 		mux.Handle("/launch/kanban", launchAuth(token, http.HandlerFunc(launchKanbanHandler), deviceStore))
 		mux.Handle("/launch/run", launchAuth(token, http.HandlerFunc(launchRunHandler), deviceStore))
@@ -455,21 +381,13 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/doctor", launchAuth(token, http.HandlerFunc(launchDoctorHandler), deviceStore))
 	}
 
-	// Webhooks verify their own shared secret; no bearer token, no device.
 	for _, source := range []string{"linear", "github", "gitlab", "jira"} {
 		mux.HandleFunc("/hooks/"+source, watchHookHandler(source))
 	}
 
-	// /pair is deliberately NOT behind the bearer check: its whole purpose is
-	// to serve a client that has no token yet. It is guarded by the pairing
-	// code — single-use, ten minutes, attempt-capped — and the route is only
-	// mounted while a window is open.
 	var pairSession *pairing.Session
 	if opts.pair {
 		if deviceStore == "" {
-			// Without somewhere to record the device, pairing would consume the
-			// single-use code, fail to save, and leave a stray .tmp holding the
-			// token hash wherever corgi happened to be running.
 			fmt.Fprintln(os.Stderr, "corgi mcp --pair cannot be combined with --insecure, and needs a writable corgi data directory.")
 			exitProcess(2)
 		}
@@ -487,8 +405,6 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		window.set(session, role)
 		mux.Handle("/pair", pairingHandlerFor(window, deviceStore))
 		defer session.Close()
-		// `corgi agent pair` asks for a fresh window while this runs: a
-		// request file in the agent dir, answered with the code in another.
 		go watchPairRequests(filepath.Dir(deviceStore), window)
 	}
 
@@ -496,7 +412,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	announceMCPAuth(token, deviceStore)
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
-	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token) // NOSONAR — the local endpoint; the public one is the tunnel, which is https
+	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token)
 	if pairSession != nil {
 		announcePairing(pairSession.Code(), addr)
 	}
@@ -508,7 +424,6 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		tunnelDone = startMCPTunnel(ctx, addr, token, opts, origins, oa)
 	}
 
-	// Cancel the tunnel ctx on signal so its subprocess dies with the server.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
@@ -519,11 +434,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	}()
 
 	err := srv.ListenAndServe()
-	// Join the tunnel runner on BOTH exits. On the graceful path (SIGTERM →
-	// srv.Close → ErrServerClosed) returning without the join races process
-	// exit against CommandContext's kill goroutine — losing that race orphans
-	// cloudflared: a live public URL routing to a dead port.
-	cancel() // kill the tunnel subprocess (exec.CommandContext)
+	cancel()
 	if tunnelDone != nil {
 		select {
 		case <-tunnelDone:
@@ -536,10 +447,6 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	}
 }
 
-// startMCPTunnel opens one tunnel to addr's local port using the shared
-// tunnel.Run runner, bound to ctx so it dies with the server. The returned
-// channel closes once the tunnel runner drains, letting callers join the child
-// before exiting (so os.Exit doesn't orphan cloudflared/ngrok).
 func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, origins *originAllowlist, oa *oauthServer) <-chan struct{} {
 	provider, named, err := buildMCPTunnelConfig(opts.tunnelProvider, opts.tunnelHostname, opts.tunnelName)
 	if err != nil {
@@ -560,7 +467,7 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, o
 	events := make(chan tunnel.Event, 32)
 	go func() {
 		tunnel.Run(ctx, provider, "mcp", port, named, events)
-		close(events) // terminate the consumer below when the tunnel exits
+		close(events)
 	}()
 	go func() {
 		defer close(done)
@@ -576,13 +483,9 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, o
 				if oa != nil {
 					oa.setIssuer(ev.URL)
 				}
-				// Probe the route the tools are actually served on, not the
-				// root — see probeTunnelExposure.
 				go probeTunnelExposure(ctx, mcpProbeTarget(ev.URL), nil)
 				recordPublicURL(ev.URL)
 				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
-				// Don't reprint the bearer token in a pasteable block on the
-				// public side — the local config (printed earlier) already has it.
 				printMCPClientConfig(os.Stderr, ev.URL+"/mcp", "")
 				if token != "" {
 					fmt.Fprintln(os.Stderr, "token configured; see the local config above for the Authorization header")
@@ -593,15 +496,8 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, o
 	return done
 }
 
-// probeDelays waits out DNS propagation. A quick tunnel's hostname is NXDOMAIN
-// for a few seconds after cloudflared prints it, and resolvers cache that
-// against the zone's negative TTL — half an hour for trycloudflare.
 var probeDelays = []time.Duration{8 * time.Second, 20 * time.Second, 45 * time.Second}
 
-// probeTunnelExposure reports whether the tunnel is behind an identity proxy.
-// url must be the endpoint the tools are served on (`/mcp`), not the tunnel
-// root: `/` may still redirect to a login page and that would read as private.
-// Runs in the background — the gate starts closed and only opens on evidence.
 func probeTunnelExposure(ctx context.Context, url string, sleep func(context.Context, time.Duration) bool) {
 	if sleep == nil {
 		sleep = waitOrDone
@@ -617,8 +513,6 @@ func probeTunnelExposure(ctx context.Context, url string, sleep func(context.Con
 		}
 	}
 	if !result.Protected {
-		// Not a warning: this is the documented default. The block message
-		// already told them how to change it.
 		fmt.Fprintf(os.Stderr, "🌐 exposure: public — %s\n", result.Detail)
 		return
 	}
@@ -628,19 +522,13 @@ func probeTunnelExposure(ctx context.Context, url string, sleep func(context.Con
 		result.Provider, result.Detail)
 }
 
-// exposureProbe is the access check, swappable so a test can assert which URL
-// the gate is measured against without needing a trusted certificate.
 var exposureProbe = tunnel.ProbeAccess
 
-// probeNameUnresolved reports the one failure worth retrying: the hostname is
-// not in DNS yet. Anything else is a real answer about the endpoint.
 func probeNameUnresolved(r tunnel.AccessResult) bool {
 	d := strings.ToLower(r.Detail)
 	return strings.Contains(d, "no such host") || strings.Contains(d, "server misbehaving")
 }
 
-// waitOrDone sleeps unless the context ends first, reporting whether the wait
-// completed and the caller should carry on.
 func waitOrDone(ctx context.Context, d time.Duration) bool {
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -652,14 +540,10 @@ func waitOrDone(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// mcpProbeTarget is the URL the exposure probe must measure: the route the
-// tools are served on, never the tunnel root.
 func mcpProbeTarget(tunnelURL string) string {
 	return strings.TrimSuffix(tunnelURL, "/") + "/mcp"
 }
 
-// mcpAddrPort extracts the numeric port from a listen addr like ":8765" or
-// "127.0.0.1:8765".
 func mcpAddrPort(addr string) (int, error) {
 	_, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -668,8 +552,6 @@ func mcpAddrPort(addr string) (int, error) {
 	return strconv.Atoi(portStr)
 }
 
-// localURL renders addr as a dialable host:port, defaulting an empty host to
-// 127.0.0.1 for the printed local URL.
 func localURL(addr string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -681,8 +563,6 @@ func localURL(addr string) string {
 	return host + ":" + port
 }
 
-// printMCPClientConfig prints a ready-to-paste mcpServers JSON block, including
-// the Authorization header only when a token is set.
 func printMCPClientConfig(w io.Writer, url, token string) {
 	cfg := map[string]any{"mcpServers": map[string]any{"corgi": map[string]any{"url": url}}}
 	if token != "" {
@@ -694,32 +574,22 @@ func printMCPClientConfig(w io.Writer, url, token string) {
 	fmt.Fprintln(w, string(b))
 }
 
-// composeContext bundles a loaded compose with the throwaway cobra command it
-// was loaded through, plus a cleanup to detach that command from rootCmd.
 type composeContext struct {
 	corgi   *utils.CorgiCompose
 	cmd     *cobra.Command
 	cleanup func()
 }
 
-// loadComposeCtx loads the compose via utils.GetCorgiServices. MCP runs outside
-// cobra's flag context, so it attaches a throwaway command to rootCmd. Empty
-// path => default resolution from cwd. Caller must defer ctx.cleanup().
 func loadComposeCtx(composePath string) (composeContext, error) {
-	// rootCmd's persistent flags are only merged into Flags() during Execute(),
-	// which MCP never runs, so merge them explicitly.
 	rootCmd.Flags().AddFlagSet(rootCmd.PersistentFlags())
 
 	tmp := &cobra.Command{Use: "mcp-load"}
 	rootCmd.AddCommand(tmp)
-	// determineCorgiComposePath reads --global off the command directly, not Root.
 	tmp.Flags().Bool("global", false, "")
 	tmp.Flags().Bool("seed", false, "")
 	tmp.Flags().String("artifacts-dir", "", "")
 
 	cleanup := func() {
-		// Reset on rootCmd directly: after RemoveCommand, tmp.Root() is tmp, not
-		// rootCmd, so the stale filename would leak into the next tool call.
 		_ = rootCmd.PersistentFlags().Set("filename", "")
 		rootCmd.RemoveCommand(tmp)
 	}
@@ -738,8 +608,6 @@ func loadComposeCtx(composePath string) (composeContext, error) {
 	return composeContext{corgi: corgi, cmd: tmp, cleanup: cleanup}, nil
 }
 
-// loadComposeCached serves repeat tool calls from the parsed-compose cache,
-// falling back to a real parse when the file changed or was never seen.
 func loadComposeCached(cmd *cobra.Command, composePath string) (*utils.CorgiCompose, error) {
 	cwd, _ := os.Getwd()
 	key := composeLookup{arg: composePath, cwd: cwd, tier: utils.EnvTierFromFlag}
@@ -756,8 +624,6 @@ func loadComposeCached(cmd *cobra.Command, composePath string) (*utils.CorgiComp
 	return corgi, nil
 }
 
-// loadComposeForMCP loads just the parsed compose. A variable so a tool
-// test can hand it a stack without a file.
 var loadComposeForMCP = func(composePath string) (*utils.CorgiCompose, error) {
 	ctx, err := loadComposeCtx(composePath)
 	if err != nil {
@@ -867,8 +733,6 @@ func filterStatusEntries(entries []statusEntry, service string, unhealthyOnly bo
 	return out
 }
 
-// statusEntryName recovers the declared name from a status label such as
-// "db_services.pg (postgres)" or "services.api".
 func statusEntryName(label string) string {
 	name := strings.TrimPrefix(strings.TrimPrefix(label, "db_services."), "services.")
 	if i := strings.Index(name, " ("); i >= 0 {
@@ -900,15 +764,12 @@ type envArgs struct {
 	Key         string `json:"key"`
 }
 
-// An unfiltered corgi_env keeps this many vars per service; the rest hide
-// behind a marker entry so the whole stack's env never floods the context.
 const (
 	mcpEnvVarCap      = 40
 	envTruncatedKey   = "_truncated"
 	envTruncatedLabel = "corgi_env"
 )
 
-// mcpEnv resolves environment per service into the shared keyed shape.
 func mcpEnv(args envArgs) (map[string]map[string]envEntry, error) {
 	corgi, err := loadComposeForMCP(args.ComposePath)
 	if err != nil {
@@ -930,7 +791,7 @@ func mcpEnv(args envArgs) (map[string]map[string]envEntry, error) {
 	for name := range all {
 		order = append(order, name)
 	}
-	sort.Strings(order) // deterministic output
+	sort.Strings(order)
 	doc := envKeyedMap(all, order)
 	if args.Key != "" {
 		for name, vars := range doc {
@@ -949,8 +810,6 @@ func mcpEnv(args envArgs) (map[string]map[string]envEntry, error) {
 	return doc, nil
 }
 
-// capEnvDoc keeps the first limit keys (sorted) of any oversized service and
-// adds a marker entry saying how to fetch the rest.
 func capEnvDoc(doc map[string]map[string]envEntry, limit int) {
 	for name, vars := range doc {
 		if len(vars) <= limit {
@@ -1000,8 +859,6 @@ func splitPairs(s string) []string {
 	return out
 }
 
-// mcpUp always starts DETACHED so the tool returns promptly: it mirrors the
-// foreground run prelude, then runDetached's state machine.
 func mcpUp(args upArgs) (utils.RunState, error) {
 	ctx, err := loadComposeCtx(args.ComposePath)
 	if err != nil {
@@ -1027,14 +884,11 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 		envErr      error
 		overrideErr error
 	)
-	// Per-service beforeStart runs inside spawnDetachedServices, so the omit
-	// window has to cover the whole boot, not just preflight.
 	withOmit(splitPairs(args.Omit), func() {
 		withStdoutToStderr(func() {
 			if CheckClonedReposExistence(corgi.Services) {
 				CloneServices(corgi.Services)
 			}
-			// After clone (so it doesn't clobber the worktree), before env/beforeStart.
 			if overrideErr = utils.ApplyServiceWorkdirs(corgi, splitPairs(args.ServiceDir), splitPairs(args.ServiceBranch), nil); overrideErr != nil {
 				return
 			}
@@ -1139,8 +993,6 @@ type logsResult struct {
 	Truncated bool     `json:"truncated,omitempty"`
 }
 
-// mcpLogFilter is the CLI's --grep/--since matcher plus the errorsOnly level
-// gate; all of it runs before the tail so `lines` counts matches, not raw lines.
 type mcpLogFilter struct {
 	stream     logStreamFilter
 	errorsOnly bool
@@ -1161,8 +1013,6 @@ func buildMCPLogFilter(args logsArgs) (mcpLogFilter, error) {
 	return f, nil
 }
 
-// compileLogGrep takes a regexp, or a literal substring when the pattern does
-// not compile (an agent grepping for "foo(" should not have to escape it).
 func compileLogGrep(pattern string) *regexp.Regexp {
 	if re, err := regexp.Compile(pattern); err == nil {
 		return re
@@ -1185,7 +1035,6 @@ func mcpLogs(args logsArgs) (logsResult, error) {
 	if err != nil {
 		return logsResult{}, fmt.Errorf(errFmt, utils.ErrUsage, err)
 	}
-	// Load compose only to resolve CorgiComposePathDir for the log base.
 	if _, err := loadComposeForMCP(args.ComposePath); err != nil {
 		return logsResult{}, composeLoadError(err)
 	}
@@ -1205,14 +1054,11 @@ func mcpLogs(args logsArgs) (logsResult, error) {
 	return logsResult{Service: args.Service, Lines: lines, Truncated: truncated}, nil
 }
 
-// tailLogFile returns the last n lines of a log file, stripping the timestamp prefix.
 func tailLogFile(path string, n int) ([]string, error) {
 	lines, _, err := readLogLines(path, n, mcpLogFilter{})
 	return lines, err
 }
 
-// readLogLines applies the filter to every line, then keeps the last n. The
-// bool reports that more lines matched than were returned.
 func readLogLines(path string, n int, filter mcpLogFilter) ([]string, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1254,8 +1100,7 @@ type execResult struct {
 	DurationMs int64  `json:"durationMs"`
 }
 
-// mcpExec runs a one-off command in a service's resolved env, capturing combined
-// output into a buffer so nothing leaks to the JSON-RPC channel.
+// Output is buffered so nothing leaks onto the JSON-RPC channel.
 func mcpExec(args execArgs) (execResult, error) {
 	if strings.TrimSpace(args.Service) == "" || strings.TrimSpace(args.Command) == "" {
 		return execResult{}, fmt.Errorf("%s: service and command are required", utils.ErrUsage)
@@ -1304,7 +1149,7 @@ func mcpExec(args execArgs) (execResult, error) {
 			budgetCtx,
 			args.Command,
 			service.AbsolutePath,
-			false, // never interactive under MCP
+			false,
 			&buf,
 			&buf,
 			getServiceEnv(*service),
@@ -1337,9 +1182,6 @@ type testRunResult struct {
 	Note     string       `json:"note,omitempty"`
 }
 
-// mcpTest runs each selected service's test script, mirroring `corgi test`.
-// Test scripts execute commands; their child stdout is routed to stderr so the
-// JSON-RPC channel stays clean.
 func mcpTest(args testArgs) (testRunResult, error) {
 	ctx, err := loadComposeCtx(args.ComposePath)
 	if err != nil {
@@ -1387,8 +1229,6 @@ func mcpTest(args testArgs) (testRunResult, error) {
 	return testRunResult{Services: results, Passed: passed, TimedOut: budgetCtx.Err() != nil}, nil
 }
 
-// mcpE2E runs the stack's e2e block against the already-running stack with
-// its output captured, the way `corgi test --e2e` does on a terminal.
 func mcpE2E(cmd *cobra.Command, corgi *utils.CorgiCompose) (testRunResult, error) {
 	suite := corgi.E2E
 	if suite == nil || suite.Run == "" {
@@ -1410,8 +1250,6 @@ func mcpE2E(cmd *cobra.Command, corgi *utils.CorgiCompose) (testRunResult, error
 	return testRunResult{Services: []testResult{result}, Passed: result.Passed}, nil
 }
 
-// runE2ECommands runs install then run; `set -e` stops a multi-line block at
-// its first failing line, matching the CLI's line-by-line runner.
 func runE2ECommands(suite *utils.E2ESuite, workdir string, out io.Writer) (int, error) {
 	for _, step := range []string{suite.Install, suite.Run} {
 		if step == "" {
@@ -1438,8 +1276,6 @@ type restartArgs struct {
 	Profile     string `json:"profile"`
 }
 
-// mcpRestart stops the detached stack then starts it again detached, returning
-// the new run-state. Down/up already route their progress prints to stderr.
 func mcpRestart(args restartArgs) (upLaunch, error) {
 	if _, err := mcpDown(validateArgs{ComposePath: args.ComposePath}); err != nil {
 		return upLaunch{}, err
@@ -1459,8 +1295,6 @@ type dbQueryResult struct {
 	Truncated bool   `json:"truncated,omitempty"`
 }
 
-// mcpDBQuery runs a single non-interactive query against a db_service container,
-// capturing the tool's output instead of streaming it to stdout.
 func mcpDBQuery(args dbQueryArgs) (dbQueryResult, error) {
 	if strings.TrimSpace(args.Service) == "" || strings.TrimSpace(args.Query) == "" {
 		return dbQueryResult{}, fmt.Errorf("%s: service and query are required", utils.ErrUsage)
@@ -1498,8 +1332,6 @@ type dbSnapshotResult struct {
 	Arch           string `json:"arch"`
 }
 
-// mcpDBSnapshot mirrors `corgi db snapshot`: a physical copy of a
-// postgres-family data dir, restartable later with mcpDBRestore.
 func mcpDBSnapshot(args dbSnapshotArgs) (dbSnapshotResult, error) {
 	corgi, err := loadComposeForMCP(args.ComposePath)
 	if err != nil {
@@ -1553,8 +1385,6 @@ type dbRestoreResult struct {
 	Archive string `json:"archive"`
 }
 
-// mcpDBRestore mirrors `corgi db restore --yes`: wipes the db's data volume and
-// puts the snapshot in its place. No prompt — the tool description carries the warning.
 func mcpDBRestore(args dbRestoreArgs) (dbRestoreResult, error) {
 	if strings.TrimSpace(args.Name) == "" {
 		return dbRestoreResult{}, fmt.Errorf("%s: name (a snapshot name or an archive path) is required", utils.ErrUsage)
@@ -1588,8 +1418,6 @@ func mcpDBRestore(args dbRestoreArgs) (dbRestoreResult, error) {
 	return dbRestoreResult{Service: svc.ServiceName, Archive: archive}, nil
 }
 
-// refuseWhileSupervised keeps the CLI's rule: a snapshot stops the db container,
-// which would yank it from under services a detached run is supervising.
 func refuseWhileSupervised() error {
 	if utils.IsStackSupervised(utils.CorgiComposePathDir) {
 		return fmt.Errorf("%s: a detached run is supervising this stack's services — call corgi_down first (databases alone may stay up)", utils.ErrAlreadyRunning)
@@ -1599,16 +1427,11 @@ func refuseWhileSupervised() error {
 
 func mcpSchema() string { return utils.ComposeJSONSchema() }
 
-// MCP tool output that an agent reads into its context. Verbose build/test
-// output can be tens of KB; capping keeps the head (what ran) and tail (where
-// errors surface) so the agent gets the signal without the whole dump.
 const (
 	mcpMaxOutputLines = 200
 	mcpMaxOutputBytes = 16 * 1024
 )
 
-// capMCPOutput trims s to at most maxLines (head+tail, middle elided) and then
-// to maxBytes (tail-preferring), returning the result and whether it truncated.
 func capMCPOutput(s string, maxLines, maxBytes int) (string, bool) {
 	truncated := false
 	if maxLines > 0 {
@@ -1624,15 +1447,12 @@ func capMCPOutput(s string, maxLines, maxBytes int) (string, bool) {
 		}
 	}
 	if maxBytes > 0 && len(s) > maxBytes {
-		// Keep the tail: errors and exit context land at the end.
 		s = "…[truncated]…\n" + s[len(s)-maxBytes:]
 		truncated = true
 	}
 	return s, truncated
 }
 
-// filterByProfile narrows corgi to the selection for the given comma-separated
-// profiles (members plus their transitive depends_on closure).
 func filterByProfile(corgi *utils.CorgiCompose, profile string) {
 	services, dbs := utils.SelectByProfiles(corgi, utils.ParseProfiles(profile))
 	filteredSvcs := corgi.Services[:0]
@@ -1651,15 +1471,10 @@ func filterByProfile(corgi *utils.CorgiCompose, profile string) {
 	corgi.DatabaseServices = filteredDbs
 }
 
-// composeLoadError prefixes the stable error code so agents can branch on it.
 func composeLoadError(err error) error {
 	return fmt.Errorf(errFmt, utils.ErrComposeNotFound, err)
 }
 
-// withStdoutToStderr runs fn with corgi's human/console output redirected to
-// os.Stderr via the goroutine-safe console override, keeping the run/stop
-// paths' progress prints off the JSON-RPC stdout channel without mutating the
-// process-global os.Stdout (which races under the HTTP transport).
 func withStdoutToStderr(fn func()) {
 	utils.SetConsoleOverride(os.Stderr)
 	defer utils.ClearConsoleOverride()
@@ -1980,8 +1795,6 @@ func registerMCPTools(s *server.MCPServer) {
 	})
 }
 
-// jsonHandler wraps a typed core into an MCP tool handler, marshaling the result
-// to JSON text and converting a returned error into an MCP tool error.
 func jsonHandler(core func(mcp.CallToolRequest) (any, error)) server.ToolHandlerFunc {
 	return func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		mcpHandlerMu.Lock()

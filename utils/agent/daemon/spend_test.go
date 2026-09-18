@@ -11,9 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// The sweep sums each session's transcript from where it stopped last
-// time, puts the total on the board, and rings once when a session passes
-// its budget. A budget of its own beats the default.
 func TestTheSweepSumsSpendAndRingsOnceOverBudget(t *testing.T) {
 	origDiff, origTree, origRoot, origTranscript := driftDiff, workingTreeOf, workspaceRootOf, transcriptOf
 	defer func() {
@@ -60,7 +57,6 @@ func TestTheSweepSumsSpendAndRingsOnceOverBudget(t *testing.T) {
 		t.Fatalf("one ring, saying how much: %v", rang)
 	}
 
-	// Its own budget, wider: under again, and no ring for staying there.
 	d.Sessions.SetCap("one", 5000)
 	f, _ = os.OpenFile(filepath.Join(dir, "one.jsonl"), os.O_APPEND|os.O_WRONLY, 0o600)
 	f.WriteString(row)

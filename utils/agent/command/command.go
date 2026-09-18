@@ -1,7 +1,3 @@
-// Package command is the daemon's inbound mailbox: one JSON file per request,
-// written by another corgi process (the MCP server or the CLI) and consumed by
-// the running daemon. Files rather than a socket, to match the daemon's
-// design — see daemon.go's statusPublishInterval comment.
 package command
 
 import (
@@ -21,59 +17,29 @@ import (
 )
 
 const (
-	ActionStart = "start"
-	ActionStop  = "stop"
-	// ActionAttention is a Claude Code hook reporting that a session wants a
-	// person: a permission prompt, a question, or a finished turn.
+	ActionStart     = "start"
+	ActionStop      = "stop"
 	ActionAttention = "attention"
-	// ActionSession is one Claude Code hook event for the session registry,
-	// written by `corgi agent hook emit`.
-	ActionSession = "session"
-	// ActionFocus, ActionPin and ActionPage are key presses: bring a session
-	// to the front, reserve a key, turn the overflow page. ActionRescan asks
-	// for a fresh look at the process table.
-	ActionFocus  = "focus"
-	ActionPin    = "pin"
-	ActionPage   = "page"
-	ActionRescan = "rescan"
-	// ActionRefresh is a reload button pressed somewhere: look at the
-	// process table again, poll every tracker now, publish — so the phone,
-	// the menu bar and the page all see the same fresh picture.
-	ActionRefresh = "refresh"
-	// ActionResize changes the number of keys on the board in place.
-	ActionResize = "resize"
-	// ActionNew opens a fresh Claude Code session in an editor window: the
-	// one named, else the one last focused, else the most recent.
-	ActionNew = "new"
-	// ActionDismiss takes a finished session off the board until its next
-	// event: a closed chat whose process lingers, a key wanted back.
-	ActionDismiss = "dismiss"
-	// ActionSend types Text into a session's terminal; ActionAnswer answers
-	// its pending permission prompt with Answer (allow, always, deny).
-	ActionSend   = "send"
-	ActionAnswer = "answer"
-	// ActionNote sets or clears a session's note.
-	ActionNote = "note"
-	// ActionCap gives a session a token budget of its own, or with no
-	// session sets the daemon's default; zero tokens takes it away.
-	ActionCap = "cap"
-	// ActionInterrupt presses Escape in a working session: Claude Code
-	// stops the turn and waits, nothing is closed.
+	ActionSession   = "session"
+	ActionFocus     = "focus"
+	ActionPin       = "pin"
+	ActionPage      = "page"
+	ActionRescan    = "rescan"
+	ActionRefresh   = "refresh"
+	ActionResize    = "resize"
+	ActionNew       = "new"
+	ActionDismiss   = "dismiss"
+	ActionSend      = "send"
+	ActionAnswer    = "answer"
+	ActionNote      = "note"
+	ActionCap       = "cap"
 	ActionInterrupt = "interrupt"
-	// ActionContinue runs one headless turn — claude -p --resume — for a
-	// session whose terminal is gone, with Text as the message.
-	ActionContinue = "continue"
-	// ActionRead says a phone is reading a session's conversation; the
-	// row shows an eye for a minute.
-	ActionRead = "read"
-	// ActionWatch delivers a tracker or code-host event a webhook received.
-	ActionWatch = "watch"
-	// ActionPlan asks the daemon to move every running plan along now.
-	ActionPlan = "plan"
+	ActionContinue  = "continue"
+	ActionRead      = "read"
+	ActionWatch     = "watch"
+	ActionPlan      = "plan"
 )
 
-// needsWorkspace lists the actions addressed to a workspace; the rest are
-// addressed to a session or to the board.
 var needsWorkspace = map[string]bool{ActionStart: true, ActionStop: true, ActionAttention: true}
 
 var known = map[string]bool{
@@ -89,58 +55,36 @@ var known = map[string]bool{
 	ActionRead:      true,
 }
 
-// TTL is how long a written command stays valid. A start that sat in the spool
-// longer than this is deleted unexecuted: a clear failure now beats a session
-// surprisingly appearing hours later.
 const TTL = 60 * time.Second
 
-// Command is one request to the daemon.
 type Command struct {
-	ID          string `json:"id"`
-	Action      string `json:"action"`
-	WorkspaceID string `json:"workspaceId"`
-	Profile     string `json:"profile,omitempty"`
-	// Name is the session name shown in claude.ai. Free text from the phone,
-	// so the daemon sanitizes it before it reaches an argv.
-	Name string `json:"name,omitempty"`
-	// Detail carries a hook's own message, already trimmed by the sender.
+	ID          string    `json:"id"`
+	Action      string    `json:"action"`
+	WorkspaceID string    `json:"workspaceId"`
+	Profile     string    `json:"profile,omitempty"`
+	Name        string    `json:"name,omitempty"`
 	Detail      string    `json:"detail,omitempty"`
 	Source      string    `json:"source,omitempty"`
 	RequestedAt time.Time `json:"requestedAt"`
 
-	// Event is the hook payload for ActionSession.
-	Event *sessions.Event `json:"event,omitempty"`
-	// SessionID names the target of ActionFocus and ActionDismiss: an id, an id prefix, a
-	// label or a key number, resolved by the registry.
-	SessionID string `json:"sessionId,omitempty"`
-	// Index and Pinned are ActionPin's key and its new state.
-	Index  int  `json:"index,omitempty"`
-	Pinned bool `json:"pinned,omitempty"`
-	// Direction is ActionPage's +1 (next) or -1 (previous).
-	Direction int `json:"direction,omitempty"`
-	// Size is ActionResize's new key count.
-	Size int `json:"size,omitempty"`
-	// WindowID is ActionNew's editor window, when the caller has one.
-	WindowID string `json:"windowId,omitempty"`
-	// Text and Enter are ActionSend's payload; Note is ActionNote's line;
-	// Answer is ActionAnswer's choice.
-	Text   string `json:"text,omitempty"`
-	Enter  bool   `json:"enter,omitempty"`
-	Note   string `json:"note,omitempty"`
-	Answer string `json:"answer,omitempty"`
-	// Tokens is ActionCap's budget.
-	Tokens int64 `json:"tokens,omitempty"`
-	// WatchEvent is ActionWatch's payload.
-	WatchEvent *watch.Event `json:"watchEvent,omitempty"`
-	// Command is what ActionNew's terminal runs when the caller has a
-	// specific command line (carry's `--resume`); else `corgi agent claude`.
-	Command string `json:"command,omitempty"`
+	Event      *sessions.Event `json:"event,omitempty"`
+	SessionID  string          `json:"sessionId,omitempty"`
+	Index      int             `json:"index,omitempty"`
+	Pinned     bool            `json:"pinned,omitempty"`
+	Direction  int             `json:"direction,omitempty"`
+	Size       int             `json:"size,omitempty"`
+	WindowID   string          `json:"windowId,omitempty"`
+	Text       string          `json:"text,omitempty"`
+	Enter      bool            `json:"enter,omitempty"`
+	Note       string          `json:"note,omitempty"`
+	Answer     string          `json:"answer,omitempty"`
+	Tokens     int64           `json:"tokens,omitempty"`
+	WatchEvent *watch.Event    `json:"watchEvent,omitempty"`
+	Command    string          `json:"command,omitempty"`
 }
 
-// Dir is the spool directory under the agent data dir.
 func Dir(agentDir string) string { return filepath.Join(agentDir, "commands") }
 
-// validate rejects a command the daemon could not act on.
 func (c Command) validate() error {
 	if !known[c.Action] {
 		return fmt.Errorf("unknown command action %q", c.Action)
@@ -169,8 +113,6 @@ func (c Command) validate() error {
 	return nil
 }
 
-// Write persists one command atomically and returns it with ID and
-// RequestedAt filled.
 func Write(agentDir string, c Command) (Command, error) {
 	if err := c.validate(); err != nil {
 		return c, err
@@ -186,8 +128,6 @@ func Write(agentDir string, c Command) (Command, error) {
 		c.RequestedAt = time.Now().UTC()
 	}
 	dir := Dir(agentDir)
-	// 0700/0600: a spool entry starts an agent process, so only the owner may
-	// write one.
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return c, err
 	}
@@ -199,9 +139,6 @@ func Write(agentDir string, c Command) (Command, error) {
 	return c, atomicfile.Write(path, data, 0o600)
 }
 
-// Drain reads and removes every pending command, oldest first. Corrupt and
-// stale files are deleted and skipped: the spool must never hold anything back
-// for a second look.
 func Drain(agentDir string, now time.Time, ttl time.Duration) ([]Command, error) {
 	dir := Dir(agentDir)
 	entries, err := os.ReadDir(dir)

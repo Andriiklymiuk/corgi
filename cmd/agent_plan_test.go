@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// The planner's answer is read whether it came fenced or bare, capped at
-// max, and its "after" numbers are kept only when they point at a task.
 func TestParsePlannerAnswer(t *testing.T) {
 	text := "Here is the plan:\n```json\n{\"summary\":\"limiter first\",\"tasks\":[{\"title\":\"add limiter\",\"body\":\"…\"},{\"title\":\"wire it\",\"body\":\"…\",\"after\":[1,2,9]},{\"title\":\"docs\",\"body\":\"…\",\"after\":[1]}]}\n```"
 	ans, err := parsePlannerAnswer(text, 2)

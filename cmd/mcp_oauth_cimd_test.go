@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// rewriteTransport sends every request to the test server, whatever host the
-// URL names, the way the pinned dialer does in production.
 type rewriteTransport struct {
 	target string
 	inner  http.RoundTripper

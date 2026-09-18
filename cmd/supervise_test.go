@@ -10,7 +10,7 @@ import (
 func TestHealCrashed_RecoversWithinRetries(t *testing.T) {
 	policy := &utils.RestartPolicy{Mode: "on-failure", MaxRetries: 3, BackoffSeconds: 2}
 	calls := 0
-	relaunch := func() bool { calls++; return calls == 2 } // alive on 2nd try
+	relaunch := func() bool { calls++; return calls == 2 }
 	var slept time.Duration
 	sleep := func(d time.Duration) { slept += d }
 

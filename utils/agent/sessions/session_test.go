@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// A spent window and an overloaded API both arrive as rate_limit, and they
-// want opposite reactions: the first is hours and a clock, the second is
-// minutes and a retry. The classifier has to tell them apart from the text.
 func TestALimitIsQuotaOrOverload(t *testing.T) {
 	cases := []struct {
 		errType, msg string

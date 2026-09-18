@@ -1,7 +1,5 @@
 package utils
 
-// Error codes emitted via JSONError. Stable contract for agents — codes never
-// change meaning; new codes may be added. Documented in docs/agents.md.
 const (
 	ErrPortConflict     = "E_PORT_CONFLICT"
 	ErrDanglingDep      = "E_DANGLING_DEP"
@@ -16,16 +14,16 @@ const (
 	ErrUnhealthy        = "E_UNHEALTHY"
 	ErrReadinessTimeout = "E_READINESS_TIMEOUT"
 	ErrDockerDown       = "E_DOCKER_DOWN"
-	ErrUsage            = "E_USAGE"           // invalid command usage / args
-	ErrExecFailed       = "E_EXEC_FAILED"     // command failed to spawn
-	ErrUnknownProfile   = "E_UNKNOWN_PROFILE" // --profile matched no services/db_services
+	ErrUsage            = "E_USAGE"
+	ErrExecFailed       = "E_EXEC_FAILED"
+	ErrUnknownProfile   = "E_UNKNOWN_PROFILE"
 	ErrInvalidCondition = "E_INVALID_CONDITION"
-	ErrConfig           = "E_CONFIG"          // could not load/resolve the compose file
-	ErrAlreadyRunning   = "E_ALREADY_RUNNING" // a detached run is already active
-	ErrUnsupported      = "E_UNSUPPORTED"     // operation not supported yet
-	ErrNotRunning       = "E_NOT_RUNNING"     // no matching detached service to act on
-	ErrConfigPath       = "E_CONFIG_PATH"     // cannot resolve user-config dir
-	ErrConfigRead       = "E_CONFIG_READ"     // cannot read user-config file
-	ErrDuplicateName    = "E_DUPLICATE_NAME"  // a name is used by more than one service/db_service
-	ErrPortRange        = "E_PORT_RANGE"      // a port is outside the valid 1..65535 range
+	ErrConfig           = "E_CONFIG"
+	ErrAlreadyRunning   = "E_ALREADY_RUNNING"
+	ErrUnsupported      = "E_UNSUPPORTED"
+	ErrNotRunning       = "E_NOT_RUNNING"
+	ErrConfigPath       = "E_CONFIG_PATH"
+	ErrConfigRead       = "E_CONFIG_READ"
+	ErrDuplicateName    = "E_DUPLICATE_NAME"
+	ErrPortRange        = "E_PORT_RANGE"
 )

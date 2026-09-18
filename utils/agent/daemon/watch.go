@@ -22,80 +22,39 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// WatchSpec is one workspace's watch, resolved by cmd from config and tokens.
 type WatchSpec struct {
-	Workspace string
-	Dir       string
-	ConfigDir string
-	// AgentDir is where the daemon keeps its files (bots, config); the
-	// daemon fills it in for runs that need to look beside the spec.
-	AgentDir string
-	// Isolate runs each fix in its own worktrees; see Daemon.Isolate.
-	Isolate bool
-	// PruneAfter is how long a finished isolated run keeps its worktrees;
-	// zero keeps them.
-	PruneAfter time.Duration
-	// RerunCI reruns the failed jobs of a red build once before anyone is
-	// told or handed it; see Daemon.RerunCI.
-	RerunCI bool
-	// Silent: nothing about this workspace's watch rings; see Daemon.silenced.
-	Silent bool
-	// Slots is how many fixes may run in this workspace at once; 0 and 1
-	// are one at a time. More than one needs Isolate, or two runs would
-	// share one checkout: without it the daemon keeps to one.
-	Slots int
-	// NoRetry leaves deferred fixes to a manual run.
-	NoRetry bool
-	// Models picks the model per event kind, and the one to step up to
-	// after a failed run.
-	Models *config.ModelPolicy
-	// Routines run on a clock in this workspace; see routines.go.
-	Routines []config.Routine
-	Project  string   // tracker key prefix: ABC-123 belongs to ABC
-	Repos    []string // owner/repo
-	Rules    watch.Rules
-	// Chat is the workspace's Slack: who may start a run from a mention,
-	// where a reply goes, in whose voice.
-	Chat    *config.SlackWatch
-	Sources []watch.Source
-	// Skipped names the sources the rules can never use, so status can say
-	// why they are not polled.
-	Skipped  []string
-	Interval time.Duration
-	// Action is notify or fix.
-	Action string
-	// the only commands a handoff packet may ask the runner to re-run
-	DoneWhen []string
-	// Approve: an unattended review of someone else's pull request may
-	// end in an approval when nothing blocks.
-	Approve bool
-	// Lease claims the ticket on the tracker before working it, so two
-	// machines watching one board do not both take it.
-	Lease bool
-	// ReviewStatus is the column a ticket moves to once a run opened a pull
-	// request for it.
-	ReviewStatus string
-	// FixKinds narrows what "fix" actually runs on: empty means every kind
-	// the rules matched, which is what action: fix always meant. Naming
-	// kinds lets a workspace work review comments unattended while still
-	// only being told about a fresh ticket.
-	FixKinds []string
-	// SkipPermissions lets the fix run unattended; without it claude stops
-	// at the first permission prompt and the run times out.
+	Workspace       string
+	Dir             string
+	ConfigDir       string
+	AgentDir        string
+	Isolate         bool
+	PruneAfter      time.Duration
+	RerunCI         bool
+	Silent          bool
+	Slots           int
+	NoRetry         bool
+	Models          *config.ModelPolicy
+	Routines        []config.Routine
+	Project         string
+	Repos           []string
+	Rules           watch.Rules
+	Chat            *config.SlackWatch
+	Sources         []watch.Source
+	Skipped         []string
+	Interval        time.Duration
+	Action          string
+	DoneWhen        []string
+	Approve         bool
+	Lease           bool
+	ReviewStatus    string
+	FixKinds        []string
 	SkipPermissions bool
-	// MaxFixesPerHour and MaxFixesPerDay cap fix starts; 0 is the default.
 	MaxFixesPerHour int
 	MaxFixesPerDay  int
-	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts.
-	Quiet string
-	// DaysOff are the weekdays the watch sleeps through: no polling, no
-	// fix, nothing rings; what arrived is in the inbox and rings once the
-	// next working day starts.
-	DaysOff []time.Weekday
+	Quiet           string
+	DaysOff         []time.Weekday
 }
 
-// ParseDaysOff reads day names — "sat,sun", "saturday", "weekends" — into
-// weekdays. "" or "none" is no day off.
 func ParseDaysOff(list []string) ([]time.Weekday, error) {
 	names := map[string]time.Weekday{
 		"sun": time.Sunday, "sunday": time.Sunday, "mon": time.Monday, "monday": time.Monday,
@@ -132,12 +91,10 @@ func ParseDaysOff(list []string) ([]time.Weekday, error) {
 	if len(out) == 7 {
 		return nil, fmt.Errorf("every day off is no watch at all — corgi agent watch disable")
 	}
-	// Monday first: "sat, sun" reads as a weekend, "sun, sat" as a typo.
 	sort.Slice(out, func(i, j int) bool { return (out[i]+6)%7 < (out[j]+6)%7 })
 	return out, nil
 }
 
-// DaysOffWords is the list as the status prints it: "sat, sun".
 func DaysOffWords(days []time.Weekday) string {
 	var w []string
 	for _, d := range days {
@@ -146,10 +103,8 @@ func DaysOffWords(days []time.Weekday) string {
 	return strings.Join(w, ", ")
 }
 
-// DayOff is dayOff for callers outside this package.
 func DayOff(spec WatchSpec, now time.Time) bool { return dayOff(spec, now) }
 
-// dayOff says now falls on one of the spec's days off, in local time.
 func dayOff(spec WatchSpec, now time.Time) bool {
 	wd := now.Local().Weekday()
 	for _, d := range spec.DaysOff {
@@ -160,20 +115,14 @@ func dayOff(spec WatchSpec, now time.Time) bool {
 	return false
 }
 
-// blockerWindow is how long a blocking failure is believed. Long enough to
-// stop a run every three minutes, short enough that a credential fixed this
-// morning is forgotten by the afternoon.
 const blockerWindow = 2 * time.Hour
 
 const (
 	DefaultMaxFixesPerHour = 3
 	DefaultMaxFixesPerDay  = 10
-	// limitRefusePercent: a fix started this close to a limit would only
-	// finish the account off for everything else.
-	limitRefusePercent = 95
+	limitRefusePercent     = 95
 )
 
-// FixCaps is the workspace's per-hour and per-day fix caps, defaults applied.
 func (s WatchSpec) FixCaps() (perHour, perDay int) {
 	perHour, perDay = s.MaxFixesPerHour, s.MaxFixesPerDay
 	if perHour <= 0 {
@@ -185,7 +134,6 @@ func (s WatchSpec) FixCaps() (perHour, perDay int) {
 	return perHour, perDay
 }
 
-// owns says an event is this workspace's by project key or repo.
 func (s WatchSpec) owns(e watch.Event) bool {
 	switch e.Kind {
 	case watch.KindIssueNew, watch.KindIssueComment:
@@ -204,8 +152,6 @@ func (s WatchSpec) owns(e watch.Event) bool {
 	return false
 }
 
-// liveSources splits the sources into the ones worth polling and the
-// names of the ones the rules can never match.
 func (s WatchSpec) liveSources() (live []watch.Source, dead []string) {
 	for _, src := range s.Sources {
 		if s.Rules.DeadSource(src.Name()) {
@@ -217,12 +163,10 @@ func (s WatchSpec) liveSources() (live []watch.Source, dead []string) {
 	return live, dead
 }
 
-// QuietHours is a daily local-time window, possibly across midnight.
 type QuietHours struct {
-	start, end int // minutes since midnight
+	start, end int
 }
 
-// ParseQuiet reads "HH:MM-HH:MM"; "" is no window.
 func ParseQuiet(s string) (QuietHours, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -254,7 +198,6 @@ func parseClock(s string) (int, error) {
 	return t.Hour()*60 + t.Minute(), nil
 }
 
-// Contains says t's local time of day falls in the window.
 func (q QuietHours) Contains(t time.Time) bool {
 	if q.start == q.end {
 		return false
@@ -266,15 +209,12 @@ func (q QuietHours) Contains(t time.Time) bool {
 	return m >= q.start || m < q.end
 }
 
-// fixTimeout bounds one unattended claude run.
 const fixTimeout = 30 * time.Minute
 
-// claudeCommand builds the headless run; a seam for tests.
 var claudeCommand = func(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "claude", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
-	// A timeout must take the tools claude spawned with it, not just claude.
 	killProcessGroup(cmd)
 	cmd.WaitDelay = 10 * time.Second
 	return cmd
@@ -283,9 +223,6 @@ var claudeCommand = func(ctx context.Context, dir string, env []string, args ...
 func (d *Daemon) loadWatchFiles() {
 	if d.watchState == nil {
 		d.watchState = watch.LoadState(d.Dir)
-		// A fix that never reported an outcome was interrupted, not finished.
-		// Close it, and forget its event so the next poll offers it again —
-		// the caps still decide whether anything actually runs.
 		if keys := d.watchState.Fixes.Interrupted("interrupted — the daemon stopped mid-run", time.Now()); len(keys) > 0 {
 			for _, key := range keys {
 				d.watchState.Unsee(key)
@@ -318,7 +255,6 @@ func (d *Daemon) startWatches(ctx context.Context) {
 				d.advancePlans(ctx)
 				go d.refreshInboxStates(ctx, spec)
 			},
-			// A day off is a day off: the tracker is not even asked.
 			Asleep: func(now time.Time) bool { return dayOff(spec, now) }}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = make(chan struct{}, slotsOf(spec))
@@ -329,27 +265,18 @@ func (d *Daemon) startWatches(ctx context.Context) {
 	utils.Infof("agent: watching %d workspace(s) — tracker and review events\n", len(d.Watches))
 }
 
-// refresh is the reload button, wherever it was pressed: the process table
-// again, every tracker polled now, the inbox's columns re-read — then the
-// board published, so every surface reads the same fresh picture.
 func (d *Daemon) refresh() {
 	d.rescan()
-	// An account added a moment ago is on the board after this, not at
-	// the next minute's sweep.
 	d.sampleAccounts(time.Now())
 	for _, w := range d.watchers {
 		w.Nudge()
 	}
 }
 
-// handleWatchEvent routes a webhook's event to the workspace it belongs to,
-// else to the first one whose rules take it; the seen list keeps it single.
 func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 	if d.watchers == nil {
 		return
 	}
-	// A routine handed in by `corgi agent routine run` names its workspace
-	// and skips the rules: someone asked for it now.
 	if e.Kind == watch.KindRoutine {
 		for _, spec := range d.Watches {
 			if spec.Workspace != e.Workspace || d.watchState == nil {
@@ -380,7 +307,6 @@ func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 	}
 }
 
-// WatchIdentity is who "me" is for a source, as its poll learned it.
 func (d *Daemon) WatchIdentity(source string) string {
 	if d.watchState == nil {
 		return ""
@@ -399,23 +325,16 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 		if d.Events != nil {
 			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "watch", Reason: string(e.Kind) + " " + e.Ref, URL: e.URL})
 		}
-		// Three comments on one pull request are one thing to look at. The
-		// seen index dedupes a comment against itself; this dedupes the
-		// second comment against the first, within a round.
 		if d.watchState.SameRefThisRound(spec.Workspace, e) > 0 {
 			if isFeedback(e.Kind) && spec.FixesKind(e.Kind) {
 				d.settleFix(ctx, spec, e)
 			}
 			return
 		}
-		// Dismissed from the inbox means dismissed here too.
 		if d.watchState.IsIgnored(e.Key) {
 			return
 		}
 		body := watchBody(e)
-		// A red build is rerun once before it is worked on or handed over:
-		// a runner that died is not a bug in the branch. The second red on
-		// the same run goes the usual way.
 		if e.Kind == watch.KindCIFailed && spec.RerunCI {
 			if note, ok := d.rerunRedBuild(ctx, spec, e); ok {
 				body += " (" + note + ")"
@@ -437,8 +356,6 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 				body += " (" + note + ")"
 			}
 		}
-		// A review or a comment on a pull request of mine is something the
-		// next session should not need telling again.
 		if e.Mine && (e.Kind == watch.KindPRReview || e.Kind == watch.KindPRComment) && strings.TrimSpace(e.Body) != "" {
 			who := e.Author
 			if who == "" {
@@ -446,21 +363,14 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			}
 			d.learn(spec, string(e.Kind)+" "+e.Ref+" ("+who+")", e.Body)
 		}
-		// The bots that act on this kind run beside the fix, as themselves.
 		d.startBots(ctx, spec, e)
-		// And the session already on that branch hears about it, when the
-		// workspace closes the loop on its own.
 		if d.handOverEvent(ctx, spec, e) {
 			body += " (handed to the session on it)"
 		}
-		// A ticket I wrote myself is not news: the inbox has it and a fix
-		// still runs, but nothing rings.
 		if e.Self && e.Kind == watch.KindIssueNew {
 			utils.Infof("agent: (mine) %s\n", body)
 			return
 		}
-		// Quiet hours mean quiet: the event is recorded and the inbox shows
-		// it, but nothing buzzes until the window opens.
 		if quietNow(spec, time.Now()) {
 			d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
 			return
@@ -469,10 +379,6 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 	}
 }
 
-// rerunRedBuild reruns the failed jobs of the run a red-build event is
-// about, once: ok says the rerun went out and this red is done with. A
-// run already rerun, no run to find, or no way to ask leave ok false, so
-// the event goes on to be worked or handed over.
 func (d *Daemon) rerunRedBuild(ctx context.Context, spec WatchSpec, e watch.Event) (string, bool) {
 	if d.RerunCI == nil || e.Ref == "" {
 		return "", false
@@ -493,7 +399,6 @@ func (d *Daemon) rerunRedBuild(ctx context.Context, spec WatchSpec, e watch.Even
 	return "rerunning its failed jobs once — a second red is handed on", true
 }
 
-// quietNow is a quiet hour or a day off: nothing rings, nothing starts.
 func quietNow(spec WatchSpec, now time.Time) bool {
 	if dayOff(spec, now) {
 		return true
@@ -502,15 +407,11 @@ func quietNow(spec WatchSpec, now time.Time) bool {
 	return err == nil && q.Contains(now)
 }
 
-// releaseHeld delivers, once, what quiet hours swallowed. One notification
-// for the lot: waking to nine separate buzzes is its own kind of noise.
 func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 	if d.watchState == nil || quietNow(spec, now) {
 		return
 	}
 	held := d.watchState.TakeHeld(spec.Workspace)
-	// The night moved things on: a ticket finished, a row dismissed, is not
-	// news in the morning.
 	moved := watch.LoadStateLog(d.Dir)
 	kept := held[:0]
 	for _, n := range held {
@@ -540,10 +441,6 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 	go d.notifyAttention(notifyTitlePrefix+spec.Workspace, body, spec.Workspace)
 }
 
-// retryDeferred starts the most urgent deferred fix for a workspace once
-// whatever stopped it — a cap, quiet hours, the budget — has passed. One
-// per round, so a backlog drains at the pace the caps allow rather than
-// all at once the minute the window resets.
 func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Time) {
 	if spec.NoRetry || spec.Action != "fix" || d.watchState == nil {
 		return
@@ -568,9 +465,6 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 		return
 	}
 	sort.SliceStable(queue, func(i, j int) bool { return watch.Less(queue[i], queue[j]) })
-	// An event waited hours in the queue; the rules may have changed, and so
-	// may the ticket. One that is over now is dropped, not started: the
-	// morning is not the moment to move a finished ticket back to In Progress.
 	for i, e := range queue {
 		if why := d.stillWorthFixing(ctx, spec, e); why != "" {
 			d.watchState.Fixes.DropDeferred(e.Key)
@@ -588,10 +482,6 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 	}
 }
 
-// stillWorthFixing says why an event that once earned a fix no longer does,
-// or "" while it still does. The rules first: what they refuse today they
-// refuse for an event queued yesterday. Then the ticket's column, from what
-// the daemon last saw and, for the tracker kinds, from the tracker itself.
 func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.Event) string {
 	if spec.Rules.Enabled {
 		if why := spec.Rules.Why(e); why != "" {
@@ -630,13 +520,8 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 	return ""
 }
 
-// startFix launches the fix, or says in one short note why not. A deferred
-// event leaves the seen list and waits in the fix log until the daemon can
-// start it (retryDeferred) or someone runs `corgi agent watch run`.
 func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) string {
 	now := time.Now()
-	// Checked again here, not only where the event arrived: a deferred run
-	// can start hours later, and by then the trust list may have changed.
 	if why := chatRunRefusal(spec, e); why != "" {
 		d.watchState.Fixes.DropDeferred(e.Key)
 		return "not started: " + why
@@ -663,16 +548,12 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 	return ""
 }
 
-// commentSettle is how long a feedback fix waits after the last comment on
-// its pull request: reviewers, and review bots, post several in a row.
 var commentSettle = time.Minute
 
 func isFeedback(kind watch.Kind) bool {
 	return kind == watch.KindPRComment || kind == watch.KindPRReview || kind == watch.KindIssueComment
 }
 
-// settleFix starts the fix for a comment once no more have landed on the
-// same ref for commentSettle; a fix already running gets it afterwards.
 func (d *Daemon) settleFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	key := spec.Workspace + "/" + e.Ref
 	d.attentionMu.Lock()
@@ -711,8 +592,6 @@ func (d *Daemon) takeFollowUp(spec WatchSpec, ref string) (watch.Event, bool) {
 }
 
 func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
-	// The person who asked sees corgi pick it up before the run has anything
-	// to say, which is most of what an ack is for.
 	if e.Source == "slack" {
 		d.say(ctx, spec, e, "", "eyes")
 	}
@@ -720,18 +599,13 @@ func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	go func() {
 		defer d.runs.Done()
 		d.runFix(ctx, spec, e)
-		// A run ended: a plan waiting on it may have a next task.
 		d.advancePlans(ctx)
-		// A comment that landed during the run is the next one, after the
-		// same settle: the run read every open thread when it started, so
-		// this one is only what came later.
 		if follow, ok := d.takeFollowUp(spec, e.Ref); ok && ctx.Err() == nil {
 			d.settleFix(ctx, spec, follow)
 		}
 	}()
 }
 
-// fixDeferral says why a fix must not start now; "" means go ahead.
 func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	perHour, perDay := spec.FixCaps()
 	if log.StartedSince(spec.Workspace, now.Add(-time.Hour)) >= perHour {
@@ -750,10 +624,6 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 		if pct >= limitRefusePercent {
 			return fmt.Sprintf("limit %d%%", pct)
 		}
-		// What a run here usually costs, against what is left. Ten comment
-		// fixes and ten whole tickets are the same number of runs and nowhere
-		// near the same spend, so a count is the wrong unit to stop on. Only
-		// once there is something measured to go on.
 		if typical := log.TypicalSpend(spec.Workspace); typical > 0 && pct+typical > limitRefusePercent {
 			return fmt.Sprintf("a run here costs about %d%% and %d%% is used", typical, pct)
 		}
@@ -761,7 +631,6 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	return ""
 }
 
-// FixBudget is a workspace's fix count against its caps.
 type FixBudget struct {
 	Hour     int       `json:"hour"`
 	PerHour  int       `json:"perHour"`
@@ -772,7 +641,6 @@ type FixBudget struct {
 	Deferred int       `json:"deferred"`
 }
 
-// BudgetFor reads the workspace's fix history against its caps.
 func BudgetFor(spec WatchSpec, log *watch.FixLog, now time.Time) FixBudget {
 	b := FixBudget{Deferred: log.DeferredCount(spec.Workspace)}
 	b.PerHour, b.PerDay = spec.FixCaps()
@@ -784,13 +652,10 @@ func BudgetFor(spec WatchSpec, log *watch.FixLog, now time.Time) FixBudget {
 	return b
 }
 
-// String is "2/3 this hour · 5/10 today".
 func (b FixBudget) String() string {
 	return fmt.Sprintf("%d/%d this hour · %d/%d today", b.Hour, b.PerHour, b.Day, b.PerDay)
 }
 
-// limitUsed is the fuller of the account's two windows; one that has
-// already reset since the snapshot no longer counts.
 func limitUsed(configDir string, now time.Time) (int, bool) {
 	l, ok := usage.ReadLimits(configDir)
 	if !ok {
@@ -806,8 +671,6 @@ func limitUsed(configDir string, now time.Time) (int, bool) {
 	return pct, true
 }
 
-// claimFix keeps one fix per issue or PR in flight: a second event on the
-// same ref while claude is still working is reported, not run again.
 func (d *Daemon) claimFix(workspace, ref string) bool {
 	d.attentionMu.Lock()
 	defer d.attentionMu.Unlock()
@@ -858,8 +721,6 @@ func watchBody(e watch.Event) string {
 	}
 }
 
-// commentLine says who said what on which ticket; with no text to show, it
-// says what the ticket is rather than ending in a colon and nothing.
 func commentLine(e watch.Event) string {
 	who := firstNonEmpty(e.Author, "someone")
 	if strings.TrimSpace(e.Body) == "" {
@@ -875,15 +736,10 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-// fixPrompts is what the headless claude gets, per kind. The skills carry
-// the rules: one spec gate collapsed by the approval, draft PRs only,
-// never merge.
 var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	watch.KindRoutine: func(e watch.Event) string {
 		return e.Body
 	},
-	// A task of your own: no tracker, so the session keeps the board honest
-	// itself with the task commands.
 	watch.KindTask: func(e watch.Event) string {
 		body := strings.TrimSpace(e.Body)
 		if body == "" {
@@ -915,19 +771,15 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	watch.KindChatMention: chatPrompt,
 	watch.KindChatMessage: chatPrompt,
 	watch.KindReviewRequested: func(e watch.Event) string {
-		// A review asked for in chat names several pull requests at once —
-		// one ticket across its repositories — and is reviewed as one.
 		if e.Source == "slack" {
 			return chatPrompt(e)
 		}
-		// Someone else's branch. Read it, say what you think, change nothing.
 		return "Review this pull request, which " + firstNonEmpty(e.Author, "a colleague") +
 			" asked me to review: " + e.URL + ". It is THEIR branch — read the diff and post a review " +
 			"(a summary and inline comments). Do not push commits to it, do not resolve their threads" +
 			approveClause + ". If it is good, say so and say why. /corgi:review " + e.URL
 	},
 	watch.KindCIFailed: func(e watch.Event) string {
-		// The one kind that brings its own test for "done": make it green.
 		return "A build went red in " + e.Ref + ": " + e.Title + ". " +
 			"Find the failing run (gh run list --repo " + e.Ref + " --status failure --limit 5, then gh run view --log-failed), " +
 			"read what actually failed, and fix the cause on the branch it failed on — not by weakening the test or skipping it. " +
@@ -941,14 +793,8 @@ func reviewFeedbackPrompt(e watch.Event) string {
 		"apply the valid comments, push back on the wrong ones, reply and resolve the threads, push the fixes. /corgi:review " + e.URL
 }
 
-// FixPrompt is the prompt an event hands to a session, so the phone can start
-// the same work the daemon would have started by itself.
 func FixPrompt(e watch.Event) string { return fixPrompt(e) }
 
-// BatchPrompt is one session for several new issues at once, which is what
-// the stories skill is built for: it specs them together, reuses what they
-// share and opens the PRs in one pass. Only issue.new batches — a review
-// comment is about one thread and has nothing to share with the next.
 func BatchPrompt(events []watch.Event) string {
 	if len(events) == 0 {
 		return ""
@@ -967,11 +813,8 @@ func BatchPrompt(events []watch.Event) string {
 		strings.Join(refs, " ")
 }
 
-// fixPrompt is the prompt for an event's kind; "" for a kind with no fix.
 const approveClause = "__APPROVE__"
 
-// withApprove settles the review-request prompt: approve when the
-// workspace says so and the review is clean, else never on my behalf.
 func withApprove(prompt string, approve bool) string {
 	if approve {
 		return strings.Replace(prompt, approveClause, ", and approve it on my behalf only when the review has no blocking finding and the risk card says auto-approve: yes — otherwise post the findings and leave it unapproved", 1)
@@ -986,10 +829,6 @@ func fixPrompt(e watch.Event) string {
 	return ""
 }
 
-// unattendedSuffix is what an unattended run owes the person who finds its
-// work later: a trail on the pull request, and a pass over its own diff
-// before it claims anyone's attention. A run someone started by hand does
-// not get this — they are already reading it.
 func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 	trail := "corgi watch · " + spec.Workspace + " · " + string(e.Kind) + " " + e.Ref
 	if e.URL != "" {
@@ -1010,13 +849,10 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 		"(one flag per item; short sentences; no secrets)."
 }
 
-// fixArgs is claude's argv for one event.
 func fixArgs(spec WatchSpec, e watch.Event) []string {
 	return fixArgsWith(spec, e, "")
 }
 
-// fixArgsWith adds what an earlier run on the same ref left behind, so a
-// second attempt continues rather than starting at the ticket again.
 func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 	prompt := withApprove(fixPrompt(e), spec.Approve) + unattendedSuffix(spec, e)
 	if p, ok := packetFor(spec.Dir, e.Ref); ok {
@@ -1035,8 +871,6 @@ func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 
 var prLink = regexp.MustCompile(`https://(?:github\.com/[^\s)]+/pull/\d+|[^\s)]+/-/merge_requests/\d+)`)
 
-// slotsOf is how many fixes may run at once in a workspace: its slots,
-// when it isolates each run; else one.
 func slotsOf(spec WatchSpec) int {
 	if spec.Slots > 1 && spec.Isolate {
 		return spec.Slots
@@ -1044,17 +878,12 @@ func slotsOf(spec WatchSpec) int {
 	return 1
 }
 
-// takeSlot waits for a free slot in the workspace and gives it back
-// through the returned func.
 func (d *Daemon) takeSlot(workspace string) func() {
 	sem := d.fixBusy[workspace]
 	sem <- struct{}{}
 	return func() { <-sem }
 }
 
-// runFix runs one event's fix — one at a time per workspace, or as many
-// as its slots allow — and reports how it ended. A key runs once: the
-// seen list already holds it.
 func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	defer d.releaseFix(spec.Workspace, e.Ref)
 	defer d.takeSlot(spec.Workspace)()
@@ -1071,17 +900,11 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	defer logFile.Close()
 
-	// A ticket that is blocked — by the breaker, by a run that said so, or
-	// by a person — waits for a person. Nothing is deferred and no budget is
-	// spent; the inbox shows why.
 	if b, ok := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); ok && e.Ref != "" {
 		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: blocked ("+b.By+"): "+b.Reason, time.Now())
 		utils.Infof("agent: watch: %s is blocked (%s): %s — corgi agent watch unblock %s\n", e.Ref, b.By, b.Reason, e.Ref)
 		return
 	}
-	// A wall this workspace has hit twice running is not worth a third run:
-	// a missing credential or a refused permission will still be missing in
-	// an hour. Deferred, so a manual run picks it up once it is fixed.
 	if kind, runs := d.watchState.Fixes.RecentBlocker(spec.Workspace, blockerWindow, time.Now()); runs >= 2 {
 		d.watchState.Fixes.Defer(e)
 		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: the last "+strconv.Itoa(runs)+" runs here failed on "+kind, time.Now())
@@ -1090,10 +913,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 			spec.Workspace, e.URL)
 		return
 	}
-	// Two machines watching one board would otherwise both take this ticket.
-	// A tracker that cannot be read leaves the claim unknown: the run goes
-	// ahead, because refusing to work when the tracker is down is worse than
-	// the duplicate it guards against.
 	if spec.Lease && d.ClaimTicket != nil && e.Ref != "" {
 		switch ok, holder, err := d.ClaimTicket(spec.Workspace, e); {
 		case err != nil:
@@ -1112,7 +931,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		env = append(env, "CLAUDE_CONFIG_DIR="+spec.ConfigDir)
 	}
 	fmt.Fprintf(logFile, "=== %s %s %s\n", time.Now().Format(time.RFC3339), e.Kind, e.Ref)
-	// What the window was at before the run, so the receipt is the difference.
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
 	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
 	started := time.Now()
@@ -1138,9 +956,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	cmd := claudeCommand(ctx, spec.Dir, env, args...)
 	cmd.Stdin = nil
 	raw, runErr := cmd.Output()
-	// json output carries what the run said plus what it cost; the log keeps
-	// the words, the record keeps the numbers. Output that is not the JSON
-	// envelope (an older claude, a crash mid-line) is used as it came.
 	out, receipt := unwrapResult(raw)
 	logFile.Write(out)
 	if receipt.ok {
@@ -1150,8 +965,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
 		d.watchState.Fixes.Finish(e.Key, nil, "", runErr.Error(), time.Now())
-		// What it managed to say before it stopped is worth more than the
-		// error on its own: the next attempt starts from there.
 		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 		d.mirrorHandoff(spec, e.Ref, started)
 		d.tripBreaker(spec, e, runErr.Error())
@@ -1177,9 +990,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	d.mirrorHandoff(spec, e.Ref, started)
 	d.blockIfRunSaidSo(spec, e, started)
 	d.routineReport(spec, e, string(out), nil)
-	// It opened something, so the ticket is no longer being worked on — it is
-	// waiting on a reviewer, and the board should say so without anyone
-	// dragging it.
 	if len(links) > 0 && d.Delivered != nil {
 		d.Delivered(spec.Workspace, e, links)
 	}
@@ -1193,7 +1003,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		}
 		d.say(ctx, spec, e, said, d.chatMark(ctx, spec, e))
 	}
-	// The pull request it opened is where to go, if it opened one.
 	target := e.URL
 	if len(links) > 0 {
 		target = links[0]
@@ -1201,9 +1010,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, target)
 }
 
-// Probe is one synthesized event's walk through the pipeline, for
-// `corgi agent watch test`: every gate a real event passes, and the claude
-// run it would start, without starting it or recording anything.
 type Probe struct {
 	Workspace string    `json:"workspace"`
 	Matched   bool      `json:"matched"`
@@ -1217,8 +1023,6 @@ type Probe struct {
 	Args      []string  `json:"args,omitempty"`
 }
 
-// ProbeEvent routes e the way handleWatchEvent does and reports each gate.
-// ok is false when no watched workspace takes the event.
 func (d *Daemon) ProbeEvent(e watch.Event, now time.Time) (Probe, bool) {
 	d.loadWatchFiles()
 	var spec *WatchSpec
@@ -1241,10 +1045,6 @@ func (d *Daemon) ProbeEvent(e watch.Event, now time.Time) (Probe, bool) {
 	}
 	p := Probe{Workspace: spec.Workspace, Why: spec.Rules.Why(e), Seen: d.watchState.IsSeen(e.Key), Action: spec.Action}
 	p.Matched = p.Why == ""
-	// A kind --auto-for did not name is reported, not worked on. This read
-	// p.Matched before it was set, so the dry run always echoed the
-	// workspace's action and said "fix" for a kind the daemon would only
-	// have told you about — wrong in exactly the tool people use to check.
 	if p.Matched && spec.Action == "fix" && !spec.FixesKind(e.Kind) {
 		p.Action = "notify"
 	}
@@ -1316,8 +1116,6 @@ func uniqueStrings(in []string) []string {
 	return out
 }
 
-// FixesKind says an arriving event is one this workspace works on its own,
-// rather than one it only reports.
 func (s WatchSpec) FixesKind(kind watch.Kind) bool {
 	if s.Action != "fix" {
 		return false
@@ -1333,11 +1131,6 @@ func (s WatchSpec) FixesKind(kind watch.Kind) bool {
 	return false
 }
 
-// refreshInboxStates asks each source whether the things still sitting in the
-// inbox are still open. An event is recorded once and never revisited, so a
-// merge request merged an hour later, or a review someone has since given,
-// stayed on the phone looking like work. Cheap: only what is still listed,
-// only the pull-request kinds, once a round.
 func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 	if d.watchState == nil {
 		return
@@ -1357,7 +1150,7 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 			continue
 		}
 		if known, ok := states.Get(e.Key); ok && watch.Settled(e, known.Status) != "" {
-			continue // already known to be over
+			continue
 		}
 		for _, src := range spec.Sources {
 			asker, ok := src.(watch.RefStater)
@@ -1373,19 +1166,10 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 	d.refreshPulls(ctx, spec)
 }
 
-// pullFresh is how long a pull request's checks and approval are taken as
-// read before the forge is asked again.
 const pullFresh = 2 * time.Minute
 
-// refreshPulls reads how every pull request the inbox or the board
-// mentions stands — do its checks pass, is it approved — so a row can say
-// "ready to merge" instead of only "in review". The pull requests: the
-// ones rows are about, the ones corgi's runs opened, the ones sessions
-// linked. Once a round, and only what has not been read for a while.
 func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 	refs := map[string]bool{}
-	// links is the pull request page for each ref, when a link is known —
-	// what a merge is addressed to.
 	links := map[string]string{}
 	add := func(link string) {
 		if ref := watch.PullRef(link); ref != "" {
@@ -1433,7 +1217,6 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 		if known && now.Sub(was.At) < pullFresh {
 			continue
 		}
-		// A pull request already merged or closed is history: not asked again.
 		if known && (was.State == "merged" || was.State == "closed") {
 			continue
 		}
@@ -1451,8 +1234,6 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 	}
 }
 
-// packetFor is the handoff an earlier run left for a ticket, if it is
-// recent enough to still describe the code.
 func packetFor(dir, ref string) (handoff.Packet, bool) {
 	p, err := handoff.Read(dir, ref)
 	if err != nil || time.Since(p.WrittenAt) > handoff.MaxAge {
@@ -1461,9 +1242,6 @@ func packetFor(dir, ref string) (handoff.Packet, bool) {
 	return p, true
 }
 
-// packetTrust re-runs the packet's own check so the next run knows whether
-// to build on it or to start from the ticket and the diff. The packet was
-// written by a run the ticket steered, so only a doneWhen line is run.
 func packetTrust(dir string, p handoff.Packet, trusted []string) string {
 	if p.Verification == nil {
 		return "it recorded no check, so trust nothing in it you have not confirmed."
@@ -1481,8 +1259,6 @@ func packetTrust(dir string, p handoff.Packet, trusted []string) string {
 	return fmt.Sprintf("`%s` exits %d now — start from the ticket and the diff, not the packet.", v.Cmd, v.Exit)
 }
 
-// runHandover is what a run leaves for the next one: the packet it wrote
-// during the run when it wrote one, else the last lines it said.
 func runHandover(dir, ref string, started time.Time, out string) string {
 	if p, err := handoff.Read(dir, ref); err == nil && !p.WrittenAt.Before(started) {
 		return "handoff: " + p.Summary() + " — " + handoff.MarkdownPath(dir, ref)
@@ -1492,8 +1268,6 @@ func runHandover(dir, ref string, started time.Time, out string) string {
 
 func worktreeOf(dir string, p handoff.Packet) string { return handoff.WorktreeDir(dir, p) }
 
-// verifyTimeout bounds a packet's verification command: a check that hangs
-// must not hold the runner before claude has even started.
 const verifyTimeout = 5 * time.Minute
 
 func runShellQuiet(dir, command string) (int, error) {
@@ -1520,8 +1294,6 @@ func shortSHA(s string) string {
 	return s
 }
 
-// mirrorHandoff puts the packet a run wrote onto the ticket's workpad, so a
-// machine or account without this checkout can still pick the work up.
 func (d *Daemon) mirrorHandoff(spec WatchSpec, ref string, started time.Time) {
 	if d.Workpad == nil {
 		return
@@ -1533,24 +1305,18 @@ func (d *Daemon) mirrorHandoff(spec WatchSpec, ref string, started time.Time) {
 	go d.Workpad(spec.Workspace, ref, "Handoff", p.Markdown())
 }
 
-// FixBranch is the branch an isolated run works on: one per ticket, so a
-// second attempt lands in the same worktrees and undo knows what to remove.
 func FixBranch(ref string) string {
 	ref = strings.ToLower(strings.TrimSpace(ref))
 	ref = strings.NewReplacer("/", "-", "#", "-", " ", "-", ":", "-").Replace(ref)
 	return "corgi/" + ref
 }
 
-// isolationNote tells the run where to work. The stories skill would make
-// its own branch and worktrees; here they exist already.
 func IsolationNote(branch string, trees []string) string {
 	return "\n\nThis run is isolated: every repository already has a worktree on branch `" + branch +
 		"`, created off its current HEAD. Work only in these directories and open the pull requests from this branch; " +
 		"do not create another branch and do not edit the main checkouts:\n- " + strings.Join(trees, "\n- ")
 }
 
-// tripBreaker blocks a ticket after BreakerAfter failed runs in a row. A
-// third try at a wall costs a run and buys nothing; a person looks instead.
 func (d *Daemon) tripBreaker(spec WatchSpec, e watch.Event, lastErr string) {
 	if e.Ref == "" || d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref) < watch.BreakerAfter {
 		return
@@ -1563,9 +1329,6 @@ func (d *Daemon) tripBreaker(spec WatchSpec, e watch.Event, lastErr string) {
 	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
 }
 
-// blockIfRunSaidSo honours a run's own handoff: a packet in state blocked
-// or auth-required names a missing tool, credential or secret, and no run
-// can supply that. The reason goes on the ticket for whoever can.
 func (d *Daemon) blockIfRunSaidSo(spec WatchSpec, e watch.Event, started time.Time) {
 	if e.Ref == "" {
 		return
@@ -1585,8 +1348,6 @@ func (d *Daemon) blockIfRunSaidSo(spec WatchSpec, e watch.Event, started time.Ti
 	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, e.Ref+" is blocked: "+reason, spec.Workspace, e.URL)
 }
 
-// RunLog is the last n lines of a run's log, for a surface that cannot open
-// the file. "" when there is no log.
 func RunLog(agentDir, key string, n int) string {
 	data, err := os.ReadFile(filepath.Join(agentDir, "watch", "runs", safeName(key)+".log"))
 	if err != nil {
@@ -1595,8 +1356,6 @@ func RunLog(agentDir, key string, n int) string {
 	return watch.TailLines(string(data), n)
 }
 
-// runReceipt is what `claude -p --output-format json` says about a run
-// beyond its words.
 type runReceipt struct {
 	ok      bool
 	costUSD float64
@@ -1604,8 +1363,6 @@ type runReceipt struct {
 	turns   int
 }
 
-// unwrapResult takes the JSON envelope apart: the result text for the log
-// and the PR scan, the cost for the record. Anything else passes through.
 func unwrapResult(raw []byte) ([]byte, runReceipt) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[0] != '{' {
@@ -1631,9 +1388,6 @@ func unwrapResult(raw []byte) ([]byte, runReceipt) {
 		tokens: u.Input + u.Output + u.CacheRead + u.CacheWrite}
 }
 
-// fixModel is the model for one run: the policy's choice for the kind, or
-// the escalation after a failed run on the same ticket — a harder problem
-// gets the stronger model rather than another try with the same one.
 func fixModel(spec WatchSpec, e watch.Event, failedBefore int) string {
 	if failedBefore > 0 {
 		return spec.Models.ForEscalation()
@@ -1641,9 +1395,6 @@ func fixModel(spec WatchSpec, e watch.Event, failedBefore int) string {
 	return spec.Models.ForKind(string(e.Kind))
 }
 
-// storyMode tells the stories skill which lane the ticket's own labels put
-// it in, so a bug goes logs-first and a feature gets a plan; nothing when
-// the labels say nothing.
 func storyMode(e watch.Event) string {
 	for _, l := range e.Labels {
 		switch strings.ToLower(strings.TrimSpace(l)) {

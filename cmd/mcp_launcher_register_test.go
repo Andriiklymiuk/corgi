@@ -14,8 +14,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// The Mac app registers a folder and adds an account over the launcher
-// exactly as `corgi agent init` and `corgi agent profile add` would.
 func TestLaunchRegistersAWorkspace(t *testing.T) {
 	phoneBoard(t, true)
 	repo := t.TempDir()
@@ -38,14 +36,12 @@ func TestLaunchRegistersAWorkspace(t *testing.T) {
 		t.Fatalf("no repo file: %v", err)
 	}
 
-	// The list shows it.
 	rec = httptest.NewRecorder()
 	launchWorkspacesHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/workspaces", nil))
 	if !strings.Contains(rec.Body.String(), `"path":"`+repo+`"`) {
 		t.Fatalf("list: %s", rec.Body.String())
 	}
 
-	// Not a repo, not absolute, an id another directory owns: refused.
 	plain := t.TempDir()
 	for _, body := range []string{
 		`{"path":"` + plain + `"}`,
@@ -72,7 +68,6 @@ func TestLaunchAddsAProfile(t *testing.T) {
 	if got := launchProfileNames(); len(got) != 1 || got[0] != "work" {
 		t.Fatalf("names: %v", got)
 	}
-	// A bad name, and a profile that sets nothing: refused.
 	for _, body := range []string{`{"name":"no spaces","configDir":"~/.x"}`, `{"name":"empty"}`} {
 		if rec := post(launchProfilesHandler, "/launch/profiles", body); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: %d %s", body, rec.Code, rec.Body.String())
@@ -80,8 +75,6 @@ func TestLaunchAddsAProfile(t *testing.T) {
 	}
 }
 
-// A ticket named by ref and workspace, as the command line names it, is
-// the same ticket the phone names by key.
 func TestLaunchTicketByRef(t *testing.T) {
 	dir := phoneBoard(t, true)
 	tasks := watch.LoadTasks(dir)

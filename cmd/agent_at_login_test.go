@@ -19,9 +19,6 @@ func atLoginCmd(t *testing.T) *cobra.Command {
 	return c
 }
 
-// A bare `up` must never install anything on its own — start-at-login writes a
-// file into the user's login session, which is not a side effect of "start my
-// endpoint".
 func TestEnsureAtLoginInstallsNothingWhenNotAsked(t *testing.T) {
 	dir := t.TempDir()
 	utils.NonInteractive = true
@@ -38,8 +35,6 @@ func TestEnsureAtLoginInstallsNothingWhenNotAsked(t *testing.T) {
 	}
 }
 
-// --at-login=false is how you turn it back off, and it must be remembered so
-// the offer is not made again on the next up.
 func TestEnsureAtLoginFalseRecordsTheDecision(t *testing.T) {
 	dir := t.TempDir()
 	cmd := atLoginCmd(t)
@@ -61,8 +56,6 @@ func TestEnsureAtLoginFalseRecordsTheDecision(t *testing.T) {
 	}
 }
 
-// Already on, service in place: nothing to do, and in particular no reinstall
-// (which would shell out to launchctl on every up).
 func TestEnsureAtLoginIsAnIdempotentNoOpWhenAlreadySet(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no login service on windows")
@@ -113,8 +106,6 @@ func TestLoginServiceInstalledFollowsTheFile(t *testing.T) {
 	}
 }
 
-// The daemon starts on every login, including for people who never asked for a
-// tunnel. It must not open one.
 func TestRestoreUpAtLoginDoesNothingWithoutTheFlag(t *testing.T) {
 	dir := t.TempDir()
 	if err := saveUpSettings(dir, upSettings{TunnelHostname: "corgi.example.com"}); err != nil {
@@ -126,8 +117,6 @@ func TestRestoreUpAtLoginDoesNothingWithoutTheFlag(t *testing.T) {
 	}
 }
 
-// An `agent up` holding the lock is about to start the MCP itself; the daemon
-// it just spawned must not race it for the port.
 func TestRestoreUpAtLoginYieldsToARunningUp(t *testing.T) {
 	dir := t.TempDir()
 	if err := saveUpSettings(dir, upSettings{AtLogin: true}); err != nil {
@@ -145,8 +134,6 @@ func TestRestoreUpAtLoginYieldsToARunningUp(t *testing.T) {
 	}
 }
 
-// Not flags, so a bare `up` would drop them on the merge and silently switch
-// start-at-login off.
 func TestMergeUpSettingsCarriesTheAtLoginDecision(t *testing.T) {
 	saved := upSettings{AtLogin: true, AtLoginAsked: true, TunnelHostname: "corgi.example.com"}
 	got, _ := mergeUpSettings(upSettings{}, func(string) bool { return false }, saved)
@@ -182,8 +169,6 @@ func TestLoopbackAddr(t *testing.T) {
 	}
 }
 
-// The toast is read at the machine corgi runs on: it opens the page served
-// from localhost, not a round trip through the tunnel.
 func TestPreferLocalLinkSwapsTheLauncherForLocalhost(t *testing.T) {
 	data := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", data)
@@ -212,8 +197,6 @@ func TestPreferLocalLinkSwapsTheLauncherForLocalhost(t *testing.T) {
 	}
 }
 
-// A session URL is the session itself — there is no local page that shows it,
-// so rewriting it would send the click nowhere.
 func TestPreferLocalLinkLeavesASessionURLAlone(t *testing.T) {
 	data := t.TempDir()
 	t.Setenv("CORGI_DATA_DIR", data)
@@ -272,8 +255,6 @@ func TestProtectedWorkspaceNoteIsSilentOutsideTheGatedFolders(t *testing.T) {
 
 func TestRestoreUpRestartsAnMCPFromAnOlderCorgi(t *testing.T) {
 	dir := t.TempDir()
-	// A version file that is not ours and no live pid: nothing corgi can
-	// stop, so the running server is left alone.
 	if err := os.WriteFile(filepath.Join(dir, mcpVersionName), []byte("0.0.1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

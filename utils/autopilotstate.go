@@ -11,19 +11,14 @@ import (
 type AutopilotMode string
 
 const (
-	AutopilotRunning AutopilotMode = "running"
-	AutopilotPaused  AutopilotMode = "paused"
-	AutopilotStopped AutopilotMode = "stopped"
-	// AutopilotUninitialized is a read-only sentinel for "no state file yet"
-	// (a genuine first run). It is never persisted — resume/pause/stop/heartbeat
-	// always write running/paused/stopped. It lets the loop tell a first run
-	// (start it) apart from an explicit stop (kill switch — stay stopped).
+	AutopilotRunning       AutopilotMode = "running"
+	AutopilotPaused        AutopilotMode = "paused"
+	AutopilotStopped       AutopilotMode = "stopped"
 	AutopilotUninitialized AutopilotMode = "uninitialized"
 )
 
-// AutopilotIteration is the compact per-iteration summary the loop emits.
 type AutopilotIteration struct {
-	Phase    string `json:"phase"` // built | idle | awaiting_spec_signoff | error
+	Phase    string `json:"phase"`
 	Built    int    `json:"built"`
 	Skipped  int    `json:"skipped"`
 	Awaiting int    `json:"awaiting"`
@@ -54,7 +49,6 @@ func WriteAutopilotState(path string, s AutopilotState) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	// This is per-developer state, not shared config — keep it out of commits.
 	EnsureCorgiServicesIgnore(dir, filepath.Base(path))
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -73,7 +67,6 @@ func ReadAutopilotState(path string) (AutopilotState, error) {
 	return s, err
 }
 
-// readOrInit returns the existing state, or a fresh running default when absent.
 func readOrInit(path string) AutopilotState {
 	s, err := ReadAutopilotState(path)
 	if err != nil {
@@ -82,15 +75,12 @@ func readOrInit(path string) AutopilotState {
 	return s
 }
 
-// SetAutopilotMode flips mode, creating the file on first run (resume).
 func SetAutopilotMode(path string, mode AutopilotMode) (AutopilotState, error) {
 	s := readOrInit(path)
 	s.Mode = mode
 	return s, WriteAutopilotState(path, s)
 }
 
-// RecordAutopilotHeartbeat stamps the heartbeat, bumps the iteration counter,
-// and stores the latest summary. Bounded, no goroutine.
 func RecordAutopilotHeartbeat(path string, it AutopilotIteration) (AutopilotState, error) {
 	s := readOrInit(path)
 	s.Iteration++

@@ -15,14 +15,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// Any agent CLI that can run a command on an event — Codex, Gemini CLI,
-// OpenCode, one of your own — puts its sessions on the same board as
-// Claude Code's through this: one call per event, the same shape the
-// Claude Code hooks deliver, so the keys, the phone and the bar treat it
-// as any other session. Claude Code itself needs nothing: `corgi agent
-// track enable` writes its hooks.
-
-// eventNames maps the short words to the hook events the board knows.
 var eventNames = map[string]string{
 	"start":      "SessionStart",
 	"prompt":     "UserPromptSubmit",
@@ -97,9 +89,6 @@ is unaffected whatever corgi's state is.`,
 	},
 }
 
-// agentEvent builds the event as the Claude Code hook would, from flags
-// instead of stdin: the same subject and risk words, the same process
-// chain for the host, the same delivery.
 func agentEvent(name, agent, session, cwd, tool, input, message string, getenv func(string) string, parent int) (sessions.Event, bool) {
 	chain := proc.Ancestors(parent)
 	if proc.HasCorgi(chain) {

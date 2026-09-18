@@ -8,20 +8,14 @@ import (
 	"testing"
 )
 
-// Closing and merging reach a real forge, so the URL has to be read exactly
-// and a host corgi does not know has to be refused rather than guessed at.
 func TestClosingAndMergingReachTheRightPlace(t *testing.T) {
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// RequestURI, not URL.Path: the path arrives escaped and Path decodes
-		// it, which would hide whether the project was escaped at all.
 		got = append(got, r.Method+" "+r.RequestURI+" "+r.Header.Get("PRIVATE-TOKEN")+r.Header.Get("Authorization"))
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
-	// GitLab: the project path is escaped into one segment, and the token
-	// goes in the header GitLab actually reads.
 	link := srv.URL + "/acme/group/api/-/merge_requests/7"
 	if err := ClosePR(context.Background(), Secrets{GitLab: "glpat-x", GitLabURL: srv.URL}, link); err != nil {
 		t.Fatalf("close: %v", err)
@@ -41,17 +35,14 @@ func TestClosingAndMergingReachTheRightPlace(t *testing.T) {
 		t.Fatalf("gitlab merge went to %q", got)
 	}
 
-	// No token is a clear error, not a silent no-op.
 	if err := ClosePR(context.Background(), Secrets{}, link); err == nil {
 		t.Fatal("closing without a token must say so")
 	}
-	// A link corgi cannot place is refused rather than guessed at.
 	for _, bad := range []string{"https://example.com/thing/1", "not a url", ""} {
 		if err := ClosePR(context.Background(), Secrets{GitLab: "x", GitHub: "y"}, bad); err == nil {
 			t.Errorf("%q is not a pull request corgi knows how to close", bad)
 		}
 	}
-	// A GitHub link that is not a pull request path is refused too.
 	if err := ClosePR(context.Background(), Secrets{GitHub: "y"}, "https://github.com/acme/api/issues/3"); err == nil {
 		t.Fatal("an issue is not a pull request")
 	}

@@ -59,7 +59,6 @@ func TestSeedDbReturnsOnUpFailure(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// dump present so we get past the dump-exists guard
 	if err := os.WriteFile(filepath.Join(dir, "dump.sql"), []byte("-- dump"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +68,6 @@ func TestSeedDbReturnsOnUpFailure(t *testing.T) {
 	seedReady = func(context.Context, utils.DatabaseService) error { readyCalled = true; return nil }
 	t.Cleanup(func() { seedReady = prevReady })
 
-	// No Makefile/`make up` target exists in the temp dir, so `make up` fails.
 	err := SeedDb(utils.DatabaseService{ServiceName: "db1"})
 	if err == nil {
 		t.Fatal("expected SeedDb to return the make-up error")
@@ -101,7 +99,6 @@ func TestErrMakeCommandFailedConst(t *testing.T) {
 }
 
 func TestDbShellCmd_Registered(t *testing.T) {
-	// Verify the shell subcommand is registered under db.
 	found := false
 	for _, sub := range dbCmd.Commands() {
 		if sub.Use == "shell [service-name]" {

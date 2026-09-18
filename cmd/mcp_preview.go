@@ -14,18 +14,8 @@ import (
 	"time"
 )
 
-// Preview: open, on the phone, the web app a workspace's stack is serving
-// on the laptop. A WebView cannot send a header with every asset it
-// loads, so the phone asks (sealed, as a device) for a ticket — a long
-// random path prefix that names one running service of one workspace and
-// dies in ten minutes — and loads the page through it. The proxy goes to
-// 127.0.0.1 and that service's port, nowhere else; a viewer device gets no
-// ticket; WebSockets are not carried (2.23).
-
-// previewFor is how long a ticket opens the door.
 const previewFor = 10 * time.Minute
 
-// previewTicket is one door: a service's port on this machine, until.
 type previewTicket struct {
 	Workspace string
 	Service   string
@@ -34,16 +24,13 @@ type previewTicket struct {
 }
 
 var (
-	previewMu      sync.Mutex
-	previewTickets = map[string]previewTicket{}
-	// Seams for tests.
+	previewMu            sync.Mutex
+	previewTickets       = map[string]previewTicket{}
 	previewWorkspaceRoot = workspaceRoot
 	previewSnapshot      = stackSnapshot
 	previewNow           = time.Now
 )
 
-// launchPreviewHandler is POST /launch/preview {workspace, service}: the
-// ticket for one running service with a port.
 func launchPreviewHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -114,8 +101,6 @@ func launchPreviewHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{"url": "/launch/preview/" + token + "/", "expiresAt": until, "service": service, "port": found.Port, "workspace": id})
 }
 
-// previewProxyHandler serves GET /launch/preview/<ticket>/<path>: the page
-// behind the ticket's port, the path after it, headers as they came.
 func previewProxyHandler(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/launch/preview/")
 	token, path, ok := strings.Cut(rest, "/")
@@ -150,8 +135,6 @@ func previewProxyHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusBadGateway, t.Service+" did not answer: "+err.Error())
 		},
 	}
-	// A redirect to the app's own root would leave the ticket behind; keep
-	// it under the door.
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		if loc := resp.Header.Get("Location"); strings.HasPrefix(loc, "/") && !strings.HasPrefix(loc, prefix) {
 			resp.Header.Set("Location", prefix+strings.TrimPrefix(loc, "/"))

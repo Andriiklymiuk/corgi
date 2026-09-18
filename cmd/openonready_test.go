@@ -43,7 +43,7 @@ func TestMaybeOpenOnReady_SkipsWhenNotOptedIn(t *testing.T) {
 	openOnReadyFlag = true
 	called := false
 	browserOpener = func(string, string) error { called = true; return nil }
-	maybeOpenOnReady(utils.Service{Port: 3000}) // no OpenOnReady
+	maybeOpenOnReady(utils.Service{Port: 3000})
 	if called {
 		t.Fatal("must not open when service did not opt in")
 	}

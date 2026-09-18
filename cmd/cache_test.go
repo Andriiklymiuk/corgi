@@ -9,8 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// The generated file is only trustworthy while something fails when it stops
-// matching the compose file it came from.
 func TestCheckGitLabCacheFileDetectsDrift(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "corgi-cache.yml")
@@ -38,8 +36,6 @@ func TestCheckGitLabCacheFileAcceptsAMatch(t *testing.T) {
 	}
 }
 
-// A missing file is the common first run, and "no such file" alone does not
-// tell anyone what to do about it.
 func TestCheckGitLabCacheFileExplainsAMissingFile(t *testing.T) {
 	err := checkGitLabCacheFile(filepath.Join(t.TempDir(), "nope.yml"), "x")
 	if err == nil {
@@ -50,7 +46,6 @@ func TestCheckGitLabCacheFileExplainsAMissingFile(t *testing.T) {
 	}
 }
 
-// --out is what a repo runs once; it has to create .gitlab/ on the way.
 func TestWriteGeneratedFileCreatesTheDirectory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".gitlab", "corgi-cache.yml")
 	if err := writeGeneratedFile(path, "content\n"); err != nil {
@@ -65,8 +60,6 @@ func TestWriteGeneratedFileCreatesTheDirectory(t *testing.T) {
 	}
 }
 
-// Round-tripping is the whole contract: what --out writes is what --check
-// accepts, or every CI run fails on a file it just generated.
 func TestGitLabCacheWriteThenCheckRoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".gitlab", "corgi-cache.yml")
 	rendered := "# generated\n.corgi-cache:\n  cache: []\n"
@@ -78,8 +71,6 @@ func TestGitLabCacheWriteThenCheckRoundTrips(t *testing.T) {
 	}
 }
 
-// resetCachePathsFlags undoes the flag state a previous run left on the shared
-// cobra command, so one subtest cannot leak --out into the next.
 func resetCachePathsFlags(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
@@ -89,8 +80,6 @@ func resetCachePathsFlags(t *testing.T) {
 		for _, name := range []string{"out", "check", "path-prefix"} {
 			_ = cachePathsCmd.Flags().Set(name, "")
 		}
-		// --json is a persistent flag on the shared rootCmd, so leaving it set
-		// makes every later runRoot in this package emit JSON.
 		_ = rootCmd.PersistentFlags().Set("json", "false")
 		utils.PayloadOnStdout = false
 		utils.JSONOutput = false
@@ -135,15 +124,11 @@ func TestCachePathsGitLabToStdout(t *testing.T) {
 	if !strings.Contains(out, ".corgi-cache:") {
 		t.Errorf("expected the GitLab job template:\n%s", out)
 	}
-	// The "using compose file" line belongs on stderr, or a redirect into the
-	// committed file would capture it as YAML.
 	if strings.Contains(out, "Using corgi-compose file") {
 		t.Errorf("the compose banner leaked into stdout:\n%s", out)
 	}
 }
 
-// The two flags a repo actually runs: one writes the file, the other is the
-// pipeline's guard against it going stale.
 func TestCachePathsGitLabOutThenCheck(t *testing.T) {
 	dir := chdirToCompose(t)
 	resetCachePathsFlags(t)
@@ -172,8 +157,6 @@ func TestCachePathsGitLabPathPrefix(t *testing.T) {
 	}
 }
 
-// chdirToCachedCompose writes a compose whose one service opts into caching,
-// so the plan has a cacheKey file to be present or missing.
 func chdirToCachedCompose(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -200,9 +183,6 @@ func writeLockfile(t *testing.T, dir string) {
 	}
 }
 
-// The CI failure this guards: the action hashes the lockfiles before
-// `corgi init` clones them, gets a stable key from nothing, and the cache never
-// invalidates. Silence is what let that ship stale node_modules for weeks.
 func TestCachePathsWarnsWhenCacheKeyFilesAreMissing(t *testing.T) {
 	chdirToCachedCompose(t)
 	resetCachePathsFlags(t)
@@ -240,8 +220,6 @@ func TestCachePathsKeyWarnsWhenCacheKeyFilesAreMissing(t *testing.T) {
 	}
 }
 
-// Under GitHub Actions the warning becomes a job annotation, which is where a
-// person looks when a nightly goes red.
 func TestCachePathsWarnsAsGitHubAnnotation(t *testing.T) {
 	chdirToCachedCompose(t)
 	resetCachePathsFlags(t)
@@ -289,8 +267,6 @@ func TestCachePathsIsQuietWhenEveryCacheKeyFileExists(t *testing.T) {
 	}
 }
 
-// exitCodeOf runs fn with osExit stubbed and returns the code it exited with,
-// or -1 when it returned normally.
 func exitCodeOf(t *testing.T, fn func()) int {
 	t.Helper()
 	previous := osExit
@@ -308,8 +284,6 @@ func exitCodeOf(t *testing.T, fn func()) int {
 	return code
 }
 
-// --strict is what the post-init cache action runs: a plan hashed from nothing
-// must fail the step instead of feeding actions/cache a frozen key.
 func TestCachePathsStrictExitsOneWhenFilesAreMissing(t *testing.T) {
 	chdirToCachedCompose(t)
 	resetCachePathsFlags(t)
@@ -350,8 +324,6 @@ func TestCachePathsStrictPassesWhenFilesExist(t *testing.T) {
 	}
 }
 
-// The two states must not share a key, or a present lockfile could hit a
-// cache entry saved when it was absent.
 func TestCachePathsKeyDiffersOnceTheLockfileExists(t *testing.T) {
 	dir := chdirToCachedCompose(t)
 	resetCachePathsFlags(t)

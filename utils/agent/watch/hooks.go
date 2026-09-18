@@ -12,12 +12,8 @@ import (
 	"time"
 )
 
-// ErrBadSignature is a webhook whose signature did not match the secret.
 var ErrBadSignature = errors.New("webhook signature does not match")
 
-// VerifyHook checks the request against the shared secret the way each
-// service signs: Linear and GitHub HMAC the body, GitLab sends the secret
-// as a header, Jira has no signature so the secret rides in the query.
 func VerifyHook(source string, r *http.Request, body []byte, secret string) error {
 	if secret == "" {
 		return errors.New("no webhook secret; run `corgi agent watch hooks`")
@@ -51,8 +47,6 @@ func verifyHMAC(got string, body []byte, secret string) error {
 	return ErrBadSignature
 }
 
-// ParseHook turns a webhook body into events. Unknown payloads yield none,
-// never an error: a service sends more event types than we care about.
 func ParseHook(source string, r *http.Request, body []byte, me string) ([]Event, error) {
 	switch source {
 	case "linear":
@@ -193,9 +187,6 @@ func parseGitHubHook(event string, body []byte, me string) ([]Event, error) {
 			Title: title, URL: url, Body: clip(p.Review.Body, 200), Author: p.Review.User.Login, State: p.Review.State,
 			Mine: mine, At: hookTime(p.Review.SubmittedAt)}}, nil
 	case "pull_request_review_comment", "issue_comment":
-		// My own comment is not news; a bot's — a tracker link, a coverage
-		// report — is not a person waiting. The poller skips both; the
-		// webhook has to as well, or the same comment rings this way.
 		if p.Comment == nil || isMe(me, p.Comment.User.Login) || githubBot(p.Comment.User.Login, p.Comment.User.Type) {
 			return nil, nil
 		}
@@ -292,7 +283,6 @@ func parseJiraHook(body []byte, me string) ([]Event, error) {
 	return nil, nil
 }
 
-// jiraText flattens an Atlassian document (or a plain string) to text.
 func jiraText(raw json.RawMessage) string {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
@@ -326,7 +316,6 @@ func jiraBrowseURL(self, key string) string {
 	return ""
 }
 
-// isMe: any of the ids the service gives for a person against what we know.
 func isMe(me string, ids ...string) bool {
 	if me == "" {
 		return false
@@ -358,8 +347,6 @@ func clip(s string, n int) string {
 
 func parseTime(s string) time.Time { return hookTime(s) }
 
-// githubBot says a GitHub account is an app, not a person: the API says
-// type Bot, and the login ends in [bot].
 func githubBot(login, kind string) bool {
 	return strings.EqualFold(kind, "Bot") || strings.HasSuffix(strings.ToLower(login), "[bot]")
 }

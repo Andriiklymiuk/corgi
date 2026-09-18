@@ -69,8 +69,6 @@ func TestLaunchAnswerRefusesWhatShouldNotBeAnsweredBlind(t *testing.T) {
 	}
 }
 
-// Interrupt is Escape into a working session and nothing else: a session
-// waiting on a prompt or done has no turn to stop.
 func TestLaunchInterruptOnlyAWorkingSession(t *testing.T) {
 	dir := phoneBoard(t, true,
 		sessions.Session{ID: "w1", Display: "api", Status: sessions.StatusWorking},

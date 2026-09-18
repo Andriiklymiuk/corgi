@@ -13,7 +13,6 @@ import (
 func TestCostByRepoDayAndBot(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 9, 14, 15, 0, 0, 0, time.Local)
-	// The ledger: two days, two workspaces.
 	l := usage.OpenLedger(dir)
 	l.AddTokens("api", 1_000_000, now)
 	l.AddTokens("web", 250_000, now)
@@ -21,7 +20,6 @@ func TestCostByRepoDayAndBot(t *testing.T) {
 	if err := l.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	// The fix log: a bot's run with a receipt, and a plain run.
 	fixes := watch.LoadFixLog(dir)
 	e1 := watch.Event{Key: "k1", Ref: "ABC-1", Workspace: "api", Kind: watch.KindIssueNew}
 	fixes.StartFor(e1, now.Add(-time.Hour))

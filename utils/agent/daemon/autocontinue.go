@@ -10,13 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// A session that hit a limit is waiting on a clock, not a person. The
-// daemon watches the clock so the editor does not have to be open: when a
-// spent window resets, or a few minutes after an overload, it types
-// "continue" into the session. Bounded — a limit that comes straight back
-// is not fought — and only with autoContinue on, because it types into a
-// terminal that is yours.
-
 const (
 	resumeGrace      = 30 * time.Second
 	resumeJitter     = 60 * time.Second
@@ -24,8 +17,7 @@ const (
 	overloadBackoffM = 15 * time.Minute
 	maxQuotaResumes  = 3
 	maxOverloadTries = 5
-	// quotaStillFull is the reading at which a window is not really back.
-	quotaStillFull = 95
+	quotaStillFull   = 95
 )
 
 var jitter = func(limit time.Duration) time.Duration {
@@ -35,7 +27,6 @@ var jitter = func(limit time.Duration) time.Duration {
 	return time.Duration(rand.Int63n(int64(limit)))
 }
 
-// readLimits is a seam for tests; the daemon reads Claude's cached usage.
 var readLimits = usage.ReadLimits
 
 func (d *Daemon) autoContinue(ctx context.Context, now time.Time) {
@@ -52,9 +43,6 @@ func (d *Daemon) autoContinue(ctx context.Context, now time.Time) {
 	}
 }
 
-// resumeIsDue says the session's clock ran out and the numbers agree. A
-// session with no plan yet is given one here; one that still reads as
-// spent is told to look again in a few minutes.
 func (d *Daemon) resumeIsDue(s sessions.Session, now time.Time) bool {
 	if s.ResumeAt.IsZero() {
 		if at := resumeTime(s, now); !at.IsZero() {
@@ -66,20 +54,14 @@ func (d *Daemon) resumeIsDue(s sessions.Session, now time.Time) bool {
 		return false
 	}
 	if s.Limit == sessions.LimitQuota && quotaStillSpent(s.ConfigDir, now) {
-		// The clock said yes, the numbers say no: the reset has not
-		// landed in the cache yet, or the week is what is spent. Look
-		// again in a few minutes rather than type into a wall.
 		d.Sessions.PlanResume(s.ID, now.Add(5*time.Minute))
 		return false
 	}
 	return s.Resumes < maxResumes(s.Limit)
 }
 
-// resumeSession types "continue" into a session whose limit should be over.
 func (d *Daemon) resumeSession(ctx context.Context, s sessions.Session) {
 	if target, err := d.Sessions.Focus(s.ID); err != nil || target.Kind == sessions.HostVSCodePanel {
-		// Nowhere to type: the panel takes text only from the keyboard.
-		// Leave the plan cleared so the key stops promising a continue.
 		d.Sessions.PlanResume(s.ID, time.Time{})
 		if err == nil {
 			utils.Infof("agent: %s: limit should be over, but it runs in the Claude Code panel — continue it by hand\n", s.Display)
@@ -101,10 +83,6 @@ func maxResumes(kind sessions.LimitKind) int {
 	return maxQuotaResumes
 }
 
-// resumeTime is when to try: for an overload a growing wait from now; for
-// a quota the earliest reset of a window that is actually spent, from the
-// account's cached numbers. No numbers, no plan — guessing at a reset time
-// means typing into a session at the wrong moment.
 func resumeTime(s sessions.Session, now time.Time) time.Time {
 	switch s.Limit {
 	case sessions.LimitOverload:
@@ -130,10 +108,6 @@ func quotaResumeTime(configDir string, now time.Time) time.Time {
 	}
 	at := earliestSpentReset(l)
 	if at.IsZero() {
-		// Nothing reads as spent but the session said limit: a
-		// session-credit cap, or a cache older than the limit. No
-		// reset this side knows means no plan — typing into it only
-		// makes the session say no again.
 		return time.Time{}
 	}
 	if at.Before(now) {
@@ -142,8 +116,6 @@ func quotaResumeTime(configDir string, now time.Time) time.Time {
 	return at.Add(resumeGrace + jitter(resumeJitter))
 }
 
-// earliestSpentReset is the soonest reset among the windows that read as
-// full, zero when none does.
 func earliestSpentReset(l usage.Limits) time.Time {
 	var at time.Time
 	for _, w := range []usage.Window{l.FiveHour, l.SevenDay} {
@@ -157,8 +129,6 @@ func earliestSpentReset(l usage.Limits) time.Time {
 	return at
 }
 
-// quotaStillSpent says the account's numbers still read as full: a window
-// at or above the stop line whose reset is not yet behind us.
 func quotaStillSpent(configDir string, now time.Time) bool {
 	l, ok := readLimits(configDir)
 	if !ok {
@@ -172,10 +142,6 @@ func quotaStillSpent(configDir string, now time.Time) bool {
 	return false
 }
 
-// autoCarry is the other way past a limit: with the workspace's autoCarry
-// on, a session that hit its quota is carried to another of its accounts
-// that still has budget — once per limit, and never when no account has
-// any. Off by default: it opens a terminal that is yours.
 func (d *Daemon) autoCarry(ctx context.Context, now time.Time) {
 	if d.Carry == nil || d.Policy == nil || d.Sessions == nil {
 		return

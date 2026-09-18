@@ -49,7 +49,6 @@ func TestComputeDryRunPlan_Valid(t *testing.T) {
 		t.Errorf("valid plan should omit errors, got %v", plan.Errors)
 	}
 
-	// Topological order: db before both services; auth before api.
 	idx := map[string]int{}
 	for i, id := range plan.Order {
 		idx[id] = i
@@ -95,7 +94,6 @@ func TestComputeDryRunPlan_ServiceDetails(t *testing.T) {
 			t.Errorf("deps: want %v, got %v", wantDeps, api.DependsOn)
 		}
 	}
-	// Env keys derived from db (APP_DB_*) and service env entries.
 	if !containsAll(api.EnvKeys, []string{"APP_DB_HOST", "APP_DB_PORT", "AUTH_URL", "PORT", "FEATURE"}) {
 		t.Errorf("env keys missing expected entries: %v", api.EnvKeys)
 	}
@@ -114,7 +112,6 @@ func TestComputeDryRunPlan_DatabaseEntries(t *testing.T) {
 }
 
 func TestComputeDryRunPlan_Invalid(t *testing.T) {
-	// Dangling dependency -> validation error -> valid=false, errors present.
 	c := &utils.CorgiCompose{
 		Services: []utils.Service{
 			{
@@ -138,7 +135,6 @@ func TestComputeDryRunPlan_Invalid(t *testing.T) {
 }
 
 func TestComputeStartOrder_Cycle(t *testing.T) {
-	// a -> b -> a cycle; order is best-effort but never empty and includes all.
 	c := &utils.CorgiCompose{
 		Services: []utils.Service{
 			{ServiceName: "a", DependsOnServices: []utils.DependsOnService{{Name: "b"}}},
@@ -176,8 +172,6 @@ func TestWillClone(t *testing.T) {
 	}
 }
 
-// emitDryRunPlan must not create corgi_services/ or write any .env. This guards
-// the no-side-effect contract from the print path.
 func TestEmitDryRunPlan_NoSideEffects(t *testing.T) {
 	dir := t.TempDir()
 	wd, _ := os.Getwd()

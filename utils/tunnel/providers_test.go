@@ -171,7 +171,6 @@ func TestNgrokPreflightAuthNoConfig(t *testing.T) {
 }
 
 func TestNgrokPreflightNamedAuth(t *testing.T) {
-	// Should return error when ngrok config not present
 	err := Ngrok{}.PreflightNamedAuth(NamedConfig{Hostname: "x.ngrok.app"})
 	if err == nil {
 		t.Log("ngrok available and configured (unexpected)")

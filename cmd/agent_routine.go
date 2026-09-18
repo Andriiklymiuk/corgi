@@ -14,10 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A routine is a run on a clock: the digest at 08:30, the PR babysitter
-// every two hours, the dependency triage on Monday. It runs through the
-// same runner as an unattended fix — caps, quiet hours, budget, log, cost —
-// and its report is one inbox row.
 var agentRoutineCmd = &cobra.Command{
 	Use:   "routine",
 	Short: "Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, or your own",
@@ -266,8 +262,6 @@ The daemon has to be running.`,
 	},
 }
 
-// routineBotExists refuses a bot that is not there or lives elsewhere: a
-// routine runs in one workspace, and its bot has to be of that workspace.
 func routineBotExists(dir, name, workspace string) error {
 	store, err := bots.Load(bots.Path(dir))
 	if err != nil {

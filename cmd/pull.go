@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// pullCmd represents the pull command
 var pullCmd = &cobra.Command{
 	Use:   "pull",
 	Short: "Runs git pull for each service folder",
@@ -42,7 +41,6 @@ func runPull(cmd *cobra.Command, _ []string) {
 }
 
 func pullOneService(service utils.Service, isRunOnce bool) {
-	// Repo not cloned yet (e.g. fresh checkout). Clone instead of pulling a missing dir.
 	if service.CloneFrom != "" && service.AbsolutePath != "" {
 		if _, statErr := os.Stat(service.AbsolutePath); os.IsNotExist(statErr) {
 			cloneOneService(service)

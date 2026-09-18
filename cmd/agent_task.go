@@ -14,9 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A task of your own on the board: written for later, picked up when
-// there is time, moved along by the session that works on it.
-
 var agentTaskCmd = &cobra.Command{
 	Use:   "task",
 	Short: "Tasks of your own on the board: add one for later, pick it up, move it along",
@@ -193,8 +190,6 @@ func moveTask(arg, column string) {
 	fmt.Printf("%s → %s\n", t.Ref(), t.State)
 }
 
-// nudgeDaemon asks a running daemon to publish, so every surface sees a
-// moved task now rather than at the next poll. Quietly nothing without one.
 func nudgeDaemon(dir string) {
 	info, err := daemon.ReadInfo(dir)
 	if err != nil || info == nil {
@@ -203,7 +198,6 @@ func nudgeDaemon(dir string) {
 	daemon.Nudge(info)
 }
 
-// workspaceIDForDir is the registered workspace a directory is inside, "".
 func workspaceIDForDir(agentD, cwd string) string {
 	registry, err := workspace.Load(agentRegistryPath(agentD))
 	if err != nil {

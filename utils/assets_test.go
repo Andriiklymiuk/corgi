@@ -7,14 +7,11 @@ import (
 	"testing"
 )
 
-// The images land on pr-assets/<key> at origin, under docs/pr-assets/<key>/,
-// and the checkout the user works in is left on its own branch, clean.
 func TestPushAssetsCommitsToTheAssetsBranchAndLeavesTheCheckoutAlone(t *testing.T) {
 	requireGit(t)
 	root := t.TempDir()
 	origin, clone := originRepo(t, root, "main")
 	git(t, clone, "checkout", "-b", "feature/ABC-1/thing")
-	// A repo that gitignores docs/ still gets its screenshots on the assets branch.
 	if err := os.WriteFile(filepath.Join(clone, ".git", "info", "exclude"), []byte("docs\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +49,6 @@ func TestPushAssetsCommitsToTheAssetsBranchAndLeavesTheCheckoutAlone(t *testing.
 		t.Fatal("assets worktree was left behind")
 	}
 
-	// A second push appends to the same branch instead of starting over.
 	img2 := filepath.Join(root, "2-sheet.png")
 	if err := os.WriteFile(img2, []byte("png2"), 0o600); err != nil {
 		t.Fatal(err)
@@ -90,8 +86,6 @@ func TestPushAssetsRefusesBadInput(t *testing.T) {
 	}
 }
 
-// The link a private repo renders: GitHub through the blob viewer with
-// ?raw=true, GitLab through /-/raw/; ssh and https remotes read the same.
 func TestAssetURLPerForge(t *testing.T) {
 	cases := map[string]string{
 		"git@github.com:acme/api.git":           "https://github.com/acme/api/blob/pr-assets/ABC-1/docs/pr-assets/ABC-1/1.png?raw=true",

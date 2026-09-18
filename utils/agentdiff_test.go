@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// newRepo makes a git repository with one commit on main.
 func newRepo(t *testing.T, dir string) string {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -80,7 +79,6 @@ func TestDiffStackCountsAcrossRepos(t *testing.T) {
 	if len(got.Repos) != 2 {
 		t.Fatalf("repos = %d, want 2", len(got.Repos))
 	}
-	// Sorted for stable output across calls.
 	if got.Repos[0].Service != "api" || got.Repos[1].Service != "web" {
 		t.Errorf("repos should be sorted by service, got %s then %s", got.Repos[0].Service, got.Repos[1].Service)
 	}
@@ -89,8 +87,6 @@ func TestDiffStackCountsAcrossRepos(t *testing.T) {
 	}
 }
 
-// An agent's first act is usually to create a file, and `git diff` shows
-// nothing for an untracked one — so this is the case that matters most.
 func TestDiffIncludesUntrackedFiles(t *testing.T) {
 	repo := newRepo(t, filepath.Join(t.TempDir(), "web"))
 	writeRepoFile(t, filepath.Join(repo, "Signup.tsx"), "line one\nline two\n")
@@ -275,9 +271,6 @@ func TestServiceDirsWithoutWorktrees(t *testing.T) {
 	}
 }
 
-// Two services in different subdirectories of one repository are still one
-// repository. Keying the de-duplication on the raw service directory diffed it
-// twice and doubled the stack totals.
 func TestDiffCountsAServiceSharedRepoOnce(t *testing.T) {
 	repo := newRepo(t, filepath.Join(t.TempDir(), "monorepo"))
 	writeRepoFile(t, filepath.Join(repo, "packages", "api", "main.go"), "package main\n")
@@ -300,9 +293,6 @@ func TestDiffCountsAServiceSharedRepoOnce(t *testing.T) {
 	}
 }
 
-// `git diff --numstat` reports a rename as the single path "old => new", which
-// is neither a usable display name nor a pathspec that matches anything — every
-// renamed file came back with an empty patch.
 func TestDiffHandlesRenamedFiles(t *testing.T) {
 	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
 	writeRepoFile(t, filepath.Join(repo, "old-name.go"), "package main\n\nfunc main() {}\n")
@@ -344,9 +334,6 @@ func TestWorktreeDirsIncludesOnlyMaterializedServices(t *testing.T) {
 	}
 }
 
-// git C-quotes paths with non-ASCII characters unless -z is used, and the
-// literal quoted name cannot be opened — so the file was silently dropped from
-// precisely the set an agent's work consists of: newly created files.
 func TestDiffIncludesUntrackedFilesWithAwkwardNames(t *testing.T) {
 	repo := newRepo(t, filepath.Join(t.TempDir(), "web"))
 	for _, name := range []string{"café.ts", "a file with spaces.md", "naïve.txt"} {
@@ -372,11 +359,9 @@ func TestDiffIncludesUntrackedFilesWithAwkwardNames(t *testing.T) {
 	}
 }
 
-// The per-file cap does not bound the response: many modest files still add up
-// to a payload a phone client cannot take.
 func TestDiffBudgetsTheWholeResponse(t *testing.T) {
 	repo := newRepo(t, filepath.Join(t.TempDir(), "api"))
-	body := strings.Repeat("a line of text\n", 4000) // ~56KB each
+	body := strings.Repeat("a line of text\n", 4000)
 	for i := range 40 {
 		writeRepoFile(t, filepath.Join(repo, fmt.Sprintf("file%02d.txt", i)), body)
 	}
@@ -393,7 +378,6 @@ func TestDiffBudgetsTheWholeResponse(t *testing.T) {
 	if !got.PatchesTruncated {
 		t.Error("the response should say that some patch bodies were dropped")
 	}
-	// Counts survive even where the body was dropped, so the shape is complete.
 	for _, f := range got.Repos[0].Files {
 		if f.Additions == 0 {
 			t.Errorf("%s lost its line count", f.Path)

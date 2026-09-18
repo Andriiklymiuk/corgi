@@ -66,8 +66,6 @@ func TestGitLabPoll(t *testing.T) {
 	g := NewGitLab(Secrets{GitLab: "tok", GitLabURL: f.srv.URL})
 	g.Me = "me"
 
-	// Todo 6 is a project bot, todo 5 is my own comment: neither is a person
-	// waiting on me, and both still move the cursor.
 	events, cursor, err := g.Poll(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -76,8 +74,6 @@ func TestGitLabPoll(t *testing.T) {
 		t.Fatalf("events = %d, want 3 with the bot's tagged: %+v", len(events), events)
 	}
 	review, comment := events[0], events[1]
-	// A review request is on someone else's merge request, so it is not mine;
-	// every other todo is.
 	if review.Key != "gitlab:todo:9" || review.Kind != KindReviewRequested || review.Ref != "acme/api!12" ||
 		review.Title != "Add retries" || review.Author != "bob" || review.Mine || review.Source != "gitlab" ||
 		review.URL != "https://gitlab.com/acme/api/-/merge_requests/12" || review.At.IsZero() {
@@ -90,7 +86,6 @@ func TestGitLabPoll(t *testing.T) {
 		t.Errorf("cursor = %v, want lastId 10", cursor)
 	}
 
-	// Same feed again: everything is at or below lastId.
 	events, next, err := g.Poll(context.Background(), cursor)
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +94,6 @@ func TestGitLabPoll(t *testing.T) {
 		t.Errorf("second round: events = %v, cursor = %v", events, next)
 	}
 
-	// A cursor in the middle of the feed keeps only the newer todos.
 	events, _, err = g.Poll(context.Background(), Cursor{"lastId": "7"})
 	if err != nil {
 		t.Fatal(err)
@@ -109,8 +103,6 @@ func TestGitLabPoll(t *testing.T) {
 	}
 }
 
-// Nobody says who I am: the poll asks GitLab once, keeps the name in the
-// cursor, and my own todos are not news from then on.
 func TestGitLabLearnsWhoIAm(t *testing.T) {
 	f := newGitLabFake(t)
 	g := NewGitLab(Secrets{GitLab: "tok", GitLabURL: f.srv.URL})
@@ -129,7 +121,6 @@ func TestGitLabLearnsWhoIAm(t *testing.T) {
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want 3", len(events))
 	}
-	// The next round reads the name from the cursor, no extra call.
 	before := f.requests.Load()
 	g2 := NewGitLab(Secrets{GitLab: "tok", GitLabURL: f.srv.URL})
 	if _, _, err := g2.Poll(context.Background(), cursor); err != nil {

@@ -20,8 +20,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// newTestMCPServer builds a server with the real tool+resource registration so
-// we exercise registerMCPTools/registerMCPResources end to end.
 func newTestMCPServer() *server.MCPServer {
 	s := server.NewMCPServer("corgi-test", "0.0.0")
 	registerMCPTools(s)
@@ -29,8 +27,6 @@ func newTestMCPServer() *server.MCPServer {
 	return s
 }
 
-// TestRegisterMCPTools_ListsExpectedTools drives the in-process client to list
-// the registered tools, proving registration wired them up.
 func TestRegisterMCPTools_ListsExpectedTools(t *testing.T) {
 	s := newTestMCPServer()
 	c, err := client.NewInProcessClient(s)
@@ -63,8 +59,6 @@ func TestRegisterMCPTools_ListsExpectedTools(t *testing.T) {
 	}
 }
 
-// TestRegisterMCPResources_ListsExpectedResources proves the four resources are
-// registered and that the schema resource returns ComposeJSONSchema().
 func TestRegisterMCPResources_ListsExpectedResources(t *testing.T) {
 	s := newTestMCPServer()
 	c, err := client.NewInProcessClient(s)
@@ -106,8 +100,6 @@ func TestRegisterMCPResources_ListsExpectedResources(t *testing.T) {
 	}
 }
 
-// TestServeMCPStdioEndToEnd exercises the registered corgi_validate tool through
-// the in-memory transport — the same path serveMCPStdio serves, minus the pipe.
 func TestServeMCPStdioEndToEnd(t *testing.T) {
 	chdirToTempCompose(t, mcpComposeFixture)
 	s := newTestMCPServer()
@@ -195,7 +187,6 @@ func TestIsAlreadyRunning_StoppedState(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// PID 999999 won't be alive → reconcile leaves it non-running.
 	if isAlreadyRunning(statePath) {
 		t.Error("a stopped/dead service must report not-running")
 	}
@@ -236,7 +227,6 @@ func TestTailLogFile(t *testing.T) {
 		t.Errorf("expected last 2 lines [c d], got %v", lines)
 	}
 
-	// Empty file → empty slice, no error.
 	empty := filepath.Join(dir, "empty.log")
 	if err := os.WriteFile(empty, nil, 0644); err != nil {
 		t.Fatal(err)
@@ -246,7 +236,6 @@ func TestTailLogFile(t *testing.T) {
 		t.Errorf("empty file: got %v err %v", got, err)
 	}
 
-	// Missing file → error.
 	if _, err := tailLogFile(filepath.Join(dir, "nope.log"), 5); err == nil {
 		t.Error("expected error for missing file")
 	}
@@ -254,14 +243,9 @@ func TestTailLogFile(t *testing.T) {
 
 func TestMCPUp_BlockedWhenAlreadyRunning(t *testing.T) {
 	chdirToTempCompose(t, mcpComposeFixture)
-	// mcpUp resolves the state path off utils.CorgiComposePathDir (an absolute
-	// path), so load once to populate it and seed the state where mcpUp reads it.
 	if _, err := loadComposeForMCP(""); err != nil {
 		t.Fatalf("load compose: %v", err)
 	}
-	// PidAlive only counts a pid that is its own process-group leader as alive,
-	// so seed with a live group-leader child rather than os.Getpid() (the test
-	// process isn't a group leader under `go test`).
 	pid := spawnGroupLeader(t)
 	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
 	if err := utils.WriteRunState(statePath, utils.RunState{
@@ -276,9 +260,6 @@ func TestMCPUp_BlockedWhenAlreadyRunning(t *testing.T) {
 	}
 }
 
-// spawnGroupLeader starts a long-lived sleep in its own process group and
-// returns its pid; killed on cleanup. Mirrors how detached procs look to
-// PidAlive (pgid == pid).
 func spawnGroupLeader(t *testing.T) int {
 	t.Helper()
 	cmd := exec.Command("sleep", "30")
@@ -293,8 +274,6 @@ func spawnGroupLeader(t *testing.T) int {
 	return cmd.Process.Pid
 }
 
-// The initialize result is what a connector shows before the first call:
-// the name, the title, and the instructions the model reads.
 func TestCorgiMCPServerInitializeResult(t *testing.T) {
 	s := newCorgiMCPServer("0.0.0-test")
 	c, err := client.NewInProcessClient(s)

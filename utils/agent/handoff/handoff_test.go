@@ -23,8 +23,6 @@ func sample() Packet {
 	}
 }
 
-// The packet is a file beside the workspace, ignored by git, with a
-// Markdown twin; it round-trips, and the next session finds it by branch.
 func TestAPacketIsWrittenReadAndFoundByBranch(t *testing.T) {
 	dir := t.TempDir()
 	if err := Write(dir, sample()); err != nil {
@@ -59,7 +57,6 @@ func TestAPacketIsWrittenReadAndFoundByBranch(t *testing.T) {
 	}
 }
 
-// What must not reach the ticket, or mislead the next run.
 func TestValidationRefusesSecretsPlaceholdersAndNoise(t *testing.T) {
 	p := sample()
 	p.Decisions = append(p.Decisions, "used LINEAR_API_KEY=lin_api_0123456789abcdef for the calls")
@@ -110,8 +107,6 @@ func TestRefFromBranch(t *testing.T) {
 	}
 }
 
-// Staleness is commits since the packet's head; verification re-runs the
-// packet's own command at the current head.
 func TestCommitsSinceAndVerifyUseGit(t *testing.T) {
 	orig := run
 	defer func() { run = orig }()

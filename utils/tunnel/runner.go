@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// send delivers ev unless ctx is done first. Returns false if abandoned,
-// so callers can stop early instead of blocking on a dead consumer.
 func send(ctx context.Context, events chan<- Event, ev Event) bool {
 	select {
 	case events <- ev:
@@ -21,20 +19,14 @@ func send(ctx context.Context, events chan<- Event, ev Event) bool {
 	}
 }
 
-// Event is a single state change for one tunnel target. Consumers drain a
-// channel of these and re-render the table or log lines accordingly.
 type Event struct {
-	Service string // logical name (compose service name or "port-3030")
-	Port    int    // local port being tunneled
-	URL     string // public URL when established; "" otherwise
-	Err     error  // non-nil on subprocess failure
-	Done    bool   // true when the subprocess has exited
+	Service string
+	Port    int
+	URL     string
+	Err     error
+	Done    bool
 }
 
-// Run spawns the provider's tunnel CLI for one (service, port) target and
-// streams Events on `events`. If named is non-nil, runs in named mode with
-// the configured hostname (URL emitted immediately). Cancel `ctx` to
-// terminate the subprocess. Run returns when the subprocess exits.
 func Run(ctx context.Context, provider Provider, service string, port int, named *NamedConfig, events chan<- Event) {
 	var argv []string
 	if named != nil {
@@ -88,8 +80,6 @@ func Run(ctx context.Context, provider Provider, service string, port int, named
 		return
 	}
 
-	// cloudflared writes to stderr, ngrok to stdout, localtunnel to stdout.
-	// Read both unconditionally — extra empty lines are cheap.
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go scan(ctx, &wg, stdout, provider, service, port, events)
@@ -103,7 +93,6 @@ func Run(ctx context.Context, provider Provider, service string, port int, named
 func scan(ctx context.Context, wg *sync.WaitGroup, r io.Reader, p Provider, service string, port int, events chan<- Event) {
 	defer wg.Done()
 	scanner := bufio.NewScanner(r)
-	// Bump max line size — cloudflared sometimes prints long banner lines.
 	scanner.Buffer(make([]byte, 0, 1024*64), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -115,15 +104,11 @@ func scan(ctx context.Context, wg *sync.WaitGroup, r io.Reader, p Provider, serv
 	}
 }
 
-// BackoffConfig bounds the restart backoff. Zero values fall back to defaults.
 type BackoffConfig struct {
-	Base time.Duration // first delay; default 500ms
-	Max  time.Duration // ceiling; default 30s
+	Base time.Duration
+	Max  time.Duration
 }
 
-// RunSupervised keeps a tunnel target alive across subprocess crashes,
-// restarting with capped exponential backoff until ctx is cancelled. Each
-// attempt delegates to Run. Bound entirely to ctx — returns when ctx is done.
 func RunSupervised(ctx context.Context, provider Provider, service string, port int, named *NamedConfig, events chan<- Event, cfg BackoffConfig) {
 	base, limit := cfg.Base, cfg.Max
 	if base <= 0 {

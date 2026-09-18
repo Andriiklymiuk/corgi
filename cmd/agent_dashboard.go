@@ -34,20 +34,15 @@ func runAgentDashboard(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_dashboard", fmt.Errorf("the daemon is not running — start it with `corgi agent up`"), 2)
 	}
-	base := "http://" + strings.TrimSpace(string(addr)) // NOSONAR — loopback on this machine, no certificate exists for it
+	base := "http://" + strings.TrimSpace(string(addr))
 
 	name, _ := cmd.Flags().GetString("name")
 	token, err := pairing.PairLocal(pairing.StorePath(dir), name)
 	if err != nil {
 		exitWithError("agent_dashboard", err, 1)
 	}
-	// The token rides in the fragment, which never reaches the server or its
-	// logs — only the page's own JS, which puts it in this browser's storage.
 	link := base + "/app#token=" + token
 
-	// --print writes a working key to the terminal, which is a place keys get
-	// pasted into chats and screenshots. Only to a real terminal, and said
-	// out loud; a pipe or a log gets the refusal instead.
 	if printOnly, _ := cmd.Flags().GetBool("print"); printOnly {
 		if utils.JSONOutput {
 			exitWithError("agent_dashboard", fmt.Errorf("--print --json would put a working key in a log; open it instead: corgi agent dashboard"), 2)
@@ -69,8 +64,6 @@ func runAgentDashboard(cmd *cobra.Command, _ []string) {
 	fmt.Println("revoke it any time: corgi mcp devices revoke " + name)
 }
 
-// stdoutIsTerminal says someone is looking at this, rather than a file or a
-// pipe that will keep the key after they have stopped.
 func stdoutIsTerminal() bool {
 	info, err := os.Stdout.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0

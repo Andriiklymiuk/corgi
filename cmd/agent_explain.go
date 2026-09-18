@@ -10,19 +10,10 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// Explain this diff: the chief reads a session's branch — the files with
-// their counts and the patch, bounded — and says in three plain lines what
-// it does, then one word for the risk. For a phone on the bus: enough to
-// merge or to ask, without reading four hundred lines. The same gate as
-// the diff itself, and the same cheap model as the chief.
-
 const explainSoul = `You explain a code change to its author, who is reading on a phone. You are given the ticket, the branch, the files with their line counts, and the patch. Answer in plain text only — no markdown, no asterisks, no headings, no code fences. Exactly this shape: at most three short lines saying what the change does and what it touches (name files as given), then one last line "risk: low|medium|high — <why in a clause>". Low is a comment, a rename, a test, a small local change; medium is logic or an interface others use; high is data, auth, deletion, migrations, money, or anything that runs against production. Say what the patch shows, never what it might have meant to do.`
 
-// explainPatchMax bounds what the chief reads: past this the patch is cut
-// and the prompt says so, so the answer says it read the first part.
 const explainPatchMax = 60 << 10
 
-// explainSession is what the chief says about the session's diff.
 func explainSession(ctx context.Context, s sessions.Session, question string) (answer, risk string, files int, err error) {
 	dir := diffDirFor(s)
 	if dir == "" {
@@ -91,7 +82,6 @@ func explainSession(ctx context.Context, s sessions.Session, question string) (a
 
 var riskLine = regexp.MustCompile(`(?im)^\s*risk:\s*(low|medium|high)\b`)
 
-// riskWord is the one word off the answer's risk line, or "".
 func riskWord(answer string) string {
 	m := riskLine.FindAllStringSubmatch(answer, -1)
 	if len(m) == 0 {

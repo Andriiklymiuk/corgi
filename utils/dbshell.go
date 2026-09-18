@@ -13,11 +13,7 @@ import (
 
 const redisCLITool = "redis-cli"
 
-// shellConfig is the per-driver mapping from corgi DatabaseService to the
-// CLI tool that opens its shell (psql, mongosh, ...). argsFunc builds args
-// for interactive mode; execArgsFunc is the non-interactive --exec variant.
-// envFunc (optional) returns env vars passed into the container via
-// `docker exec -e`, so secrets like MYSQL_PWD never land on argv.
+// envFunc secrets go in via `docker exec -e`, never argv.
 type shellConfig struct {
 	cmd          string
 	argsFunc     func(db DatabaseService) []string
@@ -51,14 +47,11 @@ func postgresExecArgs(db DatabaseService, query string) []string {
 }
 
 func redisArgs(db DatabaseService) []string {
-	// Password travels via the REDISCLI_AUTH container env (see redisEnv), never
-	// on argv where another process in the container could read it via `ps`.
 	return nil
 }
 
 func redisExecArgs(db DatabaseService, query string) []string {
 	args := redisArgs(db)
-	// redis-cli treats trailing space-separated tokens as the command.
 	return append(args, strings.Fields(query)...)
 }
 
@@ -73,7 +66,6 @@ func mongoArgs(db DatabaseService) []string {
 		Path:   "/" + db.DatabaseName,
 	}
 	if db.User != "" || db.Password != "" {
-		// url.UserPassword escapes '@', ':', '/' so passwords don't break the URI.
 		u.User = url.UserPassword(defaultStr(db.User, "mongo"), db.Password)
 	}
 	return []string{u.String()}
@@ -84,8 +76,6 @@ func mongoExecArgs(db DatabaseService, query string) []string {
 }
 
 func mysqlArgs(db DatabaseService) []string {
-	// The password travels via the MYSQL_PWD container env (see mysqlEnv), never
-	// on argv where `ps` could read it.
 	args := []string{"-u", defaultStr(db.User, "root")}
 	if db.DatabaseName != "" {
 		args = append(args, db.DatabaseName)
@@ -121,7 +111,6 @@ func cassandraExecArgs(db DatabaseService, query string) []string {
 	return append(cassandraArgs(db), "-e", query)
 }
 
-// driverShells maps driver names to their interactive shell configurations.
 var driverShells = map[string]shellConfig{
 	"postgres":    {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
 	"postgis":     {cmd: "psql", argsFunc: postgresArgs, execArgsFunc: postgresExecArgs},
@@ -166,33 +155,20 @@ var driverShells = map[string]shellConfig{
 	},
 }
 
-// OpenDBShell drops the user into an interactive psql/mongosh/etc. inside
-// the db_service's running container.
 func OpenDBShell(db DatabaseService) error {
 	return runDBShell(db, "", true, os.Stdout, os.Stderr)
 }
 
-// ExecDBQuery runs a single query against the db_service's container and
-// writes the tool's output to stdout. Exits with the tool's exit code.
 func ExecDBQuery(db DatabaseService, query string) error {
 	return runDBShell(db, query, false, os.Stdout, os.Stderr)
 }
 
-// ExecDBQueryCapture runs a single query non-interactively and returns the
-// tool's combined output instead of streaming it, so callers (e.g. the MCP
-// server) keep stdout clear.
 func ExecDBQueryCapture(db DatabaseService, query string) (string, error) {
 	var buf bytes.Buffer
 	err := runDBShell(db, query, false, &buf, &buf)
 	return buf.String(), err
 }
 
-// buildDockerExecArgs assembles the `docker exec ...` argument list for a db
-// service + query. Pure: no docker or container lookup. containerID is the
-// already-resolved target. Secrets from cfg.envFunc are carried into the
-// container as `-e KEY=VALUE` (before the container id), never on argv. Empty
-// tokens are dropped so optional flags (e.g. redis with no password) don't
-// leave a stray "". Also returns the env map for assertion/inspection.
 func buildDockerExecArgs(cfg shellConfig, db DatabaseService, query, containerID string, interactive bool) ([]string, map[string]string, error) {
 	dockerArgs := []string{"exec"}
 	if interactive {
@@ -226,7 +202,6 @@ func buildDockerExecArgs(cfg shellConfig, db DatabaseService, query, containerID
 	return filtered, env, nil
 }
 
-// sortedKeys returns m's keys sorted so the emitted -e flags are deterministic.
 func sortedKeys(m map[string]string) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -255,7 +230,7 @@ func runDBShell(db DatabaseService, query string, interactive bool, stdout, stde
 		return err
 	}
 
-	cmd := exec.Command("docker", filtered...) // NOSONAR — docker is a known system binary
+	cmd := exec.Command("docker", filtered...)
 	if interactive {
 		cmd.Stdin = os.Stdin
 	}
@@ -264,10 +239,8 @@ func runDBShell(db DatabaseService, query string, interactive bool, stdout, stde
 	return cmd.Run()
 }
 
-// getRunningContainerID looks up a container by exact name match (anchored
-// regex), so a "postgres-api" filter never picks up "postgres-api-staging".
 func getRunningContainerID(containerName string) (string, error) {
-	out, err := exec.Command( // NOSONAR — docker is a known system binary
+	out, err := exec.Command(
 		"docker", "ps", "--filter", fmt.Sprintf("name=^%s$", containerName),
 		"--format", "{{.ID}}",
 	).Output()
@@ -281,7 +254,6 @@ func getRunningContainerID(containerName string) (string, error) {
 	return strings.SplitN(id, "\n", 2)[0], nil
 }
 
-// SupportedShellDrivers returns the list of driver names that have a shell defined.
 func SupportedShellDrivers() []string {
 	names := make([]string, 0, len(driverShells))
 	for k := range driverShells {

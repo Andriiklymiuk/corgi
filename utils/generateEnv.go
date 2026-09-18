@@ -12,7 +12,6 @@ import (
 
 const corgiGeneratedMessage = "# 🐶 Auto generated vars by corgi"
 
-// envLineIntFmt formats a newline-prefixed KEY=<int> env line.
 const envLineIntFmt = "\n%s=%d"
 
 func getEnvFromFile(filePath, corgiGeneratedMessage string) string {
@@ -140,13 +139,10 @@ func EnsurePathExists(dirName string) error {
 	return os.MkdirAll(dirName, 0755)
 }
 
-// ExportsMap holds resolved exports per service: serviceName -> varName -> value.
 type ExportsMap map[string]map[string]string
 
 var currentExportsMap ExportsMap
 
-// Returned when a ${producer.VAR} ref points at a service excluded by
-// --services. Callers drop the env line instead of erroring.
 type producerSkippedError struct {
 	producer string
 	varName  string
@@ -158,9 +154,6 @@ func (e *producerSkippedError) Error() string {
 
 var crossServiceRefRe = regexp.MustCompile(`\$\{([A-Za-z0-9_\-/]+)\.([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-// Only ${producer.VAR} in an environment block creates an ordering edge.
-// Alias-only depends_on_services entries emit a static localhost:port, so they
-// need none. Self-deps are ignored; a real cycle errors naming the services.
 func collectProducers(s Service) map[string]bool {
 	producers := map[string]bool{}
 	for _, env := range s.Environment {
@@ -253,9 +246,6 @@ func cycleError(services []Service, indeg map[string]int) error {
 	)
 }
 
-// resolveExports computes the exports map for a producer service from its
-// resolved env. Entries with `=` are inline literals (with ${OWN_VAR} expansion);
-// entries without `=` are re-exports of an existing env var.
 func resolveExports(service Service, producerEnv map[string]string) (map[string]string, error) {
 	out := map[string]string{}
 	for _, entry := range service.Exports {
@@ -278,9 +268,6 @@ func resolveExports(service Service, producerEnv map[string]string) (map[string]
 	return out, nil
 }
 
-// substituteCrossServiceRefs expands ${producer.VAR} references against the
-// cross-service exports map. Validates that the producer is listed in the
-// consumer's depends_on_services and that VAR is exported.
 func resolveCrossServiceRef(
 	consumer Service,
 	allowed map[string]bool,
@@ -338,12 +325,6 @@ func substituteCrossServiceRefs(
 	return out, firstErr
 }
 
-// GenerateEnvForServices writes each service's env file, resolving
-// ${producer.VAR} references across services.
-//
-// Two phases so codependent services still resolve: topo-sort first, and on a
-// cycle fall back to expanding the exports maps to a fixed point. A true
-// VAR-level cycle (A.X="${B.Y}", B.Y="${A.X}") errors naming the stuck vars.
 func GenerateEnvForServices(corgiCompose *CorgiCompose) error {
 	ordered, err := topoSortServices(corgiCompose.Services)
 	if err == nil {
@@ -363,11 +344,8 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) error {
 		return nil
 	}
 
-	// Fallback: fixed-point resolution for codependencies.
 	resolved, fpErr := resolveExportsFixedPoint(corgiCompose)
 	if fpErr != nil {
-		// Both topo and fixed-point failed — true cycle. Surface the
-		// fixed-point error since it names the actual stuck variables.
 		fmt.Println(art.RedColor, "service env generation:", fpErr, art.WhiteColor)
 		return fpErr
 	}
@@ -387,12 +365,6 @@ func GenerateEnvForServices(corgiCompose *CorgiCompose) error {
 	return nil
 }
 
-// resolveExportsFixedPoint is the codependency fallback. It builds each
-// service's exports from its local env (no cross-ref substitution), then
-// iteratively expands ${producer.VAR} within the exports map until either
-// stable or all references are resolved. Returns an error naming any
-// vars whose values still contain unresolved cross-refs after the
-// iteration limit (true VAR-level cycle).
 func buildServiceExports(s Service, envMap map[string]string) map[string]string {
 	exports := map[string]string{}
 	for _, entry := range s.Exports {
@@ -462,8 +434,6 @@ func substituteSingleExportVar(vars map[string]string, varName, val string, cons
 	return false
 }
 
-// stripSkippedProducerRefs strips skipped refs so findStuckExports doesn't
-// flag a fake cycle.
 func stripSkippedProducerRefs(val string) string {
 	return crossServiceRefRe.ReplaceAllStringFunc(val, func(match string) string {
 		m := crossServiceRefRe.FindStringSubmatch(match)
@@ -519,10 +489,6 @@ func resolveExportsFixedPoint(c *CorgiCompose) (ExportsMap, error) {
 	return out, nil
 }
 
-// buildLocalEnv replicates the env-construction phase of GenerateEnvForService
-// without writing a file or substituting cross-service refs. Used by the
-// codependency fallback to compute each service's exports independently of
-// resolution order.
 func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 	var envForService string
 	if service.CopyEnvFromFilePath != "" {
@@ -542,8 +508,6 @@ func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 		existing := parseEnvVarsIntoMap(envForService)
 		var lines []string
 		for _, line := range service.Environment {
-			// Only own ${VAR} substitution; leave ${producer.VAR} literal
-			// for the fixed-point resolver to handle.
 			lines = append(lines, substituteEnvVarReferences(line, existing))
 		}
 		envForService += "\n" + strings.Join(lines, "\n") + "\n"
@@ -551,10 +515,6 @@ func buildLocalEnv(service Service, corgiCompose CorgiCompose) string {
 	return envForService
 }
 
-// ComputeEnvKeysForService returns the env var KEYS corgi would generate for the
-// service, in generation order with duplicates removed. Pure (no file I/O), so
-// it doesn't model two writer-only paths: copyEnvFromFilePath keys and
-// environment lines the writer drops when a cross-service producer is skipped.
 func ComputeEnvKeysForService(svc Service, corgi *CorgiCompose) []string {
 	if corgi == nil || svc.IgnoreEnv {
 		return []string{}
@@ -571,7 +531,6 @@ func ComputeEnvKeysForService(svc Service, corgi *CorgiCompose) []string {
 		body += fmt.Sprintf(envLineIntFmt, portAlias, svc.Port)
 	}
 	for _, line := range svc.Environment {
-		// Keep the left-of-= verbatim; only the KEY matters here.
 		body += "\n" + line
 	}
 
@@ -669,9 +628,6 @@ func recordExportsForService(service Service, envForService string) error {
 	return nil
 }
 
-// localhostHostRe matches "localhost" only when it is a standalone host token —
-// not preceded or followed by a hostname character — so URL authorities are
-// rewritten while identifiers like "localhostname" are left untouched.
 var localhostHostRe = regexp.MustCompile(`(^|[^A-Za-z0-9_-])localhost($|[^A-Za-z0-9_-])`)
 
 func replaceLocalhostHost(content, repl string) string {
@@ -699,9 +655,6 @@ func renderEnvFileContent(pathToEnvFile string, envForService string, service Se
 			corgiGeneratedMessage,
 		)
 	}
-	// Rewrite the "localhost" host token only. LocalhostNameInEnv wins if set;
-	// otherwise --host catches user-written URLs (e.g. Supabase) too. Scoped to
-	// host authorities so identifiers like LOCALHOST_NAME=localhostname survive.
 	switch {
 	case service.LocalhostNameInEnv != "":
 		envFileContentString = replaceLocalhostHost(envFileContentString, service.LocalhostNameInEnv)
@@ -721,7 +674,6 @@ func writeEnvFile(pathToEnvFile, content string) error {
 		return err
 	}
 	defer f.Close()
-	// O_TRUNC keeps an existing file's old mode, so tighten any looser perms.
 	if err := f.Chmod(0o600); err != nil {
 		Info(err)
 		return err
@@ -783,16 +735,13 @@ func parseEnvVarsIntoMap(envForService string) map[string]string {
 	return envMap
 }
 
-// substituteEnvVarReferences processes an environment variable line for variable references and substitutes them.
 func substituteEnvVarReferences(envLine string, envMap map[string]string) string {
 	re := regexp.MustCompile(`\$\{([^}]+)\}`)
 	return re.ReplaceAllStringFunc(envLine, func(match string) string {
-		// Extract the variable name from the match.
-		varName := match[2 : len(match)-1] // Remove ${ and }
+		varName := match[2 : len(match)-1]
 		if value, exists := envMap[varName]; exists {
 			return value
 		}
-		// If there's no match, return the original placeholder.
 		return match
 	})
 }

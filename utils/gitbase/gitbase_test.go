@@ -17,8 +17,6 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// A repo whose default branch is trunk, with a stale local master far
-// behind: the base is origin/trunk, not master.
 func TestOriginHeadWinsOverStaleMaster(t *testing.T) {
 	remote := t.TempDir()
 	git(t, remote, "init", "-q", "-b", "trunk")

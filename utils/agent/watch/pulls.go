@@ -14,11 +14,6 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// PullStatus is what the forge says about a pull request past open or
-// merged: whether its checks pass and whether it has been approved — the
-// two things between "in review" and "ready to merge". Every surface reads
-// the same words: checks passing / failing / pending / none, review
-// approved / changes / pending / none.
 type PullStatus struct {
 	State  string    `json:"state"`
 	Checks string    `json:"checks,omitempty"`
@@ -26,21 +21,14 @@ type PullStatus struct {
 	At     time.Time `json:"at"`
 }
 
-// Facts is the status as the standing ladder reads it.
 func (p PullStatus) Facts() sessions.PullFacts {
 	return sessions.PullFacts{State: p.State, Checks: p.Checks, Review: p.Review}
 }
 
-// Ready is "nothing stands between this and Merge": open, checks green or
-// absent, approved. One rule, in the ladder.
 func (p PullStatus) Ready() bool { return sessions.PullReady(p.Facts()) }
 
-// Line is the status in a few words for a row: "checks ✓ · approved",
-// "checks ✗", "changes requested".
 func (p PullStatus) Line() string { return sessions.PullLine(p.Facts()) }
 
-// PullAsker is a source that can say how a pull request stands: GitHub
-// and GitLab do; the trackers do not.
 type PullAsker interface {
 	PullStatus(ctx context.Context, ref string) (PullStatus, bool)
 }
@@ -50,12 +38,8 @@ var (
 	gitlabMR   = regexp.MustCompile(`^https?://[^/]+/(.+?)/-/merge_requests/(\d+)`)
 )
 
-// pullLink finds pull-request and merge-request URLs inside free text — a
-// chat message listing one per repository.
 var pullLink = regexp.MustCompile(`https?://github\.com/[^/\s]+/[^/\s]+/pull/\d+|https?://[^/\s]+/\S+?/-/merge_requests/\d+`)
 
-// PullLinks is every pull request a piece of text mentions, in the order it
-// mentions them, each one PullRef can file.
 func PullLinks(text string) []string {
 	var out []string
 	for _, link := range pullLink.FindAllString(text, -1) {
@@ -67,8 +51,6 @@ func PullLinks(text string) []string {
 	return out
 }
 
-// PullRef is the ref a pull request link is filed under: acme/api#7 for
-// GitHub, group/project!7 for GitLab. "" for anything else.
 func PullRef(link string) string {
 	if m := githubPull.FindStringSubmatch(link); m != nil {
 		return m[1] + "#" + m[2]
@@ -79,9 +61,6 @@ func PullRef(link string) string {
 	return ""
 }
 
-// PullLog is <agentDir>/watch/pulls.json: the last status the daemon read
-// for each pull request the inbox or the board mentions. Read by every
-// surface, written by the daemon once a round.
 type PullLog struct {
 	mu    sync.Mutex
 	path  string
@@ -92,7 +71,6 @@ const pullKeep = 200
 
 func pullsPath(agentDir string) string { return filepath.Join(agentDir, "watch", "pulls.json") }
 
-// LoadPullLog reads the file; missing or broken is empty.
 func LoadPullLog(agentDir string) *PullLog {
 	l := &PullLog{path: pullsPath(agentDir), Pulls: map[string]PullStatus{}}
 	if data, err := os.ReadFile(l.path); err == nil {
@@ -104,7 +82,6 @@ func LoadPullLog(agentDir string) *PullLog {
 	return l
 }
 
-// Get is the status for a ref, or for a link.
 func (l *PullLog) Get(refOrLink string) (PullStatus, bool) {
 	if strings.HasPrefix(refOrLink, "http") {
 		refOrLink = PullRef(refOrLink)
@@ -118,7 +95,6 @@ func (l *PullLog) Get(refOrLink string) (PullStatus, bool) {
 	return p, ok
 }
 
-// Set records a status; the oldest go once the file is past what any list shows.
 func (l *PullLog) Set(ref string, p PullStatus) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -145,10 +121,6 @@ func (l *PullLog) Set(ref string, p PullStatus) error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-// checksVerdict folds a set of check conclusions into one word: any failure
-// is failing, else anything still running is pending, else passing; none
-// at all is none. Neutral outcomes (skipped, cancelled, neutral) count as
-// neither.
 func checksVerdict(conclusions []string, running int) string {
 	if len(conclusions) == 0 && running == 0 {
 		return "none"

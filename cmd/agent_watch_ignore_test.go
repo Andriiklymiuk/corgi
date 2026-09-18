@@ -8,8 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// "Ignore ABC-1" means the ticket, not one of its rows: the issue and every
-// comment on it go together. A key from --json still targets one row.
 func TestIgnoringARefCoversEveryRowOnIt(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "watch"), 0o700); err != nil {

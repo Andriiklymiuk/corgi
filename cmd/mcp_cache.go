@@ -10,8 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// mcpStatusCacheTTL bounds how stale a corgi_status answer may be. Agents poll
-// status in tight loops; one probe sweep per second is plenty.
 const mcpStatusCacheTTL = time.Second
 
 type fileStamp struct {
@@ -31,8 +29,6 @@ func (s fileStamp) equal(o fileStamp) bool {
 	return s.size == o.size && s.modTime.Equal(o.modTime)
 }
 
-// composeLookup is what a tool call hands loadComposeCtx: the composePath arg
-// (often empty), which resolves relative to the cwd, and the env tier.
 type composeLookup struct {
 	arg  string
 	cwd  string
@@ -75,9 +71,6 @@ func newMCPCacheStore() *mcpCacheStore {
 	}
 }
 
-// lookupCompose returns a private copy of the cached compose and restores the
-// package globals GetCorgiServices would have set, or reports a miss when the
-// file (or its sibling .env) changed since it was parsed.
 func (c *mcpCacheStore) lookupCompose(key composeLookup) (*utils.CorgiCompose, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -97,8 +90,6 @@ func (c *mcpCacheStore) lookupCompose(key composeLookup) (*utils.CorgiCompose, b
 	return cloneCompose(e.corgi), true
 }
 
-// storeCompose snapshots a freshly parsed compose plus the globals that came
-// with it. Must run right after GetCorgiServices, before the caller mutates it.
 func (c *mcpCacheStore) storeCompose(key composeLookup, corgi *utils.CorgiCompose) {
 	path := utils.CorgiComposePath
 	e := &composeCacheEntry{
@@ -132,8 +123,6 @@ func (c *mcpCacheStore) storeStatus(path string, entries []statusEntry) {
 	c.mu.Unlock()
 }
 
-// invalidateStatus drops every probe result; called after anything that
-// changes what is listening (up, down, restore).
 func (c *mcpCacheStore) invalidateStatus() {
 	c.mu.Lock()
 	c.status = map[string]statusCacheEntry{}
@@ -147,8 +136,6 @@ func (c *mcpCacheStore) reset() {
 	c.mu.Unlock()
 }
 
-// cloneCompose deep-copies the compose so a handler's in-place edits
-// (filterByProfile, workdir overrides) never reach the cached original.
 func cloneCompose(c *utils.CorgiCompose) *utils.CorgiCompose {
 	if c == nil {
 		return nil
@@ -195,7 +182,6 @@ func deepCopyValue(v reflect.Value) reflect.Value {
 		out := reflect.New(v.Type()).Elem()
 		for i := 0; i < v.NumField(); i++ {
 			if !out.Field(i).CanSet() {
-				// Unexported fields (time.Time and friends): the value copy is all we can do.
 				return v
 			}
 			out.Field(i).Set(deepCopyValue(v.Field(i)))

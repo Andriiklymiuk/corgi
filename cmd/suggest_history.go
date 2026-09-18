@@ -10,12 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// suggestHistoryDefaultCooldown is the dedupe window for dismissed/proposed
-// ideas: 30 days. Past this, a previously-rejected idea may resurface.
 const suggestHistoryDefaultCooldown = 30 * 24 * time.Hour
 
-// suggestHistoryRoot resolves the workspace root for the state file: the
-// --workspace flag when set (cron passes an absolute path), else cwd.
 func suggestHistoryRoot(cmd *cobra.Command) string {
 	if ws, _ := cmd.Flags().GetString("workspace"); ws != "" {
 		return ws
@@ -27,7 +23,6 @@ func suggestHistoryRoot(cmd *cobra.Command) string {
 	return wd
 }
 
-// failSuggestHistory reports an IO/parse error consistently and exits 1.
 func failSuggestHistory(err error) {
 	if utils.JSONOutput {
 		utils.JSONError(utils.ErrConfig, err.Error())
@@ -37,7 +32,6 @@ func failSuggestHistory(err error) {
 	exitProcess(1)
 }
 
-// failUsage reports a bad-usage error (JSON via JSONError, else stderr) and exits 2.
 func failUsage(msg string) {
 	if utils.JSONOutput {
 		utils.JSONError(utils.ErrUsage, msg)
@@ -92,7 +86,6 @@ var suggestHistoryListCmd = &cobra.Command{
 	},
 }
 
-// suggestCheckResult is the dedupe/rate-limit verdict for one candidate slug.
 type suggestCheckResult struct {
 	Skip   bool   `json:"skip"`
 	Reason string `json:"reason"`
@@ -118,7 +111,6 @@ var suggestHistoryCheckCmd = &cobra.Command{
 		if cooldown <= 0 {
 			cooldown = suggestHistoryDefaultCooldown
 		}
-		// --max overrides config; else fall back to the user config (0 → helper default).
 		maxPerWeek, _ := cmd.Flags().GetInt("max")
 		if !cmd.Flags().Changed("max") {
 			if cfg, cerr := utils.LoadUserConfig(); cerr == nil {
@@ -183,7 +175,6 @@ var suggestHistoryRecordCmd = &cobra.Command{
 	},
 }
 
-// suggestConfigView is the effective proactive-suggest mode.
 type suggestConfigView struct {
 	AutoFileDrafts bool `json:"autoFileDrafts"`
 	MaxPerWeek     int  `json:"maxPerWeek"`
@@ -229,7 +220,6 @@ func init() {
 	suggestHistoryRecordCmd.Flags().String("title", "", "suggestion title")
 	suggestHistoryRecordCmd.Flags().String("lens", "", "eng|product")
 
-	// --workspace applies to every subcommand that touches the state file.
 	suggestHistoryCmd.PersistentFlags().String("workspace", "", "workspace root (default: cwd); cron passes an absolute path")
 
 	suggestHistoryCmd.AddCommand(

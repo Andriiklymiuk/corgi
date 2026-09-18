@@ -431,8 +431,6 @@ func TestRunAgentHookIsSilentWithoutADaemon(t *testing.T) {
 	c := &cobra.Command{}
 	c.Flags().String("workspace", "acme", "")
 
-	// No daemon, no workspace flag, and a junk payload: every path must return
-	// quietly, because anything printed lands in the user's Claude session.
 	runAgentHook(c, []string{hookEventNotification})
 	runAgentHook(c, nil)
 	empty := &cobra.Command{}

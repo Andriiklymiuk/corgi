@@ -8,8 +8,6 @@ func TestSessionLinkScannerCapturesEachDistinctSession(t *testing.T) {
 	var got []string
 	s := newSessionLinkScanner(func(id string) { got = append(got, id) })
 
-	// Real remote-control output: OSC-8 hyperlink escapes around the URL, a
-	// query string, and the same session printed twice.
 	chunk := "\x1b]8;;https://claude.ai/code/session_01AAA?from=cliAttached\x1b]8;;\x1b\\\n" +
 		"link https://claude.ai/code/session_01AAA?from=cliprobe\n" +
 		"and https://claude.ai/code/session_02BBB done\n"
@@ -19,7 +17,6 @@ func TestSessionLinkScannerCapturesEachDistinctSession(t *testing.T) {
 		t.Fatalf("scanner must report each distinct session once, got %v", got)
 	}
 
-	// An id split across writes must not be reported truncated.
 	_, _ = s.Write([]byte("see https://claude.ai/code/session_03C"))
 	_, _ = s.Write([]byte("CC now\n"))
 	if len(got) != 3 || got[2] != "session_03CCC" {

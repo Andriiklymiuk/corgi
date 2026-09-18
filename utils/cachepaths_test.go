@@ -54,7 +54,6 @@ func TestCachePathsCoversEachEcosystem(t *testing.T) {
 	}
 }
 
-// The markers and the dependency directories must always travel together.
 func TestCachePathsAlwaysIncludesTheStepMarkers(t *testing.T) {
 	plan := planFor(t, nil)
 	want := filepath.Join(".corgi", "corgi_services", cacheDirName)
@@ -122,8 +121,6 @@ func groupKey(plan CachePlan, id string) string {
 	return ""
 }
 
-// The whole point of grouping: one language's lockfile churn must not evict
-// another language's packages.
 func TestCacheGroupsAreIndependentPerEcosystem(t *testing.T) {
 	nodeDir, pyDir := t.TempDir(), t.TempDir()
 	nodeLock := filepath.Join(nodeDir, "package-lock.json")
@@ -167,8 +164,6 @@ func TestCacheGroupsAreIndependentPerEcosystem(t *testing.T) {
 	}
 }
 
-// restore-keys lets a changed lockfile start from the previous packages; the
-// markers stay exact-match because corgi re-hashes them anyway.
 func TestCacheGroupRestorePrefix(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(`{"v":1}`), 0o644); err != nil {
@@ -193,8 +188,6 @@ func TestCacheGroupRestorePrefix(t *testing.T) {
 	}
 }
 
-// A restored step marker next to a dependency directory that did not come back
-// would make corgi skip an install whose output is missing.
 func TestCacheMarkersAreKeyedOnEveryLockfile(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(`{"v":1}`), 0o644); err != nil {
@@ -223,9 +216,6 @@ func TestCacheMarkersAreKeyedOnEveryLockfile(t *testing.T) {
 	}
 }
 
-// A key hashed from files that do not exist yet is stable and therefore
-// useless: in CI it is computed before the service repos are cloned, so the
-// cache never invalidates. The plan has to say the hash covered nothing.
 func TestCachePathsReportsMissingCacheKeyFiles(t *testing.T) {
 	dir := t.TempDir()
 	svc := []Service{{

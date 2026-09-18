@@ -15,12 +15,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
-// A fresh pairing window without restarting anything: the running MCP
-// server opens one on request and hands back the code. What `corgi agent
-// up` printed once, printable again — for a second phone, a teammate's
-// (--viewer), or the bar's AirDrop, which sends the code inside a file the
-// phone opens with corgi: no QR, no typing.
-
 var agentPairCmd = &cobra.Command{
 	Use:   "pair",
 	Short: "Open a fresh pairing window and print its QR — or write a .corgipair file to AirDrop",
@@ -88,7 +82,6 @@ when it pairs. AirDrop carries it end-to-end encrypted between your devices.`,
 	},
 }
 
-// requestPairWindow asks the server for a window and waits for its answer.
 func requestPairWindow(dir string, viewer bool, wait time.Duration) (pairAnswer, error) {
 	answer := filepath.Join(dir, pairAnswerName)
 	_ = os.Remove(answer)
@@ -114,14 +107,10 @@ func requestPairWindow(dir string, viewer bool, wait time.Duration) (pairAnswer,
 	return pairAnswer{}, fmt.Errorf("the MCP server did not open a window — is it the one corgi agent up started, on corgi 2.22.4 or newer?")
 }
 
-// PairFile is what a .corgipair holds: enough for the phone to pair, and
-// nothing that outlives the code.
 type PairFile struct {
-	Corgi  string `json:"corgi"`
-	Daemon string `json:"daemon"`
-	URL    string `json:"url,omitempty"`
-	// LocalURL is the launcher on this machine itself, for a client on it
-	// — the Mac app from the store, which may not run corgi (2.28).
+	Corgi    string    `json:"corgi"`
+	Daemon   string    `json:"daemon"`
+	URL      string    `json:"url,omitempty"`
 	LocalURL string    `json:"localUrl,omitempty"`
 	Code     string    `json:"code"`
 	Expires  time.Time `json:"expiresAt"`

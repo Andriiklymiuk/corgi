@@ -44,8 +44,6 @@ func lookPath(name string) error {
 	return err
 }
 
-// setupStepTimeout bounds every step except the browser login, which waits on
-// a person. Without it a hung cloudflared call blocks the command for ever.
 const setupStepTimeout = 2 * time.Minute
 
 func execRunner(name string, args ...string) (string, error) {
@@ -62,7 +60,6 @@ func execRunner(name string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// Seams so the whole command can be exercised without cloudflared installed.
 var (
 	tunnelExec   tunnelRunner = execRunner
 	tunnelLookup binaryLookup = lookPath
@@ -119,8 +116,6 @@ func runAgentTunnelSetup(cmd *cobra.Command, args []string) {
 	utils.Info("next: `corgi agent restart`, then scan the QR once — the phone stays paired from then on")
 }
 
-// ngrok selects a tunnel by its domain, so a name would be recorded and never
-// used.
 func tunnelNameFor(provider, name string) string {
 	if provider == "ngrok" {
 		return ""
@@ -154,7 +149,6 @@ func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host stri
 
 	utils.Infof("routing %s to %s…\n", host, name)
 	if out, err := run("cloudflared", "tunnel", "route", "dns", name, host); err != nil {
-		// An existing route is the normal case on a re-run, not a failure.
 		if !strings.Contains(strings.ToLower(out), "already exists") {
 			return fmt.Errorf("could not route %s: %w\n%s", host, err, strings.TrimSpace(out))
 		}

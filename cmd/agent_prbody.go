@@ -14,13 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A pull request body from the session that made it: what was asked (the
-// ticket, the first prompt), what changed (the files with their counts,
-// the commits), what was run (the last test command and how it went).
-// Scrubbed like the transcript. Printed, or written onto the pull request
-// with --apply.
-
-// prBodyFor writes the Markdown for a session's branch.
 func prBodyFor(ctx context.Context, s sessions.Session) (string, error) {
 	dir := diffDirFor(s)
 	if dir == "" {
@@ -35,7 +28,6 @@ func prBodyFor(ctx context.Context, s sessions.Session) (string, error) {
 		return "", fmt.Errorf("git could not diff the branch")
 	}
 	var b strings.Builder
-	// What: the ticket and the first thing the person asked for.
 	b.WriteString("## What\n\n")
 	asked := firstPromptOf(s)
 	switch {
@@ -48,7 +40,6 @@ func prBodyFor(ctx context.Context, s sessions.Session) (string, error) {
 	default:
 		b.WriteString(firstNonEmpty(s.Summary, "See the changes below.") + "\n")
 	}
-	// Changes: the commits, then the files.
 	if out, err := exec.CommandContext(ctx, "git", "-C", dir, "log", "--format=%s", base+"..HEAD").Output(); err == nil {
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 		if len(lines) > 0 && lines[0] != "" {
@@ -85,7 +76,6 @@ func prBodyFor(ctx context.Context, s sessions.Session) (string, error) {
 		}
 		b.WriteString(line + "\n")
 	}
-	// Tests: the last run the session made, or the gate.
 	b.WriteString("\n## Tests\n\n")
 	switch {
 	case s.Gate != nil && s.Gate.Cmd != "":
@@ -113,8 +103,6 @@ func sinceWord(at time.Time) string {
 	return " · " + roughAge(time.Since(at)) + " ago"
 }
 
-// firstPromptOf is the first thing a person typed into the session,
-// clipped to a line or two.
 func firstPromptOf(s sessions.Session) string {
 	path := transcriptPathFor(s)
 	if path == "" || !transcript.Exists(path) {

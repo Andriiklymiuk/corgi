@@ -97,8 +97,6 @@ func TestSendNotifyTestPostsTheConfiguredShape(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	// httptest hosts are 127.0.0.1, which falls through to the ntfy shape, so
-	// drive the JSON path through buildNotifyRequest's discord branch instead.
 	req, err := buildNotifyRequest(webhookDiscord, srv.URL, "corgi agent", "working", "")
 	if err != nil {
 		t.Fatal(err)

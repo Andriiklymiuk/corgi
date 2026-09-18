@@ -6,17 +6,10 @@ import (
 	"time"
 )
 
-// readinessPollInterval is how often readiness probes retry while waiting.
 const readinessPollInterval = 500 * time.Millisecond
 
-// ReadinessProbeTimeout is how long one probe may take before it counts as a
-// failure, deliberately far longer than the poll interval: a dev server does
-// real work on its first request (Vite pre-bundling, Metro building), so a short
-// timeout reports a healthy service as down. Exported so status probes match.
 const ReadinessProbeTimeout = 10 * time.Second
 
-// WaitForDBReady blocks until the db is reachable or ctx is done. With no known
-// port it falls back to a short fixed wait (legacy behavior).
 func WaitForDBReady(ctx context.Context, db DatabaseService) error {
 	if db.Port == 0 {
 		time.Sleep(3 * time.Second)
@@ -25,8 +18,6 @@ func WaitForDBReady(ctx context.Context, db DatabaseService) error {
 	return pollReady(ctx, db.ServiceName, db.Port, db.HealthCheck)
 }
 
-// WaitForServiceReady blocks until the service is reachable or ctx is done.
-// No port => returns nil immediately.
 func WaitForServiceReady(ctx context.Context, svc Service) error {
 	if svc.Port == 0 {
 		return nil
@@ -34,12 +25,9 @@ func WaitForServiceReady(ctx context.Context, svc Service) error {
 	if err := pollReady(ctx, svc.ServiceName, svc.Port, svc.HealthCheck); err != nil {
 		return err
 	}
-	// Only once the service is listening, and only once.
 	return RunWarmup(ctx, svc.ServiceName, svc.Port, svc.Warmup)
 }
 
-// pollReady probes a target every readinessPollInterval until reachable or ctx
-// is done. A non-empty healthCheck selects an HTTP probe; else a TCP connect.
 func pollReady(ctx context.Context, name string, port int, healthCheck string) error {
 	start := time.Now()
 	for {

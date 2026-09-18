@@ -29,7 +29,6 @@ func TestRecordSampleKeepsOneRowPerFetch(t *testing.T) {
 func TestForecastProjectsExhaustionAgainstTheReset(t *testing.T) {
 	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
 	var samples []Sample
-	// 10% per 10 minutes = 60%/h, from 10% at t-30m to 40% now.
 	for i := 0; i <= 3; i++ {
 		at := now.Add(-time.Duration(30-10*i) * time.Minute)
 		samples = append(samples, Sample{At: at, FetchedAt: at, FiveHour: 10 + 10*i, SevenDay: 20})
@@ -42,7 +41,6 @@ func TestForecastProjectsExhaustionAgainstTheReset(t *testing.T) {
 	if f.FiveHour.PercentPerHour != 60 {
 		t.Fatalf("rate %v", f.FiveHour.PercentPerHour)
 	}
-	// 60% left at 60%/h: one hour, before the two-hour reset → not safe.
 	if want := now.Add(time.Hour); !f.FiveHour.ExhaustAt.Equal(want) || f.FiveHour.Safe {
 		t.Fatalf("exhaust %v safe %v", f.FiveHour.ExhaustAt, f.FiveHour.Safe)
 	}

@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// One comment per ticket, sections rewritten in place: the second write
-// updates, it does not append, and a section can be replaced or removed.
 func TestTheWorkpadIsOneCommentThatGrows(t *testing.T) {
 	board := &leaseTracker{}
 	ctx := context.Background()

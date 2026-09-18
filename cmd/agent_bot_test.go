@@ -15,9 +15,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// The phone lists the bots with what they are and what they run on, can
-// write one, and opening one puts --bot on the new session's command
-// line; a name nobody defined is 404.
 func TestBotsReachThePhoneAndTheNewSessionLine(t *testing.T) {
 	dir := phoneBoard(t, true)
 	reg := &workspace.Registry{}
@@ -45,8 +42,6 @@ func TestBotsReachThePhoneAndTheNewSessionLine(t *testing.T) {
 	if len(got.Bots) != 1 || got.Bots[0]["title"] != "Code Reviewer" || got.Bots[0]["hasSoul"] != true || got.Bots[0]["color"] != "orange" {
 		t.Fatalf("the phone sees the bot: %+v", got.Bots)
 	}
-	// A paired phone reads the soul (the body travels sealed) and what the
-	// bot runs on, in words; the templates ride along for "add a reviewer".
 	if got.Bots[0]["soul"] != "You review pull requests. Never merge." || got.Bots[0]["onWords"] != "a review lands on a pull request" {
 		t.Fatalf("soul and triggers: %+v", got.Bots[0])
 	}
@@ -54,7 +49,6 @@ func TestBotsReachThePhoneAndTheNewSessionLine(t *testing.T) {
 		t.Fatalf("templates %d triggers %d", len(got.Templates), len(got.Triggers))
 	}
 
-	// The phone edits it: a new soul, a second trigger; the colour it had stays.
 	rec = post(launchBotsHandler, "/launch/bots", `{"name":"reviewer","title":"Code Reviewer","workspace":"api","soul":"Be brief.","model":"sonnet","on":["pr.review","ci.failed"]}`)
 	if rec.Code != 200 {
 		t.Fatalf("edit: %d %s", rec.Code, rec.Body)
@@ -89,8 +83,6 @@ func TestBotsReachThePhoneAndTheNewSessionLine(t *testing.T) {
 	}
 }
 
-// Resuming needs the transcript to still be there under the account the
-// launch runs as.
 func TestResumeOnlyWhenTheTranscriptExists(t *testing.T) {
 	cfg := t.TempDir()
 	cwd := "/home/me/acme-api"
@@ -105,8 +97,6 @@ func TestResumeOnlyWhenTheTranscriptExists(t *testing.T) {
 	}
 }
 
-// A bot's detail sums its runs into a ledger: runs, failures, retries,
-// the pull requests it opened and how many merged, and the bill.
 func TestABotsDetailCarriesItsLedger(t *testing.T) {
 	dir := phoneBoard(t, true)
 	fixes := watch.LoadFixLog(dir)

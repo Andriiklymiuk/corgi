@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// prependPATH points PATH at bin for the duration of the test.
 func prependPATH(t *testing.T, bin string) {
 	t.Helper()
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -103,7 +102,6 @@ case "$*" in
   *"status --porcelain"*)          echo "" ;;
   *) echo "" ;;
 esac`)
-	// gh present but finds no PR (exit 1) so the probe falls through to glab.
 	writeFakeBin(t, bin, "gh", `exit 1`)
 	writeFakeBin(t, bin, "glab", `echo '[{"iid":7,"state":"opened","draft":false,"web_url":"https://gl/mr/7"}]'`)
 	prependPATH(t, bin)
@@ -125,7 +123,6 @@ case "$*" in
   *"rev-parse --git-dir"*)         echo ".git" ;;
   *) echo "" ;;
 esac`)
-	// gh and glab both present but return nothing → no PR, but branch still set.
 	writeFakeBin(t, bin, "gh", `exit 1`)
 	writeFakeBin(t, bin, "glab", `echo '[]'`)
 	prependPATH(t, bin)
@@ -186,7 +183,6 @@ func TestAbortOnValidationErrors_JSONMode(t *testing.T) {
 	JSONOutput = true
 	t.Cleanup(func() { JSONOutput = prevJSON })
 
-	// JSONError writes to os.Stdout — swap a pipe in so the test output stays clean.
 	prevStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -198,8 +194,6 @@ func TestAbortOnValidationErrors_JSONMode(t *testing.T) {
 	}
 	got := AbortOnValidationErrors(bad)
 	_ = w.Close()
-	// The payload is tiny and fits the pipe buffer, so reading after the write
-	// side closed won't deadlock.
 	var sb strings.Builder
 	buf := make([]byte, 4096)
 	for {
@@ -248,19 +242,16 @@ func TestNormalizeLinksBareAndEmpty(t *testing.T) {
 }
 
 func TestParseFactNoFrontmatterAndBadYAML(t *testing.T) {
-	// No frontmatter → empty fact, no error (lint handles it later).
 	f, err := parseFact([]byte("just a body\n"), "x.md")
 	if err != nil || f.Name != "" {
 		t.Fatalf("no-frontmatter parse = (%+v, %v), want empty/nil", f, err)
 	}
-	// Malformed frontmatter YAML → a real parse error.
 	if _, err := parseFact([]byte("---\nname: [unterminated\n---\nbody\n"), "x.md"); err == nil {
 		t.Fatal("malformed frontmatter must return a parse error")
 	}
 }
 
 func TestReadFactsTypeFallbackAndError(t *testing.T) {
-	// type omitted → inferred from the folder.
 	root := filepath.Join(t.TempDir(), "memory")
 	writeFact(t, root, "decisions", "notype", "---\nname: notype\ndescription: d\n---\n")
 	facts, err := ReadFacts(root)
@@ -271,7 +262,6 @@ func TestReadFactsTypeFallbackAndError(t *testing.T) {
 		t.Fatalf("type should fall back to the folder, got %+v", facts)
 	}
 
-	// A malformed fact makes ReadFacts (and LintFacts) error out.
 	bad := filepath.Join(t.TempDir(), "memory")
 	writeFact(t, bad, "decisions", "broken", "---\nname: [bad\n---\nx\n")
 	if _, err := ReadFacts(bad); err == nil {
@@ -290,9 +280,7 @@ func TestAddFactRejectsEmptyName(t *testing.T) {
 
 func TestLintFlagsMissingDescriptionAndBadName(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "memory")
-	// Missing description.
 	writeFact(t, root, "decisions", "nodesc", "---\nname: nodesc\ntype: decision\n---\n")
-	// Bad (non-kebab) name.
 	writeFact(t, root, "decisions", "Bad_Name", "---\nname: Bad_Name\ndescription: d\ntype: decision\n---\n")
 	errs, _ := LintFacts(root)
 	if !hasCode(errs, ErrMemoryNoFront) {
@@ -315,7 +303,6 @@ func TestWriteAutopilotStateMkdirFails(t *testing.T) {
 	if err := os.WriteFile(fileAsParent, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// dir would be <file>/corgi_services — MkdirAll can't create under a file.
 	path := filepath.Join(fileAsParent, "corgi_services", ".autopilot.json")
 	if err := WriteAutopilotState(path, AutopilotState{Mode: AutopilotRunning}); err == nil {
 		t.Fatal("WriteAutopilotState should fail when the parent dir can't be created")
@@ -335,19 +322,15 @@ func TestConsoleOutUsesOverride(t *testing.T) {
 }
 
 func TestDetectDuplicateComposeKeysEdges(t *testing.T) {
-	// A top-level sequence (not a mapping) yields no duplicates.
 	if dups := detectDuplicateComposeKeys([]byte("- a\n- b\n")); len(dups) != 0 {
 		t.Errorf("sequence doc should have no dups, got %v", dups)
 	}
-	// A section whose value is a scalar (not a map) is skipped.
 	if dups := detectDuplicateComposeKeys([]byte("services: hello\n")); len(dups) != 0 {
 		t.Errorf("scalar section should be skipped, got %v", dups)
 	}
-	// Invalid YAML parses to nothing → no dups, no panic.
 	if dups := detectDuplicateComposeKeys([]byte("a: b: c\n")); len(dups) != 0 {
 		t.Errorf("invalid yaml should yield no dups, got %v", dups)
 	}
-	// A genuine duplicate under a tracked section is reported.
 	dups := detectDuplicateComposeKeys([]byte("services:\n  api: {}\n  api: {}\n"))
 	if len(dups) != 1 || dups[0] != "services.api" {
 		t.Errorf("expected services.api dup, got %v", dups)
@@ -381,7 +364,6 @@ func TestLoadSuggestHistory_MalformedJSON(t *testing.T) {
 
 func TestLoadSuggestHistory_ReadErrorIsNotMissing(t *testing.T) {
 	root := t.TempDir()
-	// Make the history path a directory so ReadFile fails with a non-NotExist error.
 	if err := os.MkdirAll(SuggestHistoryPath(root), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +377,6 @@ func TestLoadSuggestHistory_DefaultsVersion(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "corgi_services"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// No "version" key → defaults to 1.
 	if err := os.WriteFile(SuggestHistoryPath(root), []byte(`{"entries":[]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}

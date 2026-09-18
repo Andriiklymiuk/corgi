@@ -8,15 +8,12 @@ import (
 	"strings"
 )
 
-// Tier selected by --tier; empty = default path. Like HostOverride.
 var (
 	EnvTierFromFlag string
 	ActiveTierName  string
 	ActiveTierDir   string
 )
 
-// Resolve --tier against the compose's envTiers: set the active tier globals
-// and, unless the user passed --dbServices, apply the tier's db default.
 func applyEnvTier(corgi *CorgiCompose) error {
 	ActiveTierName, ActiveTierDir = "", ""
 	if EnvTierFromFlag == "" {
@@ -45,8 +42,6 @@ func tierNames(tiers map[string]EnvTier) []string {
 	return names
 }
 
-// Source env file: explicit copyEnvFromFilePath (${tier} substituted) →
-// <tierDir>/<service>.env → repo .env-example/.env.example. "" if none.
 func resolveEnvSourceFile(composeDir string, service Service, copyEnvFilePath, tierName, tierDir string) string {
 	rel := resolveCopyEnvPath(service, copyEnvFilePath)
 	if rel != "" {
@@ -67,9 +62,6 @@ func resolveEnvSourceFile(composeDir string, service Service, copyEnvFilePath, t
 	return exampleEnvFile(service)
 }
 
-// exampleEnvFile is the one place that knows which filenames count as a
-// service's committed env example; resolution and `corgi env check` must
-// agree on it.
 func exampleEnvFile(service Service) string {
 	for _, name := range []string{".env-example", ".env.example"} {
 		candidate := filepath.Join(service.AbsolutePath, name)
@@ -80,7 +72,6 @@ func exampleEnvFile(service Service) string {
 	return ""
 }
 
-// Warn if resolved env still contains a declared placeholder token. "" = none.
 func placeholderWarning(service Service, envBody string) string {
 	var found []string
 	for _, token := range service.EnvPlaceholdersToCheck {

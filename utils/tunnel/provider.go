@@ -1,7 +1,3 @@
-// Package tunnel exposes pluggable tunnel providers for `corgi tunnel`.
-// Each provider knows how to spawn a CLI subprocess that opens a public
-// HTTPS tunnel to a local port and prints (somewhere on stdout/stderr)
-// a matching public URL line that can be parsed back out.
 package tunnel
 
 import "runtime"
@@ -22,14 +18,12 @@ type Provider interface {
 	PreflightNamedAuth(cfg NamedConfig) error
 }
 
-// Providers is the registry consumed by the tunnel command.
 var Providers = map[string]Provider{
 	"cloudflared": Cloudflared{},
 	"ngrok":       Ngrok{},
 	"localtunnel": Localtunnel{},
 }
 
-// Names returns the registered provider keys for help text / validation.
 func Names() []string {
 	out := make([]string, 0, len(Providers))
 	for k := range Providers {
@@ -38,8 +32,6 @@ func Names() []string {
 	return out
 }
 
-// installHint names the install that fits this machine: brew on a Mac, the
-// vendor's packages on a Linux box where brew is rarely there.
 func installHint(goos, formula, linuxURL string) string {
 	if goos == "linux" {
 		return "download it from " + linuxURL + " (deb, rpm or a binary), or `brew install " + formula + "` with Linuxbrew"

@@ -101,8 +101,6 @@ func TestRunMissingBinary(t *testing.T) {
 }
 
 func TestRunSendsRespectCancel(t *testing.T) {
-	// Unbuffered: any send blocks unless drained. We never drain, so the only
-	// way Run returns is by abandoning its sends on ctx cancel.
 	events := make(chan Event)
 	ctx, cancel := context.WithCancel(context.Background())
 

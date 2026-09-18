@@ -13,8 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// waitForServicesReady should probe every service that has a port and skip
-// the ones that don't, using the injected readiness function.
 func TestWaitForServicesReady_SkipsNoPortAndProbesRest(t *testing.T) {
 	var probed []string
 	ready := func(_ context.Context, s utils.Service) error {
@@ -23,7 +21,7 @@ func TestWaitForServicesReady_SkipsNoPortAndProbesRest(t *testing.T) {
 	}
 	services := []utils.Service{
 		{ServiceName: "api", Port: 3000},
-		{ServiceName: "worker", Port: 0}, // no port -> skipped
+		{ServiceName: "worker", Port: 0},
 	}
 	if err := waitForServicesReady(context.Background(), services, ready); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -33,7 +31,6 @@ func TestWaitForServicesReady_SkipsNoPortAndProbesRest(t *testing.T) {
 	}
 }
 
-// A readiness failure must be returned, naming the offending service.
 func TestWaitForServicesReady_PropagatesError(t *testing.T) {
 	ready := func(_ context.Context, _ utils.Service) error {
 		return errors.New("boom")
@@ -48,8 +45,6 @@ func TestWaitForServicesReady_PropagatesError(t *testing.T) {
 	}
 }
 
-// With no listening ports and no databases, the composed gate returns
-// immediately with no error.
 func TestWaitDetachedReady_NoPortsReturnsNil(t *testing.T) {
 	corgi := &utils.CorgiCompose{
 		Services: []utils.Service{{ServiceName: "api", Port: 0}},
@@ -59,8 +54,6 @@ func TestWaitDetachedReady_NoPortsReturnsNil(t *testing.T) {
 	}
 }
 
-// An unreachable service makes the gate fail once the context expires, so
-// --wait surfaces a real timeout instead of returning early.
 func TestWaitDetachedReady_UnreachableServiceTimesOut(t *testing.T) {
 	corgi := &utils.CorgiCompose{
 		Services: []utils.Service{{ServiceName: "ghost", Port: 59997}},
@@ -135,8 +128,6 @@ func TestWaitForDbsReadySkipsManualRun(t *testing.T) {
 	}
 }
 
-// The launcher and the readiness gate must agree; disagreeing is the bug this
-// pair of functions exists to prevent.
 func TestSkipReadinessWaitAgreesWithLauncher(t *testing.T) {
 	prev := utils.ServicesItemsFromFlag
 	t.Cleanup(func() { utils.ServicesItemsFromFlag = prev })
@@ -160,8 +151,6 @@ func TestSkipReadinessWaitAgreesWithLauncher(t *testing.T) {
 	}
 }
 
-// The reason a boot failed is in the logs; a failed run should not make the
-// reader go looking for them.
 func TestPrintFailureLogsShowsEachServiceTail(t *testing.T) {
 	root := t.TempDir()
 	prev := utils.CorgiComposePathDir

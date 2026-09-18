@@ -9,9 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
-// A browser on the machine running the daemon needs no pairing code: whoever
-// can run the command can already read the daemon's files. It still gets a
-// real, revocable device of its own rather than a shared key.
 func TestLocalPairingMintsARevocableDevice(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "devices.json")
 
@@ -33,7 +30,6 @@ func TestLocalPairingMintsARevocableDevice(t *testing.T) {
 		t.Fatal("the store keeps a hash, never the token itself")
 	}
 
-	// Pairing again replaces it, which is what someone re-running this wants.
 	second, err := pairing.PairLocal(store, "this-laptop")
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +42,6 @@ func TestLocalPairingMintsARevocableDevice(t *testing.T) {
 		t.Fatalf("re-pairing replaces rather than piles up: %+v", saved.Devices)
 	}
 
-	// A phone paired separately is untouched by any of it.
 	if _, err := pairing.PairLocal(store, "my-phone"); err != nil {
 		t.Fatal(err)
 	}

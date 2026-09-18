@@ -15,14 +15,11 @@ import (
 
 const linearURL = "https://api.linear.app/graphql"
 
-// bodyMax is how much of a description or comment an event carries.
 const bodyMax = 200
 
-// Linear polls issues and comments through the GraphQL API with a
-// personal API key.
 type Linear struct {
 	Token, Team string
-	Me          string // viewer id, resolved on the first poll and kept in the cursor
+	Me          string
 	Client      *http.Client
 	URL         string
 }
@@ -33,9 +30,6 @@ func NewLinear(s Secrets, team string) *Linear {
 
 func (l *Linear) Name() string { return "linear" }
 
-// Poll asks for issues updated and comments on my issues created since the
-// cursor. New issues become KindIssueNew, other people's comments on issues
-// assigned to me become KindIssueComment.
 func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
 	if strings.TrimSpace(l.Token) == "" {
 		return nil, cursor, ErrNoToken
@@ -90,8 +84,6 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if err := l.query(ctx, query, &data); err != nil {
 		return nil, cursor, err
 	}
-	// A busy interval can hold more than one page of comments; the oldest
-	// would otherwise slip past the cursor.
 	comments := data.Comments.Nodes
 	for page := data.Comments; page.PageInfo.HasNextPage && len(comments) < 500; {
 		var more struct{ Comments linearComments }
@@ -144,8 +136,6 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		if !created.After(commentsSince) || (n.User != nil && isMe(l.Me, n.User.ID)) {
 			continue
 		}
-		// An integration's comment — GitHub, Slack, an agent — has no user
-		// behind it; nobody is waiting on an answer.
 		if n.User == nil || n.BotActor != nil {
 			continue
 		}
@@ -157,11 +147,9 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Title:  n.Issue.Title,
 			Body:   clip(n.Body, bodyMax),
 			URL:    n.Issue.URL,
-			// The issue's column travels with its comments, so the rules can
-			// tell a live discussion from chatter on finished work.
-			State: n.Issue.State.Name,
-			Mine:  true,
-			At:    created,
+			State:  n.Issue.State.Name,
+			Mine:   true,
+			At:     created,
 		}
 		if n.User != nil {
 			e.Author = n.User.Name
@@ -191,8 +179,6 @@ type linearComments struct {
 	}
 }
 
-// query posts one GraphQL document and decodes data into out; HTTP and
-// GraphQL errors both come back as one descriptive error.
 func (l *Linear) query(ctx context.Context, document string, out any) error {
 	body, err := json.Marshal(map[string]string{"query": document})
 	if err != nil {
@@ -252,8 +238,6 @@ func graphqlString(t time.Time) string {
 	return strconv.Quote(t.UTC().Format(time.RFC3339Nano))
 }
 
-// cursorTime reads a saved bookmark; a missing or unreadable one means the
-// last day.
 func cursorTime(s string, now time.Time) time.Time {
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 		return t
@@ -261,8 +245,6 @@ func cursorTime(s string, now time.Time) time.Time {
 	return now.Add(-24 * time.Hour)
 }
 
-// setCursorTime writes the newest time seen, or carries the old value when
-// nothing moved so an empty cursor stays empty.
 func setCursorTime(next, prev Cursor, key string, newest, since time.Time) {
 	if newest.After(since) {
 		next[key] = newest.UTC().Format(time.RFC3339Nano)
@@ -271,7 +253,6 @@ func setCursorTime(next, prev Cursor, key string, newest, since time.Time) {
 	}
 }
 
-// trackerTime reads the timestamps Linear and Jira send; unreadable is zero.
 func trackerTime(s string) time.Time {
 	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.000-0700"} {
 		if t, err := time.Parse(layout, s); err == nil {

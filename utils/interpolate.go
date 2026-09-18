@@ -8,16 +8,8 @@ import (
 	"strings"
 )
 
-// bracedRe matches ${VAR} and ${VAR:-default}. The name must be a simple
-// identifier, so a dotted form like ${producer.VAR} (cross-service ref) does NOT
-// match and is left for the cross-service resolver. Groups: 1=leading "$" of the
-// $${...} escape, 2=name, 3=":-" sentinel, 4=default.
 var bracedRe = regexp.MustCompile(`(\$?)\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:-)([^}]*))?\}`)
 
-// scanBraced walks raw, expanding ${VAR} / ${VAR:-default} via lookup and
-// handling the $${X} escape. Unset vars with no default are left untouched and
-// their names appended (de-duplicated) to unresolved. Shared core for
-// Interpolate (strict) and InterpolateTolerant.
 func scanBraced(raw []byte, lookup func(string) (string, bool)) (out []byte, unresolved []string) {
 	seen := map[string]bool{}
 	out = bracedRe.ReplaceAllFunc(raw, func(m []byte) []byte {
@@ -28,7 +20,7 @@ func scanBraced(raw []byte, lookup func(string) (string, bool)) (out []byte, unr
 		def := string(sub[4])
 
 		if escaped {
-			return m[1:] // $${X} -> literal ${X}
+			return m[1:]
 		}
 		if v, ok := lookup(name); ok && v != "" {
 			return []byte(v)
@@ -40,13 +32,11 @@ func scanBraced(raw []byte, lookup func(string) (string, bool)) (out []byte, unr
 			seen[name] = true
 			unresolved = append(unresolved, name)
 		}
-		return m // leave untouched for later resolvers
+		return m
 	})
 	return out, unresolved
 }
 
-// Interpolate expands ${VAR} / ${VAR:-default} via lookup, erroring on an unset
-// var with no default. Bare $VAR is left untouched (too risky for shell snippets).
 func Interpolate(raw []byte, lookup func(string) (string, bool)) ([]byte, error) {
 	out, unresolved := scanBraced(raw, lookup)
 	if len(unresolved) > 0 {
@@ -55,14 +45,10 @@ func Interpolate(raw []byte, lookup func(string) (string, bool)) ([]byte, error)
 	return out, nil
 }
 
-// InterpolateTolerant is the non-breaking variant: instead of erroring on an
-// unset var, it leaves the token untouched and returns the unresolved names.
 func InterpolateTolerant(raw []byte, lookup func(string) (string, bool)) (out []byte, unresolved []string) {
 	return scanBraced(raw, lookup)
 }
 
-// LoadDotEnv parses a minimal KEY=value .env file into a map. Blank lines and
-// `#` comments are ignored. A missing file yields an empty map (no error).
 func LoadDotEnv(path string) (map[string]string, error) {
 	out := map[string]string{}
 	f, err := os.Open(path)
@@ -90,8 +76,6 @@ func LoadDotEnv(path string) (map[string]string, error) {
 	return out, sc.Err()
 }
 
-// EnvThenDotEnv builds an Interpolate lookup that checks the process env first,
-// then the given .env map. Process env takes precedence.
 func EnvThenDotEnv(dotenv map[string]string) func(string) (string, bool) {
 	return func(name string) (string, bool) {
 		if v, ok := os.LookupEnv(name); ok {

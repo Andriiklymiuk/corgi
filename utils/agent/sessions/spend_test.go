@@ -22,8 +22,6 @@ func TestParseTokensReadsWhatAPersonTypes(t *testing.T) {
 	}
 }
 
-// A session passes its budget once: the sweep rings then, and the row
-// says over budget until the budget moves.
 func TestSpendCrossesABudgetOnce(t *testing.T) {
 	r := newTestRegistry(t)
 	r.Apply(ev("UserPromptSubmit", "s1", 0))
@@ -42,7 +40,6 @@ func TestSpendCrossesABudgetOnce(t *testing.T) {
 	if !s.OverCap || s.Spend.Tokens != 52_000_000 {
 		t.Fatalf("the row says so: %+v", s)
 	}
-	// Its own, bigger budget takes it back under; the default no longer counts.
 	if err := r.SetCap("s1", 100_000_000); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +62,6 @@ func TestSpendCrossesABudgetOnce(t *testing.T) {
 	}
 }
 
-// Escape stops a working session's turn; a session at rest is left alone.
 func TestInterruptIsEscapeIntoAWorkingSessionOnly(t *testing.T) {
 	r := newTestRegistry(t)
 	r.Apply(ev("UserPromptSubmit", "s1", 0))
@@ -83,7 +79,6 @@ func TestInterruptIsEscapeIntoAWorkingSessionOnly(t *testing.T) {
 	if r.Interrupted("s1", t0.Add(31*time.Second)) {
 		t.Fatal("once")
 	}
-	// Its next event says what it is really doing.
 	r.Apply(ev("PreToolUse", "s1", 40*time.Second))
 	if s, _ := r.Lookup("s1"); s.Status != StatusWorking {
 		t.Fatalf("a tool after Escape means it kept going: %s", s.Status)

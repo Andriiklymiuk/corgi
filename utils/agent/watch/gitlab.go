@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// GitLab polls pending todos: GitLab already filters them to what is
-// addressed to me, so one small request covers every project.
 type GitLab struct {
 	URL    string
 	Token  string
@@ -22,7 +20,6 @@ type GitLab struct {
 	Client *http.Client
 }
 
-// NewGitLab uses the saved token; URL falls back to gitlab.com.
 func NewGitLab(s Secrets) *GitLab {
 	return &GitLab{URL: strings.TrimSpace(s.GitLabURL), Token: strings.TrimSpace(s.GitLab)}
 }
@@ -50,8 +47,6 @@ type gitlabTodo struct {
 	Target struct {
 		IID   int64  `json:"iid"`
 		Title string `json:"title"`
-		// State is opened, merged, closed or locked. A comment on a merge
-		// request that is already merged is not work.
 		State string `json:"state"`
 	} `json:"target"`
 	Author struct {
@@ -60,17 +55,12 @@ type gitlabTodo struct {
 	} `json:"author"`
 }
 
-// gitlabBot says a to-do item was raised by a bot rather than a person: the API's
-// own flag when it sends one, else the names GitLab gives its bots — project
-// and group access tokens, the ghost user, the built-in service bots.
 var gitlabBotName = regexp.MustCompile(`(?i)^(project|group)_\d+_bot|[_-]bot$|^(ghost|support-bot|alert-bot|security-bot|gitlab-bot)$`)
 
 func gitlabBot(username string, flagged bool) bool {
 	return flagged || gitlabBotName.MatchString(strings.TrimSpace(username))
 }
 
-// Poll returns merge-request todos newer than cursor["lastId"]; the cursor
-// advances to the largest id in the response, skipped todos included.
 func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
 	if g.Token == "" {
 		return nil, cursor, ErrNoToken
@@ -79,9 +69,6 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if base == "" {
 		base = "https://gitlab.com"
 	}
-	// Who I am, once, kept in the cursor: my own note on a merge request
-	// is not news to me, and GitLab does raise a to-do item for it now and then
-	// (a self-assign, a thread I am in). Without a name, nothing is mine.
 	if g.Me == "" {
 		g.Me = cursor["me"]
 	}
@@ -129,7 +116,6 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		if !ok {
 			continue
 		}
-		// My own comment is not news; a bot's is for the rules to weigh.
 		if kind == KindPRComment && isMe(g.Me, t.Author.Username) {
 			continue
 		}
@@ -143,12 +129,10 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Body:   gitlabTruncate(t.Body, 200),
 			URL:    t.TargetURL,
 			Author: t.Author.Username,
-			// A review request is on someone else's merge request; every
-			// other to-do item is on something of mine.
-			Mine:  kind != KindReviewRequested,
-			Bot:   kind == KindPRComment && gitlabBot(t.Author.Username, t.Author.Bot),
-			State: t.Target.State,
-			At:    at,
+			Mine:   kind != KindReviewRequested,
+			Bot:    kind == KindPRComment && gitlabBot(t.Author.Username, t.Author.Bot),
+			State:  t.Target.State,
+			At:     at,
 		})
 	}
 
@@ -173,8 +157,6 @@ func gitlabTruncate(s string, n int) string {
 	return string(r[:n])
 }
 
-// RefState is the merge request's state for acme/api!7 — draft, opened,
-// merged, closed or locked — so a row already merged can leave the inbox.
 func (g *GitLab) RefState(ctx context.Context, ref string) string {
 	project, num, ok := strings.Cut(ref, "!")
 	if !ok || g.Token == "" {
@@ -197,7 +179,6 @@ func (g *GitLab) RefState(ctx context.Context, ref string) string {
 	return mr.State
 }
 
-// getInto is one authenticated GET decoded into out.
 func (g *GitLab) getInto(ctx context.Context, endpoint string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -219,8 +200,6 @@ func (g *GitLab) getInto(ctx context.Context, endpoint string, out any) error {
 	return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(out)
 }
 
-// PullStatus is how group/project!7 stands: its state, its head pipeline,
-// and whether it is approved. Unreadable is "not known".
 func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) {
 	project, num, ok := strings.Cut(ref, "!")
 	if !ok || g.Token == "" {

@@ -56,8 +56,6 @@ func runBuild(cmd *cobra.Command, _ []string) {
 		utils.Info("skipping not-yet-cloned services (run corgi init first):", notCloned)
 	}
 
-	// --docker semantics don't matter here: build targets every service that
-	// has a docker source, scripted or not.
 	resolved, rerr := utils.ResolveRunnerModes(cloned, true, false)
 	if rerr != nil {
 		exitWithErrorPrefix(utils.ErrConfig, "❌", rerr, 1)
@@ -72,7 +70,6 @@ func runBuild(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	// Seam files (docker-compose.yml/Makefile) must exist before make build.
 	CreateServices(buildable)
 
 	utils.Info(art.BlueColor, fmt.Sprintf("🔨 building %d image(s) in parallel", len(buildable)), art.WhiteColor)
@@ -87,8 +84,6 @@ func runBuild(cmd *cobra.Command, _ []string) {
 	}
 }
 
-// Resolution reads the repo dir — a not-yet-cloned service would produce a
-// misleading "no dockerfile found" error, so filter those out up front.
 func filterClonedServices(services []utils.Service) (cloned []utils.Service, notCloned []string) {
 	for _, s := range services {
 		if s.CloneFrom != "" {

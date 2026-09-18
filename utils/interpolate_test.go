@@ -27,7 +27,6 @@ func TestInterpolateBasic(t *testing.T) {
 }
 
 func TestInterpolateDefault(t *testing.T) {
-	// Unset -> default.
 	out, err := Interpolate([]byte("port: ${PORT:-5432}"), lookupFrom(nil))
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +35,6 @@ func TestInterpolateDefault(t *testing.T) {
 		t.Errorf("unset default: got %q", out)
 	}
 
-	// Set -> value, default ignored.
 	out, err = Interpolate([]byte("port: ${PORT:-5432}"), lookupFrom(map[string]string{"PORT": "6000"}))
 	if err != nil {
 		t.Fatal(err)
@@ -67,8 +65,6 @@ func TestInterpolateTolerantLeavesUnresolved(t *testing.T) {
 }
 
 func TestInterpolateTolerantDottedUntouched(t *testing.T) {
-	// Cross-service ${producer.VAR} refs must be left fully untouched and NOT
-	// reported as unresolved — the cross-service resolver owns them.
 	out, unresolved := InterpolateTolerant([]byte("host: ${a.b}"), lookupFrom(nil))
 	if string(out) != "host: ${a.b}" {
 		t.Errorf("dotted form should be untouched: got %q", out)
@@ -90,9 +86,6 @@ func TestInterpolateTolerantDedupesAndKeepsSetDefaultEscape(t *testing.T) {
 }
 
 func TestInterpolateInsideStartCommand(t *testing.T) {
-	// A braced ${VAR} inside a start command string is resolved at LOAD time
-	// (baked into the parsed Start entry), while $${VAR} is left as the literal
-	// ${VAR} for the runtime shell to expand.
 	in := []byte("start:\n  - echo ${MYVAR}\n  - echo $${MYVAR}\n")
 	out, unresolved := InterpolateTolerant(in, lookupFrom(map[string]string{"MYVAR": "hello"}))
 	if len(unresolved) != 0 {
@@ -117,7 +110,6 @@ func TestInterpolateInsideStartCommand(t *testing.T) {
 }
 
 func TestInterpolateEscape(t *testing.T) {
-	// $${X} -> literal ${X}, no lookup attempted.
 	out, err := Interpolate([]byte("cmd: $${HOME}/bin"), lookupFrom(nil))
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +130,6 @@ func TestInterpolateMultiplePerLine(t *testing.T) {
 }
 
 func TestInterpolateBareDollarUntouched(t *testing.T) {
-	// Bare $VAR is not a braced form and must be left as-is.
 	out, err := Interpolate([]byte("run: echo $HOME"), lookupFrom(map[string]string{"HOME": "x"}))
 	if err != nil {
 		t.Fatal(err)

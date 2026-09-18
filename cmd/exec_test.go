@@ -16,8 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// freeTCPPort opens then closes an ephemeral listener and returns the port that
-// is now free (nothing listening), for the readiness-timeout paths.
 func freeTCPPort(t *testing.T) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "localhost:0")
@@ -29,7 +27,6 @@ func freeTCPPort(t *testing.T) int {
 	return port
 }
 
-// liveTCPPort returns an open listener and its port; caller closes the listener.
 func liveTCPPort(t *testing.T) (net.Listener, int) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "localhost:0")
@@ -39,8 +36,6 @@ func liveTCPPort(t *testing.T) (net.Listener, int) {
 	return ln, ln.Addr().(*net.TCPAddr).Port
 }
 
-// captureStderr mirrors captureStdout but redirects os.Stderr, so tests can
-// assert that human-mode error output stays off stdout.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	orig := os.Stderr
@@ -109,7 +104,6 @@ func TestExecService_UnknownService_Human(t *testing.T) {
 		})
 	})
 
-	// Human mode: the error must go to stderr, never stdout (no JSON code).
 	if strings.TrimSpace(stdout) != "" {
 		t.Errorf("human-mode error leaked onto stdout: %q", stdout)
 	}
@@ -147,7 +141,6 @@ func TestExecService_UnknownService_JSON(t *testing.T) {
 }
 
 func TestSplitExecArgs(t *testing.T) {
-	// `corgi exec svc -- npm run migrate` → dash=1
 	svc, tokens := splitExecArgs([]string{"svc", "npm", "run", "migrate"}, 1)
 	if svc != "svc" {
 		t.Errorf("expected svc, got %q", svc)
@@ -156,7 +149,6 @@ func TestSplitExecArgs(t *testing.T) {
 		t.Errorf("expected command tokens, got %v", tokens)
 	}
 
-	// Missing command tokens: `corgi exec svc --` → dash=1, no trailing tokens.
 	svc, tokens = splitExecArgs([]string{"svc"}, 1)
 	if svc != "svc" {
 		t.Errorf("expected svc, got %q", svc)
@@ -165,20 +157,16 @@ func TestSplitExecArgs(t *testing.T) {
 		t.Errorf("expected no command tokens, got %v", tokens)
 	}
 
-	// No `--`: first arg is service, rest is command.
 	svc, tokens = splitExecArgs([]string{"svc", "ls"}, -1)
 	if svc != "svc" || strings.Join(tokens, " ") != "ls" {
 		t.Errorf("got svc=%q tokens=%v", svc, tokens)
 	}
 
-	// Empty args → empty service, no tokens (usage error path).
 	svc, tokens = splitExecArgs(nil, -1)
 	if svc != "" || len(tokens) != 0 {
 		t.Errorf("expected empty, got svc=%q tokens=%v", svc, tokens)
 	}
 
-	// >1 pre-dash tokens join into a bogus service name — this is exactly the
-	// case runExec's dash>1 guard rejects before calling splitExecArgs.
 	svc, tokens = splitExecArgs([]string{"svc", "extra", "cmd"}, 2)
 	if svc != "svc extra" {
 		t.Errorf("expected joined bogus service 'svc extra', got %q", svc)
@@ -189,7 +177,7 @@ func TestSplitExecArgs(t *testing.T) {
 }
 
 func TestEnsureServiceDeps_DBTimeout(t *testing.T) {
-	port := freeTCPPort(t) // nothing listening here
+	port := freeTCPPort(t)
 	corgi := &utils.CorgiCompose{
 		DatabaseServices: []utils.DatabaseService{
 			{ServiceName: "db", Port: port},
@@ -244,8 +232,6 @@ func TestEnsureServiceDeps_Success(t *testing.T) {
 }
 
 func TestEnsureServiceDeps_UnknownDepsSkipped(t *testing.T) {
-	// Unknown db/service deps are skipped (corgi validate flags them), so this
-	// returns nil without probing anything.
 	corgi := &utils.CorgiCompose{
 		Services: []utils.Service{
 			{ServiceName: "svc",
@@ -282,8 +268,6 @@ func TestExecService_ReadinessTimeout(t *testing.T) {
 }
 
 func TestExecService_SpawnFailure(t *testing.T) {
-	// A working dir that does not exist makes exec.Cmd.Start fail before any
-	// child exit code, exercising the spawn-failure branch (code 1 + error).
 	corgi := execTestCompose(t.TempDir() + "/does-not-exist")
 	stderr := captureStderr(t, func() {
 		code, err := execService(corgi, "svc", []string{"true"}, false, time.Second)
@@ -303,18 +287,15 @@ func TestReadyTimeoutFlag(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().Duration("ready-timeout", defaultReadyTimeout, "")
 
-	// Unset => default.
 	if got := readyTimeoutFlag(cmd); got != defaultReadyTimeout {
 		t.Errorf("expected default %v, got %v", defaultReadyTimeout, got)
 	}
 
-	// Explicit positive value is honored.
 	_ = cmd.Flags().Set("ready-timeout", "5s")
 	if got := readyTimeoutFlag(cmd); got != 5*time.Second {
 		t.Errorf("expected 5s, got %v", got)
 	}
 
-	// Non-positive falls back to default.
 	_ = cmd.Flags().Set("ready-timeout", "0s")
 	if got := readyTimeoutFlag(cmd); got != defaultReadyTimeout {
 		t.Errorf("expected default for 0s, got %v", got)
@@ -338,7 +319,6 @@ func TestExecService_JSONOutput(t *testing.T) {
 		}
 	})
 
-	// stdout must be pure JSON (child "hi" goes to stderr in JSON mode).
 	var result map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
 		t.Fatalf("stdout is not pure JSON: %v\noutput: %q", err, out)

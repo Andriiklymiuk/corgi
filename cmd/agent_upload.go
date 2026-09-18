@@ -14,25 +14,12 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// A picture from the phone to a session: a screenshot of the bug, a photo
-// of the whiteboard. The phone sends the bytes sealed like every body; the
-// laptop keeps them beside the agent's own data, never in the repository,
-// and answers with the path. The phone then types the path into the
-// session as part of the message, and Claude reads the file from there —
-// the same as dragging a picture into the terminal at the desk.
-
-// maxUploadBytes caps one picture; the phone shrinks before sending.
 const maxUploadBytes = 8 << 20
 
-// maxUploadSealed is the sealed request that carries it: base64 inside
-// JSON inside base64 inside JSON, so a little under twice the bytes.
 const maxUploadSealed = 2 * maxUploadBytes
 
-// uploadKeep is how long a picture stays on disk; a session rarely needs
-// last week's screenshot, and the folder must not grow forever.
 const uploadKeep = 7 * 24 * time.Hour
 
-// Only pictures, said by their first bytes, never by the name.
 var uploadTypes = map[string]string{
 	"image/png":  ".png",
 	"image/jpeg": ".jpg",
@@ -42,14 +29,10 @@ var uploadTypes = map[string]string{
 
 var unsafeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
-// uploadDir is where a session's pictures go: private to this user,
-// under the agent's own folder, one folder per session.
 func uploadDir(dir, sessionID string) string {
 	return filepath.Join(dir, "uploads", sessionID)
 }
 
-// saveUpload writes one picture and returns its path. The name the phone
-// gave is kept as a hint only; the extension is what the bytes say.
 func saveUpload(dir, sessionID, name string, data []byte, now time.Time) (string, error) {
 	if len(data) == 0 {
 		return "", fmt.Errorf("nothing to save")
@@ -80,8 +63,6 @@ func saveUpload(dir, sessionID, name string, data []byte, now time.Time) (string
 	return path, nil
 }
 
-// pruneUploads drops pictures older than uploadKeep and the empty folders
-// they leave. Cheap enough to run on every upload.
 func pruneUploads(dir string, now time.Time) {
 	root := filepath.Join(dir, "uploads")
 	folders, err := os.ReadDir(root)
@@ -115,9 +96,6 @@ func pruneUploads(dir string, now time.Time) {
 	}
 }
 
-// launchUploadHandler is the phone's paperclip: POST {session, name, data}
-// with data base64 → {path}. The session must be live; the picture must
-// be a picture.
 func launchUploadHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {

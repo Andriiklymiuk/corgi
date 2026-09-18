@@ -90,9 +90,9 @@ func canShowWelcomeMessages() bool {
 			arg == "completion" ||
 			arg == "version" ||
 			arg == "cache" ||
-			arg == "mcp" || // mcp owns stdout (JSON-RPC) — no banner allowed
-			arg == "agent" || // agent is a daemon and a status surface, not a greeting
-			arg == "upgrade" || arg == "update" || arg == "upd" || // one line: which version, and whether it moved
+			arg == "mcp" ||
+			arg == "agent" ||
+			arg == "upgrade" || arg == "update" || arg == "upd" ||
 			arg == "__complete" ||
 			arg == "__completeNoDesc" ||
 			arg == "--silent" ||

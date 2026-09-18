@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// ReplayGuard remembers the nonces opened within the skew window.
 type ReplayGuard struct {
 	mu   sync.Mutex
 	seen map[string]time.Time
@@ -14,7 +13,6 @@ type ReplayGuard struct {
 
 func NewReplayGuard() *ReplayGuard { return &ReplayGuard{seen: map[string]time.Time{}} }
 
-// Seen records nonce and reports whether it was seen before.
 func (g *ReplayGuard) Seen(nonce string, now time.Time) bool {
 	if nonce == "" {
 		return false
@@ -33,7 +31,6 @@ func (g *ReplayGuard) Seen(nonce string, now time.Time) bool {
 	return false
 }
 
-// EnvelopeNonce is the nonce of a sealed message, "" otherwise.
 func EnvelopeNonce(envelope []byte) string {
 	var env Envelope
 	if err := json.Unmarshal(envelope, &env); err != nil {

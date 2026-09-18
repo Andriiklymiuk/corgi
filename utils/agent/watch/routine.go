@@ -7,24 +7,15 @@ import (
 	"time"
 )
 
-// A routine is a run the daemon starts on a clock rather than on an event:
-// the morning digest, the PR babysitter, the dependency triage, the release
-// notes. Each is one prompt to `claude -p` with the caps, the quiet hours,
-// the budget and the log every unattended run has, and its report is one
-// row in the inbox.
-
-// KindRoutine is the inbox kind for a routine's report.
 const KindRoutine Kind = "routine"
 
-// RoutineKind is one entry of the catalog.
 type RoutineKind struct {
 	Name    string
 	What    string
 	Prompt  string
-	Default string // the schedule it makes sense on
+	Default string
 }
 
-// Catalog is what `corgi agent routine add <kind>` knows how to run.
 var Catalog = []RoutineKind{
 	{Name: "digest", What: "what happened here since yesterday, in five bullets", Default: "daily 08:30",
 		Prompt: "Write the morning digest for this workspace: pull requests opened, merged or gone red since yesterday, tickets that moved, anything stalled more than two days. Use gh/glab and the tracker MCP tools; read, do not change. At most five bullets, each one line, the most important first. Summarise, do not itemise. Start your answer with a one-line headline."},
@@ -42,7 +33,6 @@ var Catalog = []RoutineKind{
 		Prompt: "Run `corgi docs check --base $(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~30)` in this workspace. For every doc it lists, read the doc and the change it names, fix the doc if it is wrong now, and open one draft pull request with the doc fixes. Fix stale CLAUDE.md pointers too. Start with a one-line headline: docs touched."},
 }
 
-// CatalogKind finds one entry by name.
 func CatalogKind(name string) (RoutineKind, bool) {
 	for _, k := range Catalog {
 		if strings.EqualFold(strings.TrimSpace(name), k.Name) {
@@ -52,11 +42,9 @@ func CatalogKind(name string) (RoutineKind, bool) {
 	return RoutineKind{}, false
 }
 
-// Schedule is when a routine runs: "daily HH:MM", "every Nh" / "every Nm",
-// or "weekly Mon HH:MM".
 type Schedule struct {
 	Every   time.Duration
-	At      int // minutes since midnight, for daily and weekly
+	At      int
 	Weekday time.Weekday
 	Weekly  bool
 	Daily   bool
@@ -64,8 +52,6 @@ type Schedule struct {
 
 var weekdays = map[string]time.Weekday{"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
 
-// ParseSchedule reads the three shapes; anything else is an error that
-// says what the shapes are.
 func ParseSchedule(text string) (Schedule, error) {
 	f := strings.Fields(strings.ToLower(strings.TrimSpace(text)))
 	usage := fmt.Errorf("a schedule is \"daily HH:MM\", \"every 6h\" (or 30m) or \"weekly Mon HH:MM\", not %q", text)
@@ -122,7 +108,6 @@ func parseClock(s string) (int, error) {
 	return h*60 + m, nil
 }
 
-// Due says whether a routine last run at last should run at now.
 func (s Schedule) Due(last, now time.Time) bool {
 	switch {
 	case s.Every > 0:
@@ -152,17 +137,8 @@ func (s Schedule) String() string {
 	return ""
 }
 
-// RoutineReportTTL is how long a routine's report stays in the inbox.
 const RoutineReportTTL = 24 * time.Hour
 
-// InboxKeeper decides, row by row and newest first, whether an event still
-// belongs in the inbox: one row per thread — the pull request, the ticket,
-// the routine — and that the newest. A thread updated twice is logged twice,
-// once per poll that noticed it, and the inbox is not a log. Routine reports
-// also age out after a day.
-//
-// Feed it every row, dismissed ones included, before testing anything else:
-// dismissing the newest row of a thread must not surface the older one.
 type InboxKeeper struct {
 	seen map[string]bool
 	now  time.Time

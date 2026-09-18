@@ -58,8 +58,6 @@ func assertValidCappedResult(t *testing.T, res *mcp.CallToolResult, limit int) {
 	}
 }
 
-// A log made of quotes doubles on the wire; a cap that measures the raw
-// slice lets 60k of it through as 120k.
 func TestResultGuardQuoteHeavyPayload(t *testing.T) {
 	const limit = 100_000
 	raw := strings.Repeat(`"`, 60_000)

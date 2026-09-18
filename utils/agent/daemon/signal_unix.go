@@ -9,25 +9,17 @@ import (
 	"syscall"
 )
 
-// syscallZero is signal 0: it performs the permission and existence checks
-// without delivering anything, which is the portable liveness probe.
 var syscallZero = syscall.Signal(0)
 
-// processAliveOS reports whether pid is a live process. On unix os.FindProcess
-// always succeeds, so the signal probe is what actually answers.
 func processAliveOS(pid int) bool {
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return false
 	}
-	// EPERM is a process that exists and is not ours to signal: alive. Only
-	// "no such process" is gone; reading anything else as gone deletes a live
-	// daemon's record.
 	err = proc.Signal(syscallZero)
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-// nudgeProcess delivers the spool doorbell to a daemon in another process.
 func nudgeProcess(pid int) error {
 	proc, err := os.FindProcess(pid)
 	if err != nil {
@@ -36,9 +28,6 @@ func nudgeProcess(pid int) error {
 	return proc.Signal(syscall.SIGUSR1)
 }
 
-// notifyNudge forwards SIGUSR1 into the command loop's wake channel until the
-// returned stop func runs. The channel send never blocks: a burst of signals
-// coalesces into one drain, which reads the whole spool anyway.
 func notifyNudge(ch chan<- struct{}) func() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGUSR1)

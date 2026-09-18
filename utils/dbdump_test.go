@@ -34,14 +34,12 @@ func TestBuildPgSeedCommand_ContainerIdNotShellExpanded(t *testing.T) {
 	if name != "docker" {
 		t.Fatalf("cmd = %q, want docker", name)
 	}
-	// the container id is one argv element, passed verbatim (never re-expanded).
 	want := []string{"exec", "-i", id, "psql", "-U", "u", "-d", "app"}
 	if strings.Join(args, " ") != strings.Join(want, " ") {
 		t.Fatalf("args = %v, want %v", args, want)
 	}
 }
 
-// containsArg reports whether args contains flag immediately followed by val.
 func containsArg(args []string, flag, val string) bool {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == flag && args[i+1] == val {

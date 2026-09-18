@@ -5,18 +5,11 @@ import (
 	"strings"
 )
 
-// Standing is where a thing stands — a session, a kanban card, an inbox
-// row — in one word a surface prints as is, and the clause behind it.
-// Worked out once, here, from the facts the daemon holds, so the phone,
-// the menu bar, the editor and the deck never disagree about what "ready
-// to merge" means.
 type Standing struct {
 	Word string `json:"word"`
 	Why  string `json:"why,omitempty"`
 }
 
-// Line is the word and the clause on one row: "ready to merge · checks ✓ ·
-// approved", "working".
 func (s Standing) Line() string {
 	if s.Why == "" {
 		return s.Word
@@ -27,10 +20,6 @@ func (s Standing) Line() string {
 	return s.Word + " · " + s.Why
 }
 
-// The words, top rung first. A higher rung wins: merged is merged whatever
-// the checks say, a permission prompt waits whatever the pull request says,
-// and a pull request that exists is what the row is about, not the session
-// behind it.
 const (
 	StandMerged    = "merged"
 	StandClosed    = "closed"
@@ -55,23 +44,16 @@ const (
 	StandNew       = "new"
 )
 
-// PullFacts is what the forge said about a pull request, as words: State
-// open / draft / merged / closed, Checks passing / failing / pending /
-// none, Review approved / changes / pending / none.
 type PullFacts struct {
 	State  string
 	Checks string
 	Review string
 }
 
-// PullReady is "nothing stands between this and Merge": open, checks green
-// or absent, approved.
 func PullReady(p PullFacts) bool {
 	return p.State == "open" && (p.Checks == "passing" || p.Checks == "none" || p.Checks == "") && p.Review == "approved"
 }
 
-// PullLine is the pull request's standing in a few words for a row:
-// "ready to merge · checks ✓ · approved", "checks ✗ · changes requested".
 func PullLine(p PullFacts) string {
 	parts := pullParts(p)
 	if PullReady(p) {
@@ -101,8 +83,6 @@ func pullParts(p PullFacts) string {
 	return strings.Join(parts, " · ")
 }
 
-// Facts is everything the ladder looks at. Any field may be empty; the
-// ladder takes the highest rung the facts reach.
 type Facts struct {
 	Status  Status
 	Pending *Pending
@@ -111,29 +91,19 @@ type Facts struct {
 	Gate    *GateRun
 	Tests   *TestRun
 	Behind  *Behind
-	// Pull is the forge's word on the pull request; PR the link alone,
-	// before the forge has been asked.
-	Pull *PullFacts
-	PR   string
-	// Blocked is the wall an unattended run hit, from the fix log.
+	Pull    *PullFacts
+	PR      string
 	Blocked string
-	// Handoff is a packet waiting for a session to pick it up.
 	Handoff string
 }
 
-// Facts gathers a session's own facts; pull is the forge's word on its
-// pull request, when the daemon has one.
 func (s Session) Facts(pull *PullFacts) Facts {
 	return Facts{Status: s.Status, Pending: s.Pending, Stuck: s.Stuck, Limit: s.Limit,
 		Gate: s.Gate, Tests: s.Tests, Behind: s.Behind, Pull: pull, PR: s.PR}
 }
 
-// gateStrikes is how many red gate runs in a row mean the session cannot
-// get there on its own — the same count the daemon rings at.
 const gateStrikes = 3
 
-// StandingOf walks the ladder top down and stops at the first rung the
-// facts reach.
 func StandingOf(f Facts) Standing {
 	if f.Pull != nil {
 		switch f.Pull.State {

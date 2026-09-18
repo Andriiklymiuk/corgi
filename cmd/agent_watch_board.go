@@ -14,8 +14,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// resolveWorkspaceConfig is a registered workspace's settings: the user
-// config with the repo's own committed one overlaid.
 func resolveWorkspaceConfig(agentD, workspaceID string) (config.Resolved, error) {
 	registry, err := workspace.Load(agentRegistryPath(agentD))
 	if err != nil {
@@ -33,8 +31,6 @@ func resolveWorkspaceConfig(agentD, workspaceID string) (config.Resolved, error)
 	return config.Resolve(ws.ID, repo, user), nil
 }
 
-// watchWriter is the tracker a workspace can change, with the project key
-// its refs belong to.
 func watchWriter(agentD, workspaceID string) (watch.Writer, string, error) {
 	resolved, err := resolveWorkspaceConfig(agentD, workspaceID)
 	if err != nil {
@@ -186,8 +182,6 @@ var agentWatchCommentCmd = &cobra.Command{
 	},
 }
 
-// runTrackerWrite is the shape every write shares: find the workspace, get
-// its tracker, do the one thing, say what happened.
 func runTrackerWrite(cmd *cobra.Command, label, ref string, do func(context.Context, watch.Writer, string) (string, error)) {
 	dir := mustAgentDir()
 	id, err := watchTargetWorkspace(dir, cmd.Flags())
@@ -219,8 +213,6 @@ func init() {
 	agentWatchCmd.AddCommand(agentWatchBoardCmd, agentWatchMoveCmd, agentWatchAssignCmd, agentWatchCommentCmd)
 }
 
-// autoForNames are the words someone types for a group of event kinds. The
-// kinds themselves are accepted too, so a config written by hand still works.
 var autoForNames = map[string][]string{
 	"tickets":  {"issue.new"},
 	"issues":   {"issue.new"},
@@ -237,8 +229,6 @@ var knownWatchKinds = map[string]bool{
 	"issue.new": true, "issue.comment": true, "pr.comment": true, "pr.review": true, "review.requested": true, "ci.failed": true,
 }
 
-// parseAutoFor turns "tickets,reviews" into the event kinds a fix may run
-// on. Empty, or "all", means every kind the rules matched.
 func parseAutoFor(raw string) ([]string, error) {
 	var kinds []string
 	seen := map[string]bool{}

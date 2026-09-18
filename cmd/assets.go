@@ -9,9 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Images a pull request body can actually show. gh has no upload endpoint and
-// raw.githubusercontent.com answers 404 to a browser on a private repo, so the
-// images go on a branch of their own and are linked through the blob viewer.
 var assetsCmd = &cobra.Command{
 	Use:   "assets",
 	Short: "Images a PR/MR body can show: push them to the repo's assets branch",

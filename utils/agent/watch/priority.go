@@ -2,9 +2,6 @@ package watch
 
 import "strings"
 
-// Priority is how urgent a ticket says it is, from its labels: the words
-// trackers and teams actually use. 0 is urgent, 1 high, 2 everything else.
-// Used to order the inbox and to pick which deferred fix runs first.
 func Priority(e Event) int {
 	for _, l := range e.Labels {
 		switch strings.ToLower(strings.TrimSpace(l)) {
@@ -17,9 +14,6 @@ func Priority(e Event) int {
 	return 2
 }
 
-// KindRank orders kinds by who is waiting: a review someone asked for
-// outranks a red build outranks a reply on your own PR outranks a fresh
-// ticket, which blocks nobody yet.
 func KindRank(kind Kind) int {
 	switch kind {
 	case KindReviewRequested:
@@ -35,7 +29,6 @@ func KindRank(kind Kind) int {
 	}
 }
 
-// Less orders two events for a queue: priority, then kind, then age.
 func Less(a, b Event) bool {
 	if pa, pb := Priority(a), Priority(b); pa != pb {
 		return pa < pb

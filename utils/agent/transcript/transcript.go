@@ -1,9 +1,3 @@
-// Package transcript reads a Claude Code session's conversation as the
-// phone shows it: what you said, what Claude said, each tool it used and
-// what came back — from the JSONL Claude Code writes as it goes, tailed
-// from where the last read stopped. Secrets that look like secrets are
-// scrubbed before anything leaves the machine, results are cut short, and
-// the machine decides which workspaces may be read at all (cmd/agent_stream).
 package transcript
 
 import (
@@ -18,35 +12,23 @@ import (
 	"time"
 )
 
-// Entry is one thing that happened in the conversation.
 type Entry struct {
-	// ID is the row's uuid; the phone keys on it.
-	ID string `json:"id"`
-	// Kind: "user" (you typed), "assistant" (Claude said), "tool" (Claude
-	// used a tool), "result" (what the tool returned).
-	Kind string    `json:"kind"`
-	At   time.Time `json:"at,omitzero"`
-	Text string    `json:"text,omitempty"`
-	// Tool and Subject for a tool call — "Edit", "auth/session.go".
-	Tool    string `json:"tool,omitempty"`
-	Subject string `json:"subject,omitempty"`
-	// ToolID ties a result to its call.
-	ToolID string `json:"toolId,omitempty"`
-	// Truncated says the text was cut at MaxText.
-	Truncated bool `json:"truncated,omitempty"`
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"`
+	At        time.Time `json:"at,omitzero"`
+	Text      string    `json:"text,omitempty"`
+	Tool      string    `json:"tool,omitempty"`
+	Subject   string    `json:"subject,omitempty"`
+	ToolID    string    `json:"toolId,omitempty"`
+	Truncated bool      `json:"truncated,omitempty"`
 }
 
-// MaxText is where a message or a result is cut: a phone screen, not a log.
 const MaxText = 2000
 
-// MaxEntries is the most one read returns.
 const MaxEntries = 200
 
 const maxLine = 4 << 20
 
-// Read returns the entries written after offset (a byte position from a
-// previous read; 0 reads from the top) and the position to continue from.
-// A file shorter than offset was replaced: it reads from the top again.
 func Read(path string, offset int64, limit int) ([]Entry, int64, error) {
 	if limit <= 0 || limit > MaxEntries {
 		limit = MaxEntries
@@ -69,7 +51,6 @@ func Read(path string, offset int64, limit int) ([]Entry, int64, error) {
 	for len(out) < limit {
 		line, err := r.ReadBytes('\n')
 		if err != nil {
-			// A line still being written is read next time, whole.
 			break
 		}
 		offset += int64(len(line))
@@ -78,9 +59,6 @@ func Read(path string, offset int64, limit int) ([]Entry, int64, error) {
 	return out, offset, nil
 }
 
-// Last returns the newest max entries of the whole file, and the position
-// after the last complete line — how a phone opens a conversation that has
-// been going for hours without reading it all.
 func Last(path string, limit int) ([]Entry, int64, error) {
 	if limit <= 0 || limit > MaxEntries {
 		limit = MaxEntries
@@ -110,13 +88,11 @@ func Last(path string, limit int) ([]Entry, int64, error) {
 	return ring, offset, nil
 }
 
-// Exists says whether there is a transcript to read.
 func Exists(path string) bool {
 	st, err := os.Stat(path)
 	return err == nil && !st.IsDir()
 }
 
-// Size is the file's length, for the long-poll to notice growth.
 func Size(path string) int64 {
 	st, err := os.Stat(path)
 	if err != nil {
@@ -125,7 +101,6 @@ func Size(path string) int64 {
 	return st.Size()
 }
 
-// ErrNoTranscript is a session with nothing written yet.
 var ErrNoTranscript = errors.New("no transcript yet")
 
 type row struct {
@@ -150,9 +125,6 @@ type block struct {
 	ToolUse string          `json:"tool_use_id"`
 }
 
-// parse turns one JSONL line into the entries a person reads. Thinking,
-// system rows, hook chatter and sub-agent side chains stay out; a pasted
-// image is named, not carried.
 func parse(line []byte) []Entry {
 	if len(line) > maxLine {
 		return nil
@@ -165,7 +137,6 @@ func parse(line []byte) []Entry {
 		return nil
 	}
 	var out []Entry
-	// Content is a string (an old-style user prompt) or a list of blocks.
 	var text string
 	if json.Unmarshal(r.Message.Content, &text) == nil {
 		if e, ok := textEntry(r, "user", text); ok {
@@ -198,8 +169,6 @@ func parse(line []byte) []Entry {
 			t, truncated := clip(Scrub(resultText(b.Content)))
 			out = append(out, Entry{ID: id, Kind: "result", At: r.Timestamp, Text: t, ToolID: b.ToolUse, Truncated: truncated})
 		case "image":
-			// A picture pasted at the desk: the phone learns one was there,
-			// never its bytes.
 			if r.Type == "user" {
 				out = append(out, Entry{ID: id, Kind: "user", At: r.Timestamp, Text: "🖼 image"})
 			}
@@ -210,8 +179,6 @@ func parse(line []byte) []Entry {
 
 func textEntry(r row, kind, text string) (Entry, bool) {
 	text = strings.TrimSpace(text)
-	// Claude Code's own reminders and command caveats are typed as the
-	// user but are not the user.
 	if text == "" || strings.HasPrefix(text, "<system-reminder>") || strings.HasPrefix(text, "<local-command") || strings.HasPrefix(text, "<command-") {
 		return Entry{}, false
 	}
@@ -254,8 +221,6 @@ func clip(s string) (string, bool) {
 	return cut + "\n…", true
 }
 
-// subjectOf is the one thing a tool call is about: the file, the command,
-// the pattern. Never the whole input.
 func subjectOf(name string, input json.RawMessage) string {
 	var in map[string]any
 	if json.Unmarshal(input, &in) != nil {
@@ -321,10 +286,6 @@ func itoa(i int) string {
 	return itoa(i/10) + string(digits[i%10])
 }
 
-// Secrets that look like secrets, replaced before anything leaves the
-// machine. It cannot catch everything — which workspaces may stream at
-// all is the real control — but a token in a tool result should not ride
-// to a phone because nobody looked.
 var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\b(sk|rk|pk)[-_](?:live|test|ant|proj|or)?[-_]?[A-Za-z0-9_-]{16,}`),
 	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{20,}`),
@@ -339,17 +300,12 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
 }
 
-// Scrub replaces what looks like a credential with a marker, keeping the
-// name of the thing so the line still reads.
 func Scrub(s string) string {
 	if s == "" {
 		return s
 	}
 	for _, re := range secretPatterns {
 		s = re.ReplaceAllStringFunc(s, func(m string) string {
-			// Keep "password=" / "Bearer " so the reader knows what was there.
-			// A value already scrubbed, or one that is itself "Bearer …" (the
-			// bearer pattern ran first), is left as it is.
 			if strings.Contains(m, "•••") || strings.Contains(strings.ToLower(m), "bearer") && !strings.HasPrefix(strings.ToLower(m), "bearer") {
 				return m
 			}

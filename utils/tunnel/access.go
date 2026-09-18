@@ -8,35 +8,20 @@ import (
 	"time"
 )
 
-// Exposure is how reachable an endpoint is — a different question from whether
-// it has a stable URL. "Is there a tunnel" is too blunt to gate on: a named
-// tunnel behind an identity proxy is not open to the internet, and a quick
-// tunnel is open to anyone who guesses the hostname.
 type Exposure string
 
 const (
-	// ExposureLocal is a loopback or LAN listener with no tunnel at all.
-	ExposureLocal Exposure = "local"
-	// ExposurePrivate is a tunnel an identity proxy stands in front of, so an
-	// unauthenticated request never reaches corgi.
+	ExposureLocal   Exposure = "local"
 	ExposurePrivate Exposure = "private"
-	// ExposurePublic is a tunnel anyone holding the URL can reach.
-	ExposurePublic Exposure = "public"
+	ExposurePublic  Exposure = "public"
 )
 
-// AccessResult is what probing an endpoint learned.
 type AccessResult struct {
-	// Protected is true only when an identity proxy was actually observed
-	// intercepting the request. Anything else — an error, a timeout, an
-	// unrecognised response — leaves it false.
-	Protected bool `json:"protected"`
-	// Provider names what answered, for the line corgi prints.
-	Provider string `json:"provider,omitempty"`
-	// Detail says how it was recognised, or why it was not.
-	Detail string `json:"detail,omitempty"`
+	Protected bool   `json:"protected"`
+	Provider  string `json:"provider,omitempty"`
+	Detail    string `json:"detail,omitempty"`
 }
 
-// Exposure maps a probe result onto the tier a tunnelled endpoint sits in.
 func (r AccessResult) Exposure() Exposure {
 	if r.Protected {
 		return ExposurePrivate
@@ -44,29 +29,14 @@ func (r AccessResult) Exposure() Exposure {
 	return ExposurePublic
 }
 
-// accessProbeTimeout bounds the probe. It runs while a tunnel is coming up and
-// nothing waits on the result, but an unbounded request would keep a goroutine
-// alive for the life of the process.
 const accessProbeTimeout = 10 * time.Second
 
-// ProbeAccess asks whether an identity proxy stands in front of a URL.
-//
-// Positive-only by design: an endpoint is downgraded to "private" solely on
-// evidence that an unauthenticated request was intercepted, because guessing
-// the other way relaxes a security gate onto an open shell endpoint. Follows no
-// redirects — the redirect is the evidence.
 func ProbeAccess(ctx context.Context, rawURL string) AccessResult {
 	return ProbeAccessWith(ctx, rawURL, &http.Client{})
 }
 
-// ProbeAccessWith is ProbeAccess against a caller-supplied client, so a test
-// can point it at a server whose certificate the default client would reject.
-// The redirect policy is set here rather than taken from the client: not
-// following the redirect is what makes the check work, not a caller's choice.
 func ProbeAccessWith(ctx context.Context, rawURL string, client *http.Client) AccessResult {
 	if !strings.HasPrefix(rawURL, "https://") {
-		// An identity proxy terminates TLS. Anything on plain HTTP is not
-		// behind one, whatever it answers.
 		return AccessResult{Detail: "not an https endpoint"}
 	}
 
@@ -78,8 +48,6 @@ func ProbeAccessWith(ctx context.Context, rawURL string, client *http.Client) Ac
 		return AccessResult{Detail: err.Error()}
 	}
 	probe := *client
-	// The interception is what is being measured, so following it would
-	// discard the answer and report on the login page instead.
 	probe.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
@@ -92,14 +60,9 @@ func ProbeAccessWith(ctx context.Context, rawURL string, client *http.Client) Ac
 	return classifyAccessResponse(resp.StatusCode, resp.Header)
 }
 
-// classifyAccessResponse recognises an identity proxy from the response alone.
-// Split out from the request so the recognition rules are testable without a
-// network.
 func classifyAccessResponse(status int, header http.Header) AccessResult {
 	location := header.Get("Location")
 
-	// Cloudflare Access redirects an unauthenticated request to its own login
-	// path, and stamps the response on the way through.
 	if strings.Contains(location, "/cdn-cgi/access/login") {
 		return AccessResult{
 			Protected: true,
@@ -116,9 +79,6 @@ func classifyAccessResponse(status int, header http.Header) AccessResult {
 			}
 		}
 	}
-	// A generic identity proxy in front of an API endpoint answers 401 with a
-	// challenge naming itself. corgi's own bearer auth also answers 401, so the
-	// challenge has to name something other than corgi to count.
 	if status == http.StatusUnauthorized {
 		if challenge := header.Get("Www-Authenticate"); challenge != "" && !isCorgiChallenge(challenge) {
 			return AccessResult{
@@ -132,10 +92,6 @@ func classifyAccessResponse(status int, header http.Header) AccessResult {
 	return AccessResult{Detail: fmt.Sprintf("no identity proxy observed (status %d)", status)}
 }
 
-// isCorgiChallenge reports whether a 401 came from corgi's own bearer check
-// rather than something standing in front of it. Treating corgi's own auth as
-// an identity proxy would let the endpoint declare itself private on the
-// strength of the very token the gate exists to protect.
 func isCorgiChallenge(challenge string) bool {
 	lower := strings.ToLower(challenge)
 	return strings.Contains(lower, "corgi") ||

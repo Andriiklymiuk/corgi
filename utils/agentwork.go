@@ -6,21 +6,15 @@ import (
 	"strings"
 )
 
-// PullRequestState is the forge-side view of one service branch's PR/MR.
-// All fields are best-effort; an empty struct is never produced — PR is nil
-// when no PR matches the branch.
 type PullRequestState struct {
-	Provider string `json:"provider"` // "github" | "gitlab"
+	Provider string `json:"provider"`
 	Number   int    `json:"number,omitempty"`
-	State    string `json:"state"` // "open" | "merged" | "closed"
+	State    string `json:"state"`
 	Draft    bool   `json:"draft,omitempty"`
 	URL      string `json:"url,omitempty"`
-	CI       string `json:"ci,omitempty"` // "passing" | "failing" | "pending" | "none"
+	CI       string `json:"ci,omitempty"`
 }
 
-// AgentWork is what a per-service git/forge probe can see locally for one
-// service's checkout. Tracker ticket correlation is layered on top by the
-// tracker skill (see docs/tracker.md) — out of scope here.
 type AgentWork struct {
 	RepoPath string            `json:"repoPath"`
 	Branch   string            `json:"branch,omitempty"`
@@ -28,10 +22,6 @@ type AgentWork struct {
 	PR       *PullRequestState `json:"pr,omitempty"`
 }
 
-// ProbeAgentWork is a best-effort read of one service checkout's code state:
-// branch, dirty flag, and the PR/MR for that branch with a CI rollup. Returns
-// nil when dir isn't a git repo. Never errors — a missing gh/glab or no PR
-// just leaves fields empty, so one bad service can't sink the whole snapshot.
 func ProbeAgentWork(dir string) *AgentWork {
 	if dir == "" || !isGitRepo(dir) {
 		return nil
@@ -49,7 +39,6 @@ func ProbeAgentWork(dir string) *AgentWork {
 	return aw
 }
 
-// RepoState is one checkout's local git state: no forge, no network.
 type RepoState struct {
 	Path     string `json:"path,omitempty"`
 	Branch   string `json:"branch"`
@@ -60,12 +49,6 @@ type RepoState struct {
 	Behind   int    `json:"behind,omitempty"`
 }
 
-// ProbeRepoState reads a checkout's branch and whether it holds uncommitted
-// work. Returns false when dir is not a git repository. Detached HEAD reports
-// an empty branch.
-//
-// Separate from ProbeAgentWork, which also shells out to `gh`/`glab` with no
-// timeout — wrong on a restart path, where the network may be why it died.
 func ProbeRepoState(dir string) (RepoState, bool) {
 	if dir == "" || !isGitRepo(dir) {
 		return RepoState{}, false
@@ -78,8 +61,6 @@ func ProbeRepoState(dir string) (RepoState, bool) {
 	return st, true
 }
 
-// probePullRequest tries GitHub (gh) first, then GitLab (glab). Returns nil if
-// neither tool is installed or no PR/MR matches the branch.
 func probePullRequest(dir, branch string) *PullRequestState {
 	if _, err := exec.LookPath("gh"); err == nil {
 		if pr := probeGithubPR(dir, branch); pr != nil {
@@ -145,18 +126,15 @@ func probeGitlabMR(dir, branch string) *PullRequestState {
 		State:    strings.ToLower(m.State),
 		Draft:    m.Draft,
 		URL:      m.WebURL,
-		CI:       "none", // glab list doesn't return a rollup; left "none" for v1.
+		CI:       "none",
 	}
 }
 
-// ciCheck is one entry of GitHub's statusCheckRollup.
 type ciCheck struct {
 	Conclusion string `json:"conclusion"`
 	Status     string `json:"status"`
 }
 
-// rollupCI collapses a PR's check rollup into one CI verdict: any failure wins,
-// else any pending downgrades to pending, else passing.
 func rollupCI(checks []ciCheck) string {
 	if len(checks) == 0 {
 		return "none"

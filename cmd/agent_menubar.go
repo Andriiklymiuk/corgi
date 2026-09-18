@@ -7,10 +7,6 @@ import (
 	"strings"
 )
 
-// The menu bar app is its own program with its own login item; corgi only
-// knows whether it is installed and running, and can open it. Opening it once
-// is enough for login: corgi-bar turns its login item on the first time it
-// runs from /Applications.
 const menuBarAppPath = "/Applications/corgi-bar.app"
 
 var lookForMenuBar = func() (installed, running bool) {
@@ -28,10 +24,6 @@ var openMenuBar = func() error {
 	return exec.Command("open", "-g", "-a", menuBarAppPath).Run()
 }
 
-// startMenuBarIfInstalled opens corgi-bar when it is installed and not up,
-// so `agent up --at-login` leaves the whole setup coming back after a reboot,
-// not just the daemon. Says nothing when the app is not installed: the menu
-// bar is optional, and setup already offers it.
 func startMenuBarIfInstalled(say func(string)) {
 	installed, running := lookForMenuBar()
 	if !installed || running {

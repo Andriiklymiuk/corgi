@@ -8,11 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// The morning brief, for a phone: what the daily digest says (sessions,
-// waits, limits, where each account stands) and what was done since
-// yesterday, per workspace — the same words `corgi agent digest` and
-// `corgi agent standup` print. The daemon pushes the digest once a day
-// at digestAt; the push opens this.
 func launchBriefHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -44,7 +39,6 @@ func launchBriefHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// cardDay is one day of the fortnight on the card, every account summed.
 type cardDay struct {
 	Date      string `json:"date"`
 	Sessions  int    `json:"sessions"`
@@ -52,9 +46,6 @@ type cardDay struct {
 	ToolCalls int    `json:"toolCalls"`
 }
 
-// dayCard is the day in numbers and nothing else — no workspace, no ticket,
-// no prompt, no session title — so the phone can draw it and a person can
-// post it without giving anything away.
 type dayCard struct {
 	At     time.Time         `json:"at"`
 	Since  time.Time         `json:"since"`
@@ -74,9 +65,6 @@ func buildDayCard(dir string, now time.Time) dayCard {
 	return card
 }
 
-// cardNumbers is the part of the card that costs no git log: today's waits
-// (label dropped) and a fortnight of days — every account's stats cache
-// summed, then the daemon's own ledger where it counted more.
 func cardNumbers(dir string, now time.Time) (usage.WaitSummary, []cardDay) {
 	waits := usage.Summarize(usage.LoadWaits(dir, startOfDay(now)), "wait")
 	waits.LongestLabel = ""
@@ -104,8 +92,6 @@ func cardNumbers(dir string, now time.Time) (usage.WaitSummary, []cardDay) {
 			d.ToolCalls += day.ToolCalls
 		}
 	}
-	// The daemon's own count wins where it is higher: Claude Code's cache
-	// lags by hours and stops for months, and never sees an editor's session.
 	for date, day := range usage.ReadLedgerDays(dir, dates) {
 		d := byDate[date]
 		d.Sessions = max(d.Sessions, day.Sessions)
@@ -119,7 +105,6 @@ func cardNumbers(dir string, now time.Time) (usage.WaitSummary, []cardDay) {
 	return waits, days
 }
 
-// GET /launch/card — the day in numbers for the share card.
 func launchCardHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {

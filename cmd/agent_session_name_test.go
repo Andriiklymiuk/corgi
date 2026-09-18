@@ -45,7 +45,6 @@ func TestDefaultSessionNameNamesTheProfile(t *testing.T) {
 }
 
 func TestDefaultSessionNameDropsAnUnknownBranch(t *testing.T) {
-	// Not a git checkout: the branch is the only part that may go missing.
 	got := defaultSessionName("corgi", t.TempDir(), "", time.Date(2026, 9, 3, 18, 55, 0, 0, time.UTC))
 
 	if want := "corgi · 18:55"; got != want {

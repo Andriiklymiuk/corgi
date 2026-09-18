@@ -32,11 +32,10 @@ func TestReplaceLocalhostHost(t *testing.T) {
 		{"DATABASE_URL=postgres://localhost:5432/app", "db", "DATABASE_URL=postgres://db:5432/app"},
 		{"HOST=localhost", "db", "HOST=db"},
 		{"redis://localhost", "db", "redis://db"},
-		{"X=localhost.internal", "db", "X=db.internal"}, // leading boundary, trailing '.' is not a host char
-		// must NOT touch identifiers/words that merely contain "localhost"
+		{"X=localhost.internal", "db", "X=db.internal"},
 		{"LOCALHOSTNAME=localhostname", "db", "LOCALHOSTNAME=localhostname"},
 		{"X=mylocalhost", "db", "X=mylocalhost"},
-		{"# talk to localhost-ish", "db", "# talk to localhost-ish"}, // '-' is a host char → no match
+		{"# talk to localhost-ish", "db", "# talk to localhost-ish"},
 	}
 	for _, c := range cases {
 		if got := replaceLocalhostHost(c.in, c.repl); got != c.want {

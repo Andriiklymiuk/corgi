@@ -48,8 +48,6 @@ func TestAwsVpnInit_AbortsOnShutdownSignal(t *testing.T) {
 	ResetShutdownForTests()
 	t.Cleanup(ResetShutdownForTests)
 
-	// Pre-set shutdown so the loop short-circuits on first iteration
-	// without ever touching the real `ps ax` / AWS VPN Client.
 	RequestShutdown()
 
 	start := time.Now()
@@ -78,8 +76,6 @@ func TestConnectFirstAwsVpnProfile_PostConnectSleepInterruptible(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		RequestShutdown()
 	}()
-	// Reap the goroutine before resetting state to avoid the goroutine's
-	// RequestShutdown racing with ResetShutdown of a subsequent test.
 	t.Cleanup(func() {
 		<-done
 		ResetShutdownForTests()
@@ -136,9 +132,6 @@ func TestAwsVpnInit_MaxLaunchAttemptsBounded(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		t.Skip("AwsVpnInit returns error early on linux")
 	}
-	// Avoid actually opening AWS VPN Client. Pre-set shutdown so the
-	// loop exits before launchAwsVpn runs `open -a`. This test verifies
-	// the loop is bounded — runtime budget far below the worst case.
 	ResetShutdownForTests()
 	t.Cleanup(ResetShutdownForTests)
 	RequestShutdown()
@@ -194,9 +187,6 @@ func TestConnectFirstAwsVpnProfile_DoesNotLeakProfileName(t *testing.T) {
 	withShortPostConnectWait(t)
 	_ = connectFirstAwsVpnProfile()
 
-	// The script must only reference generic button labels, not any
-	// specific profile name. Sanity check by ensuring no quoted strings
-	// other than the known UI labels appear.
 	allowedQuoted := map[string]bool{
 		`"AWS VPN Client"`:         true,
 		`"System Events"`:          true,
@@ -268,7 +258,6 @@ func TestConnectFirstAwsVpnProfile_NoWindow(t *testing.T) {
 	if err := connectFirstAwsVpnProfile(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	// Should wait awsVpnPostConnectWait (shortened) — not the full 8s.
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("waited too long: %s", elapsed)
 	}
@@ -279,7 +268,6 @@ func TestConnectFirstAwsVpnProfile_OsascriptError(t *testing.T) {
 	withOsascriptRunner(t, func(string) (string, error) {
 		return "", fmt.Errorf("Accessibility not authorized")
 	})
-	// Must not propagate error — degrades to manual-connect message.
 	if err := connectFirstAwsVpnProfile(); err != nil {
 		t.Fatalf("expected graceful degradation, got err: %v", err)
 	}

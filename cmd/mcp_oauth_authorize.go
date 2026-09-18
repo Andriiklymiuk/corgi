@@ -16,15 +16,11 @@ import (
 )
 
 const (
-	maxPendingAuths = 20
-	pendingAuthTTL  = 10 * time.Minute
-	// approveCodeAlphabet is pairing's code alphabet without 0 and 1, so
-	// pairing.NormalizeCode keeps every character a page shows.
+	maxPendingAuths     = 20
+	pendingAuthTTL      = 10 * time.Minute
 	approveCodeAlphabet = "23456789ABCDEFGHJKMNPQRSTVWXYZ"
 )
 
-// newApproveCode is the short code a consent page shows for
-// `corgi agent approve ABCD-2345`; unique among pending authorizations.
 func (oa *oauthServer) newApproveCodeLocked() (string, error) {
 	for attempt := 0; attempt < 10; attempt++ {
 		b := make([]byte, 8)
@@ -53,8 +49,6 @@ func (oa *oauthServer) pendingByCodeLocked(code string) (*pendingAuth, bool) {
 	return nil, false
 }
 
-// resolveClient finds the client an authorize request names: a metadata
-// document when client_id is an https URL, else the DCR store.
 func (oa *oauthServer) resolveClient(r *http.Request, clientID string) (oauthClient, error) {
 	if isCIMDClientID(clientID) {
 		return oa.cimd.client(r.Context(), clientID, oa.hosts)
@@ -68,9 +62,6 @@ func (oa *oauthServer) resolveClient(r *http.Request, clientID string) (oauthCli
 	return c, nil
 }
 
-// authorizeHandler is GET /oauth/authorize. The client and redirect URI are
-// checked before anything else and a failure there is a 400 page — never a
-// redirect, or the endpoint would bounce browsers to any URL asked.
 func (oa *oauthServer) authorizeHandler(w http.ResponseWriter, r *http.Request) {
 	oa.mu.Lock()
 	if oa.limitedLocked(w) {
@@ -104,7 +95,6 @@ func (oa *oauthServer) authorizeHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// From here the redirect target is trusted and errors travel back on it.
 	state := q.Get("state")
 	if q.Get("response_type") != "code" {
 		oa.redirectError(w, r, redirectURI, state, "unsupported_response_type", "only response_type=code")
@@ -152,9 +142,7 @@ func (oa *oauthServer) authorizeHandler(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// setConsentHeaders: the consent page must never render inside another
-// site's frame — a browser holding corgi_token could be clickjacked into
-// Approve. Inline script and same-origin fetch only.
+// Consent page must never render in another site's frame: clickjack into Approve.
 func setConsentHeaders(w http.ResponseWriter) {
 	setLaunchHeaders(w)
 	w.Header().Set(headerContentType, "text/html; charset=utf-8")
@@ -163,15 +151,12 @@ func setConsentHeaders(w http.ResponseWriter) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 }
 
-// consentError is the 400 page for a request whose redirect target cannot
-// be trusted.
 func (oa *oauthServer) consentError(w http.ResponseWriter, msg string) {
 	setConsentHeaders(w)
 	w.WriteHeader(http.StatusBadRequest)
 	_ = consentErrorPage.Execute(w, msg)
 }
 
-// redirectError sends an OAuth error back to a trusted redirect URI.
 func (oa *oauthServer) redirectError(w http.ResponseWriter, r *http.Request, redirectURI, state, code, desc string) {
 	u, _ := url.Parse(redirectURI)
 	q := u.Query()
@@ -185,16 +170,11 @@ func (oa *oauthServer) redirectError(w http.ResponseWriter, r *http.Request, red
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
-// approveRequest is what the consent page (id) or `corgi agent approve`
-// (code) posts.
 type approveRequest struct {
 	ID   string `json:"id"`
 	Code string `json:"code"`
 }
 
-// approveHandler is POST /oauth/approve with a device token: the resource
-// owner is present. Mints the authorization code and answers with the
-// redirect the browser should follow.
 func (oa *oauthServer) approveHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -229,8 +209,6 @@ func (oa *oauthServer) approveHandler(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusInternalServerError, "server_error", err.Error())
 		return
 	}
-	// The page that posted the id follows the redirect itself and the
-	// pending entry is done. A CLI approval leaves it for the page to poll.
 	if req.ID != "" {
 		delete(oa.pending, p.id)
 	}
@@ -240,8 +218,6 @@ func (oa *oauthServer) approveHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(body)
 }
 
-// approveLocked mints the code once and remembers the redirect on the
-// pending entry, so a page polling after a CLI approval finds it.
 func (oa *oauthServer) approveLocked(p *pendingAuth) (string, error) {
 	if p.redirect != "" {
 		return p.redirect, nil
@@ -262,8 +238,6 @@ func (oa *oauthServer) approveLocked(p *pendingAuth) (string, error) {
 	return p.redirect, nil
 }
 
-// pendingHandler is GET /oauth/pending/<id>: the consent page polls it after
-// showing the approval code. Approved once → the entry is consumed.
 func (oa *oauthServer) pendingHandler(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, oauthPendingPath)
 	oa.mu.Lock()
@@ -355,8 +329,6 @@ var consentErrorPage = template.Must(template.New("consentError").Parse(`<!docty
 .card{background:#101113;border:1px solid #212327;border-radius:1rem;padding:1.6rem;max-width:26rem}h1{font-size:1.1rem;margin:0 0 .6rem}p{color:#8a8f98;line-height:1.45}</style></head>
 <body><div class="card"><h1>corgi cannot start this sign-in</h1><p>{{.}}</p><p>Nothing was sent anywhere. Close this tab and try again from the client.</p></div></body></html>`))
 
-// approvePendingLocally is what `corgi agent approve` does: it talks to the
-// MCP server on this machine with a freshly minted local device token.
 func approvePendingLocally(agentDir, code string) (string, error) {
 	addr, err := readLocalMCPAddr(agentDir)
 	if err != nil {
@@ -374,7 +346,7 @@ func approvePendingLocally(agentDir, code string) (string, error) {
 		}
 	}()
 	body, _ := json.Marshal(approveRequest{Code: code})
-	req, err := http.NewRequest(http.MethodPost, "http://"+addr+oauthApprovePath, strings.NewReader(string(body))) // NOSONAR — loopback on this machine
+	req, err := http.NewRequest(http.MethodPost, "http://"+addr+oauthApprovePath, strings.NewReader(string(body)))
 	if err != nil {
 		return "", err
 	}

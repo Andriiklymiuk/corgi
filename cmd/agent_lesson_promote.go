@@ -15,14 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A lesson lives under the agent dir, read by the sessions corgi starts.
-// Promoting one writes it into the workspace's CLAUDE.md, where every
-// session reads it — as a line under a Lessons heading, once. With --pr
-// the line goes on a branch of its own, in a worktree, and becomes a pull
-// request; your checkout is not touched.
-
-// promoteLesson appends lesson n (1-based, as list prints them) to
-// root/CLAUDE.md and says the line it wrote.
 func promoteLesson(agentDir, workspace, root string, n int) (string, error) {
 	list := lessons.List(agentDir, workspace)
 	if n < 1 || n > len(list) {
@@ -43,8 +35,6 @@ func promoteLesson(agentDir, workspace, root string, n int) (string, error) {
 	case text == "":
 		text = "# " + workspace + "\n\n" + heading + "\n\n" + line + "\n"
 	case strings.Contains(text, heading+"\n"):
-		// At the end of the section: after its last line, before the next
-		// heading (or the end of the file).
 		i := strings.Index(text, heading+"\n") + len(heading) + 1
 		rest := text[i:]
 		end := len(rest)
@@ -64,8 +54,6 @@ func promoteLesson(agentDir, workspace, root string, n int) (string, error) {
 	return line, os.WriteFile(path, []byte(text), 0o644)
 }
 
-// promoteOnBranch does the same on a branch of its own, in a worktree, and
-// opens a pull request with gh when the origin is GitHub.
 func promoteOnBranch(agentDir, workspace, root string, n int) (string, error) {
 	tmp, err := os.MkdirTemp("", "corgi-lesson-")
 	if err != nil {

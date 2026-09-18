@@ -26,7 +26,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// The flag names, once, so the definition and every read agree.
 const (
 	watchFlagPruneAfter   = "prune-after"
 	watchFlagMaxPerHour   = "max-per-hour"
@@ -107,8 +106,6 @@ var agentWatchEnableCmd = &cobra.Command{
 			}
 			wc.Interval = v
 		}
-		// --auto is the whole unattended mode in one flag: act on everything
-		// this workspace is told about, not just be told.
 		if auto, _ := flags.GetBool("auto"); auto {
 			wc.Action, wc.PRs, wc.Comments = "fix", true, true
 		}
@@ -152,7 +149,6 @@ var agentWatchEnableCmd = &cobra.Command{
 			if wc.Slots, _ = flags.GetInt("slots"); wc.Slots < 1 || wc.Slots > 8 {
 				return fmt.Errorf("--slots is 1 to 8")
 			}
-			// Two runs at once need two checkouts.
 			if wc.Slots > 1 && !wc.Isolate {
 				wc.Isolate = true
 				utils.Info("agent: --slots above 1 turns on --isolate: each run gets worktrees of its own")
@@ -345,9 +341,6 @@ var agentWatchRunCmd = &cobra.Command{
 	},
 }
 
-// handBackDeferred gives the daemon the fixes it deferred, from a person's
-// hand: it decides again against the caps of the moment. Without a daemon
-// they are listed, so the person can run the skill instead.
 func handBackDeferred(dir string, fixes *watch.FixLog) {
 	deferred := fixes.DeferredEvents()
 	if len(deferred) == 0 {
@@ -443,8 +436,6 @@ real event.`,
 	},
 }
 
-// synthesizeWatchEvent is a believable event of one kind, shaped for the
-// first watched workspace unless flags say otherwise.
 func synthesizeWatchEvent(kind watch.Kind, specs []daemon.WatchSpec, ref, url, body string) (watch.Event, error) {
 	first := specs[0]
 	e := watch.Event{Kind: kind, Ref: ref, URL: url, Body: body, Title: "watch test", Author: "watch test", Mine: true, At: time.Now()}
@@ -495,8 +486,6 @@ func synthesizePullEvent(e *watch.Event, first daemon.WatchSpec) {
 		e.State = "changes_requested"
 	}
 	if e.Kind == watch.KindReviewRequested {
-		// Someone else's pull request: not mine, which is the whole
-		// difference between reviewing it and fixing my own.
 		e.Mine = false
 		e.Author = "a colleague"
 		e.Title = "Retry the upload on a 502"
@@ -654,8 +643,6 @@ agent directory, mode 0600, next to the machine-wide ones.
 	},
 }
 
-// chatStatusLine is a workspace's chat listening in one line; "" when it
-// listens to no chat at all.
 func chatStatusLine(spec daemon.WatchSpec) string {
 	c := spec.Chat
 	if c == nil {
@@ -681,7 +668,6 @@ func chatStatusLine(spec daemon.WatchSpec) string {
 	return line + " · no runs from chat"
 }
 
-// withoutSource drops one name from a skipped list.
 func withoutSource(list []string, drop string) []string {
 	out := list[:0]
 	for _, n := range list {
@@ -692,8 +678,6 @@ func withoutSource(list []string, drop string) []string {
 	return out
 }
 
-// chatFromFlags folds the chat flags into the workspace's block; nil means
-// no chat flag was given and whatever is stored stands.
 func chatFromFlags(flags *pflag.FlagSet, current *config.ChatConfig) (*config.ChatConfig, error) {
 	touched := false
 	for _, n := range []string{"mentions", "channel", "review-channel", "trust", "post-to", "reply-as"} {
@@ -776,8 +760,6 @@ func printWatchedWorkspaces(specs []daemon.WatchSpec, fixes *watch.FixLog, now t
 		if s.Action == "fix" {
 			fmt.Printf("  %-20s %s\n", "", fixBudgetLine(s, fixes, now))
 		} else if s.Quiet != "" {
-			// Quiet hours hold the notification too, so a reporting watch
-			// has to say when it goes quiet or it looks broken in the evening.
 			fmt.Printf("  %-20s quiet %s — held until the window opens\n", "", s.Quiet)
 		}
 		if line := chatStatusLine(s); line != "" {
@@ -825,7 +807,6 @@ func printWatchFixes(fixes []watch.FixRecord, now time.Time) {
 	}
 }
 
-// fixRecordLine is one run: what it was about, how long ago, how it ended.
 func fixRecordLine(r watch.FixRecord, now time.Time) string {
 	line := fmt.Sprintf("  %-28s %s", firstNonEmptyString(r.Ref, r.Key), roughAge(now.Sub(r.StartedAt))+" ago")
 	switch {
@@ -841,9 +822,6 @@ func fixRecordLine(r watch.FixRecord, now time.Time) string {
 	return line
 }
 
-// loadWatchSpecs builds the daemon's watches from config and tokens. A
-// workspace with watch enabled but no token for any source still appears,
-// so the status can say why nothing happens.
 func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 	registry, err := workspace.Load(agentRegistryPath(dir))
 	if err != nil {
@@ -863,13 +841,9 @@ func loadWatchSpecs(dir string) ([]daemon.WatchSpec, error) {
 	return out, nil
 }
 
-// watchSpecOf is one workspace's spec; false when it neither watches nor
-// runs routines, so the daemon has nothing to do there.
 func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (daemon.WatchSpec, bool) {
 	wc := resolved.Watch
 	if wc == nil || !wc.Enabled {
-		// No watch, but routines on a clock still need a spec to run
-		// under: the caps and the log, no sources, no polling.
 		if len(resolved.Routines) > 0 {
 			return daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir),
 				SkipPermissions: resolved.DangerouslySkipPermissions, Models: resolved.Models, Routines: resolved.Routines}, true
@@ -885,8 +859,6 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 		spec.Action = "fix"
 	}
 	spec.PruneAfter, _ = watch.ParseAge(wc.PruneAfter)
-	// A bad day name in the file is ignored, not fatal: the watch runs
-	// every day rather than not at all.
 	if days, err := daemon.ParseDaysOff(wc.DaysOff); err == nil {
 		spec.DaysOff = days
 	} else {
@@ -896,15 +868,10 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 		spec.Chat = wc.Chat.Slack
 		spec.Rules.Mentions = wc.Chat.Slack.Mentions
 		spec.Rules.Channels = append(append([]string{}, wc.Chat.Slack.Channels...), wc.Chat.Slack.ReviewChannels...)
-		// A review channel is a request to review: asking for the channel is
-		// asking for the thing it carries, so it need not be said twice.
 		if len(wc.Chat.Slack.ReviewChannels) > 0 {
 			spec.Rules.Reviews = true
 		}
 	}
-	// A source the rules take nothing from is not built: polling it would
-	// only spend requests. A workspace that never asked for chat is not
-	// "skipping" it — there is nothing there to skip.
 	spec.Skipped = spec.Rules.DeadSources()
 	if wc.Chat == nil || wc.Chat.Slack == nil {
 		spec.Skipped = withoutSource(spec.Skipped, "slack")
@@ -914,8 +881,6 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	return spec, true
 }
 
-// watchInterval is the configured poll interval; "0" means webhooks only,
-// and anything else unreadable keeps the default.
 func watchInterval(raw string, fallback time.Duration) time.Duration {
 	if raw == "" {
 		return fallback
@@ -929,8 +894,6 @@ func watchInterval(raw string, fallback time.Duration) time.Duration {
 	return fallback
 }
 
-// watchTracker is the tracker a workspace polls: the one configured, else
-// whichever has a token.
 func watchTracker(configured string, secrets watch.Secrets) string {
 	if configured != "" {
 		return configured
@@ -982,8 +945,6 @@ func tokenLine(s watch.Secrets) string {
 		watch.Fingerprint(s.GitLab), slackTokenLabel(s))
 }
 
-// slackTokenLabel says which Slack voices are available: the user's token
-// reads and speaks as them, the bot's only speaks.
 func slackTokenLabel(s watch.Secrets) string {
 	switch {
 	case s.SlackUser != "" && s.SlackBot != "":
@@ -996,8 +957,6 @@ func slackTokenLabel(s watch.Secrets) string {
 	return watch.Fingerprint("")
 }
 
-// githubTokenLabel is the fingerprint, marked gh-auth when the gh CLI is
-// the only place a token comes from.
 func githubTokenLabel(secrets watch.Secrets) string {
 	token, source := watch.GitHubToken(secrets)
 	if source == "gh-auth" {
@@ -1014,7 +973,6 @@ func sourceNames(s daemon.WatchSpec) []string {
 	return names
 }
 
-// fixBudgetLine is "caps 3/h 10/day · quiet 23:00-07:00 · fixes today: 2 (last 14:05) · 1 deferred".
 func fixBudgetLine(s daemon.WatchSpec, fixes *watch.FixLog, now time.Time) string {
 	b := daemon.BudgetFor(s, fixes, now)
 	line := fmt.Sprintf("caps %d/h %d/day · quiet %s · fixes today: %d", b.PerHour, b.PerDay, firstNonEmptyString(s.Quiet, "none"), b.Today)
@@ -1030,9 +988,6 @@ func fixBudgetLine(s daemon.WatchSpec, fixes *watch.FixLog, now time.Time) strin
 	return line
 }
 
-// watchHookHandler receives one service's webhook, checks its signature
-// and hands the events to the daemon through the spool. The MCP process
-// answers the HTTP; the daemon owns the rules and the seen list.
 func watchHookHandler(source string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -1075,8 +1030,6 @@ func watchHookHandler(source string) http.HandlerFunc {
 	}
 }
 
-// watchIdentity is who "me" is for a webhook: what a poll learned, else
-// what `watch auth --me` said.
 func watchIdentity(dir, source string, secrets watch.Secrets) string {
 	state := watch.LoadState(dir)
 	for key, c := range state.Cursors {
@@ -1087,12 +1040,6 @@ func watchIdentity(dir, source string, secrets watch.Secrets) string {
 	return secrets.Me
 }
 
-// watchTargetWorkspace is --workspace when given, else the one the cwd is
-// in. A menu bar or a Stream Deck has no cwd to speak of.
-// prRefURL turns a ref back into the link that ref shape implies: acme/api#7
-// is a GitHub pull request, acme/api!7 a GitLab merge request. The dry run
-// prints the prompt a real event would carry, so a GitHub URL built from a
-// GitLab ref would preview a link that does not exist.
 func prRefURL(ref string) string {
 	if repo, num, ok := strings.Cut(ref, "!"); ok {
 		return "https://gitlab.com/" + repo + "/-/merge_requests/" + firstNonEmptyString(num, "1")
@@ -1155,8 +1102,6 @@ func describeWatch(wc *config.WatchConfig) string {
 	return out
 }
 
-// describeWatchParts is what the watch listens for and does, in the order
-// the flags read.
 func describeWatchParts(wc *config.WatchConfig) []string {
 	var parts []string
 	if len(wc.Labels) > 0 {
@@ -1314,8 +1259,6 @@ func init() {
 	agentCmd.AddCommand(agentWatchCmd)
 }
 
-// watchStatusWorkspace is one watched workspace as `--json` and the
-// launcher report it.
 type watchStatusWorkspace struct {
 	Workspace string           `json:"workspace"`
 	Sources   []string         `json:"sources"`
@@ -1342,32 +1285,25 @@ type watchStatusFix struct {
 	Error     string    `json:"error,omitempty"`
 }
 
-// watchStatusEvent is one inbox row.
 type watchStatusEvent struct {
-	Key       string    `json:"key"`
-	Ref       string    `json:"ref"`
-	Kind      string    `json:"kind"`
-	Workspace string    `json:"workspace,omitempty"`
-	Title     string    `json:"title,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	State     string    `json:"state,omitempty"`
-	At        time.Time `json:"at"`
-	Blocked   string    `json:"blocked,omitempty"`
-	Session   *CardSess `json:"session,omitempty"`
-	Picked    *CardPick `json:"picked,omitempty"`
-	Columns   []string  `json:"columns,omitempty"`
-	// PR and Pull: the pull request this row is about or has, and
-	// how it stands — checks, approval, ready to merge.
-	PR     string            `json:"pr,omitempty"`
-	Pull   *watch.PullStatus `json:"pull,omitempty"`
-	Handed *watch.Hand       `json:"handed,omitempty"`
-	// Standing is the row's one word and clause from the ladder.
-	Standing sessions.Standing `json:"standing"`
+	Key       string            `json:"key"`
+	Ref       string            `json:"ref"`
+	Kind      string            `json:"kind"`
+	Workspace string            `json:"workspace,omitempty"`
+	Title     string            `json:"title,omitempty"`
+	URL       string            `json:"url,omitempty"`
+	State     string            `json:"state,omitempty"`
+	At        time.Time         `json:"at"`
+	Blocked   string            `json:"blocked,omitempty"`
+	Session   *CardSess         `json:"session,omitempty"`
+	Picked    *CardPick         `json:"picked,omitempty"`
+	Columns   []string          `json:"columns,omitempty"`
+	PR        string            `json:"pr,omitempty"`
+	Pull      *watch.PullStatus `json:"pull,omitempty"`
+	Handed    *watch.Hand       `json:"handed,omitempty"`
+	Standing  sessions.Standing `json:"standing"`
 }
 
-// watchStatusJSON is `corgi agent watch --json`: the watched workspaces,
-// the polls, the recent runs and the inbox rows — what a menu bar or an
-// editor draws. The launcher serves the same at GET /launch/watch-status.
 func watchStatusJSON(dir string, specs []daemon.WatchSpec, state *watch.State, now time.Time) map[string]any {
 	workspaces := watchStatusWorkspaces(specs, state, now)
 	fixes := watchStatusFixes(dir, state)
@@ -1388,9 +1324,6 @@ func watchStatusWorkspaces(specs []daemon.WatchSpec, state *watch.State, now tim
 	return out
 }
 
-// watchStatusFixes are the recent runs. A run's row links to its ticket,
-// so a menu bar can open what the run was about, not only the pull
-// request it opened.
 func watchStatusFixes(dir string, state *watch.State) []watchStatusFix {
 	fixes := []watchStatusFix{}
 	for _, r := range state.Fixes.RecentFixes("", 20) {
@@ -1404,7 +1337,6 @@ func watchStatusFixes(dir string, state *watch.State) []watchStatusFix {
 	return fixes
 }
 
-// watchInbox is what every inbox row is read against, loaded once.
 type watchInbox struct {
 	dir      string
 	now      time.Time
@@ -1416,8 +1348,6 @@ type watchInbox struct {
 	moved    *watch.StateLog
 }
 
-// watchStatusEvents is the inbox itself, so a menu bar or an editor can
-// show what arrived without reading the log file or asking the phone.
 func watchStatusEvents(dir string, state *watch.State, now time.Time) []watchStatusEvent {
 	inbox := watchInbox{dir: dir, now: now, state: state, onTicket: sessionsOnTickets(dir),
 		picks: watch.LoadPicks(dir), pulls: watch.LoadPullLog(dir), hands: watch.LoadHands(dir), moved: watch.LoadStateLog(dir)}
@@ -1425,7 +1355,7 @@ func watchStatusEvents(dir string, state *watch.State, now time.Time) []watchSta
 	events := []watchStatusEvent{}
 	for _, e := range watch.RecentEvents(dir, 25) {
 		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
-			continue // dismissed, or an old routine report: not waiting on anyone
+			continue
 		}
 		if row, ok := inbox.row(e); ok {
 			events = append(events, row)
@@ -1434,11 +1364,7 @@ func watchStatusEvents(dir string, state *watch.State, now time.Time) []watchSta
 	return events
 }
 
-// row is one event as the inbox shows it; false when it is history.
 func (in watchInbox) row(e watch.Event) (watchStatusEvent, bool) {
-	// Merged, closed, done: history rather than work. The same test
-	// the phone's inbox uses, so the menu bar and the editor do not
-	// disagree with it about what is waiting.
 	current := e.State
 	if st, ok := in.moved.Get(e.Key); ok {
 		current = st.Status
@@ -1471,8 +1397,6 @@ func (in watchInbox) row(e watch.Event) (watchStatusEvent, bool) {
 	return er, true
 }
 
-// launchWatchStatusHandler is GET /launch/watch-status: `corgi agent watch
-// --json` for a client that cannot run corgi — the sandboxed Mac app.
 func launchWatchStatusHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -1492,8 +1416,6 @@ func launchWatchStatusHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, watchStatusJSON(dir, specs, watch.LoadState(dir), time.Now()))
 }
 
-// launchStatusHandler is GET /launch/status: `corgi agent status --json`,
-// for the same client.
 func launchStatusHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {

@@ -20,8 +20,6 @@ func TestFixKindsSplitUnattendedWorkByKind(t *testing.T) {
 		t.Fatal("naming kinds must not turn a reporting watch into an unattended one")
 	}
 
-	// The ask: work review comments on your own, but only be told about a
-	// fresh ticket.
 	reviewsOnly := WatchSpec{Action: "fix", FixKinds: []string{"pr.review", "pr.comment"}}
 	if !reviewsOnly.FixesKind(watch.KindPRReview) || !reviewsOnly.FixesKind(watch.KindPRComment) {
 		t.Fatal("a named kind is worked on")
@@ -35,9 +33,6 @@ func TestFixKindsSplitUnattendedWorkByKind(t *testing.T) {
 	}
 }
 
-// The dry run is the tool people use to decide whether to trust unattended
-// mode, and it reported "fix" for kinds --auto-for never named: the check
-// read p.Matched before it was assigned.
 func TestTheDryRunSaysNotifyForAKindThatIsNotWorkedOn(t *testing.T) {
 	d := &Daemon{Dir: t.TempDir(), Watches: []WatchSpec{{
 		Workspace: "api", Project: "ABC", ConfigDir: t.TempDir(),
@@ -60,7 +55,6 @@ func TestTheDryRunSaysNotifyForAKindThatIsNotWorkedOn(t *testing.T) {
 			t.Errorf("%s was not named in --auto-for, so the dry run must say notify, got %q", kind, p.Action)
 		}
 	}
-	// A reporting workspace is unaffected either way.
 	quiet := &Daemon{Dir: t.TempDir(), Watches: []WatchSpec{{
 		Workspace: "api", Project: "ABC", Rules: watch.Rules{Enabled: true, PRs: true}, Action: "notify",
 	}}}

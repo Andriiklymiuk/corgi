@@ -14,8 +14,6 @@ import (
 
 const mcpFilterStamp = "2006-01-02T15:04:05.000Z"
 
-// writeStampedLog drops a captured-run log for service under the cwd's
-// corgi_services so mcpLogs can find it; each entry is (age, content).
 func writeStampedLog(t *testing.T, dir, service string, entries [][2]string) {
 	t.Helper()
 	logDir := filepath.Join(dir, "corgi_services", ".logs", service)
@@ -141,8 +139,6 @@ func TestMCPStatusFilters(t *testing.T) {
 		t.Errorf("db_service filter: got %+v", db)
 	}
 
-	// Nothing listens on those ports, so unhealthyOnly is everything; a
-	// declared service without a port is a legitimate empty answer.
 	down, err := mcpStatus(statusArgs{UnhealthyOnly: true})
 	if err != nil {
 		t.Fatal(err)
@@ -159,7 +155,6 @@ func TestMCPStatusFilters(t *testing.T) {
 		t.Errorf("unknown service must be E_SERVICE_NOT_FOUND, got %v", err)
 	}
 
-	// The sweep above was cached; the filtered calls must not have replaced it.
 	if _, ok := mcpCache.cachedStatus(utils.CorgiComposePath); !ok {
 		t.Error("status sweep not cached")
 	}

@@ -7,16 +7,10 @@ import (
 	"strings"
 )
 
-// GitLabCacheOptions tunes the generated cache config for where the compose
-// file sits relative to the GitLab project root.
 type GitLabCacheOptions struct {
-	// PathPrefix is prepended to every compose-relative path. A pipeline that
-	// clones the workspace repo into a subdirectory needs it, because GitLab
-	// resolves cache paths against the project root and nothing else.
 	PathPrefix string
 }
 
-// GitLab's own limits, which are what force most of the shape below.
 const (
 	gitlabMaxCaches      = 4
 	gitlabCacheTemplate  = ".corgi-cache"
@@ -24,20 +18,11 @@ const (
 	gitlabMergedGroupKey = "mixed"
 )
 
-// gitlabHomeCache redirects a package manager's shared cache into the project.
-// GitLab's caches "define their paths relative to the project directory, and
-// can't link to files outside it", so corgi's "~/..." entries are uncacheable
-// as they stand; each becomes an in-project directory plus the environment
-// variable that puts the package manager's cache there.
 type gitlabHomeCache struct {
 	env string
 	dir string
 }
 
-// Only true caches belong here. GEM_HOME, for one, is where gems install
-// rather than where they are cached, so redirecting it would move the install
-// and can break a later bundle exec — ruby's in-project vendor/bundle is the
-// part worth caching anyway.
 var gitlabHomeCaches = map[string]gitlabHomeCache{
 	"~/.npm":                    {"npm_config_cache", "npm"},
 	"~/.bun/install/cache":      {"BUN_INSTALL_CACHE_DIR", "bun"},
@@ -55,16 +40,11 @@ var gitlabHomeCaches = map[string]gitlabHomeCache{
 	"~/.pub-cache":              {"PUB_CACHE", "pub"},
 }
 
-// gitlabEntry is one rendered cache entry.
 type gitlabEntry struct {
 	id    string
 	paths []string
 }
 
-// GitLabCacheYAML renders the cache plan as a hidden `.corgi-cache` job
-// template a real job extends. GitLab's cache config is static YAML, so unlike
-// GitHub it cannot read the plan at runtime — the fragment is committed and
-// `corgi cache paths --gitlab --check` fails once it drifts from the compose.
 func GitLabCacheYAML(plan CachePlan, opts GitLabCacheOptions) string {
 	entries := gitlabEntries(plan, opts)
 
@@ -118,9 +98,6 @@ func GitLabCacheYAML(plan CachePlan, opts GitLabCacheOptions) string {
 func writeGitLabEntry(b *strings.Builder, e gitlabEntry) {
 	prefix := "corgi-deps-" + e.id
 	fmt.Fprintf(b, "    - key: \"%s-$CI_COMMIT_REF_SLUG\"\n", prefix)
-	// A new branch starts from the default branch's cache instead of from
-	// nothing, which is where the first run of every merge request would
-	// otherwise pay the full install.
 	b.WriteString("      fallback_keys:\n")
 	fmt.Fprintf(b, "        - \"%s-$CI_DEFAULT_BRANCH\"\n", prefix)
 	fmt.Fprintf(b, "        - \"%s\"\n", prefix)
@@ -128,14 +105,9 @@ func writeGitLabEntry(b *strings.Builder, e gitlabEntry) {
 	for _, p := range e.paths {
 		b.WriteString("        - " + p + "\n")
 	}
-	// Saved even when the job fails: a red e2e run still installed everything,
-	// and throwing that away makes the next attempt pay for it again.
 	b.WriteString("      when: always\n")
 }
 
-// gitlabEntries turns the plan's groups into at most four cache entries, which
-// is all GitLab allows per job. The markers entry always survives the merge:
-// it is small, and it is what lets corgi skip an unchanged install at all.
 func gitlabEntries(plan CachePlan, opts GitLabCacheOptions) []gitlabEntry {
 	if len(plan.Groups) == 0 {
 		return []gitlabEntry{{id: "markers", paths: gitlabPaths(plan.Paths, opts)}}
@@ -151,9 +123,6 @@ func gitlabEntries(plan CachePlan, opts GitLabCacheOptions) []gitlabEntry {
 		ecosystems = append(ecosystems, e)
 	}
 
-	// One slot belongs to the markers, so the ecosystems share what is left.
-	// Merging the tail keeps the first ecosystems independently keyed rather
-	// than dropping any of them from the cache entirely.
 	if room := gitlabMaxCaches - len(markers); len(ecosystems) > room && room > 0 {
 		merged := gitlabEntry{id: gitlabMergedGroupKey}
 		for _, e := range ecosystems[room-1:] {
@@ -174,8 +143,6 @@ func gitlabPaths(paths []string, opts GitLabCacheOptions) []string {
 		case isHome:
 			p = path.Join(gitlabHomeCacheRoot, mapped.dir)
 		case strings.HasPrefix(p, "~/"):
-			// An ecosystem corgi knows but this table does not. Dropping it is
-			// the only honest option: GitLab would reject the path outright.
 			continue
 		default:
 			p = gitlabPrefix(p, opts)
@@ -199,8 +166,6 @@ func gitlabPrefix(p string, opts GitLabCacheOptions) string {
 
 type gitlabVariable struct{ env, dir string }
 
-// gitlabVariables is the set of redirects the plan actually needs, so a node
-// workspace does not carry a cargo variable it never reads.
 func gitlabVariables(plan CachePlan) []gitlabVariable {
 	seen := map[string]gitlabVariable{}
 	for _, p := range plan.Paths {

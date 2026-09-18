@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// Back to draft and reopen are the two moves the phone was missing: a review
-// asked for too early, and a pull request closed by mistake.
 func TestDraftAndReopenReachTheRightPlace(t *testing.T) {
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +25,6 @@ func TestDraftAndReopenReachTheRightPlace(t *testing.T) {
 	if err := DraftPR(context.Background(), Secrets{GitLab: "glpat-x", GitLabURL: srv.URL}, link); err != nil {
 		t.Fatalf("draft: %v", err)
 	}
-	// GitLab keeps draft in the title: read it, then write it back prefixed.
 	if len(got) != 2 || !strings.HasPrefix(got[0], "GET ") || !strings.HasPrefix(got[1], "PUT ") || !strings.Contains(got[1], "/api/v4/projects/acme%2Fgroup%2Fapi/merge_requests/7") {
 		t.Fatalf("gitlab draft went to %q", got)
 	}
@@ -50,8 +47,6 @@ func TestDraftAndReopenReachTheRightPlace(t *testing.T) {
 	}
 }
 
-// A GitLab merge request already in draft is left alone: a second "Draft:"
-// on the title would be the phone's doing, not the person's.
 func TestDraftLeavesADraftAlone(t *testing.T) {
 	var puts int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,8 +64,6 @@ func TestDraftLeavesADraftAlone(t *testing.T) {
 	}
 }
 
-// The state a row shows is one word for every surface, and "draft" is one
-// of them now — GitHub keeps it beside state, GitLab beside the title.
 func TestPullStateFoldsDraftIn(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

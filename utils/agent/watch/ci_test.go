@@ -2,8 +2,6 @@ package watch
 
 import "testing"
 
-// A red build is the best thing to hand an agent: a precise signal, a small
-// diff, and a pass condition nobody can argue with.
 func TestRedBuildsOnlyArriveWhenAsked(t *testing.T) {
 	off := Rules{Enabled: true, PRs: true}
 	red := Event{Kind: KindCIFailed, Ref: "acme/api", Mine: true, Title: "e2e failed"}
@@ -22,9 +20,6 @@ func TestRedBuildsOnlyArriveWhenAsked(t *testing.T) {
 		t.Fatal("a build on something that is not mine is not my problem")
 	}
 
-	// github carries red builds, so --ci alone is enough to keep it polled —
-	// without it, a workspace that wants neither PRs nor CI polls github for
-	// nothing.
 	if on.DeadSource("github") {
 		t.Fatal("--ci keeps github worth polling")
 	}

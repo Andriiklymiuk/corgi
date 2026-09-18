@@ -16,8 +16,6 @@ func newFlagCmd() *cobra.Command {
 }
 
 func TestApplyGlobalFlagsJSON(t *testing.T) {
-	// Restore the global so a later test (e.g. TestRunConfigShow) doesn't
-	// inherit JSONOutput=true under -count>1.
 	defer func(prev bool) { utils.JSONOutput = prev }(utils.JSONOutput)
 	utils.JSONOutput = false
 	c := newFlagCmd()

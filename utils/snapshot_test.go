@@ -155,7 +155,6 @@ func TestCheckRestoreCompatibility(t *testing.T) {
 	if err := CheckRestoreCompatibility(m, "postgis/postgis:16-3.4", "arm64", "17"); err == nil {
 		t.Error("pg-major mismatch should fail")
 	}
-	// An unknown target version (e.g. unreadable PG_VERSION) skips the gate.
 	if err := CheckRestoreCompatibility(m, "postgis/postgis:16-3.4", "arm64", ""); err != nil {
 		t.Errorf("empty target pg-major should skip the gate, got %v", err)
 	}
@@ -166,9 +165,6 @@ func TestIsStackSupervised(t *testing.T) {
 	if IsStackSupervised(dir) {
 		t.Error("no .state.json should mean not supervised")
 	}
-	// write a state file with a running container-managed service (PID 0 is the
-	// container-managed convention; ReconcileRunState leaves it as-is rather than
-	// pid-probing an unowned pid, so the running status survives on any platform).
 	st := RunState{
 		Services: []RunStateEntry{{Status: "running", PID: 0, Command: "x"}},
 	}
@@ -189,8 +185,6 @@ func TestParsePgVersionMajor(t *testing.T) {
 	}
 }
 
-// writeZstdTar builds a valid zstd-wrapped tar (one file entry) at path, using
-// the same libs the prod code reads with, so probeArchive runs under plain go test.
 func writeZstdTar(t *testing.T, path string) {
 	t.Helper()
 	var buf bytes.Buffer
@@ -241,7 +235,6 @@ func TestProbeArchive(t *testing.T) {
 		t.Error("non-zstd file should fail to probe")
 	}
 
-	// valid zstd header wrapping garbage that is not a tar
 	corrupt := filepath.Join(dir, "corrupt.tar.zst")
 	cf, err := os.Create(corrupt)
 	if err != nil {
@@ -306,7 +299,6 @@ func TestCleanSnapshots(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(snapDir, "build1.tar.zst"), []byte("z"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		// a sibling file under the service dir that must survive
 		if err := os.WriteFile(filepath.Join(root, svc, "docker-compose.yml"), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -329,6 +321,5 @@ func TestCleanSnapshots(t *testing.T) {
 
 func TestCleanSnapshotsMissingRoot(t *testing.T) {
 	t.Chdir(t.TempDir())
-	// no corgi_services/db_services → CleanSnapshots returns without error
 	CleanSnapshots()
 }

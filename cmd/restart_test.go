@@ -79,12 +79,10 @@ func TestResolveRestartTarget(t *testing.T) {
 		{ServiceName: "api", Port: 3000, Start: []string{"echo hi"}},
 	}}
 
-	// 1. no state file -> E_NOT_RUNNING
 	if _, _, _, code, err := resolveRestartTarget(statePath, corgi, "api"); err == nil || code != utils.ErrNotRunning {
 		t.Fatalf("no-state: code=%q err=%v", code, err)
 	}
 
-	// write a run-state with api only
 	st := utils.RunState{Services: []utils.RunStateEntry{
 		{Name: "api", Kind: "service", Status: "running", PID: 42},
 	}}
@@ -92,18 +90,15 @@ func TestResolveRestartTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 2. service not in state -> E_NOT_RUNNING
 	if _, _, _, code, err := resolveRestartTarget(statePath, corgi, "web"); err == nil || code != utils.ErrNotRunning {
 		t.Fatalf("not-in-state: code=%q err=%v", code, err)
 	}
 
-	// 3. in state but not in compose -> E_SERVICE_NOT_FOUND
 	emptyCorgi := &utils.CorgiCompose{}
 	if _, _, _, code, err := resolveRestartTarget(statePath, emptyCorgi, "api"); err == nil || code != utils.ErrServiceNotFound {
 		t.Fatalf("not-in-compose: code=%q err=%v", code, err)
 	}
 
-	// 4. happy path -> no error, entry + svc resolved
 	_, entry, svc, code, err := resolveRestartTarget(statePath, corgi, "api")
 	if err != nil || code != "" {
 		t.Fatalf("happy: code=%q err=%v", code, err)

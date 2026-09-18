@@ -208,7 +208,6 @@ func TestStepNeedsRunWhenCachedOutputIsGone(t *testing.T) {
 		t.Fatal("marker plus node_modules present should skip")
 	}
 
-	// The markers cache restored, the node cache did not.
 	if err := os.RemoveAll(nodeModules); err != nil {
 		t.Fatal(err)
 	}
@@ -235,8 +234,6 @@ func cachedNodeService(t *testing.T) (Service, BeforeStartStep, string) {
 	return svc, step, svcDir
 }
 
-// The marker vouches for node_modules, so it lives inside node_modules: one
-// cache entry carries both, and they cannot be restored from different runs.
 func TestStepMarkerLivesInsideTheOutputDir(t *testing.T) {
 	svc, step, svcDir := cachedNodeService(t)
 
@@ -258,17 +255,12 @@ func TestStepMarkerLivesInsideTheOutputDir(t *testing.T) {
 	}
 }
 
-// The failure this design removes: CI restored fresh markers next to a
-// node_modules saved weeks earlier. With the marker inside node_modules, a
-// stale restore brings its stale marker along and the hash no longer matches.
 func TestStepNeedsRunWhenRestoredOutputDirIsStale(t *testing.T) {
 	svc, step, svcDir := cachedNodeService(t)
 
 	_, oldHash := StepNeedsRun(svc, 0, step, false)
 	PersistStepHash(svc, 0, step, oldHash)
 
-	// A new commit changes the lockfile; the cache's prefix fallback restores
-	// the previous node_modules, marker included.
 	if err := os.WriteFile(filepath.Join(svcDir, "package-lock.json"), []byte("v2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -276,9 +268,6 @@ func TestStepNeedsRunWhenRestoredOutputDirIsStale(t *testing.T) {
 		t.Fatal("a restored node_modules carrying an older marker must not skip the install")
 	}
 
-	// The other skew: a central marker that matches the new lockfile (a
-	// markers cache saved by a later run) must not vouch for this old
-	// node_modules.
 	_, newHash := StepNeedsRun(svc, 0, step, false)
 	if err := writeStepHash(stepCachePath(svc, 0), newHash); err != nil {
 		t.Fatal(err)
@@ -288,8 +277,6 @@ func TestStepNeedsRunWhenRestoredOutputDirIsStale(t *testing.T) {
 	}
 }
 
-// go.sum installs only into a shared home cache, so there is no directory to
-// carry the marker; those steps keep the central one.
 func TestStepMarkerStaysCentralWithoutAnOutputDir(t *testing.T) {
 	prev := CorgiComposePathDir
 	CorgiComposePathDir = t.TempDir()
@@ -312,7 +299,6 @@ func TestStepMarkerStaysCentralWithoutAnOutputDir(t *testing.T) {
 	}
 }
 
-// pip without a venv never produces .venv; the marker must not invent one.
 func TestStepMarkerDoesNotCreateAMissingOutputDir(t *testing.T) {
 	prev := CorgiComposePathDir
 	CorgiComposePathDir = t.TempDir()

@@ -9,18 +9,12 @@ import (
 	"time"
 )
 
-// DefaultWarmupTimeout is generous because warmup exists for work that is slow
-// by nature — bundling an app, compiling on first request.
 const DefaultWarmupTimeout = 10 * time.Minute
 
-// WarmupCheck is one expensive request performed once a service is listening,
-// before it counts as ready.
 type WarmupCheck struct {
 	Path    string        `yaml:"path,omitempty"`
 	Timeout time.Duration `yaml:"timeout,omitempty"`
-	// Expect is an optional substring the response body must contain. Without
-	// it any non-5xx response passes.
-	Expect string `yaml:"expect,omitempty"`
+	Expect  string        `yaml:"expect,omitempty"`
 }
 
 func (w *WarmupCheck) timeout() time.Duration {
@@ -37,9 +31,6 @@ func (w *WarmupCheck) path() string {
 	return w.Path
 }
 
-// RunWarmup performs the warmup request once and waits for it to complete.
-// Deliberately not a poll: a server that builds on demand holds the connection
-// until it is done, and asking again only queues a second build.
 func RunWarmup(ctx context.Context, name string, port int, warmup *WarmupCheck) error {
 	if warmup == nil || port == 0 {
 		return nil

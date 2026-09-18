@@ -1,8 +1,3 @@
-// Package lessons keeps what a workspace learned the hard way: the review
-// that said line 40 was wrong, the check that stayed red, the bot that
-// fell over — one line each, oldest first, in a markdown file a person
-// can read and edit. A new session in the workspace is pointed at it by
-// the context hook, so the same thing is not learned twice.
 package lessons
 
 import (
@@ -14,21 +9,16 @@ import (
 	"time"
 )
 
-// Lesson is one line: when, where it came from, what it said.
 type Lesson struct {
 	At     time.Time `json:"at"`
-	Source string    `json:"source"` // "review acme/api#7 (dan)", "done-when", "bot reviewer", "you"
+	Source string    `json:"source"`
 	Text   string    `json:"text"`
 }
 
-// Path is the workspace's file under the agent dir — never inside the
-// repository, so nothing shows up in git status.
 func Path(agentDir, workspace string) string {
 	return filepath.Join(agentDir, "lessons", safe(workspace)+".md")
 }
 
-// Add appends one lesson. The text is one line; anything after the first
-// newline is dropped, and a line already there is not written twice.
 func Add(agentDir, workspace string, l Lesson) error {
 	text := firstLine(l.Text)
 	if text == "" {
@@ -58,8 +48,6 @@ func Add(agentDir, workspace string, l Lesson) error {
 	return err
 }
 
-// List reads the file back, oldest first. A line that is not a lesson —
-// the heading, a note someone typed — is skipped.
 func List(agentDir, workspace string) []Lesson {
 	f, err := os.Open(Path(agentDir, workspace))
 	if err != nil {
@@ -78,8 +66,6 @@ func List(agentDir, workspace string) []Lesson {
 	return out
 }
 
-// parse reads "2026-09-13 · review acme/api#7 (dan): line 40 is wrong";
-// a line without the date or the source is kept as text alone.
 func parse(line string) Lesson {
 	l := Lesson{Text: line}
 	date, rest, ok := strings.Cut(line, " · ")

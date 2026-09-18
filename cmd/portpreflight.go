@@ -8,7 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// Conflict message per declared port already in use. isBusy/owner injected for tests.
 func checkPortConflicts(ports []portOwnerInfo, isBusy func(int) bool, owner func(int) string) []string {
 	var conflicts []string
 	for _, p := range ports {
@@ -24,8 +23,6 @@ func checkPortConflicts(ports []portOwnerInfo, isBusy func(int) bool, owner func
 	return conflicts
 }
 
-// Service ports only (not db_services: corgi reuses already-running db
-// containers, so their ports being held is expected, not a conflict).
 func collectServicePorts(corgi *utils.CorgiCompose) []portOwnerInfo {
 	var ports []portOwnerInfo
 	for _, svc := range corgi.Services {
@@ -40,8 +37,6 @@ func collectServicePorts(corgi *utils.CorgiCompose) []portOwnerInfo {
 	return ports
 }
 
-// portPreflight aborts the run if a declared service port is taken. With
-// killPort it first frees occupied ports, then re-checks.
 func portPreflight(corgi *utils.CorgiCompose, killPort bool) error {
 	ports := collectServicePorts(corgi)
 	if killPort {
@@ -53,7 +48,6 @@ func portPreflight(corgi *utils.CorgiCompose, killPort bool) error {
 				utils.Infof("⚠️  could not free port %d: %v\n", p.Port, err)
 				continue
 			}
-			// wait for the socket to release before the re-check below.
 			if !utils.WaitPortFree(p.Port, 3*time.Second) {
 				utils.Infof("⚠️  port %d still busy after kill\n", p.Port)
 			}

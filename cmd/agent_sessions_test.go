@@ -208,8 +208,6 @@ func TestAgentBoardShowsAndSetsTheSize(t *testing.T) {
 	}
 }
 
-// corgi agent new --workspace/--prompt: the workspace must be registered;
-// a prompt is spooled and handed over by id, never on the command line.
 func TestNewSessionArgs(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir())

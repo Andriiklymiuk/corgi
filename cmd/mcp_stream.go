@@ -12,48 +12,26 @@ import (
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
-// The stream: one open GET on which the launcher says "the board moved",
-// "the inbox moved", the moment the daemon writes them — so a phone or an
-// editor refetches what changed when it changes, instead of asking every
-// few seconds whether anything did. A frame names the feeds that moved and
-// never what they hold; a keyed device gets every frame sealed like any
-// answer. The poll stays: a stream that drops falls back to it.
-
-// streamFrame is one event on the stream. Seq counts changes since the
-// launcher started, so a listener that reconnects says where it was; What
-// names the feeds to read again, in allFeeds order.
 type streamFrame struct {
 	Seq  uint64    `json:"seq"`
 	What []string  `json:"what,omitempty"`
 	At   time.Time `json:"at"`
 }
 
-// allFeeds is every feed a listener can be told to read, in the order a
-// frame lists them.
 var allFeeds = []string{"board", "inbox", "kanban", "workspaces", "bots"}
 
-// streamFiles is which feeds each file the daemon writes feeds into.
 var streamFiles = map[string][]string{
 	"sessions.json": {"board", "kanban"},
 	"status.json":   {"board", "workspaces"},
 	"bots.json":     {"bots"},
 }
 
-// watchFiles are the watch's own, under <agentDir>/watch: the inbox and
-// the kanban read all of them.
 var watchFiles = []string{"events.jsonl", "ignored.json", "state.json", "states.json", "fixes.json", "picks.json", "pulls.json", "handed.json", "tasks.json", "board.json"}
 
-// streamTick is how often the files are looked at while someone listens;
-// a stat each is nothing, and the daemon writes at most a few times a second.
 var streamTick = 250 * time.Millisecond
 
-// streamPing keeps a quiet stream open through tunnels that drop an idle
-// connection.
 const streamPing = 20 * time.Second
 
-// changeWatch stats the files a launcher's answers are read from and tells
-// every listener which feeds moved. It runs only while someone listens: the
-// last listener gone, the loop ends, and the next one starts it again.
 type changeWatch struct {
 	dir   string
 	mu    sync.Mutex
@@ -70,7 +48,6 @@ type fileMark struct {
 	size int64
 }
 
-// streamSub is one listener: what moved since it last looked, and a nudge.
 type streamSub struct {
 	mu      sync.Mutex
 	pending map[string]bool
@@ -80,7 +57,6 @@ type streamSub struct {
 
 var changeWatches sync.Map
 
-// changeWatchFor is the one watch for an agent dir.
 func changeWatchFor(dir string) *changeWatch {
 	if w, ok := changeWatches.Load(dir); ok {
 		return w.(*changeWatch)
@@ -103,7 +79,6 @@ func (w *changeWatch) running() bool {
 	return w.stop != nil
 }
 
-// subscribe adds a listener and starts the loop for the first one.
 func (w *changeWatch) subscribe() *streamSub {
 	s := &streamSub{pending: map[string]bool{}, signal: make(chan struct{}, 1)}
 	w.mu.Lock()
@@ -117,7 +92,6 @@ func (w *changeWatch) subscribe() *streamSub {
 	return s
 }
 
-// unsubscribe drops a listener and stops the loop after the last one.
 func (w *changeWatch) unsubscribe(s *streamSub) {
 	w.mu.Lock()
 	delete(w.subs, s)
@@ -133,7 +107,6 @@ func (w *changeWatch) unsubscribe(s *streamSub) {
 	}
 }
 
-// markLocked stats every file once.
 func (w *changeWatch) markLocked() map[string]fileMark {
 	marks := map[string]fileMark{}
 	for path := range w.files {
@@ -158,8 +131,6 @@ func (w *changeWatch) loop(stop, done chan struct{}) {
 	}
 }
 
-// sweep is one look at the files: whatever moved becomes one frame for
-// every listener.
 func (w *changeWatch) sweep() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -199,7 +170,6 @@ func (w *changeWatch) sweep() {
 	}
 }
 
-// take is what moved since the listener last took, as one frame.
 func (s *streamSub) take() (streamFrame, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -221,10 +191,6 @@ func feedsInOrder(set map[string]bool) []string {
 	return out
 }
 
-// launchStream serves GET /launch/stream. It checks the caller the way
-// launchAuth does, then keeps the answer open: a hello with the seq to
-// resume from (and everything to read, when the caller was away and missed
-// something), a change frame each time files move, a ping while quiet.
 func launchStream(token, storePath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setLaunchHeaders(w)
@@ -279,8 +245,6 @@ func launchStream(token, storePath string) http.Handler {
 		now := watch.seq
 		watch.mu.Unlock()
 		hello := streamFrame{Seq: now, At: time.Now()}
-		// A listener back from somewhere else than now — behind, or from
-		// before this launcher started counting — reads everything once.
 		if after, err := strconv.ParseUint(r.URL.Query().Get("after"), 10, 64); err == nil && after != now {
 			hello.What = append([]string(nil), allFeeds...)
 		}

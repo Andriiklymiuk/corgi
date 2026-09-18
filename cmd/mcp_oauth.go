@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// Paths corgi serves as resource server and authorization server for its own
-// /mcp. RFC 9728 (protected resource) and RFC 8414 (AS metadata), both at
-// the root and under the /mcp path, since Claude probes the path form first.
 const (
 	oauthPRMPath        = "/.well-known/oauth-protected-resource"
 	oauthASMetadataPath = "/.well-known/oauth-authorization-server"
@@ -27,14 +24,8 @@ const (
 	oauthDocsURL        = "https://github.com/Andriiklymiuk/corgi/blob/main/docs/mcp.md"
 )
 
-// oauthServer is corgi as OAuth 2.1 authorization server for the connector.
-// One instance per `corgi mcp --http`; every /oauth and /.well-known route
-// hangs off it.
 type oauthServer struct {
-	mu sync.Mutex
-	// issuer is the public origin, set once the tunnel resolves; before that
-	// the loopback address. Never the request's Host header. Its own lock,
-	// so it can be read while mu is held.
+	mu          sync.Mutex
 	issuerMu    sync.Mutex
 	issuer      string
 	hosts       *oauthClientHosts
@@ -49,8 +40,6 @@ type oauthServer struct {
 	now         func() time.Time
 }
 
-// pendingAuth is a consent page waiting for approval. Filled in by the
-// authorize endpoint.
 type pendingAuth struct {
 	id            string
 	client        oauthClient
@@ -59,14 +48,9 @@ type pendingAuth struct {
 	state         string
 	approveCode   string
 	expires       time.Time
-	// redirect is set once approved: the redirect URI with the code on it.
-	redirect string
+	redirect      string
 }
 
-// newOAuthServer starts with the loopback issuer for listenAddr. deviceStore
-// is where access tokens are recorded as devices; statePath is oauth.json.
-// An unreadable oauth.json is reported and treated as empty, never fatal:
-// the header path must keep serving.
 func newOAuthServer(listenAddr string, hosts *oauthClientHosts, origins *originAllowlist, deviceStore, statePath string) *oauthServer {
 	state, err := loadOAuthState(statePath)
 	if err != nil {
@@ -74,7 +58,7 @@ func newOAuthServer(listenAddr string, hosts *oauthClientHosts, origins *originA
 		state = &oauthState{}
 	}
 	return &oauthServer{
-		issuer:      "http://" + localURL(listenAddr), // NOSONAR — loopback issuer until the tunnel resolves; OAuth 2.1 allows plain http only there
+		issuer:      "http://" + localURL(listenAddr),
 		hosts:       hosts,
 		origins:     origins,
 		deviceStore: deviceStore,
@@ -88,12 +72,8 @@ func newOAuthServer(listenAddr string, hosts *oauthClientHosts, origins *originA
 	}
 }
 
-// oauthRequestsPerMinute is one bucket for register, authorize and token
-// together. Behind a tunnel every request comes from the tunnel agent, so a
-// per-IP limit would be the same bucket with more code.
 const oauthRequestsPerMinute = 60
 
-// rateBucket is a token bucket; the caller holds oa.mu.
 type rateBucket struct {
 	capacity  float64
 	perSecond float64
@@ -104,7 +84,7 @@ type rateBucket struct {
 func (b *rateBucket) take(now time.Time) bool {
 	if b.last.IsZero() {
 		b.tokens = b.capacity
-	} else if elapsed := now.Sub(b.last); elapsed > 0 { // a clock step back refills nothing
+	} else if elapsed := now.Sub(b.last); elapsed > 0 {
 		b.tokens = min(b.capacity, b.tokens+elapsed.Seconds()*b.perSecond)
 	}
 	b.last = now
@@ -115,8 +95,6 @@ func (b *rateBucket) take(now time.Time) bool {
 	return true
 }
 
-// limited answers 429 when the shared bucket is empty. Called with oa.mu
-// held by the handler that owns the request.
 func (oa *oauthServer) limitedLocked(w http.ResponseWriter) bool {
 	if oa.bucket.take(oa.now()) {
 		return false
@@ -130,7 +108,6 @@ func (oa *oauthServer) saveLocked() error {
 	return saveOAuthState(oa.statePath, oa.state)
 }
 
-// setIssuer records the public origin the tunnel gave us.
 func (oa *oauthServer) setIssuer(raw string) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	if raw == "" {
@@ -147,7 +124,6 @@ func (oa *oauthServer) issuerURL() string {
 	return oa.issuer
 }
 
-// resourceMetadataURL is what the 401 challenge points at.
 func (oa *oauthServer) resourceMetadataURL() string {
 	return oa.issuerURL() + oauthPRMPath + "/mcp"
 }
@@ -179,7 +155,6 @@ func (oa *oauthServer) authorizationServerMetadata() map[string]any {
 	}
 }
 
-// metadataHandler serves one JSON document, cacheable for five minutes.
 func (oa *oauthServer) metadataHandler(doc func() map[string]any) http.Handler {
 	return oa.guard("GET, HEAD, OPTIONS", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(headerContentType, mimeJSON)
@@ -197,8 +172,6 @@ func (oa *oauthServer) metadataHandler(doc func() map[string]any) http.Handler {
 	}))
 }
 
-// guard is the /mcp endpoint's method and Origin discipline for the OAuth
-// routes: unlisted methods 405, a foreign Origin 403.
 func (oa *oauthServer) guard(allow string, next http.Handler) http.Handler {
 	methods := map[string]bool{}
 	for _, m := range strings.Split(allow, ",") {
@@ -220,7 +193,6 @@ func (oa *oauthServer) guard(allow string, next http.Handler) http.Handler {
 	})
 }
 
-// mount registers every OAuth route on mux.
 func (oa *oauthServer) mount(mux *http.ServeMux) {
 	prm := oa.metadataHandler(oa.protectedResourceMetadata)
 	as := oa.metadataHandler(oa.authorizationServerMetadata)
@@ -236,10 +208,8 @@ func (oa *oauthServer) mount(mux *http.ServeMux) {
 	mux.Handle(oauthPendingPath, oa.guard("GET", http.HandlerFunc(oa.pendingHandler)))
 }
 
-// maxOAuthBody bounds a registration or token request body.
 const maxOAuthBody = 64 << 10
 
-// registerRequest is the RFC 7591 metadata corgi reads; the rest is ignored.
 type registerRequest struct {
 	RedirectURIs            []string `json:"redirect_uris"`
 	ClientName              string   `json:"client_name"`
@@ -248,8 +218,6 @@ type registerRequest struct {
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
-// registerHandler is dynamic client registration: a public client with
-// allowlisted redirect URIs gets an id, no secret.
 func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -322,7 +290,6 @@ func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(body)
 }
 
-// oauthError writes an RFC 6749 §5.2 error body.
 func oauthError(w http.ResponseWriter, status int, code, description string) {
 	w.Header().Set(headerContentType, mimeJSON)
 	w.Header().Set("Cache-Control", "no-store")

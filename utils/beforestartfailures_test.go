@@ -14,7 +14,6 @@ func TestBeforeStartFailuresRecordAndReport(t *testing.T) {
 		t.Fatalf("no failures means no error, got %v", err)
 	}
 
-	// nil must not register a failure.
 	RecordBeforeStartFailure("api", nil)
 	if got := BeforeStartFailed(); len(got) != 0 {
 		t.Errorf("nil error must not record, got %v", got)
@@ -23,7 +22,6 @@ func TestBeforeStartFailuresRecordAndReport(t *testing.T) {
 	RecordBeforeStartFailure("web", errors.New("exit status 1"))
 	RecordBeforeStartFailure("api", errors.New("exit status 127"))
 
-	// Sorted, so the message is stable across runs.
 	got := BeforeStartFailed()
 	if len(got) != 2 || got[0] != "api" || got[1] != "web" {
 		t.Errorf("expected [api web], got %v", got)
@@ -40,8 +38,6 @@ func TestBeforeStartFailuresRecordAndReport(t *testing.T) {
 	}
 }
 
-// corgi restart re-enters the run in the same process; a failure from the last
-// boot must not fail the next one.
 func TestBeforeStartFailuresResetBetweenRuns(t *testing.T) {
 	ResetBeforeStartFailures()
 	t.Cleanup(ResetBeforeStartFailures)

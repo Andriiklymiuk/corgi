@@ -24,7 +24,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// watchFixture: a home with one registered workspace at ws, watch enabled.
 func watchFixture(t *testing.T, wc *config.WatchConfig) (dir, ws string) {
 	t.Helper()
 	home := t.TempDir()
@@ -76,7 +75,6 @@ func TestLoadWatchSpecsFromConfigAndTokens(t *testing.T) {
 		t.Fatalf("rules %+v", s.Rules)
 	}
 
-	// Disabled, or no tokens: still listed, so the status can say why.
 	t.Setenv("LINEAR_API_KEY", "")
 	t.Setenv("GITHUB_TOKEN", "")
 	githubTokenSeam := os.Getenv("PATH")
@@ -283,7 +281,6 @@ func TestWatchStatusShowsFixBudgetAndSkippedSources(t *testing.T) {
 		t.Fatalf("json: %+v", w)
 	}
 
-	// Without a daemon, `run` lists what waits rather than handing it anywhere.
 	out = captureStdout(t, func() {
 		if err := agentWatchRunCmd.RunE(agentWatchRunCmd, nil); err != nil {
 			t.Fatal(err)
@@ -347,7 +344,6 @@ func TestWatchTestWalksThePipeline(t *testing.T) {
 	}
 }
 
-// fakeGH puts a gh on PATH whose `auth token` prints token, and nothing else.
 func fakeGH(t *testing.T, token string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -370,7 +366,6 @@ func TestWatchStatusSeesTheGhCLIToken(t *testing.T) {
 	if !strings.Contains(out, "github gh-auth "+watch.Fingerprint("ghp_from_cli")) || !strings.Contains(out, "every 3m0s github") {
 		t.Fatalf("status: %s", out)
 	}
-	// A saved token wins over the CLI's.
 	t.Setenv("GITHUB_TOKEN", "ghp_env")
 	out = captureStdout(t, func() { runAgentWatchStatus(nil, nil) })
 	if !strings.Contains(out, "github "+watch.Fingerprint("ghp_env")+" ·") || strings.Contains(out, "gh-auth") {

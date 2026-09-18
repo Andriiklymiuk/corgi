@@ -9,9 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// chdirToCompose drops a minimal loadable corgi-compose.yml in a temp dir and
-// chdirs there, so commands that resolve the compose (autopilot, mission-control)
-// succeed. Returns the dir.
 func chdirToCompose(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -36,14 +33,12 @@ func runRoot(t *testing.T, args ...string) {
 }
 
 func TestPrintAutopilotStatus(t *testing.T) {
-	// No heartbeat yet.
 	out := captureStdout(t, func() {
 		printAutopilotStatus(utils.AutopilotState{Mode: utils.AutopilotUninitialized})
 	})
 	if out == "" {
 		t.Fatal("expected status output")
 	}
-	// With a heartbeat + last-iteration summary.
 	out = captureStdout(t, func() {
 		printAutopilotStatus(utils.AutopilotState{
 			Mode:          utils.AutopilotRunning,
@@ -61,8 +56,6 @@ func TestPrintAutopilotStatus(t *testing.T) {
 
 func TestLoadAutopilotStatusReadError(t *testing.T) {
 	dir := t.TempDir()
-	// Make the state path a directory so ReadAutopilotState fails with a
-	// non-NotExist error (exercises loadAutopilotStatus's error return).
 	if err := os.MkdirAll(utils.AutopilotStatePath(dir), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -74,20 +67,16 @@ func TestLoadAutopilotStatusReadError(t *testing.T) {
 func TestAutopilotCommandsViaCobra(t *testing.T) {
 	dir := chdirToCompose(t)
 
-	// Mode transitions (human mode): resume -> pause -> stop.
 	captureStdout(t, func() { runRoot(t, "autopilot", "resume") })
 	captureStdout(t, func() { runRoot(t, "autopilot", "pause") })
 	captureStdout(t, func() { runRoot(t, "autopilot", "stop") })
 
-	// Heartbeat records an iteration summary.
 	captureStdout(t, func() {
 		runRoot(t, "autopilot", "heartbeat", "--phase", "idle", "--built", "1", "--skipped", "2", "--note", "tick")
 	})
 
-	// Status (human) reads it back.
 	captureStdout(t, func() { runRoot(t, "autopilot", "status") })
 
-	// Status (JSON) emits the state object on stdout.
 	utils.JSONOutput = true
 	t.Cleanup(func() { utils.JSONOutput = false })
 	out := captureStdout(t, func() { runRoot(t, "autopilot", "status") })
@@ -95,7 +84,6 @@ func TestAutopilotCommandsViaCobra(t *testing.T) {
 		t.Fatalf("json status missing mode field: %q", out)
 	}
 
-	// The state file landed under the compose dir.
 	if _, err := os.Stat(utils.AutopilotStatePath(dir)); err != nil {
 		t.Fatalf("expected an autopilot state file: %v", err)
 	}
@@ -112,12 +100,10 @@ func TestMemoryListHumanAndTypeFilter(t *testing.T) {
 		_, _ = runMemory(t, "add", "--type", "fix", "--name", "retry-429", "--desc", "Backoff on 429")
 	})
 
-	// Human list shows both facts.
 	out := captureStdout(t, func() { _, _ = runMemory(t, "list") })
 	if !contains(out, "pg-choice") || !contains(out, "retry-429") {
 		t.Fatalf("human list missing facts:\n%s", out)
 	}
-	// --type narrows to one.
 	out = captureStdout(t, func() { _, _ = runMemory(t, "list", "--type", "fix") })
 	if !contains(out, "retry-429") || contains(out, "pg-choice") {
 		t.Fatalf("type filter wrong:\n%s", out)
@@ -150,8 +136,6 @@ func TestMemoryLintWarnsOnDanglingLink(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 	_ = os.Chdir(dir)
 
-	// A fact whose [[ghost]] link has no target → a lint WARNING (not an error),
-	// so the command prints the warning and exits 0.
 	factDir := filepath.Join(dir, utils.MemoryDirName, "decisions")
 	if err := os.MkdirAll(factDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -177,7 +161,6 @@ func TestSuggestHistoryHumanFlows(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 	_ = os.Chdir(dir)
 
-	// record (human) then list (human) shows the entry.
 	captureStdout(t, func() {
 		runSuggestHistory(t, "record", "--slug", "demo", "--status", "proposed", "--title", "Demo", "--lens", "eng")
 	})
@@ -186,12 +169,10 @@ func TestSuggestHistoryHumanFlows(t *testing.T) {
 		t.Fatalf("human list missing the recorded entry:\n%s", out)
 	}
 
-	// check (human): a recorded proposed slug is skipped...
 	out = captureStdout(t, func() { runSuggestHistory(t, "check", "--slug", "demo") })
 	if !contains(out, "skip") {
 		t.Fatalf("expected a skip line:\n%s", out)
 	}
-	// ...and an unknown slug is ok. --cooldown 0 falls back to the default window.
 	out = captureStdout(t, func() { runSuggestHistory(t, "check", "--slug", "fresh", "--cooldown", "0") })
 	if !contains(out, "ok") {
 		t.Fatalf("expected an ok line:\n%s", out)
@@ -200,12 +181,10 @@ func TestSuggestHistoryHumanFlows(t *testing.T) {
 
 func TestSuggestHistoryConfig(t *testing.T) {
 	withTempHome(t)
-	// Human mode.
 	out := captureStdout(t, func() { runSuggestHistory(t, "config") })
 	if !contains(out, "proactive suggest") {
 		t.Fatalf("human config missing the mode line:\n%s", out)
 	}
-	// JSON mode.
 	utils.JSONOutput = true
 	t.Cleanup(func() { utils.JSONOutput = false })
 	out = captureStdout(t, func() { runSuggestHistory(t, "config") })
@@ -217,7 +196,6 @@ func TestSuggestHistoryConfig(t *testing.T) {
 func TestSuggestHistoryWorkspaceFlag(t *testing.T) {
 	withTempHome(t)
 	ws := t.TempDir()
-	// --workspace points the state file at an explicit root (cron's path).
 	captureStdout(t, func() {
 		runSuggestHistory(t, "record", "--slug", "ws", "--status", "filed", "--ticket", "ABC-1", "--workspace", ws)
 	})
@@ -259,7 +237,6 @@ func TestBuildMissionFrameShowsDirty(t *testing.T) {
 func TestAgentWorkProber(t *testing.T) {
 	dir := t.TempDir()
 	yml := filepath.Join(dir, "corgi-compose.yml")
-	// A service with a path so the prober resolves a repo dir for it.
 	if err := os.WriteFile(yml, []byte("name: test\nservices:\n  api:\n    port: 3000\n    path: ./api\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -270,25 +247,20 @@ func TestAgentWorkProber(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 	_ = os.Chdir(dir)
 
-	// Disabled → every lookup yields nil.
 	if p := agentWorkProber(missionControlCmd, true); p("api") != nil {
 		t.Error("disabled prober must yield nil")
 	}
-	// Enabled → resolves known services; a non-git repo just probes to nil, and
-	// an unknown service is nil (not in the resolved map).
 	p := agentWorkProber(missionControlCmd, false)
-	_ = p("api")           // exercises the resolve + ProbeAgentWork path
-	if p("ghost") != nil { // unknown service
+	_ = p("api")
+	if p("ghost") != nil {
 		t.Error("unknown service must yield nil")
 	}
 }
 
 func TestRunMissionControlOnce(t *testing.T) {
 	chdirToCompose(t)
-	// Human, no agent-work probe — exercises the no-watch single-frame path.
 	captureStdout(t, func() { runRoot(t, "mission-control", "--no-agent-work") })
 
-	// JSON snapshot path.
 	utils.JSONOutput = true
 	t.Cleanup(func() { utils.JSONOutput = false })
 	out := captureStdout(t, func() { runRoot(t, "mission-control", "--no-agent-work", "--json") })

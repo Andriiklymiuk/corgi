@@ -1,9 +1,3 @@
-// Package config resolves agent-mode settings from two files with different
-// trust levels: `.corgi/agent.yml` is committed and written by whoever wrote
-// the repo, so it is UNTRUSTED; the user-level file in the corgi data directory
-// is written by the machine's owner and is TRUSTED.
-//
-// The rule that keeps this safe: untrusted config may restrict, never relax.
 package config
 
 import (
@@ -17,71 +11,32 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// RepoConfig is `.corgi/agent.yml` — committed, untrusted.
-//
-// Deliberately tiny. Every field here either identifies the workspace or
-// restricts what may be done with it. Adding a field that grants capability
-// would make cloning a repository a way to run code on someone's machine.
 type RepoConfig struct {
 	Version   int           `yaml:"version"`
 	Workspace RepoWorkspace `yaml:"workspace"`
 }
 
-// RepoWorkspace is the identity half of a workspace.
 type RepoWorkspace struct {
-	ID      string   `yaml:"id"`
-	Aliases []string `yaml:"aliases"`
-	// Sensitive refuses public tunnels for this workspace. Honoured from the
-	// repo file because it only ever takes capability away.
-	Sensitive bool `yaml:"sensitive"`
+	ID        string   `yaml:"id"`
+	Aliases   []string `yaml:"aliases"`
+	Sensitive bool     `yaml:"sensitive"`
 }
 
-// UserConfig is the user-level file — never committed, trusted.
 type UserConfig struct {
-	Version    int                        `yaml:"version"`
-	Workspaces map[string]WorkspaceConfig `yaml:"workspaces"`
-	Defaults   WorkspaceConfig            `yaml:"defaults"`
-	// NotifyUrl gets a POST per daemon notification; trusted config only.
-	NotifyUrl string `yaml:"notifyUrl"`
-	// DigestAt is a local "HH:MM" at which the daemon sends one message a
-	// day — sessions run, limits hit, how long you were waited on — to the
-	// same place notifications go. Empty means no digest.
-	DigestAt string `yaml:"digestAt"`
-	// StayAwake keeps the machine awake for as long as the DAEMON runs, not
-	// just while a session does. Without it a laptop with no session running
-	// goes to sleep and stops answering the phone entirely — which is the one
-	// state agent mode exists to avoid. Off by default: a machine that never
-	// sleeps is a flat battery, and that must be the owner's choice.
-	StayAwake bool `yaml:"stayAwake"`
-	// KeepDisplay makes the wake lock keep the display lit too (macOS
-	// caffeinate -d): the lock screen comes from the display sleeping, which
-	// the plain lock does not stop. Off by default: a lit screen is a
-	// battery and a burn-in, and that is the owner's choice.
-	KeepDisplay bool `yaml:"keepDisplay,omitempty"`
-	// AutoContinue lets the daemon type "continue" into a session that hit
-	// a limit once the window resets (quota) or after a short wait
-	// (overload). Off by default: it types into your terminal.
-	AutoContinue bool `yaml:"autoContinue"`
-	// Profiles are named setting bundles pickable at session-start time —
-	// "work", "personal" — for running one workspace under different Claude
-	// accounts. Trusted like everything else here: a remote caller sends only
-	// a profile NAME; what it selects is defined in this file.
-	Profiles map[string]WorkspaceConfig `yaml:"profiles"`
-	// TrackSlots is how many keys the session board has — the size of the
-	// Stream Deck it is drawn on. Zero means the default (a Mini's six).
-	TrackSlots int `yaml:"trackSlots,omitempty"`
-	// SessionCap is the token budget every session runs under — the
-	// daemon rings once when one passes it and the row says so. Zero is
-	// no budget. `corgi agent cap 50M` sets it.
-	SessionCap int64 `yaml:"sessionCap,omitempty"`
-	// Stream lists the workspaces whose sessions a paired phone may read
-	// as a conversation (`corgi agent stream enable --workspace api`), or
-	// "*" for all. Empty: no transcript leaves this machine. The list is
-	// here, in the trusted config, never in a repository.
-	Stream []string `yaml:"stream,omitempty"`
+	Version      int                        `yaml:"version"`
+	Workspaces   map[string]WorkspaceConfig `yaml:"workspaces"`
+	Defaults     WorkspaceConfig            `yaml:"defaults"`
+	NotifyUrl    string                     `yaml:"notifyUrl"`
+	DigestAt     string                     `yaml:"digestAt"`
+	StayAwake    bool                       `yaml:"stayAwake"`
+	KeepDisplay  bool                       `yaml:"keepDisplay,omitempty"`
+	AutoContinue bool                       `yaml:"autoContinue"`
+	Profiles     map[string]WorkspaceConfig `yaml:"profiles"`
+	TrackSlots   int                        `yaml:"trackSlots,omitempty"`
+	SessionCap   int64                      `yaml:"sessionCap,omitempty"`
+	Stream       []string                   `yaml:"stream,omitempty"`
 }
 
-// StreamAllowed says whether a session in workspace may be read by a phone.
 func (u *UserConfig) StreamAllowed(workspace string) bool {
 	if u == nil {
 		return false
@@ -94,66 +49,29 @@ func (u *UserConfig) StreamAllowed(workspace string) bool {
 	return false
 }
 
-// WorkspaceConfig is everything that grants capability. Trusted sources only.
 type WorkspaceConfig struct {
-	Autostart *bool `yaml:"autostart"`
-	// AutostartSession makes the server the daemon starts by itself also open
-	// a session in the checkout, the way `claude remote-control` does when
-	// run by hand. Off by default: a server that comes up with the daemon is
-	// there so the machine is reachable, and the session it would pre-create
-	// — one per workspace, per daemon start, per network-timeout restart — is
-	// what fills the phone's list with rows nobody opened. Sessions are
-	// created from claude.ai or by a launcher Start instead. Turn this on for
-	// a workspace whose session you want waiting in the list the moment the
-	// daemon is up. A pointer, like Autostart, so a workspace can turn a
-	// default off as well as on.
-	AutostartSession *bool `yaml:"autostartSession"`
-	// Kind selects which agent CLI to supervise. Empty keeps the default, so a
-	// config written before this existed behaves exactly as it did.
-	Kind string `yaml:"kind"`
-	Bin  string `yaml:"bin"`
-	// Args is the argv for kind: custom, after the binary name.
-	//
-	// Trusted config only, like everything else here — an argv is a choice of
-	// what code runs, so a committed repo file must never reach it.
-	Args []string `yaml:"args"`
-	// ConfigDirEnv and CredentialEnv describe a custom kind's environment.
-	ConfigDirEnv   string   `yaml:"configDirEnv"`
-	CredentialEnv  []string `yaml:"credentialEnv"`
-	Spawn          string   `yaml:"spawn"`
-	Capacity       int      `yaml:"capacity"`
-	PermissionMode string   `yaml:"permissionMode"`
-	ConfigDir      string   `yaml:"configDir"`
-	// Accounts lists the profiles this workspace may run under, for `corgi
-	// agent claude --profile auto` (the one with the most budget left) and
-	// `corgi agent carry` (moving a limited session to another). Empty means
-	// only its own account: a workspace never switches unless told it may.
-	Accounts []string `yaml:"accounts"`
-	WakeLock string   `yaml:"wakeLock"`
-	// InheritAPIKey lets this workspace keep an ambient ANTHROPIC_API_KEY.
-	// Off unless the machine's owner asks for it: remote control refuses to
-	// run with one set, and an inherited key bills the API instead of a
-	// subscription.
-	InheritAPIKey     bool `yaml:"inheritApiKey"`
-	InheritOAuthToken bool `yaml:"inheritOauthToken"`
-	// Watch asks the daemon to poll the tracker and code host for this
-	// workspace and act on new issues and review comments.
-	Watch *WatchConfig `yaml:"watch"`
-	// Models is which model does which kind of work, so a plan is thought
-	// through on the strong one and a red build fixed on the cheap one.
-	Models *ModelPolicy `yaml:"models"`
-	// Routines are runs on a clock: the morning digest, the PR babysitter.
-	// Each is a catalog kind or a prompt, and a schedule.
-	Routines []Routine `yaml:"routines,omitempty"`
-	// DangerouslySkipPermissions runs the session with permission prompts off,
-	// removing the main defence against it acting on instructions injected into
-	// a file it read. Trusted config only by construction — RepoConfig has no
-	// such field, so a cloned repository can never turn it on.
-	DangerouslySkipPermissions bool `yaml:"dangerouslySkipPermissions"`
+	Autostart        *bool  `yaml:"autostart"`
+	AutostartSession *bool  `yaml:"autostartSession"`
+	Kind             string `yaml:"kind"`
+	Bin              string `yaml:"bin"`
+	// Trusted config only: argv picks what code runs, a committed repo file must never reach it.
+	Args                       []string     `yaml:"args"`
+	ConfigDirEnv               string       `yaml:"configDirEnv"`
+	CredentialEnv              []string     `yaml:"credentialEnv"`
+	Spawn                      string       `yaml:"spawn"`
+	Capacity                   int          `yaml:"capacity"`
+	PermissionMode             string       `yaml:"permissionMode"`
+	ConfigDir                  string       `yaml:"configDir"`
+	Accounts                   []string     `yaml:"accounts"`
+	WakeLock                   string       `yaml:"wakeLock"`
+	InheritAPIKey              bool         `yaml:"inheritApiKey"`
+	InheritOAuthToken          bool         `yaml:"inheritOauthToken"`
+	Watch                      *WatchConfig `yaml:"watch"`
+	Models                     *ModelPolicy `yaml:"models"`
+	Routines                   []Routine    `yaml:"routines,omitempty"`
+	DangerouslySkipPermissions bool         `yaml:"dangerouslySkipPermissions"`
 }
 
-// LoadRepo reads `.corgi/agent.yml` from a workspace directory. A missing file
-// is not an error — agent mode is opt-in.
 func LoadRepo(dir string) (*RepoConfig, error) {
 	path := filepath.Join(dir, ".corgi", "agent.yml")
 	data, err := os.ReadFile(path)
@@ -170,11 +88,6 @@ func LoadRepo(dir string) (*RepoConfig, error) {
 	return &c, nil
 }
 
-// LoadUser reads the trusted user-level config.
-//
-// The file must not be group- or world-readable: it names the config
-// directories holding Claude credentials, and on a shared machine that is a
-// map to someone else's account.
 func LoadUser(path string) (*UserConfig, error) {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -183,8 +96,6 @@ func LoadUser(path string) (*UserConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Skipped on Windows: Go reports 0666 for every file there, so this would
-	// reject a config the user cannot fix, with advice that does not apply.
 	if runtime.GOOS != "windows" {
 		if mode := info.Mode().Perm(); mode&0o077 != 0 {
 			return nil, fmt.Errorf(
@@ -200,10 +111,6 @@ func LoadUser(path string) (*UserConfig, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	// Bypass must be a deliberate per-workspace (or per-profile) choice. Under
-	// defaults: it would skip prompts for every workspace — including ones a
-	// later `agent scan` adds — and the OR overlay means no workspace could turn
-	// it back off. Too dangerous to allow as a blanket default.
 	if c.Defaults.DangerouslySkipPermissions {
 		return nil, fmt.Errorf(
 			"%s: dangerouslySkipPermissions cannot be set under defaults: — set it per-workspace or per-profile, so each bypass is a deliberate opt-in with an opt-out",
@@ -215,26 +122,14 @@ func LoadUser(path string) (*UserConfig, error) {
 	return &c, nil
 }
 
-// Resolved is the merged settings for one workspace.
 type Resolved struct {
-	// ID is the registry's identity for this workspace. Trusted.
-	ID string
-	// RepoDeclaredID is whatever the committed file called itself. Untrusted:
-	// useful to `corgi agent init`, never used to look up settings.
+	ID             string
 	RepoDeclaredID string
 	Aliases        []string
 	Sensitive      bool
 	WorkspaceConfig
 }
 
-// Resolve merges the two files under the restrict-never-relax rule.
-//
-// id comes from the local registry and the repo file may not change it: the id
-// keys into the trusted per-workspace settings, so a clone declaring `id: work`
-// would inherit that workspace's configDir, bin and permissionMode.
-// RepoDeclaredID is reported separately for `corgi agent init` to adopt.
-//
-// repo may be nil. Capability-granting fields come only from user.
 func Resolve(id string, repo *RepoConfig, user *UserConfig) Resolved {
 	out := Resolved{ID: id}
 
@@ -254,32 +149,19 @@ func Resolve(id string, repo *RepoConfig, user *UserConfig) Resolved {
 	return out
 }
 
-// ChatConfig is the chat services a workspace listens to. Slack today.
 type ChatConfig struct {
 	Slack *SlackWatch `yaml:"slack,omitempty"`
 }
 
-// SlackWatch is one workspace's Slack.
 type SlackWatch struct {
-	// Mentions rings when someone names me or writes to me directly.
-	Mentions bool `yaml:"mentions"`
-	// Channels are listened to message by message.
-	Channels []string `yaml:"channels,omitempty"`
-	// ReviewChannels are where pull requests are posted for review: a post
-	// carrying links is one review to do, answered in its thread.
+	Mentions       bool     `yaml:"mentions"`
+	Channels       []string `yaml:"channels,omitempty"`
 	ReviewChannels []string `yaml:"reviewChannels,omitempty"`
-	// Trust names the people whose mention may start an unattended run —
-	// the author of the message, not whoever it names. Empty means nobody:
-	// a channel is open to whoever is in it, so a message arriving from one
-	// is a request to look at, never an instruction to carry out.
-	Trust []string `yaml:"trust,omitempty"`
-	// PostTo is the default channel for `corgi agent chat post`.
-	PostTo string `yaml:"postTo,omitempty"`
-	// ReplyAs is bot or me; empty picks the bot when there is a bot token.
-	ReplyAs string `yaml:"replyAs,omitempty"`
+	Trust          []string `yaml:"trust,omitempty"`
+	PostTo         string   `yaml:"postTo,omitempty"`
+	ReplyAs        string   `yaml:"replyAs,omitempty"`
 }
 
-// MayRun says whether this person's mention may start an unattended run.
 func (s *SlackWatch) MayRun(author string) bool {
 	if s == nil || len(s.Trust) == 0 {
 		return false
@@ -296,153 +178,52 @@ func (s *SlackWatch) MayRun(author string) bool {
 	return false
 }
 
-// WatchConfig is what `corgi agent watch enable` writes.
 type WatchConfig struct {
-	Enabled  bool   `yaml:"enabled"`
-	Interval string `yaml:"interval"` // "3m"; "0" polls never (webhooks only)
-	// Tracker is linear or jira; empty picks whichever has a token.
-	Tracker string `yaml:"tracker"`
-	// Project is the Linear team key or Jira project key.
-	Project string `yaml:"project"`
-	// Labels and States filter new issues; empty matches any.
-	Labels []string `yaml:"labels"`
-	States []string `yaml:"states"`
-	// Assignee is "me" (default) or "any".
-	Assignee string `yaml:"assignee"`
-	// Comments: new comments on issues assigned to me.
-	Comments bool `yaml:"comments"`
-	// PRs: reviews and comments on pull requests I opened.
-	PRs bool `yaml:"prs"`
-	// Repos limits GitHub polling to owner/repo names; empty means every
-	// notification.
-	Repos []string `yaml:"repos"`
-	// Action is notify (default) or fix: fix runs `claude -p` in the
-	// workspace with the matching skill and opens draft PRs.
-	Action string `yaml:"action"`
-	// MaxFixesPerHour and MaxFixesPerDay cap how many fixes start; 0 is
-	// the default (3 and 10). A fix past the cap is deferred, not dropped.
-	MaxFixesPerHour int `yaml:"maxFixesPerHour,omitempty"`
-	MaxFixesPerDay  int `yaml:"maxFixesPerDay,omitempty"`
-	// Quiet is a local "HH:MM-HH:MM" window in which no fix starts, e.g.
-	// "23:00-07:00"; empty means none.
-	Quiet string `yaml:"quiet,omitempty"`
-	// DaysOff are weekdays the watch sleeps through — "sat", "sun" — no
-	// polling, no fix, nothing rings until the next working day.
-	DaysOff []string `yaml:"daysOff,omitempty"`
-	// Lease claims a ticket on the tracker before working it, so a second
-	// machine watching the same board leaves it alone. Off by default: it
-	// posts a comment, which not every board wants.
-	Lease bool `yaml:"lease,omitempty"`
-	// NoRetry stops the daemon from starting a deferred fix on its own once
-	// the cap, the quiet hours or the budget that stopped it has passed.
-	// Off by default: a fix that waited for budget runs when budget returns.
-	NoRetry bool `yaml:"noRetry,omitempty"`
-	// Isolate gives every unattended run its own git worktrees, one per
-	// repository, on a branch named after the ticket — so a run never
-	// touches your checkout and two runs on one repo do not collide. Off by
-	// default: it takes disk and a branch per ticket.
-	Isolate bool `yaml:"isolate,omitempty"`
-	// PruneAfter removes an isolated run's worktrees this long after it
-	// finished ("7d", "48h"); the branch stays, a dirty worktree stays.
-	// Empty keeps them until `watch undo` or `watch prune`.
-	PruneAfter string `yaml:"pruneAfter,omitempty"`
-	// DayCap is the workspace's tokens-per-day budget: what its sessions
-	// spend, summed by the sweep; the daemon rings once when a day passes
-	// it. 0 is none (2.24).
-	DayCap int64 `yaml:"dayCap,omitempty"`
-	// Headless lets a message for a session whose terminal is gone — the
-	// editor closed, the lid shut on a tab — run as one headless turn,
-	// claude -p --resume, in its own checkout under its own account. The
-	// phone's chat keeps working after the terminal is gone. Off by
-	// default: -p answers permission prompts on its own (acceptEdits).
-	Headless bool `yaml:"headless,omitempty"`
-	// RerunCI reruns the failed jobs of a red build once before anyone is
-	// told or handed it; the second red on the same run goes the usual
-	// way. GitHub. Off by default.
-	RerunCI bool `yaml:"rerunCI,omitempty"`
-	// Chat is the workspace's chat listening and speaking: which channels,
-	// who may start a run, where a reply goes. Trusted config only — a
-	// channel to read and a person who may start a run are capability.
-	Chat *ChatConfig `yaml:"chat,omitempty"`
-	// Silent keeps this workspace's watch quiet: fixes run, the inbox and
-	// the kanban fill, but nothing rings — no toast, no phone push. A
-	// permission prompt in a live session still rings; that is not the
-	// watch's. Off by default.
-	Silent bool `yaml:"silent,omitempty"`
-	// AutoCarry moves a session that hit its five-hour quota to another of
-	// the workspace's accounts that still has budget — the transcript
-	// copied, a new terminal resuming it there — once per limit. Only
-	// profiles the accounts list names. Off by default: it opens a terminal.
-	AutoCarry bool `yaml:"autoCarry,omitempty"`
-	// Slots is how many unattended runs may go at once in this workspace;
-	// 0 and 1 are one at a time. More than one needs isolate, or the runs
-	// would share one checkout — the daemon keeps to one without it.
-	Slots int `yaml:"slots,omitempty"`
-	// Reviews reports pull requests someone asked me to review.
-	Reviews bool `yaml:"reviews,omitempty"`
-	// CI reports builds that went red on something of mine.
-	CI bool `yaml:"ci,omitempty"`
-	// From narrows comments and reviews to these people; empty is anyone.
-	From []string `yaml:"from,omitempty"`
-	// Bots lets comments from bot accounts count — a review bot whose
-	// findings are to be fixed. Off by default.
-	Bots bool `yaml:"bots,omitempty"`
-	// FixKinds narrows what action: fix runs on — "issue.new",
-	// "issue.comment", "pr.comment", "pr.review". Empty is every kind that
-	// matched, which is what fix has always meant.
-	FixKinds []string `yaml:"fixKinds,omitempty"`
-	// ReviewStatus is the column a ticket moves to once a run has opened a
-	// pull request for it: the work is done, it is waiting on a reviewer.
-	// Empty writes nothing.
-	ReviewStatus string `yaml:"reviewStatus,omitempty"`
-	// PickupStatus is the column a ticket moves to when someone picks it up
-	// — "In Progress", say. Empty writes nothing: a tracker corgi has not
-	// been told to move tickets on is left alone.
-	PickupStatus string `yaml:"pickupStatus,omitempty"`
-	// AutoMerge merges a pull request of mine the moment the forge says it
-	// is ready — checks green, approved — and says so. Off by default: a
-	// merge is a merge.
-	AutoMerge bool `yaml:"autoMerge,omitempty"`
-	// Approve lets an unattended review of a pull request someone asked
-	// me to review end in an approval when nothing blocks and the risk
-	// card says so. Off by default: an approval carries my name.
-	Approve bool `yaml:"approve,omitempty"`
-	// HandOver types a review comment, a red build or an asked-for review
-	// into the session already on that branch, as the next message, so the
-	// loop closes where the work is. Off by default.
-	HandOver bool `yaml:"handOver,omitempty"`
-	// AutoAllow answers a permission prompt on its own when the tool only
-	// reads — Read, Grep, Glob, a web search — so a phone is not woken for
-	// `ls`. "reads" is the one value; anything that writes, and every Bash
-	// command, still waits for a person. Off by default.
-	AutoAllow string `yaml:"autoAllow,omitempty"`
-	// DoneWhen is what finished means for a session in this workspace:
-	// commands run in its directory when it stops with changes on its
-	// branch — `go test ./...`, `pnpm lint`. One red and the daemon types
-	// the failure back as the next message; the session is not done. Empty
-	// means a stop is a stop.
-	DoneWhen []string `yaml:"doneWhen,omitempty"`
-	// CompactAt is the context fill, in percent, past which the daemon
-	// types /compact into a session the next time it stops — before it
-	// forgets what it was doing. 0 is off; 85 is the number the board
-	// already goes red at.
-	CompactAt int `yaml:"compactAt,omitempty"`
-	// Rebase rebases a session's branch onto main where it sits when the
-	// session stops behind main with a clean tree and no conflicts. Off by
-	// default: it rewrites a branch. (A branch that would conflict is
-	// typed into the session instead, under handOver.)
-	Rebase bool `yaml:"rebase,omitempty"`
-	// Lessons writes what the workspace learned the hard way — a review
-	// that asked for changes, a check that stayed red, a bot that fell
-	// over — one line each to <agentDir>/lessons/<workspace>.md, which the
-	// context hook points every new session at. Off by default.
-	Lessons bool `yaml:"lessons,omitempty"`
+	Enabled         bool        `yaml:"enabled"`
+	Interval        string      `yaml:"interval"`
+	Tracker         string      `yaml:"tracker"`
+	Project         string      `yaml:"project"`
+	Labels          []string    `yaml:"labels"`
+	States          []string    `yaml:"states"`
+	Assignee        string      `yaml:"assignee"`
+	Comments        bool        `yaml:"comments"`
+	PRs             bool        `yaml:"prs"`
+	Repos           []string    `yaml:"repos"`
+	Action          string      `yaml:"action"`
+	MaxFixesPerHour int         `yaml:"maxFixesPerHour,omitempty"`
+	MaxFixesPerDay  int         `yaml:"maxFixesPerDay,omitempty"`
+	Quiet           string      `yaml:"quiet,omitempty"`
+	DaysOff         []string    `yaml:"daysOff,omitempty"`
+	Lease           bool        `yaml:"lease,omitempty"`
+	NoRetry         bool        `yaml:"noRetry,omitempty"`
+	Isolate         bool        `yaml:"isolate,omitempty"`
+	PruneAfter      string      `yaml:"pruneAfter,omitempty"`
+	DayCap          int64       `yaml:"dayCap,omitempty"`
+	Headless        bool        `yaml:"headless,omitempty"`
+	RerunCI         bool        `yaml:"rerunCI,omitempty"`
+	Chat            *ChatConfig `yaml:"chat,omitempty"`
+	Silent          bool        `yaml:"silent,omitempty"`
+	AutoCarry       bool        `yaml:"autoCarry,omitempty"`
+	Slots           int         `yaml:"slots,omitempty"`
+	Reviews         bool        `yaml:"reviews,omitempty"`
+	CI              bool        `yaml:"ci,omitempty"`
+	From            []string    `yaml:"from,omitempty"`
+	Bots            bool        `yaml:"bots,omitempty"`
+	FixKinds        []string    `yaml:"fixKinds,omitempty"`
+	ReviewStatus    string      `yaml:"reviewStatus,omitempty"`
+	PickupStatus    string      `yaml:"pickupStatus,omitempty"`
+	AutoMerge       bool        `yaml:"autoMerge,omitempty"`
+	Approve         bool        `yaml:"approve,omitempty"`
+	HandOver        bool        `yaml:"handOver,omitempty"`
+	AutoAllow       string      `yaml:"autoAllow,omitempty"`
+	DoneWhen        []string    `yaml:"doneWhen,omitempty"`
+	CompactAt       int         `yaml:"compactAt,omitempty"`
+	Rebase          bool        `yaml:"rebase,omitempty"`
+	Lessons         bool        `yaml:"lessons,omitempty"`
 }
 
-// AutoAllowReads is the one permission policy a workspace can hold.
 const AutoAllowReads = "reads"
 
-// ParseAutoAllow reads a policy word: "reads", or "off"/"" for none.
 func ParseAutoAllow(s string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "", "off", "none", "no":
@@ -453,42 +234,26 @@ func ParseAutoAllow(s string) (string, error) {
 	return "", fmt.Errorf("auto-allow is reads or off, not %q", s)
 }
 
-// Routine is one scheduled run. Kind names a catalog entry (digest,
-// babysit-pr, deps, release-notes, flaky, doc-drift); Prompt is a run of
-// the user's own; Schedule is "daily HH:MM", "every 6h" or "weekly Mon HH:MM".
 type Routine struct {
 	Name     string `yaml:"name"`
 	Kind     string `yaml:"kind,omitempty"`
 	Prompt   string `yaml:"prompt,omitempty"`
 	Schedule string `yaml:"schedule"`
 	Model    string `yaml:"model,omitempty"`
-	// Bot is the bot the run happens as: its soul, model and account, and
-	// the run is filed under its name. Empty runs plain, like a fix.
-	Bot string `yaml:"bot,omitempty"`
-	Off bool   `yaml:"off,omitempty"`
+	Bot      string `yaml:"bot,omitempty"`
+	Off      bool   `yaml:"off,omitempty"`
 }
 
-// ModelPolicy names a model per phase of work. Empty fields take the
-// defaults; Kinds overrides the unattended runner per event kind.
 type ModelPolicy struct {
-	// Auto is what `corgi agent claude --model auto` starts with; opusplan
-	// (Opus to plan, Sonnet to execute) unless told otherwise.
-	Auto string `yaml:"auto,omitempty"`
-	// Plan, Execute, Review and Triage are the phases a run goes through.
-	Plan    string `yaml:"plan,omitempty"`
-	Execute string `yaml:"execute,omitempty"`
-	Review  string `yaml:"review,omitempty"`
-	Triage  string `yaml:"triage,omitempty"`
-	// Escalate is what the next run uses after a failed one on the same
-	// ticket: a harder problem gets the stronger model, not another try.
-	Escalate string `yaml:"escalate,omitempty"`
-	// Kinds maps an unattended event kind (issue.new, ci.failed, …) to a
-	// model, beating the phase defaults.
-	Kinds map[string]string `yaml:"kinds,omitempty"`
+	Auto     string            `yaml:"auto,omitempty"`
+	Plan     string            `yaml:"plan,omitempty"`
+	Execute  string            `yaml:"execute,omitempty"`
+	Review   string            `yaml:"review,omitempty"`
+	Triage   string            `yaml:"triage,omitempty"`
+	Escalate string            `yaml:"escalate,omitempty"`
+	Kinds    map[string]string `yaml:"kinds,omitempty"`
 }
 
-// Defaults for the policy: plan and review on the strong model, execution
-// and triage on the cheap one.
 const (
 	ModelAutoDefault     = "opusplan"
 	ModelPlanDefault     = "opus"
@@ -498,15 +263,10 @@ const (
 	ModelEscalateDefault = "opus"
 )
 
-// ForAuto is the interactive default.
 func (m *ModelPolicy) ForAuto() string {
 	return pick(m, func(p ModelPolicy) string { return p.Auto }, ModelAutoDefault)
 }
 
-// ForKind is the runner's model for one event kind: the kind's own entry,
-// else the phase it belongs to. A fresh ticket is planned; a red build, a
-// comment or a review reply is executed; a review someone asked for is
-// reviewed.
 func (m *ModelPolicy) ForKind(kind string) string {
 	if m != nil && m.Kinds != nil {
 		if v := strings.TrimSpace(m.Kinds[kind]); v != "" {
@@ -523,7 +283,6 @@ func (m *ModelPolicy) ForKind(kind string) string {
 	}
 }
 
-// ForEscalation is the model after a failed run.
 func (m *ModelPolicy) ForEscalation() string {
 	return pick(m, func(p ModelPolicy) string { return p.Escalate }, ModelEscalateDefault)
 }
@@ -568,9 +327,6 @@ func overlayModels(base, over *ModelPolicy) *ModelPolicy {
 	return &merged
 }
 
-// overlayWatch replaces base with over, keeping base's caps and quiet
-// hours where over left them unset, so defaults: can carry a budget for
-// every watched workspace.
 func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	if over == nil {
 		return base
@@ -609,7 +365,6 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	return &merged
 }
 
-// overlay applies the non-empty fields of over onto base.
 func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	base = overlayLaunch(base, over)
 	base = overlayAccount(base, over)
@@ -618,16 +373,12 @@ func overlay(base, over WorkspaceConfig) WorkspaceConfig {
 	if len(over.Routines) > 0 {
 		base.Routines = over.Routines
 	}
-	// Booleans that grant capability are OR-ed rather than overwritten, so a
-	// per-workspace entry cannot silently turn off a default the user set.
 	base.InheritAPIKey = base.InheritAPIKey || over.InheritAPIKey
 	base.InheritOAuthToken = base.InheritOAuthToken || over.InheritOAuthToken
 	base.DangerouslySkipPermissions = base.DangerouslySkipPermissions || over.DangerouslySkipPermissions
 	return base
 }
 
-// overlayLaunch covers how a session is started: the program and its
-// supervision.
 func overlayLaunch(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.Autostart != nil {
 		base.Autostart = over.Autostart
@@ -641,9 +392,6 @@ func overlayLaunch(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.Bin != "" {
 		base.Bin = over.Bin
 	}
-	// Replaced wholesale rather than appended: an argv is one command, and
-	// concatenating a default's flags onto a workspace's own would produce a
-	// command line neither file asked for.
 	if len(over.Args) > 0 {
 		base.Args = over.Args
 	}
@@ -659,8 +407,6 @@ func overlayLaunch(base, over WorkspaceConfig) WorkspaceConfig {
 	return base
 }
 
-// overlayAccount covers which account a session runs under and what it
-// may take from the machine.
 func overlayAccount(base, over WorkspaceConfig) WorkspaceConfig {
 	if over.ConfigDirEnv != "" {
 		base.ConfigDirEnv = over.ConfigDirEnv
@@ -680,9 +426,6 @@ func overlayAccount(base, over WorkspaceConfig) WorkspaceConfig {
 	return base
 }
 
-// ApplyProfile overlays a named profile onto already-resolved settings. The
-// name may come from an untrusted caller (a phone); everything it selects is
-// defined in the trusted file, so remote picks from the menu, never cooks.
 func ApplyProfile(r Resolved, user *UserConfig, name string) (Resolved, error) {
 	if name == "" {
 		return r, nil
@@ -703,16 +446,10 @@ func ApplyProfile(r Resolved, user *UserConfig, name string) (Resolved, error) {
 	return r, nil
 }
 
-// AutostartSessionEnabled reports whether a server the daemon starts by
-// itself should also open a session in the checkout. Off unless asked for.
 func (r Resolved) AutostartSessionEnabled() bool {
 	return r.AutostartSession != nil && *r.AutostartSession
 }
 
-// AutostartEnabled reports whether the workspace should be supervised. Opt-in:
-// `agent scan ~/projects` can register a dozen stacks, and defaulting to on
-// would spawn a process for each on the next daemon start. `agent init` writes
-// the trusted config that enables it; `scan` deliberately does not.
 func (r Resolved) AutostartEnabled() bool {
 	return r.Autostart != nil && *r.Autostart
 }

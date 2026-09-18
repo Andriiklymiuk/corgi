@@ -21,33 +21,17 @@ import (
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
 
-// Session tracking rides on the daemon that is already always up. The hooks
-// `corgi agent track enable` installs write one spool entry per event; the
-// daemon folds them into the registry, reaps dead processes, joins sessions
-// to editor windows, and publishes sessions.json for whatever draws the
-// board. See utils/agent/sessions.
-
 var (
-	// reapInterval is how often every session's pid is probed. SessionEnd
-	// does not fire for a force-quit window; this is what frees its key.
-	reapInterval = 5 * time.Second
-	// sweepInterval is how often stale sessions are swept and every
-	// account's usage sampled, whatever the tick.
+	reapInterval  = 5 * time.Second
 	sweepInterval = time.Minute
 )
 
-// focusBudget bounds the OS-level part of a focus. A key press never
-// waits on it; the outcome comes back on the next state push.
 const focusBudget = 1500 * time.Millisecond
 
-// SessionsPath is where the daemon publishes the board.
-// liftEpisode is how long one lift stays told for a session.
 const liftEpisode = 10 * time.Minute
 
 func SessionsPath(dir string) string { return filepath.Join(dir, "sessions.json") }
 
-// handleSessionCommand executes one board-related spool entry. Returns false
-// for an action it does not own.
 func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bool {
 	if d.Sessions == nil {
 		return false
@@ -57,8 +41,6 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		if c.Event != nil {
 			d.Ledger.Note(c.Event.Name, c.Event.SessionID, c.Event.Agent != "", c.Event.At)
 			d.Sessions.Apply(*c.Event)
-			// A session opened as a bot is that bot's thread from now on:
-			// the next open resumes it.
 			if c.Event.Bot != "" && c.Event.SessionID != "" && !sessions.Placeholder(c.Event.SessionID) {
 				if err := bots.RecordSession(bots.Path(d.Dir), c.Event.Bot, c.Event.SessionID, c.Event.At); err != nil {
 					utils.Infof("agent: bot %s: %v\n", c.Event.Bot, err)
@@ -129,8 +111,6 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 	return true
 }
 
-// flushSessions publishes the board when it changed. Called at the end of
-// every drain and reaper tick, so a burst of tool events is one write.
 func (d *Daemon) flushSessions() {
 	if d.Sessions == nil {
 		return
@@ -140,8 +120,6 @@ func (d *Daemon) flushSessions() {
 	}
 }
 
-// startSessionTracking restores the previous board, adopts sessions that
-// started while the daemon was down, and connects the windows on disk.
 func (d *Daemon) startSessionTracking() {
 	if d.Sessions == nil {
 		return
@@ -157,8 +135,6 @@ func (d *Daemon) startSessionTracking() {
 	d.flushSessions()
 }
 
-// configDirs is every Claude config dir the daemon knows an account by:
-// the default, the ones it was told, and the ones live sessions run under.
 func (d *Daemon) configDirs() []string {
 	seen := map[string]bool{}
 	var dirs []string
@@ -182,10 +158,6 @@ func (d *Daemon) configDirs() []string {
 	return dirs
 }
 
-// backfillLedger fills a brand-new day ledger from a fortnight of
-// transcripts, once, off the main loop: the card would otherwise show
-// thirteen empty days after an upgrade. Lines after this moment are the
-// hooks' to count.
 func (d *Daemon) backfillLedger(ctx context.Context) {
 	if d.Ledger == nil || !d.Ledger.NeedsBackfill() {
 		return
@@ -206,9 +178,6 @@ func (d *Daemon) backfillLedger(ctx context.Context) {
 	}()
 }
 
-// onSessionTransition runs under the registry lock, so it only records and
-// hands off: a limit lifting is worth one notification, and every wait that
-// ends is a number for `corgi agent usage`.
 func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Status, now time.Time) {
 	label := s.Display
 	if label == "" {
@@ -224,10 +193,6 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 			_ = usage.RecordWait(d.Dir, usage.Wait{At: now.UTC(), Kind: kind, Label: label, Profile: s.Profile, Seconds: secs})
 		}
 	}
-	// A stop with work on the branch is checked against the workspace's
-	// done-when before anyone is told it is done.
-	// (The registry is locked here: anything that reads it back runs on
-	// its own goroutine.)
 	if to == sessions.StatusDone && from == sessions.StatusWorking {
 		d.swaps.Add(1)
 		go func() {
@@ -237,15 +202,10 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		}()
 		d.gateDone(s)
 	}
-	// A prompt the workspace's policy answers is answered here and never
-	// rings: a read is a read.
 	if to == sessions.StatusNeedsInput && s.Pending != nil && d.allowsByPolicy(s) {
 		go d.autoAllow(s)
 		return
 	}
-	// A permission prompt is the one notification a phone can answer from
-	// the lock screen: it carries the session id, and the Allow / Deny
-	// buttons the app registered for this category.
 	if to == sessions.StatusNeedsInput && s.Pending != nil && d.Push != nil && MutedUntil(d.Dir).IsZero() {
 		body := "permission: " + s.Pending.Tool
 		if s.Pending.Subject != "" {
@@ -269,9 +229,6 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 	switch {
 	case from == sessions.StatusLimited && to == sessions.StatusWorking:
 		d.limitWatch[s.ID] = true
-		// Rung at the clock already: the resume is not news. Nor is a person
-		// typing — they may have changed model or account, and either way
-		// they are at the keyboard; the ring is for someone who walked away.
 		resumed = !d.liftTold[s.ID] && s.ResumedBy != "person"
 		delete(d.liftTold, s.ID)
 		d.stopLiftClock(s.ID)
@@ -287,10 +244,6 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		}
 	}
 	d.attentionMu.Unlock()
-	// The lift is told when it happens — after a short grace, so a prompt
-	// that hits the wall again within it is not called a lift — naming the
-	// account, since two can be on the board. The turn it resumed gets its
-	// own word when it comes to rest.
 	if resumed {
 		id := s.ID
 		grace := d.LiftGrace
@@ -300,8 +253,6 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		time.AfterFunc(grace, func() {
 			d.attentionMu.Lock()
 			still := d.limitWatch[id]
-			// A limit that bounces — continue, the same limit, continue — is
-			// one episode, told once, not on every bounce.
 			recent := !d.liftRang[id].IsZero() && time.Since(d.liftRang[id]) < liftEpisode
 			if still && !recent {
 				if d.liftRang == nil {
@@ -321,8 +272,6 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 	}
 }
 
-// accountWord names the account a session runs under, when the board has
-// more than one to tell apart: " on skp", " on codex", " on codex · work".
 func (d *Daemon) accountWord(s sessions.Session) string {
 	parts := []string{}
 	if s.Agent != "" {
@@ -337,8 +286,6 @@ func (d *Daemon) accountWord(s sessions.Session) string {
 	return " on " + strings.Join(parts, " · ")
 }
 
-// sampleAccounts reads every account's cached /usage numbers, keeps the
-// fresh ones for the slope, and puts the picture on the board.
 func (d *Daemon) sampleAccounts(now time.Time) {
 	if d.Sessions == nil {
 		return
@@ -364,18 +311,10 @@ func (d *Daemon) sampleAccounts(now time.Time) {
 	d.Sessions.SetAccounts(accounts)
 }
 
-// sendToSession types text into a session after bringing it forward. An
-// integrated terminal takes it through the window's extension; iTerm2 and
-// Terminal.app through AppleScript; the Claude Code panel takes nothing
-// from here — its input is a web view — so the outcome says so and a key
-// falls back to its own keystrokes.
 func (d *Daemon) sendToSession(ctx context.Context, ref, text string, enter bool) {
 	d.sendKeys(ctx, ref, text, enter, nil)
 }
 
-// sendKeys types into a session and, once the keys are on their way, runs
-// delivered — the interrupt marks the session interrupted then, because
-// Claude Code fires no hook when a person presses Escape.
 func (d *Daemon) sendKeys(ctx context.Context, ref, text string, enter bool, delivered func()) {
 	target, err := d.Sessions.Focus(ref)
 	if err != nil {
@@ -424,10 +363,6 @@ func (d *Daemon) deliverText(ctx context.Context, t sessions.FocusTarget, text s
 	return fmt.Errorf("%s: nowhere to type", t.Label)
 }
 
-// typeIntoTerminal writes text into the emulator tab a session runs in.
-// iTerm2 has `write text`; Terminal.app has `do script`, which runs the
-// text as a shell command, so its tab gets keystrokes through System Events
-// instead (Accessibility permission for corgi).
 func typeIntoTerminal(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error {
 	tty := proc.TTYName(t.TTY)
 	if tty == "" {
@@ -462,8 +397,6 @@ func itermWriteScript(tty, text string, enter bool) string {
 end tell`
 }
 
-// appleScriptString quotes text for AppleScript: backslashes and quotes
-// escaped, control characters spelled out.
 func appleScriptString(text string) string {
 	var b strings.Builder
 	b.WriteByte('"')
@@ -485,7 +418,6 @@ func appleScriptString(text string) string {
 	return b.String()
 }
 
-// reapSessions runs the periodic checks until ctx ends.
 func (d *Daemon) reapSessions(ctx context.Context) {
 	if d.Sessions == nil {
 		return
@@ -535,10 +467,6 @@ func (d *Daemon) alive(pid int) bool {
 	return proc.Alive(pid)
 }
 
-// syncWindows reads the editor windows the corgi VS Code extension left on
-// disk and re-runs the join. Runs on every drain, because the extension
-// nudges the daemon after writing its record. Cheap: a handful of small
-// files, and the join is skipped when none of them changed.
 func (d *Daemon) syncWindows() {
 	if d.Sessions == nil {
 		return
@@ -546,7 +474,6 @@ func (d *Daemon) syncWindows() {
 	d.Sessions.SetWindows(sessions.LoadWindows(d.Dir, d.alive))
 }
 
-// rescan registers every live Claude process no hook has reported.
 func (d *Daemon) rescan() {
 	if d.Sessions == nil || d.ListProcesses == nil {
 		return
@@ -561,8 +488,6 @@ func (d *Daemon) rescan() {
 	}
 }
 
-// focusSession resolves a reference and dispatches the focus off the command
-// loop: a slow `open` must not hold up the next event.
 func (d *Daemon) focusSession(ctx context.Context, ref string) {
 	target, err := d.Sessions.Focus(ref)
 	if err != nil {
@@ -576,9 +501,6 @@ func (d *Daemon) focusSession(ctx context.Context, ref string) {
 	}()
 }
 
-// newSession asks an editor window for a fresh terminal running claude:
-// raise the window, then leave the request its extension acts on. The "+"
-// key. A failure is a board notice, since no session exists yet to carry it.
 func (d *Daemon) newSession(ctx context.Context, windowID, cmdline string) {
 	if strings.TrimSpace(cmdline) == "" {
 		cmdline = newSessionCommand()
@@ -610,9 +532,6 @@ func (d *Daemon) newSession(ctx context.Context, windowID, cmdline string) {
 	}()
 }
 
-// dispatchFocus runs the two steps: the OS brings the window forward, then
-// the window's extension reveals the tab or panel. The outcome lands on the
-// session so the key can flash a failure.
 func (d *Daemon) dispatchFocus(ctx context.Context, t sessions.FocusTarget) {
 	ctx, cancel := context.WithTimeout(ctx, focusBudget)
 	defer cancel()
@@ -633,10 +552,6 @@ func (d *Daemon) dispatchFocus(ctx context.Context, t sessions.FocusTarget) {
 	d.flushSessions()
 }
 
-// raiseWindow is the OS-level half of a focus. On macOS `open -a <app>
-// <folder>` brings forward the existing window that has the folder open —
-// no Accessibility permission, no scripting. Anything not recognised is an
-// error rather than a guess: raising the wrong window is worse than none.
 func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 	switch t.Kind {
 	case sessions.HostVSCodeTerminal, sessions.HostVSCodePanel:
@@ -649,17 +564,12 @@ func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 	return fmt.Errorf("no window known for a %s session on %s", t.Kind, runtime.GOOS)
 }
 
-// raiseEditor brings an editor window forward. The app must be known:
-// TERM_PROGRAM=vscode is what Cursor and Windsurf say too, and a guess
-// would start the wrong editor and open a new window.
 func raiseEditor(ctx context.Context, t sessions.FocusTarget) error {
 	if t.App == "" {
 		return errors.New("which editor is unknown — install the corgi VS Code extension, or reopen the terminal")
 	}
 	switch runtime.GOOS {
 	case "darwin":
-		// With a folder (one a connected window reported open), the
-		// window that has it comes forward; without one, the app does.
 		args := []string{"-a", t.App}
 		if t.Folder != "" {
 			args = append(args, t.Folder)
@@ -667,7 +577,6 @@ func raiseEditor(ctx context.Context, t sessions.FocusTarget) error {
 		return run(ctx, "open", args...)
 	case "linux":
 		if t.Folder == "" {
-			// `code` alone opens a new window; there is no "just raise".
 			return errors.New("no connected window to raise — install the corgi VS Code extension")
 		}
 		return run(ctx, editorCLI(t.App), "--reuse-window", t.Folder)
@@ -675,9 +584,6 @@ func raiseEditor(ctx context.Context, t sessions.FocusTarget) error {
 	return fmt.Errorf("no window known for a %s session on %s", t.Kind, runtime.GOOS)
 }
 
-// raiseTerminal selects the exact iTerm2 or Terminal.app tab: both expose
-// each tab's tty to AppleScript, and the hook recorded the claude process's
-// controlling terminal. Without a tty the app comes forward on its own.
 func raiseTerminal(ctx context.Context, t sessions.FocusTarget) error {
 	app, script := "iTerm", itermScript
 	if t.Kind == sessions.HostTerminalApp {
@@ -691,8 +597,6 @@ func raiseTerminal(ctx context.Context, t sessions.FocusTarget) error {
 	return run(ctx, "open", "-a", app)
 }
 
-// itermScript selects the iTerm2 session on tty and brings its window up.
-// The tty is a /dev path corgi resolved itself, never text from a hook.
 func itermScript(tty string) string {
 	return `tell application "iTerm2"
 	repeat with w in windows
@@ -711,7 +615,6 @@ func itermScript(tty string) string {
 end tell`
 }
 
-// terminalAppScript does the same for Terminal.app.
 func terminalAppScript(tty string) string {
 	return `tell application "Terminal"
 	repeat with w in windows
@@ -727,7 +630,6 @@ func terminalAppScript(tty string) string {
 end tell`
 }
 
-// editorCLI maps an editor's application name to its command-line launcher.
 func editorCLI(app string) string {
 	switch {
 	case strings.Contains(app, "Insiders"):
@@ -750,14 +652,8 @@ func run(ctx context.Context, name string, args ...string) error {
 	return nil
 }
 
-// newSessionCommand is what the "+" terminal runs: this corgi's `agent
-// claude`, which picks the folder's workspace account and settings. The
-// path is absolute so the terminal's PATH does not matter.
 func newSessionCommand() string { return NewSessionCommand() }
 
-// NewSessionCommand is the shell line a fresh terminal runs: this corgi
-// binary, `agent claude`, and the given flags. Every argument is quoted, so
-// a caller must still keep user text out of it: a prompt travels by id.
 func NewSessionCommand(args ...string) string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -777,8 +673,6 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// resetClock is the clock a limit message names ("resets 2:30pm (Europe/Kiev)",
-// "resets at 9am"), as the next such moment after now. Nothing known: false.
 var resetClock = func(detail string, now time.Time) (time.Time, bool) {
 	m := resetClockText.FindStringSubmatch(detail)
 	if m == nil {
@@ -811,9 +705,6 @@ var resetClock = func(detail string, now time.Time) (time.Time, bool) {
 
 var resetClockText = regexp.MustCompile(`(?i)resets?\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s*\(([A-Za-z_]+/[A-Za-z_]+)\))?`)
 
-// scheduleLiftClock rings the lift when the limit said it ends, so the person
-// hears it at that minute and not whenever the session next moves. Must hold
-// attentionMu.
 func (d *Daemon) scheduleLiftClock(s sessions.Session, label string, now time.Time) {
 	d.stopLiftClock(s.ID)
 	at, ok := resetClock(s.Detail, now)
@@ -830,7 +721,6 @@ func (d *Daemon) scheduleLiftClock(s sessions.Session, label string, now time.Ti
 	d.liftDue[id] = time.AfterFunc(at.Sub(now), func() {
 		d.attentionMu.Lock()
 		delete(d.liftDue, id)
-		// Resumed before the clock: that path speaks for itself.
 		if d.limitWatch[id] || d.liftTold[id] {
 			d.attentionMu.Unlock()
 			return
@@ -845,9 +735,6 @@ func (d *Daemon) scheduleLiftClock(s sessions.Session, label string, now time.Ti
 	})
 }
 
-// liftWord is what to say when a limited session is working again: the
-// model too, when the board knows it, because "back to work on Opus" is a
-// fact where "the limit lifted" is a guess.
 func (d *Daemon) liftWord(s sessions.Session) string {
 	line := "limit lifted" + d.accountWord(s) + " — back to work"
 	if s.Model != "" {
@@ -856,7 +743,6 @@ func (d *Daemon) liftWord(s sessions.Session) string {
 	return line
 }
 
-// stopLiftClock cancels a pending clock ring. Must hold attentionMu.
 func (d *Daemon) stopLiftClock(id string) {
 	if t, ok := d.liftDue[id]; ok {
 		t.Stop()

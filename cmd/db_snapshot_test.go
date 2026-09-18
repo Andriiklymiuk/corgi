@@ -52,7 +52,6 @@ func TestResolveRestoreSource(t *testing.T) {
 	utils.CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-	// named snapshot → paths under the service snapshots dir, fromPath=false
 	arc, meta, fromPath, err := resolveRestoreSource("main", "build1")
 	if err != nil {
 		t.Fatalf("named: %v", err)
@@ -65,7 +64,6 @@ func TestResolveRestoreSource(t *testing.T) {
 		t.Errorf("named paths = %q,%q want %q,%q", arc, meta, wantArc, wantMeta)
 	}
 
-	// absolute path → fromPath=true, meta derived by trimming .tar.zst
 	arc, meta, fromPath, err = resolveRestoreSource("main", "/abs/x.tar.zst")
 	if err != nil {
 		t.Fatalf("abs: %v", err)
@@ -74,12 +72,10 @@ func TestResolveRestoreSource(t *testing.T) {
 		t.Errorf("abs path = %q,%q,%v", arc, meta, fromPath)
 	}
 
-	// relative path with a separator → fromPath=true
 	if _, _, fromPath, _ := resolveRestoreSource("main", "rel/x.tar.zst"); !fromPath {
 		t.Error("a value with a separator must be treated as a path")
 	}
 
-	// suffix only, no separator → still a path, meta sidecar derived
 	arc, meta, fromPath, err = resolveRestoreSource("main", "x.tar.zst")
 	if err != nil {
 		t.Fatalf("suffix: %v", err)
@@ -94,14 +90,12 @@ func TestListSnapshots(t *testing.T) {
 	utils.CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-	// no snapshots dir yet → the "no snapshots" branch (text) and an empty JSON array
 	listSnapshots("main")
 	prevJSON := utils.JSONOutput
 	utils.JSONOutput = true
 	t.Cleanup(func() { utils.JSONOutput = prevJSON })
 	listSnapshots("main")
 
-	// one valid pair → both the JSON and the text listing branches
 	arc, meta, err := utils.SnapshotPaths("main", "build1")
 	if err != nil {
 		t.Fatal(err)
@@ -117,9 +111,9 @@ func TestListSnapshots(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	listSnapshots("main") // JSON
+	listSnapshots("main")
 	utils.JSONOutput = false
-	listSnapshots("main") // text
+	listSnapshots("main")
 }
 
 func TestSnapshotRemovePaths(t *testing.T) {
@@ -127,12 +121,10 @@ func TestSnapshotRemovePaths(t *testing.T) {
 	utils.CorgiComposePathDir = t.TempDir()
 	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
 
-	// a path-escaping name is rejected before any path is returned
 	if _, _, err := snapshotRemovePaths("main", "../evil"); err == nil {
 		t.Error("a name with a path separator must be rejected")
 	}
 
-	// a good name resolves to the pair and removeSnapshot deletes both files
 	arc, meta, err := snapshotRemovePaths("main", "good")
 	if err != nil {
 		t.Fatalf("good name: %v", err)

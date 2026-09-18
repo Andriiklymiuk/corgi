@@ -22,7 +22,7 @@ func TestDirIsWorkspace(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(gitRepo, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	worktree := t.TempDir() // a .git FILE marks a git worktree/submodule
+	worktree := t.TempDir()
 	if err := os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: /elsewhere\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -48,8 +48,6 @@ func TestCorgiListenerPIDsIsSafeOnBadInput(t *testing.T) {
 	if pids := corgiListenerPIDs("not-an-addr"); pids != nil {
 		t.Errorf("malformed addr must yield nothing, got %v", pids)
 	}
-	// Port 1 is never held by a corgi process; lsof finding nothing must mean
-	// "no one to stop", not an error.
 	if pids := corgiListenerPIDs("127.0.0.1:1"); len(pids) != 0 {
 		t.Errorf("an unheld port must yield nothing, got %v", pids)
 	}
@@ -80,9 +78,6 @@ func TestWorkspaceSessionTarget(t *testing.T) {
 		t.Errorf("no user config → default account, got %q", configDir)
 	}
 
-	// A workspace running under a profile keeps its sessions and transcripts in
-	// that account's config dir; resolving the default one is why the phone
-	// showed no sessions and no tokens for a second-account workspace.
 	if err := os.WriteFile(agentUserConfigPath(agentD),
 		[]byte("version: 1\nprofiles:\n  work:\n    configDir: ~/claude-configs/work\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -90,8 +85,6 @@ func TestWorkspaceSessionTarget(t *testing.T) {
 	if _, configDir, _ := workspaceSessionTarget("acme", "work"); configDir != "~/claude-configs/work" {
 		t.Errorf("configDir = %q, want the profile's account dir", configDir)
 	}
-	// An unknown profile falls back to the default account rather than failing:
-	// the start that named it already refused.
 	if _, configDir, _ := workspaceSessionTarget("acme", "ghost"); configDir != "" {
 		t.Errorf("configDir = %q, want the default account for an unknown profile", configDir)
 	}
@@ -116,7 +109,7 @@ func TestLaunchSessionsHandlerUnknownWorkspace(t *testing.T) {
 
 func TestLaunchSessionsHandlerListsForARegisteredWorkspace(t *testing.T) {
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
-	t.Setenv("PATH", "/nonexistent") // no claude binary → empty list, still 200
+	t.Setenv("PATH", "/nonexistent")
 	registerStack(t, mustAgentDir(), "acme", stackWithAgentConfig(t, ""))
 
 	rec := httptest.NewRecorder()
@@ -136,9 +129,6 @@ func TestAddProfileRejectsSkipPlusPermissionMode(t *testing.T) {
 }
 
 func TestResolveForSessionReachesAGitOnlyWorkspace(t *testing.T) {
-	// The regression this guards: mcp_agent.go's Reconcile calls kept the old
-	// compose-only predicate, so the phone's own tools flagged a freshly
-	// registered git-only repo as unreachable — and saved that to disk.
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	repo := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
@@ -178,8 +168,6 @@ func TestRegisterCwdWorkspaceInAGitOnlyRepo(t *testing.T) {
 }
 
 func TestRegisterCwdWorkspaceRefusesADoubleCollision(t *testing.T) {
-	// Both the basename and the parent-basename ids belong to other dirs:
-	// registering must refuse, never repoint an id that keys trusted settings.
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
 	parent := t.TempDir()
 	repo := filepath.Join(parent, "api")
@@ -188,7 +176,6 @@ func TestRegisterCwdWorkspaceRefusesADoubleCollision(t *testing.T) {
 	}
 	agentD := mustAgentDir()
 	registerStack(t, agentD, "api", "/somewhere/else/api")
-	// occupy the disambiguated name too
 	reg, _ := mustLoadRegistry()
 	reg.Upsert(workspace.Workspace{ID: filepath.Base(parent) + "-api", AbsPath: "/a/third/place", Status: workspace.StatusOK})
 	if err := workspace.Save(agentRegistryPath(agentD), reg); err != nil {
@@ -220,22 +207,17 @@ func TestBridgeSessionLinks(t *testing.T) {
 		}
 	}
 
-	// A live bridge (this test's own pid) yields the canonical web link —
-	// including bridges corgi did not start.
 	write(`{"sessionId":"session_01ABC","environmentId":"env_01X","source":"standalone","pid":` + strconv.Itoa(os.Getpid()) + `}`)
 	links := bridgeSessionLinks(repo, cfgDir)
 	if len(links) != 1 || links[0] != "https://claude.ai/code/session_01ABC" {
 		t.Fatalf("live bridge must link, got %v", links)
 	}
 
-	// A dead bridge's pointer is stale — no link beats a dead link.
 	write(`{"sessionId":"session_01ABC","pid":99999999}`)
 	if links := bridgeSessionLinks(repo, cfgDir); len(links) != 0 {
 		t.Errorf("a dead bridge must yield nothing, got %v", links)
 	}
 
-	// A UUID (or anything not session_…) must never become a link — that id
-	// namespace 404s on claude.ai, the exact bug this replaced.
 	write(`{"sessionId":"3b828c86-0d7a-4927","pid":` + strconv.Itoa(os.Getpid()) + `}`)
 	if links := bridgeSessionLinks(repo, cfgDir); len(links) != 0 {
 		t.Errorf("a non-session_ id must yield nothing, got %v", links)
@@ -262,11 +244,9 @@ func TestClaudeTrustsDir(t *testing.T) {
 	if claudeTrustsDir(cfgDir, "/never-opened") {
 		t.Error("a dir Claude never opened must report untrusted — that is the warning's whole point")
 	}
-	// Claude never ran under this account at all → nothing is trusted.
 	if claudeTrustsDir(t.TempDir(), "/anything") {
 		t.Error("a missing .claude.json means Claude never ran under the account — untrusted")
 	}
-	// An unparseable config must NOT warn: a format change is not the user's problem.
 	broken := t.TempDir()
 	_ = os.WriteFile(filepath.Join(broken, ".claude.json"), []byte("not json"), 0o600)
 	if !claudeTrustsDir(broken, "/anything") {
@@ -286,7 +266,6 @@ func TestEnableWorkspaceSkipPermissionsIsSticky(t *testing.T) {
 		t.Fatalf("init --dangerously-skip-permissions must persist: %+v, %v", user, err)
 	}
 
-	// A later re-init WITHOUT the flag must not silently clear the granted bypass.
 	if err := enableWorkspace("acme", "", false); err != nil {
 		t.Fatal(err)
 	}

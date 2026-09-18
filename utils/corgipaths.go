@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// SkipCorgiServicesMigration lets `corgi migrate` do the move itself.
 var SkipCorgiServicesMigration bool
 
 const (
@@ -19,8 +18,6 @@ const (
 	CorgiServicesName = "corgi_services"
 )
 
-// CorgiServicesRelIn is the state folder relative to composeDir:
-// .corgi/corgi_services, or the bare legacy folder while one is still there.
 func CorgiServicesRelIn(composeDir string) string {
 	nested := filepath.Join(CorgiDirName, CorgiServicesName)
 	if composeDir == "" {
@@ -55,7 +52,6 @@ func ServicesIn(composeDir string) string {
 	return filepath.Join(CorgiServicesIn(composeDir), "services")
 }
 
-// ComposeDirOf walks back up from a path under the state folder.
 func ComposeDirOf(corgiServicesPath string) string {
 	dir := filepath.Dir(corgiServicesPath)
 	if filepath.Base(dir) == CorgiDirName {
@@ -64,8 +60,6 @@ func ComposeDirOf(corgiServicesPath string) string {
 	return dir
 }
 
-// MigrateCorgiServices moves a legacy corgi_services/ under .corgi/. It
-// refuses while services are up, so nothing loses the paths it started with.
 func MigrateCorgiServices(composeDir string) (bool, error) {
 	if composeDir == "" {
 		return false, nil
@@ -94,9 +88,6 @@ func MigrateCorgiServices(composeDir string) (bool, error) {
 	return true, nil
 }
 
-// repairWorktrees re-points each source repo at the worktree's new path. Git
-// records it absolutely, so without this `git worktree list` calls the moved
-// checkout prunable and the next prune drops the branch's admin files.
 func repairWorktrees(target string) {
 	entries, err := os.ReadDir(filepath.Join(target, ".worktrees"))
 	if err != nil {
@@ -113,10 +104,6 @@ func repairWorktrees(target string) {
 	}
 }
 
-// retargetRunState rewrites the absolute paths the last run recorded, so a
-// log file the board still points at is found where the folder now is. The
-// state is parsed rather than string-replaced: a separator is escaped inside
-// JSON, so a raw replace would silently miss every Windows path.
 func retargetRunState(legacy, target string) {
 	prefix := legacy + string(filepath.Separator)
 	move := func(path string) string {
@@ -151,9 +138,6 @@ func retargetRunState(legacy, target string) {
 	}
 }
 
-// runningIn is what would lose its paths if the folder moved. A "running"
-// row left behind by a crash or a reboot is not one of them, so every row is
-// probed: a service by its pid, a db service by its container.
 func runningIn(corgiServicesPath string) []string {
 	state, err := ReadRunState(filepath.Join(corgiServicesPath, ".state.json"))
 	if err != nil {
@@ -167,8 +151,6 @@ func runningIn(corgiServicesPath string) []string {
 			if e.Status != "running" {
 				continue
 			}
-			// A service with a pid of its own is probed by pid; anything else
-			// is container-managed, and its container is the truth.
 			if e.PID > 0 {
 				if PidAlive(e.PID, e.Command) {
 					names = append(names, e.Name)
@@ -187,10 +169,6 @@ func runningIn(corgiServicesPath string) []string {
 	return names
 }
 
-// runningContainers is the subset docker says is up, asked in one call with a
-// deadline: this runs before every command in a workspace that has not moved
-// yet, and a docker daemon that is starting can block for a long time. A
-// docker that cannot answer holds nothing a moved folder could break.
 func runningContainers(containers []string) []string {
 	if len(containers) == 0 {
 		return nil
@@ -213,11 +191,6 @@ func runningContainers(containers []string) []string {
 	return up
 }
 
-// retargetGitignore adds a rule for the new path beside each rule for the old
-// one, and keeps the old rule. Replacing it would un-ignore the folder for
-// everyone on the team still running a corgi that puts it there, who would
-// pull the commit and find the whole thing untracked. A repository already
-// ignoring .corgi/ needs nothing.
 func retargetGitignore(composeDir string) {
 	path := filepath.Join(composeDir, ".gitignore")
 	data, err := os.ReadFile(path)
@@ -253,8 +226,6 @@ func retargetGitignore(composeDir string) {
 	_ = os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o644)
 }
 
-// legacyRule reads a line naming the old top-level folder: the bare path, and
-// whether the rule un-ignores rather than ignores.
 func legacyRule(line string) (bare string, negate bool, ok bool) {
 	bare = strings.TrimSpace(line)
 	negate = strings.HasPrefix(bare, "!")
@@ -265,8 +236,6 @@ func legacyRule(line string) (bare string, negate bool, ok bool) {
 	return bare, negate, true
 }
 
-// ignoresCorgiDir says the whole .corgi/ is already ignored, which covers the
-// folder wherever inside it corgi puts things.
 func ignoresCorgiDir(lines []string) bool {
 	for _, line := range lines {
 		bare := strings.TrimSpace(line)

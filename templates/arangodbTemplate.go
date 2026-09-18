@@ -40,7 +40,6 @@ help:
 .PHONY: up down stop id seed getSelfDump remove logs help
 `
 
-// bootstrap/bootstrap.sh
 var BootstrapArangodb = `#!/bin/sh
 
 sleep 10

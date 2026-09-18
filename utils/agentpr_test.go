@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// fakeForge records every command and answers the few git queries openBranchPRs
-// makes, so the flow can be checked without a network or a forge CLI.
 type fakeForge struct {
 	calls   []string
 	commits map[string]string

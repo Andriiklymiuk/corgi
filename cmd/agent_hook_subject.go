@@ -8,23 +8,12 @@ import (
 	"strings"
 )
 
-// A tool's input is the one part of a hook payload corgi must not keep: a
-// Bash command carries tokens, a Write carries the file. What a key can show
-// instead is one safe word about it — the file's name, the program, the
-// pattern — chosen here, in the hook, before anything is written anywhere.
-
-// subjectMaxLen bounds the line a key shows.
 const subjectMaxLen = 40
 
-// safeToken is a command-line word that cannot be a secret or a flag value:
-// letters, digits and path punctuation, short.
 var safeToken = regexp.MustCompile(`^[A-Za-z0-9_./~+-]{1,24}$`)
 
-// subcommandWord is a bare word after the program: letters and digits,
-// no dash, dot or slash, so flags, paths and values never qualify.
 var subcommandWord = regexp.MustCompile(`^[a-z][a-z0-9-]{0,15}$`)
 
-// subjectOf reduces tool_input to the safe subject for a tool, or "".
 func subjectOf(tool string, input json.RawMessage) string {
 	if len(input) == 0 {
 		return ""
@@ -69,10 +58,6 @@ func subjectOf(tool string, input json.RawMessage) string {
 	return subject
 }
 
-// commandSubject keeps the program and up to two subcommand words after it
-// — `git push origin`, `go test`, `npm run` — and nothing that could be a
-// path, a flag or a value: `rm -rf /` is `rm`, `curl -H "Authorization: …"`
-// is `curl`, `export TOKEN=x` is `export`.
 func commandSubject(command string) string {
 	fields := strings.Fields(command)
 	if len(fields) == 0 || !safeToken.MatchString(fields[0]) {
@@ -88,12 +73,6 @@ func commandSubject(command string) string {
 	return strings.Join(kept, " ")
 }
 
-// riskOf is one word about what a tool would do, decided here where the
-// full input is still in hand and thrown away right after: reads (a file
-// read, a search, a fetch), writes (an edit, a plain command), or
-// destructive (rm, force-push, drop, sudo — the commands an Allow button
-// must not approve unseen). The phone colours Allow by it; nothing of the
-// input itself leaves this process.
 func riskOf(tool string, input json.RawMessage) string {
 	switch tool {
 	case "Read", "Grep", "Glob", "WebFetch", "WebSearch", "Task", "Agent", "Skill", "TodoWrite":
@@ -113,6 +92,4 @@ func riskOf(tool string, input json.RawMessage) string {
 	return ""
 }
 
-// destructiveCommand is the same shape the board refuses to answer blind,
-// applied to the whole command line rather than its safe subject.
 var destructiveCommand = regexp.MustCompile(`(?i)(^|[\s;&|])(rm|sudo|mkfs|dd|shutdown|reboot|kill|pkill|killall|chmod|chown|launchctl|diskutil|git\s+push\s+[^\n]*--force|git\s+reset\s+--hard|git\s+clean)(\s|$)|--force\b|--hard\b|--no-verify\b|\bdrop\s+(table|database|schema)\b|\btruncate\b|\bpurge\b|\brm\s+-rf\b`)

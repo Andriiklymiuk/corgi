@@ -11,8 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A pull request of mine, changed from wherever I am: out of draft, merged,
-// closed. The same three the phone and the page offer on a row.
 var agentWatchPRCmd = &cobra.Command{
 	Use:   "pr <ready|merge|close|approve|request|comment> <REF|key|url> [words]",
 	Short: "Mark a pull request of yours ready for review, merge or close it; approve, ask for changes on, or comment on any",

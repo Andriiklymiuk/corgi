@@ -14,22 +14,8 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A bot that runs on its own. A bot is a persona (bots.Bot); with `on`
-// set it also acts when one of those events arrives in its workspace — a
-// review lands, a build goes red — as an unattended run under its own
-// soul and model, logged and costed like a fix, filed under the bot's
-// name so every surface can say "reviewer ran on #302: two findings".
-//
-// It is not a fix: it takes no lease, moves no ticket, isolates only when
-// the bot says so, and a blocked ticket does not stop it (a review is
-// still wanted on a blocked ticket). The watch's caps, quiet hours and
-// days off still hold — a bot spends the same account.
-
-// botRunKey files a bot's run apart from the fix on the same event.
 func botRunKey(bot, eventKey string) string { return "bot:" + bot + ":" + eventKey }
 
-// BotRunPrompt is what a bot is told when its event arrives: the event in
-// the words the fix would get, then who it is and what to leave behind.
 func BotRunPrompt(b bots.Bot, e watch.Event) string {
 	base := fixPrompt(e)
 	if base == "" {
@@ -44,7 +30,6 @@ func BotRunPrompt(b bots.Bot, e watch.Event) string {
 	return base + "\n\nYou are " + b.Display() + ". Do what your role says and nothing beyond it. End with one line that says what you did."
 }
 
-// startBots runs every bot in the workspace that acts on this kind.
 func (d *Daemon) startBots(ctx context.Context, spec WatchSpec, e watch.Event) {
 	store, err := bots.Load(bots.Path(d.Dir))
 	if err != nil {
@@ -67,7 +52,6 @@ func (d *Daemon) startBots(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 }
 
-// runBot is one bot's run on one event, in one of the workspace's slots.
 func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch.Event) {
 	defer d.takeSlot(spec.Workspace)()
 	ctx, cancel := context.WithTimeout(ctx, fixTimeout)
@@ -109,8 +93,6 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 	attempt := botRun{spec: spec, bot: b, prompt: prompt, dir: dir, env: env, log: logFile}
 	out, receipt, runErr := d.botAttempt(ctx, attempt, b.Model)
 	cost, tokens := receipt.costUSD, receipt.tokens
-	// One failure gets one more try, a rung up the ladder: the model that
-	// looped or fell over is often the model that was too small for it.
 	if runErr != nil && ctx.Err() == nil {
 		if next := nextModel(b.Model); next != "" {
 			fmt.Fprintf(logFile, "\n=== failed: %v — trying again on %s\n", runErr, next)
@@ -153,8 +135,6 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 	go d.notifyAttentionAt(notifyTitlePrefix+b.Display(), body, spec.Workspace, target)
 }
 
-// botRun is one bot's run on one event: everything an attempt needs that
-// does not change between the first try and the retry on a bigger model.
 type botRun struct {
 	spec   WatchSpec
 	bot    bots.Bot
@@ -164,8 +144,6 @@ type botRun struct {
 	log    *os.File
 }
 
-// botAttempt is one `claude -p` under the bot's soul on one model; what
-// it printed goes to the log as it comes.
 func (d *Daemon) botAttempt(ctx context.Context, run botRun, model string) ([]byte, runReceipt, error) {
 	args := botArgs(run, model)
 	cmd := claudeCommand(ctx, run.dir, run.env, args...)
@@ -179,7 +157,6 @@ func (d *Daemon) botAttempt(ctx context.Context, run botRun, model string) ([]by
 	return out, rc, err
 }
 
-// botArgs is the claude command line for one attempt.
 func botArgs(run botRun, model string) []string {
 	args := []string{"-p", run.prompt, "--output-format", "json"}
 	if soul := strings.TrimSpace(run.bot.Soul); soul != "" {
@@ -196,8 +173,6 @@ func botArgs(run botRun, model string) []string {
 	return args
 }
 
-// nextModel is the rung above: the retry after a failed run. Past opus
-// there is nowhere to go; a bot on the default model retries on opus.
 func nextModel(model string) string {
 	switch strings.ToLower(strings.TrimSpace(model)) {
 	case "haiku":
@@ -215,8 +190,6 @@ func modelWord(model string) string {
 	return model
 }
 
-// botConfigDir is the account a bot runs under: its own profile applied
-// to the workspace's config, else the workspace's own.
 func botConfigDir(spec WatchSpec, b bots.Bot) string {
 	if b.Profile == "" {
 		return spec.ConfigDir
@@ -233,8 +206,6 @@ func botConfigDir(spec WatchSpec, b bots.Bot) string {
 	return expandHome(resolved.ConfigDir)
 }
 
-// agentDirOf is the agent dir a spec's daemon runs from, kept on the spec
-// by the daemon so a run can find the user config beside the bots.
 func agentDirOf(spec WatchSpec) string { return spec.AgentDir }
 
 func expandHome(p string) string {

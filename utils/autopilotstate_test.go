@@ -52,11 +52,9 @@ func TestAutopilotHeartbeatStampsTime(t *testing.T) {
 	}
 }
 
-// Writing the state must keep it out of commits: the per-developer file is
-// gitignored via corgi_services/.gitignore (the skill/docs promise "gitignored").
 func TestWriteAutopilotStateGitignoresItself(t *testing.T) {
 	dir := t.TempDir()
-	path := AutopilotStatePath(dir) // <dir>/corgi_services/.autopilot.json
+	path := AutopilotStatePath(dir)
 	if err := WriteAutopilotState(path, AutopilotState{Mode: AutopilotRunning}); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -73,7 +71,6 @@ func TestWriteAutopilotStateGitignoresItself(t *testing.T) {
 func TestSetAutopilotModeMissingFileDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := AutopilotStatePath(dir)
-	// No file yet: setting a mode should create one (resume on first run).
 	st, err := SetAutopilotMode(path, AutopilotRunning)
 	if err != nil {
 		t.Fatalf("set mode: %v", err)

@@ -13,13 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// On macOS the daemon runs from its own copy of the binary, at a path that
-// never changes. launchd resolves /opt/homebrew/bin/corgi to the versioned
-// Caskroom directory, and macOS keys "corgi wants access to Documents" on
-// that real path — so every `corgi upd` looked like a new tool and asked
-// again at the next login. A stable path with a stable signing identity is
-// asked once. Linux has no such prompt and keeps the symlink.
-
 func stableDaemonBinary() (string, error) {
 	base, err := utils.NativeDataDir()
 	if err != nil {
@@ -32,8 +25,6 @@ func daemonRunsFromStableCopy() bool {
 	return runtime.GOOS == "darwin"
 }
 
-// refreshStableDaemonBinary copies the binary at from into the stable path
-// unless the copy already matches byte for byte. Returns the stable path.
 func refreshStableDaemonBinary(from string) (string, error) {
 	dest, err := stableDaemonBinary()
 	if err != nil {
@@ -67,13 +58,10 @@ func refreshStableDaemonBinary(from string) (string, error) {
 		os.Remove(tmpPath)
 		return "", err
 	}
-	// Owner-only: launchd runs the daemon as this user, nobody else needs it.
 	if err := os.Chmod(tmpPath, 0o700); err != nil {
 		os.Remove(tmpPath)
 		return "", err
 	}
-	// A running daemon keeps its old inode open; the rename swaps the path
-	// under it without touching the process.
 	if err := os.Rename(tmpPath, dest); err != nil {
 		os.Remove(tmpPath)
 		return "", err
@@ -106,8 +94,6 @@ func fileDigest(path string) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-// installedDaemonBinary is the program the login service file names, or ""
-// when there is no service file or it cannot be read.
 func installedDaemonBinary() string {
 	path := loginServicePath()
 	if path == "" {
@@ -120,9 +106,6 @@ func installedDaemonBinary() string {
 	return programFromServiceFile(string(data))
 }
 
-// programFromServiceFile pulls the executable out of a launchd plist or a
-// systemd unit without a full parser: the first <string> after
-// ProgramArguments, or the first word of ExecStart.
 func programFromServiceFile(text string) string {
 	if i := strings.Index(text, "<key>ProgramArguments</key>"); i >= 0 {
 		rest := text[i:]
@@ -147,9 +130,6 @@ func programFromServiceFile(text string) string {
 
 const checkDaemonBinary = "daemon binary"
 
-// checkDaemonBinaryPath is the doctor's answer to "why does macOS keep
-// asking about Documents": the service runs corgi from a path that changes
-// with every update, or from a copy older than the corgi you have.
 func checkDaemonBinaryPath() agentCheck {
 	if !daemonRunsFromStableCopy() || !loginServiceInstalled() {
 		return agentCheck{Name: checkDaemonBinary, OK: true, Detail: "not applicable"}

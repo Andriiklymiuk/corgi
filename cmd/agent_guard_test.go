@@ -50,11 +50,9 @@ func TestGuardInstallsAPrePushHookOnce(t *testing.T) {
 	if info, _ := os.Stat(path); info.Mode()&0o100 == 0 {
 		t.Fatal("the hook is executable")
 	}
-	// Ours again: rewritten, no complaint.
 	if _, err := installGuard(repo, false); err != nil {
 		t.Fatal(err)
 	}
-	// Somebody else's hook is not overwritten unless asked.
 	_ = os.WriteFile(path, []byte("#!/bin/sh\necho mine\n"), 0o755)
 	if _, err := installGuard(repo, false); err == nil || !strings.Contains(err.Error(), "already") {
 		t.Fatalf("another hook: %v", err)

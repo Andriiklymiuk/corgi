@@ -6,10 +6,6 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// toolKind is what a tool does to state, which is what a client uses to
-// decide whether to ask the person before running it. mcp-go's defaults mark
-// every tool destructive, so an unlisted tool would make Claude ask before
-// reading a status; newCorgiTool refuses to register one.
 type toolKind int
 
 const (
@@ -105,7 +101,6 @@ func annotationOptions(m toolMeta) []mcp.ToolOption {
 	return opts
 }
 
-// newCorgiTool is mcp.NewTool plus the title and hints from mcpToolMeta.
 func newCorgiTool(name string, opts ...mcp.ToolOption) mcp.Tool {
 	m, ok := mcpToolMeta[name]
 	if !ok {

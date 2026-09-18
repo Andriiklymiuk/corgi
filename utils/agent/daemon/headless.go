@@ -12,16 +12,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// A session whose terminal is gone — the editor closed, the laptop lid
-// shut on a tab — can still answer from the phone: the daemon runs one
-// headless turn, claude -p --resume <id> <message>, in the session's own
-// checkout under its own account, and the transcript the phone reads grows
-// by that turn. Only for a gone session: one with a terminal is typed into,
-// never resumed beside itself. Off by default (the workspace's headless
-// switch, or corgi agent continue by hand): -p answers permission prompts
-// on its own.
-
-// headlessTimeout bounds one turn.
 const headlessTimeout = 30 * time.Minute
 
 func label(s sessions.Session) string {
@@ -31,8 +21,6 @@ func label(s sessions.Session) string {
 	return s.Label
 }
 
-// continueHeadless runs one turn for ref with text; a turn already running
-// for the session, or a session with a terminal, is refused with a notice.
 func (d *Daemon) continueHeadless(ctx context.Context, ref, text string) {
 	if d.Sessions == nil {
 		return
@@ -43,7 +31,6 @@ func (d *Daemon) continueHeadless(ctx context.Context, ref, text string) {
 	}
 	s, err := d.Sessions.Lookup(ref)
 	if err != nil {
-		// Not on the board: one that left is still known by id.
 		ended, ok := d.Sessions.LookupEnded(ref)
 		if !ok {
 			d.Sessions.SetNotice(err)

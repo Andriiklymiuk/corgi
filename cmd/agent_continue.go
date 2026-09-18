@@ -12,10 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A session that hit a limit waits on a clock. The editor extension can type
-// "continue" when the window resets, but only while the editor is open; the
-// daemon can do it from anywhere. Off by default because it types into a
-// terminal that is yours.
 var agentContinueCmd = &cobra.Command{
 	Use:   "continue [on|off]",
 	Short: "Let the daemon continue a limited session when its limit is over",
@@ -70,8 +66,6 @@ func runAgentContinue(_ *cobra.Command, args []string) {
 	utils.Info("run `corgi agent restart` so the running daemon picks it up")
 }
 
-// writeUserConfigLine edits one line of the hand-edited config, like
-// writeStayAwake: a marshal round-trip would flatten the comments.
 func writeUserConfigLine(path string, line *regexp.Regexp, value string) error {
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {

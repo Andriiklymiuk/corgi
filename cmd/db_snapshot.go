@@ -79,8 +79,6 @@ func runDbSnapshot(cmd *cobra.Command, args []string) {
 		exitProcess(1)
 	}
 
-	// --list / --rm manage existing snapshots; then the lone positional is the
-	// service. Otherwise args are [name] [service] and we create.
 	if snapList || snapRM != "" {
 		manageSnapshots(args, corgi.DatabaseServices)
 		return
@@ -228,9 +226,6 @@ func listSnapshots(service string) {
 	}
 }
 
-// resolveRestoreSource maps the [name|path] positional to (archive, meta,
-// fromPath). A value with a path separator or a .tar.zst suffix is an explicit
-// (untrusted) path; otherwise it is a named snapshot under the service dir.
 func resolveRestoreSource(service, nameOrPath string) (archive, metaPath string, fromPath bool, err error) {
 	fromPath = strings.ContainsAny(nameOrPath, `/\`) || strings.HasSuffix(nameOrPath, ".tar.zst")
 	if fromPath {
@@ -242,7 +237,6 @@ func resolveRestoreSource(service, nameOrPath string) (archive, metaPath string,
 	return archive, metaPath, false, err
 }
 
-// snapshotRemovePaths sanitizes the name and resolves the pair to delete.
 func snapshotRemovePaths(service, name string) (archive, metaPath string, err error) {
 	name, err = utils.SanitizeSnapshotName(name)
 	if err != nil {

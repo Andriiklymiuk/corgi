@@ -11,20 +11,13 @@ import (
 	"strings"
 )
 
-// SupabasePorts holds the API/DB/Studio/Inbucket ports actually configured
-// in the project's supabase/config.toml. Falls back to the supabase CLI
-// stock defaults (54321..54324) when fields are missing or the file is
-// unreadable.
 type SupabasePorts struct {
-	API      int // [api].port
-	DB       int // [db].port
-	Studio   int // [studio].port
-	Inbucket int // [inbucket].port
+	API      int
+	DB       int
+	Studio   int
+	Inbucket int
 }
 
-// Parses a supabase config.toml. Arg can be either a direct .toml path or
-// a project root (resolves to <root>/supabase/config.toml). Empty falls back
-// to cwd. Missing sections use supabase CLI defaults.
 func ReadSupabasePorts(pathOrRoot string) SupabasePorts {
 	defaults := SupabasePorts{API: 54321, DB: 54322, Studio: 54323, Inbucket: 54324}
 	var tomlPath string
@@ -62,8 +55,6 @@ func ReadSupabasePorts(pathOrRoot string) SupabasePorts {
 				got.DB = p
 			case "studio":
 				got.Studio = p
-			// supabase renamed [inbucket] to [local_smtp] in CLI 2.109; both
-			// still parse, so read whichever the project uses.
 			case "inbucket", "local_smtp":
 				got.Inbucket = p
 			}
@@ -72,9 +63,6 @@ func ReadSupabasePorts(pathOrRoot string) SupabasePorts {
 	return got
 }
 
-// SignSupabaseJWT signs the canonical supabase HS256 JWT for a given role
-// (anon | service_role) using the provided secret. Output matches what
-// `supabase status` reports for projects with the same JWT secret.
 func SignSupabaseJWT(secret, role string) string {
 	header := `{"alg":"HS256","typ":"JWT"}`
 	payload := fmt.Sprintf(`{"iss":"supabase-demo","role":"%s","exp":1983812996}`, role)
@@ -90,8 +78,6 @@ func SignSupabaseJWT(secret, role string) string {
 	return signing + "." + sig
 }
 
-// Stock supabase local-dev seeds. ANON_KEY / SERVICE_ROLE_KEY are derived
-// at emission time via SignSupabaseJWT, not hardcoded.
 const (
 	SupabaseJWTSecret     = "super-secret-jwt-token-with-at-least-32-characters-long"
 	SupabaseS3AccessKeyID = "625729a08b95bf1b7ff351a663f3a23c"
@@ -99,11 +85,6 @@ const (
 	SupabaseS3Region      = "local"
 )
 
-// Wraps the supabase CLI. WORKDIR is the service folder when configTomlPath
-// is set (corgi owns config.toml), or project root otherwise (legacy).
-// DESIRED_*_PORT come from yaml port:/dbPort:/studioPort:/inbucketPort:;
-// "0" = noop. Patches happen before `supabase start` so bind ports match
-// the env corgi emits.
 var MakefileSupabase = `{{if .ConfigTomlPath -}}
 WORKDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 {{- else -}}
@@ -186,8 +167,6 @@ help:
 .PHONY: up down stop logs id remove help
 `
 
-// BootstrapSupabase seeds buckets (Storage API) and auth users (Admin API)
-// after `supabase start`. Idempotent — duplicates skipped via curl `|| true`.
 var BootstrapSupabase = `#!/usr/bin/env bash
 set -euo pipefail
 

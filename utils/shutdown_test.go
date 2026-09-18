@@ -27,7 +27,6 @@ func TestRequestShutdown_Idempotent(t *testing.T) {
 	ResetShutdownForTests()
 	t.Cleanup(ResetShutdownForTests)
 
-	// Must not panic on double-close — sync.Once guards it.
 	RequestShutdown()
 	RequestShutdown()
 	RequestShutdown()
@@ -60,7 +59,6 @@ func TestResetShutdown_RearmsChannel(t *testing.T) {
 	if ShutdownRequested() {
 		t.Error("ResetShutdown must clear shutdown state")
 	}
-	// After reset, RequestShutdown must work again (sync.Once re-armed).
 	RequestShutdown()
 	if !ShutdownRequested() {
 		t.Error("RequestShutdown must work after reset")

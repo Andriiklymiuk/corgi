@@ -64,7 +64,6 @@ func TestDaemonFoldsHookEventsIntoThePublishedBoard(t *testing.T) {
 		t.Fatalf("sessions.json is owner-only: %v", err)
 	}
 
-	// Pin, then page and rescan are accepted without complaint.
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionPin, Index: 0, Pinned: true})
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionPage, Direction: 1})
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionRescan})
@@ -118,8 +117,6 @@ func TestDaemonRescanAdoptsRunningClaudeProcesses(t *testing.T) {
 	cancel()
 	<-done
 
-	// The board survives a restart of the daemon: a second daemon on the
-	// same directory, told nothing by the process table, still lists it.
 	_ = os.Remove(SessionsPath(d.Dir) + ".stale")
 	again := New("test", d.Dir)
 	again.Start, again.Notify = d.Start, d.Notify
@@ -155,7 +152,6 @@ func TestDaemonFocusRaisesThenLeavesARevealRequest(t *testing.T) {
 		}
 		return nil
 	}
-	// A connected window with the terminal the session runs in.
 	wdir := sessions.WindowsDir(d.Dir)
 	_ = os.MkdirAll(wdir, 0o700)
 	win, _ := json.Marshal(sessions.Window{ID: "w1", App: "Cursor", ExtHostPID: 77, Folders: []string{"/tmp/acme-api"},
@@ -262,7 +258,6 @@ func TestDaemonNewSessionRaisesTheWindowAndAsksForATerminal(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); _ = d.Run(ctx, nil) }()
 
-	// No window yet: the failure is a board notice.
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionNew})
 	d.Nudge()
 	waitFor(t, func() bool { return readBoard(t, d).Notice != "" })
@@ -355,9 +350,6 @@ func TestSendAnswerAndNoteReachTheSession(t *testing.T) {
 	<-done
 }
 
-// Interrupt is Escape typed into a working session, and the row says
-// interrupted at once, because Claude Code fires no hook for it. A session
-// at rest is left alone.
 func TestInterruptTypesEscapeAndMarksTheRow(t *testing.T) {
 	d := trackingDaemon(t)
 	var mu sync.Mutex
@@ -409,10 +401,6 @@ func TestInterruptTypesEscapeAndMarksTheRow(t *testing.T) {
 	<-done
 }
 
-// The lift is told when it happens, after a grace — not three quarters of
-// an hour later when the resumed turn ends — and names the account when
-// there is one to tell apart. A prompt that hits the wall again inside the
-// grace is no lift. The resumed turn coming to rest gets its own words.
 func TestLimitLiftedIsToldWhenItHappens(t *testing.T) {
 	d := testDaemon(t)
 	d.LiftGrace = 30 * time.Millisecond
@@ -447,7 +435,6 @@ func TestLimitLiftedIsToldWhenItHappens(t *testing.T) {
 	}
 }
 
-// One account, the default one: no account word at all.
 func TestAccountWordIsQuietWithOneAccount(t *testing.T) {
 	d := testDaemon(t)
 	if w := d.accountWord(sessions.Session{Profile: "default"}); w != "" {
@@ -472,7 +459,6 @@ func TestIdleDaemonBacksOffUntilASessionArrives(t *testing.T) {
 	d.Nudge()
 	waitFor(t, func() bool { return readBoard(t, d).Size == 8 })
 
-	// Nothing tracked: the spool is left alone until the next nudge.
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionResize, Size: 5})
 	time.Sleep(100 * time.Millisecond)
 	if st := readBoard(t, d); st.Size != 8 {
@@ -484,7 +470,6 @@ func TestIdleDaemonBacksOffUntilASessionArrives(t *testing.T) {
 	d.Nudge()
 	waitFor(t, func() bool { st := readBoard(t, d); return len(st.Sessions) == 1 && st.Size == 5 })
 
-	// Busy now: the fast tick drains without a nudge and the reaper probes.
 	_, _ = command.Write(d.Dir, command.Command{Action: command.ActionResize, Size: 4})
 	waitFor(t, func() bool { return readBoard(t, d).Size == 4 })
 	waitFor(t, func() bool { return probes.Load() > 0 })
@@ -528,9 +513,6 @@ func TestNewSessionCommandQuotesEveryArgument(t *testing.T) {
 	}
 }
 
-// A permission prompt reaches the phones with the session id and the
-// "permission" category, so the lock screen can answer it; a risky command
-// is marked, so the app shows only Deny.
 func TestAPermissionPromptIsPushedWithItsSessionID(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
@@ -550,7 +532,6 @@ func TestAPermissionPromptIsPushedWithItsSessionID(t *testing.T) {
 	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(got) == 2 })
 	mu.Lock()
 	defer mu.Unlock()
-	// Two goroutines, either order.
 	byBody := map[string]push.Message{}
 	for _, m := range got {
 		byBody[m.Body] = m
@@ -564,8 +545,6 @@ func TestAPermissionPromptIsPushedWithItsSessionID(t *testing.T) {
 	}
 }
 
-// Every hook event counts toward the day: the ledger the card reads is the
-// daemon's own, written when the daemon leaves.
 func TestDaemonKeepsADayLedgerFromHookEvents(t *testing.T) {
 	d := trackingDaemon(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -614,8 +593,6 @@ func TestResetClockReadsTheLimitMessage(t *testing.T) {
 	}
 }
 
-// The person hears the lift at the minute the limit named, not when the
-// session next happens to move; the resume after that says nothing more.
 func TestLiftRingsAtTheClockTheLimitNamed(t *testing.T) {
 	prev := resetClock
 	resetClock = func(string, time.Time) (time.Time, bool) { return time.Now().Add(40 * time.Millisecond), true }
@@ -671,7 +648,6 @@ func TestALimitIsOnlyCalledLiftedWhenTheMachineResumedIt(t *testing.T) {
 		}
 	}
 
-	// Nothing more may arrive: the person's resume is not news.
 	select {
 	case b := <-notes:
 		if strings.Contains(b, "limit lifted") {

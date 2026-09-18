@@ -13,9 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// A phone reads a workspace's watch as switches and flips them; the two
-// loops the daemon closes by itself take on the next round, the rest say
-// a restart is needed.
 func TestWatchSwitchesFromThePhone(t *testing.T) {
 	dir := phoneBoard(t, true)
 	reg := &workspace.Registry{}
@@ -57,9 +54,6 @@ func TestWatchSwitchesFromThePhone(t *testing.T) {
 	if rec := post(launchWatchHandler, "/launch/watch", `{"workspace":"nope","prs":true}`); rec.Code != 404 {
 		t.Fatalf("unknown workspace: %d", rec.Code)
 	}
-	// The reads policy is the third switch that takes at once, and it is
-	// what the daemon's policy lookup answers for anything under the
-	// workspace — a worktree included — and for nothing outside it.
 	wsPath, _ := reg.Find("api")
 	rec = post(launchWatchHandler, "/launch/watch", `{"workspace":"api","autoAllow":"reads"}`)
 	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
@@ -80,7 +74,6 @@ func TestWatchSwitchesFromThePhone(t *testing.T) {
 	if saved.Watch.AutoAllow != "" || policyFor(dir, wsPath.AbsPath).AutoAllow != "" {
 		t.Fatalf("off: %s", rec.Body)
 	}
-	// Done-when is a list of commands, also live.
 	rec = post(launchWatchHandler, "/launch/watch", `{"workspace":"api","doneWhen":["go test ./...","  ",""]}`)
 	_ = json.Unmarshal(rec.Body.Bytes(), &saved)
 	if rec.Code != 200 || saved.Restart || len(saved.Watch.DoneWhen) != 1 || saved.Watch.DoneWhen[0] != "go test ./..." {
@@ -91,7 +84,6 @@ func TestWatchSwitchesFromThePhone(t *testing.T) {
 	}
 }
 
-// The brief is the digest and the standup in one answer for the phone.
 func TestTheBriefAnswersThePhone(t *testing.T) {
 	phoneBoard(t, true)
 	rec := httptest.NewRecorder()
@@ -111,8 +103,6 @@ func TestTheBriefAnswersThePhone(t *testing.T) {
 	}
 }
 
-// The card is the day in numbers with nothing of anyone's in it: a fortnight
-// of days, today's totals, the waits — and never a label.
 func TestTheCardCarriesNumbersAndNoNames(t *testing.T) {
 	dir := phoneBoard(t, true)
 	if err := usage.RecordWait(dir, usage.Wait{At: time.Now(), Kind: "wait", Seconds: 90, Label: "secret-ws · fix login"}); err != nil {
@@ -135,7 +125,6 @@ func TestTheCardCarriesNumbersAndNoNames(t *testing.T) {
 	if rec.Code != 200 || len(got.Days) != cardDays || got.Today["date"] != usage.Today(time.Now()) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	// At least: this machine's own Claude cache may add to today.
 	if s, _ := got.Today["sessions"].(float64); s < 1 {
 		t.Fatalf("the daemon's own ledger counts: %v", got.Today)
 	}

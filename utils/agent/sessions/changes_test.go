@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// The last test run is the first thing a person reads when a session says
-// it is done: green and when, or red and what.
 func TestTheLastTestRunIsOnTheSession(t *testing.T) {
 	r := newTestRegistry(t)
 	r.Apply(ev("UserPromptSubmit", "s1", 0))
@@ -23,7 +21,6 @@ func TestTheLastTestRunIsOnTheSession(t *testing.T) {
 	if s = find(t, r, "s1"); s.Tests == nil || s.Tests.OK || s.Tests.Cmd != "bun test" {
 		t.Fatalf("a red bun test must replace it: %+v", s.Tests)
 	}
-	// A Bash that is not a test run leaves the last test run alone.
 	other := ev("PostToolUse", "s1", 3*time.Second)
 	other.Tool, other.Subject = "Bash", "git status"
 	r.Apply(other)
@@ -44,8 +41,6 @@ func TestWhatCountsAsATestCommand(t *testing.T) {
 	}
 }
 
-// SetChanges reports a change only when something a person would see moved,
-// so a board that has not moved is not rewritten every minute.
 func TestChangesAreWrittenOnlyWhenTheyMove(t *testing.T) {
 	r := newTestRegistry(t)
 	r.Apply(ev("UserPromptSubmit", "s1", 0))

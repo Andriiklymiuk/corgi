@@ -8,28 +8,21 @@ import (
 	"time"
 )
 
-// ModelTokens is one model's share of a day.
 type ModelTokens struct {
 	Model  string `json:"model"`
 	Tokens int64  `json:"tokens"`
 }
 
-// DayStats is what Claude Code's own stats cache says about one day under
-// one account: how busy, and on which models.
 type DayStats struct {
-	Date      string        `json:"date"`
-	Messages  int           `json:"messages"`
-	Sessions  int           `json:"sessions"`
-	ToolCalls int           `json:"toolCalls"`
-	Models    []ModelTokens `json:"models,omitempty"`
-	// Tokens by workspace, and their sum, as the daemon's sweep counted
-	// them (2.24); absent from a day nothing was swept.
+	Date        string           `json:"date"`
+	Messages    int              `json:"messages"`
+	Sessions    int              `json:"sessions"`
+	ToolCalls   int              `json:"toolCalls"`
+	Models      []ModelTokens    `json:"models,omitempty"`
 	Tokens      map[string]int64 `json:"tokens,omitempty"`
 	TokensTotal int64            `json:"tokensTotal,omitempty"`
 }
 
-// statsFile is the shape of Claude Code's stats-cache.json, as far as corgi
-// reads it.
 type statsFile struct {
 	Daily []struct {
 		Date      string `json:"date"`
@@ -62,10 +55,6 @@ func readStatsFile(configDir string) (statsFile, bool) {
 	return file, true
 }
 
-// ReadDayStats reads <configDir>/stats-cache.json for the given local day
-// ("2026-09-08"). ok is false when the account has no cache or no entry for
-// that day. The cache is Claude Code's, recomputed when it feels like it,
-// so the numbers lag the transcripts by hours.
 func ReadDayStats(configDir, date string) (DayStats, bool) {
 	file, ok := readStatsFile(configDir)
 	if !ok {
@@ -74,8 +63,6 @@ func ReadDayStats(configDir, date string) (DayStats, bool) {
 	return file.day(date)
 }
 
-// ReadDaysStats reads one account's cache once and answers for every date
-// asked, so a fortnight costs one parse. Dates with no entry are left out.
 func ReadDaysStats(configDir string, dates []string) map[string]DayStats {
 	out := map[string]DayStats{}
 	file, ok := readStatsFile(configDir)
@@ -112,5 +99,4 @@ func (file statsFile) day(date string) (DayStats, bool) {
 	return out, found
 }
 
-// Today is the local date the stats cache keys on.
 func Today(now time.Time) string { return now.Local().Format("2006-01-02") }

@@ -41,12 +41,9 @@ type watchWorkspaceStatus struct {
 	Action     string              `json:"action,omitempty"`
 	LocalToken bool                `json:"hasOwnTokens"`
 	Sources    []watchSourceStatus `json:"sources,omitempty"`
-	// Suggests is what this workspace still needs before anything arrives.
-	Suggests []string `json:"whatIsMissing,omitempty"`
+	Suggests   []string            `json:"whatIsMissing,omitempty"`
 }
 
-// mcpWatchStatus reports what each workspace watches and what it still needs,
-// so a caller can set the rest up without guessing.
 func mcpWatchStatus(args watchStatusArgs) (map[string]any, error) {
 	dir, err := agentDir()
 	if err != nil {
@@ -112,8 +109,6 @@ func mcpWatchStatus(args watchStatusArgs) (map[string]any, error) {
 	return map[string]any{"workspaces": out, "agentDir": dir}, nil
 }
 
-// watchGaps is what stops this workspace reporting anything, in the order a
-// person would fix it.
 func watchGaps(row watchWorkspaceStatus) []string {
 	var gaps []string
 	tracker := row.Tracker
@@ -143,8 +138,6 @@ func watchGaps(row watchWorkspaceStatus) []string {
 	return gaps
 }
 
-// optionalBool tells "not asked for" apart from "asked for, false": the two
-// defaults agree only when the caller actually sent the key.
 func optionalBool(r mcp.CallToolRequest, name string) *bool {
 	v := r.GetBool(name, false)
 	if r.GetBool(name, true) != v {
@@ -165,9 +158,6 @@ type watchEnableArgs struct {
 	Action    string
 }
 
-// mcpWatchEnable turns the watch on for one workspace and says what it will
-// take. It never accepts a token: a token belongs in a command flag or the
-// environment, never in a tool call that is logged with the conversation.
 func mcpWatchEnable(args watchEnableArgs) (map[string]any, error) {
 	dir, err := agentDir()
 	if err != nil {
@@ -277,15 +267,11 @@ func trimmedList(in []string) []string {
 	return out
 }
 
-// githubCLIToken is what a GitHub poll would fall back to, without printing it.
 func githubCLIToken() string {
 	token, _ := watch.GitHubToken(watch.Secrets{})
 	return token
 }
 
-// watchFixesForMCP is what the unattended mode did: what it worked on, and
-// what it opened. The notification announcing a PR is gone in a second; this
-// outlives it.
 func watchFixesForMCP(workspaceID string, limit int) ([]map[string]any, error) {
 	dir, err := agentDir()
 	if err != nil {
@@ -317,7 +303,6 @@ func watchFixesForMCP(workspaceID string, limit int) ([]map[string]any, error) {
 	return out, nil
 }
 
-// watchEventsForMCP is the recent watch events, so a caller can act on them.
 func watchEventsForMCP(workspaceID string, limit int) ([]map[string]any, error) {
 	dir, err := agentDir()
 	if err != nil {
@@ -337,8 +322,6 @@ func watchEventsForMCP(workspaceID string, limit int) ([]map[string]any, error) 
 			"url": e.URL, "workspace": e.Workspace, "at": e.At.Format(time.RFC3339),
 			"canWorkOn": daemon.FixPrompt(e) != "",
 		}
-		// How the pull request stands, when the row is about one: an agent
-		// asked "what can I merge" answers from this.
 		if st, ok := pulls.Get(firstNonEmptyString(watch.PullRef(e.URL), e.Ref)); ok {
 			row["pull"] = st
 			row["readyToMerge"] = st.Ready()
@@ -348,8 +331,6 @@ func watchEventsForMCP(workspaceID string, limit int) ([]map[string]any, error) 
 	return out, nil
 }
 
-// mcpWatchBoard is the tracker's real columns, so a caller offering a move
-// picks from what exists instead of guessing a column name.
 func mcpWatchBoard(workspaceID string, refresh bool) (map[string]any, error) {
 	dir, err := agentDir()
 	if err != nil {
@@ -386,8 +367,6 @@ func mcpWatchBoard(workspaceID string, refresh bool) (map[string]any, error) {
 	return out, nil
 }
 
-// mcpWatchMove moves one ticket. Deliberate by construction: nothing calls
-// this on a poll.
 func mcpWatchMove(workspaceID, ref, status string) (map[string]any, error) {
 	dir, err := agentDir()
 	if err != nil {

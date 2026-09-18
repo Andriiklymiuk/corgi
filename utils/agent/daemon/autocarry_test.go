@@ -8,9 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// A session at a quota limit in a workspace with autoCarry on is carried
-// once to another account with budget; without the policy, or once
-// carried, nothing happens.
 func TestAutoCarryMovesALimitedSessionOnce(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
@@ -43,7 +40,6 @@ func TestAutoCarryMovesALimitedSessionOnce(t *testing.T) {
 		t.Fatal("a carry rings once")
 	}
 
-	// Off: nothing moves.
 	policy.AutoCarry = false
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s2", Cwd: "/tmp/b", ClaudePID: 200, Ancestors: []int{200}, At: now})
 	d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s2", Error: "rate_limit", Message: "usage limit", At: now})
@@ -51,7 +47,6 @@ func TestAutoCarryMovesALimitedSessionOnce(t *testing.T) {
 	if len(carried) != 1 {
 		t.Fatalf("off means off: %v", carried)
 	}
-	// No account with budget: remembered, not asked again this episode.
 	policy.AutoCarry = true
 	d.Carry = func(s sessions.Session) (string, error) { carried = append(carried, "ask:"+s.ID); return "", nil }
 	d.autoCarry(context.Background(), now)

@@ -64,8 +64,6 @@ func TestMigrateCommandLeavesTheAutoMigrationAlone(t *testing.T) {
 	}
 }
 
-// The migrate command turns the automatic move off for its own process. In a
-// test binary that process is shared, so every other cmd test would inherit it.
 func restoreMigrateFlags(t *testing.T) {
 	t.Helper()
 	dryRun, skip := migrateDryRun, utils.SkipCorgiServicesMigration

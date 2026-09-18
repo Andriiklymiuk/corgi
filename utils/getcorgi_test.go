@@ -139,9 +139,6 @@ func TestGetCorgiServicesInterpolatesFromSiblingDotEnv(t *testing.T) {
 }
 
 func TestGetCorgiServicesLeavesUnsetVarUnresolved(t *testing.T) {
-	// An unset var with no default must NOT fail the load (non-breaking): the
-	// ${VAR} token is left literal (silently) so later tunnel / cross-service
-	// resolvers can still handle it.
 	dir := t.TempDir()
 	yml := filepath.Join(dir, "corgi-compose.yml")
 	if err := os.WriteFile(yml, []byte("name: ${UNSET_NO_DEFAULT_VAR}\n"), 0644); err != nil {

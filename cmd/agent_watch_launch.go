@@ -11,14 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// The watch's switches, for a phone or a menu bar: what each workspace is
-// told about and works on its own, and the two loops it closes by itself.
-// GET lists them; POST flips some for one workspace. The automation
-// switches — hand-over, auto-merge, the reads policy — take on the
-// daemon's next round; the rest need the daemon to
-// read its config again (corgi agent restart), and the answer says so.
-
-// WatchSwitches is one workspace's watch, in switches.
 type WatchSwitches struct {
 	Workspace string   `json:"workspace"`
 	Enabled   bool     `json:"enabled"`
@@ -29,32 +21,21 @@ type WatchSwitches struct {
 	CI        bool     `json:"ci"`
 	Labels    []string `json:"labels"`
 	Isolate   bool     `json:"isolate"`
-	// Slots is how many unattended runs may go at once (1 to 8); above 1
-	// each has worktrees of its own (2.23).
 	Slots     int      `json:"slots"`
 	Quiet     string   `json:"quiet"`
 	DaysOff   []string `json:"daysOff"`
 	AutoMerge bool     `json:"autoMerge"`
 	Approve   bool     `json:"approve"`
 	HandOver  bool     `json:"handOver"`
-	// AutoAllow is "reads" or "" — the one permission policy.
-	AutoAllow string `json:"autoAllow"`
-	// DoneWhen is what finished means: commands, empty when a stop is a stop.
-	DoneWhen []string `json:"doneWhen"`
-	// CompactAt is the context percent past which a stop gets /compact; 0 is off.
-	CompactAt int `json:"compactAt"`
-	// Rebase rebases a stopped session's clean branch onto main when main moved.
-	Rebase bool `json:"rebase"`
-	// Lessons writes reviews, red gates and failed bots down for the next session.
-	Lessons bool `json:"lessons"`
-	// AutoCarry moves a session at its quota to another account with budget (2.23).
-	AutoCarry bool `json:"autoCarry"`
-	// RerunCI reruns a red build's failed jobs once before it is handed on (2.23).
-	RerunCI bool `json:"rerunCI"`
-	// Silent: this workspace's watch never rings (2.27).
-	Silent bool `json:"silent"`
-	// Headless runs a message for a gone session as claude -p --resume (2.23).
-	Headless bool `json:"headless"`
+	AutoAllow string   `json:"autoAllow"`
+	DoneWhen  []string `json:"doneWhen"`
+	CompactAt int      `json:"compactAt"`
+	Rebase    bool     `json:"rebase"`
+	Lessons   bool     `json:"lessons"`
+	AutoCarry bool     `json:"autoCarry"`
+	RerunCI   bool     `json:"rerunCI"`
+	Silent    bool     `json:"silent"`
+	Headless  bool     `json:"headless"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -150,8 +131,6 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		if wc == nil {
 			wc = &config.WatchConfig{}
 		}
-		// Only the two loops take on the next round; anything else is read
-		// when the daemon starts.
 		restart := false
 		if req.Enabled != nil {
 			wc.Enabled, restart = *req.Enabled, true
@@ -275,8 +254,6 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// setWorkspaceWatch edits one workspace's watch config in the user file
-// through edit and writes it back; the daemon reads it live.
 func setWorkspaceWatch(dir, id string, edit func(*config.WatchConfig)) error {
 	registry, err := workspace.Load(agentRegistryPath(dir))
 	if err != nil {

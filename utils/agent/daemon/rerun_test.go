@@ -9,8 +9,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// The first red on a repository is rerun once and nobody is handed it;
-// the second red on the same run goes the usual way — here, a fix.
 func TestARedBuildIsRerunOnceBeforeItIsWorked(t *testing.T) {
 	d := testDaemon(t)
 	notes := make(chan string, 8)
@@ -23,7 +21,6 @@ func TestARedBuildIsRerunOnceBeforeItIsWorked(t *testing.T) {
 		}
 		reruns++
 		if reruns > 1 {
-			// The run was rerun already: nothing to rerun.
 			return watch.Rerun{}, errors.New("run 12 was rerun already")
 		}
 		return watch.Rerun{RunID: 12, URL: "https://github.com/acme/api/actions/runs/12", At: time.Now()}, nil
@@ -39,7 +36,6 @@ func TestARedBuildIsRerunOnceBeforeItIsWorked(t *testing.T) {
 	if len(got) != 1 || len(*ran) != 0 {
 		t.Fatalf("the first red is rerun, not worked: notes %v runs %v", got, *ran)
 	}
-	// The second red comes a round later, as it would from the poll.
 	d.watchState.NewRound()
 	second := watch.Event{Key: "github:ci:acme/api:1:" + now.Add(5*time.Minute).Format(time.RFC3339), Kind: watch.KindCIFailed, Ref: "acme/api", Title: "ci failed", Mine: true, At: now.Add(5 * time.Minute)}
 	d.handleWatchEvent(context.Background(), second)

@@ -14,11 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Docs go stale in two ways corgi can see without a table nobody maintains:
-// a document that names something the diff changed, and a CLAUDE.md pointer
-// (file:line) that no longer lands where it says. Both are read from the
-// changed surface and the tree; no config.
-
 var docsCheckCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Docs that mention what the diff changed, and pointers that no longer land",

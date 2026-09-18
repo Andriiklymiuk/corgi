@@ -71,7 +71,6 @@ func upgradeRun(cmd *cobra.Command, args []string) {
 			refreshDaemonAfterUpgrade(exePath, latestVersion)
 		}
 	case installMethodWindows:
-		// We can't safely overwrite the running corgi.exe from inside corgi.exe.
 		fmt.Printf("Detected Windows install at %s.\n", exeDir)
 		fmt.Println("Run this from another PowerShell window to upgrade:")
 		fmt.Printf("  irm %s | iex\n", installPs1ScriptURL)
@@ -166,13 +165,8 @@ func upgradeViaHomebrew() error {
 	if err := run("update"); err != nil {
 		return fmt.Errorf("brew update failed: %w", err)
 	}
-	// Homebrew loads casks only from trusted taps; older brews have no
-	// such command, and then there is nothing to trust.
 	_ = exec.Command("brew", "trust", "andriiklymiuk/tools").Run()
 
-	// corgi moved from a formula to a cask. An install that predates that
-	// still holds the formula keg, which brew upgrade will not replace on
-	// its own; swap it for the cask once.
 	if exec.Command("brew", "list", "--formula", "corgi").Run() == nil {
 		fmt.Println("corgi is a Homebrew cask now — replacing the old formula install")
 		if err := run("uninstall", "--formula", "corgi"); err != nil {
@@ -209,16 +203,10 @@ func upgradeViaInstallScript(installDir string) error {
 }
 
 func getLatestGitHubTag() (string, error) {
-	// A timeout matters here beyond the upgrade command: the MCP server calls
-	// this hourly from a goroutine, and a hung connection would park one for
-	// good, once per hour, for the life of the process.
 	client := &http.Client{Timeout: 10 * time.Second}
 	if tag, err := latestTagFromAPI(client); err == nil && tag != "" {
 		return tag, nil
 	}
-	// The API allows sixty anonymous calls an hour per address and answers
-	// 403 past that; the release page's redirect carries the same tag and
-	// has no such limit.
 	return latestTagFromRedirect(client)
 }
 
@@ -271,8 +259,6 @@ func latestTagFromRedirect(client *http.Client) (string, error) {
 	return tag, nil
 }
 
-// tagFromReleaseLocation reads the tag out of the Location a releases/latest
-// request redirects to: .../releases/tag/v1.21.50 → v1.21.50.
 func tagFromReleaseLocation(location string) string {
 	const marker = "/releases/tag/"
 	i := strings.LastIndex(location, marker)
@@ -286,19 +272,11 @@ func tagFromReleaseLocation(location string) string {
 	return strings.TrimSpace(tag)
 }
 
-// refreshDaemonAfterUpgrade hands the login service the corgi that was just
-// installed. The daemon runs from its own copy (see agent_install_stable.go),
-// and that copy is only refreshed by `agent install` — which has to be the
-// new binary, not this process, so the copy is the new version.
-// installed is the version that was just put on disk: this process is
-// still the old corgi, so APP_VERSION is the wrong thing to compare with.
 func refreshDaemonAfterUpgrade(exePath, installed string) {
 	if !daemonRunsFromStableCopy() || !loginServiceInstalled() {
 		return
 	}
 	if installedDaemonBinary() != mustStableDaemonBinary() {
-		// Older installs point launchd straight at Homebrew's path, which is
-		// what brings the macOS file prompt back after every update.
 		fmt.Println("The daemon still starts from Homebrew's path — run `corgi agent install` once to stop macOS asking about Documents after every update.")
 		return
 	}
@@ -308,8 +286,6 @@ func refreshDaemonAfterUpgrade(exePath, installed string) {
 		fmt.Println("Run `corgi agent install` yourself.")
 		return
 	}
-	// install bounces the login service; a daemon `agent up` started by hand
-	// is not the service's and keeps running the old corgi. Ask it to move.
 	old := runningDaemonVersion()
 	if !daemonWantsRestart(old, installed) {
 		return
@@ -325,14 +301,10 @@ func refreshDaemonAfterUpgrade(exePath, installed string) {
 	fmt.Printf("Daemon restarted on corgi %s.\n", installed)
 }
 
-// daemonWantsRestart says whether a running daemon is on another version
-// than the one just installed; no daemon, nothing to move.
 func daemonWantsRestart(running, installed string) bool {
 	return running != "" && strings.TrimPrefix(running, "v") != strings.TrimPrefix(installed, "v")
 }
 
-// runningDaemonVersion is what the daemon's own record says it runs, or ""
-// when none is running.
 func runningDaemonVersion() string {
 	dir, err := agentDir()
 	if err != nil {

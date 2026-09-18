@@ -10,9 +10,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// slowClaude is a headless run that takes a moment and records when each
-// run began and ended (the fix's context is cancelled the moment it is
-// done, before its slot is given back).
 type span struct{ start, end time.Time }
 
 func slowClaude(t *testing.T) func() []span {
@@ -45,10 +42,6 @@ func slowClaude(t *testing.T) func() []span {
 	}
 }
 
-// overlapped says whether two runs were inside at the same time: each run
-// sleeps 0.3s, so a second one that started before the first could finish
-// ran beside it. Ends are stamped by a goroutine after cancel, too late to
-// judge by under load.
 func overlapped(spans []span) bool {
 	for i := range spans {
 		for j := range spans {
@@ -86,9 +79,6 @@ func runTwoFixes(t *testing.T, slots int, isolate bool) bool {
 	return false
 }
 
-// One slot is today: two fixes in one workspace run one after the other.
-// Two slots run them side by side — each in its own worktrees, which is
-// why more than one slot needs isolation.
 func TestSlotsRunFixesSideBySide(t *testing.T) {
 	if runTwoFixes(t, 0, false) {
 		t.Fatal("no slots set: one at a time")
@@ -115,8 +105,6 @@ func TestSlotsOf(t *testing.T) {
 
 func TestCommentsOnOnePullRequestSettleIntoOneFix(t *testing.T) {
 	prev := commentSettle
-	// Three comments land 50 ms apart; the settle must outlast a slow CI
-	// runner's scheduling under -race, or a fix starts between them.
 	commentSettle = 600 * time.Millisecond
 	t.Cleanup(func() { commentSettle = prev })
 	d := testDaemon(t)

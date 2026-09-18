@@ -9,12 +9,6 @@ import (
 	"strings"
 )
 
-// Cloudflared uses Cloudflare Quick Tunnels (no signup, free).
-// `cloudflared tunnel --url http://localhost:<port>` writes lines like:
-//
-//	2026-04-30T12:34:56Z INF |  https://kind-zebra-42.trycloudflare.com  |
-//
-// to stderr. We grep the line for any *.trycloudflare.com URL.
 type Cloudflared struct{}
 
 func (Cloudflared) Name() string { return "cloudflared" }

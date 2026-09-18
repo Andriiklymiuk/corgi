@@ -18,11 +18,9 @@ func TestALeaseSaysWhoAndWhenAndLapses(t *testing.T) {
 	if !ok || got.Machine != "laptop" || !got.At.Equal(now) {
 		t.Fatalf("a claim has to survive the round trip: %+v", got)
 	}
-	// A person reading the ticket should see it is bookkeeping.
 	if !strings.Contains(line, "corgi is working on this") {
 		t.Fatalf("the claim must explain itself: %q", line)
 	}
-	// It is found even with a person's comment around it.
 	if _, ok := ParseLease("looks good to me\n" + line + "\nthanks"); !ok {
 		t.Fatal("a claim inside a longer comment still counts")
 	}
@@ -58,8 +56,6 @@ func TestHeldByIgnoresMyOwnAndExpiredClaims(t *testing.T) {
 	}
 }
 
-// leaseTracker is a tracker two machines can both post to, so the race can
-// actually be run rather than reasoned about.
 var errNoSuchComment = errors.New("no such comment")
 
 type leaseTracker struct {
@@ -103,7 +99,6 @@ func TestTwoMachinesOneTicketOneRun(t *testing.T) {
 	board := &leaseTracker{}
 	now := time.Now()
 
-	// Both find it free and both claim: the older claim keeps it.
 	ok, holder, err := Claim(context.Background(), board, "ABC-1", "laptop", now)
 	if err != nil || !ok || holder != "" {
 		t.Fatalf("the first machine takes it: ok=%v holder=%q err=%v", ok, holder, err)
@@ -116,24 +111,18 @@ func TestTwoMachinesOneTicketOneRun(t *testing.T) {
 		t.Fatalf("the second machine stands down and says who has it: ok=%v holder=%q", ok, holder)
 	}
 
-	// The same machine coming back to its own ticket is not blocked by itself.
 	if ok, _, _ := Claim(context.Background(), board, "ABC-1", "laptop", now.Add(time.Minute)); !ok {
 		t.Fatal("my own claim must not lock me out")
 	}
 
-	// Once it lapses, the other machine may take it.
 	if ok, _, _ := Claim(context.Background(), board, "ABC-1", "desktop", now.Add(LeaseTTL+time.Hour)); !ok {
 		t.Fatal("a lapsed claim frees the ticket")
 	}
 }
 
-// A dead race: both read an empty board before either posted. They must not
-// both proceed, and both must reach the same verdict without talking.
 func TestASimultaneousClaimIsSettledTheSameWayByBoth(t *testing.T) {
 	now := time.Now()
 	board := &leaseTracker{}
-	// Both posted at the same instant; the tie goes to the smaller name so
-	// each machine, reading the same board, decides the same thing.
 	_ = board.Comment(context.Background(), "ABC-1", Lease{Machine: "desktop", At: now}.String())
 	ok, holder, err := Claim(context.Background(), board, "ABC-1", "laptop", now)
 	if err != nil {
@@ -144,8 +133,6 @@ func TestASimultaneousClaimIsSettledTheSameWayByBoth(t *testing.T) {
 	}
 }
 
-// A tracker that cannot be read leaves the claim unknown. Claim says so and
-// lets the caller decide, rather than silently allowing a duplicate.
 func TestAnUnreadableTrackerIsReportedNotGuessed(t *testing.T) {
 	board := &leaseTracker{readErr: context.DeadlineExceeded}
 	ok, holder, err := Claim(context.Background(), board, "ABC-1", "laptop", time.Now())

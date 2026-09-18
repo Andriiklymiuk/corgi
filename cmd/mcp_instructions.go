@@ -1,10 +1,5 @@
 package cmd
 
-// mcpServerInstructions is handed to every MCP client at initialize. It is the
-// only guidance a client that never loads the corgi skills — the Claude app
-// connector on a phone, a bare MCP inspector — gets before its first call, so
-// it carries the few facts that a tool description alone cannot: which call to
-// make first, what is and is not a ready gate, and what the tunnel gate hides.
 const mcpServerInstructions = `corgi runs a multi-service development stack from one corgi-compose.yml: databases in Docker, service repositories, generated env files with cross-service URLs.
 
 Orient first. corgi_context answers "where am I" in one call (topology, ports, health, each repository's branch). When the user names a stack by a human name, corgi_workspace_resolve maps it to one registered workspace and returns candidates instead of guessing; echo the resolved path before working in it.

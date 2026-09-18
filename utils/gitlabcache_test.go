@@ -18,9 +18,6 @@ func nodeService(name string, lockfile string) Service {
 	}
 }
 
-// GitLab refuses to cache anything outside the project directory, so every
-// "~/..." path corgi emits has to become an in-project directory plus the env
-// var that puts the package manager's cache there.
 func TestGitLabCacheNeverEmitsHomePaths(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{
 		nodeService("api", "package-lock.json"),
@@ -43,9 +40,6 @@ func TestGitLabCacheNeverEmitsHomePaths(t *testing.T) {
 	}
 }
 
-// The service repos are cloned during the job, so no lockfile exists when
-// GitLab computes a key. Branch-scoped keys with a fallback to the default
-// branch are what is actually available; corgi's own markers re-validate.
 func TestGitLabCacheKeysAreBranchScopedWithFallbacks(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{
 		nodeService("api", "package-lock.json"),
@@ -63,8 +57,6 @@ func TestGitLabCacheKeysAreBranchScopedWithFallbacks(t *testing.T) {
 	}
 }
 
-// A red e2e run still paid for every install. Dropping the cache on failure
-// makes the retry pay again.
 func TestGitLabCacheSavesEvenWhenTheJobFails(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{nodeService("api", "package-lock.json")}, GitLabCacheOptions{})
 	if !strings.Contains(out, "when: always") {
@@ -72,8 +64,6 @@ func TestGitLabCacheSavesEvenWhenTheJobFails(t *testing.T) {
 	}
 }
 
-// GitLab allows four cache entries per job. The markers must always be one of
-// them, so the ecosystems are what gets merged when there are too many.
 func TestGitLabCacheNeverExceedsFourEntries(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{
 		nodeService("api", "package-lock.json"),
@@ -91,8 +81,6 @@ func TestGitLabCacheNeverExceedsFourEntries(t *testing.T) {
 	}
 }
 
-// A workspace with no cacheKey anywhere still has markers worth keeping, and
-// the file must stay valid rather than render an empty cache list.
 func TestGitLabCacheHandlesAPlanWithNoGroups(t *testing.T) {
 	out := gitlabYAMLFor(t, nil, GitLabCacheOptions{})
 
@@ -107,8 +95,6 @@ func TestGitLabCacheHandlesAPlanWithNoGroups(t *testing.T) {
 	}
 }
 
-// The workspace repo is usually cloned into a subdirectory of the job, while
-// GitLab resolves every cache path against the project root.
 func TestGitLabCachePrefixesEveryPath(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{nodeService("api", "package-lock.json")},
 		GitLabCacheOptions{PathPrefix: "workspace"})
@@ -121,8 +107,6 @@ func TestGitLabCachePrefixesEveryPath(t *testing.T) {
 	}
 }
 
-// The whole point of generating the file is that it can be diffed against the
-// compose file later, so the same input must render byte-identically.
 func TestGitLabCacheIsDeterministic(t *testing.T) {
 	services := []Service{nodeService("api", "package-lock.json"), nodeService("web", "package-lock.json")}
 	first := gitlabYAMLFor(t, services, GitLabCacheOptions{})
@@ -132,8 +116,6 @@ func TestGitLabCacheIsDeterministic(t *testing.T) {
 	}
 }
 
-// The generated file is included by the pipeline, so the job names it defines
-// are part of the contract with gitlab/corgi.yml.
 func TestGitLabCacheDefinesTheExpectedTemplateName(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{nodeService("api", "package-lock.json")}, GitLabCacheOptions{})
 	if !strings.HasPrefix(strings.TrimSpace(stripComments(out)), ".corgi-cache:") {
@@ -152,8 +134,6 @@ func stripComments(s string) string {
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
-// A home directory corgi knows but the GitLab table does not must be dropped,
-// not emitted: GitLab rejects any cache path outside the project.
 func TestGitLabCacheDropsAnUnmappedHomePath(t *testing.T) {
 	plan := CachePlan{
 		Paths: []string{"api/node_modules", "~/.some-new-tool"},
@@ -172,8 +152,6 @@ func TestGitLabCacheDropsAnUnmappedHomePath(t *testing.T) {
 	}
 }
 
-// Merging the tail can bring the same shared directory in twice; a duplicated
-// cache path is a config GitLab has to be handed only once.
 func TestGitLabCacheDedupesPathsWhenGroupsMerge(t *testing.T) {
 	shared := "packages/node_modules"
 	groups := []CacheGroup{
@@ -190,9 +168,6 @@ func TestGitLabCacheDedupesPathsWhenGroupsMerge(t *testing.T) {
 	}
 }
 
-// GEM_HOME is an install prefix, not a cache. Redirecting it would move where
-// gems land and can break a later bundle exec, so ruby's home entry is skipped
-// and only the in-project vendor/bundle is cached.
 func TestGitLabCacheDoesNotRedirectRubyInstalls(t *testing.T) {
 	out := gitlabYAMLFor(t, []Service{{
 		ServiceName: "billing",

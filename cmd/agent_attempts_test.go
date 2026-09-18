@@ -13,9 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A fan-out reads off the board by attempt: grouped under the ref, in
-// order, each with what it built; picking one notes it and interrupts the
-// rest that still work.
 func TestAttemptsGroupAndPick(t *testing.T) {
 	list := []sessions.Session{
 		{ID: "a", Label: "api", Attempt: "ABC-1/1", Status: sessions.StatusDone, Branch: "corgi/ABC-1-1", Changes: &sessions.Changes{Files: 3, Lines: 80}, Tests: &sessions.TestRun{OK: true, Cmd: "go test"}, Gate: &sessions.GateRun{OK: true}},
@@ -44,7 +41,6 @@ func TestAttemptsGroupAndPick(t *testing.T) {
 	}
 }
 
-// A fan-out is n work-on commands, attempt N each, on the models in turn.
 func TestWorkOnFansOut(t *testing.T) {
 	dir := phoneBoard(t, true)
 	os.MkdirAll(filepath.Join(dir, "watch"), 0o700)

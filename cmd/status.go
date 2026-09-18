@@ -17,10 +17,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// statusCmd is the post-boot sibling of `corgi doctor`:
-//
-//	doctor → are prereqs in place and ports free BEFORE `corgi run`?
-//	status → is each declared service / db actually responding AFTER `corgi run`?
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Healthcheck every declared service and db_service",
@@ -122,9 +118,6 @@ func resolveStatusRows(cmd *cobra.Command) []statusRow {
 	return rows
 }
 
-// emitNoMatch reports an empty service-filter result. In --json mode it emits a
-// structured error to stderr so stdout stays pure JSON; otherwise a plain human
-// line via utils.Info (which already routes to stderr under --json).
 func emitNoMatch(filter []string) {
 	msg := fmt.Sprintf("No matching services for filter %v.", filter)
 	if utils.JSONOutput {
@@ -170,8 +163,6 @@ func runStatus(cmd *cobra.Command, _ []string) {
 	case f.untilHealthy:
 		runStatusUntilHealthy(rows, f.interval, f.timeout, f.jsonOut, f.quiet)
 	case f.watch:
-		// Watch loops until Ctrl+C; cancel on signal so the watch
-		// goroutine exits cleanly instead of being killed mid-write.
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		runStatusWatch(ctx, rows, f.interval, f.jsonOut, f.quiet)
@@ -375,7 +366,6 @@ func splitResults(rows []statusRow, results map[string]probeResult) (up, down []
 	return
 }
 
-// rows must be pre-sorted by port — runStatus does it once before the loop.
 func buildWatchFrame(rows []statusRow, results map[string]probeResult, interval time.Duration, now time.Time) string {
 	var buf strings.Builder
 	buf.WriteString("🩺 corgi status\n")
@@ -512,7 +502,6 @@ func collectStatusRows(corgi *utils.CorgiCompose) []statusRow {
 			row.Kind = "http"
 			row.URL = fmt.Sprintf("http://localhost:%d%s", db.Port, db.HealthCheck)
 		} else if db.Driver == "localstack" {
-			// Sensible default for the localstack driver — it ships a canonical health endpoint.
 			row.Kind = "http"
 			row.URL = fmt.Sprintf("http://localhost:%d/_localstack/health", db.Port)
 		}

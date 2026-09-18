@@ -14,11 +14,9 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// postgres uses an anonymous volume (no volumes: block), postgis a named one —
-// exercising both wipe paths.
 type e2eDB struct {
 	driver      string
-	service     string // unique corgisnapselftest-prefixed name → unique container
+	service     string
 	composeBody string
 }
 
@@ -54,10 +52,6 @@ func composeDownVolumes(t *testing.T, dir string) {
 	}
 }
 
-// waitReady blocks until Postgres is the FINAL server and stably accepting
-// connections. One successful query is not enough on first boot: the entrypoint
-// runs a temporary server, says "ready", then restarts the real one — so a
-// sustained streak of successes is required to outlast that blip.
 func waitReady(t *testing.T, container, user, db string) {
 	t.Helper()
 	deadline := time.Now().Add(180 * time.Second)
@@ -133,8 +127,6 @@ networks:
 		{
 			driver:  "postgis",
 			service: "corgisnapselftestpgis",
-			// postgis/postgis publishes amd64-only manifests; on an arm64 engine
-			// compose refuses to fall back, so pin the platform to run it emulated.
 			composeBody: fmt.Sprintf(`services:
   postgis-corgisnapselftestpgis:
     image: postgis/postgis:17-3.5
@@ -162,7 +154,6 @@ networks:
 	for _, db := range dbs {
 		db := db
 		t.Run(db.driver, func(t *testing.T) {
-			// RunSnapshot/RunRestore read the package-global CorgiComposePathDir.
 			root := t.TempDir()
 			prev := utils.CorgiComposePathDir
 			utils.CorgiComposePathDir = root
@@ -189,9 +180,6 @@ networks:
 				t.Fatalf("pre-snapshot matview = %q, want before-snapshot", got)
 			}
 
-			// Force a checkpoint so RunSnapshot's clean SIGINT stop finishes fast —
-			// matters under emulation, where a fat shutdown checkpoint can blow the
-			// 120s stop timeout and get SIGKILLed (exit 137).
 			psql(t, container, user, dbN, "CHECKPOINT;")
 
 			const snapName = "e2e-build1"
@@ -235,8 +223,6 @@ networks:
 			if got := psqlScalar(t, container, user, dbN, "SELECT label FROM widget WHERE id = 1;"); got != "before-snapshot" {
 				t.Fatalf("restored row = %q, want before-snapshot", got)
 			}
-			// and the matview returns the snapshot value WITHOUT a refresh — proving
-			// the physical data dir (not just the table) was restored.
 			if got := psqlScalar(t, container, user, dbN, "SELECT label FROM widget_mv WHERE id = 1;"); got != "before-snapshot" {
 				t.Fatalf("restored matview = %q, want before-snapshot (no refresh)", got)
 			}

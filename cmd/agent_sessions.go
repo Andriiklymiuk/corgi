@@ -20,11 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The board, from the command line. Everything here reads sessions.json or
-// drops a command into the daemon's spool: a Stream Deck plugin does exactly
-// the same, which is why these exist — a plugin that shells out to `corgi
-// agent focus` needs no private protocol.
-
 var agentSessionsCmd = &cobra.Command{
 	Use:   "sessions",
 	Short: "Show every tracked Claude Code session as the board of keys",
@@ -141,9 +136,6 @@ session takes the lowest free key within a second. The "+" key on a deck.`,
 	},
 }
 
-// newSessionArgs is what `corgi agent claude` is run with for a new
-// session: the same checks the launcher makes for the phone, so a bad
-// workspace or bot fails here, not in a terminal nobody is watching.
 func newSessionArgs(workspace, prompt, bot, model, profile string, isolate bool) ([]string, error) {
 	var args []string
 	if bot = strings.TrimSpace(bot); bot != "" {
@@ -196,7 +188,6 @@ var agentWindowsCmd = &cobra.Command{
 	Run:   runAgentWindows,
 }
 
-// keyIndex reads a 1-based key number as printed on the board.
 func keyIndex(arg string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(arg), "#"))
 	if err != nil || n < 1 {
@@ -205,8 +196,6 @@ func keyIndex(arg string) (int, error) {
 	return n - 1, nil
 }
 
-// sendBoardCommand drops one command in the spool and nudges the daemon,
-// which must be running: without it nothing would read the request.
 var agentRefreshCmd = &cobra.Command{
 	Use:   "refresh",
 	Short: "Reload everything now: rescan sessions, poll every tracker, publish",
@@ -236,8 +225,6 @@ func sendBoardCommand(c command.Command, done string) {
 	utils.Info(done)
 }
 
-// boardReport is `corgi agent sessions --json`: the published board plus
-// where it lives and whether anyone is maintaining it.
 type boardReport struct {
 	Path    string `json:"path"`
 	Running bool   `json:"daemonRunning"`
@@ -286,9 +273,6 @@ func runAgentSessions(cmd *cobra.Command, _ []string) {
 	}
 }
 
-// watchBoard redraws on every publish. The daemon writes sessions.json by
-// rename, which is one create event, so a directory watch is exact; the
-// slow tick is the safety net for a watcher that misses one.
 func watchBoard(ctx context.Context, dir string, last time.Time, redraw func(boardReport)) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -430,7 +414,6 @@ func statusGlyph(s sessions.Status) string {
 	return "?"
 }
 
-// statusWord is the one word a key shows under the label.
 func statusWord(s sessions.Status) string {
 	switch s {
 	case sessions.StatusWorking:

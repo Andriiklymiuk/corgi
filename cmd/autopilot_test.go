@@ -13,8 +13,6 @@ func TestAutopilotStatusMissingStateReportsUninitialized(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status on empty dir should not error: %v", err)
 	}
-	// No file yet → a first run, distinct from an explicit stop, so the loop
-	// starts rather than treating it as the kill switch. Never a crash.
 	if st.Mode != utils.AutopilotUninitialized {
 		t.Fatalf("empty status mode = %q, want uninitialized", st.Mode)
 	}

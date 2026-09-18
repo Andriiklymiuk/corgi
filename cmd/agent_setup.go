@@ -72,8 +72,6 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	utils.Info("next: `corgi agent install` to start at login, then `corgi agent status`")
 }
 
-// registerError carries the exit code and error key `corgi agent init`
-// prints for a refusal, so the launcher can say the same thing over HTTP.
 type registerError struct {
 	code string
 	exit int
@@ -83,10 +81,6 @@ type registerError struct {
 func (e *registerError) Error() string { return e.err.Error() }
 func (e *registerError) Unwrap() error { return e.err }
 
-// registerWorkspace is what `corgi agent init` does in a directory: writes
-// the repo's .corgi/agent.yml, puts the directory in the registry under id
-// (the directory's name when empty) and turns supervision on. The Mac app
-// registers a folder it was pointed at through the launcher the same way.
 func registerWorkspace(dir, id string, aliases []string, configDir string, sensitive, skipPerms bool) (string, error) {
 	if !dirIsWorkspace(dir) {
 		return "", &registerError{"agent_no_workspace", 2,
@@ -100,11 +94,6 @@ func registerWorkspace(dir, id string, aliases []string, configDir string, sensi
 	if err != nil {
 		return "", &registerError{"agent_registry_read", 1, err}
 	}
-	// Refuse to repoint an id that belongs to a different directory. The id is
-	// the key into the trusted per-workspace settings (configDir, a granted
-	// permission bypass), so silently taking over "api" from another repo also
-	// named api would transfer that capability to the new directory. Sticky
-	// settings make this worse, and repo basenames collide constantly.
 	if prior, ok := registry.Find(id); ok && prior.AbsPath != "" && prior.AbsPath != dir {
 		return "", &registerError{"agent_id_taken", 2, fmt.Errorf(
 			"workspace id %q already belongs to %s — its settings (account, permissions) must not transfer here. "+
@@ -122,30 +111,18 @@ func registerWorkspace(dir, id string, aliases []string, configDir string, sensi
 	existing.ComposeFile = registeredComposeFile(dir)
 	existing.Aliases = aliases
 	existing.Status = workspace.StatusOK
-	// Cache the service names so "fix the api" can resolve to the stack that
-	// has a service called api. Without this the resolver's service matching
-	// has nothing to match against.
 	existing.Services, existing.Repos = describeStack(dir)
 	registry.Upsert(existing)
 	if err := workspace.Save(path, registry); err != nil {
 		return "", &registerError{"agent_registry_write", 1, err}
 	}
 
-	// init is the deliberate opt-in, so it is what turns supervision on.
-	// `corgi agent scan` registers without arming anything.
 	if err := enableWorkspace(id, configDir, skipPerms); err != nil {
 		return "", &registerError{"agent_write_user_config", 1, err}
 	}
 	return id, nil
 }
 
-// describeStack reads a stack's service and repository names for the registry,
-// so a phone can say "fix the api" and reach the right workspace.
-//
-// The compose file is parsed directly rather than through GetCorgiServices:
-// that path mutates global cobra flags, resolves environments, and can prompt
-// when a directory turns out not to hold a stack — none of which belongs in a
-// best-effort read that runs over whatever `agent scan` walked past.
 func describeStack(dir string) (services, repos []string) {
 	data, err := os.ReadFile(filepath.Join(dir, composeFileName(dir)))
 	if err != nil {
@@ -192,10 +169,6 @@ func composeFileName(dir string) string {
 	return "corgi-compose.yml"
 }
 
-// claudeTrustsDir reports whether Claude's config records an accepted
-// workspace-trust dialog for dir. remote-control refuses an untrusted directory
-// and only a human at `claude` can accept, so init/up warn up front. An
-// unparseable config reports trusted; a missing one means Claude never ran.
 func claudeTrustsDir(configDir, dir string) bool {
 	base := expandTilde(configDir)
 	if base == "" {
@@ -220,8 +193,6 @@ func claudeTrustsDir(configDir, dir string) bool {
 	return cfg.Projects[dir].HasTrustDialogAccepted
 }
 
-// warnIfUntrusted prints the one-time-fix instruction when Claude has not
-// trusted dir under the workspace's account.
 func warnIfUntrusted(configDir, dir string) {
 	if claudeTrustsDir(configDir, dir) {
 		return
@@ -237,9 +208,6 @@ func trustAccountSuffix(configDir string) string {
 	return " under " + configDir
 }
 
-// registeredComposeFile is what the registry records: the real compose file, or
-// empty for a git-only workspace — never the default-name fallback, which would
-// tell `corgi agent workspaces --json` readers a file exists that does not.
 func registeredComposeFile(dir string) string {
 	if dirHasComposeFile(dir) {
 		return composeFileName(dir)
@@ -287,8 +255,6 @@ func setWorkspaceAutostart(id string, on bool) error {
 	return writeUserConfig(path, user)
 }
 
-// enableWorkspace turns on supervision for a workspace, and records its Claude
-// config directory, in the trusted user-level file.
 func enableWorkspace(id, configDir string, skipPerms bool) error {
 	dir, err := agentDir()
 	if err != nil {
@@ -305,9 +271,6 @@ func enableWorkspace(id, configDir string, skipPerms bool) error {
 	if configDir != "" {
 		entry.ConfigDir = configDir
 	}
-	// Never silently clears an already-set opt-in: a re-init without the flag
-	// leaves a previously-granted bypass alone, matching how the config overlay
-	// OR-s capability booleans rather than overwriting them.
 	if skipPerms {
 		entry.DangerouslySkipPermissions = true
 	}
@@ -323,8 +286,6 @@ var agentScanCmd = &cobra.Command{
 	Run:   runAgentScan,
 }
 
-// scanMaxDepth bounds the walk. Stacks live a couple of levels under a projects
-// directory; descending further mostly finds node_modules.
 const scanMaxDepth = 4
 
 func runAgentScan(cmd *cobra.Command, args []string) {
@@ -378,7 +339,6 @@ func runAgentScan(cmd *cobra.Command, args []string) {
 	utils.Info("none of them are supervised yet — run `corgi agent init` in the ones you want running")
 }
 
-// skipDirs are never worth descending into when hunting for stacks.
 var skipDirs = map[string]bool{
 	"node_modules": true, ".git": true, "vendor": true, "dist": true,
 	"build": true, ".next": true, "target": true, "Pods": true,
@@ -391,7 +351,7 @@ func findComposeDirs(root string) []string {
 
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // an unreadable directory is not worth failing the scan
+			return nil
 		}
 		if !d.IsDir() {
 			return nil
@@ -404,7 +364,7 @@ func findComposeDirs(root string) []string {
 		}
 		if dirHasComposeFile(path) {
 			out = append(out, path)
-			return filepath.SkipDir // a stack does not contain another stack
+			return filepath.SkipDir
 		}
 		return nil
 	})
@@ -417,8 +377,6 @@ var agentDoctorCmd = &cobra.Command{
 	Run:   runAgentDoctor,
 }
 
-// Check names, kept as constants so the same string is not repeated across a
-// check and its assertions.
 const (
 	checkWakeLock   = "wake lock"
 	checkAtLogin    = "start at login"
@@ -494,9 +452,6 @@ func collectAgentChecks() []agentCheck {
 	return checks
 }
 
-// checkSessionTracking says whether the board can work: hooks in every
-// account, and — the first thing to debug when a key press goes nowhere —
-// any tracked session whose window corgi could not identify.
 func checkSessionTracking(dir string) []agentCheck {
 	var checks []agentCheck
 	hooked, stale := 0, 0
@@ -513,8 +468,6 @@ func checkSessionTracking(dir string) []agentCheck {
 	}
 	c := agentCheck{Name: "session tracking", OK: true, Detail: fmt.Sprintf("hooks in %d of %d Claude config dir(s)", hooked, len(dirs))}
 	if hooked == 0 {
-		// Optional, so not a failure: doctor must not exit 1 for a feature
-		// nobody asked for.
 		c.Detail = "off — `corgi agent track enable` for a Stream Deck or `corgi agent sessions`"
 		return append(checks, c)
 	}
@@ -611,8 +564,6 @@ func checkWakeLockSupport() agentCheck {
 	}
 	detail := argv[0] + " · " + wakeLockScope()
 	if risk := supervisor.CheckSleepRisk(); risk.AtRisk() {
-		// A caveat, not a failure. Idle sleep IS held off on battery, so a red
-		// cross here sent people chasing a setting that was never the problem.
 		return agentCheck{Name: checkWakeLock, OK: true, Detail: detail + " — " + risk.Reason, Fix: risk.Fix}
 	}
 	if runtime.GOOS == "darwin" {
@@ -621,8 +572,6 @@ func checkWakeLockSupport() agentCheck {
 	return agentCheck{Name: checkWakeLock, OK: true, Detail: detail}
 }
 
-// wakeLockScope says whether the machine stays awake between sessions, which is
-// the difference between a phone tap reaching this laptop and reaching nothing.
 func wakeLockScope() string {
 	dir, err := agentDir()
 	if err != nil {
@@ -643,9 +592,6 @@ func checkInstallSupport() agentCheck {
 			Fix:    "run `corgi agent serve` yourself, or supervise it with your own tooling",
 		}
 	}
-	// Not a failure — plenty of machines are meant to start it by hand. It is
-	// still the answer to "why is my phone dead after a reboot", so it says
-	// what is actually installed rather than what the platform could support.
 	if !loginServiceInstalled() {
 		return agentCheck{
 			Name:   checkAtLogin,
@@ -664,8 +610,6 @@ func checkInstallSupport() agentCheck {
 	return agentCheck{Name: checkAtLogin, OK: true, Detail: detail}
 }
 
-// checkNotifier is for a Linux box: a server has no desktop to toast on, and
-// a notification nobody sees is the same as none.
 func checkNotifier() agentCheck {
 	_, err := exec.LookPath("notify-send")
 	url := ""
@@ -761,15 +705,11 @@ func init() {
 	agentCmd.AddCommand(agentInitCmd, agentScanCmd, agentDoctorCmd)
 }
 
-// gitConfigEmail is a seam: what `git config user.email` says in dir.
 var gitConfigEmail = func(dir string) string {
 	out, _ := exec.Command("git", "-C", dir, "config", "--get", "user.email").Output()
 	return strings.TrimSpace(string(out))
 }
 
-// checkUnattended is what a fix that nobody watches trips over on a fresh
-// machine: a commit with no author, a pull request with no CLI to open it,
-// a skill that is not installed. Each is a quiet failure thirty minutes in.
 func checkUnattended(dir string) []agentCheck {
 	registry, _ := mustLoadRegistry()
 	user, _ := config.LoadUser(agentUserConfigPath(dir))
@@ -865,8 +805,6 @@ func forgeCLICheck(haveGH, haveGlab, githubToken, gitlabToken bool) agentCheck {
 	return agentCheck{Name: name, OK: true, Detail: strings.Join(have, ", ")}
 }
 
-// pluginInstalled reads Claude Code's installed_plugins.json: a key is
-// "<name>@<marketplace>".
 func pluginInstalled(data []byte, name string) bool {
 	var f struct {
 		Plugins map[string]json.RawMessage `json:"plugins"`

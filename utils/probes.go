@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// lsofPath resolves lsof, falling back to absolute locations when PATH omits
-// /usr/sbin (GUI/launchd/IDE shells). Returns "" if lsof is absent.
 func lsofPath() string {
 	if p, err := exec.LookPath("lsof"); err == nil {
 		return p
@@ -27,8 +25,6 @@ func lsofPath() string {
 	return ""
 }
 
-// WaitPortFree polls until port is free or timeout elapses. A kill doesn't
-// release the socket synchronously, so callers must wait before re-checking.
 func WaitPortFree(port int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -42,8 +38,6 @@ func WaitPortFree(port int, timeout time.Duration) bool {
 	}
 }
 
-// IsPortListening returns true if something is listening on localhost:<port>.
-// Used both by `corgi doctor` (expects false) and `corgi status` (expects true).
 func IsPortListening(port int) bool {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", port), 500*time.Millisecond)
 	if err != nil {
@@ -53,9 +47,6 @@ func IsPortListening(port int) bool {
 	return true
 }
 
-// PortOwner returns a short description of the process listening on the given
-// port, or empty string if nothing is listening or the platform can't answer.
-// macOS/Linux only — uses lsof, which isn't on Windows.
 func PortOwner(port int) string {
 	lsof := lsofPath()
 	if lsof == "" {
@@ -73,7 +64,6 @@ func PortOwner(port int) string {
 	if len(lines) < 2 {
 		return ""
 	}
-	// Each line: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
 	var owners []string
 	seen := map[string]bool{}
 	for _, line := range lines[1:] {
@@ -90,10 +80,6 @@ func PortOwner(port int) string {
 	return strings.Join(owners, " ")
 }
 
-// IsHTTPHealthy returns true if a GET on the URL returns any non-5xx
-// response within the timeout. Any transport error or 5xx counts as unhealthy.
-// reason is "" on HTTP response (regardless of code); on transport error it is
-// one of "timeout", "connection refused", "no response".
 func IsHTTPHealthy(rawURL string, timeout time.Duration) (healthy bool, code int, reason string) {
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(rawURL)
@@ -115,7 +101,6 @@ func classifyHTTPErr(err error) string {
 	return "no response"
 }
 
-// IsDockerRunning returns true if the docker daemon responds to `docker info`.
 func IsDockerRunning() bool {
 	cmd := exec.Command("docker", "info")
 	cmd.Stdout = nil

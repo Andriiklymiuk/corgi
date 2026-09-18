@@ -35,72 +35,39 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
-// corgi's own phone UI: after pairing the browser page lists workspaces and
-// starts a session in one tap, no claude.ai connector needed.
-//
-//   GET  /app                 the launcher page (static; uses the stored token)
-//   GET  /launch/workspaces   list workspaces with running state + sessionUrl
-//   POST /launch/start        {workspace, profile?} → start a session
-//
-// /launch/* sits behind the same auth as /mcp and grants no new capability.
-
-// launchWorkspace is one row in the launcher list.
 type launchWorkspace struct {
-	ID         string   `json:"id"`
-	Aliases    []string `json:"aliases,omitempty"`
-	Path       string   `json:"path"`
-	Status     string   `json:"status"`
-	Running    bool     `json:"running"`
-	SessionURL string   `json:"sessionUrl,omitempty"`
-	// SessionLinks are per-session claude.ai URLs captured from remote
-	// control's own output — the only links the site resolves (the ids the
-	// claude CLI lists locally are UUIDs the web does not know).
-	SessionLinks []string `json:"sessionLinks,omitempty"`
-	Note         string   `json:"note,omitempty"`
-	// State is the one word the card leads with: what this workspace is doing
-	// right now, decided here rather than in three places in the page.
-	State string `json:"state"`
-	// Everything from here down the daemon already knew and the phone could
-	// not see: `corgi agent status` on the laptop said more than the page you
-	// carry around.
-	Disabled  bool   `json:"disabled,omitempty"`
-	StartedAt int64  `json:"startedAt,omitempty"`
-	Restarts  int    `json:"restarts,omitempty"`
-	Profile   string `json:"profile,omitempty"`
-	WakeLock  bool   `json:"wakeLock,omitempty"`
-	Origin    string `json:"origin,omitempty"`
-	PID       int    `json:"pid,omitempty"`
-	LastCause string `json:"lastCause,omitempty"`
-	// DeviceOnly says the supervised server opened no session of its own: it
-	// is online as a device, and Start on the card is what gives it one.
-	DeviceOnly bool `json:"deviceOnly,omitempty"`
-	// Remark is the daemon's standing note about how this workspace runs — a
-	// flag the installed CLI did not know, say. Informational, unlike Note,
-	// which is a refusal.
-	Remark string `json:"remark,omitempty"`
-	// Branch and Dirty describe the checkout a session here would start on —
-	// the answer to "which of these two is the one I was working in?".
-	Branch     string            `json:"branch,omitempty"`
-	Dirty      bool              `json:"dirty,omitempty"`
-	Live       int               `json:"live"`
-	TopSession *launchTopSession `json:"topSession,omitempty"`
-	Usage      *usage.Report     `json:"usage,omitempty"`
-	LastEvent  *launchLastEvent  `json:"lastEvent,omitempty"`
-	Profiles   []string          `json:"profiles,omitempty"`
+	ID           string            `json:"id"`
+	Aliases      []string          `json:"aliases,omitempty"`
+	Path         string            `json:"path"`
+	Status       string            `json:"status"`
+	Running      bool              `json:"running"`
+	SessionURL   string            `json:"sessionUrl,omitempty"`
+	SessionLinks []string          `json:"sessionLinks,omitempty"`
+	Note         string            `json:"note,omitempty"`
+	State        string            `json:"state"`
+	Disabled     bool              `json:"disabled,omitempty"`
+	StartedAt    int64             `json:"startedAt,omitempty"`
+	Restarts     int               `json:"restarts,omitempty"`
+	Profile      string            `json:"profile,omitempty"`
+	WakeLock     bool              `json:"wakeLock,omitempty"`
+	Origin       string            `json:"origin,omitempty"`
+	PID          int               `json:"pid,omitempty"`
+	LastCause    string            `json:"lastCause,omitempty"`
+	DeviceOnly   bool              `json:"deviceOnly,omitempty"`
+	Remark       string            `json:"remark,omitempty"`
+	Branch       string            `json:"branch,omitempty"`
+	Dirty        bool              `json:"dirty,omitempty"`
+	Live         int               `json:"live"`
+	TopSession   *launchTopSession `json:"topSession,omitempty"`
+	Usage        *usage.Report     `json:"usage,omitempty"`
+	LastEvent    *launchLastEvent  `json:"lastEvent,omitempty"`
+	Profiles     []string          `json:"profiles,omitempty"`
 }
 
 type launchTopSession struct {
-	Name string `json:"name"`
-	// NameSource and NameSince are Claude Code's own record of where the
-	// session's current name came from — "user" for one someone typed,
-	// "derived"/"auto" for one Claude picked, "hook" for one a hook set — and
-	// when it last changed. corgi shows the live name, so a session Claude has
-	// since renamed reads as its new name here too.
+	Name       string `json:"name"`
 	NameSource string `json:"nameSource,omitempty"`
 	NameSince  int64  `json:"nameSince,omitempty"`
-	// WaitingFor is what Claude Code says this session is blocked on, when it
-	// says anything ("input needed", "dialog open", "sandbox request"). Absent
-	// means it did not say, never that the session is idle.
 	WaitingFor string `json:"waitingFor,omitempty"`
 	Where      string `json:"where"`
 	StartedAt  int64  `json:"startedAt,omitempty"`
@@ -140,10 +107,6 @@ func launchWorkspacesHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{"workspaces": out})
 }
 
-// launchRegisterWorkspace is `corgi agent init` run in a folder the Mac
-// app was pointed at: the same registry entry, the same repo file, the same
-// refusals. The path must be absolute — the daemon has no working directory
-// of the caller's to resolve against.
 func launchRegisterWorkspace(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path string `json:"path"`
@@ -166,9 +129,6 @@ func launchRegisterWorkspace(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{"done": "registered " + id, "id": id, "path": path})
 }
 
-// launchProfilesHandler lists the account profiles, and adds one the way
-// `corgi agent profile add <name> --config-dir <dir>` does: a name and the
-// Claude config directory whose login it stands for.
 func launchProfilesHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
@@ -235,10 +195,6 @@ type wsRunState struct {
 	remark    string
 }
 
-// buildLaunchWorkspaces joins the registry with the daemon's live status into
-// the launcher rows. A start the daemon refused (sensitive, unknown profile,
-// unreachable, bad bin) leaves a diagnostic warning, not a run state — merging
-// it in is what stops the phone showing "Starting…" then silently giving up.
 func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) []launchWorkspace {
 	running := launchRunStates(status)
 	profiles := launchProfileNames()
@@ -264,8 +220,6 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 	return out
 }
 
-// launchRunStates flattens the daemon's published status into one record per
-// workspace id, with a refused start's warning folded in as the note.
 func launchRunStates(status *daemon.Status) map[string]wsRunState {
 	running := map[string]wsRunState{}
 	if status == nil {
@@ -290,13 +244,9 @@ func runStateOf(ws supervisor.RunState) wsRunState {
 	if !ws.StartedAt.IsZero() {
 		started = ws.StartedAt.UnixMilli()
 	}
-	// Gated on Running: DeviceOnly describes the last run and survives its
-	// exit, and a server sitting in a restart backoff is not "online".
 	idleDevice := ws.Running && ws.DeviceOnly && ws.SessionsThisRun == 0
 	url := ws.SessionURL
 	if idleDevice {
-		// Whatever link a device with no session printed, it is not a
-		// conversation to open. The card's button must be Start.
 		url = ""
 	}
 	return wsRunState{
@@ -308,52 +258,32 @@ func runStateOf(ws supervisor.RunState) wsRunState {
 	}
 }
 
-// launchState reduces running, live sessions, the last event and a refused
-// start to the one word the card leads with. Decided here so the phone and
-// anything else reading /launch/workspaces agree on it. Finer than `corgi
-// agent status`'s workspaceState, which answers a different question: whether
-// the daemon is supervising, not whether a human is needed.
 func launchState(row launchWorkspace) string {
 	return launchStateAt(row, time.Now())
 }
 
-// launchReadyAfter is how long a device-only server gets to register before
-// the card stops calling it "starting". Remote control is up within seconds;
-// past this, running with no session is its resting state, not a start that
-// never finished.
 const launchReadyAfter = 15 * time.Second
 
 func launchStateAt(row launchWorkspace, now time.Time) string {
 	switch {
 	case row.Disabled:
-		// The daemon gave up on this one after repeated failures. It looked
-		// exactly like "stopped" on the phone, and Start on a disabled
-		// workspace is the tap that appears to do nothing.
 		return "disabled"
 	case row.Note != "" && !row.Running:
-		// A start the daemon refused, or a diagnostic: the reason is on the card.
 		return "blocked"
 	case row.LastEvent != nil && row.LastEvent.Kind == "attention":
-		// A permission prompt or a question is blocking the session — the one
-		// state where the session is running and still needs a human.
 		return "attention"
 	case row.Live > 0:
 		return "live"
 	case row.Running && row.DeviceOnly && row.StartedAt > 0 &&
 		now.Sub(time.UnixMilli(row.StartedAt)) >= launchReadyAfter:
-		// Online as a device with no session: the machine answers, and Start
-		// is what opens a conversation. Not "starting" — nothing is pending.
 		return "ready"
 	case row.Running:
-		// Supervised, but no session has registered yet.
 		return "starting"
 	}
 	return "stopped"
 }
 
 func workspaceActivity(id, absPath, profile string) (int, *launchTopSession, *launchLastEvent) {
-	// The pid-file reader, never listClaudeSessions: its fallback shells out,
-	// and this runs per workspace on a list the phone polls while starting.
 	var live int
 	var top *launchTopSession
 	if _, configDir, ok := workspaceSessionTarget(id, profile); ok && absPath != "" {
@@ -409,9 +339,6 @@ func sessionDisplayName(sess claudeSession) string {
 	return "session"
 }
 
-// sessionWaitingFor reports what a session is blocked on, in Claude Code's own
-// words, and only when it actually said so: "waiting" with nothing named, or a
-// session that never writes status at all, must not read as an answer.
 func sessionWaitingFor(sess claudeSession) string {
 	if w := strings.TrimSpace(sess.WaitingFor); w != "" {
 		return w
@@ -437,10 +364,6 @@ func sessionWhereLabel(sess claudeSession) string {
 	return "session"
 }
 
-// checkoutTTL bounds how often the branch probe runs. `git status` on a big
-// repo is not free and this list is polled every second while a session
-// starts, so the request path serves the last answer and refreshes behind it —
-// the same deal as the usage sums below.
 const checkoutTTL = 20 * time.Second
 
 var checkoutCache = struct {
@@ -491,10 +414,6 @@ func refreshCheckout(id, absPath string) {
 	entry.branch, entry.dirty = state.Branch, state.Dirty
 }
 
-// usageTTL is how long a summed report is reused. Summing a workspace means
-// scanning its transcripts — a fifth of a second on a busy one — and this list
-// is polled every second while a session starts, so the request path must
-// never pay for it.
 const usageTTL = time.Minute
 
 var usageCache = struct {
@@ -508,9 +427,6 @@ type cachedUsage struct {
 	refreshing bool
 }
 
-// Zero across both windows is reported as nothing, so an idle workspace shows
-// no number rather than a row of noughts. A stale report is served while a
-// fresh one is summed in the background.
 func workspaceUsage(id, absPath, profile string) *usage.Report {
 	if absPath == "" {
 		return nil
@@ -520,9 +436,6 @@ func workspaceUsage(id, absPath, profile string) *usage.Report {
 		return nil
 	}
 
-	// Keyed by account too: the same workspace under a different profile has a
-	// different transcript directory, and a stale entry would report the other
-	// account's tokens.
 	key := id + "\x00" + profile
 	usageCache.mu.Lock()
 	entry := usageCache.reps[key]
@@ -557,8 +470,6 @@ func refreshUsage(key, absPath, configDir string) {
 	}
 }
 
-// Only the profile NAMES cross the wire; what each selects stays in the
-// trusted config.
 func launchProfileNames() []string {
 	dir, err := agentDir()
 	if err != nil {
@@ -595,8 +506,6 @@ func launchStartHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusBadRequest, "a workspace is required")
 		return
 	}
-	// Same code path as the MCP tool, so the two surfaces cannot drift: it
-	// resolves the name, refuses a sensitive workspace, and enqueues the start.
 	result, err := mcpSessionStart(req.Workspace, req.Profile, req.Name)
 	if err != nil {
 		writeLaunchError(w, http.StatusBadRequest, err.Error())
@@ -630,24 +539,11 @@ func launchStopHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, result)
 }
 
-// claudeSession is one running Claude Code process for a workspace: the
-// per-pid records under <configDir>/sessions, with `claude agents --json` as
-// the fallback. BridgeSessionID is the claude.ai id the process registered —
-// the one the site resolves — so a terminal or VS Code session gets a real
-// link, unlike its local SessionID, which the web does not know.
 type claudeSession struct {
-	Name string `json:"name"`
-	// Written by Claude Code beside the name; see launchTopSession.
-	NameSource string `json:"nameSource,omitempty"`
-	NameSince  int64  `json:"nameSince,omitempty"`
-	// ProcStart is the process's start time as the OS reports it. Claude Code
-	// records it so a recycled pid cannot pass for the process that wrote the
-	// record — see sessionProcessIsLive.
-	ProcStart string `json:"procStart,omitempty"`
-	// Status, WaitingFor and Tempo are Claude Code's own live view of the
-	// session. Not every session writes them (an interactive one on a laptop
-	// often does not), so everything reading them treats absent as unknown
-	// rather than idle.
+	Name            string `json:"name"`
+	NameSource      string `json:"nameSource,omitempty"`
+	NameSince       int64  `json:"nameSince,omitempty"`
+	ProcStart       string `json:"procStart,omitempty"`
 	Status          string `json:"status,omitempty"`
 	WaitingFor      string `json:"waitingFor,omitempty"`
 	Tempo           string `json:"tempo,omitempty"`
@@ -661,10 +557,6 @@ type claudeSession struct {
 	URL             string `json:"url,omitempty"`
 }
 
-// launchSessionsHandler lists the Claude sessions for one workspace. corgi holds
-// no Claude credentials of its own: it shells out to `claude agents --json`,
-// which reads the local session state the CLI already keeps, scoped to the
-// workspace directory and run under that workspace's own account.
 func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -721,26 +613,16 @@ func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
 				info["daemonSince"] = d.StartedAt
 			}
 		}
-		// The tunnel the phone comes in through, so "why can't I reach it"
-		// has somewhere to start: the provider and the host.
 		if up := loadUpSettings(dir); up.Provider != "" || up.TunnelHostname != "" {
-			// stable: a configured hostname, the one thing that keeps the
-			// address across restarts; a quick tunnel's dies with the process.
 			info["tunnel"] = map[string]any{"provider": up.Provider, "host": up.TunnelHostname, "stable": strings.TrimSpace(up.TunnelHostname) != ""}
 		}
 	}
-	// A release the cache has not seen yet is not "out": the phone would tell
-	// a 2.19.7 laptop that 2.19.6 is available.
 	if latest := cachedLatestVersion(); latest != "" && versionNewer(latest, APP_VERSION) {
 		info["latest"] = latest
 	}
 	writeLaunchJSON(w, info)
 }
 
-// launchBoardHandler is the session board for the phone: which Claude
-// sessions on this machine are waiting on a person, which are working. The
-// same sessions.json the Stream Deck reads, minus nothing — the page decides
-// what to show.
 func launchBoardHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -761,12 +643,8 @@ func launchBoardHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, rep)
 }
 
-// unreadTail bounds how far back the transcript is read for a count.
 const unreadTail = 60
 
-// fillUnread says, for each session a phone has read before, what Claude
-// has said since: the count and the first line. Only readable workspaces
-// (the same gate as the conversation), only sessions that were read at all.
 func fillUnread(list []sessions.Session) {
 	for i := range list {
 		s := &list[i]
@@ -803,9 +681,6 @@ var latestVersion struct {
 	checked time.Time
 }
 
-// Refreshed off the request path: the page must never wait on GitHub.
-// versionNewer says whether a is a later dotted version than b; anything
-// that is not three numbers compares as text, which is how it was before.
 func versionNewer(a, b string) bool {
 	pa, pb := strings.Split(strings.TrimPrefix(a, "v"), "."), strings.Split(strings.TrimPrefix(b, "v"), ".")
 	if len(pa) != 3 || len(pb) != 3 {
@@ -843,11 +718,6 @@ func cachedLatestVersion() string {
 	return latestVersion.value
 }
 
-// A device may not revoke itself: locking the only paired phone out, from that
-// phone, is never what was meant.
-// launchConnectorHandler mints a key-less token for an MCP client (the
-// Claude app as a custom connector): a phone's own token never opens
-// /mcp, so the phone asks for one it can hand out instead.
 func launchConnectorHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -920,7 +790,6 @@ func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusInternalServerError, "could not save the paired devices")
 			return
 		}
-		// A revoked phone hears nothing more either.
 		_ = push.Load(dir).Remove(name)
 		writeLaunchJSON(w, map[string]any{"revoked": name})
 	default:
@@ -968,16 +837,6 @@ func sessionHistory(workspaceID string) []launchHistoryEntry {
 	return out
 }
 
-// workspaceSessionTarget resolves a workspace id to its directory and the Claude
-// config dir (account) its sessions live under. The id is the trusted registry
-// key, and the directory comes from the registry — never from the caller — so a
-// device token cannot point the shell-out at an arbitrary path.
-// workspaceSessionTarget resolves where a workspace's Claude state lives.
-//
-// profile matters: a workspace running under one keeps its session records and
-// its transcripts in that account's config dir, so resolving the default one
-// showed the phone no sessions and no token counts for exactly the workspaces
-// that run under a second account. Pass "" for the default account.
 func workspaceSessionTarget(id, profile string) (absPath, configDir string, ok bool) {
 	registry, _, err := agentRegistry()
 	if err != nil {
@@ -998,8 +857,6 @@ func workspaceSessionTarget(id, profile string) (absPath, configDir string, ok b
 	repo, _ := config.LoadRepo(ws.AbsPath)
 	resolved := config.Resolve(id, repo, user)
 	if p := strings.TrimSpace(profile); p != "" {
-		// An unknown profile is not this function's error to report — the start
-		// that named it already refused — so fall back to the default account.
 		if withProfile, perr := config.ApplyProfile(resolved, user, p); perr == nil {
 			resolved = withProfile
 		}
@@ -1007,8 +864,6 @@ func workspaceSessionTarget(id, profile string) (absPath, configDir string, ok b
 	return ws.AbsPath, resolved.ConfigDir, true
 }
 
-// runningProfile is the account the daemon actually started this workspace
-// under, for the handlers that are given an id and nothing else.
 func runningProfile(id string) string {
 	dir, err := agentDir()
 	if err != nil {
@@ -1026,12 +881,6 @@ func runningProfile(id string) string {
 	return ""
 }
 
-// bridgeSessionLinks reads the claude.ai session URL a remote-control bridge
-// recorded for absPath under the account's config dir. This covers sessions
-// corgi did NOT start: any `claude remote-control` (or /remote-control in a
-// chat) writes projects/<munged-dir>/bridge-pointer.json with the real
-// session_… web id — the id namespace claude.ai actually resolves. Best-effort:
-// missing or stale (dead pid) pointers yield nothing.
 func bridgeSessionLinks(absPath, configDir string) []string {
 	base := expandTilde(configDir)
 	if base == "" {
@@ -1053,30 +902,15 @@ func bridgeSessionLinks(absPath, configDir string) []string {
 		return nil
 	}
 	if bp.PID > 0 && !pidExists(bp.PID) {
-		return nil // the bridge is gone; its pointer is stale
+		return nil
 	}
 	return []string{"https://claude.ai/code/" + bp.SessionID}
 }
 
-// mungeClaudeProjectDir maps a directory to Claude's per-project state folder
-// name (its convention: every / and . becomes -).
 func mungeClaudeProjectDir(dir string) string {
 	return strings.NewReplacer("/", "-", ".", "-", "\\", "-", ":", "-").Replace(dir)
 }
 
-// pidExists is a plain liveness probe. Not PidAlive: a hand-started bridge runs
-// under a shell and is no process-group leader, which PidAlive requires.
-// sessionProcessIsLive answers whether the process that wrote a session record
-// is still the process running under that pid.
-//
-// A live pid is not enough on its own: session records outlive the machine
-// (they sit in the config dir across reboots) and pids are handed out again
-// from low numbers after one, so a stale record whose pid now belongs to
-// something else made a finished session show up as live — a phantom "1 live"
-// on a workspace with nothing running in it. Claude Code writes procStart for
-// exactly this check, so where the OS will tell us a process's start time
-// cheaply, compare it. Where it will not, a live pid stays the best answer
-// available, which is what this did everywhere before.
 func sessionProcessIsLive(cs claudeSession) bool {
 	if !pidExists(cs.PID) {
 		return false
@@ -1088,16 +922,6 @@ func sessionProcessIsLive(cs claudeSession) bool {
 	return sameStartToken(cs.ProcStart, started)
 }
 
-// processStartToken reads the start time the OS keeps for a pid, in the exact
-// form Claude Code records it, so the two can be compared as strings:
-//
-//	linux   field 22 of /proc/<pid>/stat — clock ticks since boot
-//	darwin  the output of `ps -o lstart= -p <pid>` under LC_ALL=C and TZ=UTC
-//
-// ok is false where neither is available (Windows, or the read failed), and
-// the caller then falls back to "a live pid is live", as it did everywhere
-// before this existed. Comparing a token we could not read is never worth a
-// session vanishing from the list.
 func processStartToken(pid int) (string, bool) {
 	if pid <= 0 {
 		return "", false
@@ -1119,10 +943,6 @@ func processStartToken(pid int) (string, bool) {
 	return token, ok
 }
 
-// startTokenTTL bounds how long a read is reused. A process's start time never
-// changes, so this only exists so a recycled pid cannot keep a dead session's
-// answer — and so the darwin path costs at most one `ps` per pid per minute
-// while the phone polls this list every second.
 const startTokenTTL = time.Minute
 
 var startTokens = struct {
@@ -1149,8 +969,6 @@ func rememberStartToken(pid int, value string) {
 	startTokens.mu.Lock()
 	defer startTokens.mu.Unlock()
 	if len(startTokens.seen) > 512 {
-		// A daemon alive for weeks must not accumulate an entry per pid ever
-		// seen; every entry is re-readable, so dropping them costs one read.
 		startTokens.seen = map[int]startToken{}
 	}
 	startTokens.seen[pid] = startToken{value: value, read: time.Now()}
@@ -1161,15 +979,11 @@ func linuxStartTicks(pid int) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	// The second field is the executable name in parentheses and may itself
-	// contain spaces and parentheses, so fields are counted from the last ')'.
 	closing := strings.LastIndex(string(data), ")")
 	if closing < 0 {
 		return "", false
 	}
 	fields := strings.Fields(string(data)[closing+1:])
-	// state is the field after comm, so starttime (22nd overall) is index 19
-	// of what is left.
 	const startTimeOffset = 19
 	if len(fields) <= startTimeOffset {
 		return "", false
@@ -1177,13 +991,10 @@ func linuxStartTicks(pid int) (string, bool) {
 	return fields[startTimeOffset], true
 }
 
-// darwinStartDate runs the same command Claude Code does, with the same
-// locale and timezone pinned, so the strings line up. Bounded: this sits on a
-// request path the phone polls.
 func darwinStartDate(pid int) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "ps", "-o", "lstart=", "-p", strconv.Itoa(pid)) // NOSONAR — fixed argv, numeric pid
+	cmd := exec.CommandContext(ctx, "ps", "-o", "lstart=", "-p", strconv.Itoa(pid))
 	cmd.Env = append(os.Environ(), "LC_ALL=C", "TZ=UTC")
 	out, err := cmd.Output()
 	if err != nil {
@@ -1196,10 +1007,6 @@ func darwinStartDate(pid int) (string, bool) {
 	return line, true
 }
 
-// sameStartToken compares two start times for the same pid. Internal spacing
-// is normalised first: `ps` pads a single-digit day ("Sep  3"), and a session
-// disappearing from the phone over a space would be a far worse bug than the
-// stale record this is here to catch.
 func sameStartToken(a, b string) bool {
 	return strings.Join(strings.Fields(a), " ") == strings.Join(strings.Fields(b), " ")
 }
@@ -1219,9 +1026,6 @@ func pidExists(pid int) bool {
 	return proc.Signal(syscall.Signal(0)) == nil
 }
 
-// listClaudeSessions returns the Claude sessions under absPath. Best-effort: a
-// missing claude binary, a timeout, or no sessions all resolve to an empty list,
-// so the launcher shows "no sessions" rather than a 500.
 func listClaudeSessions(absPath, configDir string) []claudeSession {
 	if sessions, ok := localClaudeSessions(absPath, configDir); ok {
 		return sessions
@@ -1229,9 +1033,6 @@ func listClaudeSessions(absPath, configDir string) []claudeSession {
 	return claudeAgentsSessions(absPath, configDir)
 }
 
-// localClaudeSessions reads the per-process records Claude Code keeps under
-// <configDir>/sessions/<pid>.json. ok is false when the directory is absent
-// (an older CLI), so the caller can fall back to shelling out.
 func localClaudeSessions(absPath, configDir string) ([]claudeSession, bool) {
 	base := expandTilde(configDir)
 	if base == "" {
@@ -1276,7 +1077,6 @@ func localClaudeSessions(absPath, configDir string) ([]claudeSession, bool) {
 func claudeAgentsSessions(absPath, configDir string) []claudeSession {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	// Fixed argv (no shell); absPath is the trusted registry path.
 	cmd := exec.CommandContext(ctx, "claude", "agents", "--json", "--cwd", absPath)
 	cmd.Env = os.Environ()
 	if d := expandTilde(configDir); d != "" {
@@ -1316,8 +1116,6 @@ func setLaunchHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
-// launchNameArg is the name a DELETE names: the sealed body's when it
-// carries one (bound to the key), else the query's.
 func launchNameArg(r *http.Request) string {
 	if r.Body != nil && r.ContentLength != 0 {
 		var body struct {
@@ -1343,9 +1141,6 @@ func writeLaunchError(w http.ResponseWriter, status int, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-// launcherPageHTML is the phone launcher. Self-contained (no external assets),
-// reads the device token from localStorage, and talks only to same-origin
-// /launch/* endpoints. Every dynamic value is escaped before it reaches the DOM.
 const launcherPageHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -3525,10 +3320,6 @@ const launcherPageHTML = `<!doctype html>
 </script>
 `
 
-// The phone can answer a permission prompt and type into a session, the
-// same two things a deck key does. A risky Bash prompt is refused here, so
-// the person hears why on the phone rather than finding a notice later.
-
 func launchAnswerHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -3564,9 +3355,6 @@ func launchAnswerHandler(w http.ResponseWriter, r *http.Request) {
 	launchBoardCommand(w, command.Command{Action: command.ActionAnswer, SessionID: session.ID, Answer: answer, Source: "phone"})
 }
 
-// launchInterruptHandler is the phone's Interrupt button: Escape into a
-// working session, which stops the turn and waits. Nothing to stop is a
-// 409, like an answer with nothing pending.
 func launchInterruptHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -3592,9 +3380,6 @@ func launchInterruptHandler(w http.ResponseWriter, r *http.Request) {
 	launchBoardCommand(w, command.Command{Action: command.ActionInterrupt, SessionID: session.ID, Source: "phone"})
 }
 
-// launchRefreshHandler is the reload button: the daemon looks at the
-// process table again and polls every tracker now, then publishes — the
-// caller re-reads a moment later, and so does everything else.
 func launchRefreshHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -3604,9 +3389,6 @@ func launchRefreshHandler(w http.ResponseWriter, r *http.Request) {
 	launchBoardCommand(w, command.Command{Action: command.ActionRefresh, Source: "phone"})
 }
 
-// launchFreshHandler restarts a drifting session clean, under the same
-// account, from a handoff: `corgi agent carry <id> --fresh` run as itself,
-// so the phone and the CLI do exactly the same thing.
 func launchFreshHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -3648,10 +3430,7 @@ func launchSendHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Session string `json:"session"`
 		Text    string `json:"text"`
-		// ID, when the phone sends one, makes the send happen once: a
-		// message queued while the laptop was away may be handed over
-		// twice if the tunnel drops mid-answer (2.23).
-		ID string `json:"id"`
+		ID      string `json:"id"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the text")
@@ -3672,8 +3451,6 @@ func launchSendHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if session.Status == sessions.StatusGone {
-		// No terminal to type into. With the workspace's headless switch
-		// on, the daemon runs the turn itself: claude -p --resume.
 		dir, _ := agentDir()
 		if !policyFor(dir, session.Cwd).Headless {
 			writeLaunchError(w, http.StatusConflict, "that session is closed — corgi agent watch enable --headless lets a message run it a turn anyway")
@@ -3685,10 +3462,8 @@ func launchSendHandler(w http.ResponseWriter, r *http.Request) {
 	launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: session.ID, Text: text, Enter: true, Source: "phone"})
 }
 
-// sendOnceFor is how long a send id is remembered.
 const sendOnceFor = 10 * time.Minute
 
-// onceSet remembers ids for a while, so a repeat is seen as one.
 type onceSet struct {
 	mu   sync.Mutex
 	seen map[string]time.Time
@@ -3696,7 +3471,6 @@ type onceSet struct {
 
 var sendOnce = &onceSet{seen: map[string]time.Time{}}
 
-// first says whether id is new; "" is never remembered.
 func (o *onceSet) first(id string, now time.Time) bool {
 	if id == "" {
 		return true
@@ -3715,8 +3489,6 @@ func (o *onceSet) first(id string, now time.Time) bool {
 	return true
 }
 
-// launchSessionFor finds a board session by id or display name. A non-zero
-// code is the HTTP status to answer with.
 func launchSessionFor(ref string) (sessions.Session, int, string) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -3735,8 +3507,6 @@ func launchSessionFor(ref string) (sessions.Session, int, string) {
 			return s, 0, ""
 		}
 	}
-	// One that left the board is still known by id: its transcript can be
-	// read, and a message for it can run as a headless turn (2.23).
 	for _, s := range rep.Ended {
 		if s.ID == ref {
 			return s, 0, ""
@@ -3749,8 +3519,6 @@ func launchBoardCommand(w http.ResponseWriter, c command.Command) {
 	launchBoardCommands(w, []command.Command{c})
 }
 
-// launchBoardCommands writes several commands and nudges once: a fan-out
-// is one press.
 func launchBoardCommands(w http.ResponseWriter, cmds []command.Command) {
 	dir, err := agentDir()
 	if err != nil {
@@ -3776,11 +3544,6 @@ func launchBoardCommands(w http.ResponseWriter, cmds []command.Command) {
 	writeLaunchJSON(w, out)
 }
 
-// A new chat from the phone: a window, a prompt, a model, a profile. The
-// shell line the editor runs carries this binary and validated flags only;
-// the prompt goes by id (see savePrompt) and is read once by the new
-// session.
-
 var profileNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 func launchNewHandler(w http.ResponseWriter, r *http.Request) {
@@ -3796,10 +3559,7 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		Profile   string `json:"profile"`
 		Workspace string `json:"workspace"`
 		Isolate   bool   `json:"isolate"`
-		// Bot opens the chat as a named bot: its workspace, account, model
-		// and persona, resuming its last conversation. The other fields
-		// still override.
-		Bot string `json:"bot"`
+		Bot       string `json:"bot"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -3891,13 +3651,8 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
-// watchBatchMax is how many issues one session is asked to ship at once.
 const watchBatchMax = 10
 
-// launchEventsHandler lists what the watch has seen, newest first, so the
-// phone can show the tracker issues and reviews waiting for a decision.
-// launchRunHandler is one unattended run's log tail and record, for the
-// phone: what it did, what it left, what it cost.
 func launchRunHandler(w http.ResponseWriter, r *http.Request) {
 	dir, err := agentDir()
 	if err != nil {
@@ -3949,8 +3704,6 @@ func launchRunHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, out)
 }
 
-// launchPushHandler registers the calling phone's Expo push token, so the
-// laptop can reach it when a session needs a person; DELETE forgets it.
 func launchPushHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
@@ -3968,8 +3721,6 @@ func launchPushHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var req struct {
 			Token string `json:"token"`
-			// What this phone wants to hear: quiet hours ("23:00-07:00"),
-			// and "needs" for only what needs a person.
 			Quiet string `json:"quiet"`
 			Only  string `json:"only"`
 		}
@@ -3990,8 +3741,6 @@ func launchPushHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// launchKanbanHandler is the derived board: one card per ticket with its
-// column and why, plus the columns each tracker can move a ticket to.
 func launchKanbanHandler(w http.ResponseWriter, r *http.Request) {
 	dir, err := agentDir()
 	if err != nil {
@@ -4031,41 +3780,27 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type row struct {
-		Key        string    `json:"key"`
-		Kind       string    `json:"kind"`
-		Ref        string    `json:"ref"`
-		Title      string    `json:"title"`
-		URL        string    `json:"url,omitempty"`
-		Workspace  string    `json:"workspace,omitempty"`
-		At         time.Time `json:"at"`
-		Actionable bool      `json:"actionable"`
-		State      string    `json:"state,omitempty"`
-		// Blocked is why unattended runs leave this ticket alone, when they do.
-		Blocked   string `json:"blocked,omitempty"`
-		BlockedBy string `json:"blockedBy,omitempty"`
-		// Priority is 0 urgent, 1 high, 2 the rest, from the ticket's labels.
-		Priority int `json:"priority"`
-		// Author and Body are who said what, for a comment or a review —
-		// the line a person reads before deciding, without opening the tracker.
-		Author string `json:"author,omitempty"`
-		Body   string `json:"body,omitempty"`
-		// Session is the live Claude session on this ticket, when one is:
-		// opened for it by "Work on it", or on a branch named after it.
-		Session *CardSess `json:"session,omitempty"`
-		// Picked is Work on it pressed, and by whom, while fresh.
-		Picked *CardPick `json:"picked,omitempty"`
-		// Columns is where a task can be moved; a tracker ticket's columns
-		// are under boards, by workspace.
-		Columns []string `json:"columns,omitempty"`
-		// PR is the pull request of mine a person may mark ready, merge or
-		// close from this row.
-		PR string `json:"pr,omitempty"`
-		// Pull is how that pull request stands: checks, approval.
-		Pull *watch.PullStatus `json:"pull,omitempty"`
-		// Handed is the session this row was typed into, and when.
-		Handed *watch.Hand `json:"handed,omitempty"`
-		// Standing is the row's one word and clause from the ladder.
-		Standing sessions.Standing `json:"standing"`
+		Key        string            `json:"key"`
+		Kind       string            `json:"kind"`
+		Ref        string            `json:"ref"`
+		Title      string            `json:"title"`
+		URL        string            `json:"url,omitempty"`
+		Workspace  string            `json:"workspace,omitempty"`
+		At         time.Time         `json:"at"`
+		Actionable bool              `json:"actionable"`
+		State      string            `json:"state,omitempty"`
+		Blocked    string            `json:"blocked,omitempty"`
+		BlockedBy  string            `json:"blockedBy,omitempty"`
+		Priority   int               `json:"priority"`
+		Author     string            `json:"author,omitempty"`
+		Body       string            `json:"body,omitempty"`
+		Session    *CardSess         `json:"session,omitempty"`
+		Picked     *CardPick         `json:"picked,omitempty"`
+		Columns    []string          `json:"columns,omitempty"`
+		PR         string            `json:"pr,omitempty"`
+		Pull       *watch.PullStatus `json:"pull,omitempty"`
+		Handed     *watch.Hand       `json:"handed,omitempty"`
+		Standing   sessions.Standing `json:"standing"`
 	}
 	out := []row{}
 	onTicket := sessionsOnTickets(dir)
@@ -4073,11 +3808,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	pulls := watch.LoadPullLog(dir)
 	hands := watch.LoadHands(dir)
 	now := time.Now()
-	// The events log keeps the column a ticket arrived in. A move made since
-	// then is the truth, so it wins.
 	moved := watch.LoadStateLog(dir)
-	// The inbox is what is still waiting. Seen is not the test — every
-	// delivered event is seen — so it is the dismissed ones that leave.
 	state := watch.LoadState(dir)
 	fixLog := watch.LoadFixLog(dir)
 	keeper := watch.NewInboxKeeper(time.Now())
@@ -4085,9 +3816,6 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
 			continue
 		}
-		// Merged, closed, done: the row is history, not work. The daemon
-		// refreshes these each round, so a merge request merged an hour after
-		// it was recorded stops being listed without anyone dismissing it.
 		current := e.State
 		if now, ok := moved.Get(e.Key); ok {
 			current = now.Status
@@ -4135,8 +3863,6 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		fixes = append(fixes, row)
 	}
-	// The columns each workspace can move a ticket to, read from the cache
-	// so a menu on the phone draws without a round trip to the tracker.
 	boards := map[string]any{}
 	cache := watch.LoadBoardCache(dir)
 	seen := map[string]bool{}
@@ -4153,9 +3879,6 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			boards[e.Workspace] = map[string]any{"columns": names, "me": info.Me.Name}
 		}
 	}
-	// One queue, not one per repo. A review someone is waiting on outranks
-	// your own backlog ticket whatever repo it came from, and within a rank
-	// the one that has waited longest goes first.
 	sort.SliceStable(out, func(i, j int) bool {
 		if pi, pj := out[i].Priority, out[j].Priority; pi != pj {
 			return pi < pj
@@ -4169,9 +3892,6 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{"events": out, "fixes": fixes, "boards": boards})
 }
 
-// launchTicketHandler is the phone changing one ticket: move it to a column,
-// assign it, or drop it out of the inbox. Each is something someone tapped;
-// nothing here happens on a poll.
 func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -4179,16 +3899,13 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Key    string `json:"key"`
-		Do     string `json:"do"`
-		Status string `json:"status"`
-		// For a task's edit: what changes; an empty field keeps what it had.
+		Key       string `json:"key"`
+		Do        string `json:"do"`
+		Status    string `json:"status"`
 		Title     string `json:"title"`
 		Body      string `json:"body"`
 		Workspace string `json:"workspace"`
-		// Ref names the ticket the way the command line does (`corgi agent
-		// watch move ABC-1 Done --workspace api`) when the caller has no key.
-		Ref string `json:"ref"`
+		Ref       string `json:"ref"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -4210,16 +3927,11 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusNotFound, "no such watch event")
 		return
 	}
-	// Ignoring is ours alone: it takes the row out of the inbox and stops the
-	// unattended mode picking it up, and writes nothing to anyone's tracker.
 	if strings.TrimSpace(req.Do) == "ignore" {
 		_ = watch.LoadState(dir).Ignore(event.Key)
 		writeLaunchJSON(w, map[string]any{"done": "ignored " + firstNonEmptyString(event.Ref, event.Key)})
 		return
 	}
-	// Hand over: the comment or the red build, typed into the session
-	// already on that branch or ticket as its next message; the row keeps
-	// the mark. The line is the same one the daemon's own handOver uses.
 	if strings.TrimSpace(req.Do) == "handover" {
 		line := watch.HandoverLine(event)
 		if line == "" {
@@ -4249,8 +3961,6 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: target.ID, Text: line, Enter: true, Source: from})
 		return
 	}
-	// Unblocking is a person's call too: it lets the unattended mode back on
-	// the ticket and clears the reason from the workpad.
 	if strings.TrimSpace(req.Do) == "unblock" {
 		if !watch.LoadFixLog(dir).Unblock(event.Workspace, event.Ref) {
 			writeLaunchError(w, http.StatusBadRequest, event.Ref+" is not blocked")
@@ -4262,8 +3972,6 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchJSON(w, map[string]any{"done": "unblocked " + event.Ref})
 		return
 	}
-	// A task of your own has no tracker: a move is a move of the file, close
-	// is Done, and it can be edited or removed outright.
 	if event.Kind == watch.KindTask {
 		tasks := watch.LoadTasks(dir)
 		now := time.Now()
@@ -4330,9 +4038,6 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		_ = watch.LoadStateLog(dir).SetFrom(event.Key, status, event.State, time.Now())
 		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status, "state": status})
 	case "merge", "close", "ready", "draft", "reopen":
-		// Only a pull request of mine: one corgi opened, one a session on
-		// the ticket opened, or the one this row is about when it is mine —
-		// not a button that can close anything a link points at.
 		link := prLinkFor(dir, event, nil)
 		if link == "" {
 			writeLaunchError(w, http.StatusBadRequest, "no pull request of yours on this")
@@ -4357,16 +4062,11 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
 			return
 		}
-		// The row says so at once; the daemon's next round reads the forge
-		// and agrees, or corrects it.
 		if strings.HasPrefix(string(event.Kind), "pr.") || event.Kind == watch.KindCIFailed || event.Kind == watch.KindReviewRequested {
 			_ = watch.LoadStateLog(dir).SetFrom(event.Key, state, event.State, time.Now())
 		}
 		writeLaunchJSON(w, map[string]any{"done": did + link, "url": link, "state": state})
 	case "approve", "request", "comment":
-		// A review, on whatever pull request the row is about — somebody
-		// else's that asked for one, or a session's own — with the
-		// workspace's token: the person's name goes on it.
 		link := event.URL
 		if watch.PullRef(link) == "" {
 			link = prLinkFor(dir, event, nil)
@@ -4404,10 +4104,6 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// prLinkFor is the pull request a person may act on from a ticket's row:
-// the one corgi's run opened, else the one a session on the ticket opened,
-// else — for a row about my own pull request — that pull request. "" when
-// there is none of mine.
 func prLinkFor(dir string, e watch.Event, onTicket map[string]*CardSess) string {
 	if link := prCorgiOpened(dir, e.Key); link != "" {
 		return link
@@ -4430,27 +4126,21 @@ func prLinkFor(dir string, e watch.Event, onTicket map[string]*CardSess) string 
 	return ""
 }
 
-// waitingRank orders the inbox by who is stuck. Someone waiting on you comes
-// first, then a build nobody can merge past, then a conversation, then work
-// that is only waiting on you starting it.
 func waitingRank(kind string) int {
 	switch kind {
 	case "review.requested":
-		return 0 // a person is blocked on you
+		return 0
 	case "ci.failed":
-		return 1 // the branch is blocked
+		return 1
 	case "pr.review", "pr.comment":
-		return 2 // your own PR, someone replied
+		return 2
 	case "issue.comment":
 		return 3
 	default:
-		return 4 // a fresh ticket blocks nobody yet
+		return 4
 	}
 }
 
-// prCorgiOpened is the pull request corgi's own run opened for this event,
-// or "" when it opened none. The merge button never acts on a link that did
-// not come from a run corgi made.
 func prCorgiOpened(agentD, key string) string {
 	for _, r := range watch.LoadFixLog(agentD).RecentFixes("", 50) {
 		if r.Key == key && len(r.PRs) > 0 {
@@ -4460,9 +4150,6 @@ func prCorgiOpened(agentD, key string) string {
 	return ""
 }
 
-// launchWorkOnHandler hands one watch event to a real session: the same
-// prompt the daemon's own fix would have used, opened as a chat someone can
-// watch and steer. The prompt travels by id, never on the command line.
 func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -4470,16 +4157,13 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Key     string   `json:"key"`
-		Keys    []string `json:"keys"`
-		Window  string   `json:"window"`
-		Model   string   `json:"model"`
-		Profile string   `json:"profile"`
-		From    string   `json:"from"` // phone (default) or page
-		// Isolate asks for a worktree of the session's own.
-		Isolate bool `json:"isolate"`
-		// Attempts opens that many sessions on the ticket to compare, on
-		// Models in turn; the board groups them under the ticket.
+		Key      string   `json:"key"`
+		Keys     []string `json:"keys"`
+		Window   string   `json:"window"`
+		Model    string   `json:"model"`
+		Profile  string   `json:"profile"`
+		From     string   `json:"from"`
+		Isolate  bool     `json:"isolate"`
 		Attempts int      `json:"attempts"`
 		Models   []string `json:"models"`
 	}
@@ -4514,26 +4198,15 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 	launchBoardCommands(w, cmds)
 }
 
-// ticketRefPattern is what a ref may look like on a command line: a key,
-// an owner/repo#1 or !1 — never a space, a quote or a shell character.
 var ticketRefPattern = regexp.MustCompile(`^[A-Za-z0-9_./#!-]{1,120}$`)
 var ticketKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_.:/#!@-]{1,200}$`)
 
-// workOnOptions is where and how a session for a ticket opens: an editor
-// window, a model, a profile, and who asked.
 type workOnOptions struct {
 	Window, Model, Profile, Source string
-	// Isolate: the session gets a worktree of its own on corgi/<ref>.
-	Isolate bool
-	// Attempt is N when this is one of several sessions on the ticket, to
-	// compare; each gets its own worktree on corgi/<ref>-N.
-	Attempt int
+	Isolate                        bool
+	Attempt                        int
 }
 
-// workOnCommands is workOnCommand for a fan-out: n sessions on the same
-// ticket, each an attempt of its own, on the models given in turn (one
-// model for all when one is given; the default when none). The picks and
-// the board move happen once.
 func workOnCommands(dir string, keys []string, opt workOnOptions, n int, models []string) ([]command.Command, int, string) {
 	if n < 1 {
 		n = 1
@@ -4559,14 +4232,8 @@ func workOnCommands(dir string, keys []string, opt workOnOptions, n int, models 
 	return out, 0, ""
 }
 
-// maxAttempts is how many sessions a fan-out opens at most: each is a
-// worktree, a terminal and a bill.
 const maxAttempts = 5
 
-// workOnCommand is the new-session command that hands watch events to a
-// real chat — the daemon's own fix prompt, in the ticket's own checkout. The
-// page, the phone and the editor all come through here. A refusal is an
-// HTTP status and a sentence; 0 means the command is ready to spool.
 func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Command, int, string) {
 	if len(keys) == 0 {
 		return command.Command{}, http.StatusBadRequest, "name the event to work on"
@@ -4582,8 +4249,6 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 		}
 		events = append(events, event)
 	}
-	// A batch is one workspace's issues: the skill specs them together
-	// against that checkout, and two checkouts have nothing to share.
 	for _, e := range events[1:] {
 		if e.Workspace != events[0].Workspace {
 			return command.Command{}, http.StatusBadRequest, "those are in different workspaces — take one workspace at a time"
@@ -4615,9 +4280,6 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 			return command.Command{}, http.StatusNotFound, "that editor window is not connected any more"
 		}
 	}
-	// A ticket belongs in its own checkout. When an editor is already open on
-	// that workspace, the session opens there rather than wherever the phone
-	// happened to point; with none open, the caller's choice stands.
 	if boardErr == nil {
 		if own := windowOnWorkspace(rep, dir, events[0].Workspace); own != "" {
 			window = own
@@ -4627,15 +4289,7 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 	if err != nil {
 		return command.Command{}, http.StatusInternalServerError, err.Error()
 	}
-	// The event's workspace, not the terminal's: a phone has no cwd, so
-	// without this the session opens in whichever checkout the editor window
-	// was in — the wrong repo, under the wrong account.
-	// Picking a story up is a board move as much as a session: the column
-	// says someone has it. Off unless the workspace names a pickup status,
-	// and never allowed to hold up the session it belongs to.
 	go markPickedUp(dir, events)
-	// The board says who asked and that a session is on its way; a task of
-	// your own moves to Doing at once.
 	now := time.Now()
 	picks := watch.LoadPicks(dir)
 	tasks := watch.LoadTasks(dir)
@@ -4675,8 +4329,6 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 		Command: daemon.NewSessionCommand(args...), Source: opt.Source}, 0, ""
 }
 
-// windowOnWorkspace is a connected editor window whose folder is inside the
-// workspace's checkout, or "" when none is.
 func windowOnWorkspace(rep boardReport, agentD, workspaceID string) string {
 	if strings.TrimSpace(workspaceID) == "" {
 		return ""
@@ -4691,7 +4343,6 @@ func windowOnWorkspace(rep boardReport, agentD, workspaceID string) string {
 			if !underRoot(folder, root) {
 				continue
 			}
-			// Several windows on one repo: the one most recently in front.
 			if best == "" || win.FocusedAt.After(bestFocus) {
 				best, bestFocus = win.ID, win.FocusedAt
 			}
@@ -4701,10 +4352,6 @@ func windowOnWorkspace(rep boardReport, agentD, workspaceID string) string {
 	return best
 }
 
-// underRoot says a folder is the workspace's checkout or inside it. Both
-// forms of each path are compared, because EvalSymlinks only resolves what
-// exists — on macOS a temp root resolves to /private/var while a subfolder
-// that is not there yet does not, and the two would never match.
 func underRoot(folder, root string) bool {
 	for _, r := range pathForms(root) {
 		for _, f := range pathForms(folder) {
@@ -4743,10 +4390,6 @@ func windowConnected(rep boardReport, window string) bool {
 	return false
 }
 
-// sessionsOnTickets is the live session on each ticket, by lower-cased ref:
-// what "Work on it" opened, or a session on the ticket's branch. So an
-// inbox row can say a session is on it the moment the session's first
-// event lands, on every surface alike.
 func sessionsOnTickets(dir string) map[string]*CardSess {
 	out := map[string]*CardSess{}
 	rep, err := readBoard(dir)
@@ -4768,10 +4411,6 @@ func sessionsOnTickets(dir string) map[string]*CardSess {
 	return out
 }
 
-// launchTaskHandler writes a task of your own onto the board: a title, a
-// description, the workspace it is for. It lands in the inbox and the Inbox
-// column like a ticket, and "Work on it" opens a session with the
-// description as the prompt.
 func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()

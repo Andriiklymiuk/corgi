@@ -14,12 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A wake lock held per session leaves the worst gap uncovered: with nothing
-// running, the laptop sleeps and the phone cannot start anything — which is the
-// one thing agent mode exists for. `awake on` holds it for the daemon's whole
-// life instead, and replaces the `caffeinate` people otherwise leave running in
-// a terminal all day.
-
 var agentAwakeCmd = &cobra.Command{
 	Use:   "awake [on|off]",
 	Short: "Keep this machine awake for as long as the agent daemon runs",
@@ -52,8 +46,6 @@ func runAgentAwake(cmd *cobra.Command, args []string) {
 		printAwakeState(path)
 		return
 	}
-	// --display on|off: the display too, so the screen never locks while
-	// the lock is held. Restart the daemon for it to take.
 	if display, _ := cmd.Flags().GetString("display"); display != "" {
 		on, err := parseOnOff(display)
 		if err != nil {
@@ -101,7 +93,6 @@ func printAwakeState(path string) {
 	utils.Infof("stayAwake is on (%s) — held for as long as the daemon runs\n", path)
 }
 
-// stayAwakeEnabled reports the setting without printing anything.
 func stayAwakeEnabled(dir string) bool {
 	user, err := config.LoadUser(agentUserConfigPath(dir))
 	return err == nil && user != nil && user.StayAwake
@@ -117,15 +108,11 @@ func parseOnOff(arg string) (bool, error) {
 	return false, fmt.Errorf("say `on` or `off`, not %q", arg)
 }
 
-// writeStayAwake edits the one line, like the notifyUrl writer: the file is
-// hand-edited and commented, and a marshal round-trip would flatten both.
 func writeStayAwake(path string, on bool) error {
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("cannot read %s: %v", path, err)
 	}
-	// A machine that never ran `agent init` has no agent dir yet, and this is a
-	// perfectly reasonable first command to run.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -138,7 +125,6 @@ func writeStayAwake(path string, on bool) error {
 	} else {
 		body = strings.TrimRight(body, "\n") + "\n" + line + "\n"
 	}
-	// 0600 for the same reason as the rest of this file: it grants capability.
 	return os.WriteFile(path, []byte(body), 0o600)
 }
 

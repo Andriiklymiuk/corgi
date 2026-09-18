@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-// A daemon the record forgot is still a daemon. These tests swap the process
-// scan so nothing here can signal the machine's real one.
-
 func withStrays(t *testing.T, pids ...int) {
 	t.Helper()
 	orig := otherServers
@@ -28,7 +25,6 @@ func TestStopStrayServersEndsWhatTheRecordForgot(t *testing.T) {
 	orig := otherServers
 	t.Cleanup(func() { otherServers = orig })
 	otherServers = func(int) []int {
-		// Listed until it has exited; the stop's wait loop polls this.
 		select {
 		case <-done:
 			return nil

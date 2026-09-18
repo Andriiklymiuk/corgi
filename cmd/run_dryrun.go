@@ -8,8 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/art"
 )
 
-// dryRunPlan is the JSON shape printed by `corgi run --dry-run --json`.
-// Slices stay non-nil so the contract never emits null arrays.
 type dryRunPlan struct {
 	Valid     bool                    `json:"valid"`
 	Order     []string                `json:"order"`
@@ -35,14 +33,10 @@ type dryRunService struct {
 	EnvKeys   []string `json:"envKeys"`
 }
 
-// serviceRunMode mirrors ResolveRunnerModes against current disk state, for
-// the plan output. A not-yet-cloned repo can't be inspected, hence "unknown".
 func serviceRunMode(svc utils.Service, dockerFlag bool) string {
 	if svc.ManualRun {
 		return "manual"
 	}
-	// Derive the label from the real resolver so dry-run can't drift from
-	// what `corgi run` will actually do.
 	resolved, err := utils.ResolveRunnerModes([]utils.Service{svc}, dockerFlag, false)
 	if err != nil {
 		if willClone(svc) {
@@ -67,8 +61,6 @@ func serviceRunMode(svc utils.Service, dockerFlag bool) string {
 	}
 }
 
-// computeDryRunPlan builds the plan without side effects: validate, resolve
-// start order, report per-item details.
 func computeDryRunPlan(corgi *utils.CorgiCompose, dockerFlag bool) dryRunPlan {
 	errs, warns := utils.ValidateCompose(corgi)
 	if errs == nil {
@@ -114,8 +106,6 @@ func computeDryRunPlan(corgi *utils.CorgiCompose, dockerFlag bool) dryRunPlan {
 	return plan
 }
 
-// willClone reports whether corgi would clone this service: cloneFrom is set
-// and the target path does not yet exist.
 func willClone(svc utils.Service) bool {
 	if svc.CloneFrom == "" {
 		return false
@@ -129,8 +119,6 @@ func willClone(svc utils.Service) bool {
 	return true
 }
 
-// serviceDeps returns the node ids this service depends on (db:<name>,
-// svc:<name>), sorted for deterministic output.
 func serviceDeps(svc utils.Service) []string {
 	deps := []string{}
 	for _, d := range svc.DependsOnDb {
@@ -147,9 +135,6 @@ func serviceDeps(svc utils.Service) []string {
 	return deps
 }
 
-// computeStartOrder topologically sorts the dependency graph (node ids
-// db:<name>, svc:<name>), tie-breaking by name. On a cycle it falls back to a
-// best-effort order rather than dropping nodes.
 func computeStartOrder(corgi *utils.CorgiCompose) []string {
 	nodes := []string{}
 	indeg := map[string]int{}
@@ -172,7 +157,6 @@ func computeStartOrder(corgi *utils.CorgiCompose) []string {
 	}
 
 	addEdge := func(from, to string) {
-		// from must precede to; only count edges between known nodes.
 		if !exists[from] || !exists[to] {
 			return
 		}
@@ -185,7 +169,6 @@ func computeStartOrder(corgi *utils.CorgiCompose) []string {
 	return kahnSort(nodes, indeg, graph)
 }
 
-// addDependencyEdges wires precedence edges from each dependency to its service.
 func addDependencyEdges(corgi *utils.CorgiCompose, addEdge func(from, to string)) {
 	for _, svc := range corgi.Services {
 		to := "svc:" + svc.ServiceName
@@ -202,8 +185,6 @@ func addDependencyEdges(corgi *utils.CorgiCompose, addEdge func(from, to string)
 	}
 }
 
-// kahnSort runs Kahn's algorithm, tie-breaking by name. Nodes left after a
-// cycle are appended in sorted order so the output is never empty.
 func kahnSort(nodes []string, indeg map[string]int, graph map[string][]string) []string {
 	sorted := append([]string{}, nodes...)
 	sort.Strings(sorted)
@@ -233,7 +214,6 @@ func kahnSort(nodes []string, indeg map[string]int, graph map[string][]string) [
 		}
 	}
 
-	// Cycle remnants: append deterministically so order is never empty.
 	for _, n := range sorted {
 		if !done[n] {
 			order = append(order, n)
@@ -242,7 +222,6 @@ func kahnSort(nodes []string, indeg map[string]int, graph map[string][]string) [
 	return order
 }
 
-// emitDryRunPlan prints the plan and returns the process exit code.
 func emitDryRunPlan(plan dryRunPlan) int {
 	if utils.JSONOutput {
 		utils.PrintJSON(plan)
@@ -267,7 +246,6 @@ func printDryRunHuman(plan dryRunPlan) {
 	printDryRunServices(plan.Services)
 }
 
-// printDryRunIssues prints validation errors (when invalid) and any warnings.
 func printDryRunIssues(plan dryRunPlan) {
 	if !plan.Valid {
 		utils.Info(art.RedColor, "validation failed:", art.WhiteColor)

@@ -23,8 +23,6 @@ import (
 
 var omitItems []string
 
-// bootStartedAt marks the beginning of a boot so --wait-timeout can cover
-// beforeStart as well as the readiness wait.
 var bootStartedAt time.Time
 
 type runSummary struct {
@@ -34,14 +32,11 @@ type runSummary struct {
 
 type runSummaryItem struct {
 	Name  string `json:"name"`
-	Kind  string `json:"kind"` // "service" | "db_service"
+	Kind  string `json:"kind"`
 	Port  int    `json:"port,omitempty"`
 	Error string `json:"error,omitempty"`
 }
 
-// buildRunSummary lists what corgi attempts to launch, applying the same
-// per-item skip rules as the launcher (manualRun db_services and services
-// are excluded; manual services explicitly named in --services are kept).
 func buildRunSummary(corgi *utils.CorgiCompose) runSummary {
 	s := runSummary{Started: []runSummaryItem{}, Failed: []runSummaryItem{}}
 	for _, db := range corgi.DatabaseServices {
@@ -106,7 +101,6 @@ func buildDetachState(composePath string, procs []detachedProc, dbs []utils.RunS
 	}
 }
 
-// runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:     "run",
 	Short:   "Run all databases and services",
@@ -322,11 +316,8 @@ database readiness probe.`,
 	registerServiceWorkdirFlags(runCmd.PersistentFlags())
 }
 
-// defaultReadyTimeout bounds the wait for a db/dependency to become reachable
-// before proceeding anyway. Shared by run, exec, test, and the mcp server.
 const defaultReadyTimeout = 15 * time.Second
 
-// Resolved --gate-deps / --ready-timeout for the current run, set by applyRunFlags.
 var (
 	gateDepsFlag       bool
 	noBeforeStartCache bool
@@ -334,12 +325,8 @@ var (
 	readyTimeout       = defaultReadyTimeout
 )
 
-// exitInProgress guards the terminal-exit path. Reset on cleanup-setup
-// error so the next signal can retry.
 var exitInProgress atomic.Bool
 
-// runReloading is true while runRun is re-entered from a SIGHUP reload, so a
-// config-load failure returns gracefully instead of exiting the whole process.
 var runReloading atomic.Bool
 
 func handleRunSignal(cmd *cobra.Command, s os.Signal) {
@@ -367,8 +354,6 @@ func handleRunSignal(cmd *cobra.Command, s os.Signal) {
 		exitInProgress.Store(false)
 		return
 	}
-	// Kill start commands first so afterStart runs on a clean process
-	// table — avoids races with mid-flight cleanup.
 	utils.KillAllStoredProcesses()
 	cleanup(corgiLatestVersion)
 	utils.PrintFinalMessage()
@@ -423,10 +408,6 @@ func usesDocker(corgi *utils.CorgiCompose) bool {
 	return false
 }
 
-// readySignal carries two startup milestones a dependent may wait on: started
-// (producer launched) and ready (readiness probe passed or timed out — closed
-// either way so dependents never hang). The sync.Once guards make every close
-// idempotent, since multiple goroutines may try to close the same channel.
 type readySignal struct {
 	started     chan struct{}
 	ready       chan struct{}
@@ -441,8 +422,6 @@ func startAllServices(corgi *utils.CorgiCompose, cmd *cobra.Command) {
 	var serviceWaitGroup sync.WaitGroup
 	serviceWaitGroup.Add(len(corgi.Services))
 
-	// Build the registry before launching any goroutine so every dependent can
-	// find its producers' channels regardless of start order.
 	signals := make(map[string]*readySignal, len(corgi.Services))
 	for _, s := range corgi.Services {
 		signals[s.ServiceName] = &readySignal{
@@ -478,10 +457,7 @@ func startAllServices(corgi *utils.CorgiCompose, cmd *cobra.Command) {
 	utils.Info("😉 corgi is running — Ctrl+C to stop")
 	select {
 	case <-servicesDone:
-		// All start commands exited on their own.
 	case <-utils.ShutdownCh():
-		// SIGINT/SIGTERM handler runs cleanup + os.Exit; wait here so the
-		// joined goroutines unwind before the process tears down.
 		<-servicesDone
 	}
 }
@@ -510,7 +486,6 @@ func resolveHostFlag(cmd *cobra.Command) error {
 	return nil
 }
 
-// Block on a tier marked confirm:true unless --yes. Non-interactive needs --yes.
 func confirmTier(cmd *cobra.Command, corgi *utils.CorgiCompose) error {
 	if utils.ActiveTierName == "" {
 		return nil
@@ -551,11 +526,8 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	confirmTierOrExit(cmd, corgi)
 
-	// Single filter point: narrow services/db_services before anything reads them.
-	// The --services/--omit/--dbServices filters then intersect this narrowed set.
 	applyProfileFilter(cmd, corgi)
 
-	// --dry-run branches before any side effect: plan only, then exit.
 	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
 		dockerFlag, _ := cmd.Flags().GetBool("docker")
 		exitProcess(emitDryRunPlan(computeDryRunPlan(corgi, dockerFlag)))
@@ -567,13 +539,8 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	detach, _ := cmd.Flags().GetBool("detach")
 
-	// Started before beforeStart, so --wait-timeout is a budget for the whole
-	// boot. Installs, migrations and builds are usually the slow part; timing
-	// only the readiness wait made the flag mean far less than it looks.
 	bootStartedAt = time.Now()
 
-	// corgi restart and the compose watcher re-enter this in the same process,
-	// so a failure from the previous boot would otherwise fail the next one.
 	utils.ResetBeforeStartFailures()
 
 	rejectTunnelWithDetachOrExit(cmd, detach)
@@ -588,8 +555,6 @@ func runRun(cmd *cobra.Command, _ []string) {
 
 	utils.CleanFromScratch(cmd, *corgi)
 
-	// After clone + fromScratch clean (so neither clobbers the worktree), before
-	// beforeStart/env/run read AbsolutePath.
 	materializeWorktreesOrExit(cmd, corgi)
 
 	resolveRunnerModesOrExit(cmd, corgi)
@@ -625,11 +590,7 @@ func runRun(cmd *cobra.Command, _ []string) {
 	reportBeforeStartFailures()
 }
 
-// reportBeforeStartFailures makes a run whose setup failed exit non-zero. The
-// rest of the stack still comes up; only the status changes. --wait already
-// fails earlier, so this covers the paths that do not wait.
 func reportBeforeStartFailures() {
-	// The watcher and `corgi restart` re-enter run in the same process.
 	if runReloading.Load() {
 		return
 	}
@@ -671,7 +632,6 @@ func confirmTierOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	}
 }
 
-// Service-port preflight (skip on hot-reload: that path manages its own lifecycle).
 func runPortPreflightOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	if runReloading.Load() {
 		return
@@ -763,9 +723,6 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 		exitProcess(1)
 	}
 
-	// --wait gates the return on the whole stack becoming reachable. The state
-	// file is already written, so the services keep running and `corgi stop`
-	// still works even if the wait times out.
 	if wait, _ := cmd.Flags().GetBool("wait"); wait {
 		cleanup := waitDetachedReadyOrExit(cmd, corgi)
 		defer cleanup()
@@ -778,8 +735,6 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	}
 }
 
-// waitDetachedReadyOrExit returns the cleanup the caller defers, so the log
-// follow lives until runDetached itself returns.
 func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func() {
 	timeout, _ := cmd.Flags().GetDuration("wait-timeout")
 	remaining := timeout - time.Since(bootStartedAt)
@@ -797,22 +752,17 @@ func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func
 	ctx, cancel := context.WithTimeout(context.Background(), remaining)
 	defer cancel()
 	stopFollow := func() {
-		// No-op unless --follow replaces it, so the failure path can
-		// stop the stream unconditionally.
 	}
 	if follow, _ := cmd.Flags().GetBool("follow"); follow {
 		stopFollow = startLogFollow()
 	}
 	if err := waitDetachedReady(ctx, corgi); err != nil {
-		// Stop the tail first: os.Exit skips defers, and a stream still
-		// running would interleave with the failure dump below.
 		stopFollow()
 		if utils.JSONOutput {
 			utils.JSONError(utils.ErrReadinessTimeout, err.Error())
 		} else {
 			fmt.Fprintln(os.Stderr, "❌", err)
 		}
-		// The reason a boot failed is in the service logs, not up here.
 		if dump, _ := cmd.Flags().GetBool("dump-on-failure"); dump {
 			printFailureLogs()
 		}
@@ -821,11 +771,7 @@ func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func
 	return stopFollow
 }
 
-// waitDetachedReady blocks until every service (with a port) and database is
-// reachable, or ctx expires. Returns the first readiness error.
 func waitDetachedReady(ctx context.Context, corgi *utils.CorgiCompose) error {
-	// A service whose beforeStart failed is never going to listen, so waiting
-	// for it only delays the real error by the whole timeout.
 	if err := utils.BeforeStartFailureError(); err != nil {
 		return err
 	}
@@ -835,8 +781,6 @@ func waitDetachedReady(ctx context.Context, corgi *utils.CorgiCompose) error {
 	return waitForDbsReady(ctx, corgi.DatabaseServices, utils.WaitForDBReady)
 }
 
-// waitForServicesReady waits for each service with a port to become reachable.
-// ready is injected for tests.
 func waitForServicesReady(ctx context.Context, services []utils.Service, ready func(context.Context, utils.Service) error) error {
 	for _, svc := range services {
 		if svc.Port == 0 || skipReadinessWait(svc) {
@@ -873,7 +817,7 @@ func forceStopPreviousRun(prev utils.RunState, statePath string) {
 			continue
 		}
 		if s.PID == 0 {
-			dockerRunners = append(dockerRunners, s.Name) // container, not a pgroup
+			dockerRunners = append(dockerRunners, s.Name)
 			continue
 		}
 		_ = stopProcessGroup(s)
@@ -903,8 +847,6 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 		if shouldSkipManualRun(svc) {
 			continue
 		}
-		// Detached services start one after another, so the gate is taken once,
-		// at the first service that still wants the databases.
 		if svc.WaitsForDatabases() && !waited {
 			<-dbsReady
 			waited = true
@@ -921,8 +863,6 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 }
 
 func startDetachedService(svc utils.Service) (detachedProc, bool) {
-	// docker-runner services run as containers (no tracked pid); reconcile
-	// and stop key off pid==0 and let cleanup bring them down.
 	if isDockerRunnable(svc) {
 		return startDetachedDockerRunner(svc)
 	}
@@ -970,9 +910,6 @@ func startDetachedShellService(svc utils.Service) (detachedProc, bool) {
 	}, true
 }
 
-// runServiceBeforeStart runs a service's beforeStart. When no step declares a
-// cacheKey it uses the original joined-&&-chain (unchanged behavior). When any
-// step has a cacheKey, steps run individually so unchanged ones can be skipped.
 func runServiceBeforeStart(service utils.Service, envFile string) {
 	if service.BeforeStart == nil || omitted(utils.BeforeStartInConfig) {
 		return
@@ -992,7 +929,6 @@ func runServiceBeforeStart(service utils.Service, envFile string) {
 	}
 }
 
-// Run beforeStart per step: skip unchanged cacheKey steps, persist hash on success. run injected for tests.
 func runCachedBeforeStart(service utils.Service, noCache bool, run func(string) error) error {
 	for i, step := range service.BeforeStart {
 		needs, hash := utils.StepNeedsRun(service, i, step, noCache)
@@ -1012,11 +948,8 @@ func runDetachedBeforeStart(svc utils.Service) {
 	runServiceBeforeStart(svc, getServiceEnv(svc))
 }
 
-// browserOpener is overridable in tests.
 var browserOpener = launchBrowser
 
-// startDetachedFn and dockerRunnerUp are overridable in tests so the detached
-// spawn path can be exercised without forking real processes.
 var (
 	startDetachedFn = utils.StartDetached
 	dockerRunnerUp  = func(serviceName string) error {
@@ -1024,15 +957,11 @@ var (
 	}
 )
 
-// isDockerRunnable says the service boots via its generated docker seam:
-// a port mapping exists, or the repo's own compose file declares its own.
 func isDockerRunnable(svc utils.Service) bool {
 	return svc.Runner.IsDocker() &&
 		(svc.Port != 0 || svc.ResolvedDockerSource == utils.SourceRepoCompose)
 }
 
-// hintDockerCapable tells script-mode users that --docker exists — at most
-// one line per `corgi run` invocation.
 func hintDockerCapable(services []utils.Service, dockerFlag bool) {
 	if dockerFlag {
 		return
@@ -1048,7 +977,6 @@ func hintDockerCapable(services []utils.Service, dockerFlag bool) {
 	}
 }
 
-// Open a service's URL once ready, when --open is set and it opted in.
 func maybeOpenOnReady(service utils.Service) {
 	if !openOnReadyFlag || service.Port == 0 || service.OpenOnReady == nil || !service.OpenOnReady.Enabled {
 		return
@@ -1059,7 +987,6 @@ func maybeOpenOnReady(service utils.Service) {
 	}
 }
 
-// Run one service's afterStart teardown on single-service stop/restart.
 func runServiceAfterStop(corgi *utils.CorgiCompose, name string) {
 	svc := findService(corgi, name)
 	if svc == nil || svc.AfterStart == nil || omitted(utils.AfterStartInConfig) {
@@ -1068,8 +995,6 @@ func runServiceAfterStop(corgi *utils.CorgiCompose, name string) {
 	utils.RunCleanupCommands("afterStart", svc.ServiceName, svc.AfterStart, svc.AbsolutePath, getServiceEnv(*svc))
 }
 
-// settleDetached gives freshly spawned services a moment to crash, then records
-// each one's real status so the state file doesn't claim a dead service is running.
 func settleDetached(procs []detachedProc) {
 	if len(procs) == 0 {
 		return
@@ -1112,9 +1037,6 @@ func detachedDBEntries(corgi *utils.CorgiCompose) []utils.RunStateEntry {
 	return dbs
 }
 
-// applyProfileFilter narrows services/db_services to those selected by --profile.
-// No-op when empty. When nothing matches it selects nothing and warns, so a typo'd
-// profile starts nothing rather than everything.
 func applyProfileFilter(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	raw, _ := cmd.Flags().GetString("profile")
 	profiles := utils.ParseProfiles(raw)
@@ -1124,7 +1046,6 @@ func applyProfileFilter(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 
 	services, dbs := utils.SelectByProfiles(corgi, profiles)
 	if len(services) == 0 && len(dbs) == 0 {
-		// Select nothing — don't fall through to "select all".
 		utils.Infof("⚠️  [%s] profile %q matches no services or db_services; nothing to run\n", utils.ErrUnknownProfile, raw)
 	}
 
@@ -1171,7 +1092,6 @@ func applyRunFlags(cmd *cobra.Command) {
 	}
 }
 
-// Seam so tests can observe the VPN init without driving the GUI client.
 var awsVpnInit = utils.AwsVpnInit
 
 func runPreflight(cmd *cobra.Command, corgi *utils.CorgiCompose) {
@@ -1188,7 +1108,6 @@ func runPreflight(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	}
 }
 
-// Pre-scope containers left running would fight for the same ports.
 func warnLegacyContainers(corgi *utils.CorgiCompose) {
 	if utils.ContainerScope() == "" {
 		return
@@ -1226,8 +1145,6 @@ func runBeforeStart(corgi *utils.CorgiCompose) {
 	)
 }
 
-// stopDockerRunners brings down docker-runner containers so none outlives its
-// config on shutdown or hot reload. Safe on nil.
 func stopDockerRunners(corgi *utils.CorgiCompose) {
 	if corgi == nil {
 		return
@@ -1268,8 +1185,6 @@ func cleanup(corgi *utils.CorgiCompose) {
 	maybeHintNotifications()
 }
 
-// maybeHintNotifications nudges users to turn on desktop crash alerts.
-// Stays quiet in CI and when notifications are already enabled.
 func maybeHintNotifications() {
 	if utils.CIMode {
 		return
@@ -1282,10 +1197,6 @@ func maybeHintNotifications() {
 		art.CyanColor, art.WhiteColor)
 }
 
-// dbsReady closes once the database phase is done. It starts closed so that any
-// path which never runs that phase — every other command, and tests driving the
-// launchers directly — is not gated by it. Only the concurrent phase installs a
-// fresh, open gate.
 var dbsReady = closedGate()
 
 func closedGate() chan struct{} {
@@ -1294,10 +1205,6 @@ func closedGate() chan struct{} {
 	return c
 }
 
-// startDatabasePhase brings the databases up and writes each service's env.
-// On the default gate that is the old sequence: databases, then env. A service
-// that opted out moves the phase to the background so it can start against
-// databases still coming up. Env is derived from the compose file either way.
 func startDatabasePhase(cmd *cobra.Command, corgi *utils.CorgiCompose) error {
 	if !utils.AnyServiceStartsWithDatabases(corgi) {
 		runDatabaseServices(cmd, corgi.DatabaseServices)
@@ -1316,9 +1223,6 @@ func startDatabasePhase(cmd *cobra.Command, corgi *utils.CorgiCompose) error {
 	return nil
 }
 
-// orderedByDatabaseGate puts the services that opted out of the gate first, so
-// a sequential launcher starts them while the databases are still coming up.
-// Order is otherwise preserved.
 func orderedByDatabaseGate(services []utils.Service) []utils.Service {
 	ordered := make([]utils.Service, 0, len(services))
 	for _, s := range services {
@@ -1386,7 +1290,6 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	if err := utils.ExecuteCommandRun(dbService.ServiceName, "make", "up"); err != nil {
 		utils.Info("Starting service failed", err)
 	}
-	// Bounded readiness probe (non-fatal on timeout so services still get a chance).
 	ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
 	defer cancel()
 	if err := utils.WaitForDBReady(ctx, dbService); err != nil {
@@ -1394,9 +1297,6 @@ func startDatabaseIfNeeded(dbService utils.DatabaseService) {
 	}
 }
 
-// skipReadinessWait reports whether this run declined to start the service, in
-// which case waiting for it can only burn the timeout. One predicate, because
-// a launcher and a readiness gate that disagree is the bug this fixes.
 func skipReadinessWait(service utils.Service) bool {
 	if !service.ManualRun {
 		return false
@@ -1468,7 +1368,6 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 	defer serviceWaitGroup.Done()
 
 	sig := signals[service.ServiceName]
-	// Close own milestones on any early return so dependents never hang.
 	defer func() {
 		if sig != nil {
 			sig.markStarted()
@@ -1502,16 +1401,12 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 		return
 	}
 
-	// Mark started, then probe readiness in the background since
-	// startServiceProcess blocks on the start command. The probe is joined
-	// before runService returns so it can't outlive the service goroutine.
 	var probeWG sync.WaitGroup
 	defer probeWG.Wait()
 
 	if sig != nil {
 		sig.markStarted()
 		if service.Port == 0 {
-			// Nothing to probe — dependents waiting on `ready` proceed at once.
 			sig.markReady()
 		} else {
 			launchReadinessProbe(service, sig, &probeWG)
@@ -1521,7 +1416,6 @@ func runService(service utils.Service, cobraCmd *cobra.Command, serviceWaitGroup
 	startServiceProcess(service)
 }
 
-// waitForDatabasesGate reports false when shutdown interrupts the wait.
 func waitForDatabasesGate(service utils.Service) bool {
 	if !service.WaitsForDatabases() {
 		return true
@@ -1542,7 +1436,6 @@ func launchReadinessProbe(service utils.Service, sig *readySignal, probeWG *sync
 		defer cancel()
 		done := make(chan struct{})
 		defer close(done)
-		// Abort the probe promptly if corgi is shutting down.
 		go func() {
 			select {
 			case <-utils.ShutdownCh():
@@ -1558,10 +1451,6 @@ func launchReadinessProbe(service utils.Service, sig *readySignal, probeWG *sync
 	}()
 }
 
-// waitForServiceDeps blocks until this service's gated dependencies reach their
-// condition's milestone. An edge is gated only when it sets condition: or
-// --gate-deps is passed; ungated edges keep the default parallel start. Bounded
-// by readyTimeout.
 func waitForServiceDeps(service utils.Service, signals map[string]*readySignal) {
 	for _, dep := range service.DependsOnServices {
 		gated := dep.Condition != "" || gateDepsFlag
@@ -1570,11 +1459,8 @@ func waitForServiceDeps(service utils.Service, signals map[string]*readySignal) 
 		}
 		producer, ok := signals[dep.Name]
 		if !ok {
-			// Unknown dependency — `corgi validate` already flags these.
 			continue
 		}
-		// condition: started waits only until corgi launched the producer;
-		// "ready" (or empty under --gate-deps) waits for the readiness probe.
 		ch := producer.ready
 		if dep.Condition == "started" {
 			ch = producer.started
@@ -1650,7 +1536,6 @@ func omitted(key string) bool {
 	return false
 }
 
-// A typo here is silent otherwise: --omit useAWSVpn still launches the VPN.
 func unknownOmitKeys() []string {
 	var unknown []string
 	for _, k := range requestedOmitKeys() {
@@ -1661,7 +1546,6 @@ func unknownOmitKeys() []string {
 	return unknown
 }
 
-// The MCP daemon is long-lived, so a per-call omit must not leak into the next.
 func withOmit(extra []string, fn func()) {
 	prev := omitItems
 	omitItems = append(append([]string{}, prev...), extra...)
@@ -1674,7 +1558,7 @@ func handleComposeWriteEvent(watcher *fsnotify.Watcher, cmd *cobra.Command, even
 	corgi, err := utils.GetCorgiServices(cmd)
 	if err != nil {
 		fmt.Println(err)
-		return true // stop watching on read error
+		return true
 	}
 	if utils.CompareCorgiFiles(corgi, oldCorgi) {
 		return false
@@ -1714,7 +1598,6 @@ func watchComposeEvents(watcher *fsnotify.Watcher, cmd *cobra.Command) {
 	}
 }
 
-// handleComposeEvent reports true when watching should stop.
 func handleComposeEvent(watcher *fsnotify.Watcher, cmd *cobra.Command, event fsnotify.Event) bool {
 	if event.Op&fsnotify.Write != fsnotify.Write {
 		return false
@@ -1722,11 +1605,6 @@ func handleComposeEvent(watcher *fsnotify.Watcher, cmd *cobra.Command, event fsn
 	return handleComposeWriteEvent(watcher, cmd, event.Name)
 }
 
-// setupLogWriters creates per-service log files under corgi_services/.logs/
-// and registers each writer in utils.ServiceLogWriters so that runManaged
-// tees stdout/stderr to the file. Also ensures .gitignore excludes the dir.
-// Closes any previously registered writers first so re-entry on SIGHUP
-// reload does not leak file descriptors.
 func setupLogWriters(corgi *utils.CorgiCompose) {
 	utils.CloseAllLogWriters()
 	base := utils.CorgiServicesDir()

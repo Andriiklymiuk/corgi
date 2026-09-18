@@ -846,7 +846,6 @@ func TestGitHousekeepingNeverSourcesTheRepoEnv(t *testing.T) {
 
 func TestCloneServicesReportsFailures(t *testing.T) {
 	dir := t.TempDir()
-	// A cloneFrom that cannot resolve: the clone must be reported, not swallowed.
 	failed := CloneServices([]utils.Service{{
 		ServiceName:  "broken",
 		Path:         "./broken",
@@ -887,13 +886,11 @@ func TestCheckoutFeatureBranchesOverridesComposeBranch(t *testing.T) {
 
 	svc := utils.Service{ServiceName: "api", AbsolutePath: repo, Branch: "develop"}
 
-	// --feature wins over the compose branch: the flag is the more specific intent.
 	checkoutFeatureBranches([]utils.Service{svc}, "feature/x")
 	if cur := currentBranch(t, repo); cur != "feature/x" {
 		t.Errorf("--feature should win over compose branch:, on %q", cur)
 	}
 
-	// A repo without the feature branch keeps whatever it was on.
 	checkoutFeatureBranches([]utils.Service{svc}, "absent")
 	if cur := currentBranch(t, repo); cur != "feature/x" {
 		t.Errorf("a missing feature branch must not move the checkout, on %q", cur)

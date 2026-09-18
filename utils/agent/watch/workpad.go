@@ -6,22 +6,13 @@ import (
 	"strings"
 )
 
-// The workpad is the one comment corgi keeps on a ticket: the spec, the
-// pull requests, the latest handoff, a blocker — each a section, rewritten
-// in place. One comment that grows, not a trail of "corgi opened…" lines,
-// and a place any machine or account can read the state of the work.
-
-// WorkpadMarker is the first line of the comment; it is how the comment is
-// found again, on Linear and on Jira alike.
 const WorkpadMarker = "corgi · workpad"
 
-// Workpad is the comment parsed: sections in the order they first appeared.
 type Workpad struct {
 	Order    []string
 	Sections map[string]string
 }
 
-// ParseWorkpad reads a comment body; ok is false when it is not a workpad.
 func ParseWorkpad(body string) (Workpad, bool) {
 	body = strings.TrimSpace(body)
 	if !strings.HasPrefix(body, WorkpadMarker) {
@@ -52,7 +43,6 @@ func ParseWorkpad(body string) (Workpad, bool) {
 	return w, true
 }
 
-// Set replaces one section; an empty text removes it.
 func (w *Workpad) Set(section, text string) {
 	if w.Sections == nil {
 		w.Sections = map[string]string{}
@@ -75,7 +65,6 @@ func (w *Workpad) Set(section, text string) {
 	w.Sections[section] = text
 }
 
-// Body is the comment as written back.
 func (w Workpad) Body() string {
 	var b strings.Builder
 	b.WriteString(WorkpadMarker)
@@ -90,10 +79,6 @@ func (w Workpad) Body() string {
 	return b.String()
 }
 
-// UpsertWorkpad sets one section of the ticket's workpad, creating the
-// comment the first time. Reads the newest comments to find it; a ticket
-// with more than that many comments after the workpad gets a second one,
-// which is still better than one per event.
 func UpsertWorkpad(ctx context.Context, w Writer, ref, section, text string) error {
 	comments, err := w.RecentComments(ctx, ref, 50)
 	if err != nil {

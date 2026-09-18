@@ -34,7 +34,7 @@ func TestCanRunCliAgain(t *testing.T) {
 		{[]string{"corgi", "create"}, true},
 		{[]string{"corgi", "fork"}, true},
 		{[]string{"corgi", "status"}, false},
-		{[]string{"corgi", "-v"}, false}, // a flag short-circuits to false
+		{[]string{"corgi", "-v"}, false},
 		{[]string{"corgi"}, false},
 	}
 	for _, tc := range cases {
@@ -84,19 +84,16 @@ func TestShowFinalMessage_SuppressedIsSilent(t *testing.T) {
 }
 
 func TestClearTerminal_EarlyReturnOnSuppressingArg(t *testing.T) {
-	// A suppressing arg must make ClearTerminal a no-op (no terminal reset exec).
 	withArgs(t, "corgi", "status")
-	ClearTerminal() // must not panic or run a clear command
+	ClearTerminal()
 }
 
 func TestRunClearCmd_HarmlessCommand(t *testing.T) {
-	// Exercises the exec path with a no-op binary available on POSIX systems.
 	if _, err := os.Stat("/usr/bin/true"); err == nil {
 		runClearCmd("/usr/bin/true")
 	}
 }
 
-// captureStdout redirects os.Stdout for the duration of fn and returns the output.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	orig := os.Stdout

@@ -8,10 +8,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-// Two sessions on one repository, each in its own worktree, both editing
-// registry.go: the board says so before a merge does. Two in the same
-// checkout share every file, and the board says that instead. A session in
-// another repository is nobody's business here.
 func TestCrossingsNameWhoElseIsOnTheSameFiles(t *testing.T) {
 	live := []sessions.Session{
 		{ID: "a", Label: "api", Display: "api"},
@@ -56,8 +52,6 @@ func TestCrossingsNameWhoElseIsOnTheSameFiles(t *testing.T) {
 	}
 }
 
-// The sweep puts the numbers on the board, and a session in another
-// working tree of the same repository shows up as an overlap.
 func TestTheSweepWritesChangesAndOverlap(t *testing.T) {
 	origDiff, origTree, origRoot := driftDiff, workingTreeOf, workspaceRootOf
 	defer func() { driftDiff, workingTreeOf, workspaceRootOf = origDiff, origTree, origRoot }()

@@ -13,9 +13,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// runCLI drives the real cobra path — root flags merged, PersistentPreRun run —
-// with the process exit captured instead of taken. exitProcess does not unwind,
-// so a command that exits carries on; every assertion checks the code too.
 func runCLI(t *testing.T, args ...string) (string, int) {
 	t.Helper()
 	previousExit := osExit
@@ -37,8 +34,6 @@ func runCLI(t *testing.T, args ...string) (string, int) {
 	return out, code
 }
 
-// cobra keeps parsed flag values on the shared rootCmd tree between Execute
-// calls, so one test's --wait-for would still be set for the next one.
 func resetCommandFlags() {
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {

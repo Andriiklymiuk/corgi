@@ -15,11 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Agent mode starts at login through the platform's own supervisor. Nothing
-// secret is ever written into the service file: on macOS these live in
-// ~/Library/LaunchAgents, which is world-readable and lands in backups. The
-// file names paths; the daemon reads credentials itself at start.
-
 var agentInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Start agent mode at login (launchd on macOS, systemd on Linux)",
@@ -35,12 +30,8 @@ var agentUninstallCmd = &cobra.Command{
 const launchdLabel = "com.andriiklymiuk.corgi.agent"
 const systemdUnitName = "corgi-agent.service"
 
-// systemctlUser scopes systemctl to the calling user's manager.
 const systemctlUser = "--user"
 
-// runSupervisorCommand runs launchctl / systemctl. A seam, so the file-writing and
-// error paths can be tested without loading a real job into the test runner's
-// login session.
 var runSupervisorCommand = func(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
 }
@@ -68,8 +59,6 @@ func unsupportedInstallError() error {
 		"Run `corgi agent serve` under your own supervisor instead", runtime.GOOS)
 }
 
-// loginServicePath is where this platform keeps corgi's start-at-login file.
-// Empty on a platform with no supported mechanism.
 func loginServicePath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -84,9 +73,6 @@ func loginServicePath() string {
 	return ""
 }
 
-// loginServiceInstalled reports whether the start-at-login file is in place.
-// The file, not the running process: the question it answers is "will this come
-// back after a reboot", which a currently-running daemon does not settle.
 func loginServiceInstalled() bool {
 	path := loginServicePath()
 	if path == "" {
@@ -98,8 +84,6 @@ func loginServiceInstalled() bool {
 
 func runAgentInstall(_ *cobra.Command, _ []string) {
 	if !installSupported() {
-		// Stated plainly rather than half-installing: silent partial support is
-		// the worst option, because it looks like it worked.
 		exitWithError("agent_install_unsupported", unsupportedInstallError(), 2)
 	}
 	if err := installLoginService(); err != nil {
@@ -108,8 +92,6 @@ func runAgentInstall(_ *cobra.Command, _ []string) {
 	reportLoginInstall(adoptSavedUpAtLogin())
 }
 
-// reportLoginInstall says what login start will actually bring back, which is
-// the daemon alone unless a previous `agent up` left settings to repeat.
 func reportLoginInstall(withUp bool) {
 	utils.Info("corgi agent now starts at login. Check it with `corgi agent status`.")
 	if withUp {
@@ -119,9 +101,6 @@ func reportLoginInstall(withUp bool) {
 	utils.Info("that is the daemon only — run `corgi agent up --at-login` in a stack to also restore the tunnel and pairing server")
 }
 
-// adoptSavedUpAtLogin turns on tunnel restore when a previous `agent up` left
-// settings to repeat. Nothing is invented for a user who never ran `up`: a
-// public tunnel must never start from a command that did not ask for one.
 func adoptSavedUpAtLogin() bool {
 	dir, err := agentDir()
 	if err != nil || !upSettingsExist(dir) {
@@ -135,17 +114,12 @@ func adoptSavedUpAtLogin() bool {
 	return saveUpSettings(dir, s) == nil
 }
 
-// installLoginService writes the platform's service file and loads it.
 func installLoginService() error {
 	binary, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	// Deliberately NOT EvalSymlinks on Linux. Homebrew installs corgi as a
-	// symlink into a versioned directory; resolving it would bake that version
-	// into the service file, and the next upgrade would delete the path and
-	// agent mode would silently stop starting at login. macOS goes further and
-	// runs its own copy, see agent_install_stable.go.
+	// No EvalSymlinks on Linux: Homebrew's versioned path would break at the next upgrade.
 	if daemonRunsFromStableCopy() {
 		if binary, err = refreshStableDaemonBinary(binary); err != nil {
 			return fmt.Errorf("copy corgi for the daemon: %w", err)
@@ -169,18 +143,8 @@ func installLoginService() error {
 	return unsupportedInstallError()
 }
 
-// servicePATH is the PATH the supervised daemon runs with. launchd and systemd
-// start services with a minimal PATH that would not find `claude`, so the
-// installing shell's PATH is captured plus the usual locations.
-// serviceEnv keeps the daemon reading the same agent dir as the installing
-// shell. NativeDataDir keys on CORGI_DATA_DIR, HOME and XDG_DATA_HOME, so PATH
-// alone is not enough. HOMEBREW_PREFIX is for the legacy exec-path registry.
 func serviceEnv() map[string]string {
 	env := map[string]string{"PATH": servicePATH()}
-	// HOME is normally injected by launchd/systemd, but the daemon's data-dir
-	// resolution now depends on it, so pin it rather than rely on the launcher.
-	// TZ too: quiet hours and routines are local time, and a server's
-	// launcher would otherwise hand the daemon UTC.
 	for _, key := range []string{"CORGI_DATA_DIR", "HOME", "XDG_DATA_HOME", "HOMEBREW_PREFIX", "TZ"} {
 		if v := os.Getenv(key); v != "" {
 			env[key] = v
@@ -189,8 +153,6 @@ func serviceEnv() map[string]string {
 	return env
 }
 
-// sortedEnv returns the environment as stable key/value pairs, so a reinstall
-// produces an identical file.
 func sortedEnv(env map[string]string) [][2]string {
 	keys := make([]string, 0, len(env))
 	for k := range env {
@@ -242,7 +204,6 @@ func installLaunchd(binary, logDir string) error {
 		return err
 	}
 
-	// bootout first so a reinstall picks up a changed binary path.
 	_, _ = runSupervisorCommand("launchctl", "bootout", "gui/"+currentUID(), plistPath)
 	if out, err := runSupervisorCommand("launchctl", "bootstrap", "gui/"+currentUID(), plistPath); err != nil {
 		return fmt.Errorf("launchctl bootstrap failed: %v\n%s", err, out)
@@ -252,12 +213,7 @@ func installLaunchd(binary, logDir string) error {
 	return nil
 }
 
-// renderedLaunchdPlist is the plist corgi installs. It deliberately contains no
-// credential material: files in ~/Library/LaunchAgents are world-readable and
-// land in backups, so the daemon reads its own config at start instead.
 func renderedLaunchdPlist(binary, outLog, errLog string, env map[string]string) string {
-	// A path may contain & or <, which would produce an invalid plist and an
-	// opaque `launchctl bootstrap` failure.
 	binary, outLog, errLog = escapeXML(binary), escapeXML(outLog), escapeXML(errLog)
 
 	var envEntries strings.Builder
@@ -339,9 +295,6 @@ func installSystemd(binary, logDir string) error {
 	return nil
 }
 
-// lingerEnabled asks logind whether this user's services outlive their
-// logins. Without linger a user unit on a server dies with the SSH session
-// that installed it, which looks exactly like a daemon that never started.
 func lingerEnabled() (on, known bool) {
 	if runtime.GOOS != "linux" {
 		return false, false
@@ -357,12 +310,9 @@ func lingerFromOutput(out []byte) bool {
 	return strings.TrimSpace(string(out)) == "yes"
 }
 
-// renderedSystemdUnit is the user unit corgi installs. Like the plist, it
-// carries no credential material.
 func renderedSystemdUnit(binary string, env map[string]string) string {
 	var envLines strings.Builder
 	for _, kv := range sortedEnv(env) {
-		// Quoted: a value containing a space would otherwise truncate there.
 		fmt.Fprintf(&envLines, "Environment=\"%s=%s\"\n", kv[0], kv[1])
 	}
 	return fmt.Sprintf(`[Unit]
@@ -404,14 +354,10 @@ func runAgentUninstall(_ *cobra.Command, _ []string) {
 	}
 	utils.Infof("removed %s\n", path)
 
-	// The service file is gone, so nothing would read the flag anyway; clearing
-	// it keeps `agent status` from claiming a restore that cannot happen.
 	clearAtLogin()
 	utils.Info("corgi agent no longer starts at login")
 }
 
-// clearAtLogin turns off tunnel restore, leaving the rest of the saved `up`
-// settings alone so the next `agent up` still repeats the named tunnel.
 func clearAtLogin() {
 	dir, err := agentDir()
 	if err != nil || !upSettingsExist(dir) {
@@ -425,7 +371,6 @@ func clearAtLogin() {
 	_ = saveUpSettings(dir, s)
 }
 
-// escapeXML makes a path safe to interpolate into the plist.
 func escapeXML(s string) string {
 	var b strings.Builder
 	if err := xml.EscapeText(&b, []byte(s)); err != nil {

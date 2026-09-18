@@ -13,8 +13,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A routine due on the clock starts through the fix runner, once, and its
-// report lands in the inbox as one row with the run's headline.
 func TestRoutinesRunOnTheClockAndReportToTheInbox(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
@@ -52,7 +50,6 @@ func TestRoutinesRunOnTheClockAndReportToTheInbox(t *testing.T) {
 	}
 	d.routineReport(spec, e, "3 PRs green, 1 red\n- details…", nil)
 	rows := watch.RecentEvents(d.Dir, 5)
-	// Two rows: the cancelled run above reported its failure, and this one.
 	if len(rows) != 2 || rows[0].Kind != watch.KindRoutine || !strings.Contains(rows[0].Title, "digest — 3 PRs green, 1 red") || rows[0].Body != "" {
 		t.Fatalf("inbox row: %+v", rows)
 	}
@@ -64,9 +61,6 @@ func TestRoutinesRunOnTheClockAndReportToTheInbox(t *testing.T) {
 	}
 }
 
-// A routine that names a bot runs under that bot's soul and model, is
-// filed under the bot's name, reports to the inbox like any routine and
-// gives its claim back; one naming a bot that is not there runs plain.
 func TestARoutineRunsAsTheBotItNames(t *testing.T) {
 	d := dynDaemon(t)
 	d.loadWatchFiles()
@@ -109,7 +103,6 @@ func TestARoutineRunsAsTheBotItNames(t *testing.T) {
 	}
 	d.releaseFix("api", "routine/suggest")
 
-	// The next one in line names a bot of another workspace: it runs plain.
 	d.runRoutines(context.Background(), monday)
 	d.runs.Wait()
 	mu.Lock()

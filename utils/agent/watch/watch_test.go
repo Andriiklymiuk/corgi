@@ -306,8 +306,6 @@ func TestParseHooks(t *testing.T) {
 		t.Fatalf("github %+v", events)
 	}
 
-	// A bot's comment on my pull request — Linear's link, a coverage
-	// report — is not a person waiting: the webhook drops it like the poller.
 	botComment := `{"action":"created","repository":{"full_name":"acme/api"},"issue":{"number":12,"title":"Referrals","html_url":"https://github.com/acme/api/pull/12","user":{"login":"andrii"},"pull_request":{}},"comment":{"id":77,"body":"ABC-99 Add a tracker link","created_at":"2026-09-09T10:00:00Z","user":{"login":"linear-code[bot]","type":"Bot"}}}`
 	r.Header.Set("X-GitHub-Event", "issue_comment")
 	if events, _ := ParseHook("github", r, []byte(botComment), "andrii"); len(events) != 0 {
@@ -359,7 +357,6 @@ func TestFixLogRecordsTheOutcomeAndHealsAnInterruptedRun(t *testing.T) {
 		t.Error("the second run is still open")
 	}
 
-	// A run that never reported is interrupted, not finished; its event comes back.
 	reopened := LoadFixLog(dir)
 	keys := reopened.Interrupted("stopped mid-run", now.Add(time.Hour))
 	if len(keys) != 1 || keys[0] != "jira:ABC-2" {
@@ -400,20 +397,16 @@ func TestSettled(t *testing.T) {
 	}
 }
 
-// A nudge polls now instead of at the next tick, and two nudges before the
-// loop gets to it are one poll.
 func TestANudgeWakesTheWatch(t *testing.T) {
 	src := &countingSource{gate: make(chan struct{})}
 	w := &Watch{Workspace: "api", Sources: []Source{src}, Interval: time.Hour, State: LoadState(t.TempDir())}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go w.Run(ctx)
-	// The first poll is in flight; three nudges land while it is.
 	w.Nudge()
 	w.Nudge()
 	w.Nudge()
 	src.gate <- struct{}{}
-	// The loop wakes once for them, not three times.
 	select {
 	case src.gate <- struct{}{}:
 	case <-time.After(2 * time.Second):
@@ -429,8 +422,6 @@ func TestANudgeWakesTheWatch(t *testing.T) {
 	}
 }
 
-// countingSource counts polls; each one waits on gate so a test can hold
-// the watch mid-poll.
 type countingSource struct {
 	polls atomic.Int32
 	gate  chan struct{}
@@ -446,11 +437,9 @@ func (c *countingSource) Poll(ctx context.Context, _ Cursor) ([]Event, Cursor, e
 	return nil, Cursor{}, nil
 }
 
-// A watch asleep for the day does not ask the tracker; a nudge — the reload
-// button — still polls once.
 func TestAnAsleepWatchDoesNotPollUntilNudged(t *testing.T) {
 	src := &countingSource{gate: make(chan struct{})}
-	close(src.gate) // never blocks: the poll returns at once
+	close(src.gate)
 	w := &Watch{Workspace: "api", Rules: Rules{Enabled: true}, Sources: []Source{src}, Interval: 20 * time.Millisecond,
 		State: LoadState(t.TempDir()), Asleep: func(time.Time) bool { return true }}
 	ctx, cancel := context.WithCancel(context.Background())

@@ -21,7 +21,6 @@ func TestTasksLiveOnTheBoardUntilFinished(t *testing.T) {
 	}
 	b, _ := l.Add("Second", "", "web", "cli", now.Add(time.Minute))
 
-	// Any spelling finds it; a move is case-insensitive and validated.
 	for _, arg := range []string{"TASK-1", "task:1", "1", "task-1"} {
 		if got, ok := LoadTasks(dir).Find(arg); !ok || got.ID != 1 {
 			t.Errorf("Find(%q) = %+v %v", arg, got, ok)
@@ -35,7 +34,6 @@ func TestTasksLiveOnTheBoardUntilFinished(t *testing.T) {
 		t.Fatalf("move: %+v %v", moved, err)
 	}
 
-	// The inbox reads tasks as events, ahead of the tracker's, newest first.
 	events := RecentEvents(dir, 25)
 	if len(events) != 2 || events[0].Key != "task:1" || events[1].Key != b.Key() {
 		t.Fatalf("events: %+v", events)
@@ -46,7 +44,6 @@ func TestTasksLiveOnTheBoardUntilFinished(t *testing.T) {
 	if e, ok := FindEvent(dir, "task:2"); !ok || e.Ref != "TASK-2" {
 		t.Fatal("a task is found by key like any event")
 	}
-	// A task in Review is still work; only Done or Canceled settles it.
 	if Settled(events[0], events[0].State) != "" {
 		t.Fatal("review is not the end")
 	}
@@ -57,7 +54,6 @@ func TestTasksLiveOnTheBoardUntilFinished(t *testing.T) {
 	if Settled(done.Event(), done.State) == "" {
 		t.Fatal("done settles it")
 	}
-	// A finished task leaves the board after a week; the file keeps it.
 	if got := l.Events(now.Add(8 * 24 * time.Hour)); len(got) != 1 || got[0].Key != "task:1" {
 		t.Fatalf("after a week: %+v", got)
 	}

@@ -82,8 +82,6 @@ func runCIInit(cmd *cobra.Command, _ []string) {
 	utils.Info(ciNextSteps(provider, corgi))
 }
 
-// resolveCIProvider prefers the flag, then the origin remote. An unknown
-// remote is an error: the wrong forge's pipeline is silently useless.
 func resolveCIProvider(cmd *cobra.Command) (string, error) {
 	flag, _ := cmd.Flags().GetString("provider")
 	switch strings.ToLower(strings.TrimSpace(flag)) {
@@ -105,7 +103,6 @@ func resolveCIProvider(cmd *cobra.Command) (string, error) {
 		"could not tell the forge from the git remote (%q) — pass --provider github|gitlab", remote)
 }
 
-// gitOriginURL is overridable in tests.
 var gitOriginURL = func() string {
 	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
 	if err != nil {
@@ -130,8 +127,6 @@ func writeCIFiles(provider string, corgi *utils.CorgiCompose, force bool) ([]str
 	}
 	sort.Strings(names)
 
-	// Check all before writing any: refusing halfway leaves a pipeline
-	// without the cache plan it includes.
 	if !force {
 		for _, name := range names {
 			if _, err := os.Stat(filepath.Join(utils.CorgiComposePathDir, name)); err == nil {

@@ -12,10 +12,6 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
-// defaultMCPCallBudget is how long one tool call may run. Claude.ai and
-// Desktop drop a call at 240 s; 200 s leaves room for the network and the
-// envelope. Claude Code reads MCP_TOOL_TIMEOUT instead, so the budget is
-// also what stdio callers get unless CORGI_MCP_CALL_BUDGET says otherwise.
 const (
 	defaultMCPCallBudget = 200 * time.Second
 	minMCPCallBudget     = time.Second
@@ -29,7 +25,6 @@ func mcpCallBudget() time.Duration {
 	return defaultMCPCallBudget
 }
 
-// clampToBudget bounds a caller-chosen wait; clamped reports that it did.
 func clampToBudget(d time.Duration) (time.Duration, bool) {
 	budget := mcpCallBudget()
 	if d <= 0 || d > budget {
@@ -38,8 +33,6 @@ func clampToBudget(d time.Duration) (time.Duration, bool) {
 	return d, false
 }
 
-// upLaunch is what corgi_up returns: the run-state when the child finished
-// inside the wait, a handle to poll otherwise.
 type upLaunch struct {
 	Status string          `json:"status"`
 	Handle *upHandle       `json:"handle,omitempty"`
@@ -60,8 +53,6 @@ const (
 	upNextPoll       = "poll corgi_status until healthy; corgi_logs reads each service"
 )
 
-// mcpUpChildCommand builds the child that boots the stack. A variable so a
-// test can stand in a shell command for the real binary.
 var mcpUpChildCommand = func(args upArgs, composePath, logPath string) (*exec.Cmd, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -89,16 +80,11 @@ var mcpUpChildCommand = func(args upArgs, composePath, logPath string) (*exec.Cm
 	return cmd, nil
 }
 
-// mcpUpInFlight remembers the child booting each compose dir, so a second
-// corgi_up during a cold boot gets the same handle instead of a second boot.
 var (
 	mcpUpInFlightMu sync.Mutex
 	mcpUpInFlight   = map[string]upHandle{}
 )
 
-// mcpUpDetached starts the stack in a child process and waits at most wait
-// for it. The child owns every beforeStart, so a cold boot never holds the
-// tool call (or the handler lock) for minutes.
 func mcpUpDetached(args upArgs, wait time.Duration) (upLaunch, error) {
 	ctx, err := loadComposeCtx(args.ComposePath)
 	if err != nil {
@@ -145,8 +131,6 @@ func mcpUpDetached(args upArgs, wait time.Duration) (upLaunch, error) {
 	mcpUpInFlight[composeDir] = handle
 	mcpUpInFlightMu.Unlock()
 
-	// The child is reaped here whenever it ends; the goroutine lives exactly
-	// as long as the child, not the request.
 	exited := make(chan error, 1)
 	go func() {
 		exited <- cmd.Wait()

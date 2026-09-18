@@ -11,8 +11,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// The editor's "Work on it" comes through the CLI: a ref finds its issue
-// row, the prompt goes by id, and a refusal is a sentence, not a spool entry.
 func TestWorkOnCommandFromARef(t *testing.T) {
 	dir := phoneBoard(t, true)
 	os.MkdirAll(filepath.Join(dir, "watch"), 0o700)

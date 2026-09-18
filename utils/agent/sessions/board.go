@@ -1,18 +1,5 @@
 package sessions
 
-// Board is the fixed array of keys. Slot assignment lives here, not in the
-// plugin: a plugin restarts whenever the Stream Deck app does, and a board
-// that reshuffled on every restart would be a board nobody could learn.
-//
-// Rules, in priority order:
-//  1. A pinned slot never moves.
-//  2. A new session takes the lowest free index. Nothing is ever re-sorted.
-//  3. A session that ends frees its index, unless pinned, in which case the
-//     slot keeps the id and the session reads "gone" until unpinned.
-//  4. A free slot with sessions in overflow takes the oldest overflow entry.
-//  5. With overflow, the highest unpinned slot becomes the pager. Its own
-//     session is hidden behind the "+N", and paging rotates the unpinned
-//     slots through the overflow.
 type Board struct {
 	Size     int      `json:"size"`
 	Slots    []string `json:"slots"`
@@ -20,10 +7,8 @@ type Board struct {
 	Overflow []string `json:"overflow,omitempty"`
 }
 
-// DefaultSize is a Stream Deck Mini.
 const DefaultSize = 6
 
-// NewBoard returns an empty board of size keys.
 func NewBoard(size int) Board {
 	if size <= 0 {
 		size = DefaultSize
@@ -31,8 +16,6 @@ func NewBoard(size int) Board {
 	return Board{Size: size, Slots: make([]string, size), Pinned: make([]bool, size)}
 }
 
-// Resize keeps every assignment that still fits and moves the rest to the
-// front of the overflow, so shrinking the board loses no session.
 func (b *Board) Resize(size int) {
 	if size <= 0 || size == b.Size {
 		return
@@ -52,7 +35,6 @@ func (b *Board) Resize(size int) {
 	b.fill()
 }
 
-// IndexOf is the slot holding id, or -1.
 func (b *Board) IndexOf(id string) int {
 	for i, s := range b.Slots {
 		if s == id && id != "" {
@@ -62,7 +44,6 @@ func (b *Board) IndexOf(id string) int {
 	return -1
 }
 
-// Has reports whether id is on the board or in its overflow.
 func (b *Board) Has(id string) bool {
 	if b.IndexOf(id) >= 0 {
 		return true
@@ -75,7 +56,6 @@ func (b *Board) Has(id string) bool {
 	return false
 }
 
-// Place seats a new session: lowest free slot, else the end of the overflow.
 func (b *Board) Place(id string) {
 	if id == "" || b.Has(id) {
 		return
@@ -89,8 +69,6 @@ func (b *Board) Place(id string) {
 	b.Overflow = append(b.Overflow, id)
 }
 
-// Remove frees a session's seat. A pinned slot keeps the id (the caller marks
-// the session gone) and reports true, so the session record must survive.
 func (b *Board) Remove(id string) (kept bool) {
 	if i := b.IndexOf(id); i >= 0 {
 		if b.Pinned[i] {
@@ -104,8 +82,6 @@ func (b *Board) Remove(id string) (kept bool) {
 	return false
 }
 
-// Rename swaps one id for another in place, for a rescan placeholder that
-// just learned its real session id.
 func (b *Board) Rename(old, id string) {
 	if i := b.IndexOf(old); i >= 0 {
 		b.Slots[i] = id
@@ -118,9 +94,6 @@ func (b *Board) Rename(old, id string) {
 	}
 }
 
-// Pin reserves a slot for whatever it holds. Unpinning a slot whose session
-// is gone frees it; the caller drops the session. Returns false for an index
-// off the board or an empty slot (there is nothing to keep).
 func (b *Board) Pin(index int, on bool) bool {
 	if index < 0 || index >= b.Size {
 		return false
@@ -132,13 +105,11 @@ func (b *Board) Pin(index int, on bool) bool {
 	return true
 }
 
-// Pinned reports whether id sits in a pinned slot.
 func (b *Board) IsPinned(id string) bool {
 	i := b.IndexOf(id)
 	return i >= 0 && b.Pinned[i]
 }
 
-// Free empties a slot outright, pinned or not, and refills it from overflow.
 func (b *Board) Free(index int) {
 	if index < 0 || index >= b.Size {
 		return
@@ -148,8 +119,6 @@ func (b *Board) Free(index int) {
 	b.fill()
 }
 
-// PagerIndex is the slot showing "+N", or -1 when nothing overflows or every
-// slot is pinned.
 func (b *Board) PagerIndex() int {
 	if len(b.Overflow) == 0 {
 		return -1
@@ -162,8 +131,6 @@ func (b *Board) PagerIndex() int {
 	return -1
 }
 
-// Hidden counts the sessions a pager stands for: the overflow plus the one
-// behind the pager key itself.
 func (b *Board) Hidden() int {
 	if b.PagerIndex() < 0 {
 		return len(b.Overflow)
@@ -171,9 +138,6 @@ func (b *Board) Hidden() int {
 	return len(b.Overflow) + 1
 }
 
-// Page rotates the unpinned slots through the overflow: +1 shows the next
-// page, -1 the previous. The pager key's own hidden session leads the next
-// page, so nothing is skipped.
 func (b *Board) Page(direction int) bool {
 	if len(b.Overflow) == 0 || direction == 0 {
 		return false
@@ -205,7 +169,6 @@ func (b *Board) Page(direction int) bool {
 	return true
 }
 
-// fill promotes overflow into free unpinned slots, oldest first.
 func (b *Board) fill() {
 	for i, s := range b.Slots {
 		if len(b.Overflow) == 0 {

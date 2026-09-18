@@ -36,10 +36,9 @@ const githubNotifications = `[
 ]`
 
 type githubFake struct {
-	srv      *httptest.Server
-	requests atomic.Int32
-	users    atomic.Int32
-	// notifications is what /notifications answers; tests swap the feed.
+	srv           *httptest.Server
+	requests      atomic.Int32
+	users         atomic.Int32
 	notifications string
 }
 
@@ -92,9 +91,6 @@ func TestGitHubPoll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// n5 is a bot linking the ticket and n6 is my own comment: GitHub tells
-	// the thread's author about both. My own never comes through; the
-	// bot's does, tagged, for the rules to weigh.
 	if len(events) != 3 || !events[2].Bot || events[2].Author == "" {
 		t.Fatalf("events = %d, want 3 with the bot's tagged: %+v", len(events), events)
 	}
@@ -102,16 +98,12 @@ func TestGitHubPoll(t *testing.T) {
 		t.Fatal("a bot's comment counts only with --bots")
 	}
 	review, comment := events[0], events[1]
-	// review_requested is someone asking me to review THEIR pull request.
 	if review.Kind != KindReviewRequested || review.Mine || review.Ref != "acme/api#12" ||
 		review.Key != "github:acme/api#12:n1:2026-09-09T10:00:00Z" ||
 		review.URL != "https://github.com/acme/api/pull/12" || review.Title != "Add retries" ||
 		review.Source != "github" || review.At.IsZero() {
 		t.Errorf("review event = %+v", review)
 	}
-	// The notification names the pull request; the comment itself — who,
-	// what — is one more call, so the line a person reads is not "someone
-	// commented on acme/web#7:" and nothing.
 	if comment.Kind != KindPRComment || !comment.Mine || comment.Ref != "acme/web#7" ||
 		comment.Author != "maria" || comment.Body != "can you add a test for the empty case?" {
 		t.Errorf("comment event = %+v", comment)
@@ -122,14 +114,10 @@ func TestGitHubPoll(t *testing.T) {
 	if cursor["me"] != "andrii" || cursor["lastModified"] != "Wed, 09 Sep 2026 10:00:00 GMT" || cursor["pollInterval"] != "60" {
 		t.Errorf("cursor = %v", cursor)
 	}
-	// /user, the notifications list, one lookup per pull request to find
-	// out whether it is still open — a notification does not say — and the
-	// one comment worth reading.
 	if g.Me != "andrii" || f.users.Load() != 1 || f.requests.Load() != 8 {
 		t.Errorf("me = %q, /user calls = %d, requests = %d", g.Me, f.users.Load(), f.requests.Load())
 	}
 
-	// Second round: If-Modified-Since → 304, one request, same cursor, no /user.
 	events, next, err := g.Poll(context.Background(), cursor)
 	if err != nil {
 		t.Fatal(err)
@@ -194,10 +182,6 @@ func TestGitHubUnauthorized(t *testing.T) {
 	}
 }
 
-// GitHub tells a pull request's author about everything on it — a push, an
-// edit, the opening itself — with reason "author" and no comment to point
-// at. Those read as "someone commented on …" with nobody and nothing behind
-// them; the phone rang for every push to my own draft.
 const githubAuthorActivity = `[
   {"id":"p1","reason":"author","updated_at":"2026-09-14T07:06:14Z",
    "subject":{"title":"Tracking consent","url":"https://api.github.com/repos/acme/app/pulls/258","type":"PullRequest",
@@ -225,8 +209,6 @@ func TestGitHubPollSkipsAuthorActivityWithoutAComment(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("events = %d, want only the review with words in it: %+v", len(events), events)
 	}
-	// A review someone wrote still arrives: it has a comment URL, an author
-	// and a body, so the line a person reads is a line a person can act on.
 	if e := events[0]; e.Ref != "acme/api#9" || e.Author != "maria" || e.Body != "looks good, one nit inline" {
 		t.Errorf("review event = %+v", e)
 	}

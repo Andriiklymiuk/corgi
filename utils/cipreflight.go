@@ -6,16 +6,11 @@ import (
 	"strings"
 )
 
-// Overridable so the container probe can be tested without one.
 var (
 	dockerEnvMarkerPath = "/.dockerenv"
 	initCgroupPath      = "/proc/1/cgroup"
 )
 
-// InContainer reports whether this process is running inside a container.
-// corgi's generated connection strings assume services share the localhost its
-// database containers publish to; a CI job in its own container does not, and
-// the failure reads as "postgres is down" rather than "wrong runner".
 func InContainer() bool {
 	if _, err := os.Stat(dockerEnvMarkerPath); err == nil {
 		return true
@@ -33,20 +28,12 @@ func InContainer() bool {
 	return false
 }
 
-// MissingEnvSource is a service whose declared env file is not on disk.
 type MissingEnvSource struct {
-	Service string `json:"service"`
-	// Declared is copyEnvFromFilePath as written, with ${tier} substituted.
+	Service  string `json:"service"`
 	Declared string `json:"declared"`
-	// Fallback is what corgi would silently use instead — usually a committed
-	// .env-example, whose placeholder values start the service and then fail at
-	// the first request, far from the cause.
 	Fallback string `json:"fallback,omitempty"`
 }
 
-// MissingEnvSources lists the services whose copyEnvFromFilePath does not
-// resolve. Those files are almost always gitignored, so a CI runner has none of
-// them — the most common reason a first pipeline never boots.
 func MissingEnvSources(corgi *CorgiCompose) []MissingEnvSource {
 	var missing []MissingEnvSource
 	for _, service := range sortedServices(corgi) {

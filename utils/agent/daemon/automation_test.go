@@ -17,11 +17,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// The two switches a workspace flips once and forgets: a review lands on a
-// branch a session owns and the session hears it as its next message; a
-// pull request the forge calls ready is merged. Both read the config as it
-// is now, so a phone that flipped them needs no daemon restart.
-
 func writeWatchConfig(t *testing.T, d *Daemon, workspace, yaml string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(d.Dir, "config.yml"), []byte("workspaces:\n  "+workspace+":\n    watch:\n      enabled: true\n"+yaml), 0o600); err != nil {
@@ -31,7 +26,6 @@ func writeWatchConfig(t *testing.T, d *Daemon, workspace, yaml string) {
 
 func TestAReviewIsHandedToTheSessionOnItsBranch(t *testing.T) {
 	d := trackingDaemon(t)
-	// The send finishes with a board write; the temp dir must outlive it.
 	t.Cleanup(d.swaps.Wait)
 	var mu sync.Mutex
 	var typed []string
@@ -47,7 +41,6 @@ func TestAReviewIsHandedToTheSessionOnItsBranch(t *testing.T) {
 	writeWatchConfig(t, d, "acme", "      handOver: true\n")
 	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir, Repos: []string{"acme/api"}, Rules: watch.Rules{Enabled: true, PRs: true}, Action: "notify"}}
 	d.startWatches(context.Background())
-	// A session in a terminal, on the branch whose pull request this is.
 	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", Cwd: "/tmp/acme-api", ClaudePID: 100, TermProgram: "iTerm.app", TTY: 5, PR: "https://github.com/acme/api/pull/7", At: time.Now()})
 
 	e := watch.Event{Key: "github:acme/api#7:r1", Source: "github", Kind: watch.KindPRReview, Ref: "acme/api#7", Title: "Add retries", Author: "dan", Body: "line 40 is wrong", URL: "https://github.com/acme/api/pull/7#pullrequestreview-1", Mine: true, At: time.Now()}
@@ -66,7 +59,6 @@ func TestAReviewIsHandedToTheSessionOnItsBranch(t *testing.T) {
 	if h, ok := watch.LoadHands(d.Dir).Get(e.Key); !ok || h.To != "s1" || h.By != "daemon" {
 		t.Fatalf("the row carries the mark: %+v %v", h, ok)
 	}
-	// Once: the same event again is not typed twice.
 	d.handOverEvent(context.Background(), d.Watches[0], e)
 	mu.Lock()
 	n := len(typed)
@@ -89,7 +81,6 @@ func TestAReadyPullRequestIsMergedWhenTheWorkspaceSaysSo(t *testing.T) {
 	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir}
 	link := "https://github.com/acme/api/pull/7"
 	ready := watch.PullStatus{State: "open", Checks: "passing", Review: "approved", At: time.Now()}
-	// Not yet: review pending.
 	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, watch.PullStatus{State: "open", Checks: "passing", Review: "pending", At: time.Now()}, false)
 	if len(merged) != 0 {
 		t.Fatalf("merged too early: %v", merged)
@@ -102,7 +93,6 @@ func TestAReadyPullRequestIsMergedWhenTheWorkspaceSaysSo(t *testing.T) {
 	if st, ok := watch.LoadPullLog(d.Dir).Get("acme/api#7"); !ok || st.State != "merged" {
 		t.Fatalf("the log says merged: %+v %v", st, ok)
 	}
-	// The switch off: nothing merges.
 	writeWatchConfig(t, d, "acme", "      autoMerge: false\n")
 	d.pullChanged(context.Background(), spec, "acme/api#8", "https://github.com/acme/api/pull/8", watch.PullStatus{}, ready, false)
 	if len(merged) != 1 {
@@ -110,10 +100,6 @@ func TestAReadyPullRequestIsMergedWhenTheWorkspaceSaysSo(t *testing.T) {
 	}
 }
 
-// A read in a workspace whose policy is reads is answered by the daemon —
-// Enter into the iTerm2 tab, nothing pushed, the row counting it; a write
-// in the same workspace, a read elsewhere, and a read in a session the
-// daemon cannot type into quietly all ring as before.
 func TestAReadIsAllowedByTheWorkspacePolicy(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
@@ -154,12 +140,10 @@ func TestAReadIsAllowedByTheWorkspacePolicy(t *testing.T) {
 	if s, _ := d.Sessions.Lookup("s1"); s.AutoAllowed != 1 {
 		t.Fatalf("the row counts it: %+v", s)
 	}
-	// A write, and a Bash read, still ask.
 	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Read", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Edit", Subject: "main.go", Risk: "writes", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Edit", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "cat main.go", Risk: "reads", At: now})
-	// A read in a workspace with no policy, and one in a VS Code terminal.
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s2", Cwd: "/tmp/other", ClaudePID: 2, TermProgram: "iTerm.app", TTY: 6, At: now})
 	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s2", Tool: "Read", Subject: "a.go", Risk: "reads", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s3", Cwd: "/tmp/acme", ClaudePID: 3, TermProgram: "vscode", At: now})
@@ -172,10 +156,6 @@ func TestAReadIsAllowedByTheWorkspacePolicy(t *testing.T) {
 	}
 }
 
-// A session that stops with changes on its branch is not done until the
-// workspace's done-when says so: a red command is typed back with its
-// tail, the row shows tests ✗ and the streak; green clears it. After
-// three reds in a row the daemon rings instead of typing.
 func TestAStopIsGatedByTheWorkspacesDoneWhen(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
@@ -198,7 +178,6 @@ func TestAStopIsGatedByTheWorkspacesDoneWhen(t *testing.T) {
 	now := time.Now()
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: t.TempDir(), ClaudePID: 1, TermProgram: "iTerm.app", TTY: 5, At: now})
 	d.Sessions.Apply(sessions.Event{Name: "PreToolUse", SessionID: "s1", Tool: "Edit", Subject: "main.go", At: now})
-	// A stop with nothing on the branch is a stop.
 	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
 	d.runs.Wait()
 	if s, _ := d.Sessions.Lookup("s1"); s.Gate != nil {
@@ -218,7 +197,6 @@ func TestAStopIsGatedByTheWorkspacesDoneWhen(t *testing.T) {
 	if s.Gate == nil || s.Gate.OK || s.Gate.Fails != 1 || s.Tests == nil || s.Tests.OK || s.Tests.Cmd != "echo boom; echo bang; exit 1" {
 		t.Fatalf("the row says red: gate %+v tests %+v", s.Gate, s.Tests)
 	}
-	// Green clears it, and nothing is typed.
 	policy = Policy{DoneWhen: []string{"true"}}
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
@@ -233,7 +211,6 @@ func TestAStopIsGatedByTheWorkspacesDoneWhen(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("green types nothing: %v", typed)
 	}
-	// Past three reds in a row the daemon rings a person.
 	policy = Policy{DoneWhen: []string{"exit 1"}}
 	for i := 0; i < 4; i++ {
 		d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
@@ -251,8 +228,6 @@ func TestAStopIsGatedByTheWorkspacesDoneWhen(t *testing.T) {
 	}
 }
 
-// A session that stops past the workspace's context threshold is told to
-// /compact, once per episode; under it, nothing.
 func TestAFullSessionIsCompactedWhenItStops(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
@@ -295,7 +270,6 @@ func TestAFullSessionIsCompactedWhenItStops(t *testing.T) {
 	if s, _ := d.Sessions.Lookup("s1"); s.Compacted != 1 || s.CompactedAt.IsZero() {
 		t.Fatalf("counted: %+v", s)
 	}
-	// Still 90% a moment later (the compact has not landed yet): not again.
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
 	d.Sessions.Apply(post)
 	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
@@ -307,8 +281,6 @@ func TestAFullSessionIsCompactedWhenItStops(t *testing.T) {
 	}
 }
 
-// With lessons on, a review on a pull request of mine is written down for
-// the next session, once; a workspace without the switch learns nothing.
 func TestAReviewOnMyPullRequestBecomesALesson(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Notify = func(_, _ string) {}
@@ -322,7 +294,6 @@ func TestAReviewOnMyPullRequestBecomesALesson(t *testing.T) {
 	if len(got) != 1 || got[0].Source != "pr.review acme/api#7 (dan)" || got[0].Text != "retries need a cap" {
 		t.Fatalf("%+v", got)
 	}
-	// Somebody else's pull request is not my lesson.
 	theirs := e
 	theirs.Key, theirs.Mine, theirs.Body = "github:acme/api#8:r1", false, "use a queue"
 	d.handleWatchEvent(context.Background(), theirs)
@@ -331,8 +302,6 @@ func TestAReviewOnMyPullRequestBecomesALesson(t *testing.T) {
 	}
 }
 
-// The daily digest reaches the phones too: the first lines as a push in
-// the "brief" category, once a day.
 func TestTheDailyDigestIsPushedToThePhone(t *testing.T) {
 	d := testDaemon(t)
 	d.DigestAt = "00:00"
@@ -357,8 +326,6 @@ func TestTheDailyDigestIsPushedToThePhone(t *testing.T) {
 	}
 }
 
-// While muted nothing rings — no toast, no push, not even a permission —
-// and the board says until when; when it passes, everything rings again.
 func TestAMuteHoldsEveryRing(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
@@ -382,7 +349,6 @@ func TestAMuteHoldsEveryRing(t *testing.T) {
 	if st := d.Sessions.Snapshot(time.Now()); st.MutedUntil.IsZero() {
 		t.Fatal("the board says muted")
 	}
-	// Off: the next attention rings, and the board clears.
 	if err := SetMute(d.Dir, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +357,6 @@ func TestAMuteHoldsEveryRing(t *testing.T) {
 	if st := d.Sessions.Snapshot(time.Now()); !st.MutedUntil.IsZero() {
 		t.Fatal("the board rings again")
 	}
-	// A mute in the past is no mute.
 	_ = SetMute(d.Dir, time.Now().Add(-time.Minute))
 	if !MutedUntil(d.Dir).IsZero() {
 		t.Fatal("passed")

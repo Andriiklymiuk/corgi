@@ -1,7 +1,6 @@
 package utils
 
 import (
-	// The notification sound is embedded with go:embed below.
 	_ "embed"
 	"fmt"
 	"net/url"
@@ -39,8 +38,6 @@ func notifyIconPath() string {
 	return notifyIconFile
 }
 
-// notifyThrottleWindow is the dedupe gap between two notifications with
-// the same title+body — stops crash-loop services from spamming toasts.
 var notifyThrottleWindow = 30 * time.Second
 
 var (
@@ -59,16 +56,11 @@ func loadNotifyEnabled() bool {
 	return notifyConfigEnabled.Load()
 }
 
-// ResetNotifyCache forces the next Notify to re-read ~/.corgi/config.yml.
-// Call after SaveUserConfig if an in-process toggle should take effect now.
 func ResetNotifyCache() {
 	notifyConfigOnce = sync.Once{}
 	notifyConfigEnabled.Store(false)
 }
 
-// Notify sends a desktop notification if the user opted in via doctor.
-// Same-message notifications inside notifyThrottleWindow are dropped so
-// a crash-looping service can't spam the desktop. Fails silently.
 func Notify(title, body string) {
 	if !loadNotifyEnabled() {
 		return
@@ -87,7 +79,6 @@ func claimNotifyToken(key string) bool {
 		return false
 	}
 	notifyLastSent[key] = now
-	// Sweep expired entries at high-water mark so the map stays bounded.
 	if len(notifyLastSent) > 1024 {
 		for k, t := range notifyLastSent {
 			if now.Sub(t) > notifyThrottleWindow {
@@ -98,15 +89,12 @@ func claimNotifyToken(key string) bool {
 	return true
 }
 
-// ResetNotifyThrottleForTests clears the dedupe map.
 func ResetNotifyThrottleForTests() {
 	notifyThrottleMu.Lock()
 	defer notifyThrottleMu.Unlock()
 	notifyLastSent = map[string]time.Time{}
 }
 
-// NotifyRaw sends a notification without checking the opt-in flag. Used
-// by doctor and `corgi config notifications test` to fire one regardless.
 func NotifyRaw(title, body string) {
 	sendNotification(title, body)
 }
@@ -121,12 +109,8 @@ var notifyLink string
 
 var sendNotificationOverride func(title, body string)
 
-// runNotifyCommand is the dispatch, replaced in tests so building the argv can
-// be exercised without a toast appearing on the developer's own screen.
 var runNotifyCommand = func(cmd *exec.Cmd) error { return cmd.Run() }
 
-// SilenceNotifyDispatchForTests keeps the per-OS argv building under test while
-// stopping anything from actually being displayed.
 func SilenceNotifyDispatchForTests(t interface{ Cleanup(func()) }) {
 	original := runNotifyCommand
 	runNotifyCommand = func(*exec.Cmd) error { return nil }
@@ -135,7 +119,6 @@ func SilenceNotifyDispatchForTests(t interface{ Cleanup(func()) }) {
 
 func SilenceNotificationsForTests() {
 	sendNotificationOverride = func(string, string) {
-		// no desktop alerts in tests
 	}
 }
 
@@ -147,9 +130,6 @@ func sendNotification(title, body string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		// terminal-notifier (if installed via brew) gives toasts proper
-		// "corgi" branding + survives Focus filters that block Script
-		// Editor by default. Fall back to osascript otherwise.
 		if path, err := exec.LookPath("terminal-notifier"); err == nil {
 			args := []string{
 				"-title", title,
@@ -172,11 +152,10 @@ func sendNotification(title, body string) {
 			`display notification %q with title %q`,
 			body, title,
 		)
-		cmd = exec.Command("osascript", "-e", script) // NOSONAR — system binary
+		cmd = exec.Command("osascript", "-e", script)
 	case "linux":
-		cmd = exec.Command("notify-send", title, body) // NOSONAR — system binary
+		cmd = exec.Command("notify-send", title, body)
 	case "windows":
-		// PowerShell toast via Windows Runtime APIs (works on Win 10+).
 		ps := fmt.Sprintf(
 			`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; `+
 				`$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); `+
@@ -186,14 +165,13 @@ func sendNotification(title, body string) {
 				`[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('corgi').Show($notif)`,
 			powershellQuote(title), powershellQuote(body),
 		)
-		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", ps) // NOSONAR — system binary
+		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", ps)
 	default:
 		return
 	}
-	_ = runNotifyCommand(cmd) // best-effort; notification failure is never fatal
+	_ = runNotifyCommand(cmd)
 }
 
-// IsNotificationsEnabled returns true when the user has opted into notifications.
 func IsNotificationsEnabled() bool {
 	cfg, err := LoadUserConfig()
 	if err != nil {

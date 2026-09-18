@@ -12,10 +12,6 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-// A bot with `on` runs by itself when its kind arrives in its workspace:
-// as its own persona (the soul on the command line), filed under its name
-// in the fix log with what it said — beside, not instead of, the
-// workspace's own notify. A bot without `on` never runs on its own.
 func TestABotRunsOnItsOwnKinds(t *testing.T) {
 	d := testDaemon(t)
 	notes := make(chan string, 8)
@@ -56,9 +52,6 @@ func TestABotRunsOnItsOwnKinds(t *testing.T) {
 	}
 }
 
-// A bot whose run fails gets one more try a rung up the ladder — sonnet
-// after haiku, opus after sonnet or the default — and the record says so;
-// an opus bot has nowhere to go and fails once.
 func TestAFailedBotRunRetriesOneModelUp(t *testing.T) {
 	d := testDaemon(t)
 	notes := make(chan string, 8)
@@ -70,8 +63,6 @@ func TestAFailedBotRunRetriesOneModelUp(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		ran = append(ran, strings.Join(args, " "))
-		// The reviewer's first attempt falls over; its retry on opus says
-		// its line. Big fails on its own model.
 		if line := strings.Join(args, " "); strings.Contains(line, "Be brief.") && strings.Contains(line, "--model opus") {
 			return exec.CommandContext(ctx, "echo", "two findings, no merge")
 		}
@@ -101,7 +92,6 @@ func TestAFailedBotRunRetriesOneModelUp(t *testing.T) {
 			opus++
 		}
 	}
-	// reviewer: sonnet then opus; big: opus once (its own model), no retry.
 	if sonnet != 1 || opus != 2 {
 		t.Fatalf("ladder: %v", ran)
 	}

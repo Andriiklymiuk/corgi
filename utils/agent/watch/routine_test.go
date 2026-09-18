@@ -8,7 +8,7 @@ import (
 
 func TestSchedulesParseAndComeDue(t *testing.T) {
 	loc := time.Local
-	mon0900 := time.Date(2026, 9, 14, 9, 0, 0, 0, loc) // a Monday
+	mon0900 := time.Date(2026, 9, 14, 9, 0, 0, 0, loc)
 	for text, want := range map[string]string{"daily 08:30": "daily 08:30", "every 2h": "every 2h0m0s", "weekly mon 09:00": "weekly Mon 09:00", "Weekly Friday 16:00": "weekly Fri 16:00"} {
 		s, err := ParseSchedule(text)
 		if err != nil || s.String() != want {
@@ -47,8 +47,6 @@ func TestSchedulesParseAndComeDue(t *testing.T) {
 	}
 }
 
-// A routine's report is the newest one per routine, for a day; other rows
-// are untouched.
 func TestRoutineReportsAgeOutOfTheInbox(t *testing.T) {
 	now := time.Now()
 	k := NewInboxKeeper(now)
@@ -61,9 +59,6 @@ func TestRoutineReportsAgeOutOfTheInbox(t *testing.T) {
 	}
 }
 
-// A thread that was updated twice — a pull request commented on at ten and
-// again at noon — is one row, the newest, not one per poll that noticed it.
-// Dismissing that newest row must not surface the older one underneath.
 func TestOneInboxRowPerThread(t *testing.T) {
 	now := time.Now()
 	k := NewInboxKeeper(now)
@@ -75,8 +70,6 @@ func TestOneInboxRowPerThread(t *testing.T) {
 	}
 }
 
-// Every catalog entry has a schedule the parser takes; the suggest one is
-// weekly and puts its idea on the board rather than in the repository.
 func TestTheCatalogDefaultsParse(t *testing.T) {
 	for _, k := range Catalog {
 		if _, err := ParseSchedule(k.Default); err != nil {

@@ -169,7 +169,6 @@ func TestDeliverEventSpoolsOnlyForARunningDaemon(t *testing.T) {
 	if entries, _ := os.ReadDir(filepath.Join(dir, "commands")); len(entries) != 0 {
 		t.Fatalf("no daemon, no spool file — the spool would grow forever: %d entries", len(entries))
 	}
-	// A record naming this very process passes the liveness and name checks.
 	exe, _ := os.Executable()
 	data, _ := json.Marshal(daemon.Info{PID: os.Getpid(), Executable: exe, Commands: true})
 	_ = os.MkdirAll(dir, 0o700)
@@ -264,7 +263,6 @@ func TestEnableTrackingMergesAndDisableStrips(t *testing.T) {
 		t.Fatal("hasTrackingHooks")
 	}
 
-	// --no-tab-title removes the title hook on a re-enable.
 	if err := enableTrackingIn(path, "corgi", false); err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +456,6 @@ func TestTrackingHooksStaleSpotsAnOlderHookSet(t *testing.T) {
 		t.Fatal("what this version just wrote is not stale")
 	}
 
-	// The 1.21.58 shape: no context hook, PreToolUse on every tool.
 	settings, _ := readUserSettings(path)
 	hooks, _ := settings["hooks"].(map[string]any)
 	hooks["SessionStart"] = []any{map[string]any{

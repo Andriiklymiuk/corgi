@@ -22,7 +22,6 @@ func TestTopoSortServices_NoDeps(t *testing.T) {
 }
 
 func TestTopoSortServices_LinearDep(t *testing.T) {
-	// Only cross-service ${producer.VAR} refs add ordering edges.
 	services := []Service{
 		{
 			ServiceName:       "consumer",
@@ -41,7 +40,6 @@ func TestTopoSortServices_LinearDep(t *testing.T) {
 }
 
 func TestTopoSortServices_Cycle(t *testing.T) {
-	// Real cycle: both sides reference each other's exports.
 	services := []Service{
 		{
 			ServiceName:       "a",
@@ -67,8 +65,6 @@ func TestTopoSortServices_Cycle(t *testing.T) {
 }
 
 func TestTopoSortServices_SoftCodependency(t *testing.T) {
-	// Two services depend on each other via envAlias only — no cross-ref.
-	// Should NOT cycle: emitted values are static localhost:port.
 	services := []Service{
 		{
 			ServiceName:       "api",
@@ -89,7 +85,6 @@ func TestTopoSortServices_SoftCodependency(t *testing.T) {
 }
 
 func TestTopoSortServices_SelfDep(t *testing.T) {
-	// Service listing itself as dep (for own BASE_URL alias) must not cycle.
 	services := []Service{
 		{
 			ServiceName:       "a",
@@ -106,9 +101,6 @@ func TestTopoSortServices_SelfDep(t *testing.T) {
 }
 
 func TestResolveExportsFixedPoint_BidirectionalLiterals(t *testing.T) {
-	// Real codependency that topo-sort can't order: both services have
-	// hard ${other.VAR} refs but the export VALUES themselves are static
-	// literals so resolution converges in one fixed-point pass.
 	c := &CorgiCompose{
 		Services: []Service{
 			{
@@ -138,9 +130,6 @@ func TestResolveExportsFixedPoint_BidirectionalLiterals(t *testing.T) {
 }
 
 func TestResolveExportsFixedPoint_TransitiveResolution(t *testing.T) {
-	// A exports a literal that references B's export. B's export references
-	// A's literal-only export (not the ${b.X} one). Fixed-point should
-	// resolve in a couple of iterations.
 	c := &CorgiCompose{
 		Services: []Service{
 			{
@@ -168,7 +157,6 @@ func TestResolveExportsFixedPoint_TransitiveResolution(t *testing.T) {
 }
 
 func TestResolveExportsFixedPoint_TrueVarLevelCycle(t *testing.T) {
-	// A.X = ${b.Y}, B.Y = ${a.X}. Genuine cycle — fixed-point cannot resolve.
 	c := &CorgiCompose{
 		Services: []Service{
 			{
@@ -193,8 +181,6 @@ func TestResolveExportsFixedPoint_TrueVarLevelCycle(t *testing.T) {
 }
 
 func TestTopoSortServices_MixedHardSoft(t *testing.T) {
-	// api consumes notif's TOKEN (hard); notif aliases api's URL (soft).
-	// Order must be notif → api. No cycle.
 	services := []Service{
 		{
 			ServiceName:       "api",
@@ -363,7 +349,6 @@ func TestSubstituteServiceVars_StripsSkippedProducerRef(t *testing.T) {
 		t.Fatalf("expected 'prefix--suffix', got %q", got)
 	}
 
-	// findStuckExports must not flag this as a cycle.
 	if stuck := findStuckExports(out); len(stuck) > 0 {
 		t.Fatalf("expected no stuck exports, got %v", stuck)
 	}
@@ -440,7 +425,6 @@ func TestSubstituteCrossServiceRefs_OwnVarUnchanged(t *testing.T) {
 	}
 }
 
-// resetServiceShell clears the once-cached shell so each test resolves fresh.
 func resetServiceShell() {
 	serviceShellOnce = sync.Once{}
 	serviceShellPath = ""
