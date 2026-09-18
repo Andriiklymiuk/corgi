@@ -54,7 +54,10 @@ type WatchSpec struct {
 	Project  string   // tracker key prefix: ABC-123 belongs to ABC
 	Repos    []string // owner/repo
 	Rules    watch.Rules
-	Sources  []watch.Source
+	// Chat is the workspace's Slack: who may start a run from a mention,
+	// where a reply goes, in whose voice.
+	Chat    *config.SlackWatch
+	Sources []watch.Source
 	// Skipped names the sources the rules can never use, so status can say
 	// why they are not polled.
 	Skipped  []string

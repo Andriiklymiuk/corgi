@@ -223,6 +223,11 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("bots") {
 			wc.Bots, _ = flags.GetBool("bots")
 		}
+		if chat, err := chatFromFlags(flags, wc.Chat); err != nil {
+			return err
+		} else if chat != nil {
+			wc.Chat = chat
+		}
 		if flags.Changed(watchFlagAutoFor) {
 			v, _ := flags.GetString(watchFlagAutoFor)
 			kinds, err := parseAutoFor(v)
@@ -649,6 +654,60 @@ agent directory, mode 0600, next to the machine-wide ones.
 	},
 }
 
+// withoutSource drops one name from a skipped list.
+func withoutSource(list []string, drop string) []string {
+	out := list[:0]
+	for _, n := range list {
+		if n != drop {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// chatFromFlags folds the chat flags into the workspace's block; nil means
+// no chat flag was given and whatever is stored stands.
+func chatFromFlags(flags *pflag.FlagSet, current *config.ChatConfig) (*config.ChatConfig, error) {
+	touched := false
+	for _, n := range []string{"mentions", "channel", "review-channel", "run-from", "post-to", "reply-as"} {
+		if flags.Changed(n) {
+			touched = true
+		}
+	}
+	if !touched {
+		return nil, nil
+	}
+	out := &config.ChatConfig{Slack: &config.SlackWatch{}}
+	if current != nil && current.Slack != nil {
+		copied := *current.Slack
+		out.Slack = &copied
+	}
+	if flags.Changed("mentions") {
+		out.Slack.Mentions, _ = flags.GetBool("mentions")
+	}
+	if flags.Changed("channel") {
+		out.Slack.Channels, _ = flags.GetStringSlice("channel")
+	}
+	if flags.Changed("review-channel") {
+		out.Slack.ReviewChannels, _ = flags.GetStringSlice("review-channel")
+	}
+	if flags.Changed("run-from") {
+		out.Slack.RunFrom, _ = flags.GetStringSlice("run-from")
+	}
+	if flags.Changed("post-to") {
+		v, _ := flags.GetString("post-to")
+		out.Slack.PostTo = strings.TrimSpace(v)
+	}
+	if flags.Changed("reply-as") {
+		v, _ := flags.GetString("reply-as")
+		if v = strings.TrimSpace(v); v != "bot" && v != "me" && v != "" {
+			return nil, fmt.Errorf("--reply-as must be bot or me")
+		}
+		out.Slack.ReplyAs = v
+	}
+	return out, nil
+}
+
 func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 	dir := mustAgentDir()
 	specs, err := loadWatchSpecs(dir)
@@ -803,9 +862,23 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	} else {
 		utils.Infof("agent: watch %s: daysOff ignored: %v\n", w.ID, err)
 	}
+	if wc.Chat != nil && wc.Chat.Slack != nil {
+		spec.Chat = wc.Chat.Slack
+		spec.Rules.Mentions = wc.Chat.Slack.Mentions
+		spec.Rules.Channels = append(append([]string{}, wc.Chat.Slack.Channels...), wc.Chat.Slack.ReviewChannels...)
+		// A review channel is a request to review: asking for the channel is
+		// asking for the thing it carries, so it need not be said twice.
+		if len(wc.Chat.Slack.ReviewChannels) > 0 {
+			spec.Rules.Reviews = true
+		}
+	}
 	// A source the rules take nothing from is not built: polling it would
-	// only spend requests.
+	// only spend requests. A workspace that never asked for chat is not
+	// "skipping" it — there is nothing there to skip.
 	spec.Skipped = spec.Rules.DeadSources()
+	if wc.Chat == nil || wc.Chat.Slack == nil {
+		spec.Skipped = withoutSource(spec.Skipped, "slack")
+	}
 	spec.Interval = watchInterval(wc.Interval, spec.Interval)
 	spec.Sources = watchSources(spec.Rules, wc, secrets)
 	return spec, true
@@ -860,6 +933,15 @@ func watchSources(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secre
 	}
 	if !rules.DeadSource("gitlab") && secrets.GitLab != "" {
 		sources = append(sources, watch.NewGitLab(secrets))
+	}
+	if !rules.DeadSource("slack") && wc.Chat != nil && wc.Chat.Slack != nil {
+		if sl := watch.NewSlack(secrets, watch.SlackWatchConfig{
+			Mentions:       wc.Chat.Slack.Mentions,
+			Channels:       wc.Chat.Slack.Channels,
+			ReviewChannels: wc.Chat.Slack.ReviewChannels,
+		}); sl.Token() != "" {
+			sources = append(sources, sl)
+		}
 	}
 	return sources
 }
@@ -1175,6 +1257,12 @@ func init() {
 	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 sessions only)")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
+	f.Bool("mentions", false, "Ring when someone names you in Slack or writes to you directly (needs corgi agent watch auth slack)")
+	f.StringSlice("channel", nil, "Slack channels every message of which is news, e.g. #incidents (repeatable)")
+	f.StringSlice("review-channel", nil, "Slack channels where pull requests are posted for review: a post with links is one review, answered in its thread (repeatable)")
+	f.StringSlice("run-from", nil, "Who may start an unattended run by mentioning you in Slack, e.g. @vincent (repeatable); empty means nobody")
+	f.String("post-to", "", "Default Slack channel for corgi agent chat post")
+	f.String("reply-as", "", "Whose voice a reply speaks in: bot or me (default: the bot when a bot token is stored)")
 	f.String(watchFlagAutoFor, "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")
 	agentWatchRunCmd.Flags().Bool(watchFlagDryRun, false, "Do not advance the saved cursors")
 	tf := agentWatchTestCmd.Flags()
