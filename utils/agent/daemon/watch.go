@@ -240,6 +240,9 @@ func (d *Daemon) startWatches(ctx context.Context) {
 		return
 	}
 	d.loadWatchFiles()
+	onHot = func() {
+		go d.notifyAttentionAt("corgi agent", "the laptop is hot — no fix starts until it cools", "", "")
+	}
 	d.watchers = map[string]*watch.Watch{}
 	d.fixBusy = map[string]chan struct{}{}
 	for _, spec := range d.Watches {
@@ -625,6 +628,9 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	}
 	if q, err := ParseQuiet(spec.Quiet); err == nil && q.Contains(now) {
 		return "quiet hours"
+	}
+	if tooHot(now) {
+		return "too hot"
 	}
 	if pct, ok := limitUsed(spec.ConfigDir, now); ok {
 		if pct >= limitRefusePercent {
