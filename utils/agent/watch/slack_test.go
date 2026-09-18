@@ -209,3 +209,27 @@ func TestSlackDMIsAMention(t *testing.T) {
 		t.Fatalf("title = %q", events[0].Title)
 	}
 }
+
+func TestSlackMentionsSurviveAMissingListScope(t *testing.T) {
+	f := newSlackFake(t)
+	f.convList = `{"ok":false,"error":"missing_scope"}`
+	f.search = `{"ok":true,"messages":{"matches":[
+		{"ts":"1726000300.000100","text":"<@UME> ping","user":"UTM","username":"teammate",
+		 "channel":{"id":"C0IN","name":"incidents"},
+		 "permalink":"https://acme.slack.com/archives/C0IN/p1726000300000100"}
+	],"paging":{"page":1,"pages":1}}}`
+	s := newTestSlack(f, SlackWatchConfig{Mentions: true})
+
+	events, _, err := s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme", "search": "1726000200.000000"})
+	if err != nil {
+		t.Fatalf("a token with search:read alone still finds mentions: %v", err)
+	}
+	if len(events) != 1 || events[0].Kind != KindChatMention {
+		t.Fatalf("the mention from search: %+v", events)
+	}
+
+	s = newTestSlack(f, SlackWatchConfig{Mentions: true, Channels: []string{"#incidents"}})
+	if _, _, err := s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme"}); err == nil || !strings.Contains(err.Error(), "channels:read") {
+		t.Fatalf("a listened channel needs the list, and the error must name the scope: %v", err)
+	}
+}
