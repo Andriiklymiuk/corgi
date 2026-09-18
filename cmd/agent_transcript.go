@@ -68,6 +68,9 @@ side by side. --json prints {steps}; --max caps the steps, newest last.`,
 			if e.Kind == "tool" {
 				line = strings.TrimSpace(e.Tool + " " + e.Subject)
 			}
+			if e.Picture != "" {
+				line = strings.TrimSpace("🖼 picture " + line)
+			}
 			fmt.Printf("%-9s %s\n", e.Kind, firstLineOf(line))
 		}
 	},

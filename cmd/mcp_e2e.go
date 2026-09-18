@@ -179,7 +179,7 @@ func viewerMay(method, path string) bool {
 		return false
 	}
 	switch path {
-	case "/launch/transcript", "/launch/doctor", "/launch/sessions", "/launch/preview", "/launch/diff", "/launch/run":
+	case "/launch/transcript", "/launch/picture", "/launch/doctor", "/launch/sessions", "/launch/preview", "/launch/diff", "/launch/run":
 		return false
 	}
 	return true
