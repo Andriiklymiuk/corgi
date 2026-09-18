@@ -70,10 +70,7 @@ func (d *Daemon) continueHeadless(ctx context.Context, ref, text string) {
 		}()
 		ctx, cancel := context.WithTimeout(ctx, headlessTimeout)
 		defer cancel()
-		var env []string
-		if s.ConfigDir != "" {
-			env = append(env, "CLAUDE_CONFIG_DIR="+s.ConfigDir)
-		}
+		env := headlessEnv(s.ConfigDir, os.Getenv("CORGI_OMIT"))
 		args := []string{"-p", text, "--resume", s.ID, "--output-format", "json", "--permission-mode", "acceptEdits"}
 		logDir := filepath.Join(d.Dir, "watch", "runs")
 		_ = os.MkdirAll(logDir, 0o700)

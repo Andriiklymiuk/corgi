@@ -74,10 +74,7 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 	d.watchState.Fixes.SetBot(key, b.Name)
 	fmt.Fprintf(logFile, "=== %s bot %s on %s %s\n", time.Now().Format(time.RFC3339), b.Name, e.Kind, e.Ref)
 
-	var env []string
-	if configDir := botConfigDir(spec, b); configDir != "" {
-		env = append(env, "CLAUDE_CONFIG_DIR="+configDir)
-	}
+	env := headlessEnv(botConfigDir(spec, b), os.Getenv("CORGI_OMIT"))
 	prompt := BotRunPrompt(b, e)
 	dir := spec.Dir
 	if b.Isolate && d.Isolate != nil {

@@ -510,3 +510,33 @@ func TestFixDeferralTripCap(t *testing.T) {
 		t.Fatalf("budget: %+v %s", b, b.String())
 	}
 }
+
+func TestUnattendedSuffixForReviewRequests(t *testing.T) {
+	spec := WatchSpec{Workspace: "w"}
+	review := unattendedSuffix(spec, watch.Event{Kind: watch.KindReviewRequested, Ref: "org/repo#1", URL: "https://example.test/1"})
+	if strings.Contains(review, "Evidence") || strings.Contains(review, "pull request body") {
+		t.Fatal("a review of someone else's branch has no PR body to write")
+	}
+	if !strings.Contains(review, "Never ask a question") || !strings.Contains(review, "corgi agent handoff --ref org/repo#1") {
+		t.Fatal("the never-ask and handoff rules stay")
+	}
+	fix := unattendedSuffix(spec, watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-1"})
+	if !strings.Contains(fix, "## Evidence") || !strings.Contains(fix, "corgi watch · w · issue.new ABC-1") {
+		t.Fatal("a fix keeps the evidence section and the trail")
+	}
+}
+
+func TestHeadlessEnvSkipsVPN(t *testing.T) {
+	got := strings.Join(headlessEnv("/tmp/cfg", ""), " ")
+	if got != "CLAUDE_CONFIG_DIR=/tmp/cfg CORGI_OMIT=useAwsVpn" {
+		t.Fatal(got)
+	}
+	got = strings.Join(headlessEnv("", "useDocker"), " ")
+	if got != "CORGI_OMIT=useDocker,useAwsVpn" {
+		t.Fatal(got)
+	}
+	got = strings.Join(headlessEnv("", "useAwsVpn"), " ")
+	if got != "CORGI_OMIT=useAwsVpn" {
+		t.Fatal(got)
+	}
+}
