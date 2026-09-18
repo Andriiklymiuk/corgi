@@ -17,14 +17,18 @@ func TestMCPSwitchesMuteAndLessons(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{"workspace": "api", "autoAllow": "reads", "doneWhen": []any{"go test ./...", ""}, "compactAt": float64(85), "lessons": true}
+	req.Params.Arguments = map[string]any{"workspace": "api", "autoAllow": "reads", "doneWhen": []any{"go test ./...", ""}, "compactAt": float64(85), "lessons": true, "planReview": "risk>=7"}
 	out, err := mcpWatchSet(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sw := out.(map[string]any)["watch"].(WatchSwitches)
-	if sw.AutoAllow != "reads" || len(sw.DoneWhen) != 1 || sw.CompactAt != 85 || !sw.Lessons || sw.Rebase {
+	if sw.AutoAllow != "reads" || len(sw.DoneWhen) != 1 || sw.CompactAt != 85 || !sw.Lessons || sw.Rebase || sw.PlanReview != "risk>=7" {
 		t.Fatalf("%+v", sw)
+	}
+	req.Params.Arguments = map[string]any{"workspace": "api", "planReview": "sometimes"}
+	if _, err := mcpWatchSet(req); err == nil {
+		t.Fatal("plan-review is off, always or risk>=N")
 	}
 	got, _ := mcpWatchSwitches("api")
 	if list := got.(map[string]any)["workspaces"].([]WatchSwitches); len(list) != 1 || list[0].CompactAt != 85 {

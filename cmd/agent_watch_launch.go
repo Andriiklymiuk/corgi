@@ -12,30 +12,31 @@ import (
 )
 
 type WatchSwitches struct {
-	Workspace string   `json:"workspace"`
-	Enabled   bool     `json:"enabled"`
-	Action    string   `json:"action"`
-	Comments  bool     `json:"comments"`
-	PRs       bool     `json:"prs"`
-	Reviews   bool     `json:"reviews"`
-	CI        bool     `json:"ci"`
-	Labels    []string `json:"labels"`
-	Isolate   bool     `json:"isolate"`
-	Slots     int      `json:"slots"`
-	Quiet     string   `json:"quiet"`
-	DaysOff   []string `json:"daysOff"`
-	AutoMerge bool     `json:"autoMerge"`
-	Approve   bool     `json:"approve"`
-	HandOver  bool     `json:"handOver"`
-	AutoAllow string   `json:"autoAllow"`
-	DoneWhen  []string `json:"doneWhen"`
-	CompactAt int      `json:"compactAt"`
-	Rebase    bool     `json:"rebase"`
-	Lessons   bool     `json:"lessons"`
-	AutoCarry bool     `json:"autoCarry"`
-	RerunCI   bool     `json:"rerunCI"`
-	Silent    bool     `json:"silent"`
-	Headless  bool     `json:"headless"`
+	Workspace  string   `json:"workspace"`
+	Enabled    bool     `json:"enabled"`
+	Action     string   `json:"action"`
+	Comments   bool     `json:"comments"`
+	PRs        bool     `json:"prs"`
+	Reviews    bool     `json:"reviews"`
+	CI         bool     `json:"ci"`
+	Labels     []string `json:"labels"`
+	Isolate    bool     `json:"isolate"`
+	Slots      int      `json:"slots"`
+	Quiet      string   `json:"quiet"`
+	DaysOff    []string `json:"daysOff"`
+	AutoMerge  bool     `json:"autoMerge"`
+	Approve    bool     `json:"approve"`
+	HandOver   bool     `json:"handOver"`
+	AutoAllow  string   `json:"autoAllow"`
+	DoneWhen   []string `json:"doneWhen"`
+	CompactAt  int      `json:"compactAt"`
+	Rebase     bool     `json:"rebase"`
+	Lessons    bool     `json:"lessons"`
+	PlanReview string   `json:"planReview"`
+	AutoCarry  bool     `json:"autoCarry"`
+	RerunCI    bool     `json:"rerunCI"`
+	Silent     bool     `json:"silent"`
+	Headless   bool     `json:"headless"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -58,6 +59,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 		out.DoneWhen = wc.DoneWhen
 	}
 	out.CompactAt, out.Rebase, out.Lessons, out.AutoCarry, out.RerunCI, out.Headless, out.Silent = wc.CompactAt, wc.Rebase, wc.Lessons, wc.AutoCarry, wc.RerunCI, wc.Headless, wc.Silent
+	out.PlanReview = wc.PlanReview
 	out.Slots = max(1, wc.Slots)
 	return out
 }

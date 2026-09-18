@@ -39,6 +39,7 @@ const (
 	watchFlagCompactAt    = "compact-at"
 	watchFlagDoneWhen     = "done-when"
 	watchFlagAutoAllow    = "auto-allow"
+	watchFlagPlanReview   = "plan-review"
 	watchFlagAutoFor      = "auto-for"
 	watchFlagDaysOff      = "days-off"
 	watchFlagDryRun       = "dry-run"
@@ -211,6 +212,14 @@ var agentWatchEnableCmd = &cobra.Command{
 				return err
 			}
 			wc.AutoAllow = policy
+		}
+		if flags.Changed(watchFlagPlanReview) {
+			v, _ := flags.GetString(watchFlagPlanReview)
+			policy, err := config.ParsePlanReview(v)
+			if err != nil {
+				return err
+			}
+			wc.PlanReview = policy
 		}
 		if flags.Changed("from") {
 			v, _ := flags.GetString("from")
@@ -1127,12 +1136,20 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		{wc.CompactAt > 0, fmt.Sprintf("/compact past %d%%", wc.CompactAt)},
 		{wc.Rebase, "rebased when main moves"},
 		{wc.Lessons, "lessons written down"},
+		{wc.PlanReview != "", "plan reviewed " + planReviewWords(wc.PlanReview)},
 	} {
 		if p.on {
 			parts = append(parts, p.text)
 		}
 	}
 	return parts
+}
+
+func planReviewWords(policy string) string {
+	if policy == config.PlanReviewAlways {
+		return "before every story"
+	}
+	return "when the forecast is " + strings.TrimPrefix(policy, "risk") + " of 10"
 }
 
 func describeWatchCaps(wc *config.WatchConfig) string {
@@ -1229,6 +1246,7 @@ func init() {
 	f.Bool("rebase", false, "Rebase a session's branch onto main where it sits when the session stops behind main with a clean tree and no conflicts (a branch that would conflict is typed into the session under --hand-over)")
 	f.Int(watchFlagCompactAt, 0, "Type /compact into a session past this much context the next time it stops — 85 is where the board goes red; 0 is off")
 	f.String(watchFlagDoneWhen, "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes — `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
+	f.String(watchFlagPlanReview, "", "Stop for a human before code on a story: always, risk>=N (the story's forecast, 1 to 10), or off. Off means the stories skill gates as today; on, the spec waits for an answer — from the terminal or the phone — before a branch is cut")
 	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 and tmux sessions only)")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")

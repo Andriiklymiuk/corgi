@@ -240,6 +240,36 @@ func NewSession() (*Session, string, error) {
 	return s, code, nil
 }
 
+const MaxLaunchTTL = 24 * time.Hour
+
+var ErrBadLaunchCode = errors.New("a launch code is 20 characters from 0-9 A-Z (no I, L, O, U): mint one with `corgi agent pair --mint`")
+
+func NewSessionWithCode(code string, ttl time.Duration) (*Session, error) {
+	code = NormalizeCode(code)
+	if len(code) != codeLength {
+		return nil, ErrBadLaunchCode
+	}
+	if ttl <= 0 {
+		ttl = CodeTTL
+	}
+	if ttl > MaxLaunchTTL {
+		ttl = MaxLaunchTTL
+	}
+	s := &Session{now: time.Now}
+	s.code = code
+	s.expires = s.now().Add(ttl)
+	return s, nil
+}
+
+func (s *Session) ExpiresAt() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.expires
+}
+
 func (s *Session) Code() string {
 	if s == nil {
 		return ""

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -220,9 +221,49 @@ type WatchConfig struct {
 	CompactAt       int         `yaml:"compactAt,omitempty"`
 	Rebase          bool        `yaml:"rebase,omitempty"`
 	Lessons         bool        `yaml:"lessons,omitempty"`
+	PlanReview      string      `yaml:"planReview,omitempty"`
 }
 
 const AutoAllowReads = "reads"
+
+const PlanReviewAlways = "always"
+
+func ParsePlanReview(s string) (string, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "", "off", "none", "no":
+		return "", nil
+	case PlanReviewAlways:
+		return PlanReviewAlways, nil
+	}
+	if n, ok := planReviewThreshold(s); ok {
+		return fmt.Sprintf("risk>=%d", n), nil
+	}
+	return "", fmt.Errorf("plan-review is off, always or risk>=N (1 to 10), not %q", s)
+}
+
+func PlanReviewRequired(policy string, risk int) bool {
+	switch policy {
+	case "":
+		return false
+	case PlanReviewAlways:
+		return true
+	}
+	n, ok := planReviewThreshold(policy)
+	return ok && risk >= n
+}
+
+func planReviewThreshold(s string) (int, bool) {
+	rest, ok := strings.CutPrefix(strings.ReplaceAll(strings.ToLower(s), " ", ""), "risk>=")
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.Atoi(rest)
+	if err != nil || n < 1 || n > 10 {
+		return 0, false
+	}
+	return n, true
+}
 
 func ParseAutoAllow(s string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
@@ -352,6 +393,9 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	}
 	if merged.ReviewStatus == "" {
 		merged.ReviewStatus = base.ReviewStatus
+	}
+	if merged.PlanReview == "" {
+		merged.PlanReview = base.PlanReview
 	}
 	if len(merged.FixKinds) == 0 {
 		merged.FixKinds = base.FixKinds

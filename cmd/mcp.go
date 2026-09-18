@@ -391,10 +391,13 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 			fmt.Fprintln(os.Stderr, "corgi mcp --pair cannot be combined with --insecure, and needs a writable corgi data directory.")
 			exitProcess(2)
 		}
-		session, _, err := pairing.NewSession()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "could not start pairing:", err)
-			exitProcess(1)
+		session, launched := takePairLaunch(filepath.Dir(deviceStore))
+		if !launched {
+			var err error
+			if session, _, err = pairing.NewSession(); err != nil {
+				fmt.Fprintln(os.Stderr, "could not start pairing:", err)
+				exitProcess(1)
+			}
 		}
 		pairSession = session
 		role := ""
@@ -414,7 +417,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
 	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token)
 	if pairSession != nil {
-		announcePairing(pairSession.Code(), addr)
+		announcePairing(pairSession, addr)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

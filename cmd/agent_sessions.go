@@ -26,7 +26,10 @@ var agentSessionsCmd = &cobra.Command{
 	Long: `Prints the session board the daemon keeps: one line per key, with the
 session's label, status, what it is doing, its account and where its terminal
 lives. --json prints the same board as sessions.json, plus the file's path, so
-a plugin can find and watch it. --watch redraws on every change.
+a plugin can find and watch it. --watch redraws on every change. --grouped
+folds the sessions by the ticket (or branch) they work on — the sessions, the
+workspaces, the worktrees and the PRs of one piece of work in one block; the
+same grouping sessions.json carries under "groups".
 
 Needs ` + "`corgi agent track enable`" + ` once, and the daemon running.`,
 	Run: runAgentSessions,
@@ -257,6 +260,14 @@ func runAgentSessions(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_sessions", err, 1)
 	}
+	if grouped, _ := cmd.Flags().GetBool("grouped"); grouped {
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"path": rep.Path, "daemonRunning": rep.Running, "groups": rep.Groups})
+			return
+		}
+		printGroups(rep.State)
+		return
+	}
 	if utils.JSONOutput {
 		utils.PrintJSON(rep)
 		return
@@ -270,6 +281,44 @@ func runAgentSessions(cmd *cobra.Command, _ []string) {
 		printBoard(next, time.Now())
 	}); err != nil {
 		exitWithError("agent_sessions", err, 1)
+	}
+}
+
+func printGroups(st sessions.State) {
+	if len(st.Groups) == 0 {
+		fmt.Println("no session is on a ticket or a feature branch")
+		return
+	}
+	display := map[string]string{}
+	for _, s := range st.Sessions {
+		display[s.ID] = firstNonEmpty(s.Display, s.Label, s.ID)
+	}
+	for _, g := range st.Groups {
+		fmt.Printf("%s", g.Key)
+		if g.NeedsInput > 0 {
+			fmt.Printf("  %d waiting on you", g.NeedsInput)
+		}
+		if g.Working > 0 {
+			fmt.Printf("  %d working", g.Working)
+		}
+		fmt.Println()
+		names := make([]string, 0, len(g.Sessions))
+		for _, id := range g.Sessions {
+			names = append(names, display[id])
+		}
+		fmt.Printf("  sessions   %s\n", strings.Join(names, ", "))
+		if len(g.Branches) > 0 {
+			fmt.Printf("  branches   %s\n", strings.Join(g.Branches, ", "))
+		}
+		if len(g.Worktrees) > 0 {
+			fmt.Printf("  worktrees  %s\n", strings.Join(g.Worktrees, ", "))
+		}
+		if len(g.PRs) > 0 {
+			fmt.Printf("  prs        %s\n", strings.Join(g.PRs, ", "))
+		}
+		if g.Ticket != "" {
+			fmt.Printf("  ticket     %s\n", g.Ticket)
+		}
 	}
 }
 
@@ -468,6 +517,7 @@ func runAgentWindows(_ *cobra.Command, _ []string) {
 
 func init() {
 	agentSessionsCmd.Flags().Bool("watch", false, "Redraw the board whenever it changes")
+	agentSessionsCmd.Flags().Bool("grouped", false, "Fold the sessions by ticket or branch: sessions, workspaces, worktrees and PRs of one piece of work together")
 	agentPinCmd.Flags().Bool("off", false, "Release the key instead")
 	agentNewCmd.Flags().String("window", "", "Editor window id, as `corgi agent windows` lists them (default: the one in front)")
 	agentNewCmd.Flags().Bool("isolate", false, "Start it in a worktree of its own, on a corgi/session-<time> branch, so it never touches the checkout the window is on")
