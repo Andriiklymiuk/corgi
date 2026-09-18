@@ -287,9 +287,9 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent up --at-login` | the same, plus the endpoint and tunnel that up used |
 | `corgi agent awake [on\|off]` | keep the machine awake for the daemon's whole life |
 | `corgi agent status [--json]` | what is running (`online` = device with no session yet), the launcher and connector URLs, restarts, which account |
-| `corgi agent doctor [--json] [--away]` | can this work here, and what to fix; `--away` adds what matters when nobody touches the machine for weeks (2.28.29) |
-| `corgi agent away [--dry-run] [--pulse <url>]` | the away doctor, with every corgi-side fix applied: a digest routine per watched workspace, worktrees + pruning + harden where fixes run unattended; then the sudo lines only you can run (2.28.29) |
-| `corgi agent pulse [url\|off]` | a dead-man ping every five minutes to a healthchecks.io / Uptime Kuma push URL, so a service alarms you when the machine goes quiet (2.28.29) |
+| `corgi agent doctor [--json] [--away]` | can this work here, and what to fix; `--away` adds what matters when nobody touches the machine for weeks (2.28.31) |
+| `corgi agent away [--dry-run] [--pulse <url>]` | the away doctor, with every corgi-side fix applied: a digest routine per watched workspace, worktrees + pruning + harden where fixes run unattended; then the sudo lines only you can run (2.28.31) |
+| `corgi agent pulse [url\|off]` | a dead-man ping every five minutes to a healthchecks.io / Uptime Kuma push URL, so a service alarms you when the machine goes quiet (2.28.31) |
 | `corgi agent workspaces` | list, `forget`, `relocate` |
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |
 | `corgi agent brief [id]` | what the last session was working on before it restarted |
