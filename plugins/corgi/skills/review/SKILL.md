@@ -98,7 +98,7 @@ separately (don't make a second call just for a SHA):
 Code hook rewrites `git`/`gh`/`glab`). Fetch the **reviewable diff raw** to avoid
 truncation degrading review quality:
 ```
-rtk proxy gh pr diff <n> --repo <owner>/<repo> --patch
+rtk proxy gh pr diff <n> --repo <owner>/<repo>
 rtk proxy glab mr diff <n> --repo <host>/<group>/<proj> --color=never
 ```
 See `../_shared/forge-commands.md` §0 for the rule of thumb: rtk-filtered for

@@ -414,6 +414,10 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	case "SessionStart":
 		r.applyStart(s, ev, now)
 	case "UserPromptSubmit":
+		// A person typing is what took it off the wall, whatever they typed.
+		if s.Status == StatusLimited {
+			s.ResumedBy = "person"
+		}
 		s.Tool, s.Detail, s.Pending = "", "", nil
 		s.TurnStartedAt = now
 		r.setStatus(s, StatusWorking, now)
@@ -525,6 +529,7 @@ func (r *Registry) applyLimit(s *Session, kind LimitKind, reset string, now time
 		s.Detail = "resets " + reset
 	}
 	s.Limit, s.ResumeAt = kind, time.Time{}
+	s.ResumedBy = ""
 	r.setStatus(s, StatusLimited, now)
 }
 
@@ -552,6 +557,7 @@ func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
 	case "quota_auto_resume_fired":
 		// The limit lifted and Claude picked the turn back up.
 		s.Tool, s.Detail, s.Pending = "", "", nil
+		s.ResumedBy = "clock"
 		r.setStatus(s, StatusWorking, now)
 	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response", "quota_auto_resume_stale", "quota_auto_resume_disabled":
 		// Nothing a key needs to say.
@@ -638,6 +644,14 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	}
 	if ev.Title != "" {
 		s.Title = ev.Title
+	}
+	// The hook already reads the model off the newest assistant turn for the
+	// context gauge, so the board learns it without a second pass over the
+	// transcript; an agent that is not Claude Code sends it outright.
+	if ev.Model != "" {
+		s.Model = ev.Model
+	} else if ev.Context != nil && ev.Context.Model != "" {
+		s.Model = ev.Context.Model
 	}
 	if ev.Branch != "" {
 		s.Branch = ev.Branch

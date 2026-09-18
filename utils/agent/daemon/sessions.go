@@ -269,8 +269,10 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 	switch {
 	case from == sessions.StatusLimited && to == sessions.StatusWorking:
 		d.limitWatch[s.ID] = true
-		// Rung at the clock already: the resume is not news.
-		resumed = !d.liftTold[s.ID]
+		// Rung at the clock already: the resume is not news. Nor is a person
+		// typing — they may have changed model or account, and either way
+		// they are at the keyboard; the ring is for someone who walked away.
+		resumed = !d.liftTold[s.ID] && s.ResumedBy != "person"
 		delete(d.liftTold, s.ID)
 		d.stopLiftClock(s.ID)
 	case to == sessions.StatusLimited:
@@ -311,7 +313,7 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 			if !still || recent {
 				return
 			}
-			d.notifyAttention(notifyTitlePrefix+label, "limit lifted"+d.accountWord(s)+" — back to work", s.Folder)
+			d.notifyAttention(notifyTitlePrefix+label, d.liftWord(s), s.Folder)
 		})
 	}
 	if rested != "" {
@@ -839,8 +841,19 @@ func (d *Daemon) scheduleLiftClock(s sessions.Session, label string, now time.Ti
 		}
 		d.liftRang[id] = time.Now()
 		d.attentionMu.Unlock()
-		d.notifyAttention(notifyTitlePrefix+label, "limit lifted"+d.accountWord(s)+" — back to work", s.Folder)
+		d.notifyAttention(notifyTitlePrefix+label, d.liftWord(s), s.Folder)
 	})
+}
+
+// liftWord is what to say when a limited session is working again: the
+// model too, when the board knows it, because "back to work on Opus" is a
+// fact where "the limit lifted" is a guess.
+func (d *Daemon) liftWord(s sessions.Session) string {
+	line := "limit lifted" + d.accountWord(s) + " — back to work"
+	if s.Model != "" {
+		line += " on " + sessions.ModelLabel(s.Model)
+	}
+	return line
 }
 
 // stopLiftClock cancels a pending clock ring. Must hold attentionMu.

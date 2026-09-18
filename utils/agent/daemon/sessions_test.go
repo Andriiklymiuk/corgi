@@ -642,3 +642,41 @@ func TestLiftRingsAtTheClockTheLimitNamed(t *testing.T) {
 	case <-time.After(60 * time.Millisecond):
 	}
 }
+
+func TestALimitIsOnlyCalledLiftedWhenTheMachineResumedIt(t *testing.T) {
+	d := testDaemon(t)
+	d.LiftGrace = 10 * time.Millisecond
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+
+	byPerson := sessions.Session{ID: "s1", Folder: "acme", ResumedBy: "person", Model: "claude-opus-5"}
+	d.onSessionTransition(byPerson, sessions.StatusLimited, sessions.StatusWorking, time.Now())
+
+	byClock := sessions.Session{ID: "s2", Folder: "acme", ResumedBy: "clock", Model: "claude-opus-5"}
+	d.onSessionTransition(byClock, sessions.StatusLimited, sessions.StatusWorking, time.Now())
+
+	deadline := time.After(2 * time.Second)
+	lifts := 0
+	for lifts == 0 {
+		select {
+		case b := <-notes:
+			if strings.Contains(b, "limit lifted") {
+				lifts++
+				if !strings.Contains(b, "on Opus") {
+					t.Errorf("the line should name the model it came back on: %q", b)
+				}
+			}
+		case <-deadline:
+			t.Fatal("the clock's resume must still ring")
+		}
+	}
+
+	// Nothing more may arrive: the person's resume is not news.
+	select {
+	case b := <-notes:
+		if strings.Contains(b, "limit lifted") {
+			t.Fatalf("a person typing is not a limit lifting: %q", b)
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
+}

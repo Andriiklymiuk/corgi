@@ -18,10 +18,13 @@ and list calls get the savings for free** — safe, the review doesn't need thos
 verbatim.
 
 **One hard exception: the diff that gets reviewed must be full-fidelity.** A
-filtered/truncated diff = a bad review. Fetch the reviewable diff **raw**:
+filtered/truncated diff = a bad review. Fetch the reviewable diff **raw**, and
+**combined** — `--patch` returns a per-commit patch series, so a file touched by
+several commits arrives several times and its hunk headers number an intermediate
+state, not head. Anchoring off those lands comments on the wrong code:
 
 ```bash
-rtk proxy gh pr diff <n> --repo <owner>/<repo> --patch        # raw, unfiltered
+rtk proxy gh pr diff <n> --repo <owner>/<repo>                # raw, combined
 rtk proxy glab mr diff <n> --repo <repo> --color=never
 ```
 
@@ -47,7 +50,7 @@ glab mr view <n> -R <repo> -F json    # read .diff_refs, .state, .draft, .source
 
 Reviewable diff (raw, see §0):
 ```bash
-rtk proxy gh pr diff <n> --repo <owner>/<repo> --patch
+rtk proxy gh pr diff <n> --repo <owner>/<repo>
 rtk proxy glab mr diff <n> -R <repo> --color=never
 ```
 
