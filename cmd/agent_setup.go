@@ -397,6 +397,11 @@ func runAgentDoctor(cmd *cobra.Command, _ []string) {
 	} else {
 		checks = append(collectAgentChecks(), checkSecurity()...)
 	}
+	if away, _ := cmd.Flags().GetBool("away"); away {
+		if dir, err := agentDir(); err == nil {
+			checks = append(checks, awayChecks(dir)...)
+		}
+	}
 
 	if utils.JSONOutput {
 		utils.PrintJSON(checks)
@@ -701,6 +706,7 @@ func init() {
 
 	agentScanCmd.Flags().Bool("dry-run", false, "Show what would be registered without changing anything")
 
+	agentDoctorCmd.Flags().Bool("away", false, "also what matters when nobody touches this machine for weeks: updates, lid, power, network, heat, pulse, digest, isolation")
 	agentDoctorCmd.Flags().Bool("security", false, "only the security checks: deny rules, the secrets hook, permissions, isolation, tunnel exposure")
 	agentCmd.AddCommand(agentInitCmd, agentScanCmd, agentDoctorCmd)
 }
