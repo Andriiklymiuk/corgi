@@ -1,6 +1,6 @@
 ---
 name: risk
-description: Use when someone asks how much human review a change deserves: "risk assessment for this PR/MR", "how risky is this story", "can this be auto-approved", "score this diff", "who should review this", or as the gate stories, review, and autopilot run. Scores 1 to 10 and writes a risk card. NOT for finding bugs (review), complexity, or building (stories).
+description: "Use when someone asks how much human review a change deserves: \"risk assessment for this PR/MR\", \"how risky is this story\", \"can this be auto-approved\", \"score this diff\", \"who should review this\", or as the gate stories, review, and autopilot run. Scores 1 to 10 and writes a risk card. NOT for finding bugs (review), complexity, or building (stories)."
 ---
 
 # Risk assessment

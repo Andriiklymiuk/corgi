@@ -1,6 +1,6 @@
 ---
 name: run
-description: Use when the user wants to bring up a corgi-compose stack: "run the stack", "run with tunnel and logs", "run web + mobile against the remote backend", "run just the api", "run for the android emulator". Boots detached, waits until healthy, reports URLs and how to stop. NOT for authoring compose, shipping tickets, or a broken stack.
+description: "Use when the user wants to bring up a corgi-compose stack: \"run the stack\", \"run with tunnel and logs\", \"run web + mobile against the remote backend\", \"run just the api\", \"run for the android emulator\". Boots detached, waits until healthy, reports URLs and how to stop. NOT for authoring compose, shipping tickets, or a broken stack."
 ---
 
 # Corgi run

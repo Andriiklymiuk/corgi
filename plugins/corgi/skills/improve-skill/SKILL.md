@@ -1,6 +1,6 @@
 ---
 name: improve-skill
-description: Use when the user wants to refine or create an agent skill from this conversation: "improve my <X> skill", "the skill should've caught Z", "fix the stories skill", "make a skill for <workflow we just did>". Friction in this session is the evidence; a missing path scaffolds a new skill. NOT for corgi-compose (corgi skill) or normal code edits.
+description: "Use when the user wants to refine or create an agent skill from this conversation: \"improve my <X> skill\", \"the skill should've caught Z\", \"fix the stories skill\", \"make a skill for <workflow we just did>\". Friction in this session is the evidence; a missing path scaffolds a new skill. NOT for corgi-compose (corgi skill) or normal code edits."
 ---
 
 # Improve or scaffold a skill

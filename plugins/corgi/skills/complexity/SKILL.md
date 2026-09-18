@@ -1,6 +1,6 @@
 ---
 name: complexity
-description: Use when changed code must get simpler: "reduce complexity", "this function is a jungle", "simplify this", "god function", "check the complexity of this PR", "is this AI slop", or as the gate stories and review run on a diff. Measures cyclomatic and cognitive complexity, refactors the worst first, proves behaviour unchanged. NOT for performance work or lint-only fixes.
+description: "Use when changed code must get simpler: \"reduce complexity\", \"this function is a jungle\", \"simplify this\", \"god function\", \"check the complexity of this PR\", \"is this AI slop\", or as the gate stories and review run on a diff. Measures cyclomatic and cognitive complexity, refactors the worst first, proves behaviour unchanged. NOT for performance work or lint-only fixes."
 ---
 
 # Reduce complexity

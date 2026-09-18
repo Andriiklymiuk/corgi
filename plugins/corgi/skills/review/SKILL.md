@@ -1,6 +1,6 @@
 ---
 name: review
-description: Use when the user wants a code review of EXISTING pull/merge requests: "review this PR/MR", "code review <link>", "check the api + web MRs for ABC-123", a bare link with "thoughts?". Also to address feedback on your OWN PR: "fix the comments on this MR", "address the feedback for ABC-123". NOT for creating PRs (stories) or the local diff (/code-review).
+description: "Use when the user wants a code review of EXISTING pull/merge requests: \"review this PR/MR\", \"code review <link>\", \"check the api + web MRs for ABC-123\", a bare link with \"thoughts?\". Also to address feedback on your OWN PR: \"fix the comments on this MR\", \"address the feedback for ABC-123\". NOT for creating PRs (stories) or the local diff (/code-review)."
 ---
 
 # Corgi review
@@ -127,7 +127,11 @@ this thread list into P3.6's prune pass. Don't re-litigate settled threads.
 
 **Evidence worktree (read-only).** The diff is where findings anchor; the evidence
 lives in the tree around it. Put the head SHA in a throwaway detached worktree — never
-the user's checkout, never a branch:
+the user's checkout, never a branch. A detached worktree has **no installed
+dependencies**, so it cannot run a test or a probe as-is: when the hunt needs one,
+prepare **one** runnable copy per repo up front (copy out, link the deps in from the
+local checkout) rather than letting each subagent rebuild its own — otherwise half the
+set verifies by running and half falls back to trusting CI:
 ```bash
 git -C <dir> fetch origin pull/<n>/head            # GitLab: merge-requests/<iid>/head
 git -C <dir> worktree add --detach /tmp/corgi-review/<repo>-<n> FETCH_HEAD
@@ -207,25 +211,16 @@ Build **one compact, distilled** standards note **per repo** — same-repo PRs
 share it, never rebuild it. The note is the orchestrator's cache (stories model):
 a handful of bullets the reviewer reads, **not** raw files dumped into context.
 
-**Keep it cheap — this is the token-sensitive phase.** Don't read everything.
-1. **Canonical first, stop early.** Read `CLAUDE.md` (or `AGENTS.md`) — usually
-   small and authoritative. If it covers conventions well, that + the lint config
-   is the whole note. `GEMINI.md`/`.cursorrules`/`CONTRIBUTING.md` overlap heavily
-   — read one only if the canonical file is absent. Don't read all five.
-2. **One lint/format config, relevance-gated by the diff's languages.** Diff is
-   all TS → read the JS/TS config (`biome.json` / `.eslintrc*` / `.prettierrc`),
-   skip `.golangci.yml`/`ruff.toml`. Don't read configs for languages not in the
-   diff.
-3. **Size cap.** Skip any standards file over ~400 lines / 40 KB — sample its
-   headings instead of reading whole. The manifest is read only for the test/lint
-   *scripts*, not in full.
-4. **Neighbor files are lazy, not upfront.** Don't pre-read source files. The diff
-   already carries surrounding context; only open **1–2** neighbor files **if** a
-   specific convention question comes up mid-review (e.g. "is this the repo's error
-   pattern?"), scoped to the diff's area.
-5. **Most repos have no CLAUDE.md** → the note is just "lint config X + conventions
-   observed in the diff." Near-zero cost. Don't manufacture standards that aren't
-   written down.
+**The orchestrator writes this note, and it is the ONLY standards input a subagent
+gets. A subagent never opens `CLAUDE.md`, `AGENTS.md` or a lint config itself** —
+that is the whole saving, and N same-repo PRs otherwise re-read the same file N
+times. Skipping P2 and putting "read the repo's CLAUDE.md" in each prompt is the
+failure this phase exists to prevent.
+
+Read the canonical file (`CLAUDE.md`/`AGENTS.md`) plus the one lint config matching
+the diff's languages — nothing else, headings only above ~400 lines. No CLAUDE.md →
+the note is "lint config X + conventions observed in the diff", which is fine; don't
+manufacture standards nobody wrote down.
 
 **On-disk service (repo is a local corgi service)** — map repo → service via
 `corgi-compose.yml` (`path:`/`cloneFrom:`), read from the service dir, reuse its
@@ -415,15 +410,13 @@ criterion — met / unmet → finding / not verifiable — so the author sees wh
 between the PR and done, not only what is wrong.
 
 **Token discipline (stories model):**
-- **Spend the budget on evidence, not on standards.** P2 stays a dozen bullets; the
-  sweep above reads whatever the changed symbols touch — callers, a dependency's
-  function, the deploy workflow. Twenty neighbour files opened to settle a real
-  question is the review; twenty opened to learn the code style is not.
-- **One Explore sweep per service+area, not per PR.** Orchestrator holds the
-  investigation note (the cache); subagents reference it, never re-explore the
-  same files.
-- **Reuse ledger** — shared components/contracts recorded once; each review
-  cites, doesn't re-derive.
+- **Spend the budget on evidence, not on standards.** Twenty neighbour files opened
+  to settle a real question is the review; twenty opened to learn the code style is
+  not.
+- **Name the overlap before dispatching.** Two PRs in a set touching the same files
+  (a stacked pair, or siblings in one repo) each re-derive the same facts unless the
+  prompt says which files are shared and what the other reviewer covers. One line per
+  prompt; the orchestrator holds the ledger, subagents cite it.
 - Big **set** → dispatch per-PR reviews to parallel subagents, each scoped to
   its diff + the shared note.
 - Big **single PR** (large diff / many files) → split that one PR's diff by

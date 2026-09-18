@@ -1,6 +1,6 @@
 ---
 name: before-after
-description: Use when a visual change should be proven against the state it replaced: "screenshot comparison", "before and after", "show me the before/after", "prove the UI changed", "attach screenshots to the PR", "do a visual diff of my change". Captures the same screen on the base branch and on yours and puts both in the PR/MR. NOT a design comparison (design-parity), NOT store marketing shots (mobile-screenshots), NOT a pixel-diff assertion in CI (the repo's own visual harness).
+description: "Use when a visual change should be proven against the state it replaced: \"screenshot comparison\", \"before and after\", \"show me the before/after\", \"prove the UI changed\", \"attach screenshots to the PR\", \"do a visual diff of my change\". Captures the same screen on the base branch and on yours and puts both in the PR/MR. NOT a design comparison (design-parity), NOT store marketing shots (mobile-screenshots), NOT a pixel-diff assertion in CI (the repo's own visual harness)."
 ---
 
 # Before and after, from the branch that changed it

@@ -348,6 +348,8 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `GET`/`POST /launch/profiles` | the account profiles, and one added as `corgi agent profile add <name> --config-dir <dir>` would — the Mac app's **Add account** (2.28.4) |
 | `corgi agent watch prune [--older-than 7d] [--dry-run]` | remove the worktrees of isolated runs finished that long ago; the branch and any dirty worktree stay. `watch enable --prune-after 7d` does it from the daemon, hourly (2.28.14) |
 | `corgi agent watch enable --silent [--workspace X]` | this workspace's watch keeps quiet: fixes run, the inbox and the kanban fill, but nothing rings — no toast, no phone push — until `--silent=false`. For a repository where comments and reviews should just get fixed. A permission prompt in a live session still rings. `silent` in the phone's repo switches too (2.28) |
+| `corgi agent watch enable --mentions [--channel '#incidents'] [--review-channel '#code-review'] [--run-from @vincent]` | Slack joins the watch: a mention or a direct message rings like a review comment, a listened channel rings on every message, and a post in a review channel carrying pull-request links is one review to do. `--run-from` names who may start an unattended run by mentioning you — empty means nobody, because a channel is open to whoever is in it. Needs `corgi agent watch auth slack` (2.29) |
+| `corgi agent chat post "<text>" [--to '#chan'] [--reply <event key>] [--as me\|bot]` · `chat react <event key> <emoji>` | say something back, in the thread the message came from. The bot speaks by default when a bot token is stored; `--as me` posts under your own name. Also the MCP tool `corgi_chat_post`, so a session answers the same way (2.29) |
 | `corgi agent plan "<goal>" [--workspace X] [--max N] [--run --slots N]` · `plan run\|status\|stop <P-n>` | a goal handed to a planner (a short `claude -p`, sonnet by default) that writes 2–6 tasks on the board — what to change, where, how a session knows it is done, which tasks wait for which — and to the daemon, which works through them: each task the same unattended run a ticket gets, in a worktree of its own, `--slots N` at a time, the next when one ends (Review or Done lets the tasks after it start). The workspace's caps, quiet hours and breaker hold; a run that failed leaves its task for you, the plan never retries it. The tasks are ordinary tasks (TASK-n on the kanban, `task edit` before `plan run`); the plan is the order and the slots, in `watch/plans.json`, and a readable `plans/P-n.md` with a Decisions section. Needs the workspace watched with `--isolate`. `GET /launch/plans` for the phone (2.26) |
 | `corgi agent kanban [--workspace X] [--json]` | one card per ticket in a column corgi works out — Inbox, Ready, Running, Blocked, Review, Done — from the inbox, the runs, the sessions on each branch, the handoffs; the phone's Board tab draws the same |
 | `corgi agent handoff --ref X --done … --remaining … --next …` / `show X` | a handoff for the next session or person: corgi fills in branch, head, base, uncommitted files, who was writing, budget left; you say what is done, what is not, what was decided; `.corgi/corgi_services/handoffs/<ref>.json` plus a Markdown twin |
@@ -1120,6 +1122,42 @@ an HMAC of the body, GitLab against its secret token header, Jira against a
 token in the URL. A named tunnel (`corgi agent tunnel setup`) keeps the
 URLs stable. `--interval 0` turns polling off for a workspace that has
 webhooks.
+
+
+### Slack
+
+The watch reads Slack with your own user token (`xoxp-`): one search for
+your handle a round finds every mention, including the ones inside threads
+of channels nobody listed, and each listened channel is read message by
+message. A direct message is a mention by construction.
+
+```bash
+corgi agent watch auth slack --token xoxp-…            # read your channels, and post as you
+corgi agent watch auth slack --bot xoxb-…              # optional: let replies come from the app
+corgi agent watch enable --mentions --run-from @vincent
+corgi agent watch enable --review-channel '#code-review' --action fix --auto-for reviews --approve
+corgi agent chat post "on it" --reply slack:C0RE:1726000400.000100
+```
+
+The user token wants `search:read`, the four `*:history` and `*:read`
+scopes, `users:read`, `chat:write` and `reactions:write`.
+
+**A review channel** is the shape most teams already have: one post per
+ticket listing the pull requests, the reviewer answering in the thread. Put
+that channel in `--review-channel` and a post carrying links becomes **one**
+review — `/corgi:review` over every link at once, which is what reviewing a
+corgi workspace means — answered in the thread with a line per pull request.
+The ✅ goes on the post only when the forge itself says every one is
+approved, never because the run said so. The author's later "@you updated"
+in the thread arrives as a mention carrying the parent's links, so the
+second pass reviews at the new head.
+
+**A mention can start a run**, and that is the one place a stranger could
+reach your machine, so it is gated on a list of people rather than on
+anything about the message: `--run-from @vincent @lena`. Empty means nobody.
+The message reaches the prompt fenced and labelled as a colleague's request
+rather than as instructions — but the list is the guard; the fence is the
+second line.
 
 **Notify** sends the same notification a waiting session does: desktop,
 `notifyUrl`, Telegram. **Fix** also runs a headless `claude -p` in the

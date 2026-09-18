@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Use when shipping an Expo/React Native app to the stores via the repo's LOCAL build targets: "ship it", "make ship", "build and submit to TestFlight/Play", "push a release to the App Store", "cut a build", "release the app", "upload the binary". Gates on the mobile skill's render first. NOT for device verification, IAP metadata (purchases), or remote EAS cloud builds.
+description: "Use when shipping an Expo/React Native app to the stores via the repo's LOCAL build targets: \"ship it\", \"make ship\", \"build and submit to TestFlight/Play\", \"push a release to the App Store\", \"cut a build\", \"release the app\", \"upload the binary\". Gates on the mobile skill's render first. NOT for device verification, IAP metadata (purchases), or remote EAS cloud builds."
 ---
 
 # Ship a local build to the stores
