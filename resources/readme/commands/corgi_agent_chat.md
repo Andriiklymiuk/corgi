@@ -47,6 +47,7 @@ be taken back, so it is never the accidental default.
 ### SEE ALSO
 
 * [corgi agent](corgi_agent)	 - Keep Claude Code Remote Control running for your corgi workspaces
+* [corgi agent chat announce](corgi_agent_chat_announce)	 - Post the pull requests of a piece of work in the workspace's review channel
 * [corgi agent chat post](corgi_agent_chat_post)	 - Say something in a channel, or in the thread of an event
 * [corgi agent chat react](corgi_agent_chat_react)	 - Put one emoji on the message an event names
 
