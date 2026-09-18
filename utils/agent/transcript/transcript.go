@@ -21,6 +21,10 @@ type Entry struct {
 	Subject   string    `json:"subject,omitempty"`
 	ToolID    string    `json:"toolId,omitempty"`
 	Truncated bool      `json:"truncated,omitempty"`
+	// Picture names an image a tool returned (a screenshot); Picture(path,
+	// id) hands the bytes over on demand so the entry itself stays small.
+	Picture     string `json:"picture,omitempty"`
+	PictureType string `json:"pictureType,omitempty"`
 }
 
 const MaxText = 2000
@@ -167,7 +171,11 @@ func parse(line []byte) []Entry {
 			out = append(out, Entry{ID: id, Kind: "tool", At: r.Timestamp, Tool: b.Name, Subject: Scrub(subjectOf(b.Name, b.Input)), ToolID: b.ID})
 		case "tool_result":
 			t, truncated := clip(Scrub(resultText(b.Content)))
-			out = append(out, Entry{ID: id, Kind: "result", At: r.Timestamp, Text: t, ToolID: b.ToolUse, Truncated: truncated})
+			e := Entry{ID: id, Kind: "result", At: r.Timestamp, Text: t, ToolID: b.ToolUse, Truncated: truncated}
+			if mime := resultPictureType(b.Content); mime != "" {
+				e.Picture, e.PictureType = id, mime
+			}
+			out = append(out, e)
 		case "image":
 			if r.Type == "user" {
 				out = append(out, Entry{ID: id, Kind: "user", At: r.Timestamp, Text: "🖼 image"})
