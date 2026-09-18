@@ -233,3 +233,34 @@ func TestSlackMentionsSurviveAMissingListScope(t *testing.T) {
 		t.Fatalf("a listened channel needs the list, and the error must name the scope: %v", err)
 	}
 }
+
+func TestSlackListsOnlyTheTypesTheTokenMayRead(t *testing.T) {
+	f := newSlackFake(t)
+	var asked []string
+	full := f.convList
+	f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/conversations.list" {
+			types := r.URL.Query().Get("types")
+			asked = append(asked, types)
+			if strings.Contains(types, "private_channel") || strings.Contains(types, "im") {
+				_, _ = w.Write([]byte(`{"ok":false,"error":"missing_scope","needed":"groups:read,im:read,mpim:read"}`))
+				return
+			}
+			_, _ = w.Write([]byte(full))
+			return
+		}
+		if r.URL.Path == "/search.messages" {
+			_, _ = w.Write([]byte(f.search))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"messages":[],"has_more":false}`))
+	})
+	s := newTestSlack(f, SlackWatchConfig{Mentions: true, ReviewChannels: []string{"#code-review"}})
+	_, _, err := s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme"})
+	if err != nil {
+		t.Fatalf("a token that reads public channels only still lists them: %v", err)
+	}
+	if len(asked) < 2 || asked[len(asked)-1] != "public_channel" {
+		t.Fatalf("the retry asks for public channels alone: %v", asked)
+	}
+}

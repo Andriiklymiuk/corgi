@@ -80,13 +80,17 @@ func (a *slackAPI) do(req *http.Request, method string, out any) error {
 		return fmt.Errorf("slack %s: %v", method, err)
 	}
 	var envelope struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error"`
+		OK     bool   `json:"ok"`
+		Error  string `json:"error"`
+		Needed string `json:"needed"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return fmt.Errorf("slack %s: %v", method, err)
 	}
 	if !envelope.OK {
+		if envelope.Needed != "" {
+			return fmt.Errorf("slack %s: %s (needs %s)", method, firstNonBlank(envelope.Error, "not ok"), envelope.Needed)
+		}
 		return fmt.Errorf("slack %s: %s", method, firstNonBlank(envelope.Error, "not ok"))
 	}
 	if out == nil {
