@@ -348,7 +348,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `GET`/`POST /launch/profiles` | the account profiles, and one added as `corgi agent profile add <name> --config-dir <dir>` would — the Mac app's **Add account** (2.28.4) |
 | `corgi agent watch prune [--older-than 7d] [--dry-run]` | remove the worktrees of isolated runs finished that long ago; the branch and any dirty worktree stay. `watch enable --prune-after 7d` does it from the daemon, hourly (2.28.14) |
 | `corgi agent watch enable --silent [--workspace X]` | this workspace's watch keeps quiet: fixes run, the inbox and the kanban fill, but nothing rings — no toast, no phone push — until `--silent=false`. For a repository where comments and reviews should just get fixed. A permission prompt in a live session still rings. `silent` in the phone's repo switches too (2.28) |
-| `corgi agent watch enable --mentions [--channel '#incidents'] [--review-channel '#code-review'] [--run-from @vincent]` | Slack joins the watch: a mention or a direct message rings like a review comment, a listened channel rings on every message, and a post in a review channel carrying pull-request links is one review to do. `--run-from` names who may start an unattended run by mentioning you — empty means nobody, because a channel is open to whoever is in it. Needs `corgi agent watch auth slack` (2.29) |
+| `corgi agent watch enable --mentions [--channel '#incidents'] [--review-channel '#code-review'] [--trust @teammate]` | Slack joins the watch: a mention or a direct message rings like a review comment, a listened channel rings on every message, and a post in a review channel carrying pull-request links is one review to do. `--trust` names who may start an unattended run by mentioning you — empty means nobody, because a channel is open to whoever is in it. Needs `corgi agent watch auth slack` (2.29) |
 | `corgi agent chat post "<text>" [--to '#chan'] [--reply <event key>] [--as me\|bot]` · `chat react <event key> <emoji>` | say something back, in the thread the message came from. The bot speaks by default when a bot token is stored; `--as me` posts under your own name. Also the MCP tool `corgi_chat_post`, so a session answers the same way (2.29) |
 | `corgi agent plan "<goal>" [--workspace X] [--max N] [--run --slots N]` · `plan run\|status\|stop <P-n>` | a goal handed to a planner (a short `claude -p`, sonnet by default) that writes 2–6 tasks on the board — what to change, where, how a session knows it is done, which tasks wait for which — and to the daemon, which works through them: each task the same unattended run a ticket gets, in a worktree of its own, `--slots N` at a time, the next when one ends (Review or Done lets the tasks after it start). The workspace's caps, quiet hours and breaker hold; a run that failed leaves its task for you, the plan never retries it. The tasks are ordinary tasks (TASK-n on the kanban, `task edit` before `plan run`); the plan is the order and the slots, in `watch/plans.json`, and a readable `plans/P-n.md` with a Decisions section. Needs the workspace watched with `--isolate`. `GET /launch/plans` for the phone (2.26) |
 | `corgi agent kanban [--workspace X] [--json]` | one card per ticket in a column corgi works out — Inbox, Ready, Running, Blocked, Review, Done — from the inbox, the runs, the sessions on each branch, the handoffs; the phone's Board tab draws the same |
@@ -1134,7 +1134,7 @@ message. A direct message is a mention by construction.
 ```bash
 corgi agent watch auth slack --token xoxp-…            # read your channels, and post as you
 corgi agent watch auth slack --bot xoxb-…              # optional: let replies come from the app
-corgi agent watch enable --mentions --run-from @vincent
+corgi agent watch enable --mentions --trust @teammate
 corgi agent watch enable --review-channel '#code-review' --action fix --auto-for reviews --approve
 corgi agent chat post "on it" --reply slack:C0RE:1726000400.000100
 ```
@@ -1154,7 +1154,7 @@ second pass reviews at the new head.
 
 **A mention can start a run**, and that is the one place a stranger could
 reach your machine, so it is gated on a list of people rather than on
-anything about the message: `--run-from @vincent @lena`. Empty means nobody.
+anything about the message: `--trust @teammate @reviewer`. Empty means nobody.
 The message reaches the prompt fenced and labelled as a colleague's request
 rather than as instructions — but the list is the guard; the fence is the
 second line.

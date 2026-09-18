@@ -127,8 +127,16 @@ func runChatPost(req chatRequest) error {
 }
 
 // mcpChatPost is the tool behind corgi_chat_post: the same call the shell
-// makes, so a session and a person say things the same way.
+// makes, so a session and a person say things the same way — with one
+// difference. A session may not ASK to speak as the person. Much of what a
+// session reads came from other people, so an agent that can be talked into
+// posting under its owner's name is a way to put words in their mouth. The
+// workspace's own replyAs still decides, because that is the machine
+// owner's standing choice rather than something a message can reach.
 func mcpChatPost(r mcp.CallToolRequest) (any, error) {
+	if as := strings.TrimSpace(r.GetString("as", "")); strings.EqualFold(as, "me") {
+		return nil, fmt.Errorf("a session may not post under your name: leave `as` out and the workspace's replyAs decides, or run `corgi agent chat post --as me` yourself")
+	}
 	if err := runChatPost(chatRequest{
 		Text:      r.GetString("text", ""),
 		To:        r.GetString("to", ""),

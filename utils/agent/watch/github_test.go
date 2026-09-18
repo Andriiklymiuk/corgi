@@ -71,7 +71,7 @@ func newGitHubFake(t *testing.T) *githubFake {
 		case "/repos/acme/web/issues/comments/99":
 			_, _ = w.Write([]byte(`{"body":"can you add a test for the empty case?","user":{"login":"maria","type":"User"}}`))
 		case "/repos/acme/app/issues/comments/500":
-			_, _ = w.Write([]byte(`{"body":"HUM-1 Android app icon\nReview in Linear","user":{"login":"linear-code[bot]","type":"Bot"}}`))
+			_, _ = w.Write([]byte(`{"body":"ABC-1 App icon\nReview in Linear","user":{"login":"linear-code[bot]","type":"Bot"}}`))
 		case "/repos/acme/app/issues/comments/501":
 			_, _ = w.Write([]byte(`{"body":"rebased","user":{"login":"andrii","type":"User"}}`))
 		case "/repos/acme/api/pulls/9/reviews/77":

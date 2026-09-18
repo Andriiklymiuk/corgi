@@ -675,8 +675,8 @@ func chatStatusLine(spec daemon.WatchSpec) string {
 		return ""
 	}
 	line := "slack: " + strings.Join(parts, " · ")
-	if len(c.RunFrom) > 0 {
-		return line + " · runs from " + strings.Join(c.RunFrom, " ")
+	if len(c.Trust) > 0 {
+		return line + " · runs from " + strings.Join(c.Trust, " ")
 	}
 	return line + " · no runs from chat"
 }
@@ -696,7 +696,7 @@ func withoutSource(list []string, drop string) []string {
 // no chat flag was given and whatever is stored stands.
 func chatFromFlags(flags *pflag.FlagSet, current *config.ChatConfig) (*config.ChatConfig, error) {
 	touched := false
-	for _, n := range []string{"mentions", "channel", "review-channel", "run-from", "post-to", "reply-as"} {
+	for _, n := range []string{"mentions", "channel", "review-channel", "trust", "post-to", "reply-as"} {
 		if flags.Changed(n) {
 			touched = true
 		}
@@ -718,8 +718,8 @@ func chatFromFlags(flags *pflag.FlagSet, current *config.ChatConfig) (*config.Ch
 	if flags.Changed("review-channel") {
 		out.Slack.ReviewChannels, _ = flags.GetStringSlice("review-channel")
 	}
-	if flags.Changed("run-from") {
-		out.Slack.RunFrom, _ = flags.GetStringSlice("run-from")
+	if flags.Changed("trust") {
+		out.Slack.Trust, _ = flags.GetStringSlice("trust")
 	}
 	if flags.Changed("post-to") {
 		v, _ := flags.GetString("post-to")
@@ -1290,7 +1290,7 @@ func init() {
 	f.Bool("mentions", false, "Ring when someone names you in Slack or writes to you directly (needs corgi agent watch auth slack)")
 	f.StringSlice("channel", nil, "Slack channels every message of which is news, e.g. #incidents (repeatable)")
 	f.StringSlice("review-channel", nil, "Slack channels where pull requests are posted for review: a post with links is one review, answered in its thread (repeatable)")
-	f.StringSlice("run-from", nil, "Who may start an unattended run by mentioning you in Slack, e.g. @vincent (repeatable); empty means nobody")
+	f.StringSlice("trust", nil, "Colleagues whose Slack mention may start an unattended run — the person who WROTE the message, e.g. @teammate (repeatable). Empty means nobody: a mention only rings")
 	f.String("post-to", "", "Default Slack channel for corgi agent chat post")
 	f.String("reply-as", "", "Whose voice a reply speaks in: bot or me (default: the bot when a bot token is stored)")
 	f.String(watchFlagAutoFor, "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")

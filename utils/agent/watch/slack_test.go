@@ -23,7 +23,7 @@ func newSlackFake(t *testing.T) *slackFake {
 		convList: `{"ok":true,"channels":[
 			{"id":"C0RE","name":"code-review","is_im":false},
 			{"id":"C0IN","name":"incidents","is_im":false},
-			{"id":"D0VI","is_im":true,"user":"UVI"}
+			{"id":"D0TM","is_im":true,"user":"UTM"}
 		],"response_metadata":{"next_cursor":""}}`,
 		search:  `{"ok":true,"messages":{"matches":[],"paging":{"page":1,"pages":1}}}`,
 		replies: `{"ok":true,"messages":[]}`,
@@ -65,7 +65,7 @@ func newTestSlack(f *slackFake, cfg SlackWatchConfig) *Slack {
 func TestSlackFirstRoundOnlyBookmarks(t *testing.T) {
 	f := newSlackFake(t)
 	f.history["C0IN"] = `{"ok":true,"messages":[
-		{"type":"message","user":"ULE","text":"deploying","ts":"1726000000.000100"}],"has_more":false}`
+		{"type":"message","user":"USM","text":"deploying","ts":"1726000000.000100"}],"has_more":false}`
 	s := newTestSlack(f, SlackWatchConfig{Channels: []string{"#incidents"}})
 
 	events, cursor, err := s.Poll(context.Background(), Cursor{})
@@ -86,7 +86,7 @@ func TestSlackFirstRoundOnlyBookmarks(t *testing.T) {
 func TestSlackChannelMessagesAfterTheBookmark(t *testing.T) {
 	f := newSlackFake(t)
 	f.history["C0IN"] = `{"ok":true,"messages":[
-		{"type":"message","user":"ULE","text":"and now it is green","ts":"1726000200.000100"},
+		{"type":"message","user":"USM","text":"and now it is green","ts":"1726000200.000100"},
 		{"type":"message","user":"UME","text":"mine, not news","ts":"1726000150.000100"},
 		{"type":"message","bot_id":"B1","subtype":"bot_message","text":"deploy finished","ts":"1726000100.000100"}
 	],"has_more":false}`
@@ -103,12 +103,12 @@ func TestSlackChannelMessagesAfterTheBookmark(t *testing.T) {
 	for _, e := range events {
 		byTS[strings.TrimPrefix(e.Key, "slack:C0IN:")] = e
 	}
-	lena := byTS["1726000200.000100"]
-	if lena.Kind != KindChatMessage || lena.State != "#incidents" || lena.Author != "@ule" {
-		t.Fatalf("channel message = %+v", lena)
+	reviewer := byTS["1726000200.000100"]
+	if reviewer.Kind != KindChatMessage || reviewer.State != "#incidents" || reviewer.Author != "@usm" {
+		t.Fatalf("channel message = %+v", reviewer)
 	}
-	if lena.URL != "https://acme.slack.com/archives/C0IN/p1726000200000100" {
-		t.Fatalf("link = %q", lena.URL)
+	if reviewer.URL != "https://acme.slack.com/archives/C0IN/p1726000200000100" {
+		t.Fatalf("link = %q", reviewer.URL)
 	}
 	if !byTS["1726000150.000100"].Self {
 		t.Error("a message I wrote must be marked mine")
@@ -124,12 +124,12 @@ func TestSlackChannelMessagesAfterTheBookmark(t *testing.T) {
 func TestSlackMentionsComeFromSearchAndCarryTheThread(t *testing.T) {
 	f := newSlackFake(t)
 	f.search = `{"ok":true,"messages":{"matches":[
-		{"ts":"1726000300.000100","text":"<@UME> updated","user":"UVI","username":"vincent",
+		{"ts":"1726000300.000100","text":"<@UME> updated","user":"UTM","username":"teammate",
 		 "channel":{"id":"C0RE","name":"code-review"},
 		 "permalink":"https://acme.slack.com/archives/C0RE/p1726000300000100?thread_ts=1726000100.000100"}
 	],"paging":{"page":1,"pages":1}}}`
 	f.replies = `{"ok":true,"messages":[
-		{"type":"message","user":"UVI","text":"[HUM-1409] review please https://github.com/acme/api/pull/515","ts":"1726000100.000100"}]}`
+		{"type":"message","user":"UTM","text":"[ABC-12] review please https://github.com/acme/api/pull/515","ts":"1726000100.000100"}]}`
 	s := newTestSlack(f, SlackWatchConfig{Mentions: true})
 
 	events, cursor, err := s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme", "search": "1726000200.000000"})
@@ -143,7 +143,7 @@ func TestSlackMentionsComeFromSearchAndCarryTheThread(t *testing.T) {
 	if e.Kind != KindChatMention || !e.Mine {
 		t.Fatalf("a mention is mine by construction: %+v", e)
 	}
-	if !strings.Contains(e.Body, "In reply to @uvi:") || !strings.Contains(e.Body, "HUM-1409") {
+	if !strings.Contains(e.Body, "In reply to @utm:") || !strings.Contains(e.Body, "ABC-12") {
 		t.Fatalf("a reply in a thread must carry the parent, which is where the links are: %q", e.Body)
 	}
 	if len(e.Links) != 1 || e.Links[0] != "https://github.com/acme/api/pull/515" {
@@ -160,9 +160,9 @@ func TestSlackMentionsComeFromSearchAndCarryTheThread(t *testing.T) {
 func TestSlackReviewChannelPostIsOneEventWithEveryLink(t *testing.T) {
 	f := newSlackFake(t)
 	f.history["C0RE"] = `{"ok":true,"messages":[
-		{"type":"message","user":"UVI","ts":"1726000400.000100",
-		 "text":"[HUM-1473] Send the consultation request\nAPI: https://github.com/acme/api/pull/519\nAdmin: https://github.com/acme/admin-portal/pull/76"},
-		{"type":"message","user":"UVI","ts":"1726000350.000100","text":"no links here"}
+		{"type":"message","user":"UTM","ts":"1726000400.000100",
+		 "text":"[ABC-34] Send the welcome email\nAPI: https://github.com/acme/api/pull/519\nAdmin: https://github.com/acme/web/pull/76"},
+		{"type":"message","user":"UTM","ts":"1726000350.000100","text":"no links here"}
 	],"has_more":false}`
 	s := newTestSlack(f, SlackWatchConfig{ReviewChannels: []string{"#code-review"}})
 
@@ -194,18 +194,18 @@ func TestSlackReviewChannelPostIsOneEventWithEveryLink(t *testing.T) {
 
 func TestSlackDMIsAMention(t *testing.T) {
 	f := newSlackFake(t)
-	f.history["D0VI"] = `{"ok":true,"messages":[
-		{"type":"message","user":"UVI","text":"got a minute?","ts":"1726000500.000100"}],"has_more":false}`
+	f.history["D0TM"] = `{"ok":true,"messages":[
+		{"type":"message","user":"UTM","text":"got a minute?","ts":"1726000500.000100"}],"has_more":false}`
 	s := newTestSlack(f, SlackWatchConfig{Mentions: true})
 
-	events, _, err := s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme", "hist:D0VI": "1726000400.000100"})
+	events, _, err := s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme", "hist:D0TM": "1726000400.000100"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(events) != 1 || events[0].Kind != KindChatMention {
 		t.Fatalf("a direct message is a mention by construction: %+v", events)
 	}
-	if !strings.HasPrefix(events[0].Title, "DM from @uvi") {
+	if !strings.HasPrefix(events[0].Title, "DM from @utm") {
 		t.Fatalf("title = %q", events[0].Title)
 	}
 }

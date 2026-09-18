@@ -657,7 +657,7 @@ func TestWatchEnableStoresTheSlackBlockAndBuildsTheSource(t *testing.T) {
 	c := agentWatchEnableCmd
 	c.Flags().Visit(func(f *pflag.Flag) { _ = c.Flags().Set(f.Name, zeroFlag(f)) })
 	args := []string{"--mentions", "--review-channel", "#code-review", "--channel", "#incidents",
-		"--run-from", "@vincent", "--post-to", "#code-review", "--reply-as", "bot"}
+		"--trust", "@teammate", "--post-to", "#code-review", "--reply-as", "bot"}
 	if err := c.Flags().Parse(args); err != nil {
 		t.Fatal(err)
 	}
@@ -673,8 +673,8 @@ func TestWatchEnableStoresTheSlackBlockAndBuildsTheSource(t *testing.T) {
 	if spec.Chat == nil || !spec.Chat.Mentions || spec.Chat.ReplyAs != "bot" {
 		t.Fatalf("chat block = %+v", spec.Chat)
 	}
-	if len(spec.Chat.RunFrom) != 1 || spec.Chat.RunFrom[0] != "@vincent" {
-		t.Fatalf("runFrom = %v", spec.Chat.RunFrom)
+	if len(spec.Chat.Trust) != 1 || spec.Chat.Trust[0] != "@teammate" {
+		t.Fatalf("trust = %v", spec.Chat.Trust)
 	}
 	if !spec.Rules.Mentions || len(spec.Rules.Channels) != 2 {
 		t.Fatalf("the rules must see both the listened and the review channels: %+v", spec.Rules)
@@ -695,10 +695,10 @@ func TestWatchEnableStoresTheSlackBlockAndBuildsTheSource(t *testing.T) {
 
 func TestWatchStatusNamesTheChatBlock(t *testing.T) {
 	spec := daemon.WatchSpec{Workspace: "acme", Chat: &config.SlackWatch{
-		Mentions: true, ReviewChannels: []string{"#code-review"}, RunFrom: []string{"@vincent"},
+		Mentions: true, ReviewChannels: []string{"#code-review"}, Trust: []string{"@teammate"},
 	}}
 	got := chatStatusLine(spec)
-	for _, want := range []string{"mentions", "#code-review", "@vincent"} {
+	for _, want := range []string{"mentions", "#code-review", "@teammate"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("status line %q must name %q", got, want)
 		}

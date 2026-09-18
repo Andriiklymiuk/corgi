@@ -195,7 +195,7 @@ corgi agent watch                                                    # tokens pe
 For Slack, ask two more things and nothing else:
 
 - **"Where do people post pull requests for review?"** → `--review-channel '#code-review'`
-- **"Who may set corgi working by mentioning you?"** → `--run-from @vincent @lena`
+- **"Who may set corgi working by mentioning you?"** → `--trust @teammate @reviewer`
 
 The second is a security question wearing a friendly hat: everyone in a
 channel can type a mention, so the answer is a list of named people and the
@@ -203,7 +203,7 @@ default is nobody. Never suggest a wildcard, and never fill it in from the
 channel's membership.
 
 ```bash
-corgi agent watch enable --mentions --run-from @vincent
+corgi agent watch enable --mentions --trust @teammate
 corgi agent watch enable --review-channel '#code-review' --action fix --auto-for reviews
 ```
 
