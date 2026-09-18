@@ -254,6 +254,47 @@ func Resolve(id string, repo *RepoConfig, user *UserConfig) Resolved {
 	return out
 }
 
+// ChatConfig is the chat services a workspace listens to. Slack today.
+type ChatConfig struct {
+	Slack *SlackWatch `yaml:"slack,omitempty"`
+}
+
+// SlackWatch is one workspace's Slack.
+type SlackWatch struct {
+	// Mentions rings when someone names me or writes to me directly.
+	Mentions bool `yaml:"mentions"`
+	// Channels are listened to message by message.
+	Channels []string `yaml:"channels,omitempty"`
+	// ReviewChannels are where pull requests are posted for review: a post
+	// carrying links is one review to do, answered in its thread.
+	ReviewChannels []string `yaml:"reviewChannels,omitempty"`
+	// RunFrom names who may start an unattended run by mentioning me.
+	// Empty means nobody: a message from a channel is not an instruction,
+	// and a channel is open to whoever is in it.
+	RunFrom []string `yaml:"runFrom,omitempty"`
+	// PostTo is the default channel for `corgi agent chat post`.
+	PostTo string `yaml:"postTo,omitempty"`
+	// ReplyAs is bot or me; empty picks the bot when there is a bot token.
+	ReplyAs string `yaml:"replyAs,omitempty"`
+}
+
+// MayRun says whether this person's mention may start an unattended run.
+func (s *SlackWatch) MayRun(author string) bool {
+	if s == nil || len(s.RunFrom) == 0 {
+		return false
+	}
+	who := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(author), "@"))
+	if who == "" {
+		return false
+	}
+	for _, w := range s.RunFrom {
+		if strings.ToLower(strings.TrimPrefix(strings.TrimSpace(w), "@")) == who {
+			return true
+		}
+	}
+	return false
+}
+
 // WatchConfig is what `corgi agent watch enable` writes.
 type WatchConfig struct {
 	Enabled  bool   `yaml:"enabled"`
@@ -318,6 +359,10 @@ type WatchConfig struct {
 	// told or handed it; the second red on the same run goes the usual
 	// way. GitHub. Off by default.
 	RerunCI bool `yaml:"rerunCI,omitempty"`
+	// Chat is the workspace's chat listening and speaking: which channels,
+	// who may start a run, where a reply goes. Trusted config only — a
+	// channel to read and a person who may start a run are capability.
+	Chat *ChatConfig `yaml:"chat,omitempty"`
 	// Silent keeps this workspace's watch quiet: fixes run, the inbox and
 	// the kanban fill, but nothing rings — no toast, no phone push. A
 	// permission prompt in a live session still rings; that is not the
@@ -556,6 +601,9 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	}
 	if len(merged.From) == 0 {
 		merged.From = base.From
+	}
+	if merged.Chat == nil {
+		merged.Chat = base.Chat
 	}
 	return &merged
 }

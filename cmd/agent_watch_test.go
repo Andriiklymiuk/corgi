@@ -644,3 +644,51 @@ func TestWatchAuthSlackChecksTheTokenPrefixes(t *testing.T) {
 		t.Fatalf("both tokens should be stored: %+v", got)
 	}
 }
+
+func TestWatchEnableStoresTheSlackBlockAndBuildsTheSource(t *testing.T) {
+	dir, ws := watchFixture(t, &config.WatchConfig{Enabled: true})
+	t.Setenv("SLACK_USER_TOKEN", "")
+	t.Chdir(ws)
+
+	if err := watch.SaveSecrets(dir, watch.Secrets{SlackUser: "xoxp-t"}); err != nil {
+		t.Fatal(err)
+	}
+
+	c := agentWatchEnableCmd
+	c.Flags().Visit(func(f *pflag.Flag) { _ = c.Flags().Set(f.Name, zeroFlag(f)) })
+	args := []string{"--mentions", "--review-channel", "#code-review", "--channel", "#incidents",
+		"--run-from", "@vincent", "--post-to", "#code-review", "--reply-as", "bot"}
+	if err := c.Flags().Parse(args); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RunE(c, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	specs, err := loadWatchSpecs(dir)
+	if err != nil || len(specs) != 1 {
+		t.Fatalf("specs = %+v, %v", specs, err)
+	}
+	spec := specs[0]
+	if spec.Chat == nil || !spec.Chat.Mentions || spec.Chat.ReplyAs != "bot" {
+		t.Fatalf("chat block = %+v", spec.Chat)
+	}
+	if len(spec.Chat.RunFrom) != 1 || spec.Chat.RunFrom[0] != "@vincent" {
+		t.Fatalf("runFrom = %v", spec.Chat.RunFrom)
+	}
+	if !spec.Rules.Mentions || len(spec.Rules.Channels) != 2 {
+		t.Fatalf("the rules must see both the listened and the review channels: %+v", spec.Rules)
+	}
+	if !spec.Rules.Reviews {
+		t.Error("asking for a review channel is asking for the reviews it carries")
+	}
+	var slack bool
+	for _, s := range spec.Sources {
+		if s.Name() == "slack" {
+			slack = true
+		}
+	}
+	if !slack {
+		t.Fatal("a workspace with a slack block and a token must poll slack")
+	}
+}
