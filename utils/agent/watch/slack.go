@@ -119,12 +119,24 @@ func (s *Slack) channels(convs []slackConversation) []slackConversation {
 	return out
 }
 
+// Slack refuses the whole list when any asked-for type lacks its scope, so a
+// token that reads public channels alone gets a second, narrower ask.
 func (s *Slack) conversations(ctx context.Context) ([]slackConversation, error) {
+	all, err := s.conversationsOf(ctx, "public_channel,private_channel,im,mpim")
+	if err != nil && strings.Contains(err.Error(), "missing_scope") {
+		if public, retry := s.conversationsOf(ctx, "public_channel"); retry == nil {
+			return public, nil
+		}
+	}
+	return all, err
+}
+
+func (s *Slack) conversationsOf(ctx context.Context, types string) ([]slackConversation, error) {
 	var all []slackConversation
 	cursor := ""
 	for {
 		params := url.Values{
-			"types":            {"public_channel,private_channel,im,mpim"},
+			"types":            {types},
 			"limit":            {"200"},
 			"exclude_archived": {"true"},
 		}
