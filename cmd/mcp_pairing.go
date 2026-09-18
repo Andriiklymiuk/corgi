@@ -237,10 +237,46 @@ func writePairError(w http.ResponseWriter, status int, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-func announcePairing(code, addr string) {
+const pairLaunchName = "pair.launch"
+
+type pairLaunch struct {
+	Code string `json:"code"`
+	TTL  string `json:"ttl,omitempty"`
+}
+
+func writePairLaunch(dir, code string, ttl time.Duration) error {
+	if _, err := pairing.NewSessionWithCode(code, ttl); err != nil {
+		return err
+	}
+	data, _ := json.Marshal(pairLaunch{Code: pairing.NormalizeCode(code), TTL: ttl.String()})
+	return os.WriteFile(filepath.Join(dir, pairLaunchName), data, 0o600)
+}
+
+func takePairLaunch(dir string) (*pairing.Session, bool) {
+	path := filepath.Join(dir, pairLaunchName)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	_ = os.Remove(path)
+	var l pairLaunch
+	if json.Unmarshal(raw, &l) != nil {
+		return nil, false
+	}
+	ttl, _ := time.ParseDuration(l.TTL)
+	session, err := pairing.NewSessionWithCode(l.Code, ttl)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pairing: ignoring the launch code:", err)
+		return nil, false
+	}
+	return session, true
+}
+
+func announcePairing(session *pairing.Session, addr string) {
+	code := session.Code()
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "  pairing code: %s\n", code)
-	fmt.Fprintf(os.Stderr, "  valid for %s, single use\n", pairing.CodeTTL)
+	fmt.Fprintf(os.Stderr, "  valid for %s, single use\n", time.Until(session.ExpiresAt()).Round(time.Minute))
 	fmt.Fprintf(os.Stderr, "  POST http://%s/pair  {\"code\":\"%s\",\"device\":\"my-phone\"}\n", localURL(addr), code)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "  Paired devices get their own token, revocable with `corgi mcp devices revoke <name>`.")

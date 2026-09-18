@@ -62,6 +62,7 @@ type State struct {
 	Notice          string    `json:"notice,omitempty"`
 	NoticeAt        time.Time `json:"noticeAt,omitempty"`
 	Sessions        []Session `json:"sessions"`
+	Groups          []Group   `json:"groups,omitempty"`
 	Windows         []Window  `json:"windows,omitempty"`
 	Accounts        []Account `json:"accounts,omitempty"`
 }
@@ -1552,6 +1553,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 			st.Working++
 		}
 	}
+	st.Groups = Groups(st.Sessions)
 	st.Windows = r.sortedWindowsLocked()
 	st.Accounts = append([]Account(nil), r.accounts...)
 	st.Ended = append([]Session(nil), r.ended...)

@@ -180,6 +180,7 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 		After   int64  `json:"after"`
 		Wait    int    `json:"wait"`
 		Max     int    `json:"max"`
+		Why     bool   `json:"why"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -195,6 +196,15 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := transcriptPathFor(session)
+	if req.Why {
+		steps, err := transcriptSteps(path, req.Max)
+		if err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, "could not read the conversation")
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"session": session.ID, "steps": steps})
+		return
+	}
 	if path == "" || !transcript.Exists(path) {
 		writeLaunchJSON(w, map[string]any{"entries": []transcript.Entry{}, "offset": 0, "empty": true})
 		return

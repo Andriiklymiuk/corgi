@@ -49,3 +49,31 @@ func TestCarryLeavesAHandoffFirst(t *testing.T) {
 		t.Fatal("no ticket in the branch, no packet")
 	}
 }
+
+func TestForkCommandsResumeWithAForkedSessionId(t *testing.T) {
+	cmds := forkCommands("/usr/local/bin/corgi", "work", "abc-123", []string{"p1", "p2"}, 3)
+	if len(cmds) != 3 {
+		t.Fatalf("want 3 commands, got %d", len(cmds))
+	}
+	for i, c := range cmds {
+		if !strings.Contains(c, "-- --resume abc-123 --fork-session") || !strings.Contains(c, "agent claude --profile work") {
+			t.Fatalf("fork %d: %s", i, c)
+		}
+	}
+	if !strings.Contains(cmds[0], "--prompt-id p1") || !strings.Contains(cmds[1], "--prompt-id p2") || strings.Contains(cmds[2], "--prompt-id") {
+		t.Fatalf("prompts go to the first forks only: %v", cmds)
+	}
+}
+
+func TestForkRefusesBadCounts(t *testing.T) {
+	dir := t.TempDir()
+	s := sessions.Session{ID: "s1", Cwd: dir, Display: "k1"}
+	for _, n := range []int{0, 1, maxForks + 1} {
+		if err := forkSession(dir, s, "", n, nil, "test"); err == nil {
+			t.Fatalf("fork %d accepted", n)
+		}
+	}
+	if err := forkSession(dir, s, "", 2, []string{"a", "b", "c"}, "test"); err == nil {
+		t.Fatal("more prompts than forks accepted")
+	}
+}

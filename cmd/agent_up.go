@@ -164,6 +164,12 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		}
 	}
 
+	if code, _ := cmd.Flags().GetString("pair-code"); strings.TrimSpace(code) != "" {
+		ttl, _ := cmd.Flags().GetDuration("pair-ttl")
+		if err := writePairLaunch(dir, code, ttl); err != nil {
+			exitWithError("agent_up_pair", err, 2)
+		}
+	}
 	if err := spawnDetachedMCP(dir, addr, tunnel); err != nil {
 		exitWithError("agent_up_mcp", err, 1)
 	}
@@ -804,6 +810,8 @@ func addAgentUpFlags(c *cobra.Command) {
 	c.Flags().String(flagTunnelHostname, "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass \"\" to go back to a quick tunnel")
 	c.Flags().Bool(atLoginFlag, false, "Also start corgi agent at login, so the daemon, this endpoint and this tunnel come back after a reboot (--at-login=false turns it off again)")
 	c.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
+	c.Flags().String("pair-code", "", "Open the first pairing window on this code instead of a random one — minted earlier with `corgi agent pair --mint`, so a phone prepared ahead of time can pair a headless daemon nobody types on")
+	c.Flags().Duration("pair-ttl", 0, "How long the --pair-code window stays open (default 10m, at most 24h) — room for a slow boot")
 	c.Flags().Bool("viewer", false, "The pairing window this opens hands out a read-only token: a teammate's phone sees the board, the inbox and the brief, never a transcript, never a button (with --fresh to reopen a window)")
 }
 
