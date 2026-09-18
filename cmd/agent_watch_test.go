@@ -615,3 +615,32 @@ func TestAutoForTakesWordsAndKinds(t *testing.T) {
 		t.Fatal("a word nobody defined must say what the words are")
 	}
 }
+
+func TestWatchAuthSlackChecksTheTokenPrefixes(t *testing.T) {
+	dir, ws := watchFixture(t, &config.WatchConfig{Enabled: true})
+	t.Setenv("SLACK_USER_TOKEN", "")
+	t.Setenv("SLACK_BOT_TOKEN", "")
+	t.Chdir(ws)
+
+	c := agentWatchAuthCmd
+	reset := func() { c.Flags().Visit(func(f *pflag.Flag) { _ = c.Flags().Set(f.Name, zeroFlag(f)) }) }
+
+	reset()
+	if err := c.Flags().Parse([]string{"--token", "xoxb-wrong-place"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RunE(c, []string{"slack"}); err == nil {
+		t.Fatal("a bot token passed as --token must be refused: it cannot search or read as me")
+	}
+
+	reset()
+	if err := c.Flags().Parse([]string{"--token", "xoxp-mine", "--bot", "xoxb-app"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RunE(c, []string{"slack"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := watch.LoadSecrets(dir); got.SlackUser != "xoxp-mine" || got.SlackBot != "xoxb-app" {
+		t.Fatalf("both tokens should be stored: %+v", got)
+	}
+}
