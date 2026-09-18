@@ -553,6 +553,45 @@ func (s *State) cursor(ws, source string) Cursor {
 	return c
 }
 
+// Thread is the parent timestamp of the message an event key names, when
+// it sat in a thread; "" when it was a top-level post.
+func (s *State) Thread(key string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.Cursors {
+		if v := c["thread:"+key]; v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// SourceIdentity is a value a source saved about itself — the Slack team a
+// permalink needs, the login "me" resolved to.
+func (s *State) SourceIdentity(source, field string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, c := range s.Cursors {
+		if strings.HasSuffix(key, "/"+source) && c[field] != "" {
+			return c[field]
+		}
+	}
+	return ""
+}
+
+// SetThreadForTest seeds a thread pointer. Tests only.
+func (s *State) SetThreadForTest(key, parent string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Cursors == nil {
+		s.Cursors = map[string]Cursor{}
+	}
+	if s.Cursors["test/slack"] == nil {
+		s.Cursors["test/slack"] = Cursor{}
+	}
+	s.Cursors["test/slack"]["thread:"+key] = parent
+}
+
 func (s *State) setCursor(ws, source string, c Cursor, now time.Time, err error) {
 	s.mu.Lock()
 	key := ws + "/" + source
