@@ -852,23 +852,43 @@ func fixPrompt(e watch.Event) string {
 }
 
 func unattendedSuffix(spec WatchSpec, e watch.Event) string {
-	trail := "corgi watch · " + spec.Workspace + " · " + string(e.Kind) + " " + e.Ref
-	if e.URL != "" {
-		trail += " · " + e.URL
-	}
-	return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
+	s := "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
 		"pick the recommended option yourself, say which you picked and why, and go on. " +
 		"If you truly cannot proceed, leave a handoff with `--blocked <reason>` (the question goes in `--uncertain`) and stop.\n" +
 		"Before you finish: review your own diff the way you would review someone else's, " +
-		"and fix what you find — nobody has looked at this but you. " +
-		"Put this line at the end of the pull request body so whoever reviews it knows where it came from: " +
-		trail + "\n" +
-		"Say plainly at the end what you changed and what your own review found.\n" +
-		"The pull request body carries a `## Evidence` section — changed files with a reason each; the commands you ran with their results; " +
-		"each test mapped to the acceptance criterion it protects; known limitations and residual risk — facts, one line each.\n" +
-		"If you stop with work remaining, blocked, or unsure, leave a handoff for the next run before you end: " +
+		"and fix what you find — nobody has looked at this but you. "
+	ownPR := e.Kind != watch.KindReviewRequested
+	if ownPR {
+		trail := "corgi watch · " + spec.Workspace + " · " + string(e.Kind) + " " + e.Ref
+		if e.URL != "" {
+			trail += " · " + e.URL
+		}
+		s += "Put this line at the end of the pull request body so whoever reviews it knows where it came from: " + trail + "\n"
+	}
+	s += "Say plainly at the end what you changed and what your own review found.\n"
+	if ownPR {
+		s += "The pull request body carries a `## Evidence` section — changed files with a reason each; the commands you ran with their results; " +
+			"each test mapped to the acceptance criterion it protects; known limitations and residual risk — facts, one line each.\n"
+	}
+	return s + "If you stop with work remaining, blocked, or unsure, leave a handoff for the next run before you end: " +
 		"`corgi agent handoff --ref " + e.Ref + " --done … --remaining … --decision … --uncertain … --next … --verify \"<the check you ran>\"` " +
 		"(one flag per item; short sentences; no secrets)."
+}
+
+// A VPN client that wants a browser sign-in cannot be driven when nobody is
+// there, so a headless run leaves it out of the stack preflight.
+func headlessEnv(configDir, omit string) []string {
+	var env []string
+	if configDir != "" {
+		env = append(env, "CLAUDE_CONFIG_DIR="+configDir)
+	}
+	keys := []string{}
+	for _, k := range strings.Split(omit, ",") {
+		if k = strings.TrimSpace(k); k != "" && k != "useAwsVpn" {
+			keys = append(keys, k)
+		}
+	}
+	return append(env, "CORGI_OMIT="+strings.Join(append(keys, "useAwsVpn"), ","))
 }
 
 func fixArgs(spec WatchSpec, e watch.Event) []string {
@@ -948,10 +968,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if d.Pickup != nil {
 		d.Pickup(spec.Workspace, e)
 	}
-	var env []string
-	if spec.ConfigDir != "" {
-		env = append(env, "CLAUDE_CONFIG_DIR="+spec.ConfigDir)
-	}
+	env := headlessEnv(spec.ConfigDir, os.Getenv("CORGI_OMIT"))
 	fmt.Fprintf(logFile, "=== %s %s %s\n", time.Now().Format(time.RFC3339), e.Kind, e.Ref)
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
 	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
