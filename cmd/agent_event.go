@@ -104,6 +104,7 @@ func agentEvent(name, agent, session, cwd, tool, input, message string, getenv f
 		Ticket: getenv("CORGI_TICKET"), TicketKey: getenv("CORGI_TICKET_KEY"), Bot: getenv("CORGI_BOT"),
 		TermProgram: getenv("TERM_PROGRAM"),
 		TermSession: firstNonEmpty(getenv("ITERM_SESSION_ID"), getenv("TERM_SESSION_ID")),
+		TmuxPane:    getenv("TMUX_PANE"),
 		At:          time.Now().UTC(),
 	}
 	if tool != "" {

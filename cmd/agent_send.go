@@ -18,7 +18,8 @@ var agentSendCmd = &cobra.Command{
 	Short: "Type text into a session's terminal, after bringing it forward",
 	Long: `Focuses a session and types the text into it. --enter adds Enter, so the
 prompt is sent. A session in an integrated terminal takes it through the
-corgi VS Code extension; one in iTerm2 or Terminal.app through AppleScript.
+corgi VS Code extension; one in iTerm2 or Terminal.app through AppleScript;
+one inside tmux through send-keys, on macOS and Linux alike.
 The Claude Code panel takes nothing from here (its input is a web view):
 the board records the failure and a key falls back to its own keystrokes.
 

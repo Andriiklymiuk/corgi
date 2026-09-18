@@ -2,9 +2,21 @@ package utils
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// detectForge only looks gh up on PATH; the fake runner answers every call.
+func fakeGHOnPath(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
 
 type fakeForge struct {
 	calls   []string
@@ -37,6 +49,7 @@ func (f *fakeForge) run(dir, name string, args ...string) (string, error) {
 }
 
 func TestOpenBranchPRsSkipsReposWithoutCommits(t *testing.T) {
+	fakeGHOnPath(t)
 	f := &fakeForge{
 		commits: map[string]string{"api": "3", "web": "0"},
 		create:  map[string]string{"api": "https://github.com/acme/api/pull/7"},
@@ -67,6 +80,7 @@ func TestOpenBranchPRsSkipsReposWithoutCommits(t *testing.T) {
 }
 
 func TestOpenBranchPRsCrossLinksSiblings(t *testing.T) {
+	fakeGHOnPath(t)
 	f := &fakeForge{
 		commits: map[string]string{"api": "2", "web": "1"},
 		create: map[string]string{
@@ -97,6 +111,7 @@ func TestOpenBranchPRsCrossLinksSiblings(t *testing.T) {
 }
 
 func TestOpenBranchPRsReportsAFailedPush(t *testing.T) {
+	fakeGHOnPath(t)
 	f := &fakeForge{commits: map[string]string{"api": "1"}, fail: map[string]bool{"api": true}}
 	set, err := openBranchPRs(map[string]string{"api": "api"}, "feature/x", "", "T", "", false, f.run)
 	if err != nil {
@@ -162,6 +177,7 @@ func TestDetectForgeReportsAMissingRemote(t *testing.T) {
 }
 
 func TestExistingPRIsReturnedNotDuplicated(t *testing.T) {
+	fakeGHOnPath(t)
 	f := &fakeForge{commits: map[string]string{"api": "2"}}
 	run := func(dir, name string, args ...string) (string, error) {
 		if name == "gh" && args[0] == "pr" && args[1] == "view" {
@@ -222,6 +238,7 @@ func TestExecInDirRunsAndReportsFailure(t *testing.T) {
 }
 
 func TestOpenOnePRReportsAForgeFailure(t *testing.T) {
+	fakeGHOnPath(t)
 	f := &fakeForge{commits: map[string]string{"api": "1"}}
 	run := func(dir, name string, args ...string) (string, error) {
 		if name == "gh" && args[0] == "pr" && args[1] == "create" {

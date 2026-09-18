@@ -359,6 +359,11 @@ func (d *Daemon) deliverText(ctx context.Context, t sessions.FocusTarget, text s
 			return d.TypeText(ctx, t, text, enter)
 		}
 		return typeIntoTerminal(ctx, t, text, enter)
+	case sessions.HostTmux:
+		if d.TypeText != nil {
+			return d.TypeText(ctx, t, text, enter)
+		}
+		return typeIntoTmux(ctx, t, text, enter)
 	}
 	return fmt.Errorf("%s: nowhere to type", t.Label)
 }
@@ -560,6 +565,8 @@ func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 		if runtime.GOOS == "darwin" {
 			return raiseTerminal(ctx, t)
 		}
+	case sessions.HostTmux:
+		return raiseTmuxPane(ctx, t)
 	}
 	return fmt.Errorf("no window known for a %s session on %s", t.Kind, runtime.GOOS)
 }

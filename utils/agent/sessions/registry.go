@@ -507,6 +507,9 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.TermSession != "" {
 		s.TermSession = ev.TermSession
 	}
+	if ev.TmuxPane != "" {
+		s.TmuxPane = ev.TmuxPane
+	}
 	if ev.Context != nil {
 		c := *ev.Context
 		s.Context = &c
@@ -800,6 +803,10 @@ func (r *Registry) bindPanel(s *Session, h *Host) bool {
 }
 
 func (r *Registry) bindTermProgram(s *Session, h *Host) {
+	if s.TmuxPane != "" {
+		h.Kind, h.Pane = HostTmux, s.TmuxPane
+		return
+	}
 	switch strings.ToLower(s.TermProgram) {
 	case "vscode":
 		h.Kind = HostVSCodeTerminal
@@ -1230,6 +1237,7 @@ type FocusTarget struct {
 	ShellPID  int
 	Panel     bool
 	TTY       uint64
+	Pane      string
 	New       bool
 	Connected bool
 	Title     string
@@ -1251,7 +1259,7 @@ func (r *Registry) Focus(ref string) (FocusTarget, error) {
 	h := s.Host
 	return FocusTarget{
 		SessionID: s.ID, Kind: h.Kind, App: h.App, Folder: h.Folder, WindowID: h.WindowID,
-		ShellPID: h.ShellPID, Panel: h.Kind == HostVSCodePanel, Connected: h.Connected, TTY: s.TTY,
+		ShellPID: h.ShellPID, Panel: h.Kind == HostVSCodePanel, Connected: h.Connected, TTY: s.TTY, Pane: h.Pane,
 		Title: s.Title, Label: r.displayLocked(s),
 	}, nil
 }

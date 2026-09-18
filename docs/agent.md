@@ -306,7 +306,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent watch pr <ready\|merge\|close\|approve\|request\|comment> <ref\|url> [words]` | a pull request from wherever you are: the first three on one of yours; approve, ask for changes on, or comment on any the inbox knows — the one somebody asked you to review first of all (the phone's ticket sheet has the same buttons; 2.22) |
 | `corgi agent watch work <ref> [--isolate]` | what **Work on it** on the phone runs: a session on that ticket, in the window in front |
 | `corgi agent dismiss <session>` | take a done, idle or closed session off the board until its next event (a closed chat whose process lingers) |
-| `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript |
+| `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript, tmux panes via `send-keys` on any OS |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
 | `corgi agent pair [--viewer] [--file]` | a fresh pairing window on the running server — the QR again, a read-only one, or a `.corgipair` to AirDrop to the phone (2.22.4) |
@@ -645,9 +645,9 @@ prompt is drawn, and the session's row counts what it allowed
 (`autoAllowed`). Nothing rings, nothing is pushed. Three limits, none of them
 configurable: a Bash command is never a read, however it looks (`cat` and `rm`
 share a prompt shape); anything that writes waits for a person; and only a
-session in iTerm2 is answered, because it is the one host corgi can type into
-without bringing a window forward — in VS Code or Terminal.app the prompt
-rings as before. The switch flips from the phone too, on the repo's sheet,
+session in iTerm2 or tmux is answered, because those are the hosts corgi can
+type into without bringing a window forward — in VS Code or Terminal.app the
+prompt rings as before. The switch flips from the phone too, on the repo's sheet,
 and takes at the next prompt.
 
 #### Done means the checks say so
@@ -832,6 +832,14 @@ hook records the `claude` process's controlling tty, and focus selects that
 exact tab through the emulator's own scripting; with no tty the app comes
 forward on its own.
 
+**tmux, on any OS.** A `claude` started inside tmux carries `TMUX_PANE`, and
+the hook records it. Focus becomes `tmux select-window` + `select-pane`, and
+typing goes through `tmux send-keys` — no AppleScript, no Accessibility
+permission, and the only way a terminal session on Linux (or over SSH) takes
+text from the phone. The pane counts as a host corgi can type into without
+raising a window, so the workspace reads policy answers there as it does in
+iTerm2.
+
 **Tab titles.** A second, synchronous hook prints a terminal title on the
 events that change status, so every terminal tab running Claude reads
 `● acme-api`, `▲ acme-api NEEDS YOU` or `✓ acme-api` with no deck at all.
@@ -973,7 +981,7 @@ integrated terminal takes the text through the VS Code extension (a reveal
 request with `text` and `enter`; Enter is a literal carriage return, so the
 Claude Code TUI reads it as the Return key and nothing is ever run as a shell
 command). iTerm2 takes it through `write text`, Terminal.app through System
-Events keystrokes. The Claude Code panel takes nothing from here — its input
+Events keystrokes, a tmux pane through `send-keys` (Linux included). The Claude Code panel takes nothing from here — its input
 is a web view — so the send fails with a `focusError` saying so and a surface
 falls back to its own keystrokes after the focus it already got.
 
@@ -2061,7 +2069,7 @@ each thing is, `corgi agent brief` what a run was on.
 | | supported |
 |---|---|
 | macOS | yes — launchd, `caffeinate` |
-| Linux | yes — systemd user unit (`loginctl enable-linger` on a server, see above), `systemd-inhibit` |
+| Linux | yes — systemd user unit (`loginctl enable-linger` on a server, see above), `systemd-inhibit`, `notify-send`; port owners come from `/proc`, so `lsof` is optional; run `claude` inside **tmux** and focus, send and answer reach the pane (see below) |
 | Windows | **not yet.** `corgi agent install` exits 2 and says so rather than half-installing. Run `corgi agent serve` under your own supervisor. |
 
 ## macOS keeps asking to let corgi read Documents

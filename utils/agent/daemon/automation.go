@@ -137,7 +137,7 @@ func (d *Daemon) allowsByPolicy(s sessions.Session) bool {
 	if d.Policy == nil || s.Pending == nil || s.Pending.Risk != config.AutoAllowReads || s.Pending.Tool == "Bash" {
 		return false
 	}
-	if s.Host.Kind != sessions.HostITerm {
+	if s.Host.Kind != sessions.HostITerm && s.Host.Kind != sessions.HostTmux {
 		return false
 	}
 	return d.Policy(s).AutoAllow == config.AutoAllowReads

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -98,5 +99,16 @@ func TestClaimNotifyToken_ExpiresAfterWindow(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	if !claimNotifyToken("k") {
 		t.Error("claim after window should succeed")
+	}
+}
+
+func TestNotifySendArgsCarryAppNameAndIcon(t *testing.T) {
+	got := notifySendArgs("corgi · api", "needs you", "/tmp/icon.png")
+	want := []string{"--app-name=corgi", "--icon=/tmp/icon.png", "corgi · api", "needs you"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("got %q", got)
+	}
+	if got := notifySendArgs("t", "b", ""); len(got) != 3 || got[0] != "--app-name=corgi" {
+		t.Fatalf("no icon: %q", got)
 	}
 }

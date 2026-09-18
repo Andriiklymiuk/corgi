@@ -1229,7 +1229,7 @@ func init() {
 	f.Bool("rebase", false, "Rebase a session's branch onto main where it sits when the session stops behind main with a clean tree and no conflicts (a branch that would conflict is typed into the session under --hand-over)")
 	f.Int(watchFlagCompactAt, 0, "Type /compact into a session past this much context the next time it stops — 85 is where the board goes red; 0 is off")
 	f.String(watchFlagDoneWhen, "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes — `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
-	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 sessions only)")
+	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 and tmux sessions only)")
 	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
 	f.Bool("mentions", false, "Ring when someone names you in Slack or writes to you directly (needs corgi agent watch auth slack)")

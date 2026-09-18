@@ -78,6 +78,7 @@ const (
 	HostVSCodePanel    HostKind = "vscode-panel"
 	HostITerm          HostKind = "iterm"
 	HostTerminalApp    HostKind = "terminal"
+	HostTmux           HostKind = "tmux"
 	HostUnknown        HostKind = "unknown"
 )
 
@@ -108,6 +109,7 @@ type Event struct {
 	Agent        string         `json:"agent,omitempty"`
 	TermProgram  string         `json:"termProgram,omitempty"`
 	TermSession  string         `json:"termSession,omitempty"`
+	TmuxPane     string         `json:"tmuxPane,omitempty"`
 	ClaudePID    int            `json:"claudePid,omitempty"`
 	Ancestors    []int          `json:"ancestors,omitempty"`
 	Names        []string       `json:"names,omitempty"`
@@ -123,6 +125,7 @@ type Host struct {
 	ShellPID    int      `json:"shellPid,omitempty"`
 	Terminal    string   `json:"terminal,omitempty"`
 	TermProgram string   `json:"termProgram,omitempty"`
+	Pane        string   `json:"pane,omitempty"`
 	Connected   bool     `json:"connected,omitempty"`
 }
 
@@ -141,6 +144,7 @@ type Session struct {
 	Window        string         `json:"window,omitempty"`
 	TermProgram   string         `json:"termProgram,omitempty"`
 	TermSession   string         `json:"termSession,omitempty"`
+	TmuxPane      string         `json:"tmuxPane,omitempty"`
 	Host          Host           `json:"host"`
 	Status        Status         `json:"status"`
 	StatusSince   time.Time      `json:"statusSince"`

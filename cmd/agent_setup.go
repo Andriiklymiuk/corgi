@@ -495,7 +495,7 @@ func checkSessionTracking(dir string) []agentCheck {
 	if unknown > 0 {
 		board.OK = false
 		board.Detail += fmt.Sprintf(", %d with no known window", unknown)
-		board.Fix = "focus reaches those at app level only — reopen the terminal after installing the corgi VS Code extension"
+		board.Fix = "focus reaches those at app level only — reopen the terminal after installing the corgi VS Code extension, or run claude inside tmux (any OS)"
 	}
 	return append(checks, board)
 }
