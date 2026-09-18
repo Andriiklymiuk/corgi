@@ -159,7 +159,7 @@ func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host stri
 
 func setupNgrokTunnel(run tunnelRunner, have binaryLookup, host string) error {
 	if err := have("ngrok"); err != nil {
-		return fmt.Errorf("ngrok is not installed — `brew install ngrok`")
+		return utils.NotInstalledError("ngrok")
 	}
 	if _, err := run("ngrok", "config", "check"); err != nil {
 		return fmt.Errorf(`ngrok has no authtoken configured. Get one from

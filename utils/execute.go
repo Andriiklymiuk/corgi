@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -351,9 +352,15 @@ func handleCommandFailure(err error, commandSlice []string, serviceName, finalCo
 		return err
 	}
 	missingCommand := commandSlice[0]
-	cmdInfo, ok := CommandInstructions[missingCommand]
+	cmdInfo, ok := commandInstructionsFor(runtime.GOOS, missingCommand)
 	if !ok {
 		return fmt.Errorf("unknown command %s, no install instructions found", missingCommand)
+	}
+	if cmdInfo.Install == "" {
+		return fmt.Errorf("%s is missing — install it: %s", missingCommand, cmdInfo.Hint)
+	}
+	if usesBrew(cmdInfo.Install) && !brewAvailable() {
+		return fmt.Errorf("%s is missing and brew is not installed — get it with `%s` after installing Homebrew, or your own package manager", missingCommand, cmdInfo.Install)
 	}
 	fmt.Printf("\n❗%s is missing. Attempting to install it using: %s\n", missingCommand, cmdInfo.Install)
 	installCmd := exec.Command("/bin/bash", "-c", cmdInfo.Install)

@@ -48,6 +48,13 @@ func IsPortListening(port int) bool {
 }
 
 func PortOwner(port int) string {
+	if owners, ok := nativeListeners(port); ok {
+		var tags []string
+		for _, o := range owners {
+			tags = append(tags, fmt.Sprintf("%s(pid=%d)", o.Name, o.PID))
+		}
+		return strings.Join(tags, " ")
+	}
 	lsof := lsofPath()
 	if lsof == "" {
 		return ""

@@ -226,6 +226,9 @@ func TestEnvCheck_UnreadableFileErrorsInsteadOfPassing(t *testing.T) {
 		"KEY=1\n",
 		Service{ServiceName: "api", CopyEnvFromFilePath: "api.env"},
 	)
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a 0o000 file")
+	}
 	example := filepath.Join(corgi.Services[0].AbsolutePath, ".env.example")
 	if err := os.Chmod(example, 0o000); err != nil {
 		t.Fatal(err)

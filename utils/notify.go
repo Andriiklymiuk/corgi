@@ -154,7 +154,7 @@ func sendNotification(title, body string) {
 		)
 		cmd = exec.Command("osascript", "-e", script)
 	case "linux":
-		cmd = exec.Command("notify-send", title, body)
+		cmd = exec.Command("notify-send", notifySendArgs(title, body, notifyIconPath())...)
 	case "windows":
 		ps := fmt.Sprintf(
 			`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; `+
@@ -195,4 +195,12 @@ func safeNotifyLink(raw string) string {
 		return ""
 	}
 	return u.String()
+}
+
+func notifySendArgs(title, body, icon string) []string {
+	args := []string{"--app-name=corgi"}
+	if icon != "" {
+		args = append(args, "--icon="+icon)
+	}
+	return append(args, title, body)
 }

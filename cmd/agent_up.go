@@ -428,7 +428,7 @@ func corgiListenerPIDs(addr string) []int {
 	if err != nil {
 		return nil
 	}
-	out, err := exec.Command("lsof", "-ti", "tcp:"+port, "-sTCP:LISTEN").Output()
+	portNum, err := strconv.Atoi(port)
 	if err != nil {
 		return nil
 	}
@@ -438,9 +438,8 @@ func corgiListenerPIDs(addr string) []int {
 		wanted[filepath.Base(exe)] = true
 	}
 	var pids []int
-	for _, field := range strings.Fields(string(out)) {
-		pid, err := strconv.Atoi(field)
-		if err != nil || pid <= 0 || pid == os.Getpid() {
+	for _, pid := range utils.ListenerPIDs(portNum) {
+		if pid == os.Getpid() {
 			continue
 		}
 		comm, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output()

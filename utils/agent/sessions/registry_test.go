@@ -1083,3 +1083,24 @@ func TestTheModelComesFromTheContextTheHookAlreadySends(t *testing.T) {
 		t.Fatalf("the context gauge already knows the model: %q", s.Model)
 	}
 }
+
+func TestTmuxPaneBindsATmuxHost(t *testing.T) {
+	r := newTestRegistry(t)
+	inTmux := ev("SessionStart", "tmux", 0)
+	inTmux.ClaudePID, inTmux.Ancestors, inTmux.TermProgram, inTmux.TmuxPane = 700, []int{700}, "tmux", "%3"
+	oldTmux := ev("SessionStart", "old-tmux", 0)
+	oldTmux.ClaudePID, oldTmux.Ancestors, oldTmux.TmuxPane = 710, []int{710}, "%4"
+	for _, e := range []Event{inTmux, oldTmux} {
+		r.Apply(e)
+	}
+	for _, id := range []string{"tmux", "old-tmux"} {
+		got, _ := r.Lookup(id)
+		if got.Host.Kind != HostTmux || got.Host.Pane == "" {
+			t.Fatalf("%s: a TMUX_PANE binds a tmux host: %+v", id, got.Host)
+		}
+	}
+	target, err := r.Focus("tmux")
+	if err != nil || target.Kind != HostTmux || target.Pane != "%3" {
+		t.Fatalf("focus carries the pane: %+v %v", target, err)
+	}
+}

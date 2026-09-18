@@ -145,7 +145,7 @@ func detectForge(run prRunner, dir string) (forgeCLI, error) {
 	}
 	if strings.Contains(remote, "gitlab") {
 		if _, err := exec.LookPath("glab"); err != nil {
-			return forgeCLI{}, fmt.Errorf("glab is not installed — see gitlab.com/gitlab-org/cli")
+			return forgeCLI{}, NotInstalledError("glab")
 		}
 		return forgeCLI{
 			bin: "glab",
@@ -168,7 +168,7 @@ func detectForge(run prRunner, dir string) (forgeCLI, error) {
 		}, nil
 	}
 	if _, err := exec.LookPath("gh"); err != nil {
-		return forgeCLI{}, fmt.Errorf("gh is not installed — `brew install gh`")
+		return forgeCLI{}, NotInstalledError("gh")
 	}
 	return forgeCLI{
 		bin: "gh",

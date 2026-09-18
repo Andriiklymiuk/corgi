@@ -12,6 +12,17 @@ func requireGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
+	// A bare container has no git identity; commits in these tests need one.
+	for _, key := range []string{"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"} {
+		if os.Getenv(key) == "" {
+			t.Setenv(key, "corgi test")
+		}
+	}
+	for _, key := range []string{"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
+		if os.Getenv(key) == "" {
+			t.Setenv(key, "corgi@test.invalid")
+		}
+	}
 }
 
 func originRepo(t *testing.T, root, branch string) (origin, clone string) {
