@@ -1150,8 +1150,13 @@ corgi agent watch enable --review-channel '#code-review' --action fix --auto-for
 corgi agent chat post "on it" --reply slack:C0RE:1726000400.000100
 ```
 
-The user token wants `search:read`, the four `*:history` and `*:read`
-scopes, `users:read`, `chat:write` and `reactions:write`.
+The user token wants `search:read` and `users:read` for mentions alone
+(the smallest token: it can read your mentions and nothing else). A
+listened channel or a direct message adds the matching `*:read` and
+`*:history` scopes (`channels:*`, `groups:*` for private ones, `im:*`,
+`mpim:*`); answering in a thread adds `chat:write` and `reactions:write`.
+The granular `search:read.*` scopes are Enterprise-only on a user token;
+the plain `search:read` is the one.
 
 **A review channel** is the shape most teams already have: one post per
 ticket listing the pull requests, the reviewer answering in the thread. Put

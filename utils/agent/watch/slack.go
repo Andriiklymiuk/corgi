@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"regexp"
 	"sort"
@@ -65,7 +66,15 @@ func (s *Slack) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error
 
 	convs, err := s.conversations(ctx)
 	if err != nil {
-		return nil, next, err
+		// A token with search:read alone still finds mentions; the list is
+		// only needed for listened channels and direct messages.
+		if len(s.cfg.Channels)+len(s.cfg.ReviewChannels) > 0 || !strings.Contains(err.Error(), "missing_scope") {
+			if strings.Contains(err.Error(), "missing_scope") {
+				err = fmt.Errorf("%w — listening to a channel needs channels:read and channels:history (groups:* for a private one)", err)
+			}
+			return nil, next, err
+		}
+		convs = nil
 	}
 
 	var events []Event
