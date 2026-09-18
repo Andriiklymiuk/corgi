@@ -162,10 +162,11 @@ func TestRulesDeadSources(t *testing.T) {
 		r    Rules
 		dead []string
 	}{
-		{"disabled", Rules{}, []string{"github", "gitlab", "jira", "linear"}},
-		{"issues only", Rules{Enabled: true}, []string{"github", "gitlab"}},
-		{"comments too", Rules{Enabled: true, Comments: true}, []string{"github", "gitlab"}},
-		{"prs", Rules{Enabled: true, PRs: true}, nil},
+		{"disabled", Rules{}, []string{"github", "gitlab", "jira", "linear", "slack"}},
+		{"issues only", Rules{Enabled: true}, []string{"github", "gitlab", "slack"}},
+		{"comments too", Rules{Enabled: true, Comments: true}, []string{"github", "gitlab", "slack"}},
+		{"prs", Rules{Enabled: true, PRs: true}, []string{"slack"}},
+		{"mentions", Rules{Enabled: true, Mentions: true}, []string{"github", "gitlab"}},
 	}
 	for _, tc := range cases {
 		if got := tc.r.DeadSources(); strings.Join(got, ",") != strings.Join(tc.dead, ",") {
@@ -467,5 +468,60 @@ func TestAnAsleepWatchDoesNotPollUntilNudged(t *testing.T) {
 	time.Sleep(60 * time.Millisecond)
 	if n := src.polls.Load(); n != 1 {
 		t.Fatalf("a nudge polls once, got %d", n)
+	}
+}
+
+func TestRulesOnChatEvents(t *testing.T) {
+	mention := Event{Kind: KindChatMention, Ref: "slack-1726000000", Author: "@lena", Body: "can you look at this", Mine: true}
+	message := Event{Kind: KindChatMessage, Ref: "slack-1726000001", Author: "@tom", Body: "deploying now", State: "#incidents"}
+
+	off := Rules{Enabled: true}
+	if off.Why(mention) == "" {
+		t.Error("a mention needs --mentions")
+	}
+	if off.Why(message) == "" {
+		t.Error("a channel message needs the channel listened")
+	}
+
+	on := Rules{Enabled: true, Mentions: true, Channels: []string{"#incidents"}}
+	if why := on.Why(mention); why != "" {
+		t.Errorf("mention refused: %s", why)
+	}
+	if why := on.Why(message); why != "" {
+		t.Errorf("listened channel refused: %s", why)
+	}
+	elsewhere := message
+	elsewhere.State = "#random"
+	if on.Why(elsewhere) == "" {
+		t.Error("a message in a channel nobody listed is not news")
+	}
+
+	mine := mention
+	mine.Self = true
+	if on.Why(mine) == "" {
+		t.Error("my own message is not news")
+	}
+
+	bot := mention
+	bot.Bot = true
+	if on.Why(bot) == "" {
+		t.Error("a bot's mention needs --bots")
+	}
+
+	waiting := Rules{Enabled: true, Mentions: true, From: []string{"lena"}}
+	if waiting.Why(mention) != "" {
+		t.Error("from-list should take lena's mention")
+	}
+	other := mention
+	other.Author = "@tom"
+	if waiting.Why(other) == "" {
+		t.Error("from-list should refuse tom's mention")
+	}
+
+	if !(Rules{Enabled: true}).DeadSource("slack") {
+		t.Error("with neither mentions nor channels, slack can emit nothing the rules take")
+	}
+	if on.DeadSource("slack") {
+		t.Error("with mentions on, slack is live")
 	}
 }
