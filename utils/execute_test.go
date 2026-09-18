@@ -563,6 +563,9 @@ func TestKillAllStoredProcessesEmptiesHandlesRace(t *testing.T) {
 }
 
 func TestHandleCommandFailureKnownCmdInstallFails(t *testing.T) {
+	// An empty PATH: the install line (npm install -g yarn) cannot run, so the
+	// outcome does not depend on what the machine running the tests has.
+	t.Setenv("PATH", t.TempDir())
 	err := handleCommandFailure(
 		fmt.Errorf("executable file not found in $PATH"),
 		[]string{"yarn"},
