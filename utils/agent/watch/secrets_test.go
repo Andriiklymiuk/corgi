@@ -94,3 +94,26 @@ func TestSecretsFileStaysPrivateAndReadsAnOlderFile(t *testing.T) {
 		t.Errorf("writing an override rewrote the machine-wide tokens: %+v", got)
 	}
 }
+
+func TestSlackTokensOverlayAndComeFromTheEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	if err := SaveSecrets(dir, Secrets{SlackUser: "xoxp-global", SlackBot: "xoxb-global"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveWorkspaceSecrets(dir, "acme", Secrets{SlackUser: "xoxp-acme"}); err != nil {
+		t.Fatal(err)
+	}
+
+	acme := LoadSecretsFor(dir, "acme")
+	if acme.SlackUser != "xoxp-acme" {
+		t.Errorf("the workspace's own user token must win: %q", acme.SlackUser)
+	}
+	if acme.SlackBot != "xoxb-global" {
+		t.Errorf("a workspace with no bot token falls back to the machine-wide one: %q", acme.SlackBot)
+	}
+
+	t.Setenv("SLACK_USER_TOKEN", "xoxp-env")
+	if got := LoadSecrets(dir).SlackUser; got != "xoxp-env" {
+		t.Errorf("the environment beats the file: %q", got)
+	}
+}

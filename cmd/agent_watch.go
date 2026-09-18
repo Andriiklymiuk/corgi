@@ -553,7 +553,7 @@ var agentWatchHooksCmd = &cobra.Command{
 }
 
 var agentWatchAuthCmd = &cobra.Command{
-	Use:   "auth <linear|jira|github|gitlab>",
+	Use:   "auth <linear|jira|github|gitlab|slack>",
 	Short: "Store a token for a source, for the machine or for one workspace",
 	Long: `Without --local the token is the machine-wide one every watched
 workspace falls back to. With --local (run inside the workspace) or
@@ -585,6 +585,7 @@ agent directory, mode 0600, next to the machine-wide ones.
 			secrets = watch.WorkspaceSecrets(dir, id)
 		}
 		token, _ := flags.GetString("token")
+		bot, _ := flags.GetString("bot")
 		url, _ := flags.GetString("url")
 		email, _ := flags.GetString("email")
 		me, _ := flags.GetString("me")
@@ -602,6 +603,26 @@ agent directory, mode 0600, next to the machine-wide ones.
 			secrets.GitLab = token
 			if url != "" || drop {
 				secrets.GitLabURL = url
+			}
+		case "slack":
+			if drop {
+				secrets.SlackUser, secrets.SlackBot = "", ""
+				break
+			}
+			if token != "" && !strings.HasPrefix(token, "xoxp-") {
+				return fmt.Errorf("--token wants the user token (xoxp-…): it is what reads your channels and posts as you; a bot token goes in --bot")
+			}
+			if bot != "" && !strings.HasPrefix(bot, "xoxb-") {
+				return fmt.Errorf("--bot wants the bot token (xoxb-…)")
+			}
+			if token == "" && bot == "" {
+				return fmt.Errorf("slack: --token xoxp-… (read and post as you) and/or --bot xoxb-… (post as the app)")
+			}
+			if token != "" {
+				secrets.SlackUser = token
+			}
+			if bot != "" {
+				secrets.SlackBot = bot
 			}
 		default:
 			return fmt.Errorf("unknown source %q", args[0])
@@ -844,8 +865,23 @@ func watchSources(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secre
 }
 
 func tokenLine(s watch.Secrets) string {
-	return fmt.Sprintf("linear %s · jira %s · github %s · gitlab %s",
-		watch.Fingerprint(s.Linear), watch.Fingerprint(s.JiraToken), githubTokenLabel(s), watch.Fingerprint(s.GitLab))
+	return fmt.Sprintf("linear %s · jira %s · github %s · gitlab %s · slack %s",
+		watch.Fingerprint(s.Linear), watch.Fingerprint(s.JiraToken), githubTokenLabel(s),
+		watch.Fingerprint(s.GitLab), slackTokenLabel(s))
+}
+
+// slackTokenLabel says which Slack voices are available: the user's token
+// reads and speaks as them, the bot's only speaks.
+func slackTokenLabel(s watch.Secrets) string {
+	switch {
+	case s.SlackUser != "" && s.SlackBot != "":
+		return watch.Fingerprint(s.SlackUser) + " +bot"
+	case s.SlackUser != "":
+		return watch.Fingerprint(s.SlackUser)
+	case s.SlackBot != "":
+		return "bot only " + watch.Fingerprint(s.SlackBot)
+	}
+	return watch.Fingerprint("")
 }
 
 // githubTokenLabel is the fingerprint, marked gh-auth when the gh CLI is
@@ -1151,6 +1187,7 @@ func init() {
 	a.String("token", "", "API token")
 	a.String("url", "", "Jira site (https://you.atlassian.net) or self-hosted GitLab URL")
 	a.String("email", "", "Jira account email")
+	a.String("bot", "", "Slack bot token (xoxb-…), so replies come from the app rather than from you")
 	a.String("me", "", "Your login or id on the service, for webhooks before the first poll")
 	a.Bool("local", false, "Store for the workspace you are in, not the machine")
 	a.String("workspace", "", "Store for this workspace id, from anywhere")

@@ -670,13 +670,19 @@ func (w *Watch) logf(format string, a ...any) {
 // Secrets are the API tokens, read from the environment first and then
 // from <agentDir>/watch/secrets.json (0600), written by `corgi agent watch auth`.
 type Secrets struct {
-	Linear     string `json:"linear,omitempty"`
-	JiraURL    string `json:"jiraUrl,omitempty"`
-	JiraEmail  string `json:"jiraEmail,omitempty"`
-	JiraToken  string `json:"jiraToken,omitempty"`
-	GitHub     string `json:"github,omitempty"`
-	GitLab     string `json:"gitlab,omitempty"`
-	GitLabURL  string `json:"gitlabUrl,omitempty"`
+	Linear    string `json:"linear,omitempty"`
+	JiraURL   string `json:"jiraUrl,omitempty"`
+	JiraEmail string `json:"jiraEmail,omitempty"`
+	JiraToken string `json:"jiraToken,omitempty"`
+	GitHub    string `json:"github,omitempty"`
+	GitLab    string `json:"gitlab,omitempty"`
+	GitLabURL string `json:"gitlabUrl,omitempty"`
+	// SlackUser is an xoxp- token: it reads the channels and DMs its owner
+	// can see, and a message posted with it is attributed to them.
+	SlackUser string `json:"slackUser,omitempty"`
+	// SlackBot is an xoxb- token, so a reply can come from the app rather
+	// than from the person. Optional: with none, replies speak as the user.
+	SlackBot   string `json:"slackBot,omitempty"`
 	HookSecret string `json:"hookSecret,omitempty"`
 	Me         string `json:"me,omitempty"` // tracker login/email when the API cannot tell us
 }
@@ -712,6 +718,8 @@ func LoadSecrets(agentDir string) Secrets {
 	pick(&s.GitHub, "GITHUB_TOKEN")
 	pick(&s.GitLab, "GITLAB_TOKEN")
 	pick(&s.GitLabURL, "GITLAB_URL")
+	pick(&s.SlackUser, "SLACK_USER_TOKEN")
+	pick(&s.SlackBot, "SLACK_BOT_TOKEN")
 	return s
 }
 
@@ -750,6 +758,8 @@ func overlaySecrets(base, over Secrets) Secrets {
 	pick(&base.GitHub, over.GitHub)
 	pick(&base.GitLab, over.GitLab)
 	pick(&base.GitLabURL, over.GitLabURL)
+	pick(&base.SlackUser, over.SlackUser)
+	pick(&base.SlackBot, over.SlackBot)
 	pick(&base.Me, over.Me)
 	return base
 }
