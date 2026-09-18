@@ -968,6 +968,14 @@ highest-signal part and the easiest to quietly drop.
 
 Never wrap it in a fenced code block: it renders monospace and kills every link.
 
+**Announce in chat, once, when PRs/MRs were opened:** run
+`corgi agent chat announce "<[KEY] story title>" <pr-url> <pr-url> …` with every PR/MR
+this run opened (one call per story). It posts the title and one `repo: link` line per
+PR in the workspace's review channel, in the voice the workspace configured; with no
+review channel configured it prints one line and posts nothing — do not work around
+that, and never post with `chat post` yourself. Skip it for a story that opened
+nothing, and for a re-run whose PRs were announced before.
+
 ---
 
 ## Scenarios & scaling

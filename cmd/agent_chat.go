@@ -22,8 +22,9 @@ type chatRequest struct {
 }
 
 type slackDefaults struct {
-	PostTo  string
-	ReplyAs string
+	PostTo         string
+	ReplyAs        string
+	ReviewChannels []string
 }
 
 func chatTarget(req chatRequest, state *watch.State, def *slackDefaults) (watch.SlackTarget, error) {
@@ -65,7 +66,7 @@ func slackDefaultsFor(dir, workspace string) *slackDefaults {
 	}
 	for _, s := range specs {
 		if s.Workspace == workspace && s.Chat != nil {
-			return &slackDefaults{PostTo: s.Chat.PostTo, ReplyAs: s.Chat.ReplyAs}
+			return &slackDefaults{PostTo: s.Chat.PostTo, ReplyAs: s.Chat.ReplyAs, ReviewChannels: s.Chat.ReviewChannels}
 		}
 	}
 	return nil
