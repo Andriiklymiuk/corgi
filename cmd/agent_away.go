@@ -260,8 +260,7 @@ func checkClaudeUpdater() agentCheck {
 	if os.Getenv("DISABLE_AUTOUPDATER") == "1" {
 		return agentCheck{Name: name, OK: true, Detail: "pinned (DISABLE_AUTOUPDATER=1)"}
 	}
-	return agentCheck{Name: name, OK: true, Detail: "Claude Code updates itself between runs — a bad release can stall a trip",
-		Fix: "DISABLE_AUTOUPDATER=1 in the daemon's environment pins it (your call)"}
+	return agentCheck{Name: name, OK: true, Detail: "pinned for unattended runs (corgi sets DISABLE_AUTOUPDATER=1 on each); your own terminal still updates"}
 }
 
 func hasRoutine(list []config.Routine, name string) bool {

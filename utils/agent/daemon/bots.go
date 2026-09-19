@@ -54,7 +54,7 @@ func (d *Daemon) startBots(ctx context.Context, spec WatchSpec, e watch.Event) {
 
 func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch.Event) {
 	defer d.takeSlot(spec.Workspace)()
-	ctx, cancel := context.WithTimeout(ctx, fixTimeout)
+	ctx, cancel := context.WithTimeout(ctx, botTimeout)
 	defer cancel()
 
 	key := botRunKey(b.Name, e.Key)
