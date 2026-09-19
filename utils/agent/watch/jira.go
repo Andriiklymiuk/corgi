@@ -47,7 +47,78 @@ type jiraIssue struct {
 			Total    int           `json:"total"`
 			Comments []jiraComment `json:"comments"`
 		} `json:"comment"`
+		IssueType struct {
+			Subtask bool `json:"subtask"`
+		} `json:"issuetype"`
+		Parent *struct {
+			Key    string `json:"key"`
+			Fields struct {
+				Summary string `json:"summary"`
+			} `json:"fields"`
+		} `json:"parent"`
+		Subtasks []struct {
+			Key    string `json:"key"`
+			Fields struct {
+				Status struct {
+					Name string `json:"name"`
+				} `json:"status"`
+				Assignee *struct {
+					AccountID string `json:"accountId"`
+				} `json:"assignee"`
+			} `json:"fields"`
+		} `json:"subtasks"`
 	} `json:"fields"`
+	Changelog struct {
+		Histories []jiraHistory `json:"histories"`
+	} `json:"changelog"`
+}
+
+type jiraHistory struct {
+	ID      string `json:"id"`
+	Created string `json:"created"`
+	Author  struct {
+		AccountID string `json:"accountId"`
+	} `json:"author"`
+	Items []struct {
+		Field    string `json:"field"`
+		To       string `json:"to"`
+		ToString string `json:"toString"`
+	} `json:"items"`
+}
+
+// The newest change since `since` by somebody else that handed me the ticket
+// or moved it: that is the moment old work became mine.
+func (j *Jira) becameMine(issue jiraIssue, since time.Time) (jiraHistory, bool) {
+	var best jiraHistory
+	found := false
+	for _, h := range issue.Changelog.Histories {
+		at := trackerTime(h.Created)
+		if !at.After(since) || isMe(j.Me, h.Author.AccountID) {
+			continue
+		}
+		for _, it := range h.Items {
+			handed := it.Field == "assignee" && isMe(j.Me, it.To)
+			moved := it.Field == "status"
+			if (handed || moved) && (!found || at.After(trackerTime(best.Created))) {
+				best, found = h, true
+			}
+		}
+	}
+	return best, found
+}
+
+func (j *Jira) openSubtasksOfMine(issue jiraIssue) []string {
+	var keys []string
+	for _, s := range issue.Fields.Subtasks {
+		if s.Fields.Assignee == nil || !isMe(j.Me, s.Fields.Assignee.AccountID) {
+			continue
+		}
+		if finishedState(s.Fields.Status.Name) != "" {
+			continue
+		}
+		keys = append(keys, s.Key)
+	}
+	return keys
 }
 
 type jiraComment struct {
@@ -103,7 +174,8 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	}
 	params := url.Values{
 		"jql":        {jql},
-		"fields":     {"summary,description,labels,status,assignee,creator,created,updated,comment"},
+		"fields":     {"summary,description,labels,status,assignee,creator,created,updated,comment,issuetype,parent,subtasks"},
+		"expand":     {"changelog"},
 		"maxResults": {"50"},
 	}
 	if err := j.get(ctx, "/rest/api/3/search/jql", params, &search); err != nil {
@@ -120,21 +192,30 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 		if assignedToMe {
 			mine = append(mine, issue)
 		}
+		key, at := "jira:"+issue.Key, created
 		if !created.After(issuesSince) {
-			continue
+			h, ok := j.becameMine(issue, issuesSince)
+			if !ok || !assignedToMe {
+				continue
+			}
+			key, at = key+":h"+h.ID, trackerTime(h.Created)
 		}
 		e := Event{
-			Key:    "jira:" + issue.Key,
-			Source: "jira",
-			Kind:   KindIssueNew,
-			Ref:    issue.Key,
-			Title:  issue.Fields.Summary,
-			Body:   clip(jiraText(issue.Fields.Description), bodyMax),
-			URL:    strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
-			Labels: issue.Fields.Labels,
-			State:  issue.Fields.Status.Name,
-			Mine:   assignedToMe,
-			At:     created,
+			Key:      key,
+			Source:   "jira",
+			Kind:     KindIssueNew,
+			Ref:      issue.Key,
+			Title:    issue.Fields.Summary,
+			Body:     clip(jiraText(issue.Fields.Description), bodyMax),
+			URL:      strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
+			Labels:   issue.Fields.Labels,
+			State:    issue.Fields.Status.Name,
+			Mine:     assignedToMe,
+			Subtasks: j.openSubtasksOfMine(issue),
+			At:       at,
+		}
+		if p := issue.Fields.Parent; p != nil {
+			e.Parent, e.ParentTitle = p.Key, p.Fields.Summary
 		}
 		if issue.Fields.Assignee != nil {
 			e.Assignee = issue.Fields.Assignee.DisplayName

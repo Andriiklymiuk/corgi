@@ -784,7 +784,12 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			e.Ref, strings.TrimSpace(e.Title), body, e.Ref, e.Ref, e.Ref, e.Ref)
 	},
 	watch.KindIssueNew: func(e watch.Event) string {
-		return "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + e.Ref + storyMode(e)
+		p := "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + e.Ref + storyMode(e)
+		if e.Parent != "" {
+			p += fmt.Sprintf("\n%s is a subtask of %s (%q). Read the parent for context — the bug report, the acceptance criteria, "+
+				"the earlier pull requests — but the change is scoped to %s alone.", e.Ref, e.Parent, e.ParentTitle, e.Ref)
+		}
+		return p
 	},
 	watch.KindIssueComment: func(e watch.Event) string {
 		return fmt.Sprintf("A new comment on %s from %s says: %q. Read it and decide. "+

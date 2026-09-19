@@ -514,3 +514,15 @@ func TestRulesOnChatEvents(t *testing.T) {
 		t.Error("with mentions on, slack is live")
 	}
 }
+
+func TestRulesLeaveAParentToItsSubtasks(t *testing.T) {
+	r := Rules{Enabled: true}
+	e := Event{Kind: KindIssueNew, Ref: "ABC-7", Mine: true, Subtasks: []string{"ABC-8", "ABC-9"}}
+	if why := r.Why(e); !strings.Contains(why, "ABC-8") || !strings.Contains(why, "subtask") {
+		t.Fatalf("the open subtasks are the work, not the parent: %q", why)
+	}
+	e.Subtasks = nil
+	if why := r.Why(e); why != "" {
+		t.Fatalf("no subtasks, the parent is the work: %q", why)
+	}
+}
