@@ -60,7 +60,10 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 	query := fmt.Sprintf(`{
   issues(filter: {%s}, first: 50, sort: [{updatedAt: {order: Ascending}}]) {
-    nodes { id identifier title description url state { name } labels { nodes { name } } assignee { id name } creator { id name } createdAt updatedAt }
+    nodes { id identifier title description url state { name } labels { nodes { name } } assignee { id name } creator { id name } createdAt updatedAt
+      parent { identifier title }
+      children { nodes { identifier state { name } assignee { id } } }
+      history(last: 10) { nodes { id createdAt actor { id } toAssignee { id } toState { name } } } }
   }
   comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt) {
     nodes { id body createdAt user { id name } botActor { name } issue { identifier url title state { name } } }
@@ -77,6 +80,15 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 				Assignee                                *struct{ ID, Name string }
 				Creator                                 *struct{ ID, Name string }
 				CreatedAt, UpdatedAt                    string
+				Parent                                  *struct{ Identifier, Title string }
+				Children                                struct {
+					Nodes []struct {
+						Identifier string
+						State      struct{ Name string }
+						Assignee   *struct{ ID string }
+					}
+				}
+				History struct{ Nodes []linearHistory }
 			}
 		}
 		Comments linearComments
@@ -103,11 +115,17 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	for _, n := range data.Issues.Nodes {
 		created, updated := trackerTime(n.CreatedAt), trackerTime(n.UpdatedAt)
 		newestIssue = later(newestIssue, updated)
+		mine := n.Assignee != nil && isMe(l.Me, n.Assignee.ID)
+		key, at := "linear:"+n.Identifier, created
 		if !created.After(issuesSince) {
-			continue
+			h, ok := l.becameMine(n.History.Nodes, issuesSince)
+			if !ok || !mine {
+				continue
+			}
+			key, at = key+":"+h.ID, trackerTime(h.CreatedAt)
 		}
 		e := Event{
-			Key:    "linear:" + n.Identifier,
+			Key:    key,
 			Source: "linear",
 			Kind:   KindIssueNew,
 			Ref:    n.Identifier,
@@ -115,7 +133,15 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Body:   clip(n.Description, bodyMax),
 			URL:    n.URL,
 			State:  n.State.Name,
-			At:     created,
+			At:     at,
+		}
+		if n.Parent != nil {
+			e.Parent, e.ParentTitle = n.Parent.Identifier, n.Parent.Title
+		}
+		for _, c := range n.Children.Nodes {
+			if c.Assignee != nil && isMe(l.Me, c.Assignee.ID) && finishedState(c.State.Name) == "" {
+				e.Subtasks = append(e.Subtasks, c.Identifier)
+			}
 		}
 		for _, label := range n.Labels.Nodes {
 			e.Labels = append(e.Labels, label.Name)
@@ -267,4 +293,29 @@ func later(a, b time.Time) time.Time {
 		return b
 	}
 	return a
+}
+
+type linearHistory struct {
+	ID, CreatedAt string
+	Actor         *struct{ ID string }
+	ToAssignee    *struct{ ID string }
+	ToState       *struct{ Name string }
+}
+
+// The newest change since `since` by another person that handed me the issue
+// or moved it. An automation (no actor) moving it is not a hand-off.
+func (l *Linear) becameMine(history []linearHistory, since time.Time) (linearHistory, bool) {
+	var best linearHistory
+	found := false
+	for _, h := range history {
+		at := trackerTime(h.CreatedAt)
+		if !at.After(since) || h.Actor == nil || isMe(l.Me, h.Actor.ID) {
+			continue
+		}
+		handed := h.ToAssignee != nil && isMe(l.Me, h.ToAssignee.ID)
+		if (handed || h.ToState != nil) && (!found || at.After(trackerTime(best.CreatedAt))) {
+			best, found = h, true
+		}
+	}
+	return best, found
 }

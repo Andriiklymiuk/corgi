@@ -306,7 +306,9 @@ func TestFixPromptPerKind(t *testing.T) {
 		not  []string
 	}{
 		{"new issue ships it", watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-1"},
-			[]string{"/corgi:stories ABC-1", "draft PRs"}, []string{"/corgi:review"}},
+			[]string{"/corgi:stories ABC-1", "draft PRs"}, []string{"/corgi:review", "subtask"}},
+		{"a subtask carries its parent", watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-8", Parent: "ABC-7", ParentTitle: "Old story"},
+			[]string{"/corgi:stories ABC-8", "subtask of ABC-7", "Old story", "scoped to ABC-8"}, nil},
 		{"issue comment answers or changes", watch.Event{Kind: watch.KindIssueComment, Ref: "ABC-2", Author: "Max", Body: "also X"},
 			[]string{"Max", `"also X"`, "answer it as a comment on ABC-2", "do NOT open a PR", "existing branch for ABC-2", "ticket key in the branch names", "/corgi:stories ABC-2"}, nil},
 		{"pr comment addresses feedback", watch.Event{Kind: watch.KindPRComment, URL: "https://github.com/a/b/pull/1"},

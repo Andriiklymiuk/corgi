@@ -32,23 +32,27 @@ const (
 )
 
 type Event struct {
-	Key       string    `json:"key"`
-	Source    string    `json:"source"`
-	Kind      Kind      `json:"kind"`
-	Workspace string    `json:"workspace,omitempty"`
-	Ref       string    `json:"ref"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	Author    string    `json:"author,omitempty"`
-	Labels    []string  `json:"labels,omitempty"`
-	Links     []string  `json:"links,omitempty"`
-	State     string    `json:"state,omitempty"`
-	Assignee  string    `json:"assignee,omitempty"`
-	Mine      bool      `json:"mine,omitempty"`
-	Self      bool      `json:"self,omitempty"`
-	Bot       bool      `json:"bot,omitempty"`
-	At        time.Time `json:"at"`
+	Key       string   `json:"key"`
+	Source    string   `json:"source"`
+	Kind      Kind     `json:"kind"`
+	Workspace string   `json:"workspace,omitempty"`
+	Ref       string   `json:"ref"`
+	Title     string   `json:"title"`
+	Body      string   `json:"body,omitempty"`
+	URL       string   `json:"url,omitempty"`
+	Author    string   `json:"author,omitempty"`
+	Labels    []string `json:"labels,omitempty"`
+	Links     []string `json:"links,omitempty"`
+	State     string   `json:"state,omitempty"`
+	Assignee  string   `json:"assignee,omitempty"`
+	Mine      bool     `json:"mine,omitempty"`
+	Self      bool     `json:"self,omitempty"`
+	Bot       bool     `json:"bot,omitempty"`
+	// A subtask names its parent; a parent lists its open subtasks of mine.
+	Parent      string    `json:"parent,omitempty"`
+	ParentTitle string    `json:"parentTitle,omitempty"`
+	Subtasks    []string  `json:"subtasks,omitempty"`
+	At          time.Time `json:"at"`
 }
 
 type Rules struct {
@@ -141,6 +145,9 @@ func (r Rules) Why(e Event) string {
 		}
 		if r.Assignee != "any" && !e.Mine {
 			return "not assigned to me (--assignee any takes every issue)"
+		}
+		if len(e.Subtasks) > 0 {
+			return "its open subtasks are the work: " + strings.Join(e.Subtasks, ", ")
 		}
 		if len(r.Labels) > 0 && !anyFold(e.Labels, r.Labels) {
 			return fmt.Sprintf("none of the labels %s is on it (it has %s)", strings.Join(r.Labels, ", "), orNone(e.Labels))
