@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -540,5 +541,38 @@ func TestHeadlessEnvSkipsVPN(t *testing.T) {
 	got = strings.Join(headlessEnv("", "useAwsVpn"), " ")
 	if got != "CORGI_OMIT=useAwsVpn" {
 		t.Fatal(got)
+	}
+}
+
+func TestACrashedFixRunRetriesOnceLater(t *testing.T) {
+	d := testDaemon(t)
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	var runs atomic.Int32
+	prev := claudeCommand
+	claudeCommand = func(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
+		runs.Add(1)
+		return exec.CommandContext(ctx, "sh", "-c", "exit 3")
+	}
+	t.Cleanup(func() { claudeCommand = prev })
+	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Project: "ABC", Rules: watch.Rules{Enabled: true}, Action: "fix", SkipPermissions: true}}
+	d.startWatches(context.Background())
+
+	e := watch.Event{Key: "linear:ABC-1", Source: "linear", Kind: watch.KindIssueNew, Ref: "ABC-1", Title: "Login loops", Mine: true, At: time.Now()}
+	d.handleWatchEvent(context.Background(), e)
+	collectNotes(t, notes, "fix for ABC-1 failed")
+	deferred := d.watchState.Fixes.DeferredEvents()
+	if len(deferred) != 1 || deferred[0].Key != e.Key || deferred[0].NotBefore.Before(time.Now().Add(20*time.Minute)) {
+		t.Fatalf("the first crash queues one retry for later: %+v", deferred)
+	}
+	d.retryDeferred(context.Background(), d.Watches[0], time.Now())
+	if runs.Load() != 1 {
+		t.Fatalf("the retry waits its half hour: %d runs", runs.Load())
+	}
+	d.retryDeferred(context.Background(), d.Watches[0], time.Now().Add(31*time.Minute))
+	waitFor(t, func() bool { return runs.Load() == 2 })
+	collectNotes(t, notes, "ABC-1 is blocked")
+	if len(d.watchState.Fixes.DeferredEvents()) != 0 {
+		t.Fatalf("the second crash queues nothing: %+v", d.watchState.Fixes.DeferredEvents())
 	}
 }
