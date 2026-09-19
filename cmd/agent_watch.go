@@ -179,6 +179,11 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed(watchFlagAutoMerge) {
 			wc.AutoMerge, _ = flags.GetBool(watchFlagAutoMerge)
 		}
+		if flags.Changed("batch") {
+			if wc.Batch, _ = flags.GetInt("batch"); wc.Batch < 0 || wc.Batch > 5 {
+				exitWithError("agent_watch_enable", fmt.Errorf("--batch is 1 (off) to 5 tickets per run"), 2)
+			}
+		}
 		if flags.Changed(watchFlagAfterMerge) {
 			wc.AfterMerge, _ = flags.GetString(watchFlagAfterMerge)
 		}
@@ -878,7 +883,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
+		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 	if wc.Action == "fix" {
 		spec.Action = "fix"
 	}
@@ -1145,6 +1150,7 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		{wc.HandOver, "handed to the session on the branch"},
 		{wc.AutoMerge, "merged when green and approved"},
 		{wc.AfterMerge != "", "then the ticket goes to " + wc.AfterMerge + subtaskColumn(wc.AfterMergeSubtasks)},
+		{wc.Batch > 1, fmt.Sprintf("up to %d tickets arriving together share one run", wc.Batch)},
 		{wc.Approve, "review requests approved when clean"},
 		{wc.Bots, "bot comments count"},
 		{wc.AutoAllow == config.AutoAllowReads, "reads allowed by policy"},
@@ -1254,6 +1260,7 @@ func init() {
 	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool(watchFlagAutoMerge, false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
+	f.Int("batch", 1, "Tickets that arrive within 90 s of each other share one run, up to this many (1 is off); one preflight and one context for the lot")
 	f.String(watchFlagAfterMerge, "", "Move the ticket to this column once every pull request of its run is merged — a name from `corgi agent watch board`; empty leaves it where it is")
 	f.String(watchFlagAfterMergeSubtasks, "", "Where a subtask goes instead when its pull request merges (Done, say); empty means the same column as --after-merge")
 	f.Bool("bots", false, "Comments from bot accounts count too (a review bot whose findings are to be fixed); off, a bot is not a person waiting")

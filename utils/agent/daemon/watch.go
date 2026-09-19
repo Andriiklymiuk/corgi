@@ -32,6 +32,7 @@ type WatchSpec struct {
 	RerunCI         bool
 	Silent          bool
 	Slots           int
+	Batch           int
 	NoRetry         bool
 	Models          *config.ModelPolicy
 	Routines        []config.Routine
@@ -552,9 +553,62 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 		}
 		return "a fix for it is already running"
 	}
+	if spec.Batch > 1 && e.Kind == watch.KindIssueNew && e.Source != "slack" {
+		if n := d.holdForBatch(ctx, spec, e); n > 0 {
+			return fmt.Sprintf("waits %s for tickets to batch (%d so far)", batchSettle, n)
+		}
+		return ""
+	}
 	d.watchState.Fixes.StartFor(e, now)
 	d.spawnFix(ctx, spec, e)
 	return ""
+}
+
+var batchSettle = 90 * time.Second
+
+// Tickets that arrive within a short window ride in one run: one preflight,
+// one stack, one context. A full batch leaves at once; the rest leave when
+// the window closes. Returns how many are waiting, or 0 when the run left.
+func (d *Daemon) holdForBatch(ctx context.Context, spec WatchSpec, e watch.Event) int {
+	d.attentionMu.Lock()
+	if d.fixBatch == nil {
+		d.fixBatch = map[string][]watch.Event{}
+		d.fixBatchAt = map[string]*time.Timer{}
+	}
+	ws := spec.Workspace
+	d.fixBatch[ws] = append(d.fixBatch[ws], e)
+	if len(d.fixBatch[ws]) >= spec.Batch {
+		if t := d.fixBatchAt[ws]; t != nil {
+			t.Stop()
+		}
+		d.attentionMu.Unlock()
+		d.flushBatch(ctx, spec)
+		return 0
+	}
+	if d.fixBatchAt[ws] == nil {
+		d.fixBatchAt[ws] = time.AfterFunc(batchSettle, func() { d.flushBatch(ctx, spec) })
+	}
+	n := len(d.fixBatch[ws])
+	d.attentionMu.Unlock()
+	return n
+}
+
+func (d *Daemon) flushBatch(ctx context.Context, spec WatchSpec) {
+	d.attentionMu.Lock()
+	batch := d.fixBatch[spec.Workspace]
+	delete(d.fixBatch, spec.Workspace)
+	delete(d.fixBatchAt, spec.Workspace)
+	d.attentionMu.Unlock()
+	if len(batch) == 0 {
+		return
+	}
+	now := time.Now()
+	leader := batch[0]
+	leader.Riders = append([]watch.Event(nil), batch[1:]...)
+	for _, e := range batch {
+		d.watchState.Fixes.StartFor(e, now)
+	}
+	d.spawnFix(ctx, spec, leader)
 }
 
 var commentSettle = time.Minute
@@ -784,7 +838,7 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			e.Ref, strings.TrimSpace(e.Title), body, e.Ref, e.Ref, e.Ref, e.Ref)
 	},
 	watch.KindIssueNew: func(e watch.Event) string {
-		p := "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + e.Ref + storyMode(e)
+		p := "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + strings.Join(e.Refs(), " ") + storyMode(e)
 		if e.Parent != "" {
 			p += fmt.Sprintf("\n%s is a subtask of %s (%q). Read the parent for context — the bug report, the acceptance criteria, "+
 				"the earlier pull requests — but the change is scoped to %s alone.", e.Ref, e.Parent, e.ParentTitle, e.Ref)
@@ -939,6 +993,9 @@ func (d *Daemon) takeSlot(workspace string) func() {
 
 func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	defer d.releaseFix(spec.Workspace, e.Ref)
+	for _, r := range e.Riders {
+		defer d.releaseFix(spec.Workspace, r.Ref)
+	}
 	defer d.takeSlot(spec.Workspace)()
 	ctx, cancel := context.WithTimeout(ctx, fixTimeout)
 	defer cancel()
@@ -1015,6 +1072,10 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
 		d.watchState.Fixes.Finish(e.Key, nil, "", runErr.Error(), time.Now())
+		for _, r := range e.Riders {
+			d.watchState.Fixes.Finish(r.Key, nil, "", runErr.Error(), time.Now())
+			d.retryOnceLater(spec, r)
+		}
 		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 		d.mirrorHandoff(spec, e.Ref, started)
 		d.tripBreaker(spec, e, runErr.Error())
@@ -1031,7 +1092,10 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	links := uniqueStrings(prLink.FindAllString(string(out), -1))
 	note := ""
-	body := "fixed " + e.Ref
+	body := "fixed " + strings.Join(e.Refs(), " + ")
+	for _, r := range e.Riders {
+		d.watchState.Fixes.Finish(r.Key, nil, "in one run with "+e.Ref, "", time.Now())
+	}
 	if t := strings.TrimSpace(e.Title); t != "" {
 		body += " — " + t
 	}

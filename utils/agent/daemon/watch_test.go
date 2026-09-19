@@ -16,10 +16,18 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
+var fakeMu sync.Mutex
+
+func fakeRuns(ran *[]string) []string {
+	fakeMu.Lock()
+	defer fakeMu.Unlock()
+	return append([]string(nil), *ran...)
+}
+
 func fakeClaude(t *testing.T) *[]string {
 	t.Helper()
 	var ran []string
-	var mu sync.Mutex
+	mu := &fakeMu
 	prev := claudeCommand
 	claudeCommand = func(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
 		mu.Lock()
@@ -574,5 +582,60 @@ func TestACrashedFixRunRetriesOnceLater(t *testing.T) {
 	collectNotes(t, notes, "ABC-1 is blocked")
 	if len(d.watchState.Fixes.DeferredEvents()) != 0 {
 		t.Fatalf("the second crash queues nothing: %+v", d.watchState.Fixes.DeferredEvents())
+	}
+}
+
+func TestTicketsArrivingTogetherShareOneRun(t *testing.T) {
+	d := testDaemon(t)
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	ran := fakeClaude(t)
+	prev := batchSettle
+	batchSettle = 150 * time.Millisecond
+	t.Cleanup(func() { batchSettle = prev })
+	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Project: "ABC", Rules: watch.Rules{Enabled: true}, Action: "fix", SkipPermissions: true, Batch: 3}}
+	d.startWatches(context.Background())
+
+	for _, ref := range []string{"ABC-1", "ABC-2"} {
+		d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:" + ref, Source: "linear", Kind: watch.KindIssueNew, Ref: ref, Title: "Story " + ref, Mine: true, At: time.Now()})
+	}
+	got := collectNotes(t, notes, "fixed ABC-1 + ABC-2")
+	if !got["fixed ABC-1 + ABC-2 — Story ABC-1\napi: https://github.com/acme/api/pull/412"] {
+		t.Fatalf("one notice for the batch: %v", got)
+	}
+	if len(*ran) != 1 || !strings.Contains((*ran)[0], "/corgi:stories ABC-1 ABC-2") {
+		t.Fatalf("one claude run for both: %v", *ran)
+	}
+	fixes := watch.LoadFixLog(d.Dir).RecentFixes("acme", 5)
+	if len(fixes) != 2 {
+		t.Fatalf("each ticket counts as a start: %+v", fixes)
+	}
+	for _, f := range fixes {
+		if f.FinishedAt.IsZero() {
+			t.Fatalf("each ticket finishes: %+v", f)
+		}
+	}
+	// A third one after the batch left runs alone.
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:ABC-3", Source: "linear", Kind: watch.KindIssueNew, Ref: "ABC-3", Title: "Story ABC-3", Mine: true, At: time.Now()})
+	collectNotes(t, notes, "fixed ABC-3")
+	if len(*ran) != 2 || !strings.Contains((*ran)[1], "/corgi:stories ABC-3\n") {
+		t.Fatalf("a late ticket runs on its own: %v", *ran)
+	}
+}
+
+func TestABatchFullStartsAtOnce(t *testing.T) {
+	d := testDaemon(t)
+	ran := fakeClaude(t)
+	prev := batchSettle
+	batchSettle = time.Hour
+	t.Cleanup(func() { batchSettle = prev })
+	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Project: "ABC", Rules: watch.Rules{Enabled: true}, Action: "fix", SkipPermissions: true, Batch: 2}}
+	d.startWatches(context.Background())
+	for _, ref := range []string{"ABC-1", "ABC-2"} {
+		d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:" + ref, Source: "linear", Kind: watch.KindIssueNew, Ref: ref, Mine: true, At: time.Now()})
+	}
+	waitFor(t, func() bool { return len(fakeRuns(ran)) == 1 })
+	if runs := fakeRuns(ran); !strings.Contains(runs[0], "/corgi:stories ABC-1 ABC-2") {
+		t.Fatalf("%v", runs)
 	}
 }

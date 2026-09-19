@@ -80,6 +80,8 @@ type Daemon struct {
 	liftDue     map[string]*time.Timer
 	liftTold    map[string]bool
 	fixSettle   map[string]*time.Timer
+	fixBatch    map[string][]watch.Event
+	fixBatchAt  map[string]*time.Timer
 	fixFollowUp map[string]watch.Event
 	gateMu      sync.Mutex
 	gating      map[string]bool
