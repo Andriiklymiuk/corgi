@@ -91,11 +91,11 @@ func chatOutcome(prs []string, note, failure string) string {
 	case failure != "":
 		return "Could not do this: " + clipText(failure, 300) + "."
 	case len(prs) > 0:
-		line := "Opened " + strings.Join(prs, " ")
+		head := "Opened"
 		if note != "" {
-			line += " — " + note
+			head += " — " + note
 		}
-		return line + "."
+		return watch.PullLines(head, prs)
 	case note != "":
 		return clipText(note, 400)
 	}

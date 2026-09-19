@@ -2,32 +2,16 @@ package cmd
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-var prRepoName = regexp.MustCompile(`https?://[^/]+/(?:[^/]+/)*?([^/]+)/(?:pull|-/merge_requests)/\d+`)
-
-// The shape a person already posts by hand: the title, then one line per
-// pull request named by its repository.
 func announceText(title string, urls []string) string {
-	lines := []string{strings.TrimSpace(title)}
-	for _, u := range urls {
-		u = strings.TrimSpace(u)
-		if u == "" {
-			continue
-		}
-		if m := prRepoName.FindStringSubmatch(u); m != nil {
-			lines = append(lines, m[1]+": "+u)
-		} else {
-			lines = append(lines, u)
-		}
-	}
-	return strings.Join(lines, "\n")
+	return watch.PullLines(title, urls)
 }
 
 func announceChannel(to string, def *slackDefaults) string {
