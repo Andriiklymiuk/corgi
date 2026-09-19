@@ -800,6 +800,7 @@ type FixRecord struct {
 	Branch       string    `json:"branch,omitempty"`
 	Forgiven     bool      `json:"forgiven,omitempty"`
 	Bot          string    `json:"bot,omitempty"`
+	Parent       string    `json:"parent,omitempty"`
 	CostUSD      float64   `json:"costUSD,omitempty"`
 	Tokens       int64     `json:"tokens,omitempty"`
 	Retry        string    `json:"retry,omitempty"`
@@ -927,7 +928,7 @@ func (l *FixLog) StartFor(e Event, at time.Time) {
 	defer l.mu.Unlock()
 	l.Started = append(l.Started, FixRecord{
 		Key: e.Key, Workspace: e.Workspace, Ref: e.Ref, Kind: string(e.Kind),
-		Title: e.Title, URL: e.URL, StartedAt: at,
+		Title: e.Title, URL: e.URL, Parent: e.Parent, StartedAt: at,
 	})
 	l.dropDeferred(e.Key)
 	_ = l.save()
@@ -979,6 +980,25 @@ func (l *FixLog) RecentFixes(workspace string, limit int) []FixRecord {
 		out = append(out, l.Started[i])
 	}
 	return out
+}
+
+// The newest run of the workspace whose pull requests include this link.
+func (l *FixLog) RunThatOpened(workspace, link string) (FixRecord, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	want := PullRef(link)
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		r := l.Started[i]
+		if workspace != "" && r.Workspace != workspace {
+			continue
+		}
+		for _, pr := range r.PRs {
+			if pr == link || (want != "" && PullRef(pr) == want) {
+				return r, true
+			}
+		}
+	}
+	return FixRecord{}, false
 }
 
 func (l *FixLog) StartedSince(workspace string, since time.Time) int {

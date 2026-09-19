@@ -106,6 +106,7 @@ type Daemon struct {
 	Sessions       *sessions.Registry
 	Ledger         *usage.Ledger
 	MergePull      func(ctx context.Context, workspace, link string) error
+	MoveTicket     func(ctx context.Context, workspace, ref, status string) error
 	RerunCI        func(ctx context.Context, workspace, repo string, since time.Time) (watch.Rerun, error)
 	Policy         func(s sessions.Session) Policy
 	Carry          func(s sessions.Session) (string, error)

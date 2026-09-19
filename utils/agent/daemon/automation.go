@@ -130,7 +130,46 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " — checks ✓, approved", URL: link})
 		}
 		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "merged "+link+" — checks ✓ · approved", spec.Workspace, link)
+		now = watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: now.At}
 	}
+	if now.State == "merged" && (!known || was.State != "merged") {
+		d.ticketAfterMerge(ctx, spec, link)
+	}
+}
+
+// Once the last pull request of a run is merged, its ticket moves to the
+// column the workspace named; a subtask may have a column of its own.
+func (d *Daemon) ticketAfterMerge(ctx context.Context, spec WatchSpec, link string) {
+	wc := d.watchConfig(spec)
+	if wc == nil || strings.TrimSpace(wc.AfterMerge) == "" || d.MoveTicket == nil || d.watchState == nil {
+		return
+	}
+	rec, ok := d.watchState.Fixes.RunThatOpened(spec.Workspace, link)
+	if !ok || rec.Ref == "" {
+		return
+	}
+	pulls := watch.LoadPullLog(d.Dir)
+	for _, pr := range rec.PRs {
+		if pr == link {
+			continue
+		}
+		if st, ok := pulls.Get(watch.PullRef(pr)); !ok || st.State != "merged" {
+			return
+		}
+	}
+	status := strings.TrimSpace(wc.AfterMerge)
+	if rec.Parent != "" && strings.TrimSpace(wc.AfterMergeSubtasks) != "" {
+		status = strings.TrimSpace(wc.AfterMergeSubtasks)
+	}
+	if err := d.MoveTicket(ctx, spec.Workspace, rec.Ref, status); err != nil {
+		utils.Infof("agent: %s after merge: %v\n", rec.Ref, err)
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "could not move "+rec.Ref+" to "+status+": "+err.Error(), spec.Workspace, rec.URL)
+		return
+	}
+	if d.Events != nil {
+		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "moved", Reason: rec.Ref + " → " + status + " — every pull request merged", URL: rec.URL})
+	}
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, rec.Ref+" → "+status+" — every pull request merged", spec.Workspace, rec.URL)
 }
 
 func (d *Daemon) allowsByPolicy(s sessions.Session) bool {

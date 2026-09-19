@@ -27,23 +27,25 @@ import (
 )
 
 const (
-	watchFlagPruneAfter   = "prune-after"
-	watchFlagMaxPerHour   = "max-per-hour"
-	watchFlagMaxPerDay    = "max-per-day"
-	watchFlagMaxTotal     = "max-total"
-	watchFlagReviewStatus = "review-status"
-	watchFlagNoRetry      = "no-retry"
-	watchFlagAutoMerge    = "auto-merge"
-	watchFlagHandOver     = "hand-over"
-	watchFlagAutoCarry    = "auto-carry"
-	watchFlagRerunCI      = "rerun-ci"
-	watchFlagCompactAt    = "compact-at"
-	watchFlagDoneWhen     = "done-when"
-	watchFlagAutoAllow    = "auto-allow"
-	watchFlagPlanReview   = "plan-review"
-	watchFlagAutoFor      = "auto-for"
-	watchFlagDaysOff      = "days-off"
-	watchFlagDryRun       = "dry-run"
+	watchFlagPruneAfter         = "prune-after"
+	watchFlagMaxPerHour         = "max-per-hour"
+	watchFlagMaxPerDay          = "max-per-day"
+	watchFlagMaxTotal           = "max-total"
+	watchFlagReviewStatus       = "review-status"
+	watchFlagNoRetry            = "no-retry"
+	watchFlagAutoMerge          = "auto-merge"
+	watchFlagAfterMerge         = "after-merge"
+	watchFlagAfterMergeSubtasks = "after-merge-subtasks"
+	watchFlagHandOver           = "hand-over"
+	watchFlagAutoCarry          = "auto-carry"
+	watchFlagRerunCI            = "rerun-ci"
+	watchFlagCompactAt          = "compact-at"
+	watchFlagDoneWhen           = "done-when"
+	watchFlagAutoAllow          = "auto-allow"
+	watchFlagPlanReview         = "plan-review"
+	watchFlagAutoFor            = "auto-for"
+	watchFlagDaysOff            = "days-off"
+	watchFlagDryRun             = "dry-run"
 )
 
 var agentWatchCmd = &cobra.Command{
@@ -176,6 +178,12 @@ var agentWatchEnableCmd = &cobra.Command{
 		}
 		if flags.Changed(watchFlagAutoMerge) {
 			wc.AutoMerge, _ = flags.GetBool(watchFlagAutoMerge)
+		}
+		if flags.Changed(watchFlagAfterMerge) {
+			wc.AfterMerge, _ = flags.GetString(watchFlagAfterMerge)
+		}
+		if flags.Changed(watchFlagAfterMergeSubtasks) {
+			wc.AfterMergeSubtasks, _ = flags.GetString(watchFlagAfterMergeSubtasks)
 		}
 		if flags.Changed("approve") {
 			wc.Approve, _ = flags.GetBool("approve")
@@ -1136,6 +1144,7 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		{wc.PRs, "PR reviews and comments"},
 		{wc.HandOver, "handed to the session on the branch"},
 		{wc.AutoMerge, "merged when green and approved"},
+		{wc.AfterMerge != "", "then the ticket goes to " + wc.AfterMerge + subtaskColumn(wc.AfterMergeSubtasks)},
 		{wc.Approve, "review requests approved when clean"},
 		{wc.Bots, "bot comments count"},
 		{wc.AutoAllow == config.AutoAllowReads, "reads allowed by policy"},
@@ -1245,6 +1254,8 @@ func init() {
 	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
 	f.Bool(watchFlagAutoMerge, false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
+	f.String(watchFlagAfterMerge, "", "Move the ticket to this column once every pull request of its run is merged — a name from `corgi agent watch board`; empty leaves it where it is")
+	f.String(watchFlagAfterMergeSubtasks, "", "Where a subtask goes instead when its pull request merges (Done, say); empty means the same column as --after-merge")
 	f.Bool("bots", false, "Comments from bot accounts count too (a review bot whose findings are to be fixed); off, a bot is not a person waiting")
 	f.Bool("approve", false, "An unattended review of a pull request I was asked to review may approve it when nothing blocks and the risk card allows")
 	f.Bool(watchFlagHandOver, false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
@@ -1466,4 +1477,11 @@ func launchStatusHandler(w http.ResponseWriter, r *http.Request) {
 		status = &daemon.Status{Running: false, WakeLockable: supervisor.Supported()}
 	}
 	writeLaunchJSON(w, statusWithUsage(dir, status))
+}
+
+func subtaskColumn(status string) string {
+	if strings.TrimSpace(status) == "" {
+		return ""
+	}
+	return " (subtasks to " + status + ")"
 }

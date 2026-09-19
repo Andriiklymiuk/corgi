@@ -362,3 +362,47 @@ func TestAMuteHoldsEveryRing(t *testing.T) {
 		t.Fatal("passed")
 	}
 }
+
+func TestAMergedStoryMovesItsTicketOnceEveryPullIsIn(t *testing.T) {
+	d := testDaemon(t)
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	var moved []string
+	d.MoveTicket = func(_ context.Context, workspace, ref, status string) error {
+		moved = append(moved, workspace+" "+ref+" → "+status)
+		return nil
+	}
+	writeWatchConfig(t, d, "acme", "      afterMerge: Ready for QA\n      afterMergeSubtasks: Done\n")
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir}
+	fixes := watch.LoadFixLog(d.Dir)
+	now := time.Now()
+	story := watch.Event{Key: "jira:ABC-7", Workspace: "acme", Ref: "ABC-7", Kind: watch.KindIssueNew, At: now}
+	fixes.StartFor(story, now)
+	fixes.Finish(story.Key, []string{"https://github.com/acme/api/pull/7", "https://github.com/acme/web/pull/3"}, "", "", now)
+	sub := watch.Event{Key: "jira:ABC-8", Workspace: "acme", Ref: "ABC-8", Kind: watch.KindIssueNew, Parent: "ABC-7", At: now}
+	fixes.StartFor(sub, now)
+	fixes.Finish(sub.Key, []string{"https://github.com/acme/api/pull/9"}, "", "", now)
+	d.watchState = watch.LoadState(d.Dir)
+	d.watchState.Fixes = fixes
+
+	merged := watch.PullStatus{State: "merged", Checks: "passing", Review: "approved", At: now}
+	open := watch.PullStatus{State: "open", Checks: "passing", Review: "approved", At: now}
+	d.pullChanged(context.Background(), spec, "acme/api#7", "https://github.com/acme/api/pull/7", open, merged, true)
+	if len(moved) != 0 {
+		t.Fatalf("one of two pulls merged is not done: %v", moved)
+	}
+	_ = watch.LoadPullLog(d.Dir).Set("acme/api#7", merged)
+	d.pullChanged(context.Background(), spec, "acme/web#3", "https://github.com/acme/web/pull/3", open, merged, true)
+	if len(moved) != 1 || moved[0] != "acme ABC-7 → Ready for QA" {
+		t.Fatalf("the story moves when its last pull merges: %v", moved)
+	}
+	collectNotes(t, notes, "ABC-7 → Ready for QA")
+	d.pullChanged(context.Background(), spec, "acme/web#3", "https://github.com/acme/web/pull/3", merged, merged, true)
+	if len(moved) != 1 {
+		t.Fatalf("moved twice: %v", moved)
+	}
+	d.pullChanged(context.Background(), spec, "acme/api#9", "https://github.com/acme/api/pull/9", open, merged, true)
+	if len(moved) != 2 || moved[1] != "acme ABC-8 → Done" {
+		t.Fatalf("a subtask goes to its own column: %v", moved)
+	}
+}

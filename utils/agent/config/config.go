@@ -218,14 +218,17 @@ type WatchConfig struct {
 	ReviewStatus    string      `yaml:"reviewStatus,omitempty"`
 	PickupStatus    string      `yaml:"pickupStatus,omitempty"`
 	AutoMerge       bool        `yaml:"autoMerge,omitempty"`
-	Approve         bool        `yaml:"approve,omitempty"`
-	HandOver        bool        `yaml:"handOver,omitempty"`
-	AutoAllow       string      `yaml:"autoAllow,omitempty"`
-	DoneWhen        []string    `yaml:"doneWhen,omitempty"`
-	CompactAt       int         `yaml:"compactAt,omitempty"`
-	Rebase          bool        `yaml:"rebase,omitempty"`
-	Lessons         bool        `yaml:"lessons,omitempty"`
-	PlanReview      string      `yaml:"planReview,omitempty"`
+	// Where a ticket goes once every pull request of its run is merged; subtasks may go elsewhere.
+	AfterMerge         string   `yaml:"afterMerge,omitempty"`
+	AfterMergeSubtasks string   `yaml:"afterMergeSubtasks,omitempty"`
+	Approve            bool     `yaml:"approve,omitempty"`
+	HandOver           bool     `yaml:"handOver,omitempty"`
+	AutoAllow          string   `yaml:"autoAllow,omitempty"`
+	DoneWhen           []string `yaml:"doneWhen,omitempty"`
+	CompactAt          int      `yaml:"compactAt,omitempty"`
+	Rebase             bool     `yaml:"rebase,omitempty"`
+	Lessons            bool     `yaml:"lessons,omitempty"`
+	PlanReview         string   `yaml:"planReview,omitempty"`
 }
 
 const AutoAllowReads = "reads"

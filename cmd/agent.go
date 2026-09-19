@@ -185,6 +185,13 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
 		return watch.MergePR(ctx, watch.LoadSecretsFor(dir, workspaceID), link)
 	}
+	d.MoveTicket = func(ctx context.Context, workspaceID, ref, status string) error {
+		w, _, err := watchWriter(dir, workspaceID)
+		if err != nil {
+			return err
+		}
+		return w.Move(ctx, ref, status)
+	}
 	d.RerunCI = func(ctx context.Context, workspaceID, repo string, since time.Time) (watch.Rerun, error) {
 		secrets := watch.LoadSecretsFor(dir, workspaceID)
 		run, err := watch.NewestFailedRun(ctx, secrets, repo, since)
