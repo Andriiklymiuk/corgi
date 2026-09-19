@@ -16,7 +16,7 @@ func TestJiraOldTicketBecomesMine(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	stamp := func(d time.Duration) string { return now.Add(d).Format(jiraStamp) }
 	search := fmt.Sprintf(`{"issues":[
-  {"key":"ABC-7","fields":{"summary":"Old story","labels":[],"status":{"name":"READY TO DEV"},
+  {"key":"ABC-7","fields":{"summary":"Old story","labels":[],"status":{"name":"Todo"},
    "assignee":{"accountId":"me-1","displayName":"Andrii"},"creator":{"accountId":"u-2","displayName":"Bob"},"created":%q,"updated":%q,"description":null,
    "issuetype":{"name":"Story","subtask":false},
    "subtasks":[{"key":"ABC-8","fields":{"summary":"Fix the label","status":{"name":"To Do"},"assignee":{"accountId":"me-1"}}},
@@ -73,7 +73,7 @@ func TestJiraOldTicketBecomesMine(t *testing.T) {
 	if !ok {
 		t.Fatalf("the assignment is an event of its own: %v", eventKeys(events))
 	}
-	if old.Kind != KindIssueNew || !old.Mine || old.Ref != "ABC-7" || old.State != "READY TO DEV" {
+	if old.Kind != KindIssueNew || !old.Mine || old.Ref != "ABC-7" || old.State != "Todo" {
 		t.Fatalf("event %+v", old)
 	}
 	if got := strings.Join(old.Subtasks, ","); got != "ABC-8" {
