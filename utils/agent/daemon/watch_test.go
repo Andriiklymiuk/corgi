@@ -539,15 +539,15 @@ func TestUnattendedSuffixForReviewRequests(t *testing.T) {
 
 func TestHeadlessEnvSkipsVPN(t *testing.T) {
 	got := strings.Join(headlessEnv("/tmp/cfg", ""), " ")
-	if got != "CLAUDE_CONFIG_DIR=/tmp/cfg CORGI_OMIT=useAwsVpn" {
+	if got != "CLAUDE_CONFIG_DIR=/tmp/cfg CORGI_OMIT=useAwsVpn DISABLE_AUTOUPDATER=1" {
 		t.Fatal(got)
 	}
 	got = strings.Join(headlessEnv("", "useDocker"), " ")
-	if got != "CORGI_OMIT=useDocker,useAwsVpn" {
+	if got != "CORGI_OMIT=useDocker,useAwsVpn DISABLE_AUTOUPDATER=1" {
 		t.Fatal(got)
 	}
 	got = strings.Join(headlessEnv("", "useAwsVpn"), " ")
-	if got != "CORGI_OMIT=useAwsVpn" {
+	if got != "CORGI_OMIT=useAwsVpn DISABLE_AUTOUPDATER=1" {
 		t.Fatal(got)
 	}
 }
@@ -637,5 +637,21 @@ func TestABatchFullStartsAtOnce(t *testing.T) {
 	waitFor(t, func() bool { return len(fakeRuns(ran)) == 1 })
 	if runs := fakeRuns(ran); !strings.Contains(runs[0], "/corgi:stories ABC-1 ABC-2") {
 		t.Fatalf("%v", runs)
+	}
+}
+
+func TestAStoryRunGetsHoursAReviewGetsMinutes(t *testing.T) {
+	story := watch.Event{Kind: watch.KindIssueNew}
+	if got := fixTimeoutFor(story); got != 3*time.Hour {
+		t.Fatalf("a story builds, tests, opens pull requests and watches CI: %s", got)
+	}
+	story.Riders = []watch.Event{{Kind: watch.KindIssueNew}, {Kind: watch.KindIssueNew}}
+	if got := fixTimeoutFor(story); got != 9*time.Hour {
+		t.Fatalf("a batch gets that much per ticket: %s", got)
+	}
+	for _, k := range []watch.Kind{watch.KindReviewRequested, watch.KindPRComment, watch.KindPRReview, watch.KindIssueComment, watch.KindCIFailed, watch.KindChatMention} {
+		if got := fixTimeoutFor(watch.Event{Kind: k}); got != 45*time.Minute {
+			t.Fatalf("%s: %s", k, got)
+		}
 	}
 }

@@ -213,7 +213,16 @@ func (q QuietHours) Contains(t time.Time) bool {
 	return m >= q.start || m < q.end
 }
 
-const fixTimeout = 30 * time.Minute
+const botTimeout = 30 * time.Minute
+
+// A story builds, tests, opens pull requests and watches CI to green; a
+// review or a comment answer is a fraction of that.
+func fixTimeoutFor(e watch.Event) time.Duration {
+	if e.Kind == watch.KindIssueNew {
+		return time.Duration(1+len(e.Riders)) * 3 * time.Hour
+	}
+	return 45 * time.Minute
+}
 
 var claudeCommand = func(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "claude", args...)
@@ -941,7 +950,9 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 }
 
 // A VPN client that wants a browser sign-in cannot be driven when nobody is
-// there, so a headless run leaves it out of the stack preflight.
+// there, so a headless run leaves it out of the stack preflight. Claude Code
+// does not update itself under a run either: a broken update would crash
+// every run until somebody is back.
 func headlessEnv(configDir, omit string) []string {
 	var env []string
 	if configDir != "" {
@@ -953,7 +964,7 @@ func headlessEnv(configDir, omit string) []string {
 			keys = append(keys, k)
 		}
 	}
-	return append(env, "CORGI_OMIT="+strings.Join(append(keys, "useAwsVpn"), ","))
+	return append(env, "CORGI_OMIT="+strings.Join(append(keys, "useAwsVpn"), ","), "DISABLE_AUTOUPDATER=1")
 }
 
 func fixArgs(spec WatchSpec, e watch.Event) []string {
@@ -997,7 +1008,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		defer d.releaseFix(spec.Workspace, r.Ref)
 	}
 	defer d.takeSlot(spec.Workspace)()
-	ctx, cancel := context.WithTimeout(ctx, fixTimeout)
+	ctx, cancel := context.WithTimeout(ctx, fixTimeoutFor(e))
 	defer cancel()
 
 	logDir := filepath.Join(d.Dir, "watch", "runs")

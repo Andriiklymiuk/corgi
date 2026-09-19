@@ -41,7 +41,7 @@ func TestAHeadlessTurnResumesAGoneSession(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(ran) != 1 || !strings.HasPrefix(ran[0], "/tmp/acme-api CLAUDE_CONFIG_DIR=/tmp/cfg,CORGI_OMIT=useAwsVpn -p run the tests --resume s1") {
+	if len(ran) != 1 || !strings.HasPrefix(ran[0], "/tmp/acme-api CLAUDE_CONFIG_DIR=/tmp/cfg,CORGI_OMIT=useAwsVpn,DISABLE_AUTOUPDATER=1 -p run the tests --resume s1") {
 		t.Fatalf("one headless turn in the session's checkout under its account: %v", ran)
 	}
 	if s, _ := d.Sessions.LookupEnded("s1"); s.Headless == nil || s.Headless.Turns != 1 || s.Headless.At.IsZero() {
