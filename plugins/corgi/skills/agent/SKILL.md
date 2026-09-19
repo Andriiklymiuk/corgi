@@ -976,6 +976,15 @@ CLI or the phone's repo sheet, no restart:
   moves and an automation's moves are not news. A parent with open subtasks
   of the user's is left to them (`its open subtasks are the work`); a
   subtask's run gets the parent's key and title for context.
+- `corgi agent watch sweep --states "<not-started column>"`: the watch
+  only sees what changes after it starts, so work already assigned before
+  it was enabled never arrives. A sweep reads every open ticket of the
+  user's once and hands the ones in that column to the daemon as new
+  issues; seen, ran, ignored, blocked and parents-with-subtasks stay put.
+  `--dry-run` lists first. Never sweep In Progress / In Review — that is
+  the user's own hand work.
+- A story run has three hours per ticket (a review 45 min): it builds,
+  tests, opens the pull requests and watches CI.
 - A run that crashed once (exit code, timeout) gets exactly one more go
   30 min later; a second crash trips the breaker (`watch unblock` clears
   it). `--no-retry` turns the retry off with the rest.

@@ -64,6 +64,7 @@ corgi agent watch [flags]
 * [corgi agent watch prune](corgi_agent_watch_prune)	 - Remove the worktrees of finished isolated runs
 * [corgi agent watch replay](corgi_agent_watch_replay)	 - The week unattended mode would have had
 * [corgi agent watch run](corgi_agent_watch_run)	 - Poll every watched workspace once, right now, and print what is new
+* [corgi agent watch sweep](corgi_agent_watch_sweep)	 - Hand every open ticket already assigned to you to the daemon, as if it had just arrived
 * [corgi agent watch test](corgi_agent_watch_test)	 - Push one made-up event through the pipeline and print the claude run it would start, without starting it
 * [corgi agent watch unblock](corgi_agent_watch_unblock)	 - Let unattended runs work a blocked ticket again
 * [corgi agent watch undo](corgi_agent_watch_undo)	 - Put back what the last unattended run did

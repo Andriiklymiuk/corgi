@@ -37,17 +37,8 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if l.Me == "" {
 		l.Me = cursor["me"]
 	}
-	if l.Me == "" {
-		var viewer struct {
-			Viewer struct{ ID, Name, Email string } `json:"viewer"`
-		}
-		if err := l.query(ctx, `{ viewer { id name email } }`, &viewer); err != nil {
-			return nil, cursor, err
-		}
-		if viewer.Viewer.ID == "" {
-			return nil, cursor, errors.New("linear: viewer has no id")
-		}
-		l.Me = viewer.Viewer.ID
+	if err := l.resolveMe(ctx); err != nil {
+		return nil, cursor, err
 	}
 
 	now := time.Now()
@@ -60,10 +51,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 	query := fmt.Sprintf(`{
   issues(filter: {%s}, first: 50, sort: [{updatedAt: {order: Ascending}}]) {
-    nodes { id identifier title description url state { name } labels { nodes { name } } assignee { id name } creator { id name } createdAt updatedAt
-      parent { identifier title }
-      children { nodes { identifier state { name } assignee { id } } }
-      history(last: 10) { nodes { id createdAt actor { id } toAssignee { id } toState { name } } } }
+    nodes { `+linearIssueFields+` }
   }
   comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt) {
     nodes { id body createdAt user { id name } botActor { name } issue { identifier url title state { name } } }
@@ -72,25 +60,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 }`, issueFilter, graphqlString(commentsSince), strconv.Quote(l.Me))
 
 	var data struct {
-		Issues struct {
-			Nodes []struct {
-				ID, Identifier, Title, Description, URL string
-				State                                   struct{ Name string }
-				Labels                                  struct{ Nodes []struct{ Name string } }
-				Assignee                                *struct{ ID, Name string }
-				Creator                                 *struct{ ID, Name string }
-				CreatedAt, UpdatedAt                    string
-				Parent                                  *struct{ Identifier, Title string }
-				Children                                struct {
-					Nodes []struct {
-						Identifier string
-						State      struct{ Name string }
-						Assignee   *struct{ ID string }
-					}
-				}
-				History struct{ Nodes []linearHistory }
-			}
-		}
+		Issues   struct{ Nodes []linearIssue }
 		Comments linearComments
 	}
 	if err := l.query(ctx, query, &data); err != nil {
@@ -124,37 +94,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			}
 			key, at = key+":"+h.ID, trackerTime(h.CreatedAt)
 		}
-		e := Event{
-			Key:    key,
-			Source: "linear",
-			Kind:   KindIssueNew,
-			Ref:    n.Identifier,
-			Title:  n.Title,
-			Body:   clip(n.Description, bodyMax),
-			URL:    n.URL,
-			State:  n.State.Name,
-			At:     at,
-		}
-		if n.Parent != nil {
-			e.Parent, e.ParentTitle = n.Parent.Identifier, n.Parent.Title
-		}
-		for _, c := range n.Children.Nodes {
-			if c.Assignee != nil && isMe(l.Me, c.Assignee.ID) && finishedState(c.State.Name) == "" {
-				e.Subtasks = append(e.Subtasks, c.Identifier)
-			}
-		}
-		for _, label := range n.Labels.Nodes {
-			e.Labels = append(e.Labels, label.Name)
-		}
-		if n.Assignee != nil {
-			e.Assignee = n.Assignee.Name
-			e.Mine = isMe(l.Me, n.Assignee.ID)
-		}
-		if n.Creator != nil {
-			e.Author = n.Creator.Name
-			e.Self = isMe(l.Me, n.Creator.ID)
-		}
-		events = append(events, e)
+		events = append(events, l.issueEvent(n, key, at))
 	}
 	for _, n := range comments {
 		created := trackerTime(n.CreatedAt)
@@ -293,6 +233,106 @@ func later(a, b time.Time) time.Time {
 		return b
 	}
 	return a
+}
+
+type linearIssue struct {
+	ID, Identifier, Title, Description, URL string
+	State                                   struct{ Name string }
+	Labels                                  struct{ Nodes []struct{ Name string } }
+	Assignee                                *struct{ ID, Name string }
+	Creator                                 *struct{ ID, Name string }
+	CreatedAt, UpdatedAt                    string
+	Parent                                  *struct{ Identifier, Title string }
+	Children                                struct {
+		Nodes []struct {
+			Identifier string
+			State      struct{ Name string }
+			Assignee   *struct{ ID string }
+		}
+	}
+	History struct{ Nodes []linearHistory }
+}
+
+const linearIssueFields = `id identifier title description url state { name } labels { nodes { name } } assignee { id name } creator { id name } createdAt updatedAt
+      parent { identifier title }
+      children { nodes { identifier state { name } assignee { id } } }
+      history(last: 10) { nodes { id createdAt actor { id } toAssignee { id } toState { name } } }`
+
+func (l *Linear) resolveMe(ctx context.Context) error {
+	if l.Me != "" {
+		return nil
+	}
+	var viewer struct {
+		Viewer struct{ ID, Name, Email string } `json:"viewer"`
+	}
+	if err := l.query(ctx, `{ viewer { id name email } }`, &viewer); err != nil {
+		return err
+	}
+	if viewer.Viewer.ID == "" {
+		return errors.New("linear: viewer has no id")
+	}
+	l.Me = viewer.Viewer.ID
+	return nil
+}
+
+func (l *Linear) issueEvent(n linearIssue, key string, at time.Time) Event {
+	e := Event{
+		Key:    key,
+		Source: "linear",
+		Kind:   KindIssueNew,
+		Ref:    n.Identifier,
+		Title:  n.Title,
+		Body:   clip(n.Description, bodyMax),
+		URL:    n.URL,
+		State:  n.State.Name,
+		At:     at,
+	}
+	if n.Parent != nil {
+		e.Parent, e.ParentTitle = n.Parent.Identifier, n.Parent.Title
+	}
+	for _, c := range n.Children.Nodes {
+		if c.Assignee != nil && isMe(l.Me, c.Assignee.ID) && finishedState(c.State.Name) == "" {
+			e.Subtasks = append(e.Subtasks, c.Identifier)
+		}
+	}
+	for _, label := range n.Labels.Nodes {
+		e.Labels = append(e.Labels, label.Name)
+	}
+	if n.Assignee != nil {
+		e.Assignee = n.Assignee.Name
+		e.Mine = isMe(l.Me, n.Assignee.ID)
+	}
+	if n.Creator != nil {
+		e.Author = n.Creator.Name
+		e.Self = isMe(l.Me, n.Creator.ID)
+	}
+	return e
+}
+
+// Mine is every open issue assigned to me, as new-issue events, for a sweep.
+func (l *Linear) Mine(ctx context.Context) ([]Event, error) {
+	if strings.TrimSpace(l.Token) == "" {
+		return nil, ErrNoToken
+	}
+	if err := l.resolveMe(ctx); err != nil {
+		return nil, err
+	}
+	filter := `assignee: {isMe: {eq: true}}, state: {type: {nin: ["completed", "canceled"]}}`
+	if l.Team != "" {
+		filter += ", team: {key: {eq: " + strconv.Quote(l.Team) + "}}"
+	}
+	query := fmt.Sprintf(`{ issues(filter: {%s}, first: 50, sort: [{createdAt: {order: Ascending}}]) { nodes { %s } } }`, filter, linearIssueFields)
+	var data struct {
+		Issues struct{ Nodes []linearIssue }
+	}
+	if err := l.query(ctx, query, &data); err != nil {
+		return nil, err
+	}
+	var events []Event
+	for _, n := range data.Issues.Nodes {
+		events = append(events, l.issueEvent(n, "linear:"+n.Identifier, trackerTime(n.CreatedAt)))
+	}
+	return events, nil
 }
 
 type linearHistory struct {

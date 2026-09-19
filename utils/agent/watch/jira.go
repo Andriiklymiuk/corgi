@@ -107,6 +107,84 @@ func (j *Jira) becameMine(issue jiraIssue, since time.Time) (jiraHistory, bool) 
 	return best, found
 }
 
+func (j *Jira) resolveMe(ctx context.Context) error {
+	if j.Me == "" {
+		var me struct {
+			AccountID string `json:"accountId"`
+			TimeZone  string `json:"timeZone"`
+		}
+		if err := j.get(ctx, "/rest/api/3/myself", nil, &me); err != nil {
+			return err
+		}
+		if me.AccountID == "" {
+			return fmt.Errorf("jira: myself has no accountId")
+		}
+		j.Me = me.AccountID
+		if zone, err := time.LoadLocation(me.TimeZone); err == nil && me.TimeZone != "" {
+			j.zone = zone
+		}
+	}
+	if j.zone == nil {
+		j.zone = time.UTC
+	}
+	return nil
+}
+
+func (j *Jira) issueEvent(issue jiraIssue, key string, at time.Time) Event {
+	e := Event{
+		Key:      key,
+		Source:   "jira",
+		Kind:     KindIssueNew,
+		Ref:      issue.Key,
+		Title:    issue.Fields.Summary,
+		Body:     clip(jiraText(issue.Fields.Description), bodyMax),
+		URL:      strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
+		Labels:   issue.Fields.Labels,
+		State:    issue.Fields.Status.Name,
+		Mine:     issue.Fields.Assignee != nil && isMe(j.Me, issue.Fields.Assignee.AccountID),
+		Subtasks: j.openSubtasksOfMine(issue),
+		At:       at,
+	}
+	if p := issue.Fields.Parent; p != nil {
+		e.Parent, e.ParentTitle = p.Key, p.Fields.Summary
+	}
+	if issue.Fields.Assignee != nil {
+		e.Assignee = issue.Fields.Assignee.DisplayName
+	}
+	if issue.Fields.Creator != nil {
+		e.Author = issue.Fields.Creator.DisplayName
+		e.Self = isMe(j.Me, issue.Fields.Creator.AccountID)
+	}
+	return e
+}
+
+const jiraIssueFields = "summary,description,labels,status,assignee,creator,created,updated,comment,issuetype,parent,subtasks"
+
+// Mine is every open ticket assigned to me, as new-issue events: what a
+// sweep hands to the daemon so work that was waiting before the watch
+// started is not skipped.
+func (j *Jira) Mine(ctx context.Context) ([]Event, error) {
+	if err := j.resolveMe(ctx); err != nil {
+		return nil, err
+	}
+	jql := "assignee = currentUser() AND statusCategory != Done ORDER BY created ASC"
+	if j.Project != "" {
+		jql = fmt.Sprintf("project = %q AND ", j.Project) + jql
+	}
+	var search struct {
+		Issues []jiraIssue `json:"issues"`
+	}
+	params := url.Values{"jql": {jql}, "fields": {jiraIssueFields}, "maxResults": {"50"}}
+	if err := j.get(ctx, "/rest/api/3/search/jql", params, &search); err != nil {
+		return nil, err
+	}
+	var events []Event
+	for _, issue := range search.Issues {
+		events = append(events, j.issueEvent(issue, "jira:"+issue.Key, trackerTime(issue.Fields.Created)))
+	}
+	return events, nil
+}
+
 func (j *Jira) openSubtasksOfMine(issue jiraIssue) []string {
 	var keys []string
 	for _, s := range issue.Fields.Subtasks {
@@ -141,24 +219,8 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 			j.zone = zone
 		}
 	}
-	if j.Me == "" {
-		var me struct {
-			AccountID string `json:"accountId"`
-			TimeZone  string `json:"timeZone"`
-		}
-		if err := j.get(ctx, "/rest/api/3/myself", nil, &me); err != nil {
-			return nil, cursor, err
-		}
-		if me.AccountID == "" {
-			return nil, cursor, fmt.Errorf("jira: myself has no accountId")
-		}
-		j.Me = me.AccountID
-		if zone, err := time.LoadLocation(me.TimeZone); err == nil && me.TimeZone != "" {
-			j.zone = zone
-		}
-	}
-	if j.zone == nil {
-		j.zone = time.UTC
+	if err := j.resolveMe(ctx); err != nil {
+		return nil, cursor, err
 	}
 
 	now := time.Now()
@@ -174,7 +236,7 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	}
 	params := url.Values{
 		"jql":        {jql},
-		"fields":     {"summary,description,labels,status,assignee,creator,created,updated,comment,issuetype,parent,subtasks"},
+		"fields":     {jiraIssueFields},
 		"expand":     {"changelog"},
 		"maxResults": {"50"},
 	}
@@ -200,31 +262,7 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 			}
 			key, at = key+":h"+h.ID, trackerTime(h.Created)
 		}
-		e := Event{
-			Key:      key,
-			Source:   "jira",
-			Kind:     KindIssueNew,
-			Ref:      issue.Key,
-			Title:    issue.Fields.Summary,
-			Body:     clip(jiraText(issue.Fields.Description), bodyMax),
-			URL:      strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
-			Labels:   issue.Fields.Labels,
-			State:    issue.Fields.Status.Name,
-			Mine:     assignedToMe,
-			Subtasks: j.openSubtasksOfMine(issue),
-			At:       at,
-		}
-		if p := issue.Fields.Parent; p != nil {
-			e.Parent, e.ParentTitle = p.Key, p.Fields.Summary
-		}
-		if issue.Fields.Assignee != nil {
-			e.Assignee = issue.Fields.Assignee.DisplayName
-		}
-		if issue.Fields.Creator != nil {
-			e.Author = issue.Fields.Creator.DisplayName
-			e.Self = isMe(j.Me, issue.Fields.Creator.AccountID)
-		}
-		events = append(events, e)
+		events = append(events, j.issueEvent(issue, key, at))
 	}
 
 	for _, issue := range mine {
