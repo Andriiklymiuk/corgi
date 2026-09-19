@@ -456,7 +456,7 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 	}
 	var queue []watch.Event
 	for _, e := range d.watchState.Fixes.DeferredEvents() {
-		if e.Workspace != spec.Workspace {
+		if e.Workspace != spec.Workspace || now.Before(e.NotBefore) {
 			continue
 		}
 		if _, blocked := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); blocked {
@@ -1022,8 +1022,11 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		if e.Source == "slack" {
 			d.say(ctx, spec, e, chatOutcome(nil, "", runErr.Error()), "x")
 		}
-		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
-			fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath), spec.Workspace, e.URL)
+		body := fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath)
+		if d.retryOnceLater(spec, e) {
+			body += fmt.Sprintf(" — one retry in %s", retryCrashAfter)
+		}
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL)
 		return
 	}
 	links := uniqueStrings(prLink.FindAllString(string(out), -1))
@@ -1368,6 +1371,22 @@ func IsolationNote(branch string, trees []string) string {
 	return "\n\nThis run is isolated: every repository already has a worktree on branch `" + branch +
 		"`, created off its current HEAD. Work only in these directories and open the pull requests from this branch; " +
 		"do not create another branch and do not edit the main checkouts:\n- " + strings.Join(trees, "\n- ")
+}
+
+const retryCrashAfter = 30 * time.Minute
+
+// A run that crashed once gets a second go later; the second crash trips
+// the breaker, so there is never a third.
+func (d *Daemon) retryOnceLater(spec WatchSpec, e watch.Event) bool {
+	if e.Ref == "" || spec.NoRetry || d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref) != 1 {
+		return false
+	}
+	if _, blocked := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); blocked {
+		return false
+	}
+	e.NotBefore = time.Now().Add(retryCrashAfter)
+	d.watchState.Fixes.Defer(e)
+	return true
 }
 
 func (d *Daemon) tripBreaker(spec WatchSpec, e watch.Event, lastErr string) {

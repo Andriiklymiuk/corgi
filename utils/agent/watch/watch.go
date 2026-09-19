@@ -53,6 +53,8 @@ type Event struct {
 	ParentTitle string    `json:"parentTitle,omitempty"`
 	Subtasks    []string  `json:"subtasks,omitempty"`
 	At          time.Time `json:"at"`
+	// A deferred run that must not start before this moment.
+	NotBefore time.Time `json:"notBefore,omitempty"`
 }
 
 type Rules struct {
