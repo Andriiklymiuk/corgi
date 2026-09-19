@@ -187,3 +187,14 @@ func TestAMessageCannotCloseItsOwnQuarantine(t *testing.T) {
 		t.Fatal("the words still have to reach the run — they are evidence, just not instructions")
 	}
 }
+
+func TestChatOutcomeNamesEachPull(t *testing.T) {
+	got := chatOutcome([]string{"https://github.com/acme/api/pull/5", "https://github.com/acme/admin-portal/pull/9"}, "two repos", "")
+	want := "Opened — two repos\napi: https://github.com/acme/api/pull/5\nadmin-portal: https://github.com/acme/admin-portal/pull/9"
+	if got != want {
+		t.Fatalf("got:\n%s", got)
+	}
+	if got := chatOutcome(nil, "", "boom"); got != "Could not do this: boom." {
+		t.Fatal(got)
+	}
+}

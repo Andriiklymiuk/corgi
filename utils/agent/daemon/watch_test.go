@@ -74,7 +74,7 @@ func TestWatchSinkNotifiesAndFixesOnce(t *testing.T) {
 	d.handleWatchEvent(context.Background(), e)
 
 	got := collectNotes(t, notes, "fixed ABC-1")
-	if !got["new issue ABC-1 — Login loops"] || !got["fixed ABC-1 — https://github.com/acme/api/pull/412"] {
+	if !got["new issue ABC-1 — Login loops"] || !got["fixed ABC-1 — Login loops\napi: https://github.com/acme/api/pull/412"] {
 		t.Fatalf("notices %v", got)
 	}
 	if len(*ran) != 1 || !strings.Contains((*ran)[0], "--dangerously-skip-permissions") || !strings.Contains((*ran)[0], "/corgi:stories ABC-1") {
@@ -105,7 +105,7 @@ func TestATicketIWroteMyselfFixesWithoutRinging(t *testing.T) {
 	if got["new issue ABC-1 — Login loops"] {
 		t.Fatalf("a ticket I wrote rang as news: %v", got)
 	}
-	if !got["fixed ABC-1 — https://github.com/acme/api/pull/412"] || len(*ran) != 1 {
+	if !got["fixed ABC-1 — Login loops\napi: https://github.com/acme/api/pull/412"] || len(*ran) != 1 {
 		t.Fatalf("the fix must still run and report: %v, runs %v", got, *ran)
 	}
 	if data, _ := os.ReadFile(filepath.Join(d.Dir, "watch", "events.jsonl")); !strings.Contains(string(data), "ABC-1") {

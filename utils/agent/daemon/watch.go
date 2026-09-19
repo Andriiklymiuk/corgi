@@ -1024,8 +1024,11 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	links := uniqueStrings(prLink.FindAllString(string(out), -1))
 	note := ""
 	body := "fixed " + e.Ref
+	if t := strings.TrimSpace(e.Title); t != "" {
+		body += " — " + t
+	}
 	if len(links) > 0 {
-		body += " — " + strings.Join(links, " ")
+		body = watch.PullLines(body, links)
 	} else if last := lastLine(string(out)); last != "" {
 		note = clipText(last, 160)
 		body += " — " + note
