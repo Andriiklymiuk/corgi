@@ -135,7 +135,8 @@ per-story review, draft PR, grouped report.
 ## Guardrails (non-negotiable)
 
 - Read `../_shared/conventions.md` first (attribution, `manualRun`, preflight, worktrees).
-- **Draft PRs/MRs only.** Never non-draft, never merge, never force-push.
+- **Draft PRs/MRs only.** Never merge, never force-push. A PR leaves draft only through
+  Phase 5.6, and only when the workspace CLAUDE.md asks for it.
 - **One blocking gate** — spec sign-off (Phase 2); the sign-off _is_ the branch
   authorization.
 - **No destructive git without explicit OK** — checkout off a dirty tree, branch
@@ -768,8 +769,8 @@ issue link.
     `glab ci status`).
   - Batch spanning both forges → watch each PR/MR on its own forge. On red, surface the
     failing job (name + log tail), fix on the branch, push, re-watch (Phase 3 Stop rule);
-    never flip to ready to dodge a red check. Still **draft-only** — watching CI is not
-    merging.
+    never flip to ready to dodge a red check. Still draft here — Phase 5.6 decides
+    whether it ever leaves draft.
 - **Move the ticket to the review state** once its draft PR/MR is up — **resolve,
   don't hardcode:** Linear a `Code Review`/`In Review` state (later `started`-type or
   custom, from `list_issue_statuses`); Jira the transition whose target is named
@@ -848,7 +849,24 @@ blocked/failed stories.
   phase; "stop the loop" mid-run (or any interrupt) → finish nothing further, keep
   fixes already pushed. Report line stays honest: `review skipped` or
   `✗ review open — round <n>: stopped by user`.
-- Still **draft-only** — a clean review is not a merge, human flips to ready.
+- Still no merge — a clean review is not a merge. Whether the PR leaves draft is
+  Phase 5.6's call.
+
+## Phase 5.6 — Ready hand-off (only when the workspace asks)
+
+Default: the PR/MR stays draft and a human flips it. A workspace opts in with a line
+in its CLAUDE.md such as "mark agent PRs ready when done" — no line, no flip. When it
+opts in, flip **per PR/MR, only when every one of these holds**:
+
+- Phase 5.5 ended clean for this story (`0 blocking`), not `stopped` or capped.
+- The PR/MR's own CI is green (re-read it live; a queued pipeline is not green).
+- No unresolved review thread from anyone but you.
+- The story is not blocked, partial, or `needs attention`.
+
+Then `gh pr ready <url>` / `glab mr update <iid> --ready`, plus whatever follow-up the
+workspace CLAUDE.md names (a manual CI job to play, a reviewer to request). One story
+failing the checks keeps only that story's PRs in draft; the rest still flip. Say which
+flipped and which stayed in the report.
 
 ### Per-story lines (under each ticket block of the report)
 
@@ -968,7 +986,8 @@ highest-signal part and the easiest to quietly drop.
 
 Never wrap it in a fenced code block: it renders monospace and kills every link.
 
-**Announce in chat, once, when PRs/MRs were opened:** run
+**Announce in chat, once, when PRs/MRs were opened** (after Phase 5.6, so a flipped PR
+is announced ready): run
 `corgi agent chat announce "<[KEY] story title>" <pr-url> <pr-url> …` with every PR/MR
 this run opened (one call per story). It posts the title and one `repo: link` line per
 PR in the workspace's review channel, in the voice the workspace configured; with no
