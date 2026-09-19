@@ -121,14 +121,34 @@ func (s *Slack) channels(convs []slackConversation) []slackConversation {
 
 // Slack refuses the whole list when any asked-for type lacks its scope, so a
 // token that reads public channels alone gets a second, narrower ask.
+// One conversations.list call fails whole when any type's scope is missing,
+// so each type is asked for alone and the ones the token cannot read are skipped.
 func (s *Slack) conversations(ctx context.Context) ([]slackConversation, error) {
-	all, err := s.conversationsOf(ctx, "public_channel,private_channel,im,mpim")
-	if err != nil && strings.Contains(err.Error(), "missing_scope") {
-		if public, retry := s.conversationsOf(ctx, "public_channel"); retry == nil {
-			return public, nil
+	var all []slackConversation
+	var denied error
+	seen := map[string]bool{}
+	for _, kind := range []string{"public_channel", "private_channel", "im", "mpim"} {
+		convs, err := s.conversationsOf(ctx, kind)
+		if err != nil {
+			if strings.Contains(err.Error(), "missing_scope") {
+				if denied == nil {
+					denied = err
+				}
+				continue
+			}
+			return nil, err
+		}
+		for _, c := range convs {
+			if !seen[c.ID] {
+				seen[c.ID] = true
+				all = append(all, c)
+			}
 		}
 	}
-	return all, err
+	if len(all) == 0 && denied != nil {
+		return nil, denied
+	}
+	return all, nil
 }
 
 func (s *Slack) conversationsOf(ctx context.Context, types string) ([]slackConversation, error) {

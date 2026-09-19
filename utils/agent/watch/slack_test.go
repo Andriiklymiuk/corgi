@@ -260,7 +260,38 @@ func TestSlackListsOnlyTheTypesTheTokenMayRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a token that reads public channels only still lists them: %v", err)
 	}
-	if len(asked) < 2 || asked[len(asked)-1] != "public_channel" {
-		t.Fatalf("the retry asks for public channels alone: %v", asked)
+	if len(asked) != 4 || asked[0] != "public_channel" {
+		t.Fatalf("each type is asked for on its own: %v", asked)
+	}
+}
+
+func TestSlackKeepsPrivateChannelsWhenOnlyDMsAreOutOfScope(t *testing.T) {
+	f := newSlackFake(t)
+	f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/conversations.list" {
+			types := r.URL.Query().Get("types")
+			switch {
+			case strings.Contains(types, "im"):
+				_, _ = w.Write([]byte(`{"ok":false,"error":"missing_scope","needed":"im:read,mpim:read"}`))
+			case types == "private_channel":
+				_, _ = w.Write([]byte(`{"ok":true,"channels":[{"id":"GPRIV","name":"code-review","is_private":true}]}`))
+			default:
+				_, _ = w.Write([]byte(`{"ok":true,"channels":[{"id":"CPUB","name":"general"}]}`))
+			}
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"messages":[],"has_more":false}`))
+	})
+	s := newTestSlack(f, SlackWatchConfig{})
+	convs, err := s.conversations(context.Background())
+	if err != nil {
+		t.Fatalf("private channels list without a DM scope: %v", err)
+	}
+	var names []string
+	for _, c := range convs {
+		names = append(names, c.Name)
+	}
+	if len(names) != 2 || names[0] != "general" || names[1] != "code-review" {
+		t.Fatalf("want the public and the private channel, got %v", names)
 	}
 }
