@@ -1527,7 +1527,7 @@ otherwise "lid closed on the train" needs a machine that stays on.
 
 ## What counts as a new ticket
 
-A ticket created assigned to you, or an old one a person hands over: assigned to you, or moved to a column, by someone else. Jira's changelog and Linear's issue history say who did it, so your own moves and an automation's (Linear's GitHub link moving an issue to In Progress) are not news. A parent whose open subtasks are yours is left alone — the subtasks are the work — and a subtask's run is told which parent it belongs to. A run that crashed gets one more go 30 minutes later, then the breaker.
+A ticket created assigned to you, or an old one a person hands over: assigned to you, or moved to a column, by someone else. Jira's changelog and Linear's issue history say who did it, so your own moves and an automation's (Linear's GitHub link moving an issue to In Progress) are not news. A parent whose open subtasks are yours is left alone — the subtasks are the work — and a subtask's run is told which parent it belongs to. A run that crashed gets one more go 30 minutes later, then the breaker. Work that was already yours before the watch started never arrives on its own: `corgi agent watch sweep --states "Ready for dev" --dry-run` lists it, and without `--dry-run` hands it to the daemon as new issues (seen, ran, ignored and blocked tickets stay put).
 
 ## Leaving it alone for weeks
 
