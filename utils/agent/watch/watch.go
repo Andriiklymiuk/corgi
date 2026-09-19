@@ -55,6 +55,17 @@ type Event struct {
 	At          time.Time `json:"at"`
 	// A deferred run that must not start before this moment.
 	NotBefore time.Time `json:"notBefore,omitempty"`
+	// Tickets that ride in the same run as this one, the run's leader.
+	Riders []Event `json:"riders,omitempty"`
+}
+
+// Refs of the leader and every rider, in order.
+func (e Event) Refs() []string {
+	refs := []string{e.Ref}
+	for _, r := range e.Riders {
+		refs = append(refs, r.Ref)
+	}
+	return refs
 }
 
 type Rules struct {

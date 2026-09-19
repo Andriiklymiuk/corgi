@@ -961,6 +961,24 @@ CLI or the phone's repo sheet, no restart:
   and the last one. **Read them before changing code.**
 - `--hand-over`, `--auto-merge`: feedback typed into the session on
   the branch; a ready pull request merged.
+- `--after-merge "<column>"`: once **every** pull request of a run is
+  merged (by the daemon or by a person), the ticket moves to that column —
+  a name `corgi agent watch board` prints. `--after-merge-subtasks Done`
+  sends a subtask to a column of its own. Jira boards mostly; Linear's
+  GitHub link usually moves the issue by itself, so leave it off there.
+- `--batch 3`: tickets that arrive within 90 s of each other (a planner
+  assigning a few at once) share one run — `/corgi:stories A B C` — one
+  preflight and one context. Each still counts toward the caps; the notice
+  says `fixed A + B + C`; a crash retries them one by one. 1 is off.
+- What is a new ticket: one created assigned to the user, **or an old one
+  a person hands over** — assigned to the user or moved to a column, by
+  someone else (the changelog / issue history says who). The user's own
+  moves and an automation's moves are not news. A parent with open subtasks
+  of the user's is left to them (`its open subtasks are the work`); a
+  subtask's run gets the parent's key and title for context.
+- A run that crashed once (exit code, timeout) gets exactly one more go
+  30 min later; a second crash trips the breaker (`watch unblock` clears
+  it). `--no-retry` turns the retry off with the rest.
 - `--approve`: an unattended review of a pull request someone asked
   the user to review may end in an approval — only when nothing blocks and
   the risk card says `auto-approve: yes`; otherwise findings, no stamp.

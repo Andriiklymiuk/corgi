@@ -210,6 +210,7 @@ type WatchConfig struct {
 	Silent          bool        `yaml:"silent,omitempty"`
 	AutoCarry       bool        `yaml:"autoCarry,omitempty"`
 	Slots           int         `yaml:"slots,omitempty"`
+	Batch           int         `yaml:"batch,omitempty"`
 	Reviews         bool        `yaml:"reviews,omitempty"`
 	CI              bool        `yaml:"ci,omitempty"`
 	From            []string    `yaml:"from,omitempty"`
