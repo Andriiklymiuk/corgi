@@ -262,6 +262,25 @@ func launchPeersHandler(w http.ResponseWriter, r *http.Request) {
 			list = append(list, p.Public())
 		}
 		writeLaunchJSON(w, map[string]any{"me": peers.Me(), "lead": store.Lead, "peers": list})
+	case http.MethodPost:
+		// {lead: true|false} — this laptop asks to lead the trackers it shares.
+		if device, ok := authorizedDeviceFull(pairing.StorePath(dir), r.Header.Get("Authorization")); ok && device.Peer() {
+			writeLaunchError(w, http.StatusForbidden, "a peer laptop does not set the lead here")
+			return
+		}
+		var req struct {
+			Lead *bool `json:"lead"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil || req.Lead == nil {
+			writeLaunchError(w, http.StatusBadRequest, "POST {lead: true|false}")
+			return
+		}
+		if err := peers.Update(peers.Path(dir), func(s *peers.Store) { s.Lead = *req.Lead }); err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		nudgeDaemon(dir)
+		writeLaunchJSON(w, map[string]any{"lead": *req.Lead})
 	case http.MethodDelete:
 		name := launchNameArg(r)
 		removed := false
@@ -276,7 +295,7 @@ func launchPeersHandler(w http.ResponseWriter, r *http.Request) {
 		nudgeDaemon(dir)
 		writeLaunchJSON(w, map[string]any{"removed": name})
 	default:
-		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the peers, DELETE ?name= to forget one")
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the peers, POST {lead} to lead, DELETE ?name= to forget one")
 	}
 }
 
