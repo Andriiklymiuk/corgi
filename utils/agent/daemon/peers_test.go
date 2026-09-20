@@ -20,6 +20,7 @@ func (n namedSource) Poll(context.Context, watch.Cursor) ([]watch.Event, watch.C
 }
 
 func TestWatchIdentitiesAndPeerGate(t *testing.T) {
+	defer installedOnly("claude")() // CI has no claude; a laptop without one never leads
 	spec := WatchSpec{Workspace: "api", Project: "ENG", Repos: []string{"acme/api", "acme/web"}, Sources: []watch.Source{namedSource{"linear"}, namedSource{"github"}}}
 	ids := spec.Identities()
 	want := []string{"github/acme/api", "github/acme/web", "github/eng", "linear/acme/api", "linear/acme/web", "linear/eng"}
@@ -92,6 +93,7 @@ func TestLocalPulseAndAbsorb(t *testing.T) {
 }
 
 func TestLeadChangeRingsOnceAndMuteFollowsThePeer(t *testing.T) {
+	defer installedOnly("claude")()
 	d := New("test", t.TempDir())
 	var mu sync.Mutex
 	var rang []string
