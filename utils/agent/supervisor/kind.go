@@ -21,6 +21,7 @@ type Kind struct {
 
 const (
 	KindClaude = "claude"
+	KindCodex  = "codex"
 	KindCustom = "custom"
 )
 
@@ -41,6 +42,16 @@ var kinds = map[string]Kind{
 		SupportsSpawn:          true,
 		SupportsPermissionMode: true,
 		BuildsArgvFromSettings: true,
+	},
+	// Codex has no remote-control: the daemon never spawns one, but a
+	// workspace of this kind opens codex for a person and runs its fixes
+	// and bots through codex exec.
+	KindCodex: {
+		Name:          KindCodex,
+		DefaultBin:    "codex",
+		ConfigDirEnv:  "CODEX_HOME",
+		CredentialEnv: []string{"OPENAI_API_KEY", "CODEX_API_KEY"},
+		Args:          codexArgs,
 	},
 	KindCustom: {
 		Name:                   KindCustom,
@@ -105,6 +116,10 @@ func claudeArgs(c SpawnConfig) ([]string, error) {
 		args = append(args, "--name", name)
 	}
 	return args, nil
+}
+
+func codexArgs(SpawnConfig) ([]string, error) {
+	return nil, fmt.Errorf("kind %q has no remote-control session to supervise; corgi agent claude opens codex for a person, and watch fixes and bots run through codex exec", KindCodex)
 }
 
 func customArgs(c SpawnConfig) ([]string, error) {

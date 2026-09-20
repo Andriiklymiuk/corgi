@@ -97,12 +97,16 @@ when it pairs. AirDrop carries it end-to-end encrypted between your devices.`,
 }
 
 func requestPairWindow(dir string, viewer bool, wait time.Duration) (pairAnswer, error) {
-	answer := filepath.Join(dir, pairAnswerName)
-	_ = os.Remove(answer)
 	role := ""
 	if viewer {
 		role = pairing.RoleViewer
 	}
+	return requestPairWindowFor(dir, role, wait)
+}
+
+func requestPairWindowFor(dir, role string, wait time.Duration) (pairAnswer, error) {
+	answer := filepath.Join(dir, pairAnswerName)
+	_ = os.Remove(answer)
 	if err := os.WriteFile(filepath.Join(dir, pairRequestName), []byte(role+"\n"), 0o600); err != nil {
 		return pairAnswer{}, err
 	}

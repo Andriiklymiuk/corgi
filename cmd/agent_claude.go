@@ -3,6 +3,7 @@ package cmd
 import (
 	"andriiklymiuk/corgi/utils/agent/bots"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 
 type claudeLaunch struct {
 	Workspace string
+	Kind      string
 	Bin       string
 	Args      []string
 	Env       map[string]string
@@ -50,6 +52,10 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
   corgi agent claude -- --resume     # arguments after -- go to claude`,
 	Run: func(cmd *cobra.Command, args []string) {
 		profile, _ := cmd.Flags().GetString("profile")
+		kindOverride, _ = cmd.Flags().GetString("kind")
+		if kindOverride != "" && !harness.Known(kindOverride) {
+			exitWithError("agent_claude", fmt.Errorf("--kind is one of %s", strings.Join(harness.Names(), ", ")), 2)
+		}
 		show, _ := cmd.Flags().GetBool("show")
 		model, _ := cmd.Flags().GetString("model")
 		promptID, _ := cmd.Flags().GetString("prompt-id")
@@ -236,8 +242,12 @@ func runClaudeInPlace(bin string, args []string, env []string) error {
 	return c.Run()
 }
 
+// kindOverride is --kind on the command line: one session under another
+// harness than the workspace's config names.
+var kindOverride string
+
 func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, error) {
-	launch := claudeLaunch{Bin: "claude", Args: append([]string(nil), extra...), Env: map[string]string{}}
+	launch := claudeLaunch{Bin: harness.For(kindOverride, "").Bin, Args: append([]string(nil), extra...), Env: map[string]string{}}
 	registry, _, err := agentRegistry()
 	if err != nil {
 		return launch, nil
@@ -277,10 +287,14 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 		}
 		resolved = withProfile
 	}
+	if k := strings.TrimSpace(kindOverride); k != "" {
+		resolved.Kind = k
+	}
 	kind, err := supervisor.KindFor(supervisor.SpawnConfig{Kind: resolved.Kind, ConfigDirEnv: resolved.ConfigDirEnv, CredentialEnv: resolved.CredentialEnv})
 	if err != nil {
 		return launch, err
 	}
+	launch.Kind = kind.Name
 	if bin := strings.TrimSpace(resolved.Bin); bin != "" {
 		launch.Bin = expandTilde(bin)
 	} else if kind.DefaultBin != "" {
@@ -288,8 +302,8 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 	}
 	if kind.Name == supervisor.KindCustom {
 		launch.Args = append(append([]string(nil), resolved.Args...), extra...)
-	} else if mode := strings.TrimSpace(resolved.PermissionMode); mode != "" {
-		launch.Args = append([]string{"--permission-mode", mode}, extra...)
+	} else {
+		launch.Args = append(harness.For(kind.Name, "").InteractiveArgs(resolved.PermissionMode), extra...)
 	}
 	if cfg := strings.TrimSpace(resolved.ConfigDir); cfg != "" && kind.ConfigDirEnv != "" {
 		launch.Env[kind.ConfigDirEnv] = expandTilde(cfg)
@@ -359,6 +373,7 @@ func shellQuote(s string) string {
 func init() {
 	agentClaudeCmd.Flags().String("workspace", "", "Start in this registered workspace's checkout, under its account, whatever folder you are in")
 	agentClaudeCmd.Flags().String("profile", "", "Run under this corgi profile's account and settings")
+	agentClaudeCmd.Flags().String("kind", "", "Open this harness instead of the workspace's (claude, codex)")
 	agentClaudeCmd.Flags().String("model", "", "Pass --model to claude (opus, sonnet, haiku, or a model id)")
 	agentClaudeCmd.Flags().String("prompt-id", "", "Start with the prompt saved under this id by the phone launcher; the file is read once and removed")
 	agentClaudeCmd.Flags().String("ticket", "", "The tracker ref(s) this session works on (ABC-1 or ABC-1,ABC-2): the board shows it on the ticket")

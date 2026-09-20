@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -74,13 +77,13 @@ func runAgentTunnelSetup(cmd *cobra.Command, args []string) {
 	if provider == "" {
 		provider = "cloudflared"
 	}
-	if name == "" {
-		name = "corgi-agent"
-	}
 
 	dir, err := agentDir()
 	if err != nil {
 		exitWithError("agent_data_dir", err, 1)
+	}
+	if name == "" {
+		name = defaultTunnelName(loadUpSettings(dir).TunnelName)
 	}
 
 	run := tunnelExec
@@ -138,7 +141,11 @@ func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host stri
 		list, _ = run("cloudflared", "tunnel", "list")
 	}
 
-	if strings.Contains(list, name) {
+	if id := tunnelIDIn(list, name); id != "" {
+		if !dryRun && !tunnelCredentialsExist(id) {
+			return fmt.Errorf("tunnel %s exists in this Cloudflare account, but its credentials are not on this laptop — it was created on another one.\n"+
+				"Every laptop needs a tunnel of its own on a hostname of its own: corgi agent tunnel setup %s --name %s", name, host, defaultTunnelName(""))
+		}
 		utils.Infof("tunnel %s already exists\n", name)
 	} else {
 		utils.Infof("creating tunnel %s…\n", name)
@@ -152,9 +159,71 @@ func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host stri
 		if !strings.Contains(strings.ToLower(out), "already exists") {
 			return fmt.Errorf("could not route %s: %w\n%s", host, err, strings.TrimSpace(out))
 		}
-		utils.Infof("%s already points at %s\n", host, name)
+		utils.Infof("%s already has a DNS record — if it was made for this tunnel, all is well; if another laptop made it, pick a hostname of your own (one per laptop: home.%s, work.%s)\n", host, domainOf(host), domainOf(host))
 	}
 	return nil
+}
+
+// defaultTunnelName is the saved name when there is one, else one that
+// tells two laptops on the same Cloudflare account apart.
+func defaultTunnelName(saved string) string {
+	if saved = strings.TrimSpace(saved); saved != "" {
+		return saved
+	}
+	host, _ := os.Hostname()
+	short := strings.ToLower(strings.SplitN(strings.TrimSpace(host), ".", 2)[0])
+	short = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return '-'
+	}, short)
+	short = strings.Trim(short, "-")
+	if short == "" {
+		return "corgi-agent"
+	}
+	return "corgi-" + short
+}
+
+// tunnelIDIn reads `cloudflared tunnel list`: the id is the first column
+// of the row whose name is exactly the one asked for.
+func tunnelIDIn(list, name string) string {
+	for _, line := range strings.Split(list, "\n") {
+		fields := strings.Fields(line)
+		named := false
+		for _, f := range fields {
+			named = named || f == name
+		}
+		if !named {
+			continue
+		}
+		for _, f := range fields {
+			if f != name && tunnelIDShape.MatchString(f) {
+				return f
+			}
+		}
+		return "?"
+	}
+	return ""
+}
+
+var tunnelIDShape = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+var tunnelCredentialsExist = func(id string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return true
+	}
+	_, err = os.Stat(filepath.Join(home, ".cloudflared", id+".json"))
+	return err == nil
+}
+
+func domainOf(host string) string {
+	parts := strings.Split(host, ".")
+	if len(parts) > 2 {
+		return strings.Join(parts[len(parts)-2:], ".")
+	}
+	return host
 }
 
 func setupNgrokTunnel(run tunnelRunner, have binaryLookup, host string) error {
@@ -174,7 +243,7 @@ https://dashboard.ngrok.com/get-started/your-authtoken then run:
 
 func init() {
 	agentTunnelSetupCmd.Flags().String("provider", "cloudflared", "Tunnel provider (cloudflared|ngrok)")
-	agentTunnelSetupCmd.Flags().String("name", "corgi-agent", "cloudflared tunnel name to create or reuse")
+	agentTunnelSetupCmd.Flags().String("name", "", "cloudflared tunnel name to create or reuse (default: the saved one, else corgi-<this laptop>)")
 	agentTunnelSetupCmd.Flags().Bool("dry-run", false, "Print the commands without running them")
 	agentTunnelCmd.AddCommand(agentTunnelSetupCmd)
 	agentCmd.AddCommand(agentTunnelCmd)

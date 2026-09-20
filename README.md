@@ -311,6 +311,10 @@ corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 
 `agent tunnel setup` stores the choice, so plain `corgi agent up` keeps using it after that. Because the origin stops changing, the phone stays paired across restarts and reboots — save `https://<your-host>/app` to the home screen and it keeps working.
 
+**Two laptops, one phone.** Each laptop gets a tunnel and a hostname of its own (`home.yourdomain.com`, `work.yourdomain.com` — one Cloudflare account, one domain; `tunnel setup` names the tunnel after the laptop). Pair the phone with both and it introduces them to each other; from then on the two daemons pulse each other every minute and, for every tracker both watch, **one leads** — it starts the fixes and rings you, the other stays quiet and takes over when the leader sleeps. `corgi agent peers` shows who is awake and who leads; `corgi agent peers lead` on the laptop you want doing the unattended work. By hand: `corgi agent peers invite` on one, `corgi agent peers join <url> <code>` on the other.
+
+**Codex instead of Claude Code.** `kind: codex` on a workspace (or a profile) opens Codex from `corgi agent claude`, and runs that workspace's fixes, bots and routines through `codex exec`; `corgi agent claude --kind codex` does it once. Sessions still get tracked coarsely — Codex has no hooks, so the board shows less about them.
+
 `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux — a headless server too, where the phone and Telegram are the screen ([running it on a server](docs/agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
 
 ### Talk to your laptop from any Claude

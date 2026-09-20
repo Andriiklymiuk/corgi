@@ -282,6 +282,13 @@ Ask where the phone will be, then pick the row — do not default to a tunnel:
 | anywhere, no domain | `corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok` | that host + `/app` |
 | one-off, re-pairing is fine | `corgi agent up` | changes on every restart |
 
+With two laptops on one Cloudflare account, each gets its own hostname
+(`home.<domain>`, `work.<domain>`) and its own tunnel; `tunnel setup` names
+the tunnel after the laptop and refuses a tunnel whose credentials live on
+another one. A domain bought elsewhere (Namecheap, GoDaddy) stays there: only
+its nameservers move to Cloudflare's free plan, because a tunnel hostname
+must be proxied by Cloudflare — a plain CNAME at the registrar does not work.
+
 The Wi-Fi row has no tunnel, no DNS and no provider, so it is the one to
 suggest first when the phone is in the same building. The launcher is
 token-protected either way — serving it on the local network is not serving it
@@ -1047,6 +1054,48 @@ behaviour), `corgi_agent_mute`, `corgi_agent_attempts` (with `pick`),
 lists the services at a glance and starts, stops, restarts or tests them
 (`/launch/stack`); without one the section stays away. **The whole diff**:
 `/launch/diff?all=1`.
+
+## Two laptops on the same trackers
+
+Two laptops that watch the same Linear project or GitHub repo would each start
+a fix and each ring the phone. Paired as **peers** they agree: for every
+tracker both watch, one leads — it fixes, runs bots and routines, and rings;
+the other records the events and stays quiet. A leader that stops pulsing for
+three minutes (asleep, shut) is replaced by the next one, and it takes the
+lead back when it returns. Sessions and their permission prompts are still
+per laptop — those are not shared work.
+
+- The phone pairs with both → it introduces them (`POST /launch/peers/invite`
+  on the one it knew, `POST /launch/peers/join` on the new one). Nothing to run.
+- By hand: `corgi agent peers invite` on laptop A prints a URL and a
+  ten-minute code; `corgi agent peers join <url> <code>` on B pairs both ways.
+- `corgi agent peers` — who is paired, awake, leading, and what each watches.
+- `corgi agent peers lead` — this laptop leads every tracker it shares (the
+  home machine that should do the unattended work); `lead off` returns to
+  first-by-name.
+- `corgi agent peers rm <name>` — forget one (run it on both).
+
+How it holds together: a peer is a device in the other laptop's
+`devices.json` with role `peer` — a bearer token plus the same end-to-end key
+a phone gets — and that token opens only `/launch/peers/pulse` and
+`/launch/peers/join` (never the board, a transcript or a send). Peers pulse
+each other once a minute with the trackers they watch (`linear/<project>`,
+`github/<owner/repo>`), stored in `<agentDir>/peers.json` (0600). Both need a
+URL the other can reach: a tunnel each, or the same Wi-Fi.
+
+## Codex as the harness
+
+`kind: codex` on a workspace or a profile in the user config makes corgi drive
+Codex there: `corgi agent claude` opens `codex` (permission modes map:
+`acceptEdits` → `--full-auto`, `bypassPermissions` → no sandbox), and the
+daemon's fixes, bots and routines run `codex exec --json` and read its
+receipt (thread id, tokens). `corgi agent claude --kind codex` is a one-off.
+`configDir` moves `CODEX_HOME`; `OPENAI_API_KEY` is the credential. Codex has
+no permission hooks: a Codex session shows on the board by its process
+(`agent: codex`), and with `notify = ["corgi", "agent", "event", "stop",
+"--agent", "codex", "--notify"]` in `~/.codex/config.toml` every finished
+turn lands as a stop; its approvals are answered on the laptop. Adding another agent is one more
+entry in `utils/agent/harness`.
 
 ## Things not to do
 

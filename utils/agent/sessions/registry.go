@@ -1207,6 +1207,9 @@ func (r *Registry) Adopt(procs []proc.Process, cwd func(pid int) string, now tim
 		if cwd != nil {
 			s.Cwd = cwd(p.PID)
 		}
+		if h := proc.HarnessOf(p); h != "claude" {
+			s.Agent = h
+		}
 		s.Label, s.Folder = r.resolve(s.Cwd)
 		s.Profile = r.profile("")
 		r.bind(s)
@@ -1221,7 +1224,7 @@ func (r *Registry) Adopt(procs []proc.Process, cwd func(pid int) string, now tim
 }
 
 func notASession(args string) bool {
-	for _, marker := range []string{"remote-control", " mcp ", " mcp serve", "--print", " -p ", " -p\n"} {
+	for _, marker := range []string{"remote-control", " mcp ", " mcp serve", "--print", " -p ", " -p\n", " exec "} {
 		if strings.Contains(args+"\n", marker) {
 			return true
 		}

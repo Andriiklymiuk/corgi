@@ -55,6 +55,10 @@ func identifyLaunch(w http.ResponseWriter, r *http.Request, token, deviceStorePa
 		writeLaunchError(w, http.StatusForbidden, "this device only reads the board")
 		return launchIdentity{}, false
 	}
+	if device.Peer() && !peerMay(r.URL.Path) {
+		writeLaunchError(w, http.StatusForbidden, "a peer laptop only pulses and joins")
+		return launchIdentity{}, false
+	}
 	if !device.Encrypted() {
 		if r.Header.Get(pairing.E2EHeader) != "" {
 			writeLaunchError(w, http.StatusBadRequest, "this device did not pair with a key; pair again to talk encrypted")
@@ -173,6 +177,12 @@ type sealedWriter struct {
 func (s *sealedWriter) Header() http.Header         { return s.header }
 func (s *sealedWriter) WriteHeader(code int)        { s.status = code }
 func (s *sealedWriter) Write(b []byte) (int, error) { return s.body.Write(b) }
+
+// A peer laptop holds a token here, but it is not a phone: it may tell this
+// laptop what it watches and ask it to pair back, nothing else.
+func peerMay(path string) bool {
+	return path == "/launch/peers/pulse" || path == "/launch/peers/join"
+}
 
 func viewerMay(method, path string) bool {
 	if method != http.MethodGet {
