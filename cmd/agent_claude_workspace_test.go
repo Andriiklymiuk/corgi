@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/harness"
+	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,5 +100,28 @@ func TestLaunchResolvesTheNamedWorkspaceNotTheCurrentFolder(t *testing.T) {
 	want := filepath.Join(agentD, "claude-client")
 	if got := launch.Env["CLAUDE_CONFIG_DIR"]; got != want {
 		t.Fatalf("the ticket must be worked on under that workspace's account: got %q want %q", got, want)
+	}
+}
+
+func TestAgentCodexIsTheClaudeLaunchWithCodexAsTheHarness(t *testing.T) {
+	_, mine, _ := claudeHome(t)
+	defer func() { kindOverride = "" }()
+	kindOverride = harness.Codex
+	launch, err := resolveClaudeLaunch(mine, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launch.Bin != "codex" || launch.Kind != supervisor.KindCodex || launch.Workspace != "mine" {
+		t.Fatalf("codex in the folder's workspace: %+v", launch)
+	}
+	if !strings.HasPrefix(launch.String(), "codex") {
+		t.Fatalf("--show prints the codex command: %s", launch.String())
+	}
+	cmd := agentCodexCmd
+	if f := cmd.Flags().Lookup("workspace"); f == nil {
+		t.Fatal("corgi agent codex takes the launch flags")
+	}
+	if f := cmd.Flags().Lookup("kind"); f == nil || !f.Hidden {
+		t.Fatal("--kind is implied on corgi agent codex")
 	}
 }

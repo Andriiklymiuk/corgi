@@ -579,7 +579,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		${card({ name: "web", path: "…/dev/web", branch: "· feat/search*", dot: "ready", meta: '<span class="live">online · no session</span><span>up 2h</span><span>work account</span>', btn: "Start" })}`;
 
 	const app = (tab, extra = "") => `<div class="app">
-		<div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 2.29.3 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
+		<div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 2.29.4 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
 		${tabs(tab.replace("→", ""))}
 		<div class="pane">${tab.endsWith("inbox") ? inbox(extra === "moved" ? "moved" : "", extra === "aim") : tab.endsWith("sessions") ? sessions : stacks}</div>
 		</div>`;
@@ -1016,7 +1016,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"✓ codex turns land on the board too (/Users/me/.codex/config.toml)",
 		"new sessions report from their next event; `corgi agent sessions` shows the board",
 		"",
-		"{g}${/} {B}corgi agent claude --kind codex{/}",
+		"{g}${/} {B}corgi agent codex{/}",
 		"corgi: codex for acme-stack",
 		"{d}# codex opens in the workspace's checkout; a run from the phone or the tracker goes through codex exec{/}",
 		"",

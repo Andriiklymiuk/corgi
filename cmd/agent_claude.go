@@ -374,19 +374,45 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// agentCodexCmd is corgi agent claude with Codex as the harness: the same
+// workspace, account and flags, so nobody types "claude" to open codex.
+var agentCodexCmd = &cobra.Command{
+	Use:   "codex [-- codex args]",
+	Short: "Run Codex the way this folder's workspace is configured",
+	Long: `Starts Codex for the workspace the current directory belongs to, in its
+checkout and under its settings — corgi agent claude with another harness.
+The session lands on the board once corgi agent track enable has written
+Codex's notify hook.
+
+  corgi agent codex                  # this folder's workspace
+  corgi agent codex --workspace api  # that workspace, whatever folder you are in
+  corgi agent codex --show           # print the command instead of running it
+  corgi agent codex -- --model o3    # arguments after -- go to codex`,
+	Run: func(cmd *cobra.Command, args []string) {
+		_ = cmd.Flags().Set("kind", harness.Codex)
+		agentClaudeCmd.Run(cmd, args)
+	},
+}
+
+func addLaunchFlags(c *cobra.Command, agent string) {
+	c.Flags().String("workspace", "", "Start in this registered workspace's checkout, under its account, whatever folder you are in")
+	c.Flags().String("profile", "", "Run under this corgi profile's account and settings")
+	c.Flags().String("kind", "", "Open this harness instead of the workspace's (claude, codex)")
+	c.Flags().String("model", "", "Pass --model to "+agent+" (opus, sonnet, haiku, or a model id)")
+	c.Flags().String("prompt-id", "", "Start with the prompt saved under this id by the phone launcher; the file is read once and removed")
+	c.Flags().String("ticket", "", "The tracker ref(s) this session works on (ABC-1 or ABC-1,ABC-2): the board shows it on the ticket")
+	c.Flags().String("ticket-key", "", "The inbox key of that ticket, with --ticket")
+	c.Flags().Int("attempt", 0, "This session is attempt N of several on the same ticket (corgi agent watch work --attempts): its own worktree on corgi/<ticket>-N, and the board groups them")
+	c.Flags().Bool("isolate", false, "Start in a worktree of its own on a corgi/<ticket> branch — every repository of the stack gets one — so this session never touches your checkout")
+	c.Flags().String("bot", "", "Open as this bot (corgi agent bot list): its workspace, account, model and persona, resuming its last conversation")
+	c.Flags().Bool("show", false, "Print the resolved command and exit")
+}
+
 func init() {
-	agentClaudeCmd.Flags().String("workspace", "", "Start in this registered workspace's checkout, under its account, whatever folder you are in")
-	agentClaudeCmd.Flags().String("profile", "", "Run under this corgi profile's account and settings")
-	agentClaudeCmd.Flags().String("kind", "", "Open this harness instead of the workspace's (claude, codex)")
-	agentClaudeCmd.Flags().String("model", "", "Pass --model to claude (opus, sonnet, haiku, or a model id)")
-	agentClaudeCmd.Flags().String("prompt-id", "", "Start with the prompt saved under this id by the phone launcher; the file is read once and removed")
-	agentClaudeCmd.Flags().String("ticket", "", "The tracker ref(s) this session works on (ABC-1 or ABC-1,ABC-2): the board shows it on the ticket")
-	agentClaudeCmd.Flags().String("ticket-key", "", "The inbox key of that ticket, with --ticket")
-	agentClaudeCmd.Flags().Int("attempt", 0, "This session is attempt N of several on the same ticket (corgi agent watch work --attempts): its own worktree on corgi/<ticket>-N, and the board groups them")
-	agentClaudeCmd.Flags().Bool("isolate", false, "Start in a worktree of its own on a corgi/<ticket> branch — every repository of the stack gets one — so this session never touches your checkout")
-	agentClaudeCmd.Flags().String("bot", "", "Open as this bot (corgi agent bot list): its workspace, account, model and persona, resuming its last conversation")
-	agentClaudeCmd.Flags().Bool("show", false, "Print the resolved command and exit")
-	agentCmd.AddCommand(agentClaudeCmd)
+	addLaunchFlags(agentClaudeCmd, "claude")
+	addLaunchFlags(agentCodexCmd, "codex")
+	_ = agentCodexCmd.Flags().MarkHidden("kind")
+	agentCmd.AddCommand(agentClaudeCmd, agentCodexCmd)
 }
 
 func pickAccountProfile(user *config.UserConfig, resolved config.Resolved) string {
